@@ -5,12 +5,15 @@
   "main": "index.js",
   "scripts": {
     "start": "node server.js",
-    "test": "echo \"Error: no test specified\" "test": "echo \"Error: no test specified\" && exit 1""test": "echo \"Error: no test specified\" && exit 1" exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.0",
     "bcryptjs": "^3.0.3",
