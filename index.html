@@ -913,6 +913,7 @@ function App() {
 
     apiGet('/markets')
       .then(data => {
+        console.log('[markets fetch] raw response:', data);
         if (!Array.isArray(data) || data.length === 0) return;
         const shaped = data.map(m => {
           const category = m?.category || m?.commodity || "";

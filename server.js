@@ -263,18 +263,22 @@ async function scanAndCreateMarkets() {
       const resolution_date = m.resolution_date;
       const expiry_date = resolution_date;
 
-      await supabase.from('markets').insert([
-        {
-          question: m.question,
-          category,
-          resolution_date,
-          commodity: category,
-          target_price,
-          direction,
-          expiry_date,
-          resolved: false,
-        },
-      ]);
+      const insertRow = {
+        question: m.question,
+        category,
+        resolution_date,
+        commodity: category,
+        target_price,
+        direction,
+        expiry_date,
+        resolved: false,
+      };
+      console.log('[scanAndCreateMarkets] inserting:', JSON.stringify(insertRow, null, 2));
+
+      const { data: inserted, error } = await supabase.from('markets').insert([insertRow]).select();
+      if (error) {
+        console.error('[scanAndCreateMarkets] Supabase insert error:', error.message, error);
+      }
     }
   } catch (err) {
     console.error('scanAndCreateMarkets error:', err.message);
