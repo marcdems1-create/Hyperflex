@@ -146,7 +146,7 @@ function HyperflexLogo({ size = 32, animated = false }) {
 }
 
 
-const API = 'http://localhost:3000';
+const API = 'https://poetic-manifestation.up.railway.app';
 async function apiPost(path, body) {
   const res = await fetch(API + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   return res.json();
