@@ -864,6 +864,7 @@ function App() {
   const [tradeSide, setTradeSide] = useState("YES");
   const [tradeAmt, setTradeAmt] = useState("");
   const [leaderTab, setLeaderTab] = useState("weekly");
+  const [leaderboardData, setLeaderboardData] = useState([]);
   const [walletOpen, setWalletOpen] = useState(false);
   const [connecting, setConnecting] = useState(null);
   const [connected, setConnected] = useState(null);   // wallet address string
@@ -936,6 +937,14 @@ function App() {
       })
       .catch(() => {});
   }, []);
+
+  React.useEffect(() => {
+    if (tab !== 'leaderboard') return;
+    apiGet('/api/leaderboard').then(data => {
+      if (Array.isArray(data)) setLeaderboardData(data);
+    }).catch(() => setLeaderboardData([]));
+  }, [tab]);
+
   async function handleAuth() {
     setAuthError('');
     if (authMode === 'register') {
@@ -1288,20 +1297,28 @@ function App() {
                 </button>
               ))}
             </div>
-            {LEADERBOARD_DATA.map((p,i)=>(
-              <div key={p.rank} style={{background:p.isUser?"#0d1a10":"#0a1020",border:`1px solid ${p.isUser?"#1a5c3a":"#2a2a26"}`,borderRadius:4,padding:14,marginBottom:8,display:"flex",alignItems:"center",gap:10,position:"relative",overflow:"hidden"}}>
-                {p.rank<=3&&<div style={{position:"absolute",top:0,left:0,width:3,height:"100%",background:p.rank===1?"#e0a820":p.rank===2?"#a09890":"#cd7c4e"}}/>}
-                <div style={{fontSize:18,fontWeight:700,color:"#555550",minWidth:24,textAlign:"center"}}>{p.badge||p.rank}</div>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:13,fontWeight:700,color:p.isUser?"#3dbd73":"#ddd8cc"}}>{p.name}{p.isUser?" (You)":""}</div>
-                  <div style={{fontSize:9,color:"#7a7870"}}>{p.trades} trades · {p.vol} volume</div>
-                </div>
-                <div style={{textAlign:"right"}}>
-                  <div style={{fontSize:14,fontWeight:700,color:"#3dbd73"}}>{p.pnl}</div>
-                  <div style={{fontSize:10,color:"#e0a820"}}>{p.roi} ROI</div>
-                </div>
-              </div>
-            ))}
+            {leaderboardData.length === 0 ? (
+              <div style={{textAlign:"center",padding:24,color:"#7a7870",fontSize:12}}>No leaderboard data yet. Place settled trades to appear here.</div>
+            ) : (
+              leaderboardData.map((p)=> {
+                const isCurrentUser = user && p.user_id === user.id;
+                const pnlStr = p.total_pnl >= 0 ? `+$${Number(p.total_pnl).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}` : `-$${Math.abs(p.total_pnl).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+                return (
+                  <div key={p.user_id + '-' + p.rank} style={{background:isCurrentUser?"#0d1a10":"#0a1020",border:`1px solid ${isCurrentUser?"#1a5c3a":"#2a2a26"}`,borderRadius:4,padding:14,marginBottom:8,display:"flex",alignItems:"center",gap:10,position:"relative",overflow:"hidden"}}>
+                    {p.rank<=3&&<div style={{position:"absolute",top:0,left:0,width:3,height:"100%",background:p.rank===1?"#e0a820":p.rank===2?"#a09890":"#cd7c4e"}}/>}
+                    <div style={{fontSize:18,fontWeight:700,color:"#555550",minWidth:28,textAlign:"center"}}>{p.rank === 1 ? "👑" : p.rank}</div>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,fontWeight:700,color:isCurrentUser?"#3dbd73":"#ddd8cc"}}>{p.username}{isCurrentUser ? " (You)" : ""}</div>
+                      <div style={{fontSize:9,color:"#7a7870"}}>{p.total_trades} trades · {p.win_rate}% win rate</div>
+                    </div>
+                    <div style={{textAlign:"right"}}>
+                      <div style={{fontSize:14,fontWeight:700,color:p.total_pnl>=0?"#3dbd73":"#d44c4c"}}>{pnlStr}</div>
+                      <div style={{fontSize:10,color:"#e0a820"}}>{p.win_rate}% wins</div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         )}
 

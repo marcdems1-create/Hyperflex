@@ -141,6 +141,69 @@ app.get('/positions/:user_id', async (req, res) => {
   res.json(data);
 });
 
+// Leaderboard: top 20 by PnL (join users + positions, settled only)
+app.get('/api/leaderboard', async (req, res) => {
+  try {
+    const { data: positions } = await supabase
+      .from('positions')
+      .select('user_id, amount, potential_payout, settled, won')
+      .eq('settled', true);
+
+    if (!positions || positions.length === 0) {
+      return res.json([]);
+    }
+
+    const userIds = [...new Set(positions.map((p) => p.user_id))];
+    const { data: users } = await supabase
+      .from('users')
+      .select('id, display_name, email')
+      .in('id', userIds);
+
+    const userMap = new Map((users || []).map((u) => [u.id, u]));
+    const agg = new Map();
+
+    for (const p of positions) {
+      if (!agg.has(p.user_id)) {
+        agg.set(p.user_id, { total_pnl: 0, wins: 0, total_trades: 0 });
+      }
+      const a = agg.get(p.user_id);
+      a.total_trades += 1;
+      if (p.won) {
+        a.wins += 1;
+        a.total_pnl += Number(p.potential_payout) || 0;
+      }
+      a.total_pnl -= Number(p.amount) || 0;
+    }
+
+    const rows = [];
+    for (const [userId, a] of agg) {
+      const u = userMap.get(userId);
+      rows.push({
+        user_id: userId,
+        username: (u?.display_name || u?.email || 'Unknown').trim() || 'Unknown',
+        total_pnl: Math.round(a.total_pnl * 100) / 100,
+        win_rate: a.total_trades > 0 ? Math.round((a.wins / a.total_trades) * 100) : 0,
+        total_trades: a.total_trades,
+      });
+    }
+
+    rows.sort((a, b) => b.total_pnl - a.total_pnl);
+    const top20 = rows.slice(0, 20).map((r, i) => ({
+      rank: i + 1,
+      user_id: r.user_id,
+      username: r.username,
+      total_pnl: r.total_pnl,
+      win_rate: r.win_rate,
+      total_trades: r.total_trades,
+    }));
+
+    res.json(top20);
+  } catch (err) {
+    console.error('leaderboard error:', err.message);
+    res.status(500).json({ error: 'Leaderboard failed' });
+  }
+});
+
 // ── SETTLEMENT ────────────────────────────────────
 
 /**
