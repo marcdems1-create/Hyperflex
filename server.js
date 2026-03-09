@@ -143,6 +143,65 @@ app.get('/positions/:user_id', async (req, res) => {
 
 // ── SETTLEMENT ────────────────────────────────────
 
+/**
+ * Fetch current price for a commodity. Returns null if fetch fails.
+ * - Crypto (bitcoin, ethereum): CoinGecko
+ * - Commodities (gold, silver): metals.live spot
+ * - Oil (WTI): Yahoo Finance CL=F
+ */
+async function fetchCurrentPrice(commodity) {
+  if (!commodity || typeof commodity !== 'string') return null;
+  const c = commodity.toLowerCase().trim();
+
+  try {
+    // Crypto via CoinGecko
+    if (c === 'bitcoin' || c === 'btc' || c === 'crypto') {
+      const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
+      if (!res.ok) return null;
+      const data = await res.json();
+      const price = data?.bitcoin?.usd;
+      return typeof price === 'number' && price > 0 ? price : null;
+    }
+    if (c === 'ethereum' || c === 'eth') {
+      const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd');
+      if (!res.ok) return null;
+      const data = await res.json();
+      const price = data?.ethereum?.usd;
+      return typeof price === 'number' && price > 0 ? price : null;
+    }
+
+    // Precious metals via metals.live
+    if (c === 'gold' || c === 'xau') {
+      const res = await fetch('https://api.metals.live/v1/spot/gold');
+      if (!res.ok) return null;
+      const data = await res.json();
+      const price = Array.isArray(data)?.[0]?.price ?? data?.price;
+      return typeof price === 'number' && price > 0 ? price : null;
+    }
+    if (c === 'silver' || c === 'xag') {
+      const res = await fetch('https://api.metals.live/v1/spot/silver');
+      if (!res.ok) return null;
+      const data = await res.json();
+      const price = Array.isArray(data)?.[0]?.price ?? data?.price;
+      return typeof price === 'number' && price > 0 ? price : null;
+    }
+
+    // WTI crude via Yahoo Finance chart
+    if (c === 'oil' || c === 'wti' || c === 'crude') {
+      const res = await fetch('https://query1.finance.yahoo.com/v8/finance/chart/CL=F');
+      if (!res.ok) return null;
+      const data = await res.json();
+      const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
+      return typeof price === 'number' && price > 0 ? price : null;
+    }
+
+    return null;
+  } catch (err) {
+    console.warn('fetchCurrentPrice failed for', commodity, err.message);
+    return null;
+  }
+}
+
 async function settleMarkets() {
   console.log('Running settlement check...');
   const now = new Date().toISOString();
@@ -156,9 +215,12 @@ async function settleMarkets() {
   if (!markets || markets.length === 0) return;
 
   for (const market of markets) {
-    // Fetch settlement price from metals-api (or manual for now)
-    // For paper trading we simulate a price
-    const settlement_price = market.target_price * (Math.random() > 0.5 ? 1.05 : 0.95);
+    const settlement_price = await fetchCurrentPrice(market.commodity);
+    if (settlement_price == null) {
+      console.log(`Skipping settlement for market ${market.id} (${market.question}): no price for commodity "${market.commodity}"`);
+      continue;
+    }
+
     const outcome = market.direction === 'above'
       ? settlement_price >= market.target_price
       : settlement_price <= market.target_price;
@@ -195,7 +257,7 @@ async function settleMarkets() {
           .eq('id', position.user_id);
       }
     }
-    console.log(`Settled market: ${market.question} — outcome: ${outcome}`);
+    console.log(`Settled market: ${market.question} — settlement_price: ${settlement_price}, outcome: ${outcome}`);
   }
 }
 
