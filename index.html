@@ -880,7 +880,60 @@ function App() {
   const [authMode, setAuthMode] = React.useState('login');
   const [authError, setAuthError] = React.useState('');
   React.useEffect(() => {
-    apiGet('/markets').then(data => { if (Array.isArray(data) && data.length > 0) setMarkets(data); }).catch(() => {});
+    const toSector = (category) => {
+      const c = (category || "").toString().toLowerCase();
+      if (c === "crypto") return "CRYPTO";
+      if (c === "commodities") return "COMMODITIES";
+      if (c === "earnings") return "EARNINGS";
+      if (c === "macro") return "MACRO";
+      return "COMMODITIES";
+    };
+
+    const toYesCents = (m) => {
+      const raw = Number(m?.yes_price ?? m?.yes);
+      if (!Number.isFinite(raw)) return 50;
+      if (raw <= 1) return Math.max(1, Math.min(99, Math.round(raw * 100)));
+      return Math.max(1, Math.min(99, Math.round(raw)));
+    };
+
+    const toCloses = (m) => {
+      const d = m?.resolution_date || m?.expiry_date || m?.closes;
+      if (!d) return "TBD";
+      const parsed = new Date(d);
+      if (Number.isNaN(parsed.getTime())) return String(d);
+      return parsed.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+    };
+
+    const toIcon = (sector) => {
+      if (sector === "CRYPTO") return "₿";
+      if (sector === "EARNINGS") return "📊";
+      if (sector === "MACRO") return "🏛️";
+      return "🪨";
+    };
+
+    apiGet('/markets')
+      .then(data => {
+        if (!Array.isArray(data) || data.length === 0) return;
+        const shaped = data.map(m => {
+          const category = m?.category || m?.commodity || "";
+          const sector = m?.sector || toSector(category);
+          return {
+            ...m,
+            // UI expects these; missing/null fields previously caused markets to look blank or be filtered out
+            q: m?.q || m?.question,
+            question: m?.question || m?.q,
+            cat: m?.cat || String(category || sector).toUpperCase(),
+            sector,
+            yes: Number.isFinite(Number(m?.yes)) ? Number(m?.yes) : toYesCents(m),
+            vol: m?.vol || m?.volume || "0",
+            closes: m?.closes || toCloses(m),
+            icon: m?.icon || toIcon(sector),
+            hot: typeof m?.hot === "boolean" ? m.hot : true,
+          };
+        });
+        setMarkets(shaped);
+      })
+      .catch(() => {});
   }, []);
   async function handleAuth() {
     setAuthError('');

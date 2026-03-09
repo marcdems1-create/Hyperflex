@@ -260,11 +260,14 @@ async function scanAndCreateMarkets() {
       const category = (m.category || '').toString();
       const direction = (m.direction || '').toLowerCase() === 'above' ? 'above' : 'below';
       const target_price = Number(m.target_price) || 0;
-      const expiry_date = m.resolution_date;
+      const resolution_date = m.resolution_date;
+      const expiry_date = resolution_date;
 
       await supabase.from('markets').insert([
         {
           question: m.question,
+          category,
+          resolution_date,
           commodity: category,
           target_price,
           direction,
