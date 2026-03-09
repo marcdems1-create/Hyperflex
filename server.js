@@ -211,8 +211,9 @@ async function scanAndCreateMarkets() {
   }
 
   try {
+    const today = new Date().toISOString().split('T')[0];
     const systemPrompt =
-      'You are a financial prediction market creator. Generate 5 prediction market questions based on current market conditions. Return ONLY a JSON array, no other text. Each object must have: question (string), category (crypto/commodities/earnings/macro), resolution_date (YYYY-MM-DD format, 30-90 days from today), target_price (number), direction (above or below)';
+      'You are a financial prediction market creator. Today is ' + today + '. Generate 5 prediction market questions with resolution_date between 30-90 days from today. All dates must be in 2026. Return ONLY a JSON array, no other text. Each object must have: question (string), category (crypto/commodities/earnings/macro), resolution_date (YYYY-MM-DD format), target_price (number), direction (above or below)';
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
