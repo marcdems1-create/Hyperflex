@@ -445,11 +445,12 @@ function OddsChart({ marketId, currentYes }) {
 
 // ─── ORDER BOOK (Kalshi order book inspiration) ───────────────────────────────
 function OrderBook({ yes }) {
+  const baseYes = typeof yes === "number" && !Number.isNaN(yes) ? yes : 0;
   const asks = [
-    { price: yes + 3, size: 420 }, { price: yes + 2, size: 280 }, { price: yes + 1, size: 650 },
+    { price: baseYes + 3, size: 420 }, { price: baseYes + 2, size: 280 }, { price: baseYes + 1, size: 650 },
   ].reverse();
   const bids = [
-    { price: yes, size: 890 }, { price: yes - 1, size: 340 }, { price: yes - 2, size: 210 },
+    { price: baseYes, size: 890 }, { price: baseYes - 1, size: 340 }, { price: baseYes - 2, size: 210 },
   ];
   const maxSize = 890;
   return (
@@ -597,7 +598,7 @@ function MarketDetail({ m, onBack, onTrade, hlSigner, hlAddress, refreshBalances
           <span style={{fontSize:22}}>{m.icon}</span>
           <div>
             <div style={{fontSize:8,color:"#c9920d",fontWeight:700,letterSpacing:1}}>{m.cat}</div>
-            <div style={{fontSize:13,color:"#ddd8cc",lineHeight:1.4}}>{m.q}</div>
+            <div style={{fontSize:13,color:"#ddd8cc",lineHeight:1.4}}>{m.question || m.q}</div>
           </div>
         </div>
         <div style={{display:"flex",gap:16,fontSize:10,color:"#7a7870"}}>
