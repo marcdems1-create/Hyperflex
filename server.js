@@ -4,6 +4,7 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { createClient } = require('@supabase/supabase-js');
+const Anthropic = require('@anthropic-ai/sdk');
 const cron = require('node-cron');
 
 const app = express();
@@ -15,6 +16,10 @@ const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_ANON_KEY
 );
+
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+});
 
 // ── AUTH ──────────────────────────────────────────
 
@@ -196,6 +201,96 @@ async function settleMarkets() {
 
 // Run settlement every hour
 cron.schedule('0 * * * *', settleMarkets);
+
+// ── CLAUDE AI MARKET SCANNER ─────────────────────
+
+async function scanAndCreateMarkets() {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.warn('scanAndCreateMarkets skipped: ANTHROPIC_API_KEY not set');
+    return;
+  }
+
+  try {
+    const systemPrompt =
+      'You are a financial prediction market creator. Generate 5 prediction market questions based on current market conditions. Return ONLY a JSON array, no other text. Each object must have: question (string), category (crypto/commodities/earnings/macro), resolution_date (YYYY-MM-DD format, 30-90 days from today), target_price (number), direction (above or below)';
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1024,
+      system: systemPrompt,
+      messages: [
+        {
+          role: 'user',
+          content:
+            'Generate the markets as requested in the system prompt and return ONLY the JSON array.',
+        },
+      ],
+    });
+
+    const content = response?.content?.[0]?.text || response?.content?.[0]?.input_text || '';
+    if (!content) {
+      console.warn('Claude scan returned empty content');
+      return;
+    }
+
+    let markets;
+    try {
+      markets = JSON.parse(content);
+    } catch (err) {
+      console.error('Failed to parse Claude JSON for market scan:', err.message);
+      return;
+    }
+
+    if (!Array.isArray(markets)) {
+      console.warn('Claude scan did not return an array, skipping');
+      return;
+    }
+
+    for (const m of markets) {
+      if (!m || typeof m.question !== 'string') continue;
+
+      // Skip duplicates by question
+      const { data: existing } = await supabase
+        .from('markets')
+        .select('id')
+        .eq('question', m.question)
+        .maybeSingle();
+      if (existing) continue;
+
+      const category = (m.category || '').toString();
+      const direction = (m.direction || '').toLowerCase() === 'above' ? 'above' : 'below';
+      const target_price = Number(m.target_price) || 0;
+      const expiry_date = m.resolution_date;
+
+      await supabase.from('markets').insert([
+        {
+          question: m.question,
+          commodity: category,
+          target_price,
+          direction,
+          expiry_date,
+          resolved: false,
+        },
+      ]);
+    }
+  } catch (err) {
+    console.error('scanAndCreateMarkets error:', err.message);
+  }
+}
+
+// Run Claude scanner every 6 hours
+cron.schedule('0 */6 * * *', scanAndCreateMarkets);
+
+// Manual trigger endpoint
+app.post('/api/scan-markets', async (req, res) => {
+  try {
+    await scanAndCreateMarkets();
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Manual scan-markets error:', err.message);
+    res.status(500).json({ error: 'Scan failed' });
+  }
+});
 
 // ── START ─────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
