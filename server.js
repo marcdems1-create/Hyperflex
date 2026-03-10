@@ -75,39 +75,6 @@ app.get('/markets/:id', async (req, res) => {
   res.json(data);
 });
 
-// Prices cache (60s TTL) to avoid spamming CoinGecko/metals APIs
-let pricesCache = { data: null, ts: 0 };
-const PRICES_CACHE_MS = 60 * 1000;
-
-// GET /api/prices — BTC, ETH, gold, silver, oil (backend proxy to avoid CORS)
-app.get('/api/prices', async (req, res) => {
-  const now = Date.now();
-  if (pricesCache.data && now - pricesCache.ts < PRICES_CACHE_MS) {
-    return res.json(pricesCache.data);
-  }
-  try {
-    const [btc, eth, gold, silver, oil] = await Promise.all([
-      fetchCurrentPrice('bitcoin'),
-      fetchCurrentPrice('ethereum'),
-      fetchCurrentPrice('gold'),
-      fetchCurrentPrice('silver'),
-      fetchCurrentPrice('oil'),
-    ]);
-    const data = {
-      BTC: btc ?? null,
-      ETH: eth ?? null,
-      XAU: gold ?? null,
-      XAG: silver ?? null,
-      WTI: oil ?? null,
-    };
-    pricesCache = { data, ts: now };
-    res.json(data);
-  } catch (err) {
-    console.warn('GET /api/prices error:', err.message);
-    res.json(pricesCache.data || { BTC: null, ETH: null, XAU: null, XAG: null, WTI: null });
-  }
-});
-
 // Create market (admin)
 app.post('/markets', async (req, res) => {
   const { question, commodity, target_price, direction, expiry_date } = req.body;
