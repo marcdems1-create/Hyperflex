@@ -124,6 +124,17 @@
 
     /* ── RESPONSIVE LAYOUT ───────────────────────────────────── */
     .content-area { padding: 12px 16px; }
+    .desktop-layout {
+      max-width: 1200px !important;
+      width: 1200px !important;
+      margin: 0 auto !important;
+    }
+    .desktop-layout .markets-grid {
+      display: grid !important;
+      grid-template-columns: repeat(3, 1fr) !important;
+      gap: 16px !important;
+      width: 100% !important;
+    }
     @media (min-width: 768px) { .app-container { max-width: 100% !important; width: 100% !important; } }
     @media (min-width: 1024px) {
       body { max-width: 100% !important; width: 100% !important; }
@@ -1114,7 +1125,16 @@ function App() {
   const [jackpotAnswers, setJackpotAnswers] = useState({});
   const [jackpotSubmitted, setJackpotSubmitted] = useState(false);
   const [marketDetailView, setMarketDetailView] = useState(null);
+  const [windowWidth, setWindowWidth] = useState(() => typeof window !== 'undefined' ? window.innerWidth : 1024);
   const wsUnsubRef = useRef(null);
+
+  React.useEffect(() => {
+    const onResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const isDesktop = windowWidth >= 1024;
 
   // ── Live prices from backend /api/prices (avoids CORS with CoinGecko/metals) ─
   useEffect(() => {
@@ -1224,7 +1244,7 @@ function App() {
   };
 
   return (
-    <div className="app-container" style={{minHeight:"100vh",background:"#141412",fontFamily:"'Inter', sans-serif",color:"#ddd8cc",paddingBottom:80}}>
+    <div className={isDesktop ? "app-container desktop-layout" : "app-container"} style={{minHeight:"100vh",background:"#141412",fontFamily:"'Inter', sans-serif",color:"#ddd8cc",paddingBottom:80}}>
 
       {/* Live ticker */}
       <LiveTicker prices={livePrices}/>
