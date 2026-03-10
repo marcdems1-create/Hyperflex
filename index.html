@@ -114,6 +114,44 @@
     @keyframes ticker { from{transform:translateX(0);}to{transform:translateX(-50%);} }
     .live-dot { animation: pulse 1.5s infinite; }
     .fade-in { animation: slideUp 0.3s ease forwards; }
+
+    /* ── RESPONSIVE LAYOUT ───────────────────────────────────── */
+    .app-container { max-width: 430px; margin: 0 auto; }
+    @media (min-width: 768px) {
+      .app-container { max-width: 100%; padding-left: 24px; padding-right: 24px; }
+    }
+    @media (min-width: 1024px) {
+      .app-container { max-width: 1200px; margin-left: auto; margin-right: auto; padding-left: 24px; padding-right: 24px; }
+    }
+
+    .markets-grid { display: flex; flex-direction: column; gap: 12px; }
+    @media (min-width: 768px) {
+      .markets-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    }
+    @media (min-width: 1024px) {
+      .markets-grid { grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    }
+
+    .mkt-card .mkt-card-chart { display: block; }
+    @media (min-width: 1024px) {
+      .mkt-card .mkt-card-chart { display: none !important; }
+      .mkt-card { padding: 10px !important; min-height: auto !important; }
+      .mkt-card .mkt-card-title { font-size: 12px !important; line-height: 1.35 !important; margin-bottom: 6px !important; }
+      .mkt-card .mkt-card-bar { height: 3px !important; margin-bottom: 6px !important; }
+      .mkt-card .mkt-card-buttons { padding: 5px 0 !important; font-size: 11px !important; }
+      .mkt-card .mkt-card-meta { font-size: 7px !important; margin-top: 6px !important; }
+    }
+
+    .header-bar { max-width: 430px; margin: 0 auto; }
+    .bottom-nav { max-width: 430px; }
+    @media (min-width: 768px) {
+      .header-bar { max-width: 100%; padding-left: 0; padding-right: 0; }
+      .bottom-nav { max-width: 100%; }
+    }
+    @media (min-width: 1024px) {
+      .header-bar { max-width: 1200px; margin-left: auto; margin-right: auto; padding-left: 24px; padding-right: 24px; }
+      .bottom-nav { max-width: 1200px; }
+    }
   </style>
 </head>
 <body>
@@ -822,7 +860,7 @@ function Portfolio() {
 function MktCard({ m, onSelect }) {
   const isNew = m.isNew;
   return (
-    <div onClick={onSelect} style={{background: isNew ? "linear-gradient(135deg,#1c1c19,#1a1508)" : "#1c1c19", border:`1px solid ${isNew?"#c9920d":"#2a2a26"}`,borderRadius:4,padding:12,marginBottom:8,cursor:"pointer",transition:"border-color 0.2s,transform 0.15s"}}
+    <div className="mkt-card" onClick={onSelect} style={{background: isNew ? "linear-gradient(135deg,#1c1c19,#1a1508)" : "#1c1c19", border:`1px solid ${isNew?"#c9920d":"#2a2a26"}`,borderRadius:4,padding:12,marginBottom:8,cursor:"pointer",transition:"border-color 0.2s,transform 0.15s"}}
       onMouseEnter={e=>{e.currentTarget.style.borderColor="#e0a820";e.currentTarget.style.transform="translateY(-1px)";}}
       onMouseLeave={e=>{e.currentTarget.style.borderColor=isNew?"#c9920d":"#2a2a26";e.currentTarget.style.transform="translateY(0)";}}>
       {isNew && (
@@ -837,20 +875,20 @@ function MktCard({ m, onSelect }) {
           {m.hot && <span style={{fontSize:7,background:"rgba(245,158,11,0.15)",color:"#e0a820",border:"1px solid rgba(245,158,11,0.3)",borderRadius:4,padding:"1px 5px",marginRight:6,fontWeight:700}}>🔥 HOT</span>}
           {m.badge && !isNew && <span style={{fontSize:7,background:"rgba(201,146,13,0.1)",color:"#e0a820",border:"1px solid rgba(201,146,13,0.3)",borderRadius:4,padding:"1px 5px",fontWeight:700}}>{m.badge}</span>}
         </div>
-        <div style={{display:"flex",alignItems:"center",gap:4}}>
+        <div className="mkt-card-chart" style={{display:"flex",alignItems:"center",gap:4}}>
           <OddsChart marketId={m.id} currentYes={m.yes}/>
         </div>
       </div>
-      <div style={{fontSize:13,lineHeight:1.45,color:"#ddd8cc",marginBottom:10}}>{m.q}</div>
-      <div style={{display:"flex",gap:2,height:4,borderRadius:3,overflow:"hidden",marginBottom:8}}>
+      <div className="mkt-card-title" style={{fontSize:13,lineHeight:1.45,color:"#ddd8cc",marginBottom:10}}>{m.q}</div>
+      <div className="mkt-card-bar" style={{display:"flex",gap:2,height:4,borderRadius:3,overflow:"hidden",marginBottom:8}}>
         <div style={{flex:m.yes,background:"linear-gradient(90deg,#2d9b5f,#2d9b5f)",transition:"flex 0.5s"}}/>
         <div style={{flex:100-m.yes,background:"linear-gradient(90deg,#c0392b,#d44c4c)",transition:"flex 0.5s"}}/>
       </div>
-      <div style={{display:"flex",gap:8}}>
+      <div className="mkt-card-buttons" style={{display:"flex",gap:8}}>
         <div style={{flex:1,textAlign:"center",padding:"7px 0",background:"#0e1a10",border:"1px solid #1a5c3a",borderRadius:3,color:"#3dbd73",fontSize:12,fontWeight:700}}>YES {m.yes}¢</div>
         <div style={{flex:1,textAlign:"center",padding:"7px 0",background:"#1a0e0e",border:"1px solid #5c1a1a",borderRadius:3,color:"#d44c4c",fontSize:12,fontWeight:700}}>NO {100-m.yes}¢</div>
       </div>
-      <div style={{fontSize:8,color:"#2a2a26",marginTop:8,textAlign:"right"}}>Closes {m.closes} · Vol ${m.vol}</div>
+      <div className="mkt-card-meta" style={{fontSize:8,color:"#7a7870",marginTop:8,textAlign:"right"}}>Closes {m.closes} · Vol ${m.vol}</div>
     </div>
   );
 }
@@ -1088,7 +1126,7 @@ function App() {
   };
 
   return (
-    <div style={{maxWidth:430,margin:"0 auto",minHeight:"100vh",background:"#141412",fontFamily:"'DM Mono', monospace",color:"#ddd8cc",paddingBottom:80}}>
+    <div className="app-container" style={{minHeight:"100vh",background:"#141412",fontFamily:"'DM Mono', monospace",color:"#ddd8cc",paddingBottom:80}}>
 
       {/* Live ticker */}
       <LiveTicker prices={livePrices}/>
@@ -1101,7 +1139,7 @@ function App() {
       )}
 
       {/* Header */}
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",borderBottom:"1px solid #2a2a26",background:"#141412",position:"sticky",top:0,zIndex:100}}>
+      <div className="header-bar" style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",borderBottom:"1px solid #2a2a26",background:"#141412",position:"sticky",top:0,zIndex:100}}>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <HyperflexLogo size={28}/>
           <span style={{fontSize:14,fontWeight:700,letterSpacing:2,color:"#ddd8cc"}}>HYPERFLEX</span>
@@ -1231,14 +1269,16 @@ function App() {
                   <div style={{flex:1,height:1,background:"linear-gradient(90deg,transparent,#c9920d)"}}/>
                 </div>
               )}
-              {(subTab==="new"
-                ? filtered.filter(m=>m.isNew)
-                : subTab==="hot"
-                  ? filtered.filter(m=>m.hot)
-                  : filtered
-              ).map(m=>(
-                <MktCard key={m.id} m={m} onSelect={()=>setMarketDetailView(m)}/>
-              ))}
+              <div className="markets-grid">
+                {(subTab==="new"
+                  ? filtered.filter(m=>m.isNew)
+                  : subTab==="hot"
+                    ? filtered.filter(m=>m.hot)
+                    : filtered
+                ).map(m=>(
+                  <MktCard key={m.id} m={m} onSelect={()=>setMarketDetailView(m)}/>
+                ))}
+              </div>
             </div>
           )
         )}
@@ -1371,7 +1411,7 @@ function App() {
       </div>
 
       {/* Bottom Nav */}
-      <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,background:"#141412",borderTop:"1px solid #2a2a26",display:"flex",padding:"8px 0 12px"}}>
+      <div className="bottom-nav" style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",background:"#141412",borderTop:"1px solid #2a2a26",display:"flex",padding:"8px 0 12px"}}>
         {[["markets","📊","Markets"],["combos","🎰","Combos"],["jackpot","🎯","Jackpot"],["portfolio","💼","Portfolio"],["leaderboard","🏆","Board"]].map(([t,icon,label])=>(
           <button key={t} onClick={()=>{setTab(t);if(t==="markets")setMarketDetailView(null);}} style={{flex:1,background:"none",border:"none",color:tab===t?"#e0a820":"#555550",cursor:"pointer",fontFamily:"inherit",fontSize:8,display:"flex",flexDirection:"column",alignItems:"center",gap:2,transition:"color 0.2s"}}>
             <span style={{fontSize:18}}>{icon}</span>
