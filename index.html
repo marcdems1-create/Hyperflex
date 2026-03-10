@@ -113,12 +113,12 @@
     .fade-in { animation: slideUp 0.3s ease forwards; }
 
     /* ── RESPONSIVE LAYOUT ───────────────────────────────────── */
-    .app-container { max-width: 430px; margin: 0 auto; }
+    .app-container { max-width: 430px; margin: 0 auto; width: 100%; }
     @media (min-width: 768px) {
-      .app-container { max-width: 100%; padding-left: 24px; padding-right: 24px; }
+      .app-container { max-width: 100% !important; width: 100% !important; padding-left: 24px; padding-right: 24px; }
     }
     @media (min-width: 1024px) {
-      .app-container { max-width: 1200px; margin-left: auto; margin-right: auto; padding-left: 24px; padding-right: 24px; }
+      .app-container { max-width: 1200px !important; width: 100% !important; margin-left: auto; margin-right: auto; padding-left: 24px; padding-right: 24px; }
     }
 
     .markets-grid { display: flex !important; flex-direction: column !important; gap: 12px !important; }
@@ -890,10 +890,21 @@ function getMarketIcon(market) {
   return { emoji: "📊", bg: "#1a1a2e" };
 }
 
+// Days-left badge style: 1-3 red, 4-7 orange, 8-30 gold, 30+ gray
+function getDaysLeftStyle(days) {
+  if (days <= 3) return { bg: "#c0392b", color: "#fff", icon: "🔥" };
+  if (days <= 7) return { bg: "#e67e22", color: "#fff", icon: "⚠️" };
+  if (days <= 30) return { bg: "transparent", color: "#e0a820", icon: "⏰" };
+  return { bg: "transparent", color: "#7a7870", icon: "📅" };
+}
+
 // ─── MARKET CARD ──────────────────────────────────────────────────────────────
 function MktCard({ m, onSelect }) {
   const isNew = m.isNew;
   const { emoji, bg } = getMarketIcon(m);
+  const expiry = m.expiry_date || m.resolution_date;
+  const daysLeft = expiry != null ? Math.ceil((new Date(expiry) - new Date()) / (1000 * 60 * 60 * 24)) : null;
+  const daysStyle = daysLeft != null && daysLeft >= 0 ? getDaysLeftStyle(daysLeft) : null;
   return (
     <div className="mkt-card market-card" onClick={onSelect} style={{background: isNew ? "linear-gradient(135deg,#1c1c19,#1a1508)" : "#1c1c19", border:`1px solid ${isNew?"#c9920d":"#2a2a26"}`,padding:12,marginBottom:8,cursor:"pointer"}}
       onMouseEnter={e=>{e.currentTarget.style.borderColor="#e0a820";}}
@@ -923,7 +934,12 @@ function MktCard({ m, onSelect }) {
         <div style={{flex:1,textAlign:"center",padding:"7px 0",background:"linear-gradient(135deg,#0e1a10,#1a5c3a)",border:"1px solid #2d9b5f",borderRadius:6,color:"#3dbd73",fontSize:12,fontWeight:700}}>YES {m.yes}¢</div>
         <div style={{flex:1,textAlign:"center",padding:"7px 0",background:"linear-gradient(135deg,#1a0e0e,#5c1a1a)",border:"1px solid #c0392b",borderRadius:6,color:"#d44c4c",fontSize:12,fontWeight:700}}>NO {100-m.yes}¢</div>
       </div>
-      <div className="mkt-card-meta" style={{fontSize:8,color:"#7a7870",marginTop:8,textAlign:"right"}}>Vol ${m.vol} · Closes {m.closes}</div>
+      <div className="mkt-card-meta" style={{fontSize:8,color:"#7a7870",marginTop:8,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+        <span>Vol ${m.vol} · Closes {m.closes}</span>
+        {daysStyle && (
+          <span style={{fontSize:9,fontWeight:700,background:daysStyle.bg,color:daysStyle.color,padding:daysStyle.bg!=="transparent"?"2px 6px":"0",borderRadius:4,whiteSpace:"nowrap"}}>{daysStyle.icon} {Math.max(0, daysLeft)}d left</span>
+        )}
+      </div>
     </div>
   );
 }
@@ -1275,7 +1291,7 @@ function App() {
                 ))}
               </div>
 
-              {/* ⏰ Closing Soon — horizontal row of 3 compact cards (resolved=false, sort by expiry_date asc) */}
+              {/* ⏰ Closing Soon — 3 nearest expiry, truncated question, days badge, YES button; yellow/orange left border */}
               {(() => {
                 const unresolved = (markets || []).filter(m => !m.resolved);
                 const withExpiry = unresolved.filter(m => m.expiry_date || m.resolution_date);
@@ -1288,6 +1304,12 @@ function App() {
                 if (closingSoon.length === 0) return null;
                 const now = Date.now();
                 const truncate = (s, len) => (s && s.length > len ? s.slice(0, len) + "…" : s) || "";
+                const getDaysStyle = (d) => {
+                  if (d <= 3) return { bg: "#c0392b", color: "#fff", icon: "🔥" };
+                  if (d <= 7) return { bg: "#e67e22", color: "#fff", icon: "⚠️" };
+                  if (d <= 30) return { bg: "transparent", color: "#e0a820", icon: "⏰" };
+                  return { bg: "transparent", color: "#7a7870", icon: "📅" };
+                };
                 return (
                   <div style={{marginBottom:14}}>
                     <div style={{fontSize:10,color:"#e0a820",fontWeight:700,letterSpacing:0.5,marginBottom:8}}>⏰ CLOSING SOON</div>
@@ -1297,12 +1319,13 @@ function App() {
                         const daysLeft = Math.max(0, Math.ceil((new Date(expiry).getTime() - now) / (24 * 60 * 60 * 1000)));
                         const q = truncate((m.q || m.question || "").toString(), 40);
                         const yesPrice = Number(m.yes) || 50;
+                        const ds = getDaysStyle(daysLeft);
                         return (
-                          <div key={m.id} onClick={()=>setMarketDetailView(m)} style={{flex:"0 0 auto",minWidth:140,maxWidth:180,background:"#0e0e0c",border:"2px solid #e0a820",borderRadius:8,padding:10,cursor:"pointer",boxShadow:"0 0 0 1px rgba(224,168,32,0.2)"}}>
-                            <div style={{fontSize:11,color:"#ddd8cc",lineHeight:1.3,marginBottom:6,overflow:"hidden",textOverflow:"ellipsis"}}>{q}</div>
-                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:10}}>
-                              <span style={{color:"#e0a820",fontWeight:700}}>{daysLeft}d left</span>
-                              <span style={{color:"#2d9b5f",fontWeight:700}}>YES {yesPrice}¢</span>
+                          <div key={m.id} onClick={()=>setMarketDetailView(m)} style={{flex:"0 0 auto",minWidth:140,maxWidth:180,background:"#0e0e0c",border:"1px solid #2a2a26",borderLeft:"4px solid #e0a820",borderRadius:8,padding:10,cursor:"pointer"}}>
+                            <div style={{fontSize:11,color:"#ddd8cc",lineHeight:1.3,marginBottom:8,overflow:"hidden",textOverflow:"ellipsis"}}>{q}</div>
+                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                              <span style={{fontSize:9,fontWeight:700,background:ds.bg,color:ds.color,padding:ds.bg!=="transparent"?"2px 6px":"0",borderRadius:4}}>{ds.icon} {daysLeft}d left</span>
+                              <button type="button" onClick={e=>{e.stopPropagation();setMarketDetailView(m);}} style={{padding:"4px 10px",background:"#1a5c3a",border:"1px solid #2d9b5f",borderRadius:4,color:"#3dbd73",fontSize:10,fontWeight:700,cursor:"pointer"}}>YES {yesPrice}¢</button>
                             </div>
                           </div>
                         );
