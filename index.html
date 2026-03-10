@@ -50,7 +50,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #141412; color: #ddd8cc; font-family: 'Inter', sans-serif; }
+    body { background: #141412; color: #ddd8cc; font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
     :root {
       --ink: #0e0e0c;
       --paper: #141412;
@@ -67,7 +67,7 @@
       --red-lt: #c0392b;
       --border: #2a2a26;
       --dim: #7a7870;
-      --sans: 'Inter', sans-serif;
+      --sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     }
     ::-webkit-scrollbar { display: none; }
     input::placeholder, textarea::placeholder { color: #7a7870; }
@@ -81,7 +81,7 @@
       --text: #ddd8cc; --gold: #c9920d; --gold-lt: #e0a820;
       --gold-bright: #f5c842; --border: #2a2a26; --dim: #7a7870;
       --green-lt: #2d9b5f; --red-lt: #c0392b;
-      --sans: 'Inter', sans-serif;
+      --sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     }
     body { background: var(--paper) !important; color: var(--text) !important; font-family: var(--sans) !important; }
     /* Ticker */
@@ -137,6 +137,8 @@
       transform: translateY(-2px);
       box-shadow: 0 8px 24px rgba(0,0,0,0.35);
     }
+    .market-card { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+    .market-card:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(0,0,0,0.4); }
     .mkt-card .mkt-card-buttons > div:first-child {
       background: linear-gradient(135deg, #0e1a10, #1a5c3a) !important;
       border-color: #2d9b5f !important;
@@ -869,35 +871,30 @@ function Portfolio() {
   );
 }
 
-// Category → icon + background for market cards
-function getCategoryIcon(m) {
-  const cat = (m?.cat || m?.category || "").toString().toLowerCase();
-  const sector = (m?.sector || "").toString().toLowerCase();
-  const q = (m?.q || m?.question || "").toString().toLowerCase();
-  const badge = (m?.badge || "").toString().toUpperCase();
-  if (sector === "crypto" || cat.includes("bitcoin") || cat.includes("ethereum") || cat.includes("hyperliquid") || q.includes("bitcoin") || q.includes("hype token")) return { icon: "₿", bg: "#e27625" };
-  if (cat.includes("gold") || q.includes("xau")) return { icon: "🥇", bg: "#f5c842" };
-  if (cat.includes("silver") || q.includes("xag")) return { icon: "🥈", bg: "#8a9ba8" };
-  if (cat.includes("oil") || cat.includes("wti") || cat.includes("crude") || q.includes("wti")) return { icon: "🛢️", bg: "#1a1a1a" };
-  if (sector === "earnings" || cat.includes("earnings")) {
-    if (badge.includes("AAPL") || q.includes("apple")) return { icon: "AAPL", bg: "#1a5c3a", ticker: true };
-    if (badge.includes("NVDA") || q.includes("nvidia")) return { icon: "NVDA", bg: "#1a5c3a", ticker: true };
-    if (badge.includes("TSLA") || q.includes("tesla")) return { icon: "TSLA", bg: "#1a5c3a", ticker: true };
-    return { icon: "📊", bg: "#1a5c3a" };
-  }
-  if (sector === "macro" || cat.includes("fed") || cat.includes("monetary") || cat.includes("recession")) return { icon: "🏛️", bg: "#1e3a5f" };
-  if (cat.includes("iran") || cat.includes("geo") || q.includes("iran") || q.includes("geopolitical")) return { icon: "🌍", bg: "#2563eb" };
-  if (cat.includes("uranium")) return { icon: "☢️", bg: "#2d5a27" };
-  if (cat.includes("copper") || cat.includes("base metals")) return { icon: "🟤", bg: "#8b6914" };
-  return { icon: m?.icon || "🪨", bg: "#2a2a26" };
+// Returns { emoji, bg } for market card icon based on question/commodity
+function getMarketIcon(market) {
+  const q = (market?.question || market?.q || "").toString().toLowerCase();
+  const commodity = (market?.commodity || market?.cat || market?.category || "").toString().toLowerCase();
+  if (q.includes("bitcoin") || q.includes("btc") || commodity === "bitcoin") return { emoji: "₿", bg: "#F7931A" };
+  if (q.includes("gold") || q.includes("xau") || commodity.includes("gold")) return { emoji: "🥇", bg: "#FFD700" };
+  if (q.includes("silver") || q.includes("xag") || commodity.includes("silver")) return { emoji: "🥈", bg: "#C0C0C0" };
+  if (q.includes("oil") || q.includes("wti") || q.includes("crude") || commodity.includes("oil")) return { emoji: "🛢️", bg: "#2D1B00" };
+  if (q.includes("apple") || q.includes("aapl")) return { emoji: "🍎", bg: "#555555" };
+  if (q.includes("nvidia") || q.includes("nvda")) return { emoji: "🟩", bg: "#76B900" };
+  if (q.includes("tesla") || q.includes("tsla")) return { emoji: "🚗", bg: "#CC0000" };
+  if (q.includes("uranium") || commodity.includes("uranium")) return { emoji: "☢️", bg: "#1a1a00" };
+  if (q.includes("copper") || commodity.includes("copper")) return { emoji: "🟤", bg: "#8B4513" };
+  if (q.includes("fed") || q.includes("rates") || q.includes("recession") || commodity.includes("macro")) return { emoji: "🏦", bg: "#1a2744" };
+  if (q.includes("iran") || q.includes("conflict") || q.includes("geopolitical")) return { emoji: "🌍", bg: "#0a3d0a" };
+  return { emoji: "📊", bg: "#1a1a2e" };
 }
 
 // ─── MARKET CARD ──────────────────────────────────────────────────────────────
 function MktCard({ m, onSelect }) {
   const isNew = m.isNew;
-  const { icon, bg, ticker } = getCategoryIcon(m);
+  const { emoji, bg } = getMarketIcon(m);
   return (
-    <div className="mkt-card" onClick={onSelect} style={{background: isNew ? "linear-gradient(135deg,#1c1c19,#1a1508)" : "#1c1c19", border:`1px solid ${isNew?"#c9920d":"#2a2a26"}`,padding:12,marginBottom:8,cursor:"pointer"}}
+    <div className="mkt-card market-card" onClick={onSelect} style={{background: isNew ? "linear-gradient(135deg,#1c1c19,#1a1508)" : "#1c1c19", border:`1px solid ${isNew?"#c9920d":"#2a2a26"}`,padding:12,marginBottom:8,cursor:"pointer"}}
       onMouseEnter={e=>{e.currentTarget.style.borderColor="#e0a820";}}
       onMouseLeave={e=>{e.currentTarget.style.borderColor=isNew?"#c9920d":"#2a2a26";}}>
       {isNew && (
@@ -907,10 +904,10 @@ function MktCard({ m, onSelect }) {
         </div>
       )}
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-        <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:36,height:36,borderRadius:8,background:bg,fontSize:ticker?10:18,fontWeight:700,color:ticker?"#fff":"inherit"}}>{icon}</span>
+        <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:36,height:36,borderRadius:8,background:bg,fontSize:18}}>{emoji}</span>
         <div style={{flex:1}}>
           {m.hot && <span style={{fontSize:7,background:"rgba(245,158,11,0.15)",color:"#e0a820",border:"1px solid rgba(245,158,11,0.3)",borderRadius:4,padding:"1px 5px",marginRight:6,fontWeight:700}}>🔥 HOT</span>}
-          {m.badge && !isNew && !ticker && <span style={{fontSize:7,background:"rgba(201,146,13,0.1)",color:"#e0a820",border:"1px solid rgba(201,146,13,0.3)",borderRadius:4,padding:"1px 5px",fontWeight:700}}>{m.badge}</span>}
+          {m.badge && !isNew && <span style={{fontSize:7,background:"rgba(201,146,13,0.1)",color:"#e0a820",border:"1px solid rgba(201,146,13,0.3)",borderRadius:4,padding:"1px 5px",fontWeight:700}}>{m.badge}</span>}
         </div>
         <div className="mkt-card-chart" style={{display:"flex",alignItems:"center",gap:4}}>
           <OddsChart marketId={m.id} currentYes={m.yes}/>
