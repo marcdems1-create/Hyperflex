@@ -179,6 +179,92 @@ app.get('/api/creator/dashboard', requireAuth, async (req, res) => {
   }
 });
 
+app.get('/api/creator/analytics', requireAuth, async (req, res) => {
+  try {
+    const { data: settings } = await supabase
+      .from('creator_settings')
+      .select('slug, display_name')
+      .eq('user_id', req.userId)
+      .single();
+    if (!settings) return res.status(404).json({ error: 'Creator not found' });
+    const slug = settings.slug;
+
+    const { data: markets } = await supabase
+      .from('markets')
+      .select('*')
+      .eq('creator_slug', slug)
+      .order('created_at', { ascending: true });
+
+    const marketIds = (markets || []).map(m => m.id);
+    let positions = [];
+    if (marketIds.length > 0) {
+      const { data: pos } = await supabase
+        .from('positions')
+        .select('*, markets(question, category, resolved, outcome)')
+        .in('market_id', marketIds);
+      positions = pos || [];
+    }
+
+    // Markets by category
+    const byCategory = {};
+    for (const m of (markets || [])) {
+      const cat = m.category || 'other';
+      byCategory[cat] = (byCategory[cat] || 0) + 1;
+    }
+
+    // Markets over time (by week)
+    const byWeek = {};
+    for (const m of (markets || [])) {
+      if (!m.created_at) continue;
+      const d = new Date(m.created_at);
+      const week = `${d.getFullYear()}-W${String(Math.ceil((d.getDate()) / 7)).padStart(2,'0')}`;
+      byWeek[week] = (byWeek[week] || 0) + 1;
+    }
+
+    // Top markets by trade volume
+    const mktVolume = {};
+    for (const p of positions) {
+      mktVolume[p.market_id] = (mktVolume[p.market_id] || { volume: 0, trades: 0, question: p.markets?.question || '' });
+      mktVolume[p.market_id].volume += Number(p.amount) || 0;
+      mktVolume[p.market_id].trades += 1;
+    }
+    const topMarkets = Object.entries(mktVolume)
+      .map(([id, v]) => ({ market_id: id, question: v.question, volume: Math.round(v.volume * 100) / 100, trades: v.trades }))
+      .sort((a, b) => b.volume - a.volume)
+      .slice(0, 5);
+
+    // Unique traders over time
+    const tradersByWeek = {};
+    const seenTraders = new Set();
+    for (const p of positions.sort((a,b) => new Date(a.created_at) - new Date(b.created_at))) {
+      if (!p.created_at) continue;
+      const d = new Date(p.created_at);
+      const week = `${d.getFullYear()}-W${String(Math.ceil((d.getDate()) / 7)).padStart(2,'0')}`;
+      seenTraders.add(p.user_id);
+      tradersByWeek[week] = seenTraders.size;
+    }
+
+    // Resolution accuracy (resolved markets)
+    const resolved = (markets || []).filter(m => m.resolved);
+    const totalResolved = resolved.length;
+    const yesOutcomes = resolved.filter(m => m.outcome === true).length;
+
+    res.json({
+      total_markets: (markets || []).length,
+      total_positions: positions.length,
+      by_category: byCategory,
+      markets_by_week: byWeek,
+      traders_by_week: tradersByWeek,
+      top_markets: topMarkets,
+      total_resolved: totalResolved,
+      yes_outcomes: yesOutcomes,
+    });
+  } catch (err) {
+    console.error('analytics error:', err.message);
+    res.status(500).json({ error: 'Analytics failed' });
+  }
+});
+
 // Suggest markets: auth + { description } → Claude returns 5 YES/NO market ideas
 app.post('/api/suggest-markets', requireAuth, async (req, res) => {
   const { description } = req.body;
