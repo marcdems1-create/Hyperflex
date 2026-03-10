@@ -47,10 +47,10 @@
     window.__w3modal = modal;
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #141412; color: #ddd8cc; font-family: 'DM Sans', sans-serif; }
+    body { background: #141412; color: #ddd8cc; font-family: 'Inter', sans-serif; }
     :root {
       --ink: #0e0e0c;
       --paper: #141412;
@@ -67,9 +67,7 @@
       --red-lt: #c0392b;
       --border: #2a2a26;
       --dim: #7a7870;
-      --mono: 'DM Mono', monospace;
-      --serif: 'Playfair Display', serif;
-      --sans: 'DM Sans', sans-serif;
+      --sans: 'Inter', sans-serif;
     }
     ::-webkit-scrollbar { display: none; }
     input::placeholder, textarea::placeholder { color: #7a7870; }
@@ -83,8 +81,7 @@
       --text: #ddd8cc; --gold: #c9920d; --gold-lt: #e0a820;
       --gold-bright: #f5c842; --border: #2a2a26; --dim: #7a7870;
       --green-lt: #2d9b5f; --red-lt: #c0392b;
-      --mono: 'DM Mono', monospace; --serif: 'Playfair Display', serif;
-      --sans: 'DM Sans', sans-serif;
+      --sans: 'Inter', sans-serif;
     }
     body { background: var(--paper) !important; color: var(--text) !important; font-family: var(--sans) !important; }
     /* Ticker */
@@ -95,7 +92,7 @@
     ::-webkit-scrollbar-thumb { background: var(--border); }
     /* Inputs */
     input, textarea, select {
-      font-family: var(--mono) !important;
+      font-family: var(--sans) !important;
       background: var(--ink) !important;
       border-color: var(--border) !important;
       color: var(--text) !important;
@@ -132,6 +129,22 @@
       .markets-grid { grid-template-columns: repeat(3, 1fr); gap: 14px; }
     }
 
+    .mkt-card {
+      border-radius: 12px;
+      transition: border-color 0.2s, transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .mkt-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+    }
+    .mkt-card .mkt-card-buttons > div:first-child {
+      background: linear-gradient(135deg, #0e1a10, #1a5c3a) !important;
+      border-color: #2d9b5f !important;
+    }
+    .mkt-card .mkt-card-buttons > div:last-child {
+      background: linear-gradient(135deg, #1a0e0e, #5c1a1a) !important;
+      border-color: #c0392b !important;
+    }
     .mkt-card .mkt-card-chart { display: block; }
     @media (min-width: 1024px) {
       .mkt-card .mkt-card-chart { display: none !important; }
@@ -558,7 +571,7 @@ function LiveTicker({ prices = {} }) {
 
   return (
     <div style={{background:"#0e0e0c",borderBottom:"1px solid #2a2a26",padding:"6px 0",overflow:"hidden",whiteSpace:"nowrap"}}>
-      <div style={{display:"inline-block",animation:"ticker 55s linear infinite",fontFamily:"'DM Mono', monospace",fontSize:10}}>
+      <div style={{display:"inline-block",animation:"ticker 55s linear infinite",fontFamily:"'Inter', sans-serif",fontSize:10}}>
         <span style={{paddingRight:40}}>{renderItems()}</span>
         <span style={{paddingRight:40}}>{renderItems()}</span>
       </div>
@@ -576,7 +589,7 @@ function MarketDetail({ m, onBack, onTrade, hlSigner, hlAddress, refreshBalances
 
   const notify = (msg) => {
     const el = document.createElement("div");
-    el.style.cssText = "position:fixed;top:20px;right:16px;background:#2a2200;border:1px solid #c9920d;color:#ddd8cc;padding:10px 16px;border-radius:4px;font-family:'DM Mono',monospace;font-size:12px;z-index:9999;animation:fadeSlide 0.3s ease";
+    el.style.cssText = "position:fixed;top:20px;right:16px;background:#2a2200;border:1px solid #c9920d;color:#ddd8cc;padding:10px 16px;border-radius:4px;font-family:'Inter',sans-serif;font-size:12px;z-index:9999;animation:fadeSlide 0.3s ease";
     el.textContent = msg;
     document.body.appendChild(el);
     setTimeout(() => el.remove(), 2500);
@@ -626,7 +639,7 @@ function MarketDetail({ m, onBack, onTrade, hlSigner, hlAddress, refreshBalances
     }
   };
   return (
-    <div style={{animation:"fadeSlide 0.2s ease",fontFamily:"'DM Mono', monospace"}}>
+    <div style={{animation:"fadeSlide 0.2s ease",fontFamily:"'Inter', sans-serif"}}>
       <button onClick={onBack} style={{background:"none",border:"none",color:"#e0a820",fontSize:12,cursor:"pointer",padding:"8px 0 14px",display:"flex",alignItems:"center",gap:6}}>
         ← Back to markets
       </button>
@@ -856,13 +869,37 @@ function Portfolio() {
   );
 }
 
+// Category → icon + background for market cards
+function getCategoryIcon(m) {
+  const cat = (m?.cat || m?.category || "").toString().toLowerCase();
+  const sector = (m?.sector || "").toString().toLowerCase();
+  const q = (m?.q || m?.question || "").toString().toLowerCase();
+  const badge = (m?.badge || "").toString().toUpperCase();
+  if (sector === "crypto" || cat.includes("bitcoin") || cat.includes("ethereum") || cat.includes("hyperliquid") || q.includes("bitcoin") || q.includes("hype token")) return { icon: "₿", bg: "#e27625" };
+  if (cat.includes("gold") || q.includes("xau")) return { icon: "🥇", bg: "#f5c842" };
+  if (cat.includes("silver") || q.includes("xag")) return { icon: "🥈", bg: "#8a9ba8" };
+  if (cat.includes("oil") || cat.includes("wti") || cat.includes("crude") || q.includes("wti")) return { icon: "🛢️", bg: "#1a1a1a" };
+  if (sector === "earnings" || cat.includes("earnings")) {
+    if (badge.includes("AAPL") || q.includes("apple")) return { icon: "AAPL", bg: "#1a5c3a", ticker: true };
+    if (badge.includes("NVDA") || q.includes("nvidia")) return { icon: "NVDA", bg: "#1a5c3a", ticker: true };
+    if (badge.includes("TSLA") || q.includes("tesla")) return { icon: "TSLA", bg: "#1a5c3a", ticker: true };
+    return { icon: "📊", bg: "#1a5c3a" };
+  }
+  if (sector === "macro" || cat.includes("fed") || cat.includes("monetary") || cat.includes("recession")) return { icon: "🏛️", bg: "#1e3a5f" };
+  if (cat.includes("iran") || cat.includes("geo") || q.includes("iran") || q.includes("geopolitical")) return { icon: "🌍", bg: "#2563eb" };
+  if (cat.includes("uranium")) return { icon: "☢️", bg: "#2d5a27" };
+  if (cat.includes("copper") || cat.includes("base metals")) return { icon: "🟤", bg: "#8b6914" };
+  return { icon: m?.icon || "🪨", bg: "#2a2a26" };
+}
+
 // ─── MARKET CARD ──────────────────────────────────────────────────────────────
 function MktCard({ m, onSelect }) {
   const isNew = m.isNew;
+  const { icon, bg, ticker } = getCategoryIcon(m);
   return (
-    <div className="mkt-card" onClick={onSelect} style={{background: isNew ? "linear-gradient(135deg,#1c1c19,#1a1508)" : "#1c1c19", border:`1px solid ${isNew?"#c9920d":"#2a2a26"}`,borderRadius:4,padding:12,marginBottom:8,cursor:"pointer",transition:"border-color 0.2s,transform 0.15s"}}
-      onMouseEnter={e=>{e.currentTarget.style.borderColor="#e0a820";e.currentTarget.style.transform="translateY(-1px)";}}
-      onMouseLeave={e=>{e.currentTarget.style.borderColor=isNew?"#c9920d":"#2a2a26";e.currentTarget.style.transform="translateY(0)";}}>
+    <div className="mkt-card" onClick={onSelect} style={{background: isNew ? "linear-gradient(135deg,#1c1c19,#1a1508)" : "#1c1c19", border:`1px solid ${isNew?"#c9920d":"#2a2a26"}`,padding:12,marginBottom:8,cursor:"pointer"}}
+      onMouseEnter={e=>{e.currentTarget.style.borderColor="#e0a820";}}
+      onMouseLeave={e=>{e.currentTarget.style.borderColor=isNew?"#c9920d":"#2a2a26";}}>
       {isNew && (
         <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,padding:"3px 8px",background:"rgba(201,146,13,0.08)",border:"1px solid rgba(201,146,13,0.25)",borderRadius:3}}>
           <span style={{fontSize:8,color:"#e0a820",fontWeight:700,letterSpacing:0.5}}>✦ NEW TODAY</span>
@@ -870,10 +907,10 @@ function MktCard({ m, onSelect }) {
         </div>
       )}
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-        <span style={{fontSize:18}}>{m.icon}</span>
+        <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:36,height:36,borderRadius:8,background:bg,fontSize:ticker?10:18,fontWeight:700,color:ticker?"#fff":"inherit"}}>{icon}</span>
         <div style={{flex:1}}>
           {m.hot && <span style={{fontSize:7,background:"rgba(245,158,11,0.15)",color:"#e0a820",border:"1px solid rgba(245,158,11,0.3)",borderRadius:4,padding:"1px 5px",marginRight:6,fontWeight:700}}>🔥 HOT</span>}
-          {m.badge && !isNew && <span style={{fontSize:7,background:"rgba(201,146,13,0.1)",color:"#e0a820",border:"1px solid rgba(201,146,13,0.3)",borderRadius:4,padding:"1px 5px",fontWeight:700}}>{m.badge}</span>}
+          {m.badge && !isNew && !ticker && <span style={{fontSize:7,background:"rgba(201,146,13,0.1)",color:"#e0a820",border:"1px solid rgba(201,146,13,0.3)",borderRadius:4,padding:"1px 5px",fontWeight:700}}>{m.badge}</span>}
         </div>
         <div className="mkt-card-chart" style={{display:"flex",alignItems:"center",gap:4}}>
           <OddsChart marketId={m.id} currentYes={m.yes}/>
@@ -885,10 +922,10 @@ function MktCard({ m, onSelect }) {
         <div style={{flex:100-m.yes,background:"linear-gradient(90deg,#c0392b,#d44c4c)",transition:"flex 0.5s"}}/>
       </div>
       <div className="mkt-card-buttons" style={{display:"flex",gap:8}}>
-        <div style={{flex:1,textAlign:"center",padding:"7px 0",background:"#0e1a10",border:"1px solid #1a5c3a",borderRadius:3,color:"#3dbd73",fontSize:12,fontWeight:700}}>YES {m.yes}¢</div>
-        <div style={{flex:1,textAlign:"center",padding:"7px 0",background:"#1a0e0e",border:"1px solid #5c1a1a",borderRadius:3,color:"#d44c4c",fontSize:12,fontWeight:700}}>NO {100-m.yes}¢</div>
+        <div style={{flex:1,textAlign:"center",padding:"7px 0",background:"linear-gradient(135deg,#0e1a10,#1a5c3a)",border:"1px solid #2d9b5f",borderRadius:6,color:"#3dbd73",fontSize:12,fontWeight:700}}>YES {m.yes}¢</div>
+        <div style={{flex:1,textAlign:"center",padding:"7px 0",background:"linear-gradient(135deg,#1a0e0e,#5c1a1a)",border:"1px solid #c0392b",borderRadius:6,color:"#d44c4c",fontSize:12,fontWeight:700}}>NO {100-m.yes}¢</div>
       </div>
-      <div className="mkt-card-meta" style={{fontSize:8,color:"#7a7870",marginTop:8,textAlign:"right"}}>Closes {m.closes} · Vol ${m.vol}</div>
+      <div className="mkt-card-meta" style={{fontSize:8,color:"#7a7870",marginTop:8,textAlign:"right"}}>Vol ${m.vol} · Closes {m.closes}</div>
     </div>
   );
 }
@@ -1126,7 +1163,7 @@ function App() {
   };
 
   return (
-    <div className="app-container" style={{minHeight:"100vh",background:"#141412",fontFamily:"'DM Mono', monospace",color:"#ddd8cc",paddingBottom:80}}>
+    <div className="app-container" style={{minHeight:"100vh",background:"#141412",fontFamily:"'Inter', sans-serif",color:"#ddd8cc",paddingBottom:80}}>
 
       {/* Live ticker */}
       <LiveTicker prices={livePrices}/>
