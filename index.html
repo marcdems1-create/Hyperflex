@@ -130,10 +130,13 @@
         max-width: 1200px !important;
         width: 100% !important;
       }
-      .app-container { margin-left: auto; margin-right: auto; padding-left: 24px; padding-right: 24px; }
+      .app-container { margin-left: auto; margin-right: auto; padding-left: 24px; padding-right: 24px; max-width: 100% !important; }
+      .content-area, .fade-in { width: 100% !important; max-width: 100% !important; }
     }
 
-    .markets-grid { display: flex !important; flex-direction: column !important; gap: 12px !important; }
+    @media (max-width: 767px) {
+      .markets-grid { display: flex !important; flex-direction: column !important; gap: 12px !important; }
+    }
     @media (min-width: 768px) {
       .markets-grid { display: grid !important; grid-template-columns: repeat(2, 1fr) !important; gap: 12px !important; }
     }
@@ -1228,7 +1231,7 @@ function App() {
         </div>
       </div>
 
-      <div style={{padding:"12px 16px"}}>
+      <div className="content-area" style={{padding:"12px 16px"}}>
 
         {/* ── COMMODITIES HERO BLOCK ───────────────────────────── */}
         <div style={{background:"linear-gradient(135deg,#0d0f1a,#1a1400)",border:"1px solid #92400e",borderRadius:4,padding:14,marginBottom:14}}>
