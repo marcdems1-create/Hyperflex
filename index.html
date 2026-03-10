@@ -168,6 +168,32 @@
       .header-bar { max-width: 1200px; margin-left: auto; margin-right: auto; padding-left: 24px; padding-right: 24px; }
       .bottom-nav { max-width: 1200px; }
     }
+
+    /* ── DESKTOP LAYOUT: sidebar + main (min-width: 1024px) ─────────────────── */
+    .desktop-layout { max-width: none !important; width: 100% !important; padding-bottom: 0 !important; }
+    .desktop-wrapper { display: flex; min-height: 100vh; width: 100%; }
+    .desktop-sidebar {
+      width: 240px;
+      min-width: 240px;
+      background: #0e0e0c;
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      padding: 16px 0;
+    }
+    .desktop-sidebar .sidebar-logo { display: flex; align-items: center; gap: 8px; padding: 0 16px 20px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+    .desktop-sidebar .sidebar-nav { flex: 1; display: flex; flex-direction: column; gap: 2px; padding: 0 8px; }
+    .desktop-sidebar .sidebar-nav button {
+      display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border: none; border-radius: 6px;
+      background: transparent; color: #7a7870; font-family: inherit; font-size: 13px; font-weight: 500; cursor: pointer; text-align: left;
+      transition: background 0.2s, color 0.2s;
+    }
+    .desktop-sidebar .sidebar-nav button:hover { background: rgba(201,146,13,0.08); color: #c0b090; }
+    .desktop-sidebar .sidebar-nav button.active { background: rgba(201,146,13,0.15); color: #e0a820; font-weight: 600; }
+    .desktop-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+    .desktop-main .markets-grid { display: grid !important; grid-template-columns: repeat(3, 1fr) !important; gap: 16px !important; max-width: 1200px; margin: 0 auto; width: 100%; }
+    .desktop-main .mkt-card-chart { display: none !important; }
+    .desktop-topbar { display: flex; align-items: center; justify-content: flex-end; padding: 8px 24px; border-bottom: 1px solid var(--border); background: #141412; gap: 12px; }
   </style>
 </head>
 <body>
@@ -960,6 +986,12 @@ function App() {
   const [hlSigner, setHlSigner] = useState(null);     // ethers Signer
   const [balance, setBalance] = useState(0);           // USDC on HL
   const [hypeBalance, setHypeBalance] = useState(0);   // HYPE spot balance
+  const [isDesktop, setIsDesktop] = useState(typeof window !== 'undefined' && window.innerWidth >= 1024);
+  React.useEffect(() => {
+    const onResize = () => setIsDesktop(window.innerWidth >= 1024);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   const [user, setUser] = React.useState(() => { try { return JSON.parse(localStorage.getItem('hf_user') || 'null'); } catch { return null; } });
   const [token, setToken] = React.useState(() => localStorage.getItem('hf_token') || null);
@@ -1176,47 +1208,87 @@ function App() {
     } catch {}
   };
 
+  const navTabs = [["markets","📊","Markets"],["combos","🎰","Combos"],["jackpot","🎯","Jackpot"],["portfolio","💼","Portfolio"],["leaderboard","🏆","Board"],["profile","👤","Profile"]];
+
   return (
-    <div className="app-container" style={{minHeight:"100vh",background:"#141412",fontFamily:"'Inter', sans-serif",color:"#ddd8cc",paddingBottom:80}}>
+    <div className={"app-container" + (isDesktop ? " desktop-layout" : "")} style={{minHeight:"100vh",background:"#141412",fontFamily:"'Inter', sans-serif",color:"#ddd8cc",paddingBottom: isDesktop ? 0 : 80, position: isDesktop ? "relative" : undefined}}>
 
-      {/* Live ticker */}
-      <LiveTicker prices={livePrices}/>
-
-      {/* Notification */}
+      {/* Notification (shared) */}
       {notification && (
         <div style={{position:"fixed",top:36,left:"50%",transform:"translateX(-50%)",background:"#2a2200",border:"1px solid #c9920d",color:"#ddd8cc",padding:"10px 20px",borderRadius:4,fontSize:12,zIndex:9999,animation:"fadeSlide 0.3s ease",whiteSpace:"nowrap"}}>
           {notification}
         </div>
       )}
 
-      {/* Header */}
-      <div className="header-bar" style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",borderBottom:"1px solid #2a2a26",background:"#141412",position:"sticky",top:0,zIndex:100}}>
-        <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <HyperflexLogo size={28}/>
-          <span style={{fontSize:14,fontWeight:700,letterSpacing:2,color:"#ddd8cc"}}>HYPERFLEX</span>
-
+      {isDesktop ? (
+        <div className="desktop-wrapper">
+          <aside className="desktop-sidebar">
+            <div className="sidebar-logo">
+              <HyperflexLogo size={28}/>
+              <span style={{fontSize:14,fontWeight:700,letterSpacing:2,color:"#ddd8cc"}}>HYPERFLEX</span>
+            </div>
+            <nav className="sidebar-nav">
+              {navTabs.map(([t, icon, label]) => (
+                <button key={t} type="button" className={tab === t ? "active" : ""} onClick={()=>{setTab(t);if(t==="markets")setMarketDetailView(null);}}>
+                  <span style={{fontSize:16}}>{icon}</span>
+                  {label}
+                </button>
+              ))}
+            </nav>
+            <div style={{padding:"12px 16px",borderTop:"1px solid var(--border)",marginTop:"auto"}}>
+              <StreakWidget/>
+              <span style={{fontSize:10,color:"#2d9b5f",fontWeight:600,marginTop:8,display:"block"}}>🎮 Free to Play</span>
+            </div>
+          </aside>
+          <main className="desktop-main">
+            <div className="desktop-topbar">
+              <div style={{textAlign:"right"}}>
+                {connected ? (
+                  <>
+                    <div style={{fontSize:10,color:"#7a7870"}}>HL BALANCE</div>
+                    <div style={{fontSize:13,fontWeight:700,color:"#3dbd73"}}>${balance.toLocaleString(undefined,{minimumFractionDigits:2})} USDC</div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{fontSize:10,color:"#7a7870"}}>BTC LIVE</div>
+                    <div style={{fontSize:13,fontWeight:700,color:"#3dbd73"}}>{livePrices.BTC ? `$${livePrices.BTC.toLocaleString(undefined,{maximumFractionDigits:0})}` : "$83,241"}</div>
+                  </>
+                )}
+              </div>
+              <button onClick={()=>setWalletOpen(true)} style={{background:connected?"#0e1a10":"#2a2200",border:`1px solid ${connected?"#1a5c3a":"#b8820c"}`,borderRadius:6,color:connected?"#3dbd73":"#e0a820",padding:"8px 14px",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700}}>
+                {connected ? `● ${connected.slice(0,4)}…${connected.slice(-3)}` : "CONNECT"}
+              </button>
+            </div>
+            <LiveTicker prices={livePrices}/>
+          </main>
         </div>
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <div style={{textAlign:"right"}}>
-            {connected ? (
-              <>
-                <div style={{fontSize:8,color:"#7a7870"}}>HL BALANCE</div>
-                <div style={{fontSize:13,fontWeight:700,color:"#3dbd73"}}>${balance.toLocaleString(undefined,{minimumFractionDigits:2})} USDC</div>
-              </>
-            ) : (
-              <>
-                <div style={{fontSize:8,color:"#7a7870"}}>BTC LIVE</div>
-                <div style={{fontSize:13,fontWeight:700,color:"#3dbd73"}}>{livePrices.BTC ? `$${livePrices.BTC.toLocaleString(undefined,{maximumFractionDigits:0})}` : "$83,241"}</div>
-              </>
-            )}
+      ) : (
+        <>
+          <LiveTicker prices={livePrices}/>
+          <div className="header-bar" style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",borderBottom:"1px solid #2a2a26",background:"#141412",position:"sticky",top:0,zIndex:100}}>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <HyperflexLogo size={28}/>
+              <span style={{fontSize:14,fontWeight:700,letterSpacing:2,color:"#ddd8cc"}}>HYPERFLEX</span>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <div style={{textAlign:"right"}}>
+                {connected ? (<><div style={{fontSize:8,color:"#7a7870"}}>HL BALANCE</div><div style={{fontSize:13,fontWeight:700,color:"#3dbd73"}}>${balance.toLocaleString(undefined,{minimumFractionDigits:2})} USDC</div></>) : (<><div style={{fontSize:8,color:"#7a7870"}}>BTC LIVE</div><div style={{fontSize:13,fontWeight:700,color:"#3dbd73"}}>{livePrices.BTC ? `$${livePrices.BTC.toLocaleString(undefined,{maximumFractionDigits:0})}` : "$83,241"}</div></>)}
+              </div>
+              <button onClick={()=>setWalletOpen(true)} style={{background:connected?"#0e1a10":"#2a2200",border:`1px solid ${connected?"#1a5c3a":"#b8820c"}`,borderRadius:3,color:connected?"#3dbd73":"#e0a820",padding:"6px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700}}>
+                {connected ? `● ${connected.slice(0,4)}…${connected.slice(-3)}` : "CONNECT"}
+              </button>
+            </div>
           </div>
-          <button onClick={()=>setWalletOpen(true)} style={{background:connected?"#0e1a10":"#2a2200",border:`1px solid ${connected?"#1a5c3a":"#b8820c"}`,borderRadius:3,color:connected?"#3dbd73":"#e0a820",padding:"6px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700}}>
-            {connected ? `● ${connected.slice(0,4)}…${connected.slice(-3)}` : "CONNECT"}
-          </button>
-        </div>
-      </div>
+        </>
+      )}
 
-      <div style={{padding:"12px 16px"}}>
+      {/* Single shared content area: positioned in main on desktop, in flow on mobile */}
+      <div
+        style={{
+          padding:"12px 16px",
+          ...(isDesktop ? {position:"absolute",left:240,top:96,right:0,bottom:0,overflow:"auto"} : {})
+        }}
+      >
 
         {/* ── COMMODITIES HERO BLOCK ───────────────────────────── */}
         <div style={{background:"linear-gradient(135deg,#0d0f1a,#1a1400)",border:"1px solid #92400e",borderRadius:4,padding:14,marginBottom:14}}>
@@ -1242,20 +1314,22 @@ function App() {
           </button>
         </div>
 
-        {/* STREAK WIDGET + Paper trading badge */}
-        <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:14}}>
-          <StreakWidget/>
-          <span style={{fontSize:10,color:"#2d9b5f",fontWeight:600,background:"#1c1c19",border:"1px solid #1a5c3a",borderRadius:6,padding:"6px 10px",whiteSpace:"nowrap"}}>🎮 Free to Play</span>
-        </div>
-
-        {/* Tabs */}
-        <div style={{display:"flex",borderBottom:"1px solid #2a2a26",marginBottom:14}}>
-          {[["markets","Markets"],["combos","Combos ✨"],["jackpot","Jackpot 🎯"],["portfolio","Portfolio"],["leaderboard","Board"],["profile","Profile"]].map(([t,label]) => (
-            <button key={t} onClick={()=>{setTab(t);if(t==="markets")setMarketDetailView(null);}} style={{flex:1,padding:"9px 0",background:"transparent",border:"none",borderBottom:tab===t?"2px solid #c9920d":"2px solid transparent",color:tab===t?"#e0a820":"#555550",cursor:"pointer",fontFamily:"inherit",fontSize:8,fontWeight:tab===t?700:400,letterSpacing:0.5,textTransform:"uppercase",transition:"all 0.2s",whiteSpace:"nowrap"}}>
-              {label}
-            </button>
-          ))}
-        </div>
+        {/* STREAK WIDGET + Tabs — mobile only (on desktop these are in sidebar) */}
+        {!isDesktop && (
+          <>
+            <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:14}}>
+              <StreakWidget/>
+              <span style={{fontSize:10,color:"#2d9b5f",fontWeight:600,background:"#1c1c19",border:"1px solid #1a5c3a",borderRadius:6,padding:"6px 10px",whiteSpace:"nowrap"}}>🎮 Free to Play</span>
+            </div>
+            <div style={{display:"flex",borderBottom:"1px solid #2a2a26",marginBottom:14}}>
+              {[["markets","Markets"],["combos","Combos ✨"],["jackpot","Jackpot 🎯"],["portfolio","Portfolio"],["leaderboard","Board"],["profile","Profile"]].map(([t,label]) => (
+                <button key={t} onClick={()=>{setTab(t);if(t==="markets")setMarketDetailView(null);}} style={{flex:1,padding:"9px 0",background:"transparent",border:"none",borderBottom:tab===t?"2px solid #c9920d":"2px solid transparent",color:tab===t?"#e0a820":"#555550",cursor:"pointer",fontFamily:"inherit",fontSize:8,fontWeight:tab===t?700:400,letterSpacing:0.5,textTransform:"uppercase",transition:"all 0.2s",whiteSpace:"nowrap"}}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
 
         {/* MARKETS */}
         {tab==="markets" && (
@@ -1508,7 +1582,8 @@ function App() {
         )}
       </div>
 
-      {/* Bottom Nav */}
+      {/* Bottom Nav — mobile only */}
+      {!isDesktop && (
       <div className="bottom-nav" style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",background:"#141412",borderTop:"1px solid #2a2a26",display:"flex",padding:"8px 0 12px"}}>
         {[["markets","📊","Markets"],["combos","🎰","Combos"],["jackpot","🎯","Jackpot"],["portfolio","💼","Portfolio"],["leaderboard","🏆","Board"]].map(([t,icon,label])=>(
           <button key={t} onClick={()=>{setTab(t);if(t==="markets")setMarketDetailView(null);}} style={{flex:1,background:"none",border:"none",color:tab===t?"#e0a820":"#555550",cursor:"pointer",fontFamily:"inherit",fontSize:8,display:"flex",flexDirection:"column",alignItems:"center",gap:2,transition:"color 0.2s"}}>
@@ -1517,6 +1592,7 @@ function App() {
           </button>
         ))}
       </div>
+      )}
 
       {/* Wallet Modal */}
       {walletOpen && (
