@@ -129,6 +129,29 @@
       .markets-grid { grid-template-columns: repeat(3, 1fr); gap: 14px; }
     }
 
+    /* Force grid + Inter on desktop (override any conflicting styles) */
+    @media (min-width: 1024px) {
+      body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important; }
+      .markets-grid,
+      #markets-container,
+      .market-list {
+        display: grid !important;
+        grid-template-columns: repeat(3, 1fr) !important;
+        gap: 16px !important;
+        max-width: 1200px !important;
+        margin: 0 auto !important;
+      }
+      .mkt-card-chart { display: none !important; }
+    }
+    @media (min-width: 768px) and (max-width: 1023px) {
+      .markets-grid,
+      #markets-container,
+      .market-list {
+        display: grid !important;
+        grid-template-columns: repeat(2, 1fr) !important;
+      }
+    }
+
     .mkt-card {
       border-radius: 12px;
       transition: border-color 0.2s, transform 0.2s ease, box-shadow 0.2s ease;
