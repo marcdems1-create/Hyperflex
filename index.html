@@ -490,7 +490,15 @@ const STREAK_DATA = { current: 4, best: 7, prize: "$500", nextPrize: "$1,000", n
 
 // ─── MINI ODDS CHART (Polymarket chart inspiration) ──────────────────────────
 function OddsChart({ marketId, currentYes }) {
+  const valid = typeof currentYes === 'number' && !Number.isNaN(currentYes) && currentYes >= 0 && currentYes <= 100;
   const points = [];
+  if (!valid) {
+    return (
+      <svg width={120} height={40} style={{display:"block"}}>
+        <rect width={120} height={40} fill="transparent"/>
+      </svg>
+    );
+  }
   let val = currentYes - 15 + Math.random() * 5;
   for (let i = 0; i < 30; i++) {
     val += (Math.random() - 0.48) * 3;
@@ -562,11 +570,12 @@ function OrderBook({ yes }) {
 
 // ─── LIVE TICKER (Polymarket-style news ticker) ───────────────────────────────
 function LiveTicker({ prices = {} }) {
-  const btc = prices.BTC ? `$${prices.BTC.toLocaleString(undefined,{maximumFractionDigits:0})}` : "$83,241";
-  const eth = prices.ETH ? `$${prices.ETH.toLocaleString(undefined,{maximumFractionDigits:0})}` : "$1,892";
-  const xag = prices.XAG ? `$${prices.XAG.toFixed(2)}/oz` : "$84.30/oz";
-  const xau = prices.XAU ? `$${prices.XAU.toLocaleString(undefined,{maximumFractionDigits:0})}/oz` : "$5,388/oz";
-  const wti = prices.WTI ? `$${prices.WTI.toFixed(2)}/bbl` : "$79.14/bbl";
+  const num = (v) => (typeof v === 'number' && !Number.isNaN(v) ? v : null);
+  const btc = num(prices.BTC) != null ? `$${Number(prices.BTC).toLocaleString(undefined,{maximumFractionDigits:0})}` : "$83,241";
+  const eth = num(prices.ETH) != null ? `$${Number(prices.ETH).toLocaleString(undefined,{maximumFractionDigits:0})}` : "$1,892";
+  const xag = num(prices.XAG) != null ? `$${Number(prices.XAG).toFixed(2)}/oz` : "$84.30/oz";
+  const xau = num(prices.XAU) != null ? `$${Number(prices.XAU).toLocaleString(undefined,{maximumFractionDigits:0})}/oz` : "$5,388/oz";
+  const wti = num(prices.WTI) != null ? `$${Number(prices.WTI).toFixed(2)}/bbl` : "$79.14/bbl";
 
   // Each item: array of segments — { text, chg? }
   // chg: true = green, false = red, undefined = dim
@@ -1105,27 +1114,26 @@ function App() {
   const [marketDetailView, setMarketDetailView] = useState(null);
   const wsUnsubRef = useRef(null);
 
-  // ── Live price fetch via CoinGecko (public, no CORS issues) ───────────────
+  // ── Live prices from backend /api/prices (avoids CORS with CoinGecko/metals) ─
   useEffect(() => {
-    const STATIC_COMMODITIES = { XAG: 84.30, XAU: 5388, WTI: 79.14 };
+    const STATIC_FALLBACK = { XAG: 84.30, XAU: 5388, WTI: 79.14, BTC: 83241, ETH: 1892 };
     const poll = async () => {
       try {
-        const res = await fetch(
-          "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd",
-          { headers: { "Accept": "application/json" } }
-        );
+        const res = await fetch('/api/prices');
         if (res.ok) {
           const data = await res.json();
           setLivePrices(prev => ({
+            ...STATIC_FALLBACK,
             ...prev,
-            ...STATIC_COMMODITIES,
-            BTC: data.bitcoin?.usd  || prev.BTC,
-            ETH: data.ethereum?.usd || prev.ETH,
+            BTC: data.BTC ?? prev.BTC ?? STATIC_FALLBACK.BTC,
+            ETH: data.ETH ?? prev.ETH ?? STATIC_FALLBACK.ETH,
+            XAU: data.XAU ?? prev.XAU ?? STATIC_FALLBACK.XAU,
+            XAG: data.XAG ?? prev.XAG ?? STATIC_FALLBACK.XAG,
+            WTI: data.WTI ?? prev.WTI ?? STATIC_FALLBACK.WTI,
           }));
         }
       } catch {
-        // fallback: just use static values
-        setLivePrices(prev => ({ ...STATIC_COMMODITIES, BTC: prev.BTC || 83241, ETH: prev.ETH || 1892 }));
+        setLivePrices(prev => ({ ...STATIC_FALLBACK, ...prev }));
       }
     };
     poll();
