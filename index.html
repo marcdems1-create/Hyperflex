@@ -488,14 +488,15 @@ const STREAK_DATA = { current: 4, best: 7, prize: "$500", nextPrize: "$1,000", n
 
 // ─── MINI ODDS CHART (Polymarket chart inspiration) ──────────────────────────
 function OddsChart({ marketId, currentYes }) {
+  const safeYes = typeof currentYes === "number" && !Number.isNaN(currentYes) ? currentYes : 50;
   const points = [];
-  let val = currentYes - 15 + Math.random() * 5;
+  let val = safeYes - 15 + Math.random() * 5;
   for (let i = 0; i < 30; i++) {
     val += (Math.random() - 0.48) * 3;
     val = Math.max(5, Math.min(95, val));
     points.push(val);
   }
-  points[points.length - 1] = currentYes;
+  points[points.length - 1] = safeYes;
   const w = 120, h = 40;
   const minV = Math.min(...points), maxV = Math.max(...points);
   const range = maxV - minV || 1;
