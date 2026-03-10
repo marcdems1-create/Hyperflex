@@ -12,6 +12,19 @@ app.use(cors());
 app.use(express.json());
 app.use(require("express").static("public"));
 
+// Tenant: subdomain from host (e.g. acme.hyperflex.io → req.tenant.subdomain = 'acme')
+app.use((req, res, next) => {
+  const host = req.headers.host || '';
+  const parts = host.split('.');
+  let subdomain = null;
+  if (parts.length >= 3) {
+    subdomain = parts[0].toLowerCase();
+    if (subdomain === 'www' || subdomain === 'hyperflex') subdomain = null;
+  }
+  req.tenant = { subdomain };
+  next();
+});
+
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_ANON_KEY
@@ -49,6 +62,160 @@ app.post('/login', async (req, res) => {
   if (!valid) return res.status(400).json({ error: 'Invalid password' });
   const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET || 'hyperflex_secret');
   res.json({ token, user: { id: user.id, email: user.email, display_name: user.display_name, balance: user.balance } });
+});
+
+// Auth middleware for protected routes
+function requireAuth(req, res, next) {
+  const auth = req.headers.authorization;
+  const token = auth && auth.startsWith('Bearer ') ? auth.slice(7) : null;
+  if (!token) return res.status(401).json({ error: 'Auth required' });
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET || 'hyperflex_secret');
+    req.userId = payload.id;
+    next();
+  } catch (e) {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+}
+
+// ── CREATOR PLATFORM ──────────────────────────────
+
+// Creator signup: email, password, display_name, slug → user + creator_settings, return JWT
+app.post('/api/creator/signup', async (req, res) => {
+  const { email, password, display_name, slug } = req.body;
+  if (!email || !password || !display_name || !slug) {
+    return res.status(400).json({ error: 'email, password, display_name, and slug are required' });
+  }
+  const slugStr = String(slug).trim().toLowerCase();
+  if (!/^[a-z0-9]{3,20}$/.test(slugStr)) {
+    return res.status(400).json({ error: 'slug must be lowercase alphanumeric, 3–20 characters' });
+  }
+  const { data: existingSlug } = await supabase
+    .from('creator_settings')
+    .select('user_id')
+    .eq('slug', slugStr)
+    .maybeSingle();
+  if (existingSlug) return res.status(400).json({ error: 'slug already taken' });
+
+  const { data: existingEmail } = await supabase
+    .from('users')
+    .select('id')
+    .eq('email', email)
+    .maybeSingle();
+  if (existingEmail) return res.status(400).json({ error: 'email already registered' });
+
+  const password_hash = await bcrypt.hash(password, 10);
+  const { data: user, error: userError } = await supabase
+    .from('users')
+    .insert([{ email, password_hash, display_name, is_creator: true }])
+    .select()
+    .single();
+  if (userError) return res.status(400).json({ error: userError.message });
+
+  const { error: settingsError } = await supabase
+    .from('creator_settings')
+    .insert([{ user_id: user.id, slug: slugStr, display_name: display_name || user.display_name, custom_points_name: 'Flex Points' }]);
+  if (settingsError) {
+    await supabase.from('users').delete().eq('id', user.id);
+    return res.status(400).json({ error: settingsError.message || 'Failed to create creator settings' });
+  }
+
+  const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET || 'hyperflex_secret');
+  res.json({
+    token,
+    user: { id: user.id, email: user.email, display_name: user.display_name, balance: user.balance, is_creator: true },
+  });
+});
+
+// Creator dashboard: markets, total traders, total volume, resolution queue (auth required)
+app.get('/api/creator/dashboard', requireAuth, async (req, res) => {
+  try {
+    const { data: settings, error: settingsErr } = await supabase
+      .from('creator_settings')
+      .select('slug, display_name')
+      .eq('user_id', req.userId)
+      .single();
+    if (settingsErr || !settings) return res.status(404).json({ error: 'Creator settings not found' });
+    const slug = settings.slug;
+
+    const { data: markets, error: marketsErr } = await supabase
+      .from('markets')
+      .select('*')
+      .eq('creator_slug', slug)
+      .order('created_at', { ascending: false });
+    if (marketsErr) return res.status(400).json({ error: marketsErr.message });
+
+    const marketIds = (markets || []).map((m) => m.id);
+    let totalTraders = 0;
+    let totalVolume = 0;
+    if (marketIds.length > 0) {
+      const { data: positions } = await supabase
+        .from('positions')
+        .select('user_id, amount')
+        .in('market_id', marketIds);
+      const traders = new Set((positions || []).map((p) => p.user_id));
+      totalTraders = traders.size;
+      totalVolume = (positions || []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    }
+
+    const now = new Date().toISOString();
+    const { data: resolutionQueue } = await supabase
+      .from('markets')
+      .select('*')
+      .eq('creator_slug', slug)
+      .eq('resolved', false)
+      .lt('expiry_date', now)
+      .order('expiry_date', { ascending: true });
+
+    res.json({
+      markets: markets || [],
+      total_traders: totalTraders,
+      total_volume: Math.round(totalVolume * 100) / 100,
+      resolution_queue: resolutionQueue || [],
+    });
+  } catch (err) {
+    console.error('creator/dashboard error:', err.message);
+    res.status(500).json({ error: 'Dashboard failed' });
+  }
+});
+
+// Suggest markets: auth + { description } → Claude returns 5 YES/NO market ideas
+app.post('/api/suggest-markets', requireAuth, async (req, res) => {
+  const { description } = req.body;
+  if (!description || typeof description !== 'string') {
+    return res.status(400).json({ error: 'description (string) is required' });
+  }
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return res.status(503).json({ error: 'Market suggestions unavailable' });
+  }
+  try {
+    const systemPrompt = `You are a prediction market designer. The user describes their show or community. Generate exactly 5 YES/NO prediction market ideas tailored to that audience. Return ONLY a JSON array, no other text. Each object must have: question (string), category (string, e.g. crypto/commodities/earnings/macro/entertainment), resolution_date (YYYY-MM-DD, 30–90 days from today), notes (string, brief).`;
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1024,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: `Community/show description:\n${description}\n\nReturn the JSON array of 5 market ideas.` }],
+    });
+    const content = response?.content?.[0]?.text || response?.content?.[0]?.input_text || '';
+    if (!content) return res.status(502).json({ error: 'Empty response from AI' });
+    let list;
+    try {
+      list = JSON.parse(content);
+    } catch (e) {
+      return res.status(502).json({ error: 'Invalid JSON from AI' });
+    }
+    if (!Array.isArray(list)) list = [list];
+    const out = list.slice(0, 5).map((m) => ({
+      question: m?.question || '',
+      category: m?.category || 'macro',
+      resolution_date: m?.resolution_date || null,
+      notes: m?.notes || '',
+    }));
+    res.json(out);
+  } catch (err) {
+    console.error('suggest-markets error:', err.message);
+    res.status(500).json({ error: 'Suggestion failed' });
+  }
 });
 
 // ── MARKETS ───────────────────────────────────────
@@ -141,13 +308,32 @@ app.get('/positions/:user_id', async (req, res) => {
   res.json(data);
 });
 
-// Leaderboard: top 20 by PnL (join users + positions, settled only)
+// Leaderboard: top 20 by PnL (join users + positions, settled only). If tenant subdomain, filter to that creator's markets.
 app.get('/api/leaderboard', async (req, res) => {
   try {
-    const { data: positions } = await supabase
-      .from('positions')
-      .select('user_id, amount, potential_payout, settled, won')
-      .eq('settled', true);
+    let positions;
+    const subdomain = req.tenant?.subdomain;
+
+    if (subdomain) {
+      const { data: tenantMarkets } = await supabase
+        .from('markets')
+        .select('id')
+        .eq('creator_slug', subdomain);
+      const marketIds = (tenantMarkets || []).map((m) => m.id);
+      if (marketIds.length === 0) return res.json([]);
+      const { data: pos } = await supabase
+        .from('positions')
+        .select('user_id, amount, potential_payout, settled, won')
+        .eq('settled', true)
+        .in('market_id', marketIds);
+      positions = pos;
+    } else {
+      const { data: pos } = await supabase
+        .from('positions')
+        .select('user_id, amount, potential_payout, settled, won')
+        .eq('settled', true);
+      positions = pos;
+    }
 
     if (!positions || positions.length === 0) {
       return res.json([]);
