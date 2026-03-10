@@ -169,12 +169,12 @@
       .bottom-nav { max-width: 1200px; }
     }
 
-    /* ── DESKTOP LAYOUT: sidebar + main (min-width: 1024px) ─────────────────── */
+    /* ── DESKTOP LAYOUT: left nav + center (800px) + right sidebar (min-width: 768px) ── */
     .desktop-layout { max-width: none !important; width: 100% !important; padding-bottom: 0 !important; }
     .desktop-wrapper { display: flex; min-height: 100vh; width: 100%; }
     .desktop-sidebar {
-      width: 240px;
-      min-width: 240px;
+      width: 220px;
+      min-width: 220px;
       background: #0e0e0c;
       border-right: 1px solid var(--border);
       display: flex;
@@ -190,10 +190,24 @@
     }
     .desktop-sidebar .sidebar-nav button:hover { background: rgba(201,146,13,0.08); color: #c0b090; }
     .desktop-sidebar .sidebar-nav button.active { background: rgba(201,146,13,0.15); color: #e0a820; font-weight: 600; }
-    .desktop-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-    .desktop-main .markets-grid { display: grid !important; grid-template-columns: repeat(3, 1fr) !important; gap: 16px !important; max-width: 1200px; margin: 0 auto; width: 100%; }
+    .desktop-center { flex: 1; min-width: 0; display: flex; flex-direction: column; width: 100%; }
+    .desktop-main .markets-grid { display: grid !important; grid-template-columns: repeat(3, 1fr) !important; gap: 16px !important; max-width: 100%; margin: 0 auto; width: 100%; }
     .desktop-main .mkt-card-chart { display: none !important; }
     .desktop-topbar { display: flex; align-items: center; justify-content: flex-end; padding: 8px 24px; border-bottom: 1px solid var(--border); background: #141412; gap: 12px; }
+    .desktop-right-sidebar {
+      width: 260px;
+      min-width: 260px;
+      background: #0e0e0c;
+      border-left: 1px solid var(--border);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow-y: auto;
+    }
+    @media (min-width: 768px) {
+      .desktop-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+    }
   </style>
 </head>
 <body>
@@ -995,9 +1009,9 @@ function App() {
   const [hlSigner, setHlSigner] = useState(null);     // ethers Signer
   const [balance, setBalance] = useState(0);           // USDC on HL
   const [hypeBalance, setHypeBalance] = useState(0);   // HYPE spot balance
-  const [isDesktop, setIsDesktop] = useState(typeof window !== 'undefined' && window.innerWidth >= 1024);
+  const [isDesktop, setIsDesktop] = useState(typeof window !== 'undefined' && window.innerWidth >= 768);
   React.useEffect(() => {
-    const onResize = () => setIsDesktop(window.innerWidth >= 1024);
+    const onResize = () => setIsDesktop(window.innerWidth >= 768);
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
@@ -1019,6 +1033,7 @@ function App() {
   const [creatorSuggestDesc, setCreatorSuggestDesc] = React.useState('');
   const [creatorSuggestions, setCreatorSuggestions] = React.useState([]);
   const [creatorSuggestLoading, setCreatorSuggestLoading] = React.useState(false);
+  const [creatorSubTab, setCreatorSubTab] = React.useState('dashboard');
   React.useEffect(() => {
     const toSector = (category) => {
       const c = (category || "").toString().toLowerCase();
@@ -1078,11 +1093,11 @@ function App() {
   }, []);
 
   React.useEffect(() => {
-    if (tab !== 'leaderboard') return;
+    if (tab !== 'leaderboard' && !isDesktop) return;
     apiGet('/api/leaderboard').then(data => {
       if (Array.isArray(data)) setLeaderboardData(data);
     }).catch(() => setLeaderboardData([]));
-  }, [tab]);
+  }, [tab, isDesktop]);
 
   React.useEffect(() => {
     if (tab !== 'creator' || !token || !user?.is_creator) return;
@@ -1125,27 +1140,25 @@ function App() {
   const [marketDetailView, setMarketDetailView] = useState(null);
   const wsUnsubRef = useRef(null);
 
-  // ── Live price fetch via CoinGecko (public, no CORS issues) ───────────────
+  // ── Live price fetch via backend /api/prices (60s cache) ───────────────────
   useEffect(() => {
     const STATIC_COMMODITIES = { XAG: 84.30, XAU: 5388, WTI: 79.14 };
     const poll = async () => {
       try {
-        const res = await fetch(
-          "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd",
-          { headers: { "Accept": "application/json" } }
-        );
-        if (res.ok) {
-          const data = await res.json();
+        const data = await apiGet('/api/prices');
+        if (data && typeof data === 'object') {
           setLivePrices(prev => ({
-            ...prev,
             ...STATIC_COMMODITIES,
-            BTC: data.bitcoin?.usd  || prev.BTC,
-            ETH: data.ethereum?.usd || prev.ETH,
+            ...prev,
+            BTC: data.BTC ?? prev.BTC,
+            ETH: data.ETH ?? prev.ETH,
+            XAG: data.XAG ?? prev.XAG ?? STATIC_COMMODITIES.XAG,
+            XAU: data.XAU ?? prev.XAU ?? STATIC_COMMODITIES.XAU,
+            WTI: data.WTI ?? prev.WTI ?? STATIC_COMMODITIES.WTI,
           }));
         }
       } catch {
-        // fallback: just use static values
-        setLivePrices(prev => ({ ...STATIC_COMMODITIES, BTC: prev.BTC || 83241, ETH: prev.ETH || 1892 }));
+        setLivePrices(prev => ({ ...STATIC_COMMODITIES, BTC: prev.BTC || 83241, ETH: prev.ETH || 1892, XAG: prev.XAG ?? 84.30, XAU: prev.XAU ?? 5388, WTI: prev.WTI ?? 79.14 }));
       }
     };
     poll();
@@ -1253,7 +1266,7 @@ function App() {
               <span style={{fontSize:14,fontWeight:700,letterSpacing:2,color:"#ddd8cc"}}>HYPERFLEX</span>
             </div>
             <nav className="sidebar-nav">
-              {navTabs.map(([t, icon, label]) => (
+              {[["markets","📊","Markets"],["combos","🎰","Combos"],["jackpot","🎯","Jackpot"],["portfolio","💼","Portfolio"],["leaderboard","🏆","Board"],["creator","🎙️","For Creators"],["profile","👤","Profile"]].map(([t, icon, label]) => (
                 <button key={t} type="button" className={tab === t ? "active" : ""} onClick={()=>{setTab(t);if(t==="markets")setMarketDetailView(null);}}>
                   <span style={{fontSize:16}}>{icon}</span>
                   {label}
@@ -1265,28 +1278,39 @@ function App() {
               <span style={{fontSize:10,color:"#2d9b5f",fontWeight:600,marginTop:8,display:"block"}}>🎮 Free to Play</span>
             </div>
           </aside>
-          <main className="desktop-main">
+          <main className="desktop-center">
             <div className="desktop-topbar">
-              <button onClick={()=>setTab("creator")} style={{background:"none",border:"none",color:"#e0a820",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:600,padding:"4px 8px"}}>For Creators</button>
               <div style={{textAlign:"right"}}>
                 {connected ? (
-                  <>
-                    <div style={{fontSize:10,color:"#7a7870"}}>HL BALANCE</div>
-                    <div style={{fontSize:13,fontWeight:700,color:"#3dbd73"}}>${balance.toLocaleString(undefined,{minimumFractionDigits:2})} USDC</div>
-                  </>
+                  <><div style={{fontSize:10,color:"#7a7870"}}>HL BALANCE</div><div style={{fontSize:13,fontWeight:700,color:"#3dbd73"}}>${balance.toLocaleString(undefined,{minimumFractionDigits:2})} USDC</div></>
                 ) : (
-                  <>
-                    <div style={{fontSize:10,color:"#7a7870"}}>BTC LIVE</div>
-                    <div style={{fontSize:13,fontWeight:700,color:"#3dbd73"}}>{livePrices.BTC ? `$${livePrices.BTC.toLocaleString(undefined,{maximumFractionDigits:0})}` : "$83,241"}</div>
-                  </>
+                  <><div style={{fontSize:10,color:"#7a7870"}}>BTC LIVE</div><div style={{fontSize:13,fontWeight:700,color:"#3dbd73"}}>{livePrices.BTC ? `$${livePrices.BTC.toLocaleString(undefined,{maximumFractionDigits:0})}` : "$83,241"}</div></>
                 )}
               </div>
               <button onClick={()=>setWalletOpen(true)} style={{background:connected?"#0e1a10":"#2a2200",border:`1px solid ${connected?"#1a5c3a":"#b8820c"}`,borderRadius:6,color:connected?"#3dbd73":"#e0a820",padding:"8px 14px",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700}}>
                 {connected ? `● ${connected.slice(0,4)}…${connected.slice(-3)}` : "CONNECT"}
               </button>
             </div>
-            <LiveTicker prices={livePrices}/>
           </main>
+          <aside className="desktop-right-sidebar">
+            <div style={{fontSize:11,fontWeight:700,color:"#7a7870",marginBottom:8}}>STATS</div>
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {[{l:"Total Volume",v:"$124M+"},{l:"Markets Live",v:"34"},{l:"Traders",v:"48,291"}].map((s,i)=>(
+                <div key={i} style={{background:"#141412",border:"1px solid var(--border)",borderRadius:4,padding:10}}>
+                  <div style={{fontSize:12,fontWeight:700,color:"#e0a820"}}>{s.v}</div>
+                  <div style={{fontSize:10,color:"#7a7870"}}>{s.l}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{fontSize:11,fontWeight:700,color:"#7a7870",marginBottom:8}}>LIVE PRICES</div>
+            <LiveTicker prices={livePrices}/>
+            <div style={{fontSize:11,fontWeight:700,color:"#7a7870",marginBottom:8}}>LEADERBOARD</div>
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {(leaderboardData||[]).slice(0,5).map((p,i)=>(<div key={p.user_id+'-'+i} style={{fontSize:11,color:"#ddd8cc",display:"flex",justifyContent:"space-between",alignItems:"center"}}><span>#{p.rank} {p.username}</span><span style={{color:p.total_pnl>=0?"#3dbd73":"#d44c4c",fontWeight:600}}>{p.total_pnl>=0?"+":"-"}{"$"+Math.abs(p.total_pnl).toFixed(2)}</span></div>))}
+              {(!leaderboardData||leaderboardData.length===0)&&<div style={{fontSize:10,color:"#7a7870"}}>No data yet</div>}
+              <button onClick={()=>setTab("leaderboard")} style={{marginTop:4,padding:"6px 10px",background:"#2a2200",border:"1px solid #c9920d",borderRadius:4,color:"#e0a820",fontSize:10,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>View Board →</button>
+            </div>
+          </aside>
         </div>
       ) : (
         <>
@@ -1309,13 +1333,14 @@ function App() {
         </>
       )}
 
-      {/* Single shared content area: positioned in main on desktop, in flow on mobile */}
+      {/* Single shared content area: on desktop positioned between sidebars (max 800px center); on mobile in flow */}
       <div
         style={{
-          padding:"12px 16px",
-          ...(isDesktop ? {position:"absolute",left:240,top:96,right:0,bottom:0,overflow:"auto"} : {})
+          padding: isDesktop ? 0 : "12px 16px",
+          ...(isDesktop ? {position:"absolute",left:220,top:96,right:260,bottom:0,overflow:"auto",display:"flex",justifyContent:"center"} : {})
         }}
       >
+        <div className={isDesktop ? "desktop-main" : ""} style={{width:"100%",maxWidth: isDesktop ? 800 : "none",padding: isDesktop ? "12px 16px" : 0}}>
 
         {/* ── COMMODITIES HERO BLOCK ───────────────────────────── */}
         <div style={{background:"linear-gradient(135deg,#0d0f1a,#1a1400)",border:"1px solid #92400e",borderRadius:4,padding:14,marginBottom:14}}>
@@ -1577,8 +1602,17 @@ function App() {
               </div>
             ) : (
               <div>
-                <div style={{fontSize:18,fontWeight:700,color:"#e0a820",marginBottom:16}}>Creator Dashboard</div>
-                {creatorDashboard === null ? <div style={{color:"#7a7870",fontSize:13}}>Loading...</div> : (
+                <div style={{fontSize:18,fontWeight:700,color:"#e0a820",marginBottom:12}}>Creator Dashboard</div>
+                <div style={{display:"flex",gap:8,marginBottom:16,borderBottom:"1px solid #2a2a26",paddingBottom:8}}>
+                  <button onClick={()=>setCreatorSubTab("dashboard")} style={{padding:"8px 14px",background:creatorSubTab==="dashboard"?"#2a2200":"transparent",border:`1px solid ${creatorSubTab==="dashboard"?"#c9920d":"#2a2a26"}`,borderRadius:4,color:creatorSubTab==="dashboard"?"#e0a820":"#7a7870",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Dashboard</button>
+                  <button onClick={()=>setCreatorSubTab("examples")} style={{padding:"8px 14px",background:creatorSubTab==="examples"?"#2a2200":"transparent",border:`1px solid ${creatorSubTab==="examples"?"#c9920d":"#2a2a26"}`,borderRadius:4,color:creatorSubTab==="examples"?"#e0a820":"#7a7870",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Examples</button>
+                </div>
+                {creatorSubTab === "examples" ? (
+                  <div style={{width:"100%",marginTop:8}}>
+                    <div style={{fontSize:11,color:"#7a7870",marginBottom:8}}>Live example: hyperflex.network — see how your market will look to traders.</div>
+                    <iframe src="https://hyperflex.network" title="HYPERFLEX example" style={{width:"100%",minHeight:"70vh",height:600,border:"1px solid #2a2a26",borderRadius:8,background:"#141412"}} />
+                  </div>
+                ) : creatorDashboard === null ? <div style={{color:"#7a7870",fontSize:13}}>Loading...</div> : (
                   <>
                     <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:20}}>
                       <div style={{flex:1,minWidth:120,background:"#0e0e0c",border:"1px solid #2a2a26",borderRadius:6,padding:14}}>
@@ -1626,6 +1660,25 @@ function App() {
                         ))}
                       </div>
                     )}
+                    <div style={{marginTop:24}}>
+                      <div style={{fontSize:12,fontWeight:700,color:"#ddd8cc",marginBottom:12}}>Templates</div>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:12}}>
+                        {[
+                          {id:"sports",name:"Sports",desc:"Game outcomes, playoffs, MVP races",icon:"⚽"},
+                          {id:"crypto",name:"Crypto",desc:"BTC/ETH levels, adoption, regulation",icon:"₿"},
+                          {id:"podcast",name:"Podcast",desc:"Guest predictions, hot takes, community",icon:"🎙️"},
+                          {id:"finance",name:"Finance",desc:"Rates, earnings, macro events",icon:"📈"},
+                          {id:"entertainment",name:"Entertainment",desc:"Awards, releases, box office",icon:"🎬"},
+                        ].map(tpl=>(
+                          <div key={tpl.id} style={{background:"#0e0e0c",border:"1px solid #2a2a26",borderRadius:8,padding:14}}>
+                            <div style={{fontSize:20,marginBottom:6}}>{tpl.icon}</div>
+                            <div style={{fontSize:13,fontWeight:700,color:"#e0a820",marginBottom:4}}>{tpl.name}</div>
+                            <div style={{fontSize:10,color:"#7a7870",lineHeight:1.4,marginBottom:10}}>{tpl.desc}</div>
+                            <button onClick={()=>notify("Use Template: "+tpl.name+" (coming soon)")} style={{width:"100%",padding:"6px 10px",background:"#2a2200",border:"1px solid #b8820c",borderRadius:4,color:"#e0a820",fontSize:10,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Use Template</button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </>
                 )}
               </div>
@@ -1679,6 +1732,7 @@ function App() {
             </div>
           </div>
         )}
+        </div>
       </div>
 
       {/* Bottom Nav — mobile only */}
