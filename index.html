@@ -50,7 +50,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #141412; color: #ddd8cc; font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+    body { background: #141412; color: #ddd8cc; font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important; }
     :root {
       --ink: #0e0e0c;
       --paper: #141412;
@@ -83,7 +83,7 @@
       --green-lt: #2d9b5f; --red-lt: #c0392b;
       --sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     }
-    body { background: var(--paper) !important; color: var(--text) !important; font-family: var(--sans) !important; }
+    body { background: var(--paper) !important; color: var(--text) !important; font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important; }
     /* Ticker */
     .ticker-wrap { background: var(--ink) !important; border-bottom: 1px solid var(--border) !important; }
     /* Scrollbar */
@@ -129,10 +129,11 @@
       .markets-grid { grid-template-columns: repeat(3, 1fr); gap: 14px; }
     }
 
-    /* Force grid + Inter on desktop (override any conflicting styles) */
+    /* Force grid on desktop — exact container: .markets-grid / #markets-grid */
     @media (min-width: 1024px) {
       body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important; }
       .markets-grid,
+      #markets-grid,
       #markets-container,
       .market-list {
         display: grid !important;
@@ -145,6 +146,7 @@
     }
     @media (min-width: 768px) and (max-width: 1023px) {
       .markets-grid,
+      #markets-grid,
       #markets-container,
       .market-list {
         display: grid !important;
@@ -1248,8 +1250,11 @@ function App() {
           </button>
         </div>
 
-        {/* STREAK WIDGET - always visible */}
-        <StreakWidget/>
+        {/* STREAK WIDGET + Paper trading badge */}
+        <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:14}}>
+          <StreakWidget/>
+          <span style={{fontSize:10,color:"#7a7870",background:"#1c1c19",border:"1px solid #2a2a26",borderRadius:6,padding:"6px 10px",whiteSpace:"nowrap"}}>🎮 Free to Play — Paper Trading</span>
+        </div>
 
         {/* Tabs */}
         <div style={{display:"flex",borderBottom:"1px solid #2a2a26",marginBottom:14}}>
@@ -1316,6 +1321,34 @@ function App() {
                 </div>
               )}
 
+              {/* Markets Closing Soon — next 3 by expiry, countdown in days */}
+              {(() => {
+                const withExpiry = (markets || []).filter(m => m.expiry_date || m.resolution_date);
+                const sorted = [...withExpiry].sort((a, b) => {
+                  const dA = new Date(a.expiry_date || a.resolution_date || 0).getTime();
+                  const dB = new Date(b.expiry_date || b.resolution_date || 0).getTime();
+                  return dA - dB;
+                });
+                const closingSoon = sorted.slice(0, 3);
+                if (closingSoon.length === 0) return null;
+                const now = Date.now();
+                return (
+                  <div style={{background:"#0e0e0c",border:"1px solid #2a2a26",borderRadius:8,padding:12,marginBottom:14}}>
+                    <div style={{fontSize:10,color:"#e0a820",fontWeight:700,letterSpacing:0.5,marginBottom:10}}>⏱️ MARKETS CLOSING SOON</div>
+                    {closingSoon.map((m, i) => {
+                      const expiry = m.expiry_date || m.resolution_date;
+                      const daysLeft = Math.max(0, Math.ceil((new Date(expiry).getTime() - now) / (24 * 60 * 60 * 1000)));
+                      return (
+                        <div key={m.id} onClick={()=>setMarketDetailView(m)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:i < closingSoon.length - 1 ? "1px solid #2a2a26" : "none",cursor:"pointer"}}>
+                          <span style={{fontSize:11,color:"#ddd8cc",flex:1,marginRight:8}}>{m.q || m.question}</span>
+                          <span style={{fontSize:10,color:"#e0a820",fontWeight:700,whiteSpace:"nowrap"}}>{daysLeft}d left</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+
               {/* AI Scanner section header — shown when there are new markets */}
               {filtered.some(m=>m.isNew) && (subTab==="hot"||subTab==="all"||subTab==="new") && (
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8,marginTop:4}}>
@@ -1326,7 +1359,7 @@ function App() {
                   <div style={{flex:1,height:1,background:"linear-gradient(90deg,transparent,#c9920d)"}}/>
                 </div>
               )}
-              <div className="markets-grid">
+              <div id="markets-grid" className="markets-grid">
                 {(subTab==="new"
                   ? filtered.filter(m=>m.isNew)
                   : subTab==="hot"
