@@ -245,9 +245,27 @@ app.get('/markets/:id', async (req, res) => {
 // Create market (admin)
 app.post('/markets', async (req, res) => {
   const { question, commodity, target_price, direction, expiry_date } = req.body;
+  const row = { question, commodity, target_price, direction, expiry_date };
+
+  const auth = req.headers.authorization;
+  const token = auth && auth.startsWith('Bearer ') ? auth.slice(7) : null;
+  if (token) {
+    try {
+      const payload = jwt.verify(token, process.env.JWT_SECRET || 'hyperflex_secret');
+      const { data: settings } = await supabase
+        .from('creator_settings')
+        .select('slug')
+        .eq('user_id', payload.id)
+        .maybeSingle();
+      if (settings?.slug) row.creator_slug = settings.slug;
+    } catch (e) {
+      // ignore invalid token; insert without creator_slug
+    }
+  }
+
   const { data, error } = await supabase
     .from('markets')
-    .insert([{ question, commodity, target_price, direction, expiry_date }])
+    .insert([row])
     .select()
     .single();
   if (error) return res.status(400).json({ error: error.message });
@@ -387,6 +405,39 @@ app.get('/api/leaderboard', async (req, res) => {
   } catch (err) {
     console.error('leaderboard error:', err.message);
     res.status(500).json({ error: 'Leaderboard failed' });
+  }
+});
+
+// ── PRICES (60s cache, backend-only; frontend uses GET /api/prices) ─────────
+let pricesCache = { data: null, ts: 0 };
+const PRICES_CACHE_MS = 60 * 1000;
+
+app.get('/api/prices', async (req, res) => {
+  const now = Date.now();
+  if (pricesCache.data && now - pricesCache.ts < PRICES_CACHE_MS) {
+    return res.json(pricesCache.data);
+  }
+  try {
+    const cgRes = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd').then((r) => (r.ok ? r.json() : null));
+    const btc = cgRes?.bitcoin?.usd;
+    const eth = cgRes?.ethereum?.usd;
+    const [gold, silver, oil] = await Promise.all([
+      fetchCurrentPrice('gold'),
+      fetchCurrentPrice('silver'),
+      fetchCurrentPrice('oil'),
+    ]);
+    const data = {
+      BTC: typeof btc === 'number' && btc > 0 ? btc : null,
+      ETH: typeof eth === 'number' && eth > 0 ? eth : null,
+      XAU: gold,
+      XAG: silver,
+      WTI: oil,
+    };
+    pricesCache = { data, ts: now };
+    res.json(data);
+  } catch (err) {
+    console.warn('GET /api/prices error:', err.message);
+    res.json(pricesCache.data || { BTC: null, ETH: null, XAU: null, XAG: null, WTI: null });
   }
 });
 
