@@ -994,8 +994,164 @@ function MktCard({ m, onSelect }) {
 }
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
+// ── TENANT THEME SYSTEM ───────────────────────────────────────
+const THEMES = {
+  default: {
+    name: 'HYPERFLEX',
+    pointsName: 'Flex Points',
+    accent: '#c9920d',
+    accentLt: '#e0a820',
+    accentBright: '#f5c842',
+    accentBg: '#2a2200',
+    accentBorder: '#b8820c',
+    paper: '#141412',
+    ink: '#0e0e0c',
+    cream: '#1c1c19',
+    border: '#2a2a26',
+    text: '#ddd8cc',
+    dim: '#7a7870',
+    icon: '⚡',
+  },
+  sports: {
+    name: null, // filled from creator_settings
+    pointsName: 'Fan Points',
+    accent: '#1a7fd4',
+    accentLt: '#3da0f0',
+    accentBright: '#62b8ff',
+    accentBg: '#001a30',
+    accentBorder: '#1a5fa0',
+    paper: '#0d1520',
+    ink: '#080f18',
+    cream: '#111e2e',
+    border: '#1a2a3a',
+    text: '#d0dde8',
+    dim: '#5a7080',
+    icon: '⚽',
+  },
+  crypto: {
+    name: null,
+    pointsName: 'Crypto Points',
+    accent: '#7c3aed',
+    accentLt: '#a855f7',
+    accentBright: '#c084fc',
+    accentBg: '#1a0a30',
+    accentBorder: '#6d28d9',
+    paper: '#0f0a1a',
+    ink: '#080512',
+    cream: '#140e20',
+    border: '#2a1a40',
+    text: '#e0d0f0',
+    dim: '#6a507a',
+    icon: '₿',
+  },
+  podcast: {
+    name: null,
+    pointsName: 'Fan Points',
+    accent: '#e05c1a',
+    accentLt: '#f07830',
+    accentBright: '#ff9a50',
+    accentBg: '#2a1000',
+    accentBorder: '#c04a10',
+    paper: '#141008',
+    ink: '#0e0a04',
+    cream: '#1e1508',
+    border: '#2a2010',
+    text: '#e8d8c0',
+    dim: '#7a6848',
+    icon: '🎙️',
+  },
+  finance: {
+    name: null,
+    pointsName: 'Alpha Points',
+    accent: '#0a7a5a',
+    accentLt: '#0fa870',
+    accentBright: '#20d494',
+    accentBg: '#001a10',
+    accentBorder: '#0a6048',
+    paper: '#090f0c',
+    ink: '#050a07',
+    cream: '#0e1a12',
+    border: '#142a1c',
+    text: '#c0d8cc',
+    dim: '#486858',
+    icon: '📈',
+  },
+  entertainment: {
+    name: null,
+    pointsName: 'Star Points',
+    accent: '#c4177a',
+    accentLt: '#e030a0',
+    accentBright: '#f060c0',
+    accentBg: '#2a0020',
+    accentBorder: '#a01060',
+    paper: '#140a12',
+    ink: '#0e0609',
+    cream: '#1e0e1a',
+    border: '#2a142a',
+    text: '#e8c0e0',
+    dim: '#7a5070',
+    icon: '🎬',
+  },
+};
+
+// Detect subdomain and resolve theme
+function detectTenant() {
+  const hostname = window.location.hostname;
+  const parts = hostname.split('.');
+  // e.g. killtonyfans.hyperflex.network → subdomain = 'killtonyfans'
+  if (parts.length >= 3 && parts[0] !== 'www' && parts[0] !== 'hyperflex') {
+    return parts[0].toLowerCase();
+  }
+  return null;
+}
+
+const TENANT_SLUG = detectTenant();
+
+// Map creator slugs to theme types — fetched from server or inferred from template
+async function resolveTheme(slug) {
+  if (!slug) return THEMES.default;
+  try {
+    const res = await fetch('/api/creator/' + slug + '/theme');
+    if (res.ok) {
+      const data = await res.json();
+      const base = THEMES[data.theme_type] || THEMES.default;
+      return { ...base, name: data.display_name || slug.toUpperCase(), pointsName: data.custom_points_name || base.pointsName };
+    }
+  } catch(e) {}
+  return THEMES.default;
+}
+
+function applyTheme(theme) {
+  const root = document.documentElement;
+  root.style.setProperty('--gold', theme.accent);
+  root.style.setProperty('--gold-lt', theme.accentLt);
+  root.style.setProperty('--gold-bright', theme.accentBright);
+  root.style.setProperty('--accent-bg', theme.accentBg);
+  root.style.setProperty('--accent-border', theme.accentBorder);
+  root.style.setProperty('--paper', theme.paper);
+  root.style.setProperty('--ink', theme.ink);
+  root.style.setProperty('--cream', theme.cream);
+  root.style.setProperty('--border', theme.border);
+  root.style.setProperty('--text', theme.text);
+  root.style.setProperty('--dim', theme.dim);
+  document.body.style.background = theme.paper;
+  document.body.style.color = theme.text;
+}
+// ─────────────────────────────────────────────────────────────
+
 function App() {
   const [tab, setTab] = useState("markets");
+  const [tenantTheme, setTenantTheme] = React.useState(THEMES.default);
+
+  // Resolve tenant theme on mount
+  React.useEffect(() => {
+    if (TENANT_SLUG) {
+      resolveTheme(TENANT_SLUG).then(theme => {
+        setTenantTheme(theme);
+        applyTheme(theme);
+      });
+    }
+  }, []);
   const [sector, setSector] = useState("ALL");
   const [subTab, setSubTab] = useState("hot");
   const [selected, setSelected] = useState(null);
@@ -1028,12 +1184,16 @@ function App() {
   const [creatorPassword, setCreatorPassword] = React.useState('');
   const [creatorName, setCreatorName] = React.useState('');
   const [creatorSlug, setCreatorSlug] = React.useState('');
+  const [creatorTheme, setCreatorTheme] = React.useState('default');
   const [creatorError, setCreatorError] = React.useState('');
   const [creatorDashboard, setCreatorDashboard] = React.useState(null);
   const [creatorSuggestDesc, setCreatorSuggestDesc] = React.useState('');
   const [creatorSuggestions, setCreatorSuggestions] = React.useState([]);
   const [creatorSuggestLoading, setCreatorSuggestLoading] = React.useState(false);
   const [creatorSubTab, setCreatorSubTab] = React.useState('dashboard');
+  const [templateMarkets, setTemplateMarkets] = React.useState(null);
+  const [templateName, setTemplateName] = React.useState('');
+  const [templateLoading, setTemplateLoading] = React.useState(false);
   React.useEffect(() => {
     const toSector = (category) => {
       const c = (category || "").toString().toLowerCase();
@@ -1262,8 +1422,8 @@ function App() {
         <div className="desktop-wrapper">
           <aside className="desktop-sidebar">
             <div className="sidebar-logo">
-              <HyperflexLogo size={28}/>
-              <span style={{fontSize:14,fontWeight:700,letterSpacing:2,color:"#ddd8cc"}}>HYPERFLEX</span>
+              <HyperflexLogo size={28} color={tenantTheme.accent}/>
+              <span style={{fontSize:14,fontWeight:700,letterSpacing:2,color:tenantTheme.text}}>{tenantTheme.name || 'HYPERFLEX'}</span>
             </div>
             <nav className="sidebar-nav">
               {[["markets","📊","Markets"],["combos","🎰","Combos"],["jackpot","🎯","Jackpot"],["portfolio","💼","Portfolio"],["leaderboard","🏆","Board"],["creator","🎙️","For Creators"],["profile","👤","Profile"]].map(([t, icon, label]) => (
@@ -1317,8 +1477,8 @@ function App() {
           <LiveTicker prices={livePrices}/>
           <div className="header-bar" style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",borderBottom:"1px solid #2a2a26",background:"#141412",position:"sticky",top:0,zIndex:100}}>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <HyperflexLogo size={28}/>
-              <span style={{fontSize:14,fontWeight:700,letterSpacing:2,color:"#ddd8cc"}}>HYPERFLEX</span>
+              <HyperflexLogo size={28} color={tenantTheme.accent}/>
+              <span style={{fontSize:14,fontWeight:700,letterSpacing:2,color:tenantTheme.text}}>{tenantTheme.name || 'HYPERFLEX'}</span>
             </div>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
               <button onClick={()=>setTab("creator")} style={{background:"none",border:"none",color:"#e0a820",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:600}}>For Creators</button>
@@ -1598,7 +1758,18 @@ function App() {
                 <input type="password" placeholder="Password" value={creatorPassword} onChange={e=>setCreatorPassword(e.target.value)} style={{width:"100%",padding:12,background:"#0e0e0c",border:"1px solid #2a2a26",borderRadius:4,color:"#ddd8cc",fontSize:14,marginBottom:10}} />
                 <input type="text" placeholder="Display name" value={creatorName} onChange={e=>setCreatorName(e.target.value)} style={{width:"100%",padding:12,background:"#0e0e0c",border:"1px solid #2a2a26",borderRadius:4,color:"#ddd8cc",fontSize:14,marginBottom:10}} />
                 <input type="text" placeholder="Slug (lowercase, 3–20 letters/numbers)" value={creatorSlug} onChange={e=>setCreatorSlug(e.target.value.replace(/[^a-z0-9]/gi,"").toLowerCase().slice(0,20))} style={{width:"100%",padding:12,background:"#0e0e0c",border:"1px solid #2a2a26",borderRadius:4,color:"#ddd8cc",fontSize:14,marginBottom:10}} />
-                <button onClick={async ()=>{setCreatorError("");const res=await apiPost("/api/creator/signup",{email:creatorEmail,password:creatorPassword,display_name:creatorName,slug:creatorSlug});if(res.error){setCreatorError(res.error);return;}localStorage.setItem("hf_token",res.token);localStorage.setItem("hf_user",JSON.stringify(res.user));setToken(res.token);setUser(res.user);notify("Creator account created!");setCreatorEmail("");setCreatorPassword("");setCreatorName("");setCreatorSlug("");}} style={{width:"100%",padding:14,background:"linear-gradient(90deg,#b45309,#92400e)",border:"none",borderRadius:4,color:"#fef3c7",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Create creator account</button>
+                <div style={{marginBottom:14}}>
+                  <div style={{fontSize:11,color:"#7a7870",marginBottom:8,fontWeight:600}}>COMMUNITY THEME</div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+                    {[["default","⚡","HYPERFLEX","#c9920d"],["sports","⚽","Sports","#1a7fd4"],["crypto","₿","Crypto","#7c3aed"],["podcast","🎙️","Podcast","#e05c1a"],["finance","📈","Finance","#0a7a5a"],["entertainment","🎬","Entertainment","#c4177a"]].map(([id,icon,label,color])=>(
+                      <div key={id} onClick={()=>setCreatorTheme(id)} style={{padding:"10px 8px",background:creatorTheme===id?"#1a1a18":"#0e0e0c",border:`1px solid ${creatorTheme===id?color:"#2a2a26"}`,borderRadius:6,cursor:"pointer",textAlign:"center",transition:"all 0.15s"}}>
+                        <div style={{fontSize:16,marginBottom:4}}>{icon}</div>
+                        <div style={{fontSize:9,fontWeight:700,color:creatorTheme===id?color:"#7a7870"}}>{label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <button onClick={async ()=>{setCreatorError("");const res=await apiPost("/api/creator/signup",{email:creatorEmail,password:creatorPassword,display_name:creatorName,slug:creatorSlug,theme_type:creatorTheme});if(res.error){setCreatorError(res.error);return;}localStorage.setItem("hf_token",res.token);localStorage.setItem("hf_user",JSON.stringify(res.user));setToken(res.token);setUser(res.user);notify("Creator account created!");setCreatorEmail("");setCreatorPassword("");setCreatorName("");setCreatorSlug("");setCreatorTheme("default");}} style={{width:"100%",padding:14,background:"linear-gradient(90deg,#b45309,#92400e)",border:"none",borderRadius:4,color:"#fef3c7",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Create creator account</button>
               </div>
             ) : (
               <div>
@@ -1636,9 +1807,14 @@ function App() {
                     <div style={{fontSize:12,fontWeight:700,color:"#ddd8cc",marginBottom:8}}>Resolution queue (past expiry, unresolved)</div>
                     <div style={{marginBottom:20}}>
                       {(creatorDashboard.resolution_queue||[]).length === 0 ? <div style={{color:"#7a7870",fontSize:12}}>None.</div> : (creatorDashboard.resolution_queue||[]).map(m=>(
-                        <div key={m.id} style={{background:"#2a2200",border:"1px solid #b45309",borderRadius:4,padding:10,marginBottom:6}}>
-                          <div style={{fontSize:13,color:"#ddd8cc"}}>{m.question||m.q}</div>
-                          <div style={{fontSize:10,color:"#e0a820"}}>Expired {m.expiry_date||m.resolution_date}</div>
+                        <div key={m.id} style={{background:"#1a1008",border:"1px solid #b45309",borderRadius:6,padding:12,marginBottom:8}}>
+                          <div style={{fontSize:13,color:"#ddd8cc",marginBottom:4}}>{m.question||m.q}</div>
+                          <div style={{fontSize:10,color:"#e0a820",marginBottom:10}}>Expired {m.expiry_date||m.resolution_date} · {m.category||"general"}</div>
+                          <div style={{fontSize:10,color:"#7a7870",marginBottom:8}}>Did this resolve YES or NO?</div>
+                          <div style={{display:"flex",gap:8}}>
+                            <button onClick={async()=>{const res=await apiPostAuth("/api/creator/resolve/"+m.id,{outcome:true},token);if(res.error){notify(res.error);return;}notify("Market resolved YES ✓");setCreatorDashboard(prev=>({...prev,resolution_queue:(prev.resolution_queue||[]).filter(x=>x.id!==m.id),markets:(prev.markets||[]).map(x=>x.id===m.id?{...x,resolved:true,outcome:true}:x)}));}} style={{flex:1,padding:"8px 0",background:"#0e2a18",border:"1px solid #2d9b5f",borderRadius:4,color:"#3dbd73",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>✓ YES</button>
+                            <button onClick={async()=>{const res=await apiPostAuth("/api/creator/resolve/"+m.id,{outcome:false},token);if(res.error){notify(res.error);return;}notify("Market resolved NO ✓");setCreatorDashboard(prev=>({...prev,resolution_queue:(prev.resolution_queue||[]).filter(x=>x.id!==m.id),markets:(prev.markets||[]).map(x=>x.id===m.id?{...x,resolved:true,outcome:false}:x)}));}} style={{flex:1,padding:"8px 0",background:"#2a0e0e",border:"1px solid #c0392b",borderRadius:4,color:"#d44c4c",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>✗ NO</button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1674,10 +1850,29 @@ function App() {
                             <div style={{fontSize:20,marginBottom:6}}>{tpl.icon}</div>
                             <div style={{fontSize:13,fontWeight:700,color:"#e0a820",marginBottom:4}}>{tpl.name}</div>
                             <div style={{fontSize:10,color:"#7a7870",lineHeight:1.4,marginBottom:10}}>{tpl.desc}</div>
-                            <button onClick={()=>notify("Use Template: "+tpl.name+" (coming soon)")} style={{width:"100%",padding:"6px 10px",background:"#2a2200",border:"1px solid #b8820c",borderRadius:4,color:"#e0a820",fontSize:10,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Use Template</button>
+                            <button onClick={async ()=>{setTemplateLoading(tpl.id);setTemplateMarkets(null);const res=await fetch('/api/templates/'+tpl.id).then(r=>r.json());setTemplateLoading(false);if(res.markets){setTemplateName(res.name);setTemplateMarkets(res.markets);}else{notify(res.error||'Failed to load template');}}} style={{width:"100%",padding:"6px 10px",background:"#2a2200",border:"1px solid #b8820c",borderRadius:4,color:"#e0a820",fontSize:10,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{templateLoading===tpl.id?"Loading...":"Use Template"}</button>
                           </div>
                         ))}
                       </div>
+                      {templateMarkets && (
+                        <div style={{marginTop:20,background:"#0e0e0c",border:"1px solid #b8820c",borderRadius:8,padding:16}}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                            <div style={{fontSize:13,fontWeight:700,color:"#e0a820"}}>📋 {templateName} Template Markets</div>
+                            <button onClick={()=>setTemplateMarkets(null)} style={{background:"transparent",border:"none",color:"#7a7870",fontSize:16,cursor:"pointer"}}>✕</button>
+                          </div>
+                          <div style={{fontSize:10,color:"#7a7870",marginBottom:12}}>Click Create to add each market to your community. You can edit details after creating.</div>
+                          {templateMarkets.map((m,i)=>(
+                            <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:"1px solid #1e1e1c"}}>
+                              <div style={{flex:1}}>
+                                <div style={{fontSize:12,color:"#ddd8cc",marginBottom:3}}>{m.question}</div>
+                                <div style={{fontSize:10,color:"#7a7870"}}>{m.category} · expires {m.expiry_date}</div>
+                              </div>
+                              <button onClick={async()=>{const res=await apiPost('/markets',{question:m.question,commodity:m.commodity,target_price:m.target_price,direction:m.direction,expiry_date:m.expiry_date});if(res.error){notify(res.error);return;}notify('Market created: '+m.question.slice(0,40)+'...');setTemplateMarkets(prev=>prev.filter((_,j)=>j!==i));if(creatorDashboard)setCreatorDashboard({...creatorDashboard,markets:[...(creatorDashboard.markets||[]),res]});}} style={{padding:"6px 12px",background:"#1a5c3a",border:"1px solid #2d9b5f",borderRadius:4,color:"#3dbd73",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>+ Create</button>
+                            </div>
+                          ))}
+                          {templateMarkets.length===0&&<div style={{color:"#3dbd73",fontSize:12,textAlign:"center",padding:8}}>All markets created! ✓</div>}
+                        </div>
+                      )}
                     </div>
                   </>
                 )}

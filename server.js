@@ -82,7 +82,7 @@ function requireAuth(req, res, next) {
 
 // Creator signup: email, password, display_name, slug → user + creator_settings, return JWT
 app.post('/api/creator/signup', async (req, res) => {
-  const { email, password, display_name, slug } = req.body;
+  const { email, password, display_name, slug, theme_type } = req.body;
   if (!email || !password || !display_name || !slug) {
     return res.status(400).json({ error: 'email, password, display_name, and slug are required' });
   }
@@ -114,7 +114,7 @@ app.post('/api/creator/signup', async (req, res) => {
 
   const { error: settingsError } = await supabase
     .from('creator_settings')
-    .insert([{ user_id: user.id, slug: slugStr, display_name: display_name || user.display_name, custom_points_name: 'Flex Points' }]);
+    .insert([{ user_id: user.id, slug: slugStr, display_name: display_name || user.display_name, custom_points_name: 'Flex Points', theme_type: theme_type || 'default' }]);
   if (settingsError) {
     await supabase.from('users').delete().eq('id', user.id);
     return res.status(400).json({ error: settingsError.message || 'Failed to create creator settings' });
@@ -660,6 +660,164 @@ app.post('/api/scan-markets', async (req, res) => {
     console.error('Manual scan-markets error:', err.message);
     res.status(500).json({ error: 'Scan failed' });
   }
+});
+
+// POST /api/creator/resolve/:marketId — creator manually resolves a market (YES/NO)
+app.post('/api/creator/resolve/:marketId', requireAuth, async (req, res) => {
+  const { marketId } = req.params;
+  const { outcome } = req.body; // boolean: true = YES, false = NO
+  if (typeof outcome !== 'boolean') return res.status(400).json({ error: 'outcome (boolean) required' });
+
+  // Verify this market belongs to the authenticated creator
+  const { data: settings } = await supabase
+    .from('creator_settings')
+    .select('slug')
+    .eq('user_id', req.userId)
+    .maybeSingle();
+  if (!settings) return res.status(403).json({ error: 'Not a creator account' });
+
+  const { data: market, error: marketErr } = await supabase
+    .from('markets')
+    .select('*')
+    .eq('id', marketId)
+    .eq('creator_slug', settings.slug)
+    .maybeSingle();
+  if (marketErr || !market) return res.status(404).json({ error: 'Market not found or not yours' });
+  if (market.resolved) return res.status(400).json({ error: 'Market already resolved' });
+
+  // Resolve the market
+  await supabase
+    .from('markets')
+    .update({ resolved: true, outcome, settlement_price: null })
+    .eq('id', marketId);
+
+  // Settle all positions
+  const { data: positions } = await supabase
+    .from('positions')
+    .select('*')
+    .eq('market_id', marketId)
+    .eq('settled', false);
+
+  for (const position of (positions || [])) {
+    const won = (position.side === 'YES') === outcome;
+    await supabase
+      .from('positions')
+      .update({ settled: true, won })
+      .eq('id', position.id);
+
+    if (won) {
+      const { data: user } = await supabase
+        .from('users')
+        .select('balance')
+        .eq('id', position.user_id)
+        .single();
+      if (user) {
+        await supabase
+          .from('users')
+          .update({ balance: user.balance + position.potential_payout })
+          .eq('id', position.user_id);
+      }
+    }
+  }
+
+  console.log(`Creator resolved market ${marketId} (${market.question}) → ${outcome ? 'YES' : 'NO'}`);
+  res.json({ ok: true, market_id: marketId, outcome, positions_settled: (positions || []).length });
+});
+
+// GET /api/creator/:slug/theme — public, returns theme config for a creator subdomain
+app.get('/api/creator/:slug/theme', async (req, res) => {
+  const { slug } = req.params;
+  const { data, error } = await supabase
+    .from('creator_settings')
+    .select('display_name, custom_points_name, theme_type')
+    .eq('slug', slug)
+    .maybeSingle();
+  if (error || !data) return res.status(404).json({ error: 'Creator not found' });
+  res.json({
+    display_name: data.display_name,
+    custom_points_name: data.custom_points_name || 'Flex Points',
+    theme_type: data.theme_type || 'default',
+  });
+});
+
+// ── TEMPLATES ─────────────────────────────────────
+
+const TEMPLATES = {
+  sports: {
+    name: 'Sports',
+    category: 'entertainment',
+    markets: [
+      { question: 'Will the home team win tonight\'s game?', category: 'entertainment', target_price: 0, direction: 'above', days: 1 },
+      { question: 'Will there be overtime in the next playoff game?', category: 'entertainment', target_price: 0, direction: 'above', days: 7 },
+      { question: 'Will the leading scorer finish the season above 30 PPG?', category: 'entertainment', target_price: 30, direction: 'above', days: 60 },
+      { question: 'Will the #1 seed make the finals?', category: 'entertainment', target_price: 0, direction: 'above', days: 45 },
+      { question: 'Will any underdog ranked 5+ win the championship?', category: 'entertainment', target_price: 0, direction: 'above', days: 60 },
+    ],
+  },
+  crypto: {
+    name: 'Crypto',
+    category: 'crypto',
+    markets: [
+      { question: 'Will Bitcoin exceed $100,000 by end of month?', category: 'crypto', target_price: 100000, direction: 'above', days: 30 },
+      { question: 'Will Ethereum stay above $3,000 this week?', category: 'crypto', target_price: 3000, direction: 'above', days: 7 },
+      { question: 'Will a new country adopt Bitcoin as legal tender?', category: 'crypto', target_price: 0, direction: 'above', days: 90 },
+      { question: 'Will BTC dominance exceed 60% this month?', category: 'crypto', target_price: 0, direction: 'above', days: 30 },
+      { question: 'Will a spot ETH ETF see $1B+ in weekly inflows?', category: 'crypto', target_price: 0, direction: 'above', days: 45 },
+    ],
+  },
+  podcast: {
+    name: 'Podcast',
+    category: 'entertainment',
+    markets: [
+      { question: 'Will the next episode hit #1 on Spotify charts?', category: 'entertainment', target_price: 0, direction: 'above', days: 14 },
+      { question: 'Will the host interview a political figure this month?', category: 'entertainment', target_price: 0, direction: 'above', days: 30 },
+      { question: 'Will the next guest be a repeat appearance?', category: 'entertainment', target_price: 0, direction: 'above', days: 7 },
+      { question: 'Will the show cross 1M downloads this quarter?', category: 'entertainment', target_price: 0, direction: 'above', days: 90 },
+      { question: 'Will there be a live show announcement this month?', category: 'entertainment', target_price: 0, direction: 'above', days: 30 },
+    ],
+  },
+  finance: {
+    name: 'Finance',
+    category: 'macro',
+    markets: [
+      { question: 'Will the Fed cut rates at the next FOMC meeting?', category: 'macro', target_price: 0, direction: 'above', days: 45 },
+      { question: 'Will the S&P 500 close above 5,500 this month?', category: 'macro', target_price: 5500, direction: 'above', days: 30 },
+      { question: 'Will US CPI come in below 3% this quarter?', category: 'macro', target_price: 0, direction: 'above', days: 60 },
+      { question: 'Will gold exceed $3,000/oz before July?', category: 'commodities', target_price: 3000, direction: 'above', days: 60 },
+      { question: 'Will any Magnificent 7 stock drop 20%+ from its high?', category: 'earnings', target_price: 0, direction: 'above', days: 90 },
+    ],
+  },
+  entertainment: {
+    name: 'Entertainment',
+    category: 'entertainment',
+    markets: [
+      { question: 'Will this weekend\'s #1 movie gross over $50M?', category: 'entertainment', target_price: 0, direction: 'above', days: 7 },
+      { question: 'Will the Best Picture winner be a sequel or franchise film?', category: 'entertainment', target_price: 0, direction: 'above', days: 60 },
+      { question: 'Will a major streaming show be cancelled this month?', category: 'entertainment', target_price: 0, direction: 'above', days: 30 },
+      { question: 'Will a music artist announce a world tour this quarter?', category: 'entertainment', target_price: 0, direction: 'above', days: 90 },
+      { question: 'Will a video game release score 90+ on Metacritic?', category: 'entertainment', target_price: 0, direction: 'above', days: 45 },
+    ],
+  },
+};
+
+// GET /api/templates/:id — return pre-seeded market questions for a template
+app.get('/api/templates/:id', (req, res) => {
+  const tpl = TEMPLATES[req.params.id];
+  if (!tpl) return res.status(404).json({ error: 'Template not found' });
+  const today = new Date();
+  const markets = tpl.markets.map(m => {
+    const expiry = new Date(today);
+    expiry.setDate(expiry.getDate() + m.days);
+    return {
+      question: m.question,
+      category: m.category,
+      commodity: m.category,
+      target_price: m.target_price,
+      direction: m.direction,
+      expiry_date: expiry.toISOString().split('T')[0],
+    };
+  });
+  res.json({ id: req.params.id, name: tpl.name, markets });
 });
 
 // ── START ─────────────────────────────────────────
