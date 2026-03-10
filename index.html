@@ -137,6 +137,7 @@
       .content-area, .fade-in { width: 100% !important; max-width: 100% !important; }
     }
 
+    .markets-grid { border: 2px solid red; }
     @media (max-width: 767px) {
       .markets-grid { display: flex !important; flex-direction: column !important; gap: 12px !important; }
     }
@@ -218,7 +219,7 @@ function HyperflexLogo({ size = 32, animated = false }) {
 }
 
 
-const API = 'https://hyperflex-production-4294.up.railway.app';
+const API = '';
 async function apiPost(path, body) {
   const res = await fetch(API + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   return res.json();
@@ -923,6 +924,11 @@ function MktCard({ m, onSelect }) {
   const expiry = m.expiry_date || m.resolution_date;
   const daysLeft = expiry != null ? Math.ceil((new Date(expiry) - new Date()) / (1000 * 60 * 60 * 24)) : null;
   const daysStyle = daysLeft != null && daysLeft >= 0 ? getDaysLeftStyle(daysLeft) : null;
+  const yesVal = Number(m.yes) || 50;
+  const volStr = (m.vol != null && m.vol !== '') ? String(m.vol) : '0';
+  const closesStr = (m.closes != null && m.closes !== '') ? m.closes : 'TBD';
+  const showHot = m.hot !== false && m.hot !== undefined;
+  const title = m.q || m.question || 'Market';
   return (
     <div className="mkt-card market-card" onClick={onSelect} style={{background: isNew ? "linear-gradient(135deg,#1c1c19,#1a1508)" : "#1c1c19", border:`1px solid ${isNew?"#c9920d":"#2a2a26"}`,padding:12,marginBottom:8,cursor:"pointer"}}
       onMouseEnter={e=>{e.currentTarget.style.borderColor="#e0a820";}}
@@ -936,24 +942,24 @@ function MktCard({ m, onSelect }) {
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
         <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:36,height:36,borderRadius:8,background:bg,fontSize:18}}>{emoji}</span>
         <div style={{flex:1}}>
-          {m.hot && <span style={{fontSize:7,background:"rgba(245,158,11,0.15)",color:"#e0a820",border:"1px solid rgba(245,158,11,0.3)",borderRadius:4,padding:"1px 5px",marginRight:6,fontWeight:700}}>🔥 HOT</span>}
+          {showHot && <span style={{fontSize:7,background:"rgba(245,158,11,0.15)",color:"#e0a820",border:"1px solid rgba(245,158,11,0.3)",borderRadius:4,padding:"1px 5px",marginRight:6,fontWeight:700}}>🔥 HOT</span>}
           {m.badge && !isNew && <span style={{fontSize:7,background:"rgba(201,146,13,0.1)",color:"#e0a820",border:"1px solid rgba(201,146,13,0.3)",borderRadius:4,padding:"1px 5px",fontWeight:700}}>{m.badge}</span>}
         </div>
         <div className="mkt-card-chart" style={{display:"flex",alignItems:"center",gap:4}}>
-          <OddsChart marketId={m.id} currentYes={m.yes}/>
+          <OddsChart marketId={m.id} currentYes={yesVal}/>
         </div>
       </div>
-      <div className="mkt-card-title" style={{fontSize:13,lineHeight:1.45,color:"#ddd8cc",marginBottom:10}}>{m.q}</div>
+      <div className="mkt-card-title" style={{fontSize:13,lineHeight:1.45,color:"#ddd8cc",marginBottom:10}}>{title}</div>
       <div className="mkt-card-bar" style={{display:"flex",gap:2,height:4,borderRadius:3,overflow:"hidden",marginBottom:8}}>
-        <div style={{flex:m.yes,background:"linear-gradient(90deg,#2d9b5f,#2d9b5f)",transition:"flex 0.5s"}}/>
-        <div style={{flex:100-m.yes,background:"linear-gradient(90deg,#c0392b,#d44c4c)",transition:"flex 0.5s"}}/>
+        <div style={{flex:yesVal,background:"linear-gradient(90deg,#2d9b5f,#2d9b5f)",transition:"flex 0.5s"}}/>
+        <div style={{flex:100-yesVal,background:"linear-gradient(90deg,#c0392b,#d44c4c)",transition:"flex 0.5s"}}/>
       </div>
       <div className="mkt-card-buttons" style={{display:"flex",gap:8}}>
-        <div style={{flex:1,textAlign:"center",padding:"7px 0",background:"linear-gradient(135deg,#0e1a10,#1a5c3a)",border:"1px solid #2d9b5f",borderRadius:6,color:"#3dbd73",fontSize:12,fontWeight:700}}>YES {m.yes}¢</div>
-        <div style={{flex:1,textAlign:"center",padding:"7px 0",background:"linear-gradient(135deg,#1a0e0e,#5c1a1a)",border:"1px solid #c0392b",borderRadius:6,color:"#d44c4c",fontSize:12,fontWeight:700}}>NO {100-m.yes}¢</div>
+        <div style={{flex:1,textAlign:"center",padding:"7px 0",background:"linear-gradient(135deg,#0e1a10,#1a5c3a)",border:"1px solid #2d9b5f",borderRadius:6,color:"#3dbd73",fontSize:12,fontWeight:700}}>YES {yesVal}¢</div>
+        <div style={{flex:1,textAlign:"center",padding:"7px 0",background:"linear-gradient(135deg,#1a0e0e,#5c1a1a)",border:"1px solid #c0392b",borderRadius:6,color:"#d44c4c",fontSize:12,fontWeight:700}}>NO {100-yesVal}¢</div>
       </div>
       <div className="mkt-card-meta" style={{fontSize:8,color:"#7a7870",marginTop:8,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
-        <span>Vol ${m.vol} · Closes {m.closes}</span>
+        <span>Vol ${volStr} · Closes {closesStr}</span>
         {daysStyle && (
           <span style={{fontSize:9,fontWeight:700,background:daysStyle.bg,color:daysStyle.color,padding:daysStyle.bg!=="transparent"?"2px 6px":"0",borderRadius:4,whiteSpace:"nowrap"}}>{daysStyle.icon} {Math.max(0, daysLeft)}d left</span>
         )}
@@ -1043,6 +1049,10 @@ function App() {
         setMarkets(shaped);
       })
       .catch(() => {});
+  }, []);
+
+  React.useEffect(() => {
+    console.log('[HYPERFLEX] window.innerWidth on load:', window.innerWidth);
   }, []);
 
   React.useEffect(() => {
