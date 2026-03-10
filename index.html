@@ -235,6 +235,14 @@ async function apiGet(path) {
   const res = await fetch(API + path);
   return res.json();
 }
+async function apiGetAuth(path, token) {
+  const res = await fetch(API + path, { headers: { Authorization: 'Bearer ' + token } });
+  return res.json();
+}
+async function apiPostAuth(path, body, token) {
+  const res = await fetch(API + path, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify(body) });
+  return res.json();
+}
 
 // ─── HYPERLIQUID INTEGRATION ──────────────────────────────────────────────────
 // Official HL endpoints
@@ -1002,6 +1010,15 @@ function App() {
   const [authName, setAuthName] = React.useState('');
   const [authMode, setAuthMode] = React.useState('login');
   const [authError, setAuthError] = React.useState('');
+  const [creatorEmail, setCreatorEmail] = React.useState('');
+  const [creatorPassword, setCreatorPassword] = React.useState('');
+  const [creatorName, setCreatorName] = React.useState('');
+  const [creatorSlug, setCreatorSlug] = React.useState('');
+  const [creatorError, setCreatorError] = React.useState('');
+  const [creatorDashboard, setCreatorDashboard] = React.useState(null);
+  const [creatorSuggestDesc, setCreatorSuggestDesc] = React.useState('');
+  const [creatorSuggestions, setCreatorSuggestions] = React.useState([]);
+  const [creatorSuggestLoading, setCreatorSuggestLoading] = React.useState(false);
   React.useEffect(() => {
     const toSector = (category) => {
       const c = (category || "").toString().toLowerCase();
@@ -1066,6 +1083,13 @@ function App() {
       if (Array.isArray(data)) setLeaderboardData(data);
     }).catch(() => setLeaderboardData([]));
   }, [tab]);
+
+  React.useEffect(() => {
+    if (tab !== 'creator' || !token || !user?.is_creator) return;
+    apiGetAuth('/api/creator/dashboard', token).then(data => {
+      if (data && !data.error) setCreatorDashboard(data);
+    }).catch(() => setCreatorDashboard({ markets: [], total_traders: 0, total_volume: 0, resolution_queue: [] }));
+  }, [tab, token, user]);
 
   async function handleAuth() {
     setAuthError('');
@@ -1209,7 +1233,7 @@ function App() {
     } catch {}
   };
 
-  const navTabs = [["markets","📊","Markets"],["combos","🎰","Combos"],["jackpot","🎯","Jackpot"],["portfolio","💼","Portfolio"],["leaderboard","🏆","Board"],["profile","👤","Profile"]];
+  const navTabs = [["markets","📊","Markets"],["combos","🎰","Combos"],["jackpot","🎯","Jackpot"],["portfolio","💼","Portfolio"],["leaderboard","🏆","Board"],["profile","👤","Profile"],["creator","🎙️","For Creators"]];
 
   return (
     <div className={"app-container" + (isDesktop ? " desktop-layout" : "")} style={{minHeight:"100vh",background:"#141412",fontFamily:"'Inter', sans-serif",color:"#ddd8cc",paddingBottom: isDesktop ? 0 : 80, position: isDesktop ? "relative" : undefined}}>
@@ -1243,6 +1267,7 @@ function App() {
           </aside>
           <main className="desktop-main">
             <div className="desktop-topbar">
+              <button onClick={()=>setTab("creator")} style={{background:"none",border:"none",color:"#e0a820",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:600,padding:"4px 8px"}}>For Creators</button>
               <div style={{textAlign:"right"}}>
                 {connected ? (
                   <>
@@ -1272,6 +1297,7 @@ function App() {
               <span style={{fontSize:14,fontWeight:700,letterSpacing:2,color:"#ddd8cc"}}>HYPERFLEX</span>
             </div>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <button onClick={()=>setTab("creator")} style={{background:"none",border:"none",color:"#e0a820",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:600}}>For Creators</button>
               <div style={{textAlign:"right"}}>
                 {connected ? (<><div style={{fontSize:8,color:"#7a7870"}}>HL BALANCE</div><div style={{fontSize:13,fontWeight:700,color:"#3dbd73"}}>${balance.toLocaleString(undefined,{minimumFractionDigits:2})} USDC</div></>) : (<><div style={{fontSize:8,color:"#7a7870"}}>BTC LIVE</div><div style={{fontSize:13,fontWeight:700,color:"#3dbd73"}}>{livePrices.BTC ? `$${livePrices.BTC.toLocaleString(undefined,{maximumFractionDigits:0})}` : "$83,241"}</div></>)}
               </div>
@@ -1323,7 +1349,7 @@ function App() {
               <span style={{fontSize:10,color:"#2d9b5f",fontWeight:600,background:"#1c1c19",border:"1px solid #1a5c3a",borderRadius:6,padding:"6px 10px",whiteSpace:"nowrap"}}>🎮 Free to Play</span>
             </div>
             <div style={{display:"flex",borderBottom:"1px solid #2a2a26",marginBottom:14}}>
-              {[["markets","Markets"],["combos","Combos ✨"],["jackpot","Jackpot 🎯"],["portfolio","Portfolio"],["leaderboard","Board"],["profile","Profile"]].map(([t,label]) => (
+              {[["markets","Markets"],["combos","Combos ✨"],["jackpot","Jackpot 🎯"],["portfolio","Portfolio"],["leaderboard","Board"],["profile","Profile"],["creator","Creators"]].map(([t,label]) => (
                 <button key={t} onClick={()=>{setTab(t);if(t==="markets")setMarketDetailView(null);}} style={{flex:1,padding:"9px 0",background:"transparent",border:"none",borderBottom:tab===t?"2px solid #c9920d":"2px solid transparent",color:tab===t?"#e0a820":"#555550",cursor:"pointer",fontFamily:"inherit",fontSize:8,fontWeight:tab===t?700:400,letterSpacing:0.5,textTransform:"uppercase",transition:"all 0.2s",whiteSpace:"nowrap"}}>
                   {label}
                 </button>
@@ -1531,6 +1557,78 @@ function App() {
                   </div>
                 );
               })
+            )}
+          </div>
+        )}
+
+        {/* CREATOR: signup or dashboard */}
+        {tab==="creator" && (
+          <div className="fade-in">
+            {(!user || !user.is_creator) ? (
+              <div style={{maxWidth:400,margin:"0 auto"}}>
+                <div style={{fontSize:18,fontWeight:700,color:"#e0a820",marginBottom:8}}>🎙️ Creator Sign Up</div>
+                <div style={{fontSize:12,color:"#7a7870",marginBottom:16}}>Run your own prediction markets. Get a subdomain (e.g. yourshow.hyperflex.io).</div>
+                {creatorError && <div style={{background:"#1a0e0e",border:"1px solid #5c1a1a",color:"#d44c4c",padding:10,borderRadius:4,marginBottom:12,fontSize:12}}>{creatorError}</div>}
+                <input type="email" placeholder="Email" value={creatorEmail} onChange={e=>setCreatorEmail(e.target.value)} style={{width:"100%",padding:12,background:"#0e0e0c",border:"1px solid #2a2a26",borderRadius:4,color:"#ddd8cc",fontSize:14,marginBottom:10}} />
+                <input type="password" placeholder="Password" value={creatorPassword} onChange={e=>setCreatorPassword(e.target.value)} style={{width:"100%",padding:12,background:"#0e0e0c",border:"1px solid #2a2a26",borderRadius:4,color:"#ddd8cc",fontSize:14,marginBottom:10}} />
+                <input type="text" placeholder="Display name" value={creatorName} onChange={e=>setCreatorName(e.target.value)} style={{width:"100%",padding:12,background:"#0e0e0c",border:"1px solid #2a2a26",borderRadius:4,color:"#ddd8cc",fontSize:14,marginBottom:10}} />
+                <input type="text" placeholder="Slug (lowercase, 3–20 letters/numbers)" value={creatorSlug} onChange={e=>setCreatorSlug(e.target.value.replace(/[^a-z0-9]/gi,"").toLowerCase().slice(0,20))} style={{width:"100%",padding:12,background:"#0e0e0c",border:"1px solid #2a2a26",borderRadius:4,color:"#ddd8cc",fontSize:14,marginBottom:10}} />
+                <button onClick={async ()=>{setCreatorError("");const res=await apiPost("/api/creator/signup",{email:creatorEmail,password:creatorPassword,display_name:creatorName,slug:creatorSlug});if(res.error){setCreatorError(res.error);return;}localStorage.setItem("hf_token",res.token);localStorage.setItem("hf_user",JSON.stringify(res.user));setToken(res.token);setUser(res.user);notify("Creator account created!");setCreatorEmail("");setCreatorPassword("");setCreatorName("");setCreatorSlug("");}} style={{width:"100%",padding:14,background:"linear-gradient(90deg,#b45309,#92400e)",border:"none",borderRadius:4,color:"#fef3c7",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Create creator account</button>
+              </div>
+            ) : (
+              <div>
+                <div style={{fontSize:18,fontWeight:700,color:"#e0a820",marginBottom:16}}>Creator Dashboard</div>
+                {creatorDashboard === null ? <div style={{color:"#7a7870",fontSize:13}}>Loading...</div> : (
+                  <>
+                    <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:20}}>
+                      <div style={{flex:1,minWidth:120,background:"#0e0e0c",border:"1px solid #2a2a26",borderRadius:6,padding:14}}>
+                        <div style={{fontSize:10,color:"#7a7870",marginBottom:4}}>Total traders</div>
+                        <div style={{fontSize:20,fontWeight:700,color:"#e0a820"}}>{creatorDashboard.total_traders ?? 0}</div>
+                      </div>
+                      <div style={{flex:1,minWidth:120,background:"#0e0e0c",border:"1px solid #2a2a26",borderRadius:6,padding:14}}>
+                        <div style={{fontSize:10,color:"#7a7870",marginBottom:4}}>Total volume</div>
+                        <div style={{fontSize:20,fontWeight:700,color:"#3dbd73"}}>${Number(creatorDashboard.total_volume||0).toLocaleString(undefined,{minimumFractionDigits:2})}</div>
+                      </div>
+                    </div>
+                    <div style={{fontSize:12,fontWeight:700,color:"#ddd8cc",marginBottom:8}}>Your markets</div>
+                    <div style={{marginBottom:20}}>
+                      {(creatorDashboard.markets||[]).length === 0 ? <div style={{color:"#7a7870",fontSize:12}}>No markets yet.</div> : (creatorDashboard.markets||[]).map(m=>(
+                        <div key={m.id} style={{background:"#0e0e0c",border:"1px solid #2a2a26",borderRadius:4,padding:10,marginBottom:6}}>
+                          <div style={{fontSize:13,color:"#ddd8cc"}}>{m.question||m.q}</div>
+                          <div style={{fontSize:10,color:"#7a7870"}}>Expires {m.expiry_date||m.resolution_date} · {m.resolved?"Resolved":"Open"}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{fontSize:12,fontWeight:700,color:"#ddd8cc",marginBottom:8}}>Resolution queue (past expiry, unresolved)</div>
+                    <div style={{marginBottom:20}}>
+                      {(creatorDashboard.resolution_queue||[]).length === 0 ? <div style={{color:"#7a7870",fontSize:12}}>None.</div> : (creatorDashboard.resolution_queue||[]).map(m=>(
+                        <div key={m.id} style={{background:"#2a2200",border:"1px solid #b45309",borderRadius:4,padding:10,marginBottom:6}}>
+                          <div style={{fontSize:13,color:"#ddd8cc"}}>{m.question||m.q}</div>
+                          <div style={{fontSize:10,color:"#e0a820"}}>Expired {m.expiry_date||m.resolution_date}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{background:"#1c1c19",border:"1px solid #2a2a26",borderRadius:4,padding:14,marginBottom:14}}>
+                      <div style={{fontSize:12,fontWeight:700,color:"#e0a820",marginBottom:8}}>Suggest markets</div>
+                      <div style={{fontSize:11,color:"#7a7870",marginBottom:8}}>Describe your show or community; we'll suggest 5 YES/NO markets.</div>
+                      <textarea placeholder="e.g. A podcast about crypto and macro. Listeners are degens and long-term holders." value={creatorSuggestDesc} onChange={e=>setCreatorSuggestDesc(e.target.value)} rows={3} style={{width:"100%",padding:10,background:"#0e0e0c",border:"1px solid #2a2a26",borderRadius:4,color:"#ddd8cc",fontSize:12,marginBottom:10,resize:"vertical"}} />
+                      <button disabled={creatorSuggestLoading} onClick={async ()=>{setCreatorSuggestLoading(true);setCreatorSuggestions([]);const res=await apiPostAuth("/api/suggest-markets",{description:creatorSuggestDesc},token);setCreatorSuggestLoading(false);if(Array.isArray(res))setCreatorSuggestions(res);else if(res&&res.error)notify(res.error);}} style={{padding:10,background:"#2a2200",border:"1px solid #b8820c",borderRadius:4,color:"#e0a820",fontSize:12,fontWeight:700,cursor:creatorSuggestLoading?"default":"pointer",fontFamily:"inherit"}}>{creatorSuggestLoading?"Generating...":"Suggest markets"}</button>
+                    </div>
+                    {creatorSuggestions.length > 0 && (
+                      <div style={{marginTop:16}}>
+                        <div style={{fontSize:12,fontWeight:700,color:"#ddd8cc",marginBottom:10}}>Suggestions</div>
+                        {creatorSuggestions.map((s,i)=>(
+                          <div key={i} style={{background:"#0e0e0c",border:"1px solid #2a2a26",borderRadius:4,padding:12,marginBottom:10}}>
+                            <div style={{fontSize:13,fontWeight:600,color:"#ddd8cc",marginBottom:4}}>{s.question}</div>
+                            <div style={{fontSize:10,color:"#7a7870",marginBottom:6}}>{s.category} · {s.resolution_date} {s.notes? "· " + s.notes : ""}</div>
+                            <button onClick={async ()=>{const res=await apiPost("/markets",{question:s.question,commodity:s.category||"macro",target_price:0,direction:"above",expiry_date:s.resolution_date});if(res.error){notify(res.error);return;}notify("Market created");setCreatorSuggestions(prev=>prev.filter((_,j)=>j!==i));if(creatorDashboard)setCreatorDashboard({...creatorDashboard,markets:[...(creatorDashboard.markets||[]),res]});}} style={{padding:"6px 12px",background:"#1a5c3a",border:"1px solid #2d9b5f",borderRadius:4,color:"#3dbd73",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Create</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             )}
           </div>
         )}
