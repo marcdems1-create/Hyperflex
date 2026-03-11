@@ -214,6 +214,22 @@ body {
   transition: all 0.2s;
 }
 .btn-danger:hover { background: rgba(192,57,43,0.2); border-color: var(--red); }
+.yt-market-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.yt-market-item:hover { border-color: var(--gold); }
+.yt-market-item.selected { border-color: var(--gold); background: rgba(201,146,13,0.06); }
+.yt-market-item input[type="checkbox"] { margin-top: 2px; accent-color: var(--gold); flex-shrink: 0; }
+.yt-market-question { font-size: 13px; color: var(--text); line-height: 1.4; margin-bottom: 4px; }
+.yt-market-meta { font-family: var(--mono); font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.08em; }
 
 .content { padding: 32px; }
 
@@ -736,6 +752,7 @@ body {
       <div class="topbar-title" id="topbarTitle">Overview</div>
       <div class="topbar-actions">
         <button class="btn-secondary" onclick="copyLink()">📋 Copy community link</button>
+        <button class="btn-secondary" onclick="openYoutubeModal()">▶ Scan YouTube</button>
         <button class="btn-primary" onclick="openCreateModal()">+ New Market</button>
       </div>
     </div>
@@ -992,6 +1009,38 @@ body {
         <button class="btn-secondary" onclick="closeEditModal()">Cancel</button>
         <button class="btn-primary" onclick="saveMarketEdit()">Save Changes →</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- YouTube Scan Modal -->
+<div class="modal-overlay" id="youtubeModal">
+  <div class="modal" style="max-width:580px">
+    <div class="modal-header">
+      <div class="modal-title">▶ Scan YouTube Comments</div>
+      <button class="modal-close" onclick="closeYoutubeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-ai-box">
+        <div class="modal-ai-icon">🤖</div>
+        <div class="modal-ai-text">
+          <strong>AI reads your fans.</strong> Paste any YouTube video or channel URL — Claude scans the top comments and extracts the predictions your community is already making.
+        </div>
+      </div>
+      <div class="field">
+        <label>YouTube Video or Channel URL</label>
+        <input type="url" id="youtubeUrl" placeholder="https://youtube.com/watch?v=... or https://youtube.com/@yourchannel"/>
+      </div>
+      <div id="ytScanResult" style="display:none">
+        <div id="ytVideoMeta" style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:16px;padding:10px 12px;background:var(--paper);border:1px solid var(--border);border-radius:6px"></div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:10px">Suggested Markets — select to publish</div>
+        <div id="ytMarketList" style="display:flex;flex-direction:column;gap:8px"></div>
+      </div>
+      <div id="ytError" style="display:none;padding:10px 12px;background:rgba(192,57,43,0.1);border:1px solid rgba(192,57,43,0.3);border-radius:6px;font-size:12px;color:#e74c3c;line-height:1.4"></div>
+    </div>
+    <div class="modal-footer" id="ytFooter">
+      <button class="btn-secondary" onclick="closeYoutubeModal()">Cancel</button>
+      <button class="btn-primary" id="ytScanBtn" onclick="runYoutubeScan()">Scan Comments →</button>
     </div>
   </div>
 </div>
@@ -1338,6 +1387,130 @@ function showToast(msg, type = 'success') {
   document.getElementById('toastIcon').textContent = type === 'success' ? '✓' : '✗';
   t.className = 'toast ' + type + ' show';
   setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// YouTube scanner
+let ytSuggestedMarkets = [];
+
+function openYoutubeModal() {
+  document.getElementById('youtubeUrl').value = '';
+  document.getElementById('ytScanResult').style.display = 'none';
+  document.getElementById('ytError').style.display = 'none';
+  document.getElementById('ytMarketList').innerHTML = '';
+  document.getElementById('ytVideoMeta').textContent = '';
+  document.getElementById('ytScanBtn').disabled = false;
+  document.getElementById('ytScanBtn').textContent = 'Scan Comments →';
+  document.getElementById('ytFooter').innerHTML = `
+    <button class="btn-secondary" onclick="closeYoutubeModal()">Cancel</button>
+    <button class="btn-primary" id="ytScanBtn" onclick="runYoutubeScan()">Scan Comments →</button>
+  `;
+  ytSuggestedMarkets = [];
+  document.getElementById('youtubeModal').classList.add('show');
+}
+function closeYoutubeModal() {
+  document.getElementById('youtubeModal').classList.remove('show');
+}
+
+async function runYoutubeScan() {
+  const url = document.getElementById('youtubeUrl').value.trim();
+  if (!url) { showToast('Paste a YouTube URL first.', 'error'); return; }
+
+  const btn = document.getElementById('ytScanBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Scanning…';
+  document.getElementById('ytError').style.display = 'none';
+  document.getElementById('ytScanResult').style.display = 'none';
+
+  try {
+    const r = await fetch(API + '/api/creator/scan-youtube', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ url })
+    });
+    const data = await r.json();
+
+    if (!r.ok) {
+      document.getElementById('ytError').textContent = data.error || 'Scan failed.';
+      document.getElementById('ytError').style.display = 'block';
+      return;
+    }
+
+    ytSuggestedMarkets = data.markets || [];
+    document.getElementById('ytVideoMeta').textContent =
+      `📹 "${data.video_title}" · ${data.comment_count} comments scanned · ${ytSuggestedMarkets.length} markets found`;
+
+    document.getElementById('ytMarketList').innerHTML = ytSuggestedMarkets.map((m, i) => `
+      <label class="yt-market-item" id="ytItem${i}" onclick="toggleYtItem(${i})">
+        <input type="checkbox" id="ytCheck${i}" checked/>
+        <div>
+          <div class="yt-market-question">${m.question}</div>
+          <div class="yt-market-meta">${m.category} · Closes ${m.resolution_date}</div>
+        </div>
+      </label>
+    `).join('');
+
+    // Select all by default
+    ytSuggestedMarkets.forEach((_, i) => {
+      document.getElementById('ytItem' + i).classList.add('selected');
+    });
+
+    document.getElementById('ytScanResult').style.display = 'block';
+
+    // Swap footer to publish button
+    document.getElementById('ytFooter').innerHTML = `
+      <button class="btn-secondary" onclick="closeYoutubeModal()">Cancel</button>
+      <button class="btn-secondary" onclick="runYoutubeScan()">↺ Re-scan</button>
+      <button class="btn-primary" onclick="publishYtMarkets()">Publish Selected →</button>
+    `;
+  } catch {
+    document.getElementById('ytError').textContent = 'Network error. Please try again.';
+    document.getElementById('ytError').style.display = 'block';
+  } finally {
+    const b = document.getElementById('ytScanBtn');
+    if (b) { b.disabled = false; b.textContent = 'Scan Comments →'; }
+  }
+}
+
+function toggleYtItem(i) {
+  const cb = document.getElementById('ytCheck' + i);
+  const item = document.getElementById('ytItem' + i);
+  // checkbox state toggles naturally via label click; just sync the class
+  setTimeout(() => {
+    item.classList.toggle('selected', cb.checked);
+  }, 0);
+}
+
+async function publishYtMarkets() {
+  const selected = ytSuggestedMarkets.filter((_, i) => document.getElementById('ytCheck' + i)?.checked);
+  if (!selected.length) { showToast('Select at least one market.', 'error'); return; }
+
+  let published = 0;
+  let failed = 0;
+
+  for (const m of selected) {
+    try {
+      const r = await fetch(API + '/markets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({
+          question: m.question,
+          category: m.category,
+          expiry_date: m.resolution_date,
+          creator_id: user.id,
+          tenant_slug: user.slug,
+          is_public: true
+        })
+      });
+      const d = await r.json();
+      if (d.id || d.market) published++;
+      else failed++;
+    } catch { failed++; }
+  }
+
+  closeYoutubeModal();
+  if (published > 0) showToast(`${published} market${published > 1 ? 's' : ''} published! 🎯`, 'success');
+  if (failed > 0) showToast(`${failed} market${failed > 1 ? 's' : ''} failed to publish.`, 'error');
+  if (published > 0) setTimeout(() => init(), 600);
 }
 
 // Edit market

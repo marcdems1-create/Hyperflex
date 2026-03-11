@@ -733,6 +733,7 @@ app.get('/api/templates/:id', (req, res) => {
 
 const JWT_SECRET = process.env.JWT_SECRET || 'hyperflex-dev-secret-change-in-prod';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 
 // ─── MIDDLEWARE: Auth guard ──────────────────────────────────
 function requireCreator(req, res, next) {
@@ -1365,6 +1366,169 @@ function getDate(daysFromNow) {
   d.setDate(d.getDate() + daysFromNow);
   return d.toISOString().split('T')[0];
 }
+
+// ════════════════════════════════════════════════════════════
+// 7b. YOUTUBE COMMENT SCANNER
+// POST /api/creator/scan-youtube
+// Body: { url: "https://youtube.com/watch?v=..." }
+// Returns: { markets: [{ question, category, resolution_date }], comment_count, video_title }
+// ════════════════════════════════════════════════════════════
+app.post('/api/creator/scan-youtube', requireCreator, async (req, res) => {
+  try {
+    const { url } = req.body;
+    if (!url) return res.status(400).json({ error: 'YouTube URL is required' });
+
+    if (!YOUTUBE_API_KEY) {
+      return res.status(503).json({ error: 'YouTube API key not configured. Add YOUTUBE_API_KEY to your environment.' });
+    }
+    if (!ANTHROPIC_API_KEY) {
+      return res.status(503).json({ error: 'Anthropic API key not configured.' });
+    }
+
+    // ── Extract video ID or channel ID from URL ───────────────
+    let videoId = null;
+    let channelId = null;
+    let videoTitle = '';
+
+    // Patterns: watch?v=, youtu.be/, /shorts/, /live/
+    const videoMatch = url.match(/(?:v=|youtu\.be\/|\/shorts\/|\/live\/)([a-zA-Z0-9_-]{11})/);
+    if (videoMatch) {
+      videoId = videoMatch[1];
+    } else {
+      // Channel URL: /channel/UC..., /c/name, /@handle
+      const channelMatch = url.match(/youtube\.com\/(?:channel\/(UC[a-zA-Z0-9_-]+)|c\/([^/?]+)|@([^/?]+))/);
+      if (channelMatch) {
+        // Resolve handle/custom URL to channel ID via YouTube search
+        const handle = channelMatch[1] || channelMatch[2] || channelMatch[3];
+        if (channelMatch[1]) {
+          channelId = channelMatch[1];
+        } else {
+          // Search for channel to get its ID, then get latest video
+          const searchRes = await fetch(
+            `https://www.googleapis.com/youtube/v3/search?part=snippet&type=channel&q=${encodeURIComponent(handle)}&maxResults=1&key=${YOUTUBE_API_KEY}`
+          );
+          const searchData = await searchRes.json();
+          if (searchData.error) throw new Error(searchData.error.message);
+          channelId = searchData.items?.[0]?.id?.channelId;
+        }
+
+        if (!channelId) return res.status(400).json({ error: 'Could not resolve YouTube channel. Try pasting a direct video URL instead.' });
+
+        // Get most recent video from channel
+        const vidRes = await fetch(
+          `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${channelId}&order=date&type=video&maxResults=1&key=${YOUTUBE_API_KEY}`
+        );
+        const vidData = await vidRes.json();
+        if (vidData.error) throw new Error(vidData.error.message);
+        videoId = vidData.items?.[0]?.id?.videoId;
+        videoTitle = vidData.items?.[0]?.snippet?.title || '';
+        if (!videoId) return res.status(404).json({ error: 'No videos found for this channel.' });
+      }
+    }
+
+    if (!videoId) return res.status(400).json({ error: 'Could not extract a video ID from that URL. Paste a YouTube video link (e.g. youtube.com/watch?v=...)' });
+
+    // ── Fetch video title if not already set ─────────────────
+    if (!videoTitle) {
+      const infoRes = await fetch(
+        `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${YOUTUBE_API_KEY}`
+      );
+      const infoData = await infoRes.json();
+      if (infoData.error) throw new Error(infoData.error.message);
+      videoTitle = infoData.items?.[0]?.snippet?.title || 'YouTube video';
+    }
+
+    // ── Fetch top 100 comments (top relevance order) ──────────
+    const commentRes = await fetch(
+      `https://www.googleapis.com/youtube/v3/commentThreads?part=snippet&videoId=${videoId}&order=relevance&maxResults=100&key=${YOUTUBE_API_KEY}`
+    );
+    const commentData = await commentRes.json();
+
+    if (commentData.error) {
+      const msg = commentData.error.message || 'YouTube API error';
+      // Comments disabled is a common case
+      if (commentData.error.code === 403) {
+        return res.status(403).json({ error: 'Comments are disabled for this video.' });
+      }
+      throw new Error(msg);
+    }
+
+    const comments = (commentData.items || []).map(item =>
+      item.snippet?.topLevelComment?.snippet?.textDisplay || ''
+    ).filter(Boolean);
+
+    if (comments.length === 0) {
+      return res.status(404).json({ error: 'No comments found on this video.' });
+    }
+
+    // ── Send to Claude ────────────────────────────────────────
+    const today = new Date();
+    const in30 = getDate(30);
+    const in60 = getDate(60);
+    const in90 = getDate(90);
+
+    const commentBlock = comments.slice(0, 100).map((c, i) => `${i + 1}. ${c.replace(/<[^>]+>/g, '').trim()}`).join('\n');
+
+    const prompt = `You are analyzing YouTube comments to find prediction market opportunities.
+
+Video: "${videoTitle}"
+
+Here are the top comments from this video:
+${commentBlock}
+
+Based on what fans are debating, predicting, and speculating about in these comments, generate 5-10 prediction market questions. Focus on:
+- Specific predictions fans are making ("will X happen?")
+- Debates about outcomes ("I think Y will win", "no way Z happens")
+- Questions about future events related to the video's topic
+
+Each market must:
+- Be a clear YES or NO question that can be objectively resolved
+- Be directly relevant to what fans are talking about
+- Have a realistic resolution date (near=${in30}, mid=${in60}, far=${in90})
+
+Return ONLY valid JSON, no other text:
+{
+  "markets": [
+    {
+      "question": "Will [specific thing fans are debating]?",
+      "category": "sports|entertainment|finance|politics|other",
+      "resolution_date": "YYYY-MM-DD"
+    }
+  ]
+}`;
+
+    const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-opus-4-6',
+        max_tokens: 1200,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    const aiData = await aiRes.json();
+    const text = aiData.content?.[0]?.text || '';
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('AI returned invalid format');
+
+    const parsed = JSON.parse(jsonMatch[0]);
+
+    res.json({
+      markets: parsed.markets || [],
+      comment_count: comments.length,
+      video_title: videoTitle
+    });
+
+  } catch (err) {
+    console.error('scan-youtube error:', err);
+    res.status(500).json({ error: err.message || 'Failed to scan YouTube comments' });
+  }
+});
 
 // ════════════════════════════════════════════════════════════
 // 8. PUBLIC COMMUNITY PAGE DATA
