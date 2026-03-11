@@ -1377,7 +1377,7 @@ app.get('/api/community/:slug', async (req, res) => {
     const { data: markets } = await supabase
       .from('markets')
       .select('id, question, category, expiry_date, yes_price, no_price, volume, trader_count, resolved, outcome')
-      .or(`tenant_slug.eq.${slug},creator_slug.eq.${slug},creator_id.eq.${settings.creator_id}`)
+      .or(`tenant_slug.eq.${slug},creator_id.eq.${settings.creator_id}`)
       .eq('is_public', true)
       .order('created_at', { ascending: false });
 
