@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>HYPERFLEX — Creator Signup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --ink: #0e0e0c;
+  --paper: #141412;
+  --cream: #1c1c19;
+  --text: #ddd8cc;
+  --gold: #c9920d;
+  --gold-lt: #e0a820;
+  --gold-bright: #f5c842;
+  --border: #2a2a26;
+  --dim: #7a7870;
+  --green: #2d9b5f;
+  --red: #c0392b;
+  --sans: 'Syne', sans-serif;
+  --mono: 'Space Mono', monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+::-webkit-scrollbar { display: none; }
+
+body {
+  background: var(--paper);
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Background grid */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(201,146,13,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(201,146,13,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.page {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header */
+.header {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+}
+.logo-hex {
+  width: 32px;
+  height: 32px;
+}
+.logo-name {
+  font-family: var(--sans);
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: 0.08em;
+  color: var(--text);
+}
+.header-tag {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--gold);
+  background: rgba(201,146,13,0.1);
+  border: 1px solid rgba(201,146,13,0.3);
+  padding: 3px 8px;
+  border-radius: 2px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* Main layout */
+.main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  max-width: 1100px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 60px 24px;
+  gap: 80px;
+  align-items: start;
+}
+
+/* Left side - pitch */
+.pitch {
+  position: sticky;
+  top: 60px;
+}
+.pitch-eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--gold);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pitch-eyebrow::before {
+  content: '';
+  display: inline-block;
+  width: 24px;
+  height: 1px;
+  background: var(--gold);
+}
+.pitch h1 {
+  font-family: var(--sans);
+  font-weight: 800;
+  font-size: 48px;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  margin-bottom: 24px;
+  color: var(--text);
+}
+.pitch h1 span {
+  color: var(--gold);
+}
+.pitch-desc {
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--dim);
+  margin-bottom: 40px;
+}
+
+.features {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.feature {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.feature-icon {
+  width: 32px;
+  height: 32px;
+  background: rgba(201,146,13,0.1);
+  border: 1px solid rgba(201,146,13,0.2);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.feature-text strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+.feature-text span {
+  font-size: 13px;
+  color: var(--dim);
+  line-height: 1.4;
+}
+
+.community-examples {
+  margin-top: 40px;
+  padding: 20px;
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.examples-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+.example-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.pill {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--gold);
+  background: rgba(201,146,13,0.08);
+  border: 1px solid rgba(201,146,13,0.2);
+  padding: 4px 10px;
+  border-radius: 20px;
+}
+
+/* Right side - form */
+.form-card {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.form-header {
+  padding: 24px 28px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.form-header h2 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+}
+.step-indicator {
+  display: flex;
+  gap: 6px;
+}
+.step-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--border);
+  transition: background 0.3s;
+}
+.step-dot.active {
+  background: var(--gold);
+}
+.step-dot.done {
+  background: var(--green);
+}
+
+.form-body {
+  padding: 28px;
+}
+
+/* Steps */
+.step { display: none; }
+.step.active { display: block; }
+
+.step-title {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--gold);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 20px;
+}
+
+.field {
+  margin-bottom: 20px;
+}
+.field label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dim);
+  margin-bottom: 8px;
+  letter-spacing: 0.03em;
+}
+.field input,
+.field textarea,
+.field select {
+  width: 100%;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 14px;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.2s;
+  resize: none;
+}
+.field input:focus,
+.field textarea:focus,
+.field select:focus {
+  border-color: var(--gold);
+}
+.field input.error,
+.field textarea.error {
+  border-color: var(--red);
+}
+.field-hint {
+  font-size: 11px;
+  color: var(--dim);
+  margin-top: 6px;
+}
+.field-error {
+  font-size: 11px;
+  color: var(--red);
+  margin-top: 6px;
+  display: none;
+}
+.field-error.show { display: block; }
+
+/* Slug field special */
+.slug-wrap {
+  display: flex;
+  align-items: center;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+.slug-wrap:focus-within { border-color: var(--gold); }
+.slug-wrap.error { border-color: var(--red); }
+.slug-prefix {
+  padding: 12px 10px 12px 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+  white-space: nowrap;
+  border-right: 1px solid var(--border);
+  background: rgba(255,255,255,0.02);
+}
+.slug-wrap input {
+  border: none;
+  border-radius: 0;
+  padding: 12px 14px;
+  flex: 1;
+}
+.slug-wrap input:focus { outline: none; }
+.slug-status {
+  padding: 0 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.slug-status.available { color: var(--green); }
+.slug-status.taken { color: var(--red); }
+.slug-status.checking { color: var(--dim); }
+
+/* Points name preview */
+.points-preview {
+  margin-top: 10px;
+  padding: 10px 14px;
+  background: rgba(201,146,13,0.05);
+  border: 1px dashed rgba(201,146,13,0.3);
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--gold);
+}
+
+/* AI Suggest section */
+.ai-suggest-box {
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+.ai-suggest-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gold);
+}
+.ai-suggest-header span {
+  font-size: 16px;
+}
+.ai-desc-area {
+  padding: 0;
+}
+.ai-desc-area textarea {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 14px 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  height: 80px;
+}
+.ai-desc-area textarea:focus { outline: none; border: none; }
+.ai-suggest-footer {
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.btn-suggest {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold);
+  background: rgba(201,146,13,0.1);
+  border: 1px solid rgba(201,146,13,0.3);
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-suggest:hover {
+  background: rgba(201,146,13,0.2);
+  border-color: var(--gold);
+}
+.btn-suggest:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Market suggestions list */
+.suggestions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.suggestion-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+.suggestion-item:hover { border-color: rgba(201,146,13,0.4); }
+.suggestion-item.selected {
+  border-color: var(--gold);
+  background: rgba(201,146,13,0.05);
+}
+.suggestion-check {
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--border);
+  border-radius: 3px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: var(--gold);
+  transition: all 0.15s;
+}
+.suggestion-item.selected .suggestion-check {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: var(--ink);
+}
+.suggestion-text {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text);
+}
+.suggestion-meta {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+  margin-top: 3px;
+}
+
+.suggestions-hint {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+  margin-bottom: 12px;
+}
+
+/* Spinner */
+.spinner {
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid rgba(201,146,13,0.3);
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Form footer */
+.form-footer {
+  padding: 20px 28px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.btn-back {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--dim);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: color 0.2s;
+}
+.btn-back:hover { color: var(--text); }
+.btn-next {
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--ink);
+  background: var(--gold);
+  border: none;
+  padding: 12px 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  letter-spacing: 0.02em;
+}
+.btn-next:hover { background: var(--gold-bright); transform: translateY(-1px); }
+.btn-next:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.btn-next.loading { background: rgba(201,146,13,0.5); cursor: not-allowed; }
+
+/* Success state */
+.success-screen {
+  display: none;
+  padding: 48px 28px;
+  text-align: center;
+}
+.success-screen.show { display: block; }
+.success-icon {
+  font-size: 48px;
+  margin-bottom: 20px;
+}
+.success-screen h3 {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 12px;
+}
+.success-screen p {
+  font-size: 14px;
+  color: var(--dim);
+  line-height: 1.6;
+  margin-bottom: 8px;
+}
+.success-url {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--gold);
+  background: rgba(201,146,13,0.1);
+  border: 1px solid rgba(201,146,13,0.3);
+  padding: 10px 16px;
+  border-radius: 6px;
+  margin: 16px 0;
+  word-break: break-all;
+}
+.btn-dashboard {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--ink);
+  background: var(--gold);
+  border: none;
+  padding: 14px 32px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-decoration: none;
+  margin-top: 8px;
+  transition: all 0.2s;
+}
+.btn-dashboard:hover { background: var(--gold-bright); }
+
+/* Login link */
+.login-link {
+  text-align: center;
+  padding: 16px;
+  font-size: 13px;
+  color: var(--dim);
+  border-top: 1px solid var(--border);
+}
+.login-link a {
+  color: var(--gold);
+  text-decoration: none;
+}
+.login-link a:hover { text-decoration: underline; }
+
+/* Global error */
+.global-error {
+  margin: 0 28px 16px;
+  padding: 12px 16px;
+  background: rgba(192,57,43,0.1);
+  border: 1px solid rgba(192,57,43,0.3);
+  border-radius: 6px;
+  font-size: 13px;
+  color: #e74c3c;
+  display: none;
+}
+.global-error.show { display: block; }
+
+@media (max-width: 768px) {
+  .main { grid-template-columns: 1fr; gap: 40px; padding: 32px 16px; }
+  .pitch { position: static; }
+  .pitch h1 { font-size: 36px; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <header class="header">
+    <a href="/" class="logo">
+      <svg class="logo-hex" viewBox="0 0 32 32" fill="none">
+        <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="#c9920d" stroke-width="1.5" fill="rgba(201,146,13,0.1)"/>
+        <path d="M16 8L22 11.5V18.5L16 22L10 18.5V11.5L16 8Z" fill="#c9920d" opacity="0.6"/>
+      </svg>
+      <span class="logo-name">HYPERFLEX</span>
+    </a>
+    <span class="header-tag">Creator Portal</span>
+  </header>
+
+  <!-- Main -->
+  <main class="main">
+
+    <!-- Left: Pitch -->
+    <div class="pitch">
+      <div class="pitch-eyebrow">For creators</div>
+      <h1>Your community.<br/><span>Your prediction</span><br/>market.</h1>
+      <p class="pitch-desc">
+        Set up a branded prediction market for your audience in 5 minutes.
+        Custom points, your own leaderboard, AI-generated market ideas —
+        and keeps your fans coming back every week.
+      </p>
+
+      <div class="features">
+        <div class="feature">
+          <div class="feature-icon">🤖</div>
+          <div class="feature-text">
+            <strong>AI Market Suggester</strong>
+            <span>Describe your show and get 10 ready-to-publish market ideas instantly.</span>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🏆</div>
+          <div class="feature-text">
+            <strong>Private Leaderboard</strong>
+            <span>Your community's own rankings. Embed it anywhere.</span>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🎨</div>
+          <div class="feature-text">
+            <strong>Custom Points Name</strong>
+            <span>"Gridiron Gold", "Comedy Coins" — make it yours.</span>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">📊</div>
+          <div class="feature-text">
+            <strong>Creator Analytics</strong>
+            <span>See who's most active, which markets drive the most engagement.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="community-examples">
+        <div class="examples-label">Great for</div>
+        <div class="example-pills">
+          <span class="pill">Fantasy sports pods</span>
+          <span class="pill">Comedy podcasts</span>
+          <span class="pill">Sports subreddits</span>
+          <span class="pill">Finance newsletters</span>
+          <span class="pill">DFS communities</span>
+          <span class="pill">Twitch streamers</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Form -->
+    <div>
+      <div class="form-card">
+        <div class="form-header">
+          <h2>Create your community</h2>
+          <div class="step-indicator">
+            <div class="step-dot active" id="dot-1"></div>
+            <div class="step-dot" id="dot-2"></div>
+            <div class="step-dot" id="dot-3"></div>
+          </div>
+        </div>
+
+        <div class="global-error" id="globalError"></div>
+
+        <div class="form-body">
+
+          <!-- Step 1: Account -->
+          <div class="step active" id="step1">
+            <div class="step-title">Step 1 of 3 — Your Account</div>
+
+            <div class="field">
+              <label>Display Name</label>
+              <input type="text" id="displayName" placeholder="The Fantasy Footballers" autocomplete="name"/>
+              <div class="field-error" id="displayNameErr">Please enter your name or community name.</div>
+            </div>
+
+            <div class="field">
+              <label>Email</label>
+              <input type="email" id="email" placeholder="you@yourshow.com" autocomplete="email"/>
+              <div class="field-error" id="emailErr">Please enter a valid email.</div>
+            </div>
+
+            <div class="field">
+              <label>Password</label>
+              <input type="password" id="password" placeholder="Min 8 characters" autocomplete="new-password"/>
+              <div class="field-error" id="passwordErr">Password must be at least 8 characters.</div>
+            </div>
+          </div>
+
+          <!-- Step 2: Community Identity -->
+          <div class="step" id="step2">
+            <div class="step-title">Step 2 of 3 — Community Identity</div>
+
+            <div class="field">
+              <label>Community URL</label>
+              <div class="slug-wrap" id="slugWrap">
+                <span class="slug-prefix">hyperflex.network/</span>
+                <input type="text" id="slug" placeholder="gridiron-picks" autocomplete="off" spellcheck="false"/>
+                <span class="slug-status" id="slugStatus"></span>
+              </div>
+              <div class="field-hint">Lowercase letters, numbers, and hyphens only. 3–30 characters.</div>
+              <div class="field-error" id="slugErr">Please choose a valid slug.</div>
+            </div>
+
+            <div class="field">
+              <label>Points Name <span style="color:var(--dim);font-weight:400">(what your community earns)</span></label>
+              <input type="text" id="pointsName" placeholder="Flex Points" maxlength="30"/>
+              <div class="points-preview" id="pointsPreview">🏅 Your community will earn <strong>Flex Points</strong></div>
+              <div class="field-hint">E.g. "Gridiron Gold", "Comedy Coins", "Rogan Bucks"</div>
+            </div>
+
+            <div class="field">
+              <label>Primary Color <span style="color:var(--dim);font-weight:400">(optional)</span></label>
+              <div style="display:flex;gap:10px;align-items:center">
+                <input type="color" id="primaryColor" value="#c9920d" style="width:48px;height:40px;padding:4px;cursor:pointer;border-radius:6px;border:1px solid var(--border);background:var(--paper)"/>
+                <span style="font-family:var(--mono);font-size:12px;color:var(--dim)" id="colorHex">#c9920d</span>
+              </div>
+              <div class="field-hint">Used for your community's accent color and leaderboard header.</div>
+            </div>
+          </div>
+
+          <!-- Step 3: AI Market Ideas -->
+          <div class="step" id="step3">
+            <div class="step-title">Step 3 of 3 — Your First Markets</div>
+
+            <div class="ai-suggest-box">
+              <div class="ai-suggest-header">
+                <span>🤖</span> AI Market Suggester
+              </div>
+              <div class="ai-desc-area">
+                <textarea id="communityDesc" placeholder="Describe your community in one sentence. E.g. 'Weekly fantasy football podcast with 80K listeners who love DFS and weekly picks'"></textarea>
+              </div>
+              <div class="ai-suggest-footer">
+                <button class="btn-suggest" id="btnSuggest" onclick="suggestMarkets()">
+                  <span id="suggestIcon">✨</span>
+                  <span id="suggestText">Generate Market Ideas</span>
+                </button>
+              </div>
+            </div>
+
+            <div id="suggestionsSection" style="display:none">
+              <div class="suggestions-hint" id="suggestionsHint">Select markets to publish on day one:</div>
+              <div class="suggestions-list" id="suggestionsList"></div>
+            </div>
+
+            <div class="field" style="margin-top:4px">
+              <div class="field-hint" style="color:var(--dim)">
+                ✓ You can always add more markets from your dashboard later. Selected markets go live immediately after signup.
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /form-body -->
+
+        <!-- Success screen -->
+        <div class="success-screen" id="successScreen">
+          <div class="success-icon">🎉</div>
+          <h3>You're live!</h3>
+          <p>Your prediction market is ready. Share this link with your community:</p>
+          <div class="success-url" id="successUrl"></div>
+          <p style="font-size:13px;color:var(--dim)">Your first markets are already published and waiting for predictions.</p>
+          <a href="/creator/dashboard" class="btn-dashboard">
+            Go to Dashboard →
+          </a>
+        </div>
+
+        <div class="form-footer" id="formFooter">
+          <button class="btn-back" id="btnBack" onclick="prevStep()" style="visibility:hidden">
+            ← Back
+          </button>
+          <button class="btn-next" id="btnNext" onclick="nextStep()">
+            Continue →
+          </button>
+        </div>
+
+        <div class="login-link">
+          Already have an account? <a href="/creator/login">Sign in</a>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+const API = window.location.origin;
+let currentStep = 1;
+let slugAvailable = false;
+let selectedSuggestions = [];
+let slugCheckTimeout;
+
+// Step navigation
+function updateStepUI() {
+  document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+  document.getElementById('step' + currentStep).classList.add('active');
+
+  // Dots
+  for (let i = 1; i <= 3; i++) {
+    const dot = document.getElementById('dot-' + i);
+    dot.classList.remove('active', 'done');
+    if (i < currentStep) dot.classList.add('done');
+    else if (i === currentStep) dot.classList.add('active');
+  }
+
+  // Back button
+  document.getElementById('btnBack').style.visibility = currentStep > 1 ? 'visible' : 'hidden';
+
+  // Next button
+  const btn = document.getElementById('btnNext');
+  if (currentStep === 3) {
+    btn.textContent = 'Launch My Community 🚀';
+  } else {
+    btn.innerHTML = 'Continue →';
+  }
+}
+
+function prevStep() {
+  if (currentStep > 1) { currentStep--; updateStepUI(); }
+}
+
+async function nextStep() {
+  clearError();
+  if (currentStep === 1 && !validateStep1()) return;
+  if (currentStep === 2 && !validateStep2()) return;
+  if (currentStep === 3) { await submitSignup(); return; }
+  currentStep++;
+  updateStepUI();
+}
+
+// Validation
+function showFieldError(id, msg) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.classList.add('show');
+  const inputId = id.replace('Err','').replace('Error','');
+  const input = document.getElementById(inputId);
+  if (input) input.classList.add('error');
+}
+function clearErrors() {
+  document.querySelectorAll('.field-error').forEach(e => e.classList.remove('show'));
+  document.querySelectorAll('input.error, textarea.error').forEach(e => e.classList.remove('error'));
+  clearError();
+}
+function clearError() {
+  document.getElementById('globalError').classList.remove('show');
+}
+function showError(msg) {
+  const el = document.getElementById('globalError');
+  el.textContent = msg;
+  el.classList.add('show');
+}
+
+function validateStep1() {
+  clearErrors();
+  let ok = true;
+  const name = document.getElementById('displayName').value.trim();
+  const email = document.getElementById('email').value.trim();
+  const pw = document.getElementById('password').value;
+  if (!name) { showFieldError('displayNameErr', 'Please enter your name or community name.'); ok = false; }
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showFieldError('emailErr', 'Please enter a valid email.'); ok = false; }
+  if (pw.length < 8) { showFieldError('passwordErr', 'Password must be at least 8 characters.'); ok = false; }
+  return ok;
+}
+
+function validateStep2() {
+  clearErrors();
+  const slug = document.getElementById('slug').value.trim();
+  if (!slug || !/^[a-z0-9-]{3,30}$/.test(slug)) {
+    showFieldError('slugErr', 'Slug must be 3–30 characters: lowercase letters, numbers, hyphens only.');
+    document.getElementById('slugWrap').classList.add('error');
+    return false;
+  }
+  if (!slugAvailable) {
+    showFieldError('slugErr', 'Please wait for slug availability check, or choose a different slug.');
+    document.getElementById('slugWrap').classList.add('error');
+    return false;
+  }
+  return true;
+}
+
+// Slug checking
+document.getElementById('slug').addEventListener('input', function() {
+  const val = this.value.toLowerCase().replace(/[^a-z0-9-]/g, '');
+  this.value = val;
+  document.getElementById('slugWrap').classList.remove('error');
+  document.getElementById('slugErr').classList.remove('show');
+  slugAvailable = false;
+
+  clearTimeout(slugCheckTimeout);
+  const status = document.getElementById('slugStatus');
+
+  if (val.length < 3) { status.textContent = ''; return; }
+
+  status.className = 'slug-status checking';
+  status.textContent = '...';
+
+  slugCheckTimeout = setTimeout(async () => {
+    try {
+      const r = await fetch(API + '/api/creator/check-slug?slug=' + encodeURIComponent(val));
+      const data = await r.json();
+      if (data.available) {
+        status.className = 'slug-status available';
+        status.textContent = '✓';
+        slugAvailable = true;
+      } else {
+        status.className = 'slug-status taken';
+        status.textContent = '✗ taken';
+        slugAvailable = false;
+      }
+    } catch {
+      status.textContent = '';
+      slugAvailable = true; // allow on network error
+    }
+  }, 500);
+});
+
+// Points name preview
+document.getElementById('pointsName').addEventListener('input', function() {
+  const val = this.value.trim() || 'Flex Points';
+  document.getElementById('pointsPreview').innerHTML = '🏅 Your community will earn <strong>' + val + '</strong>';
+});
+
+// Color picker
+document.getElementById('primaryColor').addEventListener('input', function() {
+  document.getElementById('colorHex').textContent = this.value;
+});
+
+// AI Suggestions
+async function suggestMarkets() {
+  const desc = document.getElementById('communityDesc').value.trim();
+  const btn = document.getElementById('btnSuggest');
+  const icon = document.getElementById('suggestIcon');
+  const text = document.getElementById('suggestText');
+
+  if (!desc) {
+    document.getElementById('communityDesc').classList.add('error');
+    return;
+  }
+  document.getElementById('communityDesc').classList.remove('error');
+
+  btn.disabled = true;
+  icon.className = 'spinner';
+  text.textContent = 'Generating...';
+
+  try {
+    const r = await fetch(API + '/api/suggest-markets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ description: desc })
+    });
+    const data = await r.json();
+    if (data.markets) renderSuggestions(data.markets);
+    else showError('Could not generate suggestions. Try again.');
+  } catch {
+    showError('Network error. Please try again.');
+  } finally {
+    btn.disabled = false;
+    icon.textContent = '✨';
+    text.textContent = 'Regenerate';
+  }
+}
+
+function renderSuggestions(markets) {
+  const list = document.getElementById('suggestionsList');
+  const section = document.getElementById('suggestionsSection');
+  list.innerHTML = '';
+  selectedSuggestions = [];
+  section.style.display = 'block';
+
+  markets.forEach((m, i) => {
+    const item = document.createElement('div');
+    item.className = 'suggestion-item';
+    item.innerHTML = `
+      <div class="suggestion-check" id="check-${i}">✓</div>
+      <div>
+        <div class="suggestion-text">${m.question}</div>
+        <div class="suggestion-meta">${m.category} · Closes ${m.resolution_date}</div>
+      </div>
+    `;
+    item.addEventListener('click', () => toggleSuggestion(i, m, item));
+    list.appendChild(item);
+  });
+
+  document.getElementById('suggestionsHint').textContent =
+    `Select markets to publish on day one (${markets.length} suggestions):`;
+}
+
+function toggleSuggestion(i, market, el) {
+  el.classList.toggle('selected');
+  const idx = selectedSuggestions.findIndex(s => s.question === market.question);
+  if (idx >= 0) selectedSuggestions.splice(idx, 1);
+  else selectedSuggestions.push(market);
+}
+
+// Final signup submission
+async function submitSignup() {
+  clearError();
+  const btn = document.getElementById('btnNext');
+  btn.classList.add('loading');
+  btn.textContent = 'Launching...';
+
+  const payload = {
+    display_name: document.getElementById('displayName').value.trim(),
+    email: document.getElementById('email').value.trim(),
+    password: document.getElementById('password').value,
+    slug: document.getElementById('slug').value.trim(),
+    custom_points_name: document.getElementById('pointsName').value.trim() || 'Flex Points',
+    primary_color: document.getElementById('primaryColor').value,
+    community_description: document.getElementById('communityDesc').value.trim(),
+    selected_markets: selectedSuggestions
+  };
+
+  try {
+    const r = await fetch(API + '/api/creator/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await r.json();
+
+    if (data.token) {
+      localStorage.setItem('hf_token', data.token);
+      localStorage.setItem('hf_user', JSON.stringify(data.user));
+      document.getElementById('successUrl').textContent = `hyperflex.network/${payload.slug}`;
+      document.querySelector('.form-body').style.display = 'none';
+      document.getElementById('formFooter').style.display = 'none';
+      document.getElementById('loginLink') && (document.getElementById('loginLink').style.display = 'none');
+      document.querySelector('.login-link').style.display = 'none';
+      document.getElementById('successScreen').classList.add('show');
+      document.querySelector('.form-header h2').textContent = 'Welcome aboard! 🎉';
+    } else {
+      showError(data.error || 'Signup failed. Please try again.');
+      btn.classList.remove('loading');
+      btn.textContent = 'Launch My Community 🚀';
+    }
+  } catch {
+    showError('Network error. Please check your connection and try again.');
+    btn.classList.remove('loading');
+    btn.textContent = 'Launch My Community 🚀';
+  }
+}
+
+// Init
+updateStepUI();
+</script>
+</body>
+</html>

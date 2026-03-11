@@ -1,0 +1,1291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>HYPERFLEX — Creator Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --ink: #0e0e0c;
+  --paper: #141412;
+  --cream: #1c1c19;
+  --text: #ddd8cc;
+  --gold: #c9920d;
+  --gold-lt: #e0a820;
+  --gold-bright: #f5c842;
+  --border: #2a2a26;
+  --dim: #7a7870;
+  --green: #2d9b5f;
+  --red: #c0392b;
+  --sans: 'Syne', sans-serif;
+  --mono: 'Space Mono', monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--paper); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+body {
+  background: var(--paper);
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100vh;
+}
+
+/* Layout */
+.layout { display: flex; min-height: 100vh; }
+
+/* Sidebar */
+.sidebar {
+  width: 240px;
+  background: var(--cream);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  z-index: 100;
+}
+.sidebar-logo {
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.logo-hex { width: 28px; height: 28px; }
+.logo-name {
+  font-weight: 800;
+  font-size: 16px;
+  letter-spacing: 0.08em;
+}
+.sidebar-community {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.community-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.community-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.community-url {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--gold);
+}
+
+.sidebar-nav {
+  flex: 1;
+  padding: 12px 0;
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dim);
+  cursor: pointer;
+  transition: all 0.15s;
+  border-left: 2px solid transparent;
+  text-decoration: none;
+}
+.nav-item:hover { color: var(--text); background: rgba(255,255,255,0.03); }
+.nav-item.active {
+  color: var(--gold);
+  border-left-color: var(--gold);
+  background: rgba(201,146,13,0.06);
+}
+.nav-icon { font-size: 16px; width: 20px; text-align: center; }
+.nav-badge {
+  margin-left: auto;
+  background: var(--red);
+  color: white;
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+
+.sidebar-footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+}
+.btn-upgrade {
+  width: 100%;
+  padding: 10px;
+  background: rgba(201,146,13,0.1);
+  border: 1px solid rgba(201,146,13,0.3);
+  border-radius: 6px;
+  color: var(--gold);
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.2s;
+  margin-bottom: 10px;
+}
+.btn-upgrade:hover { background: rgba(201,146,13,0.2); }
+.signout-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+  background: none;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  padding: 4px 0;
+}
+.signout-btn:hover { color: var(--text); }
+
+/* Main content */
+.main {
+  margin-left: 240px;
+  flex: 1;
+  min-height: 100vh;
+}
+.topbar {
+  padding: 16px 32px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--paper);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+.topbar-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+}
+.topbar-actions { display: flex; gap: 10px; align-items: center; }
+.btn-primary {
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--gold);
+  border: none;
+  padding: 9px 18px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-primary:hover { background: var(--gold-bright); }
+.btn-secondary {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--dim);
+  background: transparent;
+  border: 1px solid var(--border);
+  padding: 9px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-secondary:hover { border-color: var(--text); color: var(--text); }
+
+.content { padding: 32px; }
+
+/* Stats row */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 32px;
+}
+.stat-card {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+}
+.stat-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.stat-value {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1;
+  margin-bottom: 6px;
+}
+.stat-value.gold { color: var(--gold); }
+.stat-change {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--green);
+}
+.stat-change.down { color: var(--red); }
+
+/* Section */
+.section {
+  margin-bottom: 32px;
+}
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.section-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+.section-subtitle {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+  margin-top: 2px;
+}
+
+/* Markets table */
+.markets-table {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.table-header {
+  display: grid;
+  grid-template-columns: 1fr 100px 80px 80px 100px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,0.02);
+}
+.th {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.market-row {
+  display: grid;
+  grid-template-columns: 1fr 100px 80px 80px 100px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  align-items: center;
+  transition: background 0.15s;
+}
+.market-row:last-child { border-bottom: none; }
+.market-row:hover { background: rgba(255,255,255,0.02); }
+.market-question {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 3px;
+}
+.market-meta {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+}
+.market-volume {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+}
+.market-traders {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+}
+.market-price {
+  display: flex;
+  gap: 4px;
+}
+.yes-price {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--green);
+  background: rgba(45,155,95,0.1);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.no-price {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--red);
+  background: rgba(192,57,43,0.1);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.market-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.status-dot.live { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.status-dot.resolved { background: var(--dim); }
+.status-dot.pending { background: var(--gold); }
+.status-text {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.resolve-btn {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--gold);
+  background: rgba(201,146,13,0.1);
+  border: 1px solid rgba(201,146,13,0.3);
+  padding: 3px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-left: 4px;
+}
+.resolve-btn:hover { background: rgba(201,146,13,0.2); }
+
+/* Resolution queue */
+.resolution-queue {
+  background: var(--cream);
+  border: 1px solid rgba(201,146,13,0.3);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.queue-header {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(201,146,13,0.05);
+}
+.queue-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--gold);
+}
+.queue-item {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.queue-item:last-child { border-bottom: none; }
+.queue-question {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.queue-meta {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+  margin-top: 3px;
+}
+.resolve-actions { display: flex; gap: 8px; }
+.btn-yes {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: white;
+  background: var(--green);
+  border: none;
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.btn-yes:hover { opacity: 0.85; }
+.btn-no {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: white;
+  background: var(--red);
+  border: none;
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.btn-no:hover { opacity: 0.85; }
+
+/* Leaderboard */
+.leaderboard {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.leader-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
+}
+.leader-item:last-child { border-bottom: none; }
+.leader-item:hover { background: rgba(255,255,255,0.02); }
+.leader-rank {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  width: 28px;
+  color: var(--dim);
+  text-align: center;
+}
+.leader-rank.top3 { color: var(--gold); }
+.leader-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(201,146,13,0.15);
+  border: 1px solid rgba(201,146,13,0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--gold);
+  flex-shrink: 0;
+}
+.leader-info { flex: 1; }
+.leader-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.leader-trades {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+}
+.leader-pnl {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+}
+.leader-pnl.pos { color: var(--green); }
+.leader-pnl.neg { color: var(--red); }
+
+/* Create market modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  z-index: 200;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.modal-overlay.show { display: flex; }
+.modal {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 520px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.modal-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.modal-title {
+  font-size: 16px;
+  font-weight: 700;
+}
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--dim);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+.modal-close:hover { color: var(--text); }
+.modal-body { padding: 24px; }
+.modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.field { margin-bottom: 18px; }
+.field label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dim);
+  margin-bottom: 6px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.field input, .field select, .field textarea {
+  width: 100%;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.2s;
+  resize: none;
+}
+.field input:focus, .field select:focus, .field textarea:focus {
+  border-color: var(--gold);
+}
+.field select option { background: var(--cream); }
+
+/* AI suggest in modal */
+.modal-ai-box {
+  background: var(--paper);
+  border: 1px solid rgba(201,146,13,0.2);
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 20px;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.modal-ai-icon { font-size: 20px; flex-shrink: 0; }
+.modal-ai-text {
+  font-size: 12px;
+  color: var(--dim);
+  line-height: 1.5;
+}
+.modal-ai-text strong { color: var(--gold); }
+
+/* Share card */
+.share-section {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+}
+.share-title {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+.share-btns { display: flex; gap: 10px; flex-wrap: wrap; }
+.share-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 8px 16px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--paper);
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.share-btn:hover { border-color: var(--gold); color: var(--gold); }
+
+/* Empty state */
+.empty-state {
+  padding: 48px;
+  text-align: center;
+}
+.empty-icon { font-size: 40px; margin-bottom: 16px; }
+.empty-title { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+.empty-desc { font-size: 13px; color: var(--dim); margin-bottom: 20px; }
+
+/* Loading */
+.loading-row {
+  padding: 24px;
+  text-align: center;
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+/* Toast */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 18px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 300;
+  transform: translateY(100px);
+  opacity: 0;
+  transition: all 0.3s;
+  max-width: 320px;
+}
+.toast.show { transform: translateY(0); opacity: 1; }
+.toast.success { border-color: rgba(45,155,95,0.4); }
+.toast.error { border-color: rgba(192,57,43,0.4); }
+
+@media (max-width: 900px) {
+  .sidebar { display: none; }
+  .main { margin-left: 0; }
+  .stats-row { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <svg class="logo-hex" viewBox="0 0 28 28" fill="none">
+        <path d="M14 2L24 8V20L14 26L4 20V8L14 2Z" stroke="#c9920d" stroke-width="1.5" fill="rgba(201,146,13,0.1)"/>
+        <path d="M14 7L19 10V16L14 19L9 16V10L14 7Z" fill="#c9920d" opacity="0.6"/>
+      </svg>
+      <span class="logo-name">HYPERFLEX</span>
+    </div>
+
+    <div class="sidebar-community">
+      <div class="community-label">Your community</div>
+      <div class="community-name" id="sidebarCommunityName">Loading...</div>
+      <div class="community-url" id="sidebarCommunityUrl"></div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a class="nav-item active" onclick="showTab('overview')">
+        <span class="nav-icon">📊</span> Overview
+      </a>
+      <a class="nav-item" onclick="showTab('markets')">
+        <span class="nav-icon">🎯</span> Markets
+      </a>
+      <a class="nav-item" onclick="showTab('resolve')" id="resolveNavItem">
+        <span class="nav-icon">⚖️</span> Resolve
+        <span class="nav-badge" id="resolveBadge" style="display:none">0</span>
+      </a>
+      <a class="nav-item" onclick="showTab('leaderboard')">
+        <span class="nav-icon">🏆</span> Leaderboard
+      </a>
+      <a class="nav-item" onclick="showTab('share')">
+        <span class="nav-icon">📣</span> Share & Grow
+      </a>
+      <a class="nav-item" onclick="showTab('settings')">
+        <span class="nav-icon">⚙️</span> Settings
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <button class="btn-upgrade" onclick="showUpgrade()">⚡ Upgrade to Pro</button>
+      <button class="signout-btn" onclick="signOut()">← Sign out</button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <div class="topbar">
+      <div class="topbar-title" id="topbarTitle">Overview</div>
+      <div class="topbar-actions">
+        <button class="btn-secondary" onclick="copyLink()">📋 Copy community link</button>
+        <button class="btn-primary" onclick="openCreateModal()">+ New Market</button>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- Overview Tab -->
+      <div id="tab-overview">
+        <div class="stats-row">
+          <div class="stat-card">
+            <div class="stat-label">Total Traders</div>
+            <div class="stat-value" id="statTraders">—</div>
+            <div class="stat-change" id="statTradersChange"></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Markets Live</div>
+            <div class="stat-value gold" id="statLive">—</div>
+            <div class="stat-change" id="statLiveChange"></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Total Volume</div>
+            <div class="stat-value" id="statVolume">—</div>
+            <div class="stat-change" id="statVolumeChange"></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Trades This Week</div>
+            <div class="stat-value" id="statWeekly">—</div>
+            <div class="stat-change"></div>
+          </div>
+        </div>
+
+        <!-- Resolution queue preview -->
+        <div class="section" id="resolvePreviewSection" style="display:none">
+          <div class="section-header">
+            <div>
+              <div class="section-title">⚖️ Needs Resolution</div>
+              <div class="section-subtitle">These markets have expired and need an outcome</div>
+            </div>
+            <button class="btn-secondary" onclick="showTab('resolve')">View all</button>
+          </div>
+          <div class="resolution-queue" id="resolvePreviewList"></div>
+        </div>
+
+        <!-- Recent markets -->
+        <div class="section">
+          <div class="section-header">
+            <div>
+              <div class="section-title">Recent Markets</div>
+              <div class="section-subtitle">Your most recent prediction markets</div>
+            </div>
+            <button class="btn-secondary" onclick="showTab('markets')">View all</button>
+          </div>
+          <div class="markets-table">
+            <div class="table-header">
+              <div class="th">Market</div>
+              <div class="th">Volume</div>
+              <div class="th">Traders</div>
+              <div class="th">Odds</div>
+              <div class="th">Status</div>
+            </div>
+            <div id="overviewMarketsList"><div class="loading-row">Loading markets...</div></div>
+          </div>
+        </div>
+
+        <!-- Top traders preview -->
+        <div class="section">
+          <div class="section-header">
+            <div>
+              <div class="section-title">Top Traders</div>
+              <div class="section-subtitle" id="pointsNameLabel">Community leaderboard</div>
+            </div>
+            <button class="btn-secondary" onclick="showTab('leaderboard')">Full leaderboard</button>
+          </div>
+          <div class="leaderboard" id="overviewLeaderboard">
+            <div class="loading-row">Loading...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Markets Tab -->
+      <div id="tab-markets" style="display:none">
+        <div class="section">
+          <div class="markets-table">
+            <div class="table-header">
+              <div class="th">Market</div>
+              <div class="th">Volume</div>
+              <div class="th">Traders</div>
+              <div class="th">Odds</div>
+              <div class="th">Status</div>
+            </div>
+            <div id="allMarketsList"><div class="loading-row">Loading markets...</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Resolve Tab -->
+      <div id="tab-resolve" style="display:none">
+        <div class="section">
+          <div class="section-header">
+            <div>
+              <div class="section-title">⚖️ Resolution Queue</div>
+              <div class="section-subtitle">Markets that have expired and need an outcome set</div>
+            </div>
+          </div>
+          <div class="resolution-queue" id="fullResolveList">
+            <div class="loading-row">Loading...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Leaderboard Tab -->
+      <div id="tab-leaderboard" style="display:none">
+        <div class="section">
+          <div class="leaderboard" id="fullLeaderboard">
+            <div class="loading-row">Loading...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Share Tab -->
+      <div id="tab-share" style="display:none">
+        <div class="section">
+          <div class="share-section">
+            <div class="share-title">📣 Share Your Community</div>
+            <p style="font-size:13px;color:var(--dim);margin-bottom:16px;line-height:1.6">
+              Drop these links wherever your audience hangs out — Reddit, Discord, Twitter, your newsletter.
+            </p>
+            <div class="share-btns">
+              <button class="share-btn" onclick="copyLink()">📋 Copy community link</button>
+              <button class="share-btn" onclick="shareTwitter()">🐦 Share on X/Twitter</button>
+              <button class="share-btn" onclick="shareReddit()">👾 Post to Reddit</button>
+              <button class="share-btn" onclick="copyEmbed()">💻 Copy embed code</button>
+            </div>
+          </div>
+        </div>
+        <div class="section">
+          <div class="share-section">
+            <div class="share-title">📝 Ready-to-Post Templates</div>
+            <div id="shareTemplates"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Settings Tab -->
+      <div id="tab-settings" style="display:none">
+        <div class="section">
+          <div class="markets-table" style="padding:28px">
+            <div class="field">
+              <label>Community Display Name</label>
+              <input type="text" id="settingName" placeholder="Your community name"/>
+            </div>
+            <div class="field">
+              <label>Points Name</label>
+              <input type="text" id="settingPoints" placeholder="Flex Points"/>
+            </div>
+            <div class="field">
+              <label>Primary Color</label>
+              <div style="display:flex;gap:10px;align-items:center">
+                <input type="color" id="settingColor" style="width:48px;height:40px;padding:4px;cursor:pointer;border-radius:6px;border:1px solid var(--border);background:var(--paper)"/>
+                <span style="font-family:var(--mono);font-size:12px;color:var(--dim)" id="settingColorHex">#c9920d</span>
+              </div>
+            </div>
+            <button class="btn-primary" onclick="saveSettings()" style="margin-top:8px">Save Changes</button>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+  </main>
+</div>
+
+<!-- Create Market Modal -->
+<div class="modal-overlay" id="createModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Create New Market</div>
+      <button class="modal-close" onclick="closeCreateModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-ai-box">
+        <div class="modal-ai-icon">🤖</div>
+        <div class="modal-ai-text">
+          <strong>AI Tip:</strong> Keep questions clear and binary — they must resolve YES or NO.
+          "Will X happen by [date]?" works best.
+        </div>
+      </div>
+      <div class="field">
+        <label>Market Question</label>
+        <textarea id="newQuestion" rows="2" placeholder="Will the Patriots make the playoffs this season?"></textarea>
+      </div>
+      <div class="field">
+        <label>Category</label>
+        <select id="newCategory">
+          <option value="sports">Sports</option>
+          <option value="entertainment">Entertainment</option>
+          <option value="finance">Finance</option>
+          <option value="crypto">Crypto</option>
+          <option value="politics">Politics</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Resolution Date</label>
+        <input type="date" id="newDate"/>
+      </div>
+      <div class="field">
+        <label>Resolution Source <span style="font-weight:400;text-transform:none;font-size:11px">(optional — shown to users)</span></label>
+        <input type="text" id="newSource" placeholder="ESPN, official results, etc."/>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeCreateModal()">Cancel</button>
+      <button class="btn-primary" onclick="createMarket()">Publish Market →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast">
+  <span id="toastIcon">✓</span>
+  <span id="toastMsg"></span>
+</div>
+
+<script>
+const API = window.location.origin;
+let creatorData = null;
+let communityMarkets = [];
+let resolveQueue = [];
+
+// Auth check
+const token = localStorage.getItem('hf_token');
+const user = JSON.parse(localStorage.getItem('hf_user') || 'null');
+if (!token || !user) {
+  window.location.href = '/creator/signup';
+}
+
+// Init
+async function init() {
+  try {
+    const r = await fetch(API + '/api/creator/dashboard', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    if (r.status === 401) { signOut(); return; }
+    const data = await r.json();
+    creatorData = data;
+    renderDashboard(data);
+  } catch (e) {
+    showToast('Could not load dashboard. Check your connection.', 'error');
+  }
+}
+
+function renderDashboard(data) {
+  const { creator, stats, markets, leaderboard } = data;
+
+  // Sidebar
+  document.getElementById('sidebarCommunityName').textContent = creator.display_name;
+  document.getElementById('sidebarCommunityUrl').textContent = 'hyperflex.network/' + creator.slug;
+  document.getElementById('pointsNameLabel').textContent = 'Top earners of ' + creator.custom_points_name;
+
+  // Stats
+  document.getElementById('statTraders').textContent = (stats.total_traders || 0).toLocaleString();
+  document.getElementById('statLive').textContent = stats.live_markets || 0;
+  document.getElementById('statVolume').textContent = '$' + ((stats.total_volume || 0) / 100).toFixed(0);
+  document.getElementById('statWeekly').textContent = (stats.weekly_trades || 0).toLocaleString();
+
+  // Markets
+  communityMarkets = markets || [];
+  const expiredUnresolved = communityMarkets.filter(m => !m.resolved && new Date(m.expiry_date) < new Date());
+  resolveQueue = expiredUnresolved;
+
+  // Resolution badge
+  if (resolveQueue.length > 0) {
+    document.getElementById('resolveBadge').textContent = resolveQueue.length;
+    document.getElementById('resolveBadge').style.display = 'inline-block';
+    document.getElementById('resolvePreviewSection').style.display = 'block';
+    renderResolveList(resolveQueue.slice(0, 3), 'resolvePreviewList');
+    renderResolveList(resolveQueue, 'fullResolveList');
+  } else {
+    document.getElementById('fullResolveList').innerHTML = '<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">All caught up!</div><div class="empty-desc">No markets need resolution right now.</div></div>';
+  }
+
+  // Render markets
+  renderMarketRows(communityMarkets.slice(0, 5), 'overviewMarketsList');
+  renderMarketRows(communityMarkets, 'allMarketsList');
+
+  // Leaderboard
+  renderLeaderboard(leaderboard || [], 'overviewLeaderboard', 5, creator.custom_points_name);
+  renderLeaderboard(leaderboard || [], 'fullLeaderboard', 20, creator.custom_points_name);
+
+  // Share templates
+  renderShareTemplates(creator);
+
+  // Settings prefill
+  document.getElementById('settingName').value = creator.display_name;
+  document.getElementById('settingPoints').value = creator.custom_points_name;
+  document.getElementById('settingColor').value = creator.primary_color || '#c9920d';
+  document.getElementById('settingColorHex').textContent = creator.primary_color || '#c9920d';
+}
+
+function renderMarketRows(markets, containerId) {
+  const el = document.getElementById(containerId);
+  if (!markets.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">🎯</div><div class="empty-title">No markets yet</div><div class="empty-desc">Create your first market to get started.</div><button class="btn-primary" onclick="openCreateModal()" style="margin:0 auto">+ New Market</button></div>';
+    return;
+  }
+  el.innerHTML = markets.map(m => {
+    const expired = new Date(m.expiry_date) < new Date();
+    const status = m.resolved ? 'resolved' : expired ? 'pending' : 'live';
+    const statusLabel = m.resolved ? 'Resolved' : expired ? 'Needs resolve' : 'Live';
+    const yes = Math.round((m.yes_price || 0.5) * 100);
+    return `
+      <div class="market-row">
+        <div>
+          <div class="market-question">${m.question}</div>
+          <div class="market-meta">${m.category || '—'} · Closes ${formatDate(m.expiry_date)}</div>
+        </div>
+        <div class="market-volume">$${((m.volume||0)/100).toFixed(0)}</div>
+        <div class="market-traders">${m.trader_count || 0}</div>
+        <div class="market-price">
+          <span class="yes-price">${yes}¢</span>
+          <span class="no-price">${100-yes}¢</span>
+        </div>
+        <div class="market-status">
+          <div class="status-dot ${status}"></div>
+          <span class="status-text">${statusLabel}</span>
+          ${status === 'pending' ? `<button class="resolve-btn" onclick="openResolveModal('${m.id}', \`${m.question.replace(/`/g,"'")}\`)">Resolve</button>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderResolveList(items, containerId) {
+  const el = document.getElementById(containerId);
+  if (!items.length) {
+    el.innerHTML = '<div class="loading-row">No items to resolve.</div>';
+    return;
+  }
+  el.innerHTML = items.map(m => `
+    <div class="queue-item">
+      <div style="flex:1">
+        <div class="queue-question">${m.question}</div>
+        <div class="queue-meta">Expired ${formatDate(m.expiry_date)} · ${m.trader_count || 0} traders</div>
+      </div>
+      <div class="resolve-actions">
+        <button class="btn-yes" onclick="resolveMarket('${m.id}', 'YES')">YES ✓</button>
+        <button class="btn-no" onclick="resolveMarket('${m.id}', 'NO')">NO ✗</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderLeaderboard(leaders, containerId, limit, pointsName) {
+  const el = document.getElementById(containerId);
+  const top = leaders.slice(0, limit);
+  if (!top.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">🏆</div><div class="empty-title">No traders yet</div><div class="empty-desc">Share your community link to get your first traders.</div></div>';
+    return;
+  }
+  el.innerHTML = top.map((l, i) => `
+    <div class="leader-item">
+      <div class="leader-rank ${i < 3 ? 'top3' : ''}">${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '#' + (i+1)}</div>
+      <div class="leader-avatar">${(l.display_name || '?')[0].toUpperCase()}</div>
+      <div class="leader-info">
+        <div class="leader-name">${l.display_name || 'Anonymous'}</div>
+        <div class="leader-trades">${l.trade_count || 0} trades</div>
+      </div>
+      <div class="leader-pnl ${l.pnl >= 0 ? 'pos' : 'neg'}">${l.pnl >= 0 ? '+' : ''}$${Math.abs(l.pnl || 0).toFixed(0)}</div>
+    </div>
+  `).join('');
+}
+
+function renderShareTemplates(creator) {
+  const url = 'https://hyperflex.network/' + creator.slug;
+  const templates = [
+    {
+      label: '🐦 Twitter/X',
+      text: `I set up a free prediction market for our community on @hyperflexapp\n\nMake your calls, track your accuracy, climb the leaderboard 🏆\n\n${url}`
+    },
+    {
+      label: '👾 Reddit',
+      text: `I built a free prediction market for this community — make calls on [topic], track your accuracy on a live leaderboard, and earn ${creator.custom_points_name}.\n\nNo real money, just bragging rights.\n\n${url}`
+    },
+    {
+      label: '💬 Discord',
+      text: `🎯 **Community Prediction Market is LIVE**\nMake your calls on upcoming events and compete on the leaderboard!\nEarn **${creator.custom_points_name}** for every correct prediction.\n👉 ${url}`
+    }
+  ];
+
+  document.getElementById('shareTemplates').innerHTML = templates.map(t => `
+    <div style="margin-bottom:16px">
+      <div style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.08em">${t.label}</div>
+      <div style="background:var(--paper);border:1px solid var(--border);border-radius:6px;padding:14px;font-size:13px;color:var(--dim);line-height:1.6;white-space:pre-wrap;font-family:var(--mono)">${t.text}</div>
+      <button class="share-btn" style="margin-top:8px" onclick="copyText(\`${t.text.replace(/`/g,"'")}\`)">📋 Copy</button>
+    </div>
+  `).join('');
+}
+
+// Tab switching
+function showTab(tab) {
+  ['overview','markets','resolve','leaderboard','share','settings'].forEach(t => {
+    document.getElementById('tab-' + t).style.display = t === tab ? 'block' : 'none';
+  });
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => {
+    if (n.getAttribute('onclick') && n.getAttribute('onclick').includes(tab)) n.classList.add('active');
+  });
+  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', settings:'Settings' };
+  document.getElementById('topbarTitle').textContent = titles[tab] || tab;
+}
+
+// Create market
+function openCreateModal() {
+  // Set default date to 30 days from now
+  const d = new Date();
+  d.setDate(d.getDate() + 30);
+  document.getElementById('newDate').value = d.toISOString().split('T')[0];
+  document.getElementById('createModal').classList.add('show');
+}
+function closeCreateModal() {
+  document.getElementById('createModal').classList.remove('show');
+}
+
+async function createMarket() {
+  const question = document.getElementById('newQuestion').value.trim();
+  const category = document.getElementById('newCategory').value;
+  const date = document.getElementById('newDate').value;
+  const source = document.getElementById('newSource').value.trim();
+
+  if (!question || !date) { showToast('Please fill in the question and date.', 'error'); return; }
+
+  try {
+    const r = await fetch(API + '/markets', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token
+      },
+      body: JSON.stringify({
+        question, category,
+        expiry_date: date,
+        resolution_source: source,
+        creator_id: user.id,
+        is_public: true
+      })
+    });
+    const data = await r.json();
+    if (data.id || data.market) {
+      closeCreateModal();
+      showToast('Market published! 🎯', 'success');
+      setTimeout(() => init(), 500);
+    } else {
+      showToast(data.error || 'Failed to create market.', 'error');
+    }
+  } catch {
+    showToast('Network error. Please try again.', 'error');
+  }
+}
+
+// Resolve market
+async function resolveMarket(marketId, outcome) {
+  try {
+    const r = await fetch(API + '/markets/' + marketId + '/resolve', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token
+      },
+      body: JSON.stringify({ outcome })
+    });
+    const data = await r.json();
+    if (data.ok || data.success) {
+      showToast(`Market resolved ${outcome} ✓`, 'success');
+      setTimeout(() => init(), 500);
+    } else {
+      showToast(data.error || 'Failed to resolve market.', 'error');
+    }
+  } catch {
+    showToast('Network error. Please try again.', 'error');
+  }
+}
+
+// Settings
+async function saveSettings() {
+  const payload = {
+    display_name: document.getElementById('settingName').value.trim(),
+    custom_points_name: document.getElementById('settingPoints').value.trim(),
+    primary_color: document.getElementById('settingColor').value
+  };
+  try {
+    const r = await fetch(API + '/api/creator/settings', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token
+      },
+      body: JSON.stringify(payload)
+    });
+    const data = await r.json();
+    if (data.ok) showToast('Settings saved ✓', 'success');
+    else showToast(data.error || 'Failed to save.', 'error');
+  } catch {
+    showToast('Network error.', 'error');
+  }
+}
+
+document.getElementById('settingColor').addEventListener('input', function() {
+  document.getElementById('settingColorHex').textContent = this.value;
+});
+
+// Share helpers
+function copyLink() {
+  if (!creatorData) return;
+  copyText('https://hyperflex.network/' + creatorData.creator.slug);
+}
+function copyText(text) {
+  navigator.clipboard.writeText(text).then(() => showToast('Copied! 📋', 'success'));
+}
+function shareTwitter() {
+  if (!creatorData) return;
+  const url = 'https://hyperflex.network/' + creatorData.creator.slug;
+  window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent('Make your predictions on my community market! ' + url));
+}
+function shareReddit() {
+  if (!creatorData) return;
+  const url = 'https://hyperflex.network/' + creatorData.creator.slug;
+  window.open('https://reddit.com/submit?url=' + encodeURIComponent(url) + '&title=' + encodeURIComponent('I built a free prediction market for this community'));
+}
+function copyEmbed() {
+  if (!creatorData) return;
+  const slug = creatorData.creator.slug;
+  const embed = `<iframe src="https://hyperflex.network/${slug}/embed" width="100%" height="600" frameborder="0"></iframe>`;
+  copyText(embed);
+}
+
+function showUpgrade() {
+  showToast('Pro plan coming soon! 🚀', 'success');
+}
+
+function signOut() {
+  localStorage.removeItem('hf_token');
+  localStorage.removeItem('hf_user');
+  window.location.href = '/';
+}
+
+// Helpers
+function formatDate(d) {
+  if (!d) return '—';
+  return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// Toast
+function showToast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  document.getElementById('toastMsg').textContent = msg;
+  document.getElementById('toastIcon').textContent = type === 'success' ? '✓' : '✗';
+  t.className = 'toast ' + type + ' show';
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// Init
+init();
+</script>
+</body>
+</html>
