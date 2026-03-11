@@ -830,7 +830,11 @@ app.post('/api/creator/signup', async (req, res) => {
         created_at: new Date().toISOString()
       });
 
-    if (settingsErr) throw settingsErr;
+    if (settingsErr) {
+      // Roll back the created user so we don't leave an orphaned record
+      await supabase.from('users').delete().eq('id', newUser.id);
+      throw settingsErr;
+    }
 
     // Publish selected AI-suggested markets
     if (selected_markets.length > 0) {
@@ -871,7 +875,11 @@ app.post('/api/creator/signup', async (req, res) => {
 
   } catch (err) {
     console.error('creator signup error:', err);
-    res.status(500).json({ error: err.message || 'Signup failed' });
+    res.status(500).json({
+      error: err.message || 'Signup failed',
+      details: err.details || undefined,
+      hint: err.hint || undefined
+    });
   }
 });
 
