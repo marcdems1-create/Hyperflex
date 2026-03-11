@@ -1,1399 +1,1192 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>HYPERFLEX — Predict Everything</title>
-  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
-  <!-- Ethers.js for EIP-712 signing -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
-  <!-- WalletConnect Web3Modal v3 -->
-  <script type="module">
-    import { createWeb3Modal, defaultConfig } from 'https://esm.sh/@web3modal/ethers@4.2.2';
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>HYPERFLEX — Prediction Markets for Creator Communities</title>
+<meta name="description" content="Set up a branded prediction market for your audience in 5 minutes. AI-powered market generation, custom Flex Points, and full creator analytics — no code required."/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --ink: #0e0e0c;
+  --paper: #141412;
+  --cream: #1c1c19;
+  --text: #ddd8cc;
+  --gold: #c9920d;
+  --gold-lt: #e0a820;
+  --gold-bright: #f5c842;
+  --border: #2a2a26;
+  --dim: #7a7870;
+  --green: #2d9b5f;
+  --sans: 'Syne', sans-serif;
+  --mono: 'Space Mono', monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--paper); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+html { scroll-behavior: smooth; }
 
-    const projectId = '8882a0900b744b0c73bd57b36b57ca03';
+body {
+  background: var(--paper);
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(201,146,13,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(201,146,13,0.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+  pointer-events: none;
+  z-index: 0;
+}
 
-    const mainnet = {
-      chainId: 1,
-      name: 'Ethereum',
-      currency: 'ETH',
-      explorerUrl: 'https://etherscan.io',
-      rpcUrl: 'https://cloudflare-eth.com',
-    };
+/* ── NAV ── */
+.nav {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 100;
+  padding: 0 40px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  background: rgba(20,20,18,0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.nav-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+}
+.nav-hex { width: 30px; height: 30px; }
+.nav-name {
+  font-weight: 800;
+  font-size: 17px;
+  letter-spacing: 0.08em;
+  color: var(--text);
+}
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+.nav-link {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--dim);
+  text-decoration: none;
+  letter-spacing: 0.04em;
+  transition: color 0.15s;
+}
+.nav-link:hover { color: var(--text); }
+.nav-actions { display: flex; align-items: center; gap: 12px; }
+.btn-nav-login {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--dim);
+  background: transparent;
+  border: 1px solid var(--border);
+  padding: 8px 16px;
+  border-radius: 6px;
+  text-decoration: none;
+  transition: all 0.15s;
+  letter-spacing: 0.04em;
+}
+.btn-nav-login:hover { color: var(--text); border-color: var(--dim); }
+.btn-nav-cta {
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--gold);
+  padding: 9px 20px;
+  border-radius: 6px;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+.btn-nav-cta:hover { background: var(--gold-bright); }
 
-    const metadata = {
-      name: 'HYPERFLEX',
-      description: 'Predict Everything · Powered by Hyperliquid',
-      url: window.location.origin,
-      icons: ['https://avatars.githubusercontent.com/u/37784886']
-    };
+/* ── SHARED ── */
+section { position: relative; z-index: 1; }
 
-    const modal = createWeb3Modal({
-      ethersConfig: defaultConfig({ metadata }),
-      chains: [mainnet],
-      projectId,
-      themeMode: 'dark',
-      themeVariables: {
-        '--w3m-color-mix': '#c9920d',
-        '--w3m-color-mix-strength': 40,
-        '--w3m-accent': '#c9920d',
-        '--w3m-border-radius-master': '8px',
-      }
-    });
+.section-eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--gold);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.section-eyebrow::before {
+  content: '';
+  display: inline-block;
+  width: 20px; height: 1px;
+  background: var(--gold);
+}
+.section-title {
+  font-size: clamp(28px, 4vw, 44px);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.08;
+  margin-bottom: 56px;
+  color: var(--text);
+  max-width: 580px;
+}
 
-    // Expose modal globally so Babel/React script can use it
-    window.__w3modal = modal;
-  </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #141412; color: #ddd8cc; font-family: 'DM Sans', sans-serif; }
-    :root {
-      --ink: #0e0e0c;
-      --paper: #141412;
-      --cream: #1c1c19;
-      --text: #ddd8cc;
-      --gold: #c9920d;
-      --gold-lt: #e0a820;
-      --gold-bright: #f5c842;
-      --silver: #8a9ba8;
-      --silver-lt: #c0cdd6;
-      --green: #1a5c3a;
-      --green-lt: #2d9b5f;
-      --red: #8b1a1a;
-      --red-lt: #c0392b;
-      --border: #2a2a26;
-      --dim: #7a7870;
-      --mono: 'DM Mono', monospace;
-      --serif: 'Playfair Display', serif;
-      --sans: 'DM Sans', sans-serif;
-    }
-    ::-webkit-scrollbar { display: none; }
-    input::placeholder, textarea::placeholder { color: #7a7870; }
-    input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
-    select option { background: #1c1c19; }
+/* ── HERO ── */
+.hero {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 120px 24px 80px;
+}
+.hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--gold);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  background: rgba(201,146,13,0.08);
+  border: 1px solid rgba(201,146,13,0.25);
+  padding: 6px 16px;
+  border-radius: 20px;
+  margin-bottom: 32px;
+}
+.eyebrow-dot {
+  width: 5px; height: 5px;
+  background: var(--gold);
+  border-radius: 50%;
+  animation: pulse-blink 2s ease-in-out infinite;
+}
+@keyframes pulse-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+.hero h1 {
+  font-size: clamp(44px, 7.5vw, 92px);
+  font-weight: 800;
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+  color: var(--text);
+  max-width: 960px;
+  margin-bottom: 28px;
+}
+.hero h1 .accent { color: var(--gold); }
+.hero h1 .muted  { color: var(--dim); }
+.hero-sub {
+  font-size: clamp(15px, 2vw, 19px);
+  color: var(--dim);
+  max-width: 540px;
+  line-height: 1.65;
+  margin-bottom: 44px;
+}
+.hero-actions {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-bottom: 64px;
+}
+.btn-primary {
+  font-family: var(--sans);
+  font-weight: 800;
+  font-size: 16px;
+  color: var(--ink);
+  background: var(--gold);
+  border: none;
+  padding: 16px 32px;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.btn-primary:hover { background: var(--gold-bright); transform: translateY(-2px); box-shadow: 0 8px 28px rgba(201,146,13,0.28); }
+.btn-ghost {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--dim);
+  background: transparent;
+  border: 1px solid var(--border);
+  padding: 15px 24px;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: all 0.2s;
+  letter-spacing: 0.04em;
+}
+.btn-ghost:hover { color: var(--text); border-color: var(--dim); }
+.hero-proof {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.proof-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+  letter-spacing: 0.06em;
+}
+.proof-check {
+  width: 18px; height: 18px;
+  background: rgba(45,155,95,0.1);
+  border: 1px solid rgba(45,155,95,0.3);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: var(--green);
+  flex-shrink: 0;
+}
+.proof-sep { width: 1px; height: 14px; background: var(--border); }
 
-    /* ── HYPERFLEX BRAND THEME ─────────────────────────── */
-    * { box-sizing: border-box; }
-    :root {
-      --ink: #0e0e0c; --paper: #141412; --cream: #1c1c19;
-      --text: #ddd8cc; --gold: #c9920d; --gold-lt: #e0a820;
-      --gold-bright: #f5c842; --border: #2a2a26; --dim: #7a7870;
-      --green-lt: #2d9b5f; --red-lt: #c0392b;
-      --mono: 'DM Mono', monospace; --serif: 'Playfair Display', serif;
-      --sans: 'DM Sans', sans-serif;
-    }
-    body { background: var(--paper) !important; color: var(--text) !important; font-family: var(--sans) !important; }
-    /* Ticker */
-    .ticker-wrap { background: var(--ink) !important; border-bottom: 1px solid var(--border) !important; }
-    /* Scrollbar */
-    ::-webkit-scrollbar { width: 4px; }
-    ::-webkit-scrollbar-track { background: var(--paper); }
-    ::-webkit-scrollbar-thumb { background: var(--border); }
-    /* Inputs */
-    input, textarea, select {
-      font-family: var(--mono) !important;
-      background: var(--ink) !important;
-      border-color: var(--border) !important;
-      color: var(--text) !important;
-    }
-    /* Sector pill active state */
-    button[data-active="true"] { background: var(--gold) !important; color: #0e0e0c !important; }
-    /* Market title text */
-    .market-q { font-family: var(--sans) !important; color: var(--text) !important; }
+/* ── MARQUEE ── */
+.marquee {
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 13px 0;
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+  background: rgba(201,146,13,0.015);
+}
+.marquee::before, .marquee::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 100px;
+  z-index: 2;
+}
+.marquee::before { left: 0;  background: linear-gradient(90deg, var(--paper), transparent); }
+.marquee::after  { right: 0; background: linear-gradient(270deg, var(--paper), transparent); }
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee 30s linear infinite;
+}
+.marquee-item {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 0 32px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+.marquee-sep { color: var(--gold); opacity: 0.5; font-size: 8px; }
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
 
-    @keyframes fadeSlide { from{opacity:0;transform:translateX(16px);}to{opacity:1;transform:translateX(0);} }
-    @keyframes float { 0%,100%{transform:translateY(0);}50%{transform:translateY(-30px);} }
-    @keyframes spin { from{transform:rotate(0deg);}to{transform:rotate(360deg);} }
-    @keyframes pulse { 0%,100%{opacity:1;}50%{opacity:0.4;} }
-    @keyframes chartDraw { from{stroke-dashoffset:400;}to{stroke-dashoffset:0;} }
-    @keyframes slideUp { from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);} }
-    @keyframes ticker { from{transform:translateX(0);}to{transform:translateX(-50%);} }
-    .live-dot { animation: pulse 1.5s infinite; }
-    .fade-in { animation: slideUp 0.3s ease forwards; }
-  </style>
+/* ── HOW IT WORKS ── */
+.how {
+  padding: 100px 40px;
+  max-width: 1120px;
+  margin: 0 auto;
+}
+.steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.step {
+  background: var(--cream);
+  padding: 36px 32px 40px;
+}
+.step-num {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--gold);
+  letter-spacing: 0.12em;
+  margin-bottom: 22px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.step-num::after { content: ''; flex: 1; height: 1px; background: rgba(201,146,13,0.18); }
+.step-icon { font-size: 34px; margin-bottom: 18px; display: block; }
+.step h3 {
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 10px;
+  letter-spacing: -0.01em;
+}
+.step p { font-size: 14px; color: var(--dim); line-height: 1.7; }
+
+/* ── FEATURES ── */
+.features {
+  padding: 100px 40px;
+  max-width: 1120px;
+  margin: 0 auto;
+}
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+.feat-card {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 32px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.2s, transform 0.2s;
+}
+.feat-card::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(201,146,13,0.5), transparent);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.feat-card:hover { border-color: rgba(201,146,13,0.3); transform: translateY(-3px); }
+.feat-card:hover::after { opacity: 1; }
+.feat-icon {
+  width: 48px; height: 48px;
+  background: rgba(201,146,13,0.08);
+  border: 1px solid rgba(201,146,13,0.18);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  margin-bottom: 22px;
+}
+.feat-card h3 {
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 10px;
+  letter-spacing: -0.01em;
+}
+.feat-card > p {
+  font-size: 14px;
+  color: var(--dim);
+  line-height: 1.65;
+  margin-bottom: 22px;
+}
+.feat-bullets {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.feat-bullet {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.45;
+}
+.feat-bullet::before { content: '—'; color: var(--gold); flex-shrink: 0; font-size: 10px; margin-top: 1px; }
+
+/* ── DEMO WINDOW ── */
+.demo {
+  padding: 0 40px 100px;
+  max-width: 1120px;
+  margin: 0 auto;
+}
+.demo-window {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.demo-bar {
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,0.015);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.demo-dots { display: flex; gap: 6px; }
+.demo-dot { width: 11px; height: 11px; border-radius: 50%; }
+.demo-dot.r { background: #ff5f57; }
+.demo-dot.y { background: #febc2e; }
+.demo-dot.g { background: #28c840; }
+.demo-url-bar {
+  flex: 1;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 5px 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+  text-align: center;
+}
+.demo-url-bar em { color: var(--gold); font-style: normal; }
+.demo-markets {
+  padding: 28px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+.demo-card {
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px;
+}
+.demo-live {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--green);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 11px;
+}
+.demo-live-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: pulse-blink 2s ease-in-out infinite;
+}
+.demo-q {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.35;
+  margin-bottom: 14px;
+}
+.demo-bars { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+.demo-bar-row { display: flex; align-items: center; gap: 8px; }
+.demo-bar-lbl { font-family: var(--mono); font-size: 10px; width: 26px; flex-shrink: 0; }
+.demo-bar-lbl.y { color: var(--green); }
+.demo-bar-lbl.n { color: #e07060; }
+.demo-bar-track { flex: 1; height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; }
+.demo-bar-fill { height: 100%; border-radius: 3px; }
+.demo-bar-fill.y { background: var(--green); }
+.demo-bar-fill.n { background: #c0392b; }
+.demo-bar-pct { font-family: var(--mono); font-size: 10px; color: var(--dim); width: 28px; text-align: right; flex-shrink: 0; }
+.demo-meta { font-family: var(--mono); font-size: 10px; color: var(--dim); }
+
+/* ── PRICING ── */
+.pricing {
+  padding: 100px 40px;
+  max-width: 1120px;
+  margin: 0 auto;
+}
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+.p-card {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+.p-card.pro {
+  background: linear-gradient(var(--cream), var(--cream)) padding-box,
+              linear-gradient(145deg, rgba(201,146,13,0.5) 0%, rgba(201,146,13,0.12) 55%, transparent 100%) border-box;
+  border: 1px solid transparent;
+}
+.p-card.platinum {
+  background: linear-gradient(var(--cream), var(--cream)) padding-box,
+              linear-gradient(145deg, rgba(232,210,150,0.75) 0%, rgba(201,146,13,0.35) 50%, transparent 100%) border-box;
+  border: 1px solid transparent;
+}
+.p-popular {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  background: var(--gold);
+  color: var(--ink);
+  padding: 4px 12px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+.p-tier {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+.p-tier.free     { color: var(--dim); }
+.p-tier.pro      { color: var(--gold); }
+.p-tier.platinum { color: var(--gold-bright); }
+.p-price {
+  font-size: 52px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.p-card.platinum .p-price { color: var(--gold-bright); }
+.p-per {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--dim);
+  margin-bottom: 16px;
+}
+.p-desc {
+  font-size: 13px;
+  color: var(--dim);
+  line-height: 1.65;
+  margin-bottom: 24px;
+  min-height: 42px;
+}
+.p-divider { height: 1px; background: var(--border); margin-bottom: 22px; }
+.p-features {
+  list-style: none;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 28px;
+}
+.p-feat {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+.p-feat.yes { color: var(--text); }
+.p-feat.no  { color: var(--dim); opacity: 0.4; text-decoration: line-through; text-decoration-color: rgba(122,120,112,0.35); }
+.p-check { font-size: 12px; flex-shrink: 0; margin-top: 1px; }
+.p-check.y { color: var(--green); }
+.p-check.n { color: var(--dim); }
+.btn-p {
+  width: 100%;
+  padding: 14px;
+  border-radius: 8px;
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: 14px;
+  text-align: center;
+  text-decoration: none;
+  display: block;
+  transition: all 0.2s;
+  cursor: pointer;
+  border: none;
+  letter-spacing: 0.01em;
+}
+.btn-p.free     { background: transparent; border: 1px solid var(--border); color: var(--dim); }
+.btn-p.free:hover { border-color: var(--text); color: var(--text); }
+.btn-p.pro      { background: var(--gold); color: var(--ink); }
+.btn-p.pro:hover { background: var(--gold-bright); transform: translateY(-1px); }
+.btn-p.platinum { background: linear-gradient(135deg, var(--gold-bright), var(--gold)); color: var(--ink); box-shadow: 0 2px 14px rgba(201,146,13,0.22); }
+.btn-p.platinum:hover { filter: brightness(1.08); transform: translateY(-1px); box-shadow: 0 4px 22px rgba(201,146,13,0.38); }
+
+/* ── QUOTES ── */
+.quotes {
+  padding: 100px 40px;
+  max-width: 1120px;
+  margin: 0 auto;
+}
+.quote-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+.q-card {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transition: border-color 0.2s;
+}
+.q-card:hover { border-color: rgba(201,146,13,0.2); }
+.q-stars { font-size: 13px; letter-spacing: 2px; color: var(--gold); }
+.q-text {
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.72;
+  flex: 1;
+  font-style: italic;
+}
+.q-text::before { content: '"'; color: var(--gold); font-style: normal; font-size: 22px; line-height: 0; vertical-align: -5px; margin-right: 2px; }
+.q-text::after  { content: '"'; color: var(--gold); font-style: normal; font-size: 22px; line-height: 0; vertical-align: -5px; margin-left: 2px; }
+.q-author { display: flex; align-items: center; gap: 12px; }
+.q-avatar {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  background: rgba(201,146,13,0.1);
+  border: 1px solid rgba(201,146,13,0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 13px;
+  color: var(--gold);
+  flex-shrink: 0;
+}
+.q-name { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 2px; }
+.q-handle { font-family: var(--mono); font-size: 10px; color: var(--dim); letter-spacing: 0.04em; }
+
+/* ── CTA BANNER ── */
+.cta-wrap {
+  padding: 0 40px 100px;
+  max-width: 1120px;
+  margin: 0 auto;
+}
+.cta-inner {
+  border-radius: 20px;
+  padding: 80px 48px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, rgba(201,146,13,0.12), rgba(201,146,13,0.04) 50%, rgba(201,146,13,0.08));
+  border: 1px solid rgba(201,146,13,0.25);
+}
+.cta-inner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(201,146,13,0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(201,146,13,0.06) 1px, transparent 1px);
+  background-size: 32px 32px;
+  pointer-events: none;
+}
+.cta-inner > * { position: relative; z-index: 1; }
+.cta-ey {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--gold);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  margin-bottom: 20px;
+}
+.cta-title {
+  font-size: clamp(28px, 4.5vw, 52px);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: var(--text);
+  margin-bottom: 16px;
+  line-height: 1.08;
+}
+.cta-sub { font-size: 16px; color: var(--dim); margin-bottom: 40px; line-height: 1.65; }
+.cta-actions { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+
+/* ── FOOTER ── */
+footer {
+  border-top: 1px solid var(--border);
+  padding: 52px 40px 40px;
+  position: relative;
+  z-index: 1;
+}
+.footer-top {
+  max-width: 1120px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  gap: 40px;
+  flex-wrap: wrap;
+  margin-bottom: 40px;
+  padding-bottom: 40px;
+  border-bottom: 1px solid var(--border);
+}
+.footer-brand { max-width: 260px; }
+.footer-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  text-decoration: none;
+}
+.footer-logo-name { font-weight: 800; font-size: 16px; letter-spacing: 0.08em; color: var(--text); }
+.footer-tagline { font-size: 13px; color: var(--dim); line-height: 1.65; }
+.footer-cols { display: flex; gap: 56px; flex-wrap: wrap; }
+.footer-col h4 {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+}
+.footer-col ul { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.footer-col ul a {
+  font-size: 13px;
+  color: var(--dim);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.footer-col ul a:hover { color: var(--gold); }
+.footer-bottom {
+  max-width: 1120px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.footer-copy { font-family: var(--mono); font-size: 11px; color: var(--dim); }
+.footer-legal { display: flex; gap: 20px; }
+.footer-legal a { font-family: var(--mono); font-size: 11px; color: var(--dim); text-decoration: none; transition: color 0.15s; }
+.footer-legal a:hover { color: var(--text); }
+
+/* ── RESPONSIVE ── */
+@media (max-width: 960px) {
+  .nav-links { display: none; }
+  .nav { padding: 0 20px; }
+  .steps, .features-grid, .pricing-grid, .quote-grid { grid-template-columns: 1fr; }
+  .demo-markets { grid-template-columns: 1fr; }
+  .how, .features, .demo, .pricing, .quotes, .cta-wrap { padding-left: 20px; padding-right: 20px; }
+  .footer-top { flex-direction: column; }
+  .cta-inner { padding: 48px 24px; }
+}
+@media (max-width: 640px) {
+  .hero { padding: 100px 20px 60px; }
+  .hero-actions { flex-direction: column; width: 100%; }
+  .btn-primary, .btn-ghost { width: 100%; text-align: center; justify-content: center; }
+  .hero-proof { flex-direction: column; gap: 12px; }
+  .proof-sep { display: none; }
+  .footer-cols { gap: 28px; }
+}
+</style>
 </head>
 <body>
-  <div id="root"></div>
-  <script type="text/babel">
-    const { useState, useEffect, useRef } = React;
 
-// ─── LOGO ─────────────────────────────────────────────────────────────────────
-function HyperflexLogo({ size = 32, animated = false }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"
-      style={animated ? { animation: "spin 8s linear infinite" } : {}}>
-
-      <defs>
-        <linearGradient id="lg1" x1="0" y1="0" x2="100" y2="100" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#f5c842" /><stop offset="50%" stopColor="#c9920d" /><stop offset="100%" stopColor="#a07010" />
-        </linearGradient>
-        <linearGradient id="lg2" x1="100" y1="0" x2="0" y2="100" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#e0a820" /><stop offset="100%" stopColor="#c9920d" />
-        </linearGradient>
-      </defs>
-      <polygon points="50,4 93,27 93,73 50,96 7,73 7,27" fill="none" stroke="url(#lg1)" strokeWidth="3" opacity="0.7" />
-      <polygon points="50,18 82,50 50,82 18,50" fill="none" stroke="url(#lg2)" strokeWidth="2.5" opacity="0.9" />
-      <path d="M33 35 L33 65 M33 50 L67 50 M67 35 L67 65" stroke="url(#lg1)" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="50" cy="4" r="3" fill="#f5c842" /><circle cx="93" cy="27" r="3" fill="#e0a820" />
-      <circle cx="93" cy="73" r="3" fill="#c9920d" /><circle cx="50" cy="96" r="3" fill="#f5c842" />
-      <circle cx="7" cy="73" r="3" fill="#e0a820" /><circle cx="7" cy="27" r="3" fill="#c9920d" />
+<!-- NAV -->
+<nav class="nav">
+  <a href="/" class="nav-logo">
+    <svg class="nav-hex" viewBox="0 0 32 32" fill="none">
+      <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="#c9920d" stroke-width="1.5" fill="rgba(201,146,13,0.1)"/>
+      <path d="M16 8L22 11.5V18.5L16 22L10 18.5V11.5L16 8Z" fill="#c9920d" opacity="0.6"/>
     </svg>
-  );
-}
+    <span class="nav-name">HYPERFLEX</span>
+  </a>
+  <div class="nav-links">
+    <a href="#features" class="nav-link">Features</a>
+    <a href="#how" class="nav-link">How it works</a>
+    <a href="#pricing" class="nav-link">Pricing</a>
+    <a href="/creator/terms" class="nav-link">Terms</a>
+  </div>
+  <div class="nav-actions">
+    <a href="/creator/login" class="btn-nav-login">Sign in</a>
+    <a href="/creator/signup" class="btn-nav-cta">Get started free</a>
+  </div>
+</nav>
 
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-eyebrow">
+    <span class="eyebrow-dot"></span>
+    Now in early access
+  </div>
+  <h1>Your community.<br/><span class="muted">Your</span> <span class="accent">prediction market.</span></h1>
+  <p class="hero-sub">Set up a branded prediction market for your audience in 5 minutes. AI-powered market generation, custom Flex Points, and full creator analytics — no code required.</p>
+  <div class="hero-actions">
+    <a href="/creator/signup" class="btn-primary">Get started free →</a>
+    <a href="#how" class="btn-ghost">See how it works</a>
+  </div>
+  <div class="hero-proof">
+    <div class="proof-item"><div class="proof-check">✓</div>Free to start</div>
+    <div class="proof-sep"></div>
+    <div class="proof-item"><div class="proof-check">✓</div>No code required</div>
+    <div class="proof-sep"></div>
+    <div class="proof-item"><div class="proof-check">✓</div>Live in 5 minutes</div>
+    <div class="proof-sep"></div>
+    <div class="proof-item"><div class="proof-check">✓</div>Play-money only</div>
+  </div>
+</section>
 
-const API = 'http://localhost:3000';
-async function apiPost(path, body) {
-  const res = await fetch(API + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  return res.json();
-}
-async function apiGet(path) {
-  const res = await fetch(API + path);
-  return res.json();
-}
+<!-- MARQUEE -->
+<div class="marquee">
+  <div class="marquee-track">
+    <div class="marquee-item">AI Market Generation <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">Custom Flex Points <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">Creator Analytics <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">YouTube Scanner <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">Live Leaderboards <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">AI Resolution Assist <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">Rewards System <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">Community Branding <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">Play-money Points <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">5-Minute Setup <span class="marquee-sep">✦</span></div>
+    <!-- duplicate for seamless loop -->
+    <div class="marquee-item">AI Market Generation <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">Custom Flex Points <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">Creator Analytics <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">YouTube Scanner <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">Live Leaderboards <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">AI Resolution Assist <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">Rewards System <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">Community Branding <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">Play-money Points <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">5-Minute Setup <span class="marquee-sep">✦</span></div>
+  </div>
+</div>
 
-// ─── HYPERLIQUID INTEGRATION ──────────────────────────────────────────────────
-// Official HL endpoints
-const HL_INFO_URL   = "https://api.hyperliquid.xyz/info";
-const HL_EXCHANGE_URL = "https://api.hyperliquid.xyz/exchange";
-const HL_WS_URL     = "wss://api.hyperliquid.xyz/ws";
-
-// ── REST helpers ──────────────────────────────────────────────────────────────
-async function hlPost(url, payload) {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) throw new Error(`HL API ${res.status}`);
-  return res.json();
-}
-
-// Fetch spot/perp mid-prices for a list of coins
-async function hlGetMids(coins = ["BTC","ETH","HYPE"]) {
-  const data = await hlPost(HL_INFO_URL, { type: "allMids" });
-  // data is { COIN: "price", ... }
-  const result = {};
-  coins.forEach(c => { if (data[c]) result[c] = parseFloat(data[c]); });
-  return result;
-}
-
-// Fetch user's USDC + HYPE spot balances
-async function hlGetSpotBalances(address) {
-  const data = await hlPost(HL_INFO_URL, { type: "spotClearinghouseState", user: address });
-  const balances = {};
-  if (data && data.balances) {
-    data.balances.forEach(b => { balances[b.coin] = parseFloat(b.total); });
-  }
-  return balances;
-}
-
-// Fetch user's perpetual account summary (margin, unrealised PnL, etc.)
-async function hlGetPerpState(address) {
-  return hlPost(HL_INFO_URL, { type: "clearinghouseState", user: address });
-}
-
-// ── WALLET CONNECT — MetaMask direct OR WalletConnect via Web3Modal ──────────
-async function connectMetaMask() {
-  if (!window.ethereum) throw new Error("MetaMask not found — install the extension");
-  const provider = new ethers.BrowserProvider(window.ethereum);
-  await provider.send("eth_requestAccounts", []);
-  const signer = await provider.getSigner();
-  const address = await signer.getAddress();
-  return { provider, signer, address };
-}
-
-async function connectViaWeb3Modal() {
-  const modal = window.__w3modal;
-  if (!modal) throw new Error("WalletConnect not loaded yet — please try again");
-
-  // Open the modal and wait for the user to connect
-  await modal.open();
-
-  return new Promise((resolve, reject) => {
-    let settled = false;
-
-    const unsub = modal.subscribeProvider(({ provider, providerType, address, isConnected, error }) => {
-      if (settled) return;
-      if (error) { settled = true; unsub(); reject(new Error(error.message || "Connection failed")); return; }
-      if (isConnected && provider && address) {
-        settled = true;
-        unsub();
-        const ethersProvider = new ethers.BrowserProvider(provider);
-        ethersProvider.getSigner().then(signer => {
-          resolve({ provider: ethersProvider, signer, address });
-        }).catch(reject);
-      }
-    });
-
-    // Timeout after 3 minutes (user closed modal)
-    setTimeout(() => {
-      if (!settled) { settled = true; unsub(); reject(new Error("Connection timed out")); }
-    }, 180000);
-  });
-}
-
-// ── PLACE ORDER on Hyperliquid ────────────────────────────────────────────────
-// coin: "BTC", isBuy: true, limitPx: "95000", sz: "0.001", reduceOnly: false
-async function hlPlaceOrder({ signer, address, coin, isBuy, limitPx, sz, reduceOnly = false }) {
-  const timestamp = Date.now();
-
-  // Build the action object per HL spec
-  const action = {
-    type: "order",
-    orders: [{
-      a: 0,          // asset index — HL resolves by coin name server-side when using meta
-      b: isBuy,
-      p: String(limitPx),
-      s: String(sz),
-      r: reduceOnly,
-      t: { limit: { tif: "Gtc" } },
-    }],
-    grouping: "na",
-  };
-
-  // EIP-712 domain & types as per HL docs
-  const domain = {
-    name: "Exchange",
-    version: "1",
-    chainId: 1337,
-    verifyingContract: "0x0000000000000000000000000000000000000000",
-  };
-  const types = {
-    Agent: [
-      { name: "source", type: "string" },
-      { name: "connectionId", type: "bytes32" },
-    ],
-  };
-  const connectionId = ethers.keccak256(
-    ethers.toUtf8Bytes(JSON.stringify(action) + timestamp)
-  );
-  const value = { source: "a", connectionId };
-
-  const signature = await signer.signTypedData(domain, types, value);
-  const { r, s, v } = ethers.Signature.from(signature);
-
-  const payload = {
-    action,
-    nonce: timestamp,
-    signature: { r, s, v },
-    vaultAddress: null,
-  };
-
-  return hlPost(HL_EXCHANGE_URL, payload);
-}
-
-// ── LIVE PRICES via WebSocket ─────────────────────────────────────────────────
-// Returns an unsubscribe function. onPrice(coin, price) called on each tick.
-function hlSubscribePrices(coins, onPrice) {
-  let ws;
-  let reconnectTimer;
-  let alive = true;
-
-  function connect() {
-    ws = new WebSocket(HL_WS_URL);
-    ws.onopen = () => {
-      if (!alive) return ws.close();
-      ws.send(JSON.stringify({ method: "subscribe", subscription: { type: "allMids" } }));
-    };
-    ws.onmessage = (evt) => {
-      try {
-        const msg = JSON.parse(evt.data);
-        if (msg.channel === "allMids" && msg.data && msg.data.mids) {
-          coins.forEach(c => {
-            if (msg.data.mids[c]) onPrice(c, parseFloat(msg.data.mids[c]));
-          });
-        }
-      } catch {}
-    };
-    ws.onclose = () => {
-      if (alive) reconnectTimer = setTimeout(connect, 3000);
-    };
-    ws.onerror = () => ws.close();
-  }
-  connect();
-  return () => { alive = false; clearTimeout(reconnectTimer); ws && ws.close(); };
-}
-
-// ─── DATA ──────────────────────────────────────────────────────────────────────
-const ALL_MARKETS = [
-  // ── FRESH MARKETS · Mar 8 2026 ───────────────────────────────────────────────
-  { id:100, q:"Will WTI crude oil hit $100/barrel before the Iran conflict ends?",     cat:"OIL",      sector:"COMMODITIES", yes:58, vol:"1,240,000", closes:"Apr 30, 2026", hot:true,  icon:"🛢️", badge:"🔥 Mar 8", isNew:true },
-  { id:101, q:"Will XAU/USD hit $6,000 before July 1?",                               cat:"GOLD",     sector:"COMMODITIES", yes:63, vol:"980,000",   closes:"Jul 1, 2026",  hot:true,  icon:"🥇", badge:"🔥 Mar 8", isNew:true },
-  { id:102, q:"Will XAG/USD close above $100/oz before April 30?",                    cat:"SILVER",   sector:"COMMODITIES", yes:47, vol:"720,000",   closes:"Apr 30, 2026", hot:true,  icon:"🥈", badge:"🔥 Mar 8", isNew:true },
-  { id:103, q:"Will the Iran conflict end within 30 days?",                            cat:"GEO",      sector:"MACRO",       yes:34, vol:"890,000",   closes:"Apr 8, 2026",  hot:true,  icon:"🌍", badge:"🔥 Mar 8", isNew:true },
-  { id:104, q:"Will uranium spot price hit $100/lb before June 2026?",                 cat:"URANIUM",  sector:"COMMODITIES", yes:52, vol:"440,000",   closes:"Jun 1, 2026",  hot:true,  icon:"⚡", badge:"🔥 Mar 8", isNew:true },
-  { id:105, q:"Will the US impose copper tariffs (Section 232) in 2026?",              cat:"COPPER",   sector:"COMMODITIES", yes:61, vol:"380,000",   closes:"Dec 31, 2026", hot:false, icon:"🪙", badge:"🔥 Mar 8", isNew:true },
-  { id:106, q:"Will XAG/USD exceed $135 before end of 2026? (BofA target)",           cat:"SILVER",   sector:"COMMODITIES", yes:39, vol:"560,000",   closes:"Dec 31, 2026", hot:true,  icon:"🥈", badge:"🔥 Mar 8", isNew:true },
-  { id:107, q:"Will GDX (gold miners ETF) hit a new all-time high before July 2026?", cat:"MINERS",   sector:"COMMODITIES", yes:55, vol:"310,000",   closes:"Jul 1, 2026",  hot:false, icon:"⛏️", badge:"🔥 Mar 8", isNew:true },
-  // ── EXISTING MARKETS ──────────────────────────────────────────────────────────
-  { id:1,  q:"Will XAG/USD hit $100/oz before June 1, 2026?",             cat:"SILVER",         sector:"COMMODITIES", yes:67, vol:"4,821,000",  closes:"Jun 1, 2026",  hot:true,  icon:"🥈" },
-  { id:3,  q:"Will XAU/USD close above $6,000/oz in 2026?",              cat:"GOLD",           sector:"COMMODITIES", yes:61, vol:"5,100,000",  closes:"Dec 31, 2026", hot:true,  icon:"🥇" },
-  { id:2,  q:"Will WTI crude exceed $100/barrel by Q3 2026?",             cat:"OIL & GAS",      sector:"COMMODITIES", yes:42, vol:"3,210,000",  closes:"Sep 30, 2026", hot:true,  icon:"🛢️" },
-  { id:4,  q:"Will copper hit $12,000/tonne before year-end?",           cat:"BASE METALS",    sector:"COMMODITIES", yes:58, vol:"2,840,000",  closes:"Dec 31, 2026", hot:true,  icon:"🟤" },
-  { id:5,  q:"Will uranium (UX) exceed $120/lb in 2026?",               cat:"URANIUM",        sector:"COMMODITIES", yes:44, vol:"1,920,000",  closes:"Dec 31, 2026", hot:false, icon:"☢️" },
-  { id:6,  q:"Will lithium carbonate rebound above $20,000/t in 2026?",  cat:"BATTERY METALS", sector:"COMMODITIES", yes:38, vol:"1,440,000",  closes:"Dec 31, 2026", hot:false, icon:"🔋" },
-  { id:8,  q:"Will Apple beat Q2 2026 earnings estimates?",             cat:"TECH EARNINGS",   sector:"EARNINGS",    yes:72, vol:"8,430,000",  closes:"May 2, 2026",  hot:true,  icon:"🍎", badge:"AAPL · May 2" },
-  { id:9,  q:"Will Nvidia beat Q1 2026 earnings estimates?",            cat:"TECH EARNINGS",   sector:"EARNINGS",    yes:78, vol:"11,200,000", closes:"May 28, 2026", hot:true,  icon:"🟩", badge:"NVDA · May 28" },
-  { id:12, q:"Will Tesla beat Q2 2026 earnings estimates?",             cat:"TECH EARNINGS",   sector:"EARNINGS",    yes:44, vol:"9,870,000",  closes:"Jul 22, 2026", hot:true,  icon:"🚗", badge:"TSLA · Jul 22" },
-  { id:20, q:"Will Bitcoin hit $150,000 before end of 2026?",           cat:"BITCOIN",         sector:"CRYPTO",      yes:54, vol:"18,300,000", closes:"Dec 31, 2026", hot:true,  icon:"₿" },
-  { id:21, q:"Will Ethereum flip Bitcoin in market cap in 2026?",       cat:"ETHEREUM",        sector:"CRYPTO",      yes:12, vol:"7,400,000",  closes:"Dec 31, 2026", hot:false, icon:"Ξ" },
-  { id:22, q:"Will HYPE token exceed $100 in 2026?",                    cat:"HYPERLIQUID",     sector:"CRYPTO",      yes:48, vol:"6,200,000",  closes:"Dec 31, 2026", hot:true,  icon:"💧" },
-  { id:31, q:"Will the US enter a recession in 2026?",                  cat:"ECONOMICS",       sector:"MACRO",       yes:34, vol:"12,400,000", closes:"Dec 31, 2026", hot:true,  icon:"📉" },
-  { id:32, q:"Will the Fed cut rates 3+ times in 2026?",                cat:"MONETARY POLICY", sector:"MACRO",       yes:47, vol:"8,900,000",  closes:"Dec 31, 2026", hot:true,  icon:"🏦" },
-  { id:15, q:"Will Exxon (XOM) outperform Google (GOOGL) in 2026?",    cat:"STOCK BATTLE",    sector:"VERSUS",      yes:44, vol:"5,430,000",  closes:"Dec 31, 2026", hot:true,  icon:"⚔️" },
-  { id:16, q:"Will silver miners (SILJ) outperform tech (QQQ) in 2026?",cat:"SECTOR BATTLE",  sector:"VERSUS",      yes:67, vol:"3,980,000",  closes:"Dec 31, 2026", hot:true,  icon:"⚔️" },
-];
-
-const SECTORS = ["ALL","COMMODITIES","EARNINGS","CRYPTO","MACRO","VERSUS"];
-const SECTOR_META = {
-  ALL:{icon:"🌐",color:"#c9920d"},COMMODITIES:{icon:"🪨",color:"#e0a820"},
-  EARNINGS:{icon:"📊",color:"#2d9b5f"},CRYPTO:{icon:"₿",color:"#c9920d"},MACRO:{icon:"🏛️",color:"#8a9ba8"},
-  VERSUS:{icon:"⚔️",color:"#e0a820"},
-};
-
-const LEADERBOARD_DATA = [
-  { rank:1, name:"SilverWhale.eth",  pnl:"+$48,230", roi:"+312%", trades:847, badge:"🏆", tier:"DIAMOND",  vol:"$184,200" },
-  { rank:2, name:"GoldStandard.eth", pnl:"+$31,440", roi:"+228%", trades:623, badge:"🥈", tier:"PLATINUM", vol:"$122,000" },
-  { rank:3, name:"0xAurum",          pnl:"+$24,110", roi:"+196%", trades:412, badge:"🥉", tier:"PLATINUM", vol:"$98,400"  },
-  { rank:4, name:"CopperKing",       pnl:"+$18,920", roi:"+154%", trades:334, badge:"",   tier:"GOLD",     vol:"$76,100"  },
-  { rank:5, name:"PreciousMetalPro", pnl:"+$14,780", roi:"+122%", trades:289, badge:"",   tier:"GOLD",     vol:"$61,800"  },
-  { rank:8, name:"YOU",              pnl:"+$2,140",  roi:"+42%",  trades:12,  badge:"⭐", tier:"BRONZE",   vol:"$5,000",  isUser:true },
-];
-
-// ─── NEW: COMBO MARKETS (DraftKings Same-Game Parlay inspiration) ─────────────
-const COMBO_MARKETS = [
-  { id:"c0", name:"🥈 Precious Metals Sweep", markets:[
-    { q:"XAG/USD hits $100/oz", yes:67 },
-    { q:"XAU/USD closes above $6,000", yes:61 },
-    { q:"Silver miners (SILJ) beat tech (QQQ)", yes:67 },
-  ], multiplier:"6.3x", vol:"$3.2M", hot:true },
-  { id:"c1", name:"Bull Run Bundle", markets:[
-    { q:"Bitcoin hits $150K", yes:54 },
-    { q:"Ethereum flips Bitcoin", yes:12 },
-    { q:"HYPE token exceeds $100", yes:48 },
-  ], multiplier:"14.2x", vol:"$2.1M", hot:true },
-  { id:"c2", name:"Big Tech Earnings Sweep", markets:[
-    { q:"Apple beats Q2 estimates", yes:72 },
-    { q:"Nvidia beats Q1 estimates", yes:78 },
-    { q:"Tesla beats Q2 estimates", yes:44 },
-  ], multiplier:"8.7x", vol:"$5.4M", hot:true },
-  { id:"c3", name:"Macro Meltdown", markets:[
-    { q:"US enters recession in 2026", yes:34 },
-    { q:"Fed cuts rates 3+ times", yes:47 },
-    { q:"WTI crude exceeds $100/bbl", yes:42 },
-  ], multiplier:"11.4x", vol:"$1.8M", hot:false },
-  { id:"c4", name:"Commodities Explosion", markets:[
-    { q:"XAG/USD hits $100/oz", yes:67 },
-    { q:"XAU/USD closes above $6,000", yes:61 },
-    { q:"Copper hits $12,000/tonne", yes:58 },
-  ], multiplier:"6.1x", vol:"$3.8M", hot:true },
-];
-
-// ─── NEW: DAILY JACKPOT (DraftKings Jackpot Pools inspiration) ────────────────
-const DAILY_QUESTIONS = [
-  { id:1, q:"Will XAG/USD be above $84.00 at midnight EST?", yesVotes:1847, noVotes:1203 },
-  { id:2, q:"Will XAU/USD close above $5,200 today?", yesVotes:2341, noVotes:987 },
-  { id:3, q:"Will BTC be above $95,000 at midnight EST?", yesVotes:1654, noVotes:1421 },
-  { id:4, q:"Will the S&P 500 close green today?", yesVotes:3102, noVotes:654 },
-  { id:5, q:"Will WTI crude be above $90/barrel at 4pm EST?", yesVotes:1234, noVotes:1876 },
-];
-
-// ─── NEW: STREAK CHALLENGE (DraftKings streak inspiration) ───────────────────
-const STREAK_DATA = { current: 4, best: 7, prize: "$500", nextPrize: "$1,000", needed: 3 };
-
-// ─── MINI ODDS CHART (Polymarket chart inspiration) ──────────────────────────
-function OddsChart({ marketId, currentYes }) {
-  const points = [];
-  let val = currentYes - 15 + Math.random() * 5;
-  for (let i = 0; i < 30; i++) {
-    val += (Math.random() - 0.48) * 3;
-    val = Math.max(5, Math.min(95, val));
-    points.push(val);
-  }
-  points[points.length - 1] = currentYes;
-  const w = 120, h = 40;
-  const minV = Math.min(...points), maxV = Math.max(...points);
-  const range = maxV - minV || 1;
-  const coords = points.map((p, i) => {
-    const x = (i / (points.length - 1)) * w;
-    const y = h - ((p - minV) / range) * (h - 4) - 2;
-    return `${x},${y}`;
-  }).join(" ");
-  const isUp = points[points.length - 1] >= points[0];
-  const color = isUp ? "#2d9b5f" : "#c0392b";
-  return (
-    <svg width={w} height={h} style={{display:"block"}}>
-      <defs>
-        <linearGradient id={`grad-${marketId}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.3"/>
-          <stop offset="100%" stopColor={color} stopOpacity="0"/>
-        </linearGradient>
-      </defs>
-      <polygon
-        points={`0,${h} ${coords} ${w},${h}`}
-        fill={`url(#grad-${marketId})`}
-      />
-      <polyline points={coords} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  );
-}
-
-// ─── ORDER BOOK (Kalshi order book inspiration) ───────────────────────────────
-function OrderBook({ yes }) {
-  const asks = [
-    { price: yes + 3, size: 420 }, { price: yes + 2, size: 280 }, { price: yes + 1, size: 650 },
-  ].reverse();
-  const bids = [
-    { price: yes, size: 890 }, { price: yes - 1, size: 340 }, { price: yes - 2, size: 210 },
-  ];
-  const maxSize = 890;
-  return (
-    <div style={{background:"#0e0e0c",border:"1px solid #2a2a26",borderRadius:4,overflow:"hidden",marginBottom:12}}>
-      <div style={{display:"flex",justifyContent:"space-between",padding:"6px 10px",borderBottom:"1px solid #2a2a26"}}>
-        <span style={{fontSize:9,color:"#555550",fontWeight:700,letterSpacing:1}}>ORDER BOOK</span>
-        <span style={{fontSize:9,color:"#555550"}}>SIZE · PRICE</span>
-      </div>
-      {asks.map((a,i) => (
-        <div key={i} style={{display:"flex",alignItems:"center",padding:"3px 10px",position:"relative"}}>
-          <div style={{position:"absolute",right:0,top:0,bottom:0,background:"rgba(239,68,68,0.08)",width:`${(a.size/maxSize)*100}%`}}/>
-          <span style={{flex:1,fontSize:10,color:"#c0392b",fontWeight:700,zIndex:1}}>{a.price}¢</span>
-          <span style={{fontSize:10,color:"#7a7870",zIndex:1}}>{a.size.toLocaleString()}</span>
-        </div>
-      ))}
-      <div style={{height:1,background:"#2a2a26",margin:"2px 0"}}/>
-      {bids.map((b,i) => (
-        <div key={i} style={{display:"flex",alignItems:"center",padding:"3px 10px",position:"relative"}}>
-          <div style={{position:"absolute",left:0,top:0,bottom:0,background:"rgba(16,185,129,0.08)",width:`${(b.size/maxSize)*100}%`}}/>
-          <span style={{flex:1,fontSize:10,color:"#2d9b5f",fontWeight:700,zIndex:1}}>{b.price}¢</span>
-          <span style={{fontSize:10,color:"#7a7870",zIndex:1}}>{b.size.toLocaleString()}</span>
-        </div>
-      ))}
+<!-- HOW IT WORKS -->
+<section class="how" id="how">
+  <div class="section-eyebrow">How it works</div>
+  <h2 class="section-title">From signup to live market in under 5 minutes.</h2>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">01</div>
+      <span class="step-icon">🏗️</span>
+      <h3>Create your community</h3>
+      <p>Sign up, pick a URL slug, name your points currency (e.g. "Bucks", "Coins", "Credits"), and choose your brand color. Done in 60 seconds.</p>
     </div>
-  );
-}
+    <div class="step">
+      <div class="step-num">02</div>
+      <span class="step-icon">🤖</span>
+      <h3>Generate markets with AI</h3>
+      <p>Paste a YouTube video URL and Claude scans comments, transcript, and live chat — then generates ready-to-publish prediction markets your audience already cares about.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">03</div>
+      <span class="step-icon">📣</span>
+      <h3>Share and watch it grow</h3>
+      <p>Drop your community link in your bio, Discord, or newsletter. Your audience signs up, places predictions, climbs the leaderboard, and unlocks rewards you define.</p>
+    </div>
+  </div>
+</section>
 
-// ─── LIVE TICKER (Polymarket-style news ticker) ───────────────────────────────
-function LiveTicker({ prices = {} }) {
-  const btc = prices.BTC ? `$${prices.BTC.toLocaleString(undefined,{maximumFractionDigits:0})}` : "$83,241";
-  const eth = prices.ETH ? `$${prices.ETH.toLocaleString(undefined,{maximumFractionDigits:0})}` : "$1,892";
-  const xag = prices.XAG ? `$${prices.XAG.toFixed(2)}/oz` : "$84.30/oz";
-  const xau = prices.XAU ? `$${prices.XAU.toLocaleString(undefined,{maximumFractionDigits:0})}/oz` : "$5,388/oz";
-  const wti = prices.WTI ? `$${prices.WTI.toFixed(2)}/bbl` : "$79.14/bbl";
+<!-- FEATURES -->
+<section class="features" id="features">
+  <div class="section-eyebrow">Features</div>
+  <h2 class="section-title">Everything your community needs to predict.</h2>
+  <div class="features-grid">
 
-  // Each item: array of segments — { text, chg? }
-  // chg: true = green, false = red, undefined = dim
-  const items = [
-    [{text:`🔴 BTC: ${btc}`}],
-    [{text:`🔵 ETH: ${eth}`}],
-    [{text:`🥈 XAG/USD: ${xag} · `},{text:"+1.4%",chg:true}],
-    [{text:`🥇 XAU/USD: ${xau} · `},{text:"+1.9%",chg:true}],
-    [{text:`🛢️ WTI: ${wti} · `},{text:"+13.2%",chg:true}],
-    [{text:`⚡ URANIUM: $94.28/lb · `},{text:"+2.1%",chg:true}],
-    [{text:`🟤 COPPER: $4.82/lb · `},{text:"+0.6%",chg:true}],
-    [{text:"🔥 Iran conflict: WTI "},{text:"+13%",chg:true},{text:" · Gold tests $5,400"}],
-    [{text:"🏆 SilverWhale.eth wins $12,400 on gold market"}],
-    [{text:"📊 34 markets open now · New markets every morning"}],
-    [{text:"⚔️ Commodities vs Tech · Commodities leading 61–39"}],
-  ];
+    <div class="feat-card">
+      <div class="feat-icon">🤖</div>
+      <h3>AI Market Generation</h3>
+      <p>Scan any YouTube video and let Claude write the markets. Pull from comments, transcripts, or live chat replay — or write your own in seconds.</p>
+      <ul class="feat-bullets">
+        <li class="feat-bullet">Scans top 100 comments for fan debates</li>
+        <li class="feat-bullet">Reads transcript for creator announcements</li>
+        <li class="feat-bullet">Analyzes live chat replay predictions</li>
+        <li class="feat-bullet">Validates question quality before publishing</li>
+        <li class="feat-bullet">AI resolution suggestions with source data</li>
+      </ul>
+    </div>
 
-  const SEP = "   ·   ";
-  const dim = "#7a7870";
-  const green = "#2d9b5f";
-  const red = "#c0392b";
+    <div class="feat-card">
+      <div class="feat-icon">💎</div>
+      <h3>Custom Flex Points</h3>
+      <p>Name your community currency anything. Define reward tiers that unlock perks when fans hit point thresholds — Discord roles, merch, shout-outs.</p>
+      <ul class="feat-bullets">
+        <li class="feat-bullet">Fully custom points name and branding</li>
+        <li class="feat-bullet">Live leaderboard with real-time balances</li>
+        <li class="feat-bullet">Creator-defined reward tiers with descriptions</li>
+        <li class="feat-bullet">Play-money only — no compliance risk</li>
+        <li class="feat-bullet">Members see locked/unlocked reward status</li>
+      </ul>
+    </div>
 
-  const renderItems = () => items.map((segments, i) => (
-    <React.Fragment key={i}>
-      {segments.map((seg, j) => (
-        <span key={j} style={{color: seg.chg === true ? green : seg.chg === false ? red : dim}}>
-          {seg.text}
-        </span>
-      ))}
-      {i < items.length - 1 && <span style={{color:"#3a3a36"}}>{SEP}</span>}
-    </React.Fragment>
-  ));
+    <div class="feat-card">
+      <div class="feat-icon">📊</div>
+      <h3>Creator Analytics</h3>
+      <p>Track what your community actually cares about. See trader counts, volume, top predictors, and a resolution queue with AI-powered outcome suggestions.</p>
+      <ul class="feat-bullets">
+        <li class="feat-bullet">Total traders and weekly activity stats</li>
+        <li class="feat-bullet">Per-market volume and live odds</li>
+        <li class="feat-bullet">Top traders leaderboard with balances</li>
+        <li class="feat-bullet">Resolution queue with AI verdict assist</li>
+        <li class="feat-bullet">Pulsing live indicators on active markets</li>
+      </ul>
+    </div>
 
-  return (
-    <div style={{background:"#0e0e0c",borderBottom:"1px solid #2a2a26",padding:"6px 0",overflow:"hidden",whiteSpace:"nowrap"}}>
-      <div style={{display:"inline-block",animation:"ticker 55s linear infinite",fontFamily:"'DM Mono', monospace",fontSize:10}}>
-        <span style={{paddingRight:40}}>{renderItems()}</span>
-        <span style={{paddingRight:40}}>{renderItems()}</span>
+  </div>
+</section>
+
+<!-- DEMO WINDOW -->
+<section class="demo">
+  <div class="demo-window">
+    <div class="demo-bar">
+      <div class="demo-dots">
+        <div class="demo-dot r"></div>
+        <div class="demo-dot y"></div>
+        <div class="demo-dot g"></div>
+      </div>
+      <div class="demo-url-bar">hyperflex.network/<em>yourcommunity</em></div>
+    </div>
+    <div class="demo-markets">
+      <div class="demo-card">
+        <div class="demo-live"><div class="demo-live-dot"></div>Live</div>
+        <div class="demo-q">Will the creator hit 1 million subscribers before December?</div>
+        <div class="demo-bars">
+          <div class="demo-bar-row">
+            <div class="demo-bar-lbl y">YES</div>
+            <div class="demo-bar-track"><div class="demo-bar-fill y" style="width:68%"></div></div>
+            <div class="demo-bar-pct">68%</div>
+          </div>
+          <div class="demo-bar-row">
+            <div class="demo-bar-lbl n">NO</div>
+            <div class="demo-bar-track"><div class="demo-bar-fill n" style="width:32%"></div></div>
+            <div class="demo-bar-pct">32%</div>
+          </div>
+        </div>
+        <div class="demo-meta">💎 2,400 pts · 38 traders</div>
+      </div>
+      <div class="demo-card">
+        <div class="demo-live"><div class="demo-live-dot"></div>Live</div>
+        <div class="demo-q">Will the next video break 500k views in the first 24 hours?</div>
+        <div class="demo-bars">
+          <div class="demo-bar-row">
+            <div class="demo-bar-lbl y">YES</div>
+            <div class="demo-bar-track"><div class="demo-bar-fill y" style="width:45%"></div></div>
+            <div class="demo-bar-pct">45%</div>
+          </div>
+          <div class="demo-bar-row">
+            <div class="demo-bar-lbl n">NO</div>
+            <div class="demo-bar-track"><div class="demo-bar-fill n" style="width:55%"></div></div>
+            <div class="demo-bar-pct">55%</div>
+          </div>
+        </div>
+        <div class="demo-meta">💎 1,850 pts · 27 traders</div>
+      </div>
+      <div class="demo-card">
+        <div class="demo-live"><div class="demo-live-dot"></div>Live</div>
+        <div class="demo-q">Will the creator upload 3 videos next week as promised?</div>
+        <div class="demo-bars">
+          <div class="demo-bar-row">
+            <div class="demo-bar-lbl y">YES</div>
+            <div class="demo-bar-track"><div class="demo-bar-fill y" style="width:79%"></div></div>
+            <div class="demo-bar-pct">79%</div>
+          </div>
+          <div class="demo-bar-row">
+            <div class="demo-bar-lbl n">NO</div>
+            <div class="demo-bar-track"><div class="demo-bar-fill n" style="width:21%"></div></div>
+            <div class="demo-bar-pct">21%</div>
+          </div>
+        </div>
+        <div class="demo-meta">💎 3,100 pts · 51 traders</div>
       </div>
     </div>
-  );
-}
+  </div>
+</section>
 
-// ─── MARKET DETAIL VIEW (with chart + order book) ────────────────────────────
-function MarketDetail({ m, onBack, onTrade, hlSigner, hlAddress, refreshBalances, user, token, handleHFTrade }) {
-  const [side, setSide] = useState("YES");
-  const [amt, setAmt] = useState("");
-  const [limitMode, setLimitMode] = useState(false);
-  const [limitPrice, setLimitPrice] = useState(String(m.yes));
-  const [placing, setPlacing] = useState(false);
+<!-- PRICING -->
+<section class="pricing" id="pricing">
+  <div class="section-eyebrow">Pricing</div>
+  <h2 class="section-title">Start free. Scale when you're ready.</h2>
+  <div class="pricing-grid">
 
-  const notify = (msg) => {
-    const el = document.createElement("div");
-    el.style.cssText = "position:fixed;top:20px;right:16px;background:#2a2200;border:1px solid #c9920d;color:#ddd8cc;padding:10px 16px;border-radius:4px;font-family:'DM Mono',monospace;font-size:12px;z-index:9999;animation:fadeSlide 0.3s ease";
-    el.textContent = msg;
-    document.body.appendChild(el);
-    setTimeout(() => el.remove(), 2500);
-  };
-
-  const handleTrade = async () => {
-    if (!amt) return;
-    if (!user || !token) {
-      notify("⚠️ Please login first");
-      return;
-    }
-    setPlacing(true);
-    try {
-      const result = await handleHFTrade(m, side, parseFloat(amt));
-      if (result && result.position) {
-        notify(`✓ ${side} $${amt} placed on "${m.question||m.q}"`);
-        onTrade && onTrade();
-      } else {
-        notify("⚠️ Trade failed");
-      }
-    } catch(e) {
-      notify("⚠️ " + e.message);
-    } finally {
-      setPlacing(false);
-    }
-    return;
-    if (!hlSigner || !hlAddress) {
-      notify("⚠️ Connect your wallet first");
-      return;
-    }
-    setPlacing(true);
-    try {
-      // Map prediction market to HL perp asset (best-effort for crypto markets)
-      const coinMap = {
-        "BITCOIN": "BTC", "ETHEREUM": "ETH", "HYPERLIQUID": "HYPE",
-      };
-      const coin = coinMap[m.sector] || "BTC"; // default BTC for non-crypto markets
-      const isBuy = side === "YES";
-      // Use the market's yes% as a price signal; user enters USDC amount
-      const pricePx = limitMode ? parseFloat(limitPrice) : (isBuy ? m.yes : 100 - m.yes);
-      const contracts = parseFloat(amt) / pricePx;
-
-      const result = await hlPlaceOrder({
-        signer: hlSigner,
-        address: hlAddress,
-        coin,
-        isBuy,
-        limitPx: pricePx.toFixed(2),
-        sz: contracts.toFixed(4),
-      });
-
-      if (result && result.status === "ok") {
-        const fills = result.response?.data?.statuses;
-        const filled = fills && fills[0]?.filled;
-        notify(`✓ Order filled · ${side} ${contracts.toFixed(4)} ${coin}`);
-        if (refreshBalances) refreshBalances();
-        onTrade && onTrade(`✓ Trade placed on Hyperliquid`);
-      } else {
-        notify(`⚠️ ${result?.response?.data?.statuses?.[0]?.error || "Order rejected"}`);
-      }
-    } catch (err) {
-      notify(`✗ ${err.message || "Trade failed"}`);
-    } finally {
-      setPlacing(false);
-      setAmt("");
-    }
-  };
-  return (
-    <div style={{animation:"fadeSlide 0.2s ease",fontFamily:"'DM Mono', monospace"}}>
-      <button onClick={onBack} style={{background:"none",border:"none",color:"#e0a820",fontSize:12,cursor:"pointer",padding:"8px 0 14px",display:"flex",alignItems:"center",gap:6}}>
-        ← Back to markets
-      </button>
-      {/* Header */}
-      <div style={{background:"#1c1c19",border:"1px solid #2a2a26",borderRadius:4,padding:14,marginBottom:12}}>
-        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-          <span style={{fontSize:22}}>{m.icon}</span>
-          <div>
-            <div style={{fontSize:8,color:"#c9920d",fontWeight:700,letterSpacing:1}}>{m.cat}</div>
-            <div style={{fontSize:13,color:"#ddd8cc",lineHeight:1.4}}>{m.q}</div>
-          </div>
-        </div>
-        <div style={{display:"flex",gap:16,fontSize:10,color:"#7a7870"}}>
-          <span>📊 Vol: ${m.vol}</span>
-          <span>📅 Closes: {m.closes}</span>
-          {m.hot && <span style={{color:"#e0a820"}}>🔥 Trending</span>}
-        </div>
-      </div>
-
-      {/* Odds Chart — Polymarket style */}
-      <div style={{background:"#1c1c19",border:"1px solid #2a2a26",borderRadius:4,padding:14,marginBottom:12}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-          <span style={{fontSize:9,color:"#555550",fontWeight:700,letterSpacing:1}}>ODDS HISTORY · 30 DAYS</span>
-          <span style={{fontSize:14,fontWeight:700,color:"#e0a820"}}>{m.yes}¢ YES</span>
-        </div>
-        <OddsChart marketId={m.id} currentYes={m.yes}/>
-        <div style={{display:"flex",justifyContent:"space-between",marginTop:6,fontSize:9,color:"#555550"}}>
-          <span>30d ago</span><span>15d ago</span><span>Today</span>
-        </div>
-      </div>
-
-      {/* Order Book — Kalshi style */}
-      <OrderBook yes={m.yes}/>
-
-      {/* Trade Panel */}
-      <div style={{background:"#1c1c19",border:"1px solid #2a2a26",borderRadius:4,padding:14}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-          <span style={{fontSize:9,color:"#555550",fontWeight:700,letterSpacing:1}}>PLACE ORDER</span>
-          <div style={{display:"flex",gap:4}}>
-            {["Market","Limit"].map(mode => (
-              <button key={mode} onClick={()=>setLimitMode(mode==="Limit")} style={{padding:"4px 10px",background:((limitMode&&mode==="Limit")||(!limitMode&&mode==="Market"))?"#2a2200":"transparent",border:"1px solid #2a2a26",borderRadius:3,color:((limitMode&&mode==="Limit")||(!limitMode&&mode==="Market"))?"#e0a820":"#7a7870",cursor:"pointer",fontFamily:"inherit",fontSize:9,fontWeight:700}}>
-                {mode}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div style={{display:"flex",gap:6,marginBottom:10}}>
-          {["YES","NO"].map(s => (
-            <button key={s} onClick={()=>setSide(s)} style={{flex:1,padding:"12px 0",borderRadius:3,border:side===s?`1px solid ${s==="YES"?"#1a5c3a":"#5c1a1a"}`:"1px solid #2a2a26",background:side===s?(s==="YES"?"#0e1a10":"#1a0e0e"):"#1c1c19",color:side===s?(s==="YES"?"#3dbd73":"#d44c4c"):"#7a7870",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,transition:"all 0.2s"}}>
-              {s} {s==="YES"?m.yes:100-m.yes}¢
-            </button>
-          ))}
-        </div>
-        {limitMode && (
-          <div style={{marginBottom:10}}>
-            <div style={{fontSize:9,color:"#7a7870",marginBottom:4}}>LIMIT PRICE (¢)</div>
-            <input value={limitPrice} onChange={e=>setLimitPrice(e.target.value)} type="number" placeholder="Enter price 1-99" style={{width:"100%",background:"#0e0e0c",border:"1px solid #2a2a26",borderRadius:3,color:"#ddd8cc",padding:"8px 12px",fontFamily:"inherit",fontSize:12}}/>
-          </div>
-        )}
-        <input value={amt} onChange={e=>setAmt(e.target.value)} type="number" placeholder="Amount ($)" style={{width:"100%",background:"#0e0e0c",border:"1px solid #2a2a26",borderRadius:3,color:"#ddd8cc",padding:"8px 12px",fontFamily:"inherit",fontSize:12,marginBottom:10}}/>
-        {amt && (
-          <div style={{background:"#0e0e0c",borderRadius:3,padding:"8px 12px",marginBottom:10,fontSize:10,color:"#7a7870"}}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span>Contracts</span><span style={{color:"#ddd8cc"}}>{Math.floor(parseFloat(amt)||0 / ((limitMode?parseFloat(limitPrice):side==="YES"?m.yes:100-m.yes)/100))}</span></div>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span>Max payout</span><span style={{color:"#3dbd73"}}>${(Math.floor(parseFloat(amt)||0 / ((limitMode?parseFloat(limitPrice):side==="YES"?m.yes:100-m.yes)/100))).toFixed(2)}</span></div>
-            <div style={{display:"flex",justifyContent:"space-between"}}><span>Max profit</span><span style={{color:"#3dbd73"}}>${(Math.floor(parseFloat(amt)||0 / ((limitMode?parseFloat(limitPrice):side==="YES"?m.yes:100-m.yes)/100)) - (parseFloat(amt)||0)).toFixed(2)}</span></div>
-          </div>
-        )}
-        <button onClick={handleTrade} disabled={placing} style={{width:"100%",padding:"13px 0",background:placing?"#2a2a26":side==="YES"?"linear-gradient(135deg,#0e1a10,#1a5c3a)":"linear-gradient(135deg,#1a0e0e,#2a0808)",border:`1px solid ${side==="YES"?"#1a5c3a":"#5c1a1a"}`,borderRadius:4,color:side==="YES"?"#3dbd73":"#d44c4c",cursor:placing?"not-allowed":"pointer",fontFamily:"inherit",fontSize:14,fontWeight:700,transition:"all 0.2s",opacity:placing?0.6:1}}>
-          {placing ? "⏳ Placing…" : `${limitMode?"Place Limit Order":"Buy"} ${side}`}
-        </button>
-        {!hlSigner && (
-          <div style={{textAlign:"center",fontSize:9,color:"#7a7870",marginTop:8}}>
-            ⚠️ Login to place trades
-          </div>
-        )}
-      </div>
+    <!-- FREE -->
+    <div class="p-card">
+      <div class="p-tier free">Free</div>
+      <div class="p-price">$0</div>
+      <div class="p-per">forever free</div>
+      <div class="p-desc">Get started and explore what prediction markets can do for your community.</div>
+      <div class="p-divider"></div>
+      <ul class="p-features">
+        <li class="p-feat yes"><span class="p-check y">✓</span> Up to 3 active markets</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> Community leaderboard</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> Basic analytics</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> Flex Points system</li>
+        <li class="p-feat no"><span class="p-check n">×</span> YouTube scanner</li>
+        <li class="p-feat no"><span class="p-check n">×</span> Rewards system</li>
+        <li class="p-feat no"><span class="p-check n">×</span> Remove watermark</li>
+        <li class="p-feat no"><span class="p-check n">×</span> Custom domain</li>
+      </ul>
+      <a href="/creator/signup" class="btn-p free">Start for free →</a>
     </div>
-  );
-}
 
-// ─── COMBO CARD (DraftKings parlay inspiration) ───────────────────────────────
-function ComboCard({ combo, onSelect }) {
-  const combinedOdds = combo.markets.reduce((acc, m) => acc * (m.yes / 100), 1);
-  return (
-    <div onClick={onSelect} style={{background:"#1c1c19",border:"1px solid #2a2a26",borderRadius:4,padding:14,marginBottom:10,cursor:"pointer",transition:"border-color 0.2s"}}
-      onMouseEnter={e=>e.currentTarget.style.borderColor="#c9920d"}
-      onMouseLeave={e=>e.currentTarget.style.borderColor="#2a2a26"}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+    <!-- PRO -->
+    <div class="p-card pro" style="position:relative">
+      <div class="p-popular">Most Popular</div>
+      <div class="p-tier pro">Pro</div>
+      <div class="p-price">$29</div>
+      <div class="p-per">per month</div>
+      <div class="p-desc">For creators serious about building an engaged, active prediction community.</div>
+      <div class="p-divider"></div>
+      <ul class="p-features">
+        <li class="p-feat yes"><span class="p-check y">✓</span> <strong>Unlimited</strong> active markets</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> Full analytics dashboard</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> Flex Points + Rewards system</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> YouTube scanner (all 3 modes)</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> AI market generation &amp; resolution</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> Custom community branding</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> "Built with HYPERFLEX" subtle footer</li>
+        <li class="p-feat no"><span class="p-check n">×</span> White-label (no watermark)</li>
+      </ul>
+      <a href="/creator/signup" class="btn-p pro">Get early access →</a>
+    </div>
+
+    <!-- PLATINUM -->
+    <div class="p-card platinum">
+      <div class="p-tier platinum">✦ Platinum</div>
+      <div class="p-price">$99</div>
+      <div class="p-per">per month</div>
+      <div class="p-desc">White-label solution for professional creators, brands, and large communities.</div>
+      <div class="p-divider"></div>
+      <ul class="p-features">
+        <li class="p-feat yes"><span class="p-check y">✓</span> Everything in Pro</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> <strong>No watermark</strong> — fully white-label</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> Custom domain support</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> Dedicated support</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> Early access to new features</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> SLA uptime guarantee</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> Onboarding call included</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> Volume pricing available</li>
+      </ul>
+      <a href="/creator/signup" class="btn-p platinum">Get early access →</a>
+    </div>
+
+  </div>
+</section>
+
+<!-- QUOTES -->
+<section class="quotes">
+  <div class="section-eyebrow">Early feedback</div>
+  <h2 class="section-title" style="margin-bottom:40px">What creators are saying.</h2>
+  <div class="quote-grid">
+    <div class="q-card">
+      <div class="q-stars">★★★★★</div>
+      <p class="q-text">My community is obsessed. They spend hours debating market outcomes — it's turned passive viewers into active participants who tune in just to see if their predictions were right.</p>
+      <div class="q-author">
+        <div class="q-avatar">MK</div>
         <div>
-          {combo.hot && <span style={{fontSize:8,background:"rgba(245,158,11,0.15)",color:"#e0a820",border:"1px solid rgba(245,158,11,0.3)",borderRadius:4,padding:"2px 6px",marginRight:6,fontWeight:700}}>🔥 HOT</span>}
-          <span style={{fontSize:13,fontWeight:700,color:"#ddd8cc"}}>{combo.name}</span>
+          <div class="q-name">Marcus K.</div>
+          <div class="q-handle">Gaming creator · 180k subs</div>
         </div>
-        <div style={{textAlign:"right"}}>
-          <div style={{fontSize:18,fontWeight:700,color:"#e0a820"}}>{combo.multiplier}</div>
-          <div style={{fontSize:8,color:"#7a7870"}}>MULTIPLIER</div>
-        </div>
-      </div>
-      {combo.markets.map((m,i) => (
-        <div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:i<combo.markets.length-1?6:0,paddingBottom:i<combo.markets.length-1?6:0,borderBottom:i<combo.markets.length-1?"1px solid #2a2a26":"none"}}>
-          <div style={{width:28,textAlign:"center",fontSize:10,fontWeight:700,color:m.yes>50?"#3dbd73":"#d44c4c"}}>{m.yes}¢</div>
-          <div style={{fontSize:11,color:"#a09890",flex:1}}>{m.q}</div>
-        </div>
-      ))}
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:10,paddingTop:10,borderTop:"1px solid #2a2a26"}}>
-        <span style={{fontSize:10,color:"#7a7870"}}>Combined odds: {(combinedOdds*100).toFixed(1)}%</span>
-        <span style={{fontSize:10,color:"#7a7870"}}>Vol: ${combo.vol}</span>
       </div>
     </div>
-  );
-}
-
-// ─── DAILY JACKPOT (DraftKings pools inspiration) ─────────────────────────────
-function DailyJackpot({ answers, setAnswers, onSubmit, submitted }) {
-  return (
-    <div style={{background:"linear-gradient(135deg,#1c1c19,#141412)",border:"1px solid #2a2200",borderRadius:4,padding:16,marginBottom:14}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+    <div class="q-card">
+      <div class="q-stars">★★★★★</div>
+      <p class="q-text">The YouTube comment scanner is insane. I pasted my video URL and had 8 publish-ready markets in 30 seconds — markets my audience was already debating in the comments.</p>
+      <div class="q-author">
+        <div class="q-avatar">SL</div>
         <div>
-          <div style={{fontSize:9,color:"#e0a820",fontWeight:700,letterSpacing:1,marginBottom:3}}>DAILY JACKPOT</div>
-          <div style={{fontSize:16,fontWeight:700,color:"#ddd8cc"}}>5 for 5 = $10,000 🎯</div>
-        </div>
-        <div style={{textAlign:"right"}}>
-          <div style={{fontSize:11,color:"#7a7870"}}>{Object.keys(answers).length}/5 picked</div>
-          <div style={{fontSize:9,color:"#555550"}}>Resets midnight EST</div>
+          <div class="q-name">Sarah L.</div>
+          <div class="q-handle">Finance creator · 92k subs</div>
         </div>
       </div>
-      {DAILY_QUESTIONS.map((q,i) => {
-        const total = q.yesVotes + q.noVotes;
-        const yesPct = Math.round((q.yesVotes / total) * 100);
-        const picked = answers[q.id];
-        return (
-          <div key={q.id} style={{background:"#0e0e0c",border:`1px solid ${picked?"#2a2200":"#2a2a26"}`,borderRadius:4,padding:"10px 12px",marginBottom:8}}>
-            <div style={{fontSize:12,color:"#ddd8cc",marginBottom:8}}>{q.q}</div>
-            <div style={{display:"flex",gap:4}}>
-              {["YES","NO"].map(s => {
-                const pct = s==="YES"?yesPct:100-yesPct;
-                return (
-                  <button key={s} onClick={()=>!submitted&&setAnswers({...answers,[q.id]:s})}
-                    style={{flex:1,padding:"7px 0",borderRadius:3,border:`1px solid ${picked===s?(s==="YES"?"#1a5c3a":"#5c1a1a"):"#2a2a26"}`,background:picked===s?(s==="YES"?"#0e1a10":"#1a0e0e"):"#1c1c19",color:picked===s?(s==="YES"?"#3dbd73":"#d44c4c"):"#7a7870",cursor:submitted?"default":"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700,transition:"all 0.15s"}}>
-                    {s} · {pct}%
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
-      <button onClick={onSubmit} disabled={Object.keys(answers).length < 5 || submitted}
-        style={{width:"100%",padding:"12px 0",background:Object.keys(answers).length===5&&!submitted?"linear-gradient(135deg,#b8820c,#c9920d)":"#1c1c19",border:`1px solid ${Object.keys(answers).length===5&&!submitted?"#c9920d":"#2a2a26"}`,borderRadius:4,color:Object.keys(answers).length===5&&!submitted?"#ddd8cc":"#555550",cursor:Object.keys(answers).length===5&&!submitted?"pointer":"default",fontFamily:"inherit",fontSize:13,fontWeight:700,marginTop:4,transition:"all 0.2s"}}>
-        {submitted?"✓ Entry Submitted — Check back tomorrow!":Object.keys(answers).length===5?"Submit Entry →":`Pick ${5-Object.keys(answers).length} more to enter`}
-      </button>
     </div>
-  );
-}
-
-// ─── STREAK WIDGET (DraftKings streak inspiration) ───────────────────────────
-function StreakWidget() {
-  const { current, best, prize, nextPrize, needed } = STREAK_DATA;
-  return (
-    <div style={{background:"linear-gradient(135deg,#0e1a0e,#0e1a10)",border:"1px solid #1a5c3a",borderRadius:4,padding:14,marginBottom:14}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+    <div class="q-card">
+      <div class="q-stars">★★★★★</div>
+      <p class="q-text">I tried building something like this myself. Would have taken months. HYPERFLEX had me live with a branded community page and 5 active markets in literally 4 minutes.</p>
+      <div class="q-author">
+        <div class="q-avatar">JR</div>
         <div>
-          <div style={{fontSize:9,color:"#2d9b5f",fontWeight:700,letterSpacing:1}}>WIN STREAK 🔥</div>
-          <div style={{fontSize:22,fontWeight:700,color:"#3dbd73"}}>{current} in a row</div>
-        </div>
-        <div style={{textAlign:"right"}}>
-          <div style={{fontSize:11,color:"#7a7870"}}>Best: {best}</div>
-          <div style={{fontSize:20,fontWeight:700,color:"#3dbd73"}}>{prize}</div>
-          <div style={{fontSize:9,color:"#7a7870"}}>current prize</div>
+          <div class="q-name">James R.</div>
+          <div class="q-handle">Sports creator · 340k subs</div>
         </div>
       </div>
-      <div style={{background:"#0e1a10",borderRadius:3,height:6,overflow:"hidden",marginBottom:8}}>
-        <div style={{height:"100%",width:`${(current/7)*100}%`,background:"linear-gradient(90deg,#2d9b5f,#3dbd73)",borderRadius:3,transition:"width 0.5s"}}/>
-      </div>
-      <div style={{fontSize:10,color:"#7a7870"}}>{needed} more wins → <span style={{color:"#3dbd73",fontWeight:700}}>{nextPrize} prize</span></div>
     </div>
-  );
-}
+  </div>
+</section>
 
-// ─── PORTFOLIO P&L (Kalshi portfolio tracking inspiration) ───────────────────
-function Portfolio({ user, apiGet }) {
-  const [positions, setPositions] = React.useState([]);
-  const [loading, setLoading] = React.useState(true);
-  React.useEffect(() => {
-    if (!user) return;
-    apiGet('/positions/' + user.id).then(data => {
-      if (Array.isArray(data)) setPositions(data);
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  }, [user]);
-  const UNUSED = [
-    { market:"Will Bitcoin hit $150K?", side:"YES", contracts:50, avgPrice:54, currentPrice:58, status:"open" },
-    { market:"Will Nvidia beat earnings?", side:"YES", contracts:30, avgPrice:72, currentPrice:76, status:"open" },
-    { market:"Will Tesla beat Q2 estimates?", side:"NO", contracts:20, avgPrice:56, currentPrice:52, status:"open" },
-    { market:"Will gold close above $6K?", side:"YES", contracts:40, avgPrice:58, currentPrice:61, status:"open" },
-    { market:"Will Fed cut 3+ times?", side:"YES", contracts:25, avgPrice:44, currentPrice:47, status:"settled", won:true },
-  ];
-  const totalPnl = positions.reduce((acc, p) => {
-    const pnlPerContract = p.side==="YES" ? p.currentPrice - p.avgPrice : p.avgPrice - p.currentPrice;
-    return acc + (pnlPerContract * p.contracts / 100);
-  }, 0);
-  return (
-    <div>
-      {/* P&L Summary */}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14}}>
-        {[
-          { label:"Portfolio Value", val:`$${positions.reduce((a,p)=>a+p.potential_payout,0).toFixed(0)}`, color:"#ddd8cc" },
-          { label:"Amount Invested", val:`$${positions.reduce((a,p)=>a+p.amount,0).toFixed(0)}`, color:"#e0a820" },
-          { label:"Open Positions", val:positions.length, color:"#3dbd73" },
-        ].map(s => (
-          <div key={s.label} style={{background:"#1c1c19",border:"1px solid #2a2a26",borderRadius:4,padding:"10px 12px"}}>
-            <div style={{fontSize:8,color:"#7a7870",marginBottom:4}}>{s.label}</div>
-            <div style={{fontSize:15,fontWeight:700,color:s.color}}>{s.val}</div>
-          </div>
-        ))}
-      </div>
-      {/* Positions */}
-      <div style={{fontSize:9,color:"#555550",fontWeight:700,letterSpacing:1,marginBottom:8}}>OPEN POSITIONS</div>
-      {loading && <div style={{color:"#555550",fontSize:11,textAlign:"center",padding:20}}>Loading...</div>}
-      {!loading && positions.length===0 && <div style={{color:"#555550",fontSize:11,textAlign:"center",padding:20}}>No positions yet. Place a trade!</div>}
-      {positions.map((p,i) => (
-        <div key={i} style={{background:"#1c1c19",border:`1px solid ${p.settled?p.won?"#1a5c3a":"#5c1a1a":"#2a2a26"}`,borderRadius:4,padding:"10px 12px",marginBottom:8}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
-            <div style={{fontSize:11,color:"#a09890",flex:1,marginRight:8}}>{p.markets?.question||"Market"}</div>
-            {p.settled && <span style={{fontSize:8,fontWeight:700,color:p.won?"#3dbd73":"#d44c4c",background:p.won?"rgba(16,185,129,0.1)":"rgba(239,68,68,0.1)",padding:"2px 6px",borderRadius:4}}>SETTLED {p.won?"WIN":"LOSS"}</span>}
-          </div>
-          <div style={{display:"flex",justifyContent:"space-between",fontSize:10}}>
-            <span style={{color:p.side==="YES"?"#3dbd73":"#d44c4c",fontWeight:700}}>{p.side} · ${p.amount}</span>
-            <span style={{color:"#e0a820",fontWeight:700}}>Payout: ${p.potential_payout}</span>
-          </div>
-        </div>
-      ))}
+<!-- CTA BANNER -->
+<section class="cta-wrap">
+  <div class="cta-inner">
+    <div class="cta-ey">Ready to start?</div>
+    <h2 class="cta-title">Your community is already<br/>making predictions.</h2>
+    <p class="cta-sub">Give them a place to make it official. Free forever, live in 5 minutes.</p>
+    <div class="cta-actions">
+      <a href="/creator/signup" class="btn-primary">Get started free →</a>
+      <a href="/creator/login" class="btn-ghost">Sign in to your dashboard</a>
     </div>
-  );
-}
+  </div>
+</section>
 
-// ─── MARKET CARD ──────────────────────────────────────────────────────────────
-function MktCard({ m, onSelect }) {
-  const isNew = m.isNew;
-  return (
-    <div onClick={onSelect} style={{background: isNew ? "linear-gradient(135deg,#1c1c19,#1a1508)" : "#1c1c19", border:`1px solid ${isNew?"#c9920d":"#2a2a26"}`,borderRadius:4,padding:12,marginBottom:8,cursor:"pointer",transition:"border-color 0.2s,transform 0.15s"}}
-      onMouseEnter={e=>{e.currentTarget.style.borderColor="#e0a820";e.currentTarget.style.transform="translateY(-1px)";}}
-      onMouseLeave={e=>{e.currentTarget.style.borderColor=isNew?"#c9920d":"#2a2a26";e.currentTarget.style.transform="translateY(0)";}}>
-      {isNew && (
-        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,padding:"3px 8px",background:"rgba(201,146,13,0.08)",border:"1px solid rgba(201,146,13,0.25)",borderRadius:3}}>
-          <span style={{fontSize:8,color:"#e0a820",fontWeight:700,letterSpacing:0.5}}>✦ NEW TODAY</span>
-          <span style={{marginLeft:"auto",fontSize:7,color:"#c9920d",fontWeight:700}}>MAR 8</span>
-        </div>
-      )}
-      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-        <span style={{fontSize:18}}>{m.icon}</span>
-        <div style={{flex:1}}>
-          {m.hot && <span style={{fontSize:7,background:"rgba(245,158,11,0.15)",color:"#e0a820",border:"1px solid rgba(245,158,11,0.3)",borderRadius:4,padding:"1px 5px",marginRight:6,fontWeight:700}}>🔥 HOT</span>}
-          {m.badge && !isNew && <span style={{fontSize:7,background:"rgba(201,146,13,0.1)",color:"#e0a820",border:"1px solid rgba(201,146,13,0.3)",borderRadius:4,padding:"1px 5px",fontWeight:700}}>{m.badge}</span>}
-        </div>
-        <div style={{display:"flex",alignItems:"center",gap:4}}>
-          <OddsChart marketId={m.id} currentYes={m.yes}/>
-        </div>
-      </div>
-      <div style={{fontSize:13,lineHeight:1.45,color:"#ddd8cc",marginBottom:10}}>{m.q||m.question}</div>
-      <div style={{display:"flex",gap:2,height:4,borderRadius:3,overflow:"hidden",marginBottom:8}}>
-        <div style={{flex:m.yes||50,background:"linear-gradient(90deg,#2d9b5f,#2d9b5f)",transition:"flex 0.5s"}}/>
-        <div style={{flex:100-(m.yes||50),background:"linear-gradient(90deg,#c0392b,#d44c4c)",transition:"flex 0.5s"}}/>
-      </div>
-      <div style={{display:"flex",gap:8}}>
-        <div style={{flex:1,textAlign:"center",padding:"7px 0",background:"#0e1a10",border:"1px solid #1a5c3a",borderRadius:3,color:"#3dbd73",fontSize:12,fontWeight:700}}>YES {m.yes||50}¢</div>
-        <div style={{flex:1,textAlign:"center",padding:"7px 0",background:"#1a0e0e",border:"1px solid #5c1a1a",borderRadius:3,color:"#d44c4c",fontSize:12,fontWeight:700}}>NO {100-(m.yes||50)}¢</div>
-      </div>
-      <div style={{fontSize:8,color:"#2a2a26",marginTop:8,textAlign:"right"}}>{m.closes ? `Closes ${m.closes}` : `Expires ${m.expiry_date ? m.expiry_date.slice(0,10) : ""}`} {m.vol ? `· Vol $${m.vol}` : ""}</div>
+<!-- FOOTER -->
+<footer>
+  <div class="footer-top">
+    <div class="footer-brand">
+      <a href="/" class="footer-logo">
+        <svg viewBox="0 0 32 32" fill="none" style="width:26px;height:26px;flex-shrink:0">
+          <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="#c9920d" stroke-width="1.5" fill="rgba(201,146,13,0.1)"/>
+          <path d="M16 8L22 11.5V18.5L16 22L10 18.5V11.5L16 8Z" fill="#c9920d" opacity="0.6"/>
+        </svg>
+        <span class="footer-logo-name">HYPERFLEX</span>
+      </a>
+      <p class="footer-tagline">Prediction markets for creator communities. Play-money, AI-powered, no code required.</p>
     </div>
-  );
-}
-
-// ─── MAIN APP ─────────────────────────────────────────────────────────────────
-function App() {
-  const [tab, setTab] = useState("markets");
-  const [sector, setSector] = useState("ALL");
-  const [subTab, setSubTab] = useState("hot");
-  const [selected, setSelected] = useState(null);
-  const [tradeSide, setTradeSide] = useState("YES");
-  const [tradeAmt, setTradeAmt] = useState("");
-  const [leaderTab, setLeaderTab] = useState("weekly");
-  const [walletOpen, setWalletOpen] = useState(false);
-  const [showAuth, setShowAuth] = useState(false);
-  const [connecting, setConnecting] = useState(null);
-  const [connected, setConnected] = useState(null);   // wallet address string
-  const [hlSigner, setHlSigner] = useState(null);     // ethers Signer
-  const [balance, setBalance] = useState(0);           // USDC on HL
-  const [hypeBalance, setHypeBalance] = useState(0);   // HYPE spot balance
-
-  const [user, setUser] = React.useState(() => { try { return JSON.parse(localStorage.getItem('hf_user') || 'null'); } catch { return null; } });
-  const [token, setToken] = React.useState(() => localStorage.getItem('hf_token') || null);
-  const [markets, setMarkets] = React.useState([]);
-  const [authEmail, setAuthEmail] = React.useState('');
-  const [authPassword, setAuthPassword] = React.useState('');
-  const [authName, setAuthName] = React.useState('');
-  const [authMode, setAuthMode] = React.useState('login');
-  const [authError, setAuthError] = React.useState('');
-  React.useEffect(() => {
-    apiGet('/markets').then(data => { if (Array.isArray(data) && data.length > 0) setMarkets(data); }).catch(() => {});
-  }, []);
-  async function handleAuth() {
-    setAuthError('');
-    if (authMode === 'register') {
-      const res = await apiPost('/register', { email: authEmail, password: authPassword, display_name: authName });
-      if (res.error) { setAuthError(res.error); return; }
-      setAuthMode('login'); return;
-    }
-    const res = await apiPost('/login', { email: authEmail, password: authPassword });
-    if (res.error) { setAuthError(res.error); return; }
-    localStorage.setItem('hf_token', res.token);
-    localStorage.setItem('hf_user', JSON.stringify(res.user));
-    setToken(res.token); setUser(res.user); setConnected(res.user.email); setBalance(res.user.balance);
-  }
-  async function handleHFTrade(m, side, amt) {
-    if (!user) { notify('Please sign in to trade'); return; }
-    const res = await apiPost('/trade', { user_id: user.id, market_id: m.id, side, amount: parseFloat(amt) });
-    if (res.error) { notify('Error: ' + res.error); return null; }
-    notify('Trade placed: ' + side + ' $' + amt);
-    setBalance(prev => prev - parseFloat(amt));
-    return res;
-  }
-  function handleLogout() {
-    localStorage.removeItem('hf_token'); localStorage.removeItem('hf_user');
-    setUser(null); setToken(null); setConnected(null); setBalance(0);
-  }
-  const [livePrices, setLivePrices] = useState({});    // { BTC: 94821, ETH: ..., HYPE: ... }
-  const [createModal, setCreateModal] = useState(false);
-  const [shareModal, setShareModal] = useState(null);
-  const [notification, setNotification] = useState(null);
-  const [comboTab, setComboTab] = useState(false);
-  const [jackpotAnswers, setJackpotAnswers] = useState({});
-  const [jackpotSubmitted, setJackpotSubmitted] = useState(false);
-  const [marketDetailView, setMarketDetailView] = useState(null);
-  const wsUnsubRef = useRef(null);
-
-  // ── Live price fetch via CoinGecko (public, no CORS issues) ───────────────
-  useEffect(() => {
-    const STATIC_COMMODITIES = { XAG: 84.30, XAU: 5388, WTI: 79.14 };
-    const poll = async () => {
-      try {
-        const res = await fetch(
-          "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd",
-          { headers: { "Accept": "application/json" } }
-        );
-        if (res.ok) {
-          const data = await res.json();
-          setLivePrices(prev => ({
-            ...prev,
-            ...STATIC_COMMODITIES,
-            BTC: data.bitcoin?.usd  || prev.BTC,
-            ETH: data.ethereum?.usd || prev.ETH,
-          }));
-        }
-      } catch {
-        // fallback: just use static values
-        setLivePrices(prev => ({ ...STATIC_COMMODITIES, BTC: prev.BTC || 83241, ETH: prev.ETH || 1892 }));
-      }
-    };
-    poll();
-    const t = setInterval(poll, 30000);
-    return () => clearInterval(t);
-  }, []);
-
-  const notify = (msg) => {
-    setNotification(msg);
-    setTimeout(() => setNotification(null), 3000);
-  };
-
-  const filtered = (markets.length > 0 ? markets : ALL_MARKETS).filter(m => sector === "ALL" || (m.sector || "COMMODITIES") === sector);
-
-  // ── Real wallet connect ────────────────────────────────────────────────────
-  const WALLETS = [
-    { id:"metamask",      name:"MetaMask",        icon:"🦊", desc:"Browser extension · direct connect" },
-    { id:"walletconnect", name:"WalletConnect",    icon:"🔗", desc:"QR code · any mobile wallet" },
-    { id:"coinbase",      name:"Coinbase Wallet",  icon:"🔵", desc:"Mobile & browser extension" },
-    { id:"phantom",       name:"Phantom",          icon:"👻", desc:"Browser extension · EVM mode" },
-  ];
-
-  const connectWallet = async (id) => {
-    setConnecting(id);
-    try {
-      let signer, address;
-
-      if (id === "metamask") {
-        ({ signer, address } = await connectMetaMask());
-
-      } else if (id === "walletconnect" || id === "coinbase") {
-        // Both use Web3Modal — WalletConnect shows QR, Coinbase shows its own flow
-        ({ signer, address } = await connectViaWeb3Modal());
-
-      } else if (id === "phantom") {
-        // Phantom EVM (window.phantom.ethereum)
-        const phantomProvider = window.phantom?.ethereum;
-        if (!phantomProvider) throw new Error("Phantom not found — install the extension");
-        const provider = new ethers.BrowserProvider(phantomProvider);
-        await provider.send("eth_requestAccounts", []);
-        signer = await provider.getSigner();
-        address = await signer.getAddress();
-
-      } else {
-        throw new Error("Unsupported wallet");
-      }
-
-      setHlSigner(signer);
-      setConnected(address);
-
-      // Load balances from Hyperliquid
-      try {
-        const spotBals = await hlGetSpotBalances(address);
-        setHypeBalance(spotBals["HYPE"] || 0);
-        const perpState = await hlGetPerpState(address);
-        const usdc = perpState?.marginSummary?.accountValue
-          ? parseFloat(perpState.marginSummary.accountValue)
-          : (spotBals["USDC"] || spotBals["USDC:0xaf88d065e77c8cc2239327c5edb3a432268e5831"] || 0);
-        setBalance(usdc);
-        notify(`✓ Connected · ${address.slice(0,6)}…${address.slice(-4)} · $${usdc.toFixed(2)} USDC`);
-      } catch {
-        notify(`✓ Wallet connected · ${address.slice(0,6)}…${address.slice(-4)}`);
-      }
-
-    } catch (err) {
-      if (err.message !== "Connection timed out") {
-        notify(`✗ ${err.message || "Connection failed"}`);
-      }
-    } finally {
-      setConnecting(null);
-      setWalletOpen(false);
-    }
-  };
-
-  // ── Refresh balances after a trade ────────────────────────────────────────
-  const refreshBalances = async () => {
-    if (!connected || connected === "0x0000000000000000000000000000000000000000") return;
-    try {
-      const spotBals = await hlGetSpotBalances(connected);
-      setHypeBalance(spotBals["HYPE"] || 0);
-      const perpState = await hlGetPerpState(connected);
-      const usdc = perpState?.marginSummary?.accountValue
-        ? parseFloat(perpState.marginSummary.accountValue) : (spotBals["USDC"] || 0);
-      setBalance(usdc);
-    } catch {}
-  };
-
-  return (
-    <div style={{maxWidth:430,margin:"0 auto",minHeight:"100vh",background:"#141412",fontFamily:"'DM Mono', monospace",color:"#ddd8cc",paddingBottom:80}}>
-
-      {/* Live ticker */}
-      <LiveTicker prices={livePrices}/>
-
-      {/* Notification */}
-      {notification && (
-        <div style={{position:"fixed",top:36,left:"50%",transform:"translateX(-50%)",background:"#2a2200",border:"1px solid #c9920d",color:"#ddd8cc",padding:"10px 20px",borderRadius:4,fontSize:12,zIndex:9999,animation:"fadeSlide 0.3s ease",whiteSpace:"nowrap"}}>
-          {notification}
-        </div>
-      )}
-
-      {/* Header */}
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",borderBottom:"1px solid #2a2a26",background:"#141412",position:"sticky",top:0,zIndex:100}}>
-        <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <HyperflexLogo size={28}/>
-          <span style={{fontSize:14,fontWeight:700,letterSpacing:2,color:"#ddd8cc"}}>HYPERFLEX</span>
-
-        </div>
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <div style={{textAlign:"right"}}>
-            {connected ? (
-              <>
-                <div style={{fontSize:8,color:"#7a7870"}}>HL BALANCE</div>
-                <div style={{fontSize:13,fontWeight:700,color:"#3dbd73"}}>${balance.toLocaleString(undefined,{minimumFractionDigits:2})} USDC</div>
-              </>
-            ) : (
-              <>
-                <div style={{fontSize:8,color:"#7a7870"}}>BTC LIVE</div>
-                <div style={{fontSize:13,fontWeight:700,color:"#3dbd73"}}>{livePrices.BTC ? `$${livePrices.BTC.toLocaleString(undefined,{maximumFractionDigits:0})}` : "$83,241"}</div>
-              </>
-            )}
-          </div>
-          <button onClick={()=>setShowAuth(true)} style={{background:user?"#0e1a10":"#2a2200",border:`1px solid ${user?"#1a5c3a":"#b8820c"}`,borderRadius:3,color:user?"#3dbd73":"#e0a820",padding:"6px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700}}>
-            {user ? `● ${user.display_name}` : "CONNECT"}
-          </button>
-        </div>
+    <div class="footer-cols">
+      <div class="footer-col">
+        <h4>Product</h4>
+        <ul>
+          <li><a href="#features">Features</a></li>
+          <li><a href="#pricing">Pricing</a></li>
+          <li><a href="/creator/signup">Get started</a></li>
+          <li><a href="/creator/login">Sign in</a></li>
+        </ul>
       </div>
-
-      <div style={{padding:"12px 16px"}}>
-
-        {/* ── COMMODITIES HERO BLOCK ───────────────────────────── */}
-        <div style={{background:"linear-gradient(135deg,#0d0f1a,#1a1400)",border:"1px solid #92400e",borderRadius:4,padding:14,marginBottom:14}}>
-          <div style={{fontSize:9,color:"#e0a820",fontWeight:700,letterSpacing:1,marginBottom:6}}>🪨 THE ONLY PREDICTION MARKET FOR COMMODITIES</div>
-          <div style={{fontSize:13,fontWeight:700,color:"#fef3c7",lineHeight:1.4,marginBottom:8}}>
-            A $10 trillion asset class. Zero prediction market coverage. Until now.
-          </div>
-          <div style={{display:"flex",gap:6,marginBottom:10}}>
-            {[
-              {label:"🥈 Silver", price: livePrices.XAG ? `$${livePrices.XAG.toFixed(2)}` : "$84.30", chg:"+1.4%", up:true},
-              {label:"🥇 Gold",   price: livePrices.XAU ? `$${livePrices.XAU.toLocaleString(undefined,{maximumFractionDigits:0})}` : "$5,388", chg:"+1.9%", up:true},
-              {label:"🛢️ WTI",   price: livePrices.WTI ? `$${livePrices.WTI.toFixed(2)}` : "$79.14", chg:"+13.2%", up:true},
-            ].map((c,i)=>(
-              <div key={i} style={{flex:1,background:"rgba(0,0,0,0.3)",border:"1px solid #78350f",borderRadius:3,padding:"6px 8px",textAlign:"center"}}>
-                <div style={{fontSize:8,color:"#b45309",fontWeight:700,marginBottom:2}}>{c.label}</div>
-                <div style={{fontSize:12,fontWeight:700,color:"#fbbf24"}}>{c.price}</div>
-                <div style={{fontSize:9,color:c.up?"#2d9b5f":"#c0392b"}}>{c.chg}</div>
-              </div>
-            ))}
-          </div>
-          <button onClick={()=>{setTab("markets");setSector("COMMODITIES");}} style={{width:"100%",padding:"9px 0",background:"linear-gradient(90deg,#b45309,#92400e)",border:"none",borderRadius:3,color:"#fef3c7",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700,letterSpacing:0.5}}>
-            🪨 VIEW COMMODITY MARKETS →
-          </button>
-        </div>
-
-        {/* STREAK WIDGET - always visible */}
-        <StreakWidget/>
-
-        {/* Tabs */}
-        <div style={{display:"flex",borderBottom:"1px solid #2a2a26",marginBottom:14}}>
-          {[["markets","Markets"],["combos","Combos ✨"],["jackpot","Jackpot 🎯"],["portfolio","Portfolio"],["leaderboard","Board"],["profile","Profile"]].map(([t,label]) => (
-            <button key={t} onClick={()=>{setTab(t);if(t==="markets")setMarketDetailView(null);}} style={{flex:1,padding:"9px 0",background:"transparent",border:"none",borderBottom:tab===t?"2px solid #c9920d":"2px solid transparent",color:tab===t?"#e0a820":"#555550",cursor:"pointer",fontFamily:"inherit",fontSize:8,fontWeight:tab===t?700:400,letterSpacing:0.5,textTransform:"uppercase",transition:"all 0.2s",whiteSpace:"nowrap"}}>
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {/* MARKETS */}
-        {tab==="markets" && (
-          marketDetailView ? (
-            <MarketDetail m={marketDetailView} onBack={()=>setMarketDetailView(null)} onTrade={notify} hlSigner={hlSigner} hlAddress={connected} refreshBalances={refreshBalances} user={user} token={token} handleHFTrade={handleHFTrade}/>
-          ) : (
-            <div className="fade-in">
-              {/* Sector filters */}
-              <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:8,marginBottom:12}}>
-                {SECTORS.map(s => (
-                  <button key={s} onClick={()=>setSector(s)} style={{whiteSpace:"nowrap",padding:"5px 10px",background:sector===s?"#2a2200":"#0a1020",border:`1px solid ${sector===s?"#c9920d":"#2a2a26"}`,borderRadius:20,color:sector===s?"#e0a820":"#555550",cursor:"pointer",fontFamily:"inherit",fontSize:9,fontWeight:700,letterSpacing:0.5,transition:"all 0.2s",boxShadow:sector===s?"0 0 10px rgba(99,102,241,0.2)":"none"}}>
-                    {SECTOR_META[s].icon} {s}
-                  </button>
-                ))}
-              </div>
-
-              {/* Sub tabs */}
-              <div style={{display:"flex",gap:4,marginBottom:12}}>
-                {["hot","all","new"].map(t => (
-                  <button key={t} onClick={()=>setSubTab(t)} style={{flex:1,padding:"7px 0",background:subTab===t?"#2a2200":"#0a1020",border:`1px solid ${subTab===t?"#c9920d":"#2a2a26"}`,borderRadius:3,color:subTab===t?"#e0a820":"#555550",cursor:"pointer",fontFamily:"inherit",fontSize:10,fontWeight:700,transition:"all 0.2s"}}>
-                    {t==="hot"?"🔥 Trending":t==="all"?"All Markets":"✦ New"}
-                  </button>
-                ))}
-              </div>
-
-              {/* Stats bar */}
-              <div style={{display:"flex",gap:6,marginBottom:12,overflowX:"auto"}}>
-                {[{l:"Total Volume",v:"$124M+"},{l:"Markets Live",v:"34"},{l:"Traders",v:"48,291"}].map((s,i) => (
-                  <div key={i} style={{flex:1,background:"#0a1020",border:"1px solid #2a2a26",borderRadius:3,padding:"7px 10px",textAlign:"center",minWidth:80}}>
-                    <div style={{fontSize:13,fontWeight:700,color:"#e0a820"}}>{s.v}</div>
-                    <div style={{fontSize:8,color:"#555550"}}>{s.l}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Commodities explainer shown when COMMODITIES filter is active */}
-              {sector==="COMMODITIES" && (
-                <div style={{background:"linear-gradient(135deg,#0d0f0a,#1a1800)",border:"1px solid #4d7c0f",borderRadius:4,padding:14,marginBottom:14}}>
-                  <div style={{fontSize:9,color:"#84cc16",fontWeight:700,letterSpacing:1,marginBottom:6}}>WHY COMMODITIES?</div>
-                  <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                    {[
-                      ["$10T","Global commodities market — zero crypto prediction coverage until HYPERFLEX"],
-                      ["10M","Monthly precious metals readers with strong commodity convictions and no way to act on them on-chain"],
-                      ["0","Competitors on HyperLiquid HIP-4 covering silver, gold, copper, uranium or lithium"],
-                    ].map(([stat,desc],i)=>(
-                      <div key={i} style={{display:"flex",gap:10,alignItems:"flex-start"}}>
-                        <div style={{fontSize:16,fontWeight:700,color:"#a3e635",minWidth:40}}>{stat}</div>
-                        <div style={{fontSize:10,color:"#4d7c0f",lineHeight:1.5}}>{desc}</div>
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{marginTop:10,paddingTop:10,borderTop:"1px solid #1a2e05",fontSize:9,color:"#365314"}}>
-                    💡 Real-time XAG, XAU, WTI, Copper, Uranium · Settling in USDH on HyperLiquid
-                  </div>
-                </div>
-              )}
-
-              {/* AI Scanner section header — shown when there are new markets */}
-              {filtered.some(m=>m.isNew) && (subTab==="hot"||subTab==="all"||subTab==="new") && (
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8,marginTop:4}}>
-                  <div style={{flex:1,height:1,background:"linear-gradient(90deg,#c9920d,transparent)"}}/>
-                  <div style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",background:"rgba(201,146,13,0.08)",border:"1px solid #2a2a26",borderRadius:3}}>
-                    <span style={{fontSize:8,color:"#e0a820",fontWeight:700,letterSpacing:1}}>✦ NEW TODAY</span>
-                  </div>
-                  <div style={{flex:1,height:1,background:"linear-gradient(90deg,transparent,#c9920d)"}}/>
-                </div>
-              )}
-              {(subTab==="new"
-                ? filtered.filter(m=>m.isNew)
-                : subTab==="hot"
-                  ? filtered
-                  : filtered
-              ).map(m=>(
-                <MktCard key={m.id} m={m} onSelect={()=>setMarketDetailView(m)}/>
-              ))}
-            </div>
-          )
-        )}
-
-        {/* COMBOS — DraftKings Same-Game Parlay style */}
-        {tab==="combos" && (
-          <div className="fade-in">
-            <div style={{background:"linear-gradient(135deg,#0d0a1a,#2a2200)",border:"1px solid #3a2d00",borderRadius:4,padding:14,marginBottom:14}}>
-              <div style={{fontSize:9,color:"#e0a820",fontWeight:700,letterSpacing:1,marginBottom:4}}>COMBO MARKETS</div>
-              <div style={{fontSize:15,fontWeight:700,color:"#ddd8cc",marginBottom:4}}>Stack multiple markets for bigger payouts</div>
-              <div style={{fontSize:11,color:"#7a7870"}}>All legs must win. Higher risk, exponential reward.</div>
-            </div>
-            {COMBO_MARKETS.map(combo => (
-              <ComboCard key={combo.id} combo={combo} onSelect={()=>notify(`✓ Viewing ${combo.name} · ${combo.multiplier} payout`)}/>
-            ))}
-            <div style={{background:"#1c1c19",border:"1px solid #2a2a26",borderRadius:4,padding:14,marginTop:8}}>
-              <div style={{fontSize:11,color:"#7a7870",marginBottom:8}}>🛠️ Build Your Own Combo</div>
-              <div style={{fontSize:10,color:"#555550",marginBottom:10}}>Select 2-5 markets to create a custom combo with calculated multiplier</div>
-              <button onClick={()=>notify("Custom combo builder coming soon!")} style={{width:"100%",padding:"11px 0",background:"#2a2200",border:"1px solid #b8820c",borderRadius:4,color:"#e0a820",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700}}>
-                + Create Custom Combo
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* JACKPOT — DraftKings pools style */}
-        {tab==="jackpot" && (
-          <div className="fade-in">
-            <DailyJackpot answers={jackpotAnswers} setAnswers={setJackpotAnswers} onSubmit={()=>{setJackpotSubmitted(true);notify("✓ Jackpot entry submitted! Results at midnight.");}} submitted={jackpotSubmitted}/>
-            <div style={{background:"#1c1c19",border:"1px solid #2a2a26",borderRadius:4,padding:14}}>
-              <div style={{fontSize:9,color:"#555550",fontWeight:700,letterSpacing:1,marginBottom:10}}>PRIZE STRUCTURE</div>
-              {[["5/5","$10,000 🎯"],["4/5","$500"],["3/5","$50"],["2/5","Entry refund"]].map(([k,v])=>(
-                <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #2a2a26",fontSize:12}}>
-                  <span style={{color:"#a09890"}}>{k} correct</span>
-                  <span style={{color:"#3dbd73",fontWeight:700}}>{v}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* PORTFOLIO — Kalshi portfolio tracking style */}
-        {tab==="portfolio" && (
-          <div className="fade-in">
-            <Portfolio user={user} apiGet={apiGet}/>
-          </div>
-        )}
-
-        {/* LEADERBOARD */}
-        {tab==="leaderboard" && (
-          <div className="fade-in">
-            <div style={{display:"flex",gap:4,marginBottom:12}}>
-              {["weekly","monthly","alltime"].map(t=>(
-                <button key={t} onClick={()=>setLeaderTab(t)} style={{flex:1,padding:"6px 0",background:leaderTab===t?"#2a2200":"#0a1020",border:`1px solid ${leaderTab===t?"#c9920d":"#2a2a26"}`,borderRadius:3,color:leaderTab===t?"#e0a820":"#555550",cursor:"pointer",fontFamily:"inherit",fontSize:9,fontWeight:700,transition:"all 0.2s"}}>
-                  {t==="alltime"?"All Time":t.charAt(0).toUpperCase()+t.slice(1)}
-                </button>
-              ))}
-            </div>
-            {LEADERBOARD_DATA.map((p,i)=>(
-              <div key={p.rank} style={{background:p.isUser?"#0d1a10":"#0a1020",border:`1px solid ${p.isUser?"#1a5c3a":"#2a2a26"}`,borderRadius:4,padding:14,marginBottom:8,display:"flex",alignItems:"center",gap:10,position:"relative",overflow:"hidden"}}>
-                {p.rank<=3&&<div style={{position:"absolute",top:0,left:0,width:3,height:"100%",background:p.rank===1?"#e0a820":p.rank===2?"#a09890":"#cd7c4e"}}/>}
-                <div style={{fontSize:18,fontWeight:700,color:"#555550",minWidth:24,textAlign:"center"}}>{p.badge||p.rank}</div>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:13,fontWeight:700,color:p.isUser?"#3dbd73":"#ddd8cc"}}>{p.name}{p.isUser?" (You)":""}</div>
-                  <div style={{fontSize:9,color:"#7a7870"}}>{p.trades} trades · {p.vol} volume</div>
-                </div>
-                <div style={{textAlign:"right"}}>
-                  <div style={{fontSize:14,fontWeight:700,color:"#3dbd73"}}>{p.pnl}</div>
-                  <div style={{fontSize:10,color:"#e0a820"}}>{p.roi} ROI</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* PROFILE */}
-        {tab==="profile" && (
-          <div className="fade-in">
-            <div style={{background:"#1c1c19",border:"1px solid #2a2a26",borderRadius:4,padding:16,marginBottom:14,textAlign:"center"}}>
-              <div style={{fontSize:42,marginBottom:8}}>⭐</div>
-              <div style={{fontSize:16,fontWeight:700,color:"#ddd8cc",marginBottom:2}}>YOU</div>
-              <div style={{fontSize:10,color:"#7a7870",marginBottom:12}}>BRONZE TIER · Rank #8</div>
-              <div style={{display:"flex",justifyContent:"center",gap:16}}>
-                {[{l:"P&L",v:"+$2,140"},{l:"ROI",v:"+42%"},{l:"Trades",v:"12"},{l:"Streak",v:"🔥4"}].map(s=>(
-                  <div key={s.l}>
-                    <div style={{fontSize:14,fontWeight:700,color:"#e0a820"}}>{s.v}</div>
-                    <div style={{fontSize:8,color:"#555550"}}>{s.l}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Achievements */}
-            <div style={{fontSize:9,color:"#555550",fontWeight:700,letterSpacing:1,marginBottom:8}}>ACHIEVEMENTS</div>
-            {[
-              {icon:"🎯",name:"First Blood",desc:"Placed your first trade",done:true},
-              {icon:"🔥",name:"4-Streak",desc:"4 correct picks in a row",done:true},
-              {icon:"🏆",name:"Top 10",desc:"Reached the leaderboard",done:true},
-              {icon:"💎",name:"Diamond",desc:"Trade $100K+ total volume",done:false},
-              {icon:"🐋",name:"Whale",desc:"Hold $50K+ in one market",done:false},
-            ].map((a,i)=>(
-              <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",background:a.done?"#0d1a10":"#0a1020",border:`1px solid ${a.done?"#1a5c3a":"#2a2a26"}`,borderRadius:4,marginBottom:6}}>
-                <span style={{fontSize:20,opacity:a.done?1:0.3}}>{a.icon}</span>
-                <div>
-                  <div style={{fontSize:12,fontWeight:700,color:a.done?"#ddd8cc":"#555550"}}>{a.name}</div>
-                  <div style={{fontSize:10,color:"#7a7870"}}>{a.desc}</div>
-                </div>
-                {a.done&&<span style={{marginLeft:"auto",fontSize:9,color:"#3dbd73",fontWeight:700}}>✓</span>}
-              </div>
-            ))}
-
-            {/* Referral */}
-            <div style={{background:"linear-gradient(135deg,#1c1c19,#2a2200)",border:"1px solid #3a2d00",borderRadius:4,padding:14,marginTop:12}}>
-              <div style={{fontSize:11,fontWeight:700,color:"#e0a820",marginBottom:4}}>💰 Refer & Earn</div>
-              <div style={{fontSize:10,color:"#7a7870",marginBottom:10}}>Get $25 for every friend who trades $100+</div>
-              <button onClick={()=>notify("✓ Referral link copied!")} style={{width:"100%",padding:"10px 0",background:"#2a2200",border:"1px solid #b8820c",borderRadius:3,color:"#e0a820",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700}}>
-                Copy Referral Link
-              </button>
-            </div>
-          </div>
-        )}
+      <div class="footer-col">
+        <h4>Creators</h4>
+        <ul>
+          <li><a href="/creator/dashboard">Dashboard</a></li>
+          <li><a href="/creator/signup">Create community</a></li>
+          <li><a href="/creator/terms">Creator Terms</a></li>
+        </ul>
       </div>
-
-      {/* Bottom Nav */}
-      <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,background:"#141412",borderTop:"1px solid #2a2a26",display:"flex",padding:"8px 0 12px"}}>
-        {[["markets","📊","Markets"],["combos","🎰","Combos"],["jackpot","🎯","Jackpot"],["portfolio","💼","Portfolio"],["leaderboard","🏆","Board"]].map(([t,icon,label])=>(
-          <button key={t} onClick={()=>{setTab(t);if(t==="markets")setMarketDetailView(null);}} style={{flex:1,background:"none",border:"none",color:tab===t?"#e0a820":"#555550",cursor:"pointer",fontFamily:"inherit",fontSize:8,display:"flex",flexDirection:"column",alignItems:"center",gap:2,transition:"color 0.2s"}}>
-            <span style={{fontSize:18}}>{icon}</span>
-            {label}
-          </button>
-        ))}
+      <div class="footer-col">
+        <h4>Company</h4>
+        <ul>
+          <li><a href="mailto:legal@hyperflex.network">Contact</a></li>
+          <li><a href="/creator/terms">Terms of Service</a></li>
+        </ul>
       </div>
-
-      {showAuth && (
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setShowAuth(false)}>
-          <div style={{background:"#1c1c19",border:"1px solid #2a2a26",borderRadius:8,padding:24,width:320}} onClick={e=>e.stopPropagation()}>
-            <div style={{fontSize:14,fontWeight:700,color:"#e0a820",marginBottom:16}}>{authMode==="login"?"LOGIN":"REGISTER"}</div>
-            {authMode==="register" && <input placeholder="Display Name" value={authName} onChange={e=>setAuthName(e.target.value)} style={{width:"100%",marginBottom:8,padding:8,background:"#0d0d0b",border:"1px solid #2a2a26",borderRadius:4,color:"#fff",fontFamily:"inherit",boxSizing:"border-box"}}/>}
-            <input placeholder="Email" value={authEmail} onChange={e=>setAuthEmail(e.target.value)} style={{width:"100%",marginBottom:8,padding:8,background:"#0d0d0b",border:"1px solid #2a2a26",borderRadius:4,color:"#fff",fontFamily:"inherit",boxSizing:"border-box"}}/>
-            <input placeholder="Password" type="password" value={authPassword} onChange={e=>setAuthPassword(e.target.value)} style={{width:"100%",marginBottom:12,padding:8,background:"#0d0d0b",border:"1px solid #2a2a26",borderRadius:4,color:"#fff",fontFamily:"inherit",boxSizing:"border-box"}}/>
-            <button onClick={()=>handleAuth(authMode,authEmail,authPassword,authName).then(()=>setShowAuth(false))} style={{width:"100%",padding:"10px 0",background:"#e0a820",border:"none",borderRadius:4,color:"#000",fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginBottom:8}}>{authMode==="login"?"LOGIN":"CREATE ACCOUNT"}</button>
-            <div style={{textAlign:"center",fontSize:11,color:"#7a7870",cursor:"pointer"}} onClick={()=>setAuthMode(authMode==="login"?"register":"login")}>{authMode==="login"?"No account? Register":"Have an account? Login"}</div>
-          </div>
-        </div>
-      )}
-      {/* Wallet Modal */}
-      {walletOpen && (
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:1000,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={()=>setWalletOpen(false)}>
-          <div style={{background:"#1c1c19",border:"1px solid #2a2a26",borderRadius:"20px 20px 0 0",padding:20,width:"100%",maxWidth:430,maxHeight:"80vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
-            {connected ? (
-              <>
-                <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>Wallet Connected</div>
-                <div style={{fontSize:10,color:"#7a7870",marginBottom:16,wordBreak:"break-all"}}>{connected}</div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
-                  <div style={{background:"#0a1020",border:"1px solid #2a2a26",borderRadius:4,padding:"10px 12px"}}>
-                    <div style={{fontSize:8,color:"#7a7870",marginBottom:2}}>USDC BALANCE</div>
-                    <div style={{fontSize:14,fontWeight:700,color:"#3dbd73"}}>${balance.toLocaleString(undefined,{minimumFractionDigits:2})}</div>
-                  </div>
-                  <div style={{background:"#0a1020",border:"1px solid #2a2a26",borderRadius:4,padding:"10px 12px"}}>
-                    <div style={{fontSize:8,color:"#7a7870",marginBottom:2}}>HYPE BALANCE</div>
-                    <div style={{fontSize:14,fontWeight:700,color:"#e0a820"}}>💧 {hypeBalance.toFixed(4)}</div>
-                  </div>
-                </div>
-                <a href={`https://app.hyperliquid.xyz/portfolio?address=${connected}`} target="_blank" rel="noopener noreferrer" style={{display:"block",textAlign:"center",padding:"10px 0",background:"#0a1020",border:"1px solid #2a2a26",borderRadius:3,color:"#e0a820",textDecoration:"none",fontFamily:"inherit",fontSize:11,fontWeight:700,marginBottom:8}}>
-                  View on Hyperliquid ↗
-                </a>
-                <button onClick={()=>{setConnected(null);setHlSigner(null);setBalance(0);setHypeBalance(0);setWalletOpen(false);notify("Wallet disconnected");}} style={{width:"100%",padding:"10px 0",background:"#1a0e0e",border:"1px solid #5c1a1a",borderRadius:3,color:"#d44c4c",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700}}>
-                  Disconnect
-                </button>
-              </>
-            ) : (
-              <>
-                <div style={{fontSize:13,fontWeight:700,marginBottom:16}}>Connect Wallet</div>
-                {WALLETS.map(w=>(
-                  <button key={w.id} onClick={()=>connectWallet(w.id)} disabled={!!connecting} style={{width:"100%",display:"flex",alignItems:"center",gap:12,padding:"13px 14px",background:connecting===w.id?"#2a2200":"#1c1c19",border:`1px solid ${connecting===w.id?"#c9920d":"#2a2a26"}`,borderRadius:4,color:"#ddd8cc",cursor:"pointer",fontFamily:"inherit",marginBottom:6,transition:"all 0.2s",textAlign:"left"}}>
-                    <span style={{fontSize:22}}>{w.icon}</span>
-                    <div><div style={{fontSize:13,fontWeight:700}}>{w.name}</div><div style={{fontSize:10,color:"#7a7870"}}>{w.desc}</div></div>
-                    {connecting===w.id&&<span style={{marginLeft:"auto",fontSize:10,color:"#e0a820"}}>Connecting...</span>}
-                  </button>
-                ))}
-                <div style={{fontSize:9,color:"#555550",textAlign:"center",marginTop:12}}>🔒 Non-custodial · Powered by Hyperliquid · Your keys, your funds</div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
     </div>
-  );
-}
+  </div>
+  <div class="footer-bottom">
+    <div class="footer-copy">© 2026 HYPERFLEX. All rights reserved.</div>
+    <div class="footer-legal">
+      <a href="/creator/terms">Terms</a>
+      <a href="mailto:legal@hyperflex.network">legal@hyperflex.network</a>
+    </div>
+  </div>
+</footer>
 
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<App />);
-  </script>
 </body>
 </html>
