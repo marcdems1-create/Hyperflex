@@ -1,0 +1,1432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>HYPERFLEX Community</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --ink: #0e0e0c;
+  --paper: #141412;
+  --cream: #1c1c19;
+  --text: #ddd8cc;
+  --gold: #c9920d;
+  --gold-lt: #e0a820;
+  --gold-bright: #f5c842;
+  --border: #2a2a26;
+  --dim: #7a7870;
+  --green: #2d9b5f;
+  --green-lt: rgba(45,155,95,0.15);
+  --red: #c0392b;
+  --red-lt: rgba(192,57,43,0.15);
+  --sans: 'Syne', sans-serif;
+  --mono: 'Space Mono', monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--paper); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+body {
+  background: var(--paper);
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100vh;
+}
+
+/* ── GRID BG ─── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(201,146,13,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(201,146,13,0.025) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── HEADER ─── */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(20,20,18,0.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  padding: 0 24px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.header-left { display: flex; align-items: center; gap: 16px; }
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+}
+.logo-hex { width: 26px; height: 26px; }
+.logo-name {
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  color: var(--text);
+}
+.header-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+}
+.community-name-header {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+.header-right { display: flex; align-items: center; gap: 10px; }
+
+.btn-auth {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  padding: 8px 16px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.18s;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--dim);
+}
+.btn-auth:hover { color: var(--text); border-color: var(--text); }
+.btn-auth.primary {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-weight: 700;
+}
+.btn-auth.primary:hover { background: var(--gold-bright); }
+.user-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+}
+.user-pill strong { color: var(--text); font-weight: 700; }
+.balance-badge {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--gold);
+  background: rgba(201,146,13,0.12);
+  border: 1px solid rgba(201,146,13,0.25);
+  padding: 4px 10px;
+  border-radius: 12px;
+}
+
+/* ── HERO ─── */
+.hero {
+  position: relative;
+  z-index: 1;
+  padding: 56px 24px 40px;
+  max-width: 960px;
+  margin: 0 auto;
+}
+.hero-eyebrow {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--gold);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.hero-eyebrow::before {
+  content: '';
+  display: inline-block;
+  width: 20px;
+  height: 1px;
+  background: var(--gold);
+}
+.hero h1 {
+  font-size: clamp(32px, 5vw, 52px);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  margin-bottom: 16px;
+}
+.hero-desc {
+  font-size: 15px;
+  color: var(--dim);
+  line-height: 1.6;
+  margin-bottom: 32px;
+  max-width: 520px;
+}
+.hero-stats {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.hero-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.hero-stat-val {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1;
+}
+.hero-stat-val.gold { color: var(--gold); }
+.hero-stat-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* ── CONTENT ─── */
+.content {
+  position: relative;
+  z-index: 1;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 24px 80px;
+}
+
+.section-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.section-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* ── MARKET CARDS ─── */
+.markets-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 48px;
+}
+
+.market-card {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  transition: border-color 0.2s, transform 0.15s;
+  cursor: pointer;
+}
+.market-card:hover {
+  border-color: rgba(201,146,13,0.35);
+  transform: translateY(-1px);
+}
+.market-card.resolved {
+  opacity: 0.6;
+  cursor: default;
+}
+.market-card.resolved:hover {
+  border-color: var(--border);
+  transform: none;
+}
+.market-card-inner {
+  padding: 20px 22px;
+}
+
+.market-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.market-question {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.4;
+  flex: 1;
+}
+.market-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 3px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.market-badge.live {
+  background: rgba(45,155,95,0.12);
+  border: 1px solid rgba(45,155,95,0.3);
+  color: var(--green);
+}
+.market-badge.resolved-badge {
+  background: rgba(122,120,112,0.1);
+  border: 1px solid var(--border);
+  color: var(--dim);
+}
+
+/* Odds bar */
+.odds-bar-wrap { margin-bottom: 14px; }
+.odds-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+  margin-bottom: 8px;
+  display: flex;
+}
+.odds-bar-yes {
+  background: var(--green);
+  height: 100%;
+  transition: width 0.5s ease;
+  border-radius: 3px 0 0 3px;
+}
+.odds-bar-no {
+  background: var(--red);
+  height: 100%;
+  transition: width 0.5s ease;
+  border-radius: 0 3px 3px 0;
+}
+.odds-labels {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.odds-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.odds-label.yes { color: var(--green); }
+.odds-label.no { color: var(--red); }
+.odds-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+.odds-dot.yes { background: var(--green); }
+.odds-dot.no { background: var(--red); }
+.odds-center {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+}
+
+/* Market meta */
+.market-meta {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.meta-item {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.meta-icon { font-size: 11px; }
+
+/* Predict buttons */
+.market-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  border-top: 1px solid var(--border);
+}
+.btn-predict {
+  padding: 13px 20px;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  letter-spacing: 0.02em;
+}
+.btn-predict:disabled { cursor: default; opacity: 0.4; }
+.btn-predict.yes {
+  background: var(--green-lt);
+  color: var(--green);
+  border-right: 1px solid var(--border);
+}
+.btn-predict.yes:not(:disabled):hover {
+  background: rgba(45,155,95,0.28);
+}
+.btn-predict.no {
+  background: var(--red-lt);
+  color: var(--red);
+}
+.btn-predict.no:not(:disabled):hover {
+  background: rgba(192,57,43,0.28);
+}
+
+/* Resolved outcome */
+.outcome-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  border-top: 1px solid var(--border);
+  letter-spacing: 0.06em;
+}
+.outcome-banner.yes { background: var(--green-lt); color: var(--green); }
+.outcome-banner.no { background: var(--red-lt); color: var(--red); }
+
+/* ── LEADERBOARD ─── */
+.leaderboard-card {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.lb-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 20px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
+}
+.lb-row:last-child { border-bottom: none; }
+.lb-row:hover { background: rgba(255,255,255,0.02); }
+.lb-rank {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  width: 24px;
+  text-align: center;
+  color: var(--dim);
+  flex-shrink: 0;
+}
+.lb-rank.gold { color: var(--gold); }
+.lb-rank.silver { color: #aaa; }
+.lb-rank.bronze { color: #cd7f32; }
+.lb-name {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.lb-score {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--gold);
+}
+.lb-correct {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+}
+
+/* ── EMPTY STATE ─── */
+.empty {
+  padding: 64px 32px;
+  text-align: center;
+  color: var(--dim);
+  font-size: 14px;
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.empty-icon { font-size: 40px; margin-bottom: 16px; }
+
+/* ── POWERED BY ─── */
+.powered {
+  text-align: center;
+  padding: 32px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+}
+.powered a {
+  color: var(--gold);
+  text-decoration: none;
+  font-weight: 700;
+}
+.powered a:hover { text-decoration: underline; }
+
+/* ── MODALS ─── */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10,10,8,0.8);
+  backdrop-filter: blur(4px);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+.overlay.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.modal {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 420px;
+  transform: translateY(16px);
+  transition: transform 0.2s;
+  overflow: hidden;
+}
+.overlay.show .modal { transform: translateY(0); }
+
+.modal-header {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.modal-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text);
+}
+.modal-close {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--dim);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.modal-close:hover { color: var(--text); border-color: var(--text); }
+
+.modal-body { padding: 24px; }
+.modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+/* Auth tabs */
+.auth-tabs {
+  display: flex;
+  gap: 0;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px;
+  margin-bottom: 24px;
+}
+.auth-tab {
+  flex: 1;
+  padding: 8px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  border-radius: 4px;
+  color: var(--dim);
+  transition: all 0.15s;
+  border: none;
+  background: transparent;
+}
+.auth-tab.active {
+  background: var(--cream);
+  color: var(--text);
+  font-weight: 700;
+}
+
+.field { margin-bottom: 16px; }
+.field label {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 7px;
+}
+.field input {
+  width: 100%;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.2s;
+}
+.field input:focus { border-color: var(--gold); }
+
+.modal-error {
+  background: rgba(192,57,43,0.1);
+  border: 1px solid rgba(192,57,43,0.3);
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 12px;
+  color: #e74c3c;
+  margin-bottom: 16px;
+  display: none;
+}
+.modal-error.show { display: block; }
+
+/* Predict modal specific */
+.predict-market-q {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.4;
+  margin-bottom: 20px;
+  padding: 14px;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.predict-side {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.side-btn {
+  padding: 12px;
+  border-radius: 7px;
+  border: 1.5px solid var(--border);
+  background: transparent;
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s;
+  color: var(--dim);
+}
+.side-btn.yes:hover, .side-btn.yes.active {
+  border-color: var(--green);
+  background: var(--green-lt);
+  color: var(--green);
+}
+.side-btn.no:hover, .side-btn.no.active {
+  border-color: var(--red);
+  background: var(--red-lt);
+  color: var(--red);
+}
+
+.amount-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 4px 4px 12px;
+}
+.amount-row:focus-within { border-color: var(--gold); }
+.amount-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: var(--mono);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  padding: 6px 0;
+}
+.amount-unit {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--gold);
+  padding: 6px 10px;
+  background: rgba(201,146,13,0.08);
+  border-radius: 4px;
+}
+.amount-hint {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+  margin-top: 6px;
+}
+.payout-preview {
+  margin-top: 16px;
+  padding: 12px 14px;
+  background: var(--paper);
+  border: 1px dashed rgba(201,146,13,0.3);
+  border-radius: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.payout-label { font-family: var(--mono); font-size: 11px; color: var(--dim); }
+.payout-val { font-family: var(--mono); font-size: 14px; font-weight: 700; color: var(--gold); }
+
+.btn-submit {
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: 14px;
+  padding: 11px 24px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.18s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-submit.primary {
+  background: var(--gold);
+  color: var(--ink);
+}
+.btn-submit.primary:hover { background: var(--gold-bright); }
+.btn-submit.primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-cancel {
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 11px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-cancel:hover { color: var(--text); border-color: var(--text); }
+
+/* Success toast */
+.toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%) translateY(80px);
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  z-index: 999;
+  transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s;
+  opacity: 0;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+.toast.show {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+}
+.toast.success { border-color: rgba(45,155,95,0.4); }
+.toast.error { border-color: rgba(192,57,43,0.4); color: #e74c3c; }
+
+/* Spinner */
+.spinner {
+  width: 14px; height: 14px;
+  border: 2px solid rgba(201,146,13,0.3);
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Loading skeleton */
+.skeleton-card {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 22px;
+  margin-bottom: 12px;
+}
+.skel {
+  background: linear-gradient(90deg, var(--border) 25%, rgba(255,255,255,0.04) 50%, var(--border) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: 4px;
+}
+@keyframes shimmer { to { background-position: -200% 0; } }
+
+@media (max-width: 600px) {
+  .hero { padding: 36px 16px 28px; }
+  .content { padding: 0 16px 60px; }
+  .header { padding: 0 16px; }
+  .hero-stats { gap: 16px; }
+  .market-top { flex-direction: column; gap: 8px; }
+  .predict-side { grid-template-columns: 1fr 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="header">
+  <div class="header-left">
+    <a href="/" class="logo">
+      <svg class="logo-hex" viewBox="0 0 26 26" fill="none">
+        <path d="M13 1.5L23 7.25V18.75L13 24.5L3 18.75V7.25L13 1.5Z" stroke="#c9920d" stroke-width="1.2" fill="rgba(201,146,13,0.08)"/>
+        <path d="M13 6.5L18 9.25V14.75L13 17.5L8 14.75V9.25L13 6.5Z" fill="#c9920d" opacity="0.55"/>
+      </svg>
+      <span class="logo-name">HYPERFLEX</span>
+    </a>
+    <div class="header-sep"></div>
+    <span class="community-name-header" id="headerCommunityName">Loading…</span>
+  </div>
+  <div class="header-right" id="headerRight">
+    <button class="btn-auth" onclick="openAuth('login')">Sign in</button>
+    <button class="btn-auth primary" onclick="openAuth('register')">Join</button>
+  </div>
+</header>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="hero-eyebrow">Prediction Market</div>
+  <h1 id="heroTitle">Loading community…</h1>
+  <p class="hero-desc" id="heroDesc">Make predictions, earn points, climb the leaderboard.</p>
+  <div class="hero-stats">
+    <div class="hero-stat">
+      <div class="hero-stat-val" id="statMarkets">—</div>
+      <div class="hero-stat-label">Active Markets</div>
+    </div>
+    <div class="hero-stat">
+      <div class="hero-stat-val gold" id="statPoints">—</div>
+      <div class="hero-stat-label">Points Name</div>
+    </div>
+    <div class="hero-stat">
+      <div class="hero-stat-val" id="statTraders">—</div>
+      <div class="hero-stat-label">Total Traders</div>
+    </div>
+  </div>
+</section>
+
+<!-- Content -->
+<main class="content">
+
+  <!-- Markets -->
+  <div class="section-label">Open Markets</div>
+  <div class="markets-grid" id="marketsGrid">
+    <!-- skeleton -->
+    <div class="skeleton-card">
+      <div class="skel" style="height:18px;width:70%;margin-bottom:14px"></div>
+      <div class="skel" style="height:6px;margin-bottom:16px"></div>
+      <div class="skel" style="height:12px;width:45%"></div>
+    </div>
+    <div class="skeleton-card">
+      <div class="skel" style="height:18px;width:55%;margin-bottom:14px"></div>
+      <div class="skel" style="height:6px;margin-bottom:16px"></div>
+      <div class="skel" style="height:12px;width:40%"></div>
+    </div>
+  </div>
+
+  <!-- Resolved Markets -->
+  <div id="resolvedSection" style="display:none">
+    <div class="section-label" style="margin-top:16px">Resolved Markets</div>
+    <div class="markets-grid" id="resolvedGrid"></div>
+  </div>
+
+  <!-- Leaderboard -->
+  <div id="leaderboardSection" style="display:none">
+    <div class="section-label" style="margin-top:8px">Leaderboard</div>
+    <div class="leaderboard-card" id="leaderboardCard"></div>
+  </div>
+
+</main>
+
+<div class="powered">
+  Powered by <a href="/">HYPERFLEX</a> — Build your own community →
+  <a href="/creator/signup">Get started free</a>
+</div>
+
+<!-- ══ AUTH MODAL ══ -->
+<div class="overlay" id="authOverlay" onclick="closeOverlayOnBg(event,'authOverlay')">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="authModalTitle">Join the community</span>
+      <button class="modal-close" onclick="closeAuth()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="tabRegister" onclick="switchTab('register')">Register</button>
+        <button class="auth-tab" id="tabLogin" onclick="switchTab('login')">Sign in</button>
+      </div>
+      <div class="modal-error" id="authError"></div>
+
+      <!-- Register form -->
+      <div id="registerForm">
+        <div class="field">
+          <label>Display Name</label>
+          <input type="text" id="regName" placeholder="Your name" autocomplete="name"/>
+        </div>
+        <div class="field">
+          <label>Email</label>
+          <input type="email" id="regEmail" placeholder="you@example.com" autocomplete="email"/>
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input type="password" id="regPassword" placeholder="Min 8 characters" autocomplete="new-password"/>
+        </div>
+      </div>
+
+      <!-- Login form -->
+      <div id="loginForm" style="display:none">
+        <div class="field">
+          <label>Email</label>
+          <input type="email" id="loginEmail" placeholder="you@example.com" autocomplete="email"/>
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input type="password" id="loginPassword" placeholder="Your password" autocomplete="current-password"/>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeAuth()">Cancel</button>
+      <button class="btn-submit primary" id="authSubmitBtn" onclick="submitAuth()">
+        <span id="authBtnText">Create account</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ PREDICT MODAL ══ -->
+<div class="overlay" id="predictOverlay" onclick="closeOverlayOnBg(event,'predictOverlay')">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="predictTitle">Place your prediction</span>
+      <button class="modal-close" onclick="closePredict()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="predict-market-q" id="predictQuestion"></div>
+      <div class="modal-error" id="predictError"></div>
+
+      <div style="margin-bottom:16px">
+        <div class="section-label" style="font-size:10px;margin-bottom:10px">Your pick</div>
+        <div class="predict-side">
+          <button class="side-btn yes" id="sideYes" onclick="selectSide('YES')">✓ YES</button>
+          <button class="side-btn no"  id="sideNo"  onclick="selectSide('NO')">✗ NO</button>
+        </div>
+      </div>
+
+      <div style="margin-bottom:4px">
+        <div class="section-label" style="font-size:10px;margin-bottom:10px">Amount</div>
+        <div class="amount-row">
+          <input class="amount-input" type="number" id="amountInput" value="100" min="10" step="10" oninput="updatePayout()"/>
+          <span class="amount-unit" id="amountUnit">pts</span>
+        </div>
+        <div class="amount-hint" id="amountHint">Balance: — pts</div>
+      </div>
+
+      <div class="payout-preview">
+        <span class="payout-label">Potential payout</span>
+        <span class="payout-val" id="payoutVal">200 pts</span>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closePredict()">Cancel</button>
+      <button class="btn-submit primary" id="predictSubmitBtn" onclick="submitPredict()">
+        <span id="predictBtnText">Confirm Prediction</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+const API = window.location.origin;
+const slug = window.location.pathname.replace(/^\//, '').split('/')[0];
+
+let community = null;
+let markets = [];
+let currentUser = null;
+let pendingMarket = null;
+let pendingSide = null;
+let authTab = 'register';
+
+// ── INIT ─────────────────────────────────────────────────────
+(async function init() {
+  restoreSession();
+  await loadCommunity();
+})();
+
+function restoreSession() {
+  const token = localStorage.getItem('hf_token');
+  const raw = localStorage.getItem('hf_user');
+  if (token && raw) {
+    try { currentUser = JSON.parse(raw); } catch {}
+    if (currentUser) renderUserHeader();
+  }
+}
+
+async function loadCommunity() {
+  try {
+    const r = await fetch(`${API}/api/community/${slug}`);
+    if (!r.ok) { showCommunityError(); return; }
+    const data = await r.json();
+    community = data.community;
+    markets = data.markets || [];
+    renderPage();
+    loadLeaderboard();
+  } catch {
+    showCommunityError();
+  }
+}
+
+function showCommunityError() {
+  document.getElementById('heroTitle').textContent = 'Community not found';
+  document.getElementById('heroDesc').textContent = 'This community page doesn\'t exist or is not active.';
+  document.getElementById('marketsGrid').innerHTML =
+    '<div class="empty"><div class="empty-icon">🔍</div>No community found for this URL.</div>';
+}
+
+// ── RENDER PAGE ───────────────────────────────────────────────
+function renderPage() {
+  const c = community;
+  document.title = `${c.display_name} — HYPERFLEX`;
+  document.getElementById('headerCommunityName').textContent = c.display_name;
+  document.getElementById('heroTitle').textContent = c.display_name;
+  document.getElementById('heroDesc').textContent =
+    `Make predictions on ${c.display_name}'s markets. Earn ${c.custom_points_name || 'Flex Points'} and top the leaderboard.`;
+
+  const active = markets.filter(m => !m.resolved);
+  const resolved = markets.filter(m => m.resolved);
+  const totalTraders = markets.reduce((s, m) => s + (m.trader_count || 0), 0);
+
+  document.getElementById('statMarkets').textContent = active.length;
+  document.getElementById('statPoints').textContent = c.custom_points_name || 'Flex Points';
+  document.getElementById('statTraders').textContent = totalTraders;
+  document.getElementById('amountUnit').textContent = 'pts';
+
+  // Render active markets
+  const grid = document.getElementById('marketsGrid');
+  if (active.length === 0) {
+    grid.innerHTML = '<div class="empty"><div class="empty-icon">📊</div>No open markets yet. Check back soon!</div>';
+  } else {
+    grid.innerHTML = active.map(m => marketCardHTML(m, false)).join('');
+  }
+
+  // Render resolved markets
+  if (resolved.length > 0) {
+    document.getElementById('resolvedSection').style.display = 'block';
+    document.getElementById('resolvedGrid').innerHTML = resolved.map(m => marketCardHTML(m, true)).join('');
+  }
+}
+
+function marketCardHTML(m, isResolved) {
+  const yp = Number(m.yes_price) || 0.5;
+  const np = Number(m.no_price)  || 0.5;
+  const yesPct = Math.round(yp * 100);
+  const noPct  = Math.round(np * 100);
+  const closes  = formatDate(m.expiry_date);
+  const traders = m.trader_count || 0;
+  const cat     = (m.category || 'other').toLowerCase();
+
+  let actionsHTML;
+  if (isResolved) {
+    const won = m.outcome === 'YES' || m.outcome === true;
+    actionsHTML = `
+      <div class="outcome-banner ${won ? 'yes' : 'no'}">
+        ${won ? '✓ Resolved YES' : '✗ Resolved NO'}
+      </div>`;
+  } else {
+    actionsHTML = `
+      <div class="market-actions">
+        <button class="btn-predict yes" onclick="onPredict(event,'${m.id}','YES')">
+          ✓ YES <span style="opacity:.6;font-size:11px">${yesPct}%</span>
+        </button>
+        <button class="btn-predict no" onclick="onPredict(event,'${m.id}','NO')">
+          ✗ NO <span style="opacity:.6;font-size:11px">${noPct}%</span>
+        </button>
+      </div>`;
+  }
+
+  return `
+    <div class="market-card${isResolved ? ' resolved' : ''}" id="mkt-${m.id}">
+      <div class="market-card-inner">
+        <div class="market-top">
+          <div class="market-question">${escHtml(m.question)}</div>
+          <span class="market-badge ${isResolved ? 'resolved-badge' : 'live'}">${isResolved ? 'Resolved' : 'Live'}</span>
+        </div>
+        <div class="odds-bar-wrap">
+          <div class="odds-bar">
+            <div class="odds-bar-yes" style="width:${yesPct}%"></div>
+            <div class="odds-bar-no"  style="width:${noPct}%"></div>
+          </div>
+          <div class="odds-labels">
+            <span class="odds-label yes"><span class="odds-dot yes"></span>YES ${yesPct}%</span>
+            <span class="odds-center">${cat}</span>
+            <span class="odds-label no">NO ${noPct}%<span class="odds-dot no" style="margin-left:5px"></span></span>
+          </div>
+        </div>
+        <div class="market-meta">
+          <span class="meta-item"><span class="meta-icon">📅</span> Closes ${closes}</span>
+          <span class="meta-item"><span class="meta-icon">👥</span> ${traders} trader${traders !== 1 ? 's' : ''}</span>
+        </div>
+      </div>
+      ${actionsHTML}
+    </div>`;
+}
+
+// ── LEADERBOARD ───────────────────────────────────────────────
+async function loadLeaderboard() {
+  try {
+    const r = await fetch(`${API}/api/leaderboard`);
+    if (!r.ok) return;
+    const data = await r.json();
+    if (!Array.isArray(data) || data.length === 0) return;
+
+    const top = data.slice(0, 10);
+    const pointsName = community?.custom_points_name || 'pts';
+    const section = document.getElementById('leaderboardSection');
+    const card = document.getElementById('leaderboardCard');
+
+    card.innerHTML = top.map((row, i) => {
+      const rankClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
+      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`;
+      const name = escHtml(row.display_name || row.user_id?.slice(0,8) || 'Anonymous');
+      const pnl  = (row.total_pnl || 0).toFixed(0);
+      const wins = row.wins || 0;
+      return `
+        <div class="lb-row">
+          <div class="lb-rank ${rankClass}">${medal}</div>
+          <div class="lb-name">${name}</div>
+          <div class="lb-correct">${wins}W</div>
+          <div class="lb-score">+${pnl} ${pointsName}</div>
+        </div>`;
+    }).join('');
+
+    section.style.display = 'block';
+  } catch {}
+}
+
+// ── PREDICT FLOW ──────────────────────────────────────────────
+function onPredict(e, marketId, side) {
+  e.stopPropagation();
+  const m = markets.find(x => x.id === marketId || x.id == marketId);
+  if (!m) return;
+
+  pendingMarket = m;
+  pendingSide   = side;
+
+  if (!currentUser) {
+    openAuth('register');
+    return;
+  }
+  openPredict(m, side);
+}
+
+function openPredict(m, side) {
+  document.getElementById('predictQuestion').textContent = m.question;
+  document.getElementById('predictError').classList.remove('show');
+  document.getElementById('predictError').textContent = '';
+  selectSide(side);
+  document.getElementById('amountInput').value = 100;
+  const bal = currentUser?.balance || 0;
+  document.getElementById('amountHint').textContent =
+    `Balance: ${Number(bal).toLocaleString()} pts`;
+  updatePayout();
+  document.getElementById('predictOverlay').classList.add('show');
+}
+
+function selectSide(side) {
+  pendingSide = side;
+  document.getElementById('sideYes').classList.toggle('active', side === 'YES');
+  document.getElementById('sideNo').classList.toggle('active',  side === 'NO');
+}
+
+function updatePayout() {
+  const m = pendingMarket;
+  if (!m) return;
+  const amount = parseFloat(document.getElementById('amountInput').value) || 0;
+  const price  = pendingSide === 'YES' ? (Number(m.yes_price) || 0.5) : (Number(m.no_price) || 0.5);
+  const payout = price > 0 ? (amount / price) : amount * 2;
+  document.getElementById('payoutVal').textContent =
+    `${Math.round(payout).toLocaleString()} pts`;
+}
+
+async function submitPredict() {
+  const errEl  = document.getElementById('predictError');
+  const btn    = document.getElementById('predictSubmitBtn');
+  const txtEl  = document.getElementById('predictBtnText');
+  errEl.classList.remove('show');
+
+  const amount = parseFloat(document.getElementById('amountInput').value);
+  if (!pendingSide) { showPredictError('Choose YES or NO.'); return; }
+  if (!amount || amount < 10) { showPredictError('Minimum prediction is 10 pts.'); return; }
+  if (amount > (currentUser?.balance || 0)) { showPredictError('Insufficient balance.'); return; }
+
+  btn.disabled = true;
+  txtEl.innerHTML = '<span class="spinner"></span> Placing…';
+
+  try {
+    const r = await fetch(`${API}/trade`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: currentUser.id,
+        market_id: pendingMarket.id,
+        side: pendingSide,
+        amount
+      })
+    });
+    const data = await r.json();
+    if (!r.ok) { showPredictError(data.error || 'Trade failed.'); return; }
+
+    // Deduct balance locally
+    currentUser.balance = (currentUser.balance || 0) - amount;
+    localStorage.setItem('hf_user', JSON.stringify(currentUser));
+    renderUserHeader();
+
+    closePredict();
+    showToast(`✓ Prediction placed — ${pendingSide} for ${amount.toLocaleString()} pts`, 'success');
+
+    // Increment trader count on card locally
+    const card = document.getElementById(`mkt-${pendingMarket.id}`);
+    if (card) {
+      const el = card.querySelector('.meta-item:nth-child(2)');
+      if (el) {
+        const n = (pendingMarket.trader_count || 0) + 1;
+        el.innerHTML = `<span class="meta-icon">👥</span> ${n} trader${n !== 1 ? 's' : ''}`;
+      }
+    }
+  } catch {
+    showPredictError('Network error. Try again.');
+  } finally {
+    btn.disabled = false;
+    txtEl.textContent = 'Confirm Prediction';
+  }
+}
+
+function showPredictError(msg) {
+  const el = document.getElementById('predictError');
+  el.textContent = msg;
+  el.classList.add('show');
+}
+
+function closePredict() {
+  document.getElementById('predictOverlay').classList.remove('show');
+  pendingMarket = null;
+}
+
+// ── AUTH ──────────────────────────────────────────────────────
+function openAuth(tab) {
+  switchTab(tab);
+  document.getElementById('authError').classList.remove('show');
+  document.getElementById('authOverlay').classList.add('show');
+}
+function closeAuth() {
+  document.getElementById('authOverlay').classList.remove('show');
+}
+
+function switchTab(tab) {
+  authTab = tab;
+  const isReg = tab === 'register';
+  document.getElementById('tabRegister').classList.toggle('active', isReg);
+  document.getElementById('tabLogin').classList.toggle('active', !isReg);
+  document.getElementById('registerForm').style.display  = isReg ? 'block' : 'none';
+  document.getElementById('loginForm').style.display     = isReg ? 'none'  : 'block';
+  document.getElementById('authBtnText').textContent     = isReg ? 'Create account' : 'Sign in';
+  document.getElementById('authModalTitle').textContent  = isReg ? 'Join the community' : 'Welcome back';
+  document.getElementById('authError').classList.remove('show');
+}
+
+async function submitAuth() {
+  const errEl = document.getElementById('authError');
+  const btn   = document.getElementById('authSubmitBtn');
+  const txtEl = document.getElementById('authBtnText');
+  errEl.classList.remove('show');
+
+  btn.disabled = true;
+  const origText = txtEl.textContent;
+  txtEl.innerHTML = '<span class="spinner"></span>';
+
+  try {
+    let r, data;
+    if (authTab === 'register') {
+      const name = document.getElementById('regName').value.trim();
+      const email = document.getElementById('regEmail').value.trim();
+      const pw    = document.getElementById('regPassword').value;
+      if (!name || !email || !pw) { showAuthError('All fields required.'); return; }
+      if (pw.length < 8) { showAuthError('Password must be at least 8 characters.'); return; }
+      r = await fetch(`${API}/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ display_name: name, email, password: pw })
+      });
+      data = await r.json();
+      if (!r.ok) { showAuthError(data.error || 'Registration failed.'); return; }
+      // Auto-login after register
+      r = await fetch(`${API}/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password: pw })
+      });
+      data = await r.json();
+      if (!r.ok) { showAuthError(data.error || 'Login failed after register.'); return; }
+    } else {
+      const email = document.getElementById('loginEmail').value.trim();
+      const pw    = document.getElementById('loginPassword').value;
+      if (!email || !pw) { showAuthError('Email and password required.'); return; }
+      r = await fetch(`${API}/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password: pw })
+      });
+      data = await r.json();
+      if (!r.ok) { showAuthError(data.error || 'Invalid credentials.'); return; }
+    }
+
+    // Save session
+    currentUser = data.user;
+    localStorage.setItem('hf_token', data.token);
+    localStorage.setItem('hf_user', JSON.stringify(data.user));
+    renderUserHeader();
+    closeAuth();
+    showToast(`Welcome, ${currentUser.display_name}!`, 'success');
+
+    // Resume pending prediction if any
+    if (pendingMarket) {
+      setTimeout(() => openPredict(pendingMarket, pendingSide), 300);
+    }
+  } catch {
+    showAuthError('Network error. Please try again.');
+  } finally {
+    btn.disabled = false;
+    txtEl.textContent = origText;
+  }
+}
+
+function showAuthError(msg) {
+  const el = document.getElementById('authError');
+  el.textContent = msg;
+  el.classList.add('show');
+}
+
+// ── HEADER USER STATE ─────────────────────────────────────────
+function renderUserHeader() {
+  const hr = document.getElementById('headerRight');
+  if (!currentUser) {
+    hr.innerHTML = `
+      <button class="btn-auth" onclick="openAuth('login')">Sign in</button>
+      <button class="btn-auth primary" onclick="openAuth('register')">Join</button>`;
+    return;
+  }
+  const bal = Number(currentUser.balance || 0).toLocaleString();
+  const pts = community?.custom_points_name || 'pts';
+  hr.innerHTML = `
+    <span class="balance-badge">${bal} ${pts}</span>
+    <div class="user-pill">
+      <strong>${escHtml(currentUser.display_name || currentUser.email)}</strong>
+    </div>
+    <button class="btn-auth" onclick="signOut()">Sign out</button>`;
+}
+
+function signOut() {
+  localStorage.removeItem('hf_token');
+  localStorage.removeItem('hf_user');
+  currentUser = null;
+  renderUserHeader();
+  showToast('Signed out.', 'success');
+}
+
+// ── HELPERS ───────────────────────────────────────────────────
+function closeOverlayOnBg(e, id) {
+  if (e.target.id === id) {
+    if (id === 'authOverlay') closeAuth();
+    if (id === 'predictOverlay') closePredict();
+  }
+}
+
+function formatDate(d) {
+  if (!d) return '—';
+  const date = new Date(d);
+  if (isNaN(date)) return d;
+  const now = new Date();
+  const diff = date - now;
+  if (diff < 0) return 'Closed';
+  const days = Math.floor(diff / 86400000);
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Tomorrow';
+  if (days < 7) return `${days}d`;
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+let toastTimer;
+function showToast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast ${type} show`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3200);
+}
+
+// Enter key support for auth forms
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeAuth(); closePredict(); }
+  if (e.key === 'Enter') {
+    if (document.getElementById('authOverlay').classList.contains('show')) submitAuth();
+    if (document.getElementById('predictOverlay').classList.contains('show')) submitPredict();
+  }
+});
+</script>
+</body>
+</html>

@@ -1405,6 +1405,20 @@ app.get('/creator/dashboard', (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
+// 10. PUBLIC COMMUNITY PAGE (slug catch-all — must be last)
+// GET /:slug  →  serves community.html, injects slug via query
+// ════════════════════════════════════════════════════════════
+const RESERVED_SLUGS = new Set([
+  'creator', 'api', 'markets', 'positions', 'leaderboard',
+  'trade', 'register', 'login', 'favicon.ico', 'robots.txt'
+]);
+app.get('/:slug', (req, res, next) => {
+  const { slug } = req.params;
+  if (RESERVED_SLUGS.has(slug) || slug.includes('.')) return next();
+  res.sendFile(path.join(__dirname, 'public', 'community.html'));
+});
+
+// ════════════════════════════════════════════════════════════
 // END CREATOR PLATFORM ROUTES
 // ════════════════════════════════════════════════════════════
 
