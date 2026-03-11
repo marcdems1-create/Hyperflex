@@ -1398,6 +1398,75 @@ app.get('/api/community/:slug', async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
+// 8b. EDIT / DELETE MARKET
+// PUT  /markets/:id   — update question, expiry_date, resolution_source, category
+// DELETE /markets/:id — archive market (set is_public=false)
+// ════════════════════════════════════════════════════════════
+
+app.put('/markets/:id', requireCreator, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { question, expiry_date, resolution_source, category } = req.body;
+
+    // Verify ownership
+    const { data: market } = await supabase
+      .from('markets')
+      .select('id, creator_id')
+      .eq('id', id)
+      .eq('creator_id', req.creator.id)
+      .maybeSingle();
+
+    if (!market) return res.status(404).json({ error: 'Market not found or not yours' });
+
+    const updates = {};
+    if (question !== undefined) updates.question = question;
+    if (expiry_date !== undefined) updates.expiry_date = expiry_date;
+    if (resolution_source !== undefined) updates.resolution_source = resolution_source;
+    if (category !== undefined) { updates.category = category; updates.commodity = category; }
+
+    const { data, error } = await supabase
+      .from('markets')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json({ ok: true, market: data });
+  } catch (err) {
+    console.error('market update error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/markets/:id', requireCreator, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Verify ownership
+    const { data: market } = await supabase
+      .from('markets')
+      .select('id, creator_id')
+      .eq('id', id)
+      .eq('creator_id', req.creator.id)
+      .maybeSingle();
+
+    if (!market) return res.status(404).json({ error: 'Market not found or not yours' });
+
+    const { error } = await supabase
+      .from('markets')
+      .update({ is_public: false })
+      .eq('id', id);
+
+    if (error) throw error;
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('market delete error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
 // 9. SERVE CREATOR PAGES
 // These routes serve the HTML files
 // ════════════════════════════════════════════════════════════

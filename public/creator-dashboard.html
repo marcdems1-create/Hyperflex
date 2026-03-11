@@ -202,6 +202,18 @@ body {
   transition: all 0.2s;
 }
 .btn-secondary:hover { border-color: var(--text); color: var(--text); }
+.btn-danger {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--red);
+  background: rgba(192,57,43,0.1);
+  border: 1px solid rgba(192,57,43,0.3);
+  padding: 9px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-danger:hover { background: rgba(192,57,43,0.2); border-color: var(--red); }
 
 .content { padding: 32px; }
 
@@ -941,6 +953,49 @@ body {
   </div>
 </div>
 
+<!-- Edit Market Modal -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Edit Market</div>
+      <button class="modal-close" onclick="closeEditModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="editMarketId"/>
+      <div class="field">
+        <label>Market Question</label>
+        <textarea id="editQuestion" rows="2" placeholder="Will the Patriots make the playoffs this season?"></textarea>
+      </div>
+      <div class="field">
+        <label>Category</label>
+        <select id="editCategory">
+          <option value="sports">Sports</option>
+          <option value="entertainment">Entertainment</option>
+          <option value="finance">Finance</option>
+          <option value="crypto">Crypto</option>
+          <option value="politics">Politics</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Resolution Date</label>
+        <input type="date" id="editDate"/>
+      </div>
+      <div class="field">
+        <label>Resolution Source <span style="font-weight:400;text-transform:none;font-size:11px">(optional)</span></label>
+        <input type="text" id="editSource" placeholder="ESPN, official results, etc."/>
+      </div>
+    </div>
+    <div class="modal-footer" style="justify-content:space-between">
+      <button class="btn-danger" onclick="archiveMarket()">Archive Market</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn-secondary" onclick="closeEditModal()">Cancel</button>
+        <button class="btn-primary" onclick="saveMarketEdit()">Save Changes →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div class="toast" id="toast">
   <span id="toastIcon">✓</span>
@@ -1035,7 +1090,7 @@ function renderMarketRows(markets, containerId) {
     const statusLabel = m.resolved ? 'Resolved' : expired ? 'Needs resolve' : 'Live';
     const yes = Math.round((m.yes_price || 0.5) * 100);
     return `
-      <div class="market-row">
+      <div class="market-row" onclick="openEditModal('${m.id}')" style="cursor:pointer" title="Click to edit">
         <div>
           <div class="market-question">${m.question}</div>
           <div class="market-meta">${m.category || '—'} · Closes ${formatDate(m.expiry_date)}</div>
@@ -1049,7 +1104,7 @@ function renderMarketRows(markets, containerId) {
         <div class="market-status">
           <div class="status-dot ${status}"></div>
           <span class="status-text">${statusLabel}</span>
-          ${status === 'pending' ? `<button class="resolve-btn" onclick="openResolveModal('${m.id}', \`${m.question.replace(/`/g,"'")}\`)">Resolve</button>` : ''}
+          ${status === 'pending' ? `<button class="resolve-btn" onclick="event.stopPropagation();openResolveModal('${m.id}', \`${m.question.replace(/`/g,"'")}\`)">Resolve</button>` : ''}
         </div>
       </div>
     `;
@@ -1283,6 +1338,70 @@ function showToast(msg, type = 'success') {
   document.getElementById('toastIcon').textContent = type === 'success' ? '✓' : '✗';
   t.className = 'toast ' + type + ' show';
   setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// Edit market
+function openEditModal(marketId) {
+  const m = communityMarkets.find(x => x.id === marketId);
+  if (!m) return;
+  document.getElementById('editMarketId').value = m.id;
+  document.getElementById('editQuestion').value = m.question || '';
+  document.getElementById('editCategory').value = m.category || 'other';
+  document.getElementById('editDate').value = m.expiry_date ? m.expiry_date.split('T')[0] : '';
+  document.getElementById('editSource').value = m.resolution_source || '';
+  document.getElementById('editModal').classList.add('show');
+}
+function closeEditModal() {
+  document.getElementById('editModal').classList.remove('show');
+}
+
+async function saveMarketEdit() {
+  const id = document.getElementById('editMarketId').value;
+  const question = document.getElementById('editQuestion').value.trim();
+  const category = document.getElementById('editCategory').value;
+  const expiry_date = document.getElementById('editDate').value;
+  const resolution_source = document.getElementById('editSource').value.trim();
+
+  if (!question || !expiry_date) { showToast('Question and date are required.', 'error'); return; }
+
+  try {
+    const r = await fetch(API + '/markets/' + id, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ question, category, expiry_date, resolution_source })
+    });
+    const data = await r.json();
+    if (data.ok) {
+      closeEditModal();
+      showToast('Market updated ✓', 'success');
+      setTimeout(() => init(), 500);
+    } else {
+      showToast(data.error || 'Failed to save changes.', 'error');
+    }
+  } catch {
+    showToast('Network error. Please try again.', 'error');
+  }
+}
+
+async function archiveMarket() {
+  const id = document.getElementById('editMarketId').value;
+  if (!confirm('Archive this market? It will be hidden from your community page.')) return;
+  try {
+    const r = await fetch(API + '/markets/' + id, {
+      method: 'DELETE',
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    const data = await r.json();
+    if (data.ok) {
+      closeEditModal();
+      showToast('Market archived.', 'success');
+      setTimeout(() => init(), 500);
+    } else {
+      showToast(data.error || 'Failed to archive market.', 'error');
+    }
+  } catch {
+    showToast('Network error. Please try again.', 'error');
+  }
 }
 
 // Init
