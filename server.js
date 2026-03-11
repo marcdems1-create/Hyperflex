@@ -105,8 +105,27 @@ app.get('/markets/:id', async (req, res) => {
 
 // Create market (admin)
 app.post('/markets', async (req, res) => {
-  const { question, commodity, target_price, direction, expiry_date } = req.body;
-  const row = { question, commodity, target_price, direction, expiry_date };
+  const {
+    question, expiry_date,
+    commodity, target_price, direction,
+    category, creator_id, tenant_slug, is_public, resolution_source
+  } = req.body;
+
+  const row = {
+    question,
+    expiry_date,
+    commodity:    commodity    || category || '',
+    target_price: target_price ?? 0,
+    direction:    direction    || 'above',
+    yes_price:    0.5,
+    no_price:     0.5,
+    resolved:     false,
+  };
+  if (category          !== undefined) row.category          = category;
+  if (creator_id        !== undefined) row.creator_id        = creator_id;
+  if (tenant_slug       !== undefined) row.tenant_slug       = tenant_slug;
+  if (is_public         !== undefined) row.is_public         = is_public;
+  if (resolution_source !== undefined) row.resolution_source = resolution_source;
 
   const auth = req.headers.authorization;
   const token = auth && auth.startsWith('Bearer ') ? auth.slice(7) : null;
@@ -841,6 +860,9 @@ app.post('/api/creator/signup', async (req, res) => {
       const marketsToInsert = selected_markets.map(m => ({
         question: m.question,
         category: m.category || 'other',
+        commodity: m.category || 'other',
+        target_price: 0,
+        direction: 'above',
         expiry_date: m.resolution_date || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
         creator_id: newUser.id,
         tenant_slug: slug,
