@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>HYPERFLEX — Creator Sign In</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --ink: #0e0e0c;
+  --paper: #141412;
+  --cream: #1c1c19;
+  --text: #ddd8cc;
+  --gold: #c9920d;
+  --gold-lt: #e0a820;
+  --gold-bright: #f5c842;
+  --border: #2a2a26;
+  --dim: #7a7870;
+  --green: #2d9b5f;
+  --red: #c0392b;
+  --sans: 'Syne', sans-serif;
+  --mono: 'Space Mono', monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+::-webkit-scrollbar { display: none; }
+
+body {
+  background: var(--paper);
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(201,146,13,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(201,146,13,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.page {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header */
+.header {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+}
+.logo-hex { width: 32px; height: 32px; }
+.logo-name {
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: 0.08em;
+  color: var(--text);
+}
+.header-tag {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--gold);
+  background: rgba(201,146,13,0.1);
+  border: 1px solid rgba(201,146,13,0.3);
+  padding: 3px 8px;
+  border-radius: 2px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* Main */
+.main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  max-width: 1100px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 80px 24px;
+  gap: 80px;
+  align-items: center;
+}
+
+/* Left pitch */
+.pitch { position: sticky; top: 80px; }
+.pitch-eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--gold);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pitch-eyebrow::before {
+  content: '';
+  display: inline-block;
+  width: 24px;
+  height: 1px;
+  background: var(--gold);
+}
+.pitch h1 {
+  font-weight: 800;
+  font-size: 42px;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  margin-bottom: 20px;
+  color: var(--text);
+}
+.pitch h1 span { color: var(--gold); }
+.pitch-desc {
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--dim);
+  margin-bottom: 36px;
+}
+
+.stat-row {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.stat-icon {
+  font-size: 18px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(201,146,13,0.08);
+  border: 1px solid rgba(201,146,13,0.15);
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.stat-text strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+.stat-text span {
+  font-size: 12px;
+  color: var(--dim);
+}
+
+/* Form card */
+.form-card {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.form-header {
+  padding: 24px 28px;
+  border-bottom: 1px solid var(--border);
+}
+.form-header h2 {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.form-header p {
+  font-size: 13px;
+  color: var(--dim);
+}
+
+.form-body { padding: 28px; }
+
+.field { margin-bottom: 20px; }
+.field label {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.field input {
+  width: 100%;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 13px 14px;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.2s;
+}
+.field input:focus { border-color: var(--gold); }
+.field input.error { border-color: var(--red); }
+
+.global-error {
+  padding: 11px 14px;
+  background: rgba(192,57,43,0.1);
+  border: 1px solid rgba(192,57,43,0.3);
+  border-radius: 6px;
+  font-size: 12px;
+  color: #e74c3c;
+  margin-bottom: 20px;
+  display: none;
+  line-height: 1.4;
+}
+.global-error.show { display: block; }
+
+.btn-login {
+  width: 100%;
+  padding: 14px;
+  background: var(--gold);
+  border: none;
+  border-radius: 6px;
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--ink);
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  letter-spacing: 0.01em;
+}
+.btn-login:hover { background: var(--gold-bright); transform: translateY(-1px); }
+.btn-login:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.form-footer {
+  padding: 20px 28px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+}
+.signup-link {
+  font-size: 13px;
+  color: var(--dim);
+}
+.signup-link a {
+  color: var(--gold);
+  text-decoration: none;
+  font-weight: 700;
+}
+.signup-link a:hover { text-decoration: underline; }
+
+/* Spinner */
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(14,14,12,0.3);
+  border-top-color: var(--ink);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Success flash */
+.success-banner {
+  padding: 12px 14px;
+  background: rgba(45,155,95,0.1);
+  border: 1px solid rgba(45,155,95,0.3);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--green);
+  margin-bottom: 20px;
+  display: none;
+  align-items: center;
+  gap: 8px;
+}
+.success-banner.show { display: flex; }
+
+@media (max-width: 768px) {
+  .main { grid-template-columns: 1fr; gap: 40px; padding: 40px 16px; }
+  .pitch { position: static; }
+  .pitch h1 { font-size: 32px; }
+  .form-body { padding: 20px; }
+  .form-footer { padding: 16px 20px; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="header">
+    <a href="/" class="logo">
+      <svg class="logo-hex" viewBox="0 0 32 32" fill="none">
+        <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="#c9920d" stroke-width="1.5" fill="rgba(201,146,13,0.1)"/>
+        <path d="M16 8L22 11.5V18.5L16 22L10 18.5V11.5L16 8Z" fill="#c9920d" opacity="0.6"/>
+      </svg>
+      <span class="logo-name">HYPERFLEX</span>
+    </a>
+    <span class="header-tag">Creator Portal</span>
+  </header>
+
+  <main class="main">
+
+    <!-- Left: Pitch -->
+    <div class="pitch">
+      <div class="pitch-eyebrow">Welcome back</div>
+      <h1>Your community<br/>is <span>waiting</span>.</h1>
+      <p class="pitch-desc">
+        Sign in to manage your prediction markets, resolve outcomes,
+        and see what your community is predicting right now.
+      </p>
+      <div class="stat-row">
+        <div class="stat-item">
+          <div class="stat-icon">📊</div>
+          <div class="stat-text">
+            <strong>Markets dashboard</strong>
+            <span>Create, manage, and resolve your community's markets</span>
+          </div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-icon">🏆</div>
+          <div class="stat-text">
+            <strong>Live leaderboard</strong>
+            <span>See who's leading and track community engagement</span>
+          </div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-icon">✨</div>
+          <div class="stat-text">
+            <strong>AI market ideas</strong>
+            <span>Generate new markets in seconds with Claude</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Form -->
+    <div>
+      <div class="form-card">
+        <div class="form-header">
+          <h2>Sign in to your account</h2>
+          <p>Access your creator dashboard</p>
+        </div>
+
+        <div class="form-body">
+          <div class="success-banner" id="successBanner">
+            <span>✓</span> Signed in — redirecting to your dashboard…
+          </div>
+          <div class="global-error" id="globalError"></div>
+
+          <div class="field">
+            <label>Email</label>
+            <input type="email" id="email" placeholder="you@yourshow.com"
+                   autocomplete="email" autofocus/>
+          </div>
+
+          <div class="field">
+            <label>Password</label>
+            <input type="password" id="password" placeholder="Your password"
+                   autocomplete="current-password"/>
+          </div>
+
+          <button class="btn-login" id="loginBtn" onclick="handleLogin()">
+            Sign In →
+          </button>
+        </div>
+
+        <div class="form-footer">
+          <div class="signup-link">
+            New here? <a href="/creator/signup">Create your community →</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+const API = window.location.origin;
+
+// If already logged in, skip straight to dashboard
+(function() {
+  const token = localStorage.getItem('hf_token');
+  const user  = localStorage.getItem('hf_user');
+  if (token && user) {
+    try {
+      const u = JSON.parse(user);
+      if (u && u.id) { window.location.replace('/creator/dashboard'); return; }
+    } catch {}
+  }
+})();
+
+async function handleLogin() {
+  const email    = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const errEl    = document.getElementById('globalError');
+  const btn      = document.getElementById('loginBtn');
+
+  errEl.classList.remove('show');
+
+  if (!email || !password) {
+    showError('Please enter your email and password.');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Signing in…';
+
+  try {
+    const r = await fetch(`${API}/api/creator/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+
+    const data = await r.json();
+
+    if (!r.ok) {
+      showError(data.error || 'Invalid email or password.');
+      return;
+    }
+
+    // Persist session
+    localStorage.setItem('hf_token', data.token);
+    localStorage.setItem('hf_user', JSON.stringify(data.user));
+
+    // Show success state then redirect
+    document.getElementById('successBanner').classList.add('show');
+    document.getElementById('globalError').classList.remove('show');
+    btn.innerHTML = '✓ Signed in';
+
+    setTimeout(() => window.location.replace('/creator/dashboard'), 600);
+
+  } catch {
+    showError('Network error — please check your connection and try again.');
+  } finally {
+    if (btn.innerHTML.includes('Signing')) {
+      btn.disabled = false;
+      btn.innerHTML = 'Sign In →';
+    }
+  }
+}
+
+function showError(msg) {
+  const el = document.getElementById('globalError');
+  el.textContent = msg;
+  el.classList.add('show');
+  document.getElementById('loginBtn').disabled = false;
+  document.getElementById('loginBtn').innerHTML = 'Sign In →';
+}
+
+// Enter key submits
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter') handleLogin();
+});
+</script>
+</body>
+</html>
