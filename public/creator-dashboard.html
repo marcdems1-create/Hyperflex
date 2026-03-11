@@ -1101,7 +1101,8 @@ body {
       </div>
       <div class="field">
         <label>Market Question</label>
-        <textarea id="newQuestion" rows="2" placeholder="Will the Patriots make the playoffs this season?"></textarea>
+        <textarea id="newQuestion" rows="2" placeholder="Will the Patriots make the playoffs this season?" onblur="validateQuestion()"></textarea>
+        <div id="questionWarning" style="display:none;margin-top:8px;padding:10px 12px;background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.3);border-radius:6px;font-size:12px;color:#e0a820;line-height:1.5"></div>
       </div>
       <div class="field">
         <label>Category</label>
@@ -1503,6 +1504,7 @@ function openCreateModal() {
   d.setDate(d.getDate() + 30);
   document.getElementById('newDate').value = d.toISOString().split('T')[0];
   document.getElementById('newQuestion').value = '';
+  document.getElementById('questionWarning').style.display = 'none';
   document.getElementById('newCategory').value = 'sports';
   loadSourceTemplate('sports');
   document.getElementById('createModal').classList.add('show');
@@ -2026,6 +2028,36 @@ async function publishYtMarkets() {
   if (published > 0) showToast(`${published} market${published > 1 ? 's' : ''} published! 🎯`, 'success');
   if (failed > 0) showToast(`${failed} market${failed > 1 ? 's' : ''} failed to publish.`, 'error');
   if (published > 0) setTimeout(() => init(), 600);
+}
+
+// ── QUESTION VALIDATOR ───────────────────────────────────
+async function validateQuestion() {
+  const question = document.getElementById('newQuestion').value.trim();
+  const warn = document.getElementById('questionWarning');
+  if (!question || question.length < 10) { warn.style.display = 'none'; return; }
+
+  try {
+    const r = await fetch(API + '/api/creator/validate-question', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ question })
+    });
+    const data = await r.json();
+    if (data.valid) {
+      warn.style.display = 'none';
+    } else {
+      let msg = `⚠️ This question may be unresolvable. ${data.reason}`;
+      if (data.suggested_rewrite) {
+        msg += `<br><strong>Suggested rewrite:</strong> <em>${data.suggested_rewrite}</em>
+          <button onclick="document.getElementById('newQuestion').value=${JSON.stringify(data.suggested_rewrite)};document.getElementById('questionWarning').style.display='none'"
+            style="margin-left:8px;font-size:11px;font-family:var(--mono);background:rgba(201,146,13,0.15);border:1px solid rgba(201,146,13,0.3);border-radius:4px;padding:2px 8px;color:var(--gold);cursor:pointer">Use this</button>`;
+      }
+      warn.innerHTML = msg;
+      warn.style.display = 'block';
+    }
+  } catch {
+    warn.style.display = 'none';
+  }
 }
 
 // ── SOURCE MANAGEMENT ────────────────────────────────────

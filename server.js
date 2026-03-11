@@ -1170,6 +1170,67 @@ app.put('/api/creator/settings', requireCreator, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
+// 5a. QUESTION VALIDATOR
+// POST /api/creator/validate-question
+// Body: { question }
+// Returns: { valid, reason, suggested_rewrite? }
+// ════════════════════════════════════════════════════════════
+app.post('/api/creator/validate-question', requireCreator, async (req, res) => {
+  try {
+    const { question } = req.body;
+    if (!question || question.trim().length < 5) {
+      return res.json({ valid: false, reason: 'Question is too short.', suggested_rewrite: null });
+    }
+
+    if (!ANTHROPIC_API_KEY) {
+      return res.json({ valid: true, reason: 'Validation unavailable (no API key).', suggested_rewrite: null });
+    }
+
+    const prompt = `You are a prediction market quality checker. Evaluate whether this market question is resolvable and well-formed.
+
+A good prediction market question:
+- Has a clear YES or NO answer determinable by a specific future date
+- References concrete, observable events
+- Is not ambiguous about what counts as YES vs NO
+- Cannot be answered by pure opinion or interpretation
+
+Question: "${question.trim()}"
+
+Return ONLY valid JSON:
+{
+  "valid": true or false,
+  "reason": "one sentence explanation",
+  "suggested_rewrite": "improved version of the question if invalid, or null if already valid"
+}`;
+
+    const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 300,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    const aiData = await aiRes.json();
+    const text = aiData.content?.[0]?.text || '';
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return res.json({ valid: true, reason: 'Could not parse validation result.', suggested_rewrite: null });
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    res.json({
+      valid: !!parsed.valid,
+      reason: parsed.reason || '',
+      suggested_rewrite: parsed.suggested_rewrite || null
+    });
+  } catch (err) {
+    // Fail open — don't block creation on validation errors
+    res.json({ valid: true, reason: 'Validation service unavailable.', suggested_rewrite: null });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
 // 5b. REWARDS CRUD
 // GET  /api/creator/:slug/rewards  — public
 // POST /api/creator/rewards        — requireCreator
