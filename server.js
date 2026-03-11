@@ -132,14 +132,26 @@ app.post('/markets', async (req, res) => {
   if (token) {
     try {
       const payload = jwt.verify(token, process.env.JWT_SECRET || 'hyperflex_secret');
-      const { data: settings } = await supabase
+      // Try creator_id first (new schema), fall back to user_id (old schema)
+      let { data: settings } = await supabase
         .from('creator_settings')
         .select('slug')
-        .eq('user_id', payload.id)
+        .eq('creator_id', payload.id)
         .maybeSingle();
-      if (settings?.slug) row.creator_slug = settings.slug;
+      if (!settings) {
+        ({ data: settings } = await supabase
+          .from('creator_settings')
+          .select('slug')
+          .eq('user_id', payload.id)
+          .maybeSingle());
+      }
+      if (settings?.slug) {
+        row.creator_slug = settings.slug;
+        // Populate tenant_slug if the caller didn't provide it
+        if (!row.tenant_slug) row.tenant_slug = settings.slug;
+      }
     } catch (e) {
-      // ignore invalid token; insert without creator_slug
+      // ignore invalid token
     }
   }
 
@@ -1361,10 +1373,11 @@ app.get('/api/community/:slug', async (req, res) => {
 
     if (!settings) return res.status(404).json({ error: 'Community not found' });
 
+    // Match on any of the three fields that market-creation routes populate
     const { data: markets } = await supabase
       .from('markets')
       .select('id, question, category, expiry_date, yes_price, no_price, volume, trader_count, resolved, outcome')
-      .eq('tenant_slug', slug)
+      .or(`tenant_slug.eq.${slug},creator_slug.eq.${slug},creator_id.eq.${settings.creator_id}`)
       .eq('is_public', true)
       .order('created_at', { ascending: false });
 

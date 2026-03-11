@@ -1167,6 +1167,7 @@ async function createMarket() {
         expiry_date: date,
         resolution_source: source,
         creator_id: user.id,
+        tenant_slug: user.slug,
         is_public: true
       })
     });
