@@ -1710,17 +1710,36 @@ async function fetchYouTubeTranscript(videoId) {
   }
 }
 
+async function fetchYouTubeLiveChat(videoId) {
+  try {
+    const vidRes = await fetch(
+      `https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id=${videoId}&key=${YOUTUBE_API_KEY}`
+    );
+    const vidData = await vidRes.json();
+    const liveChatId = vidData.items?.[0]?.liveStreamingDetails?.activeLiveChatId;
+    if (!liveChatId) return null;
+
+    const chatRes = await fetch(
+      `https://www.googleapis.com/youtube/v3/liveChat/messages?liveChatId=${liveChatId}&part=snippet&maxResults=200&key=${YOUTUBE_API_KEY}`
+    );
+    const chatData = await chatRes.json();
+    if (chatData.error) return null;
+
+    return (chatData.items || [])
+      .map(item => item.snippet?.displayMessage || '')
+      .filter(Boolean);
+  } catch (err) {
+    console.warn('live chat fetch failed:', err.message);
+    return null;
+  }
+}
+
 app.post('/api/creator/scan-youtube', requireCreator, async (req, res) => {
   try {
-    const { url } = req.body;
+    const { url, scan_type = 'comments' } = req.body;
     if (!url) return res.status(400).json({ error: 'YouTube URL is required' });
-
-    if (!YOUTUBE_API_KEY) {
-      return res.status(503).json({ error: 'YouTube API key not configured. Add YOUTUBE_API_KEY to your environment.' });
-    }
-    if (!ANTHROPIC_API_KEY) {
-      return res.status(503).json({ error: 'Anthropic API key not configured.' });
-    }
+    if (!YOUTUBE_API_KEY) return res.status(503).json({ error: 'YouTube API key not configured. Add YOUTUBE_API_KEY to your environment.' });
+    if (!ANTHROPIC_API_KEY) return res.status(503).json({ error: 'Anthropic API key not configured.' });
 
     // ── Extract video ID ──────────────────────────────────────
     let videoId = null;
@@ -1759,119 +1778,180 @@ app.post('/api/creator/scan-youtube', requireCreator, async (req, res) => {
 
     if (!videoId) return res.status(400).json({ error: 'Could not extract a video ID. Paste a YouTube video URL (e.g. youtube.com/watch?v=...)' });
 
-    // ── Fetch title, comments, and transcript in parallel ─────
-    const [infoRes, commentRes, transcript] = await Promise.all([
-      videoTitle ? null : fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${YOUTUBE_API_KEY}`),
-      fetch(`https://www.googleapis.com/youtube/v3/commentThreads?part=snippet&videoId=${videoId}&order=relevance&maxResults=100&key=${YOUTUBE_API_KEY}`),
-      fetchYouTubeTranscript(videoId)
-    ]);
-
-    if (infoRes) {
+    // ── Fetch video title if not already set ─────────────────
+    if (!videoTitle) {
+      const infoRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${YOUTUBE_API_KEY}`);
       const infoData = await infoRes.json();
       if (infoData.error) throw new Error(infoData.error.message);
       videoTitle = infoData.items?.[0]?.snippet?.title || 'YouTube video';
     }
 
-    const commentData = await commentRes.json();
-    if (commentData.error) {
-      if (commentData.error.code === 403) return res.status(403).json({ error: 'Comments are disabled for this video.' });
-      throw new Error(commentData.error.message || 'YouTube API error');
-    }
-
-    const comments = (commentData.items || []).map(item =>
-      item.snippet?.topLevelComment?.snippet?.textDisplay || ''
-    ).filter(Boolean);
-
-    if (comments.length === 0 && !transcript) {
-      return res.status(404).json({ error: 'No comments or transcript found for this video.' });
-    }
-
-    // ── Build prompt ──────────────────────────────────────────
     const in30 = getDate(30);
     const in60 = getDate(60);
     const in90 = getDate(90);
 
-    const commentBlock = comments.length
-      ? comments.slice(0, 100).map((c, i) => `${i + 1}. ${c.replace(/<[^>]+>/g, '').trim()}`).join('\n')
-      : '(comments unavailable)';
+    // ══════════════════════════════════════════════════════════
+    // SCAN TYPE: comments
+    // ══════════════════════════════════════════════════════════
+    if (scan_type === 'comments') {
+      const commentRes = await fetch(
+        `https://www.googleapis.com/youtube/v3/commentThreads?part=snippet&videoId=${videoId}&order=relevance&maxResults=100&key=${YOUTUBE_API_KEY}`
+      );
+      const commentData = await commentRes.json();
+      if (commentData.error) {
+        if (commentData.error.code === 403) return res.status(403).json({ error: 'Comments are disabled for this video.' });
+        throw new Error(commentData.error.message || 'YouTube API error');
+      }
 
-    // Truncate transcript to ~4000 chars to stay within token budget
-    const transcriptBlock = transcript
-      ? transcript.slice(0, 4000) + (transcript.length > 4000 ? '… [truncated]' : '')
-      : '(transcript unavailable — captions may be disabled or not yet generated)';
+      const comments = (commentData.items || [])
+        .map(item => item.snippet?.topLevelComment?.snippet?.textDisplay || '')
+        .filter(Boolean);
 
-    const hasTranscript = !!transcript;
+      if (comments.length === 0) return res.status(404).json({ error: 'No comments found for this video.' });
 
-    const prompt = `You are analyzing a YouTube video to generate two types of prediction markets for a fan community.
+      const commentBlock = comments.slice(0, 100)
+        .map((c, i) => `${i + 1}. ${c.replace(/<[^>]+>/g, '').trim()}`)
+        .join('\n');
+
+      const prompt = `You are analyzing YouTube comments to generate prediction markets for a fan community.
 
 Video title: "${videoTitle}"
 
-━━━ COMMENTS (what fans are debating) ━━━
+COMMENTS (what fans are debating):
 ${commentBlock}
 
-━━━ VIDEO TRANSCRIPT (what the creator said) ━━━
-${transcriptBlock}
+Generate 5-8 prediction markets based on the predictions, debates, and speculation in these comments. Focus on FUTURE questions fans want answered.
 
-Generate two sets of prediction markets:
-
-**SET 1 — FAN DEBATE MARKETS** (source: "comments")
-Based on predictions, debates, and speculation in the comments. These are FUTURE questions fans want answered.
-Generate 3-6 markets.
-
-**SET 2 — TRANSCRIPT MARKETS** (source: "transcript")
-${hasTranscript
-  ? `Based on claims, predictions, or upcoming events the CREATOR mentioned in the video. These should be verifiable using the video itself as the resolution source (e.g. "Will X that was claimed in the video turn out to be true?", "Will the creator follow through on Y they announced?"). Generate 3-5 markets.`
-  : `The transcript was unavailable — generate 0 transcript markets.`
-}
-
-Rules for ALL markets:
+Rules:
 - Clear YES or NO question, objectively resolvable
 - Resolution dates: near=${in30}, mid=${in60}, far=${in90}
-- No duplicate ideas between the two sets
+- No politics or harmful content
 
-Return ONLY valid JSON, no other text:
+Return ONLY valid JSON:
 {
-  "comment_markets": [
+  "markets": [
     { "question": "Will ...?", "category": "sports|entertainment|finance|politics|other", "resolution_date": "YYYY-MM-DD" }
-  ],
-  "transcript_markets": [
-    { "question": "Will ...?", "category": "sports|entertainment|finance|politics|other", "resolution_date": "YYYY-MM-DD", "resolution_note": "one sentence on how to verify this" }
   ]
 }`;
 
-    const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-opus-4-6',
-        max_tokens: 1800,
-        messages: [{ role: 'user', content: prompt }]
-      })
-    });
+      const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model: 'claude-opus-4-6', max_tokens: 1200, messages: [{ role: 'user', content: prompt }] })
+      });
+      const aiData = await aiRes.json();
+      const rawText = aiData.content?.[0]?.text || '';
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error('AI returned invalid format');
+      const markets = (JSON.parse(jsonMatch[0]).markets || []).map(m => ({ ...m, source: 'comments' }));
 
-    const aiData = await aiRes.json();
-    const text = aiData.content?.[0]?.text || '';
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('AI returned invalid format');
+      return res.json({ markets, comment_markets: markets, comment_count: comments.length, video_title: videoTitle });
+    }
 
-    const parsed = JSON.parse(jsonMatch[0]);
+    // ══════════════════════════════════════════════════════════
+    // SCAN TYPE: transcript
+    // ══════════════════════════════════════════════════════════
+    if (scan_type === 'transcript') {
+      const transcript = await fetchYouTubeTranscript(videoId);
+      if (!transcript) return res.status(404).json({ error: 'No transcript available for this video. Captions may be disabled or not yet generated.' });
 
-    const commentMarkets = (parsed.comment_markets || []).map(m => ({ ...m, source: 'comments' }));
-    const transcriptMarkets = (parsed.transcript_markets || []).map(m => ({ ...m, source: 'transcript' }));
+      const transcriptBlock = transcript.slice(0, 5000) + (transcript.length > 5000 ? '… [truncated]' : '');
 
-    res.json({
-      markets: [...commentMarkets, ...transcriptMarkets],
-      comment_markets: commentMarkets,
-      transcript_markets: transcriptMarkets,
-      comment_count: comments.length,
-      transcript_length: transcript ? transcript.length : 0,
-      has_transcript: hasTranscript,
-      video_title: videoTitle
-    });
+      const prompt = `You are analyzing a YouTube video transcript to generate prediction markets for a fan community.
+
+Video title: "${videoTitle}"
+
+VIDEO TRANSCRIPT:
+${transcriptBlock}
+
+Generate 4-6 prediction markets based on:
+- Claims or predictions the creator made in the video
+- Upcoming events or plans the creator announced
+- Things the creator said they would do next
+- Challenges, bets, or goals mentioned
+
+Each market should be verifiable against future events or follow-up content.
+
+Rules:
+- Clear YES or NO question, objectively resolvable
+- Resolution dates: near=${in30}, mid=${in60}, far=${in90}
+- Include a brief resolution_note explaining how to verify it
+
+Return ONLY valid JSON:
+{
+  "markets": [
+    { "question": "Will ...?", "category": "sports|entertainment|finance|politics|other", "resolution_date": "YYYY-MM-DD", "resolution_note": "how to verify" }
+  ]
+}`;
+
+      const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model: 'claude-opus-4-6', max_tokens: 1200, messages: [{ role: 'user', content: prompt }] })
+      });
+      const aiData = await aiRes.json();
+      const rawText = aiData.content?.[0]?.text || '';
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error('AI returned invalid format');
+      const markets = (JSON.parse(jsonMatch[0]).markets || []).map(m => ({ ...m, source: 'transcript' }));
+
+      return res.json({ markets, transcript_markets: markets, transcript_length: transcript.length, has_transcript: true, video_title: videoTitle });
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // SCAN TYPE: live_chat
+    // ══════════════════════════════════════════════════════════
+    if (scan_type === 'live_chat') {
+      const messages = await fetchYouTubeLiveChat(videoId);
+      if (!messages || messages.length === 0) {
+        return res.status(404).json({ error: 'No live chat replay found for this video. The video must be a completed live stream with chat replay enabled.' });
+      }
+
+      const chatBlock = messages.slice(0, 200)
+        .map((msg, i) => `${i + 1}. ${msg.trim()}`)
+        .join('\n');
+
+      const prompt = `You are analyzing a YouTube live stream chat replay to generate prediction markets for a fan community.
+
+Video title: "${videoTitle}"
+
+LIVE CHAT MESSAGES (${messages.length} total, showing up to 200):
+${chatBlock}
+
+Generate 4-7 prediction markets based on:
+- Recurring questions or debates many viewers were asking
+- Predictions viewers were making during the stream
+- Speculation about upcoming outcomes or events
+- Topics that generated visible excitement or disagreement
+
+Focus on questions where the chat was divided — not settled facts.
+
+Rules:
+- Clear YES or NO question, objectively resolvable
+- Resolution dates: near=${in30}, mid=${in60}, far=${in90}
+
+Return ONLY valid JSON:
+{
+  "markets": [
+    { "question": "Will ...?", "category": "sports|entertainment|finance|politics|other", "resolution_date": "YYYY-MM-DD" }
+  ]
+}`;
+
+      const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model: 'claude-opus-4-6', max_tokens: 1200, messages: [{ role: 'user', content: prompt }] })
+      });
+      const aiData = await aiRes.json();
+      const rawText = aiData.content?.[0]?.text || '';
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error('AI returned invalid format');
+      const markets = (JSON.parse(jsonMatch[0]).markets || []).map(m => ({ ...m, source: 'live_chat' }));
+
+      return res.json({ markets, live_chat_markets: markets, live_chat_count: messages.length, video_title: videoTitle });
+    }
+
+    return res.status(400).json({ error: 'Invalid scan_type. Use: comments, transcript, or live_chat.' });
 
   } catch (err) {
     console.error('scan-youtube error:', err);
@@ -2004,6 +2084,11 @@ app.delete('/markets/:id', requireCreator, async (req, res) => {
 // Signup page
 app.get('/creator/signup', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'creator-signup.html'));
+});
+
+// Creator Terms of Service
+app.get('/creator/terms', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'creator-terms.html'));
 });
 
 // Login page

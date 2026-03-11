@@ -1270,29 +1270,42 @@ body {
 <div class="modal-overlay" id="youtubeModal">
   <div class="modal" style="max-width:580px">
     <div class="modal-header">
-      <div class="modal-title">▶ Scan YouTube Comments</div>
+      <div class="modal-title">▶ Scan YouTube</div>
       <button class="modal-close" onclick="closeYoutubeModal()">×</button>
     </div>
     <div class="modal-body">
       <div class="modal-ai-box">
         <div class="modal-ai-icon">🤖</div>
-        <div class="modal-ai-text">
-          <strong>AI reads your fans.</strong> Paste any YouTube video or channel URL — Claude scans the top comments and extracts the predictions your community is already making.
+        <div class="modal-ai-text" id="ytAiDesc">
+          <strong>AI reads your content.</strong> Paste any YouTube video URL — Claude scans comments, transcript, or live chat to extract the predictions your community is already making.
         </div>
       </div>
+
+      <!-- Scan type toggle -->
+      <div style="display:flex;gap:6px;margin-bottom:16px">
+        <button id="ytToggleComments" onclick="setYtScanType('comments')"
+          style="flex:1;padding:8px 4px;font-family:var(--mono);font-size:11px;letter-spacing:0.08em;border-radius:6px;border:1px solid var(--gold);background:var(--gold);color:var(--ink);cursor:pointer;font-weight:700">
+          💬 Comments
+        </button>
+        <button id="ytToggleTranscript" onclick="setYtScanType('transcript')"
+          style="flex:1;padding:8px 4px;font-family:var(--mono);font-size:11px;letter-spacing:0.08em;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--dim);cursor:pointer">
+          🎙 Transcript
+        </button>
+        <button id="ytToggleLiveChat" onclick="setYtScanType('live_chat')"
+          style="flex:1;padding:8px 4px;font-family:var(--mono);font-size:11px;letter-spacing:0.08em;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--dim);cursor:pointer">
+          💬 Live Chat
+        </button>
+      </div>
+
       <div class="field">
         <label>YouTube Video or Channel URL</label>
         <input type="url" id="youtubeUrl" placeholder="https://youtube.com/watch?v=... or https://youtube.com/@yourchannel"/>
       </div>
       <div id="ytScanResult" style="display:none">
         <div id="ytVideoMeta" style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:16px;padding:10px 12px;background:var(--paper);border:1px solid var(--border);border-radius:6px;line-height:1.6"></div>
-        <div id="ytCommentSection" style="display:none;margin-bottom:16px">
-          <div style="font-family:var(--mono);font-size:10px;color:var(--gold);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px">💬 Fan Debate Markets — from comments</div>
-          <div id="ytCommentList" style="display:flex;flex-direction:column;gap:8px"></div>
-        </div>
-        <div id="ytTranscriptSection" style="display:none">
-          <div style="font-family:var(--mono);font-size:10px;color:#5ba4cf;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px">🎙 Transcript Markets — from what the creator said</div>
-          <div id="ytTranscriptList" style="display:flex;flex-direction:column;gap:8px"></div>
+        <div id="ytMarketSection" style="display:none">
+          <div id="ytMarketSectionLabel" style="font-family:var(--mono);font-size:10px;color:var(--gold);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px"></div>
+          <div id="ytMarketList" style="display:flex;flex-direction:column;gap:8px"></div>
         </div>
       </div>
       <div id="ytError" style="display:none;padding:10px 12px;background:rgba(192,57,43,0.1);border:1px solid rgba(192,57,43,0.3);border-radius:6px;font-size:12px;color:#e74c3c;line-height:1.4"></div>
@@ -1882,20 +1895,42 @@ function showToast(msg, type = 'success') {
 
 // YouTube scanner
 let ytSuggestedMarkets = [];
+let ytScanType = 'comments';
+
+const YT_SCAN_LABELS = {
+  comments:    { btn: '💬 Scan Comments →',    scanning: 'Scanning comments…',    icon: '💬', color: 'var(--gold)',  sectionLabel: '💬 Fan Debate Markets — from comments' },
+  transcript:  { btn: '🎙 Scan Transcript →',  scanning: 'Scanning transcript…',  icon: '🎙', color: '#5ba4cf',    sectionLabel: '🎙 Creator Announcements — from transcript' },
+  live_chat:   { btn: '💬 Scan Live Chat →',   scanning: 'Scanning live chat…',   icon: '💬', color: '#9b59b6',    sectionLabel: '💬 Live Chat Markets — from stream chat' }
+};
+
+function setYtScanType(type) {
+  ytScanType = type;
+  const toggleIds = { comments: 'ytToggleComments', transcript: 'ytToggleTranscript', live_chat: 'ytToggleLiveChat' };
+  Object.entries(toggleIds).forEach(([t, id]) => {
+    const btn = document.getElementById(id);
+    const active = t === type;
+    btn.style.background = active ? 'var(--gold)' : 'transparent';
+    btn.style.color = active ? 'var(--ink)' : 'var(--dim)';
+    btn.style.borderColor = active ? 'var(--gold)' : 'var(--border)';
+    btn.style.fontWeight = active ? '700' : '400';
+  });
+  const cfg = YT_SCAN_LABELS[type];
+  const scanBtn = document.getElementById('ytScanBtn');
+  if (scanBtn) scanBtn.textContent = cfg.btn;
+}
 
 function openYoutubeModal() {
   document.getElementById('youtubeUrl').value = '';
   document.getElementById('ytScanResult').style.display = 'none';
   document.getElementById('ytError').style.display = 'none';
-  document.getElementById('ytCommentList').innerHTML = '';
-  document.getElementById('ytTranscriptList').innerHTML = '';
-  document.getElementById('ytCommentSection').style.display = 'none';
-  document.getElementById('ytTranscriptSection').style.display = 'none';
+  document.getElementById('ytMarketList').innerHTML = '';
+  document.getElementById('ytMarketSection').style.display = 'none';
   document.getElementById('ytVideoMeta').textContent = '';
   document.getElementById('ytFooter').innerHTML = `
     <button class="btn-secondary" onclick="closeYoutubeModal()">Cancel</button>
-    <button class="btn-primary" id="ytScanBtn" onclick="runYoutubeScan()">Scan Comments & Transcript →</button>
+    <button class="btn-primary" id="ytScanBtn" onclick="runYoutubeScan()">${YT_SCAN_LABELS[ytScanType].btn}</button>
   `;
+  setYtScanType(ytScanType);
   ytSuggestedMarkets = [];
   document.getElementById('youtubeModal').classList.add('show');
 }
@@ -1907,9 +1942,10 @@ async function runYoutubeScan() {
   const url = document.getElementById('youtubeUrl').value.trim();
   if (!url) { showToast('Paste a YouTube URL first.', 'error'); return; }
 
+  const cfg = YT_SCAN_LABELS[ytScanType];
   const btn = document.getElementById('ytScanBtn');
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Scanning comments & transcript…';
+  btn.innerHTML = `<span class="spinner"></span> ${cfg.scanning}`;
   document.getElementById('ytError').style.display = 'none';
   document.getElementById('ytScanResult').style.display = 'none';
 
@@ -1917,7 +1953,7 @@ async function runYoutubeScan() {
     const r = await fetch(API + '/api/creator/scan-youtube', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-      body: JSON.stringify({ url })
+      body: JSON.stringify({ url, scan_type: ytScanType })
     });
     const data = await r.json();
 
@@ -1928,52 +1964,33 @@ async function runYoutubeScan() {
     }
 
     ytSuggestedMarkets = data.markets || [];
-    const commentMarkets = data.comment_markets || [];
-    const transcriptMarkets = data.transcript_markets || [];
 
-    // Meta summary
-    const transcriptStatus = data.has_transcript
-      ? `transcript: ${Math.round(data.transcript_length / 100) / 10}k chars`
-      : 'no transcript (captions unavailable)';
+    // Meta summary line
+    let metaDetail = '';
+    if (ytScanType === 'comments') metaDetail = `${data.comment_count} comments scanned`;
+    else if (ytScanType === 'transcript') metaDetail = `${Math.round((data.transcript_length || 0) / 100) / 10}k chars of transcript`;
+    else if (ytScanType === 'live_chat') metaDetail = `${data.live_chat_count} chat messages scanned`;
+
     document.getElementById('ytVideoMeta').innerHTML =
-      `📹 <strong style="color:var(--text)">${data.video_title}</strong><br>` +
-      `${data.comment_count} comments · ${transcriptStatus} · ${ytSuggestedMarkets.length} markets generated`;
+      `${cfg.icon} <strong style="color:var(--text)">${data.video_title}</strong><br>` +
+      `${metaDetail} · ${ytSuggestedMarkets.length} markets generated`;
 
-    // Render comment markets
-    if (commentMarkets.length > 0) {
-      document.getElementById('ytCommentList').innerHTML = commentMarkets.map((m, i) => {
-        const globalIdx = i;
-        return `
-          <label class="yt-market-item selected" id="ytItem${globalIdx}" onclick="toggleYtItem(${globalIdx})">
-            <input type="checkbox" id="ytCheck${globalIdx}" checked/>
-            <div>
-              <div class="yt-market-question">${m.question}</div>
-              <div class="yt-market-meta">${m.category} · Closes ${m.resolution_date}</div>
-            </div>
-          </label>`;
-      }).join('');
-      document.getElementById('ytCommentSection').style.display = 'block';
-    }
-
-    // Render transcript markets (indices continue from where comment markets left off)
-    if (transcriptMarkets.length > 0) {
-      const offset = commentMarkets.length;
-      document.getElementById('ytTranscriptList').innerHTML = transcriptMarkets.map((m, i) => {
-        const globalIdx = offset + i;
-        return `
-          <label class="yt-market-item selected" id="ytItem${globalIdx}" onclick="toggleYtItem(${globalIdx})">
-            <input type="checkbox" id="ytCheck${globalIdx}" checked/>
-            <div>
-              <div class="yt-market-question">${m.question}</div>
-              <div class="yt-market-meta">${m.category} · Closes ${m.resolution_date}${m.resolution_note ? ' · ' + m.resolution_note : ''}</div>
-            </div>
-          </label>`;
-      }).join('');
-      document.getElementById('ytTranscriptSection').style.display = 'block';
+    // Render markets
+    if (ytSuggestedMarkets.length > 0) {
+      document.getElementById('ytMarketSectionLabel').style.color = cfg.color;
+      document.getElementById('ytMarketSectionLabel').textContent = cfg.sectionLabel;
+      document.getElementById('ytMarketList').innerHTML = ytSuggestedMarkets.map((m, i) => `
+        <label class="yt-market-item selected" id="ytItem${i}" onclick="toggleYtItem(${i})">
+          <input type="checkbox" id="ytCheck${i}" checked/>
+          <div>
+            <div class="yt-market-question">${m.question}</div>
+            <div class="yt-market-meta">${m.category} · Closes ${m.resolution_date}${m.resolution_note ? ' · ' + m.resolution_note : ''}</div>
+          </div>
+        </label>`).join('');
+      document.getElementById('ytMarketSection').style.display = 'block';
     }
 
     document.getElementById('ytScanResult').style.display = 'block';
-
     document.getElementById('ytFooter').innerHTML = `
       <button class="btn-secondary" onclick="closeYoutubeModal()">Cancel</button>
       <button class="btn-secondary" onclick="runYoutubeScan()">↺ Re-scan</button>
@@ -1984,7 +2001,7 @@ async function runYoutubeScan() {
     document.getElementById('ytError').style.display = 'block';
   } finally {
     const b = document.getElementById('ytScanBtn');
-    if (b) { b.disabled = false; b.textContent = 'Scan Comments & Transcript →'; }
+    if (b) { b.disabled = false; b.textContent = cfg.btn; }
   }
 }
 

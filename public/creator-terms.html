@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>HYPERFLEX — Creator Terms of Service</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --ink: #0e0e0c;
+  --paper: #141412;
+  --cream: #1c1c19;
+  --text: #ddd8cc;
+  --gold: #c9920d;
+  --gold-lt: #e0a820;
+  --gold-bright: #f5c842;
+  --border: #2a2a26;
+  --dim: #7a7870;
+  --sans: 'Syne', sans-serif;
+  --mono: 'Space Mono', monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+::-webkit-scrollbar { display: none; }
+
+body {
+  background: var(--paper);
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(201,146,13,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(201,146,13,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.page {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header */
+.header {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+}
+.logo-hex { width: 32px; height: 32px; }
+.logo-name {
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: 0.08em;
+  color: var(--text);
+}
+.header-tag {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--gold);
+  background: rgba(201,146,13,0.1);
+  border: 1px solid rgba(201,146,13,0.3);
+  padding: 3px 8px;
+  border-radius: 2px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* Main */
+.main {
+  flex: 1;
+  max-width: 760px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 60px 24px 80px;
+}
+
+/* Back button */
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+  text-decoration: none;
+  letter-spacing: 0.08em;
+  margin-bottom: 40px;
+  transition: color 0.15s;
+}
+.back-btn:hover { color: var(--gold); }
+.back-btn::before { content: '←'; font-size: 13px; }
+
+/* Doc header */
+.doc-header {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 32px;
+  margin-bottom: 40px;
+}
+.doc-eyebrow {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--gold);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.doc-eyebrow::before {
+  content: '';
+  display: inline-block;
+  width: 20px;
+  height: 1px;
+  background: var(--gold);
+}
+.doc-title {
+  font-weight: 800;
+  font-size: 32px;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  margin-bottom: 16px;
+  line-height: 1.1;
+}
+.doc-meta {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+  line-height: 1.8;
+}
+
+/* Content */
+.doc-body { line-height: 1.7; }
+
+.section {
+  margin-bottom: 40px;
+  padding-bottom: 40px;
+  border-bottom: 1px solid var(--border);
+}
+.section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+h2 {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+h2 .section-num {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--gold);
+  letter-spacing: 0.1em;
+  background: rgba(201,146,13,0.1);
+  border: 1px solid rgba(201,146,13,0.2);
+  padding: 2px 8px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+h3 {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 20px 0 8px;
+  font-family: var(--mono);
+  letter-spacing: 0.06em;
+}
+
+p {
+  font-size: 14px;
+  color: var(--dim);
+  margin-bottom: 12px;
+  line-height: 1.75;
+}
+p:last-child { margin-bottom: 0; }
+
+ul {
+  margin: 8px 0 12px 0;
+  padding-left: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+ul li {
+  font-size: 14px;
+  color: var(--dim);
+  padding-left: 20px;
+  position: relative;
+  line-height: 1.65;
+}
+ul li::before {
+  content: '—';
+  position: absolute;
+  left: 0;
+  color: var(--gold);
+  font-size: 12px;
+}
+
+.callout {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--gold);
+  border-radius: 6px;
+  padding: 16px 18px;
+  margin: 16px 0;
+}
+.callout p { font-size: 13px; margin-bottom: 0; }
+
+.callout-warning {
+  background: rgba(192,57,43,0.06);
+  border: 1px solid rgba(192,57,43,0.2);
+  border-left: 3px solid #c0392b;
+  border-radius: 6px;
+  padding: 16px 18px;
+  margin: 16px 0;
+}
+.callout-warning p { font-size: 13px; color: #e07060; margin-bottom: 0; }
+
+.attestation-box {
+  background: rgba(201,146,13,0.05);
+  border: 1px solid rgba(201,146,13,0.25);
+  border-radius: 8px;
+  padding: 18px 20px;
+  margin: 16px 0;
+}
+.attestation-box p {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  font-style: italic;
+  line-height: 1.7;
+  margin-bottom: 0;
+}
+
+.all-caps {
+  font-size: 13px;
+  color: var(--dim);
+  line-height: 1.75;
+  letter-spacing: 0.01em;
+}
+
+.contact-block {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--gold);
+}
+
+.doc-footer {
+  margin-top: 48px;
+  padding-top: 32px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--dim);
+  font-style: italic;
+}
+
+@media (max-width: 640px) {
+  .main { padding: 40px 16px 60px; }
+  .doc-title { font-size: 24px; }
+  h2 { font-size: 16px; flex-wrap: wrap; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="header">
+    <a href="/" class="logo">
+      <svg class="logo-hex" viewBox="0 0 32 32" fill="none">
+        <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="#c9920d" stroke-width="1.5" fill="rgba(201,146,13,0.1)"/>
+        <path d="M16 8L22 11.5V18.5L16 22L10 18.5V11.5L16 8Z" fill="#c9920d" opacity="0.6"/>
+      </svg>
+      <span class="logo-name">HYPERFLEX</span>
+    </a>
+    <span class="header-tag">Legal</span>
+  </header>
+
+  <main class="main">
+    <a href="/creator/signup" class="back-btn">Back to Sign Up</a>
+
+    <div class="doc-header">
+      <div class="doc-eyebrow">Legal</div>
+      <h1 class="doc-title">Creator Terms of Service</h1>
+      <div class="doc-meta">
+        Effective Date: March 11, 2026<br/>
+        Last Updated: March 11, 2026
+      </div>
+    </div>
+
+    <div class="doc-body">
+
+      <!-- Section 1 -->
+      <div class="section">
+        <h2><span class="section-num">01</span> Acceptance of Terms</h2>
+        <p>By creating a creator account on HYPERFLEX ("Platform"), you ("Creator") agree to be bound by these Creator Terms of Service ("Terms"). If you do not agree, do not create an account.</p>
+        <div class="callout">
+          <p>HYPERFLEX is operated as infrastructure only. We provide the technical platform for you to create and manage prediction markets for your community. We do not operate, manage, or supervise individual markets.</p>
+        </div>
+      </div>
+
+      <!-- Section 2 -->
+      <div class="section">
+        <h2><span class="section-num">02</span> Infrastructure-Only Model</h2>
+        <p>HYPERFLEX is infrastructure, not an operator. Like Shopify or Substack, we provide tools — you run your community. This means:</p>
+        <ul>
+          <li>HYPERFLEX does not create, manage, or resolve any markets on your behalf</li>
+          <li>HYPERFLEX does not guarantee the accuracy of any market resolution</li>
+          <li>HYPERFLEX is not a counterparty to any prediction made by your community members</li>
+          <li>All markets on your community page are your sole responsibility</li>
+        </ul>
+      </div>
+
+      <!-- Section 3 -->
+      <div class="section">
+        <h2><span class="section-num">03</span> Creator Responsibilities</h2>
+        <p>By using HYPERFLEX, you agree that you are solely responsible for:</p>
+
+        <h3>3.1 Market Creation</h3>
+        <ul>
+          <li>Writing clear, unambiguous market questions with objectively verifiable YES/NO outcomes</li>
+          <li>Selecting appropriate resolution sources (minimum 3 sources required)</li>
+          <li>Setting realistic resolution dates</li>
+          <li>Ensuring markets comply with all applicable laws in your jurisdiction</li>
+        </ul>
+
+        <h3>3.2 Market Resolution</h3>
+        <ul>
+          <li>Resolving all markets accurately and fairly on or before the resolution date</li>
+          <li>Using only the resolution sources specified at market creation</li>
+          <li>Providing honest attestation when confirming resolution outcomes</li>
+          <li>Resolving disputed markets in good faith</li>
+        </ul>
+
+        <h3>3.3 Community Management</h3>
+        <ul>
+          <li>Communicating clearly with your community about market rules and resolution criteria</li>
+          <li>Handling community disputes related to your markets</li>
+          <li>Maintaining the trust of your audience</li>
+        </ul>
+      </div>
+
+      <!-- Section 4 -->
+      <div class="section">
+        <h2><span class="section-num">04</span> Prohibited Markets</h2>
+        <p>You may not create markets involving:</p>
+        <ul>
+          <li>Assassinations, targeted violence, or physical harm to individuals</li>
+          <li>Illegal activities of any kind</li>
+          <li>Markets that constitute unlicensed gambling under applicable law</li>
+          <li>Markets targeting minors</li>
+          <li>Markets designed to manipulate financial instruments</li>
+          <li>Markets that could be construed as regulated financial derivatives without proper licensing</li>
+          <li>Any content prohibited by CFTC regulations or applicable financial law</li>
+          <li>Markets based on private, non-public information</li>
+        </ul>
+        <div class="callout-warning">
+          <p>HYPERFLEX reserves the right to remove any market that violates these prohibitions without notice.</p>
+        </div>
+      </div>
+
+      <!-- Section 5 -->
+      <div class="section">
+        <h2><span class="section-num">05</span> Points System</h2>
+        <p>HYPERFLEX markets use play-money Flex Points, not real currency. By default:</p>
+        <ul>
+          <li>Flex Points have no real-world monetary value</li>
+          <li>Flex Points cannot be exchanged for cash on the HYPERFLEX platform</li>
+          <li>Any rewards or benefits you offer in exchange for Flex Points are your sole responsibility</li>
+          <li>You are responsible for ensuring any rewards you offer comply with applicable laws</li>
+        </ul>
+      </div>
+
+      <!-- Section 6 -->
+      <div class="section">
+        <h2><span class="section-num">06</span> Resolution Attestation</h2>
+        <p>When resolving a market, you are required to attest:</p>
+        <div class="attestation-box">
+          <p>"I attest that this resolution is correct and fair, based on publicly available information consistent with the resolution sources."</p>
+        </div>
+        <div class="callout-warning">
+          <p>This attestation is binding. Knowingly false attestations may result in account termination and may expose you to legal liability from your community members.</p>
+        </div>
+      </div>
+
+      <!-- Section 7 -->
+      <div class="section">
+        <h2><span class="section-num">07</span> CFTC and Regulatory Compliance</h2>
+        <p>HYPERFLEX operates as a software infrastructure provider. You, as Creator, are responsible for ensuring your use of HYPERFLEX complies with:</p>
+        <ul>
+          <li>Commodity Futures Trading Commission (CFTC) regulations</li>
+          <li>All applicable state and federal laws in your jurisdiction</li>
+          <li>All applicable laws in the jurisdictions of your community members</li>
+        </ul>
+        <div class="callout">
+          <p>HYPERFLEX makes no representations about the regulatory status of prediction markets in your jurisdiction. You should consult legal counsel before launching markets in regulated categories (politics, finance, crypto).</p>
+        </div>
+      </div>
+
+      <!-- Section 8 -->
+      <div class="section">
+        <h2><span class="section-num">08</span> Liability Limitation</h2>
+        <p class="all-caps">TO THE MAXIMUM EXTENT PERMITTED BY LAW:</p>
+        <ul>
+          <li>HYPERFLEX SHALL NOT BE LIABLE FOR ANY DISPUTES BETWEEN YOU AND YOUR COMMUNITY MEMBERS</li>
+          <li>HYPERFLEX SHALL NOT BE LIABLE FOR ANY INCORRECT OR DISPUTED MARKET RESOLUTIONS</li>
+          <li>HYPERFLEX SHALL NOT BE LIABLE FOR ANY REGULATORY ACTION TAKEN AGAINST YOU FOR YOUR USE OF THE PLATFORM</li>
+          <li>HYPERFLEX'S TOTAL LIABILITY TO YOU SHALL NOT EXCEED THE AMOUNT YOU PAID TO HYPERFLEX IN THE 12 MONTHS PRECEDING ANY CLAIM</li>
+        </ul>
+      </div>
+
+      <!-- Section 9 -->
+      <div class="section">
+        <h2><span class="section-num">09</span> Indemnification</h2>
+        <p>You agree to indemnify, defend, and hold harmless HYPERFLEX, its officers, directors, employees, and agents from any claims, damages, losses, or expenses (including legal fees) arising from:</p>
+        <ul>
+          <li>Your markets or resolutions</li>
+          <li>Your community members' disputes</li>
+          <li>Your violation of these Terms</li>
+          <li>Your violation of any applicable law</li>
+        </ul>
+      </div>
+
+      <!-- Section 10 -->
+      <div class="section">
+        <h2><span class="section-num">10</span> Account Termination</h2>
+        <p>HYPERFLEX may terminate your account for:</p>
+        <ul>
+          <li>Violation of these Terms</li>
+          <li>Creation of prohibited markets</li>
+          <li>False attestations on market resolutions</li>
+          <li>Repeated community complaints</li>
+          <li>Any activity that exposes HYPERFLEX to legal risk</li>
+        </ul>
+      </div>
+
+      <!-- Section 11 -->
+      <div class="section">
+        <h2><span class="section-num">11</span> Changes to Terms</h2>
+        <p>HYPERFLEX reserves the right to update these Terms at any time. Continued use of the platform after changes constitutes acceptance of the new Terms.</p>
+      </div>
+
+      <!-- Section 12 -->
+      <div class="section">
+        <h2><span class="section-num">12</span> Governing Law</h2>
+        <p>These Terms are governed by the laws of the State of Delaware, without regard to conflict of law principles.</p>
+      </div>
+
+      <!-- Section 13 -->
+      <div class="section">
+        <h2><span class="section-num">13</span> Contact</h2>
+        <p>For questions about these Terms:</p>
+        <div class="contact-block">legal@hyperflex.network</div>
+      </div>
+
+      <div class="doc-footer">
+        HYPERFLEX is infrastructure. You are the operator. Build responsibly.
+      </div>
+
+    </div>
+  </main>
+</div>
+</body>
+</html>
