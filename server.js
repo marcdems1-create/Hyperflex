@@ -79,232 +79,6 @@ function requireAuth(req, res, next) {
   }
 }
 
-// ── CREATOR PLATFORM ──────────────────────────────
-
-// Creator signup: email, password, display_name, slug → user + creator_settings, return JWT
-app.post('/api/creator/signup', async (req, res) => {
-  const { email, password, display_name, slug, theme_type } = req.body;
-  if (!email || !password || !display_name || !slug) {
-    return res.status(400).json({ error: 'email, password, display_name, and slug are required' });
-  }
-  const slugStr = String(slug).trim().toLowerCase();
-  if (!/^[a-z0-9]{3,20}$/.test(slugStr)) {
-    return res.status(400).json({ error: 'slug must be lowercase alphanumeric, 3–20 characters' });
-  }
-  const { data: existingSlug } = await supabase
-    .from('creator_settings')
-    .select('user_id')
-    .eq('slug', slugStr)
-    .maybeSingle();
-  if (existingSlug) return res.status(400).json({ error: 'slug already taken' });
-
-  const { data: existingEmail } = await supabase
-    .from('users')
-    .select('id')
-    .eq('email', email)
-    .maybeSingle();
-  if (existingEmail) return res.status(400).json({ error: 'email already registered' });
-
-  const password_hash = await bcrypt.hash(password, 10);
-  const { data: user, error: userError } = await supabase
-    .from('users')
-    .insert([{ email, password_hash, display_name, is_creator: true }])
-    .select()
-    .single();
-  if (userError) return res.status(400).json({ error: userError.message });
-
-  const { error: settingsError } = await supabase
-    .from('creator_settings')
-    .insert([{ user_id: user.id, slug: slugStr, display_name: display_name || user.display_name, custom_points_name: 'Flex Points', theme_type: theme_type || 'default' }]);
-  if (settingsError) {
-    await supabase.from('users').delete().eq('id', user.id);
-    return res.status(400).json({ error: settingsError.message || 'Failed to create creator settings' });
-  }
-
-  const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET || 'hyperflex_secret');
-  res.json({
-    token,
-    user: { id: user.id, email: user.email, display_name: user.display_name, balance: user.balance, is_creator: true },
-  });
-});
-
-// Creator dashboard: markets, total traders, total volume, resolution queue (auth required)
-app.get('/api/creator/dashboard', requireAuth, async (req, res) => {
-  try {
-    const { data: settings, error: settingsErr } = await supabase
-      .from('creator_settings')
-      .select('slug, display_name')
-      .eq('user_id', req.userId)
-      .single();
-    if (settingsErr || !settings) return res.status(404).json({ error: 'Creator settings not found' });
-    const slug = settings.slug;
-
-    const { data: markets, error: marketsErr } = await supabase
-      .from('markets')
-      .select('*')
-      .eq('creator_slug', slug)
-      .order('created_at', { ascending: false });
-    if (marketsErr) return res.status(400).json({ error: marketsErr.message });
-
-    const marketIds = (markets || []).map((m) => m.id);
-    let totalTraders = 0;
-    let totalVolume = 0;
-    if (marketIds.length > 0) {
-      const { data: positions } = await supabase
-        .from('positions')
-        .select('user_id, amount')
-        .in('market_id', marketIds);
-      const traders = new Set((positions || []).map((p) => p.user_id));
-      totalTraders = traders.size;
-      totalVolume = (positions || []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-    }
-
-    const now = new Date().toISOString();
-    const { data: resolutionQueue } = await supabase
-      .from('markets')
-      .select('*')
-      .eq('creator_slug', slug)
-      .eq('resolved', false)
-      .lt('expiry_date', now)
-      .order('expiry_date', { ascending: true });
-
-    res.json({
-      markets: markets || [],
-      total_traders: totalTraders,
-      total_volume: Math.round(totalVolume * 100) / 100,
-      resolution_queue: resolutionQueue || [],
-    });
-  } catch (err) {
-    console.error('creator/dashboard error:', err.message);
-    res.status(500).json({ error: 'Dashboard failed' });
-  }
-});
-
-app.get('/api/creator/analytics', requireAuth, async (req, res) => {
-  try {
-    const { data: settings } = await supabase
-      .from('creator_settings')
-      .select('slug, display_name')
-      .eq('user_id', req.userId)
-      .single();
-    if (!settings) return res.status(404).json({ error: 'Creator not found' });
-    const slug = settings.slug;
-
-    const { data: markets } = await supabase
-      .from('markets')
-      .select('*')
-      .eq('creator_slug', slug)
-      .order('created_at', { ascending: true });
-
-    const marketIds = (markets || []).map(m => m.id);
-    let positions = [];
-    if (marketIds.length > 0) {
-      const { data: pos } = await supabase
-        .from('positions')
-        .select('*, markets(question, category, resolved, outcome)')
-        .in('market_id', marketIds);
-      positions = pos || [];
-    }
-
-    // Markets by category
-    const byCategory = {};
-    for (const m of (markets || [])) {
-      const cat = m.category || 'other';
-      byCategory[cat] = (byCategory[cat] || 0) + 1;
-    }
-
-    // Markets over time (by week)
-    const byWeek = {};
-    for (const m of (markets || [])) {
-      if (!m.created_at) continue;
-      const d = new Date(m.created_at);
-      const week = `${d.getFullYear()}-W${String(Math.ceil((d.getDate()) / 7)).padStart(2,'0')}`;
-      byWeek[week] = (byWeek[week] || 0) + 1;
-    }
-
-    // Top markets by trade volume
-    const mktVolume = {};
-    for (const p of positions) {
-      mktVolume[p.market_id] = (mktVolume[p.market_id] || { volume: 0, trades: 0, question: p.markets?.question || '' });
-      mktVolume[p.market_id].volume += Number(p.amount) || 0;
-      mktVolume[p.market_id].trades += 1;
-    }
-    const topMarkets = Object.entries(mktVolume)
-      .map(([id, v]) => ({ market_id: id, question: v.question, volume: Math.round(v.volume * 100) / 100, trades: v.trades }))
-      .sort((a, b) => b.volume - a.volume)
-      .slice(0, 5);
-
-    // Unique traders over time
-    const tradersByWeek = {};
-    const seenTraders = new Set();
-    for (const p of positions.sort((a,b) => new Date(a.created_at) - new Date(b.created_at))) {
-      if (!p.created_at) continue;
-      const d = new Date(p.created_at);
-      const week = `${d.getFullYear()}-W${String(Math.ceil((d.getDate()) / 7)).padStart(2,'0')}`;
-      seenTraders.add(p.user_id);
-      tradersByWeek[week] = seenTraders.size;
-    }
-
-    // Resolution accuracy (resolved markets)
-    const resolved = (markets || []).filter(m => m.resolved);
-    const totalResolved = resolved.length;
-    const yesOutcomes = resolved.filter(m => m.outcome === true).length;
-
-    res.json({
-      total_markets: (markets || []).length,
-      total_positions: positions.length,
-      by_category: byCategory,
-      markets_by_week: byWeek,
-      traders_by_week: tradersByWeek,
-      top_markets: topMarkets,
-      total_resolved: totalResolved,
-      yes_outcomes: yesOutcomes,
-    });
-  } catch (err) {
-    console.error('analytics error:', err.message);
-    res.status(500).json({ error: 'Analytics failed' });
-  }
-});
-
-// Suggest markets: auth + { description } → Claude returns 5 YES/NO market ideas
-app.post('/api/suggest-markets', requireAuth, async (req, res) => {
-  const { description } = req.body;
-  if (!description || typeof description !== 'string') {
-    return res.status(400).json({ error: 'description (string) is required' });
-  }
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return res.status(503).json({ error: 'Market suggestions unavailable' });
-  }
-  try {
-    const systemPrompt = `You are a prediction market designer. The user describes their show or community. Generate exactly 5 YES/NO prediction market ideas tailored to that audience. Return ONLY a JSON array, no other text. Each object must have: question (string), category (string, e.g. crypto/commodities/earnings/macro/entertainment), resolution_date (YYYY-MM-DD, 30–90 days from today), notes (string, brief).`;
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1024,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: `Community/show description:\n${description}\n\nReturn the JSON array of 5 market ideas.` }],
-    });
-    const content = response?.content?.[0]?.text || response?.content?.[0]?.input_text || '';
-    if (!content) return res.status(502).json({ error: 'Empty response from AI' });
-    let list;
-    try {
-      list = JSON.parse(content);
-    } catch (e) {
-      return res.status(502).json({ error: 'Invalid JSON from AI' });
-    }
-    if (!Array.isArray(list)) list = [list];
-    const out = list.slice(0, 5).map((m) => ({
-      question: m?.question || '',
-      category: m?.category || 'macro',
-      resolution_date: m?.resolution_date || null,
-      notes: m?.notes || '',
-    }));
-    res.json(out);
-  } catch (err) {
-    console.error('suggest-markets error:', err.message);
-    res.status(500).json({ error: 'Suggestion failed' });
-  }
-});
-
 // ── MARKETS ───────────────────────────────────────
 
 // Get all open markets
@@ -918,21 +692,6 @@ app.get('/api/templates/:id', (req, res) => {
 const JWT_SECRET = process.env.JWT_SECRET || 'hyperflex-dev-secret-change-in-prod';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
-// ─── MIDDLEWARE: Tenant detection ───────────────────────────
-// Reads subdomain from Host header → attaches to req.tenant
-// e.g. gridiron-picks.hyperflex.network → req.tenant.slug = 'gridiron-picks'
-app.use((req, res, next) => {
-  const host = req.headers.host || '';
-  const parts = host.split('.');
-  let slug = null;
-  if (parts.length >= 3) {
-    slug = parts[0].toLowerCase();
-    if (['www', 'hyperflex', 'api', 'app'].includes(slug)) slug = null;
-  }
-  req.tenant = { slug };
-  next();
-});
-
 // ─── MIDDLEWARE: Auth guard ──────────────────────────────────
 function requireCreator(req, res, next) {
   const auth = req.headers.authorization || '';
@@ -1387,11 +1146,12 @@ app.post('/markets/:id/resolve', requireCreator, async (req, res) => {
         );
 
         if (isWinner) {
-          // Credit winner's balance (amount * 2 for 50/50, simplified)
+          // Credit winner's balance — fetch current then increment
           payouts.push(
-            supabase.from('users').update({
-              balance: supabase.raw(`balance + ${pos.amount * 2}`)
-            }).eq('id', pos.user_id)
+            (async () => {
+              const { data: u } = await supabase.from('users').select('balance').eq('id', pos.user_id).single();
+              if (u) await supabase.from('users').update({ balance: (u.balance || 0) + pos.amount * 2 }).eq('id', pos.user_id);
+            })()
           );
         }
       }
@@ -1616,5 +1376,7 @@ app.get('/creator/dashboard', (req, res) => {
 
 // ════════════════════════════════════════════════════════════
 // END CREATOR PLATFORM ROUTES
-// ════════════════════════════════════════════════════════════const PORT = process.env.PORT || 3000;
+// ════════════════════════════════════════════════════════════
+
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`HYPERFLEX server running on port ${PORT}`));
