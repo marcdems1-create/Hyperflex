@@ -932,15 +932,15 @@ body {
 }
 .plan-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 14px;
   margin-top: 24px;
 }
 .plan-card {
   background: var(--paper);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 24px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -952,6 +952,29 @@ body {
               linear-gradient(145deg, rgba(201,146,13,0.5) 0%, rgba(201,146,13,0.1) 50%, transparent 100%) border-box;
   border: 1px solid transparent;
 }
+/* Platinum — brighter, premium gradient border */
+.plan-card.platinum {
+  background: linear-gradient(var(--cream), var(--cream)) padding-box,
+              linear-gradient(145deg, rgba(232,210,150,0.8) 0%, rgba(201,146,13,0.4) 40%, rgba(201,146,13,0.08) 100%) border-box;
+  border: 1px solid transparent;
+}
+.plan-card.platinum .plan-price { color: var(--gold-bright); }
+.plan-recommended {
+  position: absolute;
+  top: -11px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  background: var(--gold);
+  color: var(--ink);
+  padding: 3px 10px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
 .plan-badge {
   font-family: var(--mono);
   font-size: 10px;
@@ -960,8 +983,9 @@ body {
   font-weight: 700;
   margin-bottom: 14px;
 }
-.plan-badge.free { color: var(--dim); }
-.plan-badge.pro  { color: var(--gold); }
+.plan-badge.free     { color: var(--dim); }
+.plan-badge.pro      { color: var(--gold); }
+.plan-badge.platinum { color: var(--gold-bright); letter-spacing: 0.14em; }
 .plan-price-row {
   display: flex;
   align-items: baseline;
@@ -969,7 +993,7 @@ body {
   margin-bottom: 6px;
 }
 .plan-price {
-  font-size: 38px;
+  font-size: 32px;
   font-weight: 800;
   letter-spacing: -0.03em;
   line-height: 1;
@@ -985,9 +1009,9 @@ body {
 .plan-desc {
   font-size: 12px;
   color: var(--dim);
-  margin-bottom: 20px;
+  margin-bottom: 16px;
   line-height: 1.5;
-  min-height: 36px;
+  min-height: 32px;
 }
 .plan-divider {
   height: 1px;
@@ -997,17 +1021,17 @@ body {
 .plan-features {
   list-style: none;
   padding: 0;
-  margin: 0 0 24px;
+  margin: 0 0 20px;
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 8px;
   flex: 1;
 }
 .plan-feature {
   display: flex;
   align-items: flex-start;
-  gap: 9px;
-  font-size: 13px;
+  gap: 8px;
+  font-size: 12px;
   color: var(--dim);
   line-height: 1.35;
 }
@@ -1058,6 +1082,27 @@ body {
 }
 .btn-plan-pro:hover { background: var(--gold-bright); transform: translateY(-1px); }
 .btn-plan-pro:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.btn-plan-platinum {
+  width: 100%;
+  padding: 12px;
+  background: linear-gradient(135deg, var(--gold-bright), var(--gold));
+  border: none;
+  border-radius: 6px;
+  font-family: var(--sans);
+  font-weight: 800;
+  font-size: 14px;
+  color: var(--ink);
+  cursor: pointer;
+  transition: all 0.2s;
+  letter-spacing: 0.01em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 2px 12px rgba(201,146,13,0.25);
+}
+.btn-plan-platinum:hover { filter: brightness(1.1); transform: translateY(-1px); box-shadow: 0 4px 18px rgba(201,146,13,0.35); }
+.btn-plan-platinum:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
 
 /* Waitlist email capture (shown after clicking Pro CTA) */
 .waitlist-section {
@@ -1619,13 +1664,13 @@ body {
   </div>
 </div>
 
-<!-- Upgrade to Pro Modal -->
+<!-- Upgrade Modal (Free / Pro / Platinum) -->
 <div class="modal-overlay" id="upgradeModal">
-  <div class="modal" style="max-width:680px">
-    <div class="modal-header" style="flex-direction:column;align-items:flex-start;gap:0;padding:28px 28px 24px">
-      <div class="upgrade-header-badge">⚡ HYPERFLEX Pro</div>
-      <div class="upgrade-modal-title">Unlock your full creator toolkit</div>
-      <div class="upgrade-modal-sub">Everything you need to run serious prediction markets for your community.</div>
+  <div class="modal" style="max-width:900px">
+    <div class="modal-header" style="flex-direction:column;align-items:flex-start;gap:0;padding:28px 28px 20px;position:relative">
+      <div class="upgrade-header-badge">⚡ HYPERFLEX Plans</div>
+      <div class="upgrade-modal-title">Choose your plan</div>
+      <div class="upgrade-modal-sub">All plans include Flex Points and community leaderboard. Upgrade anytime.</div>
       <button class="modal-close" onclick="closeUpgradeModal()" style="position:absolute;top:20px;right:20px">×</button>
     </div>
 
@@ -1640,7 +1685,7 @@ body {
             <span class="plan-price">$0</span>
             <span class="plan-period">/month</span>
           </div>
-          <div class="plan-desc">Get started and explore prediction markets with your community.</div>
+          <div class="plan-desc">Get started and test prediction markets with your community.</div>
           <div class="plan-divider"></div>
           <ul class="plan-features">
             <li class="plan-feature included"><span class="feature-check yes">✓</span> Up to 3 active markets</li>
@@ -1649,9 +1694,9 @@ body {
             <li class="plan-feature included"><span class="feature-check yes">✓</span> Flex Points system</li>
             <li class="plan-feature excluded"><span class="feature-check no">×</span> YouTube scanner</li>
             <li class="plan-feature excluded"><span class="feature-check no">×</span> Rewards system</li>
-            <li class="plan-feature excluded"><span class="feature-check no">×</span> Remove HYPERFLEX watermark</li>
-            <li class="plan-feature excluded"><span class="feature-check no">×</span> Full analytics dashboard</li>
-            <li class="plan-feature excluded"><span class="feature-check no">×</span> Priority support</li>
+            <li class="plan-feature excluded"><span class="feature-check no">×</span> Full analytics</li>
+            <li class="plan-feature excluded"><span class="feature-check no">×</span> Remove watermark</li>
+            <li class="plan-feature excluded"><span class="feature-check no">×</span> Custom domain</li>
           </ul>
           <div class="plan-cta">
             <div class="btn-plan-free">Current Plan</div>
@@ -1659,27 +1704,55 @@ body {
         </div>
 
         <!-- PRO -->
-        <div class="plan-card pro">
+        <div class="plan-card pro" style="position:relative">
+          <div class="plan-recommended">Most Popular</div>
           <div class="plan-badge pro">Pro</div>
           <div class="plan-price-row">
             <span class="plan-price">$29</span>
             <span class="plan-period">/month</span>
           </div>
-          <div class="plan-desc">For creators serious about community engagement and prediction markets.</div>
+          <div class="plan-desc">For serious creators growing an engaged prediction community.</div>
           <div class="plan-divider"></div>
           <ul class="plan-features">
             <li class="plan-feature included"><span class="feature-check yes">✓</span> <strong>Unlimited</strong> active markets</li>
-            <li class="plan-feature included"><span class="feature-check yes">✓</span> Community leaderboard</li>
             <li class="plan-feature included"><span class="feature-check yes">✓</span> Full analytics dashboard</li>
             <li class="plan-feature included"><span class="feature-check yes">✓</span> Flex Points + Rewards system</li>
-            <li class="plan-feature included"><span class="feature-check yes">✓</span> YouTube scanner — comments, transcript &amp; live chat</li>
+            <li class="plan-feature included"><span class="feature-check yes">✓</span> YouTube scanner (comments, transcript, live chat)</li>
             <li class="plan-feature included"><span class="feature-check yes">✓</span> AI market generation &amp; resolution</li>
-            <li class="plan-feature included"><span class="feature-check yes">✓</span> No HYPERFLEX watermark</li>
             <li class="plan-feature included"><span class="feature-check yes">✓</span> Custom community branding</li>
-            <li class="plan-feature included"><span class="feature-check yes">✓</span> Priority support</li>
+            <li class="plan-feature included"><span class="feature-check yes">✓</span> "Built with HYPERFLEX" subtle footer</li>
+            <li class="plan-feature excluded"><span class="feature-check no">×</span> Remove watermark entirely</li>
+            <li class="plan-feature excluded"><span class="feature-check no">×</span> Custom domain</li>
           </ul>
           <div class="plan-cta">
-            <button class="btn-plan-pro" id="proCtaBtn" onclick="showWaitlistForm()">
+            <button class="btn-plan-pro" onclick="showWaitlistForm('pro')">
+              Get Early Access →
+            </button>
+          </div>
+        </div>
+
+        <!-- PLATINUM -->
+        <div class="plan-card platinum" style="position:relative">
+          <div class="plan-badge platinum">✦ Platinum</div>
+          <div class="plan-price-row">
+            <span class="plan-price">$99</span>
+            <span class="plan-period">/month</span>
+          </div>
+          <div class="plan-desc">White-label solution for professional creators and brands.</div>
+          <div class="plan-divider"></div>
+          <ul class="plan-features">
+            <li class="plan-feature included"><span class="feature-check yes">✓</span> Everything in Pro</li>
+            <li class="plan-feature included"><span class="feature-check yes">✓</span> <strong>No watermark</strong> — fully white-label</li>
+            <li class="plan-feature included"><span class="feature-check yes">✓</span> Custom domain support</li>
+            <li class="plan-feature included"><span class="feature-check yes">✓</span> Dedicated support</li>
+            <li class="plan-feature included"><span class="feature-check yes">✓</span> Early access to new features</li>
+            <li class="plan-feature included"><span class="feature-check yes">✓</span> SLA uptime guarantee</li>
+            <li class="plan-feature included"><span class="feature-check yes">✓</span> Onboarding call</li>
+            <li class="plan-feature included"><span class="feature-check yes">✓</span> Volume pricing for large communities</li>
+            <li class="plan-feature included" style="opacity:0;pointer-events:none"><span class="feature-check"></span> &nbsp;</li>
+          </ul>
+          <div class="plan-cta">
+            <button class="btn-plan-platinum" onclick="showWaitlistForm('platinum')">
               Get Early Access →
             </button>
           </div>
@@ -1687,11 +1760,11 @@ body {
 
       </div>
 
-      <!-- Waitlist form (shown after clicking Pro CTA) -->
+      <!-- Waitlist form (shown after clicking any paid CTA) -->
       <div class="waitlist-section" id="waitlistSection">
         <div id="waitlistFormView">
-          <div class="waitlist-title">🚀 Be first in line when Pro launches</div>
-          <div class="waitlist-sub">We're putting the finishing touches on Pro. Drop your email and we'll notify you the moment it's live — plus you'll get an early-bird discount.</div>
+          <div class="waitlist-title" id="waitlistTitle">🚀 Be first in line when Pro launches</div>
+          <div class="waitlist-sub" id="waitlistSubText">We're putting the finishing touches on paid plans. Drop your email and we'll notify you the moment it's live — plus an early-bird discount.</div>
           <div class="waitlist-row">
             <input type="email" class="waitlist-input" id="waitlistEmail" placeholder="your@email.com" autocomplete="email"/>
             <button class="btn-waitlist-submit" id="waitlistSubmitBtn" onclick="submitWaitlist()">
@@ -1703,7 +1776,7 @@ body {
         <div class="waitlist-success" id="waitlistSuccess">
           <div class="waitlist-success-icon">🎉</div>
           <div class="waitlist-success-title">You're on the list!</div>
-          <div class="waitlist-success-sub">We'll email you the moment Pro goes live.<br/>Early-bird pricing locked in for waitlist members.</div>
+          <div class="waitlist-success-sub" id="waitlistSuccessSub">We'll email you the moment it goes live.<br/>Early-bird pricing locked in for waitlist members.</div>
         </div>
       </div>
 
@@ -2340,7 +2413,16 @@ function closeUpgradeModal() {
   document.getElementById('upgradeModal').classList.remove('show');
 }
 
-function showWaitlistForm() {
+let waitlistTier = 'pro';
+function showWaitlistForm(tier) {
+  waitlistTier = tier || 'pro';
+  const isPlatinum = waitlistTier === 'platinum';
+  document.getElementById('waitlistTitle').textContent =
+    isPlatinum ? '✦ Join the Platinum waitlist' : '🚀 Be first in line when Pro launches';
+  document.getElementById('waitlistSubText').textContent =
+    isPlatinum
+      ? "Platinum is coming soon for professional creators and brands. Leave your email and we'll reach out personally when it's ready — including an onboarding call."
+      : "We're putting the finishing touches on Pro. Drop your email and we'll notify you the moment it's live — plus an early-bird discount.";
   document.getElementById('waitlistSection').classList.add('show');
   document.getElementById('waitlistSection').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   setTimeout(() => document.getElementById('waitlistEmail').focus(), 300);
@@ -2382,16 +2464,23 @@ async function submitWaitlist() {
     }
 
     // Success — show confirmation, update sidebar button
+    // Update success copy based on tier
+    document.getElementById('waitlistSuccessSub').innerHTML =
+      waitlistTier === 'platinum'
+        ? "We'll reach out personally when Platinum is ready.<br/>We'll also send the early-bird Platinum rate."
+        : "We'll email you the moment Pro goes live.<br/>Early-bird pricing locked in for waitlist members.";
+
     document.getElementById('waitlistFormView').style.display = 'none';
     document.getElementById('waitlistSuccess').classList.add('show');
 
     const upgradeBtn = document.querySelector('.btn-upgrade');
     if (upgradeBtn) {
-      upgradeBtn.textContent = '✓ On Waitlist';
+      const label = waitlistTier === 'platinum' ? '✓ Platinum Waitlist' : '✓ On Waitlist';
+      upgradeBtn.textContent = label;
       upgradeBtn.style.background = 'rgba(45,155,95,0.12)';
       upgradeBtn.style.borderColor = 'rgba(45,155,95,0.35)';
       upgradeBtn.style.color = '#2d9b5f';
-      upgradeBtn.onclick = showUpgrade; // still opens modal to see success state
+      upgradeBtn.onclick = showUpgrade;
     }
 
   } catch {

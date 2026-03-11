@@ -550,17 +550,55 @@ body::before {
 /* ── POWERED BY ─── */
 .powered {
   text-align: center;
-  padding: 32px;
+  padding: 28px 24px 32px;
   font-family: var(--mono);
+  font-size: 12px;
+  color: var(--dim);
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+  line-height: 1.7;
+  background: linear-gradient(to bottom, transparent, rgba(201,146,13,0.02));
+}
+.powered-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-bottom: 10px;
+}
+.powered-hex { width: 18px; height: 18px; opacity: 0.7; }
+.powered-name {
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  color: var(--gold);
+  opacity: 0.85;
+}
+.powered-tagline {
   font-size: 11px;
   color: var(--dim);
+  margin-bottom: 10px;
 }
-.powered a {
-  color: var(--gold);
+.powered-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  background: rgba(201,146,13,0.08);
+  border: 1px solid rgba(201,146,13,0.25);
+  border-radius: 20px;
   text-decoration: none;
+  font-size: 11px;
   font-weight: 700;
+  color: var(--gold);
+  letter-spacing: 0.06em;
+  transition: all 0.2s;
 }
-.powered a:hover { text-decoration: underline; }
+.powered-cta:hover {
+  background: rgba(201,146,13,0.15);
+  border-color: rgba(201,146,13,0.45);
+}
+.powered-cta::after { content: ' →'; }
 
 /* ── MODALS ─── */
 .overlay {
@@ -966,8 +1004,15 @@ body::before {
 </main>
 
 <div class="powered">
-  Powered by <a href="/">HYPERFLEX</a> — Build your own community →
-  <a href="/creator/signup">Get started free</a>
+  <div class="powered-logo">
+    <svg class="powered-hex" viewBox="0 0 32 32" fill="none">
+      <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="#c9920d" stroke-width="1.5" fill="rgba(201,146,13,0.1)"/>
+      <path d="M16 8L22 11.5V18.5L16 22L10 18.5V11.5L16 8Z" fill="#c9920d" opacity="0.6"/>
+    </svg>
+    <span class="powered-name">HYPERFLEX</span>
+  </div>
+  <div class="powered-tagline">Prediction markets for creator communities</div>
+  <a href="/creator/signup" class="powered-cta">Build your own community — Get started free</a>
 </div>
 
 <!-- ══ AUTH MODAL ══ -->
