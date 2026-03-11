@@ -193,6 +193,14 @@ app.post('/trade', async (req, res) => {
   const price = side === 'YES' ? market.yes_price : market.no_price;
   const potential_payout = amount / price;
 
+  // Check if this user has traded on this market before (determines trader_count increment)
+  const { count: priorPositions } = await supabase
+    .from('positions')
+    .select('id', { count: 'exact', head: true })
+    .eq('market_id', market_id)
+    .eq('user_id', user_id);
+  const isNewTrader = (priorPositions || 0) === 0;
+
   // Deduct balance
   await supabase
     .from('users')
@@ -207,16 +215,11 @@ app.post('/trade', async (req, res) => {
     .single();
   if (posError) return res.status(400).json({ error: posError.message });
 
-  // Update market volume and trader_count
-  const newVolume = (market.volume || 0) + amount;
-  const { count: traderCount } = await supabase
-    .from('positions')
-    .select('user_id', { count: 'exact', head: true })
-    .eq('market_id', market_id);
-  await supabase
-    .from('markets')
-    .update({ volume: newVolume, trader_count: traderCount ?? (market.trader_count || 0) + 1 })
-    .eq('id', market_id);
+  // Update volume; only increment trader_count if this user hadn't traded here before
+  const marketUpdate = { volume: (market.volume || 0) + amount };
+  if (isNewTrader) marketUpdate.trader_count = (market.trader_count || 0) + 1;
+  const { error: mktErr } = await supabase.from('markets').update(marketUpdate).eq('id', market_id);
+  if (mktErr) console.error('market volume update error:', mktErr.message, mktErr.details);
 
   res.json({ message: 'Trade placed', position });
 });
@@ -1042,38 +1045,36 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
       weeklyTrades = weekCount || 0;
     }
 
-    // Get community leaderboard
+    // Get community leaderboard — distinct traders by current balance
     let leaderboard = [];
     if (marketIds.length > 0) {
       const { data: positions } = await supabase
         .from('positions')
-        .select('user_id, pnl')
+        .select('user_id')
         .in('market_id', marketIds);
 
-      if (positions) {
-        // Aggregate by user
-        const userMap = {};
-        positions.forEach(p => {
-          if (!userMap[p.user_id]) userMap[p.user_id] = { user_id: p.user_id, pnl: 0, trade_count: 0 };
-          userMap[p.user_id].pnl += (p.pnl || 0);
-          userMap[p.user_id].trade_count++;
-        });
+      if (positions && positions.length > 0) {
+        const userIds = [...new Set(positions.map(p => p.user_id))];
 
-        const userIds = Object.keys(userMap);
-        if (userIds.length > 0) {
-          const { data: usernames } = await supabase
-            .from('users')
-            .select('id, display_name')
-            .in('id', userIds);
+        // Count trades per user
+        const tradeCountMap = {};
+        positions.forEach(p => { tradeCountMap[p.user_id] = (tradeCountMap[p.user_id] || 0) + 1; });
 
-          const nameMap = {};
-          (usernames || []).forEach(u => { nameMap[u.id] = u.display_name; });
+        const { data: traders } = await supabase
+          .from('users')
+          .select('id, display_name, balance')
+          .in('id', userIds);
 
-          leaderboard = Object.values(userMap)
-            .map(u => ({ ...u, display_name: nameMap[u.user_id] || 'Anonymous' }))
-            .sort((a, b) => b.pnl - a.pnl)
-            .slice(0, 20);
-        }
+        leaderboard = (traders || [])
+          .map(u => ({
+            user_id: u.id,
+            display_name: u.display_name || 'Anonymous',
+            balance: u.balance || 0,
+            pnl: u.balance || 0,   // frontend uses pnl field for display
+            trade_count: tradeCountMap[u.id] || 0
+          }))
+          .sort((a, b) => b.balance - a.balance)
+          .slice(0, 20);
       }
     }
 
