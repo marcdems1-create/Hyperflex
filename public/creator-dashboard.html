@@ -1501,10 +1501,14 @@ body {
         <label>Market Question</label>
         <textarea id="newQuestion" rows="2" placeholder="Will the Patriots make the playoffs this season?" onblur="validateQuestion()"></textarea>
         <div id="questionWarning" style="display:none;margin-top:8px;padding:10px 12px;background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.3);border-radius:6px;font-size:12px;color:#e0a820;line-height:1.5"></div>
+        <div style="margin-top:10px">
+          <button type="button" onclick="suggestQuestions()" id="suggestQBtn" style="background:rgba(201,146,13,0.1);border:1px solid rgba(201,146,13,0.3);color:#e0a820;padding:7px 14px;border-radius:6px;font-size:12px;font-family:'Space Mono',monospace;cursor:pointer;letter-spacing:0.03em">✨ Suggest questions for this category</button>
+        </div>
+        <div id="questionSuggestions" style="display:none;margin-top:10px;display:flex;flex-wrap:wrap;gap:8px"></div>
       </div>
       <div class="field">
         <label>Category</label>
-        <select id="newCategory" onchange="loadSourceTemplate(this.value)">
+        <select id="newCategory" onchange="loadSourceTemplate(this.value); clearQuestionSuggestions()">
           <option value="sports">Sports</option>
           <option value="esports">Esports</option>
           <option value="entertainment">Entertainment</option>
@@ -1717,7 +1721,7 @@ body {
             <li class="plan-feature included"><span class="feature-check yes">✓</span> <strong>Unlimited</strong> active markets</li>
             <li class="plan-feature included"><span class="feature-check yes">✓</span> Full analytics dashboard</li>
             <li class="plan-feature included"><span class="feature-check yes">✓</span> Flex Points + Rewards system</li>
-            <li class="plan-feature included"><span class="feature-check yes">✓</span> YouTube scanner (comments, transcript, live chat)</li>
+            <li class="plan-feature included"><span class="feature-check yes">✓</span> AI scanner (YouTube, Twitch, Reddit, and more)</li>
             <li class="plan-feature included"><span class="feature-check yes">✓</span> AI market generation &amp; resolution</li>
             <li class="plan-feature included"><span class="feature-check yes">✓</span> Custom community branding</li>
             <li class="plan-feature included"><span class="feature-check yes">✓</span> "Built with HYPERFLEX" subtle footer</li>
@@ -1788,36 +1792,60 @@ body {
 <div class="modal-overlay" id="youtubeModal">
   <div class="modal" style="max-width:580px">
     <div class="modal-header">
-      <div class="modal-title">▶ Scan YouTube</div>
+      <div class="modal-title">▶ AI Content Scanner</div>
       <button class="modal-close" onclick="closeYoutubeModal()">×</button>
     </div>
     <div class="modal-body">
       <div class="modal-ai-box">
         <div class="modal-ai-icon">🤖</div>
         <div class="modal-ai-text" id="ytAiDesc">
-          <strong>AI reads your content.</strong> Paste any YouTube video URL — Claude scans comments, transcript, or live chat to extract the predictions your community is already making.
+          <strong>AI reads your content.</strong> Scan a YouTube video, or paste content from Twitch, Reddit, Discord, or anywhere else — Claude extracts the predictions your community is already making.
         </div>
       </div>
 
-      <!-- Scan type toggle -->
+      <!-- Platform toggle -->
       <div style="display:flex;gap:6px;margin-bottom:16px">
         <button id="ytToggleComments" onclick="setYtScanType('comments')"
           style="flex:1;padding:8px 4px;font-family:var(--mono);font-size:11px;letter-spacing:0.08em;border-radius:6px;border:1px solid var(--gold);background:var(--gold);color:var(--ink);cursor:pointer;font-weight:700">
-          💬 Comments
+          💬 YT Comments
         </button>
         <button id="ytToggleTranscript" onclick="setYtScanType('transcript')"
           style="flex:1;padding:8px 4px;font-family:var(--mono);font-size:11px;letter-spacing:0.08em;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--dim);cursor:pointer">
-          🎙 Transcript
+          🎙 YT Transcript
         </button>
         <button id="ytToggleLiveChat" onclick="setYtScanType('live_chat')"
           style="flex:1;padding:8px 4px;font-family:var(--mono);font-size:11px;letter-spacing:0.08em;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--dim);cursor:pointer">
-          💬 Live Chat
+          📡 YT Live Chat
+        </button>
+        <button id="ytTogglePaste" onclick="setYtScanType('paste')"
+          style="flex:1;padding:8px 4px;font-family:var(--mono);font-size:11px;letter-spacing:0.08em;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--dim);cursor:pointer">
+          📋 Paste
         </button>
       </div>
 
-      <div class="field">
+      <!-- YouTube URL field (hidden in paste mode) -->
+      <div class="field" id="ytUrlField">
         <label>YouTube Video or Channel URL</label>
         <input type="url" id="youtubeUrl" placeholder="https://youtube.com/watch?v=... or https://youtube.com/@yourchannel"/>
+      </div>
+
+      <!-- Paste mode fields (hidden in YouTube modes) -->
+      <div id="ytPasteField" style="display:none">
+        <div class="field">
+          <label>Source Platform</label>
+          <select id="ytPasteSource" style="font-family:var(--mono);font-size:12px">
+            <option value="Twitch chat">Twitch chat</option>
+            <option value="Reddit thread">Reddit thread</option>
+            <option value="Discord chat">Discord chat</option>
+            <option value="Twitter/X thread">Twitter/X thread</option>
+            <option value="Article or blog post">Article or blog post</option>
+            <option value="Community content">Other community content</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Paste your content here</label>
+          <textarea id="ytPasteText" rows="6" placeholder="Paste Twitch chat, Reddit comments, Discord messages, article text… Claude will extract what your community is speculating about." style="resize:vertical;font-size:12px;line-height:1.5"></textarea>
+        </div>
       </div>
       <div id="ytScanResult" style="display:none">
         <div id="ytVideoMeta" style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:16px;padding:10px 12px;background:var(--paper);border:1px solid var(--border);border-radius:6px;line-height:1.6"></div>
@@ -1871,6 +1899,8 @@ async function init() {
 
 function renderDashboard(data) {
   const { creator, stats, markets, leaderboard } = data;
+
+  window.communityName = creator.display_name || '';
 
   // Sidebar
   document.getElementById('sidebarCommunityName').textContent = creator.display_name;
@@ -2047,10 +2077,59 @@ function openCreateModal() {
   document.getElementById('questionWarning').style.display = 'none';
   document.getElementById('newCategory').value = 'sports';
   loadSourceTemplate('sports');
+  clearQuestionSuggestions();
   document.getElementById('createModal').classList.add('show');
 }
 function closeCreateModal() {
   document.getElementById('createModal').classList.remove('show');
+  clearQuestionSuggestions();
+}
+
+function clearQuestionSuggestions() {
+  const box = document.getElementById('questionSuggestions');
+  if (box) { box.innerHTML = ''; box.style.display = 'none'; }
+}
+
+async function suggestQuestions() {
+  const category = document.getElementById('newCategory').value;
+  const btn = document.getElementById('suggestQBtn');
+  const box = document.getElementById('questionSuggestions');
+  const token = localStorage.getItem('creator_token');
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Generating...';
+
+  try {
+    const res = await fetch('/api/creator/suggest-questions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ category, communityName: window.communityName || '' })
+    });
+    const data = await res.json();
+    if (!data.questions || !data.questions.length) throw new Error('No questions returned');
+
+    box.innerHTML = '';
+    data.questions.forEach(q => {
+      const pill = document.createElement('button');
+      pill.type = 'button';
+      pill.textContent = q;
+      pill.style.cssText = 'background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.25);color:#ddd8cc;padding:8px 12px;border-radius:6px;font-size:12px;font-family:"Space Mono",monospace;cursor:pointer;text-align:left;line-height:1.4;transition:background 0.15s';
+      pill.onmouseenter = () => pill.style.background = 'rgba(201,146,13,0.18)';
+      pill.onmouseleave = () => pill.style.background = 'rgba(201,146,13,0.08)';
+      pill.onclick = () => {
+        document.getElementById('newQuestion').value = q;
+        validateQuestion();
+        clearQuestionSuggestions();
+      };
+      box.appendChild(pill);
+    });
+    box.style.display = 'flex';
+  } catch (e) {
+    showToast('Could not generate questions — try again.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '✨ Suggest questions for this category';
+  }
 }
 
 async function createMarket() {
@@ -2519,20 +2598,27 @@ let ytScanType = 'comments';
 const YT_SCAN_LABELS = {
   comments:    { btn: '💬 Scan Comments →',    scanning: 'Scanning comments…',    icon: '💬', color: 'var(--gold)',  sectionLabel: '💬 Fan Debate Markets — from comments' },
   transcript:  { btn: '🎙 Scan Transcript →',  scanning: 'Scanning transcript…',  icon: '🎙', color: '#5ba4cf',    sectionLabel: '🎙 Creator Announcements — from transcript' },
-  live_chat:   { btn: '💬 Scan Live Chat →',   scanning: 'Scanning live chat…',   icon: '💬', color: '#9b59b6',    sectionLabel: '💬 Live Chat Markets — from stream chat' }
+  live_chat:   { btn: '📡 Scan Live Chat →',   scanning: 'Scanning live chat…',   icon: '📡', color: '#9b59b6',    sectionLabel: '📡 Live Chat Markets — from stream chat' },
+  paste:       { btn: '📋 Generate Markets →', scanning: 'Analyzing content…',    icon: '📋', color: '#27ae60',    sectionLabel: '📋 Community Markets — from pasted content' }
 };
 
 function setYtScanType(type) {
   ytScanType = type;
-  const toggleIds = { comments: 'ytToggleComments', transcript: 'ytToggleTranscript', live_chat: 'ytToggleLiveChat' };
+  const toggleIds = { comments: 'ytToggleComments', transcript: 'ytToggleTranscript', live_chat: 'ytToggleLiveChat', paste: 'ytTogglePaste' };
   Object.entries(toggleIds).forEach(([t, id]) => {
     const btn = document.getElementById(id);
+    if (!btn) return;
     const active = t === type;
     btn.style.background = active ? 'var(--gold)' : 'transparent';
     btn.style.color = active ? 'var(--ink)' : 'var(--dim)';
     btn.style.borderColor = active ? 'var(--gold)' : 'var(--border)';
     btn.style.fontWeight = active ? '700' : '400';
   });
+  // Show/hide URL vs paste fields
+  const urlField = document.getElementById('ytUrlField');
+  const pasteField = document.getElementById('ytPasteField');
+  if (urlField) urlField.style.display = type === 'paste' ? 'none' : '';
+  if (pasteField) pasteField.style.display = type === 'paste' ? '' : 'none';
   const cfg = YT_SCAN_LABELS[type];
   const scanBtn = document.getElementById('ytScanBtn');
   if (scanBtn) scanBtn.textContent = cfg.btn;
@@ -2558,6 +2644,45 @@ function closeYoutubeModal() {
 }
 
 async function runYoutubeScan() {
+  // ── Paste mode ───────────────────────────────────────────
+  if (ytScanType === 'paste') {
+    const text = document.getElementById('ytPasteText').value.trim();
+    const sourceLabel = document.getElementById('ytPasteSource').value;
+    if (!text || text.length < 50) { showToast('Paste some content first (at least a few lines).', 'error'); return; }
+
+    const cfg = YT_SCAN_LABELS['paste'];
+    const btn = document.getElementById('ytScanBtn');
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner"></span> ${cfg.scanning}`;
+    document.getElementById('ytError').style.display = 'none';
+    document.getElementById('ytScanResult').style.display = 'none';
+
+    try {
+      const r = await fetch(API + '/api/creator/scan-content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ text, source_label: sourceLabel })
+      });
+      const data = await r.json();
+      if (!r.ok) {
+        document.getElementById('ytError').textContent = data.error || 'Scan failed.';
+        document.getElementById('ytError').style.display = 'block';
+        return;
+      }
+      ytSuggestedMarkets = data.markets || [];
+      const wordCount = data.word_count || 0;
+      renderYtResults(`${sourceLabel} · ${wordCount} words analyzed`, cfg, data.markets || []);
+    } catch (e) {
+      document.getElementById('ytError').textContent = e.message || 'Scan failed.';
+      document.getElementById('ytError').style.display = 'block';
+    } finally {
+      const b = document.getElementById('ytScanBtn');
+      if (b) { b.disabled = false; b.textContent = cfg.btn; }
+    }
+    return;
+  }
+
+  // ── YouTube modes ────────────────────────────────────────
   const url = document.getElementById('youtubeUrl').value.trim();
   if (!url) { showToast('Paste a YouTube URL first.', 'error'); return; }
 
@@ -2590,31 +2715,9 @@ async function runYoutubeScan() {
     else if (ytScanType === 'transcript') metaDetail = `${Math.round((data.transcript_length || 0) / 100) / 10}k chars of transcript`;
     else if (ytScanType === 'live_chat') metaDetail = `${data.live_chat_count} chat messages scanned`;
 
-    document.getElementById('ytVideoMeta').innerHTML =
-      `${cfg.icon} <strong style="color:var(--text)">${data.video_title}</strong><br>` +
-      `${metaDetail} · ${ytSuggestedMarkets.length} markets generated`;
+    const metaSummary = `${cfg.icon} <strong style="color:var(--text)">${data.video_title}</strong><br>${metaDetail} · ${ytSuggestedMarkets.length} markets generated`;
+    renderYtResults(metaSummary, cfg, ytSuggestedMarkets);
 
-    // Render markets
-    if (ytSuggestedMarkets.length > 0) {
-      document.getElementById('ytMarketSectionLabel').style.color = cfg.color;
-      document.getElementById('ytMarketSectionLabel').textContent = cfg.sectionLabel;
-      document.getElementById('ytMarketList').innerHTML = ytSuggestedMarkets.map((m, i) => `
-        <label class="yt-market-item selected" id="ytItem${i}" onclick="toggleYtItem(${i})">
-          <input type="checkbox" id="ytCheck${i}" checked/>
-          <div>
-            <div class="yt-market-question">${m.question}</div>
-            <div class="yt-market-meta">${m.category} · Closes ${m.resolution_date}${m.resolution_note ? ' · ' + m.resolution_note : ''}</div>
-          </div>
-        </label>`).join('');
-      document.getElementById('ytMarketSection').style.display = 'block';
-    }
-
-    document.getElementById('ytScanResult').style.display = 'block';
-    document.getElementById('ytFooter').innerHTML = `
-      <button class="btn-secondary" onclick="closeYoutubeModal()">Cancel</button>
-      <button class="btn-secondary" onclick="runYoutubeScan()">↺ Re-scan</button>
-      <button class="btn-primary" onclick="publishYtMarkets()">Publish Selected →</button>
-    `;
   } catch {
     document.getElementById('ytError').textContent = 'Network error. Please try again.';
     document.getElementById('ytError').style.display = 'block';
@@ -2622,6 +2725,31 @@ async function runYoutubeScan() {
     const b = document.getElementById('ytScanBtn');
     if (b) { b.disabled = false; b.textContent = cfg.btn; }
   }
+}
+
+function renderYtResults(metaSummary, cfg, markets) {
+  document.getElementById('ytVideoMeta').innerHTML = metaSummary;
+
+  if (markets.length > 0) {
+    document.getElementById('ytMarketSectionLabel').style.color = cfg.color;
+    document.getElementById('ytMarketSectionLabel').textContent = cfg.sectionLabel;
+    document.getElementById('ytMarketList').innerHTML = markets.map((m, i) => `
+      <label class="yt-market-item selected" id="ytItem${i}" onclick="toggleYtItem(${i})">
+        <input type="checkbox" id="ytCheck${i}" checked/>
+        <div>
+          <div class="yt-market-question">${m.question}</div>
+          <div class="yt-market-meta">${m.category} · Closes ${m.resolution_date}${m.resolution_note ? ' · ' + m.resolution_note : ''}</div>
+        </div>
+      </label>`).join('');
+    document.getElementById('ytMarketSection').style.display = 'block';
+  }
+
+  document.getElementById('ytScanResult').style.display = 'block';
+  document.getElementById('ytFooter').innerHTML = `
+    <button class="btn-secondary" onclick="closeYoutubeModal()">Cancel</button>
+    <button class="btn-secondary" onclick="runYoutubeScan()">↺ Re-scan</button>
+    <button class="btn-primary" onclick="publishYtMarkets()">Publish Selected →</button>
+  `;
 }
 
 function toggleYtItem(i) {

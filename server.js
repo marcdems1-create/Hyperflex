@@ -1507,6 +1507,98 @@ app.post('/markets/:id/resolve', requireCreator, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
+// 7a. CATEGORY-AWARE QUESTION SUGGESTER
+// POST /api/creator/suggest-questions
+// Body: { category, communityName }
+// Returns: { questions: ["Will X?", "Will Y?", ...] }
+// ════════════════════════════════════════════════════════════
+app.post('/api/creator/suggest-questions', requireCreator, async (req, res) => {
+  try {
+    const { category, communityName } = req.body;
+    if (!category) return res.status(400).json({ error: 'Category required' });
+
+    const today = new Date();
+    const in30  = new Date(today.getTime() + 30  * 86400000).toISOString().split('T')[0];
+    const in60  = new Date(today.getTime() + 60  * 86400000).toISOString().split('T')[0];
+    const in90  = new Date(today.getTime() + 90  * 86400000).toISOString().split('T')[0];
+    const in180 = new Date(today.getTime() + 180 * 86400000).toISOString().split('T')[0];
+
+    const categoryContext = {
+      sports:        'sports outcomes, player performance, team standings, championships, game results',
+      esports:       'esports tournament results, team rankings, game patches, player transfers, championship outcomes',
+      entertainment: 'movies, TV shows, music, box office, award shows, celebrity events, streaming releases',
+      finance:       'stock prices, earnings reports, economic indicators, company milestones, market movements',
+      crypto:        'crypto prices, protocol upgrades, exchange listings, market cap milestones, regulatory events',
+      politics:      'elections, legislation, policy decisions, political appointments, polling outcomes',
+      news:          'current events, geopolitical developments, major world events',
+      other:         'general predictions relevant to the community',
+    };
+
+    const context = categoryContext[category] || categoryContext.other;
+    const communityStr = communityName ? ` for a community called "${communityName}"` : '';
+
+    const fallbackByCategory = {
+      sports:        ['Will the home team win the next championship?', 'Will the top player score 30+ points this week?', 'Will the season record exceed last year?', 'Will there be an upset in the next playoff round?', 'Will the underdog team make the finals?'],
+      esports:       ['Will the top-ranked team win the next tournament?', 'Will a major upset happen in the next bracket?', 'Will the new patch change the meta significantly?', 'Will the reigning champion defend their title?', 'Will a rookie player reach the top 10?'],
+      entertainment: ['Will the movie exceed $100M at the box office opening weekend?', 'Will the show be renewed for another season?', 'Will the artist win at the next award show?', 'Will the sequel outperform the original?', 'Will the album debut at #1?'],
+      finance:       ['Will the stock hit a new all-time high this quarter?', 'Will the company beat earnings estimates?', 'Will the Fed cut rates at the next meeting?', 'Will inflation drop below 3% by year end?', 'Will the IPO price above its target range?'],
+      crypto:        ['Will Bitcoin exceed $100K before year end?', 'Will Ethereum complete the next major upgrade on schedule?', 'Will the altcoin outperform BTC this month?', 'Will the protocol reach $1B TVL?', 'Will the token list on a major exchange?'],
+      politics:      ['Will the bill pass the vote?', 'Will the candidate win the primary?', 'Will the policy be reversed within 6 months?', 'Will the approval rating rise above 50%?', 'Will the election result be called on election night?'],
+      news:          ['Will the negotiation reach a deal within 30 days?', 'Will the event lead to major policy change?', 'Will the situation escalate further?', 'Will the organization announce major changes?', 'Will the story remain in the news cycle for 2+ weeks?'],
+      other:         ['Will this milestone be reached by the deadline?', 'Will the community hit 10,000 members?', 'Will the project launch on schedule?', 'Will the prediction come true this month?', 'Will the target be exceeded?'],
+    };
+
+    if (!ANTHROPIC_API_KEY) {
+      return res.json({ questions: fallbackByCategory[category] || fallbackByCategory.other });
+    }
+
+    const prompt = `Generate exactly 5 prediction market questions${communityStr} in the category: ${category} (${context}).
+
+Today is ${today.toISOString().split('T')[0]}. Use these resolution timeframes: near-term=${in30}, mid-term=${in60}, longer=${in90}, far=${in180}.
+
+Rules:
+- Each question must be a clear YES or NO binary question
+- Must be specific, interesting, and relevant to ${category}
+- Start with "Will "
+- End with "?"
+- Include a timeframe or date where natural
+- Make them engaging and debatable — not obvious
+
+Return ONLY a JSON array of 5 strings, no other text:
+["Will X?", "Will Y?", "Will Z?", "Will A?", "Will B?"]`;
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 400,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    const aiData = await response.json();
+    const text = aiData.content?.[0]?.text || '';
+    const jsonMatch = text.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) throw new Error('Invalid AI response');
+    const questions = JSON.parse(jsonMatch[0]);
+    res.json({ questions: questions.slice(0, 5) });
+
+  } catch (err) {
+    console.error('suggest-questions error:', err);
+    const fallback = {
+      sports: ['Will the top team win the championship?', 'Will the star player stay healthy all season?', 'Will the underdog make the playoffs?', 'Will this season break viewership records?', 'Will the coach be fired before season end?'],
+      finance: ['Will the stock hit a new all-time high this quarter?', 'Will the company beat earnings estimates?', 'Will the merger close on schedule?', 'Will the CEO step down this year?', 'Will the IPO debut above its target price?'],
+    };
+    const cat = req.body?.category || 'other';
+    res.json({ questions: fallback[cat] || ['Will this happen before the deadline?', 'Will the prediction come true this month?', 'Will the milestone be reached on time?', 'Will the outcome surprise everyone?', 'Will this be the biggest event of the year?'] });
+  }
+});
+
 // 7. AI MARKET SUGGESTER
 // POST /api/suggest-markets
 // Body: { description: "Weekly fantasy football podcast..." }
@@ -1956,6 +2048,72 @@ Return ONLY valid JSON:
   } catch (err) {
     console.error('scan-youtube error:', err);
     res.status(500).json({ error: err.message || 'Failed to scan YouTube video' });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+// SCAN CONTENT — paste text from any platform (Twitch, Reddit, Discord, etc.)
+// POST /api/creator/scan-content
+// Body: { text: "...", source_label: "Twitch chat" | "Reddit thread" | ... }
+// Returns: { markets, word_count, source_label }
+// ════════════════════════════════════════════════════════════
+app.post('/api/creator/scan-content', requireCreator, async (req, res) => {
+  try {
+    const { text, source_label = 'content' } = req.body;
+    if (!text || text.trim().length < 50) return res.status(400).json({ error: 'Please paste at least a few lines of content to scan.' });
+    if (!ANTHROPIC_API_KEY) return res.status(503).json({ error: 'Anthropic API key not configured.' });
+
+    const wordCount = text.trim().split(/\s+/).length;
+    const truncated = text.trim().slice(0, 6000) + (text.length > 6000 ? '\n… [truncated]' : '');
+
+    const now = new Date();
+    const in30 = new Date(now); in30.setDate(now.getDate() + 30);
+    const in60 = new Date(now); in60.setDate(now.getDate() + 60);
+    const in90 = new Date(now); in90.setDate(now.getDate() + 90);
+    const fmt = d => d.toISOString().split('T')[0];
+
+    const prompt = `You are analyzing community content to generate prediction markets for a creator's audience.
+
+Source type: ${source_label}
+
+CONTENT:
+${truncated}
+
+Generate 4-7 prediction markets based on:
+- Recurring topics, debates, or questions the community is discussing
+- Predictions or speculation people are making
+- Upcoming events or outcomes being anticipated
+- Controversies or divided opinions
+
+Rules:
+- Every question must be clearly YES or NO, objectively resolvable
+- Resolution dates: near=${fmt(in30)}, mid=${fmt(in60)}, far=${fmt(in90)}
+- Pick the most appropriate resolution date per question
+- Return ONLY valid JSON
+
+Return ONLY this JSON:
+{
+  "markets": [
+    { "question": "Will ...?", "category": "sports|esports|entertainment|finance|crypto|politics|news|other", "resolution_date": "YYYY-MM-DD" }
+  ]
+}`;
+
+    const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1200, messages: [{ role: 'user', content: prompt }] })
+    });
+    const aiData = await aiRes.json();
+    const rawText = aiData.content?.[0]?.text || '';
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('AI returned invalid format');
+    const markets = (JSON.parse(jsonMatch[0]).markets || []).map(m => ({ ...m, source: 'paste' }));
+
+    return res.json({ markets, word_count: wordCount, source_label });
+
+  } catch (err) {
+    console.error('scan-content error:', err);
+    res.status(500).json({ error: err.message || 'Failed to scan content' });
   }
 });
 
