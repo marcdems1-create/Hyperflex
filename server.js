@@ -146,7 +146,6 @@ app.post('/markets', async (req, res) => {
           .maybeSingle());
       }
       if (settings?.slug) {
-        row.creator_slug = settings.slug;
         // Populate tenant_slug if the caller didn't provide it
         if (!row.tenant_slug) row.tenant_slug = settings.slug;
       }
