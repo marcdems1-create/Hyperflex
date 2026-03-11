@@ -1410,6 +1410,20 @@ body {
       <!-- Leaderboard Tab -->
       <div id="tab-leaderboard" style="display:none">
         <div class="section">
+          <div style="display:flex;gap:6px;margin-bottom:16px">
+            <button id="lbTabAllTime" onclick="setLbPeriod('all_time')"
+              style="padding:7px 14px;font-family:var(--mono);font-size:11px;letter-spacing:0.08em;border-radius:6px;border:1px solid var(--gold);background:var(--gold);color:var(--ink);cursor:pointer;font-weight:700">
+              All Time
+            </button>
+            <button id="lbTabMonthly" onclick="setLbPeriod('monthly')"
+              style="padding:7px 14px;font-family:var(--mono);font-size:11px;letter-spacing:0.08em;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--dim);cursor:pointer">
+              This Month
+            </button>
+            <button id="lbTabWeekly" onclick="setLbPeriod('weekly')"
+              style="padding:7px 14px;font-family:var(--mono);font-size:11px;letter-spacing:0.08em;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--dim);cursor:pointer">
+              This Week
+            </button>
+          </div>
           <div class="leaderboard" id="fullLeaderboard">
             <div class="loading-row">Loading...</div>
           </div>
@@ -1724,7 +1738,6 @@ body {
             <li class="plan-feature included"><span class="feature-check yes">✓</span> AI scanner (YouTube, Twitch, Reddit, and more)</li>
             <li class="plan-feature included"><span class="feature-check yes">✓</span> AI market generation &amp; resolution</li>
             <li class="plan-feature included"><span class="feature-check yes">✓</span> Custom community branding</li>
-            <li class="plan-feature included"><span class="feature-check yes">✓</span> "Built with HYPERFLEX" subtle footer</li>
             <li class="plan-feature excluded"><span class="feature-check no">×</span> Remove watermark entirely</li>
             <li class="plan-feature excluded"><span class="feature-check no">×</span> Custom domain</li>
           </ul>
@@ -1901,6 +1914,7 @@ function renderDashboard(data) {
   const { creator, stats, markets, leaderboard } = data;
 
   window.communityName = creator.display_name || '';
+  window._pointsName = creator.custom_points_name || 'Flex Points';
 
   // Sidebar
   document.getElementById('sidebarCommunityName').textContent = creator.display_name;
@@ -2007,6 +2021,36 @@ function renderResolveList(items, containerId) {
       </div>
     </div>
   `).join('');
+}
+
+let lbPeriod = 'all_time';
+
+async function setLbPeriod(period) {
+  lbPeriod = period;
+  const tabs = { all_time: 'lbTabAllTime', monthly: 'lbTabMonthly', weekly: 'lbTabWeekly' };
+  Object.entries(tabs).forEach(([p, id]) => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    const active = p === period;
+    btn.style.background = active ? 'var(--gold)' : 'transparent';
+    btn.style.color = active ? 'var(--ink)' : 'var(--dim)';
+    btn.style.borderColor = active ? 'var(--gold)' : 'var(--border)';
+    btn.style.fontWeight = active ? '700' : '400';
+  });
+
+  const el = document.getElementById('fullLeaderboard');
+  el.innerHTML = '<div class="loading-row">Loading...</div>';
+
+  try {
+    const r = await fetch(API + '/api/creator/leaderboard?period=' + period, {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    const data = await r.json();
+    const pointsName = window._pointsName || 'Flex Points';
+    renderLeaderboard(data.leaderboard || [], 'fullLeaderboard', 20, pointsName);
+  } catch {
+    el.innerHTML = '<div class="empty-state"><div class="empty-title">Failed to load</div></div>';
+  }
 }
 
 function renderLeaderboard(leaders, containerId, limit, pointsName) {
@@ -2776,10 +2820,12 @@ async function publishYtMarkets() {
         body: JSON.stringify({
           question: m.question,
           category: m.category,
-          expiry_date: m.resolution_date,
+          expiry_date: m.resolution_date || new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0],
           creator_id: user.id,
           tenant_slug: user.slug,
-          is_public: true
+          is_public: true,
+          yes_price: 0.5,
+          no_price: 0.5
         })
       });
       const d = await r.json();

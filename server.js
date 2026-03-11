@@ -421,7 +421,7 @@ async function fetchCurrentPrice(commodity) {
 }
 
 async function settleMarkets() {
-  console.log('Running settlement check...');
+  // settlement check — silent in production
   const now = new Date().toISOString();
 
   const { data: markets } = await supabase
@@ -435,7 +435,7 @@ async function settleMarkets() {
   for (const market of markets) {
     const settlement_price = await fetchCurrentPrice(market.commodity);
     if (settlement_price == null) {
-      console.log(`Skipping settlement for market ${market.id} (${market.question}): no price for commodity "${market.commodity}"`);
+      // no price available — skip this market silently
       continue;
     }
 
@@ -475,7 +475,7 @@ async function settleMarkets() {
           .eq('id', position.user_id);
       }
     }
-    console.log(`Settled market: ${market.question} — settlement_price: ${settlement_price}, outcome: ${outcome}`);
+    console.log(`[settle] ${market.id} → ${outcome ? 'YES' : 'NO'} @ ${settlement_price}`);
   }
 }
 
@@ -554,7 +554,7 @@ async function scanAndCreateMarkets() {
         expiry_date,
         resolved: false,
       };
-      console.log('[scanAndCreateMarkets] inserting:', JSON.stringify(insertRow, null, 2));
+      // inserting auto-generated market
 
       const { data: inserted, error } = await supabase.from('markets').insert([insertRow]).select();
       if (error) {
@@ -999,6 +999,80 @@ app.post('/api/creator/login', async (req, res) => {
 
   } catch (err) {
     console.error('creator login error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+// LEADERBOARD WITH PERIOD FILTER
+// GET /api/creator/leaderboard?period=all_time|monthly|weekly
+// Auth: Bearer token required
+// ════════════════════════════════════════════════════════════
+app.get('/api/creator/leaderboard', requireCreator, async (req, res) => {
+  try {
+    const creatorId = req.creator.id;
+    const period = req.query.period || 'all_time'; // all_time | monthly | weekly
+
+    // Get this creator's market IDs
+    const { data: markets } = await supabase
+      .from('markets')
+      .select('id')
+      .eq('creator_id', creatorId);
+
+    if (!markets || markets.length === 0) return res.json({ leaderboard: [] });
+    const marketIds = markets.map(m => m.id);
+
+    // Build date filter
+    let since = null;
+    if (period === 'weekly') {
+      since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    } else if (period === 'monthly') {
+      since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    }
+
+    // Fetch positions (filtered by period if applicable)
+    let query = supabase
+      .from('positions')
+      .select('user_id, amount, won, settled')
+      .in('market_id', marketIds);
+    if (since) query = query.gte('created_at', since);
+    const { data: positions } = await query;
+
+    if (!positions || positions.length === 0) return res.json({ leaderboard: [] });
+
+    // Aggregate per user
+    const userMap = {};
+    positions.forEach(p => {
+      if (!userMap[p.user_id]) userMap[p.user_id] = { trade_count: 0, pnl: 0 };
+      userMap[p.user_id].trade_count++;
+      // For weekly/monthly: PnL = sum of won payouts - sum of amounts spent
+      if (p.settled) {
+        userMap[p.user_id].pnl += p.won ? (p.amount * 2) : -p.amount;
+      }
+    });
+
+    const userIds = Object.keys(userMap);
+    const { data: users } = await supabase
+      .from('users')
+      .select('id, display_name, balance')
+      .in('id', userIds);
+
+    const leaderboard = (users || [])
+      .map(u => ({
+        user_id: u.id,
+        display_name: u.display_name || 'Anonymous',
+        balance: u.balance || 0,
+        // For all_time use balance; for period windows use calculated pnl
+        pnl: period === 'all_time' ? (u.balance || 0) : (userMap[u.id]?.pnl || 0),
+        trade_count: userMap[u.id]?.trade_count || 0
+      }))
+      .sort((a, b) => b.pnl - a.pnl)
+      .slice(0, 20);
+
+    res.json({ leaderboard, period });
+
+  } catch (err) {
+    console.error('creator leaderboard error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
