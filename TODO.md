@@ -1,44 +1,50 @@
 # HYPERFLEX — Active Todo List
 
-> Updated each session. This is the source of truth for what needs doing.
-> Claude reads this at session start alongside CLAUDE.md and HYPERFLEX_Brief.md.
+> Updated each session. Claude reads this at session start alongside CLAUDE.md and HYPERFLEX_Brief.md.
+> Claude must determine what's done from git history — do not ask Marc.
 
 ---
 
-## 🔴 In Progress / Immediate
+## 🔴 Immediate
 
-- [ ] Push new landing page to Railway (`git push origin main`) — **Marc does this from terminal**
+- [ ] **Push to Railway** — `git push origin main` from Marc's terminal (3 commits pending: landing page, CLAUDE.md, TODO.md)
 
 ---
 
 ## 🟡 Up Next
 
-- [ ] Landing page — review live version after deploy, iterate on copy/design
-- [ ] Leaderboard — wire weekly/monthly tabs to API (currently only all-time works)
-- [ ] Scanner markets — ensure `yes_price` / `no_price` are set on creation (default to 50/50 if missing)
-- [ ] Remove or gate debug logs in production (noisy console output)
+- [ ] **Landing page** — review live after deploy, iterate on copy/design
+- [ ] **Leaderboard** — weekly/monthly tabs exist in UI but not wired to API (only all-time works)
+- [ ] **Scanner markets** — `yes_price` / `no_price` not set on AI-generated markets, defaults needed
+- [ ] **Debug logs** — `[scanAndCreateMarkets]` and `[markets fetch]` logs still noisy in production
 
 ---
 
 ## 🔵 Backlog
 
-- [ ] Custom domain support for Platinum tier (promised in pricing but not implemented)
-- [ ] Pro/Platinum — move off waitlist, wire up actual Stripe payments
-- [ ] Delete old `index.html` at project root (not served, just clutter)
-- [ ] Settlement — improve commodity mapping for scanner-generated markets
-- [ ] Community page — add social sharing meta tags (og:image, og:title per community)
-- [ ] Creator dashboard — onboarding flow for brand-new creators (empty state)
+- [ ] **Stripe payments** — Pro/Platinum currently on waitlist only, no actual billing
+- [ ] **Custom domain** — Platinum tier promises it, not implemented in server
+- [ ] **Community meta tags** — og:image, og:title per community slug for social sharing
+- [ ] **Creator onboarding** — empty state UX for brand-new creators with 0 markets
+- [ ] **Settlement mapping** — scanner categories (crypto/commodities/macro) don't always map cleanly to a commodity price source
+- [ ] **Cleanup** — delete old `index.html` at project root (not served, just clutter)
 
 ---
 
-## ✅ Recently Done
+## ✅ Done (from git history)
 
-- [x] Rewrite `public/index.html` as creator B2B SaaS landing page (commit `febf3c5`)
-- [x] Add Platinum tier to pricing modal in creator dashboard (commit `f34ae8e`)
-- [x] Redesign community watermark — HYPERFLEX logo + CTA pill (commit `f34ae8e`)
-- [x] Creator dashboard redesign — Linear/Vercel-style SaaS aesthetic (commit `cb9f958`)
-- [x] YouTube scanner — comments + transcript + live chat modes
-- [x] AI market generation, AI resolution suggestions, AI question validation
-- [x] Flex Points rewards system
-- [x] Pro/Platinum waitlist capture
-- [x] Add `CLAUDE.md` for session memory (commit `545b884`)
+- [x] Creator platform — signup, login, dashboard, community page, ToS (`0ec7450` → `b2728a2`)
+- [x] YouTube scanner — comments mode (`938f82a`), transcript mode (`e70a3f2`), live chat mode (`ad2f43d`)
+- [x] AI market generation via Claude (`938f82a`)
+- [x] AI question validation on blur (`211d1bf`)
+- [x] AI resolution suggestions (`7ff0041`)
+- [x] Flex Points rewards system (`7cf68bf`)
+- [x] Market editing + archive (`5b70859`)
+- [x] Real price settlement via CoinGecko + metals API (`43b7548`)
+- [x] Leaderboard with PnL rankings (`0218a48`)
+- [x] Creator dashboard redesign — Linear/Vercel aesthetic (`cb9f958`)
+- [x] Pro/Platinum waitlist + upgrade modal (`c047ede`)
+- [x] Platinum tier + 3-column pricing modal (`f34ae8e`)
+- [x] Community watermark redesign (`f34ae8e`)
+- [x] Landing page rewrite — creator B2B SaaS (`febf3c5`)
+- [x] CLAUDE.md + TODO.md — persistent session memory (`545b884`, `3184172`)
