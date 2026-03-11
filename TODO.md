@@ -7,7 +7,7 @@
 
 ## 🔴 Immediate
 
-- [ ] **Push to Railway** — `git push origin main` from Marc's terminal (3 commits pending: landing page, CLAUDE.md, TODO.md)
+- [ ] **Push to Railway** — `git push origin main` (commit `b3a92e4` pending: AI question suggestions + multi-platform scanner)
 
 ---
 

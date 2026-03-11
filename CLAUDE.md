@@ -34,10 +34,13 @@
 
 ## Current State (last updated March 11, 2026)
 
-- Landing page (`public/index.html`) rewritten as creator B2B SaaS page — committed `febf3c5`, **needs push**
+- Landing page (`public/index.html`) rewritten as creator B2B SaaS page — committed `febf3c5`, live
 - All other pages committed and live on Railway
 - Pro/Platinum on waitlist — all creators currently on Free tier
 - Community watermark shown for all users (all on Free)
+- Create Market modal: AI Tip box intact, ✨ Suggest questions button added (category-aware)
+- AI scanner expanded: YouTube (comments/transcript/live chat) + Paste mode (Twitch, Reddit, Discord, etc.)
+- Latest commit: `b3a92e4` — **needs push**
 
 ## To deploy: `git push origin main` (Claude cannot push — no internet from VM)
 
