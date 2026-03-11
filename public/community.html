@@ -458,6 +458,83 @@ body::before {
   color: var(--dim);
 }
 
+/* ── REWARDS ─── */
+.rewards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+.reward-tier {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  position: relative;
+  transition: border-color 0.2s;
+}
+.reward-tier.unlocked {
+  border-color: var(--gold);
+  background: rgba(201,146,13,0.06);
+}
+.reward-tier-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 3px;
+  margin-bottom: 14px;
+}
+.reward-tier-badge.locked {
+  color: var(--dim);
+  background: rgba(122,120,112,0.1);
+  border: 1px solid rgba(122,120,112,0.2);
+}
+.reward-tier-badge.unlocked {
+  color: var(--gold);
+  background: rgba(201,146,13,0.12);
+  border: 1px solid rgba(201,146,13,0.3);
+}
+.reward-tier-threshold {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 6px;
+  line-height: 1;
+}
+.reward-tier.locked .reward-tier-threshold { color: var(--dim); }
+.reward-tier-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.reward-tier.locked .reward-tier-title { color: var(--dim); }
+.reward-tier-desc {
+  font-size: 12px;
+  color: var(--dim);
+  line-height: 1.5;
+}
+.reward-progress {
+  margin-top: 14px;
+  height: 3px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.reward-progress-fill {
+  height: 100%;
+  background: var(--gold);
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+.reward-tier.locked .reward-progress-fill { background: var(--dim); }
+
 /* ── EMPTY STATE ─── */
 .empty {
   padding: 64px 32px;
@@ -880,6 +957,12 @@ body::before {
     <div class="leaderboard-card" id="leaderboardCard"></div>
   </div>
 
+  <!-- Rewards -->
+  <div id="rewardsSection" style="display:none">
+    <div class="section-label" style="margin-top:8px">🎁 Flex Points Rewards</div>
+    <div class="rewards-grid" id="rewardsGrid"></div>
+  </div>
+
 </main>
 
 <div class="powered">
@@ -1017,6 +1100,7 @@ async function loadCommunity() {
     community = data.community;
     markets = data.markets || [];
     renderPage();
+    renderRewards(data.rewards || []);
     loadLeaderboard();
   } catch {
     showCommunityError();
@@ -1070,6 +1154,33 @@ function renderPage() {
     document.getElementById('resolvedSection').style.display = 'block';
     document.getElementById('resolvedGrid').innerHTML = resolved.map(m => marketCardHTML(m, true)).join('');
   }
+}
+
+function renderRewards(rewards) {
+  if (!rewards.length) return;
+  const userBalance = currentUser?.balance || 0;
+  const section = document.getElementById('rewardsSection');
+  const grid = document.getElementById('rewardsGrid');
+
+  grid.innerHTML = rewards.map(r => {
+    const unlocked = userBalance >= r.threshold;
+    const pct = Math.min(100, Math.round((userBalance / r.threshold) * 100));
+    return `
+      <div class="reward-tier ${unlocked ? 'unlocked' : 'locked'}">
+        <div class="reward-tier-badge ${unlocked ? 'unlocked' : 'locked'}">
+          ${unlocked ? '✓ Unlocked' : '🔒 Locked'}
+        </div>
+        <div class="reward-tier-threshold">${Number(r.threshold).toLocaleString()} pts</div>
+        <div class="reward-tier-title">${r.title}</div>
+        ${r.description ? `<div class="reward-tier-desc">${r.description}</div>` : ''}
+        <div class="reward-progress">
+          <div class="reward-progress-fill" style="width:${pct}%"></div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  section.style.display = 'block';
 }
 
 function marketCardHTML(m, isResolved) {

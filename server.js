@@ -1098,7 +1098,13 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
         resolved_markets: (markets || []).filter(m => m.resolved).length
       },
       markets: markets || [],
-      leaderboard
+      leaderboard,
+      rewards: await supabase
+        .from('creator_rewards')
+        .select('id, threshold, title, description')
+        .eq('creator_id', creatorId)
+        .order('threshold', { ascending: true })
+        .then(r => r.data || [])
     });
 
   } catch (err) {
@@ -1140,6 +1146,87 @@ app.put('/api/creator/settings', requireCreator, async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     console.error('settings update error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+// 5b. REWARDS CRUD
+// GET  /api/creator/:slug/rewards  — public
+// POST /api/creator/rewards        — requireCreator
+// PUT  /api/creator/rewards/:id    — requireCreator
+// DELETE /api/creator/rewards/:id  — requireCreator
+// ════════════════════════════════════════════════════════════
+
+app.get('/api/creator/:slug/rewards', async (req, res) => {
+  try {
+    const { data: settings } = await supabase
+      .from('creator_settings')
+      .select('creator_id')
+      .eq('slug', req.params.slug)
+      .maybeSingle();
+    if (!settings) return res.status(404).json({ error: 'Community not found' });
+
+    const { data: rewards, error } = await supabase
+      .from('creator_rewards')
+      .select('id, threshold, title, description')
+      .eq('creator_id', settings.creator_id)
+      .order('threshold', { ascending: true });
+    if (error) throw error;
+    res.json({ rewards: rewards || [] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/creator/rewards', requireCreator, async (req, res) => {
+  try {
+    const { threshold, title, description } = req.body;
+    if (!threshold || !title) return res.status(400).json({ error: 'threshold and title are required' });
+
+    const { data, error } = await supabase
+      .from('creator_rewards')
+      .insert([{ creator_id: req.creator.id, threshold: Number(threshold), title, description: description || '' }])
+      .select()
+      .single();
+    if (error) throw error;
+    res.json({ ok: true, reward: data });
+  } catch (err) {
+    console.error('rewards insert error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/creator/rewards/:id', requireCreator, async (req, res) => {
+  try {
+    const { threshold, title, description } = req.body;
+    const updates = {};
+    if (threshold !== undefined) updates.threshold = Number(threshold);
+    if (title !== undefined) updates.title = title;
+    if (description !== undefined) updates.description = description;
+
+    const { error } = await supabase
+      .from('creator_rewards')
+      .update(updates)
+      .eq('id', req.params.id)
+      .eq('creator_id', req.creator.id);
+    if (error) throw error;
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/creator/rewards/:id', requireCreator, async (req, res) => {
+  try {
+    const { error } = await supabase
+      .from('creator_rewards')
+      .delete()
+      .eq('id', req.params.id)
+      .eq('creator_id', req.creator.id);
+    if (error) throw error;
+    res.json({ ok: true });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
@@ -1629,7 +1716,13 @@ app.get('/api/community/:slug', async (req, res) => {
         custom_points_name: settings.custom_points_name,
         primary_color: settings.primary_color
       },
-      markets: markets || []
+      markets: markets || [],
+      rewards: await supabase
+        .from('creator_rewards')
+        .select('id, threshold, title, description')
+        .eq('creator_id', settings.creator_id)
+        .order('threshold', { ascending: true })
+        .then(r => r.data || [])
     });
 
   } catch (err) {

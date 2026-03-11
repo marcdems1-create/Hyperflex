@@ -214,6 +214,52 @@ body {
   transition: all 0.2s;
 }
 .btn-danger:hover { background: rgba(192,57,43,0.2); border-color: var(--red); }
+.reward-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+.reward-threshold {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--gold);
+  min-width: 64px;
+  flex-shrink: 0;
+}
+.reward-info { flex: 1; min-width: 0; }
+.reward-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 2px; }
+.reward-desc { font-size: 12px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.reward-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.reward-edit-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+  background: transparent;
+  border: 1px solid var(--border);
+  padding: 5px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.reward-edit-btn:hover { border-color: var(--gold); color: var(--gold); }
+.reward-del-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--red);
+  background: transparent;
+  border: 1px solid rgba(192,57,43,0.3);
+  padding: 5px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.reward-del-btn:hover { background: rgba(192,57,43,0.1); }
 .yt-market-item {
   display: flex;
   align-items: flex-start;
@@ -918,6 +964,20 @@ body {
             <button class="btn-primary" onclick="saveSettings()" style="margin-top:8px">Save Changes</button>
           </div>
         </div>
+
+        <!-- Rewards section -->
+        <div class="section">
+          <div class="section-header">
+            <div>
+              <div class="section-title">🎁 Flex Points Rewards</div>
+              <div class="section-subtitle">Define point thresholds that unlock exclusive rewards for your community</div>
+            </div>
+            <button class="btn-primary" onclick="openRewardModal()">+ Add Reward</button>
+          </div>
+          <div id="rewardsList" style="margin-top:8px">
+            <div class="loading-row">Loading rewards...</div>
+          </div>
+        </div>
       </div>
 
     </div><!-- /content -->
@@ -1009,6 +1069,35 @@ body {
         <button class="btn-secondary" onclick="closeEditModal()">Cancel</button>
         <button class="btn-primary" onclick="saveMarketEdit()">Save Changes →</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Reward Modal (add / edit) -->
+<div class="modal-overlay" id="rewardModal">
+  <div class="modal" style="max-width:460px">
+    <div class="modal-header">
+      <div class="modal-title" id="rewardModalTitle">Add Reward</div>
+      <button class="modal-close" onclick="closeRewardModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="rewardEditId"/>
+      <div class="field">
+        <label>Point Threshold</label>
+        <input type="number" id="rewardThreshold" placeholder="e.g. 500" min="1"/>
+      </div>
+      <div class="field">
+        <label>Reward Title</label>
+        <input type="text" id="rewardTitle" placeholder="e.g. Early ticket access"/>
+      </div>
+      <div class="field">
+        <label>Description <span style="font-weight:400;text-transform:none;font-size:11px">(optional)</span></label>
+        <textarea id="rewardDescription" rows="2" placeholder="e.g. Get the link 24hrs before public sale"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer" id="rewardModalFooter">
+      <button class="btn-secondary" onclick="closeRewardModal()">Cancel</button>
+      <button class="btn-primary" onclick="saveReward()">Save Reward →</button>
     </div>
   </div>
 </div>
@@ -1125,6 +1214,7 @@ function renderDashboard(data) {
 
   // Share templates
   renderShareTemplates(creator);
+  renderRewardsList(data.rewards || []);
 
   // Settings prefill
   document.getElementById('settingName').value = creator.display_name;
@@ -1344,6 +1434,102 @@ async function saveSettings() {
 document.getElementById('settingColor').addEventListener('input', function() {
   document.getElementById('settingColorHex').textContent = this.value;
 });
+
+// ── REWARDS ───────────────────────────────────────────────
+let creatorRewards = [];
+
+function renderRewardsList(rewards) {
+  creatorRewards = rewards || [];
+  const el = document.getElementById('rewardsList');
+  if (!creatorRewards.length) {
+    el.innerHTML = '<div class="loading-row" style="color:var(--dim)">No rewards yet. Add one to motivate your community.</div>';
+    return;
+  }
+  el.innerHTML = creatorRewards.map(r => `
+    <div class="reward-row">
+      <div class="reward-threshold">${Number(r.threshold).toLocaleString()} pts</div>
+      <div class="reward-info">
+        <div class="reward-title">${r.title}</div>
+        ${r.description ? `<div class="reward-desc">${r.description}</div>` : ''}
+      </div>
+      <div class="reward-actions">
+        <button class="reward-edit-btn" onclick="openRewardModal('${r.id}')">Edit</button>
+        <button class="reward-del-btn" onclick="deleteReward('${r.id}')">Delete</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function openRewardModal(rewardId) {
+  const r = rewardId ? creatorRewards.find(x => x.id === rewardId) : null;
+  document.getElementById('rewardEditId').value = r ? r.id : '';
+  document.getElementById('rewardModalTitle').textContent = r ? 'Edit Reward' : 'Add Reward';
+  document.getElementById('rewardThreshold').value = r ? r.threshold : '';
+  document.getElementById('rewardTitle').value = r ? r.title : '';
+  document.getElementById('rewardDescription').value = r ? (r.description || '') : '';
+  document.getElementById('rewardModalFooter').innerHTML = r
+    ? `<button class="btn-danger" onclick="deleteReward('${r.id}',true)">Delete</button>
+       <div style="display:flex;gap:8px">
+         <button class="btn-secondary" onclick="closeRewardModal()">Cancel</button>
+         <button class="btn-primary" onclick="saveReward()">Save →</button>
+       </div>`
+    : `<button class="btn-secondary" onclick="closeRewardModal()">Cancel</button>
+       <button class="btn-primary" onclick="saveReward()">Save Reward →</button>`;
+  document.getElementById('rewardModal').classList.add('show');
+}
+function closeRewardModal() {
+  document.getElementById('rewardModal').classList.remove('show');
+}
+
+async function saveReward() {
+  const id = document.getElementById('rewardEditId').value;
+  const threshold = document.getElementById('rewardThreshold').value;
+  const title = document.getElementById('rewardTitle').value.trim();
+  const description = document.getElementById('rewardDescription').value.trim();
+
+  if (!threshold || !title) { showToast('Threshold and title are required.', 'error'); return; }
+
+  const method = id ? 'PUT' : 'POST';
+  const url = id ? `${API}/api/creator/rewards/${id}` : `${API}/api/creator/rewards`;
+
+  try {
+    const r = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ threshold: Number(threshold), title, description })
+    });
+    const data = await r.json();
+    if (data.ok || data.reward) {
+      closeRewardModal();
+      showToast(id ? 'Reward updated ✓' : 'Reward added ✓', 'success');
+      setTimeout(() => init(), 400);
+    } else {
+      showToast(data.error || 'Failed to save reward.', 'error');
+    }
+  } catch {
+    showToast('Network error.', 'error');
+  }
+}
+
+async function deleteReward(id, fromModal = false) {
+  if (!confirm('Delete this reward?')) return;
+  try {
+    const r = await fetch(`${API}/api/creator/rewards/${id}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    const data = await r.json();
+    if (data.ok) {
+      if (fromModal) closeRewardModal();
+      showToast('Reward deleted.', 'success');
+      setTimeout(() => init(), 400);
+    } else {
+      showToast(data.error || 'Failed to delete.', 'error');
+    }
+  } catch {
+    showToast('Network error.', 'error');
+  }
+}
 
 // Share helpers
 function copyLink() {
