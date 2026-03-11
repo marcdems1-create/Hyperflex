@@ -160,7 +160,10 @@ app.post('/markets', async (req, res) => {
     .insert([row])
     .select()
     .single();
-  if (error) return res.status(400).json({ error: error.message });
+  if (error) {
+    console.error('POST /markets insert error:', JSON.stringify({ message: error.message, code: error.code, details: error.details, hint: error.hint, row }));
+    return res.status(400).json({ error: error.message, details: error.details, hint: error.hint });
+  }
   res.json(data);
 });
 
