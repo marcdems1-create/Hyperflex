@@ -902,6 +902,252 @@ body {
   font-size: 12px;
 }
 
+/* ── Upgrade / Pro modal ─────────────────────────────────── */
+.upgrade-header-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--gold);
+  background: rgba(201,146,13,0.1);
+  border: 1px solid rgba(201,146,13,0.3);
+  padding: 3px 10px;
+  border-radius: 20px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.upgrade-modal-title {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.upgrade-modal-sub {
+  font-size: 13px;
+  color: var(--dim);
+  line-height: 1.5;
+}
+.plan-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 24px;
+}
+.plan-card {
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  position: relative;
+  transition: border-color 0.2s;
+}
+.plan-card.pro {
+  background: linear-gradient(var(--cream), var(--cream)) padding-box,
+              linear-gradient(145deg, rgba(201,146,13,0.5) 0%, rgba(201,146,13,0.1) 50%, transparent 100%) border-box;
+  border: 1px solid transparent;
+}
+.plan-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 700;
+  margin-bottom: 14px;
+}
+.plan-badge.free { color: var(--dim); }
+.plan-badge.pro  { color: var(--gold); }
+.plan-price-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.plan-price {
+  font-size: 38px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--text);
+}
+.plan-period {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--dim);
+  margin-bottom: 2px;
+  align-self: flex-end;
+}
+.plan-desc {
+  font-size: 12px;
+  color: var(--dim);
+  margin-bottom: 20px;
+  line-height: 1.5;
+  min-height: 36px;
+}
+.plan-divider {
+  height: 1px;
+  background: var(--border);
+  margin-bottom: 16px;
+}
+.plan-features {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  flex: 1;
+}
+.plan-feature {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 13px;
+  color: var(--dim);
+  line-height: 1.35;
+}
+.plan-feature.included { color: var(--text); }
+.plan-feature.excluded { color: var(--dim); opacity: 0.55; text-decoration: line-through; text-decoration-color: rgba(122,120,112,0.4); }
+.feature-check {
+  font-size: 12px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  width: 16px;
+  text-align: center;
+}
+.feature-check.yes { color: var(--green); }
+.feature-check.no  { color: var(--dim); opacity: 0.4; }
+.plan-cta {
+  margin-top: auto;
+}
+.btn-plan-free {
+  width: 100%;
+  padding: 11px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--dim);
+  cursor: default;
+  text-align: center;
+}
+.btn-plan-pro {
+  width: 100%;
+  padding: 12px;
+  background: var(--gold);
+  border: none;
+  border-radius: 6px;
+  font-family: var(--sans);
+  font-weight: 800;
+  font-size: 14px;
+  color: var(--ink);
+  cursor: pointer;
+  transition: all 0.2s;
+  letter-spacing: 0.01em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.btn-plan-pro:hover { background: var(--gold-bright); transform: translateY(-1px); }
+.btn-plan-pro:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+/* Waitlist email capture (shown after clicking Pro CTA) */
+.waitlist-section {
+  margin-top: 24px;
+  padding: 20px 22px;
+  background: rgba(201,146,13,0.04);
+  border: 1px solid rgba(201,146,13,0.2);
+  border-radius: 10px;
+  display: none;
+}
+.waitlist-section.show { display: block; }
+.waitlist-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.waitlist-sub {
+  font-size: 12px;
+  color: var(--dim);
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+.waitlist-row {
+  display: flex;
+  gap: 8px;
+}
+.waitlist-input {
+  flex: 1;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 11px 14px;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.2s;
+}
+.waitlist-input:focus { border-color: var(--gold); }
+.waitlist-input.error { border-color: var(--red); }
+.btn-waitlist-submit {
+  padding: 11px 20px;
+  background: var(--gold);
+  border: none;
+  border-radius: 6px;
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-waitlist-submit:hover { background: var(--gold-bright); }
+.btn-waitlist-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+.waitlist-error {
+  font-size: 12px;
+  color: #e74c3c;
+  margin-top: 8px;
+  display: none;
+}
+.waitlist-error.show { display: block; }
+
+/* Waitlist success state */
+.waitlist-success {
+  text-align: center;
+  padding: 10px 0 4px;
+  display: none;
+}
+.waitlist-success.show { display: block; }
+.waitlist-success-icon {
+  font-size: 32px;
+  margin-bottom: 10px;
+}
+.waitlist-success-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.waitlist-success-sub {
+  font-size: 13px;
+  color: var(--dim);
+  line-height: 1.6;
+}
+
 /* Toast */
 .toast {
   position: fixed;
@@ -1373,6 +1619,98 @@ body {
   </div>
 </div>
 
+<!-- Upgrade to Pro Modal -->
+<div class="modal-overlay" id="upgradeModal">
+  <div class="modal" style="max-width:680px">
+    <div class="modal-header" style="flex-direction:column;align-items:flex-start;gap:0;padding:28px 28px 24px">
+      <div class="upgrade-header-badge">⚡ HYPERFLEX Pro</div>
+      <div class="upgrade-modal-title">Unlock your full creator toolkit</div>
+      <div class="upgrade-modal-sub">Everything you need to run serious prediction markets for your community.</div>
+      <button class="modal-close" onclick="closeUpgradeModal()" style="position:absolute;top:20px;right:20px">×</button>
+    </div>
+
+    <div class="modal-body" style="padding:0 28px 28px">
+
+      <div class="plan-grid">
+
+        <!-- FREE -->
+        <div class="plan-card">
+          <div class="plan-badge free">Free</div>
+          <div class="plan-price-row">
+            <span class="plan-price">$0</span>
+            <span class="plan-period">/month</span>
+          </div>
+          <div class="plan-desc">Get started and explore prediction markets with your community.</div>
+          <div class="plan-divider"></div>
+          <ul class="plan-features">
+            <li class="plan-feature included"><span class="feature-check yes">✓</span> Up to 3 active markets</li>
+            <li class="plan-feature included"><span class="feature-check yes">✓</span> Community leaderboard</li>
+            <li class="plan-feature included"><span class="feature-check yes">✓</span> Basic analytics</li>
+            <li class="plan-feature included"><span class="feature-check yes">✓</span> Flex Points system</li>
+            <li class="plan-feature excluded"><span class="feature-check no">×</span> YouTube scanner</li>
+            <li class="plan-feature excluded"><span class="feature-check no">×</span> Rewards system</li>
+            <li class="plan-feature excluded"><span class="feature-check no">×</span> Remove HYPERFLEX watermark</li>
+            <li class="plan-feature excluded"><span class="feature-check no">×</span> Full analytics dashboard</li>
+            <li class="plan-feature excluded"><span class="feature-check no">×</span> Priority support</li>
+          </ul>
+          <div class="plan-cta">
+            <div class="btn-plan-free">Current Plan</div>
+          </div>
+        </div>
+
+        <!-- PRO -->
+        <div class="plan-card pro">
+          <div class="plan-badge pro">Pro</div>
+          <div class="plan-price-row">
+            <span class="plan-price">$29</span>
+            <span class="plan-period">/month</span>
+          </div>
+          <div class="plan-desc">For creators serious about community engagement and prediction markets.</div>
+          <div class="plan-divider"></div>
+          <ul class="plan-features">
+            <li class="plan-feature included"><span class="feature-check yes">✓</span> <strong>Unlimited</strong> active markets</li>
+            <li class="plan-feature included"><span class="feature-check yes">✓</span> Community leaderboard</li>
+            <li class="plan-feature included"><span class="feature-check yes">✓</span> Full analytics dashboard</li>
+            <li class="plan-feature included"><span class="feature-check yes">✓</span> Flex Points + Rewards system</li>
+            <li class="plan-feature included"><span class="feature-check yes">✓</span> YouTube scanner — comments, transcript &amp; live chat</li>
+            <li class="plan-feature included"><span class="feature-check yes">✓</span> AI market generation &amp; resolution</li>
+            <li class="plan-feature included"><span class="feature-check yes">✓</span> No HYPERFLEX watermark</li>
+            <li class="plan-feature included"><span class="feature-check yes">✓</span> Custom community branding</li>
+            <li class="plan-feature included"><span class="feature-check yes">✓</span> Priority support</li>
+          </ul>
+          <div class="plan-cta">
+            <button class="btn-plan-pro" id="proCtaBtn" onclick="showWaitlistForm()">
+              Get Early Access →
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Waitlist form (shown after clicking Pro CTA) -->
+      <div class="waitlist-section" id="waitlistSection">
+        <div id="waitlistFormView">
+          <div class="waitlist-title">🚀 Be first in line when Pro launches</div>
+          <div class="waitlist-sub">We're putting the finishing touches on Pro. Drop your email and we'll notify you the moment it's live — plus you'll get an early-bird discount.</div>
+          <div class="waitlist-row">
+            <input type="email" class="waitlist-input" id="waitlistEmail" placeholder="your@email.com" autocomplete="email"/>
+            <button class="btn-waitlist-submit" id="waitlistSubmitBtn" onclick="submitWaitlist()">
+              Notify Me →
+            </button>
+          </div>
+          <div class="waitlist-error" id="waitlistError"></div>
+        </div>
+        <div class="waitlist-success" id="waitlistSuccess">
+          <div class="waitlist-success-icon">🎉</div>
+          <div class="waitlist-success-title">You're on the list!</div>
+          <div class="waitlist-success-sub">We'll email you the moment Pro goes live.<br/>Early-bird pricing locked in for waitlist members.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <!-- YouTube Scan Modal -->
 <div class="modal-overlay" id="youtubeModal">
   <div class="modal" style="max-width:580px">
@@ -1509,6 +1847,11 @@ function renderDashboard(data) {
   document.getElementById('settingPoints').value = creator.custom_points_name;
   document.getElementById('settingColor').value = creator.primary_color || '#c9920d';
   document.getElementById('settingColorHex').textContent = creator.primary_color || '#c9920d';
+
+  // Pre-fill waitlist email with creator's account email
+  if (creator.email) {
+    document.getElementById('waitlistEmail').value = creator.email;
+  }
 }
 
 function renderMarketRows(markets, containerId) {
@@ -1979,8 +2322,84 @@ function copyEmbed() {
   copyText(embed);
 }
 
+// ── Upgrade / Pro waitlist ────────────────────────────────
 function showUpgrade() {
-  showToast('Pro plan coming soon! 🚀', 'success');
+  // Reset to initial state
+  document.getElementById('waitlistSection').classList.remove('show');
+  document.getElementById('waitlistFormView').style.display = 'block';
+  document.getElementById('waitlistSuccess').classList.remove('show');
+  document.getElementById('waitlistError').classList.remove('show');
+  document.getElementById('waitlistEmail').value = '';
+  document.getElementById('waitlistEmail').classList.remove('error');
+  const proBtn = document.getElementById('proCtaBtn');
+  proBtn.disabled = false;
+  proBtn.innerHTML = 'Get Early Access →';
+  document.getElementById('upgradeModal').classList.add('show');
+}
+function closeUpgradeModal() {
+  document.getElementById('upgradeModal').classList.remove('show');
+}
+
+function showWaitlistForm() {
+  document.getElementById('waitlistSection').classList.add('show');
+  document.getElementById('waitlistSection').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  setTimeout(() => document.getElementById('waitlistEmail').focus(), 300);
+}
+
+async function submitWaitlist() {
+  const emailInput = document.getElementById('waitlistEmail');
+  const errEl = document.getElementById('waitlistError');
+  const submitBtn = document.getElementById('waitlistSubmitBtn');
+  const email = emailInput.value.trim();
+
+  errEl.classList.remove('show');
+  emailInput.classList.remove('error');
+
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    emailInput.classList.add('error');
+    errEl.textContent = 'Please enter a valid email address.';
+    errEl.classList.add('show');
+    return;
+  }
+
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<span class="spinner"></span>';
+
+  try {
+    const r = await fetch(API + '/api/creator/waitlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ email })
+    });
+    const data = await r.json();
+
+    if (!r.ok) {
+      errEl.textContent = data.error || 'Something went wrong. Try again.';
+      errEl.classList.add('show');
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = 'Notify Me →';
+      return;
+    }
+
+    // Success — show confirmation, update sidebar button
+    document.getElementById('waitlistFormView').style.display = 'none';
+    document.getElementById('waitlistSuccess').classList.add('show');
+
+    const upgradeBtn = document.querySelector('.btn-upgrade');
+    if (upgradeBtn) {
+      upgradeBtn.textContent = '✓ On Waitlist';
+      upgradeBtn.style.background = 'rgba(45,155,95,0.12)';
+      upgradeBtn.style.borderColor = 'rgba(45,155,95,0.35)';
+      upgradeBtn.style.color = '#2d9b5f';
+      upgradeBtn.onclick = showUpgrade; // still opens modal to see success state
+    }
+
+  } catch {
+    errEl.textContent = 'Network error — please try again.';
+    errEl.classList.add('show');
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = 'Notify Me →';
+  }
 }
 
 function signOut() {

@@ -2102,6 +2102,33 @@ app.get('/creator/dashboard', (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
+// 9b. PRO WAITLIST
+// POST /api/creator/waitlist
+// Auth: requireCreator — stores email in pro_waitlist table
+// ════════════════════════════════════════════════════════════
+app.post('/api/creator/waitlist', requireCreator, async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'A valid email address is required.' });
+    }
+
+    const creator_id = req.creator.id;
+
+    const { error } = await supabase
+      .from('pro_waitlist')
+      .upsert({ email: email.toLowerCase().trim(), creator_id }, { onConflict: 'email' });
+
+    if (error) throw error;
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('waitlist error:', err);
+    res.status(500).json({ error: err.message || 'Failed to join waitlist' });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
 // 10. PUBLIC COMMUNITY PAGE (slug catch-all — must be last)
 // GET /:slug  →  serves community.html, injects slug via query
 // ════════════════════════════════════════════════════════════
