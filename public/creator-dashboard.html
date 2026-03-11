@@ -1349,7 +1349,7 @@ function renderDashboard(data) {
   // Stats
   document.getElementById('statTraders').textContent = (stats.total_traders || 0).toLocaleString();
   document.getElementById('statLive').textContent = stats.live_markets || 0;
-  document.getElementById('statVolume').textContent = '$' + ((stats.total_volume || 0) / 100).toFixed(0);
+  document.getElementById('statVolume').textContent = (stats.total_volume || 0).toLocaleString() + ' pts';
   document.getElementById('statWeekly').textContent = (stats.weekly_trades || 0).toLocaleString();
 
   // Markets
@@ -1404,7 +1404,7 @@ function renderMarketRows(markets, containerId) {
           <div class="market-question">${m.question}</div>
           <div class="market-meta">${m.category || '—'} · Closes ${formatDate(m.expiry_date)}</div>
         </div>
-        <div class="market-volume">$${((m.volume||0)/100).toFixed(0)}</div>
+        <div class="market-volume">${(m.volume||0).toLocaleString()} pts</div>
         <div class="market-traders">${m.trader_count || 0}</div>
         <div class="market-price">
           <span class="yes-price">${yes}¢</span>

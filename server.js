@@ -1047,12 +1047,12 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
     let weeklyTrades = 0;
 
     if (marketIds.length > 0) {
-      const { count: traderCount } = await supabase
+      const { data: traderRows } = await supabase
         .from('positions')
-        .select('user_id', { count: 'exact', head: true })
+        .select('user_id')
         .in('market_id', marketIds);
 
-      totalTraders = traderCount || 0;
+      totalTraders = new Set((traderRows || []).map(r => r.user_id)).size;
 
       const oneWeekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
       const { count: weekCount } = await supabase

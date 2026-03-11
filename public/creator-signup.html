@@ -742,6 +742,12 @@ body::before {
               <input type="password" id="password" placeholder="Min 8 characters" autocomplete="new-password"/>
               <div class="field-error" id="passwordErr">Password must be at least 8 characters.</div>
             </div>
+
+            <label style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:rgba(201,146,13,0.05);border:1px solid rgba(201,146,13,0.2);border-radius:6px;cursor:pointer;margin-top:4px">
+              <input type="checkbox" id="tosCheck" style="margin-top:3px;accent-color:var(--gold);flex-shrink:0"/>
+              <span style="font-size:12px;color:var(--dim);line-height:1.5">I agree that I am solely responsible for fair and accurate market resolution. HYPERFLEX provides infrastructure only.</span>
+            </label>
+            <div class="field-error" id="tosErr">You must agree to the terms to continue.</div>
           </div>
 
           <!-- Step 2: Community Identity -->
@@ -916,6 +922,7 @@ function validateStep1() {
   if (!name) { showFieldError('displayNameErr', 'Please enter your name or community name.'); ok = false; }
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showFieldError('emailErr', 'Please enter a valid email.'); ok = false; }
   if (pw.length < 8) { showFieldError('passwordErr', 'Password must be at least 8 characters.'); ok = false; }
+  if (!document.getElementById('tosCheck').checked) { showFieldError('tosErr', 'You must agree to the terms to continue.'); ok = false; }
   return ok;
 }
 
