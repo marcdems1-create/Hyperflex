@@ -154,6 +154,16 @@ app.post('/markets', async (req, res) => {
     }
   }
 
+  // Prohibited keyword check
+  const prohibited = PROHIBITED_PATTERNS.find(p => p.re.test(row.question || ''));
+  if (prohibited) return res.status(400).json({ error: prohibited.msg });
+
+  // Store resolution_sources array if provided
+  const { resolution_sources } = req.body;
+  if (Array.isArray(resolution_sources) && resolution_sources.length >= 3) {
+    row.resolution_sources = JSON.stringify(resolution_sources);
+  }
+
   const { data, error } = await supabase
     .from('markets')
     .insert([row])
@@ -740,6 +750,15 @@ const JWT_SECRET = process.env.JWT_SECRET || 'hyperflex-dev-secret-change-in-pro
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 
+const PROHIBITED_PATTERNS = [
+  { re: /\b(assassinat\w*|kill\s+(?:the\s+)?(?:president|prime\s+minister|senator|official|leader)|murder\s+(?:the\s+)?(?:president|pm))\b/i,
+    msg: 'Markets about assassination or targeted killing of individuals are not permitted.' },
+  { re: /\b(drug\s+traffick\w*|money\s+laundering|human\s+traffick\w*|child\s+(?:abuse|exploit\w*)|terrorist\s+attack|bomb\s+(?:a|the)\s+\w+)\b/i,
+    msg: 'Markets about illegal activities are not permitted.' },
+  { re: /\b(insider\s+trad\w*|market\s+manipulat\w*)\b/i,
+    msg: 'Markets about illegal financial activities are not permitted.' },
+];
+
 // ─── MIDDLEWARE: Auth guard ──────────────────────────────────
 function requireCreator(req, res, next) {
   const auth = req.headers.authorization || '';
@@ -1232,6 +1251,116 @@ app.delete('/api/creator/rewards/:id', requireCreator, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
+// 5c. SMART RESOLUTION — AI-POWERED SUGGESTION
+// POST /api/creator/markets/:id/suggest-resolution
+// Auth: requireCreator
+// Returns: { suggested_outcome, reasoning, sources_cited, confidence, crypto_data? }
+// ════════════════════════════════════════════════════════════
+app.post('/api/creator/markets/:id/suggest-resolution', requireCreator, async (req, res) => {
+  try {
+    const { data: market } = await supabase
+      .from('markets')
+      .select('*')
+      .eq('id', req.params.id)
+      .eq('creator_id', req.creator.id)
+      .maybeSingle();
+
+    if (!market) return res.status(404).json({ error: 'Market not found or not yours' });
+    if (market.resolved) return res.status(409).json({ error: 'Market already resolved' });
+
+    if (!ANTHROPIC_API_KEY) {
+      return res.status(503).json({ error: 'Anthropic API key not configured' });
+    }
+
+    // For crypto markets, try to fetch live price data from CoinGecko
+    let cryptoContext = '';
+    if (market.category === 'crypto' || market.category === 'finance') {
+      try {
+        // Ask Claude mini to extract coin symbol first, then fetch price
+        const coinRes = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+          body: JSON.stringify({
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: 100,
+            messages: [{ role: 'user', content: `Extract the cryptocurrency coin ID for CoinGecko API from this question. Reply with ONLY the lowercase CoinGecko ID (e.g. "bitcoin", "ethereum", "solana") or "none" if not applicable.\n\nQuestion: "${market.question}"` }]
+          })
+        });
+        const coinData = await coinRes.json();
+        const coinId = (coinData.content?.[0]?.text || '').trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
+
+        if (coinId && coinId !== 'none' && coinId.length > 1) {
+          const priceRes = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=usd&include_24hr_change=true`);
+          if (priceRes.ok) {
+            const priceData = await priceRes.json();
+            if (priceData[coinId]) {
+              const p = priceData[coinId];
+              cryptoContext = `\n\nLIVE PRICE DATA (CoinGecko): ${coinId} = $${p.usd?.toLocaleString()} USD (24h change: ${p.usd_24h_change?.toFixed(2)}%)`;
+            }
+          }
+        }
+      } catch (e) {
+        // price fetch is best-effort, continue without it
+      }
+    }
+
+    const sources = (() => {
+      try { return JSON.parse(market.resolution_sources || '[]'); } catch { return []; }
+    })();
+
+    const prompt = `You are an impartial resolution analyst for a prediction market platform.
+
+Market Question: "${market.question}"
+Category: ${market.category || 'general'}
+Resolution Date: ${market.expiry_date}
+Today's Date: ${new Date().toISOString().split('T')[0]}
+Resolution Sources: ${sources.length ? sources.join(', ') : 'Not specified'}${cryptoContext}
+
+Based on your knowledge up to your training cutoff and the context above, provide a resolution analysis.
+
+IMPORTANT:
+- If the resolution date is in the future, note that the market should not be resolved yet unless the outcome is already certain
+- Be honest about uncertainty — use confidence levels
+- For crypto/finance: use the live price data if provided
+- Cite which sources would confirm your suggestion
+
+Return ONLY valid JSON:
+{
+  "suggested_outcome": "YES" or "NO" or "UNRESOLVABLE",
+  "confidence": "HIGH" or "MEDIUM" or "LOW",
+  "reasoning": "2-3 sentence explanation of why you suggest this outcome",
+  "sources_cited": ["source1", "source2"],
+  "caveat": "Any important caveat or 'none'"
+}`;
+
+    const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: 'claude-opus-4-6', max_tokens: 600, messages: [{ role: 'user', content: prompt }] })
+    });
+
+    const aiData = await aiRes.json();
+    const text = aiData.content?.[0]?.text || '';
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('AI returned invalid format');
+
+    const parsed = JSON.parse(jsonMatch[0]);
+
+    // Store the suggestion on the market
+    await supabase.from('markets').update({
+      suggested_outcome: parsed.suggested_outcome,
+      auto_resolution_data: JSON.stringify({ ...parsed, crypto_context: cryptoContext, generated_at: new Date().toISOString() })
+    }).eq('id', req.params.id);
+
+    res.json({ ...parsed, market_id: req.params.id });
+
+  } catch (err) {
+    console.error('suggest-resolution error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
 // 6. RESOLVE MARKET (Creator only)
 // POST /markets/:id/resolve
 // Auth: Bearer token required
@@ -1241,6 +1370,7 @@ app.post('/markets/:id/resolve', requireCreator, async (req, res) => {
   try {
     const { id } = req.params;
     const { outcome } = req.body;
+    const { attestation_text } = req.body;
 
     if (!['YES', 'NO'].includes(outcome)) {
       return res.status(400).json({ error: 'Outcome must be YES or NO' });
@@ -1268,6 +1398,11 @@ app.post('/markets/:id/resolve', requireCreator, async (req, res) => {
       .eq('id', id);
 
     if (resolveErr) throw resolveErr;
+
+    // Store attestation
+    if (attestation_text) {
+      await supabase.from('markets').update({ attestation_text }).eq('id', id);
+    }
 
     // Pay out winners — get all positions for this market
     const { data: positions } = await supabase

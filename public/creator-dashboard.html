@@ -260,6 +260,106 @@ body {
   transition: all 0.15s;
 }
 .reward-del-btn:hover { background: rgba(192,57,43,0.1); }
+/* Source chips */
+.source-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 36px;
+  padding: 8px;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 8px;
+  align-items: center;
+}
+.source-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(201,146,13,0.1);
+  border: 1px solid rgba(201,146,13,0.25);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text);
+}
+.source-chip-remove {
+  cursor: pointer;
+  color: var(--dim);
+  font-size: 13px;
+  line-height: 1;
+  background: none;
+  border: none;
+  padding: 0;
+}
+.source-chip-remove:hover { color: var(--red); }
+.source-add-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+.source-add-input {
+  flex: 1;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  outline: none;
+}
+.source-add-input:focus { border-color: var(--gold); }
+.source-add-btn {
+  background: rgba(201,146,13,0.15);
+  border: 1px solid rgba(201,146,13,0.3);
+  border-radius: 6px;
+  padding: 7px 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--gold);
+  cursor: pointer;
+}
+.source-min-warn {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--red);
+  margin-top: 4px;
+  display: none;
+}
+/* Resolve modal */
+.resolve-suggestion-box {
+  padding: 14px 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  background: var(--paper);
+}
+.resolve-suggestion-box.yes { border-color: rgba(45,155,95,0.4); background: rgba(45,155,95,0.06); }
+.resolve-suggestion-box.no  { border-color: rgba(192,57,43,0.4);  background: rgba(192,57,43,0.06);  }
+.suggestion-outcome {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  margin-bottom: 6px;
+}
+.suggestion-reasoning { font-size: 12px; color: var(--dim); line-height: 1.6; }
+.suggestion-sources { font-family: var(--mono); font-size: 10px; color: var(--dim); margin-top: 8px; }
+.attest-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  background: rgba(201,146,13,0.05);
+  border: 1px solid rgba(201,146,13,0.2);
+  border-radius: 6px;
+  margin-bottom: 16px;
+  cursor: pointer;
+}
+.attest-row input[type="checkbox"] { margin-top: 2px; accent-color: var(--gold); flex-shrink: 0; }
+.attest-label { font-size: 13px; color: var(--text); line-height: 1.4; }
 .yt-market-item {
   display: flex;
   align-items: flex-start;
@@ -1005,12 +1105,14 @@ body {
       </div>
       <div class="field">
         <label>Category</label>
-        <select id="newCategory">
+        <select id="newCategory" onchange="loadSourceTemplate(this.value)">
           <option value="sports">Sports</option>
+          <option value="esports">Esports</option>
           <option value="entertainment">Entertainment</option>
           <option value="finance">Finance</option>
           <option value="crypto">Crypto</option>
-          <option value="politics">Politics</option>
+          <option value="politics">Politics / Elections</option>
+          <option value="news">News / Events</option>
           <option value="other">Other</option>
         </select>
       </div>
@@ -1019,8 +1121,13 @@ body {
         <input type="date" id="newDate"/>
       </div>
       <div class="field">
-        <label>Resolution Source <span style="font-weight:400;text-transform:none;font-size:11px">(optional — shown to users)</span></label>
-        <input type="text" id="newSource" placeholder="ESPN, official results, etc."/>
+        <label>Resolution Sources <span style="font-weight:400;text-transform:none;font-size:11px">(min 3 required)</span></label>
+        <div class="source-chips" id="sourceChips"></div>
+        <div class="source-add-row">
+          <input class="source-add-input" id="sourceCustomInput" placeholder="Add custom source…" onkeydown="if(event.key==='Enter'){event.preventDefault();addCustomSource()}"/>
+          <button class="source-add-btn" onclick="addCustomSource()">+ Add</button>
+        </div>
+        <div class="source-min-warn" id="sourceMinWarn">At least 3 sources required</div>
       </div>
     </div>
     <div class="modal-footer">
@@ -1069,6 +1176,62 @@ body {
         <button class="btn-secondary" onclick="closeEditModal()">Cancel</button>
         <button class="btn-primary" onclick="saveMarketEdit()">Save Changes →</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Resolve Market Modal -->
+<div class="modal-overlay" id="resolveModal">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header">
+      <div class="modal-title">⚖️ Resolve Market</div>
+      <button class="modal-close" onclick="closeResolveModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:14px;color:var(--text);font-weight:600;margin-bottom:4px" id="resolveModalQuestion"></div>
+      <div style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:20px" id="resolveModalMeta"></div>
+
+      <!-- AI Suggestion box (hidden until fetched) -->
+      <div id="resolveSuggestionArea" style="display:none">
+        <div style="font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px">AI Analysis</div>
+        <div class="resolve-suggestion-box" id="resolveSuggestionBox">
+          <div class="suggestion-outcome" id="suggestionOutcome"></div>
+          <div class="suggestion-reasoning" id="suggestionReasoning"></div>
+          <div class="suggestion-sources" id="suggestionSources"></div>
+        </div>
+      </div>
+
+      <div id="resolveSuggestionLoading" style="display:none;padding:16px;text-align:center;font-size:13px;color:var(--dim)">
+        <span class="spinner" style="width:16px;height:16px;margin-right:8px;vertical-align:middle"></span> Analyzing sources…
+      </div>
+
+      <!-- Outcome selection -->
+      <div style="margin-bottom:16px">
+        <div style="font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px">Resolution Outcome</div>
+        <div style="display:flex;gap:10px">
+          <button class="btn-yes" id="resolveYesBtn" onclick="selectOutcome('YES')" style="flex:1">YES ✓</button>
+          <button class="btn-no"  id="resolveNoBtn"  onclick="selectOutcome('NO')"  style="flex:1">NO ✗</button>
+        </div>
+      </div>
+
+      <!-- Override reason (shown when outcome differs from suggestion) -->
+      <div id="overrideReasonArea" style="display:none;margin-bottom:16px">
+        <div class="field" style="margin-bottom:0">
+          <label>Override Reason <span style="font-weight:400;text-transform:none">(required when overriding AI suggestion)</span></label>
+          <textarea id="overrideReason" rows="2" placeholder="Explain why the correct outcome differs from the AI suggestion…"></textarea>
+        </div>
+      </div>
+
+      <!-- Attestation -->
+      <label class="attest-row" onclick="toggleAttest()">
+        <input type="checkbox" id="attestCheck"/>
+        <span class="attest-label">I attest that this resolution is correct and fair, based on publicly available information consistent with the resolution sources.</span>
+      </label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeResolveModal()">Cancel</button>
+      <button class="btn-secondary" id="resolveSuggestBtn" onclick="fetchResolutionSuggestion()">🤖 Get AI Suggestion</button>
+      <button class="btn-primary" id="resolveConfirmBtn" onclick="confirmResolution()" disabled>Confirm Resolution →</button>
     </div>
   </div>
 </div>
@@ -1269,8 +1432,7 @@ function renderResolveList(items, containerId) {
         <div class="queue-meta">Expired ${formatDate(m.expiry_date)} · ${m.trader_count || 0} traders</div>
       </div>
       <div class="resolve-actions">
-        <button class="btn-yes" onclick="resolveMarket('${m.id}', 'YES')">YES ✓</button>
-        <button class="btn-no" onclick="resolveMarket('${m.id}', 'NO')">NO ✗</button>
+        <button class="btn-yes" onclick="openResolveModal('${m.id}', \`${m.question.replace(/`/g,"'")}\`)">Resolve ⚖️</button>
       </div>
     </div>
   `).join('');
@@ -1337,10 +1499,12 @@ function showTab(tab) {
 
 // Create market
 function openCreateModal() {
-  // Set default date to 30 days from now
   const d = new Date();
   d.setDate(d.getDate() + 30);
   document.getElementById('newDate').value = d.toISOString().split('T')[0];
+  document.getElementById('newQuestion').value = '';
+  document.getElementById('newCategory').value = 'sports';
+  loadSourceTemplate('sports');
   document.getElementById('createModal').classList.add('show');
 }
 function closeCreateModal() {
@@ -1351,21 +1515,29 @@ async function createMarket() {
   const question = document.getElementById('newQuestion').value.trim();
   const category = document.getElementById('newCategory').value;
   const date = document.getElementById('newDate').value;
-  const source = document.getElementById('newSource').value.trim();
 
   if (!question || !date) { showToast('Please fill in the question and date.', 'error'); return; }
+
+  // Prohibited keyword check
+  const prohibited = checkProhibited(question);
+  if (prohibited) { showToast(prohibited, 'error'); return; }
+
+  // Source validation
+  if (marketSources.length < 3) {
+    document.getElementById('sourceMinWarn').style.display = 'block';
+    showToast('Add at least 3 resolution sources.', 'error');
+    return;
+  }
+  document.getElementById('sourceMinWarn').style.display = 'none';
 
   try {
     const r = await fetch(API + '/markets', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + token
-      },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
       body: JSON.stringify({
         question, category,
         expiry_date: date,
-        resolution_source: source,
+        resolution_sources: marketSources,
         creator_id: user.id,
         tenant_slug: user.slug,
         is_public: true
@@ -1384,27 +1556,152 @@ async function createMarket() {
   }
 }
 
-// Resolve market
-async function resolveMarket(marketId, outcome) {
+// ── RESOLVE MARKET (new flow) ─────────────────────────────
+let resolveMarketId = null;
+let resolveSelectedOutcome = null;
+let resolveSuggestedOutcome = null;
+
+function openResolveModal(marketId, question) {
+  resolveMarketId = marketId;
+  resolveSelectedOutcome = null;
+  resolveSuggestedOutcome = null;
+
+  const m = communityMarkets.find(x => x.id === marketId);
+  document.getElementById('resolveModalQuestion').textContent = question || m?.question || '';
+  document.getElementById('resolveModalMeta').textContent = m
+    ? `${m.category || 'market'} · Expired ${formatDate(m.expiry_date)} · ${m.trader_count || 0} traders`
+    : '';
+
+  document.getElementById('resolveSuggestionArea').style.display = 'none';
+  document.getElementById('resolveSuggestionLoading').style.display = 'none';
+  document.getElementById('overrideReasonArea').style.display = 'none';
+  document.getElementById('attestCheck').checked = false;
+  document.getElementById('resolveConfirmBtn').disabled = true;
+  document.getElementById('resolveYesBtn').style.opacity = '1';
+  document.getElementById('resolveNoBtn').style.opacity = '1';
+  document.getElementById('resolveSuggestBtn').disabled = false;
+  document.getElementById('resolveSuggestBtn').textContent = '🤖 Get AI Suggestion';
+
+  document.getElementById('resolveModal').classList.add('show');
+}
+function closeResolveModal() {
+  document.getElementById('resolveModal').classList.remove('show');
+}
+
+function selectOutcome(outcome) {
+  resolveSelectedOutcome = outcome;
+  document.getElementById('resolveYesBtn').style.opacity = outcome === 'YES' ? '1' : '0.4';
+  document.getElementById('resolveNoBtn').style.opacity  = outcome === 'NO'  ? '1' : '0.4';
+
+  // Show override reason if outcome differs from AI suggestion
+  const differs = resolveSuggestedOutcome && resolveSuggestedOutcome !== 'UNRESOLVABLE' && outcome !== resolveSuggestedOutcome;
+  document.getElementById('overrideReasonArea').style.display = differs ? 'block' : 'none';
+
+  updateConfirmBtn();
+}
+
+function toggleAttest() {
+  // The label click toggles the checkbox naturally; just update button
+  setTimeout(updateConfirmBtn, 0);
+}
+
+function updateConfirmBtn() {
+  const attested = document.getElementById('attestCheck').checked;
+  const hasOutcome = !!resolveSelectedOutcome;
+  const overrideOk = (() => {
+    if (!resolveSuggestedOutcome || resolveSuggestedOutcome === 'UNRESOLVABLE') return true;
+    if (resolveSelectedOutcome === resolveSuggestedOutcome) return true;
+    return document.getElementById('overrideReason').value.trim().length > 0;
+  })();
+  document.getElementById('resolveConfirmBtn').disabled = !(attested && hasOutcome && overrideOk);
+}
+
+document.addEventListener('input', e => {
+  if (e.target.id === 'overrideReason') updateConfirmBtn();
+});
+
+async function fetchResolutionSuggestion() {
+  if (!resolveMarketId) return;
+  const btn = document.getElementById('resolveSuggestBtn');
+  btn.disabled = true;
+  btn.textContent = 'Analyzing…';
+  document.getElementById('resolveSuggestionLoading').style.display = 'block';
+  document.getElementById('resolveSuggestionArea').style.display = 'none';
+
   try {
-    const r = await fetch(API + '/markets/' + marketId + '/resolve', {
+    const r = await fetch(`${API}/api/creator/markets/${resolveMarketId}/suggest-resolution`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + token
-      },
-      body: JSON.stringify({ outcome })
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    const data = await r.json();
+    if (!r.ok) { showToast(data.error || 'Could not get suggestion.', 'error'); return; }
+
+    resolveSuggestedOutcome = data.suggested_outcome;
+
+    const box = document.getElementById('resolveSuggestionBox');
+    box.className = 'resolve-suggestion-box ' + (data.suggested_outcome === 'YES' ? 'yes' : data.suggested_outcome === 'NO' ? 'no' : '');
+
+    const outcomeColors = { YES: 'var(--green)', NO: 'var(--red)', UNRESOLVABLE: 'var(--dim)' };
+    document.getElementById('suggestionOutcome').textContent =
+      `AI suggests: ${data.suggested_outcome}  (${data.confidence || 'LOW'} confidence)`;
+    document.getElementById('suggestionOutcome').style.color = outcomeColors[data.suggested_outcome] || 'var(--text)';
+    document.getElementById('suggestionReasoning').textContent = data.reasoning || '';
+    document.getElementById('suggestionSources').textContent =
+      data.sources_cited?.length ? 'Sources: ' + data.sources_cited.join(' · ') : '';
+
+    document.getElementById('resolveSuggestionArea').style.display = 'block';
+
+    // Pre-select the suggested outcome
+    if (data.suggested_outcome === 'YES' || data.suggested_outcome === 'NO') {
+      selectOutcome(data.suggested_outcome);
+    }
+  } catch {
+    showToast('Could not fetch AI suggestion.', 'error');
+  } finally {
+    document.getElementById('resolveSuggestionLoading').style.display = 'none';
+    btn.disabled = false;
+    btn.textContent = '🤖 Re-analyze';
+  }
+}
+
+async function confirmResolution() {
+  if (!resolveSelectedOutcome || !resolveMarketId) return;
+
+  const overrideReason = document.getElementById('overrideReason').value.trim();
+  const attestation_text = overrideReason
+    ? `Outcome: ${resolveSelectedOutcome}. Override reason: ${overrideReason}`
+    : `Outcome: ${resolveSelectedOutcome}. Attested as correct and fair.`;
+
+  document.getElementById('resolveConfirmBtn').disabled = true;
+  document.getElementById('resolveConfirmBtn').textContent = 'Resolving…';
+
+  try {
+    const r = await fetch(`${API}/markets/${resolveMarketId}/resolve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ outcome: resolveSelectedOutcome, attestation_text })
     });
     const data = await r.json();
     if (data.ok || data.success) {
-      showToast(`Market resolved ${outcome} ✓`, 'success');
+      closeResolveModal();
+      showToast(`Market resolved ${resolveSelectedOutcome} ✓`, 'success');
       setTimeout(() => init(), 500);
     } else {
       showToast(data.error || 'Failed to resolve market.', 'error');
+      document.getElementById('resolveConfirmBtn').disabled = false;
+      document.getElementById('resolveConfirmBtn').textContent = 'Confirm Resolution →';
     }
   } catch {
     showToast('Network error. Please try again.', 'error');
+    document.getElementById('resolveConfirmBtn').disabled = false;
+    document.getElementById('resolveConfirmBtn').textContent = 'Confirm Resolution →';
   }
+}
+
+// Legacy direct-resolve (keep for programmatic use)
+async function resolveMarket(marketId, outcome) {
+  openResolveModal(marketId, '');
+  selectOutcome(outcome);
 }
 
 // Settings
@@ -1729,6 +2026,68 @@ async function publishYtMarkets() {
   if (published > 0) showToast(`${published} market${published > 1 ? 's' : ''} published! 🎯`, 'success');
   if (failed > 0) showToast(`${failed} market${failed > 1 ? 's' : ''} failed to publish.`, 'error');
   if (published > 0) setTimeout(() => init(), 600);
+}
+
+// ── SOURCE MANAGEMENT ────────────────────────────────────
+const RESOLUTION_TEMPLATES = {
+  sports:        ['NFL.com', 'ESPN.com', 'AP News', 'Reuters', 'Official governing body'],
+  esports:       ['Liquipedia', 'HLTV.org', 'AP News', 'Reuters', 'Official tournament site'],
+  politics:      ['AP News', 'Reuters', 'Fox News', 'NBC News', 'Official government website'],
+  crypto:        ['CoinGecko', 'CoinMarketCap', 'Bloomberg', 'Reuters'],
+  finance:       ['Bloomberg', 'Reuters', 'Yahoo Finance', 'AP News'],
+  entertainment: ['Verified X/Twitter', 'Reuters', 'BBC', 'Deadline', 'Variety'],
+  news:          ['Reuters', 'AP News', 'Bloomberg', 'BBC', 'NYT'],
+  other:         ['Reuters', 'AP News', 'Official source'],
+};
+const PROHIBITED_CLIENT = [
+  { re: /\b(assassinat\w*|kill\s+(?:the\s+)?(?:president|prime\s+minister|senator|official|leader)|murder\s+(?:the\s+)?(?:president|pm))\b/i,
+    msg: 'Markets about assassination or targeted killing are not permitted.' },
+  { re: /\b(drug\s+traffick\w*|money\s+laundering|human\s+traffick\w*|child\s+(?:abuse|exploit\w*)|terrorist\s+attack)\b/i,
+    msg: 'Markets about illegal activities are not permitted.' },
+  { re: /\b(insider\s+trad\w*|market\s+manipulat\w*)\b/i,
+    msg: 'Markets about illegal financial activities are not permitted.' },
+];
+let marketSources = [];
+
+function checkProhibited(question) {
+  const hit = PROHIBITED_CLIENT.find(p => p.re.test(question));
+  return hit ? hit.msg : null;
+}
+
+function loadSourceTemplate(category) {
+  const templates = RESOLUTION_TEMPLATES[category] || RESOLUTION_TEMPLATES.other;
+  marketSources = [...templates];
+  renderSourceChips();
+}
+
+function renderSourceChips() {
+  const container = document.getElementById('sourceChips');
+  if (!container) return;
+  container.innerHTML = marketSources.map((s, i) => `
+    <span class="source-chip">
+      ${s}
+      <button class="source-chip-remove" onclick="removeSource(${i})" title="Remove"
+        ${marketSources.length <= 3 ? 'disabled style="opacity:0.3;cursor:not-allowed"' : ''}>×</button>
+    </span>
+  `).join('');
+}
+
+function removeSource(i) {
+  if (marketSources.length <= 3) return;
+  marketSources.splice(i, 1);
+  renderSourceChips();
+}
+
+function addCustomSource() {
+  const input = document.getElementById('sourceCustomInput');
+  const val = input.value.trim();
+  if (!val) return;
+  if (!marketSources.includes(val)) {
+    marketSources.push(val);
+    renderSourceChips();
+    document.getElementById('sourceMinWarn').style.display = 'none';
+  }
+  input.value = '';
 }
 
 // Edit market
