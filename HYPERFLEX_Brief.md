@@ -1,145 +1,177 @@
-# HYPERFLEX Project Brief — March 9, 2026
+# HYPERFLEX Project Brief — Updated March 11, 2026
+
+> **RULE:** Claude must update this file at the END of every session with what was done, what's committed, and what's next. No exceptions.
+
+---
 
 ## 1. Project Status
 
 **LIVE:** https://hyperflex-production-4294.up.railway.app
-
-Backend and frontend are deployed on Railway. The app serves a prediction-market UI (markets, trading, settlement, leaderboard) with a Claude-powered market scanner and real-price settlement.
-
----
-
-## 2. What Was Built Today (March 9, 2026)
-
-- **Railway / Node:** Nixpacks config (`nixpacks.toml`) and `package.json` engines/start script for Node 18+ and `node server.js`.
-- **Production API URL:** Frontend (`index.html`) pointed to production API `https://hyperflex-production-4294.up.railway.app` (later updated to final domain).
-- **Market detail fixes:** Market title uses `market.question` (with fallback to `m.q`); order book guarded against NaN (baseYes default 0).
-- **Claude AI market scanner:** `@anthropic-ai/sdk` added; `scanAndCreateMarkets()` calls Claude (claude-sonnet-4-20250514) with a system prompt to generate 5 prediction markets (question, category, resolution_date, target_price, direction), parses JSON, dedupes by question, inserts into Supabase with required fields (question, category, resolution_date, commodity, target_price, direction, resolved: false). Cron every 6 hours (`0 */6 * * *`); manual trigger `POST /api/scan-markets`. Prompt updated to use dynamic “today” and require 2026 resolution dates.
-- **Scanner payload and frontend fetch logging:** Console logs for each market insert and raw `/markets` response for debugging.
-- **Real price settlement:** `fetchCurrentPrice(commodity)` added (CoinGecko for bitcoin/ethereum, metals.live for gold/silver, Yahoo Finance chart for WTI). `settleMarkets()` uses live price as `settlement_price`; skips resolution if price is null (retry next hour).
-- **Leaderboard:** `GET /api/leaderboard` aggregates settled positions and users, computes total PnL (sum of payouts where won minus sum of amount), win rate, total trades; returns top 20. BOARD tab in `index.html` fetches and displays rank, username, PnL, win rate, total trades; highlights current user row; crown for rank 1.
-- **Scanner insert completeness:** All required market fields (including category, resolution_date, commodity) inserted; frontend shapes API markets (q, sector, yes, closes, hot, etc.) so missing fields don’t hide rows.
+**Repo:** Railway auto-deploys from `main` branch on push.
 
 ---
 
-## 3. Current Tech Stack
+## 2. What This Product Is (The Pivot)
 
-From `package.json` (exact dependencies):
-
-| Package              | Version  |
-|----------------------|----------|
-| @anthropic-ai/sdk    | ^0.78.0  |
-| @supabase/supabase-js| ^2.99.0  |
-| bcryptjs             | ^3.0.3   |
-| cors                 | ^2.8.6   |
-| dotenv               | ^17.3.1  |
-| express              | ^5.2.1   |
-| jsonwebtoken         | ^9.0.3   |
-| node-cron            | ^4.2.1   |
-
-- **Runtime:** Node.js >= 18.0.0  
-- **Frontend:** Single-page app in `index.html` (React via CDN, Babel, Ethers, Web3Modal), static assets in `public/`.  
-- **Hosting:** Railway (production); start command `node server.js`.
+HYPERFLEX has pivoted from a **consumer prediction market** (competing with Polymarket) to a **B2B SaaS tool for creators**. Creators sign up, get a branded community page at `/their-slug`, and their audience predicts on markets the creator builds (often via YouTube AI scanner). No real money — play-money Flex Points only. Monetized via Free/Pro ($29/mo)/Platinum ($99/mo) tiers.
 
 ---
 
-## 4. All API Endpoints
+## 3. Full File Map
 
-Every route defined in `server.js`:
-
-| Method | Path                  | Description |
-|--------|------------------------|-------------|
-| POST   | `/register`            | Create account (email, password, display_name); returns user. |
-| POST   | `/login`               | Auth; returns token and user (id, email, display_name, balance). |
-| GET    | `/markets`             | List open markets (resolved = false), ordered by expiry_date. |
-| GET    | `/markets/:id`         | Single market by id. |
-| POST   | `/markets`             | Create market (admin): question, commodity, target_price, direction, expiry_date. |
-| POST   | `/trade`               | Place trade (user_id, market_id, side, amount); deducts balance, creates position. |
-| GET    | `/positions/:user_id`  | All positions for user with market details. |
-| GET    | `/api/leaderboard`     | Top 20 users by PnL (rank, user_id, username, total_pnl, win_rate, total_trades). |
-| POST   | `/api/scan-markets`    | Manually trigger Claude market scanner; returns `{ ok: true }`. |
-
-Static: `public/` served at `/` (e.g. `index.html` at project root is the main app).
+| File | Purpose |
+|------|---------|
+| `server.js` | Express backend, all API routes, Claude scanner, settlement cron |
+| `public/index.html` | **Creator marketing landing page** (homepage, B2B SaaS pitch) |
+| `public/creator-signup.html` | Creator registration (name, slug, points name, color, etc.) |
+| `public/creator-login.html` | Creator login |
+| `public/creator-dashboard.html` | Creator dashboard — markets, analytics, YouTube scanner, rewards, settings |
+| `public/community.html` | Member-facing community page at `/:slug` |
+| `public/creator-terms.html` | Creator Terms of Service |
+| `index.html` | ⚠️ OLD consumer trading app (React/Web3Modal) — kept at root, NOT served |
+| `hyperflex-deploy/` | Solidity contracts (HyperFlexMarket, Factory, Router) — separate Foundry project, mostly dormant |
 
 ---
 
-## 5. Database Schema (Supabase)
+## 4. Tech Stack
 
-Tables and fields used in the codebase:
+| Package | Version | Use |
+|---------|---------|-----|
+| `@anthropic-ai/sdk` | ^0.78.0 | YouTube scanner + market generation + AI resolution |
+| `@supabase/supabase-js` | ^2.99.0 | Database (users, markets, positions, communities, rewards) |
+| `bcryptjs` | ^3.0.3 | Password hashing |
+| `cors` | ^2.8.6 | CORS middleware |
+| `dotenv` | ^17.3.1 | Env vars |
+| `express` | ^5.2.1 | HTTP server |
+| `jsonwebtoken` | ^9.0.3 | Creator auth tokens |
+| `node-cron` | ^4.2.1 | Hourly settlement cron |
 
-**users**
-
-- `id` — primary key  
-- `email` — unique  
-- `password_hash` — bcrypt  
-- `display_name` — optional  
-- `balance` — numeric (paper balance for in-app trading)
-
-**markets**
-
-- `id` — primary key  
-- `question` — text  
-- `commodity` — text (e.g. crypto, gold, silver, oil)  
-- `category` — text (scanner)  
-- `resolution_date` — date (scanner)  
-- `target_price` — number (for settlement: above/below)  
-- `direction` — 'above' | 'below'  
-- `expiry_date` — timestamp (market closes; settlement runs when past)  
-- `resolved` — boolean  
-- `settlement_price` — number (set on resolution)  
-- `outcome` — boolean (true = YES wins)  
-- `yes_price`, `no_price` — used in trade pricing (e.g. 0–1 or cents)
-
-**positions**
-
-- `id` — primary key  
-- `user_id` — FK → users.id  
-- `market_id` — FK → markets.id  
-- `side` — 'YES' | 'NO'  
-- `amount` — number (stake)  
-- `potential_payout` — number (paid if won)  
-- `settled` — boolean  
-- `won` — boolean (set when market resolves)
+**Runtime:** Node.js >= 20
+**Fonts:** Syne (display) + Space Mono (mono) — used across all pages
+**Colors:** `--gold: #c9920d`, `--paper: #141412`, `--cream: #1c1c19`, `--text: #ddd8cc`
 
 ---
 
-## 6. Environment Variables
+## 5. All API Endpoints
 
-- **SUPABASE_URL** — Supabase project URL (required).  
-- **SUPABASE_ANON_KEY** — Supabase anon key (required).  
-- **ANTHROPIC_API_KEY** — For Claude market scanner; scanner no-ops if missing.  
-- **JWT_SECRET** — Optional; defaults to `'hyperflex_secret'` for login tokens.  
-- **PORT** — Optional; defaults to `3000` (Railway sets this in production).
-
-`.env` is loaded via `dotenv`; `.env` is in `.gitignore`.
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/register` | — | Legacy user signup |
+| POST | `/login` | — | Legacy user login |
+| GET | `/markets` | — | All open markets |
+| GET | `/markets/:id` | — | Single market |
+| POST | `/markets` | creator | Create market |
+| PUT | `/markets/:id` | creator | Edit market |
+| DELETE | `/markets/:id` | creator | Delete market |
+| POST | `/trade` | — | Place trade (user_id, market_id, side, amount) |
+| GET | `/positions/:user_id` | — | User positions |
+| GET | `/api/leaderboard` | — | Top 20 by PnL |
+| GET | `/api/prices` | — | Live commodity prices |
+| POST | `/api/scan-markets` | — | Manual Claude scanner trigger |
+| POST | `/api/creator/resolve/:marketId` | creator | Resolve a market |
+| GET | `/api/creator/:slug/theme` | — | Community theme/branding |
+| GET | `/api/templates/:id` | — | Market templates |
+| GET | `/api/creator/check-slug` | — | Slug availability |
+| POST | `/api/creator/signup` | — | Creator registration |
+| POST | `/api/creator/login` | — | Creator login |
+| GET | `/api/creator/dashboard` | creator | Dashboard data (markets, stats, leaderboard, rewards) |
+| PUT | `/api/creator/settings` | creator | Update community settings |
+| POST | `/api/creator/validate-question` | creator | AI question quality check |
+| GET | `/api/creator/:slug/rewards` | — | Community reward tiers |
+| POST | `/api/creator/rewards` | creator | Create reward tier |
+| PUT | `/api/creator/rewards/:id` | creator | Edit reward tier |
+| DELETE | `/api/creator/rewards/:id` | creator | Delete reward tier |
+| POST | `/api/creator/markets/:id/suggest-resolution` | creator | AI resolution suggestion |
+| POST | `/markets/:id/resolve` | creator | Resolve market (outcome true/false) |
+| POST | `/api/suggest-markets` | — | AI market suggestions |
+| POST | `/api/creator/scan-youtube` | creator | YouTube video scanner |
+| GET | `/api/community/:slug` | — | Community page data |
+| POST | `/api/creator/waitlist` | creator | Pro/Platinum waitlist signup |
+| GET | `/creator/signup` | — | Serves creator-signup.html |
+| GET | `/creator/login` | — | Serves creator-login.html |
+| GET | `/creator/dashboard` | — | Serves creator-dashboard.html |
+| GET | `/creator/terms` | — | Serves creator-terms.html |
+| GET | `/:slug` | — | Serves community.html (wildcard) |
 
 ---
 
-## 7. Dev Workflow — Cursor First, Paste Prompts, Run to Push
+## 6. Database Schema (Supabase)
 
-1. Open project in Cursor; work in `server.js`, `index.html`, or other repo files.  
-2. Use Cursor chat/Composer: paste prompts (e.g. “add endpoint …”, “fix leaderboard to …”).  
-3. Apply suggested edits; run `node server.js` locally if desired (ensure `.env` has SUPABASE_* and optionally ANTHROPIC_API_KEY).  
-4. Commit and push (e.g. “commit and push with message …” in the prompt); Railway deploys from the connected repo.
+**users** — `id`, `email`, `password_hash`, `display_name`, `balance`
 
----
+**communities** — `id`, `slug`, `creator_id`, `name`, `points_name`, `primary_color`, `description`, `plan` (free/pro/platinum)
 
-## 8. Known Issues / Next Session Tasks
+**markets** — `id`, `question`, `commodity`, `category`, `resolution_date`, `target_price`, `direction`, `expiry_date`, `resolved`, `settlement_price`, `outcome`, `yes_price`, `no_price`, `creator_slug`, `volume`, `trader_count`
 
-- **Markets table:** Scanner and manual create use `expiry_date` / `resolution_date`; confirm Supabase columns match (e.g. `expiry_date` may be date/timestamptz).  
-- **Trade pricing:** `/trade` uses `market.yes_price` and `market.no_price`; new scanner-created markets may not set these (default or migration may be needed).  
-- **fetchCurrentPrice:** Commodity mapping is fixed (bitcoin, ethereum, gold, silver, oil/wti); scanner categories (crypto, commodities, earnings, macro) may need mapping to a specific commodity for settlement (e.g. “commodities” → gold or a default).  
-- **Leaderboard:** Currently all-time only; weekly/monthly tabs in the UI are not wired to the API.  
-- **Remove or gate debug logs:** `[scanAndCreateMarkets] inserting` and `[markets fetch] raw response` in production if noisy.
+**positions** — `id`, `user_id`, `market_id`, `side`, `amount`, `potential_payout`, `settled`, `won`
+
+**rewards** — `id`, `creator_slug`, `name`, `description`, `points_required`, `is_active`
+
+**pro_waitlist** — `id`, `creator_id`, `email`, `tier`, `created_at`
 
 ---
 
-## 9. Grand Vision — Competing with Polymarket
+## 7. Environment Variables
 
-HYPERFLEX aims to be a real-money prediction market platform that competes with Polymarket, with a focus on:
+- `SUPABASE_URL` — required
+- `SUPABASE_ANON_KEY` — required (falls back from SERVICE_KEY)
+- `SUPABASE_SERVICE_KEY` — optional, preferred
+- `ANTHROPIC_API_KEY` — Claude scanner; no-ops if missing
+- `JWT_SECRET` — defaults to `'hyperflex_secret'`
+- `PORT` — Railway sets this; defaults to 3000
 
-- **Commodities and macro:** Differentiating via gold, silver, oil, and macro outcomes, not just crypto and politics.  
-- **Automated market creation:** Claude-generated markets on a schedule (e.g. every 6 hours) to keep the catalog fresh.  
-- **Real settlement:** Resolution using live prices (CoinGecko, metals.live, Yahoo) instead of simulated data.  
-- **Single app:** Auth, markets, trading, leaderboard, and wallet (e.g. MetaMask/Web3Modal) in one stack, deployable to Railway with minimal config.
+---
 
-Longer term: more asset classes, real-money integration, and scale comparable to Polymarket while keeping a commodity/macro edge.
+## 8. Pricing Tiers
+
+| Tier | Price | Key features |
+|------|-------|-------------|
+| Free | $0 | 3 active markets, leaderboard, basic analytics, Flex Points |
+| Pro | $29/mo | Unlimited markets, full analytics, YouTube scanner, AI gen, rewards, custom branding, "Built with HYPERFLEX" footer note |
+| Platinum | $99/mo | Everything in Pro + white-label (no watermark), custom domain, dedicated support, SLA, onboarding call |
+
+**Current state:** All creators are on Free tier. Pro/Platinum on waitlist (`pro_waitlist` table). Upgrade modal in dashboard captures email + tier.
+
+---
+
+## 9. Session History
+
+### March 11, 2026 — Session 2 (this session)
+- **Committed:** `public/index.html` rewritten as creator B2B landing page (was cut off last session, committed now — commit `febf3c5`)
+- **Committed:** Updated `HYPERFLEX_Brief.md` (this file) to be current
+
+### March 11, 2026 — Session 1 (cut off mid-session)
+- Rewrote `public/index.html` from old consumer trading UI to creator marketing landing page
+- Sections: Hero, Marquee, How it Works, Features, Demo mockup, Pricing (Free/Pro/Platinum), Testimonials, CTA, Footer
+- Session hit usage limit before commit
+
+### March 11, 2026 — Session 0 (last committed session)
+- Commit `f34ae8e`: Platinum tier added to pricing modal in creator dashboard
+- Pro/Platinum pricing: 3-column modal (Free / Pro $29 / Platinum $99)
+- Community watermark redesigned: HYPERFLEX hex logo + tagline + CTA pill
+- `pro_waitlist` table integration for upgrade flow
+
+### March 9–10, 2026 — Earlier sessions
+- Full B2B pivot: creator signup, dashboard, community page, Flex Points, rewards
+- YouTube scanner (comments + transcript + live chat modes)
+- AI market generation, AI resolution suggestions, AI question validation
+- Railway deployment, Supabase integration, Node 20 pin
+
+---
+
+## 10. Known Issues / Next Up
+
+- **Leaderboard:** Weekly/monthly tabs in community UI not wired to API (only all-time works)
+- **Trade pricing:** Scanner-created markets may not have `yes_price`/`no_price` set — defaults may be needed
+- **Settlement:** `fetchCurrentPrice()` commodity mapping is rough; scanner categories (crypto, commodities, macro) may not map cleanly to a specific settlement price source
+- **Debug logs:** `[scanAndCreateMarkets] inserting` and `[markets fetch] raw response` still in production — noisy
+- **Custom domain:** Platinum tier promises custom domain support — not implemented yet
+- **`/index.html` at root:** Old React trading app still sitting at project root; should eventually be removed or repurposed
+
+---
+
+## 11. Dev Workflow
+
+1. Edit files directly in the `~/hyperflex` folder
+2. Commit + push → Railway auto-deploys
+3. **Claude must update this brief at the END of every session**
