@@ -28,7 +28,7 @@ app.use((req, res, next) => {
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
+  process.env.SUPABASE_SERVICE_KEY
 );
 
 const anthropic = new Anthropic({
@@ -204,6 +204,17 @@ app.post('/trade', async (req, res) => {
     .select()
     .single();
   if (posError) return res.status(400).json({ error: posError.message });
+
+  // Update market volume and trader_count
+  const newVolume = (market.volume || 0) + amount;
+  const { count: traderCount } = await supabase
+    .from('positions')
+    .select('user_id', { count: 'exact', head: true })
+    .eq('market_id', market_id);
+  await supabase
+    .from('markets')
+    .update({ volume: newVolume, trader_count: traderCount ?? (market.trader_count || 0) + 1 })
+    .eq('id', market_id);
 
   res.json({ message: 'Trade placed', position });
 });
@@ -987,11 +998,11 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
       return res.status(404).json({ error: 'Creator not found' });
     }
 
-    // Get creator's markets
+    // Get creator's markets — match by creator_id OR tenant_slug to catch all creation paths
     const { data: markets } = await supabase
       .from('markets')
       .select('*')
-      .eq('creator_id', creatorId)
+      .or(`creator_id.eq.${creatorId},tenant_slug.eq.${settings.slug}`)
       .order('created_at', { ascending: false });
 
     // Get creator's display name from users

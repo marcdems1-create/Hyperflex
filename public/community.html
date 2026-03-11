@@ -1034,6 +1034,15 @@ function showCommunityError() {
 function renderPage() {
   const c = community;
   document.title = `${c.display_name} — HYPERFLEX`;
+
+  // Apply creator's primary color
+  if (c.primary_color) {
+    document.documentElement.style.setProperty('--gold', c.primary_color);
+    // Derive a slightly brighter hover shade
+    document.documentElement.style.setProperty('--gold-lt', c.primary_color);
+    document.documentElement.style.setProperty('--gold-bright', c.primary_color);
+  }
+
   document.getElementById('headerCommunityName').textContent = c.display_name;
   document.getElementById('heroTitle').textContent = c.display_name;
   document.getElementById('heroDesc').textContent =
