@@ -45,8 +45,8 @@
 
 ## Rules Claude Must Follow Every Session
 
-1. **Read this file + HYPERFLEX_Brief.md at session start** before touching anything
-2. **Update both files at session end** — what was done, what's committed, what's next
+1. **Read this file + HYPERFLEX_Brief.md + TODO.md at session start** before touching anything
+2. **Update all three files at session end** — what was done, what's committed, what's next
 3. **Never push** — user pushes from their terminal
 4. **Always check git status** before assuming what's deployed vs local
 5. **Brief font/color system:** Syne (display) + Space Mono (mono), gold `#c9920d`, paper `#141412`
