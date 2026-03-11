@@ -81,105 +81,6 @@ function requireAuth(req, res, next) {
 
 // ── CREATOR PLATFORM ──────────────────────────────
 
-// Creator signup: email, password, display_name, slug → user + creator_settings, return JWT
-app.post('/api/creator/signup', async (req, res) => {
-  const { email, password, display_name, slug, theme_type } = req.body;
-  if (!email || !password || !display_name || !slug) {
-    return res.status(400).json({ error: 'email, password, display_name, and slug are required' });
-  }
-  const slugStr = String(slug).trim().toLowerCase();
-  if (!/^[a-z0-9]{3,20}$/.test(slugStr)) {
-    return res.status(400).json({ error: 'slug must be lowercase alphanumeric, 3–20 characters' });
-  }
-  const { data: existingSlug } = await supabase
-    .from('creator_settings')
-    .select('user_id')
-    .eq('slug', slugStr)
-    .maybeSingle();
-  if (existingSlug) return res.status(400).json({ error: 'slug already taken' });
-
-  const { data: existingEmail } = await supabase
-    .from('users')
-    .select('id')
-    .eq('email', email)
-    .maybeSingle();
-  if (existingEmail) return res.status(400).json({ error: 'email already registered' });
-
-  const password_hash = await bcrypt.hash(password, 10);
-  const { data: user, error: userError } = await supabase
-    .from('users')
-    .insert([{ email, password_hash, display_name, is_creator: true }])
-    .select()
-    .single();
-  if (userError) return res.status(400).json({ error: userError.message });
-
-  const { error: settingsError } = await supabase
-    .from('creator_settings')
-    .insert([{ user_id: user.id, slug: slugStr, display_name: display_name || user.display_name, custom_points_name: 'Flex Points', theme_type: theme_type || 'default' }]);
-  if (settingsError) {
-    await supabase.from('users').delete().eq('id', user.id);
-    return res.status(400).json({ error: settingsError.message || 'Failed to create creator settings' });
-  }
-
-  const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET || 'hyperflex_secret');
-  res.json({
-    token,
-    user: { id: user.id, email: user.email, display_name: user.display_name, balance: user.balance, is_creator: true },
-  });
-});
-
-// Creator dashboard: markets, total traders, total volume, resolution queue (auth required)
-app.get('/api/creator/dashboard', requireAuth, async (req, res) => {
-  try {
-    const { data: settings, error: settingsErr } = await supabase
-      .from('creator_settings')
-      .select('slug, display_name')
-      .eq('user_id', req.userId)
-      .single();
-    if (settingsErr || !settings) return res.status(404).json({ error: 'Creator settings not found' });
-    const slug = settings.slug;
-
-    const { data: markets, error: marketsErr } = await supabase
-      .from('markets')
-      .select('*')
-      .eq('creator_slug', slug)
-      .order('created_at', { ascending: false });
-    if (marketsErr) return res.status(400).json({ error: marketsErr.message });
-
-    const marketIds = (markets || []).map((m) => m.id);
-    let totalTraders = 0;
-    let totalVolume = 0;
-    if (marketIds.length > 0) {
-      const { data: positions } = await supabase
-        .from('positions')
-        .select('user_id, amount')
-        .in('market_id', marketIds);
-      const traders = new Set((positions || []).map((p) => p.user_id));
-      totalTraders = traders.size;
-      totalVolume = (positions || []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-    }
-
-    const now = new Date().toISOString();
-    const { data: resolutionQueue } = await supabase
-      .from('markets')
-      .select('*')
-      .eq('creator_slug', slug)
-      .eq('resolved', false)
-      .lt('expiry_date', now)
-      .order('expiry_date', { ascending: true });
-
-    res.json({
-      markets: markets || [],
-      total_traders: totalTraders,
-      total_volume: Math.round(totalVolume * 100) / 100,
-      resolution_queue: resolutionQueue || [],
-    });
-  } catch (err) {
-    console.error('creator/dashboard error:', err.message);
-    res.status(500).json({ error: 'Dashboard failed' });
-  }
-});
-
 app.get('/api/creator/analytics', requireAuth, async (req, res) => {
   try {
     const { data: settings } = await supabase
@@ -1389,9 +1290,7 @@ app.post('/markets/:id/resolve', requireCreator, async (req, res) => {
         if (isWinner) {
           // Credit winner's balance (amount * 2 for 50/50, simplified)
           payouts.push(
-            supabase.from('users').update({
-              balance: supabase.raw(`balance + ${pos.amount * 2}`)
-            }).eq('id', pos.user_id)
+            supabase.rpc('increment_user_balance', { p_user_id: pos.user_id, p_amount: pos.amount * 2 })
           );
         }
       }
@@ -1616,5 +1515,6 @@ app.get('/creator/dashboard', (req, res) => {
 
 // ════════════════════════════════════════════════════════════
 // END CREATOR PLATFORM ROUTES
-// ════════════════════════════════════════════════════════════const PORT = process.env.PORT || 3000;
+// ════════════════════════════════════════════════════════════
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`HYPERFLEX server running on port ${PORT}`));
