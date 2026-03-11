@@ -1032,9 +1032,15 @@ body {
         <input type="url" id="youtubeUrl" placeholder="https://youtube.com/watch?v=... or https://youtube.com/@yourchannel"/>
       </div>
       <div id="ytScanResult" style="display:none">
-        <div id="ytVideoMeta" style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:16px;padding:10px 12px;background:var(--paper);border:1px solid var(--border);border-radius:6px"></div>
-        <div style="font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:10px">Suggested Markets — select to publish</div>
-        <div id="ytMarketList" style="display:flex;flex-direction:column;gap:8px"></div>
+        <div id="ytVideoMeta" style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:16px;padding:10px 12px;background:var(--paper);border:1px solid var(--border);border-radius:6px;line-height:1.6"></div>
+        <div id="ytCommentSection" style="display:none;margin-bottom:16px">
+          <div style="font-family:var(--mono);font-size:10px;color:var(--gold);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px">💬 Fan Debate Markets — from comments</div>
+          <div id="ytCommentList" style="display:flex;flex-direction:column;gap:8px"></div>
+        </div>
+        <div id="ytTranscriptSection" style="display:none">
+          <div style="font-family:var(--mono);font-size:10px;color:#5ba4cf;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px">🎙 Transcript Markets — from what the creator said</div>
+          <div id="ytTranscriptList" style="display:flex;flex-direction:column;gap:8px"></div>
+        </div>
       </div>
       <div id="ytError" style="display:none;padding:10px 12px;background:rgba(192,57,43,0.1);border:1px solid rgba(192,57,43,0.3);border-radius:6px;font-size:12px;color:#e74c3c;line-height:1.4"></div>
     </div>
@@ -1396,13 +1402,14 @@ function openYoutubeModal() {
   document.getElementById('youtubeUrl').value = '';
   document.getElementById('ytScanResult').style.display = 'none';
   document.getElementById('ytError').style.display = 'none';
-  document.getElementById('ytMarketList').innerHTML = '';
+  document.getElementById('ytCommentList').innerHTML = '';
+  document.getElementById('ytTranscriptList').innerHTML = '';
+  document.getElementById('ytCommentSection').style.display = 'none';
+  document.getElementById('ytTranscriptSection').style.display = 'none';
   document.getElementById('ytVideoMeta').textContent = '';
-  document.getElementById('ytScanBtn').disabled = false;
-  document.getElementById('ytScanBtn').textContent = 'Scan Comments →';
   document.getElementById('ytFooter').innerHTML = `
     <button class="btn-secondary" onclick="closeYoutubeModal()">Cancel</button>
-    <button class="btn-primary" id="ytScanBtn" onclick="runYoutubeScan()">Scan Comments →</button>
+    <button class="btn-primary" id="ytScanBtn" onclick="runYoutubeScan()">Scan Comments & Transcript →</button>
   `;
   ytSuggestedMarkets = [];
   document.getElementById('youtubeModal').classList.add('show');
@@ -1417,7 +1424,7 @@ async function runYoutubeScan() {
 
   const btn = document.getElementById('ytScanBtn');
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Scanning…';
+  btn.innerHTML = '<span class="spinner"></span> Scanning comments & transcript…';
   document.getElementById('ytError').style.display = 'none';
   document.getElementById('ytScanResult').style.display = 'none';
 
@@ -1436,27 +1443,52 @@ async function runYoutubeScan() {
     }
 
     ytSuggestedMarkets = data.markets || [];
-    document.getElementById('ytVideoMeta').textContent =
-      `📹 "${data.video_title}" · ${data.comment_count} comments scanned · ${ytSuggestedMarkets.length} markets found`;
+    const commentMarkets = data.comment_markets || [];
+    const transcriptMarkets = data.transcript_markets || [];
 
-    document.getElementById('ytMarketList').innerHTML = ytSuggestedMarkets.map((m, i) => `
-      <label class="yt-market-item" id="ytItem${i}" onclick="toggleYtItem(${i})">
-        <input type="checkbox" id="ytCheck${i}" checked/>
-        <div>
-          <div class="yt-market-question">${m.question}</div>
-          <div class="yt-market-meta">${m.category} · Closes ${m.resolution_date}</div>
-        </div>
-      </label>
-    `).join('');
+    // Meta summary
+    const transcriptStatus = data.has_transcript
+      ? `transcript: ${Math.round(data.transcript_length / 100) / 10}k chars`
+      : 'no transcript (captions unavailable)';
+    document.getElementById('ytVideoMeta').innerHTML =
+      `📹 <strong style="color:var(--text)">${data.video_title}</strong><br>` +
+      `${data.comment_count} comments · ${transcriptStatus} · ${ytSuggestedMarkets.length} markets generated`;
 
-    // Select all by default
-    ytSuggestedMarkets.forEach((_, i) => {
-      document.getElementById('ytItem' + i).classList.add('selected');
-    });
+    // Render comment markets
+    if (commentMarkets.length > 0) {
+      document.getElementById('ytCommentList').innerHTML = commentMarkets.map((m, i) => {
+        const globalIdx = i;
+        return `
+          <label class="yt-market-item selected" id="ytItem${globalIdx}" onclick="toggleYtItem(${globalIdx})">
+            <input type="checkbox" id="ytCheck${globalIdx}" checked/>
+            <div>
+              <div class="yt-market-question">${m.question}</div>
+              <div class="yt-market-meta">${m.category} · Closes ${m.resolution_date}</div>
+            </div>
+          </label>`;
+      }).join('');
+      document.getElementById('ytCommentSection').style.display = 'block';
+    }
+
+    // Render transcript markets (indices continue from where comment markets left off)
+    if (transcriptMarkets.length > 0) {
+      const offset = commentMarkets.length;
+      document.getElementById('ytTranscriptList').innerHTML = transcriptMarkets.map((m, i) => {
+        const globalIdx = offset + i;
+        return `
+          <label class="yt-market-item selected" id="ytItem${globalIdx}" onclick="toggleYtItem(${globalIdx})">
+            <input type="checkbox" id="ytCheck${globalIdx}" checked/>
+            <div>
+              <div class="yt-market-question">${m.question}</div>
+              <div class="yt-market-meta">${m.category} · Closes ${m.resolution_date}${m.resolution_note ? ' · ' + m.resolution_note : ''}</div>
+            </div>
+          </label>`;
+      }).join('');
+      document.getElementById('ytTranscriptSection').style.display = 'block';
+    }
 
     document.getElementById('ytScanResult').style.display = 'block';
 
-    // Swap footer to publish button
     document.getElementById('ytFooter').innerHTML = `
       <button class="btn-secondary" onclick="closeYoutubeModal()">Cancel</button>
       <button class="btn-secondary" onclick="runYoutubeScan()">↺ Re-scan</button>
@@ -1467,7 +1499,7 @@ async function runYoutubeScan() {
     document.getElementById('ytError').style.display = 'block';
   } finally {
     const b = document.getElementById('ytScanBtn');
-    if (b) { b.disabled = false; b.textContent = 'Scan Comments →'; }
+    if (b) { b.disabled = false; b.textContent = 'Scan Comments & Transcript →'; }
   }
 }
 

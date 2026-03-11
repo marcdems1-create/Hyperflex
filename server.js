@@ -1368,11 +1368,62 @@ function getDate(daysFromNow) {
 }
 
 // ════════════════════════════════════════════════════════════
-// 7b. YOUTUBE COMMENT SCANNER
+// 7b. YOUTUBE COMMENT + TRANSCRIPT SCANNER
 // POST /api/creator/scan-youtube
 // Body: { url: "https://youtube.com/watch?v=..." }
-// Returns: { markets: [{ question, category, resolution_date }], comment_count, video_title }
+// Returns: { markets, comment_count, transcript_length, video_title }
+// Each market has source: 'comments' | 'transcript'
 // ════════════════════════════════════════════════════════════
+
+// Helper: fetch auto-generated captions from watch page HTML
+async function fetchYouTubeTranscript(videoId) {
+  try {
+    const watchRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+      headers: {
+        'Accept-Language': 'en-US,en;q=0.9',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      }
+    });
+    const html = await watchRes.text();
+
+    // Extract all caption baseUrls embedded in the page
+    const captionMatches = [...html.matchAll(/"baseUrl":"(https:\\\/\\\/www\.youtube\.com\\\/api\\\/timedtext[^"]+)"/g)];
+    if (!captionMatches.length) return null;
+
+    // Unescape JSON-encoded URL, prefer English track
+    let captionUrl = null;
+    for (const m of captionMatches) {
+      const raw = m[1].replace(/\\u0026/g, '&').replace(/\\\//g, '/');
+      if (!captionUrl) captionUrl = raw; // fallback: first track
+      if (raw.includes('lang=en') || raw.includes('lang%3Den')) {
+        captionUrl = raw;
+        break;
+      }
+    }
+    if (!captionUrl) return null;
+
+    // Fetch as JSON3 format (structured segments)
+    const sep = captionUrl.includes('?') ? '&' : '?';
+    const transcriptRes = await fetch(captionUrl + sep + 'fmt=json3');
+    if (!transcriptRes.ok) return null;
+
+    const transcriptData = await transcriptRes.json();
+    const events = transcriptData.events || [];
+
+    const text = events
+      .filter(e => e.segs)
+      .map(e => e.segs.map(s => (s.utf8 || '').replace(/\n/g, ' ')).join(''))
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    return text || null;
+  } catch (err) {
+    console.warn('transcript fetch failed:', err.message);
+    return null;
+  }
+}
+
 app.post('/api/creator/scan-youtube', requireCreator, async (req, res) => {
   try {
     const { url } = req.body;
@@ -1385,25 +1436,21 @@ app.post('/api/creator/scan-youtube', requireCreator, async (req, res) => {
       return res.status(503).json({ error: 'Anthropic API key not configured.' });
     }
 
-    // ── Extract video ID or channel ID from URL ───────────────
+    // ── Extract video ID ──────────────────────────────────────
     let videoId = null;
     let channelId = null;
     let videoTitle = '';
 
-    // Patterns: watch?v=, youtu.be/, /shorts/, /live/
     const videoMatch = url.match(/(?:v=|youtu\.be\/|\/shorts\/|\/live\/)([a-zA-Z0-9_-]{11})/);
     if (videoMatch) {
       videoId = videoMatch[1];
     } else {
-      // Channel URL: /channel/UC..., /c/name, /@handle
       const channelMatch = url.match(/youtube\.com\/(?:channel\/(UC[a-zA-Z0-9_-]+)|c\/([^/?]+)|@([^/?]+))/);
       if (channelMatch) {
-        // Resolve handle/custom URL to channel ID via YouTube search
         const handle = channelMatch[1] || channelMatch[2] || channelMatch[3];
         if (channelMatch[1]) {
           channelId = channelMatch[1];
         } else {
-          // Search for channel to get its ID, then get latest video
           const searchRes = await fetch(
             `https://www.googleapis.com/youtube/v3/search?part=snippet&type=channel&q=${encodeURIComponent(handle)}&maxResults=1&key=${YOUTUBE_API_KEY}`
           );
@@ -1411,10 +1458,8 @@ app.post('/api/creator/scan-youtube', requireCreator, async (req, res) => {
           if (searchData.error) throw new Error(searchData.error.message);
           channelId = searchData.items?.[0]?.id?.channelId;
         }
+        if (!channelId) return res.status(400).json({ error: 'Could not resolve YouTube channel. Try a direct video URL instead.' });
 
-        if (!channelId) return res.status(400).json({ error: 'Could not resolve YouTube channel. Try pasting a direct video URL instead.' });
-
-        // Get most recent video from channel
         const vidRes = await fetch(
           `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${channelId}&order=date&type=video&maxResults=1&key=${YOUTUBE_API_KEY}`
         );
@@ -1426,74 +1471,85 @@ app.post('/api/creator/scan-youtube', requireCreator, async (req, res) => {
       }
     }
 
-    if (!videoId) return res.status(400).json({ error: 'Could not extract a video ID from that URL. Paste a YouTube video link (e.g. youtube.com/watch?v=...)' });
+    if (!videoId) return res.status(400).json({ error: 'Could not extract a video ID. Paste a YouTube video URL (e.g. youtube.com/watch?v=...)' });
 
-    // ── Fetch video title if not already set ─────────────────
-    if (!videoTitle) {
-      const infoRes = await fetch(
-        `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${YOUTUBE_API_KEY}`
-      );
+    // ── Fetch title, comments, and transcript in parallel ─────
+    const [infoRes, commentRes, transcript] = await Promise.all([
+      videoTitle ? null : fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${YOUTUBE_API_KEY}`),
+      fetch(`https://www.googleapis.com/youtube/v3/commentThreads?part=snippet&videoId=${videoId}&order=relevance&maxResults=100&key=${YOUTUBE_API_KEY}`),
+      fetchYouTubeTranscript(videoId)
+    ]);
+
+    if (infoRes) {
       const infoData = await infoRes.json();
       if (infoData.error) throw new Error(infoData.error.message);
       videoTitle = infoData.items?.[0]?.snippet?.title || 'YouTube video';
     }
 
-    // ── Fetch top 100 comments (top relevance order) ──────────
-    const commentRes = await fetch(
-      `https://www.googleapis.com/youtube/v3/commentThreads?part=snippet&videoId=${videoId}&order=relevance&maxResults=100&key=${YOUTUBE_API_KEY}`
-    );
     const commentData = await commentRes.json();
-
     if (commentData.error) {
-      const msg = commentData.error.message || 'YouTube API error';
-      // Comments disabled is a common case
-      if (commentData.error.code === 403) {
-        return res.status(403).json({ error: 'Comments are disabled for this video.' });
-      }
-      throw new Error(msg);
+      if (commentData.error.code === 403) return res.status(403).json({ error: 'Comments are disabled for this video.' });
+      throw new Error(commentData.error.message || 'YouTube API error');
     }
 
     const comments = (commentData.items || []).map(item =>
       item.snippet?.topLevelComment?.snippet?.textDisplay || ''
     ).filter(Boolean);
 
-    if (comments.length === 0) {
-      return res.status(404).json({ error: 'No comments found on this video.' });
+    if (comments.length === 0 && !transcript) {
+      return res.status(404).json({ error: 'No comments or transcript found for this video.' });
     }
 
-    // ── Send to Claude ────────────────────────────────────────
-    const today = new Date();
+    // ── Build prompt ──────────────────────────────────────────
     const in30 = getDate(30);
     const in60 = getDate(60);
     const in90 = getDate(90);
 
-    const commentBlock = comments.slice(0, 100).map((c, i) => `${i + 1}. ${c.replace(/<[^>]+>/g, '').trim()}`).join('\n');
+    const commentBlock = comments.length
+      ? comments.slice(0, 100).map((c, i) => `${i + 1}. ${c.replace(/<[^>]+>/g, '').trim()}`).join('\n')
+      : '(comments unavailable)';
 
-    const prompt = `You are analyzing YouTube comments to find prediction market opportunities.
+    // Truncate transcript to ~4000 chars to stay within token budget
+    const transcriptBlock = transcript
+      ? transcript.slice(0, 4000) + (transcript.length > 4000 ? '… [truncated]' : '')
+      : '(transcript unavailable — captions may be disabled or not yet generated)';
 
-Video: "${videoTitle}"
+    const hasTranscript = !!transcript;
 
-Here are the top comments from this video:
+    const prompt = `You are analyzing a YouTube video to generate two types of prediction markets for a fan community.
+
+Video title: "${videoTitle}"
+
+━━━ COMMENTS (what fans are debating) ━━━
 ${commentBlock}
 
-Based on what fans are debating, predicting, and speculating about in these comments, generate 5-10 prediction market questions. Focus on:
-- Specific predictions fans are making ("will X happen?")
-- Debates about outcomes ("I think Y will win", "no way Z happens")
-- Questions about future events related to the video's topic
+━━━ VIDEO TRANSCRIPT (what the creator said) ━━━
+${transcriptBlock}
 
-Each market must:
-- Be a clear YES or NO question that can be objectively resolved
-- Be directly relevant to what fans are talking about
-- Have a realistic resolution date (near=${in30}, mid=${in60}, far=${in90})
+Generate two sets of prediction markets:
+
+**SET 1 — FAN DEBATE MARKETS** (source: "comments")
+Based on predictions, debates, and speculation in the comments. These are FUTURE questions fans want answered.
+Generate 3-6 markets.
+
+**SET 2 — TRANSCRIPT MARKETS** (source: "transcript")
+${hasTranscript
+  ? `Based on claims, predictions, or upcoming events the CREATOR mentioned in the video. These should be verifiable using the video itself as the resolution source (e.g. "Will X that was claimed in the video turn out to be true?", "Will the creator follow through on Y they announced?"). Generate 3-5 markets.`
+  : `The transcript was unavailable — generate 0 transcript markets.`
+}
+
+Rules for ALL markets:
+- Clear YES or NO question, objectively resolvable
+- Resolution dates: near=${in30}, mid=${in60}, far=${in90}
+- No duplicate ideas between the two sets
 
 Return ONLY valid JSON, no other text:
 {
-  "markets": [
-    {
-      "question": "Will [specific thing fans are debating]?",
-      "category": "sports|entertainment|finance|politics|other",
-      "resolution_date": "YYYY-MM-DD"
-    }
+  "comment_markets": [
+    { "question": "Will ...?", "category": "sports|entertainment|finance|politics|other", "resolution_date": "YYYY-MM-DD" }
+  ],
+  "transcript_markets": [
+    { "question": "Will ...?", "category": "sports|entertainment|finance|politics|other", "resolution_date": "YYYY-MM-DD", "resolution_note": "one sentence on how to verify this" }
   ]
 }`;
 
@@ -1506,7 +1562,7 @@ Return ONLY valid JSON, no other text:
       },
       body: JSON.stringify({
         model: 'claude-opus-4-6',
-        max_tokens: 1200,
+        max_tokens: 1800,
         messages: [{ role: 'user', content: prompt }]
       })
     });
@@ -1518,15 +1574,22 @@ Return ONLY valid JSON, no other text:
 
     const parsed = JSON.parse(jsonMatch[0]);
 
+    const commentMarkets = (parsed.comment_markets || []).map(m => ({ ...m, source: 'comments' }));
+    const transcriptMarkets = (parsed.transcript_markets || []).map(m => ({ ...m, source: 'transcript' }));
+
     res.json({
-      markets: parsed.markets || [],
+      markets: [...commentMarkets, ...transcriptMarkets],
+      comment_markets: commentMarkets,
+      transcript_markets: transcriptMarkets,
       comment_count: comments.length,
+      transcript_length: transcript ? transcript.length : 0,
+      has_transcript: hasTranscript,
       video_title: videoTitle
     });
 
   } catch (err) {
     console.error('scan-youtube error:', err);
-    res.status(500).json({ error: err.message || 'Failed to scan YouTube comments' });
+    res.status(500).json({ error: err.message || 'Failed to scan YouTube video' });
   }
 });
 
