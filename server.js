@@ -2487,10 +2487,11 @@ app.get('/auth/callback', async (req, res) => {
         headers: { 'Authorization': 'Bearer ' + tokenData.access_token }
       });
       const userData = await userRes.json();
+      console.log('[twitter oauth] user response:', JSON.stringify(userData));
       const tUser   = userData.data || {};
       displayName   = tUser.name || tUser.username || 'Creator';
       // Use real email if Twitter returns it (requires "Request email" enabled in app settings)
-      email         = tUser.email ? tUser.email.toLowerCase() : `twitter_${tUser.id}@oauth.hyperflex.app`;
+      email         = tUser.email ? tUser.email.toLowerCase() : `twitter_${tUser.id || Date.now()}@oauth.hyperflex.app`;
     }
 
     if (!email) return res.redirect('/creator/login?error=no_email_returned');
