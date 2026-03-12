@@ -2481,6 +2481,7 @@ app.get('/auth/callback', async (req, res) => {
         })
       });
       const tokenData = await tokenRes.json();
+      console.log('[twitter oauth] token response:', JSON.stringify({ ...tokenData, access_token: tokenData.access_token ? '[REDACTED]' : undefined }));
       if (tokenData.error) throw new Error(tokenData.error_description || tokenData.error);
 
       const userRes = await fetch('https://api.twitter.com/2/users/me?user.fields=id,name,username,email', {
@@ -2488,6 +2489,18 @@ app.get('/auth/callback', async (req, res) => {
       });
       const userData = await userRes.json();
       console.log('[twitter oauth] user response:', JSON.stringify(userData));
+
+      // Surface Twitter API errors — if data is missing there's usually an errors array
+      if (!userData.data && userData.errors) {
+        const errMsg = userData.errors.map(e => e.message || e.title || JSON.stringify(e)).join('; ');
+        console.error('[twitter oauth] API errors:', errMsg);
+        return res.redirect('/creator/login?error=' + encodeURIComponent('Twitter error: ' + errMsg));
+      }
+      if (!userData.data && userData.title) {
+        // Top-level error response like {"title":"Unauthorized","type":"...","status":401}
+        return res.redirect('/creator/login?error=' + encodeURIComponent('Twitter: ' + userData.title));
+      }
+
       const tUser   = userData.data || {};
       displayName   = tUser.name || tUser.username || 'Creator';
       // Use real email if Twitter returns it (requires "Request email" enabled in app settings)
