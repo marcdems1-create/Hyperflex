@@ -7,6 +7,7 @@ const { createClient } = require('@supabase/supabase-js');
 const Anthropic = require('@anthropic-ai/sdk');
 const cron = require('node-cron');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 app.use(cors());
@@ -2487,16 +2488,83 @@ app.post('/api/creator/oauth-complete', async (req, res) => {
 
 // ════════════════════════════════════════════════════════════
 // 10. PUBLIC COMMUNITY PAGE (slug catch-all — must be last)
-// GET /:slug  →  serves community.html, injects slug via query
+// GET /:slug  →  serves community.html with SSR'd OG meta tags
+// Crawlers (Discord, Twitter, Slack, iMessage) need meta tags in the HTML
+// response — they don't execute JS. We SSR the <head> for every community page.
 // ════════════════════════════════════════════════════════════
 const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt'
 ]);
-app.get('/:slug', (req, res, next) => {
+
+// Read community.html once at startup and cache it
+const COMMUNITY_HTML = fs.readFileSync(path.join(__dirname, 'public', 'community.html'), 'utf8');
+
+app.get('/:slug', async (req, res, next) => {
   const { slug } = req.params;
   if (RESERVED_SLUGS.has(slug) || slug.includes('.')) return next();
-  res.sendFile(path.join(__dirname, 'public', 'community.html'));
+
+  try {
+    // Fetch community data for meta tags
+    const { data: settings } = await supabase
+      .from('creator_settings')
+      .select('display_name, community_description, custom_points_name, slug')
+      .eq('slug', slug)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    const APP_URL = process.env.APP_URL || 'https://hyperflex.network';
+
+    let title, description, ogUrl, ogImage;
+
+    if (settings) {
+      const name = settings.display_name || slug;
+      const pts  = settings.custom_points_name || 'Flex Points';
+      const desc = settings.community_description
+        ? settings.community_description.slice(0, 160)
+        : `Make predictions, earn ${pts}, and climb the leaderboard in ${name}'s community on HYPERFLEX.`;
+
+      title       = `${name} — Prediction Market`;
+      description = desc;
+      ogUrl       = `${APP_URL}/${slug}`;
+      ogImage     = `${APP_URL}/og-default.png`;
+    } else {
+      // Community not found — still serve the page (it will show 404 state via JS)
+      title       = 'HYPERFLEX — Community Prediction Markets';
+      description = 'Make predictions, earn points, and compete on the leaderboard.';
+      ogUrl       = `${APP_URL}/${slug}`;
+      ogImage     = `${APP_URL}/og-default.png`;
+    }
+
+    const esc = s => s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+    const metaTags = `
+  <title>${esc(title)}</title>
+  <meta name="description" content="${esc(description)}"/>
+  <!-- Open Graph -->
+  <meta property="og:type" content="website"/>
+  <meta property="og:url" content="${esc(ogUrl)}"/>
+  <meta property="og:title" content="${esc(title)}"/>
+  <meta property="og:description" content="${esc(description)}"/>
+  <meta property="og:image" content="${esc(ogImage)}"/>
+  <meta property="og:site_name" content="HYPERFLEX"/>
+  <!-- Twitter / X -->
+  <meta name="twitter:card" content="summary_large_image"/>
+  <meta name="twitter:title" content="${esc(title)}"/>
+  <meta name="twitter:description" content="${esc(description)}"/>
+  <meta name="twitter:image" content="${esc(ogImage)}"/>`;
+
+    // Inject after <head> — replace the generic <title> line
+    const html = COMMUNITY_HTML
+      .replace('<title>HYPERFLEX Community</title>', metaTags);
+
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+
+  } catch (err) {
+    console.error('/:slug meta SSR error:', err.message);
+    res.sendFile(path.join(__dirname, 'public', 'community.html'));
+  }
 });
 
 // ════════════════════════════════════════════════════════════
