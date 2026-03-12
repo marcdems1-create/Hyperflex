@@ -7,23 +7,21 @@
 
 ## 🔴 Immediate
 
-- [ ] **OAuth (Google + X)** — code is deployed but not functional yet. Needs: Google OAuth credentials in Railway env, Twitter/X credentials in Railway env, Supabase providers enabled in dashboard, redirect URIs whitelisted. Handle as dedicated session.
+- [ ] **Stripe payments** — Pro ($29/mo) + Platinum ($99/mo) currently waitlist only. Need checkout flow, webhook to update creator tier in DB, and billing portal link.
 
 ---
 
 ## 🟡 Up Next
 
-- [ ] **Community meta tags** — og:image, og:title per community slug for social sharing (big for growth)
-- [ ] **Creator onboarding** — empty state UX for brand-new creators with 0 markets
-- [ ] **Stripe payments** — Pro/Platinum currently on waitlist only, no actual billing
 - [ ] **Custom domain** — Platinum tier promises it, not implemented in server
+- [ ] **Settlement mapping** — scanner categories (crypto/commodities/macro) don't always map cleanly to commodity price source
 
 ---
 
 ## 🔵 Backlog
 
-- [ ] **Settlement mapping** — scanner categories (crypto/commodities/macro) don't always map cleanly to commodity price source
 - [ ] **Cleanup** — delete old `index.html` at project root (not served, just clutter)
+- [ ] **Twitter email** — Twitter API v2 doesn't return email; would need "confirmed email" access tier. Currently pseudo-email fallback + optional signup field. Good enough.
 
 ---
 
@@ -44,5 +42,7 @@
 - [x] Landing page rewrite — creator B2B SaaS (`febf3c5`)
 - [x] Pricing fix — removed "Built with HYPERFLEX subtle footer" from Pro (`d9fc0ae`)
 - [x] Debug logs stripped from production (`d9fc0ae`)
+- [x] SSR OG meta tags for community pages — og:title, og:description, og:image per slug (`7b1c397`)
+- [x] Creator onboarding checklist — 3-step empty state for new creators (`5a8d48e`)
+- [x] OAuth (Google + X) — Google fully working, X working (name/username, no email by design) (`184fb8e`)
 - [x] CLAUDE.md + TODO.md — persistent session memory
-- [x] OAuth routes added (Google + X) — needs env config to go live (`809abdf`)

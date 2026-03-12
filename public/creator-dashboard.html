@@ -1883,8 +1883,8 @@ body {
             <li class="plan-feature excluded"><span class="feature-check no">×</span> Custom domain</li>
           </ul>
           <div class="plan-cta">
-            <button class="btn-plan-pro" onclick="showWaitlistForm('pro')">
-              Get Early Access →
+            <button class="btn-plan-pro" id="proCtaBtn" onclick="startCheckout('pro')">
+              Upgrade to Pro →
             </button>
           </div>
         </div>
@@ -1910,8 +1910,8 @@ body {
             <li class="plan-feature included" style="opacity:0;pointer-events:none"><span class="feature-check"></span> &nbsp;</li>
           </ul>
           <div class="plan-cta">
-            <button class="btn-plan-platinum" onclick="showWaitlistForm('platinum')">
-              Get Early Access →
+            <button class="btn-plan-platinum" id="platCtaBtn" onclick="startCheckout('platinum')">
+              Upgrade to Platinum →
             </button>
           </div>
         </div>
@@ -2156,8 +2156,34 @@ function renderDashboard(data) {
   document.getElementById('settingColor').value = creator.primary_color || '#c9920d';
   document.getElementById('settingColorHex').textContent = creator.primary_color || '#c9920d';
 
-  // Pre-fill waitlist email with creator's account email
-  if (creator.email) {
+  // ── Plan state ───────────────────────────────────────────
+  const plan = creator.plan || 'free';
+  updateUpgradeBtn(plan);
+
+  // Mark current plan in upgrade modal cards
+  ['free','pro','platinum'].forEach(p => {
+    const ctaEl = p === 'free'
+      ? document.querySelector('.btn-plan-free')
+      : document.getElementById(p === 'pro' ? 'proCtaBtn' : 'platCtaBtn');
+    if (!ctaEl) return;
+    if (p === plan) {
+      ctaEl.textContent = '✓ Current Plan';
+      ctaEl.disabled = true;
+    } else if (p !== 'free') {
+      ctaEl.disabled = false;
+      ctaEl.textContent = p === 'pro' ? 'Upgrade to Pro →' : 'Upgrade to Platinum →';
+    }
+  });
+
+  // Post-checkout success toast
+  if (window._showUpgradeSuccess) {
+    window._showUpgradeSuccess = false;
+    const tier = plan === 'platinum' ? 'Platinum' : 'Pro';
+    showToast(`✦ Welcome to ${tier}! Your plan is now active.`, 6000);
+  }
+
+  // Pre-fill waitlist email with creator's account email (kept for fallback)
+  if (creator.email && document.getElementById('waitlistEmail')) {
     document.getElementById('waitlistEmail').value = creator.email;
   }
 }
@@ -2709,101 +2735,73 @@ function copyEmbed() {
   copyText(embed);
 }
 
-// ── Upgrade / Pro waitlist ────────────────────────────────
+// ── Upgrade / Stripe checkout ─────────────────────────────
 function showUpgrade() {
-  // Reset to initial state
-  document.getElementById('waitlistSection').classList.remove('show');
-  document.getElementById('waitlistFormView').style.display = 'block';
-  document.getElementById('waitlistSuccess').classList.remove('show');
-  document.getElementById('waitlistError').classList.remove('show');
-  document.getElementById('waitlistEmail').value = '';
-  document.getElementById('waitlistEmail').classList.remove('error');
-  const proBtn = document.getElementById('proCtaBtn');
-  proBtn.disabled = false;
-  proBtn.innerHTML = 'Get Early Access →';
   document.getElementById('upgradeModal').classList.add('show');
 }
 function closeUpgradeModal() {
   document.getElementById('upgradeModal').classList.remove('show');
 }
 
-let waitlistTier = 'pro';
-function showWaitlistForm(tier) {
-  waitlistTier = tier || 'pro';
-  const isPlatinum = waitlistTier === 'platinum';
-  document.getElementById('waitlistTitle').textContent =
-    isPlatinum ? '✦ Join the Platinum waitlist' : '🚀 Be first in line when Pro launches';
-  document.getElementById('waitlistSubText').textContent =
-    isPlatinum
-      ? "Platinum is coming soon for professional creators and brands. Leave your email and we'll reach out personally when it's ready — including an onboarding call."
-      : "We're putting the finishing touches on Pro. Drop your email and we'll notify you the moment it's live — plus an early-bird discount.";
-  document.getElementById('waitlistSection').classList.add('show');
-  document.getElementById('waitlistSection').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  setTimeout(() => document.getElementById('waitlistEmail').focus(), 300);
-}
-
-async function submitWaitlist() {
-  const emailInput = document.getElementById('waitlistEmail');
-  const errEl = document.getElementById('waitlistError');
-  const submitBtn = document.getElementById('waitlistSubmitBtn');
-  const email = emailInput.value.trim();
-
-  errEl.classList.remove('show');
-  emailInput.classList.remove('error');
-
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    emailInput.classList.add('error');
-    errEl.textContent = 'Please enter a valid email address.';
-    errEl.classList.add('show');
-    return;
-  }
-
-  submitBtn.disabled = true;
-  submitBtn.innerHTML = '<span class="spinner"></span>';
-
+async function startCheckout(tier) {
+  const btnId = tier === 'platinum' ? 'platCtaBtn' : 'proCtaBtn';
+  const btn = document.getElementById(btnId);
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Redirecting…'; }
   try {
-    const r = await fetch(API + '/api/creator/waitlist', {
+    const r = await fetch(API + '/api/creator/create-checkout-session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-      body: JSON.stringify({ email })
+      body: JSON.stringify({ tier })
     });
     const data = await r.json();
-
-    if (!r.ok) {
-      errEl.textContent = data.error || 'Something went wrong. Try again.';
-      errEl.classList.add('show');
-      submitBtn.disabled = false;
-      submitBtn.innerHTML = 'Notify Me →';
-      return;
-    }
-
-    // Success — show confirmation, update sidebar button
-    // Update success copy based on tier
-    document.getElementById('waitlistSuccessSub').innerHTML =
-      waitlistTier === 'platinum'
-        ? "We'll reach out personally when Platinum is ready.<br/>We'll also send the early-bird Platinum rate."
-        : "We'll email you the moment Pro goes live.<br/>Early-bird pricing locked in for waitlist members.";
-
-    document.getElementById('waitlistFormView').style.display = 'none';
-    document.getElementById('waitlistSuccess').classList.add('show');
-
-    const upgradeBtn = document.querySelector('.btn-upgrade');
-    if (upgradeBtn) {
-      const label = waitlistTier === 'platinum' ? '✓ Platinum Waitlist' : '✓ On Waitlist';
-      upgradeBtn.textContent = label;
-      upgradeBtn.style.background = 'rgba(45,155,95,0.12)';
-      upgradeBtn.style.borderColor = 'rgba(45,155,95,0.35)';
-      upgradeBtn.style.color = '#2d9b5f';
-      upgradeBtn.onclick = showUpgrade;
-    }
-
-  } catch {
-    errEl.textContent = 'Network error — please try again.';
-    errEl.classList.add('show');
-    submitBtn.disabled = false;
-    submitBtn.innerHTML = 'Notify Me →';
+    if (!r.ok || !data.url) throw new Error(data.error || 'Failed to start checkout');
+    window.location.href = data.url;
+  } catch (err) {
+    alert('Could not start checkout: ' + err.message);
+    if (btn) { btn.disabled = false; btn.innerHTML = tier === 'platinum' ? 'Upgrade to Platinum →' : 'Upgrade to Pro →'; }
   }
 }
+
+async function openBillingPortal() {
+  try {
+    const r = await fetch(API + '/api/creator/billing-portal', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    const data = await r.json();
+    if (!r.ok || !data.url) throw new Error(data.error || 'Could not open billing portal');
+    window.location.href = data.url;
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+// ── Sidebar upgrade button — reflects current plan ────────
+function updateUpgradeBtn(plan) {
+  const btn = document.querySelector('.btn-upgrade');
+  if (!btn) return;
+  if (plan === 'pro') {
+    btn.textContent = '⚡ Pro — Manage Billing';
+    btn.onclick = openBillingPortal;
+  } else if (plan === 'platinum') {
+    btn.textContent = '✦ Platinum — Manage Billing';
+    btn.style.background = 'rgba(201,146,13,0.18)';
+    btn.style.borderColor = 'rgba(201,146,13,0.45)';
+    btn.onclick = openBillingPortal;
+  } else {
+    btn.textContent = '⚡ Upgrade to Pro';
+    btn.onclick = showUpgrade;
+  }
+}
+
+// ── Handle post-checkout redirect (?upgraded=1) ───────────
+(function() {
+  const params = new URLSearchParams(location.search);
+  if (params.get('upgraded') === '1') {
+    history.replaceState(null, '', '/creator/dashboard');
+    // Show success toast after dashboard renders
+    window._showUpgradeSuccess = true;
+  }
+})();
 
 function signOut() {
   localStorage.removeItem('hf_token');

@@ -12,6 +12,55 @@ const crypto = require('crypto');
 
 const app = express();
 app.use(cors());
+
+// ── Stripe webhook needs raw body — must be registered BEFORE express.json() ──
+const stripe = process.env.STRIPE_SECRET_KEY
+  ? require('stripe')(process.env.STRIPE_SECRET_KEY)
+  : null;
+
+app.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  if (!stripe) return res.status(400).send('Stripe not configured');
+  const sig = req.headers['stripe-signature'];
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+  } catch (err) {
+    console.error('Stripe webhook signature error:', err.message);
+    return res.status(400).send('Webhook error: ' + err.message);
+  }
+
+  try {
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object;
+      const slug = session.metadata?.slug;
+      if (slug && session.subscription) {
+        const subscription = await stripe.subscriptions.retrieve(session.subscription);
+        const priceId = subscription.items.data[0]?.price?.id;
+        const plan = priceId === process.env.STRIPE_PLATINUM_PRICE_ID ? 'platinum' : 'pro';
+        await supabase.from('creator_settings').update({ plan }).eq('slug', slug);
+        console.log(`[stripe] upgraded ${slug} to ${plan}`);
+      }
+    }
+
+    if (event.type === 'customer.subscription.deleted' || event.type === 'customer.subscription.paused') {
+      const sub = event.data.object;
+      // Find creator by customer email
+      const customer = await stripe.customers.retrieve(sub.customer);
+      if (customer.email) {
+        const { data: user } = await supabase.from('users').select('id').eq('email', customer.email).maybeSingle();
+        if (user) {
+          await supabase.from('creator_settings').update({ plan: 'free' }).eq('creator_id', user.id);
+          console.log(`[stripe] downgraded creator ${customer.email} to free`);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[stripe] webhook handler error:', err.message);
+  }
+
+  res.json({ received: true });
+});
+
 app.use(express.json());
 app.use(require("express").static("public"));
 
@@ -2359,6 +2408,65 @@ app.post('/api/creator/waitlist', requireCreator, async (req, res) => {
   } catch (err) {
     console.error('waitlist error:', err);
     res.status(500).json({ error: err.message || 'Failed to join waitlist' });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+// STRIPE — Checkout & billing portal
+// ════════════════════════════════════════════════════════════
+
+// POST /api/creator/create-checkout-session
+// Body: { tier: 'pro' | 'platinum' }
+// Returns: { url } — redirect the browser there
+app.post('/api/creator/create-checkout-session', requireCreator, async (req, res) => {
+  if (!stripe) return res.status(400).json({ error: 'Stripe not configured' });
+  try {
+    const { tier } = req.body;
+    const priceId = tier === 'platinum'
+      ? process.env.STRIPE_PLATINUM_PRICE_ID
+      : process.env.STRIPE_PRO_PRICE_ID;
+
+    if (!priceId) return res.status(400).json({ error: 'Stripe price not configured for this tier' });
+
+    const APP_URL = process.env.APP_URL || 'https://hyperflex.network';
+    const creatorSlug = req.creator.slug;
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'subscription',
+      payment_method_types: ['card'],
+      customer_email: req.creator.email,
+      line_items: [{ price: priceId, quantity: 1 }],
+      metadata: { creator_id: String(req.creator.id), slug: creatorSlug },
+      success_url: APP_URL + '/creator/dashboard?upgraded=1',
+      cancel_url:  APP_URL + '/creator/dashboard',
+    });
+
+    res.json({ url: session.url });
+  } catch (err) {
+    console.error('[stripe] checkout error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/creator/billing-portal
+// Returns: { url } — Stripe-hosted subscription management page
+app.get('/api/creator/billing-portal', requireCreator, async (req, res) => {
+  if (!stripe) return res.status(400).json({ error: 'Stripe not configured' });
+  try {
+    const APP_URL = process.env.APP_URL || 'https://hyperflex.network';
+    // Find the Stripe customer by email
+    const customers = await stripe.customers.list({ email: req.creator.email, limit: 1 });
+    if (!customers.data.length) {
+      return res.status(404).json({ error: 'No billing account found. Please subscribe first.' });
+    }
+    const portal = await stripe.billingPortal.sessions.create({
+      customer: customers.data[0].id,
+      return_url: APP_URL + '/creator/dashboard',
+    });
+    res.json({ url: portal.url });
+  } catch (err) {
+    console.error('[stripe] billing portal error:', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 
