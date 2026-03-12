@@ -878,7 +878,21 @@ let oauthToken = '';
       const tosLabel = document.getElementById('tosCheck') && document.getElementById('tosCheck').closest('label');
       const tosErr = document.getElementById('tosErr');
       if (dn && displayName) dn.value = decodeURIComponent(displayName);
-      if (em && email) { em.value = decodeURIComponent(email); em.disabled = true; }
+      if (em && email) {
+        const decodedEmail = decodeURIComponent(email);
+        if (decodedEmail.includes('@oauth.hyperflex.app')) {
+          // Twitter pseudo-email — hide the field, show a badge instead
+          const fieldWrap = em.closest('.field') || em.parentElement;
+          fieldWrap.style.display = 'none';
+          const badge = document.createElement('div');
+          badge.style.cssText = 'display:flex;align-items:center;gap:8px;padding:10px 14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:6px;font-size:13px;color:#aaa;margin-bottom:12px';
+          badge.innerHTML = '<span style="font-size:16px">𝕏</span> Signed in with X';
+          fieldWrap.parentElement.insertBefore(badge, fieldWrap);
+        } else {
+          em.value = decodedEmail;
+          em.disabled = true;
+        }
+      }
       if (pwWrap) pwWrap.style.display = 'none';
       if (tosLabel) tosLabel.style.display = 'none';
       if (tosErr) tosErr.style.display = 'none';
