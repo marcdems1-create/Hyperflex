@@ -8,6 +8,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const cron = require('node-cron');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 
 const app = express();
 app.use(cors());
@@ -2365,75 +2366,171 @@ app.post('/api/creator/waitlist', requireCreator, async (req, res) => {
 // OAUTH — Google & X (Twitter) sign-in for creators
 // ════════════════════════════════════════════════════════════
 
+// ── OAuth helpers ────────────────────────────────────────────
+// We sign the OAuth state as a short-lived JWT so we don't need
+// server-side session storage. Twitter PKCE verifier is embedded in it.
+function makeOAuthState(data) {
+  return jwt.sign({ ...data, _ts: Date.now() }, JWT_SECRET, { expiresIn: '10m' });
+}
+function verifyOAuthState(state) {
+  return jwt.verify(state, JWT_SECRET);
+}
+
 // Route 1: GET /auth/oauth?provider=google|x
+// Redirects to the provider's auth page
 app.get('/auth/oauth', (req, res) => {
   const provider = (req.query.provider || '').toLowerCase();
-  if (provider !== 'google' && provider !== 'x') {
-    return res.redirect('/creator/login?error=invalid_provider');
+  const APP_URL = process.env.APP_URL || 'https://hyperflex.network';
+  const redirectUri = APP_URL + '/auth/callback';
+
+  if (provider === 'google') {
+    if (!process.env.GOOGLE_CLIENT_ID) {
+      return res.redirect('/creator/login?error=Google+OAuth+not+configured');
+    }
+    const state = makeOAuthState({ provider: 'google' });
+    const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    url.searchParams.set('client_id', process.env.GOOGLE_CLIENT_ID);
+    url.searchParams.set('redirect_uri', redirectUri);
+    url.searchParams.set('response_type', 'code');
+    url.searchParams.set('scope', 'email profile');
+    url.searchParams.set('state', state);
+    url.searchParams.set('access_type', 'online');
+    return res.redirect(url.toString());
   }
 
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const redirectTo = encodeURIComponent((process.env.APP_URL || 'https://hyperflex.network') + '/auth/callback');
+  if (provider === 'x') {
+    if (!process.env.TWITTER_CLIENT_ID) {
+      return res.redirect('/creator/login?error=Twitter+OAuth+not+configured');
+    }
+    // Twitter OAuth 2.0 requires PKCE — embed verifier in signed state JWT
+    const verifier = crypto.randomBytes(32).toString('base64url');
+    const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+    const state = makeOAuthState({ provider: 'x', verifier });
+    const url = new URL('https://twitter.com/i/oauth2/authorize');
+    url.searchParams.set('response_type', 'code');
+    url.searchParams.set('client_id', process.env.TWITTER_CLIENT_ID);
+    url.searchParams.set('redirect_uri', redirectUri);
+    url.searchParams.set('scope', 'tweet.read users.read');
+    url.searchParams.set('state', state);
+    url.searchParams.set('code_challenge', challenge);
+    url.searchParams.set('code_challenge_method', 'S256');
+    return res.redirect(url.toString());
+  }
 
-  const providerName = provider === 'x' ? 'twitter' : 'google';
-  const scopes = provider === 'google'
-    ? encodeURIComponent('email profile')
-    : encodeURIComponent('tweet.read users.read');
-
-  const oauthUrl = `${SUPABASE_URL}/auth/v1/authorize?provider=${providerName}&redirect_to=${redirectTo}&scopes=${scopes}`;
-  res.redirect(oauthUrl);
+  return res.redirect('/creator/login?error=invalid_provider');
 });
 
-// Route 2: GET /auth/callback?code=...
+// Route 2: GET /auth/callback?code=...&state=...
+// Handles both Google and Twitter callbacks
 app.get('/auth/callback', async (req, res) => {
   try {
-    const code = req.query.code;
-    if (!code) return res.redirect('/creator/login?error=missing_code');
+    const { code, state, error } = req.query;
+    if (error) return res.redirect('/creator/login?error=' + encodeURIComponent(error));
+    if (!code || !state) return res.redirect('/creator/login?error=missing_params');
 
-    const { data: sessionData, error: sessionError } = await supabase.auth.exchangeCodeForSession(code);
-    if (sessionError || !sessionData || !sessionData.user) {
-      console.error('exchangeCodeForSession error:', sessionError?.message);
-      return res.redirect('/creator/login?error=' + encodeURIComponent(sessionError?.message || 'oauth_failed'));
+    let stateData;
+    try { stateData = verifyOAuthState(state); }
+    catch { return res.redirect('/creator/login?error=invalid_or_expired_state'); }
+
+    const provider = stateData.provider;
+    const APP_URL = process.env.APP_URL || 'https://hyperflex.network';
+    const redirectUri = APP_URL + '/auth/callback';
+
+    let email = '';
+    let displayName = 'Creator';
+
+    // ── Google ────────────────────────────────────────────────
+    if (provider === 'google') {
+      const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          code,
+          client_id:     process.env.GOOGLE_CLIENT_ID,
+          client_secret: process.env.GOOGLE_CLIENT_SECRET,
+          redirect_uri:  redirectUri,
+          grant_type:    'authorization_code'
+        })
+      });
+      const tokenData = await tokenRes.json();
+      if (tokenData.error) throw new Error(tokenData.error_description || tokenData.error);
+
+      const infoRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+        headers: { 'Authorization': 'Bearer ' + tokenData.access_token }
+      });
+      const info = await infoRes.json();
+      email       = (info.email || '').toLowerCase();
+      displayName = info.name || email.split('@')[0] || 'Creator';
     }
 
-    const user = sessionData.user;
-    const email = (user.email || '').toLowerCase();
-    const meta = user.user_metadata || {};
-    const displayName = meta.full_name || meta.name || meta.user_name || (email ? email.split('@')[0] : 'Creator');
+    // ── Twitter / X ───────────────────────────────────────────
+    if (provider === 'x') {
+      const creds = Buffer.from(`${process.env.TWITTER_CLIENT_ID}:${process.env.TWITTER_CLIENT_SECRET}`).toString('base64');
+      const tokenRes = await fetch('https://api.twitter.com/2/oauth2/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Authorization': 'Basic ' + creds
+        },
+        body: new URLSearchParams({
+          code,
+          grant_type:    'authorization_code',
+          client_id:     process.env.TWITTER_CLIENT_ID,
+          redirect_uri:  redirectUri,
+          code_verifier: stateData.verifier
+        })
+      });
+      const tokenData = await tokenRes.json();
+      if (tokenData.error) throw new Error(tokenData.error_description || tokenData.error);
 
-    if (!email) return res.redirect('/creator/login?error=no_email');
+      const userRes = await fetch('https://api.twitter.com/2/users/me?user.fields=id,name,username', {
+        headers: { 'Authorization': 'Bearer ' + tokenData.access_token }
+      });
+      const userData = await userRes.json();
+      const tUser   = userData.data || {};
+      displayName   = tUser.name || tUser.username || 'Creator';
+      // Twitter doesn't share email without elevated access — use a stable pseudo-email
+      email         = `twitter_${tUser.id}@oauth.hyperflex.app`;
+    }
 
-    let dbUser = (await supabase.from('users').select('*').eq('email', email).maybeSingle()).data;
+    if (!email) return res.redirect('/creator/login?error=no_email_returned');
+
+    // ── Find or create user in our DB ─────────────────────────
+    let { data: dbUser } = await supabase.from('users').select('*').eq('email', email).maybeSingle();
     if (!dbUser) {
       const { data: inserted, error: insertErr } = await supabase
         .from('users')
         .insert({ email, display_name: displayName, password_hash: '', is_creator: true, balance: 100000 })
         .select()
         .single();
-      if (insertErr) {
-        console.error('user insert error:', insertErr.message);
-        return res.redirect('/creator/login?error=' + encodeURIComponent(insertErr.message));
-      }
+      if (insertErr) throw new Error(insertErr.message);
       dbUser = inserted;
     }
 
+    // ── Existing creator → go to dashboard ───────────────────
     const { data: settings } = await supabase
       .from('creator_settings')
       .select('slug')
       .eq('creator_id', dbUser.id)
       .maybeSingle();
 
-    if (settings && settings.slug) {
+    if (settings?.slug) {
       const token = makeToken({ id: dbUser.id, email: dbUser.email, slug: settings.slug });
       return res.redirect('/creator/dashboard#token=' + encodeURIComponent(token));
     }
 
+    // ── New creator → finish setup on signup page ─────────────
     const tempToken = jwt.sign(
       { id: dbUser.id, email: dbUser.email, display_name: displayName, oauth: true },
       JWT_SECRET,
       { expiresIn: '1h' }
     );
-    return res.redirect('/creator/signup?oauth_token=' + encodeURIComponent(tempToken) + '&email=' + encodeURIComponent(email) + '&display_name=' + encodeURIComponent(displayName));
+    return res.redirect(
+      '/creator/signup?oauth_token=' + encodeURIComponent(tempToken) +
+      '&email=' + encodeURIComponent(email) +
+      '&display_name=' + encodeURIComponent(displayName)
+    );
+
   } catch (err) {
     console.error('auth/callback error:', err.message);
     return res.redirect('/creator/login?error=' + encodeURIComponent(err.message));
@@ -2441,18 +2538,17 @@ app.get('/auth/callback', async (req, res) => {
 });
 
 // Route 3: POST /api/creator/oauth-complete
+// Called from creator-signup.html after OAuth user picks community name + slug
 app.post('/api/creator/oauth-complete', async (req, res) => {
   try {
     const auth = req.headers.authorization || '';
     const token = auth.replace('Bearer ', '').trim();
     if (!token) return res.status(401).json({ error: 'No token' });
+
     let payload;
-    try {
-      payload = jwt.verify(token, JWT_SECRET);
-    } catch {
-      return res.status(401).json({ error: 'Invalid or expired token' });
-    }
-    if (!payload || !payload.oauth) return res.status(401).json({ error: 'OAuth completion token required' });
+    try { payload = jwt.verify(token, JWT_SECRET); }
+    catch { return res.status(401).json({ error: 'Invalid or expired token' }); }
+    if (!payload?.oauth) return res.status(401).json({ error: 'OAuth completion token required' });
 
     const { display_name, slug } = req.body || {};
     if (!display_name || !slug) return res.status(400).json({ error: 'display_name and slug required' });
@@ -2462,24 +2558,21 @@ app.post('/api/creator/oauth-complete', async (req, res) => {
     if (existing) return res.status(409).json({ error: 'Slug already taken' });
 
     const { error: insErr } = await supabase.from('creator_settings').insert({
-      creator_id: payload.id,
+      creator_id:          payload.id,
       slug,
       display_name,
-      custom_points_name: 'Flex Points',
-      primary_color: '#c9920d',
-      is_active: true,
-      plan: 'free',
-      created_at: new Date().toISOString()
+      custom_points_name:  'Flex Points',
+      primary_color:       '#c9920d',
+      is_active:           true,
+      plan:                'free',
+      created_at:          new Date().toISOString()
     });
     if (insErr) return res.status(500).json({ error: insErr.message });
 
     await supabase.from('users').update({ display_name, tenant_slug: slug, is_creator: true }).eq('id', payload.id);
 
     const newToken = makeToken({ id: payload.id, email: payload.email, slug });
-    return res.json({
-      token: newToken,
-      user: { id: payload.id, email: payload.email, display_name, slug }
-    });
+    return res.json({ token: newToken, user: { id: payload.id, email: payload.email, display_name, slug } });
   } catch (err) {
     console.error('oauth-complete error:', err.message);
     return res.status(500).json({ error: err.message });
