@@ -2364,29 +2364,38 @@ app.post('/api/creator/waitlist', requireCreator, async (req, res) => {
 // OAUTH — Google & X (Twitter) sign-in for creators
 // ════════════════════════════════════════════════════════════
 
-// Route 1: GET /auth/oauth?provider=google|twitter
-app.get('/auth/oauth', async (req, res) => {
-  try {
-    const provider = (req.query.provider || '').toLowerCase();
-    if (provider !== 'google' && provider !== 'twitter') {
-      return res.redirect('/creator/login?error=invalid_provider');
-    }
-    const redirectTo = (process.env.APP_URL || 'http://localhost:3000') + '/auth/callback';
-    const scopes = provider === 'google' ? 'email profile' : 'tweet.read users.read';
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider,
-      options: { redirectTo, scopes }
-    });
-    if (error) {
-      console.error('oauth init error:', error.message);
-      return res.redirect('/creator/login?error=oauth_init_failed');
-    }
-    if (data && data.url) return res.redirect(data.url);
-    return res.redirect('/creator/login?error=oauth_init_failed');
-  } catch (err) {
-    console.error('oauth error:', err.message);
-    return res.redirect('/creator/login?error=oauth_init_failed');
+// Route 1: GET /auth/oauth?provider=google|x
+app.get('/auth/oauth', (req, res) => {
+  const provider = (req.query.provider || '').toLowerCase();
+  if (provider !== 'google' && provider !== 'x') {
+    return res.redirect('/creator/login?error=invalid_provider');
   }
+
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const redirectTo = encodeURIComponent((process.env.APP_URL || 'https://hyperflex.network') + '/auth/callback');
+
+  const providerName = provider === 'x' ? 'twitter' : 'google';
+  const scopes = provider === 'google'
+    ? encodeURIComponent('email profile')
+    : encodeURIComponent('tweet.read users.read');
+
+  const oauthUrl = `${SUPABASE_URL}/auth/v1/authorize?provider=${providerName}&redirect_to=${redirectTo}&scopes=${scopes}`;
+  res.redirect(oauthUrl);
+});  const provider = (req.query.provider || '').toLowerCase();
+  if (provider !== 'google' && provider !== 'x') {
+    return res.redirect('/creator/login?error=invalid_provider');
+  }
+
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const redirectTo = encodeURIComponent((process.env.APP_URL || 'https://hyperflex.network') + '/auth/callback');
+
+  const providerName = provider === 'x' ? 'twitter' : 'google';
+  const scopes = provider === 'google'
+    ? encodeURIComponent('email profile')
+    : encodeURIComponent('tweet.read users.read');
+
+  const oauthUrl = `${SUPABASE_URL}/auth/v1/authorize?provider=${providerName}&redirect_to=${redirectTo}&scopes=${scopes}`;
+  res.redirect(oauthUrl);
 });
 
 // Route 2: GET /auth/callback?code=...
