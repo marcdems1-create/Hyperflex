@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>HYPERFLEX Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --paper:      #141412;
+    --cream:      #1c1c19;
+    --border:     rgba(255,255,255,0.08);
+    --text:       #ddd8cc;
+    --dim:        #7a7870;
+    --gold:       #c9920d;
+    --gold-bright:#e8a914;
+    --red:        #c0392b;
+    --green:      #2d9b5f;
+    --blue:       #3b82f6;
+  }
+
+  body {
+    background: var(--paper);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+  }
+
+  /* ── Auth gate ─────────────────────── */
+  #authGate {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+  }
+  .auth-box {
+    background: var(--cream);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 40px;
+    width: 360px;
+    text-align: center;
+  }
+  .auth-logo {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    color: var(--gold);
+    margin-bottom: 6px;
+  }
+  .auth-sub {
+    color: var(--dim);
+    font-size: 13px;
+    margin-bottom: 28px;
+  }
+  .auth-input {
+    width: 100%;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 14px;
+    padding: 12px 14px;
+    outline: none;
+    margin-bottom: 12px;
+    letter-spacing: 0.05em;
+  }
+  .auth-input:focus { border-color: var(--gold); }
+  .auth-input.error { border-color: var(--red); }
+  .auth-btn {
+    width: 100%;
+    background: var(--gold);
+    border: none;
+    border-radius: 8px;
+    color: #000;
+    cursor: pointer;
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    padding: 12px;
+    letter-spacing: 0.06em;
+  }
+  .auth-btn:hover { background: var(--gold-bright); }
+  .auth-err {
+    color: #e57373;
+    font-size: 12px;
+    margin-top: 10px;
+    display: none;
+  }
+  .auth-err.show { display: block; }
+
+  /* ── Main app ─────────────────────── */
+  #app { display: none; }
+
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 18px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .header-logo {
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    color: var(--gold);
+  }
+  .header-badge {
+    background: rgba(201,146,13,0.12);
+    border: 1px solid rgba(201,146,13,0.25);
+    border-radius: 6px;
+    color: var(--gold);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    padding: 3px 10px;
+    text-transform: uppercase;
+  }
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .signout-link {
+    color: var(--dim);
+    cursor: pointer;
+    font-size: 13px;
+    text-decoration: none;
+  }
+  .signout-link:hover { color: var(--text); }
+
+  main {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 32px 32px 64px;
+  }
+
+  /* ── Stats row ─────────────────────── */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+  .stat-card {
+    background: var(--cream);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 24px;
+  }
+  .stat-label {
+    color: var(--dim);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .stat-value {
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--text);
+    line-height: 1;
+  }
+  .stat-value.gold { color: var(--gold); }
+  .stat-value.green { color: var(--green); }
+
+  /* ── Section header ─────────────────── */
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .section-title {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+  }
+  .refresh-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    color: var(--dim);
+    cursor: pointer;
+    font-family: 'Syne', sans-serif;
+    font-size: 12px;
+    padding: 6px 14px;
+  }
+  .refresh-btn:hover { border-color: rgba(255,255,255,0.2); color: var(--text); }
+
+  /* ── Search/filter bar ─────────────── */
+  .filter-bar {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+    align-items: center;
+  }
+  .filter-input {
+    background: var(--cream);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    padding: 8px 14px;
+    outline: none;
+    width: 260px;
+  }
+  .filter-input:focus { border-color: rgba(255,255,255,0.2); }
+  .filter-select {
+    background: var(--cream);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    padding: 8px 14px;
+    outline: none;
+    cursor: pointer;
+  }
+  .filter-select:focus { border-color: rgba(255,255,255,0.2); }
+
+  /* ── Table ─────────────────────────── */
+  .table-wrap {
+    background: var(--cream);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  thead tr {
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    color: var(--dim);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    padding: 12px 20px;
+    text-align: left;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  tbody tr {
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    transition: background 0.12s;
+  }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: rgba(255,255,255,0.03); }
+  td {
+    font-size: 13px;
+    padding: 14px 20px;
+    vertical-align: middle;
+  }
+  .td-name { font-weight: 600; }
+  .td-slug {
+    color: var(--dim);
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+  }
+  .td-email { color: var(--dim); font-size: 12px; }
+  .td-date { color: var(--dim); font-size: 12px; }
+  .td-markets { color: var(--text); font-weight: 600; text-align: center; }
+
+  /* ── Plan badge ─────────────────────── */
+  .plan-badge {
+    border-radius: 5px;
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    padding: 3px 9px;
+    text-transform: uppercase;
+  }
+  .plan-badge.free     { background: rgba(255,255,255,0.06); color: var(--dim); }
+  .plan-badge.pro      { background: rgba(201,146,13,0.14); color: var(--gold); border: 1px solid rgba(201,146,13,0.3); }
+  .plan-badge.platinum { background: rgba(232,169,20,0.14); color: var(--gold-bright); border: 1px solid rgba(232,169,20,0.35); }
+
+  /* ── Plan selector ─────────────────── */
+  .plan-select {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    cursor: pointer;
+    font-family: 'Syne', sans-serif;
+    font-size: 12px;
+    padding: 5px 10px;
+    outline: none;
+    margin-right: 6px;
+  }
+  .plan-select:focus { border-color: var(--gold); }
+  .set-plan-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--dim);
+    cursor: pointer;
+    font-family: 'Syne', sans-serif;
+    font-size: 11px;
+    padding: 5px 12px;
+    transition: all 0.15s;
+  }
+  .set-plan-btn:hover { border-color: var(--gold); color: var(--gold); }
+  .set-plan-btn.saving { opacity: 0.5; cursor: not-allowed; }
+  .set-plan-btn.saved { border-color: var(--green); color: var(--green); }
+
+  /* ── Empty / loading ─────────────────── */
+  .table-msg {
+    padding: 48px;
+    text-align: center;
+    color: var(--dim);
+    font-size: 14px;
+  }
+  .spinner-inline {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid rgba(255,255,255,0.1);
+    border-top-color: var(--gold);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Toast ───────────────────────────── */
+  .toast {
+    position: fixed;
+    bottom: 28px;
+    right: 28px;
+    background: var(--cream);
+    border: 1px solid rgba(45,155,95,0.4);
+    border-radius: 10px;
+    color: var(--text);
+    font-size: 13px;
+    padding: 12px 20px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    transform: translateY(20px);
+    opacity: 0;
+    transition: all 0.25s ease;
+    z-index: 999;
+    pointer-events: none;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.error { border-color: rgba(192,57,43,0.4); }
+</style>
+</head>
+<body>
+
+<!-- Auth gate -->
+<div id="authGate">
+  <div class="auth-box">
+    <div class="auth-logo">HYPERFLEX</div>
+    <div class="auth-sub">Admin access only</div>
+    <input type="password" class="auth-input" id="secretInput" placeholder="Admin secret" autocomplete="current-password"/>
+    <button class="auth-btn" onclick="doAuth()">Enter →</button>
+    <div class="auth-err" id="authErr">Incorrect secret</div>
+  </div>
+</div>
+
+<!-- Main app -->
+<div id="app">
+  <header>
+    <div style="display:flex;align-items:center;gap:14px">
+      <div class="header-logo">HYPERFLEX</div>
+      <div class="header-badge">Admin</div>
+    </div>
+    <div class="header-right">
+      <span class="signout-link" onclick="signOut()">Sign out</span>
+    </div>
+  </header>
+
+  <main>
+    <!-- Stats -->
+    <div class="stats-row" id="statsRow">
+      <div class="stat-card">
+        <div class="stat-label">Total Creators</div>
+        <div class="stat-value" id="statTotal">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Free</div>
+        <div class="stat-value" id="statFree">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Pro</div>
+        <div class="stat-value gold" id="statPro">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Platinum</div>
+        <div class="stat-value gold" id="statPlat">—</div>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="section-header">
+      <div class="section-title">Creators</div>
+      <button class="refresh-btn" onclick="loadCreators()">↺ Refresh</button>
+    </div>
+
+    <div class="filter-bar">
+      <input class="filter-input" id="filterInput" placeholder="Search name, slug or email…" oninput="filterTable()"/>
+      <select class="filter-select" id="filterPlan" onchange="filterTable()">
+        <option value="">All plans</option>
+        <option value="free">Free</option>
+        <option value="pro">Pro</option>
+        <option value="platinum">Platinum</option>
+      </select>
+    </div>
+
+    <div class="table-wrap">
+      <div class="table-msg" id="tableMsg"><span class="spinner-inline"></span> Loading…</div>
+      <table id="creatorsTable" style="display:none">
+        <thead>
+          <tr>
+            <th>Creator</th>
+            <th>Slug</th>
+            <th>Email</th>
+            <th style="text-align:center">Markets</th>
+            <th>Plan</th>
+            <th>Joined</th>
+            <th>Set Plan</th>
+          </tr>
+        </thead>
+        <tbody id="creatorsBody"></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = '';
+let adminSecret = '';
+let allCreators = [];
+
+// ── Auth ──────────────────────────────────────────────────
+document.getElementById('secretInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doAuth();
+});
+
+async function doAuth() {
+  const secret = document.getElementById('secretInput').value.trim();
+  if (!secret) return;
+  const errEl = document.getElementById('authErr');
+  errEl.classList.remove('show');
+  // Test the secret against the API
+  try {
+    const r = await fetch(API + '/api/admin/creators?secret=' + encodeURIComponent(secret));
+    if (r.status === 403 || r.status === 401) {
+      errEl.classList.add('show');
+      document.getElementById('secretInput').classList.add('error');
+      return;
+    }
+    adminSecret = secret;
+    sessionStorage.setItem('hf_admin_secret', secret);
+    showApp();
+    const data = await r.json();
+    renderCreators(data);
+  } catch {
+    errEl.textContent = 'Network error — try again.';
+    errEl.classList.add('show');
+  }
+}
+
+function signOut() {
+  sessionStorage.removeItem('hf_admin_secret');
+  adminSecret = '';
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('authGate').style.display = 'flex';
+  document.getElementById('secretInput').value = '';
+}
+
+function showApp() {
+  document.getElementById('authGate').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+}
+
+// ── Load creators ─────────────────────────────────────────
+async function loadCreators() {
+  document.getElementById('tableMsg').innerHTML = '<span class="spinner-inline"></span> Loading…';
+  document.getElementById('tableMsg').style.display = 'block';
+  document.getElementById('creatorsTable').style.display = 'none';
+  try {
+    const r = await fetch(API + '/api/admin/creators?secret=' + encodeURIComponent(adminSecret));
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Failed');
+    renderCreators(data);
+  } catch (err) {
+    document.getElementById('tableMsg').textContent = 'Error: ' + err.message;
+  }
+}
+
+function renderCreators(data) {
+  allCreators = data;
+  updateStats(data);
+  applyFilter();
+}
+
+function updateStats(data) {
+  document.getElementById('statTotal').textContent = data.length;
+  document.getElementById('statFree').textContent  = data.filter(c => (c.plan||'free') === 'free').length;
+  document.getElementById('statPro').textContent   = data.filter(c => c.plan === 'pro').length;
+  document.getElementById('statPlat').textContent  = data.filter(c => c.plan === 'platinum').length;
+}
+
+function filterTable() {
+  applyFilter();
+}
+
+function applyFilter() {
+  const q = (document.getElementById('filterInput').value || '').toLowerCase();
+  const planFilter = document.getElementById('filterPlan').value;
+  const filtered = allCreators.filter(c => {
+    const matchText = !q
+      || (c.name||'').toLowerCase().includes(q)
+      || (c.slug||'').toLowerCase().includes(q)
+      || (c.email||'').toLowerCase().includes(q);
+    const matchPlan = !planFilter || (c.plan||'free') === planFilter;
+    return matchText && matchPlan;
+  });
+  renderTable(filtered);
+}
+
+function renderTable(rows) {
+  const tbody = document.getElementById('creatorsBody');
+  const msg   = document.getElementById('tableMsg');
+  const tbl   = document.getElementById('creatorsTable');
+
+  if (!rows.length) {
+    msg.textContent = 'No creators found.';
+    msg.style.display = 'block';
+    tbl.style.display = 'none';
+    return;
+  }
+
+  msg.style.display = 'none';
+  tbl.style.display = 'table';
+
+  tbody.innerHTML = rows.map(c => {
+    const plan = c.plan || 'free';
+    const joined = c.joined ? new Date(c.joined).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : '—';
+    return `
+      <tr>
+        <td class="td-name">${esc(c.name || '—')}</td>
+        <td class="td-slug">/${esc(c.slug)}</td>
+        <td class="td-email">${esc(c.email)}</td>
+        <td class="td-markets">${c.markets}</td>
+        <td><span class="plan-badge ${plan}">${plan}</span></td>
+        <td class="td-date">${joined}</td>
+        <td>
+          <select class="plan-select" id="sel-${esc(c.slug)}">
+            <option value="free"     ${plan==='free'     ?'selected':''}>Free</option>
+            <option value="pro"      ${plan==='pro'      ?'selected':''}>Pro</option>
+            <option value="platinum" ${plan==='platinum' ?'selected':''}>Platinum</option>
+          </select>
+          <button class="set-plan-btn" id="btn-${esc(c.slug)}" onclick="setPlan('${esc(c.slug)}')">Set</button>
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+// ── Set plan ──────────────────────────────────────────────
+async function setPlan(slug) {
+  const select = document.getElementById('sel-' + slug);
+  const btn    = document.getElementById('btn-' + slug);
+  const plan   = select.value;
+
+  btn.textContent = '…';
+  btn.classList.add('saving');
+
+  try {
+    const r = await fetch(API + '/api/admin/set-plan?secret=' + encodeURIComponent(adminSecret), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug, plan })
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Failed');
+
+    // Update local data
+    const creator = allCreators.find(c => c.slug === slug);
+    if (creator) creator.plan = plan;
+    updateStats(allCreators);
+
+    btn.textContent = '✓';
+    btn.classList.remove('saving');
+    btn.classList.add('saved');
+    setTimeout(() => {
+      btn.textContent = 'Set';
+      btn.classList.remove('saved');
+    }, 2000);
+
+    // Update badge in-table without full re-render
+    const row = btn.closest('tr');
+    const badge = row.querySelector('.plan-badge');
+    if (badge) {
+      badge.className = 'plan-badge ' + plan;
+      badge.textContent = plan;
+    }
+
+    showToast('✓ ' + slug + ' → ' + plan);
+  } catch (err) {
+    btn.textContent = 'Set';
+    btn.classList.remove('saving');
+    showToast('Error: ' + err.message, 'error');
+  }
+}
+
+// ── Toast ──────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (type === 'error' ? ' error' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Init: resume session if secret in sessionStorage ──────
+(function() {
+  const stored = sessionStorage.getItem('hf_admin_secret');
+  if (stored) {
+    adminSecret = stored;
+    showApp();
+    loadCreators();
+  }
+})();
+</script>
+</body>
+</html>

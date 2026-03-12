@@ -2783,6 +2783,90 @@ app.get('/:slug', async (req, res, next) => {
 });
 
 // ════════════════════════════════════════════════════════════
+// ADMIN — internal ops dashboard
+// Protected by ADMIN_SECRET env var (sent as ?secret=... or Authorization header)
+// ════════════════════════════════════════════════════════════
+
+function requireAdmin(req, res, next) {
+  const secret = process.env.ADMIN_SECRET;
+  if (!secret) return res.status(503).json({ error: 'Admin not configured (set ADMIN_SECRET)' });
+  const provided = req.query.secret
+    || (req.headers.authorization || '').replace('Bearer ', '').trim();
+  if (provided !== secret) return res.status(403).json({ error: 'Forbidden' });
+  next();
+}
+
+// Serve admin HTML
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
+// GET /api/admin/creators — all creators with stats
+app.get('/api/admin/creators', requireAdmin, async (req, res) => {
+  try {
+    // All creator settings
+    const { data: settings } = await supabase
+      .from('creator_settings')
+      .select('creator_id, slug, display_name, plan, created_at, custom_points_name, primary_color')
+      .order('created_at', { ascending: false });
+
+    if (!settings?.length) return res.json([]);
+
+    // Get user emails in one query
+    const creatorIds = settings.map(s => s.creator_id);
+    const { data: users } = await supabase
+      .from('users')
+      .select('id, email')
+      .in('id', creatorIds);
+    const emailMap = Object.fromEntries((users || []).map(u => [u.id, u.email]));
+
+    // Market counts per creator
+    const { data: marketCounts } = await supabase
+      .from('markets')
+      .select('creator_id')
+      .in('creator_id', creatorIds);
+    const mktMap = {};
+    (marketCounts || []).forEach(m => { mktMap[m.creator_id] = (mktMap[m.creator_id] || 0) + 1; });
+
+    const rows = settings.map(s => ({
+      creator_id: s.creator_id,
+      slug:        s.slug,
+      name:        s.display_name,
+      email:       emailMap[s.creator_id] || '—',
+      plan:        s.plan || 'free',
+      markets:     mktMap[s.creator_id] || 0,
+      joined:      s.created_at,
+    }));
+
+    res.json(rows);
+  } catch (err) {
+    console.error('[admin] creators error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/set-plan — manually set creator plan
+// Body: { slug, plan: 'free'|'pro'|'platinum' }
+app.post('/api/admin/set-plan', requireAdmin, async (req, res) => {
+  try {
+    const { slug, plan } = req.body;
+    if (!slug || !['free','pro','platinum'].includes(plan)) {
+      return res.status(400).json({ error: 'slug and valid plan required' });
+    }
+    const { error } = await supabase
+      .from('creator_settings')
+      .update({ plan })
+      .eq('slug', slug);
+    if (error) throw error;
+    console.log(`[admin] set ${slug} → ${plan}`);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[admin] set-plan error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
 // END CREATOR PLATFORM ROUTES
 // ════════════════════════════════════════════════════════════
 
