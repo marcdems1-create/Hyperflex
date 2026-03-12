@@ -544,9 +544,10 @@ section { position: relative; z-index: 1; }
   border: 1px solid transparent;
 }
 .p-card.platinum {
-  background: linear-gradient(var(--cream), var(--cream)) padding-box,
-              linear-gradient(145deg, rgba(232,210,150,0.75) 0%, rgba(201,146,13,0.35) 50%, transparent 100%) border-box;
+  background: linear-gradient(160deg, #1e1c15 0%, #1a1812 100%) padding-box,
+              linear-gradient(145deg, rgba(255,220,100,0.9) 0%, rgba(201,146,13,0.6) 40%, rgba(140,100,10,0.3) 100%) border-box;
   border: 1px solid transparent;
+  box-shadow: 0 0 40px rgba(201,146,13,0.08), 0 8px 32px rgba(0,0,0,0.4);
 }
 .p-popular {
   position: absolute;
@@ -574,7 +575,13 @@ section { position: relative; z-index: 1; }
 }
 .p-tier.free     { color: var(--dim); }
 .p-tier.pro      { color: var(--gold); }
-.p-tier.platinum { color: var(--gold-bright); }
+.p-tier.platinum {
+  background: linear-gradient(90deg, #ffe57a, var(--gold-bright), #c9920d);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: 0.18em;
+}
 .p-price {
   font-size: 52px;
   font-weight: 800;
@@ -583,7 +590,28 @@ section { position: relative; z-index: 1; }
   color: var(--text);
   margin-bottom: 4px;
 }
-.p-card.platinum .p-price { color: var(--gold-bright); }
+.p-card.platinum .p-price {
+  background: linear-gradient(90deg, #ffe57a, var(--gold-bright));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.p-card.platinum .p-popular-premium {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, #ffe57a, var(--gold));
+  color: var(--ink);
+  padding: 4px 14px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
 .p-per {
   font-family: var(--mono);
   font-size: 12px;
@@ -637,8 +665,53 @@ section { position: relative; z-index: 1; }
 .btn-p.free:hover { border-color: var(--text); color: var(--text); }
 .btn-p.pro      { background: var(--gold); color: var(--ink); }
 .btn-p.pro:hover { background: var(--gold-bright); transform: translateY(-1px); }
-.btn-p.platinum { background: linear-gradient(135deg, var(--gold-bright), var(--gold)); color: var(--ink); box-shadow: 0 2px 14px rgba(201,146,13,0.22); }
-.btn-p.platinum:hover { filter: brightness(1.08); transform: translateY(-1px); box-shadow: 0 4px 22px rgba(201,146,13,0.38); }
+.btn-p.platinum { background: linear-gradient(135deg, #ffe57a, var(--gold-bright), var(--gold)); color: var(--ink); box-shadow: 0 2px 20px rgba(201,146,13,0.35); font-weight: 800; letter-spacing: 0.04em; }
+.btn-p.platinum:hover { filter: brightness(1.1); transform: translateY(-2px); box-shadow: 0 6px 28px rgba(201,146,13,0.5); }
+
+/* ── VIDEO ── */
+.video-section {
+  padding: 80px 40px 100px;
+  max-width: 960px;
+  margin: 0 auto;
+  text-align: center;
+}
+.video-sub {
+  color: var(--dim);
+  font-size: 15px;
+  line-height: 1.7;
+  max-width: 600px;
+  margin: 0 auto 48px;
+}
+.video-frame-wrap {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+}
+.video-frame {
+  position: relative;
+  width: 100%;
+  padding-bottom: 56.25%; /* 16:9 */
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(201,146,13,0.25);
+  background: #0d0d0b;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05);
+}
+.video-frame iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.video-glow {
+  position: absolute;
+  inset: -1px;
+  border-radius: 17px;
+  background: transparent;
+  box-shadow: 0 0 80px rgba(201,146,13,0.12), 0 0 160px rgba(201,146,13,0.06);
+  pointer-events: none;
+  z-index: -1;
+}
 
 /* ── QUOTES ── */
 .quotes {
@@ -799,7 +872,7 @@ footer {
   .nav { padding: 0 20px; }
   .steps, .features-grid, .pricing-grid, .quote-grid { grid-template-columns: 1fr; }
   .demo-markets { grid-template-columns: 1fr; }
-  .how, .features, .demo, .pricing, .quotes, .cta-wrap { padding-left: 20px; padding-right: 20px; }
+  .how, .features, .demo, .pricing, .quotes, .cta-wrap, .video-section { padding-left: 20px; padding-right: 20px; }
   .footer-top { flex-direction: column; }
   .cta-inner { padding: 48px 24px; }
 }
@@ -1027,6 +1100,26 @@ footer {
   </div>
 </section>
 
+<!-- VIDEO -->
+<section class="video-section" id="demo-video">
+  <div class="section-eyebrow">See it in action</div>
+  <h2 class="section-title">Watch HYPERFLEX in action.</h2>
+  <p class="video-sub">See how creators build branded prediction markets, scan YouTube videos with AI, and turn their community into an interactive game — in minutes.</p>
+  <div class="video-frame-wrap">
+    <div class="video-frame">
+      <!-- Replace VIDEO_ID with your YouTube video ID -->
+      <iframe
+        src="https://www.youtube.com/embed/VIDEO_ID?rel=0&modestbranding=1&color=white"
+        title="How to use HYPERFLEX"
+        frameborder="0"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowfullscreen
+      ></iframe>
+    </div>
+    <div class="video-glow"></div>
+  </div>
+</section>
+
 <!-- PRICING -->
 <section class="pricing" id="pricing">
   <div class="section-eyebrow">Pricing</div>
@@ -1073,9 +1166,10 @@ footer {
       <a href="/creator/signup" class="btn-p pro">Get early access →</a>
     </div>
 
-    <!-- PLATINUM -->
-    <div class="p-card platinum">
-      <div class="p-tier platinum">✦ Platinum</div>
+    <!-- PREMIUM -->
+    <div class="p-card platinum" style="position:relative">
+      <div class="p-popular-premium">Most Powerful</div>
+      <div class="p-tier platinum">✦ Premium</div>
       <div class="p-price">$99</div>
       <div class="p-per">per month</div>
       <div class="p-desc">White-label solution for professional creators, brands, and large communities.</div>
@@ -1090,7 +1184,7 @@ footer {
         <li class="p-feat yes"><span class="p-check y">✓</span> Onboarding call included</li>
         <li class="p-feat yes"><span class="p-check y">✓</span> Volume pricing available</li>
       </ul>
-      <a href="/creator/signup" class="btn-p platinum">Get early access →</a>
+      <a href="/creator/signup" class="btn-p platinum">Get Premium →</a>
     </div>
 
   </div>

@@ -395,7 +395,7 @@
         <div class="stat-value gold" id="statPro">—</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Platinum</div>
+        <div class="stat-label">Premium</div>
         <div class="stat-value gold" id="statPlat">—</div>
       </div>
     </div>
@@ -412,7 +412,7 @@
         <option value="">All plans</option>
         <option value="free">Free</option>
         <option value="pro">Pro</option>
-        <option value="platinum">Platinum</option>
+        <option value="platinum">Premium</option>
       </select>
     </div>
 
@@ -561,7 +561,7 @@ function renderTable(rows) {
           <select class="plan-select" id="sel-${esc(c.slug)}">
             <option value="free"     ${plan==='free'     ?'selected':''}>Free</option>
             <option value="pro"      ${plan==='pro'      ?'selected':''}>Pro</option>
-            <option value="platinum" ${plan==='platinum' ?'selected':''}>Platinum</option>
+            <option value="platinum" ${plan==='platinum' ?'selected':''}>Premium</option>
           </select>
           <button class="set-plan-btn" id="btn-${esc(c.slug)}" onclick="setPlan('${esc(c.slug)}')">Set</button>
         </td>

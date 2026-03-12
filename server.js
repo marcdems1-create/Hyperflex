@@ -2273,7 +2273,8 @@ app.get('/api/community/:slug', async (req, res) => {
         display_name: settings.display_name,
         slug: settings.slug,
         custom_points_name: settings.custom_points_name,
-        primary_color: settings.primary_color
+        primary_color: settings.primary_color,
+        plan: settings.plan || 'free'
       },
       markets: markets || [],
       rewards: await supabase

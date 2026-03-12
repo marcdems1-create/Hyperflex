@@ -1186,6 +1186,11 @@ function renderPage() {
   document.getElementById('statTraders').textContent = totalTraders;
   document.getElementById('amountUnit').textContent = 'pts';
 
+  // Hide "Powered by HYPERFLEX" watermark for Pro and Premium creators
+  const isPaid = c.plan === 'pro' || c.plan === 'platinum';
+  const poweredEl = document.querySelector('.powered');
+  if (poweredEl) poweredEl.style.display = isPaid ? 'none' : '';
+
   // Render active markets
   const grid = document.getElementById('marketsGrid');
   if (active.length === 0) {
