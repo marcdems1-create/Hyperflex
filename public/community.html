@@ -1186,8 +1186,8 @@ function renderPage() {
   document.getElementById('statTraders').textContent = totalTraders;
   document.getElementById('amountUnit').textContent = 'pts';
 
-  // Hide "Powered by HYPERFLEX" watermark for Pro and Premium creators
-  const isPaid = c.plan === 'pro' || c.plan === 'platinum';
+  // Hide "Powered by HYPERFLEX" watermark for Premium only (Pro keeps it — it's a selling point)
+  const isPaid = c.plan === 'platinum';
   const poweredEl = document.querySelector('.powered');
   if (poweredEl) poweredEl.style.display = isPaid ? 'none' : '';
 
