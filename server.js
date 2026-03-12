@@ -2381,21 +2381,6 @@ app.get('/auth/oauth', (req, res) => {
 
   const oauthUrl = `${SUPABASE_URL}/auth/v1/authorize?provider=${providerName}&redirect_to=${redirectTo}&scopes=${scopes}`;
   res.redirect(oauthUrl);
-});  const provider = (req.query.provider || '').toLowerCase();
-  if (provider !== 'google' && provider !== 'x') {
-    return res.redirect('/creator/login?error=invalid_provider');
-  }
-
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const redirectTo = encodeURIComponent((process.env.APP_URL || 'https://hyperflex.network') + '/auth/callback');
-
-  const providerName = provider === 'x' ? 'twitter' : 'google';
-  const scopes = provider === 'google'
-    ? encodeURIComponent('email profile')
-    : encodeURIComponent('tweet.read users.read');
-
-  const oauthUrl = `${SUPABASE_URL}/auth/v1/authorize?provider=${providerName}&redirect_to=${redirectTo}&scopes=${scopes}`;
-  res.redirect(oauthUrl);
 });
 
 // Route 2: GET /auth/callback?code=...
