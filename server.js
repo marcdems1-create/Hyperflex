@@ -2484,7 +2484,7 @@ app.get('/auth/callback', async (req, res) => {
       console.log('[twitter oauth] token response:', JSON.stringify({ ...tokenData, access_token: tokenData.access_token ? '[REDACTED]' : undefined }));
       if (tokenData.error) throw new Error(tokenData.error_description || tokenData.error);
 
-      const userRes = await fetch('https://api.twitter.com/2/users/me?user.fields=id,name,username,email', {
+      const userRes = await fetch('https://api.twitter.com/2/users/me?user.fields=id,name,username', {
         headers: { 'Authorization': 'Bearer ' + tokenData.access_token }
       });
       const userData = await userRes.json();
