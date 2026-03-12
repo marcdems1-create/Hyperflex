@@ -881,13 +881,23 @@ let oauthToken = '';
       if (em && email) {
         const decodedEmail = decodeURIComponent(email);
         if (decodedEmail.includes('@oauth.hyperflex.app')) {
-          // Twitter pseudo-email — hide the field, show a badge instead
+          // Twitter doesn't return email via API — let user enter it optionally
           const fieldWrap = em.closest('.field') || em.parentElement;
-          fieldWrap.style.display = 'none';
-          const badge = document.createElement('div');
-          badge.style.cssText = 'display:flex;align-items:center;gap:8px;padding:10px 14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:6px;font-size:13px;color:#aaa;margin-bottom:12px';
-          badge.innerHTML = '<span style="font-size:16px">𝕏</span> Signed in with X';
-          fieldWrap.parentElement.insertBefore(badge, fieldWrap);
+          const label = fieldWrap.querySelector('label');
+          if (label) label.innerHTML = 'Email <span style="font-weight:400;color:var(--dim,#888);font-size:11px">(optional)</span>';
+          em.value = '';
+          em.placeholder = 'your@email.com';
+          em.disabled = false;
+          em.required = false;
+          // Store pseudo-email as fallback in a hidden input
+          let hidden = document.getElementById('_twitterEmail');
+          if (!hidden) {
+            hidden = document.createElement('input');
+            hidden.type = 'hidden';
+            hidden.id = '_twitterEmail';
+            fieldWrap.appendChild(hidden);
+          }
+          hidden.value = decodedEmail;
         } else {
           em.value = decodedEmail;
           em.disabled = true;
@@ -980,7 +990,9 @@ function validateStep1() {
   const email = document.getElementById('email').value.trim();
   const pw = document.getElementById('password').value;
   if (!name) { showFieldError('displayNameErr', 'Please enter your name or community name.'); ok = false; }
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showFieldError('emailErr', 'Please enter a valid email.'); ok = false; }
+  const hasTwitterFallback = !!document.getElementById('_twitterEmail')?.value;
+  if (!hasTwitterFallback && (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) { showFieldError('emailErr', 'Please enter a valid email.'); ok = false; }
+  if (hasTwitterFallback && email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showFieldError('emailErr', 'Please enter a valid email or leave it blank.'); ok = false; }
   if (!oauthToken) {
     if (pw.length < 8) { showFieldError('passwordErr', 'Password must be at least 8 characters.'); ok = false; }
     if (!document.getElementById('tosCheck').checked) { showFieldError('tosErr', 'You must agree to the terms to continue.'); ok = false; }
@@ -1127,7 +1139,7 @@ async function submitSignup() {
 
   const payload = {
     display_name: document.getElementById('displayName').value.trim(),
-    email: document.getElementById('email').value.trim(),
+    email: document.getElementById('email').value.trim() || (document.getElementById('_twitterEmail')?.value || ''),
     password: document.getElementById('password').value,
     slug: document.getElementById('slug').value.trim(),
     custom_points_name: document.getElementById('pointsName').value.trim() || 'Flex Points',
