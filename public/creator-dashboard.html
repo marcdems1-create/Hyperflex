@@ -2446,7 +2446,6 @@ async function suggestQuestions() {
   const category = document.getElementById('newCategory').value;
   const btn = document.getElementById('suggestQBtn');
   const box = document.getElementById('questionSuggestions');
-  const token = localStorage.getItem('creator_token');
 
   btn.disabled = true;
   btn.textContent = '⏳ Generating...';
