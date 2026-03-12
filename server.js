@@ -2361,11 +2361,142 @@ app.post('/api/creator/waitlist', requireCreator, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
+// OAUTH — Google & X (Twitter) sign-in for creators
+// ════════════════════════════════════════════════════════════
+
+// Route 1: GET /auth/oauth?provider=google|twitter
+app.get('/auth/oauth', async (req, res) => {
+  try {
+    const provider = (req.query.provider || '').toLowerCase();
+    if (provider !== 'google' && provider !== 'twitter') {
+      return res.redirect('/creator/login?error=invalid_provider');
+    }
+    const redirectTo = (process.env.APP_URL || 'http://localhost:3000') + '/auth/callback';
+    const scopes = provider === 'google' ? 'email profile' : 'tweet.read users.read';
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo, scopes }
+    });
+    if (error) {
+      console.error('oauth init error:', error.message);
+      return res.redirect('/creator/login?error=oauth_init_failed');
+    }
+    if (data && data.url) return res.redirect(data.url);
+    return res.redirect('/creator/login?error=oauth_init_failed');
+  } catch (err) {
+    console.error('oauth error:', err.message);
+    return res.redirect('/creator/login?error=oauth_init_failed');
+  }
+});
+
+// Route 2: GET /auth/callback?code=...
+app.get('/auth/callback', async (req, res) => {
+  try {
+    const code = req.query.code;
+    if (!code) return res.redirect('/creator/login?error=missing_code');
+
+    const { data: sessionData, error: sessionError } = await supabase.auth.exchangeCodeForSession(code);
+    if (sessionError || !sessionData || !sessionData.user) {
+      console.error('exchangeCodeForSession error:', sessionError?.message);
+      return res.redirect('/creator/login?error=' + encodeURIComponent(sessionError?.message || 'oauth_failed'));
+    }
+
+    const user = sessionData.user;
+    const email = (user.email || '').toLowerCase();
+    const meta = user.user_metadata || {};
+    const displayName = meta.full_name || meta.name || meta.user_name || (email ? email.split('@')[0] : 'Creator');
+
+    if (!email) return res.redirect('/creator/login?error=no_email');
+
+    let dbUser = (await supabase.from('users').select('*').eq('email', email).maybeSingle()).data;
+    if (!dbUser) {
+      const { data: inserted, error: insertErr } = await supabase
+        .from('users')
+        .insert({ email, display_name: displayName, password_hash: '', is_creator: true, balance: 100000 })
+        .select()
+        .single();
+      if (insertErr) {
+        console.error('user insert error:', insertErr.message);
+        return res.redirect('/creator/login?error=' + encodeURIComponent(insertErr.message));
+      }
+      dbUser = inserted;
+    }
+
+    const { data: settings } = await supabase
+      .from('creator_settings')
+      .select('slug')
+      .eq('creator_id', dbUser.id)
+      .maybeSingle();
+
+    if (settings && settings.slug) {
+      const token = makeToken({ id: dbUser.id, email: dbUser.email, slug: settings.slug });
+      return res.redirect('/creator/dashboard#token=' + encodeURIComponent(token));
+    }
+
+    const tempToken = jwt.sign(
+      { id: dbUser.id, email: dbUser.email, display_name: displayName, oauth: true },
+      JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+    return res.redirect('/creator/signup?oauth_token=' + encodeURIComponent(tempToken) + '&email=' + encodeURIComponent(email) + '&display_name=' + encodeURIComponent(displayName));
+  } catch (err) {
+    console.error('auth/callback error:', err.message);
+    return res.redirect('/creator/login?error=' + encodeURIComponent(err.message));
+  }
+});
+
+// Route 3: POST /api/creator/oauth-complete
+app.post('/api/creator/oauth-complete', async (req, res) => {
+  try {
+    const auth = req.headers.authorization || '';
+    const token = auth.replace('Bearer ', '').trim();
+    if (!token) return res.status(401).json({ error: 'No token' });
+    let payload;
+    try {
+      payload = jwt.verify(token, JWT_SECRET);
+    } catch {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+    if (!payload || !payload.oauth) return res.status(401).json({ error: 'OAuth completion token required' });
+
+    const { display_name, slug } = req.body || {};
+    if (!display_name || !slug) return res.status(400).json({ error: 'display_name and slug required' });
+    if (!/^[a-z0-9-]{3,30}$/.test(slug)) return res.status(400).json({ error: 'Invalid slug format' });
+
+    const { data: existing } = await supabase.from('creator_settings').select('slug').eq('slug', slug).maybeSingle();
+    if (existing) return res.status(409).json({ error: 'Slug already taken' });
+
+    const { error: insErr } = await supabase.from('creator_settings').insert({
+      creator_id: payload.id,
+      slug,
+      display_name,
+      custom_points_name: 'Flex Points',
+      primary_color: '#c9920d',
+      is_active: true,
+      plan: 'free',
+      created_at: new Date().toISOString()
+    });
+    if (insErr) return res.status(500).json({ error: insErr.message });
+
+    await supabase.from('users').update({ display_name, tenant_slug: slug, is_creator: true }).eq('id', payload.id);
+
+    const newToken = makeToken({ id: payload.id, email: payload.email, slug });
+    return res.json({
+      token: newToken,
+      user: { id: payload.id, email: payload.email, display_name, slug }
+    });
+  } catch (err) {
+    console.error('oauth-complete error:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
 // 10. PUBLIC COMMUNITY PAGE (slug catch-all — must be last)
 // GET /:slug  →  serves community.html, injects slug via query
 // ════════════════════════════════════════════════════════════
 const RESERVED_SLUGS = new Set([
-  'creator', 'api', 'markets', 'positions', 'leaderboard',
+  'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt'
 ]);
 app.get('/:slug', (req, res, next) => {

@@ -1888,11 +1888,21 @@ let creatorData = null;
 let communityMarkets = [];
 let resolveQueue = [];
 
-// Auth check
-const token = localStorage.getItem('hf_token');
+// OAuth callback: token in hash → store and optionally set user from dashboard response
+let token = localStorage.getItem('hf_token');
+const hashParams = new URLSearchParams(location.hash.slice(1));
+const hashToken = hashParams.get('token');
+if (hashToken) {
+  token = decodeURIComponent(hashToken);
+  localStorage.setItem('hf_token', token);
+  history.replaceState(null, '', '/creator/dashboard');
+}
+
 const user = JSON.parse(localStorage.getItem('hf_user') || 'null');
-if (!token || !user) {
-  window.location.href = '/creator/signup';
+if (!token) {
+  window.location.href = '/creator/login';
+} else if (!user && token) {
+  // Token present (e.g. OAuth) but no user in storage — init will fetch dashboard and we can set user from response
 }
 
 // Init
@@ -1904,6 +1914,14 @@ async function init() {
     if (r.status === 401) { signOut(); return; }
     const data = await r.json();
     creatorData = data;
+    if (!user && data.creator) {
+      localStorage.setItem('hf_user', JSON.stringify({
+        id: data.creator.id,
+        email: data.creator.email,
+        slug: data.creator.slug,
+        display_name: data.creator.display_name
+      }));
+    }
     renderDashboard(data);
   } catch (e) {
     showToast('Could not load dashboard. Check your connection.', 'error');
