@@ -480,6 +480,99 @@ body {
 .stat-change.down { color: var(--red); }
 
 /* Section */
+/* ── Onboarding ─────────────────────────────────────────── */
+.onboarding {
+  background: linear-gradient(135deg, rgba(201,146,13,0.06) 0%, rgba(201,146,13,0.02) 100%);
+  border: 1px solid rgba(201,146,13,0.25);
+  border-radius: 12px;
+  padding: 28px 32px;
+  margin-bottom: 32px;
+}
+.onboarding-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.onboarding-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+  font-family: var(--display);
+}
+.onboarding-sub {
+  font-size: 12px;
+  color: var(--dim);
+  margin-top: 2px;
+  font-family: var(--mono);
+  letter-spacing: 0.05em;
+}
+.onboarding-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ob-step {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.02);
+  transition: border-color 0.15s;
+}
+.ob-step.done {
+  border-color: rgba(45,155,95,0.3);
+  background: rgba(45,155,95,0.04);
+}
+.ob-step.active {
+  border-color: rgba(201,146,13,0.4);
+  background: rgba(201,146,13,0.05);
+}
+.ob-step.locked {
+  opacity: 0.45;
+}
+.ob-num {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+  color: var(--dim);
+}
+.ob-step.done .ob-num {
+  border-color: #2d9b5f;
+  background: rgba(45,155,95,0.15);
+  color: #2d9b5f;
+}
+.ob-step.active .ob-num {
+  border-color: var(--gold);
+  background: rgba(201,146,13,0.15);
+  color: var(--gold);
+}
+.ob-label {
+  flex: 1;
+}
+.ob-label-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+.ob-label-desc {
+  font-size: 12px;
+  color: var(--dim);
+  line-height: 1.4;
+}
+.ob-step.done .ob-label-desc { color: #2d9b5f; }
+
 .section {
   margin-bottom: 40px;
 }
@@ -1301,6 +1394,54 @@ body {
 
       <!-- Overview Tab -->
       <div id="tab-overview">
+
+        <!-- Onboarding checklist — shown to new creators until they're active -->
+        <div class="onboarding" id="onboardingPanel" style="display:none">
+          <div class="onboarding-header">
+            <div style="font-size:28px">🚀</div>
+            <div>
+              <div class="onboarding-title">You're almost live!</div>
+              <div class="onboarding-sub">Complete these steps to launch your community</div>
+            </div>
+          </div>
+          <div class="onboarding-steps">
+
+            <!-- Step 1: Account created (always done) -->
+            <div class="ob-step done">
+              <div class="ob-num">✓</div>
+              <div class="ob-label">
+                <div class="ob-label-title">Create your account</div>
+                <div class="ob-label-desc">You're in. Welcome to HYPERFLEX.</div>
+              </div>
+            </div>
+
+            <!-- Step 2: First market -->
+            <div class="ob-step" id="obStep2">
+              <div class="ob-num" id="obNum2">2</div>
+              <div class="ob-label">
+                <div class="ob-label-title">Create your first market</div>
+                <div class="ob-label-desc" id="obDesc2">Ask your community something they'll actually debate.</div>
+              </div>
+              <div id="obAction2">
+                <button class="btn-primary" style="font-size:12px;padding:8px 16px" onclick="openCreateModal()">+ New Market</button>
+              </div>
+            </div>
+
+            <!-- Step 3: Share link -->
+            <div class="ob-step locked" id="obStep3">
+              <div class="ob-num" id="obNum3">3</div>
+              <div class="ob-label">
+                <div class="ob-label-title">Share your community link</div>
+                <div class="ob-label-desc" id="obDesc3">Drop it in Discord, Reddit, or wherever your audience lives.</div>
+              </div>
+              <div id="obAction3" style="display:none">
+                <button class="btn-secondary" style="font-size:12px;padding:8px 16px" onclick="copyLink()">📋 Copy link</button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
         <div class="stats-row">
           <div class="stat-card">
             <div class="stat-card-icon">👥</div>
@@ -1933,6 +2074,38 @@ function renderDashboard(data) {
 
   window.communityName = creator.display_name || '';
   window._pointsName = creator.custom_points_name || 'Flex Points';
+
+  // ── Onboarding checklist ─────────────────────────────────
+  const totalMarkets = stats.total_markets || (markets || []).length || 0;
+  const totalTraders = stats.total_traders || 0;
+  const panel = document.getElementById('onboardingPanel');
+
+  if (totalMarkets === 0) {
+    // New creator — no markets yet. Show full checklist.
+    panel.style.display = 'block';
+    // Step 2 active
+    document.getElementById('obStep2').className = 'ob-step active';
+    document.getElementById('obNum2').textContent  = '2';
+    // Step 3 locked
+    document.getElementById('obStep3').className = 'ob-step locked';
+    document.getElementById('obAction3').style.display = 'none';
+  } else if (totalMarkets > 0 && totalTraders === 0) {
+    // Has markets but no traders yet — nudge to share
+    panel.style.display = 'block';
+    // Step 2 done
+    document.getElementById('obStep2').className  = 'ob-step done';
+    document.getElementById('obNum2').textContent = '✓';
+    document.getElementById('obDesc2').textContent = 'Nice — your first market is live!';
+    document.getElementById('obAction2').style.display = 'none';
+    // Step 3 active
+    document.getElementById('obStep3').className = 'ob-step active';
+    document.getElementById('obNum3').textContent = '3';
+    document.getElementById('obDesc3').textContent = 'Share your link and get your first trader.';
+    document.getElementById('obAction3').style.display = 'block';
+  } else {
+    // Active community — hide onboarding
+    panel.style.display = 'none';
+  }
 
   // Sidebar
   document.getElementById('sidebarCommunityName').textContent = creator.display_name;
