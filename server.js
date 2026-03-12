@@ -2483,14 +2483,14 @@ app.get('/auth/callback', async (req, res) => {
       const tokenData = await tokenRes.json();
       if (tokenData.error) throw new Error(tokenData.error_description || tokenData.error);
 
-      const userRes = await fetch('https://api.twitter.com/2/users/me?user.fields=id,name,username', {
+      const userRes = await fetch('https://api.twitter.com/2/users/me?user.fields=id,name,username,email', {
         headers: { 'Authorization': 'Bearer ' + tokenData.access_token }
       });
       const userData = await userRes.json();
       const tUser   = userData.data || {};
       displayName   = tUser.name || tUser.username || 'Creator';
-      // Twitter doesn't share email without elevated access — use a stable pseudo-email
-      email         = `twitter_${tUser.id}@oauth.hyperflex.app`;
+      // Use real email if Twitter returns it (requires "Request email" enabled in app settings)
+      email         = tUser.email ? tUser.email.toLowerCase() : `twitter_${tUser.id}@oauth.hyperflex.app`;
     }
 
     if (!email) return res.redirect('/creator/login?error=no_email_returned');
