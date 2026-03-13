@@ -2209,21 +2209,32 @@ app.post('/api/creator/market-ideas', requireCreator, async (req, res) => {
   try {
     const creatorId = req.creator.id;
 
-    // Fetch plan + settings
-    const { data: settings } = await supabase
+    // Fetch plan first — separate query so missing optional columns can't break the gate
+    const { data: planRow } = await supabase
       .from('creator_settings')
-      .select('plan, community_category, community_description, display_name, custom_points_name')
+      .select('plan, community_description, display_name, custom_points_name')
       .eq('creator_id', creatorId)
       .single();
 
-    const plan = settings?.plan || 'free';
+    const plan = planRow?.plan || 'free';
     if (plan === 'free') return res.status(403).json({ error: 'Market Ideas requires Pro or Premium' });
 
+    // Fetch optional community_category separately (may not exist yet if migration not run)
+    let communityCategory = req.body.category || 'other';
+    try {
+      const { data: catRow } = await supabase
+        .from('creator_settings')
+        .select('community_category')
+        .eq('creator_id', creatorId)
+        .single();
+      if (catRow?.community_category) communityCategory = catRow.community_category;
+    } catch (_) { /* column may not exist yet — fall back to req.body.category */ }
+
     const count      = plan === 'platinum' ? 5 : 3;
-    const category   = settings?.community_category || req.body.category || 'other';
-    const desc       = settings?.community_description || '';
-    const name       = settings?.display_name || 'Community';
-    const pointsName = settings?.custom_points_name || 'Flex Points';
+    const category   = communityCategory;
+    const desc       = planRow?.community_description || '';
+    const name       = planRow?.display_name || 'Community';
+    const pointsName = planRow?.custom_points_name || 'Flex Points';
 
     const categoryLabels = {
       sports: 'Sports', esports: 'Esports / Gaming', entertainment: 'Entertainment & Pop Culture',
@@ -3672,7 +3683,7 @@ app.delete('/markets/:id', requireCreator, async (req, res) => {
 
     const { error } = await supabase
       .from('markets')
-      .update({ is_public: false })
+      .update({ archived: true, is_public: false })
       .eq('id', id);
 
     if (error) throw error;

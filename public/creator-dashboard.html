@@ -2409,7 +2409,7 @@ body.plan-premium .main {
               <button class="mkt-pill" onclick="filterMarkets('expired')" id="mktPillExpired">Expired <span class="mkt-pill-count" id="mktCountExpired">0</span></button>
               <button class="mkt-pill" onclick="filterMarkets('archived')" id="mktPillArchived">Archived <span class="mkt-pill-count" id="mktCountArchived">0</span></button>
             </div>
-            <button class="btn-primary" onclick="openCreateModal()" style="font-size:13px">+ New Market</button>
+            <button class="btn-primary" id="newMarketBtn" onclick="openCreateModal()" style="font-size:13px">+ New Market</button>
           </div>
           <div class="markets-table">
             <div class="table-header">
@@ -3763,6 +3763,9 @@ function filterMarkets(filter) {
   ['live','expired','archived'].forEach(f => {
     document.getElementById('mktPill' + f.charAt(0).toUpperCase() + f.slice(1)).classList.toggle('active', f === filter);
   });
+  // Hide "+ New Market" button when viewing archived markets
+  const newMktBtn = document.getElementById('newMarketBtn');
+  if (newMktBtn) newMktBtn.style.display = filter === 'archived' ? 'none' : '';
   const now = new Date();
   const filtered = communityMarkets.filter(m => {
     if (filter === 'live')     return !m.archived && !m.resolved && new Date(m.expiry_date) >= now;
