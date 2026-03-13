@@ -228,8 +228,8 @@ body {
   border-radius: 20px;
   margin-top: 6px;
 }
-.plan-pill.free     { background: rgba(255,255,255,0.05); color: var(--dim); border: 1px solid rgba(255,255,255,0.08); }
-.plan-pill.pro      { background: rgba(201,146,13,0.12); color: var(--gold); border: 1px solid rgba(201,146,13,0.3); }
+.plan-pill.free     { background: rgba(255,255,255,0.05); color: var(--dim); border: 1px solid rgba(255,255,255,0.08); cursor: pointer; }
+.plan-pill.pro      { background: rgba(201,146,13,0.12); color: var(--gold); border: 1px solid rgba(201,146,13,0.3); cursor: pointer; }
 .plan-pill.platinum {
   background: linear-gradient(135deg, rgba(255,229,122,0.15), rgba(201,146,13,0.12));
   color: #ffe57a;
@@ -2396,8 +2396,10 @@ body.nav-open .sidebar-backdrop {
   .topbar { padding: 10px 14px; gap: 8px; }
   .topbar-title { font-size: 15px; letter-spacing: 0; }
 
-  /* Topbar: hamburger + title + new market only */
+  /* Topbar: hamburger + title + scanner icon + new market */
   .topbar-actions .btn-secondary { display: none; }
+  #aiScannerTopbarBtn { display: inline-flex; align-items: center; padding: 9px 11px; }
+  #aiScannerTopbarBtn .scanner-label { display: none; }
   .topbar-actions .btn-primary { font-size: 13px; padding: 9px 14px; white-space: nowrap; }
 
   /* Stats */
@@ -2412,6 +2414,12 @@ body.nav-open .sidebar-backdrop {
   .analytics-stat-value { font-size: 22px; }
   .econ-health-grid { grid-template-columns: 1fr; }
   .flexbot-starter-grid { grid-template-columns: 1fr; }
+
+  /* Analytics: reduce chart padding + prevent overflow */
+  #tab-analytics .markets-table { padding: 16px !important; }
+  #tab-analytics .activity-chart { min-width: 0; overflow: hidden; }
+  #tab-analytics .bar-row-label span:first-child { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #analyticsBottomRow .section { min-width: 0; }
 
   /* Market table: question + status, tighter */
   .table-header { padding: 8px 14px; }
@@ -2489,7 +2497,7 @@ body.nav-open .sidebar-backdrop {
         <div class="community-url" id="sidebarCommunityUrl"></div>
         <button class="sidebar-copy-btn" onclick="copyLink()" title="Copy link">📋</button>
       </div>
-      <div class="plan-pill free" id="sidebarPlanPill">Free</div>
+      <div class="plan-pill free" id="sidebarPlanPill" onclick="handlePlanPillClick()" title="View plans">Free</div>
     </div>
 
     <nav class="sidebar-nav">
@@ -2555,7 +2563,7 @@ body.nav-open .sidebar-backdrop {
           <span class="community-url-text" id="topbarCommunityUrl">hyperflex.network/…</span>
           <span class="community-url-copy">📋</span>
         </div>
-        <button class="btn-secondary" onclick="openYoutubeModal()">🤖 AI Scanner</button>
+        <button class="btn-secondary" id="aiScannerTopbarBtn" onclick="openYoutubeModal()">🤖<span class="scanner-label"> AI Scanner</span></button>
         <button class="btn-primary" onclick="openCreateModal()">+ New Market</button>
       </div>
     </div>
@@ -4363,7 +4371,7 @@ function renderMarketRows(markets, containerId) {
           <div class="status-dot ${status}"></div>
           <span class="status-text">${statusLabel}</span>
           ${status === 'pending' ? `<button class="resolve-btn" onclick="event.stopPropagation();openResolveModal('${m.id}', \`${m.question.replace(/`/g,"'")}\`)">Resolve</button>` : ''}
-          <button class="resolve-btn" style="background:rgba(201,146,13,0.1);color:var(--gold);border-color:rgba(201,146,13,0.25)" title="Duplicate this market" onclick="event.stopPropagation();duplicateMarket('${m.id}')">↻ Dupe</button>
+          <button class="resolve-btn" style="background:rgba(201,146,13,0.1);color:var(--gold);border-color:rgba(201,146,13,0.25)" title="Duplicate this market" onclick="event.stopPropagation();duplicateMarket('${m.id}')">↻ Duplicate</button>
         </div>
       </div>
     `;
@@ -5936,6 +5944,12 @@ function copyEmbed() {
 }
 
 // ── Upgrade / Stripe checkout ─────────────────────────────
+function handlePlanPillClick() {
+  // Platinum users are already on the top tier — nothing to upgrade to
+  const plan = creatorData?.creator?.plan;
+  if (plan === 'platinum') return;
+  showUpgrade();
+}
 function showUpgrade() {
   document.getElementById('upgradeModal').classList.add('show');
 }
