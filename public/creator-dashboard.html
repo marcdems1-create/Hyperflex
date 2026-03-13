@@ -928,6 +928,45 @@ body.plan-premium .main {
   .econ-health-grid { grid-template-columns: 1fr; }
 }
 
+/* Referral preset cards */
+.referral-preset-card {
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: border-color .18s, background .18s;
+}
+.referral-preset-card:hover { border-color: var(--gold); background: var(--paper); }
+.rpc-highlight { border-color: color-mix(in srgb, var(--gold) 45%, transparent); }
+.rpc-name { font-weight: 700; font-size: 13px; margin-bottom: 5px; color: var(--text); }
+.rpc-vals { font-family: var(--mono); font-size: 12px; color: var(--gold); line-height: 1.6; }
+.rpc-desc { font-size: 11px; color: var(--dim); margin-top: 6px; line-height: 1.5; }
+
+/* Referral milestone steps */
+.milestone-step {
+  flex: 1;
+  min-width: 80px;
+  text-align: center;
+  position: relative;
+  padding: 0 6px 0;
+}
+.milestone-step:not(:last-child)::after {
+  content: '→';
+  position: absolute;
+  right: -8px;
+  top: 10px;
+  color: var(--dim);
+  font-size: 12px;
+}
+.ms-count { font-size: 11px; color: var(--dim); margin-bottom: 3px; }
+.ms-pts { font-family: var(--mono); font-size: 14px; font-weight: 700; color: var(--gold); }
+.ms-label { font-size: 10px; color: var(--dim); margin-top: 2px; }
+
+@media (max-width: 600px) {
+  .referral-preset-card .rpc-desc { display: none; }
+}
+
 /* FLEX BOT chat */
 .flexbot-wrap {
   display: flex;
@@ -3124,17 +3163,57 @@ body.nav-open .sidebar-backdrop {
             <div style="margin-top:24px;padding-top:24px;border-top:1px solid var(--border)">
               <div style="font-weight:600;font-size:14px;margin-bottom:4px">🔗 Referral Rewards</div>
               <div style="font-size:12px;color:var(--dim);margin-bottom:16px">Members share a personal invite link. Platform caps rewards at 5 referrals/member/week.</div>
+
+              <!-- Preset strategy cards -->
+              <div style="margin-bottom:18px">
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);margin-bottom:10px">Suggested Setups</div>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+                  <div class="referral-preset-card" onclick="applyReferralPreset(50,25)" title="Low-key incentive for casual communities">
+                    <div class="rpc-name">🌱 Gentle</div>
+                    <div class="rpc-vals">+50 pts / invite</div>
+                    <div class="rpc-vals">+25 welcome bonus</div>
+                    <div class="rpc-desc">Good for tight-knit communities where referral spam isn't welcome</div>
+                  </div>
+                  <div class="referral-preset-card rpc-highlight" onclick="applyReferralPreset(150,75)" title="Balanced growth incentive">
+                    <div class="rpc-name">🚀 Growth</div>
+                    <div class="rpc-vals">+150 pts / invite</div>
+                    <div class="rpc-vals">+75 welcome bonus</div>
+                    <div class="rpc-desc">Sweet spot — rewards effort without inflating your economy</div>
+                  </div>
+                  <div class="referral-preset-card" onclick="applyReferralPreset(300,150)" title="Aggressive viral growth">
+                    <div class="rpc-name">⚡ Viral</div>
+                    <div class="rpc-vals">+300 pts / invite</div>
+                    <div class="rpc-vals">+150 welcome bonus</div>
+                    <div class="rpc-desc">Maximum growth push — works best with high weekly refills</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Reward inputs -->
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
                 <div class="field">
                   <label>Referral Reward (pts)</label>
-                  <input type="number" id="econReferralReward" min="0" step="10" placeholder="100"/>
+                  <input type="number" id="econReferralReward" min="0" step="10" placeholder="100" oninput="updateReferralMilestones()"/>
                   <div style="font-size:12px;color:var(--dim);margin-top:4px">Given to the referrer per successful invite</div>
                 </div>
                 <div class="field">
                   <label>Welcome Bonus (pts)</label>
-                  <input type="number" id="econWelcomeBonus" min="0" step="10" placeholder="50"/>
+                  <input type="number" id="econWelcomeBonus" min="0" step="10" placeholder="50" oninput="updateReferralMilestones()"/>
                   <div style="font-size:12px;color:var(--dim);margin-top:4px">Given to new members who join via a referral</div>
                 </div>
+              </div>
+
+              <!-- Milestone earnings preview -->
+              <div id="referralMilestonePreview" style="margin-top:16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 18px">
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);margin-bottom:12px">Perk Preview — What a member earns</div>
+                <div style="display:flex;gap:0;flex-wrap:nowrap;overflow-x:auto">
+                  <div class="milestone-step" id="ms1"></div>
+                  <div class="milestone-step" id="ms3"></div>
+                  <div class="milestone-step" id="ms5"></div>
+                  <div class="milestone-step" id="ms10"></div>
+                  <div class="milestone-step" id="ms25"></div>
+                </div>
+                <div style="font-size:11px;color:var(--dim);margin-top:10px">💡 Consider adding a manual reward (in the Rewards tab) at your key milestones to give top referrers something to show off.</div>
               </div>
             </div>
 
@@ -3969,6 +4048,7 @@ function renderDashboard(data) {
   // Referral prefill
   document.getElementById('econReferralReward').value = Math.round((creator.referral_reward ?? 10000) / 100);
   document.getElementById('econWelcomeBonus').value   = Math.round((creator.welcome_bonus   ?? 5000)  / 100);
+  updateReferralMilestones();
 
   // Branding prefill
   prefillBranding(creator);
@@ -4578,6 +4658,44 @@ async function saveSettings() {
 document.getElementById('settingColor').addEventListener('input', function() {
   document.getElementById('settingColorHex').textContent = this.value;
 });
+
+// ── REFERRAL PRESETS + MILESTONE PREVIEW ────────────────────
+function applyReferralPreset(rewardPts, welcomePts) {
+  const rr = document.getElementById('econReferralReward');
+  const wb = document.getElementById('econWelcomeBonus');
+  if (rr) rr.value = rewardPts;
+  if (wb) wb.value = welcomePts;
+  updateReferralMilestones();
+  // Briefly highlight the inputs
+  [rr, wb].forEach(el => {
+    if (!el) return;
+    el.style.transition = 'box-shadow .15s';
+    el.style.boxShadow = '0 0 0 2px var(--gold)';
+    setTimeout(() => { el.style.boxShadow = ''; }, 800);
+  });
+}
+
+function updateReferralMilestones() {
+  const reward  = parseInt(document.getElementById('econReferralReward')?.value) || 0;
+  const welcome = parseInt(document.getElementById('econWelcomeBonus')?.value)   || 0;
+  if (!reward && !welcome) return;
+  const milestones = [
+    { id: 'ms1',  count: 1,  label: '1 referral'  },
+    { id: 'ms3',  count: 3,  label: '3 referrals' },
+    { id: 'ms5',  count: 5,  label: '5 referrals' },
+    { id: 'ms10', count: 10, label: '10 referrals' },
+    { id: 'ms25', count: 25, label: '25 referrals' }
+  ];
+  milestones.forEach(({ id, count, label }) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const total = reward * count;
+    el.innerHTML = `
+      <div class="ms-count">${label}</div>
+      <div class="ms-pts">${total.toLocaleString()}</div>
+      <div class="ms-label">pts earned</div>`;
+  });
+}
 
 function toggleRefillFields() {
   const enabled = document.getElementById('econRefillEnabled').checked;
