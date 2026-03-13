@@ -14,7 +14,7 @@
 
 ## 🟡 Up Next
 
-- [ ] **PUSH** — `git push origin main` to deploy commits `c5509cd` through `dc742bf`
+- [ ] **PUSH** — `git push origin main` to deploy commits `c5509cd` through `8c20977`
 - [ ] **Run 2 new migrations** in Supabase SQL editor: `supabase_migration_custom_domains.sql` + `supabase_migration_challenges.sql`
 - [ ] **Landing page video** — Video section built, just needs real YouTube VIDEO_ID inserted in `public/index.html`
 - [ ] **AI scanner improvements** — auto-scan creator's YouTube channel on schedule
@@ -67,3 +67,6 @@
 - [x] Leaderboard: weekly tab, win rate %, accuracy tier badges 🎯📊🎲 (`4c41d54`)
 - [x] UX fixes: archived markets hidden from overview, 🎁 Reward member modal + endpoint, milestone 🏆 toasts (`b5dae24`)
 - [x] Tab review additions: ↻ Duplicate market, 📱 QR code, community URL bar, leaderboard member count, reward on PP/IC rows, win rate in community header (`dc742bf`)
+- [x] Mobile UX round 1 — leaderboard pill, creator login bar, carousel tap fix, watermark overlap, archived markets, milestone toasts (`7db546e`)
+- [x] Reward presets + member claim button (`258804e`)
+- [x] Mobile UX round 2 — plan pill onclick, AI Scanner icon in topbar, Dupe→Duplicate, analytics overflow (`8c20977`)

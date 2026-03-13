@@ -93,7 +93,7 @@
   6. `supabase_migration_challenges.sql`
 - Video section on landing page needs real YouTube VIDEO_ID
 - Old `index.html` at project root should be removed eventually
-- **This session (March 13)** — all committed, needs push:
+- **This session (March 13)** — all committed, needs push (latest: `8c20977`):
   - Custom domain feature (Premium) — CNAME routing middleware + DNS verification (commit `c5509cd`)
   - Pro referral analytics access (commit `8e18b29`)
   - Referral reward preset cards + milestone earnings preview (commit `d2d2721`)
@@ -104,6 +104,9 @@
   - Leaderboard upgrades: weekly tab, win rate, accuracy badges (commit `4c41d54`)
   - Fix 4 UX issues: skeleton HTML, archived markets in overview, reward member modal + endpoint, milestone toasts (commit `b5dae24`)
   - Tab review: duplicate market, QR code, community URL bar, leaderboard member count, reward buttons on PP/IC rows, win rate in community header (commit `dc742bf`)
+  - Mobile fixes round 1: leaderboard jump pill, creator login bar, carousel fix, watermark overlap, archived markets, milestone toasts (commit `7db546e`)
+  - Reward presets + claim button (commit `258804e`)
+  - Mobile fixes round 2: plan pill onclick, AI Scanner icon in topbar, Dupe→Duplicate, analytics padding (commit `8c20977`)
 - **Economy Phase 3** (not built):
   - Streak broken toast when user loses after a streak
 
