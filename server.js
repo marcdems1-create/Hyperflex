@@ -1877,6 +1877,149 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
+// 5b. ANALYTICS
+// GET /api/creator/analytics
+// Auth: Bearer token required
+// Returns rich analytics data for the analytics dashboard
+// ════════════════════════════════════════════════════════════
+app.get('/api/creator/analytics', requireCreator, async (req, res) => {
+  try {
+    const creatorId = req.creatorId;
+
+    // Get creator slug
+    const { data: settings } = await supabase
+      .from('creator_settings')
+      .select('slug, plan, starting_balance')
+      .eq('creator_id', creatorId)
+      .single();
+    const slug = settings?.slug;
+    const plan = settings?.plan || 'free';
+
+    // Get all markets for this creator
+    const { data: markets } = await supabase
+      .from('markets')
+      .select('id, title, trader_count, volume, resolved, archived, created_at, yes_price, no_price')
+      .eq('creator_id', creatorId)
+      .order('created_at', { ascending: false });
+
+    const allMarkets = markets || [];
+    const activeMarkets   = allMarkets.filter(m => !m.resolved && !m.archived);
+    const resolvedMarkets = allMarkets.filter(m => m.resolved);
+    const archivedMarkets = allMarkets.filter(m => m.archived && !m.resolved);
+
+    // Top markets by trader count
+    const topMarkets = [...allMarkets]
+      .sort((a, b) => (b.trader_count || 0) - (a.trader_count || 0))
+      .slice(0, 5)
+      .map(m => ({
+        title: m.title,
+        trader_count: m.trader_count || 0,
+        volume: m.volume || 0,
+        resolved: m.resolved || false,
+        yes_price: m.yes_price || 0.5
+      }));
+
+    // Daily trade counts — last 30 days from positions table
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const marketIds = allMarkets.map(m => m.id);
+    let dailyTrades = [];
+    if (marketIds.length > 0) {
+      const { data: positions } = await supabase
+        .from('positions')
+        .select('created_at')
+        .in('market_id', marketIds)
+        .gte('created_at', thirtyDaysAgo.toISOString());
+
+      // Bucket by day
+      const buckets = {};
+      for (let i = 0; i < 30; i++) {
+        const d = new Date();
+        d.setDate(d.getDate() - (29 - i));
+        const key = d.toISOString().slice(0, 10);
+        buckets[key] = 0;
+      }
+      (positions || []).forEach(p => {
+        const key = p.created_at.slice(0, 10);
+        if (key in buckets) buckets[key]++;
+      });
+      dailyTrades = Object.entries(buckets).map(([date, count]) => ({ date, count }));
+    }
+
+    // Community balance stats
+    let balanceStats = { total_in_circulation: 0, avg_balance: 0, member_count: 0 };
+    if (slug) {
+      const { data: balances } = await supabase
+        .from('community_balances')
+        .select('balance')
+        .eq('creator_slug', slug);
+      if (balances && balances.length > 0) {
+        const total = balances.reduce((s, b) => s + (b.balance || 0), 0);
+        balanceStats = {
+          total_in_circulation: total,
+          avg_balance: Math.round(total / balances.length),
+          member_count: balances.length
+        };
+      }
+    }
+
+    // Refill stats
+    let refillStats = { total_refills: 0, total_pts_distributed: 0 };
+    if (slug) {
+      const { data: refills } = await supabase
+        .from('refill_history')
+        .select('amount')
+        .eq('creator_slug', slug);
+      if (refills && refills.length > 0) {
+        refillStats = {
+          total_refills: refills.length,
+          total_pts_distributed: refills.reduce((s, r) => s + (r.amount || 0), 0)
+        };
+      }
+    }
+
+    // Referral stats
+    let referralStats = { total_referrals: 0, total_pts_distributed: 0, this_week: 0 };
+    if (slug) {
+      const weekStart = getWeekStart().toISOString();
+      const { data: referrals } = await supabase
+        .from('referral_history')
+        .select('referrer_reward, welcome_bonus, created_at')
+        .eq('creator_slug', slug);
+      if (referrals && referrals.length > 0) {
+        const totalPts = referrals.reduce((s, r) => s + (r.referrer_reward || 0) + (r.welcome_bonus || 0), 0);
+        const thisWeek = referrals.filter(r => r.created_at >= weekStart).length;
+        referralStats = {
+          total_referrals: referrals.length,
+          total_pts_distributed: totalPts,
+          this_week: thisWeek
+        };
+      }
+    }
+
+    res.json({
+      plan,
+      market_breakdown: {
+        total: allMarkets.length,
+        active: activeMarkets.length,
+        resolved: resolvedMarkets.length,
+        archived: archivedMarkets.length
+      },
+      top_markets: topMarkets,
+      daily_trades: dailyTrades,
+      balance_stats: balanceStats,
+      refill_stats: refillStats,
+      referral_stats: referralStats
+    });
+
+  } catch (err) {
+    console.error('analytics error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
 // 5. UPDATE CREATOR SETTINGS
 // PUT /api/creator/settings
 // Auth: Bearer token required
