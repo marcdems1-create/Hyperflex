@@ -44,19 +44,48 @@ app.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (re
 
     if (event.type === 'customer.subscription.updated') {
       const sub = event.data.object;
-      // Only act on active subscriptions — ignore trials, past_due, etc.
       if (sub.status === 'active') {
-        const priceId = sub.items.data[0]?.price?.id;
-        const plan = priceId === process.env.STRIPE_PLATINUM_PRICE_ID ? 'platinum'
-                   : priceId === process.env.STRIPE_PRO_PRICE_ID      ? 'pro'
-                   : null;
-        if (plan) {
-          const customer = await stripe.customers.retrieve(sub.customer);
-          if (customer.email) {
-            const { data: user } = await supabase.from('users').select('id').eq('email', customer.email).maybeSingle();
-            if (user) {
-              await supabase.from('creator_settings').update({ plan }).eq('creator_id', user.id);
-              console.log(`[stripe] plan updated → ${plan} for ${customer.email}`);
+        const customer = await stripe.customers.retrieve(sub.customer);
+        if (customer.email) {
+          const { data: user } = await supabase.from('users').select('id').eq('email', customer.email).maybeSingle();
+          if (user) {
+            const priceIdToPlan = id =>
+              id === process.env.STRIPE_PLATINUM_PRICE_ID ? 'platinum'
+              : id === process.env.STRIPE_PRO_PRICE_ID    ? 'pro'
+              : null;
+
+            // Pending end-of-period plan change (e.g. Premium → Pro downgrade)
+            const pendingPriceId = sub.pending_updates?.subscription_items?.[0]?.price;
+            if (pendingPriceId) {
+              const pendingPlan = priceIdToPlan(pendingPriceId) || 'free';
+              const changeDate  = new Date(sub.current_period_end * 1000).toISOString();
+              await supabase.from('creator_settings').update({
+                plan_scheduled_change: pendingPlan,
+                plan_change_date: changeDate
+              }).eq('creator_id', user.id);
+              console.log(`[stripe] scheduled plan change → ${pendingPlan} for ${customer.email} on ${changeDate}`);
+
+            } else if (sub.cancel_at_period_end) {
+              // Scheduled cancellation → will drop to free at period end
+              const changeDate = new Date(sub.current_period_end * 1000).toISOString();
+              await supabase.from('creator_settings').update({
+                plan_scheduled_change: 'free',
+                plan_change_date: changeDate
+              }).eq('creator_id', user.id);
+              console.log(`[stripe] cancellation scheduled for ${customer.email} on ${changeDate}`);
+
+            } else {
+              // Immediate change (upgrade, or scheduled change now resolved) — sync and clear
+              const currentPriceId = sub.items.data[0]?.price?.id;
+              const plan = priceIdToPlan(currentPriceId);
+              if (plan) {
+                await supabase.from('creator_settings').update({
+                  plan,
+                  plan_scheduled_change: null,
+                  plan_change_date: null
+                }).eq('creator_id', user.id);
+                console.log(`[stripe] plan updated → ${plan} for ${customer.email}`);
+              }
             }
           }
         }
@@ -65,12 +94,15 @@ app.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (re
 
     if (event.type === 'customer.subscription.deleted' || event.type === 'customer.subscription.paused') {
       const sub = event.data.object;
-      // Find creator by customer email
       const customer = await stripe.customers.retrieve(sub.customer);
       if (customer.email) {
         const { data: user } = await supabase.from('users').select('id').eq('email', customer.email).maybeSingle();
         if (user) {
-          await supabase.from('creator_settings').update({ plan: 'free' }).eq('creator_id', user.id);
+          await supabase.from('creator_settings').update({
+            plan: 'free',
+            plan_scheduled_change: null,
+            plan_change_date: null
+          }).eq('creator_id', user.id);
           console.log(`[stripe] downgraded creator ${customer.email} to free`);
         }
       }
@@ -3383,6 +3415,8 @@ app.get('/api/community/:slug', async (req, res) => {
         primary_color:        settings.primary_color,
         community_description: settings.community_description || null,
         plan:                 settings.plan || 'free',
+        plan_scheduled_change: settings.plan_scheduled_change || null,
+        plan_change_date:      settings.plan_change_date      || null,
         // Economy settings
         starting_balance:     settings.starting_balance ?? 100000,
         min_bet:              settings.min_bet ?? 1000,

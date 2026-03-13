@@ -710,6 +710,32 @@ body.plan-premium .main {
   font-family: var(--mono);
 }
 /* Plan gate overlay */
+.plan-notice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(201,146,13,0.08);
+  border: 1px solid rgba(201,146,13,0.3);
+  border-radius: 10px;
+  padding: 12px 18px;
+  margin-bottom: 24px;
+  font-size: 13px;
+  color: var(--text);
+}
+.plan-notice-icon { font-size: 18px; flex-shrink: 0; }
+.plan-notice-text { flex: 1; line-height: 1.5; }
+.plan-notice-text strong { color: var(--gold); }
+.plan-notice-dismiss {
+  background: none;
+  border: none;
+  color: var(--dim);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 6px;
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+.plan-notice-dismiss:hover { opacity: 1; }
 .plan-gate {
   text-align: center;
   padding: 48px 24px;
@@ -2080,6 +2106,13 @@ body.plan-premium .main {
 
     <div class="content">
 
+      <!-- Plan change notice — shown when a Stripe plan change is pending -->
+      <div class="plan-notice" id="planNotice" style="display:none">
+        <div class="plan-notice-icon">ℹ️</div>
+        <div class="plan-notice-text" id="planNoticeText"></div>
+        <button class="plan-notice-dismiss" onclick="document.getElementById('planNotice').style.display='none'" title="Dismiss">✕</button>
+      </div>
+
       <!-- Overview Tab -->
       <div id="tab-overview">
 
@@ -3371,6 +3404,26 @@ function renderDashboard(data) {
   }
 
   updateUpgradeBtn(plan);
+
+  // Plan change notice
+  const noticeEl  = document.getElementById('planNotice');
+  const noticeText = document.getElementById('planNoticeText');
+  if (noticeEl && creator.plan_scheduled_change && creator.plan_change_date) {
+    const changeDate = new Date(creator.plan_change_date);
+    const dateStr    = changeDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    const changeTo   = creator.plan_scheduled_change;
+    const labelMap   = { pro: 'Pro', free: 'Free', platinum: 'Premium' };
+    const toLabel    = labelMap[changeTo] || changeTo;
+    if (changeTo === 'free') {
+      noticeText.innerHTML = `Your subscription <strong>cancels on ${dateStr}</strong>. You'll retain access to your current plan until then.`;
+    } else {
+      const currentLabel = labelMap[plan] || plan;
+      noticeText.innerHTML = `Your plan is scheduled to change from <strong>${currentLabel}</strong> to <strong>${toLabel}</strong> on <strong>${dateStr}</strong>. You'll retain current access until then.`;
+    }
+    noticeEl.style.display = 'flex';
+  } else if (noticeEl) {
+    noticeEl.style.display = 'none';
+  }
 
   // Show FLEX BOT nav item for Premium only
   const flexbotNav = document.getElementById('flexbotNavItem');
