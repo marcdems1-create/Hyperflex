@@ -1785,6 +1785,22 @@ body.plan-premium .main {
             <div class="loading-row">Loading...</div>
           </div>
         </div>
+
+        <!-- Gamification callout — Pro/Premium only, shown on overview -->
+        <div class="section" id="gamCalloutSection" style="display:none">
+          <div style="display:flex;gap:12px;flex-wrap:wrap">
+            <div id="gamCalloutPP" style="display:none;flex:1;min-width:200px;background:var(--cream);border:1px solid var(--border);border-radius:10px;padding:16px 20px;cursor:pointer" onclick="showTab('leaderboard')">
+              <div style="font-size:18px;margin-bottom:6px">⚡</div>
+              <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">Weekly Power Predictors</div>
+              <div style="font-family:var(--mono);font-size:11px;color:var(--dim)" id="gamCalloutPPSub">Top members this week</div>
+            </div>
+            <div id="gamCalloutIC" style="display:none;flex:1;min-width:200px;background:var(--cream);border:1px solid rgba(201,146,13,0.35);border-radius:10px;padding:16px 20px;cursor:pointer" onclick="showTab('leaderboard')">
+              <div style="font-size:18px;margin-bottom:6px">👑</div>
+              <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">Inner Circle</div>
+              <div style="font-family:var(--mono);font-size:11px;color:var(--dim)" id="gamCalloutICSub">Members with 2,000+ pts</div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Markets Tab -->
@@ -2445,8 +2461,32 @@ function renderDashboard(data) {
 
   // Gamification: Power Predictor + Inner Circle
   const planNow = creator.plan || 'free';
+  const isProPlan = planNow === 'pro' || planNow === 'platinum';
+  const isPremiumPlan = planNow === 'platinum';
   renderPowerPredictor(data.power_predictor, planNow, creator.custom_points_name);
   renderInnerCircle(data.inner_circle, planNow, creator.custom_points_name);
+
+  // Overview callout cards
+  const gamCallout = document.getElementById('gamCalloutSection');
+  const gamCalloutPP = document.getElementById('gamCalloutPP');
+  const gamCalloutIC = document.getElementById('gamCalloutIC');
+  if (isProPlan && gamCallout) {
+    gamCallout.style.display = 'block';
+    if (gamCalloutPP) {
+      gamCalloutPP.style.display = 'block';
+      const ppCount = (data.power_predictor || []).length;
+      document.getElementById('gamCalloutPPSub').textContent = ppCount > 0
+        ? `${ppCount} top predictor${ppCount > 1 ? 's' : ''} this week — click to view`
+        : 'No settled predictions this week yet';
+    }
+    if (isPremiumPlan && gamCalloutIC) {
+      gamCalloutIC.style.display = 'block';
+      const icCount = (data.inner_circle || []).length;
+      document.getElementById('gamCalloutICSub').textContent = icCount > 0
+        ? `${icCount} member${icCount > 1 ? 's' : ''} — click to view`
+        : 'No members at 2,000+ pts yet';
+    }
+  }
 
   // Share templates
   renderShareTemplates(creator);
