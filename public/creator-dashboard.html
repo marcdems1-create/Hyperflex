@@ -1525,6 +1525,10 @@ body.plan-premium .main {
   border-radius: 50%;
   flex-shrink: 0;
 }
+@keyframes skeletonPulse {
+  0%, 100% { opacity: .45; }
+  50%       { opacity: .9; }
+}
 @keyframes pulse-live {
   0%, 100% { box-shadow: 0 0 0 0 rgba(45,155,95,0.7); }
   50% { box-shadow: 0 0 0 5px rgba(45,155,95,0); }
@@ -3248,9 +3252,16 @@ body.nav-open .sidebar-backdrop {
               </button>
             </div>
 
-            <div id="ideasLoading" style="padding:40px;text-align:center;color:var(--dim);font-size:13px;display:none">
-              <div style="font-size:24px;margin-bottom:12px">✨</div>
-              Generating ideas for your community…
+            <div id="ideasLoading" style="display:none">
+              <div style="padding:16px 0 10px;font-size:12px;color:var(--dim);display:flex;align-items:center;gap:8px">
+                <span id="ideasLoadingDots">✨ Generating ideas</span>
+              </div>
+              <!-- Skeleton cards for 3 sections -->
+              <div style="display:flex;flex-direction:column;gap:24px">
+                <div><div style="height:14px;width:120px;background:var(--surface);border-radius:6px;margin-bottom:12px"></div><div style="display:flex;gap:12px;flex-wrap:wrap">${[1,2,3].map(()=>`<div style="flex:1;min-width:200px;height:110px;background:var(--surface);border-radius:10px;animation:skeletonPulse 1.4s ease-in-out infinite"></div>`).join('')}</div></div>
+                <div><div style="height:14px;width:90px;background:var(--surface);border-radius:6px;margin-bottom:12px"></div><div style="display:flex;gap:12px;flex-wrap:wrap">${[1,2,3].map(()=>`<div style="flex:1;min-width:200px;height:110px;background:var(--surface);border-radius:10px;animation:skeletonPulse 1.4s ease-in-out infinite;animation-delay:.2s"></div>`).join('')}</div></div>
+                <div><div style="height:14px;width:100px;background:var(--surface);border-radius:6px;margin-bottom:12px"></div><div style="display:flex;gap:12px;flex-wrap:wrap">${[1,2,3].map(()=>`<div style="flex:1;min-width:200px;height:110px;background:var(--surface);border-radius:10px;animation:skeletonPulse 1.4s ease-in-out infinite;animation-delay:.4s"></div>`).join('')}</div></div>
+              </div>
             </div>
 
             <div id="ideasError" style="padding:32px;text-align:center;color:#ef4444;font-size:13px;display:none"></div>
@@ -4843,6 +4854,14 @@ async function loadMarketIdeas(force = false) {
   sectionsEl.style.display = 'none';
   if (refreshBtn) { refreshBtn.disabled = true; refreshIcon.textContent = '…'; }
 
+  // Animated loading dots
+  let dotCount = 0;
+  const dotsEl = document.getElementById('ideasLoadingDots');
+  const dotsTimer = setInterval(() => {
+    dotCount = (dotCount + 1) % 4;
+    if (dotsEl) dotsEl.textContent = '✨ Generating ideas' + '.'.repeat(dotCount);
+  }, 400);
+
   try {
     const r = await fetch(API + '/api/creator/market-ideas', {
       method: 'POST',
@@ -4864,6 +4883,7 @@ async function loadMarketIdeas(force = false) {
     errorEl.style.display = 'block';
     errorEl.textContent   = 'Could not load ideas: ' + err.message;
   } finally {
+    clearInterval(dotsTimer);
     if (refreshBtn) { refreshBtn.disabled = false; refreshIcon.textContent = '↻'; }
   }
 }

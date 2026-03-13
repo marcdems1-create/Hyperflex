@@ -2248,32 +2248,20 @@ app.post('/api/creator/market-ideas', requireCreator, async (req, res) => {
   try {
     const creatorId = req.creator.id;
 
-    // Fetch plan first — separate query so missing optional columns can't break the gate
-    const { data: planRow } = await supabase
+    // Single query — fetch everything needed at once
+    const { data: row } = await supabase
       .from('creator_settings')
-      .select('plan, community_description, display_name, custom_points_name')
+      .select('plan, community_description, display_name, custom_points_name, community_category')
       .eq('creator_id', creatorId)
       .single();
 
-    const plan = planRow?.plan || 'free';
+    const plan = row?.plan || 'free';
     if (plan === 'free') return res.status(403).json({ error: 'Market Ideas requires Pro or Premium' });
 
-    // Fetch optional community_category separately (may not exist yet if migration not run)
-    let communityCategory = req.body.category || 'other';
-    try {
-      const { data: catRow } = await supabase
-        .from('creator_settings')
-        .select('community_category')
-        .eq('creator_id', creatorId)
-        .single();
-      if (catRow?.community_category) communityCategory = catRow.community_category;
-    } catch (_) { /* column may not exist yet — fall back to req.body.category */ }
-
-    const count      = plan === 'platinum' ? 5 : 3;
-    const category   = communityCategory;
-    const desc       = planRow?.community_description || '';
-    const name       = planRow?.display_name || 'Community';
-    const pointsName = planRow?.custom_points_name || 'Flex Points';
+    const count    = plan === 'platinum' ? 5 : 3;
+    const category = row?.community_category || req.body.category || 'other';
+    const desc     = row?.community_description || '';
+    const name     = row?.display_name || 'Community';
 
     const categoryLabels = {
       sports: 'Sports', esports: 'Esports / Gaming', entertainment: 'Entertainment & Pop Culture',
@@ -2281,69 +2269,28 @@ app.post('/api/creator/market-ideas', requireCreator, async (req, res) => {
       news: 'News & Current Events', tech: 'Technology', music: 'Music', other: 'General'
     };
     const nicheLabel = categoryLabels[category] || category;
-
     const today = new Date().toISOString().split('T')[0];
 
-    const prompt = `You are a prediction market expert. Generate market questions for a community called "${name}" focused on: ${nicheLabel}.
-${desc ? `Community description: ${desc}` : ''}
-Today's date: ${today}
+    const prompt = `Prediction market expert. Generate ${count} questions per category for "${name}" (niche: ${nicheLabel}).${desc ? ` Context: ${desc}` : ''} Today: ${today}.
 
-Generate exactly ${count} questions per category. Return ONLY valid JSON, no markdown.
+RULES — every question must have one objectively verifiable YES/NO answer.
+BANNED: opinion ("Is X better than Y?"), vague comparisons, consensus-based, no clear resolution date, already happened.
+GOOD: specific price/ranking/outcome targets with a known resolution event.
 
-━━━ RESOLVABILITY RULES (strictly enforced) ━━━
-Every question MUST have ONE objectively verifiable YES or NO answer based on a specific, publicly checkable fact, number, or official outcome.
+CATEGORIES:
+1. happening_now — resolves THIS week/month (live series, earnings, breaking news)
+2. upcoming — known events next 1–6 months (launches, elections, seasons)
+3. most_viral — bold specific predictions on the most talked-about topics in this niche
 
-✅ GOOD questions:
-- "Will Apple's stock close above $200 by end of Q1 2025?"  → resolves via stock price
-- "Will the Lakers make the NBA playoffs this season?"  → resolves via official standings
-- "Will Bitcoin hit $100k before July 2025?"  → resolves via price data
-- "Will Taylor Swift announce a new album before June?"  → resolves via official announcement
+SCORING (0–100): resolvability (0–50) + excitement (0–50). Only include if score ≥ 70.
+Questions must be under 120 chars. No duplicate topics across categories.
 
-❌ BANNED question types — never generate these:
-- Opinion/debate questions: "Is X better than Y?", "Was X the right move?", "Should X do Y?"
-- Vague comparisons: "Is passive investing better than active?", "Who is the greatest X ever?"
-- Questions resolved by "most people think" or "experts say" or "is generally considered"
-- Requires a poll, vote, or consensus to resolve
-- Subjective quality judgments: "Will X be good?", "Is X overrated?"
-- Questions with no clear resolution date or trigger event
-- Questions about things that already happened
-
-Most Viral questions are NOT debate topics — they are bold, specific, objectively-resolvable predictions on polarizing subjects. E.g. "Will Elon Musk's net worth exceed $400B by year-end?" not "Is Elon Musk good for Twitter?"
-
-━━━ CATEGORIES ━━━
-1. HAPPENING_NOW — events actively unfolding THIS week/month with imminent resolution (earnings this week, live series, breaking stories, data dropping soon)
-2. UPCOMING — known scheduled events in the next 1–6 months (product launches, elections, seasons, award shows, Fed meetings)
-3. MOST_VIRAL — bold, specific, objectively-resolvable predictions on the most talked-about subjects in this niche right now
-
-━━━ SCORING ━━━
-Each idea gets a score 0–100:
-- Resolvability (0–50): Is there one clear, verifiable YES/NO answer based on public data?
-- Excitement (0–50): Will members in this niche excitedly bet on this?
-Only include questions scoring ≥ 70. If you can't reach ${count} questions that score ≥ 70 in a category, include fewer rather than padding with weak ones.
-
-━━━ FORMAT ━━━
-{
-  "happening_now": [
-    { "question": "...", "why": "one sentence — what event/data makes this timely", "score": 85, "resolves_via": "brief note on how this resolves, e.g. 'Official NBA standings'" }
-  ],
-  "upcoming": [
-    { "question": "...", "why": "...", "score": 78, "resolves_via": "..." }
-  ],
-  "most_viral": [
-    { "question": "...", "why": "...", "score": 82, "resolves_via": "..." }
-  ]
-}
-
-Additional rules:
-- Questions under 120 characters
-- No duplicate topics across categories
-- Specific not generic ("Will the Lakers make the playoffs this season?" not "Will Team A win?")
-- Use the current year/month context — questions should be relevant on ${today}`;
-
+Return ONLY valid JSON:
+{"happening_now":[{"question":"...","why":"one sentence on timeliness","score":85,"resolves_via":"..."}],"upcoming":[...],"most_viral":[...]}`;
 
     const response = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 2200,
+      max_tokens: 1400,
       messages: [{ role: 'user', content: prompt }]
     });
 
