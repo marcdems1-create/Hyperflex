@@ -2739,14 +2739,22 @@ body.plan-premium .main {
             <div style="font-weight:700;font-size:13px;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border)">Visuals</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px">
               <div class="field">
-                <label>Logo URL</label>
-                <input type="url" id="brandingLogo" placeholder="https://…/logo.png" oninput="updateBrandingPreview()"/>
-                <div style="font-size:11px;color:var(--dim);margin-top:4px">Square image, min 200×200px. Paste a direct image URL.</div>
+                <label>Logo</label>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <input type="url" id="brandingLogo" placeholder="https://…/logo.png" oninput="updateBrandingPreview()" style="flex:1;min-width:0"/>
+                  <button class="btn-secondary" onclick="document.getElementById('logoFileInput').click()" style="white-space:nowrap;padding:0 12px;height:40px;font-size:12px;flex-shrink:0" id="logoUploadBtn">↑ Upload</button>
+                  <input type="file" id="logoFileInput" accept="image/*" style="display:none" onchange="handleAssetUpload('logo', this)"/>
+                </div>
+                <div style="font-size:11px;color:var(--dim);margin-top:4px">Square image, min 200×200px. Upload or paste a URL.</div>
               </div>
               <div class="field">
-                <label>Banner Image URL</label>
-                <input type="url" id="brandingBanner" placeholder="https://…/banner.jpg" oninput="updateBrandingPreview()"/>
-                <div style="font-size:11px;color:var(--dim);margin-top:4px">Wide image, ideally 1400×400px. Paste a direct image URL.</div>
+                <label>Banner Image</label>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <input type="url" id="brandingBanner" placeholder="https://…/banner.jpg" oninput="updateBrandingPreview()" style="flex:1;min-width:0"/>
+                  <button class="btn-secondary" onclick="document.getElementById('bannerFileInput').click()" style="white-space:nowrap;padding:0 12px;height:40px;font-size:12px;flex-shrink:0" id="bannerUploadBtn">↑ Upload</button>
+                  <input type="file" id="bannerFileInput" accept="image/*" style="display:none" onchange="handleAssetUpload('banner', this)"/>
+                </div>
+                <div style="font-size:11px;color:var(--dim);margin-top:4px">Wide image, ideally 1400×400px. Upload or paste a URL.</div>
               </div>
               <div class="field">
                 <label>Accent Color</label>
@@ -4117,6 +4125,51 @@ async function confirmDeleteAccount() {
 }
 
 // ── BRANDING ───────────────────────────────────────────────
+async function handleAssetUpload(type, input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  const btnId = type === 'logo' ? 'logoUploadBtn' : 'bannerUploadBtn';
+  const btn = document.getElementById(btnId);
+  const originalText = btn.textContent;
+  btn.textContent = 'Uploading…';
+  btn.disabled = true;
+
+  try {
+    // Read file as base64
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+    const token = localStorage.getItem('creatorToken');
+    const res = await fetch('/api/creator/upload-asset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ type, data: base64, mime: file.type })
+    });
+
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Upload failed');
+
+    // Populate the URL field and refresh preview
+    const fieldId = type === 'logo' ? 'brandingLogo' : 'brandingBanner';
+    document.getElementById(fieldId).value = json.url;
+    updateBrandingPreview();
+    btn.textContent = '✓ Done';
+    setTimeout(() => { btn.textContent = originalText; btn.disabled = false; }, 2000);
+  } catch (err) {
+    console.error('Asset upload error:', err);
+    alert('Upload failed: ' + err.message);
+    btn.textContent = originalText;
+    btn.disabled = false;
+  }
+  // Reset file input so same file can be re-selected
+  input.value = '';
+}
+
 function updateBrandingPreview() {
   const logo   = document.getElementById('brandingLogo')?.value;
   const banner = document.getElementById('brandingBanner')?.value;

@@ -2149,6 +2149,54 @@ app.get('/api/creator/analytics', requireCreator, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
+// 4b. UPLOAD BRAND ASSET (logo or banner)
+// POST /api/creator/upload-asset
+// Auth: Bearer token required
+// Body: { type: 'logo'|'banner', data: '<base64>', mime: 'image/png' }
+// Uploads to Supabase Storage bucket 'community-assets', returns public URL
+// ════════════════════════════════════════════════════════════
+app.post('/api/creator/upload-asset', requireCreator, async (req, res) => {
+  try {
+    const creatorId = req.creator.id;
+    const { type, data, mime } = req.body;
+
+    if (!type || !data || !mime) return res.status(400).json({ error: 'type, data, and mime required' });
+    if (!['logo', 'banner'].includes(type)) return res.status(400).json({ error: 'type must be logo or banner' });
+
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (!allowed.includes(mime)) return res.status(400).json({ error: 'Only JPEG, PNG, WebP, or GIF allowed' });
+
+    // Decode base64
+    const base64 = data.includes(',') ? data.split(',')[1] : data;
+    const buffer = Buffer.from(base64, 'base64');
+
+    // 5 MB limit
+    if (buffer.length > 5 * 1024 * 1024) return res.status(400).json({ error: 'File too large (max 5 MB)' });
+
+    const ext = mime.split('/')[1].replace('jpeg', 'jpg');
+    const path = `${creatorId}/${type}.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('community-assets')
+      .upload(path, buffer, { contentType: mime, upsert: true });
+
+    if (uploadError) {
+      console.error('Supabase storage upload error:', uploadError);
+      return res.status(500).json({ error: 'Upload failed: ' + uploadError.message });
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('community-assets')
+      .getPublicUrl(path);
+
+    res.json({ url: publicUrl });
+  } catch (err) {
+    console.error('upload-asset error:', err);
+    res.status(500).json({ error: 'Upload failed' });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
 // 5. UPDATE CREATOR SETTINGS
 // PUT /api/creator/settings
 // Auth: Bearer token required
