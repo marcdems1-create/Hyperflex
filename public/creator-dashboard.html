@@ -108,12 +108,37 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.community-url-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
 .community-url {
   font-family: var(--mono);
   font-size: 10px;
   color: var(--gold);
   opacity: 0.8;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+.sidebar-copy-btn {
+  background: none;
+  border: 1px solid rgba(201,146,13,0.25);
+  border-radius: 4px;
+  color: var(--gold);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 1px 5px;
+  opacity: 0.7;
+  transition: opacity 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+  line-height: 1.6;
+}
+.sidebar-copy-btn:hover { opacity: 1; border-color: var(--gold); }
 
 .sidebar-nav {
   flex: 1;
@@ -1988,7 +2013,10 @@ body.plan-premium .main {
       <div class="creator-avatar" id="sidebarAvatar">HF</div>
       <div class="community-label">Your community</div>
       <div class="community-name" id="sidebarCommunityName">Loading...</div>
-      <div class="community-url" id="sidebarCommunityUrl"></div>
+      <div class="community-url-row">
+        <div class="community-url" id="sidebarCommunityUrl"></div>
+        <button class="sidebar-copy-btn" onclick="copyLink()" title="Copy link">📋</button>
+      </div>
       <div class="plan-pill free" id="sidebarPlanPill">Free</div>
     </div>
 
@@ -2105,7 +2133,7 @@ body.plan-premium .main {
         <div class="stats-row">
           <div class="stat-card">
             <div class="stat-card-icon">👥</div>
-            <div class="stat-label">Total Traders</div>
+            <div class="stat-label">Members</div>
             <div class="stat-value" id="statTraders">—</div>
             <div class="stat-change" id="statTradersChange"></div>
           </div>
@@ -2117,7 +2145,7 @@ body.plan-premium .main {
           </div>
           <div class="stat-card">
             <div class="stat-card-icon">💎</div>
-            <div class="stat-label">Total Volume</div>
+            <div class="stat-label">Volume (pts)</div>
             <div class="stat-value" id="statVolume">—</div>
             <div class="stat-change" id="statVolumeChange"></div>
           </div>
@@ -3240,7 +3268,7 @@ function renderDashboard(data) {
   // Stats
   document.getElementById('statTraders').textContent = (stats.total_traders || 0).toLocaleString();
   document.getElementById('statLive').textContent = stats.live_markets || 0;
-  document.getElementById('statVolume').textContent = (stats.total_volume || 0).toLocaleString() + ' pts';
+  document.getElementById('statVolume').textContent = (stats.total_volume || 0).toLocaleString();
   document.getElementById('statWeekly').textContent = (stats.weekly_trades || 0).toLocaleString();
 
   // Markets
