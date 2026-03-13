@@ -2246,40 +2246,66 @@ app.post('/api/creator/market-ideas', requireCreator, async (req, res) => {
 
     const today = new Date().toISOString().split('T')[0];
 
-    const prompt = `You are a prediction market expert generating engaging market questions for a community called "${name}" focused on: ${nicheLabel}.
+    const prompt = `You are a prediction market expert. Generate market questions for a community called "${name}" focused on: ${nicheLabel}.
 ${desc ? `Community description: ${desc}` : ''}
 Today's date: ${today}
-Points currency: ${pointsName}
 
-Generate exactly ${count} market questions for each of these 3 categories. Questions must be YES/NO binary and clearly resolvable.
+Generate exactly ${count} questions per category. Return ONLY valid JSON, no markdown.
 
-Categories:
-1. HAPPENING_NOW — Events actively unfolding or data dropping this week/month (earnings reports, game results, album drops, elections, economic data releases, ongoing news stories, championship series in progress). Make them feel urgent and timely.
-2. UPCOMING — Known scheduled events in the next 1–6 months (seasons starting, product launches, elections, scheduled matches, award shows, Fed meetings, major releases).
-3. MOST_VIRAL — Topics that always generate heated debate and maximum engagement in this niche (controversial takes, GOAT debates, bold predictions, polarizing personalities, all-time rankings).
+━━━ RESOLVABILITY RULES (strictly enforced) ━━━
+Every question MUST have ONE objectively verifiable YES or NO answer based on a specific, publicly checkable fact, number, or official outcome.
 
-Return ONLY valid JSON, no markdown, no explanation:
+✅ GOOD questions:
+- "Will Apple's stock close above $200 by end of Q1 2025?"  → resolves via stock price
+- "Will the Lakers make the NBA playoffs this season?"  → resolves via official standings
+- "Will Bitcoin hit $100k before July 2025?"  → resolves via price data
+- "Will Taylor Swift announce a new album before June?"  → resolves via official announcement
+
+❌ BANNED question types — never generate these:
+- Opinion/debate questions: "Is X better than Y?", "Was X the right move?", "Should X do Y?"
+- Vague comparisons: "Is passive investing better than active?", "Who is the greatest X ever?"
+- Questions resolved by "most people think" or "experts say" or "is generally considered"
+- Requires a poll, vote, or consensus to resolve
+- Subjective quality judgments: "Will X be good?", "Is X overrated?"
+- Questions with no clear resolution date or trigger event
+- Questions about things that already happened
+
+Most Viral questions are NOT debate topics — they are bold, specific, objectively-resolvable predictions on polarizing subjects. E.g. "Will Elon Musk's net worth exceed $400B by year-end?" not "Is Elon Musk good for Twitter?"
+
+━━━ CATEGORIES ━━━
+1. HAPPENING_NOW — events actively unfolding THIS week/month with imminent resolution (earnings this week, live series, breaking stories, data dropping soon)
+2. UPCOMING — known scheduled events in the next 1–6 months (product launches, elections, seasons, award shows, Fed meetings)
+3. MOST_VIRAL — bold, specific, objectively-resolvable predictions on the most talked-about subjects in this niche right now
+
+━━━ SCORING ━━━
+Each idea gets a score 0–100:
+- Resolvability (0–50): Is there one clear, verifiable YES/NO answer based on public data?
+- Excitement (0–50): Will members in this niche excitedly bet on this?
+Only include questions scoring ≥ 70. If you can't reach ${count} questions that score ≥ 70 in a category, include fewer rather than padding with weak ones.
+
+━━━ FORMAT ━━━
 {
   "happening_now": [
-    { "question": "...", "why": "one sentence on why this is hot right now" }
+    { "question": "...", "why": "one sentence — what event/data makes this timely", "score": 85, "resolves_via": "brief note on how this resolves, e.g. 'Official NBA standings'" }
   ],
   "upcoming": [
-    { "question": "...", "why": "one sentence on the scheduled event" }
+    { "question": "...", "why": "...", "score": 78, "resolves_via": "..." }
   ],
   "most_viral": [
-    { "question": "...", "why": "one sentence on why this sparks debate" }
+    { "question": "...", "why": "...", "score": 82, "resolves_via": "..." }
   ]
 }
 
-Rules:
-- Every question must be under 120 characters
+Additional rules:
+- Questions under 120 characters
 - No duplicate topics across categories
-- Questions should feel like something a real community member would excitedly bet on
-- Make them specific, not generic (bad: "Will Team A win?", good: "Will the Lakers make the playoffs this season?")`;
+- Specific not generic ("Will the Lakers make the playoffs this season?" not "Will Team A win?")
+- Use the current year/month context — questions should be relevant on ${today}`;
+
 
     const response = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1500,
+      max_tokens: 2200,
       messages: [{ role: 'user', content: prompt }]
     });
 

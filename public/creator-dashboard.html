@@ -816,6 +816,36 @@ body.plan-premium .main {
   line-height: 1.4;
   font-style: italic;
 }
+.idea-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.idea-score {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 7px;
+  border-radius: 5px;
+  flex-shrink: 0;
+}
+.idea-score.great  { background: rgba(45,155,95,0.15);  color: #4ade80; }
+.idea-score.good   { background: rgba(201,146,13,0.15); color: var(--gold); }
+.idea-score.ok     { background: rgba(255,255,255,0.06); color: var(--dim); }
+.idea-resolves {
+  font-size: 10px;
+  color: var(--dim);
+  font-style: italic;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .idea-use-btn {
   display: flex;
   align-items: center;
@@ -4659,16 +4689,24 @@ async function loadMarketIdeas(force = false) {
 function renderIdeaCards(sectionKey, ideas) {
   const container = document.getElementById('ideaCards-' + sectionKey);
   if (!container) return;
-  container.innerHTML = ideas.map(idea => `
+  container.innerHTML = ideas.map(idea => {
+    const score = idea.score || 0;
+    const scoreClass = score >= 85 ? 'great' : score >= 70 ? 'good' : 'ok';
+    const scoreLabel = score >= 85 ? '🟢' : score >= 70 ? '🟡' : '🔴';
+    return `
     <div class="idea-card" data-question="${escapeAttr(idea.question)}" onclick="toggleIdeaCard(this)">
       <div class="idea-card-check">✓</div>
       <div class="idea-question">${escapeHtml(idea.question)}</div>
       <div class="idea-why">${escapeHtml(idea.why)}</div>
+      <div class="idea-meta-row">
+        <span class="idea-score ${scoreClass}">${scoreLabel} ${score}</span>
+        ${idea.resolves_via ? `<span class="idea-resolves" title="${escapeAttr(idea.resolves_via)}">✓ ${escapeHtml(idea.resolves_via)}</span>` : ''}
+      </div>
       <button class="idea-use-btn" onclick="event.stopPropagation(); useIdeaFromCard(this)">
         Use this →
       </button>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
 function useIdeaFromCard(btn) {
