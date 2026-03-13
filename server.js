@@ -2212,7 +2212,7 @@ app.post('/api/creator/market-ideas', requireCreator, async (req, res) => {
     const { data: settings } = await supabase
       .from('creator_settings')
       .select('plan, community_category, community_description, display_name, custom_points_name')
-      .eq('id', creatorId)
+      .eq('creator_id', creatorId)
       .single();
 
     const plan = settings?.plan || 'free';
