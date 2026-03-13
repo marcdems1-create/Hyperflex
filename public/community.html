@@ -1325,6 +1325,43 @@ function marketCardHTML(m, isResolved) {
     </div>`;
 }
 
+// Re-renders the live prices and trader count on a card without full page refresh.
+// Called after a successful trade to reflect CPMM price movement instantly.
+function refreshMarketCard(m) {
+  const card = document.getElementById(`mkt-${m.id}`);
+  if (!card) return;
+
+  const yp = Number(m.yes_price) || 0.5;
+  const np = Number(m.no_price)  || 0.5;
+  const yesPct = Math.round(yp * 100);
+  const noPct  = Math.round(np * 100);
+
+  // Odds bar
+  const barYes = card.querySelector('.odds-bar-yes');
+  const barNo  = card.querySelector('.odds-bar-no');
+  if (barYes) barYes.style.width = yesPct + '%';
+  if (barNo)  barNo.style.width  = noPct  + '%';
+
+  // Labels under bar
+  const labels = card.querySelectorAll('.odds-label');
+  if (labels[0]) labels[0].innerHTML = `<span class="odds-dot yes"></span>YES ${yesPct}%`;
+  if (labels[1]) labels[1].innerHTML = `NO ${noPct}%<span class="odds-dot no" style="margin-left:5px"></span>`;
+
+  // Button percentages
+  const btnYes = card.querySelector('.btn-predict.yes');
+  const btnNo  = card.querySelector('.btn-predict.no');
+  if (btnYes) btnYes.innerHTML = `✓ YES <span style="opacity:.6;font-size:11px">${yesPct}%</span>`;
+  if (btnNo)  btnNo.innerHTML  = `✗ NO <span style="opacity:.6;font-size:11px">${noPct}%</span>`;
+
+  // Trader count
+  const traderEl = card.querySelector('.meta-item:nth-child(2)');
+  if (traderEl) {
+    const n = (m.trader_count || 0) + 1;
+    m.trader_count = n; // update local object too
+    traderEl.innerHTML = `<span class="meta-icon">👥</span> ${n} trader${n !== 1 ? 's' : ''}`;
+  }
+}
+
 // ── LEADERBOARD ───────────────────────────────────────────────
 async function loadLeaderboard() {
   try {
@@ -1458,18 +1495,20 @@ async function submitPredict() {
     localStorage.setItem('hf_user', JSON.stringify(currentUser));
     renderUserHeader();
 
+    // Update local market prices from server response (CPMM)
+    if (data.yes_price !== undefined) {
+      pendingMarket.yes_price = data.yes_price;
+      pendingMarket.no_price  = data.no_price;
+      // Update the market in the markets array too
+      const mkt = markets.find(m => m.id === pendingMarket.id);
+      if (mkt) { mkt.yes_price = data.yes_price; mkt.no_price = data.no_price; }
+    }
+
     closePredict();
     showToast(`✓ Prediction placed — ${pendingSide} for ${inputPts.toLocaleString()} pts`, 'success');
 
-    // Increment trader count on card locally
-    const card = document.getElementById(`mkt-${pendingMarket.id}`);
-    if (card) {
-      const el = card.querySelector('.meta-item:nth-child(2)');
-      if (el) {
-        const n = (pendingMarket.trader_count || 0) + 1;
-        el.innerHTML = `<span class="meta-icon">👥</span> ${n} trader${n !== 1 ? 's' : ''}`;
-      }
-    }
+    // Refresh market card in-place with new prices + trader count
+    refreshMarketCard(pendingMarket);
   } catch {
     showPredictError('Network error. Try again.');
   } finally {

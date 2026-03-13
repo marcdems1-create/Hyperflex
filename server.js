@@ -170,6 +170,8 @@ app.post('/markets', async (req, res) => {
     direction:    direction    || 'above',
     yes_price:    0.5,
     no_price:     0.5,
+    yes_pool:     MARKET_SEED,
+    no_pool:      MARKET_SEED,
     resolved:     false,
   };
   if (category          !== undefined) row.category          = category;
@@ -278,8 +280,23 @@ app.post('/trade', async (req, res) => {
 
   if (communityBalance < amount) return res.status(400).json({ error: 'Insufficient balance' });
 
-  const price = side === 'YES' ? market.yes_price : market.no_price;
+  // ── CPMM Pricing ──────────────────────────────────────────────────────────
+  // Use pool balances for current price. Fall back to stored price if pools are missing.
+  const yesPool = market.yes_pool || MARKET_SEED;
+  const noPool  = market.no_pool  || MARKET_SEED;
+  const totalPool = yesPool + noPool;
+  const price = side === 'YES'
+    ? yesPool / totalPool
+    : noPool  / totalPool;
+
   const potential_payout = amount / price;
+
+  // Compute updated pools after this trade
+  const newYesPool = side === 'YES' ? yesPool + amount : yesPool;
+  const newNoPool  = side === 'NO'  ? noPool  + amount : noPool;
+  const newTotal   = newYesPool + newNoPool;
+  const newYesPrice = newYesPool / newTotal;
+  const newNoPrice  = newNoPool  / newTotal;
 
   // Check if this user has traded on this market before (determines trader_count increment)
   const { count: priorPositions } = await supabase
@@ -302,14 +319,26 @@ app.post('/trade', async (req, res) => {
     .single();
   if (posError) return res.status(400).json({ error: posError.message });
 
-  // Update volume; only increment trader_count if this user hadn't traded here before
-  const marketUpdate = { volume: (market.volume || 0) + amount };
+  // Update pools, prices, volume, and trader_count in one call
+  const marketUpdate = {
+    yes_pool:    newYesPool,
+    no_pool:     newNoPool,
+    yes_price:   newYesPrice,
+    no_price:    newNoPrice,
+    volume:      (market.volume || 0) + amount
+  };
   if (isNewTrader) marketUpdate.trader_count = (market.trader_count || 0) + 1;
   const { error: mktErr } = await supabase.from('markets').update(marketUpdate).eq('id', market_id);
-  if (mktErr) console.error('market volume update error:', mktErr.message, mktErr.details);
+  if (mktErr) console.error('market pool/price update error:', mktErr.message, mktErr.details);
 
   const newBalance = communityBalance - amount;
-  res.json({ message: 'Trade placed', position, balance: newBalance });
+  res.json({
+    message:   'Trade placed',
+    position,
+    balance:   newBalance,
+    yes_price: newYesPrice,   // updated prices so frontend can refresh immediately
+    no_price:  newNoPrice
+  });
 });
 
 // GET /api/user/community-balance/:slug — returns user's balance in a specific community
@@ -958,6 +987,10 @@ async function scanAndCreateMarkets() {
         target_price,
         direction,
         expiry_date,
+        yes_price: 0.5,
+        no_price: 0.5,
+        yes_pool: MARKET_SEED,
+        no_pool: MARKET_SEED,
         resolved: false,
       };
       // inserting auto-generated market
@@ -1162,6 +1195,11 @@ const JWT_SECRET = process.env.JWT_SECRET || 'hyperflex-dev-secret-change-in-pro
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 
+// ── CPMM: initial liquidity seed per side (centpoints) ─────────────────────
+// 5000 centpoints = 50 pts per side → starting price = 0.5 (50/50)
+// Dampens single-bet manipulation while still allowing prices to move meaningfully.
+const MARKET_SEED = 5000;
+
 const PROHIBITED_PATTERNS = [
   { re: /\b(assassinat\w*|kill\s+(?:the\s+)?(?:president|prime\s+minister|senator|official|leader)|murder\s+(?:the\s+)?(?:president|pm))\b/i,
     msg: 'Markets about assassination or targeted killing of individuals are not permitted.' },
@@ -1329,6 +1367,8 @@ app.post('/api/creator/signup', async (req, res) => {
         is_public: true,
         yes_price: 0.50,
         no_price: 0.50,
+        yes_pool: MARKET_SEED,
+        no_pool: MARKET_SEED,
         resolved: false,
         created_at: new Date().toISOString()
       }));
