@@ -1139,11 +1139,14 @@ let currentUser = null;
 let pendingMarket = null;
 let pendingSide = null;
 let authTab = 'register';
+// Community balance is stored as centpoints (100,000 = 1,000 pts). Always divide by 100 for display.
+let communityBalance = null;
 
 // ── INIT ─────────────────────────────────────────────────────
 (async function init() {
   restoreSession();
   await loadCommunity();
+  if (currentUser) await fetchCommunityBalance();
 })();
 
 function restoreSession() {
@@ -1168,6 +1171,22 @@ async function loadCommunity() {
   } catch {
     showCommunityError();
   }
+}
+
+// Fetch the user's balance for this specific community (centpoints)
+async function fetchCommunityBalance() {
+  const token = localStorage.getItem('hf_token');
+  if (!token || !slug) return;
+  try {
+    const r = await fetch(`${API}/api/user/community-balance/${slug}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (r.ok) {
+      const data = await r.json();
+      communityBalance = data.balance; // centpoints
+      renderUserHeader();
+    }
+  } catch { /* silent */ }
 }
 
 function showCommunityError() {
@@ -1226,7 +1245,7 @@ function renderPage() {
 
 function renderRewards(rewards) {
   if (!rewards.length) return;
-  const userBalance = currentUser?.balance || 0;
+  const userBalance = communityBalance !== null ? Math.floor(communityBalance / 100) : (currentUser?.balance || 0);
   const section = document.getElementById('rewardsSection');
   const grid = document.getElementById('rewardsGrid');
 
@@ -1323,7 +1342,8 @@ async function loadLeaderboard() {
       const rankClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
       const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`;
       const name = escHtml(row.display_name || row.username || row.user_id?.slice(0,8) || 'Anonymous');
-      const pnl  = (row.total_pnl || 0).toFixed(0);
+      // total_pnl is in centpoints (100 = 1 pt); divide for display
+      const pnl  = Math.round((row.total_pnl || 0) / 100).toLocaleString();
       const wins = row.wins || 0;
       const streak = row.streak || 0;
       let streakBadge = '';
@@ -1366,10 +1386,12 @@ function openPredict(m, side) {
   document.getElementById('predictError').classList.remove('show');
   document.getElementById('predictError').textContent = '';
   selectSide(side);
-  document.getElementById('amountInput').value = 100;
-  const bal = currentUser?.balance || 0;
+  // Default bet = min bet (converted from centpoints to pts), fallback to 10
+  const minPts = community?.min_bet ? Math.round(community.min_bet / 100) : 10;
+  document.getElementById('amountInput').value = minPts;
+  const balPts = communityBalance !== null ? Math.floor(communityBalance / 100) : (currentUser?.balance || 0);
   document.getElementById('amountHint').textContent =
-    `Balance: ${Number(bal).toLocaleString()} pts`;
+    `Balance: ${Number(balPts).toLocaleString()} pts`;
   updatePayout();
   document.getElementById('predictOverlay').classList.add('show');
 }
@@ -1396,10 +1418,19 @@ async function submitPredict() {
   const txtEl  = document.getElementById('predictBtnText');
   errEl.classList.remove('show');
 
-  const amount = parseFloat(document.getElementById('amountInput').value);
+  // User types pts; internally we use centpoints (×100)
+  const inputPts = parseFloat(document.getElementById('amountInput').value);
+  const minPts = community?.min_bet ? Math.round(community.min_bet / 100) : 10;
+  const maxPts = community?.max_bet ? Math.round(community.max_bet / 100) : null;
+  const balPts = communityBalance !== null ? Math.floor(communityBalance / 100) : (currentUser?.balance || 0);
+
   if (!pendingSide) { showPredictError('Choose YES or NO.'); return; }
-  if (!amount || amount < 10) { showPredictError('Minimum prediction is 10 pts.'); return; }
-  if (amount > (currentUser?.balance || 0)) { showPredictError('Insufficient balance.'); return; }
+  if (!inputPts || inputPts < minPts) { showPredictError(`Minimum prediction is ${minPts.toLocaleString()} pts.`); return; }
+  if (maxPts && inputPts > maxPts) { showPredictError(`Maximum prediction is ${maxPts.toLocaleString()} pts.`); return; }
+  if (inputPts > balPts) { showPredictError('Insufficient balance.'); return; }
+
+  // Convert pts → centpoints for server
+  const amount = Math.round(inputPts * 100);
 
   btn.disabled = true;
   txtEl.innerHTML = '<span class="spinner"></span> Placing…';
@@ -1418,13 +1449,17 @@ async function submitPredict() {
     const data = await r.json();
     if (!r.ok) { showPredictError(data.error || 'Trade failed.'); return; }
 
-    // Deduct balance locally
-    currentUser.balance = (currentUser.balance || 0) - amount;
+    // Update community balance from server response
+    if (data.balance !== undefined) {
+      communityBalance = data.balance; // centpoints
+    } else if (communityBalance !== null) {
+      communityBalance -= amount;
+    }
     localStorage.setItem('hf_user', JSON.stringify(currentUser));
     renderUserHeader();
 
     closePredict();
-    showToast(`✓ Prediction placed — ${pendingSide} for ${amount.toLocaleString()} pts`, 'success');
+    showToast(`✓ Prediction placed — ${pendingSide} for ${inputPts.toLocaleString()} pts`, 'success');
 
     // Increment trader count on card locally
     const card = document.getElementById(`mkt-${pendingMarket.id}`);
@@ -1526,6 +1561,8 @@ async function submitAuth() {
     currentUser = data.user;
     localStorage.setItem('hf_token', data.token);
     localStorage.setItem('hf_user', JSON.stringify(data.user));
+    // Fetch community balance (async, updates header when done)
+    fetchCommunityBalance();
     renderUserHeader();
     closeAuth();
     showToast(`Welcome, ${currentUser.display_name}!`, 'success');
@@ -1557,7 +1594,9 @@ function renderUserHeader() {
       <button class="btn-auth primary" onclick="openAuth('register')">Join</button>`;
     return;
   }
-  const bal = Number(currentUser.balance || 0).toLocaleString();
+  // Show community balance (centpoints ÷ 100) if loaded, else global balance fallback
+  const balRaw = communityBalance !== null ? communityBalance / 100 : (currentUser.balance || 0);
+  const bal = Number(balRaw).toLocaleString();
   const pts = community?.custom_points_name || 'pts';
   hr.innerHTML = `
     <span class="balance-badge">${bal} ${pts}</span>

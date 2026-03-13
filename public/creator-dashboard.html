@@ -1940,6 +1940,36 @@ body.plan-premium .main {
           </div>
         </div>
 
+        <!-- Economy Settings -->
+        <div class="section">
+          <div class="section-header">
+            <div>
+              <div class="section-title">⚡ Points Economy</div>
+              <div class="section-subtitle">Control how points are distributed in your community</div>
+            </div>
+          </div>
+          <div class="markets-table" style="padding:28px">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+              <div class="field">
+                <label>Starting Balance (pts)</label>
+                <input type="number" id="econStartingBalance" min="100" step="100" placeholder="1000"/>
+                <div style="font-size:12px;color:var(--dim);margin-top:4px">Points new members begin with</div>
+              </div>
+              <div class="field">
+                <label>Minimum Bet (pts)</label>
+                <input type="number" id="econMinBet" min="1" step="1" placeholder="10"/>
+                <div style="font-size:12px;color:var(--dim);margin-top:4px">Smallest allowed prediction</div>
+              </div>
+              <div class="field">
+                <label>Maximum Bet (pts) <span style="color:var(--dim);font-weight:400">— leave blank for no cap</span></label>
+                <input type="number" id="econMaxBet" min="1" step="1" placeholder="No cap"/>
+                <div style="font-size:12px;color:var(--dim);margin-top:4px">Largest allowed prediction</div>
+              </div>
+            </div>
+            <button class="btn-primary" onclick="saveEconSettings()" style="margin-top:16px">Save Economy Settings</button>
+          </div>
+        </div>
+
         <!-- Rewards section -->
         <div class="section">
           <div class="section-header">
@@ -2498,6 +2528,11 @@ function renderDashboard(data) {
   document.getElementById('settingColor').value = creator.primary_color || '#c9920d';
   document.getElementById('settingColorHex').textContent = creator.primary_color || '#c9920d';
 
+  // Economy prefill (stored as centpoints, display as pts)
+  document.getElementById('econStartingBalance').value = Math.round((creator.starting_balance ?? 100000) / 100);
+  document.getElementById('econMinBet').value = Math.round((creator.min_bet ?? 1000) / 100);
+  document.getElementById('econMaxBet').value = creator.max_bet ? Math.round(creator.max_bet / 100) : '';
+
   // ── Plan state ───────────────────────────────────────────
   const plan = creator.plan || 'free';
 
@@ -2648,7 +2683,7 @@ function renderLeaderboard(leaders, containerId, limit, pointsName) {
         <div class="leader-trades">${l.trade_count || 0} trades</div>
       </div>
       ${streakBadge}
-      <div class="leader-pnl ${l.pnl >= 0 ? 'pos' : 'neg'}">${l.pnl >= 0 ? '+' : ''}${Math.abs(l.pnl || 0).toFixed(0)} pts</div>
+      <div class="leader-pnl ${l.pnl >= 0 ? 'pos' : 'neg'}">${Math.round((l.pnl || 0) / 100).toLocaleString()} ${pointsName || 'pts'}</div>
     </div>`;
   }).join('');
 }
@@ -3022,6 +3057,35 @@ async function saveSettings() {
 document.getElementById('settingColor').addEventListener('input', function() {
   document.getElementById('settingColorHex').textContent = this.value;
 });
+
+async function saveEconSettings() {
+  const startingPts = parseInt(document.getElementById('econStartingBalance').value) || 1000;
+  const minPts      = parseInt(document.getElementById('econMinBet').value)          || 10;
+  const maxPtsRaw   = document.getElementById('econMaxBet').value.trim();
+  const maxPts      = maxPtsRaw ? parseInt(maxPtsRaw) : null;
+
+  if (minPts < 1)             { showToast('Min bet must be at least 1 pt.', 'error'); return; }
+  if (startingPts < 100)      { showToast('Starting balance must be at least 100 pts.', 'error'); return; }
+  if (maxPts !== null && maxPts < minPts) { showToast('Max bet must be ≥ min bet.', 'error'); return; }
+
+  const payload = {
+    starting_balance: startingPts * 100,  // pts → centpoints
+    min_bet: minPts * 100,
+    max_bet: maxPts !== null ? maxPts * 100 : null
+  };
+  try {
+    const r = await fetch(API + '/api/creator/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify(payload)
+    });
+    const data = await r.json();
+    if (data.ok) showToast('Economy settings saved ✓', 'success');
+    else showToast(data.error || 'Failed to save.', 'error');
+  } catch {
+    showToast('Network error.', 'error');
+  }
+}
 
 // ── REWARDS ───────────────────────────────────────────────
 let creatorRewards = [];

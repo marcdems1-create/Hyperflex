@@ -233,14 +233,13 @@ app.post('/markets', async (req, res) => {
 app.post('/trade', async (req, res) => {
   const { user_id, market_id, side, amount } = req.body;
 
-  // Get user balance
+  // Validate user exists
   const { data: user, error: userError } = await supabase
     .from('users')
-    .select('balance')
+    .select('id')
     .eq('id', user_id)
     .single();
   if (userError || !user) return res.status(400).json({ error: 'User not found' });
-  if (user.balance < amount) return res.status(400).json({ error: 'Insufficient balance' });
 
   // Get market
   const { data: market, error: marketError } = await supabase
@@ -250,6 +249,34 @@ app.post('/trade', async (req, res) => {
     .single();
   if (marketError || !market) return res.status(400).json({ error: 'Market not found' });
   if (market.resolved) return res.status(400).json({ error: 'Market already resolved' });
+
+  // Resolve community slug for this market
+  const creatorSlug = await getCreatorSlugForMarket(market);
+
+  // Get creator economy settings (min/max bet)
+  let minBet = 1000, maxBet = null;
+  if (creatorSlug) {
+    const { data: econSettings } = await supabase
+      .from('creator_settings')
+      .select('min_bet, max_bet')
+      .eq('slug', creatorSlug)
+      .maybeSingle();
+    if (econSettings) {
+      minBet = econSettings.min_bet ?? 1000;
+      maxBet = econSettings.max_bet ?? null;
+    }
+  }
+
+  // Enforce bet limits
+  if (amount < minBet) return res.status(400).json({ error: `Minimum bet is ${minBet / 100} pts` });
+  if (maxBet && amount > maxBet) return res.status(400).json({ error: `Maximum bet is ${maxBet / 100} pts` });
+
+  // Get community balance (auto-creates row on first trade)
+  const communityBalance = creatorSlug
+    ? await getCommunityBalance(user_id, creatorSlug)
+    : 0;
+
+  if (communityBalance < amount) return res.status(400).json({ error: 'Insufficient balance' });
 
   const price = side === 'YES' ? market.yes_price : market.no_price;
   const potential_payout = amount / price;
@@ -262,11 +289,10 @@ app.post('/trade', async (req, res) => {
     .eq('user_id', user_id);
   const isNewTrader = (priorPositions || 0) === 0;
 
-  // Deduct balance
-  await supabase
-    .from('users')
-    .update({ balance: user.balance - amount })
-    .eq('id', user_id);
+  // Deduct from community balance
+  if (creatorSlug) {
+    await setCommunityBalance(user_id, creatorSlug, communityBalance - amount);
+  }
 
   // Record position
   const { data: position, error: posError } = await supabase
@@ -282,7 +308,46 @@ app.post('/trade', async (req, res) => {
   const { error: mktErr } = await supabase.from('markets').update(marketUpdate).eq('id', market_id);
   if (mktErr) console.error('market volume update error:', mktErr.message, mktErr.details);
 
-  res.json({ message: 'Trade placed', position });
+  const newBalance = communityBalance - amount;
+  res.json({ message: 'Trade placed', position, balance: newBalance });
+});
+
+// GET /api/user/community-balance/:slug — returns user's balance in a specific community
+// Auth: Bearer token (user JWT)
+app.get('/api/user/community-balance/:slug', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.replace('Bearer ', '').trim();
+    if (!token) return res.status(401).json({ error: 'No token' });
+
+    const { data: user, error: authErr } = await supabase
+      .from('users')
+      .select('id')
+      .eq('auth_token', token)
+      .maybeSingle();
+    if (authErr || !user) return res.status(401).json({ error: 'Invalid token' });
+
+    const { slug } = req.params;
+    const balance = await getCommunityBalance(user.id, slug);
+
+    // Also return economy settings for this community so the frontend can enforce min/max
+    const { data: settings } = await supabase
+      .from('creator_settings')
+      .select('min_bet, max_bet, starting_balance, custom_points_name')
+      .eq('slug', slug)
+      .maybeSingle();
+
+    res.json({
+      balance,
+      min_bet: settings?.min_bet ?? 1000,
+      max_bet: settings?.max_bet ?? null,
+      starting_balance: settings?.starting_balance ?? 100000,
+      custom_points_name: settings?.custom_points_name || 'Flex Points'
+    });
+  } catch (err) {
+    console.error('community-balance error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Get user positions
@@ -482,6 +547,63 @@ async function fetchCurrentPrice(commodity) {
   }
 }
 
+// ─── Community balance helpers ───────────────────────────────
+// Gets a user's balance in a specific community. Auto-creates the row
+// on first access using the creator's configured starting_balance.
+async function getCommunityBalance(userId, creatorSlug) {
+  // Try to get existing row
+  const { data: existing } = await supabase
+    .from('community_balances')
+    .select('balance')
+    .eq('user_id', userId)
+    .eq('creator_slug', creatorSlug)
+    .maybeSingle();
+
+  if (existing) return existing.balance;
+
+  // First time in this community — look up creator's starting balance
+  const { data: settings } = await supabase
+    .from('creator_settings')
+    .select('starting_balance')
+    .eq('slug', creatorSlug)
+    .maybeSingle();
+
+  const startingBalance = settings?.starting_balance ?? 100000; // default 1,000 pts
+
+  // Create the row
+  const { data: created } = await supabase
+    .from('community_balances')
+    .insert([{ user_id: userId, creator_slug: creatorSlug, balance: startingBalance }])
+    .select('balance')
+    .single();
+
+  return created?.balance ?? startingBalance;
+}
+
+async function setCommunityBalance(userId, creatorSlug, newBalance) {
+  await supabase
+    .from('community_balances')
+    .upsert(
+      { user_id: userId, creator_slug: creatorSlug, balance: newBalance, updated_at: new Date().toISOString() },
+      { onConflict: 'user_id,creator_slug' }
+    );
+}
+
+// Resolve the creator slug for a market (prefer tenant_slug, fall back to creator_id lookup)
+async function getCreatorSlugForMarket(market) {
+  if (market.tenant_slug) return market.tenant_slug;
+  if (market.creator_id) {
+    const { data: s } = await supabase
+      .from('creator_settings')
+      .select('slug')
+      .eq('creator_id', market.creator_id)
+      .maybeSingle();
+    return s?.slug || null;
+  }
+  return null;
+}
+// ────────────────────────────────────────────────────────────
+
 // ─── Streak helpers ─────────────────────────────────────────
 // Returns the number of consecutive wins in a user's most-recent settled positions,
 // excluding the market currently being settled so the multiplier reflects prior streak.
@@ -584,19 +706,20 @@ async function settleMarkets() {
         .eq('id', position.id);
 
       if (won) {
-        const { data: user } = await supabase
-          .from('users')
-          .select('balance')
-          .eq('id', position.user_id)
-          .single();
         // Apply streak multiplier (based on streak BEFORE this settlement)
         const streak = await getUserStreak(position.user_id, market.id);
         const multiplier = getStreakMultiplier(streak);
         const payout = Math.round(position.potential_payout * multiplier);
-        await supabase
-          .from('users')
-          .update({ balance: user.balance + payout })
-          .eq('id', position.user_id);
+        // Credit community balance (per-community economy)
+        const creatorSlug = await getCreatorSlugForMarket(market);
+        if (creatorSlug) {
+          const cb = await getCommunityBalance(position.user_id, creatorSlug);
+          await setCommunityBalance(position.user_id, creatorSlug, cb + payout);
+        } else {
+          // Fallback: legacy global balance
+          const { data: user } = await supabase.from('users').select('balance').eq('id', position.user_id).single();
+          if (user) await supabase.from('users').update({ balance: user.balance + payout }).eq('id', position.user_id);
+        }
         if (multiplier > 1) {
           console.log(`[settle] streak bonus x${multiplier} for user ${position.user_id} (streak=${streak})`);
         }
@@ -751,23 +874,22 @@ app.post('/api/creator/resolve/:marketId', requireAuth, async (req, res) => {
       .eq('id', position.id);
 
     if (won) {
-      const { data: user } = await supabase
-        .from('users')
-        .select('balance')
-        .eq('id', position.user_id)
-        .single();
-      if (user) {
-        // Apply streak multiplier based on streak BEFORE this settlement
-        const streak = await getUserStreak(position.user_id, marketId);
-        const multiplier = getStreakMultiplier(streak);
-        const payout = Math.round(position.potential_payout * multiplier);
-        await supabase
-          .from('users')
-          .update({ balance: user.balance + payout })
-          .eq('id', position.user_id);
-        if (multiplier > 1) {
-          console.log(`[resolve] streak bonus x${multiplier} for user ${position.user_id} (streak=${streak})`);
-        }
+      // Apply streak multiplier based on streak BEFORE this settlement
+      const streak = await getUserStreak(position.user_id, marketId);
+      const multiplier = getStreakMultiplier(streak);
+      const payout = Math.round(position.potential_payout * multiplier);
+      // Credit community balance (per-community economy)
+      const creatorSlug = await getCreatorSlugForMarket(market);
+      if (creatorSlug) {
+        const cb = await getCommunityBalance(position.user_id, creatorSlug);
+        await setCommunityBalance(position.user_id, creatorSlug, cb + payout);
+      } else {
+        // Fallback: legacy global balance
+        const { data: user } = await supabase.from('users').select('balance').eq('id', position.user_id).single();
+        if (user) await supabase.from('users').update({ balance: user.balance + payout }).eq('id', position.user_id);
+      }
+      if (multiplier > 1) {
+        console.log(`[resolve] streak bonus x${multiplier} for user ${position.user_id} (streak=${streak})`);
       }
     }
   }
@@ -1302,15 +1424,29 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
           .select('id, display_name, balance')
           .in('id', userIds);
 
+        // Fetch community balances for this creator's community
+        const { data: communityBalRows } = await supabase
+          .from('community_balances')
+          .select('user_id, balance')
+          .eq('creator_slug', settings.slug)
+          .in('user_id', userIds);
+
+        const communityBalMap = {};
+        (communityBalRows || []).forEach(r => { communityBalMap[r.user_id] = r.balance; });
+
         leaderboard = (traders || [])
-          .map(u => ({
-            user_id: u.id,
-            display_name: u.display_name || 'Anonymous',
-            balance: u.balance || 0,
-            pnl: u.balance || 0,   // frontend uses pnl field for display
-            trade_count: tradeCountMap[u.id] || 0,
-            streak: streakMap[u.id] || 0
-          }))
+          .map(u => {
+            // Prefer community balance; fall back to starting_balance if not yet set
+            const commBal = communityBalMap[u.id] ?? (settings.starting_balance ?? 100000);
+            return {
+              user_id: u.id,
+              display_name: u.display_name || 'Anonymous',
+              balance: commBal,
+              pnl: commBal,   // frontend uses pnl field for display
+              trade_count: tradeCountMap[u.id] || 0,
+              streak: streakMap[u.id] || 0
+            };
+          })
           .sort((a, b) => b.balance - a.balance)
           .slice(0, 20);
 
@@ -1354,17 +1490,15 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
           }
         }
 
-        // ── Inner Circle (Premium): members with 2,000+ Flex Points (balance ≥ 200,000) ──
+        // ── Inner Circle (Premium): members with 2,000+ Flex Points (community balance ≥ 200,000 centpoints) ──
         if (isPremium) {
-          const INNER_CIRCLE_THRESHOLD = 200000; // 2,000 Flex Points
+          const INNER_CIRCLE_THRESHOLD = 200000; // 2,000 pts in centpoints
           inner_circle = (traders || [])
-            .filter(u => (u.balance || 0) >= INNER_CIRCLE_THRESHOLD)
-            .map(u => ({
-              user_id: u.id,
-              display_name: u.display_name || 'Anonymous',
-              balance: u.balance || 0,
-              points: Math.floor((u.balance || 0) / 100)
-            }))
+            .map(u => {
+              const commBal = communityBalMap[u.id] ?? (settings.starting_balance ?? 100000);
+              return { user_id: u.id, display_name: u.display_name || 'Anonymous', balance: commBal, points: Math.floor(commBal / 100) };
+            })
+            .filter(u => u.balance >= INNER_CIRCLE_THRESHOLD)
             .sort((a, b) => b.balance - a.balance);
         }
       }
@@ -1379,7 +1513,11 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
         custom_points_name: settings.custom_points_name,
         primary_color: settings.primary_color,
         plan: settings.plan || 'free',
-        community_description: settings.community_description
+        community_description: settings.community_description,
+        // Economy fields
+        starting_balance: settings.starting_balance ?? 100000,
+        min_bet: settings.min_bet ?? 1000,
+        max_bet: settings.max_bet ?? null
       },
       stats: {
         total_traders: totalTraders,
@@ -1415,16 +1553,32 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
 // ════════════════════════════════════════════════════════════
 app.put('/api/creator/settings', requireCreator, async (req, res) => {
   try {
-    const { display_name, custom_points_name, primary_color } = req.body;
+    const {
+      display_name, custom_points_name, primary_color,
+      // Economy fields
+      starting_balance, min_bet, max_bet,
+      refill_enabled, refill_amount, refill_cadence, activity_gate
+    } = req.body;
+
+    const updates = {
+      display_name,
+      custom_points_name,
+      primary_color,
+      updated_at: new Date().toISOString()
+    };
+
+    // Economy fields — only update if explicitly provided
+    if (starting_balance !== undefined) updates.starting_balance = Math.max(1000, parseInt(starting_balance) || 100000);
+    if (min_bet !== undefined) updates.min_bet = Math.max(100, parseInt(min_bet) || 1000);
+    if (max_bet !== undefined) updates.max_bet = max_bet === null ? null : Math.max(updates.min_bet || 100, parseInt(max_bet));
+    if (refill_enabled !== undefined) updates.refill_enabled = Boolean(refill_enabled);
+    if (refill_amount !== undefined) updates.refill_amount = Math.max(100, parseInt(refill_amount) || 10000);
+    if (refill_cadence !== undefined && ['daily','weekly','monthly'].includes(refill_cadence)) updates.refill_cadence = refill_cadence;
+    if (activity_gate !== undefined) updates.activity_gate = Math.max(0, parseInt(activity_gate) || 5);
 
     const { error } = await supabase
       .from('creator_settings')
-      .update({
-        display_name,
-        custom_points_name,
-        primary_color,
-        updated_at: new Date().toISOString()
-      })
+      .update(updates)
       .eq('creator_id', req.creator.id);
 
     if (error) throw error;
@@ -2524,7 +2678,11 @@ app.get('/api/community/:slug', async (req, res) => {
         slug: settings.slug,
         custom_points_name: settings.custom_points_name,
         primary_color: settings.primary_color,
-        plan: settings.plan || 'free'
+        plan: settings.plan || 'free',
+        // Economy settings (safe to expose — used by frontend for UI enforcement)
+        starting_balance: settings.starting_balance ?? 100000,
+        min_bet: settings.min_bet ?? 1000,
+        max_bet: settings.max_bet ?? null
       },
       markets: markets || [],
       rewards: await supabase
