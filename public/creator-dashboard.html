@@ -4400,8 +4400,10 @@ async function handleAssetUpload(type, input) {
     if (!res.ok) throw new Error(json.error || 'Upload failed');
 
     // Populate the URL field and refresh preview
+    // Append cache-busting timestamp so re-uploads of the same filename
+    // aren't served from browser cache
     const fieldId = type === 'logo' ? 'brandingLogo' : 'brandingBanner';
-    document.getElementById(fieldId).value = json.url;
+    document.getElementById(fieldId).value = json.url + '?t=' + Date.now();
     updateBrandingPreview();
     btn.textContent = '✓ Done';
     setTimeout(() => { btn.textContent = originalText; btn.disabled = false; }, 2000);
