@@ -3098,11 +3098,23 @@ body.plan-premium .main {
         </div>
       </div>
 
+      <!-- Twitch URL field (shown in Twitch mode, above paste) -->
+      <div id="ytTwitchUrlField" style="display:none">
+        <div class="field">
+          <label>Twitch VOD URL</label>
+          <input type="url" id="twitchUrl" placeholder="https://twitch.tv/videos/12345678"/>
+          <div style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:5px">
+            Auto-scans video metadata + top viewer clips for market ideas.
+          </div>
+        </div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-align:center;margin:10px 0 4px;letter-spacing:0.1em;opacity:0.6">— OR PASTE CHAT BELOW —</div>
+      </div>
+
       <!-- Paste field (Twitch + Paste modes) -->
       <div id="ytPasteField" style="display:none">
         <div class="field">
           <label id="ytPasteLabel">Paste content here</label>
-          <textarea id="ytPasteText" rows="7" placeholder="Paste Twitch chat, Reddit comments, Discord messages, article text… the AI will extract what your community is speculating about." style="resize:vertical;font-size:12px;line-height:1.5"></textarea>
+          <textarea id="ytPasteText" rows="6" placeholder="Paste Twitch chat, Reddit comments, Discord messages, article text… the AI will extract what your community is speculating about." style="resize:vertical;font-size:12px;line-height:1.5"></textarea>
         </div>
         <!-- Source label for context (hidden input — set programmatically) -->
         <input type="hidden" id="ytPasteSource" value="Twitch chat"/>
@@ -4456,21 +4468,26 @@ function setYtScanType(type) {
   const pasteTextarea = document.getElementById('ytPasteText');
   const pasteSource = document.getElementById('ytPasteSource');
 
+  const twitchUrlField = document.getElementById('ytTwitchUrlField');
+
   if (type === 'youtube') {
     if (urlField) urlField.style.display = '';
+    if (twitchUrlField) twitchUrlField.style.display = 'none';
     if (pasteField) pasteField.style.display = 'none';
+  } else if (type === 'twitch') {
+    if (urlField) urlField.style.display = 'none';
+    if (twitchUrlField) twitchUrlField.style.display = '';
+    if (pasteField) pasteField.style.display = '';
+    if (pasteLabel) pasteLabel.textContent = 'Paste Twitch chat here (optional)';
+    if (pasteTextarea) pasteTextarea.placeholder = 'Paste your Twitch chat log here — or leave empty if you provided a VOD URL above.';
+    if (pasteSource) pasteSource.value = 'Twitch chat';
   } else {
     if (urlField) urlField.style.display = 'none';
+    if (twitchUrlField) twitchUrlField.style.display = 'none';
     if (pasteField) pasteField.style.display = '';
-    if (type === 'twitch') {
-      if (pasteLabel) pasteLabel.textContent = 'Paste Twitch chat here';
-      if (pasteTextarea) pasteTextarea.placeholder = 'Paste your Twitch chat log here — the AI will pull out what your viewers are predicting and speculating about.';
-      if (pasteSource) pasteSource.value = 'Twitch chat';
-    } else {
-      if (pasteLabel) pasteLabel.textContent = 'Paste content here';
-      if (pasteTextarea) pasteTextarea.placeholder = 'Paste Reddit comments, Discord messages, article text, or any community content — the AI extracts what people are already predicting.';
-      if (pasteSource) pasteSource.value = 'Community content';
-    }
+    if (pasteLabel) pasteLabel.textContent = 'Paste content here';
+    if (pasteTextarea) pasteTextarea.placeholder = 'Paste Reddit comments, Discord messages, article text, or any community content — the AI extracts what people are already predicting.';
+    if (pasteSource) pasteSource.value = 'Community content';
   }
 
   const cfg = YT_SCAN_LABELS[type];
@@ -4481,6 +4498,7 @@ function setYtScanType(type) {
 function openYoutubeModal() {
   document.getElementById('youtubeUrl').value = '';
   document.getElementById('ytPasteText').value = '';
+  const tu = document.getElementById('twitchUrl'); if (tu) tu.value = '';
   document.getElementById('ytScanResult').style.display = 'none';
   document.getElementById('ytError').style.display = 'none';
   document.getElementById('ytMarketList').innerHTML = '';
@@ -4502,19 +4520,92 @@ async function runYoutubeScan() {
   const cfg = YT_SCAN_LABELS[ytScanType];
   const btn = document.getElementById('ytScanBtn');
 
-  // ── Paste / Twitch mode ──────────────────────────────────
-  if (ytScanType === 'paste' || ytScanType === 'twitch') {
+  // ── Twitch mode — URL takes priority, falls back to paste ─
+  if (ytScanType === 'twitch') {
+    const twitchUrl = document.getElementById('twitchUrl')?.value.trim();
+    const text = document.getElementById('ytPasteText').value.trim();
+
+    // URL path — auto-fetch via Twitch API
+    if (twitchUrl) {
+      btn.disabled = true;
+      btn.innerHTML = `<span class="spinner"></span> Scanning VOD…`;
+      document.getElementById('ytError').style.display = 'none';
+      document.getElementById('ytScanResult').style.display = 'none';
+      try {
+        const r = await fetch(API + '/api/creator/scan-twitch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+          body: JSON.stringify({ url: twitchUrl })
+        });
+        const data = await r.json();
+        if (!r.ok) {
+          document.getElementById('ytError').textContent = data.error || 'Scan failed.';
+          document.getElementById('ytError').style.display = 'block';
+          return;
+        }
+        ytSuggestedMarkets = data.markets || [];
+        const meta = [
+          `🟣 <strong style="color:var(--text)">${data.video_title || 'Twitch VOD'}</strong>`,
+          data.game_name ? `Category: ${data.game_name}` : null,
+          data.clip_count ? `${data.clip_count} clips analyzed` : null,
+          `${ytSuggestedMarkets.length} markets generated`
+        ].filter(Boolean).join('<br>');
+        renderYtResults(meta, cfg, data.markets || []);
+      } catch (e) {
+        document.getElementById('ytError').textContent = e.message || 'Scan failed.';
+        document.getElementById('ytError').style.display = 'block';
+      } finally {
+        const b = document.getElementById('ytScanBtn');
+        if (b) { b.disabled = false; b.textContent = cfg.btn; }
+      }
+      return;
+    }
+
+    // Paste fallback
+    if (!text || text.length < 50) {
+      showToast('Enter a Twitch VOD URL or paste chat content first.', 'error');
+      return;
+    }
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner"></span> Analyzing chat…`;
+    document.getElementById('ytError').style.display = 'none';
+    document.getElementById('ytScanResult').style.display = 'none';
+    try {
+      const r = await fetch(API + '/api/creator/scan-content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ text, source_label: 'Twitch chat' })
+      });
+      const data = await r.json();
+      if (!r.ok) {
+        document.getElementById('ytError').textContent = data.error || 'Scan failed.';
+        document.getElementById('ytError').style.display = 'block';
+        return;
+      }
+      ytSuggestedMarkets = data.markets || [];
+      renderYtResults(`🟣 <strong style="color:var(--text)">Twitch chat</strong><br>${data.word_count || 0} words analyzed · ${ytSuggestedMarkets.length} markets generated`, cfg, data.markets || []);
+    } catch (e) {
+      document.getElementById('ytError').textContent = e.message || 'Scan failed.';
+      document.getElementById('ytError').style.display = 'block';
+    } finally {
+      const b = document.getElementById('ytScanBtn');
+      if (b) { b.disabled = false; b.textContent = cfg.btn; }
+    }
+    return;
+  }
+
+  // ── Paste mode ───────────────────────────────────────────
+  if (ytScanType === 'paste') {
     const text = document.getElementById('ytPasteText').value.trim();
     const sourceLabel = document.getElementById('ytPasteSource').value;
     if (!text || text.length < 50) {
-      showToast(ytScanType === 'twitch' ? 'Paste your Twitch chat first.' : 'Paste some content first (at least a few lines).', 'error');
+      showToast('Paste some content first (at least a few lines).', 'error');
       return;
     }
     btn.disabled = true;
     btn.innerHTML = `<span class="spinner"></span> ${cfg.scanning}`;
     document.getElementById('ytError').style.display = 'none';
     document.getElementById('ytScanResult').style.display = 'none';
-
     try {
       const r = await fetch(API + '/api/creator/scan-content', {
         method: 'POST',
@@ -4528,8 +4619,7 @@ async function runYoutubeScan() {
         return;
       }
       ytSuggestedMarkets = data.markets || [];
-      const wordCount = data.word_count || 0;
-      renderYtResults(`${cfg.icon} <strong style="color:var(--text)">${sourceLabel}</strong><br>${wordCount} words analyzed · ${ytSuggestedMarkets.length} markets generated`, cfg, data.markets || []);
+      renderYtResults(`${cfg.icon} <strong style="color:var(--text)">${sourceLabel}</strong><br>${data.word_count || 0} words analyzed · ${ytSuggestedMarkets.length} markets generated`, cfg, data.markets || []);
     } catch (e) {
       document.getElementById('ytError').textContent = e.message || 'Scan failed.';
       document.getElementById('ytError').style.display = 'block';

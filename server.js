@@ -3127,6 +3127,142 @@ Return ONLY valid JSON:
 });
 
 // ════════════════════════════════════════════════════════════
+// TWITCH VOD SCANNER
+// POST /api/creator/scan-twitch
+// Body: { url }
+// Returns: { markets, video_title, game_name, clip_count, source_summary }
+// Requires: TWITCH_CLIENT_ID + TWITCH_CLIENT_SECRET env vars
+// ════════════════════════════════════════════════════════════
+
+async function getTwitchAccessToken() {
+  const res = await fetch(
+    `https://id.twitch.tv/oauth2/token?client_id=${process.env.TWITCH_CLIENT_ID}&client_secret=${process.env.TWITCH_CLIENT_SECRET}&grant_type=client_credentials`,
+    { method: 'POST' }
+  );
+  if (!res.ok) throw new Error('Failed to get Twitch access token — check TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET');
+  const data = await res.json();
+  return data.access_token;
+}
+
+function extractTwitchVideoId(url) {
+  const match = url.match(/twitch\.tv\/videos\/(\d+)/i);
+  return match ? match[1] : null;
+}
+
+async function fetchTwitchVideoData(videoId, accessToken) {
+  const headers = {
+    'Client-ID': process.env.TWITCH_CLIENT_ID,
+    'Authorization': `Bearer ${accessToken}`
+  };
+
+  const [videoRes, clipsRes] = await Promise.all([
+    fetch(`https://api.twitch.tv/helix/videos?id=${videoId}`, { headers }),
+    fetch(`https://api.twitch.tv/helix/clips?video_id=${videoId}&first=20`, { headers })
+  ]);
+
+  const videoData = await videoRes.json();
+  const video = videoData.data?.[0];
+  if (!video) throw new Error('Video not found. Make sure this is a Twitch VOD URL (twitch.tv/videos/...)');
+
+  const clipsData = await clipsRes.json();
+  const clips = clipsData.data || [];
+
+  let gameName = null;
+  if (video.game_id) {
+    const gameRes = await fetch(`https://api.twitch.tv/helix/games?id=${video.game_id}`, { headers });
+    const gameData = await gameRes.json();
+    gameName = gameData.data?.[0]?.name || null;
+  }
+
+  return { video, clips, gameName };
+}
+
+app.post('/api/creator/scan-twitch', requireCreator, async (req, res) => {
+  try {
+    const { url } = req.body;
+    if (!url) return res.status(400).json({ error: 'Twitch VOD URL is required.' });
+    if (!ANTHROPIC_API_KEY) return res.status(503).json({ error: 'Anthropic API key not configured.' });
+    if (!process.env.TWITCH_CLIENT_ID || !process.env.TWITCH_CLIENT_SECRET) {
+      return res.status(503).json({ error: 'Twitch API not configured. Add TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET to your Railway environment variables.' });
+    }
+
+    const videoId = extractTwitchVideoId(url);
+    if (!videoId) return res.status(400).json({ error: 'Could not extract a Twitch video ID. Paste a VOD URL — e.g. twitch.tv/videos/12345678' });
+
+    const accessToken = await getTwitchAccessToken();
+    const { video, clips, gameName } = await fetchTwitchVideoData(videoId, accessToken);
+
+    const now = new Date();
+    const in30 = new Date(now); in30.setDate(now.getDate() + 30);
+    const in60 = new Date(now); in60.setDate(now.getDate() + 60);
+    const in90 = new Date(now); in90.setDate(now.getDate() + 90);
+    const fmt = d => d.toISOString().split('T')[0];
+
+    const clipsBlock = clips.length > 0
+      ? clips.map((c, i) => `${i + 1}. "${c.title}" — ${c.view_count.toLocaleString()} views`).join('\n')
+      : 'No clips available for this VOD.';
+
+    const durationMins = video.duration
+      ? Math.round(video.duration.replace(/[^\d]/g, '') / 60)
+      : null;
+
+    const prompt = `You are analyzing a Twitch VOD to generate prediction markets for a fan community.
+
+STREAM INFO:
+Title: "${video.title}"
+${gameName ? `Game/Category: ${gameName}` : ''}
+${durationMins ? `Duration: ~${durationMins} minutes` : ''}
+${video.view_count ? `Views: ${parseInt(video.view_count).toLocaleString()}` : ''}
+${video.description ? `Description: ${video.description}` : ''}
+
+TOP CLIPS FROM THIS STREAM (viewer-created highlights — reveals what the community cared about most):
+${clipsBlock}
+
+Generate 5-8 prediction markets based on:
+- What the stream title and category suggest about upcoming events
+- What clip titles reveal about the storylines or moments viewers found noteworthy
+- Recurring themes, ongoing storylines, or rivalries suggested by the content
+- Upcoming events related to this game/streamer/category
+
+Rules:
+- Every question must be clearly YES or NO and objectively resolvable
+- Resolution dates: near=${fmt(in30)}, mid=${fmt(in60)}, far=${fmt(in90)}
+- Focus on what THIS specific community would want to predict on
+- No politics or harmful content
+
+Return ONLY valid JSON:
+{
+  "markets": [
+    { "question": "Will ...?", "category": "sports|esports|entertainment|finance|crypto|politics|news|other", "resolution_date": "YYYY-MM-DD" }
+  ]
+}`;
+
+    const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1200, messages: [{ role: 'user', content: prompt }] })
+    });
+    const aiData = await aiRes.json();
+    const rawText = aiData.content?.[0]?.text || '';
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('AI returned invalid format');
+    const markets = (JSON.parse(jsonMatch[0]).markets || []).map(m => ({ ...m, source: 'twitch' }));
+
+    return res.json({
+      markets,
+      video_title: video.title,
+      game_name: gameName,
+      clip_count: clips.length,
+      source_summary: `${clips.length} clips · ${gameName || 'Twitch VOD'}`
+    });
+
+  } catch (err) {
+    console.error('scan-twitch error:', err.message);
+    res.status(500).json({ error: err.message || 'Failed to scan Twitch VOD' });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
 // SCAN CONTENT — paste text from any platform (Twitch, Reddit, Discord, etc.)
 // POST /api/creator/scan-content
 // Body: { text: "...", source_label: "Twitch chat" | "Reddit thread" | ... }
