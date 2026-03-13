@@ -3785,6 +3785,20 @@ body.nav-open .sidebar-backdrop {
     </div>
     <div class="modal-body">
       <input type="hidden" id="rewardEditId"/>
+
+      <!-- Preset suggestions — hidden when editing existing reward -->
+      <div id="rewardPresets" style="margin-bottom:16px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);margin-bottom:8px;font-family:var(--mono)">Quick Presets — click to fill</div>
+        <div style="display:flex;flex-wrap:wrap;gap:7px">
+          <button type="button" class="btn-secondary" style="font-size:11px;padding:5px 10px" onclick="applyRewardPreset(250,'🏷️ Shoutout','I\'ll give you a shoutout in my next post or stream')">250 — Shoutout</button>
+          <button type="button" class="btn-secondary" style="font-size:11px;padding:5px 10px" onclick="applyRewardPreset(500,'🎟️ Early Access','Get the link 24 hours before the public release')">500 — Early Access</button>
+          <button type="button" class="btn-secondary" style="font-size:11px;padding:5px 10px" onclick="applyRewardPreset(1000,'💬 Discord Role','Earn the exclusive predictor role in our Discord server')">1000 — Discord Role</button>
+          <button type="button" class="btn-secondary" style="font-size:11px;padding:5px 10px" onclick="applyRewardPreset(2500,'🎁 Merch Discount','20% off your next order in the store — DM me for the code')">2500 — Merch Discount</button>
+          <button type="button" class="btn-secondary" style="font-size:11px;padding:5px 10px" onclick="applyRewardPreset(5000,'📞 1-on-1 Call','15-minute call with me — ask me anything')">5000 — 1-on-1 Call</button>
+          <button type="button" class="btn-secondary" style="font-size:11px;padding:5px 10px" onclick="applyRewardPreset(10000,'🏆 Legend Status','Permanent legend badge and lifetime community recognition')">10K — Legend</button>
+        </div>
+      </div>
+
       <div class="field">
         <label>Point Threshold</label>
         <input type="number" id="rewardThreshold" placeholder="e.g. 500" min="1"/>
@@ -5737,10 +5751,19 @@ function renderRewardsList(rewards) {
   `).join('');
 }
 
+function applyRewardPreset(threshold, title, description) {
+  document.getElementById('rewardThreshold').value = threshold;
+  document.getElementById('rewardTitle').value = title;
+  document.getElementById('rewardDescription').value = description;
+}
+
 function openRewardModal(rewardId) {
   const r = rewardId ? creatorRewards.find(x => x.id === rewardId) : null;
   document.getElementById('rewardEditId').value = r ? r.id : '';
   document.getElementById('rewardModalTitle').textContent = r ? 'Edit Reward' : 'Add Reward';
+  // Show presets only when creating new
+  const presetsEl = document.getElementById('rewardPresets');
+  if (presetsEl) presetsEl.style.display = r ? 'none' : 'block';
   document.getElementById('rewardThreshold').value = r ? r.threshold : '';
   document.getElementById('rewardTitle').value = r ? r.title : '';
   document.getElementById('rewardDescription').value = r ? (r.description || '') : '';

@@ -754,6 +754,9 @@ body::before {
 .reward-progress { margin-top: 12px; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
 .reward-progress-fill { height: 100%; background: var(--gold); border-radius: 2px; transition: width 0.4s ease; }
 .reward-tier.locked .reward-progress-fill { background: rgba(122,120,112,0.4); }
+.reward-claim-btn { margin-top: 12px; width: 100%; padding: 9px 0; background: var(--gold); color: var(--ink); border: none; border-radius: 7px; font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.04em; cursor: pointer; transition: opacity .15s; }
+.reward-claim-btn:hover { opacity: 0.85; }
+.reward-claim-btn:disabled { opacity: 0.5; cursor: default; }
 
 /* ── REFERRAL ── */
 .referral-card {
@@ -1896,8 +1899,11 @@ function renderRewards(rewards) {
   const userBal = communityBalance !== null ? Math.floor(communityBalance / 100) : (currentUser?.balance || 0);
   const grid = document.getElementById('rewardsGrid');
   grid.innerHTML = rewards.map(r => {
-    const unlocked = userBal >= r.threshold;
+    const unlocked = currentUser && userBal >= r.threshold;
     const pct = Math.min(100, Math.round((userBal / r.threshold) * 100));
+    const claimBtn = unlocked
+      ? `<button class="reward-claim-btn" onclick="claimReward(this, '${escHtml(r.title)}')">🎁 Claim this reward</button>`
+      : '';
     return `
       <div class="reward-tier ${unlocked ? 'unlocked' : 'locked'}">
         <div class="reward-tier-badge ${unlocked ? 'unlocked' : 'locked'}">${unlocked ? '✓ Unlocked' : '🔒 Locked'}</div>
@@ -1905,9 +1911,23 @@ function renderRewards(rewards) {
         <div class="reward-tier-title">${r.title}</div>
         ${r.description ? `<div class="reward-tier-desc">${r.description}</div>` : ''}
         <div class="reward-progress"><div class="reward-progress-fill" style="width:${pct}%"></div></div>
+        ${claimBtn}
       </div>`;
   }).join('');
   document.getElementById('rewardsSection').style.display = 'block';
+}
+
+function claimReward(btn, title) {
+  if (!currentUser) { openAuth('login'); return; }
+  btn.disabled = true;
+  btn.textContent = '✓ Claimed!';
+  // Copy a claim message to clipboard for the member to send the creator
+  const msg = `Hi! I've reached the "${title}" reward on your HYPERFLEX community (${window.location.href}). My username is ${currentUser.display_name || currentUser.email}. Please help me claim it! 🎁`;
+  navigator.clipboard.writeText(msg).then(() => {
+    showToast('🎁 Claim message copied — send it to the creator to collect your reward!', 'success');
+  }).catch(() => {
+    showToast('🎁 You\'ve unlocked "' + title + '"! Contact the creator to claim it.', 'success');
+  });
 }
 
 function renderRewardHint() {
