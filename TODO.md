@@ -7,9 +7,9 @@
 
 ## 🔴 Immediate
 
+- [ ] **⚠️ SUPABASE MIGRATION** — Run `supabase_migration_community_economy.sql` in Supabase Dashboard → SQL Editor BEFORE deploying `c55f856`
 - [ ] **Stripe env vars** — Marc needs to add to Railway: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRO_PRICE_ID`, `STRIPE_PLATINUM_PRICE_ID`
 - [ ] **Admin env var** — Marc needs to add `ADMIN_SECRET` to Railway
-- [ ] **package-lock.json** — needs `npm install` run locally to add stripe, then commit+push (Railway deploy failing without it)
 
 ---
 
@@ -18,6 +18,8 @@
 - [ ] **Landing page video** — Video section built, just needs real YouTube VIDEO_ID inserted in `public/index.html`
 - [ ] **Custom domain** — Premium tier promises it, not implemented in server
 - [ ] **AI scanner improvements** — auto-scan creator's YouTube channel on schedule
+- [ ] **Economy Phase 2**: Activity-gated weekly refills, user referral system (100 pts/referral, 50 welcome bonus, capped 5/week, creator-configurable), dynamic odds (CPMM)
+- [ ] **FAQ section** — explain how Flex Points work (pending Economy Phase 2 finalization)
 
 ---
 
@@ -52,3 +54,6 @@
 - [x] Landing page rewrite — creator B2B SaaS
 - [x] Pricing fix — removed "Built with HYPERFLEX" from Pro
 - [x] CLAUDE.md + TODO.md — persistent session memory
+- [x] Flex Points gamification — streak multipliers (3→1.5×, 5+→2×), streak badges, Power Predictor, Inner Circle callouts (`43c70fd`, `ca699e2`)
+- [x] Scanner redesign — YouTube/Twitch/Paste modes, removed "Claude" branding (`b8121aa`)
+- [x] Per-community points economy — community_balances table, min/max bet, economy settings UI, centpoints throughout (`c55f856`)

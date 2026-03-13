@@ -35,7 +35,7 @@
 
 ## Current State (last updated March 12, 2026)
 
-- All features live on Railway. Latest commit: `43c70fd`
+- All features live on Railway. Latest commit: `c55f856`
 - **Stripe payments live** — Pro ($29/mo) + Premium ($99/mo) checkout + billing portal
   - Railway env vars needed: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRO_PRICE_ID`, `STRIPE_PLATINUM_PRICE_ID`
   - Webhook endpoint registered at: `https://hyperflex.network/stripe/webhook`
@@ -46,7 +46,6 @@
 - **Premium rebrand**: "Platinum" renamed to "Premium" in all UI. DB value stays `'platinum'` — do NOT change DB value.
 - **Watermark**: shown on Free + Pro, hidden on Premium only
 - **Video section**: added to landing page — replace `VIDEO_ID` in `public/index.html` with real YouTube video ID when ready
-- **Suggest questions fix**: was using wrong localStorage key (`creator_token` → `hf_token`), now fixed
 - **creator_settings** is the canonical creator table (not `communities`)
 - Stripe webhook updates `creator_settings.plan` on checkout + cancellation
 - **Flex Points Gamification** (commit `43c70fd`):
@@ -54,6 +53,18 @@
   - Streak badges on leaderboards: 🔥 (3+), ⚡ Streak Master (7+)
   - Weekly Power Predictor panel on creator dashboard (Pro/Premium gated)
   - Inner Circle panel on creator dashboard (Premium gated) — members with 2,000+ points
+- **Per-Community Points Economy** (commit `c55f856`) — ⚠️ REQUIRES Supabase migration first:
+  - `community_balances` table: per-user per-creator balance (centpoints: 100,000 = 1,000 pts)
+  - `creator_settings` new columns: `starting_balance`, `min_bet`, `max_bet`, `refill_enabled`, `refill_amount`, `refill_cadence`, `activity_gate`
+  - Balance helpers: `getCommunityBalance(userId, slug)`, `setCommunityBalance()`, `getCreatorSlugForMarket()`
+  - Settlement (cron + manual) credits `community_balances`, not `users.balance`
+  - `GET /api/user/community-balance/:slug` — auth'd endpoint for member balance
+  - `GET /api/community/:slug` — now includes `starting_balance`, `min_bet`, `max_bet`
+  - `PUT /api/creator/settings` — accepts all economy fields
+  - Economy Settings panel on creator dashboard (Settings tab)
+  - community.html: shows community balance, enforces min/max bet in UI
+  - **CENTPOINTS**: all balances/bets stored as 100× pts. Always divide by 100 for display.
+  - **Migration file**: `supabase_migration_community_economy.sql` — run in Supabase SQL editor
 
 ## To deploy: `git push origin main` (Claude cannot push — no internet from VM)
 
@@ -73,10 +84,16 @@
 
 ## Known Issues / Next Up
 
+- **⚠️ MUST DO BEFORE DEPLOY**: Run `supabase_migration_community_economy.sql` in Supabase SQL editor
 - Video section on landing page needs real YouTube VIDEO_ID
 - Custom domain for Premium not implemented yet
 - Old `index.html` at project root should be removed eventually
 - Gamification: could add "streak broken" toast on community.html when user loses after a streak
+- **Economy Phase 2** (planned, not built):
+  - Activity-gated weekly refills (user needs ≥ N bets/week to get refill)
+  - User referral system (100 pts to referrer, 50 welcome bonus, capped 5/week, creator-configurable amounts)
+  - Dynamic odds (CPMM-style: `yes_price = yes_pool / (yes_pool + no_pool)`)
+  - FAQ section explaining points mechanics to members
 
 ---
 
