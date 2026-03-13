@@ -773,15 +773,42 @@ body.plan-premium .main {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  transition: border-color .15s;
+  transition: border-color .15s, background .15s;
+  cursor: pointer;
+  position: relative;
+  -webkit-tap-highlight-color: transparent;
 }
-.idea-card:hover { border-color: var(--gold); }
+.idea-card:hover { border-color: rgba(201,146,13,0.4); }
+.idea-card.selected {
+  border-color: var(--gold);
+  background: rgba(201,146,13,0.06);
+}
+.idea-card-check {
+  position: absolute;
+  top: 12px; right: 12px;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--paper);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px;
+  color: transparent;
+  transition: all .15s;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+.idea-card.selected .idea-card-check {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: #000;
+}
 .idea-question {
   font-size: 13px;
   font-weight: 600;
   line-height: 1.45;
   color: var(--text);
   flex: 1;
+  padding-right: 28px; /* space for checkbox */
 }
 .idea-why {
   font-size: 11px;
@@ -790,8 +817,9 @@ body.plan-premium .main {
   font-style: italic;
 }
 .idea-use-btn {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
   font-size: 12px;
   font-weight: 600;
@@ -799,13 +827,60 @@ body.plan-premium .main {
   background: rgba(201,146,13,0.1);
   border: 1px solid rgba(201,146,13,0.25);
   border-radius: 6px;
-  padding: 6px 12px;
+  padding: 8px 12px;
   cursor: pointer;
   transition: background .15s;
-  align-self: flex-start;
+  width: 100%;
   font-family: var(--sans);
+  min-height: 36px;
 }
 .idea-use-btn:hover { background: rgba(201,146,13,0.2); }
+
+/* Bulk create bar */
+.ideas-bulk-bar {
+  display: none;
+  position: sticky;
+  bottom: 16px;
+  background: var(--gold);
+  color: #000;
+  padding: 12px 18px;
+  border-radius: 12px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 16px 28px 0;
+  font-weight: 700;
+  font-size: 14px;
+  box-shadow: 0 4px 24px rgba(201,146,13,0.4);
+  z-index: 10;
+}
+.ideas-bulk-bar.show { display: flex; }
+.ideas-bulk-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+.ideas-bulk-create {
+  background: #000;
+  color: var(--gold);
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 13px;
+  white-space: nowrap;
+  min-height: 36px;
+}
+.ideas-bulk-clear {
+  background: rgba(0,0,0,0.15);
+  color: rgba(0,0,0,0.7);
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+  min-height: 36px;
+}
 
 /* Economy health grid */
 .econ-health-grid {
@@ -3050,6 +3125,15 @@ body.nav-open .sidebar-backdrop {
                 </div>
                 <div id="ideaCards-most_viral" class="ideas-grid"></div>
               </div>
+
+              <!-- Bulk create bar -->
+              <div id="ideasBulkBar" class="ideas-bulk-bar">
+                <span id="ideasBulkCount">0 ideas selected</span>
+                <div class="ideas-bulk-actions">
+                  <button class="ideas-bulk-clear" onclick="clearIdeaSelection()">Clear</button>
+                  <button class="ideas-bulk-create" onclick="createSelectedIdeas()">⚡ Create Markets →</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -4211,7 +4295,11 @@ async function createMarket() {
     if (data.id || data.market) {
       closeCreateModal();
       showToast('Market published! 🎯', 'success');
-      setTimeout(() => init(), 500);
+      setTimeout(() => {
+        init();
+        // Continue idea queue if there are more queued
+        if (ideaQueue.length > 0) setTimeout(() => openNextInQueue(), 400);
+      }, 500);
     } else {
       showToast(data.error || 'Failed to create market.', 'error');
     }
@@ -4572,20 +4660,84 @@ function renderIdeaCards(sectionKey, ideas) {
   const container = document.getElementById('ideaCards-' + sectionKey);
   if (!container) return;
   container.innerHTML = ideas.map(idea => `
-    <div class="idea-card">
+    <div class="idea-card" data-question="${escapeAttr(idea.question)}" onclick="toggleIdeaCard(this)">
+      <div class="idea-card-check">✓</div>
       <div class="idea-question">${escapeHtml(idea.question)}</div>
       <div class="idea-why">${escapeHtml(idea.why)}</div>
-      <button class="idea-use-btn" onclick="useIdeaQuestion(${JSON.stringify(idea.question)})">
+      <button class="idea-use-btn" onclick="event.stopPropagation(); useIdeaFromCard(this)">
         Use this →
       </button>
     </div>
   `).join('');
 }
 
-function useIdeaQuestion(question) {
+function useIdeaFromCard(btn) {
+  const question = btn.closest('.idea-card').dataset.question;
   openCreateModal();
-  const el = document.getElementById('newQuestion');
-  if (el) { el.value = question; el.dispatchEvent(new Event('input')); }
+  setTimeout(() => {
+    const el = document.getElementById('newQuestion');
+    if (el) { el.value = question; el.dispatchEvent(new Event('input')); }
+  }, 50);
+}
+
+// ── Multi-select ───────────────────────────────────────────
+const selectedIdeas = new Set();
+let ideaQueue = [];
+
+function toggleIdeaCard(card) {
+  const q = card.dataset.question;
+  if (selectedIdeas.has(q)) {
+    selectedIdeas.delete(q);
+    card.classList.remove('selected');
+  } else {
+    selectedIdeas.add(q);
+    card.classList.add('selected');
+  }
+  updateBulkBar();
+}
+
+function updateBulkBar() {
+  const bar   = document.getElementById('ideasBulkBar');
+  const count = selectedIdeas.size;
+  if (!bar) return;
+  if (count === 0) {
+    bar.classList.remove('show');
+  } else {
+    bar.classList.add('show');
+    document.getElementById('ideasBulkCount').textContent =
+      `${count} idea${count !== 1 ? 's' : ''} selected`;
+  }
+}
+
+function clearIdeaSelection() {
+  selectedIdeas.clear();
+  document.querySelectorAll('.idea-card.selected').forEach(c => c.classList.remove('selected'));
+  updateBulkBar();
+}
+
+function createSelectedIdeas() {
+  if (!selectedIdeas.size) return;
+  ideaQueue = [...selectedIdeas];
+  clearIdeaSelection();
+  openNextInQueue();
+}
+
+function openNextInQueue() {
+  if (!ideaQueue.length) return;
+  const question = ideaQueue.shift();
+  openCreateModal();
+  // Update modal title to show queue progress
+  const remaining = ideaQueue.length;
+  const titleEl = document.getElementById('createModal')?.querySelector('.modal-title');
+  if (titleEl) titleEl.textContent = remaining > 0 ? `New Market (${remaining + 1} remaining)` : 'New Market';
+  setTimeout(() => {
+    const el = document.getElementById('newQuestion');
+    if (el) { el.value = question; el.dispatchEvent(new Event('input')); }
+  }, 50);
+}
+
+function escapeAttr(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 function escapeHtml(str) {
