@@ -23,6 +23,7 @@
   --red-lt: rgba(192,57,43,0.15);
   --sans: 'Syne', sans-serif;
   --mono: 'Space Mono', monospace;
+  --display: 'Syne', sans-serif;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 ::-webkit-scrollbar { width: 4px; }
@@ -35,71 +36,60 @@ body {
   font-family: var(--sans);
   min-height: 100vh;
 }
-
-/* ── GRID BG ─── */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
   background-image:
-    linear-gradient(rgba(201,146,13,0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(201,146,13,0.025) 1px, transparent 1px);
+    linear-gradient(rgba(201,146,13,0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(201,146,13,0.02) 1px, transparent 1px);
   background-size: 40px 40px;
   pointer-events: none;
   z-index: 0;
 }
 
-/* ── HEADER ─── */
+/* ── HEADER ── */
 .header {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: rgba(20,20,18,0.92);
-  backdrop-filter: blur(12px);
+  background: rgba(20,20,18,0.95);
+  backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--border);
   padding: 0 24px;
-  height: 60px;
+  height: 58px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
 }
-.header-left { display: flex; align-items: center; gap: 16px; }
-.logo {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  text-decoration: none;
-}
-.logo-hex { width: 26px; height: 26px; }
-.logo-name {
-  font-weight: 800;
-  font-size: 15px;
-  letter-spacing: 0.08em;
-  color: var(--text);
-}
-.header-sep {
-  width: 1px;
-  height: 20px;
-  background: var(--border);
-}
+.header-left { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.logo { display: flex; align-items: center; gap: 8px; text-decoration: none; flex-shrink: 0; }
+.logo-hex { width: 24px; height: 24px; }
+.logo-name { font-weight: 800; font-size: 14px; letter-spacing: 0.08em; color: var(--text); }
+.header-sep { width: 1px; height: 18px; background: var(--border); flex-shrink: 0; }
 .community-name-header {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.header-right { display: flex; align-items: center; gap: 10px; }
+.header-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 
 .btn-auth {
   font-family: var(--mono);
   font-size: 11px;
-  letter-spacing: 0.06em;
-  padding: 8px 16px;
+  letter-spacing: 0.05em;
+  padding: 7px 14px;
   border-radius: 5px;
   cursor: pointer;
   transition: all 0.18s;
   border: 1px solid var(--border);
   background: transparent;
   color: var(--dim);
+  white-space: nowrap;
 }
 .btn-auth:hover { color: var(--text); border-color: var(--text); }
 .btn-auth.primary {
@@ -110,111 +100,281 @@ body::before {
   font-weight: 700;
 }
 .btn-auth.primary:hover { background: var(--gold-bright); }
-.user-pill {
+
+/* ── USER BAR (logged in) ── */
+.user-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
+  gap: 10px;
+}
+.balance-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  background: rgba(201,146,13,0.1);
+  border: 1px solid rgba(201,146,13,0.28);
+  border-radius: 20px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--gold);
+  font-weight: 700;
+  cursor: default;
+}
+.balance-pill-icon { font-size: 13px; }
+.user-name-pill {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  padding: 5px 10px;
   background: var(--cream);
   border: 1px solid var(--border);
   border-radius: 20px;
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--dim);
+  white-space: nowrap;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.user-pill strong { color: var(--text); font-weight: 700; }
-.balance-badge {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--gold);
-  background: rgba(201,146,13,0.12);
-  border: 1px solid rgba(201,146,13,0.25);
-  padding: 4px 10px;
-  border-radius: 12px;
-}
-
-/* ── HERO ─── */
-.hero {
-  position: relative;
-  z-index: 1;
-  padding: 56px 24px 40px;
-  max-width: 960px;
-  margin: 0 auto;
-}
-.hero-eyebrow {
+.rank-chip {
   font-family: var(--mono);
   font-size: 10px;
   color: var(--gold);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  margin-bottom: 16px;
+  background: rgba(201,146,13,0.1);
+  border: 1px solid rgba(201,146,13,0.2);
+  border-radius: 10px;
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+
+/* ── HERO ── */
+.hero {
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+}
+.hero-banner {
+  height: 180px;
+  background: linear-gradient(135deg, rgba(201,146,13,0.06), rgba(201,146,13,0.02));
+  background-size: cover;
+  background-position: center;
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  padding: 0 24px 20px;
+}
+.hero-banner::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent 30%, rgba(20,20,18,0.95) 100%);
+}
+.hero-inner {
+  max-width: 900px;
+  margin: 0 auto;
+  width: 100%;
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+}
+.hero-logo {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  border: 2px solid var(--border);
+  background: var(--cream);
+  object-fit: cover;
+  flex-shrink: 0;
+  margin-bottom: -8px;
+}
+.hero-logo-placeholder {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(201,146,13,0.08);
   display: flex;
   align-items: center;
-  gap: 8px;
-}
-.hero-eyebrow::before {
-  content: '';
-  display: inline-block;
-  width: 20px;
-  height: 1px;
-  background: var(--gold);
-}
-.hero h1 {
-  font-size: clamp(32px, 5vw, 52px);
+  justify-content: center;
+  font-size: 22px;
   font-weight: 800;
-  line-height: 1.05;
+  color: var(--gold);
+  flex-shrink: 0;
+  font-family: var(--sans);
+  margin-bottom: -8px;
+}
+.hero-title-block { flex: 1; min-width: 0; }
+.hero-eyebrow {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--gold);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+  opacity: 0.8;
+}
+.hero-name {
+  font-size: clamp(22px, 4vw, 34px);
+  font-weight: 800;
+  line-height: 1.1;
   letter-spacing: -0.02em;
   color: var(--text);
-  margin-bottom: 16px;
+  font-family: var(--display);
+}
+.hero-body {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 18px 24px 0;
 }
 .hero-desc {
-  font-size: 15px;
+  font-size: 13px;
   color: var(--dim);
   line-height: 1.6;
-  margin-bottom: 32px;
-  max-width: 520px;
+  margin-bottom: 18px;
+  max-width: 560px;
 }
-.hero-stats {
+.hero-stats-row {
   display: flex;
-  gap: 24px;
-  flex-wrap: wrap;
+  gap: 0;
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 20px;
 }
 .hero-stat {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+  flex: 1;
+  padding: 14px 18px;
+  border-right: 1px solid var(--border);
+  text-align: center;
 }
+.hero-stat:last-child { border-right: none; }
 .hero-stat-val {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 800;
   color: var(--text);
   line-height: 1;
+  margin-bottom: 4px;
 }
 .hero-stat-val.gold { color: var(--gold); }
 .hero-stat-label {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 9px;
   color: var(--dim);
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
+.social-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+.social-link {
+  font-size: 11px;
+  font-family: var(--mono);
+  color: var(--dim);
+  text-decoration: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 10px;
+  transition: border-color 0.15s, color 0.15s;
+}
 
-/* ── CONTENT ─── */
+/* ── REWARD PROGRESS HINT (logged in) ── */
+.reward-hint-bar {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.reward-hint-label {
+  font-size: 12px;
+  color: var(--dim);
+  flex: 1;
+  min-width: 0;
+}
+.reward-hint-label strong { color: var(--text); }
+.reward-hint-track {
+  flex: 2;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+  min-width: 60px;
+}
+.reward-hint-fill {
+  height: 100%;
+  background: var(--gold);
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+.reward-hint-pct {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--gold);
+  flex-shrink: 0;
+}
+
+/* ── CONTENT ── */
 .content {
   position: relative;
   z-index: 1;
-  max-width: 960px;
+  max-width: 900px;
   margin: 0 auto;
   padding: 0 24px 80px;
 }
 
+/* ── FILTER TABS ── */
+.filter-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.filter-tab {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  padding: 7px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.filter-tab:hover { border-color: rgba(201,146,13,0.4); color: var(--text); }
+.filter-tab.active {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: var(--ink);
+  font-weight: 700;
+}
+.filter-count {
+  background: rgba(0,0,0,0.2);
+  border-radius: 10px;
+  padding: 1px 6px;
+  font-size: 10px;
+}
+.filter-tab.active .filter-count { background: rgba(0,0,0,0.25); }
+
+/* ── SECTION LABEL ── */
 .section-label {
   font-family: var(--mono);
   font-size: 10px;
   color: var(--dim);
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -226,138 +386,125 @@ body::before {
   background: var(--border);
 }
 
-/* ── MARKET CARDS ─── */
-.markets-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-bottom: 48px;
-}
+/* ── MARKET CARDS ── */
+.markets-grid { display: flex; flex-direction: column; gap: 10px; margin-bottom: 40px; }
 
 .market-card {
   background: var(--cream);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   overflow: hidden;
-  transition: border-color 0.2s, transform 0.15s;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
   cursor: pointer;
 }
 .market-card:hover {
-  border-color: rgba(201,146,13,0.35);
+  border-color: rgba(201,146,13,0.4);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.25);
   transform: translateY(-1px);
 }
-.market-card.resolved {
-  opacity: 0.6;
-  cursor: default;
-}
-.market-card.resolved:hover {
-  border-color: var(--border);
-  transform: none;
-}
-.market-card-inner {
-  padding: 20px 22px;
-}
+.market-card.resolved { opacity: 0.55; cursor: default; }
+.market-card.resolved:hover { border-color: var(--border); box-shadow: none; transform: none; }
+.market-card.has-position { border-color: rgba(201,146,13,0.3); }
+
+.market-card-inner { padding: 18px 20px 14px; }
 
 .market-top {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: 12px;
+  margin-bottom: 6px;
 }
-.market-question {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--text);
-  line-height: 1.4;
-  flex: 1;
+.market-badges {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 .market-badge {
   font-family: var(--mono);
-  font-size: 10px;
-  padding: 3px 8px;
+  font-size: 9px;
+  padding: 3px 7px;
   border-radius: 3px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   white-space: nowrap;
-  flex-shrink: 0;
 }
-.market-badge.live {
-  background: rgba(45,155,95,0.12);
-  border: 1px solid rgba(45,155,95,0.3);
-  color: var(--green);
+.market-badge.live { background: rgba(45,155,95,0.12); border: 1px solid rgba(45,155,95,0.3); color: var(--green); }
+.market-badge.resolved-badge { background: rgba(122,120,112,0.1); border: 1px solid var(--border); color: var(--dim); }
+.market-badge.hot { background: rgba(255,140,0,0.12); border: 1px solid rgba(255,140,0,0.3); color: #ff8c00; }
+.market-badge.soon { background: rgba(192,57,43,0.12); border: 1px solid rgba(192,57,43,0.3); color: #e74c3c; }
+
+.market-question {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.45;
+  flex: 1;
 }
-.market-badge.resolved-badge {
-  background: rgba(122,120,112,0.1);
-  border: 1px solid var(--border);
+
+/* User's position indicator */
+.my-position-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 7px 10px;
+  background: rgba(201,146,13,0.07);
+  border: 1px solid rgba(201,146,13,0.18);
+  border-radius: 6px;
+}
+.my-position-label {
+  font-family: var(--mono);
+  font-size: 10px;
   color: var(--dim);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.my-position-side {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 3px;
+}
+.my-position-side.yes { background: var(--green-lt); color: var(--green); }
+.my-position-side.no { background: var(--red-lt); color: var(--red); }
+.my-position-amount {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--gold);
+  margin-left: auto;
 }
 
 /* Odds bar */
-.odds-bar-wrap { margin-bottom: 14px; }
+.odds-bar-wrap { margin-bottom: 12px; }
 .odds-bar {
-  height: 6px;
-  border-radius: 3px;
+  height: 7px;
+  border-radius: 4px;
   background: var(--border);
   overflow: hidden;
   margin-bottom: 8px;
   display: flex;
 }
-.odds-bar-yes {
-  background: var(--green);
-  height: 100%;
-  transition: width 0.5s ease;
-  border-radius: 3px 0 0 3px;
-}
-.odds-bar-no {
-  background: var(--red);
-  height: 100%;
-  transition: width 0.5s ease;
-  border-radius: 0 3px 3px 0;
-}
-.odds-labels {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.odds-label {
-  font-family: var(--mono);
-  font-size: 11px;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
+.odds-bar-yes { background: var(--green); height: 100%; transition: width 0.5s ease; border-radius: 4px 0 0 4px; }
+.odds-bar-no  { background: var(--red);   height: 100%; transition: width 0.5s ease; border-radius: 0 4px 4px 0; }
+.odds-labels { display: flex; justify-content: space-between; align-items: center; }
+.odds-label { font-family: var(--mono); font-size: 11px; display: flex; align-items: center; gap: 5px; }
 .odds-label.yes { color: var(--green); }
-.odds-label.no { color: var(--red); }
-.odds-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-}
+.odds-label.no  { color: var(--red); }
+.odds-dot { width: 6px; height: 6px; border-radius: 50%; }
 .odds-dot.yes { background: var(--green); }
-.odds-dot.no { background: var(--red); }
-.odds-center {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--dim);
-}
+.odds-dot.no  { background: var(--red); }
+.odds-center { font-family: var(--mono); font-size: 10px; color: var(--dim); }
 
 /* Market meta */
-.market-meta {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  flex-wrap: wrap;
-}
-.meta-item {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--dim);
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
+.market-meta { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.meta-item { font-family: var(--mono); font-size: 10px; color: var(--dim); display: flex; align-items: center; gap: 4px; }
 .meta-icon { font-size: 11px; }
+.meta-item.urgent { color: #e74c3c; }
 
 /* Predict buttons */
 .market-actions {
@@ -380,22 +527,15 @@ body::before {
   gap: 8px;
   letter-spacing: 0.02em;
 }
-.btn-predict:disabled { cursor: default; opacity: 0.4; }
+.btn-predict:disabled { cursor: default; opacity: 0.35; }
 .btn-predict.yes {
   background: var(--green-lt);
   color: var(--green);
   border-right: 1px solid var(--border);
 }
-.btn-predict.yes:not(:disabled):hover {
-  background: rgba(45,155,95,0.28);
-}
-.btn-predict.no {
-  background: var(--red-lt);
-  color: var(--red);
-}
-.btn-predict.no:not(:disabled):hover {
-  background: rgba(192,57,43,0.28);
-}
+.btn-predict.yes:not(:disabled):hover { background: rgba(45,155,95,0.28); }
+.btn-predict.no  { background: var(--red-lt); color: var(--red); }
+.btn-predict.no:not(:disabled):hover  { background: rgba(192,57,43,0.28); }
 
 /* Resolved outcome */
 .outcome-banner {
@@ -410,171 +550,118 @@ body::before {
   letter-spacing: 0.06em;
 }
 .outcome-banner.yes { background: var(--green-lt); color: var(--green); }
-.outcome-banner.no { background: var(--red-lt); color: var(--red); }
+.outcome-banner.no  { background: var(--red-lt);   color: var(--red); }
 
-/* ── LEADERBOARD ─── */
+/* ── EMPTY STATE ── */
+.empty {
+  padding: 56px 32px;
+  text-align: center;
+  color: var(--dim);
+  font-size: 14px;
+  background: var(--cream);
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+}
+.empty-icon { font-size: 36px; margin-bottom: 14px; }
+
+/* ── LEADERBOARD ── */
+.leaderboard-wrap { margin-bottom: 40px; }
 .leaderboard-card {
   background: var(--cream);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   overflow: hidden;
 }
 .lb-row {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 13px 20px;
+  gap: 12px;
+  padding: 12px 18px;
   border-bottom: 1px solid var(--border);
   transition: background 0.15s;
 }
 .lb-row:last-child { border-bottom: none; }
 .lb-row:hover { background: rgba(255,255,255,0.02); }
-.lb-rank {
-  font-family: var(--mono);
-  font-size: 12px;
-  font-weight: 700;
-  width: 24px;
-  text-align: center;
-  color: var(--dim);
-  flex-shrink: 0;
+.lb-row.is-you {
+  background: rgba(201,146,13,0.06);
+  border-left: 3px solid var(--gold);
+  padding-left: 15px;
 }
-.lb-rank.gold { color: var(--gold); }
+.lb-rank { font-family: var(--mono); font-size: 12px; font-weight: 700; width: 22px; text-align: center; color: var(--dim); flex-shrink: 0; }
+.lb-rank.gold   { color: var(--gold); }
 .lb-rank.silver { color: #aaa; }
 .lb-rank.bronze { color: #cd7f32; }
-.lb-name {
-  flex: 1;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-}
-.lb-score {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--gold);
-}
-.lb-correct {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--dim);
-}
+.lb-name  { flex: 1; font-size: 13px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 8px; }
+.lb-you-tag { font-family: var(--mono); font-size: 9px; color: var(--gold); background: rgba(201,146,13,0.12); border: 1px solid rgba(201,146,13,0.25); border-radius: 3px; padding: 1px 5px; letter-spacing: 0.06em; }
+.lb-correct { font-family: var(--mono); font-size: 10px; color: var(--dim); }
+.lb-score   { font-family: var(--mono); font-size: 12px; color: var(--gold); font-weight: 700; }
 .lb-streak {
-  font-size: 11px;
-  font-weight: 700;
-  padding: 2px 7px;
-  border-radius: 20px;
-  white-space: nowrap;
-  flex-shrink: 0;
+  font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 20px; white-space: nowrap; flex-shrink: 0;
 }
-.lb-streak.fire {
-  background: rgba(255, 140, 0, 0.15);
-  color: #ff8c00;
-  border: 1px solid rgba(255, 140, 0, 0.3);
-}
-.lb-streak.master {
-  background: rgba(201, 146, 13, 0.2);
-  color: var(--gold);
-  border: 1px solid rgba(201, 146, 13, 0.4);
-}
+.lb-streak.fire   { background: rgba(255,140,0,0.15); color: #ff8c00; border: 1px solid rgba(255,140,0,0.3); }
+.lb-streak.master { background: rgba(201,146,13,0.2); color: var(--gold); border: 1px solid rgba(201,146,13,0.4); }
 
-/* ── REWARDS ─── */
-.rewards-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+/* Your rank callout */
+.your-rank-bar {
+  background: rgba(201,146,13,0.07);
+  border: 1px solid rgba(201,146,13,0.2);
+  border-radius: 8px;
+  padding: 10px 16px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
   gap: 12px;
+  font-size: 13px;
 }
+.your-rank-bar span { color: var(--dim); font-size: 12px; }
+.your-rank-bar strong { color: var(--gold); }
+
+/* ── REWARDS ── */
+.rewards-wrap { margin-bottom: 40px; }
+.rewards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
 .reward-tier {
   background: var(--cream);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 20px;
-  position: relative;
+  padding: 18px;
   transition: border-color 0.2s;
 }
-.reward-tier.unlocked {
-  border-color: var(--gold);
-  background: rgba(201,146,13,0.06);
-}
+.reward-tier.unlocked { border-color: var(--gold); background: rgba(201,146,13,0.05); }
 .reward-tier-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  padding: 3px 8px;
+  padding: 3px 7px;
   border-radius: 3px;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
-.reward-tier-badge.locked {
-  color: var(--dim);
-  background: rgba(122,120,112,0.1);
-  border: 1px solid rgba(122,120,112,0.2);
-}
-.reward-tier-badge.unlocked {
-  color: var(--gold);
-  background: rgba(201,146,13,0.12);
-  border: 1px solid rgba(201,146,13,0.3);
-}
-.reward-tier-threshold {
-  font-family: var(--mono);
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--text);
-  margin-bottom: 6px;
-  line-height: 1;
-}
+.reward-tier-badge.locked   { color: var(--dim); background: rgba(122,120,112,0.1); border: 1px solid rgba(122,120,112,0.2); }
+.reward-tier-badge.unlocked { color: var(--gold); background: rgba(201,146,13,0.12); border: 1px solid rgba(201,146,13,0.3); }
+.reward-tier-threshold { font-family: var(--mono); font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 4px; line-height: 1; }
 .reward-tier.locked .reward-tier-threshold { color: var(--dim); }
-.reward-tier-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text);
-  margin-bottom: 6px;
-}
+.reward-tier-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 5px; }
 .reward-tier.locked .reward-tier-title { color: var(--dim); }
-.reward-tier-desc {
-  font-size: 12px;
-  color: var(--dim);
-  line-height: 1.5;
-}
-.reward-progress {
-  margin-top: 14px;
-  height: 3px;
-  background: var(--border);
-  border-radius: 2px;
-  overflow: hidden;
-}
-.reward-progress-fill {
-  height: 100%;
-  background: var(--gold);
-  border-radius: 2px;
-  transition: width 0.4s ease;
-}
-.reward-tier.locked .reward-progress-fill { background: var(--dim); }
+.reward-tier-desc  { font-size: 11px; color: var(--dim); line-height: 1.5; }
+.reward-progress { margin-top: 12px; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.reward-progress-fill { height: 100%; background: var(--gold); border-radius: 2px; transition: width 0.4s ease; }
+.reward-tier.locked .reward-progress-fill { background: rgba(122,120,112,0.4); }
 
-/* ── REFERRAL CARD ─── */
+/* ── REFERRAL ── */
 .referral-card {
   background: var(--cream);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 20px 24px;
+  border-radius: 12px;
+  padding: 20px 22px;
+  margin-bottom: 40px;
 }
-.referral-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text);
-  margin-bottom: 6px;
-}
-.referral-desc {
-  font-size: 12px;
-  color: var(--dim);
-  margin-bottom: 14px;
-}
-.referral-link-row {
-  display: flex;
-  gap: 8px;
-}
+.referral-title { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 5px; }
+.referral-desc  { font-size: 12px; color: var(--dim); margin-bottom: 14px; line-height: 1.5; }
+.referral-link-row { display: flex; gap: 8px; }
 .referral-input {
   flex: 1;
   background: var(--paper);
@@ -585,7 +672,6 @@ body::before {
   font-size: 11px;
   color: var(--dim);
   outline: none;
-  cursor: text;
 }
 .btn-copy {
   padding: 9px 16px;
@@ -601,76 +687,43 @@ body::before {
 }
 .btn-copy:hover { opacity: 0.85; }
 
-/* ── EMPTY STATE ─── */
-.empty {
-  padding: 64px 32px;
-  text-align: center;
-  color: var(--dim);
-  font-size: 14px;
-  background: var(--cream);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-}
-.empty-icon { font-size: 40px; margin-bottom: 16px; }
-
-/* ── POWERED BY ─── */
+/* ── POWERED BY ── */
 .powered {
   text-align: center;
-  padding: 28px 24px 32px;
+  padding: 24px 24px 32px;
   font-family: var(--mono);
   font-size: 12px;
   color: var(--dim);
   border-top: 1px solid var(--border);
-  margin-top: 8px;
   line-height: 1.7;
-  background: linear-gradient(to bottom, transparent, rgba(201,146,13,0.02));
 }
-.powered-logo {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  margin-bottom: 10px;
-}
-.powered-hex { width: 18px; height: 18px; opacity: 0.7; }
-.powered-name {
-  font-weight: 800;
-  font-size: 13px;
-  letter-spacing: 0.1em;
-  color: var(--gold);
-  opacity: 0.85;
-}
-.powered-tagline {
-  font-size: 11px;
-  color: var(--dim);
-  margin-bottom: 10px;
-}
+.powered-logo { display: flex; align-items: center; justify-content: center; gap: 7px; margin-bottom: 8px; }
+.powered-hex  { width: 16px; height: 16px; opacity: 0.7; }
+.powered-name { font-weight: 800; font-size: 12px; letter-spacing: 0.1em; color: var(--gold); opacity: 0.85; }
+.powered-tagline { font-size: 11px; color: var(--dim); margin-bottom: 10px; }
 .powered-cta {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 18px;
+  gap: 6px;
+  padding: 7px 16px;
   background: rgba(201,146,13,0.08);
-  border: 1px solid rgba(201,146,13,0.25);
+  border: 1px solid rgba(201,146,13,0.22);
   border-radius: 20px;
   text-decoration: none;
   font-size: 11px;
   font-weight: 700;
   color: var(--gold);
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   transition: all 0.2s;
 }
-.powered-cta:hover {
-  background: rgba(201,146,13,0.15);
-  border-color: rgba(201,146,13,0.45);
-}
+.powered-cta:hover { background: rgba(201,146,13,0.15); border-color: rgba(201,146,13,0.45); }
 .powered-cta::after { content: ' →'; }
 
-/* ── MODALS ─── */
+/* ── MODALS ── */
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgba(10,10,8,0.8);
+  background: rgba(10,10,8,0.82);
   backdrop-filter: blur(4px);
   z-index: 200;
   display: flex;
@@ -681,310 +734,146 @@ body::before {
   pointer-events: none;
   transition: opacity 0.2s;
 }
-.overlay.show {
-  opacity: 1;
-  pointer-events: auto;
-}
-
+.overlay.show { opacity: 1; pointer-events: auto; }
 .modal {
   background: var(--cream);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 14px;
   width: 100%;
   max-width: 420px;
-  transform: translateY(16px);
-  transition: transform 0.2s;
+  transform: translateY(14px);
+  transition: transform 0.22s cubic-bezier(0.34,1.36,0.64,1);
   overflow: hidden;
 }
 .overlay.show .modal { transform: translateY(0); }
-
 .modal-header {
-  padding: 20px 24px 16px;
+  padding: 18px 22px 14px;
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
-.modal-title {
-  font-size: 16px;
-  font-weight: 800;
-  color: var(--text);
-}
+.modal-title { font-size: 15px; font-weight: 800; color: var(--text); }
 .modal-close {
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--dim);
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.15s;
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; border: 1px solid var(--border); border-radius: 6px;
+  color: var(--dim); font-size: 13px; cursor: pointer; transition: all 0.15s;
 }
 .modal-close:hover { color: var(--text); border-color: var(--text); }
-
-.modal-body { padding: 24px; }
-.modal-footer {
-  padding: 16px 24px;
-  border-top: 1px solid var(--border);
-  display: flex;
-  gap: 10px;
-  justify-content: flex-end;
-}
+.modal-body { padding: 22px; }
+.modal-footer { padding: 14px 22px; border-top: 1px solid var(--border); display: flex; gap: 10px; justify-content: flex-end; }
 
 /* Auth tabs */
-.auth-tabs {
-  display: flex;
-  gap: 0;
-  background: var(--paper);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 3px;
-  margin-bottom: 24px;
-}
+.auth-tabs { display: flex; background: var(--paper); border: 1px solid var(--border); border-radius: 6px; padding: 3px; margin-bottom: 20px; }
 .auth-tab {
-  flex: 1;
-  padding: 8px;
-  text-align: center;
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  cursor: pointer;
-  border-radius: 4px;
-  color: var(--dim);
-  transition: all 0.15s;
-  border: none;
-  background: transparent;
+  flex: 1; padding: 8px; text-align: center;
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em;
+  cursor: pointer; border-radius: 4px; color: var(--dim);
+  transition: all 0.15s; border: none; background: transparent;
 }
-.auth-tab.active {
-  background: var(--cream);
-  color: var(--text);
-  font-weight: 700;
-}
+.auth-tab.active { background: var(--cream); color: var(--text); font-weight: 700; }
 
 .field { margin-bottom: 16px; }
 .field label {
-  display: block;
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--dim);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  margin-bottom: 7px;
+  display: block; font-family: var(--mono); font-size: 10px; color: var(--dim);
+  letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 6px;
 }
 .field input {
-  width: 100%;
-  background: var(--paper);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 10px 12px;
-  font-family: var(--mono);
-  font-size: 13px;
-  color: var(--text);
-  outline: none;
-  transition: border-color 0.2s;
+  width: 100%; background: var(--paper); border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px 12px; font-family: var(--mono); font-size: 13px;
+  color: var(--text); outline: none; transition: border-color 0.2s;
 }
 .field input:focus { border-color: var(--gold); }
 
-.modal-error {
-  background: rgba(192,57,43,0.1);
-  border: 1px solid rgba(192,57,43,0.3);
-  border-radius: 6px;
-  padding: 10px 14px;
-  font-size: 12px;
-  color: #e74c3c;
-  margin-bottom: 16px;
-  display: none;
-}
+.modal-error { background: rgba(192,57,43,0.1); border: 1px solid rgba(192,57,43,0.3); border-radius: 6px; padding: 10px 14px; font-size: 12px; color: #e74c3c; margin-bottom: 14px; display: none; }
 .modal-error.show { display: block; }
 
-/* Predict modal specific */
-.predict-market-q {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text);
-  line-height: 1.4;
-  margin-bottom: 20px;
-  padding: 14px;
-  background: var(--paper);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-}
-.predict-side {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin-bottom: 20px;
-}
+/* Predict modal */
+.predict-market-q { font-size: 14px; font-weight: 700; color: var(--text); line-height: 1.4; margin-bottom: 18px; padding: 14px; background: var(--paper); border: 1px solid var(--border); border-radius: 8px; }
+.predict-side { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 20px; }
 .side-btn {
-  padding: 12px;
-  border-radius: 7px;
+  padding: 14px;
+  border-radius: 8px;
   border: 1.5px solid var(--border);
   background: transparent;
   font-family: var(--sans);
   font-weight: 700;
-  font-size: 14px;
+  font-size: 15px;
   cursor: pointer;
   transition: all 0.15s;
   color: var(--dim);
 }
-.side-btn.yes:hover, .side-btn.yes.active {
-  border-color: var(--green);
-  background: var(--green-lt);
-  color: var(--green);
-}
-.side-btn.no:hover, .side-btn.no.active {
-  border-color: var(--red);
-  background: var(--red-lt);
-  color: var(--red);
-}
+.side-btn.yes:hover, .side-btn.yes.active { border-color: var(--green); background: var(--green-lt); color: var(--green); }
+.side-btn.no:hover,  .side-btn.no.active  { border-color: var(--red);   background: var(--red-lt);   color: var(--red); }
 
 .amount-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--paper);
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  display: flex; align-items: center; gap: 8px;
+  background: var(--paper); border: 1px solid var(--border); border-radius: 6px;
   padding: 4px 4px 4px 12px;
 }
 .amount-row:focus-within { border-color: var(--gold); }
-.amount-input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
-  font-family: var(--mono);
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text);
-  padding: 6px 0;
-}
-.amount-unit {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--gold);
-  padding: 6px 10px;
-  background: rgba(201,146,13,0.08);
-  border-radius: 4px;
-}
-.amount-hint {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--dim);
-  margin-top: 6px;
-}
+.amount-input { flex: 1; background: transparent; border: none; outline: none; font-family: var(--mono); font-size: 16px; font-weight: 700; color: var(--text); padding: 6px 0; }
+.amount-unit  { font-family: var(--mono); font-size: 11px; color: var(--gold); padding: 6px 10px; background: rgba(201,146,13,0.08); border-radius: 4px; }
+.amount-hint  { font-family: var(--mono); font-size: 10px; color: var(--dim); margin-top: 6px; }
 .payout-preview {
-  margin-top: 16px;
-  padding: 12px 14px;
-  background: var(--paper);
-  border: 1px dashed rgba(201,146,13,0.3);
-  border-radius: 6px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  margin-top: 14px; padding: 12px 14px;
+  background: var(--paper); border: 1px dashed rgba(201,146,13,0.3); border-radius: 6px;
+  display: flex; justify-content: space-between; align-items: center;
 }
 .payout-label { font-family: var(--mono); font-size: 11px; color: var(--dim); }
-.payout-val { font-family: var(--mono); font-size: 14px; font-weight: 700; color: var(--gold); }
+.payout-val   { font-family: var(--mono); font-size: 14px; font-weight: 700; color: var(--gold); }
 
 .btn-submit {
-  font-family: var(--sans);
-  font-weight: 700;
-  font-size: 14px;
-  padding: 11px 24px;
-  border-radius: 6px;
-  border: none;
-  cursor: pointer;
-  transition: all 0.18s;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  font-family: var(--sans); font-weight: 700; font-size: 14px;
+  padding: 11px 24px; border-radius: 6px; border: none; cursor: pointer;
+  transition: all 0.18s; display: flex; align-items: center; gap: 6px;
 }
-.btn-submit.primary {
-  background: var(--gold);
-  color: var(--ink);
-}
+.btn-submit.primary { background: var(--gold); color: var(--ink); }
 .btn-submit.primary:hover { background: var(--gold-bright); }
 .btn-submit.primary:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-cancel {
-  font-family: var(--mono);
-  font-size: 12px;
-  padding: 11px 16px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--dim);
-  cursor: pointer;
-  transition: all 0.15s;
+  font-family: var(--mono); font-size: 12px; padding: 11px 16px;
+  border-radius: 6px; border: 1px solid var(--border);
+  background: transparent; color: var(--dim); cursor: pointer; transition: all 0.15s;
 }
 .btn-cancel:hover { color: var(--text); border-color: var(--text); }
 
-/* Success toast */
+/* Toast */
 .toast {
-  position: fixed;
-  bottom: 28px;
-  left: 50%;
+  position: fixed; bottom: 28px; left: 50%;
   transform: translateX(-50%) translateY(80px);
-  background: var(--cream);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px 20px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
+  background: var(--cream); border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px 20px; font-size: 13px; font-weight: 600; color: var(--text);
   z-index: 999;
   transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s;
-  opacity: 0;
-  white-space: nowrap;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  opacity: 0; white-space: nowrap; display: flex; align-items: center; gap: 8px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.4);
 }
-.toast.show {
-  transform: translateX(-50%) translateY(0);
-  opacity: 1;
-}
+.toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
 .toast.success { border-color: rgba(45,155,95,0.4); }
-.toast.error { border-color: rgba(192,57,43,0.4); color: #e74c3c; }
+.toast.error   { border-color: rgba(192,57,43,0.4); color: #e74c3c; }
 
 /* Spinner */
-.spinner {
-  width: 14px; height: 14px;
-  border: 2px solid rgba(201,146,13,0.3);
-  border-top-color: var(--gold);
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-  display: inline-block;
-}
+.spinner { width: 14px; height: 14px; border: 2px solid rgba(201,146,13,0.3); border-top-color: var(--gold); border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* Loading skeleton */
-.skeleton-card {
-  background: var(--cream);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 20px 22px;
-  margin-bottom: 12px;
-}
-.skel {
-  background: linear-gradient(90deg, var(--border) 25%, rgba(255,255,255,0.04) 50%, var(--border) 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.4s infinite;
-  border-radius: 4px;
-}
+/* Skeleton */
+.skeleton-card { background: var(--cream); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; margin-bottom: 10px; }
+.skel { background: linear-gradient(90deg, var(--border) 25%, rgba(255,255,255,0.04) 50%, var(--border) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 4px; }
 @keyframes shimmer { to { background-position: -200% 0; } }
 
 @media (max-width: 600px) {
-  .hero { padding: 36px 16px 28px; }
+  .hero-banner { height: 140px; padding: 0 16px 16px; }
+  .hero-body { padding: 14px 16px 0; }
   .content { padding: 0 16px 60px; }
   .header { padding: 0 16px; }
-  .hero-stats { gap: 16px; }
-  .market-top { flex-direction: column; gap: 8px; }
-  .predict-side { grid-template-columns: 1fr 1fr; }
+  .hero-stats-row { display: grid; grid-template-columns: 1fr 1fr; }
+  .hero-stat:nth-child(3) { grid-column: 1/-1; border-right: none; border-top: 1px solid var(--border); }
+  .market-top { flex-wrap: wrap; }
+  .market-badges { width: 100%; justify-content: flex-start; order: -1; }
+  .lb-correct { display: none; }
+  .user-name-pill { display: none; }
 }
 </style>
 </head>
@@ -1005,27 +894,38 @@ body::before {
   </div>
   <div class="header-right" id="headerRight">
     <button class="btn-auth" onclick="openAuth('login')">Sign in</button>
-    <button class="btn-auth primary" onclick="openAuth('register')">Join</button>
+    <button class="btn-auth primary" onclick="openAuth('register')">Join free</button>
   </div>
 </header>
 
 <!-- Hero -->
 <section class="hero">
-  <div class="hero-eyebrow">Prediction Market</div>
-  <h1 id="heroTitle">Loading community…</h1>
-  <p class="hero-desc" id="heroDesc">Make predictions, earn points, climb the leaderboard.</p>
-  <div class="hero-stats">
-    <div class="hero-stat">
-      <div class="hero-stat-val" id="statMarkets">—</div>
-      <div class="hero-stat-label">Active Markets</div>
+  <div class="hero-banner" id="heroBanner">
+    <div class="hero-inner">
+      <div class="hero-logo-placeholder" id="heroLogoPlaceholder">HF</div>
+      <img id="heroLogoImg" class="hero-logo" src="" alt="" style="display:none" onerror="this.style.display='none';document.getElementById('heroLogoPlaceholder').style.display='flex'"/>
+      <div class="hero-title-block">
+        <div class="hero-eyebrow">Prediction Market</div>
+        <div class="hero-name" id="heroTitle">Loading…</div>
+      </div>
     </div>
-    <div class="hero-stat">
-      <div class="hero-stat-val gold" id="statPoints">—</div>
-      <div class="hero-stat-label">Points Name</div>
-    </div>
-    <div class="hero-stat">
-      <div class="hero-stat-val" id="statTraders">—</div>
-      <div class="hero-stat-label">Total Traders</div>
+  </div>
+  <div class="hero-body">
+    <p class="hero-desc" id="heroDesc">Make predictions, earn points, climb the leaderboard.</p>
+    <div id="socialRow" class="social-row" style="display:none"></div>
+    <div class="hero-stats-row">
+      <div class="hero-stat">
+        <div class="hero-stat-val" id="statMarkets">—</div>
+        <div class="hero-stat-label">Open Markets</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-val" id="statTraders">—</div>
+        <div class="hero-stat-label">Members</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-val gold" id="statPoints">—</div>
+        <div class="hero-stat-label" id="statPointsLabel">Points Name</div>
+      </div>
     </div>
   </div>
 </section>
@@ -1033,46 +933,69 @@ body::before {
 <!-- Content -->
 <main class="content">
 
-  <!-- Markets -->
-  <div class="section-label">Open Markets</div>
+  <!-- Reward progress hint — shown when logged in -->
+  <div id="rewardHint" style="display:none" class="reward-hint-bar">
+    <div class="reward-hint-label" id="rewardHintText">Loading reward progress…</div>
+    <div class="reward-hint-track"><div class="reward-hint-fill" id="rewardHintFill" style="width:0%"></div></div>
+    <div class="reward-hint-pct" id="rewardHintPct">0%</div>
+  </div>
+
+  <!-- Filter tabs -->
+  <div class="filter-row" id="filterRow" style="display:none">
+    <button class="filter-tab active" id="ftAll"   onclick="setFilter('all')">All <span class="filter-count" id="fcAll">0</span></button>
+    <button class="filter-tab"        id="ftHot"   onclick="setFilter('hot')">🔥 Hot <span class="filter-count" id="fcHot">0</span></button>
+    <button class="filter-tab"        id="ftSoon"  onclick="setFilter('soon')">⏰ Closing Soon <span class="filter-count" id="fcSoon">0</span></button>
+    <button class="filter-tab"        id="ftMine"  onclick="setFilter('mine')" style="display:none">✓ My Bets <span class="filter-count" id="fcMine">0</span></button>
+  </div>
+
+  <!-- Markets grid -->
   <div class="markets-grid" id="marketsGrid">
-    <!-- skeleton -->
     <div class="skeleton-card">
-      <div class="skel" style="height:18px;width:70%;margin-bottom:14px"></div>
-      <div class="skel" style="height:6px;margin-bottom:16px"></div>
-      <div class="skel" style="height:12px;width:45%"></div>
+      <div class="skel" style="height:16px;width:65%;margin-bottom:14px"></div>
+      <div class="skel" style="height:7px;margin-bottom:14px"></div>
+      <div class="skel" style="height:10px;width:40%"></div>
     </div>
     <div class="skeleton-card">
-      <div class="skel" style="height:18px;width:55%;margin-bottom:14px"></div>
-      <div class="skel" style="height:6px;margin-bottom:16px"></div>
-      <div class="skel" style="height:12px;width:40%"></div>
+      <div class="skel" style="height:16px;width:50%;margin-bottom:14px"></div>
+      <div class="skel" style="height:7px;margin-bottom:14px"></div>
+      <div class="skel" style="height:10px;width:35%"></div>
+    </div>
+    <div class="skeleton-card">
+      <div class="skel" style="height:16px;width:72%;margin-bottom:14px"></div>
+      <div class="skel" style="height:7px;margin-bottom:14px"></div>
+      <div class="skel" style="height:10px;width:30%"></div>
     </div>
   </div>
 
-  <!-- Resolved Markets -->
+  <!-- Resolved markets -->
   <div id="resolvedSection" style="display:none">
-    <div class="section-label" style="margin-top:16px">Resolved Markets</div>
-    <div class="markets-grid" id="resolvedGrid"></div>
+    <div class="section-label" style="margin-top:8px;cursor:pointer" onclick="toggleResolved()">
+      Past Results <span id="resolvedToggle" style="font-size:10px;margin-left:4px">▶ show</span>
+    </div>
+    <div id="resolvedGrid" style="display:none"></div>
   </div>
 
   <!-- Leaderboard -->
-  <div id="leaderboardSection" style="display:none">
-    <div class="section-label" style="margin-top:8px">Leaderboard</div>
+  <div id="leaderboardSection" class="leaderboard-wrap" style="display:none">
+    <div class="section-label">Leaderboard</div>
+    <div id="yourRankBar" style="display:none" class="your-rank-bar">
+      <span>Your rank:</span> <strong id="yourRankNum"></strong> <span id="yourRankScore"></span>
+    </div>
     <div class="leaderboard-card" id="leaderboardCard"></div>
   </div>
 
   <!-- Rewards -->
-  <div id="rewardsSection" style="display:none">
-    <div class="section-label" style="margin-top:8px">🎁 Flex Points Rewards</div>
+  <div id="rewardsSection" class="rewards-wrap" style="display:none">
+    <div class="section-label">🎁 Rewards</div>
     <div class="rewards-grid" id="rewardsGrid"></div>
   </div>
 
-  <!-- Referral (shown after login) -->
-  <div id="referralSection" style="display:none;margin-top:24px"></div>
+  <!-- Referral -->
+  <div id="referralSection" style="display:none"></div>
 
 </main>
 
-<div class="powered">
+<div class="powered" id="poweredBy">
   <div class="powered-logo">
     <svg class="powered-hex" viewBox="0 0 32 32" fill="none">
       <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="#c9920d" stroke-width="1.5" fill="rgba(201,146,13,0.1)"/>
@@ -1081,10 +1004,10 @@ body::before {
     <span class="powered-name">HYPERFLEX</span>
   </div>
   <div class="powered-tagline">Prediction markets for creator communities</div>
-  <a href="/creator/signup" class="powered-cta">Build your own community — Get started free</a>
+  <a href="/creator/signup" class="powered-cta">Build your own community — free</a>
 </div>
 
-<!-- ══ AUTH MODAL ══ -->
+<!-- AUTH MODAL -->
 <div class="overlay" id="authOverlay" onclick="closeOverlayOnBg(event,'authOverlay')">
   <div class="modal">
     <div class="modal-header">
@@ -1097,33 +1020,14 @@ body::before {
         <button class="auth-tab" id="tabLogin" onclick="switchTab('login')">Sign in</button>
       </div>
       <div class="modal-error" id="authError"></div>
-
-      <!-- Register form -->
       <div id="registerForm">
-        <div class="field">
-          <label>Display Name</label>
-          <input type="text" id="regName" placeholder="Your name" autocomplete="name"/>
-        </div>
-        <div class="field">
-          <label>Email</label>
-          <input type="email" id="regEmail" placeholder="you@example.com" autocomplete="email"/>
-        </div>
-        <div class="field">
-          <label>Password</label>
-          <input type="password" id="regPassword" placeholder="Min 8 characters" autocomplete="new-password"/>
-        </div>
+        <div class="field"><label>Display Name</label><input type="text" id="regName" placeholder="Your name" autocomplete="name"/></div>
+        <div class="field"><label>Email</label><input type="email" id="regEmail" placeholder="you@example.com" autocomplete="email"/></div>
+        <div class="field"><label>Password</label><input type="password" id="regPassword" placeholder="Min 8 characters" autocomplete="new-password"/></div>
       </div>
-
-      <!-- Login form -->
       <div id="loginForm" style="display:none">
-        <div class="field">
-          <label>Email</label>
-          <input type="email" id="loginEmail" placeholder="you@example.com" autocomplete="email"/>
-        </div>
-        <div class="field">
-          <label>Password</label>
-          <input type="password" id="loginPassword" placeholder="Your password" autocomplete="current-password"/>
-        </div>
+        <div class="field"><label>Email</label><input type="email" id="loginEmail" placeholder="you@example.com" autocomplete="email"/></div>
+        <div class="field"><label>Password</label><input type="password" id="loginPassword" placeholder="Your password" autocomplete="current-password"/></div>
       </div>
     </div>
     <div class="modal-footer">
@@ -1135,34 +1039,31 @@ body::before {
   </div>
 </div>
 
-<!-- ══ PREDICT MODAL ══ -->
+<!-- PREDICT MODAL -->
 <div class="overlay" id="predictOverlay" onclick="closeOverlayOnBg(event,'predictOverlay')">
   <div class="modal">
     <div class="modal-header">
-      <span class="modal-title" id="predictTitle">Place your prediction</span>
+      <span class="modal-title">Place your prediction</span>
       <button class="modal-close" onclick="closePredict()">✕</button>
     </div>
     <div class="modal-body">
       <div class="predict-market-q" id="predictQuestion"></div>
       <div class="modal-error" id="predictError"></div>
-
       <div style="margin-bottom:16px">
-        <div class="section-label" style="font-size:10px;margin-bottom:10px">Your pick</div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px">Your pick</div>
         <div class="predict-side">
           <button class="side-btn yes" id="sideYes" onclick="selectSide('YES')">✓ YES</button>
           <button class="side-btn no"  id="sideNo"  onclick="selectSide('NO')">✗ NO</button>
         </div>
       </div>
-
       <div style="margin-bottom:4px">
-        <div class="section-label" style="font-size:10px;margin-bottom:10px">Amount</div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px">Amount</div>
         <div class="amount-row">
           <input class="amount-input" type="number" id="amountInput" value="100" min="10" step="10" oninput="updatePayout()"/>
           <span class="amount-unit" id="amountUnit">pts</span>
         </div>
         <div class="amount-hint" id="amountHint">Balance: — pts</div>
       </div>
-
       <div class="payout-preview">
         <span class="payout-label">Potential payout</span>
         <span class="payout-val" id="payoutVal">200 pts</span>
@@ -1177,50 +1078,48 @@ body::before {
   </div>
 </div>
 
-<!-- Toast -->
 <div class="toast" id="toast"></div>
 
 <script>
-const API = window.location.origin;
+const API  = window.location.origin;
 const slug = window.location.pathname.replace(/^\//, '').split('/')[0];
 
-let community = null;
-let markets = [];
-let currentUser = null;
-let pendingMarket = null;
-let pendingSide = null;
-let authTab = 'register';
-// Community balance is stored as centpoints (100,000 = 1,000 pts). Always divide by 100 for display.
+let community       = null;
+let markets         = [];
+let currentUser     = null;
+let pendingMarket   = null;
+let pendingSide     = null;
+let authTab         = 'register';
 let communityBalance = null;
+let myPositions     = {};   // marketId → { side, amount }
+let leaderboardData = [];
+let currentFilter   = 'all';
+let resolvedVisible = false;
+let allRewards      = [];
 
-// ── INIT ─────────────────────────────────────────────────────
+// ── INIT ──────────────────────────────────────────────────────
 (async function init() {
-  // Capture referral code from URL before anything else
   captureReferralParam();
   restoreSession();
   await loadCommunity();
   if (currentUser) {
-    await fetchCommunityBalance();
+    await Promise.all([fetchCommunityBalance(), fetchMyPositions()]);
+    renderUserHeader();
     renderReferralSection();
   }
 })();
 
-// Store referral param in localStorage for use after registration
 function captureReferralParam() {
   const refId = new URLSearchParams(window.location.search).get('ref');
   if (refId && slug) {
     localStorage.setItem(`hf_ref_${slug}`, refId);
-    // Clean the URL so it doesn't look odd
-    try {
-      const clean = window.location.pathname;
-      window.history.replaceState({}, '', clean);
-    } catch {}
+    try { window.history.replaceState({}, '', window.location.pathname); } catch {}
   }
 }
 
 function restoreSession() {
   const token = localStorage.getItem('hf_token');
-  const raw = localStorage.getItem('hf_user');
+  const raw   = localStorage.getItem('hf_user');
   if (token && raw) {
     try { currentUser = JSON.parse(raw); } catch {}
     if (currentUser) renderUserHeader();
@@ -1233,16 +1132,16 @@ async function loadCommunity() {
     if (!r.ok) { showCommunityError(); return; }
     const data = await r.json();
     community = data.community;
-    markets = data.markets || [];
+    markets   = data.markets || [];
+    allRewards = data.rewards || [];
     renderPage();
-    renderRewards(data.rewards || []);
+    renderRewards(allRewards);
     loadLeaderboard();
   } catch {
     showCommunityError();
   }
 }
 
-// Fetch the user's balance for this specific community (centpoints)
 async function fetchCommunityBalance() {
   const token = localStorage.getItem('hf_token');
   if (!token || !slug) return;
@@ -1252,99 +1151,33 @@ async function fetchCommunityBalance() {
     });
     if (r.ok) {
       const data = await r.json();
-      communityBalance = data.balance; // centpoints
-      renderUserHeader();
+      communityBalance = data.balance;
     }
-  } catch { /* silent */ }
+  } catch {}
 }
 
-// ── REFERRAL ──────────────────────────────────────────────────
-
-// Called after new user registration — claims any stored referral code for this community
-async function claimReferralIfPending(token) {
-  const refUserId = localStorage.getItem(`hf_ref_${slug}`);
-  if (!refUserId || !slug) return;
+async function fetchMyPositions() {
+  const token = localStorage.getItem('hf_token');
+  if (!token || !slug) return;
   try {
-    const r = await fetch(`${API}/api/referral/claim`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ ref_user_id: refUserId, creator_slug: slug })
-    });
-    const data = await r.json();
-    if (data.ok && data.welcome_bonus > 0) {
-      const bonusPts = Math.round(data.welcome_bonus / 100);
-      showToast(`🎁 Welcome bonus: +${bonusPts} pts added to your balance!`, 'success');
-      // Refresh balance to reflect the bonus
-      await fetchCommunityBalance();
-    }
-  } catch { /* silent — referral failure shouldn't break sign-up */ }
-  localStorage.removeItem(`hf_ref_${slug}`);
-}
-
-// Renders the referral share section for logged-in users
-async function renderReferralSection() {
-  const section = document.getElementById('referralSection');
-  if (!section || !currentUser) return;
-
-  const refLink = `${window.location.origin}/${slug}?ref=${currentUser.id}`;
-
-  // Load stats async
-  let statsHTML = '';
-  try {
-    const token = localStorage.getItem('hf_token');
-    const r = await fetch(`${API}/api/user/referral-stats/${slug}`, {
+    const r = await fetch(`${API}/api/user/my-positions/${slug}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     if (r.ok) {
-      const s = await r.json();
-      const earnedPts = Math.round((s.total_earned || 0) / 100);
-      statsHTML = `
-        <div style="display:flex;gap:20px;margin-top:12px;font-size:12px;color:var(--dim)">
-          <span><strong style="color:var(--text)">${s.total || 0}</strong> referrals total</span>
-          <span><strong style="color:var(--text)">${earnedPts}</strong> pts earned</span>
-          <span><strong style="color:var(--text)">${s.remaining_cap ?? 5}</strong>/5 remaining this week</span>
-        </div>`;
+      const data = await r.json();
+      (data || []).forEach(p => {
+        // Accumulate per market (user may have multiple bets)
+        if (!myPositions[p.market_id]) {
+          myPositions[p.market_id] = { side: p.side, amount: 0 };
+        }
+        myPositions[p.market_id].amount += Math.round((p.amount || 0) / 100);
+        // If they've bet both sides just show the larger one
+        if (p.side !== myPositions[p.market_id].side) {
+          myPositions[p.market_id].side = p.amount > (myPositions[p.market_id].amount * 100) ? p.side : myPositions[p.market_id].side;
+        }
+      });
     }
   } catch {}
-
-  const pts = community?.custom_points_name || 'pts';
-  const rewardPts = community?.referral_reward !== undefined
-    ? Math.round(community.referral_reward / 100)
-    : 100;
-  const bonusPts = community?.welcome_bonus !== undefined
-    ? Math.round(community.welcome_bonus / 100)
-    : 50;
-
-  section.innerHTML = `
-    <div class="referral-card">
-      <div class="referral-title">🔗 Invite Friends</div>
-      <div class="referral-desc">You earn <strong>${rewardPts} ${pts}</strong> per referral · Friends get <strong>${bonusPts} ${pts}</strong> welcome bonus</div>
-      <div class="referral-link-row">
-        <input class="referral-input" id="refLinkInput" type="text" value="${refLink}" readonly/>
-        <button class="btn-copy" onclick="copyRefLink()">Copy</button>
-      </div>
-      ${statsHTML}
-    </div>`;
-  section.style.display = 'block';
-}
-
-function copyRefLink() {
-  const input = document.getElementById('refLinkInput');
-  if (!input) return;
-  navigator.clipboard.writeText(input.value).then(() => {
-    showToast('Referral link copied!', 'success');
-  }).catch(() => {
-    input.select();
-    document.execCommand('copy');
-    showToast('Referral link copied!', 'success');
-  });
-}
-
-function showCommunityError() {
-  document.getElementById('heroTitle').textContent = 'Community not found';
-  document.getElementById('heroDesc').textContent = 'This community page doesn\'t exist or is not active.';
-  document.getElementById('marketsGrid').innerHTML =
-    '<div class="empty"><div class="empty-icon">🔍</div>No community found for this URL.</div>';
 }
 
 // ── RENDER PAGE ───────────────────────────────────────────────
@@ -1352,170 +1185,205 @@ function renderPage() {
   const c = community;
   document.title = `${c.display_name} — HYPERFLEX`;
 
-  // Apply creator's primary color
+  // Apply creator accent color
   if (c.primary_color) {
     document.documentElement.style.setProperty('--gold', c.primary_color);
-    // Derive a slightly brighter hover shade
     document.documentElement.style.setProperty('--gold-lt', c.primary_color);
     document.documentElement.style.setProperty('--gold-bright', c.primary_color);
   }
 
-  document.getElementById('headerCommunityName').textContent = c.display_name;
-  document.getElementById('heroTitle').textContent = c.display_name;
-  document.getElementById('heroDesc').textContent = c.community_description ||
-    `Make predictions on ${c.display_name}'s markets. Earn ${c.custom_points_name || 'Flex Points'} and top the leaderboard.`;
-
-  // Custom font
+  // Apply custom font
   if (c.font_choice && c.font_choice !== 'Syne') {
     const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(c.font_choice)}:wght@400;600;700;800&display=swap`;
+    link.rel   = 'stylesheet';
+    link.href  = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(c.font_choice)}:wght@400;600;700;800&display=swap`;
     document.head.appendChild(link);
     document.documentElement.style.setProperty('--display', `'${c.font_choice}', sans-serif`);
   }
 
-  // Banner image
-  if (c.banner_url) {
-    const heroEl = document.querySelector('.hero');
-    if (heroEl) {
-      const bannerDiv = document.createElement('div');
-      bannerDiv.style.cssText = `position:absolute;inset:0;background:url('${c.banner_url}') center/cover no-repeat;opacity:0.15;z-index:-1;border-radius:0;`;
-      heroEl.style.position = 'relative';
-      heroEl.prepend(bannerDiv);
-    }
+  document.getElementById('headerCommunityName').textContent = c.display_name;
+  document.getElementById('heroTitle').textContent = c.display_name;
+  document.getElementById('heroDesc').textContent  = c.community_description ||
+    `Make predictions on ${c.display_name}'s markets. Earn ${c.custom_points_name || 'Flex Points'} and top the leaderboard.`;
+
+  // Logo
+  const logoInitials = (c.display_name || 'HF').split(/\s+/).slice(0,2).map(w => w[0].toUpperCase()).join('');
+  document.getElementById('heroLogoPlaceholder').textContent = logoInitials;
+  if (c.logo_url) {
+    const img = document.getElementById('heroLogoImg');
+    img.src = c.logo_url;
+    img.alt = c.display_name;
+    img.style.display = 'block';
+    document.getElementById('heroLogoPlaceholder').style.display = 'none';
+    // Header logo too
+    const headerName = document.getElementById('headerCommunityName');
+    const hImg = document.createElement('img');
+    hImg.src = c.logo_url; hImg.alt = ''; hImg.onerror = () => hImg.remove();
+    hImg.style.cssText = 'width:22px;height:22px;border-radius:50%;object-fit:cover;margin-right:6px;vertical-align:middle;flex-shrink:0;';
+    headerName.parentNode.insertBefore(hImg, headerName);
   }
 
-  // Logo in header
-  if (c.logo_url) {
-    const headerName = document.getElementById('headerCommunityName');
-    if (headerName) {
-      const logoImg = document.createElement('img');
-      logoImg.src = c.logo_url;
-      logoImg.alt = c.display_name;
-      logoImg.style.cssText = 'width:28px;height:28px;border-radius:50%;object-fit:cover;margin-right:6px;vertical-align:middle;';
-      logoImg.onerror = () => logoImg.remove();
-      headerName.parentNode.insertBefore(logoImg, headerName);
-    }
+  // Banner
+  if (c.banner_url) {
+    const banner = document.getElementById('heroBanner');
+    banner.style.backgroundImage = `url('${c.banner_url}')`;
+    banner.style.backgroundSize  = 'cover';
+    banner.style.backgroundPosition = 'center';
   }
 
   // Social links
   const socials = [
-    { key: 'social_twitter',  icon: '𝕏', label: 'X / Twitter', color: '#1da1f2' },
-    { key: 'social_youtube',  icon: '▶', label: 'YouTube',     color: '#ff0000' },
-    { key: 'social_discord',  icon: '💬', label: 'Discord',    color: '#5865f2' },
-    { key: 'social_twitch',   icon: '🎮', label: 'Twitch',     color: '#9146ff' }
+    { key: 'social_twitter', icon: '𝕏',  label: 'Twitter',  color: '#1da1f2' },
+    { key: 'social_youtube', icon: '▶',  label: 'YouTube',  color: '#ff0000' },
+    { key: 'social_discord', icon: '💬', label: 'Discord',  color: '#5865f2' },
+    { key: 'social_twitch',  icon: '🎮', label: 'Twitch',   color: '#9146ff' }
   ].filter(s => c[s.key]);
   if (socials.length) {
-    const heroEl = document.querySelector('.hero');
-    if (heroEl) {
-      const socialRow = document.createElement('div');
-      socialRow.style.cssText = 'display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;';
-      socials.forEach(s => {
-        const a = document.createElement('a');
-        a.href = c[s.key];
-        a.target = '_blank';
-        a.rel = 'noopener noreferrer';
-        a.textContent = `${s.icon} ${s.label}`;
-        a.style.cssText = `font-size:12px;font-family:var(--mono);color:var(--dim);text-decoration:none;border:1px solid var(--border);border-radius:6px;padding:4px 10px;transition:border-color .15s,color .15s;`;
-        a.onmouseover = () => { a.style.borderColor = s.color; a.style.color = s.color; };
-        a.onmouseout  = () => { a.style.borderColor = ''; a.style.color = ''; };
-        socialRow.appendChild(a);
-      });
-      heroEl.appendChild(socialRow);
-    }
+    const row = document.getElementById('socialRow');
+    row.style.display = 'flex';
+    socials.forEach(s => {
+      const a = document.createElement('a');
+      a.href = c[s.key]; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      a.textContent = `${s.icon} ${s.label}`;
+      a.className = 'social-link';
+      a.onmouseover = () => { a.style.borderColor = s.color; a.style.color = s.color; };
+      a.onmouseout  = () => { a.style.borderColor = ''; a.style.color = ''; };
+      row.appendChild(a);
+    });
   }
 
-  const active = markets.filter(m => !m.resolved);
-  const resolved = markets.filter(m => m.resolved);
+  // Stats
+  const active   = markets.filter(m => !m.resolved);
+  const resolved = markets.filter(m =>  m.resolved);
   const totalTraders = markets.reduce((s, m) => s + (m.trader_count || 0), 0);
 
-  document.getElementById('statMarkets').textContent = active.length;
-  document.getElementById('statPoints').textContent = c.custom_points_name || 'Flex Points';
-  document.getElementById('statTraders').textContent = totalTraders;
-  document.getElementById('amountUnit').textContent = 'pts';
+  document.getElementById('statMarkets').textContent  = active.length;
+  document.getElementById('statTraders').textContent  = totalTraders;
+  document.getElementById('statPoints').textContent   = c.custom_points_name || 'Flex Points';
+  document.getElementById('statPointsLabel').textContent = 'Points Currency';
+  document.getElementById('amountUnit').textContent   = 'pts';
 
-  // Hide "Powered by HYPERFLEX" watermark for Premium only (Pro keeps it — it's a selling point)
-  const isPaid = c.plan === 'platinum';
-  const poweredEl = document.querySelector('.powered');
-  if (poweredEl) poweredEl.style.display = isPaid ? 'none' : '';
-
-  // Render active markets
-  const grid = document.getElementById('marketsGrid');
-  if (active.length === 0) {
-    grid.innerHTML = '<div class="empty"><div class="empty-icon">📊</div>No open markets yet. Check back soon!</div>';
-  } else {
-    grid.innerHTML = active.map(m => marketCardHTML(m, false)).join('');
+  // Watermark
+  if (c.plan === 'platinum') {
+    const p = document.getElementById('poweredBy');
+    if (p) p.style.display = 'none';
   }
 
-  // Render resolved markets
+  // Build filter counts + render
+  buildFilterCounts();
+  renderFilteredMarkets();
+
+  // Resolved
   if (resolved.length > 0) {
     document.getElementById('resolvedSection').style.display = 'block';
     document.getElementById('resolvedGrid').innerHTML = resolved.map(m => marketCardHTML(m, true)).join('');
   }
 }
 
-function renderRewards(rewards) {
-  if (!rewards.length) return;
-  const userBalance = communityBalance !== null ? Math.floor(communityBalance / 100) : (currentUser?.balance || 0);
-  const section = document.getElementById('rewardsSection');
-  const grid = document.getElementById('rewardsGrid');
+function buildFilterCounts() {
+  const active = markets.filter(m => !m.resolved);
+  const hot    = active.filter(m => isHot(m));
+  const soon   = active.filter(m => isClosingSoon(m));
+  const mine   = active.filter(m => myPositions[m.id]);
 
-  grid.innerHTML = rewards.map(r => {
-    const unlocked = userBalance >= r.threshold;
-    const pct = Math.min(100, Math.round((userBalance / r.threshold) * 100));
-    return `
-      <div class="reward-tier ${unlocked ? 'unlocked' : 'locked'}">
-        <div class="reward-tier-badge ${unlocked ? 'unlocked' : 'locked'}">
-          ${unlocked ? '✓ Unlocked' : '🔒 Locked'}
-        </div>
-        <div class="reward-tier-threshold">${Number(r.threshold).toLocaleString()} pts</div>
-        <div class="reward-tier-title">${r.title}</div>
-        ${r.description ? `<div class="reward-tier-desc">${r.description}</div>` : ''}
-        <div class="reward-progress">
-          <div class="reward-progress-fill" style="width:${pct}%"></div>
-        </div>
-      </div>
-    `;
-  }).join('');
+  document.getElementById('fcAll').textContent  = active.length;
+  document.getElementById('fcHot').textContent  = hot.length;
+  document.getElementById('fcSoon').textContent = soon.length;
+  document.getElementById('fcMine').textContent = mine.length;
 
-  section.style.display = 'block';
+  if (active.length > 0) document.getElementById('filterRow').style.display = 'flex';
+  if (mine.length > 0)   document.getElementById('ftMine').style.display = 'flex';
+}
+
+function isHot(m)         { return (m.trader_count || 0) >= 5; }
+function isClosingSoon(m) {
+  const diff = new Date(m.expiry_date) - new Date();
+  return diff > 0 && diff < 72 * 60 * 60 * 1000;
+}
+
+function setFilter(f) {
+  currentFilter = f;
+  ['all','hot','soon','mine'].forEach(id => {
+    const el = document.getElementById('ft' + id.charAt(0).toUpperCase() + id.slice(1));
+    if (el) el.classList.toggle('active', id === f);
+  });
+  renderFilteredMarkets();
+}
+
+function renderFilteredMarkets() {
+  const active = markets.filter(m => !m.resolved);
+  let filtered;
+  if (currentFilter === 'hot')   filtered = active.filter(m => isHot(m));
+  else if (currentFilter === 'soon') filtered = active.filter(m => isClosingSoon(m));
+  else if (currentFilter === 'mine') filtered = active.filter(m => myPositions[m.id]);
+  else filtered = active;
+
+  const grid = document.getElementById('marketsGrid');
+  if (filtered.length === 0) {
+    const msgs = {
+      hot:  { icon: '🔥', title: 'No hot markets yet', sub: 'Markets with 5+ traders will show here.' },
+      soon: { icon: '⏰', title: 'Nothing closing soon', sub: 'Markets closing within 72 hours will show here.' },
+      mine: { icon: '✓', title: 'No active bets', sub: 'Your open predictions will show here.' },
+      all:  { icon: '📊', title: 'No open markets', sub: 'Check back soon!' }
+    };
+    const m = msgs[currentFilter] || msgs.all;
+    grid.innerHTML = `<div class="empty"><div class="empty-icon">${m.icon}</div><strong>${m.title}</strong><br/><span style="font-size:12px;color:var(--dim);margin-top:6px;display:block">${m.sub}</span></div>`;
+  } else {
+    grid.innerHTML = filtered.map(m => marketCardHTML(m, false)).join('');
+  }
 }
 
 function marketCardHTML(m, isResolved) {
-  const yp = Number(m.yes_price) || 0.5;
-  const np = Number(m.no_price)  || 0.5;
-  const yesPct = Math.round(yp * 100);
-  const noPct  = Math.round(np * 100);
+  const yp      = Number(m.yes_price) || 0.5;
+  const np      = Number(m.no_price)  || 0.5;
+  const yesPct  = Math.round(yp * 100);
+  const noPct   = Math.round(np * 100);
   const closes  = formatDate(m.expiry_date);
   const traders = m.trader_count || 0;
   const cat     = (m.category || 'other').toLowerCase();
+  const hot     = isHot(m);
+  const soon    = isClosingSoon(m);
+  const pos     = myPositions[m.id];
 
+  // Badges
+  let badgesHTML = `<span class="market-badge ${isResolved ? 'resolved-badge' : 'live'}">${isResolved ? 'Resolved' : 'Live'}</span>`;
+  if (!isResolved && hot)  badgesHTML += `<span class="market-badge hot">🔥 Hot</span>`;
+  if (!isResolved && soon) badgesHTML += `<span class="market-badge soon">⏰ Soon</span>`;
+
+  // My position
+  let posHTML = '';
+  if (!isResolved && pos) {
+    posHTML = `<div class="my-position-row">
+      <span class="my-position-label">Your bet</span>
+      <span class="my-position-side ${pos.side.toLowerCase()}">${pos.side}</span>
+      <span class="my-position-amount">${pos.amount.toLocaleString()} pts</span>
+    </div>`;
+  }
+
+  // Predict buttons or resolved banner
   let actionsHTML;
   if (isResolved) {
     const won = m.outcome === 'YES' || m.outcome === true;
-    actionsHTML = `
-      <div class="outcome-banner ${won ? 'yes' : 'no'}">
-        ${won ? '✓ Resolved YES' : '✗ Resolved NO'}
-      </div>`;
+    actionsHTML = `<div class="outcome-banner ${won ? 'yes' : 'no'}">${won ? '✓ Resolved YES' : '✗ Resolved NO'}</div>`;
   } else {
-    actionsHTML = `
-      <div class="market-actions">
-        <button class="btn-predict yes" onclick="onPredict(event,'${m.id}','YES')">
-          ✓ YES <span style="opacity:.6;font-size:11px">${yesPct}%</span>
-        </button>
-        <button class="btn-predict no" onclick="onPredict(event,'${m.id}','NO')">
-          ✗ NO <span style="opacity:.6;font-size:11px">${noPct}%</span>
-        </button>
-      </div>`;
+    actionsHTML = `<div class="market-actions">
+      <button class="btn-predict yes" onclick="onPredict(event,'${m.id}','YES')">
+        ✓ YES <span style="opacity:.55;font-size:11px">${yesPct}%</span>
+      </button>
+      <button class="btn-predict no" onclick="onPredict(event,'${m.id}','NO')">
+        ✗ NO <span style="opacity:.55;font-size:11px">${noPct}%</span>
+      </button>
+    </div>`;
   }
 
   return `
-    <div class="market-card${isResolved ? ' resolved' : ''}" id="mkt-${m.id}">
+    <div class="market-card${isResolved ? ' resolved' : ''}${pos ? ' has-position' : ''}" id="mkt-${m.id}">
       <div class="market-card-inner">
         <div class="market-top">
           <div class="market-question">${escHtml(m.question)}</div>
-          <span class="market-badge ${isResolved ? 'resolved-badge' : 'live'}">${isResolved ? 'Resolved' : 'Live'}</span>
+          <div class="market-badges">${badgesHTML}</div>
         </div>
+        ${posHTML}
         <div class="odds-bar-wrap">
           <div class="odds-bar">
             <div class="odds-bar-yes" style="width:${yesPct}%"></div>
@@ -1528,7 +1396,7 @@ function marketCardHTML(m, isResolved) {
           </div>
         </div>
         <div class="market-meta">
-          <span class="meta-item"><span class="meta-icon">📅</span> Closes ${closes}</span>
+          <span class="meta-item${soon ? ' urgent' : ''}"><span class="meta-icon">📅</span> ${closes}</span>
           <span class="meta-item"><span class="meta-icon">👥</span> ${traders} trader${traders !== 1 ? 's' : ''}</span>
         </div>
       </div>
@@ -1536,41 +1404,12 @@ function marketCardHTML(m, isResolved) {
     </div>`;
 }
 
-// Re-renders the live prices and trader count on a card without full page refresh.
-// Called after a successful trade to reflect CPMM price movement instantly.
-function refreshMarketCard(m) {
-  const card = document.getElementById(`mkt-${m.id}`);
-  if (!card) return;
-
-  const yp = Number(m.yes_price) || 0.5;
-  const np = Number(m.no_price)  || 0.5;
-  const yesPct = Math.round(yp * 100);
-  const noPct  = Math.round(np * 100);
-
-  // Odds bar
-  const barYes = card.querySelector('.odds-bar-yes');
-  const barNo  = card.querySelector('.odds-bar-no');
-  if (barYes) barYes.style.width = yesPct + '%';
-  if (barNo)  barNo.style.width  = noPct  + '%';
-
-  // Labels under bar
-  const labels = card.querySelectorAll('.odds-label');
-  if (labels[0]) labels[0].innerHTML = `<span class="odds-dot yes"></span>YES ${yesPct}%`;
-  if (labels[1]) labels[1].innerHTML = `NO ${noPct}%<span class="odds-dot no" style="margin-left:5px"></span>`;
-
-  // Button percentages
-  const btnYes = card.querySelector('.btn-predict.yes');
-  const btnNo  = card.querySelector('.btn-predict.no');
-  if (btnYes) btnYes.innerHTML = `✓ YES <span style="opacity:.6;font-size:11px">${yesPct}%</span>`;
-  if (btnNo)  btnNo.innerHTML  = `✗ NO <span style="opacity:.6;font-size:11px">${noPct}%</span>`;
-
-  // Trader count
-  const traderEl = card.querySelector('.meta-item:nth-child(2)');
-  if (traderEl) {
-    const n = (m.trader_count || 0) + 1;
-    m.trader_count = n; // update local object too
-    traderEl.innerHTML = `<span class="meta-icon">👥</span> ${n} trader${n !== 1 ? 's' : ''}`;
-  }
+function toggleResolved() {
+  resolvedVisible = !resolvedVisible;
+  document.getElementById('resolvedGrid').style.display = resolvedVisible ? 'flex' : 'none';
+  if (resolvedVisible) document.getElementById('resolvedGrid').style.flexDirection = 'column';
+  if (resolvedVisible) document.getElementById('resolvedGrid').style.gap = '10px';
+  document.getElementById('resolvedToggle').textContent = resolvedVisible ? '▼ hide' : '▶ show';
 }
 
 // ── LEADERBOARD ───────────────────────────────────────────────
@@ -1580,52 +1419,161 @@ async function loadLeaderboard() {
     if (!r.ok) return;
     const data = await r.json();
     if (!Array.isArray(data) || data.length === 0) return;
+    leaderboardData = data;
 
     const top = data.slice(0, 10);
-    const pointsName = community?.custom_points_name || 'pts';
-    const section = document.getElementById('leaderboardSection');
+    const pts = community?.custom_points_name || 'pts';
     const card = document.getElementById('leaderboardCard');
+
+    // Find current user in leaderboard
+    let myRank = null, myScore = null;
+    if (currentUser) {
+      const myRow = data.findIndex(r => r.user_id === currentUser.id);
+      if (myRow !== -1) {
+        myRank  = myRow + 1;
+        myScore = Math.round((data[myRow].total_pnl || 0) / 100).toLocaleString();
+      }
+    }
 
     card.innerHTML = top.map((row, i) => {
       const rankClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
       const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`;
-      const name = escHtml(row.display_name || row.username || row.user_id?.slice(0,8) || 'Anonymous');
-      // total_pnl is in centpoints (100 = 1 pt); divide for display
-      const pnl  = Math.round((row.total_pnl || 0) / 100).toLocaleString();
-      const wins = row.wins || 0;
+      const name  = escHtml(row.display_name || row.username || 'Anonymous');
+      const pnl   = Math.round((row.total_pnl || 0) / 100).toLocaleString();
+      const wins  = row.wins || 0;
       const streak = row.streak || 0;
+      const isYou = currentUser && row.user_id === currentUser.id;
       let streakBadge = '';
-      if (streak >= 7) {
-        streakBadge = `<span class="lb-streak master" title="${streak}-win streak">⚡ ${streak} Streak</span>`;
-      } else if (streak >= 3) {
-        streakBadge = `<span class="lb-streak fire" title="${streak}-win streak">🔥 ${streak}</span>`;
-      }
+      if (streak >= 7) streakBadge = `<span class="lb-streak master">⚡ ${streak}</span>`;
+      else if (streak >= 3) streakBadge = `<span class="lb-streak fire">🔥 ${streak}</span>`;
       return `
-        <div class="lb-row">
+        <div class="lb-row${isYou ? ' is-you' : ''}">
           <div class="lb-rank ${rankClass}">${medal}</div>
-          <div class="lb-name">${name}${streakBadge ? ' ' + streakBadge : ''}</div>
+          <div class="lb-name">${name}${isYou ? '<span class="lb-you-tag">YOU</span>' : ''}${streakBadge}</div>
           <div class="lb-correct">${wins}W</div>
-          <div class="lb-score">+${pnl} ${pointsName}</div>
+          <div class="lb-score">+${pnl} ${pts}</div>
         </div>`;
     }).join('');
 
-    section.style.display = 'block';
+    // Your rank callout (only if not in top 10 or for emphasis)
+    if (myRank && myScore) {
+      const bar = document.getElementById('yourRankBar');
+      document.getElementById('yourRankNum').textContent = `#${myRank}`;
+      document.getElementById('yourRankScore').textContent = `· +${myScore} ${pts}`;
+      bar.style.display = 'flex';
+    }
+
+    document.getElementById('leaderboardSection').style.display = 'block';
   } catch {}
+}
+
+// ── REWARDS ───────────────────────────────────────────────────
+function renderRewards(rewards) {
+  if (!rewards.length) return;
+  const userBal = communityBalance !== null ? Math.floor(communityBalance / 100) : (currentUser?.balance || 0);
+  const grid = document.getElementById('rewardsGrid');
+  grid.innerHTML = rewards.map(r => {
+    const unlocked = userBal >= r.threshold;
+    const pct = Math.min(100, Math.round((userBal / r.threshold) * 100));
+    return `
+      <div class="reward-tier ${unlocked ? 'unlocked' : 'locked'}">
+        <div class="reward-tier-badge ${unlocked ? 'unlocked' : 'locked'}">${unlocked ? '✓ Unlocked' : '🔒 Locked'}</div>
+        <div class="reward-tier-threshold">${Number(r.threshold).toLocaleString()} pts</div>
+        <div class="reward-tier-title">${r.title}</div>
+        ${r.description ? `<div class="reward-tier-desc">${r.description}</div>` : ''}
+        <div class="reward-progress"><div class="reward-progress-fill" style="width:${pct}%"></div></div>
+      </div>`;
+  }).join('');
+  document.getElementById('rewardsSection').style.display = 'block';
+}
+
+function renderRewardHint() {
+  if (!currentUser || !allRewards.length) return;
+  const userBal = communityBalance !== null ? Math.floor(communityBalance / 100) : 0;
+  // Find next reward not yet unlocked
+  const next = allRewards.slice().sort((a,b) => a.threshold - b.threshold).find(r => userBal < r.threshold);
+  if (!next) return; // all unlocked
+  const pts = community?.custom_points_name || 'pts';
+  const pct = Math.min(99, Math.round((userBal / next.threshold) * 100));
+  const needed = (next.threshold - userBal).toLocaleString();
+  document.getElementById('rewardHintText').innerHTML = `<strong>${needed} ${pts}</strong> to unlock <strong>${next.title}</strong>`;
+  document.getElementById('rewardHintFill').style.width = pct + '%';
+  document.getElementById('rewardHintPct').textContent = pct + '%';
+  document.getElementById('rewardHint').style.display = 'flex';
+}
+
+// ── REFERRAL ──────────────────────────────────────────────────
+async function claimReferralIfPending(token) {
+  const refUserId = localStorage.getItem(`hf_ref_${slug}`);
+  if (!refUserId || !slug) return;
+  try {
+    const r = await fetch(`${API}/api/referral/claim`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ ref_user_id: refUserId, creator_slug: slug })
+    });
+    const data = await r.json();
+    if (data.ok && data.welcome_bonus > 0) {
+      const bonusPts = Math.round(data.welcome_bonus / 100);
+      showToast(`🎁 Welcome bonus: +${bonusPts} pts added!`, 'success');
+      await fetchCommunityBalance();
+    }
+  } catch {}
+  localStorage.removeItem(`hf_ref_${slug}`);
+}
+
+async function renderReferralSection() {
+  const section = document.getElementById('referralSection');
+  if (!section || !currentUser) return;
+  const refLink = `${window.location.origin}/${slug}?ref=${currentUser.id}`;
+  let statsHTML = '';
+  try {
+    const token = localStorage.getItem('hf_token');
+    const r = await fetch(`${API}/api/user/referral-stats/${slug}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (r.ok) {
+      const s = await r.json();
+      const earnedPts = Math.round((s.total_earned || 0) / 100);
+      statsHTML = `<div style="display:flex;gap:20px;margin-top:12px;font-size:12px;color:var(--dim)">
+        <span><strong style="color:var(--text)">${s.total || 0}</strong> referrals</span>
+        <span><strong style="color:var(--text)">${earnedPts}</strong> pts earned</span>
+        <span><strong style="color:var(--text)">${s.remaining_cap ?? 5}</strong>/5 left this week</span>
+      </div>`;
+    }
+  } catch {}
+  const pts      = community?.custom_points_name || 'pts';
+  const rewardPts = community?.referral_reward ? Math.round(community.referral_reward / 100) : 100;
+  const bonusPts  = community?.welcome_bonus   ? Math.round(community.welcome_bonus   / 100) : 50;
+  section.innerHTML = `
+    <div class="referral-card">
+      <div class="referral-title">🔗 Invite Friends, Earn ${pts}</div>
+      <div class="referral-desc">You earn <strong>${rewardPts} ${pts}</strong> per referral · Friends get <strong>${bonusPts} ${pts}</strong> welcome bonus · Up to 5/week</div>
+      <div class="referral-link-row">
+        <input class="referral-input" id="refLinkInput" type="text" value="${refLink}" readonly/>
+        <button class="btn-copy" onclick="copyRefLink()">Copy</button>
+      </div>
+      ${statsHTML}
+    </div>`;
+  section.style.display = 'block';
+}
+
+function copyRefLink() {
+  const input = document.getElementById('refLinkInput');
+  if (!input) return;
+  navigator.clipboard.writeText(input.value)
+    .then(() => showToast('Referral link copied!', 'success'))
+    .catch(() => { input.select(); document.execCommand('copy'); showToast('Referral link copied!', 'success'); });
 }
 
 // ── PREDICT FLOW ──────────────────────────────────────────────
 function onPredict(e, marketId, side) {
   e.stopPropagation();
-  const m = markets.find(x => x.id === marketId || x.id == marketId);
+  const m = markets.find(x => String(x.id) === String(marketId));
   if (!m) return;
-
   pendingMarket = m;
   pendingSide   = side;
-
-  if (!currentUser) {
-    openAuth('register');
-    return;
-  }
+  if (!currentUser) { openAuth('register'); return; }
   openPredict(m, side);
 }
 
@@ -1634,12 +1582,10 @@ function openPredict(m, side) {
   document.getElementById('predictError').classList.remove('show');
   document.getElementById('predictError').textContent = '';
   selectSide(side);
-  // Default bet = min bet (converted from centpoints to pts), fallback to 10
   const minPts = community?.min_bet ? Math.round(community.min_bet / 100) : 10;
   document.getElementById('amountInput').value = minPts;
   const balPts = communityBalance !== null ? Math.floor(communityBalance / 100) : (currentUser?.balance || 0);
-  document.getElementById('amountHint').textContent =
-    `Balance: ${Number(balPts).toLocaleString()} pts`;
+  document.getElementById('amountHint').textContent = `Balance: ${Number(balPts).toLocaleString()} pts`;
   updatePayout();
   document.getElementById('predictOverlay').classList.add('show');
 }
@@ -1656,8 +1602,7 @@ function updatePayout() {
   const amount = parseFloat(document.getElementById('amountInput').value) || 0;
   const price  = pendingSide === 'YES' ? (Number(m.yes_price) || 0.5) : (Number(m.no_price) || 0.5);
   const payout = price > 0 ? (amount / price) : amount * 2;
-  document.getElementById('payoutVal').textContent =
-    `${Math.round(payout).toLocaleString()} pts`;
+  document.getElementById('payoutVal').textContent = `${Math.round(payout).toLocaleString()} pts`;
 }
 
 async function submitPredict() {
@@ -1666,20 +1611,17 @@ async function submitPredict() {
   const txtEl  = document.getElementById('predictBtnText');
   errEl.classList.remove('show');
 
-  // User types pts; internally we use centpoints (×100)
   const inputPts = parseFloat(document.getElementById('amountInput').value);
-  const minPts = community?.min_bet ? Math.round(community.min_bet / 100) : 10;
-  const maxPts = community?.max_bet ? Math.round(community.max_bet / 100) : null;
-  const balPts = communityBalance !== null ? Math.floor(communityBalance / 100) : (currentUser?.balance || 0);
+  const minPts   = community?.min_bet ? Math.round(community.min_bet / 100) : 10;
+  const maxPts   = community?.max_bet ? Math.round(community.max_bet / 100) : null;
+  const balPts   = communityBalance !== null ? Math.floor(communityBalance / 100) : (currentUser?.balance || 0);
 
-  if (!pendingSide) { showPredictError('Choose YES or NO.'); return; }
-  if (!inputPts || inputPts < minPts) { showPredictError(`Minimum prediction is ${minPts.toLocaleString()} pts.`); return; }
-  if (maxPts && inputPts > maxPts) { showPredictError(`Maximum prediction is ${maxPts.toLocaleString()} pts.`); return; }
-  if (inputPts > balPts) { showPredictError('Insufficient balance.'); return; }
+  if (!pendingSide)            { showPredictError('Choose YES or NO.'); return; }
+  if (!inputPts || inputPts < minPts) { showPredictError(`Minimum bet is ${minPts.toLocaleString()} pts.`); return; }
+  if (maxPts && inputPts > maxPts)    { showPredictError(`Maximum bet is ${maxPts.toLocaleString()} pts.`); return; }
+  if (inputPts > balPts)              { showPredictError('Insufficient balance.'); return; }
 
-  // Convert pts → centpoints for server
   const amount = Math.round(inputPts * 100);
-
   btn.disabled = true;
   txtEl.innerHTML = '<span class="spinner"></span> Placing…';
 
@@ -1687,39 +1629,35 @@ async function submitPredict() {
     const r = await fetch(`${API}/trade`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        user_id: currentUser.id,
-        market_id: pendingMarket.id,
-        side: pendingSide,
-        amount
-      })
+      body: JSON.stringify({ user_id: currentUser.id, market_id: pendingMarket.id, side: pendingSide, amount })
     });
     const data = await r.json();
     if (!r.ok) { showPredictError(data.error || 'Trade failed.'); return; }
 
-    // Update community balance from server response
-    if (data.balance !== undefined) {
-      communityBalance = data.balance; // centpoints
-    } else if (communityBalance !== null) {
-      communityBalance -= amount;
-    }
+    // Update balance
+    if (data.balance !== undefined) communityBalance = data.balance;
+    else if (communityBalance !== null) communityBalance -= amount;
     localStorage.setItem('hf_user', JSON.stringify(currentUser));
-    renderUserHeader();
 
-    // Update local market prices from server response (CPMM)
+    // Track position locally for immediate UI update
+    const mid = pendingMarket.id;
+    if (!myPositions[mid]) myPositions[mid] = { side: pendingSide, amount: 0 };
+    myPositions[mid].amount += inputPts;
+
+    // Update CPMM prices locally
     if (data.yes_price !== undefined) {
       pendingMarket.yes_price = data.yes_price;
       pendingMarket.no_price  = data.no_price;
-      // Update the market in the markets array too
       const mkt = markets.find(m => m.id === pendingMarket.id);
       if (mkt) { mkt.yes_price = data.yes_price; mkt.no_price = data.no_price; }
     }
 
     closePredict();
-    showToast(`✓ Prediction placed — ${pendingSide} for ${inputPts.toLocaleString()} pts`, 'success');
-
-    // Refresh market card in-place with new prices + trader count
+    showToast(`✓ ${pendingSide} · ${inputPts.toLocaleString()} pts placed`, 'success');
     refreshMarketCard(pendingMarket);
+    renderUserHeader();
+    buildFilterCounts();
+    renderRewardHint();
   } catch {
     showPredictError('Network error. Try again.');
   } finally {
@@ -1733,10 +1671,50 @@ function showPredictError(msg) {
   el.textContent = msg;
   el.classList.add('show');
 }
-
 function closePredict() {
   document.getElementById('predictOverlay').classList.remove('show');
   pendingMarket = null;
+}
+
+function refreshMarketCard(m) {
+  const card = document.getElementById(`mkt-${m.id}`);
+  if (!card) return;
+  const yp = Number(m.yes_price) || 0.5;
+  const np = Number(m.no_price)  || 0.5;
+  const yesPct = Math.round(yp * 100);
+  const noPct  = Math.round(np * 100);
+  const barYes = card.querySelector('.odds-bar-yes');
+  const barNo  = card.querySelector('.odds-bar-no');
+  if (barYes) barYes.style.width = yesPct + '%';
+  if (barNo)  barNo.style.width  = noPct  + '%';
+  const labels = card.querySelectorAll('.odds-label');
+  if (labels[0]) labels[0].innerHTML = `<span class="odds-dot yes"></span>YES ${yesPct}%`;
+  if (labels[1]) labels[1].innerHTML = `NO ${noPct}%<span class="odds-dot no" style="margin-left:5px"></span>`;
+  const btnYes = card.querySelector('.btn-predict.yes');
+  const btnNo  = card.querySelector('.btn-predict.no');
+  if (btnYes) btnYes.innerHTML = `✓ YES <span style="opacity:.55;font-size:11px">${yesPct}%</span>`;
+  if (btnNo)  btnNo.innerHTML  = `✗ NO <span style="opacity:.55;font-size:11px">${noPct}%</span>`;
+  const n = (m.trader_count || 0) + 1;
+  m.trader_count = n;
+  const traderEl = card.querySelector('.meta-item:nth-child(2)');
+  if (traderEl) traderEl.innerHTML = `<span class="meta-icon">👥</span> ${n} trader${n !== 1 ? 's' : ''}`;
+
+  // Add position indicator if not present
+  card.classList.add('has-position');
+  const existingPos = card.querySelector('.my-position-row');
+  const pos = myPositions[m.id];
+  if (!existingPos && pos) {
+    const posDiv = document.createElement('div');
+    posDiv.className = 'my-position-row';
+    posDiv.innerHTML = `
+      <span class="my-position-label">Your bet</span>
+      <span class="my-position-side ${pos.side.toLowerCase()}">${pos.side}</span>
+      <span class="my-position-amount">${pos.amount.toLocaleString()} pts</span>`;
+    const oddsWrap = card.querySelector('.odds-bar-wrap');
+    if (oddsWrap) card.querySelector('.market-card-inner').insertBefore(posDiv, oddsWrap);
+  } else if (existingPos && pos) {
+    existingPos.querySelector('.my-position-amount').textContent = pos.amount.toLocaleString() + ' pts';
+  }
 }
 
 // ── AUTH ──────────────────────────────────────────────────────
@@ -1745,19 +1723,17 @@ function openAuth(tab) {
   document.getElementById('authError').classList.remove('show');
   document.getElementById('authOverlay').classList.add('show');
 }
-function closeAuth() {
-  document.getElementById('authOverlay').classList.remove('show');
-}
+function closeAuth() { document.getElementById('authOverlay').classList.remove('show'); }
 
 function switchTab(tab) {
   authTab = tab;
   const isReg = tab === 'register';
-  document.getElementById('tabRegister').classList.toggle('active', isReg);
-  document.getElementById('tabLogin').classList.toggle('active', !isReg);
-  document.getElementById('registerForm').style.display  = isReg ? 'block' : 'none';
-  document.getElementById('loginForm').style.display     = isReg ? 'none'  : 'block';
-  document.getElementById('authBtnText').textContent     = isReg ? 'Create account' : 'Sign in';
-  document.getElementById('authModalTitle').textContent  = isReg ? 'Join the community' : 'Welcome back';
+  document.getElementById('tabRegister').classList.toggle('active',  isReg);
+  document.getElementById('tabLogin').classList.toggle('active',    !isReg);
+  document.getElementById('registerForm').style.display = isReg ? 'block' : 'none';
+  document.getElementById('loginForm').style.display    = isReg ? 'none'  : 'block';
+  document.getElementById('authBtnText').textContent    = isReg ? 'Create account' : 'Sign in';
+  document.getElementById('authModalTitle').textContent = isReg ? 'Join the community' : 'Welcome back';
   document.getElementById('authError').classList.remove('show');
 }
 
@@ -1766,69 +1742,44 @@ async function submitAuth() {
   const btn   = document.getElementById('authSubmitBtn');
   const txtEl = document.getElementById('authBtnText');
   errEl.classList.remove('show');
-
   btn.disabled = true;
   const origText = txtEl.textContent;
   txtEl.innerHTML = '<span class="spinner"></span>';
-
   try {
     let r, data;
     if (authTab === 'register') {
-      const name = document.getElementById('regName').value.trim();
+      const name  = document.getElementById('regName').value.trim();
       const email = document.getElementById('regEmail').value.trim();
       const pw    = document.getElementById('regPassword').value;
       if (!name || !email || !pw) { showAuthError('All fields required.'); return; }
-      if (pw.length < 8) { showAuthError('Password must be at least 8 characters.'); return; }
-      r = await fetch(`${API}/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ display_name: name, email, password: pw })
-      });
+      if (pw.length < 8)          { showAuthError('Password must be at least 8 characters.'); return; }
+      r = await fetch(`${API}/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ display_name: name, email, password: pw }) });
       data = await r.json();
       if (!r.ok) { showAuthError(data.error || 'Registration failed.'); return; }
-      // Auto-login after register
-      r = await fetch(`${API}/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password: pw })
-      });
+      r = await fetch(`${API}/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: pw }) });
       data = await r.json();
-      if (!r.ok) { showAuthError(data.error || 'Login failed after register.'); return; }
+      if (!r.ok) { showAuthError(data.error || 'Login failed.'); return; }
     } else {
       const email = document.getElementById('loginEmail').value.trim();
       const pw    = document.getElementById('loginPassword').value;
       if (!email || !pw) { showAuthError('Email and password required.'); return; }
-      r = await fetch(`${API}/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password: pw })
-      });
+      r = await fetch(`${API}/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: pw }) });
       data = await r.json();
       if (!r.ok) { showAuthError(data.error || 'Invalid credentials.'); return; }
     }
-
-    // Save session
     currentUser = data.user;
     localStorage.setItem('hf_token', data.token);
     localStorage.setItem('hf_user', JSON.stringify(data.user));
-    // Fetch community balance (async, updates header when done)
-    fetchCommunityBalance();
+    await Promise.all([fetchCommunityBalance(), fetchMyPositions()]);
     renderUserHeader();
+    buildFilterCounts();
+    renderFilteredMarkets();
     closeAuth();
-    showToast(`Welcome, ${currentUser.display_name}!`, 'success');
-
-    // If this was a fresh registration, try to claim any stored referral
-    if (authTab === 'register') {
-      claimReferralIfPending(data.token);
-    }
-
-    // Show referral share section now that user is logged in
+    showToast(`Welcome, ${currentUser.display_name}! 🎉`, 'success');
+    if (authTab === 'register') claimReferralIfPending(data.token);
     renderReferralSection();
-
-    // Resume pending prediction if any
-    if (pendingMarket) {
-      setTimeout(() => openPredict(pendingMarket, pendingSide), 300);
-    }
+    renderRewardHint();
+    if (pendingMarket) setTimeout(() => openPredict(pendingMarket, pendingSide), 300);
   } catch {
     showAuthError('Network error. Please try again.');
   } finally {
@@ -1843,39 +1794,61 @@ function showAuthError(msg) {
   el.classList.add('show');
 }
 
-// ── HEADER USER STATE ─────────────────────────────────────────
+// ── HEADER ────────────────────────────────────────────────────
 function renderUserHeader() {
   const hr = document.getElementById('headerRight');
   if (!currentUser) {
     hr.innerHTML = `
       <button class="btn-auth" onclick="openAuth('login')">Sign in</button>
-      <button class="btn-auth primary" onclick="openAuth('register')">Join</button>`;
+      <button class="btn-auth primary" onclick="openAuth('register')">Join free</button>`;
     return;
   }
-  // Show community balance (centpoints ÷ 100) if loaded, else global balance fallback
   const balRaw = communityBalance !== null ? communityBalance / 100 : (currentUser.balance || 0);
   const bal = Number(balRaw).toLocaleString();
   const pts = community?.custom_points_name || 'pts';
+  // Find rank
+  let rankHTML = '';
+  if (leaderboardData.length) {
+    const idx = leaderboardData.findIndex(r => r.user_id === currentUser.id);
+    if (idx !== -1) rankHTML = `<span class="rank-chip">#${idx + 1}</span>`;
+  }
   hr.innerHTML = `
-    <span class="balance-badge">${bal} ${pts}</span>
-    <div class="user-pill">
-      <strong>${escHtml(currentUser.display_name || currentUser.email)}</strong>
-    </div>
-    <button class="btn-auth" onclick="signOut()">Sign out</button>`;
+    <div class="user-bar">
+      <div class="balance-pill"><span class="balance-pill-icon">⚡</span>${bal} ${pts}</div>
+      ${rankHTML}
+      <span class="user-name-pill">${escHtml(currentUser.display_name || currentUser.email)}</span>
+      <button class="btn-auth" onclick="signOut()" style="font-size:10px;padding:5px 10px">Sign out</button>
+    </div>`;
+  // Show reward hint
+  if (allRewards.length) renderRewardHint();
 }
 
 function signOut() {
   localStorage.removeItem('hf_token');
   localStorage.removeItem('hf_user');
   currentUser = null;
+  myPositions = {};
+  communityBalance = null;
   renderUserHeader();
+  buildFilterCounts();
+  renderFilteredMarkets();
+  document.getElementById('rewardHint').style.display = 'none';
+  document.getElementById('yourRankBar').style.display = 'none';
+  document.getElementById('referralSection').style.display = 'none';
   showToast('Signed out.', 'success');
+}
+
+// ── ERRORS ────────────────────────────────────────────────────
+function showCommunityError() {
+  document.getElementById('heroTitle').textContent = 'Community not found';
+  document.getElementById('heroDesc').textContent  = 'This page doesn\'t exist or isn\'t active yet.';
+  document.getElementById('marketsGrid').innerHTML = '<div class="empty"><div class="empty-icon">🔍</div>No community found for this URL.</div>';
 }
 
 // ── HELPERS ───────────────────────────────────────────────────
 function closeOverlayOnBg(e, id) {
   if (e.target.id === id) {
-    if (id === 'authOverlay') closeAuth();
+    if (id === 'authOverlay')    closeAuth();
     if (id === 'predictOverlay') closePredict();
   }
 }
@@ -1884,22 +1857,21 @@ function formatDate(d) {
   if (!d) return '—';
   const date = new Date(d);
   if (isNaN(date)) return d;
-  const now = new Date();
+  const now  = new Date();
   const diff = date - now;
   if (diff < 0) return 'Closed';
-  const days = Math.floor(diff / 86400000);
-  if (days === 0) return 'Today';
+  const days  = Math.floor(diff / 86400000);
+  const hours = Math.floor(diff / 3600000);
+  if (hours < 24) return `${hours}h left`;
   if (days === 1) return 'Tomorrow';
-  if (days < 7) return `${days}d`;
+  if (days < 7)   return `${days}d left`;
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 function escHtml(s) {
   return String(s)
-    .replace(/&/g,'&amp;')
-    .replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;');
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 let toastTimer;
@@ -1911,11 +1883,10 @@ function showToast(msg, type = 'success') {
   toastTimer = setTimeout(() => t.classList.remove('show'), 3200);
 }
 
-// Enter key support for auth forms
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { closeAuth(); closePredict(); }
   if (e.key === 'Enter') {
-    if (document.getElementById('authOverlay').classList.contains('show')) submitAuth();
+    if (document.getElementById('authOverlay').classList.contains('show'))    submitAuth();
     if (document.getElementById('predictOverlay').classList.contains('show')) submitPredict();
   }
 });

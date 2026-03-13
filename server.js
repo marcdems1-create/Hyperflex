@@ -589,6 +589,28 @@ app.get('/api/user/referral-stats/:slug', async (req, res) => {
   }
 });
 
+// GET /api/user/my-positions/:slug — auth'd: returns current user's open positions in a community
+app.get('/api/user/my-positions/:slug', async (req, res) => {
+  try {
+    const userId = getUserIdFromReq(req);
+    if (!userId) return res.status(401).json({ error: 'Invalid token' });
+    const { slug } = req.params;
+    // Get all market IDs for this community
+    const { data: creator } = await supabase.from('creator_settings').select('creator_id').eq('slug', slug).maybeSingle();
+    if (!creator) return res.json([]);
+    const { data: mktRows } = await supabase.from('markets').select('id').eq('creator_id', creator.creator_id).eq('resolved', false);
+    if (!mktRows || mktRows.length === 0) return res.json([]);
+    const marketIds = mktRows.map(m => m.id);
+    const { data: positions } = await supabase.from('positions')
+      .select('market_id, side, amount, potential_payout, settled')
+      .eq('user_id', userId)
+      .in('market_id', marketIds);
+    res.json(positions || []);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Get user positions
 app.get('/positions/:user_id', async (req, res) => {
   const { data, error } = await supabase
