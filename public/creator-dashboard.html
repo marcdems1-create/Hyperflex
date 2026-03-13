@@ -372,6 +372,28 @@ body.plan-premium .main {
   letter-spacing: -0.01em;
 }
 .topbar-actions { display: flex; gap: 10px; align-items: center; }
+.community-url-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+  max-width: 260px;
+}
+.community-url-pill:hover { border-color: var(--gold); background: var(--cream); }
+.community-url-text {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.community-url-copy { font-size: 13px; flex-shrink: 0; }
 .btn-primary {
   font-family: var(--sans);
   font-weight: 700;
@@ -688,6 +710,52 @@ body.plan-premium .main {
   .analytics-stat-grid { grid-template-columns: 1fr; }
   .econ-health-grid { grid-template-columns: 1fr; }
 }
+
+/* Market filter pills */
+.mkt-filter-pills { display: flex; gap: 6px; }
+.mkt-pill {
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  background: var(--cream);
+  color: var(--dim);
+  cursor: pointer;
+  transition: all .15s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.mkt-pill:hover { border-color: var(--gold); color: var(--ink); }
+.mkt-pill.active { background: var(--gold); border-color: var(--gold); color: #fff; }
+.mkt-pill-count {
+  font-size: 11px;
+  font-family: var(--mono);
+  background: rgba(0,0,0,0.12);
+  border-radius: 99px;
+  padding: 1px 6px;
+  min-width: 18px;
+  text-align: center;
+}
+/* Resonance score badge */
+.resonance-score {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--mono);
+  flex-shrink: 0;
+}
+.resonance-score.high  { background: rgba(74,222,128,0.2); color: #16a34a; }
+.resonance-score.mid   { background: rgba(201,146,13,0.2); color: var(--gold); }
+.resonance-score.low   { background: rgba(120,113,108,0.15); color: var(--dim); }
+.resonance-score.none  { background: transparent; color: var(--border); font-size:9px; }
 
 /* Stats row */
 .stats-row {
@@ -1794,7 +1862,10 @@ body.plan-premium .main {
     <div class="topbar">
       <div class="topbar-title" id="topbarTitle">Overview</div>
       <div class="topbar-actions">
-        <button class="btn-secondary" onclick="copyLink()">📋 Copy community link</button>
+        <div class="community-url-pill" onclick="copyLink()" title="Click to copy">
+          <span class="community-url-text" id="topbarCommunityUrl">hyperflex.network/…</span>
+          <span class="community-url-copy">📋</span>
+        </div>
         <button class="btn-secondary" onclick="openYoutubeModal()">🤖 AI Scanner</button>
         <button class="btn-primary" onclick="openCreateModal()">+ New Market</button>
       </div>
@@ -1946,9 +2017,18 @@ body.plan-premium .main {
       <!-- Markets Tab -->
       <div id="tab-markets" style="display:none">
         <div class="section">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <div class="mkt-filter-pills">
+              <button class="mkt-pill active" onclick="filterMarkets('live')" id="mktPillLive">Live <span class="mkt-pill-count" id="mktCountLive">0</span></button>
+              <button class="mkt-pill" onclick="filterMarkets('expired')" id="mktPillExpired">Expired <span class="mkt-pill-count" id="mktCountExpired">0</span></button>
+              <button class="mkt-pill" onclick="filterMarkets('archived')" id="mktPillArchived">Archived <span class="mkt-pill-count" id="mktCountArchived">0</span></button>
+            </div>
+            <button class="btn-primary" onclick="openCreateModal()" style="font-size:13px">+ New Market</button>
+          </div>
           <div class="markets-table">
             <div class="table-header">
               <div class="th">Market</div>
+              <div class="th">Score</div>
               <div class="th">Volume</div>
               <div class="th">Traders</div>
               <div class="th">Odds</div>
@@ -2801,6 +2881,7 @@ function renderDashboard(data) {
   // Sidebar
   document.getElementById('sidebarCommunityName').textContent = creator.display_name;
   document.getElementById('sidebarCommunityUrl').textContent = 'hyperflex.network/' + creator.slug;
+  document.getElementById('topbarCommunityUrl').textContent = 'hyperflex.network/' + creator.slug;
   // Avatar initials — up to 2 chars from display name
   const initials = (creator.display_name || '?')
     .split(/\s+/).slice(0, 2).map(w => w[0].toUpperCase()).join('');
@@ -2831,7 +2912,8 @@ function renderDashboard(data) {
 
   // Render markets
   renderMarketRows(communityMarkets.slice(0, 5), 'overviewMarketsList');
-  renderMarketRows(communityMarkets, 'allMarketsList');
+  updateMarketCounts();
+  filterMarkets(currentMarketFilter);
 
   // Leaderboard
   renderLeaderboard(leaderboard || [], 'overviewLeaderboard', 5, creator.custom_points_name);
@@ -2937,16 +3019,22 @@ function renderDashboard(data) {
   }
 }
 
+function resonanceBadge(score) {
+  if (!score) return `<div class="resonance-score none" title="No score yet">—</div>`;
+  const cls = score >= 8 ? 'high' : score >= 5 ? 'mid' : 'low';
+  return `<div class="resonance-score ${cls}" title="AI resonance score: ${score}/10">${score}</div>`;
+}
+
 function renderMarketRows(markets, containerId) {
   const el = document.getElementById(containerId);
   if (!markets.length) {
-    el.innerHTML = '<div class="empty-state"><div class="empty-icon">🎯</div><div class="empty-title">No markets yet</div><div class="empty-desc">Create your first market to get started.</div><button class="btn-primary" onclick="openCreateModal()" style="margin:0 auto">+ New Market</button></div>';
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">🎯</div><div class="empty-title">No markets here</div><div class="empty-desc">Create your first market to get started.</div><button class="btn-primary" onclick="openCreateModal()" style="margin:0 auto">+ New Market</button></div>';
     return;
   }
   el.innerHTML = markets.map(m => {
     const expired = new Date(m.expiry_date) < new Date();
-    const status = m.resolved ? 'resolved' : expired ? 'pending' : 'live';
-    const statusLabel = m.resolved ? 'Resolved' : expired ? 'Needs resolve' : 'Live';
+    const status = m.resolved ? 'resolved' : m.archived ? 'archived' : expired ? 'pending' : 'live';
+    const statusLabel = m.resolved ? 'Resolved' : m.archived ? 'Archived' : expired ? 'Needs resolve' : 'Live';
     const yes = Math.round((m.yes_price || 0.5) * 100);
     return `
       <div class="market-row" onclick="openEditModal('${m.id}')" style="cursor:pointer" title="Click to edit">
@@ -2954,6 +3042,7 @@ function renderMarketRows(markets, containerId) {
           <div class="market-question">${m.question}</div>
           <div class="market-meta">${m.category || '—'} · Closes ${formatDate(m.expiry_date)}</div>
         </div>
+        <div>${resonanceBadge(m.resonance_score)}</div>
         <div class="market-volume">${(m.volume||0).toLocaleString()} pts</div>
         <div class="market-traders">${m.trader_count || 0}</div>
         <div class="market-price">
@@ -2968,6 +3057,32 @@ function renderMarketRows(markets, containerId) {
       </div>
     `;
   }).join('');
+}
+
+let currentMarketFilter = 'live';
+function filterMarkets(filter) {
+  currentMarketFilter = filter;
+  ['live','expired','archived'].forEach(f => {
+    document.getElementById('mktPill' + f.charAt(0).toUpperCase() + f.slice(1)).classList.toggle('active', f === filter);
+  });
+  const now = new Date();
+  const filtered = communityMarkets.filter(m => {
+    if (filter === 'live')     return !m.archived && !m.resolved && new Date(m.expiry_date) >= now;
+    if (filter === 'expired')  return !m.archived && (m.resolved || new Date(m.expiry_date) < now);
+    if (filter === 'archived') return m.archived;
+    return true;
+  });
+  renderMarketRows(filtered, 'allMarketsList');
+}
+
+function updateMarketCounts() {
+  const now = new Date();
+  const live     = communityMarkets.filter(m => !m.archived && !m.resolved && new Date(m.expiry_date) >= now).length;
+  const expired  = communityMarkets.filter(m => !m.archived && (m.resolved || new Date(m.expiry_date) < now)).length;
+  const archived = communityMarkets.filter(m => m.archived).length;
+  document.getElementById('mktCountLive').textContent = live;
+  document.getElementById('mktCountExpired').textContent = expired;
+  document.getElementById('mktCountArchived').textContent = archived;
 }
 
 function renderResolveList(items, containerId) {

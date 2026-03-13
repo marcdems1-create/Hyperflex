@@ -182,6 +182,20 @@
     font-weight: 700;
     letter-spacing: 0.04em;
   }
+  .admin-tab {
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 7px 18px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--dim);
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .admin-tab:hover { color: var(--text); border-color: rgba(255,255,255,0.2); }
+  .admin-tab.active { background: rgba(201,146,13,0.15); border-color: var(--gold); color: var(--gold); }
   .refresh-btn {
     background: transparent;
     border: 1px solid var(--border);
@@ -380,12 +394,36 @@
   </header>
 
   <main>
-    <!-- Stats -->
-    <div class="stats-row" id="statsRow">
+    <!-- Platform stats -->
+    <div class="stats-row" id="statsRow" style="grid-template-columns:repeat(6,1fr)">
       <div class="stat-card">
-        <div class="stat-label">Total Creators</div>
+        <div class="stat-label">Total Users</div>
+        <div class="stat-value" id="statTotalUsers">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">New (7d)</div>
+        <div class="stat-value gold" id="statNewUsers">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Creators</div>
         <div class="stat-value" id="statTotal">—</div>
       </div>
+      <div class="stat-card">
+        <div class="stat-label">Total Markets</div>
+        <div class="stat-value" id="statTotalMarkets">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Total Trades</div>
+        <div class="stat-value" id="statTotalTrades">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Trades (7d)</div>
+        <div class="stat-value gold" id="statNewTrades">—</div>
+      </div>
+    </div>
+
+    <!-- Plan breakdown -->
+    <div class="stats-row" style="grid-template-columns:repeat(3,1fr);margin-top:0">
       <div class="stat-card">
         <div class="stat-label">Free</div>
         <div class="stat-value" id="statFree">—</div>
@@ -400,38 +438,76 @@
       </div>
     </div>
 
-    <!-- Table -->
-    <div class="section-header">
-      <div class="section-title">Creators</div>
-      <button class="refresh-btn" onclick="loadCreators()">↺ Refresh</button>
+    <!-- Tab nav -->
+    <div style="display:flex;gap:8px;margin-bottom:20px">
+      <button class="admin-tab active" id="tabBtnCreators" onclick="showAdminTab('creators')">Creators</button>
+      <button class="admin-tab" id="tabBtnUsers" onclick="showAdminTab('users')">All Users</button>
     </div>
 
-    <div class="filter-bar">
-      <input class="filter-input" id="filterInput" placeholder="Search name, slug or email…" oninput="filterTable()"/>
-      <select class="filter-select" id="filterPlan" onchange="filterTable()">
-        <option value="">All plans</option>
-        <option value="free">Free</option>
-        <option value="pro">Pro</option>
-        <option value="platinum">Premium</option>
-      </select>
+    <!-- Creators tab -->
+    <div id="adminTabCreators">
+      <div class="section-header">
+        <div class="section-title">Creators</div>
+        <button class="refresh-btn" onclick="loadCreators()">↺ Refresh</button>
+      </div>
+      <div class="filter-bar">
+        <input class="filter-input" id="filterInput" placeholder="Search name, slug or email…" oninput="filterTable()"/>
+        <select class="filter-select" id="filterPlan" onchange="filterTable()">
+          <option value="">All plans</option>
+          <option value="free">Free</option>
+          <option value="pro">Pro</option>
+          <option value="platinum">Premium</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <div class="table-msg" id="tableMsg"><span class="spinner-inline"></span> Loading…</div>
+        <table id="creatorsTable" style="display:none">
+          <thead>
+            <tr>
+              <th>Creator</th>
+              <th>Slug</th>
+              <th>Email</th>
+              <th style="text-align:center">Markets</th>
+              <th>Plan</th>
+              <th>Joined</th>
+              <th>Set Plan</th>
+            </tr>
+          </thead>
+          <tbody id="creatorsBody"></tbody>
+        </table>
+      </div>
     </div>
 
-    <div class="table-wrap">
-      <div class="table-msg" id="tableMsg"><span class="spinner-inline"></span> Loading…</div>
-      <table id="creatorsTable" style="display:none">
-        <thead>
-          <tr>
-            <th>Creator</th>
-            <th>Slug</th>
-            <th>Email</th>
-            <th style="text-align:center">Markets</th>
-            <th>Plan</th>
-            <th>Joined</th>
-            <th>Set Plan</th>
-          </tr>
-        </thead>
-        <tbody id="creatorsBody"></tbody>
-      </table>
+    <!-- Users tab -->
+    <div id="adminTabUsers" style="display:none">
+      <div class="section-header">
+        <div class="section-title">All Users</div>
+        <button class="refresh-btn" onclick="loadUsers()">↺ Refresh</button>
+      </div>
+      <div class="filter-bar">
+        <input class="filter-input" id="userFilterInput" placeholder="Search name or email…" oninput="filterUsers()"/>
+        <select class="filter-select" id="userFilterType" onchange="filterUsers()">
+          <option value="">All</option>
+          <option value="member">Members only</option>
+          <option value="creator">Creators only</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <div class="table-msg" id="usersTableMsg"><span class="spinner-inline"></span> Loading…</div>
+        <table id="usersTable" style="display:none">
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>Email</th>
+              <th>Type</th>
+              <th style="text-align:center">Trades</th>
+              <th style="text-align:right">Total Balance (pts)</th>
+              <th>Joined</th>
+            </tr>
+          </thead>
+          <tbody id="usersBody"></tbody>
+        </table>
+      </div>
     </div>
   </main>
 </div>
@@ -500,10 +576,34 @@ async function loadCreators() {
   }
 }
 
+// ── Admin tabs ────────────────────────────────────────────
+function showAdminTab(tab) {
+  ['creators','users'].forEach(t => {
+    document.getElementById('adminTab' + t.charAt(0).toUpperCase() + t.slice(1)).style.display = t === tab ? 'block' : 'none';
+    document.getElementById('tabBtn' + t.charAt(0).toUpperCase() + t.slice(1)).classList.toggle('active', t === tab);
+  });
+  if (tab === 'users' && !allUsers.length) loadUsers();
+}
+
+// ── Platform stats ────────────────────────────────────────
+async function loadPlatformStats() {
+  try {
+    const r = await fetch(API + '/api/admin/platform-stats?secret=' + encodeURIComponent(adminSecret));
+    if (!r.ok) return;
+    const d = await r.json();
+    document.getElementById('statTotalUsers').textContent  = (d.total_users   || 0).toLocaleString();
+    document.getElementById('statNewUsers').textContent    = '+' + (d.new_users_7d  || 0);
+    document.getElementById('statTotalMarkets').textContent = (d.total_markets || 0).toLocaleString();
+    document.getElementById('statTotalTrades').textContent  = (d.total_trades  || 0).toLocaleString();
+    document.getElementById('statNewTrades').textContent    = '+' + (d.new_trades_7d || 0);
+  } catch {}
+}
+
 function renderCreators(data) {
   allCreators = data;
   updateStats(data);
   applyFilter();
+  loadPlatformStats();
 }
 
 function updateStats(data) {
@@ -511,6 +611,67 @@ function updateStats(data) {
   document.getElementById('statFree').textContent  = data.filter(c => (c.plan||'free') === 'free').length;
   document.getElementById('statPro').textContent   = data.filter(c => c.plan === 'pro').length;
   document.getElementById('statPlat').textContent  = data.filter(c => c.plan === 'platinum').length;
+}
+
+// ── Users table ───────────────────────────────────────────
+let allUsers = [];
+
+async function loadUsers() {
+  const msg = document.getElementById('usersTableMsg');
+  const tbl = document.getElementById('usersTable');
+  msg.innerHTML = '<span class="spinner-inline"></span> Loading…';
+  msg.style.display = 'block';
+  tbl.style.display = 'none';
+  try {
+    const r = await fetch(API + '/api/admin/users?secret=' + encodeURIComponent(adminSecret));
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Failed');
+    allUsers = data;
+    filterUsers();
+  } catch (err) {
+    msg.textContent = 'Error: ' + err.message;
+  }
+}
+
+function filterUsers() {
+  const q    = (document.getElementById('userFilterInput').value || '').toLowerCase();
+  const type = document.getElementById('userFilterType').value;
+  const filtered = allUsers.filter(u => {
+    const matchText = !q || (u.display_name||'').toLowerCase().includes(q) || (u.email||'').toLowerCase().includes(q);
+    const matchType = !type || (type === 'creator' ? u.is_creator : !u.is_creator);
+    return matchText && matchType;
+  });
+  renderUsersTable(filtered);
+}
+
+function renderUsersTable(rows) {
+  const msg  = document.getElementById('usersTableMsg');
+  const tbl  = document.getElementById('usersTable');
+  const tbody = document.getElementById('usersBody');
+  if (!rows.length) {
+    msg.textContent = 'No users found.';
+    msg.style.display = 'block';
+    tbl.style.display = 'none';
+    return;
+  }
+  msg.style.display = 'none';
+  tbl.style.display = 'table';
+  tbody.innerHTML = rows.map(u => {
+    const joined = u.joined ? new Date(u.joined).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : '—';
+    const typeLabel = u.is_creator
+      ? '<span class="plan-badge pro" style="font-size:10px">creator</span>'
+      : '<span style="font-size:11px;color:var(--dim)">member</span>';
+    const pts = Math.round((u.total_balance || 0) / 100).toLocaleString();
+    return `
+      <tr>
+        <td class="td-name">${esc(u.display_name || '—')}</td>
+        <td class="td-email">${esc(u.email)}</td>
+        <td>${typeLabel}</td>
+        <td class="td-markets">${u.trades}</td>
+        <td style="text-align:right;font-family:monospace;font-size:12px">${pts}</td>
+        <td class="td-date">${joined}</td>
+      </tr>`;
+  }).join('');
 }
 
 function filterTable() {

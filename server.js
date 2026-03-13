@@ -86,6 +86,30 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
+// ── RESONANCE SCORING ─────────────────────────────
+// Scores a market question 1-10 for predicted community engagement.
+// Uses Haiku for speed + cost. Non-blocking — failures are silent.
+async function scoreMarketResonance(question, category) {
+  try {
+    const resp = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 60,
+      messages: [{
+        role: 'user',
+        content: `Rate this prediction market question for community engagement potential. Consider: clarity, emotional investment, time-sensitivity, binary nature, specificity.\n\nQuestion: "${question}"\nCategory: ${category || 'general'}\n\nRespond with ONLY valid JSON: {"score": <1-10 integer>}`
+      }]
+    });
+    const text = resp.content[0]?.text?.trim() || '';
+    const match = text.match(/\{[\s\S]*?\}/);
+    if (!match) return null;
+    const parsed = JSON.parse(match[0]);
+    const score = parseInt(parsed.score);
+    return (score >= 1 && score <= 10) ? score : null;
+  } catch {
+    return null;
+  }
+}
+
 // ── AUTH ──────────────────────────────────────────
 
 // Register
@@ -225,6 +249,12 @@ app.post('/markets', async (req, res) => {
   if (error) {
     console.error('POST /markets insert error:', JSON.stringify({ message: error.message, code: error.code, details: error.details, hint: error.hint, row }));
     return res.status(400).json({ error: error.message, details: error.details, hint: error.hint });
+  }
+  // Score resonance async — don't block response
+  if (data?.id) {
+    scoreMarketResonance(data.question, data.category).then(score => {
+      if (score) supabase.from('markets').update({ resonance_score: score }).eq('id', data.id).then(() => {});
+    });
   }
   res.json(data);
 });
@@ -1125,6 +1155,11 @@ async function scanAndCreateMarkets() {
       const { data: inserted, error } = await supabase.from('markets').insert([insertRow]).select();
       if (error) {
         console.error('[scanAndCreateMarkets] Supabase insert error:', error.message, error);
+      } else if (inserted?.[0]?.id) {
+        // Score resonance async — don't block market creation
+        scoreMarketResonance(insertRow.question, insertRow.category).then(score => {
+          if (score) supabase.from('markets').update({ resonance_score: score }).eq('id', inserted[0].id).then(() => {});
+        });
       }
     }
   } catch (err) {
@@ -1500,11 +1535,21 @@ app.post('/api/creator/signup', async (req, res) => {
         created_at: new Date().toISOString()
       }));
 
-      const { error: marketsErr } = await supabase
+      const { data: insertedMkts, error: marketsErr } = await supabase
         .from('markets')
-        .insert(marketsToInsert);
+        .insert(marketsToInsert)
+        .select('id, question, category');
 
       if (marketsErr) console.error('Markets insert error:', marketsErr);
+
+      // Score resonance for each market async
+      if (insertedMkts?.length) {
+        insertedMkts.forEach(m => {
+          scoreMarketResonance(m.question, m.category).then(score => {
+            if (score) supabase.from('markets').update({ resonance_score: score }).eq('id', m.id).then(() => {});
+          });
+        });
+      }
     }
 
     // Generate token
@@ -3752,6 +3797,91 @@ app.post('/api/admin/set-plan', requireAdmin, async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     console.error('[admin] set-plan error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/admin/users — all non-creator members with activity stats
+app.get('/api/admin/users', requireAdmin, async (req, res) => {
+  try {
+    const { data: allUsers } = await supabase
+      .from('users')
+      .select('id, email, display_name, created_at')
+      .order('created_at', { ascending: false });
+
+    if (!allUsers?.length) return res.json([]);
+
+    // Which users are creators?
+    const { data: creatorSettings } = await supabase
+      .from('creator_settings')
+      .select('creator_id');
+    const creatorIdSet = new Set((creatorSettings || []).map(s => s.creator_id));
+
+    // Trade counts per user
+    const allUserIds = allUsers.map(u => u.id);
+    const { data: positions } = await supabase
+      .from('positions')
+      .select('user_id')
+      .in('user_id', allUserIds);
+    const tradeMap = {};
+    (positions || []).forEach(p => { tradeMap[p.user_id] = (tradeMap[p.user_id] || 0) + 1; });
+
+    // Community balance totals per user
+    const { data: balances } = await supabase
+      .from('community_balances')
+      .select('user_id, balance')
+      .in('user_id', allUserIds);
+    const balMap = {};
+    (balances || []).forEach(b => { balMap[b.user_id] = (balMap[b.user_id] || 0) + (b.balance || 0); });
+
+    const rows = allUsers.map(u => ({
+      id:           u.id,
+      email:        u.email || '—',
+      display_name: u.display_name || '—',
+      is_creator:   creatorIdSet.has(u.id),
+      trades:       tradeMap[u.id] || 0,
+      total_balance: balMap[u.id] || 0,
+      joined:       u.created_at
+    }));
+
+    res.json(rows);
+  } catch (err) {
+    console.error('[admin] users error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/admin/platform-stats — platform-wide metrics
+app.get('/api/admin/platform-stats', requireAdmin, async (req, res) => {
+  try {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    const [
+      { count: totalUsers },
+      { count: totalCreators },
+      { count: totalMarkets },
+      { count: totalTrades },
+      { count: newUsers7d },
+      { count: newTrades7d }
+    ] = await Promise.all([
+      supabase.from('users').select('*', { count: 'exact', head: true }),
+      supabase.from('creator_settings').select('*', { count: 'exact', head: true }),
+      supabase.from('markets').select('*', { count: 'exact', head: true }),
+      supabase.from('positions').select('*', { count: 'exact', head: true }),
+      supabase.from('users').select('*', { count: 'exact', head: true }).gte('created_at', sevenDaysAgo),
+      supabase.from('positions').select('*', { count: 'exact', head: true }).gte('created_at', sevenDaysAgo)
+    ]);
+
+    res.json({
+      total_users:    totalUsers   || 0,
+      total_creators: totalCreators || 0,
+      total_markets:  totalMarkets  || 0,
+      total_trades:   totalTrades   || 0,
+      new_users_7d:   newUsers7d    || 0,
+      new_trades_7d:  newTrades7d   || 0
+    });
+  } catch (err) {
+    console.error('[admin] platform-stats error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
