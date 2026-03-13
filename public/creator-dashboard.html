@@ -211,51 +211,112 @@ body {
   border: 1px solid rgba(255,229,122,0.35);
 }
 
-/* ── Premium sidebar glow (applied when plan=premium) ── */
-body.plan-pro    .sidebar::before { background: linear-gradient(90deg, transparent, rgba(201,146,13,0.5), transparent); }
-body.plan-premium .sidebar {
-  background: linear-gradient(180deg, #181610 0%, #141412 100%);
-}
-body.plan-premium .sidebar::before {
-  background: linear-gradient(90deg, transparent, rgba(255,229,122,0.6), transparent);
-}
-body.plan-premium .creator-avatar {
-  background: linear-gradient(135deg, rgba(255,229,122,0.25), rgba(201,146,13,0.1));
-  border-color: rgba(255,229,122,0.5);
-  color: #ffe57a;
-}
-body.plan-premium .community-url { color: #ffe57a; }
-body.plan-premium .nav-item.active { color: #ffe57a; border-left-color: #ffe57a; background: rgba(255,229,122,0.06); }
-body.plan-premium .btn-upgrade {
-  background: linear-gradient(135deg, rgba(255,229,122,0.12), rgba(201,146,13,0.08));
-  border-color: rgba(255,229,122,0.35);
-  color: #ffe57a;
+/* ── Shimmer animation for Premium pill ── */
+@keyframes premium-shimmer {
+  0%   { background-position: 200% center; }
+  100% { background-position: -200% center; }
 }
 
-/* ── Premium stat cards ── */
+/* ══════════════════════════════════════════════════════════
+   PLAN-SPECIFIC DASHBOARD THEMES
+   ══════════════════════════════════════════════════════════ */
+
+/* ── Pro sidebar accent ── */
+body.plan-pro .sidebar::before {
+  background: linear-gradient(90deg, transparent, rgba(201,146,13,0.5), transparent);
+}
+
+/* ── Premium sidebar — distinctly gold-tinted ── */
+body.plan-premium .sidebar {
+  background: linear-gradient(180deg, #19160e 0%, #151310 60%, #141412 100%);
+  border-right-color: rgba(255,229,122,0.15);
+}
+body.plan-premium .sidebar::before {
+  background: linear-gradient(90deg, transparent, rgba(255,229,122,0.7), transparent);
+}
+/* Gold vertical stripe on right edge of sidebar */
+body.plan-premium .sidebar::after {
+  content: '';
+  position: absolute;
+  top: 10%; right: 0; bottom: 10%;
+  width: 2px;
+  background: linear-gradient(180deg, transparent 0%, rgba(255,229,122,0.5) 30%, rgba(201,146,13,0.7) 50%, rgba(255,229,122,0.5) 70%, transparent 100%);
+  border-radius: 2px;
+  pointer-events: none;
+}
+body.plan-premium .nav-section-label { color: rgba(255,229,122,0.45); opacity: 1; }
+body.plan-premium .community-url { color: #ffe57a; }
+body.plan-premium .nav-item.active {
+  color: #ffe57a;
+  border-left-color: #ffe57a;
+  background: rgba(255,229,122,0.08);
+}
+body.plan-premium .nav-item:hover { background: rgba(255,229,122,0.05); }
+
+/* ── Premium avatar — gold ring glow ── */
+body.plan-premium .creator-avatar {
+  background: linear-gradient(135deg, rgba(255,229,122,0.25), rgba(201,146,13,0.1));
+  border-color: rgba(255,229,122,0.6);
+  color: #ffe57a;
+  box-shadow: 0 0 0 3px rgba(255,229,122,0.15), 0 0 20px rgba(255,229,122,0.15);
+}
+
+/* ── Premium plan pill — animated shimmer ── */
+body.plan-premium .plan-pill {
+  background: linear-gradient(90deg,
+    rgba(255,229,122,0.08) 0%,
+    rgba(255,229,122,0.22) 40%,
+    rgba(255,229,122,0.08) 80%);
+  background-size: 200% auto;
+  animation: premium-shimmer 4s linear infinite;
+  border-color: rgba(255,229,122,0.55);
+  color: #ffe57a;
+  letter-spacing: 0.14em;
+}
+
+/* ── Premium upgrade/billing button ── */
+body.plan-premium .btn-upgrade {
+  background: linear-gradient(135deg, rgba(255,229,122,0.14), rgba(201,146,13,0.1));
+  border-color: rgba(255,229,122,0.45);
+  color: #ffe57a;
+}
+body.plan-premium .btn-upgrade:hover {
+  background: linear-gradient(135deg, rgba(255,229,122,0.22), rgba(201,146,13,0.16));
+  border-color: rgba(255,229,122,0.65);
+}
+
+/* ── Stat cards — positioned for overlay ── */
 body.plan-premium .stat-card,
 body.plan-pro     .stat-card {
   position: relative;
   overflow: hidden;
 }
+
+/* ── Premium stat cards — visible gold glow border ── */
+body.plan-premium .stat-card {
+  background:
+    linear-gradient(var(--cream), var(--cream)) padding-box,
+    linear-gradient(135deg, rgba(255,229,122,0.65) 0%, rgba(201,146,13,0.25) 55%, rgba(201,146,13,0.08) 100%) border-box;
+  box-shadow: 0 2px 24px rgba(201,146,13,0.1), inset 0 1px 0 rgba(255,229,122,0.06);
+}
 body.plan-premium .stat-card::before {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, rgba(255,229,122,0.04) 0%, transparent 60%);
+  background: linear-gradient(135deg, rgba(255,229,122,0.07) 0%, transparent 55%);
   pointer-events: none;
 }
 body.plan-pro .stat-card::before {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, rgba(201,146,13,0.04) 0%, transparent 60%);
+  background: linear-gradient(135deg, rgba(201,146,13,0.05) 0%, transparent 60%);
   pointer-events: none;
 }
 
-/* ── Premium topbar accent ── */
+/* ── Premium topbar — gold underline + title tint ── */
 body.plan-premium .topbar {
-  border-bottom-color: rgba(255,229,122,0.12);
+  border-bottom-color: rgba(255,229,122,0.15);
 }
 body.plan-premium .topbar::after {
   content: '';
@@ -263,7 +324,13 @@ body.plan-premium .topbar::after {
   bottom: -1px;
   left: 0; right: 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255,229,122,0.3), transparent);
+  background: linear-gradient(90deg, transparent 0%, rgba(255,229,122,0.55) 30%, rgba(255,229,122,0.55) 70%, transparent 100%);
+}
+body.plan-premium .topbar-title { color: #ffe57a; }
+
+/* ── Premium main content — subtle warm page tint ── */
+body.plan-premium .main {
+  background: radial-gradient(ellipse 100% 50% at 50% 0%, rgba(201,146,13,0.04) 0%, transparent 70%);
 }
 
 .signout-btn {
@@ -2874,8 +2941,8 @@ function updateUpgradeBtn(plan) {
     btn.onclick = openBillingPortal;
   } else if (plan === 'platinum') {
     btn.textContent = '✦ Premium — Manage Billing';
-    btn.style.background = 'rgba(201,146,13,0.18)';
-    btn.style.borderColor = 'rgba(201,146,13,0.45)';
+    btn.style.background = '';
+    btn.style.borderColor = '';
     btn.onclick = openBillingPortal;
   } else {
     btn.textContent = '⚡ Upgrade to Pro';
