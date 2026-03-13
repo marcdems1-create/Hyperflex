@@ -35,7 +35,7 @@
 
 ## Current State (last updated March 12, 2026)
 
-- All features live on Railway. Latest commit: `24f2879`
+- All features live on Railway. Latest commit: `2fd70c7`
 - **Stripe payments live** — Pro ($29/mo) + Premium ($99/mo) checkout + billing portal
   - Railway env vars needed: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRO_PRICE_ID`, `STRIPE_PLATINUM_PRICE_ID`
   - Webhook endpoint registered at: `https://hyperflex.network/stripe/webhook`
@@ -84,15 +84,20 @@
 
 ## Known Issues / Next Up
 
-- **⚠️ MUST DO BEFORE DEPLOY**: Run `supabase_migration_community_economy.sql` in Supabase SQL editor
+- **⚠️ MUST DO BEFORE DEPLOY**: Run ALL 4 migrations in order in Supabase SQL editor:
+  1. `supabase_migration_community_economy.sql`
+  2. `supabase_migration_refill_history.sql`
+  3. `supabase_migration_cpmm.sql`
+  4. `supabase_migration_referrals.sql`
 - Video section on landing page needs real YouTube VIDEO_ID
 - Custom domain for Premium not implemented yet
 - Old `index.html` at project root should be removed eventually
 - Gamification: could add "streak broken" toast on community.html when user loses after a streak
-- **Economy Phase 2** (planned, not built):
-  - Activity-gated weekly refills (user needs ≥ N bets/week to get refill)
-  - User referral system (100 pts to referrer, 50 welcome bonus, capped 5/week, creator-configurable amounts)
-  - Dynamic odds (CPMM-style: `yes_price = yes_pool / (yes_pool + no_pool)`)
+- **Economy Phase 2** — ALL BUILT:
+  - [x] Activity-gated weekly refills (commit `637977c`) — Monday cron, effective gate = MIN(config, 0.5×markets), new users always qualify
+  - [x] CPMM dynamic odds (commit `24f2879`) — `yes_price = yes_pool / (yes_pool + no_pool)`, seed 50 pts/side, live price update after trade
+  - [x] User referral system (commit `2fd70c7`) — `?ref=` capture → localStorage → auto-claim after registration, 5/week cap, creator-configurable rewards
+- **Economy Phase 3** (not built):
   - FAQ section explaining points mechanics to members
 
 ---

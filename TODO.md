@@ -7,7 +7,11 @@
 
 ## 🔴 Immediate
 
-- [ ] **⚠️ SUPABASE MIGRATION** — Run `supabase_migration_community_economy.sql` in Supabase Dashboard → SQL Editor BEFORE deploying `c55f856`
+- [ ] **⚠️ SUPABASE MIGRATIONS** — Run ALL four in Supabase SQL Editor IN ORDER before deploying:
+  1. `supabase_migration_community_economy.sql`
+  2. `supabase_migration_refill_history.sql`
+  3. `supabase_migration_cpmm.sql`
+  4. `supabase_migration_referrals.sql`
 - [ ] **Stripe env vars** — Marc needs to add to Railway: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRO_PRICE_ID`, `STRIPE_PLATINUM_PRICE_ID`
 - [ ] **Admin env var** — Marc needs to add `ADMIN_SECRET` to Railway
 
@@ -19,7 +23,8 @@
 - [ ] **Custom domain** — Premium tier promises it, not implemented in server
 - [ ] **AI scanner improvements** — auto-scan creator's YouTube channel on schedule
 - [x] Activity-gated weekly refills (commit `637977c`)
-- [ ] **Economy Phase 2 remaining**: user referral system (100 pts/referral, 50 welcome bonus, capped 5/week, creator-configurable), dynamic odds (CPMM)
+- [x] CPMM dynamic odds — pool-based pricing, live price update after trade (commit `24f2879`)
+- [x] User referral system — ?ref= capture, auto-claim, share card, creator-configurable rewards (commit `2fd70c7`)
 - [ ] **FAQ section** — explain how Flex Points work (pending Economy Phase 2 finalization)
 
 ---
