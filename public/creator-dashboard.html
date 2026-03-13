@@ -3308,7 +3308,29 @@ body.nav-open .sidebar-backdrop {
                 <span id="ideasBulkCount">0 ideas selected</span>
                 <div class="ideas-bulk-actions">
                   <button class="ideas-bulk-clear" onclick="clearIdeaSelection()">Clear</button>
-                  <button class="ideas-bulk-create" onclick="createSelectedIdeas()">⚡ Create Markets →</button>
+                  <button class="ideas-bulk-create" onclick="openBulkCreatePanel()">⚡ Create All Selected →</button>
+                </div>
+              </div>
+
+              <!-- Bulk create confirmation panel -->
+              <div id="bulkCreatePanel" style="display:none;margin-top:12px;background:var(--surface);border:1.5px solid var(--gold);border-radius:12px;padding:20px 22px">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+                  <div style="font-weight:700;font-size:14px">⚡ Create <span id="bulkPanelCount">0</span> Markets at Once</div>
+                  <button onclick="closeBulkCreatePanel()" style="background:none;border:none;color:var(--dim);cursor:pointer;font-size:18px;line-height:1;padding:0">✕</button>
+                </div>
+                <div id="bulkQuestionList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px;max-height:200px;overflow-y:auto"></div>
+                <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+                  <div class="field" style="margin:0;flex:1;min-width:160px">
+                    <label style="font-size:12px;margin-bottom:4px">Close Date <span style="color:var(--dim);font-weight:400">(applied to all)</span></label>
+                    <input type="date" id="bulkExpiry" style="font-size:13px"/>
+                  </div>
+                  <button class="btn-primary" id="bulkCreateBtn" onclick="submitBulkCreate()" style="flex-shrink:0;margin-top:18px">⚡ Create All</button>
+                </div>
+                <div id="bulkCreateProgress" style="margin-top:12px;display:none">
+                  <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden">
+                    <div id="bulkProgressBar" style="height:100%;background:var(--gold);width:0%;transition:width .4s"></div>
+                  </div>
+                  <div id="bulkProgressLabel" style="font-size:12px;color:var(--dim);margin-top:6px">Creating markets…</div>
                 </div>
               </div>
             </div>
@@ -4895,8 +4917,9 @@ function renderIdeaCards(sectionKey, ideas) {
     const score = idea.score || 0;
     const scoreClass = score >= 85 ? 'great' : score >= 70 ? 'good' : 'ok';
     const scoreLabel = score >= 85 ? '🟢' : score >= 70 ? '🟡' : '🔴';
+    const ideaPayload = escapeAttr(JSON.stringify({ question: idea.question, resolves_via: idea.resolves_via || '' }));
     return `
-    <div class="idea-card" data-question="${escapeAttr(idea.question)}" onclick="toggleIdeaCard(this)">
+    <div class="idea-card" data-question="${escapeAttr(idea.question)}" data-idea="${ideaPayload}" onclick="toggleIdeaCard(this)">
       <div class="idea-card-check">✓</div>
       <div class="idea-question">${escapeHtml(idea.question)}</div>
       <div class="idea-why">${escapeHtml(idea.why)}</div>
@@ -4925,12 +4948,12 @@ const selectedIdeas = new Set();
 let ideaQueue = [];
 
 function toggleIdeaCard(card) {
-  const q = card.dataset.question;
-  if (selectedIdeas.has(q)) {
-    selectedIdeas.delete(q);
+  const key = card.dataset.idea || card.dataset.question; // full JSON payload preferred
+  if (selectedIdeas.has(key)) {
+    selectedIdeas.delete(key);
     card.classList.remove('selected');
   } else {
-    selectedIdeas.add(q);
+    selectedIdeas.add(key);
     card.classList.add('selected');
   }
   updateBulkBar();
@@ -4953,26 +4976,106 @@ function clearIdeaSelection() {
   selectedIdeas.clear();
   document.querySelectorAll('.idea-card.selected').forEach(c => c.classList.remove('selected'));
   updateBulkBar();
+  closeBulkCreatePanel();
 }
 
-function createSelectedIdeas() {
+// selectedIdeas now stores objects: { question, resolves_via, category }
+// For backward compat the Set stores stringified JSON
+
+function openBulkCreatePanel() {
   if (!selectedIdeas.size) return;
-  ideaQueue = [...selectedIdeas];
-  clearIdeaSelection();
-  openNextInQueue();
+  const panel = document.getElementById('bulkCreatePanel');
+  const listEl = document.getElementById('bulkQuestionList');
+  const countEl = document.getElementById('bulkPanelCount');
+  const expiryEl = document.getElementById('bulkExpiry');
+
+  // Default expiry: 30 days from now
+  const d = new Date(); d.setDate(d.getDate() + 30);
+  expiryEl.value = d.toISOString().split('T')[0];
+  expiryEl.min   = new Date().toISOString().split('T')[0];
+
+  countEl.textContent = selectedIdeas.size;
+  listEl.innerHTML = [...selectedIdeas].map((raw, i) => {
+    const item = tryParseIdea(raw);
+    return `<div style="display:flex;align-items:flex-start;gap:8px;font-size:13px;padding:6px 10px;background:var(--paper);border-radius:7px">
+      <span style="color:var(--gold);font-family:var(--mono);font-size:11px;min-width:18px;margin-top:1px">${i+1}</span>
+      <span style="color:var(--text);line-height:1.4">${escapeHtml(item.question)}</span>
+    </div>`;
+  }).join('');
+
+  panel.style.display = 'block';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
+function closeBulkCreatePanel() {
+  document.getElementById('bulkCreatePanel').style.display = 'none';
+  document.getElementById('bulkCreateProgress').style.display = 'none';
+  document.getElementById('bulkProgressBar').style.width = '0%';
+}
+
+async function submitBulkCreate() {
+  const expiry = document.getElementById('bulkExpiry').value;
+  if (!expiry) { showToast('Please set a close date.', 'error'); return; }
+
+  const markets = [...selectedIdeas].map(raw => tryParseIdea(raw));
+  const btn     = document.getElementById('bulkCreateBtn');
+  const prog    = document.getElementById('bulkCreateProgress');
+  const bar     = document.getElementById('bulkProgressBar');
+  const label   = document.getElementById('bulkProgressLabel');
+
+  btn.disabled = true;
+  btn.textContent = 'Creating…';
+  prog.style.display = 'block';
+  bar.style.width = '20%';
+  label.textContent = `Creating ${markets.length} markets…`;
+
+  try {
+    const r = await fetch(API + '/api/creator/markets/bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ markets, expiry_date: expiry })
+    });
+    bar.style.width = '80%';
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Bulk create failed');
+
+    bar.style.width = '100%';
+    const skipped = data.skipped?.length || 0;
+    label.textContent = skipped
+      ? `✓ ${data.created} created, ${skipped} skipped`
+      : `✓ All ${data.created} markets created!`;
+
+    clearIdeaSelection();
+    setTimeout(() => {
+      closeBulkCreatePanel();
+      showToast(`🎯 ${data.created} market${data.created !== 1 ? 's' : ''} published!`, 'success');
+      init();
+    }, 900);
+  } catch (err) {
+    bar.style.width = '0%';
+    prog.style.display = 'none';
+    btn.disabled = false;
+    btn.textContent = '⚡ Create All';
+    showToast(err.message, 'error');
+  }
+}
+
+function tryParseIdea(raw) {
+  try { return JSON.parse(raw); } catch { return { question: raw }; }
+}
+
+// Keep single-open flow available via "Use this →" button
 function openNextInQueue() {
   if (!ideaQueue.length) return;
-  const question = ideaQueue.shift();
+  const raw = ideaQueue.shift();
+  const item = tryParseIdea(raw);
   openCreateModal();
-  // Update modal title to show queue progress
   const remaining = ideaQueue.length;
   const titleEl = document.getElementById('createModal')?.querySelector('.modal-title');
   if (titleEl) titleEl.textContent = remaining > 0 ? `New Market (${remaining + 1} remaining)` : 'New Market';
   setTimeout(() => {
     const el = document.getElementById('newQuestion');
-    if (el) { el.value = question; el.dispatchEvent(new Event('input')); }
+    if (el) { el.value = item.question; el.dispatchEvent(new Event('input')); }
   }, 50);
 }
 

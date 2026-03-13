@@ -350,6 +350,90 @@ app.post('/markets', async (req, res) => {
   res.json(data);
 });
 
+// ── BULK MARKET CREATE ────────────────────────────────────────
+// POST /api/creator/markets/bulk
+// Auth: Bearer token (creator)
+// Body: { markets: [{question, resolves_via?, category?}], expiry_date }
+// Creates all markets in a single batch insert. Returns { created, errors }.
+app.post('/api/creator/markets/bulk', requireCreator, async (req, res) => {
+  try {
+    const { markets, expiry_date } = req.body;
+    if (!Array.isArray(markets) || !markets.length) {
+      return res.status(400).json({ error: 'markets array required' });
+    }
+    if (!expiry_date) {
+      return res.status(400).json({ error: 'expiry_date required' });
+    }
+
+    // Get creator slug + category
+    const { data: creator } = await supabase
+      .from('creator_settings')
+      .select('slug, community_category, plan')
+      .eq('creator_id', req.creator.id)
+      .single();
+
+    if (!creator) return res.status(404).json({ error: 'Creator not found' });
+
+    const rows = [];
+    const skipped = [];
+
+    for (const m of markets.slice(0, 20)) { // hard cap 20
+      const question = (m.question || '').trim();
+      if (!question) { skipped.push({ question, reason: 'Empty question' }); continue; }
+      // Prohibited check
+      const prohibited = PROHIBITED_PATTERNS.find(p => p.re.test(question));
+      if (prohibited) { skipped.push({ question, reason: prohibited.msg }); continue; }
+
+      const resolvesVia = m.resolves_via || '';
+      const sources = resolvesVia
+        ? JSON.stringify([resolvesVia, 'Official announcement or press release', 'Public data / official statistics'])
+        : null;
+
+      rows.push({
+        question,
+        expiry_date,
+        commodity:   m.category || creator.community_category || 'general',
+        category:    m.category || creator.community_category || 'general',
+        target_price: 0,
+        direction:    'above',
+        yes_price:    0.5,
+        no_price:     0.5,
+        yes_pool:     MARKET_SEED,
+        no_pool:      MARKET_SEED,
+        resolved:     false,
+        creator_id:   req.creator.id,
+        tenant_slug:  creator.slug,
+        is_public:    true,
+        ...(sources ? { resolution_sources: sources } : {})
+      });
+    }
+
+    if (!rows.length) {
+      return res.status(400).json({ error: 'No valid markets to create', skipped });
+    }
+
+    const { data: inserted, error } = await supabase
+      .from('markets')
+      .insert(rows)
+      .select('id, question, category');
+
+    if (error) throw error;
+
+    // Score resonance async for each
+    for (const mkt of inserted || []) {
+      scoreMarketResonance(mkt.question, mkt.category).then(score => {
+        if (score) supabase.from('markets').update({ resonance_score: score }).eq('id', mkt.id).then(() => {});
+      });
+    }
+
+    console.log(`[bulk-create] ${inserted?.length} markets created by ${creator.slug}`);
+    res.json({ created: inserted?.length || 0, skipped, markets: inserted });
+  } catch (err) {
+    console.error('[bulk-create]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── TRADING ───────────────────────────────────────
 
 // Place a trade
