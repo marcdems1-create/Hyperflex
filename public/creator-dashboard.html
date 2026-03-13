@@ -2017,6 +2017,24 @@ body.plan-premium .main {
               </div>
             </div>
 
+            <!-- Referral Rewards -->
+            <div style="margin-top:24px;padding-top:24px;border-top:1px solid var(--border)">
+              <div style="font-weight:600;font-size:14px;margin-bottom:4px">🔗 Referral Rewards</div>
+              <div style="font-size:12px;color:var(--dim);margin-bottom:16px">Members share a personal invite link. Platform caps rewards at 5 referrals/member/week.</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+                <div class="field">
+                  <label>Referral Reward (pts)</label>
+                  <input type="number" id="econReferralReward" min="0" step="10" placeholder="100"/>
+                  <div style="font-size:12px;color:var(--dim);margin-top:4px">Given to the referrer per successful invite</div>
+                </div>
+                <div class="field">
+                  <label>Welcome Bonus (pts)</label>
+                  <input type="number" id="econWelcomeBonus" min="0" step="10" placeholder="50"/>
+                  <div style="font-size:12px;color:var(--dim);margin-top:4px">Given to new members who join via a referral</div>
+                </div>
+              </div>
+            </div>
+
             <button class="btn-primary" onclick="saveEconSettings()" style="margin-top:20px">Save Economy Settings</button>
           </div>
         </div>
@@ -2592,6 +2610,9 @@ function renderDashboard(data) {
     document.getElementById('refillFields').style.display = 'grid';
     document.getElementById('refillTestWrap').style.display = 'block';
   }
+  // Referral prefill
+  document.getElementById('econReferralReward').value = Math.round((creator.referral_reward ?? 10000) / 100);
+  document.getElementById('econWelcomeBonus').value   = Math.round((creator.welcome_bonus   ?? 5000)  / 100);
 
   // ── Plan state ───────────────────────────────────────────
   const plan = creator.plan || 'free';
@@ -3130,22 +3151,28 @@ async function saveEconSettings() {
   const minPts        = parseInt(document.getElementById('econMinBet').value)          || 10;
   const maxPtsRaw     = document.getElementById('econMaxBet').value.trim();
   const maxPts        = maxPtsRaw ? parseInt(maxPtsRaw) : null;
-  const refillEnabled = document.getElementById('econRefillEnabled').checked;
-  const refillPts     = parseInt(document.getElementById('econRefillAmount').value)    || 100;
-  const activityGate  = parseInt(document.getElementById('econActivityGate').value)   ?? 5;
+  const refillEnabled      = document.getElementById('econRefillEnabled').checked;
+  const refillPts          = parseInt(document.getElementById('econRefillAmount').value)    || 100;
+  const activityGate       = parseInt(document.getElementById('econActivityGate').value)   ?? 5;
+  const referralRewardPts  = parseInt(document.getElementById('econReferralReward').value) || 100;
+  const welcomeBonusPts    = parseInt(document.getElementById('econWelcomeBonus').value)   || 50;
 
   if (minPts < 1)             { showToast('Min bet must be at least 1 pt.', 'error'); return; }
   if (startingPts < 100)      { showToast('Starting balance must be at least 100 pts.', 'error'); return; }
   if (maxPts !== null && maxPts < minPts) { showToast('Max bet must be ≥ min bet.', 'error'); return; }
   if (refillEnabled && refillPts < 1) { showToast('Refill amount must be at least 1 pt.', 'error'); return; }
+  if (referralRewardPts < 0)  { showToast('Referral reward cannot be negative.', 'error'); return; }
+  if (welcomeBonusPts < 0)    { showToast('Welcome bonus cannot be negative.', 'error'); return; }
 
   const payload = {
-    starting_balance: startingPts * 100,  // pts → centpoints
+    starting_balance: startingPts * 100,          // pts → centpoints
     min_bet:          minPts * 100,
     max_bet:          maxPts !== null ? maxPts * 100 : null,
     refill_enabled:   refillEnabled,
     refill_amount:    refillPts * 100,
-    activity_gate:    activityGate
+    activity_gate:    activityGate,
+    referral_reward:  referralRewardPts * 100,
+    welcome_bonus:    welcomeBonusPts   * 100
   };
   try {
     const r = await fetch(API + '/api/creator/settings', {

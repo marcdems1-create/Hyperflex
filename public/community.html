@@ -553,6 +553,54 @@ body::before {
 }
 .reward-tier.locked .reward-progress-fill { background: var(--dim); }
 
+/* ── REFERRAL CARD ─── */
+.referral-card {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 24px;
+}
+.referral-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.referral-desc {
+  font-size: 12px;
+  color: var(--dim);
+  margin-bottom: 14px;
+}
+.referral-link-row {
+  display: flex;
+  gap: 8px;
+}
+.referral-input {
+  flex: 1;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 9px 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+  outline: none;
+  cursor: text;
+}
+.btn-copy {
+  padding: 9px 16px;
+  background: var(--gold);
+  color: #000;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.15s;
+}
+.btn-copy:hover { opacity: 0.85; }
+
 /* ── EMPTY STATE ─── */
 .empty {
   padding: 64px 32px;
@@ -1019,6 +1067,9 @@ body::before {
     <div class="rewards-grid" id="rewardsGrid"></div>
   </div>
 
+  <!-- Referral (shown after login) -->
+  <div id="referralSection" style="display:none;margin-top:24px"></div>
+
 </main>
 
 <div class="powered">
@@ -1144,10 +1195,28 @@ let communityBalance = null;
 
 // ── INIT ─────────────────────────────────────────────────────
 (async function init() {
+  // Capture referral code from URL before anything else
+  captureReferralParam();
   restoreSession();
   await loadCommunity();
-  if (currentUser) await fetchCommunityBalance();
+  if (currentUser) {
+    await fetchCommunityBalance();
+    renderReferralSection();
+  }
 })();
+
+// Store referral param in localStorage for use after registration
+function captureReferralParam() {
+  const refId = new URLSearchParams(window.location.search).get('ref');
+  if (refId && slug) {
+    localStorage.setItem(`hf_ref_${slug}`, refId);
+    // Clean the URL so it doesn't look odd
+    try {
+      const clean = window.location.pathname;
+      window.history.replaceState({}, '', clean);
+    } catch {}
+  }
+}
 
 function restoreSession() {
   const token = localStorage.getItem('hf_token');
@@ -1187,6 +1256,88 @@ async function fetchCommunityBalance() {
       renderUserHeader();
     }
   } catch { /* silent */ }
+}
+
+// ── REFERRAL ──────────────────────────────────────────────────
+
+// Called after new user registration — claims any stored referral code for this community
+async function claimReferralIfPending(token) {
+  const refUserId = localStorage.getItem(`hf_ref_${slug}`);
+  if (!refUserId || !slug) return;
+  try {
+    const r = await fetch(`${API}/api/referral/claim`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ ref_user_id: refUserId, creator_slug: slug })
+    });
+    const data = await r.json();
+    if (data.ok && data.welcome_bonus > 0) {
+      const bonusPts = Math.round(data.welcome_bonus / 100);
+      showToast(`🎁 Welcome bonus: +${bonusPts} pts added to your balance!`, 'success');
+      // Refresh balance to reflect the bonus
+      await fetchCommunityBalance();
+    }
+  } catch { /* silent — referral failure shouldn't break sign-up */ }
+  localStorage.removeItem(`hf_ref_${slug}`);
+}
+
+// Renders the referral share section for logged-in users
+async function renderReferralSection() {
+  const section = document.getElementById('referralSection');
+  if (!section || !currentUser) return;
+
+  const refLink = `${window.location.origin}/${slug}?ref=${currentUser.id}`;
+
+  // Load stats async
+  let statsHTML = '';
+  try {
+    const token = localStorage.getItem('hf_token');
+    const r = await fetch(`${API}/api/user/referral-stats/${slug}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (r.ok) {
+      const s = await r.json();
+      const earnedPts = Math.round((s.total_earned || 0) / 100);
+      statsHTML = `
+        <div style="display:flex;gap:20px;margin-top:12px;font-size:12px;color:var(--dim)">
+          <span><strong style="color:var(--text)">${s.total || 0}</strong> referrals total</span>
+          <span><strong style="color:var(--text)">${earnedPts}</strong> pts earned</span>
+          <span><strong style="color:var(--text)">${s.remaining_cap ?? 5}</strong>/5 remaining this week</span>
+        </div>`;
+    }
+  } catch {}
+
+  const pts = community?.custom_points_name || 'pts';
+  const rewardPts = community?.referral_reward !== undefined
+    ? Math.round(community.referral_reward / 100)
+    : 100;
+  const bonusPts = community?.welcome_bonus !== undefined
+    ? Math.round(community.welcome_bonus / 100)
+    : 50;
+
+  section.innerHTML = `
+    <div class="referral-card">
+      <div class="referral-title">🔗 Invite Friends</div>
+      <div class="referral-desc">You earn <strong>${rewardPts} ${pts}</strong> per referral · Friends get <strong>${bonusPts} ${pts}</strong> welcome bonus</div>
+      <div class="referral-link-row">
+        <input class="referral-input" id="refLinkInput" type="text" value="${refLink}" readonly/>
+        <button class="btn-copy" onclick="copyRefLink()">Copy</button>
+      </div>
+      ${statsHTML}
+    </div>`;
+  section.style.display = 'block';
+}
+
+function copyRefLink() {
+  const input = document.getElementById('refLinkInput');
+  if (!input) return;
+  navigator.clipboard.writeText(input.value).then(() => {
+    showToast('Referral link copied!', 'success');
+  }).catch(() => {
+    input.select();
+    document.execCommand('copy');
+    showToast('Referral link copied!', 'success');
+  });
 }
 
 function showCommunityError() {
@@ -1605,6 +1756,14 @@ async function submitAuth() {
     renderUserHeader();
     closeAuth();
     showToast(`Welcome, ${currentUser.display_name}!`, 'success');
+
+    // If this was a fresh registration, try to claim any stored referral
+    if (authTab === 'register') {
+      claimReferralIfPending(data.token);
+    }
+
+    // Show referral share section now that user is logged in
+    renderReferralSection();
 
     // Resume pending prediction if any
     if (pendingMarket) {

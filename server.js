@@ -341,23 +341,28 @@ app.post('/trade', async (req, res) => {
   });
 });
 
+// Helper: extract user ID from JWT Bearer token. Returns null on failure.
+function getUserIdFromReq(req) {
+  try {
+    const auth = req.headers.authorization || '';
+    const token = auth.replace('Bearer ', '').trim();
+    if (!token) return null;
+    const payload = jwt.verify(token, process.env.JWT_SECRET || 'hyperflex_secret');
+    return payload.id || null;
+  } catch {
+    return null;
+  }
+}
+
 // GET /api/user/community-balance/:slug — returns user's balance in a specific community
 // Auth: Bearer token (user JWT)
 app.get('/api/user/community-balance/:slug', async (req, res) => {
   try {
-    const authHeader = req.headers.authorization || '';
-    const token = authHeader.replace('Bearer ', '').trim();
-    if (!token) return res.status(401).json({ error: 'No token' });
-
-    const { data: user, error: authErr } = await supabase
-      .from('users')
-      .select('id')
-      .eq('auth_token', token)
-      .maybeSingle();
-    if (authErr || !user) return res.status(401).json({ error: 'Invalid token' });
+    const userId = getUserIdFromReq(req);
+    if (!userId) return res.status(401).json({ error: 'Invalid token' });
 
     const { slug } = req.params;
-    const balance = await getCommunityBalance(user.id, slug);
+    const balance = await getCommunityBalance(userId, slug);
 
     // Also return economy settings for this community so the frontend can enforce min/max
     const { data: settings } = await supabase
@@ -375,6 +380,128 @@ app.get('/api/user/community-balance/:slug', async (req, res) => {
     });
   } catch (err) {
     console.error('community-balance error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── REFERRAL SYSTEM ──────────────────────────────────────────
+// Platform-level cap: referrer earns reward for max 5 referrals per week per community.
+// Welcome bonus is always given regardless of cap.
+const REFERRAL_WEEKLY_CAP = 5;
+
+// POST /api/referral/claim — called after new user registers via a referral link
+// Auth: Bearer token of the NEW user (the referred person)
+// Body: { ref_user_id, creator_slug }
+app.post('/api/referral/claim', async (req, res) => {
+  try {
+    const currentUserId = getUserIdFromReq(req);
+    if (!currentUserId) return res.status(401).json({ error: 'Invalid token' });
+
+    const { ref_user_id, creator_slug } = req.body;
+    if (!ref_user_id || !creator_slug) return res.status(400).json({ error: 'ref_user_id and creator_slug required' });
+
+    // Self-referral guard
+    if (ref_user_id === currentUserId) return res.status(400).json({ error: 'Cannot refer yourself' });
+
+    // Already claimed for this community?
+    const { data: existingRef } = await supabase
+      .from('referral_history')
+      .select('id')
+      .eq('referred_id', currentUserId)
+      .eq('creator_slug', creator_slug)
+      .maybeSingle();
+    if (existingRef) return res.status(409).json({ error: 'Referral already claimed for this community' });
+
+    // Verify referrer exists
+    const { data: referrer } = await supabase
+      .from('users')
+      .select('id')
+      .eq('id', ref_user_id)
+      .maybeSingle();
+    if (!referrer) return res.status(400).json({ error: 'Referrer not found' });
+
+    // Get creator's referral settings
+    const { data: settings } = await supabase
+      .from('creator_settings')
+      .select('referral_reward, welcome_bonus')
+      .eq('slug', creator_slug)
+      .maybeSingle();
+    if (!settings) return res.status(404).json({ error: 'Community not found' });
+
+    const referralReward = settings.referral_reward ?? 10000; // 100 pts default
+    const welcomeBonus   = settings.welcome_bonus   ?? 5000;  // 50 pts default
+
+    // Check referrer's weekly cap
+    const weekStart = getWeekStart().toISOString();
+    const { count: weeklyCount } = await supabase
+      .from('referral_history')
+      .select('id', { count: 'exact', head: true })
+      .eq('referrer_id', ref_user_id)
+      .eq('creator_slug', creator_slug)
+      .gte('created_at', weekStart);
+
+    const capExceeded = (weeklyCount || 0) >= REFERRAL_WEEKLY_CAP;
+
+    // Credit welcome bonus to the new user
+    const newUserBal = await getCommunityBalance(currentUserId, creator_slug);
+    await setCommunityBalance(currentUserId, creator_slug, newUserBal + welcomeBonus);
+
+    // Credit referral reward to referrer (only if under weekly cap)
+    if (!capExceeded && referralReward > 0) {
+      const referrerBal = await getCommunityBalance(ref_user_id, creator_slug);
+      await setCommunityBalance(ref_user_id, creator_slug, referrerBal + referralReward);
+    }
+
+    // Record the referral
+    await supabase
+      .from('referral_history')
+      .insert({
+        referrer_id:     ref_user_id,
+        referred_id:     currentUserId,
+        creator_slug,
+        referrer_reward: capExceeded ? 0 : referralReward,
+        welcome_bonus:   welcomeBonus,
+        cap_exceeded:    capExceeded
+      });
+
+    console.log(`[referral] ${creator_slug}: ${ref_user_id} → ${currentUserId} (welcome=${welcomeBonus/100}pts, reward=${capExceeded ? 0 : referralReward/100}pts, cap_exceeded=${capExceeded})`);
+
+    res.json({
+      ok:             true,
+      welcome_bonus:  welcomeBonus,
+      referral_reward_given: capExceeded ? 0 : referralReward,
+      cap_exceeded:   capExceeded
+    });
+  } catch (err) {
+    console.error('referral claim error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/user/referral-stats/:slug — returns referral stats for the current user in a community
+app.get('/api/user/referral-stats/:slug', async (req, res) => {
+  try {
+    const userId = getUserIdFromReq(req);
+    if (!userId) return res.status(401).json({ error: 'Invalid token' });
+
+    const { slug } = req.params;
+
+    // All referrals this user has made in this community
+    const { data: referrals } = await supabase
+      .from('referral_history')
+      .select('referrer_reward, created_at')
+      .eq('referrer_id', userId)
+      .eq('creator_slug', slug)
+      .order('created_at', { ascending: false });
+
+    const total        = (referrals || []).length;
+    const totalEarned  = (referrals || []).reduce((s, r) => s + (r.referrer_reward || 0), 0);
+    const weekStart    = getWeekStart().toISOString();
+    const thisWeek     = (referrals || []).filter(r => r.created_at >= weekStart).length;
+    const remainingCap = Math.max(0, REFERRAL_WEEKLY_CAP - thisWeek);
+
+    res.json({ total, total_earned: totalEarned, this_week: thisWeek, remaining_cap: remainingCap });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
@@ -1718,7 +1845,10 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
         refill_enabled: settings.refill_enabled ?? false,
         refill_amount: settings.refill_amount ?? 10000,
         refill_cadence: settings.refill_cadence ?? 'weekly',
-        activity_gate: settings.activity_gate ?? 5
+        activity_gate: settings.activity_gate ?? 5,
+        // Referral fields
+        referral_reward: settings.referral_reward ?? 10000,
+        welcome_bonus:   settings.welcome_bonus   ?? 5000
       },
       stats: {
         total_traders: totalTraders,
@@ -1758,7 +1888,9 @@ app.put('/api/creator/settings', requireCreator, async (req, res) => {
       display_name, custom_points_name, primary_color,
       // Economy fields
       starting_balance, min_bet, max_bet,
-      refill_enabled, refill_amount, refill_cadence, activity_gate
+      refill_enabled, refill_amount, refill_cadence, activity_gate,
+      // Referral fields
+      referral_reward, welcome_bonus
     } = req.body;
 
     const updates = {
@@ -1776,6 +1908,9 @@ app.put('/api/creator/settings', requireCreator, async (req, res) => {
     if (refill_amount !== undefined) updates.refill_amount = Math.max(100, parseInt(refill_amount) || 10000);
     if (refill_cadence !== undefined && ['daily','weekly','monthly'].includes(refill_cadence)) updates.refill_cadence = refill_cadence;
     if (activity_gate !== undefined) updates.activity_gate = Math.max(0, parseInt(activity_gate) || 5);
+    // Referral fields
+    if (referral_reward !== undefined) updates.referral_reward = Math.max(0, parseInt(referral_reward) || 0);
+    if (welcome_bonus   !== undefined) updates.welcome_bonus   = Math.max(0, parseInt(welcome_bonus) || 0);
 
     const { error } = await supabase
       .from('creator_settings')
@@ -2883,7 +3018,9 @@ app.get('/api/community/:slug', async (req, res) => {
         // Economy settings (safe to expose — used by frontend for UI enforcement)
         starting_balance: settings.starting_balance ?? 100000,
         min_bet: settings.min_bet ?? 1000,
-        max_bet: settings.max_bet ?? null
+        max_bet: settings.max_bet ?? null,
+        referral_reward: settings.referral_reward ?? 10000,
+        welcome_bonus: settings.welcome_bonus ?? 5000
       },
       markets: markets || [],
       rewards: await supabase
