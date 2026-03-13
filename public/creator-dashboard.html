@@ -4144,7 +4144,7 @@ async function handleAssetUpload(type, input) {
       reader.readAsDataURL(file);
     });
 
-    const token = localStorage.getItem('creatorToken');
+    const token = localStorage.getItem('hf_token');
     const res = await fetch('/api/creator/upload-asset', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
