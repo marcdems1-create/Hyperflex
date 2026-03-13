@@ -967,6 +967,59 @@ body::before {
   .lb-correct { display: none; }
   .user-name-pill { display: none; }
 }
+
+/* ── FAQ ── */
+.faq-wrap { margin-bottom: 36px; }
+.faq-list {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.faq-item { border-bottom: 1px solid var(--border); }
+.faq-item:last-child { border-bottom: none; }
+.faq-q {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  transition: color .15s, background .15s;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.faq-q:hover { color: var(--gold); background: rgba(201,146,13,0.03); }
+.faq-arrow {
+  font-size: 11px;
+  color: var(--dim);
+  flex-shrink: 0;
+  transition: transform .22s;
+}
+.faq-item.open .faq-q { color: var(--gold); }
+.faq-item.open .faq-arrow { transform: rotate(180deg); color: var(--gold); }
+.faq-a {
+  font-size: 13px;
+  color: var(--dim);
+  line-height: 1.7;
+  padding: 0 20px 16px;
+  display: none;
+}
+.faq-item.open .faq-a { display: block; }
+.faq-a strong { color: var(--text); }
+.faq-a .faq-tag {
+  display: inline-block;
+  background: rgba(201,146,13,0.12);
+  color: var(--gold);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin: 0 2px;
+}
 </style>
 </head>
 <body>
@@ -1080,6 +1133,12 @@ body::before {
 
   <!-- Referral -->
   <div id="referralSection" style="display:none"></div>
+
+  <!-- FAQ -->
+  <div id="faqSection" class="faq-wrap" style="display:none">
+    <div class="section-label">How it works</div>
+    <div class="faq-list" id="faqList"></div>
+  </div>
 
 </main>
 
@@ -1369,6 +1428,9 @@ function renderPage() {
     document.getElementById('resolvedSection').style.display = 'block';
     document.getElementById('resolvedGrid').innerHTML = resolved.map(m => marketCardHTML(m, true)).join('');
   }
+
+  // FAQ
+  renderFAQ(c.custom_points_name);
 }
 
 function buildFilterCounts() {
@@ -1652,6 +1714,70 @@ async function loadLeaderboard() {
 }
 
 // ── REWARDS ───────────────────────────────────────────────────
+// ── FAQ ───────────────────────────────────────────────────
+function renderFAQ(pts) {
+  const p = pts || 'Flex Points';
+  const items = [
+    {
+      q: `What are ${p}?`,
+      a: `<strong>${p}</strong> are this community's play-money currency. They're earned by making correct predictions on markets, winning streaks, and inviting friends. They have no real-world monetary value — it's all about bragging rights and climbing the leaderboard.`
+    },
+    {
+      q: 'How do I earn points?',
+      a: `You earn <strong>${p}</strong> by betting on markets and being right. When a market resolves, winners split the pool based on how much they bet. You also get a <span class="faq-tag">starting balance</span> just for joining, and the community may offer <span class="faq-tag">weekly refills</span> to keep everyone active. Invite friends with your referral link and both of you earn a bonus.`
+    },
+    {
+      q: 'What happens when a market resolves?',
+      a: `Once the creator resolves a market as <strong>YES</strong> or <strong>NO</strong>, all winning positions are paid out automatically. Your payout is proportional to how much you bet and the odds at the time. If you backed the winning side, your ${p} balance goes up — if not, you lose your stake. Resolved markets move to the <em>Past Results</em> section.`
+    },
+    {
+      q: 'What are win streaks?',
+      a: `Win streaks reward consistency. Get <strong>3 correct predictions in a row</strong> and your payouts are multiplied by <span class="faq-tag">1.5×</span>. Reach <strong>5 in a row</strong> and you hit <span class="faq-tag">2× payouts</span> — every correct call earns double ${p}. Streaks are shown next to your name on the leaderboard with 🔥 and ⚡ badges.`
+    },
+    {
+      q: 'How do the odds work?',
+      a: `Odds move in real time based on how people bet. If everyone piles onto YES, the YES price rises and the potential payout shrinks — but being contrarian and correct pays out more. This is called a <strong>constant product market</strong>: the more popular a side gets, the less you earn by following the crowd.`
+    },
+    {
+      q: 'What are rewards?',
+      a: `The creator has set up reward tiers that unlock once you accumulate enough <strong>${p}</strong>. Rewards might include Discord roles, shout-outs, merch discounts, or exclusive access. Check the Rewards section below the leaderboard to see what's available and how close you are.`
+    },
+    {
+      q: 'How do referrals work?',
+      a: `Once you're signed in, you'll find a personal invite link in your profile. Share it and when someone signs up through your link, <strong>both of you earn bonus ${p}</strong>. The amount is set by the creator. There's a weekly cap to keep things fair.`
+    },
+    {
+      q: 'Is this real money?',
+      a: `No. <strong>${p} have no monetary value</strong> and cannot be withdrawn, traded, or converted to cash. This is entirely play-money — think of it like a game score. No purchases required, no financial risk.`
+    },
+    {
+      q: 'Can I run out of points?',
+      a: `You can lose your bet if a market resolves against you, but you can never go below zero. If the community has weekly refills enabled, you'll receive a top-up of ${p} every week just for being active — so even a bad streak doesn't knock you out permanently.`
+    }
+  ];
+
+  const list = document.getElementById('faqList');
+  list.innerHTML = items.map((item, i) => `
+    <div class="faq-item" onclick="toggleFAQ(this)">
+      <div class="faq-q">
+        <span>${item.q}</span>
+        <span class="faq-arrow">▼</span>
+      </div>
+      <div class="faq-a">${item.a}</div>
+    </div>
+  `).join('');
+
+  document.getElementById('faqSection').style.display = 'block';
+}
+
+function toggleFAQ(el) {
+  const isOpen = el.classList.contains('open');
+  // Close all
+  document.querySelectorAll('.faq-item.open').forEach(i => i.classList.remove('open'));
+  // Open clicked if it was closed
+  if (!isOpen) el.classList.add('open');
+}
+
 function renderRewards(rewards) {
   if (!rewards.length) return;
   const userBal = communityBalance !== null ? Math.floor(communityBalance / 100) : (currentUser?.balance || 0);
