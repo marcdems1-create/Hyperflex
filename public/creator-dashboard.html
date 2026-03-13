@@ -2144,11 +2144,53 @@ body.plan-premium .main {
 .toast.success { border-color: rgba(45,155,95,0.4); }
 .toast.error { border-color: rgba(192,57,43,0.4); }
 
+/* ── Mobile hamburger button ── */
+.hamburger {
+  display: none;
+  flex-direction: column;
+  gap: 5px;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid var(--border);
+  margin-right: 10px;
+  flex-shrink: 0;
+}
+.hamburger span {
+  display: block;
+  width: 20px;
+  height: 2px;
+  background: var(--text);
+  border-radius: 2px;
+  transition: all .2s;
+}
+
+/* Mobile sidebar overlay backdrop */
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 99;
+  opacity: 0;
+  transition: opacity .25s;
+}
+.sidebar-backdrop.open { opacity: 1; }
+
 @media (max-width: 1024px) {
-  .sidebar { display: none; }
+  .hamburger { display: flex; }
+  .sidebar {
+    transform: translateX(-100%);
+    transition: transform .25s cubic-bezier(.4,0,.2,1);
+    z-index: 200;
+  }
+  .sidebar.open { transform: translateX(0); }
+  .sidebar-backdrop { display: block; }
   .main { margin-left: 0; }
   .content { padding: 24px; }
-  .topbar { padding: 14px 24px; }
+  .topbar { padding: 14px 16px; gap: 8px; }
+  .topbar-title { font-size: 17px; }
   .stats-row { grid-template-columns: repeat(2, 1fr); gap: 14px; }
   .table-header, .market-row {
     grid-template-columns: 1fr 50px 90px 70px 120px;
@@ -2156,10 +2198,16 @@ body.plan-premium .main {
   /* Hide traders column (nth-child 5) on tablet */
   .market-row > *:nth-child(5),
   .table-header > *:nth-child(5) { display: none; }
+  /* Hide URL pill on small topbar */
+  .community-url-pill { display: none; }
 }
 @media (max-width: 600px) {
   .stats-row { grid-template-columns: 1fr 1fr; gap: 10px; }
   .stat-value { font-size: 28px; }
+  .topbar-actions { gap: 6px; }
+  .topbar-actions .btn-secondary { display: none; } /* hide AI Scanner — accessible from sidebar */
+  .topbar-actions .btn-primary { font-size: 12px; padding: 7px 12px; }
+  .content { padding: 16px; }
 }
 </style>
 </head>
@@ -2235,9 +2283,15 @@ body.plan-premium .main {
     </div>
   </aside>
 
+  <!-- Sidebar backdrop (mobile) -->
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSidebar()"></div>
+
   <!-- Main -->
   <main class="main">
     <div class="topbar">
+      <button class="hamburger" onclick="toggleSidebar()" aria-label="Open menu">
+        <span></span><span></span><span></span>
+      </button>
       <div class="topbar-title" id="topbarTitle">Overview</div>
       <div class="topbar-actions">
         <div class="community-url-pill" onclick="copyLink()" title="Click to copy">
@@ -3951,6 +4005,8 @@ function showTab(tab) {
   document.getElementById('topbarTitle').textContent = titles[tab] || tab;
   if (tab === 'analytics' && !analyticsLoaded) loadAnalytics();
   if (tab === 'ideas' && !ideasLoaded) loadMarketIdeas(false);
+  // Close sidebar drawer on mobile after nav tap
+  if (window.innerWidth <= 1024) closeSidebar();
 }
 
 // Create market
@@ -5448,7 +5504,6 @@ async function saveMarketEdit() {
 
 async function archiveMarket() {
   const id = document.getElementById('editMarketId').value;
-  if (!confirm('Archive this market? It will be hidden from your community page.')) return;
   try {
     const r = await fetch(API + '/markets/' + id, {
       method: 'DELETE',
@@ -5465,6 +5520,28 @@ async function archiveMarket() {
   } catch {
     showToast('Network error. Please try again.', 'error');
   }
+}
+
+// ── Mobile sidebar ────────────────────────────────────────
+function toggleSidebar() {
+  const sidebar = document.querySelector('.sidebar');
+  const backdrop = document.getElementById('sidebarBackdrop');
+  const isOpen = sidebar.classList.contains('open');
+  if (isOpen) { closeSidebar(); } else { openSidebar(); }
+}
+function openSidebar() {
+  const sidebar = document.querySelector('.sidebar');
+  const backdrop = document.getElementById('sidebarBackdrop');
+  sidebar.classList.add('open');
+  backdrop.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeSidebar() {
+  const sidebar = document.querySelector('.sidebar');
+  const backdrop = document.getElementById('sidebarBackdrop');
+  sidebar.classList.remove('open');
+  backdrop.classList.remove('open');
+  document.body.style.overflow = '';
 }
 
 // Init
