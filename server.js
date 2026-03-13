@@ -732,6 +732,162 @@ async function settleMarkets() {
 // Run settlement every hour
 cron.schedule('0 * * * *', settleMarkets);
 
+// ── WEEKLY REFILLS ────────────────────────────────
+
+// Returns the most recent Monday at 00:00:00 UTC
+function getWeekStart(date = new Date()) {
+  const d = new Date(date);
+  const day = d.getUTCDay(); // 0=Sun, 1=Mon…6=Sat
+  const diff = day === 0 ? -6 : 1 - day; // roll back to Monday
+  d.setUTCDate(d.getUTCDate() + diff);
+  d.setUTCHours(0, 0, 0, 0);
+  return d;
+}
+
+// Process refills for one creator's community (or all creators if creatorSlug is null).
+// Called by the weekly cron and by the manual trigger endpoint.
+async function processWeeklyRefills(targetSlug = null) {
+  const weekStart     = getWeekStart();
+  const weekStartISO  = weekStart.toISOString();
+  const weekStartDate = weekStart.toISOString().split('T')[0]; // YYYY-MM-DD
+
+  // Fetch eligible creators
+  let query = supabase
+    .from('creator_settings')
+    .select('slug, refill_amount, refill_cadence, activity_gate, starting_balance')
+    .eq('refill_enabled', true);
+  if (targetSlug) query = query.eq('slug', targetSlug);
+  const { data: creators } = await query;
+
+  if (!creators || creators.length === 0) {
+    console.log('[refill] No creators with refill enabled.');
+    return { creators_processed: 0, total_refills: 0 };
+  }
+
+  let totalRefills = 0;
+
+  for (const creator of creators) {
+    const slug         = creator.slug;
+    const refillAmount = creator.refill_amount  ?? 10000; // default 100 pts
+    const configGate   = creator.activity_gate  ?? 5;
+
+    try {
+      // ── 1. All market IDs for this community ──────────────────────────────
+      const { data: allMarkets } = await supabase
+        .from('markets')
+        .select('id')
+        .or(`creator_slug.eq.${slug},tenant_slug.eq.${slug}`);
+      const allMarketIds = (allMarkets || []).map(m => m.id);
+
+      // ── 2. Markets published THIS week (for gate scaling) ────────────────
+      const { count: marketsThisWeek } = await supabase
+        .from('markets')
+        .select('id', { count: 'exact', head: true })
+        .or(`creator_slug.eq.${slug},tenant_slug.eq.${slug}`)
+        .gte('created_at', weekStartISO);
+
+      // Effective gate = min(configured, floor(0.5 × marketsPublishedThisWeek))
+      // Protects users from being gated out when the creator publishes fewer markets
+      const effectiveGate = Math.min(configGate, Math.floor(0.5 * (marketsThisWeek || 0)));
+
+      // ── 3. All community members ──────────────────────────────────────────
+      const { data: balanceRows } = await supabase
+        .from('community_balances')
+        .select('user_id, balance')
+        .eq('creator_slug', slug);
+
+      if (!balanceRows || balanceRows.length === 0) continue;
+      const userIds = balanceRows.map(r => r.user_id);
+
+      // ── 4. Bets this week per user ────────────────────────────────────────
+      let betCountMap = {};
+      if (allMarketIds.length > 0) {
+        const { data: weekPositions } = await supabase
+          .from('positions')
+          .select('user_id')
+          .in('market_id', allMarketIds)
+          .gte('created_at', weekStartISO);
+        (weekPositions || []).forEach(p => {
+          betCountMap[p.user_id] = (betCountMap[p.user_id] || 0) + 1;
+        });
+      }
+
+      // ── 5. Already-refilled this week ────────────────────────────────────
+      const { data: alreadyRefilled } = await supabase
+        .from('refill_history')
+        .select('user_id')
+        .eq('creator_slug', slug)
+        .eq('week_start', weekStartDate)
+        .in('user_id', userIds);
+      const alreadyRefilledSet = new Set((alreadyRefilled || []).map(r => r.user_id));
+
+      // ── 6. User registration dates (new-user grace period) ───────────────
+      const { data: userRows } = await supabase
+        .from('users')
+        .select('id, created_at')
+        .in('id', userIds);
+      const userCreatedMap = {};
+      (userRows || []).forEach(u => { userCreatedMap[u.id] = u.created_at; });
+      const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+
+      // ── 7. Process each member ────────────────────────────────────────────
+      let refillCount = 0;
+      for (const row of balanceRows) {
+        const userId = row.user_id;
+        if (alreadyRefilledSet.has(userId)) continue; // already got it this week
+
+        // New users (< 7 days) get a free pass — no activity required
+        const isNewUser = userCreatedMap[userId] && userCreatedMap[userId] > sevenDaysAgo;
+        const betsThisWeek = betCountMap[userId] || 0;
+        const qualifies = isNewUser || betsThisWeek >= effectiveGate;
+
+        if (qualifies) {
+          await setCommunityBalance(userId, slug, row.balance + refillAmount);
+          await supabase
+            .from('refill_history')
+            .insert({ user_id: userId, creator_slug: slug, amount: refillAmount, week_start: weekStartDate });
+          refillCount++;
+        }
+      }
+
+      totalRefills += refillCount;
+      console.log(`[refill] ${slug}: ${refillCount}/${balanceRows.length} refilled (+${refillAmount / 100} pts, gate=${effectiveGate})`);
+
+    } catch (err) {
+      console.error(`[refill] Error for ${slug}:`, err.message);
+    }
+  }
+
+  console.log(`[refill] Done — ${totalRefills} total refills across ${creators.length} communities.`);
+  return { creators_processed: creators.length, total_refills: totalRefills };
+}
+
+// Run every Monday at midnight UTC
+cron.schedule('0 0 * * 1', () => {
+  console.log('[refill] Weekly cron triggered');
+  processWeeklyRefills();
+});
+
+// POST /api/creator/trigger-refill — manually trigger a refill run for the creator's community
+// Useful for testing; safe to call multiple times (idempotent per week)
+app.post('/api/creator/trigger-refill', requireCreator, async (req, res) => {
+  try {
+    const { data: settings } = await supabase
+      .from('creator_settings')
+      .select('slug, refill_enabled')
+      .eq('creator_id', req.creator.id)
+      .maybeSingle();
+    if (!settings) return res.status(404).json({ error: 'Creator settings not found' });
+    if (!settings.refill_enabled) return res.status(400).json({ error: 'Refill is not enabled for your community. Enable it in Economy Settings first.' });
+
+    const result = await processWeeklyRefills(settings.slug);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    console.error('trigger-refill error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── CLAUDE AI MARKET SCANNER ─────────────────────
 
 async function scanAndCreateMarkets() {
@@ -1517,7 +1673,12 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
         // Economy fields
         starting_balance: settings.starting_balance ?? 100000,
         min_bet: settings.min_bet ?? 1000,
-        max_bet: settings.max_bet ?? null
+        max_bet: settings.max_bet ?? null,
+        // Refill fields
+        refill_enabled: settings.refill_enabled ?? false,
+        refill_amount: settings.refill_amount ?? 10000,
+        refill_cadence: settings.refill_cadence ?? 'weekly',
+        activity_gate: settings.activity_gate ?? 5
       },
       stats: {
         total_traders: totalTraders,
