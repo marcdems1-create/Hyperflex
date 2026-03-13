@@ -1226,9 +1226,9 @@ function renderPage() {
   // Banner
   if (c.banner_url) {
     const banner = document.getElementById('heroBanner');
-    banner.style.backgroundImage = `url('${c.banner_url}')`;
-    banner.style.backgroundSize  = 'cover';
-    banner.style.backgroundPosition = 'center';
+    banner.style.backgroundImage    = `url('${c.banner_url}')`;
+    banner.style.backgroundSize     = 'cover';
+    banner.style.backgroundPosition = c.banner_position || 'center';
   }
 
   // Social links

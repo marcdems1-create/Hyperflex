@@ -998,6 +998,60 @@ body.plan-premium .main {
   border: 1px solid var(--border);
   opacity: 0.6;
 }
+/* Banner adjust */
+.branding-preview-banner.adjusting {
+  cursor: grab;
+  outline: 2px dashed var(--gold);
+  outline-offset: -2px;
+}
+.branding-preview-banner.adjusting:active { cursor: grabbing; }
+.banner-adjust-hint {
+  display: none;
+  position: absolute;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  z-index: 3;
+  pointer-events: none;
+}
+.banner-adjust-hint span {
+  background: rgba(0,0,0,0.65);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 20px;
+  letter-spacing: .03em;
+}
+.branding-preview-banner.adjusting .banner-adjust-hint { display: flex; }
+.banner-adjust-row {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.banner-adjust-btn {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--cream);
+  color: var(--text);
+  font-family: var(--sans);
+  transition: border-color .15s;
+}
+.banner-adjust-btn:hover { border-color: var(--gold); color: var(--gold); }
+.banner-adjust-btn.active {
+  background: rgba(201,146,13,0.12);
+  border-color: var(--gold);
+  color: var(--gold);
+}
+.banner-adjust-tip {
+  font-size: 11px;
+  color: var(--dim);
+}
 /* Danger zone */
 .danger-zone {
   border: 1px solid rgba(239,68,68,0.3);
@@ -2861,6 +2915,7 @@ body.plan-premium .main {
               <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);margin-bottom:10px;font-family:var(--mono)">Preview</div>
               <div class="branding-preview" id="brandingPreview">
                 <div class="branding-preview-banner" id="previewBanner">
+                  <div class="banner-adjust-hint"><span>↕ Drag to reposition</span></div>
                   <img src="" id="previewLogo" class="branding-preview-logo" style="display:none" onerror="this.style.display='none'"/>
                   <span class="branding-preview-name" id="previewName">Your Community</span>
                 </div>
@@ -2870,6 +2925,12 @@ body.plan-premium .main {
                   <div class="branding-preview-card"></div>
                 </div>
               </div>
+              <!-- Adjust row — shown only when a banner URL is set -->
+              <div class="banner-adjust-row" id="bannerAdjustRow">
+                <button class="banner-adjust-btn" id="bannerAdjustBtn" onclick="toggleBannerAdjust()">⤢ Adjust position</button>
+                <span class="banner-adjust-tip" id="bannerAdjustTip">Click to drag and reposition your banner</span>
+              </div>
+              <input type="hidden" id="brandingBannerPos" value="50% 50%"/>
             </div>
 
             <!-- Identity -->
@@ -4420,13 +4481,28 @@ async function handleAssetUpload(type, input) {
 function updateBrandingPreview() {
   const logo   = document.getElementById('brandingLogo')?.value;
   const banner = document.getElementById('brandingBanner')?.value;
+  const pos    = document.getElementById('brandingBannerPos')?.value || '50% 50%';
   const name   = document.getElementById('brandingName')?.value || creatorData?.creator?.display_name || 'Your Community';
   const color  = document.getElementById('brandingColor')?.value || '#c9920d';
   const hex    = document.getElementById('brandingColorHex');
   if (hex) hex.textContent = color;
 
   const bannerEl = document.getElementById('previewBanner');
-  if (bannerEl) bannerEl.style.background = banner ? `url('${banner}') center/cover, var(--border)` : 'var(--border)';
+  if (bannerEl) {
+    if (banner) {
+      bannerEl.style.backgroundImage    = `url('${banner}')`;
+      bannerEl.style.backgroundSize     = 'cover';
+      bannerEl.style.backgroundPosition = pos;
+      bannerEl.style.backgroundColor    = 'var(--border)';
+    } else {
+      bannerEl.style.backgroundImage    = '';
+      bannerEl.style.backgroundColor    = 'var(--border)';
+    }
+  }
+
+  // Show/hide adjust row
+  const adjustRow = document.getElementById('bannerAdjustRow');
+  if (adjustRow) adjustRow.style.display = banner ? 'flex' : 'none';
 
   const logoEl = document.getElementById('previewLogo');
   if (logoEl) {
@@ -4437,6 +4513,78 @@ function updateBrandingPreview() {
   if (nameEl) { nameEl.textContent = name; nameEl.style.color = color; }
 }
 
+// ── Banner drag-to-adjust ──────────────────────────────────
+let _bannerAdjusting = false;
+let _bannerDrag = null; // { startX, startY, posX, posY }
+
+function toggleBannerAdjust() {
+  _bannerAdjusting = !_bannerAdjusting;
+  const banner = document.getElementById('previewBanner');
+  const btn    = document.getElementById('bannerAdjustBtn');
+  const tip    = document.getElementById('bannerAdjustTip');
+  if (!banner) return;
+  if (_bannerAdjusting) {
+    banner.classList.add('adjusting');
+    btn.classList.add('active');
+    btn.textContent = '✓ Done';
+    if (tip) tip.textContent = 'Drag the image to reposition, then click Done';
+  } else {
+    banner.classList.remove('adjusting');
+    btn.classList.remove('active');
+    btn.textContent = '⤢ Adjust position';
+    if (tip) tip.textContent = 'Click to drag and reposition your banner';
+  }
+}
+
+(function initBannerDrag() {
+  document.addEventListener('DOMContentLoaded', () => {
+    const banner = document.getElementById('previewBanner');
+    if (!banner) return;
+
+    function getPosXY() {
+      const posInput = document.getElementById('brandingBannerPos');
+      const parts = (posInput?.value || '50% 50%').split(' ');
+      return { x: parseFloat(parts[0]) || 50, y: parseFloat(parts[1]) || 50 };
+    }
+    function setPosXY(x, y) {
+      x = Math.max(0, Math.min(100, x));
+      y = Math.max(0, Math.min(100, y));
+      const val = `${x.toFixed(1)}% ${y.toFixed(1)}%`;
+      const posInput = document.getElementById('brandingBannerPos');
+      if (posInput) posInput.value = val;
+      banner.style.backgroundPosition = val;
+    }
+
+    function onStart(clientX, clientY) {
+      if (!_bannerAdjusting) return;
+      const { x, y } = getPosXY();
+      _bannerDrag = { startX: clientX, startY: clientY, posX: x, posY: y };
+      banner.style.cursor = 'grabbing';
+    }
+    function onMove(clientX, clientY) {
+      if (!_bannerDrag) return;
+      const rect = banner.getBoundingClientRect();
+      // Sensitivity: dragging full width/height = 100% shift
+      const dx = (clientX - _bannerDrag.startX) / rect.width  * -100;
+      const dy = (clientY - _bannerDrag.startY) / rect.height * -100;
+      setPosXY(_bannerDrag.posX + dx, _bannerDrag.posY + dy);
+    }
+    function onEnd() {
+      if (!_bannerDrag) return;
+      _bannerDrag = null;
+      if (_bannerAdjusting) banner.style.cursor = 'grab';
+    }
+
+    banner.addEventListener('mousedown',  e => { e.preventDefault(); onStart(e.clientX, e.clientY); });
+    document.addEventListener('mousemove', e => onMove(e.clientX, e.clientY));
+    document.addEventListener('mouseup',   () => onEnd());
+
+    banner.addEventListener('touchstart',  e => { e.preventDefault(); onStart(e.touches[0].clientX, e.touches[0].clientY); }, { passive: false });
+    document.addEventListener('touchmove',  e => { if (_bannerDrag) { e.preventDefault(); onMove(e.touches[0].clientX, e.touches[0].clientY); } }, { passive: false });
+    document.addEventListener('touchend',   () => onEnd());
+  });
+})();
+
 function prefillBranding(creator) {
   const safe = v => v || '';
   const si = (id, v) => { const el = document.getElementById(id); if (el) el.value = safe(v); };
@@ -4445,6 +4593,8 @@ function prefillBranding(creator) {
   si('brandingDesc',    creator.community_description);
   si('brandingLogo',    creator.logo_url);
   si('brandingBanner',  creator.banner_url);
+  const posEl = document.getElementById('brandingBannerPos');
+  if (posEl) posEl.value = creator.banner_position || '50% 50%';
   si('brandingTwitter', creator.social_twitter);
   si('brandingYouTube', creator.social_youtube);
   si('brandingDiscord', creator.social_discord);
@@ -4463,6 +4613,7 @@ async function saveBrandingSettings() {
     community_description: document.getElementById('brandingDesc')?.value.trim()    || null,
     logo_url:              document.getElementById('brandingLogo')?.value.trim()    || null,
     banner_url:            document.getElementById('brandingBanner')?.value.trim()  || null,
+    banner_position:       document.getElementById('brandingBannerPos')?.value      || '50% 50%',
     primary_color:         document.getElementById('brandingColor')?.value          || undefined,
     font_choice:           document.getElementById('brandingFont')?.value           || undefined,
     social_twitter:        document.getElementById('brandingTwitter')?.value.trim() || null,

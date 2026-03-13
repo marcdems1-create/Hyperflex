@@ -1978,7 +1978,8 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
         social_discord:      settings.social_discord  || null,
         social_twitch:       settings.social_twitch   || null,
         community_description: settings.community_description || null,
-        community_category:    settings.community_category   || 'other'
+        community_category:    settings.community_category   || 'other',
+        banner_position:       settings.banner_position      || '50% 50%'
       },
       stats: {
         total_traders: totalTraders,
@@ -2303,7 +2304,7 @@ app.put('/api/creator/settings', requireCreator, async (req, res) => {
       // Referral fields
       referral_reward, welcome_bonus,
       // Branding fields
-      logo_url, banner_url, font_choice,
+      logo_url, banner_url, banner_position, font_choice,
       social_twitter, social_youtube, social_discord, social_twitch,
       community_description,
       // Ideas niche
@@ -2338,6 +2339,7 @@ app.put('/api/creator/settings', requireCreator, async (req, res) => {
     if (social_twitch  !== undefined) updates.social_twitch  = social_twitch  || null;
     if (community_description !== undefined) updates.community_description = community_description || null;
     if (community_category !== undefined) updates.community_category = community_category || 'other';
+    if (banner_position   !== undefined) updates.banner_position    = banner_position    || '50% 50%';
 
     const { error } = await supabase
       .from('creator_settings')
@@ -3588,8 +3590,9 @@ app.get('/api/community/:slug', async (req, res) => {
         referral_reward:      settings.referral_reward ?? 10000,
         welcome_bonus:        settings.welcome_bonus ?? 5000,
         // Branding
-        logo_url:             settings.logo_url   || null,
-        banner_url:           settings.banner_url || null,
+        logo_url:             settings.logo_url       || null,
+        banner_url:           settings.banner_url     || null,
+        banner_position:      settings.banner_position || '50% 50%',
         font_choice:          settings.font_choice || 'Syne',
         social_twitter:       settings.social_twitter  || null,
         social_youtube:       settings.social_youtube  || null,
