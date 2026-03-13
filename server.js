@@ -299,6 +299,7 @@ app.get('/positions/:user_id', async (req, res) => {
 app.get('/api/leaderboard', async (req, res) => {
   try {
     let positions;
+    let leaderboardMarketIds = null;
     const subdomain = req.tenant?.subdomain;
 
     if (subdomain) {
@@ -306,20 +307,21 @@ app.get('/api/leaderboard', async (req, res) => {
         .from('markets')
         .select('id')
         .eq('creator_slug', subdomain);
-      const marketIds = (tenantMarkets || []).map((m) => m.id);
-      if (marketIds.length === 0) return res.json([]);
+      leaderboardMarketIds = (tenantMarkets || []).map((m) => m.id);
+      if (leaderboardMarketIds.length === 0) return res.json([]);
       const { data: pos } = await supabase
         .from('positions')
         .select('user_id, amount, potential_payout, settled, won')
         .eq('settled', true)
-        .in('market_id', marketIds);
+        .in('market_id', leaderboardMarketIds);
       positions = pos;
     } else {
       const { data: pos } = await supabase
         .from('positions')
-        .select('user_id, amount, potential_payout, settled, won')
+        .select('user_id, amount, potential_payout, settled, won, market_id')
         .eq('settled', true);
       positions = pos;
+      leaderboardMarketIds = [...new Set((pos || []).map(p => p.market_id))];
     }
 
     if (!positions || positions.length === 0) {
@@ -348,15 +350,21 @@ app.get('/api/leaderboard', async (req, res) => {
       a.total_pnl -= Number(p.amount) || 0;
     }
 
+    // Batch-compute streaks for all leaderboard users
+    const streakMap = await getStreakMap(userIds, leaderboardMarketIds);
+
     const rows = [];
     for (const [userId, a] of agg) {
       const u = userMap.get(userId);
       rows.push({
         user_id: userId,
         username: (u?.display_name || u?.email || 'Unknown').trim() || 'Unknown',
+        display_name: (u?.display_name || u?.email || 'Unknown').trim() || 'Unknown',
         total_pnl: Math.round(a.total_pnl * 100) / 100,
         win_rate: a.total_trades > 0 ? Math.round((a.wins / a.total_trades) * 100) : 0,
         total_trades: a.total_trades,
+        wins: a.wins,
+        streak: streakMap[userId] || 0,
       });
     }
 
@@ -365,9 +373,12 @@ app.get('/api/leaderboard', async (req, res) => {
       rank: i + 1,
       user_id: r.user_id,
       username: r.username,
+      display_name: r.display_name,
       total_pnl: r.total_pnl,
       win_rate: r.win_rate,
       total_trades: r.total_trades,
+      wins: r.wins,
+      streak: r.streak,
     }));
 
     res.json(top20);
@@ -471,6 +482,64 @@ async function fetchCurrentPrice(commodity) {
   }
 }
 
+// ─── Streak helpers ─────────────────────────────────────────
+// Returns the number of consecutive wins in a user's most-recent settled positions,
+// excluding the market currently being settled so the multiplier reflects prior streak.
+async function getUserStreak(userId, excludeMarketId = null) {
+  let query = supabase
+    .from('positions')
+    .select('won, market_id')
+    .eq('user_id', userId)
+    .eq('settled', true)
+    .order('created_at', { ascending: false })
+    .limit(15);
+  if (excludeMarketId) query = query.neq('market_id', excludeMarketId);
+  const { data: recentPositions } = await query;
+  if (!recentPositions || recentPositions.length === 0) return 0;
+  let streak = 0;
+  for (const p of recentPositions) {
+    if (p.won) streak++;
+    else break;
+  }
+  return streak;
+}
+
+// Multiplier tiers: 3 consecutive wins → 1.5×, 5+ → 2×
+function getStreakMultiplier(streak) {
+  if (streak >= 5) return 2.0;
+  if (streak >= 3) return 1.5;
+  return 1.0;
+}
+
+// Batch-compute current streak for an array of userIds across a set of marketIds.
+// Returns { userId: streakCount } map.
+async function getStreakMap(userIds, marketIds) {
+  if (!userIds || userIds.length === 0) return {};
+  const { data: allPos } = await supabase
+    .from('positions')
+    .select('user_id, won, created_at')
+    .in('user_id', userIds)
+    .in('market_id', marketIds)
+    .eq('settled', true)
+    .order('created_at', { ascending: false })
+    .limit(500);
+
+  // Group by user (already sorted desc by created_at)
+  const possByUser = {};
+  for (const p of allPos || []) {
+    if (!possByUser[p.user_id]) possByUser[p.user_id] = [];
+    possByUser[p.user_id].push(p.won);
+  }
+  const streakMap = {};
+  for (const [uid, wins] of Object.entries(possByUser)) {
+    let s = 0;
+    for (const won of wins) { if (won) s++; else break; }
+    streakMap[uid] = s;
+  }
+  return streakMap;
+}
+// ────────────────────────────────────────────────────────────
+
 async function settleMarkets() {
   // settlement check — silent in production
   const now = new Date().toISOString();
@@ -520,10 +589,17 @@ async function settleMarkets() {
           .select('balance')
           .eq('id', position.user_id)
           .single();
+        // Apply streak multiplier (based on streak BEFORE this settlement)
+        const streak = await getUserStreak(position.user_id, market.id);
+        const multiplier = getStreakMultiplier(streak);
+        const payout = Math.round(position.potential_payout * multiplier);
         await supabase
           .from('users')
-          .update({ balance: user.balance + position.potential_payout })
+          .update({ balance: user.balance + payout })
           .eq('id', position.user_id);
+        if (multiplier > 1) {
+          console.log(`[settle] streak bonus x${multiplier} for user ${position.user_id} (streak=${streak})`);
+        }
       }
     }
     console.log(`[settle] ${market.id} → ${outcome ? 'YES' : 'NO'} @ ${settlement_price}`);
@@ -681,10 +757,17 @@ app.post('/api/creator/resolve/:marketId', requireAuth, async (req, res) => {
         .eq('id', position.user_id)
         .single();
       if (user) {
+        // Apply streak multiplier based on streak BEFORE this settlement
+        const streak = await getUserStreak(position.user_id, marketId);
+        const multiplier = getStreakMultiplier(streak);
+        const payout = Math.round(position.potential_payout * multiplier);
         await supabase
           .from('users')
-          .update({ balance: user.balance + position.potential_payout })
+          .update({ balance: user.balance + payout })
           .eq('id', position.user_id);
+        if (multiplier > 1) {
+          console.log(`[resolve] streak bonus x${multiplier} for user ${position.user_id} (streak=${streak})`);
+        }
       }
     }
   }
@@ -1189,8 +1272,15 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
       weeklyTrades = weekCount || 0;
     }
 
-    // Get community leaderboard — distinct traders by current balance
+    const plan = settings.plan || 'free';
+    const isPro = plan === 'pro' || plan === 'platinum';
+    const isPremium = plan === 'platinum';
+
+    // Get community leaderboard — distinct traders by current balance, with streak badges
     let leaderboard = [];
+    let power_predictor = null;   // Pro/Premium: top 3 weekly winners
+    let inner_circle = null;      // Premium: members with 2,000+ Flex Points (balance ≥ 200,000)
+
     if (marketIds.length > 0) {
       const { data: positions } = await supabase
         .from('positions')
@@ -1204,6 +1294,9 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
         const tradeCountMap = {};
         positions.forEach(p => { tradeCountMap[p.user_id] = (tradeCountMap[p.user_id] || 0) + 1; });
 
+        // Batch-compute streaks for all traders in this community
+        const streakMap = await getStreakMap(userIds, marketIds);
+
         const { data: traders } = await supabase
           .from('users')
           .select('id, display_name, balance')
@@ -1215,10 +1308,65 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
             display_name: u.display_name || 'Anonymous',
             balance: u.balance || 0,
             pnl: u.balance || 0,   // frontend uses pnl field for display
-            trade_count: tradeCountMap[u.id] || 0
+            trade_count: tradeCountMap[u.id] || 0,
+            streak: streakMap[u.id] || 0
           }))
           .sort((a, b) => b.balance - a.balance)
           .slice(0, 20);
+
+        // ── Power Predictor (Pro/Premium): top 3 members by wins in the last 7 days ──
+        if (isPro) {
+          const oneWeekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+          const { data: weeklyWins } = await supabase
+            .from('positions')
+            .select('user_id, won')
+            .in('market_id', marketIds)
+            .eq('settled', true)
+            .eq('won', true)
+            .gte('created_at', oneWeekAgo);
+
+          if (weeklyWins && weeklyWins.length > 0) {
+            const winCountMap = {};
+            weeklyWins.forEach(p => { winCountMap[p.user_id] = (winCountMap[p.user_id] || 0) + 1; });
+
+            // Get display names for top 3 by win count
+            const topIds = Object.entries(winCountMap)
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 3)
+              .map(([uid]) => uid);
+
+            const { data: topUsers } = await supabase
+              .from('users')
+              .select('id, display_name')
+              .in('id', topIds);
+
+            power_predictor = topIds.map((uid, rank) => {
+              const u = (topUsers || []).find(u => u.id === uid);
+              return {
+                rank: rank + 1,
+                user_id: uid,
+                display_name: u?.display_name || 'Anonymous',
+                wins_this_week: winCountMap[uid]
+              };
+            });
+          } else {
+            power_predictor = [];
+          }
+        }
+
+        // ── Inner Circle (Premium): members with 2,000+ Flex Points (balance ≥ 200,000) ──
+        if (isPremium) {
+          const INNER_CIRCLE_THRESHOLD = 200000; // 2,000 Flex Points
+          inner_circle = (traders || [])
+            .filter(u => (u.balance || 0) >= INNER_CIRCLE_THRESHOLD)
+            .map(u => ({
+              user_id: u.id,
+              display_name: u.display_name || 'Anonymous',
+              balance: u.balance || 0,
+              points: Math.floor((u.balance || 0) / 100)
+            }))
+            .sort((a, b) => b.balance - a.balance);
+        }
       }
     }
 
@@ -1243,6 +1391,8 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
       },
       markets: markets || [],
       leaderboard,
+      power_predictor,
+      inner_circle,
       rewards: await supabase
         .from('creator_rewards')
         .select('id, threshold, title, description')

@@ -994,6 +994,130 @@ body.plan-premium .main {
 }
 .leader-pnl.pos { color: var(--green); }
 .leader-pnl.neg { color: var(--red); }
+.leader-streak {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 20px;
+  flex-shrink: 0;
+}
+.leader-streak.fire {
+  background: rgba(255, 140, 0, 0.12);
+  color: #ff8c00;
+  border: 1px solid rgba(255, 140, 0, 0.25);
+}
+.leader-streak.master {
+  background: rgba(201, 146, 13, 0.18);
+  color: var(--gold);
+  border: 1px solid rgba(201, 146, 13, 0.35);
+}
+
+/* ── Gamification panels ─── */
+.gamification-panel {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.gam-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.gam-title {
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.03em;
+}
+.gam-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 20px;
+}
+.gam-badge.pro {
+  background: rgba(255,255,255,0.08);
+  color: #aaa;
+  border: 1px solid rgba(255,255,255,0.12);
+}
+.gam-badge.premium {
+  background: rgba(201,146,13,0.15);
+  color: var(--gold);
+  border: 1px solid rgba(201,146,13,0.3);
+}
+.gam-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.gam-row:last-child { border-bottom: none; }
+.gam-pos {
+  font-family: var(--mono);
+  font-size: 18px;
+  width: 28px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.gam-name {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.gam-meta {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+}
+.gam-points {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--gold);
+}
+.gam-empty {
+  padding: 24px 20px;
+  text-align: center;
+  color: var(--dim);
+  font-size: 12px;
+}
+.gate-overlay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 32px 20px;
+  text-align: center;
+  color: var(--dim);
+  font-size: 12px;
+}
+.gate-overlay strong {
+  font-size: 14px;
+  color: var(--text);
+}
+.gate-overlay .btn-upgrade-sm {
+  margin-top: 4px;
+  padding: 8px 18px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  background: linear-gradient(135deg, #c9920d, #f0c050);
+  color: var(--ink);
+}
 
 /* Create market modal */
 .modal-overlay {
@@ -1715,6 +1839,42 @@ body.plan-premium .main {
             <div class="loading-row">Loading...</div>
           </div>
         </div>
+
+        <!-- ── Power Predictor (Pro/Premium) ─────────────────────── -->
+        <div class="section" id="powerPredictorSection">
+          <div class="section-header" style="margin-bottom:14px">
+            <div>
+              <div class="section-title">⚡ Weekly Power Predictors</div>
+              <div class="section-subtitle">Top 3 members by correct predictions this week</div>
+            </div>
+          </div>
+          <div class="gamification-panel" id="powerPredictorPanel">
+            <div class="gate-overlay" id="powerPredictorGate" style="display:none">
+              <strong>Pro Feature</strong>
+              <span>Spotlight your weekly top predictors and drive competition</span>
+              <button class="btn-upgrade-sm" onclick="showUpgrade()">Upgrade to Pro →</button>
+            </div>
+            <div id="powerPredictorList"></div>
+          </div>
+        </div>
+
+        <!-- ── Inner Circle (Premium only) ──────────────────────── -->
+        <div class="section" id="innerCircleSection">
+          <div class="section-header" style="margin-bottom:14px">
+            <div>
+              <div class="section-title">👑 Inner Circle</div>
+              <div class="section-subtitle">Members who've earned 2,000+ Flex Points — your most dedicated community</div>
+            </div>
+          </div>
+          <div class="gamification-panel" id="innerCirclePanel">
+            <div class="gate-overlay" id="innerCircleGate" style="display:none">
+              <strong>Premium Feature</strong>
+              <span>Identify your power users and offer them exclusive access</span>
+              <button class="btn-upgrade-sm" onclick="showUpgrade()">Upgrade to Premium →</button>
+            </div>
+            <div id="innerCircleList"></div>
+          </div>
+        </div>
       </div>
 
       <!-- Share Tab -->
@@ -2292,6 +2452,11 @@ function renderDashboard(data) {
   renderLeaderboard(leaderboard || [], 'overviewLeaderboard', 5, creator.custom_points_name);
   renderLeaderboard(leaderboard || [], 'fullLeaderboard', 20, creator.custom_points_name);
 
+  // Gamification: Power Predictor + Inner Circle
+  const planNow = creator.plan || 'free';
+  renderPowerPredictor(data.power_predictor, planNow, creator.custom_points_name);
+  renderInnerCircle(data.inner_circle, planNow, creator.custom_points_name);
+
   // Share templates
   renderShareTemplates(creator);
   renderRewardsList(data.rewards || []);
@@ -2435,7 +2600,15 @@ function renderLeaderboard(leaders, containerId, limit, pointsName) {
     el.innerHTML = '<div class="empty-state"><div class="empty-icon">🏆</div><div class="empty-title">No traders yet</div><div class="empty-desc">Share your community link to get your first traders.</div></div>';
     return;
   }
-  el.innerHTML = top.map((l, i) => `
+  el.innerHTML = top.map((l, i) => {
+    const streak = l.streak || 0;
+    let streakBadge = '';
+    if (streak >= 7) {
+      streakBadge = `<span class="leader-streak master" title="${streak}-win streak">⚡ ${streak}</span>`;
+    } else if (streak >= 3) {
+      streakBadge = `<span class="leader-streak fire" title="${streak}-win streak">🔥 ${streak}</span>`;
+    }
+    return `
     <div class="leader-item">
       <div class="leader-rank ${i < 3 ? 'top3' : ''}">${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '#' + (i+1)}</div>
       <div class="leader-avatar">${(l.display_name || '?')[0].toUpperCase()}</div>
@@ -2443,7 +2616,55 @@ function renderLeaderboard(leaders, containerId, limit, pointsName) {
         <div class="leader-name">${l.display_name || 'Anonymous'}</div>
         <div class="leader-trades">${l.trade_count || 0} trades</div>
       </div>
-      <div class="leader-pnl ${l.pnl >= 0 ? 'pos' : 'neg'}">${l.pnl >= 0 ? '+' : ''}$${Math.abs(l.pnl || 0).toFixed(0)}</div>
+      ${streakBadge}
+      <div class="leader-pnl ${l.pnl >= 0 ? 'pos' : 'neg'}">${l.pnl >= 0 ? '+' : ''}${Math.abs(l.pnl || 0).toFixed(0)} pts</div>
+    </div>`;
+  }).join('');
+}
+
+function renderPowerPredictor(data, plan, pointsName) {
+  const isPro = plan === 'pro' || plan === 'platinum';
+  const gate = document.getElementById('powerPredictorGate');
+  const list = document.getElementById('powerPredictorList');
+  if (!isPro) {
+    gate.style.display = 'flex';
+    list.innerHTML = '';
+    return;
+  }
+  gate.style.display = 'none';
+  if (!data || data.length === 0) {
+    list.innerHTML = '<div class="gam-empty">No predictions settled this week yet — check back soon.</div>';
+    return;
+  }
+  const medals = ['🥇', '🥈', '🥉'];
+  list.innerHTML = data.map((p, i) => `
+    <div class="gam-row">
+      <div class="gam-pos">${medals[i] || '#' + (i+1)}</div>
+      <div class="gam-name">${p.display_name}</div>
+      <div class="gam-meta">${p.wins_this_week} correct this week</div>
+    </div>
+  `).join('');
+}
+
+function renderInnerCircle(data, plan, pointsName) {
+  const isPremium = plan === 'platinum';
+  const gate = document.getElementById('innerCircleGate');
+  const list = document.getElementById('innerCircleList');
+  if (!isPremium) {
+    gate.style.display = 'flex';
+    list.innerHTML = '';
+    return;
+  }
+  gate.style.display = 'none';
+  if (!data || data.length === 0) {
+    list.innerHTML = `<div class="gam-empty">No members have reached 2,000 ${pointsName || 'Flex Points'} yet.<br>Keep your community active!</div>`;
+    return;
+  }
+  list.innerHTML = data.map(p => `
+    <div class="gam-row">
+      <div class="gam-pos">👑</div>
+      <div class="gam-name">${p.display_name}</div>
+      <div class="gam-points">${p.points.toLocaleString()} pts</div>
     </div>
   `).join('');
 }

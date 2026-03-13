@@ -457,6 +457,24 @@ body::before {
   font-size: 11px;
   color: var(--dim);
 }
+.lb-streak {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 20px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.lb-streak.fire {
+  background: rgba(255, 140, 0, 0.15);
+  color: #ff8c00;
+  border: 1px solid rgba(255, 140, 0, 0.3);
+}
+.lb-streak.master {
+  background: rgba(201, 146, 13, 0.2);
+  color: var(--gold);
+  border: 1px solid rgba(201, 146, 13, 0.4);
+}
 
 /* ── REWARDS ─── */
 .rewards-grid {
@@ -1304,13 +1322,20 @@ async function loadLeaderboard() {
     card.innerHTML = top.map((row, i) => {
       const rankClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
       const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`;
-      const name = escHtml(row.display_name || row.user_id?.slice(0,8) || 'Anonymous');
+      const name = escHtml(row.display_name || row.username || row.user_id?.slice(0,8) || 'Anonymous');
       const pnl  = (row.total_pnl || 0).toFixed(0);
       const wins = row.wins || 0;
+      const streak = row.streak || 0;
+      let streakBadge = '';
+      if (streak >= 7) {
+        streakBadge = `<span class="lb-streak master" title="${streak}-win streak">⚡ ${streak} Streak</span>`;
+      } else if (streak >= 3) {
+        streakBadge = `<span class="lb-streak fire" title="${streak}-win streak">🔥 ${streak}</span>`;
+      }
       return `
         <div class="lb-row">
           <div class="lb-rank ${rankClass}">${medal}</div>
-          <div class="lb-name">${name}</div>
+          <div class="lb-name">${name}${streakBadge ? ' ' + streakBadge : ''}</div>
           <div class="lb-correct">${wins}W</div>
           <div class="lb-score">+${pnl} ${pointsName}</div>
         </div>`;
