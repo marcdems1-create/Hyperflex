@@ -3322,9 +3322,30 @@ body.nav-open .sidebar-backdrop {
               </div>
               <!-- Skeleton cards for 3 sections -->
               <div style="display:flex;flex-direction:column;gap:24px">
-                <div><div style="height:14px;width:120px;background:var(--surface);border-radius:6px;margin-bottom:12px"></div><div style="display:flex;gap:12px;flex-wrap:wrap">${[1,2,3].map(()=>`<div style="flex:1;min-width:200px;height:110px;background:var(--surface);border-radius:10px;animation:skeletonPulse 1.4s ease-in-out infinite"></div>`).join('')}</div></div>
-                <div><div style="height:14px;width:90px;background:var(--surface);border-radius:6px;margin-bottom:12px"></div><div style="display:flex;gap:12px;flex-wrap:wrap">${[1,2,3].map(()=>`<div style="flex:1;min-width:200px;height:110px;background:var(--surface);border-radius:10px;animation:skeletonPulse 1.4s ease-in-out infinite;animation-delay:.2s"></div>`).join('')}</div></div>
-                <div><div style="height:14px;width:100px;background:var(--surface);border-radius:6px;margin-bottom:12px"></div><div style="display:flex;gap:12px;flex-wrap:wrap">${[1,2,3].map(()=>`<div style="flex:1;min-width:200px;height:110px;background:var(--surface);border-radius:10px;animation:skeletonPulse 1.4s ease-in-out infinite;animation-delay:.4s"></div>`).join('')}</div></div>
+                <div>
+                  <div style="height:14px;width:120px;background:var(--surface);border-radius:6px;margin-bottom:12px"></div>
+                  <div style="display:flex;gap:12px;flex-wrap:wrap">
+                    <div style="flex:1;min-width:200px;height:110px;background:var(--surface);border-radius:10px;animation:skeletonPulse 1.4s ease-in-out infinite"></div>
+                    <div style="flex:1;min-width:200px;height:110px;background:var(--surface);border-radius:10px;animation:skeletonPulse 1.4s ease-in-out infinite"></div>
+                    <div style="flex:1;min-width:200px;height:110px;background:var(--surface);border-radius:10px;animation:skeletonPulse 1.4s ease-in-out infinite"></div>
+                  </div>
+                </div>
+                <div>
+                  <div style="height:14px;width:90px;background:var(--surface);border-radius:6px;margin-bottom:12px"></div>
+                  <div style="display:flex;gap:12px;flex-wrap:wrap">
+                    <div style="flex:1;min-width:200px;height:110px;background:var(--surface);border-radius:10px;animation:skeletonPulse 1.4s ease-in-out infinite;animation-delay:.2s"></div>
+                    <div style="flex:1;min-width:200px;height:110px;background:var(--surface);border-radius:10px;animation:skeletonPulse 1.4s ease-in-out infinite;animation-delay:.2s"></div>
+                    <div style="flex:1;min-width:200px;height:110px;background:var(--surface);border-radius:10px;animation:skeletonPulse 1.4s ease-in-out infinite;animation-delay:.2s"></div>
+                  </div>
+                </div>
+                <div>
+                  <div style="height:14px;width:100px;background:var(--surface);border-radius:6px;margin-bottom:12px"></div>
+                  <div style="display:flex;gap:12px;flex-wrap:wrap">
+                    <div style="flex:1;min-width:200px;height:110px;background:var(--surface);border-radius:10px;animation:skeletonPulse 1.4s ease-in-out infinite;animation-delay:.4s"></div>
+                    <div style="flex:1;min-width:200px;height:110px;background:var(--surface);border-radius:10px;animation:skeletonPulse 1.4s ease-in-out infinite;animation-delay:.4s"></div>
+                    <div style="flex:1;min-width:200px;height:110px;background:var(--surface);border-radius:10px;animation:skeletonPulse 1.4s ease-in-out infinite;animation-delay:.4s"></div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -3760,6 +3781,32 @@ body.nav-open .sidebar-backdrop {
   </div>
 </div>
 
+<!-- Member Reward Modal -->
+<div class="modal-overlay" id="memberRewardModal" style="display:none" onclick="if(event.target===this)closeMemberRewardModal()">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header">
+      <div class="modal-title">🎁 Reward Member</div>
+      <button class="modal-close" onclick="closeMemberRewardModal()">✕</button>
+    </div>
+    <div class="modal-body" style="padding:20px 24px">
+      <div style="font-size:13px;color:var(--dim);margin-bottom:16px">Send bonus points to <strong id="memberRewardName"></strong></div>
+      <label style="display:block;font-size:12px;color:var(--dim);margin-bottom:6px;font-family:var(--mono)">AMOUNT (pts)</label>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <button class="btn-secondary" style="font-size:12px;padding:6px 12px" onclick="setRewardAmount(50)">+50</button>
+        <button class="btn-secondary" style="font-size:12px;padding:6px 12px" onclick="setRewardAmount(100)">+100</button>
+        <button class="btn-secondary" style="font-size:12px;padding:6px 12px" onclick="setRewardAmount(250)">+250</button>
+        <button class="btn-secondary" style="font-size:12px;padding:6px 12px" onclick="setRewardAmount(500)">+500</button>
+      </div>
+      <input type="number" id="memberRewardAmt" class="form-input" min="1" max="1000" placeholder="Custom amount" style="width:100%;box-sizing:border-box">
+      <div style="font-size:11px;color:var(--dim);margin-top:6px">Max 1,000 pts per reward</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeMemberRewardModal()">Cancel</button>
+      <button class="btn-primary" onclick="submitMemberReward()">Send Reward</button>
+    </div>
+  </div>
+</div>
+
 <!-- Upgrade Modal (Free / Pro / Platinum) -->
 <div class="modal-overlay" id="upgradeModal">
   <div class="modal" style="max-width:900px">
@@ -4081,13 +4128,13 @@ function renderDashboard(data) {
   }
 
   // Render markets
-  renderMarketRows(communityMarkets.slice(0, 5), 'overviewMarketsList');
+  renderMarketRows(communityMarkets.filter(m => !m.archived).slice(0, 5), 'overviewMarketsList');
   updateMarketCounts();
   filterMarkets(currentMarketFilter);
 
   // Leaderboard
-  renderLeaderboard(leaderboard || [], 'overviewLeaderboard', 5, creator.custom_points_name);
-  renderLeaderboard(leaderboard || [], 'fullLeaderboard', 20, creator.custom_points_name);
+  renderLeaderboard(leaderboard || [], 'overviewLeaderboard', 5, creator.custom_points_name, true);
+  renderLeaderboard(leaderboard || [], 'fullLeaderboard', 20, creator.custom_points_name, true);
 
   // Gamification: Power Predictor + Inner Circle
   const planNow = creator.plan || 'free';
@@ -4345,13 +4392,13 @@ async function setLbPeriod(period) {
     });
     const data = await r.json();
     const pointsName = window._pointsName || 'Flex Points';
-    renderLeaderboard(data.leaderboard || [], 'fullLeaderboard', 20, pointsName);
+    renderLeaderboard(data.leaderboard || [], 'fullLeaderboard', 20, pointsName, true);
   } catch {
     el.innerHTML = '<div class="empty-state"><div class="empty-title">Failed to load</div></div>';
   }
 }
 
-function renderLeaderboard(leaders, containerId, limit, pointsName) {
+function renderLeaderboard(leaders, containerId, limit, pointsName, showReward) {
   const el = document.getElementById(containerId);
   const top = leaders.slice(0, limit);
   if (!top.length) {
@@ -4366,6 +4413,9 @@ function renderLeaderboard(leaders, containerId, limit, pointsName) {
     } else if (streak >= 3) {
       streakBadge = `<span class="leader-streak fire" title="${streak}-win streak">🔥 ${streak}</span>`;
     }
+    const rewardBtn = showReward && l.user_id
+      ? `<button class="btn-secondary" style="padding:4px 10px;font-size:11px;margin-left:6px;white-space:nowrap" onclick="event.stopPropagation();openMemberRewardModal('${l.user_id}','${(l.display_name||'Member').replace(/'/g,"\\'")}')">🎁 Reward</button>`
+      : '';
     return `
     <div class="leader-item">
       <div class="leader-rank ${i < 3 ? 'top3' : ''}">${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '#' + (i+1)}</div>
@@ -4376,6 +4426,7 @@ function renderLeaderboard(leaders, containerId, limit, pointsName) {
       </div>
       ${streakBadge}
       <div class="leader-pnl ${l.pnl >= 0 ? 'pos' : 'neg'}">${Math.round((l.pnl || 0) / 100).toLocaleString()} ${pointsName || 'pts'}</div>
+      ${rewardBtn}
     </div>`;
   }).join('');
 }
@@ -5646,6 +5697,45 @@ function openRewardModal(rewardId) {
 }
 function closeRewardModal() {
   document.getElementById('rewardModal').classList.remove('show');
+}
+
+// ── Member Reward Modal ──
+let _memberRewardUserId = null;
+function openMemberRewardModal(userId, displayName) {
+  _memberRewardUserId = userId;
+  document.getElementById('memberRewardName').textContent = displayName;
+  document.getElementById('memberRewardAmt').value = '';
+  document.getElementById('memberRewardModal').style.display = 'flex';
+  setTimeout(() => document.getElementById('memberRewardModal').classList.add('show'), 10);
+}
+function closeMemberRewardModal() {
+  document.getElementById('memberRewardModal').classList.remove('show');
+  setTimeout(() => { document.getElementById('memberRewardModal').style.display = 'none'; }, 200);
+}
+function setRewardAmount(pts) {
+  document.getElementById('memberRewardAmt').value = pts;
+}
+async function submitMemberReward() {
+  const amount_pts = parseInt(document.getElementById('memberRewardAmt').value);
+  if (!amount_pts || amount_pts <= 0 || amount_pts > 1000) {
+    showToast('Enter 1–1000 pts', 'error'); return;
+  }
+  if (!_memberRewardUserId) return;
+  try {
+    const r = await fetch(API + '/api/creator/member/reward', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ user_id: _memberRewardUserId, amount_pts })
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Failed');
+    showToast(`🎁 +${amount_pts} pts sent to ${data.display_name}!`, 'success');
+    closeMemberRewardModal();
+    // Reload dashboard to reflect new balance
+    loadDashboard();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
 }
 
 async function saveReward() {

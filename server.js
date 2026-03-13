@@ -2621,6 +2621,32 @@ app.delete('/api/creator/rewards/:id', requireCreator, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
+// 5b2. CREATOR REWARD MEMBER — send bonus pts to a specific member
+// POST /api/creator/member/reward
+// Body: { user_id, amount_pts }
+// ════════════════════════════════════════════════════════════
+app.post('/api/creator/member/reward', requireCreator, async (req, res) => {
+  try {
+    const { user_id, amount_pts } = req.body;
+    if (!user_id || !amount_pts || amount_pts <= 0) {
+      return res.status(400).json({ error: 'user_id and positive amount_pts required' });
+    }
+    const clampedPts = Math.min(Math.round(amount_pts), 100000); // max 1000 pts per reward
+    const slug = req.creator.slug;
+    const currentBal = await getCommunityBalance(user_id, slug);
+    const newBal = currentBal + clampedPts * 100; // centpoints
+    await setCommunityBalance(user_id, slug, newBal);
+
+    // Fetch display name for response
+    const { data: userRow } = await supabase.from('users').select('display_name').eq('id', user_id).single();
+    res.json({ ok: true, new_balance_pts: Math.round(newBal / 100), display_name: userRow?.display_name || 'Member' });
+  } catch (err) {
+    console.error('reward member error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
 // 5c. SMART RESOLUTION — AI-POWERED SUGGESTION
 // POST /api/creator/markets/:id/suggest-resolution
 // Auth: requireCreator

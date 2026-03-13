@@ -955,8 +955,9 @@ body::before {
   box-shadow: 0 8px 32px rgba(0,0,0,0.4);
 }
 .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
-.toast.success { border-color: rgba(45,155,95,0.4); }
-.toast.error   { border-color: rgba(192,57,43,0.4); color: #e74c3c; }
+.toast.success   { border-color: rgba(45,155,95,0.4); }
+.toast.error     { border-color: rgba(192,57,43,0.4); color: #e74c3c; }
+.toast.milestone { border-color: rgba(201,146,13,0.6); color: var(--gold); font-size: 14px; }
 
 /* Spinner */
 .spinner { width: 14px; height: 14px; border: 2px solid rgba(201,146,13,0.3); border-top-color: var(--gold); border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; }
@@ -1370,6 +1371,12 @@ async function fetchCommunityBalance() {
     });
     if (r.ok) {
       const data = await r.json();
+      // Check milestones from stored last-known vs incoming balance
+      const milestoneKey = `hf_last_pts_${slug}`;
+      const lastPts = parseInt(localStorage.getItem(milestoneKey) || '0');
+      const newPts = Math.floor((data.balance || 0) / 100);
+      if (lastPts > 0) checkMilestone(lastPts, newPts);
+      localStorage.setItem(milestoneKey, String(newPts));
       communityBalance = data.balance;
     }
   } catch {}
@@ -2050,9 +2057,11 @@ async function submitPredict() {
     const data = await r.json();
     if (!r.ok) { showPredictError(data.error || 'Trade failed.'); return; }
 
-    // Update balance
+    // Update balance + check milestones
+    const prevPts = communityBalance !== null ? Math.floor(communityBalance / 100) : null;
     if (data.balance !== undefined) communityBalance = data.balance;
     else if (communityBalance !== null) communityBalance -= amount;
+    checkMilestone(prevPts, communityBalance !== null ? Math.floor(communityBalance / 100) : null);
     localStorage.setItem('hf_user', JSON.stringify(currentUser));
 
     // Track position locally for immediate UI update
@@ -2297,6 +2306,26 @@ function showToast(msg, type = 'success') {
   t.className = `toast ${type} show`;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove('show'), 3200);
+}
+
+// ── Milestone notifications ──────────────────────────────────
+const MILESTONES = [100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000];
+function checkMilestone(prevPts, newPts) {
+  if (!currentUser || prevPts === null || prevPts >= newPts) return;
+  const crossed = MILESTONES.filter(m => prevPts < m && newPts >= m);
+  if (!crossed.length) return;
+  // Show highest milestone crossed
+  const top = crossed[crossed.length - 1];
+  const label = top >= 1000 ? (top / 1000) + 'K' : top;
+  // Small delay so trade toast appears first
+  setTimeout(() => showMilestoneToast(label), 600);
+}
+function showMilestoneToast(label) {
+  const t = document.getElementById('toast');
+  t.innerHTML = `🏆 Milestone unlocked: <strong>${label} pts!</strong>`;
+  t.className = 'toast milestone show';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 4500);
 }
 
 document.addEventListener('keydown', e => {
