@@ -33,14 +33,13 @@
 
 ---
 
-## Current State (last updated March 13, 2026)
+## Current State (last updated March 12, 2026)
 
-- All features live on Railway. Latest commit: `b0b62d8`
+- All features live on Railway. Latest commit: `43c70fd`
 - **Stripe payments live** — Pro ($29/mo) + Premium ($99/mo) checkout + billing portal
   - Railway env vars needed: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRO_PRICE_ID`, `STRIPE_PLATINUM_PRICE_ID`
   - Webhook endpoint registered at: `https://hyperflex.network/stripe/webhook`
   - Webhook events: `checkout.session.completed`, `customer.subscription.deleted`, `customer.subscription.paused`, `customer.subscription.updated`
-  - **NOTE:** package-lock.json must be regenerated locally with `npm install` — Railway deploy was failing due to missing stripe in lockfile. Marc was running `npm install && git add package-lock.json && git commit && git push` via Claude Code at session end.
 - **Admin dashboard** at `/admin` — password-gated, creator table, inline plan control
   - Railway env var needed: `ADMIN_SECRET`
 - **OAuth**: Google fully working. X/Twitter works (name + username only — Twitter doesn't return email via API)
@@ -50,6 +49,11 @@
 - **Suggest questions fix**: was using wrong localStorage key (`creator_token` → `hf_token`), now fixed
 - **creator_settings** is the canonical creator table (not `communities`)
 - Stripe webhook updates `creator_settings.plan` on checkout + cancellation
+- **Flex Points Gamification** (commit `43c70fd`):
+  - Streak multipliers in settlement: 3 wins → 1.5×, 5+ wins → 2× payout
+  - Streak badges on leaderboards: 🔥 (3+), ⚡ Streak Master (7+)
+  - Weekly Power Predictor panel on creator dashboard (Pro/Premium gated)
+  - Inner Circle panel on creator dashboard (Premium gated) — members with 2,000+ points
 
 ## To deploy: `git push origin main` (Claude cannot push — no internet from VM)
 
@@ -69,10 +73,10 @@
 
 ## Known Issues / Next Up
 
-- `package-lock.json` may need regenerating if Stripe install wasn't committed yet
-- Custom domain for Premium not implemented yet
 - Video section on landing page needs real YouTube VIDEO_ID
+- Custom domain for Premium not implemented yet
 - Old `index.html` at project root should be removed eventually
+- Gamification: could add "streak broken" toast on community.html when user loses after a streak
 
 ---
 
