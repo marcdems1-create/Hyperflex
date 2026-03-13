@@ -2027,7 +2027,7 @@ app.get('/api/creator/analytics', requireCreator, async (req, res) => {
     // Get all markets for this creator
     const { data: markets } = await supabase
       .from('markets')
-      .select('id, title, trader_count, volume, resolved, archived, created_at, yes_price, no_price')
+      .select('id, question, trader_count, volume, resolved, archived, created_at, yes_price, no_price')
       .eq('creator_id', creatorId)
       .order('created_at', { ascending: false });
 
@@ -2041,7 +2041,7 @@ app.get('/api/creator/analytics', requireCreator, async (req, res) => {
       .sort((a, b) => (b.trader_count || 0) - (a.trader_count || 0))
       .slice(0, 5)
       .map(m => ({
-        title: m.title,
+        title: m.question,
         trader_count: m.trader_count || 0,
         volume: m.volume || 0,
         resolved: m.resolved || false,
