@@ -2318,7 +2318,107 @@ Return ONLY valid JSON:
       return res.json({ markets, live_chat_markets: markets, live_chat_count: messages.length, video_title: videoTitle });
     }
 
-    return res.status(400).json({ error: 'Invalid scan_type. Use: comments, transcript, or live_chat.' });
+    // ══════════════════════════════════════════════════════════
+    // SCAN TYPE: all  — fetch everything available, one AI call
+    // ══════════════════════════════════════════════════════════
+    if (scan_type === 'all') {
+      // Run all three fetches in parallel; silence individual failures
+      const [commentData, transcript, liveChatMessages] = await Promise.all([
+        fetch(`https://www.googleapis.com/youtube/v3/commentThreads?part=snippet&videoId=${videoId}&order=relevance&maxResults=100&key=${YOUTUBE_API_KEY}`)
+          .then(r => r.json()).catch(() => null),
+        fetchYouTubeTranscript(videoId).catch(() => null),
+        fetchYouTubeLiveChat(videoId).catch(() => null)
+      ]);
+
+      const sections = [];
+      let commentCount = 0, hasTranscript = false, liveChatCount = 0;
+
+      // Comments section
+      const comments = (commentData?.items || [])
+        .map(item => item.snippet?.topLevelComment?.snippet?.textDisplay || '')
+        .filter(Boolean);
+      if (comments.length > 0) {
+        commentCount = comments.length;
+        const block = comments.slice(0, 80).map((c, i) => `${i + 1}. ${c.replace(/<[^>]+>/g, '').trim()}`).join('\n');
+        sections.push(`=== YOUTUBE COMMENTS (${comments.length}) ===\n${block}`);
+      }
+
+      // Transcript section
+      if (transcript) {
+        hasTranscript = true;
+        const truncated = transcript.slice(0, 3000) + (transcript.length > 3000 ? '… [truncated]' : '');
+        sections.push(`=== VIDEO TRANSCRIPT ===\n${truncated}`);
+      }
+
+      // Live chat section
+      const liveMessages = liveChatMessages || [];
+      if (liveMessages.length > 0) {
+        liveChatCount = liveMessages.length;
+        const block = liveMessages.slice(0, 150).map((m, i) => `${i + 1}. ${m.trim()}`).join('\n');
+        sections.push(`=== LIVE CHAT (${liveMessages.length} messages) ===\n${block}`);
+      }
+
+      if (sections.length === 0) {
+        return res.status(404).json({ error: 'No scannable content found. This video may have comments disabled and no captions. Try a different video.' });
+      }
+
+      const combinedContent = sections.join('\n\n');
+      const sourceSummary = [
+        commentCount > 0 ? `${commentCount} comments` : null,
+        hasTranscript ? 'transcript' : null,
+        liveChatCount > 0 ? `${liveChatCount} live chat msgs` : null
+      ].filter(Boolean).join(' · ');
+
+      const prompt = `You are analyzing a YouTube video to generate prediction markets for a fan community.
+
+Video title: "${videoTitle}"
+
+AVAILABLE CONTENT (${sourceSummary}):
+${combinedContent}
+
+Generate 6-10 diverse prediction markets by looking at:
+- Predictions and debates fans are having in comments
+- Claims, announcements, or goals the creator mentioned in the transcript
+- Questions and speculation from live chat viewers
+- Recurring themes that appear across multiple sources
+
+Return the BEST markets — prioritize questions that are debatable, future-facing, and objectively resolvable.
+
+Rules:
+- Clear YES or NO question
+- Resolution dates: near=${in30}, mid=${in60}, far=${in90}
+- No politics or harmful content
+- Avoid duplicates — each market should be about a distinct topic
+
+Return ONLY valid JSON:
+{
+  "markets": [
+    { "question": "Will ...?", "category": "sports|entertainment|finance|politics|other", "resolution_date": "YYYY-MM-DD", "source": "comments|transcript|live_chat" }
+  ]
+}`;
+
+      const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model: 'claude-opus-4-6', max_tokens: 1800, messages: [{ role: 'user', content: prompt }] })
+      });
+      const aiData = await aiRes.json();
+      const rawText = aiData.content?.[0]?.text || '';
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error('AI returned invalid format');
+      const markets = JSON.parse(jsonMatch[0]).markets || [];
+
+      return res.json({
+        markets,
+        video_title: videoTitle,
+        comment_count: commentCount,
+        has_transcript: hasTranscript,
+        live_chat_count: liveChatCount,
+        source_summary: sourceSummary
+      });
+    }
+
+    return res.status(400).json({ error: 'Invalid scan_type. Use: all, comments, transcript, or live_chat.' });
 
   } catch (err) {
     console.error('scan-youtube error:', err);
