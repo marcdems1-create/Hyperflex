@@ -446,6 +446,18 @@
 
     <!-- Creators tab -->
     <div id="adminTabCreators">
+
+      <!-- Slug lookup tool -->
+      <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:16px;margin-bottom:20px">
+        <div style="font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,0.5);margin-bottom:10px">🔍 Slug Lookup</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input class="filter-input" id="slugLookupInput" placeholder="e.g. test" style="max-width:200px;margin:0"
+            onkeydown="if(event.key==='Enter')lookupSlug()"/>
+          <button class="refresh-btn" onclick="lookupSlug()">Look up</button>
+        </div>
+        <div id="slugLookupResult" style="margin-top:12px;display:none"></div>
+      </div>
+
       <div class="section-header">
         <div class="section-title">Creators</div>
         <button class="refresh-btn" onclick="loadCreators()">↺ Refresh</button>
@@ -471,6 +483,7 @@
               <th>Plan</th>
               <th>Joined</th>
               <th>Set Plan</th>
+              <th></th>
             </tr>
           </thead>
           <tbody id="creatorsBody"></tbody>
@@ -732,7 +745,7 @@ function renderTable(rows) {
     const plan = c.plan || 'free';
     const joined = c.joined ? new Date(c.joined).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : '—';
     return `
-      <tr>
+      <tr id="creator-row-${esc(c.slug)}">
         <td class="td-name">${esc(c.name || '—')}</td>
         <td class="td-slug">/${esc(c.slug)}</td>
         <td class="td-email">${esc(c.email)}</td>
@@ -747,6 +760,7 @@ function renderTable(rows) {
           </select>
           <button class="set-plan-btn" id="btn-${esc(c.slug)}" onclick="setPlan('${esc(c.slug)}')">Set</button>
         </td>
+        <td><button class="set-plan-btn" style="background:rgba(239,68,68,0.15);border-color:#ef4444;color:#ef4444" onclick="deleteCreatorBySlug('${esc(c.slug)}', '${esc(c.name || c.slug)}')">Delete</button></td>
       </tr>`;
   }).join('');
 }
@@ -794,6 +808,74 @@ async function setPlan(slug) {
   } catch (err) {
     btn.textContent = 'Set';
     btn.classList.remove('saving');
+    showToast('Error: ' + err.message, 'error');
+  }
+}
+
+// ── Slug Lookup ────────────────────────────────────────────
+async function lookupSlug() {
+  const slug = (document.getElementById('slugLookupInput').value || '').trim().toLowerCase();
+  const resultEl = document.getElementById('slugLookupResult');
+  if (!slug) return;
+
+  resultEl.style.display = 'block';
+  resultEl.innerHTML = '<span style="color:rgba(255,255,255,0.5);font-size:13px">Looking up…</span>';
+
+  try {
+    const r = await fetch(API + '/api/admin/lookup-slug/' + encodeURIComponent(slug) + '?secret=' + encodeURIComponent(adminSecret));
+    const data = await r.json();
+
+    if (!data.found) {
+      resultEl.innerHTML = `<span style="color:#4ade80;font-size:13px">✓ Slug <strong>/${slug}</strong> is available (no creator found)</span>`;
+      return;
+    }
+
+    const c = data.creator;
+    const joined = c.created_at ? new Date(c.created_at).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : '—';
+    resultEl.innerHTML = `
+      <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:12px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:13px;color:#fff;margin-bottom:4px">
+            <strong>${esc(c.display_name || '—')}</strong>
+            &nbsp;<span style="color:rgba(255,255,255,0.4)">/${esc(c.slug)}</span>
+            &nbsp;<span class="plan-badge ${c.plan||'free'}" style="font-size:10px">${c.plan||'free'}</span>
+          </div>
+          <div style="font-size:12px;color:rgba(255,255,255,0.45)">
+            ${esc(c.email || 'no email')} &nbsp;·&nbsp; user_id: <code style="font-size:11px">${esc(c.creator_id)}</code> &nbsp;·&nbsp; joined ${joined}
+          </div>
+        </div>
+        <button class="set-plan-btn" style="background:rgba(239,68,68,0.2);border-color:#ef4444;color:#ef4444;white-space:nowrap"
+          onclick="deleteCreatorBySlug('${esc(c.slug)}', '${esc(c.display_name || c.slug)}')">
+          🗑 Free Up Slug
+        </button>
+      </div>`;
+  } catch (err) {
+    resultEl.innerHTML = `<span style="color:#ef4444;font-size:13px">Error: ${esc(err.message)}</span>`;
+  }
+}
+
+async function deleteCreatorBySlug(slug, name) {
+  if (!confirm(`Permanently delete creator "${name}" (/${slug}) and ALL their data?\n\nThis frees up the slug but cannot be undone.`)) return;
+  try {
+    const r = await fetch(API + '/api/admin/creator-by-slug/' + encodeURIComponent(slug) + '?secret=' + encodeURIComponent(adminSecret), {
+      method: 'DELETE'
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Delete failed');
+
+    showToast('✓ Slug /' + slug + ' freed up.');
+
+    // Remove from local list + re-render
+    allCreators = allCreators.filter(c => c.slug !== slug);
+    applyFilter();
+    updateStats(allCreators);
+
+    // Clear lookup result if it was showing this slug
+    const resultEl = document.getElementById('slugLookupResult');
+    if (resultEl) {
+      resultEl.innerHTML = `<span style="color:#4ade80;font-size:13px">✓ Slug <strong>/${esc(slug)}</strong> has been freed up.</span>`;
+    }
+  } catch (err) {
     showToast('Error: ' + err.message, 'error');
   }
 }

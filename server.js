@@ -4367,6 +4367,69 @@ app.delete('/api/admin/user/:id', requireAdmin, async (req, res) => {
   }
 });
 
+// GET /api/admin/lookup-slug/:slug — find creator by slug (even orphaned rows)
+app.get('/api/admin/lookup-slug/:slug', requireAdmin, async (req, res) => {
+  try {
+    const slug = req.params.slug;
+    const { data: cs } = await supabase
+      .from('creator_settings')
+      .select('creator_id, slug, display_name, plan, created_at')
+      .eq('slug', slug)
+      .maybeSingle();
+    if (!cs) return res.json({ found: false });
+
+    // Try to get user email
+    const { data: user } = await supabase
+      .from('users')
+      .select('id, email, display_name as user_name')
+      .eq('id', cs.creator_id)
+      .maybeSingle();
+
+    res.json({ found: true, creator: { ...cs, email: user?.email || null, user_name: user?.user_name || null } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/admin/creator-by-slug/:slug — nuke a creator + all data by slug
+app.delete('/api/admin/creator-by-slug/:slug', requireAdmin, async (req, res) => {
+  try {
+    const slug = req.params.slug;
+
+    const { data: cs } = await supabase
+      .from('creator_settings')
+      .select('creator_id')
+      .eq('slug', slug)
+      .maybeSingle();
+
+    if (!cs) return res.status(404).json({ error: 'No creator found with that slug' });
+    const userId = cs.creator_id;
+
+    // Cascade delete
+    await supabase.from('referral_history').delete().eq('creator_slug', slug);
+    await supabase.from('refill_history').delete().eq('creator_slug', slug);
+    await supabase.from('community_balances').delete().eq('creator_slug', slug);
+    const { data: markets } = await supabase.from('markets').select('id').eq('creator_id', userId);
+    const marketIds = (markets || []).map(m => m.id);
+    if (marketIds.length) {
+      await supabase.from('positions').delete().in('market_id', marketIds);
+      await supabase.from('markets').delete().in('id', marketIds);
+    }
+    await supabase.from('creator_settings').delete().eq('creator_id', userId);
+    await supabase.from('creator_rewards').delete().eq('creator_id', userId);
+    await supabase.from('community_balances').delete().eq('user_id', userId);
+    await supabase.from('referral_history').delete().or(`referrer_id.eq.${userId},referred_id.eq.${userId}`);
+    await supabase.from('positions').delete().eq('user_id', userId);
+    await supabase.from('users').delete().eq('id', userId);
+
+    console.log(`[admin-free-slug] Slug "${slug}" (user ${userId}) deleted by admin`);
+    res.json({ ok: true, freed: slug });
+  } catch (err) {
+    console.error('[admin-free-slug] error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── FLEX BOT ─────────────────────────────────────────────
 // POST /api/creator/flexbot
 // Premium-only. Takes messages array, returns Claude response.
