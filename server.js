@@ -42,6 +42,27 @@ app.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (re
       }
     }
 
+    if (event.type === 'customer.subscription.updated') {
+      const sub = event.data.object;
+      // Only act on active subscriptions — ignore trials, past_due, etc.
+      if (sub.status === 'active') {
+        const priceId = sub.items.data[0]?.price?.id;
+        const plan = priceId === process.env.STRIPE_PLATINUM_PRICE_ID ? 'platinum'
+                   : priceId === process.env.STRIPE_PRO_PRICE_ID      ? 'pro'
+                   : null;
+        if (plan) {
+          const customer = await stripe.customers.retrieve(sub.customer);
+          if (customer.email) {
+            const { data: user } = await supabase.from('users').select('id').eq('email', customer.email).maybeSingle();
+            if (user) {
+              await supabase.from('creator_settings').update({ plan }).eq('creator_id', user.id);
+              console.log(`[stripe] plan updated → ${plan} for ${customer.email}`);
+            }
+          }
+        }
+      }
+    }
+
     if (event.type === 'customer.subscription.deleted' || event.type === 'customer.subscription.paused') {
       const sub = event.data.object;
       // Find creator by customer email
