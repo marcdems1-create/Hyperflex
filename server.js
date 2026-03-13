@@ -9,6 +9,7 @@ const cron = require('node-cron');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const dns = require('dns').promises;
 
 const app = express();
 app.use(cors());
@@ -79,11 +80,14 @@ app.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (re
               const currentPriceId = sub.items.data[0]?.price?.id;
               const plan = priceIdToPlan(currentPriceId);
               if (plan) {
-                await supabase.from('creator_settings').update({
+                const planUpdate = {
                   plan,
                   plan_scheduled_change: null,
                   plan_change_date: null
-                }).eq('creator_id', user.id);
+                };
+                // If downgrading away from Premium, unverify custom domain
+                if (plan !== 'platinum') planUpdate.custom_domain_verified = false;
+                await supabase.from('creator_settings').update(planUpdate).eq('creator_id', user.id);
                 console.log(`[stripe] plan updated → ${plan} for ${customer.email}`);
               }
             }
@@ -101,7 +105,9 @@ app.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (re
           await supabase.from('creator_settings').update({
             plan: 'free',
             plan_scheduled_change: null,
-            plan_change_date: null
+            plan_change_date: null,
+            // Unverify custom domain — feature requires Premium
+            custom_domain_verified: false
           }).eq('creator_id', user.id);
           console.log(`[stripe] downgraded creator ${customer.email} to free`);
         }
@@ -127,6 +133,38 @@ app.use((req, res, next) => {
     if (subdomain === 'www' || subdomain === 'hyperflex') subdomain = null;
   }
   req.tenant = { subdomain };
+  next();
+});
+
+// ── Custom Domain Routing ──────────────────────────────────────
+// If the request host matches a verified custom domain, serve the
+// community page for that creator's slug (same HTML, different URL).
+app.use(async (req, res, next) => {
+  const host = (req.headers.host || '').toLowerCase().replace(/:\d+$/, '');
+  // Skip hyperflex.network itself and API/asset paths
+  if (!host || host.includes('hyperflex') || host.includes('localhost') || req.path.startsWith('/api') || req.path.startsWith('/stripe')) {
+    return next();
+  }
+  // Only intercept root / and /<anything> that looks like a community slug
+  // (avoid interfering with static assets)
+  if (req.path !== '/' && !/^\/[a-z0-9_-]+\/?$/.test(req.path)) {
+    return next();
+  }
+  try {
+    const { data: creator } = await supabase
+      .from('creator_settings')
+      .select('slug')
+      .eq('custom_domain', host)
+      .eq('custom_domain_verified', true)
+      .maybeSingle();
+    if (creator?.slug) {
+      // Serve community.html — the page JS reads the slug from the URL or from a
+      // meta tag we inject. We pass slug as query param so community.html can read it.
+      return res.sendFile(path.join(__dirname, 'public', 'community.html'));
+    }
+  } catch (err) {
+    console.error('[custom-domain middleware]', err.message);
+  }
   next();
 });
 
@@ -4510,6 +4548,173 @@ Keep responses concise, practical, and specific to prediction markets. Use bulle
     res.json({ reply: response.content[0]?.text || '' });
   } catch (err) {
     console.error('[flexbot] error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+// CUSTOM DOMAIN ENDPOINTS (Premium only)
+// ════════════════════════════════════════════════════════════
+
+// POST /api/creator/custom-domain/set
+// Body: { domain: "markets.yourdomain.com" }
+// Saves the domain and issues a TXT-record verification token.
+app.post('/api/creator/custom-domain/set', requireCreator, async (req, res) => {
+  try {
+    const { data: creator } = await supabase
+      .from('creator_settings')
+      .select('plan, slug')
+      .eq('creator_id', req.creator.id)
+      .single();
+
+    if (creator.plan !== 'platinum') {
+      return res.status(403).json({ error: 'Custom domains require the Premium plan.' });
+    }
+
+    const domain = (req.body.domain || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
+    if (!domain || !/^[a-z0-9.-]+$/.test(domain)) {
+      return res.status(400).json({ error: 'Invalid domain format. Example: markets.yourdomain.com' });
+    }
+
+    // Ensure no other creator already claimed this domain
+    const { data: existing } = await supabase
+      .from('creator_settings')
+      .select('slug')
+      .eq('custom_domain', domain)
+      .neq('creator_id', req.creator.id)
+      .maybeSingle();
+    if (existing) {
+      return res.status(409).json({ error: 'This domain is already connected to another community.' });
+    }
+
+    const token = 'hyperflex-verify=' + crypto.randomBytes(20).toString('hex');
+    const { error } = await supabase.from('creator_settings').update({
+      custom_domain: domain,
+      custom_domain_verified: false,
+      custom_domain_token: token,
+      custom_domain_verified_at: null
+    }).eq('creator_id', req.creator.id);
+
+    if (error) throw error;
+    res.json({ ok: true, domain, token, slug: creator.slug });
+  } catch (err) {
+    console.error('[custom-domain/set]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/creator/custom-domain/verify
+// Checks DNS CNAME and TXT records then marks domain as verified.
+app.post('/api/creator/custom-domain/verify', requireCreator, async (req, res) => {
+  try {
+    const { data: creator } = await supabase
+      .from('creator_settings')
+      .select('plan, custom_domain, custom_domain_token, slug')
+      .eq('creator_id', req.creator.id)
+      .single();
+
+    if (creator.plan !== 'platinum') {
+      return res.status(403).json({ error: 'Custom domains require the Premium plan.' });
+    }
+    if (!creator.custom_domain) {
+      return res.status(400).json({ error: 'No domain saved. Call /set first.' });
+    }
+
+    const domain = creator.custom_domain;
+    const expectedToken = creator.custom_domain_token;
+    const expectedCname = 'hyperflex.network';
+
+    let cnameOk = false;
+    let txtOk = false;
+    const errors = [];
+
+    // Check CNAME
+    try {
+      const cnames = await dns.resolveCname(domain);
+      cnameOk = cnames.some(c => c.toLowerCase().replace(/\.$/, '') === expectedCname);
+      if (!cnameOk) errors.push(`CNAME: found [${cnames.join(', ')}], expected ${expectedCname}`);
+    } catch (e) {
+      errors.push(`CNAME lookup failed: ${e.message}`);
+    }
+
+    // Check TXT record (on _hyperflex-verify.<domain>)
+    const txtHost = `_hyperflex-verify.${domain}`;
+    try {
+      const records = await dns.resolveTxt(txtHost);
+      const flat = records.map(r => r.join('')).join(' ');
+      txtOk = flat.includes(expectedToken);
+      if (!txtOk) errors.push(`TXT record on ${txtHost} not found or mismatch`);
+    } catch (e) {
+      errors.push(`TXT lookup on ${txtHost} failed: ${e.message}`);
+    }
+
+    if (!cnameOk || !txtOk) {
+      return res.status(400).json({ ok: false, errors });
+    }
+
+    const { error } = await supabase.from('creator_settings').update({
+      custom_domain_verified: true,
+      custom_domain_verified_at: new Date().toISOString()
+    }).eq('creator_id', req.creator.id);
+
+    if (error) throw error;
+    console.log(`[custom-domain] verified ${domain} → ${creator.slug}`);
+    res.json({ ok: true, domain });
+  } catch (err) {
+    console.error('[custom-domain/verify]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/creator/custom-domain/remove
+// Clears the custom domain for this creator.
+app.delete('/api/creator/custom-domain/remove', requireCreator, async (req, res) => {
+  try {
+    const { error } = await supabase.from('creator_settings').update({
+      custom_domain: null,
+      custom_domain_verified: false,
+      custom_domain_token: null,
+      custom_domain_verified_at: null
+    }).eq('creator_id', req.creator.id);
+
+    if (error) throw error;
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[custom-domain/remove]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/custom-domain/resolve
+// Public — called by community.html on custom domains to get the creator's slug.
+app.get('/api/custom-domain/resolve', async (req, res) => {
+  const host = (req.headers.host || '').toLowerCase().replace(/:\d+$/, '');
+  try {
+    const { data: creator } = await supabase
+      .from('creator_settings')
+      .select('slug')
+      .eq('custom_domain', host)
+      .eq('custom_domain_verified', true)
+      .maybeSingle();
+    if (!creator) return res.status(404).json({ error: 'No verified domain' });
+    res.json({ slug: creator.slug });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/creator/custom-domain/status
+// Returns current custom domain state for the logged-in creator.
+app.get('/api/creator/custom-domain/status', requireCreator, async (req, res) => {
+  try {
+    const { data: creator, error } = await supabase
+      .from('creator_settings')
+      .select('custom_domain, custom_domain_verified, custom_domain_token, custom_domain_verified_at')
+      .eq('creator_id', req.creator.id)
+      .single();
+    if (error) throw error;
+    res.json(creator);
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });

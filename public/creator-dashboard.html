@@ -2837,6 +2837,55 @@ body.nav-open .sidebar-backdrop {
           </div>
         </div>
 
+        <!-- Custom Domain (Premium only) -->
+        <div class="section" id="customDomainSection" style="display:none">
+          <div class="markets-table" style="padding:28px">
+            <div class="section-title" style="margin-bottom:6px">🌐 Custom Domain</div>
+            <div style="font-size:13px;color:var(--dim);margin-bottom:20px;line-height:1.6">
+              Point your own domain to your community page. Members visit <strong>markets.yourdomain.com</strong> instead of hyperflex.network/yourslug.<br>
+              You control the URL — same page, your brand.
+            </div>
+
+            <!-- DNS Instructions (shown after saving domain) -->
+            <div id="cdDnsInstructions" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:20px">
+              <div style="font-size:13px;font-weight:600;margin-bottom:12px;color:var(--text)">📋 DNS Setup Instructions</div>
+              <div style="font-size:12px;color:var(--dim);margin-bottom:14px">Add these two records in your DNS provider (Cloudflare, GoDaddy, etc.):</div>
+              <div style="display:flex;flex-direction:column;gap:10px">
+                <div style="background:var(--paper);border-radius:8px;padding:12px;font-family:var(--mono);font-size:12px">
+                  <div style="color:var(--dim);margin-bottom:4px">CNAME record</div>
+                  <div>Name: <span id="cdCnameHost" style="color:var(--gold)">markets.yourdomain.com</span></div>
+                  <div>Value: <span style="color:var(--gold)">hyperflex.network</span></div>
+                </div>
+                <div style="background:var(--paper);border-radius:8px;padding:12px;font-family:var(--mono);font-size:12px">
+                  <div style="color:var(--dim);margin-bottom:4px">TXT record (for verification)</div>
+                  <div>Name: <span id="cdTxtHost" style="color:var(--gold)">_hyperflex-verify.markets.yourdomain.com</span></div>
+                  <div>Value: <span id="cdTxtValue" style="color:var(--gold)">—</span></div>
+                </div>
+              </div>
+              <div style="font-size:11px;color:var(--dim);margin-top:12px">⏱ DNS changes can take up to 24 hours to propagate. SSL is handled automatically by Railway once the CNAME resolves.</div>
+            </div>
+
+            <!-- Status badge -->
+            <div id="cdStatusRow" style="display:none;margin-bottom:16px;align-items:center;gap:10px;flex-wrap:wrap">
+              <span style="font-size:13px;color:var(--dim)">Current domain:</span>
+              <span id="cdCurrentDomain" style="font-family:var(--mono);font-size:13px;color:var(--text)"></span>
+              <span id="cdVerifiedBadge" style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px"></span>
+            </div>
+
+            <!-- Form -->
+            <div class="field" style="margin-bottom:14px">
+              <label>Domain</label>
+              <input type="text" id="cdDomainInput" placeholder="markets.yourdomain.com" style="font-family:var(--mono);font-size:13px"/>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <button class="btn-primary" onclick="saveCdDomain()">Save Domain</button>
+              <button id="cdVerifyBtn" class="btn-secondary" onclick="verifyCdDomain()" style="display:none">Check DNS & Verify</button>
+              <button id="cdRemoveBtn" class="btn-danger" onclick="removeCdDomain()" style="display:none;font-size:13px;padding:10px 16px">Remove Domain</button>
+            </div>
+            <div id="cdFeedback" style="margin-top:12px;font-size:13px"></div>
+          </div>
+        </div>
+
         <!-- Danger Zone -->
         <div class="section">
           <div class="markets-table" style="padding:28px">
@@ -3955,6 +4004,13 @@ function renderDashboard(data) {
   // Show FLEX BOT nav item for Premium only
   const flexbotNav = document.getElementById('flexbotNavItem');
   if (flexbotNav) flexbotNav.style.display = plan === 'platinum' ? 'flex' : 'none';
+
+  // Show Custom Domain panel for Premium only
+  const cdSection = document.getElementById('customDomainSection');
+  if (cdSection) {
+    cdSection.style.display = plan === 'platinum' ? 'block' : 'none';
+    if (plan === 'platinum') loadCdStatus();
+  }
 
   // Show Market Ideas nav item for Pro + Premium
   const ideasNav = document.getElementById('ideasNavItem');
@@ -5821,6 +5877,119 @@ function toggleSidebar() {
 }
 function closeSidebar() {
   document.body.classList.remove('nav-open');
+}
+
+// ── CUSTOM DOMAIN ──────────────────────────────────────────────
+async function loadCdStatus() {
+  try {
+    const token = localStorage.getItem('creator_token');
+    const r = await fetch('/api/creator/custom-domain/status', { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) return;
+    const d = await r.json();
+    renderCdStatus(d);
+  } catch {}
+}
+
+function renderCdStatus(d) {
+  const statusRow = document.getElementById('cdStatusRow');
+  const domainSpan = document.getElementById('cdCurrentDomain');
+  const badge = document.getElementById('cdVerifiedBadge');
+  const input = document.getElementById('cdDomainInput');
+  const verifyBtn = document.getElementById('cdVerifyBtn');
+  const removeBtn = document.getElementById('cdRemoveBtn');
+  const dnsBox = document.getElementById('cdDnsInstructions');
+
+  if (d.custom_domain) {
+    statusRow.style.display = 'flex';
+    domainSpan.textContent = d.custom_domain;
+    input.value = d.custom_domain;
+
+    if (d.custom_domain_verified) {
+      badge.textContent = '✓ Verified';
+      badge.style.cssText = 'background:#16a34a22;color:#16a34a;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px';
+      verifyBtn.style.display = 'none';
+      dnsBox.style.display = 'none';
+    } else {
+      badge.textContent = '⏳ Pending Verification';
+      badge.style.cssText = 'background:#ca8a0422;color:#ca8a04;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px';
+      verifyBtn.style.display = 'inline-block';
+      // Show DNS instructions with values filled in
+      document.getElementById('cdCnameHost').textContent = d.custom_domain;
+      document.getElementById('cdTxtHost').textContent = '_hyperflex-verify.' + d.custom_domain;
+      document.getElementById('cdTxtValue').textContent = d.custom_domain_token || '—';
+      dnsBox.style.display = 'block';
+    }
+    removeBtn.style.display = 'inline-block';
+  } else {
+    statusRow.style.display = 'none';
+    dnsBox.style.display = 'none';
+    verifyBtn.style.display = 'none';
+    removeBtn.style.display = 'none';
+  }
+}
+
+async function saveCdDomain() {
+  const domain = (document.getElementById('cdDomainInput').value || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
+  const fb = document.getElementById('cdFeedback');
+  if (!domain) { fb.innerHTML = '<span style="color:#ef4444">Please enter a domain.</span>'; return; }
+  fb.innerHTML = '<span style="color:var(--dim)">Saving…</span>';
+  try {
+    const token = localStorage.getItem('creator_token');
+    const r = await fetch('/api/creator/custom-domain/set', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ domain })
+    });
+    const d = await r.json();
+    if (!r.ok) { fb.innerHTML = `<span style="color:#ef4444">${d.error}</span>`; return; }
+    fb.innerHTML = '<span style="color:#16a34a">Domain saved. Add the DNS records below, then click "Check DNS & Verify".</span>';
+    loadCdStatus();
+  } catch (e) {
+    fb.innerHTML = `<span style="color:#ef4444">${e.message}</span>`;
+  }
+}
+
+async function verifyCdDomain() {
+  const fb = document.getElementById('cdFeedback');
+  fb.innerHTML = '<span style="color:var(--dim)">Checking DNS… this may take a moment.</span>';
+  try {
+    const token = localStorage.getItem('creator_token');
+    const r = await fetch('/api/creator/custom-domain/verify', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    const d = await r.json();
+    if (d.ok) {
+      fb.innerHTML = '<span style="color:#16a34a">✓ Domain verified! Your community is now live at your custom domain.</span>';
+      loadCdStatus();
+    } else {
+      const errList = (d.errors || ['Verification failed']).join('<br>• ');
+      fb.innerHTML = `<span style="color:#ef4444">DNS check failed:<br>• ${errList}<br><br>DNS changes can take up to 24 hours. Try again after propagation.</span>`;
+    }
+  } catch (e) {
+    fb.innerHTML = `<span style="color:#ef4444">${e.message}</span>`;
+  }
+}
+
+async function removeCdDomain() {
+  if (!confirm('Remove your custom domain? Your community will only be reachable at hyperflex.network/yourslug.')) return;
+  const fb = document.getElementById('cdFeedback');
+  fb.innerHTML = '<span style="color:var(--dim)">Removing…</span>';
+  try {
+    const token = localStorage.getItem('creator_token');
+    const r = await fetch('/api/creator/custom-domain/remove', {
+      method: 'DELETE',
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    const d = await r.json();
+    if (d.ok) {
+      fb.innerHTML = '<span style="color:var(--dim)">Domain removed.</span>';
+      document.getElementById('cdDomainInput').value = '';
+      loadCdStatus();
+    }
+  } catch (e) {
+    fb.innerHTML = `<span style="color:#ef4444">${e.message}</span>`;
+  }
 }
 
 // Init

@@ -1229,7 +1229,8 @@ body::before {
 
 <script>
 const API  = window.location.origin;
-const slug = window.location.pathname.replace(/^\//, '').split('/')[0];
+// Slug resolution: from pathname (normal) or custom domain (root path)
+let slug = window.location.pathname.replace(/^\//, '').split('/')[0];
 
 let community       = null;
 let markets         = [];
@@ -1246,6 +1247,13 @@ let allRewards      = [];
 
 // ── INIT ──────────────────────────────────────────────────────
 (async function init() {
+  // If no slug in pathname, we may be on a custom domain — resolve it
+  if (!slug) {
+    try {
+      const r = await fetch('/api/custom-domain/resolve');
+      if (r.ok) { const d = await r.json(); slug = d.slug || ''; }
+    } catch {}
+  }
   captureReferralParam();
   restoreSession();
   await loadCommunity();
