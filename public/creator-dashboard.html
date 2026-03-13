@@ -1101,7 +1101,7 @@ body.plan-premium .main {
 }
 .table-header {
   display: grid;
-  grid-template-columns: 1fr 110px 90px 90px 120px;
+  grid-template-columns: 1fr 50px 110px 90px 90px 120px;
   padding: 12px 24px;
   border-bottom: 1px solid var(--border);
   background: rgba(255,255,255,0.015);
@@ -1115,7 +1115,7 @@ body.plan-premium .main {
 }
 .market-row {
   display: grid;
-  grid-template-columns: 1fr 110px 90px 90px 120px;
+  grid-template-columns: 1fr 50px 110px 90px 90px 120px;
   padding: 16px 24px;
   border-bottom: 1px solid var(--border);
   align-items: center;
@@ -1959,11 +1959,11 @@ body.plan-premium .main {
   .topbar { padding: 14px 24px; }
   .stats-row { grid-template-columns: repeat(2, 1fr); gap: 14px; }
   .table-header, .market-row {
-    grid-template-columns: 1fr 90px 70px 120px;
+    grid-template-columns: 1fr 50px 90px 70px 120px;
   }
-  /* Hide traders column on tablet */
-  .market-row > *:nth-child(4),
-  .table-header > *:nth-child(4) { display: none; }
+  /* Hide traders column (nth-child 5) on tablet */
+  .market-row > *:nth-child(5),
+  .table-header > *:nth-child(5) { display: none; }
 }
 @media (max-width: 600px) {
   .stats-row { grid-template-columns: 1fr 1fr; gap: 10px; }
