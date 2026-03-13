@@ -2144,70 +2144,173 @@ body.plan-premium .main {
 .toast.success { border-color: rgba(45,155,95,0.4); }
 .toast.error { border-color: rgba(192,57,43,0.4); }
 
-/* ── Mobile hamburger button ── */
+/* ═══════════════════════════════════════════
+   MOBILE / RESPONSIVE — full overhaul
+   ═══════════════════════════════════════════ */
+
+/* Hamburger button — hidden on desktop */
 .hamburger {
   display: none;
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
   gap: 5px;
   cursor: pointer;
-  padding: 6px;
-  border-radius: 8px;
-  background: transparent;
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: var(--cream);
   border: 1px solid var(--border);
-  margin-right: 10px;
   flex-shrink: 0;
 }
 .hamburger span {
   display: block;
-  width: 20px;
+  width: 18px;
   height: 2px;
   background: var(--text);
   border-radius: 2px;
-  transition: all .2s;
+  transition: transform .2s, opacity .2s;
 }
+body.nav-open .hamburger span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+body.nav-open .hamburger span:nth-child(2) { opacity: 0; transform: scaleX(0); }
+body.nav-open .hamburger span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
 
-/* Mobile sidebar overlay backdrop */
+/* Backdrop — always in DOM, controlled by opacity */
 .sidebar-backdrop {
-  display: none;
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.6);
-  z-index: 99;
+  background: rgba(0,0,0,0.65);
+  z-index: 149;
   opacity: 0;
-  transition: opacity .25s;
+  pointer-events: none;
+  transition: opacity .28s;
 }
-.sidebar-backdrop.open { opacity: 1; }
+body.nav-open .sidebar-backdrop {
+  opacity: 1;
+  pointer-events: auto;
+}
 
+/* ── Tablet ≤1024px ── */
 @media (max-width: 1024px) {
   .hamburger { display: flex; }
+
+  /* Larger tap targets in sidebar nav */
+  .nav-item { padding: 13px 22px; font-size: 14px; min-height: 48px; }
+  .nav-icon { font-size: 17px; }
+  .sidebar-footer .btn-upgrade,
+  .sidebar-footer .signout-btn { min-height: 44px; font-size: 13px; }
+
+  /* Sidebar becomes slide-over drawer */
   .sidebar {
     transform: translateX(-100%);
-    transition: transform .25s cubic-bezier(.4,0,.2,1);
-    z-index: 200;
+    transition: transform .28s cubic-bezier(.4,0,.2,1);
+    z-index: 150;
   }
-  .sidebar.open { transform: translateX(0); }
-  .sidebar-backdrop { display: block; }
+  body.nav-open .sidebar { transform: translateX(0); }
+  body.nav-open { overflow: hidden; }
+
   .main { margin-left: 0; }
-  .content { padding: 24px; }
-  .topbar { padding: 14px 16px; gap: 8px; }
+  .topbar { padding: 12px 18px; gap: 10px; }
   .topbar-title { font-size: 17px; }
-  .stats-row { grid-template-columns: repeat(2, 1fr); gap: 14px; }
-  .table-header, .market-row {
-    grid-template-columns: 1fr 50px 90px 70px 120px;
-  }
-  /* Hide traders column (nth-child 5) on tablet */
-  .market-row > *:nth-child(5),
-  .table-header > *:nth-child(5) { display: none; }
-  /* Hide URL pill on small topbar */
   .community-url-pill { display: none; }
+  .content { padding: 22px; }
+
+  /* Stats 2×2 */
+  .stats-row { grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  /* Analytics 2 col */
+  .analytics-stat-grid { grid-template-columns: 1fr 1fr; }
+
+  /* Economy health 2 col */
+  .econ-health-grid { grid-template-columns: 1fr 1fr; }
+
+  /* Market table: hide resonance(2), volume(3), traders(4), price(5) — show question + status */
+  .table-header { grid-template-columns: 1fr 110px; padding: 10px 18px; }
+  .market-row   { grid-template-columns: 1fr 110px; padding: 14px 18px; }
+  .market-row > *:nth-child(2),
+  .market-row > *:nth-child(3),
+  .market-row > *:nth-child(4),
+  .market-row > *:nth-child(5),
+  .table-header > *:nth-child(2),
+  .table-header > *:nth-child(3),
+  .table-header > *:nth-child(4),
+  .table-header > *:nth-child(5) { display: none; }
 }
+
+/* ── Phone ≤600px ── */
 @media (max-width: 600px) {
-  .stats-row { grid-template-columns: 1fr 1fr; gap: 10px; }
-  .stat-value { font-size: 28px; }
-  .topbar-actions { gap: 6px; }
-  .topbar-actions .btn-secondary { display: none; } /* hide AI Scanner — accessible from sidebar */
-  .topbar-actions .btn-primary { font-size: 12px; padding: 7px 12px; }
-  .content { padding: 16px; }
+  .content { padding: 14px; }
+  .topbar { padding: 10px 14px; gap: 8px; }
+  .topbar-title { font-size: 15px; letter-spacing: 0; }
+
+  /* Topbar: hamburger + title + new market only */
+  .topbar-actions .btn-secondary { display: none; }
+  .topbar-actions .btn-primary { font-size: 13px; padding: 9px 14px; white-space: nowrap; }
+
+  /* Stats */
+  .stats-row { gap: 8px; }
+  .stat-card { padding: 14px 16px; }
+  .stat-value { font-size: 24px; }
+  .stat-label { font-size: 11px; }
+  .stat-card-icon { font-size: 18px; }
+
+  /* Analytics 1 col */
+  .analytics-stat-grid { grid-template-columns: 1fr; gap: 10px; }
+  .analytics-stat-value { font-size: 22px; }
+  .econ-health-grid { grid-template-columns: 1fr; }
+  .flexbot-starter-grid { grid-template-columns: 1fr; }
+
+  /* Market table: question + status, tighter */
+  .table-header { padding: 8px 14px; }
+  .market-row   { padding: 14px; }
+  .market-question { font-size: 13px; }
+  .market-meta { font-size: 10px; }
+
+  /* Modals: full-width sheet from bottom */
+  .modal-overlay { padding: 0; align-items: flex-end; }
+  .modal { border-radius: 18px 18px 0 0; max-height: 92vh; max-width: 100%; }
+
+  /* Filter pills wrap */
+  .mkt-pills { flex-wrap: wrap; gap: 6px; }
+
+  /* Branding two-col → single col */
+  .branding-two-col { grid-template-columns: 1fr !important; }
+
+  /* Reward cards → single col */
+  .rewards-grid { grid-template-columns: 1fr !important; }
+
+  /* Ideas grid → single col */
+  .ideas-sections-grid { grid-template-columns: 1fr !important; }
+
+  /* Share grid → stack */
+  .share-grid { grid-template-columns: 1fr !important; }
+
+  /* General: ensure no horizontal overflow */
+  .content > * { min-width: 0; }
+  input, textarea, select { font-size: 16px !important; } /* prevent iOS zoom on focus */
+
+  /* Catch-all: collapse any inline 1fr 1fr grids to single column */
+  [style*="grid-template-columns:1fr 1fr"],
+  [style*="grid-template-columns: 1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Analytics two-col bottom row */
+  #analyticsBottomRow { grid-template-columns: 1fr !important; }
+
+  /* Section header: stack title + button on small screens */
+  .section-header { flex-wrap: wrap; gap: 10px; }
+  .section-header .btn-primary,
+  .section-header .btn-secondary { width: 100%; justify-content: center; }
+
+  /* Nav pills: make them scrollable horizontally */
+  .mkt-pills, .resolve-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap;
+    padding-bottom: 4px;
+  }
+  .mkt-pill { white-space: nowrap; flex-shrink: 0; }
 }
 </style>
 </head>
@@ -5524,24 +5627,10 @@ async function archiveMarket() {
 
 // ── Mobile sidebar ────────────────────────────────────────
 function toggleSidebar() {
-  const sidebar = document.querySelector('.sidebar');
-  const backdrop = document.getElementById('sidebarBackdrop');
-  const isOpen = sidebar.classList.contains('open');
-  if (isOpen) { closeSidebar(); } else { openSidebar(); }
-}
-function openSidebar() {
-  const sidebar = document.querySelector('.sidebar');
-  const backdrop = document.getElementById('sidebarBackdrop');
-  sidebar.classList.add('open');
-  backdrop.classList.add('open');
-  document.body.style.overflow = 'hidden';
+  document.body.classList.toggle('nav-open');
 }
 function closeSidebar() {
-  const sidebar = document.querySelector('.sidebar');
-  const backdrop = document.getElementById('sidebarBackdrop');
-  sidebar.classList.remove('open');
-  backdrop.classList.remove('open');
-  document.body.style.overflow = '';
+  document.body.classList.remove('nav-open');
 }
 
 // Init
