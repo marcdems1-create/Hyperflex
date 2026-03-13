@@ -1303,7 +1303,12 @@ body.plan-premium .main {
   line-height: 1;
   margin-bottom: 8px;
   letter-spacing: -0.02em;
+  word-break: break-all;
+  overflow-wrap: break-word;
 }
+/* Shrink automatically when value is long */
+.stat-value.compact { font-size: 26px; letter-spacing: -0.01em; }
+.stat-value.xs      { font-size: 20px; letter-spacing: 0; }
 .stat-value.gold { color: var(--gold); }
 .stat-change {
   font-family: var(--mono);
@@ -3994,10 +3999,10 @@ function renderDashboard(data) {
   document.getElementById('pointsNameLabel').textContent = 'Top earners of ' + creator.custom_points_name;
 
   // Stats
-  document.getElementById('statTraders').textContent = (stats.total_traders || 0).toLocaleString();
-  document.getElementById('statLive').textContent = stats.live_markets || 0;
-  document.getElementById('statVolume').textContent = (stats.total_volume || 0).toLocaleString();
-  document.getElementById('statWeekly').textContent = (stats.weekly_trades || 0).toLocaleString();
+  setStatValue('statTraders', stats.total_traders || 0);
+  setStatValue('statLive',    stats.live_markets  || 0);
+  setStatValue('statVolume',  stats.total_volume  || 0, true); // abbreviated
+  setStatValue('statWeekly',  stats.weekly_trades || 0);
 
   // Markets
   communityMarkets = markets || [];
@@ -5077,6 +5082,27 @@ function openNextInQueue() {
     const el = document.getElementById('newQuestion');
     if (el) { el.value = item.question; el.dispatchEvent(new Event('input')); }
   }, 50);
+}
+
+// ── STAT VALUE HELPER ─────────────────────────────────────────
+// Sets a stat card value, abbreviates large numbers, and shrinks font if needed
+function setStatValue(id, num, abbreviate = false) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  let text;
+  if (abbreviate) {
+    if (num >= 1_000_000)      text = (num / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
+    else if (num >= 10_000)    text = Math.round(num / 1000) + 'K';
+    else if (num >= 1_000)     text = (num / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+    else                       text = num.toLocaleString();
+  } else {
+    text = num.toLocaleString();
+  }
+  el.textContent = text;
+  // Auto-size: remove old classes first
+  el.classList.remove('compact', 'xs');
+  if (text.length >= 7)      el.classList.add('xs');
+  else if (text.length >= 5) el.classList.add('compact');
 }
 
 function escapeAttr(str) {
