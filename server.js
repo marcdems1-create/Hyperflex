@@ -746,9 +746,13 @@ app.get('/positions/:user_id', async (req, res) => {
 // Leaderboard: top 20 by PnL (join users + positions, settled only). If tenant subdomain, filter to that creator's markets.
 app.get('/api/leaderboard', async (req, res) => {
   try {
+    const period = req.query.period; // 'week' | undefined (all-time)
     let positions;
     let leaderboardMarketIds = null;
     const subdomain = req.tenant?.subdomain;
+
+    // For weekly: only positions settled this week (Mon 00:00 UTC)
+    const weekStart = period === 'week' ? getWeekStart() : null;
 
     if (subdomain) {
       const { data: tenantMarkets } = await supabase
@@ -757,17 +761,21 @@ app.get('/api/leaderboard', async (req, res) => {
         .eq('creator_slug', subdomain);
       leaderboardMarketIds = (tenantMarkets || []).map((m) => m.id);
       if (leaderboardMarketIds.length === 0) return res.json([]);
-      const { data: pos } = await supabase
+      let q = supabase
         .from('positions')
         .select('user_id, amount, potential_payout, settled, won')
         .eq('settled', true)
         .in('market_id', leaderboardMarketIds);
+      if (weekStart) q = q.gte('created_at', weekStart);
+      const { data: pos } = await q;
       positions = pos;
     } else {
-      const { data: pos } = await supabase
+      let q = supabase
         .from('positions')
         .select('user_id, amount, potential_payout, settled, won, market_id')
         .eq('settled', true);
+      if (weekStart) q = q.gte('created_at', weekStart);
+      const { data: pos } = await q;
       positions = pos;
       leaderboardMarketIds = [...new Set((pos || []).map(p => p.market_id))];
     }
@@ -798,8 +806,8 @@ app.get('/api/leaderboard', async (req, res) => {
       a.total_pnl -= Number(p.amount) || 0;
     }
 
-    // Batch-compute streaks for all leaderboard users
-    const streakMap = await getStreakMap(userIds, leaderboardMarketIds);
+    // Streaks only meaningful for all-time view
+    const streakMap = period === 'week' ? {} : await getStreakMap(userIds, leaderboardMarketIds);
 
     const rows = [];
     for (const [userId, a] of agg) {

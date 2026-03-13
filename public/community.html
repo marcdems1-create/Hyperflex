@@ -687,6 +687,18 @@ body::before {
 .lb-you-tag { font-family: var(--mono); font-size: 9px; color: var(--gold); background: rgba(201,146,13,0.12); border: 1px solid rgba(201,146,13,0.25); border-radius: 3px; padding: 1px 5px; letter-spacing: 0.06em; }
 .lb-correct { font-family: var(--mono); font-size: 10px; color: var(--dim); }
 .lb-score   { font-family: var(--mono); font-size: 12px; color: var(--gold); font-weight: 700; }
+.lb-winrate { font-family: var(--mono); font-size: 10px; color: var(--dim); min-width: 34px; text-align: right; }
+.lb-winrate.sharp  { color: #4ade80; }
+.lb-winrate.solid  { color: var(--gold); }
+.lb-accuracy-badge { font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 3px; letter-spacing: 0.04em; white-space: nowrap; flex-shrink: 0; }
+.lb-accuracy-badge.sharp     { background: rgba(74,222,128,0.12); color: #4ade80; border: 1px solid rgba(74,222,128,0.3); }
+.lb-accuracy-badge.solid     { background: rgba(201,146,13,0.12); color: var(--gold); border: 1px solid rgba(201,146,13,0.3); }
+.lb-accuracy-badge.speculator{ background: rgba(255,255,255,0.05); color: var(--dim); border: 1px solid var(--border); }
+
+/* Leaderboard tabs */
+.lb-tabs { display: flex; gap: 0; margin-bottom: 0; border-bottom: 1px solid var(--border); }
+.lb-tab  { flex: 1; text-align: center; padding: 10px 14px; font-size: 12px; font-weight: 600; cursor: pointer; color: var(--dim); border-bottom: 2px solid transparent; transition: color .15s, border-color .15s; font-family: var(--mono); letter-spacing: 0.04em; }
+.lb-tab.active { color: var(--gold); border-bottom-color: var(--gold); }
 .lb-streak {
   font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 20px; white-space: nowrap; flex-shrink: 0;
 }
@@ -1142,7 +1154,13 @@ body::before {
     <div id="yourRankBar" style="display:none" class="your-rank-bar">
       <span>Your rank:</span> <strong id="yourRankNum"></strong> <span id="yourRankScore"></span>
     </div>
-    <div class="leaderboard-card" id="leaderboardCard"></div>
+    <div class="leaderboard-card">
+      <div class="lb-tabs">
+        <div class="lb-tab active" id="lbTabAllTime" onclick="switchLbTab('all')">All Time</div>
+        <div class="lb-tab" id="lbTabWeek" onclick="switchLbTab('week')">This Week</div>
+      </div>
+      <div id="leaderboardCard"></div>
+    </div>
   </div>
 
   <!-- Rewards -->
@@ -1717,58 +1735,88 @@ function toggleResolved() {
 }
 
 // ── LEADERBOARD ───────────────────────────────────────────────
-async function loadLeaderboard() {
+let lbPeriod = 'all';
+
+async function loadLeaderboard(period = 'all') {
+  lbPeriod = period;
   try {
-    const r = await fetch(`${API}/api/leaderboard`);
+    const url = `${API}/api/leaderboard${period === 'week' ? '?period=week' : ''}`;
+    const r = await fetch(url);
     if (!r.ok) return;
     const data = await r.json();
-    if (!Array.isArray(data) || data.length === 0) return;
-    leaderboardData = data;
 
-    const top = data.slice(0, 10);
-    const pts = community?.custom_points_name || 'pts';
+    if (period === 'all') leaderboardData = data;
+
+    const pts  = community?.custom_points_name || 'pts';
     const card = document.getElementById('leaderboardCard');
 
-    // Find current user in leaderboard
+    if (!Array.isArray(data) || data.length === 0) {
+      card.innerHTML = `<div style="padding:28px;text-align:center;color:var(--dim);font-size:13px">${period === 'week' ? 'No settled predictions this week yet.' : 'No predictions settled yet.'}</div>`;
+      document.getElementById('leaderboardSection').style.display = 'block';
+      return;
+    }
+
+    // Find current user rank
     let myRank = null, myScore = null;
     if (currentUser) {
-      const myRow = data.findIndex(r => r.user_id === currentUser.id);
+      const myRow = data.findIndex(row => row.user_id === currentUser.id);
       if (myRow !== -1) {
         myRank  = myRow + 1;
         myScore = Math.round((data[myRow].total_pnl || 0) / 100).toLocaleString();
       }
     }
 
-    card.innerHTML = top.map((row, i) => {
-      const rankClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
-      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`;
-      const name  = escHtml(row.display_name || row.username || 'Anonymous');
-      const pnl   = Math.round((row.total_pnl || 0) / 100).toLocaleString();
-      const wins  = row.wins || 0;
-      const streak = row.streak || 0;
-      const isYou = currentUser && row.user_id === currentUser.id;
+    card.innerHTML = data.slice(0, 10).map((row, i) => {
+      const rankClass  = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
+      const medal      = i === 0 ? '🥇'  : i === 1 ? '🥈'    : i === 2 ? '🥉'     : `#${i + 1}`;
+      const name       = escHtml(row.display_name || row.username || 'Anonymous');
+      const pnl        = Math.round((row.total_pnl || 0) / 100).toLocaleString();
+      const isYou      = currentUser && row.user_id === currentUser.id;
+      const streak     = row.streak || 0;
+      const winRate    = row.win_rate || 0;
+      const trades     = row.total_trades || 0;
+
+      // Streak badge
       let streakBadge = '';
       if (streak >= 7) streakBadge = `<span class="lb-streak master">⚡ ${streak}</span>`;
       else if (streak >= 3) streakBadge = `<span class="lb-streak fire">🔥 ${streak}</span>`;
+
+      // Accuracy tier (min 3 trades to qualify)
+      let accuracyBadge = '';
+      if (trades >= 3) {
+        if (winRate >= 60)      accuracyBadge = `<span class="lb-accuracy-badge sharp">🎯 SHARP</span>`;
+        else if (winRate >= 50) accuracyBadge = `<span class="lb-accuracy-badge solid">📊 SOLID</span>`;
+        else                    accuracyBadge = `<span class="lb-accuracy-badge speculator">🎲 SPEC</span>`;
+      }
+
+      // Win rate display
+      const wrClass = winRate >= 60 ? 'sharp' : winRate >= 50 ? 'solid' : '';
+      const wrDisplay = trades >= 3 ? `<div class="lb-winrate ${wrClass}" title="${trades} predictions">${winRate}%</div>` : `<div class="lb-winrate" title="Not enough trades">${trades}p</div>`;
+
       return `
         <div class="lb-row${isYou ? ' is-you' : ''}">
           <div class="lb-rank ${rankClass}">${medal}</div>
-          <div class="lb-name">${name}${isYou ? '<span class="lb-you-tag">YOU</span>' : ''}${streakBadge}</div>
-          <div class="lb-correct">${wins}W</div>
+          <div class="lb-name">${name}${isYou ? '<span class="lb-you-tag">YOU</span>' : ''}${streakBadge}${accuracyBadge}</div>
+          ${wrDisplay}
           <div class="lb-score">+${pnl} ${pts}</div>
         </div>`;
     }).join('');
 
-    // Your rank callout (only if not in top 10 or for emphasis)
     if (myRank && myScore) {
-      const bar = document.getElementById('yourRankBar');
-      document.getElementById('yourRankNum').textContent = `#${myRank}`;
+      document.getElementById('yourRankNum').textContent  = `#${myRank}`;
       document.getElementById('yourRankScore').textContent = `· +${myScore} ${pts}`;
-      bar.style.display = 'flex';
+      document.getElementById('yourRankBar').style.display = 'flex';
     }
 
     document.getElementById('leaderboardSection').style.display = 'block';
   } catch {}
+}
+
+function switchLbTab(period) {
+  lbPeriod = period;
+  document.getElementById('lbTabAllTime').classList.toggle('active', period === 'all');
+  document.getElementById('lbTabWeek').classList.toggle('active', period === 'week');
+  loadLeaderboard(period);
 }
 
 // ── REWARDS ───────────────────────────────────────────────────
