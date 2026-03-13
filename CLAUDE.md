@@ -35,7 +35,7 @@
 
 ## Current State (last updated March 12, 2026)
 
-- All features live on Railway. Latest commit: `c55f856`
+- All features live on Railway. Latest commit: `637977c`
 - **Stripe payments live** — Pro ($29/mo) + Premium ($99/mo) checkout + billing portal
   - Railway env vars needed: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRO_PRICE_ID`, `STRIPE_PLATINUM_PRICE_ID`
   - Webhook endpoint registered at: `https://hyperflex.network/stripe/webhook`

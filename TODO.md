@@ -18,7 +18,8 @@
 - [ ] **Landing page video** — Video section built, just needs real YouTube VIDEO_ID inserted in `public/index.html`
 - [ ] **Custom domain** — Premium tier promises it, not implemented in server
 - [ ] **AI scanner improvements** — auto-scan creator's YouTube channel on schedule
-- [ ] **Economy Phase 2**: Activity-gated weekly refills, user referral system (100 pts/referral, 50 welcome bonus, capped 5/week, creator-configurable), dynamic odds (CPMM)
+- [x] Activity-gated weekly refills (commit `637977c`)
+- [ ] **Economy Phase 2 remaining**: user referral system (100 pts/referral, 50 welcome bonus, capped 5/week, creator-configurable), dynamic odds (CPMM)
 - [ ] **FAQ section** — explain how Flex Points work (pending Economy Phase 2 finalization)
 
 ---
