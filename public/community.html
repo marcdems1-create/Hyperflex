@@ -2237,10 +2237,21 @@ function renderUserHeader() {
     const idx = leaderboardData.findIndex(r => r.user_id === currentUser.id);
     if (idx !== -1) rankHTML = `<span class="rank-chip">#${idx + 1}</span>`;
   }
+  // Personal win rate from leaderboard data
+  let winRateHTML = '';
+  if (leaderboardData.length) {
+    const myRow = leaderboardData.find(r => r.user_id === currentUser.id);
+    if (myRow && (myRow.total_trades || 0) >= 3) {
+      const wr = myRow.win_rate || 0;
+      const wrColor = wr >= 60 ? '#c9920d' : wr >= 50 ? '#6ba3be' : 'var(--dim)';
+      winRateHTML = `<span style="font-family:var(--mono);font-size:10px;color:${wrColor};background:rgba(255,255,255,0.06);padding:3px 7px;border-radius:4px;border:1px solid rgba(255,255,255,0.1)">${wr}% accuracy</span>`;
+    }
+  }
   hr.innerHTML = `
     <div class="user-bar">
       <div class="balance-pill"><span class="balance-pill-icon">⚡</span>${bal} ${pts}</div>
       ${rankHTML}
+      ${winRateHTML}
       <span class="user-name-pill">${escHtml(currentUser.display_name || currentUser.email)}</span>
       <button class="btn-auth" onclick="signOut()" style="font-size:10px;padding:5px 10px">Sign out</button>
     </div>`;

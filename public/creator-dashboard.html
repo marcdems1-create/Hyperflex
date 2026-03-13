@@ -2466,6 +2466,7 @@ body.nav-open .sidebar-backdrop {
   .mkt-pill { white-space: nowrap; flex-shrink: 0; }
 }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 <body>
 <div class="layout">
@@ -2616,6 +2617,14 @@ body.nav-open .sidebar-backdrop {
             </div>
 
           </div>
+        </div>
+
+        <!-- Community URL quick-copy bar -->
+        <div id="communityUrlBar" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:18px;align-items:center;gap:10px;flex-wrap:wrap">
+          <span style="font-family:var(--mono);font-size:12px;color:var(--dim);white-space:nowrap">Your link:</span>
+          <span id="communityUrlText" style="font-family:var(--mono);font-size:12px;color:var(--gold);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+          <button class="btn-secondary" onclick="copyLink()" style="font-size:12px;padding:6px 12px;white-space:nowrap">📋 Copy</button>
+          <button class="btn-secondary" onclick="showTab('share')" style="font-size:12px;padding:6px 12px;white-space:nowrap">Share →</button>
         </div>
 
         <div class="stats-row">
@@ -2829,6 +2838,21 @@ body.nav-open .sidebar-backdrop {
           <div class="share-section">
             <div class="share-title">📝 Ready-to-Post Templates</div>
             <div id="shareTemplates"></div>
+          </div>
+        </div>
+        <div class="section">
+          <div class="share-section">
+            <div class="share-title">📱 QR Code</div>
+            <p style="font-size:13px;color:var(--dim);margin-bottom:16px;line-height:1.6">
+              Print it, drop it in a newsletter, or flash it on stream — members scan to join instantly.
+            </p>
+            <div style="display:flex;align-items:flex-start;gap:24px;flex-wrap:wrap">
+              <div id="qrCodeBox" style="background:#fff;padding:12px;border-radius:10px;border:1px solid var(--border);display:inline-block"></div>
+              <div style="display:flex;flex-direction:column;gap:10px;justify-content:center;padding-top:4px">
+                <div id="qrCodeUrl" style="font-family:var(--mono);font-size:12px;color:var(--dim)"></div>
+                <button class="share-btn" onclick="downloadQR()" style="width:fit-content">⬇ Download QR</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -4063,6 +4087,16 @@ function renderDashboard(data) {
   window.communityName = creator.display_name || '';
   window._pointsName = creator.custom_points_name || 'Flex Points';
 
+  // ── Community URL bar ────────────────────────────────────
+  if (creator.slug) {
+    const urlBar = document.getElementById('communityUrlBar');
+    const urlText = document.getElementById('communityUrlText');
+    if (urlBar && urlText) {
+      urlText.textContent = 'hyperflex.network/' + creator.slug;
+      urlBar.style.display = 'flex';
+    }
+  }
+
   // ── Onboarding checklist ─────────────────────────────────
   const totalMarkets = stats.total_markets || (markets || []).length || 0;
   const totalTraders = stats.total_traders || 0;
@@ -4167,6 +4201,7 @@ function renderDashboard(data) {
 
   // Share templates
   renderShareTemplates(creator);
+  generateQR(creator.slug);
   renderRewardsList(data.rewards || []);
 
   // Settings prefill
@@ -4314,6 +4349,7 @@ function renderMarketRows(markets, containerId) {
           <div class="status-dot ${status}"></div>
           <span class="status-text">${statusLabel}</span>
           ${status === 'pending' ? `<button class="resolve-btn" onclick="event.stopPropagation();openResolveModal('${m.id}', \`${m.question.replace(/`/g,"'")}\`)">Resolve</button>` : ''}
+          <button class="resolve-btn" style="background:rgba(201,146,13,0.1);color:var(--gold);border-color:rgba(201,146,13,0.25)" title="Duplicate this market" onclick="event.stopPropagation();duplicateMarket('${m.id}')">↻ Dupe</button>
         </div>
       </div>
     `;
@@ -4405,7 +4441,11 @@ function renderLeaderboard(leaders, containerId, limit, pointsName, showReward) 
     el.innerHTML = '<div class="empty-state"><div class="empty-icon">🏆</div><div class="empty-title">No traders yet</div><div class="empty-desc">Share your community link to get your first traders.</div></div>';
     return;
   }
-  el.innerHTML = top.map((l, i) => {
+  const totalCount = leaders.length;
+  const countBadge = totalCount > 0
+    ? `<div style="font-family:var(--mono);font-size:11px;color:var(--dim);padding:0 2px 12px;text-align:right">${totalCount} member${totalCount !== 1 ? 's' : ''} competing</div>`
+    : '';
+  el.innerHTML = countBadge + top.map((l, i) => {
     const streak = l.streak || 0;
     let streakBadge = '';
     if (streak >= 7) {
@@ -4451,6 +4491,7 @@ function renderPowerPredictor(data, plan, pointsName) {
       <div class="gam-pos">${medals[i] || '#' + (i+1)}</div>
       <div class="gam-name">${p.display_name}</div>
       <div class="gam-meta">${p.wins_this_week} correct this week</div>
+      <button class="btn-secondary" style="padding:4px 10px;font-size:11px;margin-left:auto;white-space:nowrap" onclick="openMemberRewardModal('${p.user_id}','${(p.display_name||'Member').replace(/'/g,"\\'")}')">🎁 Reward</button>
     </div>
   `).join('');
 }
@@ -4474,6 +4515,7 @@ function renderInnerCircle(data, plan, pointsName) {
       <div class="gam-pos">👑</div>
       <div class="gam-name">${p.display_name}</div>
       <div class="gam-points">${p.points.toLocaleString()} pts</div>
+      <button class="btn-secondary" style="padding:4px 10px;font-size:11px;margin-left:auto;white-space:nowrap" onclick="openMemberRewardModal('${p.user_id}','${(p.display_name||'Member').replace(/'/g,"\\'")}')">🎁 Reward</button>
     </div>
   `).join('');
 }
@@ -4537,6 +4579,23 @@ function openCreateModal() {
 function closeCreateModal() {
   document.getElementById('createModal').classList.remove('show');
   clearQuestionSuggestions();
+}
+
+function duplicateMarket(marketId) {
+  const m = communityMarkets.find(x => x.id === marketId);
+  if (!m) return;
+  // Open create modal with question pre-filled, close date set to +30 days
+  const d = new Date();
+  d.setDate(d.getDate() + 30);
+  document.getElementById('newDate').value = d.toISOString().split('T')[0];
+  document.getElementById('newQuestion').value = m.question;
+  document.getElementById('questionWarning').style.display = 'none';
+  const cat = m.category || 'other';
+  document.getElementById('newCategory').value = cat;
+  loadSourceTemplate(cat);
+  clearQuestionSuggestions();
+  document.getElementById('createModal').classList.add('show');
+  showToast('Market pre-filled — update the close date and publish.', 'success');
 }
 
 function clearQuestionSuggestions() {
@@ -5785,6 +5844,46 @@ async function deleteReward(id, fromModal = false) {
     }
   } catch {
     showToast('Network error.', 'error');
+  }
+}
+
+// ── QR Code ──
+let _qrInstance = null;
+function generateQR(slug) {
+  const box = document.getElementById('qrCodeBox');
+  const urlEl = document.getElementById('qrCodeUrl');
+  if (!box || !slug) return;
+  const url = 'https://hyperflex.network/' + slug;
+  if (urlEl) urlEl.textContent = url;
+  box.innerHTML = '';
+  try {
+    _qrInstance = new QRCode(box, {
+      text: url,
+      width: 160,
+      height: 160,
+      colorDark: '#141412',
+      colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.M
+    });
+  } catch (e) {
+    box.innerHTML = '<div style="font-size:12px;color:var(--dim)">QR unavailable</div>';
+  }
+}
+function downloadQR() {
+  const canvas = document.querySelector('#qrCodeBox canvas');
+  const img = document.querySelector('#qrCodeBox img');
+  if (canvas) {
+    const a = document.createElement('a');
+    a.download = 'hyperflex-qr.png';
+    a.href = canvas.toDataURL();
+    a.click();
+  } else if (img) {
+    const a = document.createElement('a');
+    a.download = 'hyperflex-qr.png';
+    a.href = img.src;
+    a.click();
+  } else {
+    showToast('QR not ready — open Share tab first', 'error');
   }
 }
 
