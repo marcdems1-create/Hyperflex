@@ -1977,7 +1977,8 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
         social_youtube:      settings.social_youtube  || null,
         social_discord:      settings.social_discord  || null,
         social_twitch:       settings.social_twitch   || null,
-        community_description: settings.community_description || null
+        community_description: settings.community_description || null,
+        community_category:    settings.community_category   || 'other'
       },
       stats: {
         total_traders: totalTraders,
@@ -2197,6 +2198,96 @@ app.post('/api/creator/upload-asset', requireCreator, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
+// 4c. AI MARKET IDEAS
+// POST /api/creator/market-ideas
+// Auth: Bearer token required (Pro or Premium only)
+// Body: { category, description, count } — count = 3 (Pro) or 5 (Premium)
+// Returns: { happening_now: [], upcoming: [], most_viral: [] }
+// ════════════════════════════════════════════════════════════
+app.post('/api/creator/market-ideas', requireCreator, async (req, res) => {
+  try {
+    const creatorId = req.creator.id;
+
+    // Fetch plan + settings
+    const { data: settings } = await supabase
+      .from('creator_settings')
+      .select('plan, community_category, community_description, display_name, custom_points_name')
+      .eq('id', creatorId)
+      .single();
+
+    const plan = settings?.plan || 'free';
+    if (plan === 'free') return res.status(403).json({ error: 'Market Ideas requires Pro or Premium' });
+
+    const count      = plan === 'platinum' ? 5 : 3;
+    const category   = settings?.community_category || req.body.category || 'other';
+    const desc       = settings?.community_description || '';
+    const name       = settings?.display_name || 'Community';
+    const pointsName = settings?.custom_points_name || 'Flex Points';
+
+    const categoryLabels = {
+      sports: 'Sports', esports: 'Esports / Gaming', entertainment: 'Entertainment & Pop Culture',
+      finance: 'Finance & Stock Market', crypto: 'Crypto & Web3', politics: 'Politics & Elections',
+      news: 'News & Current Events', tech: 'Technology', music: 'Music', other: 'General'
+    };
+    const nicheLabel = categoryLabels[category] || category;
+
+    const today = new Date().toISOString().split('T')[0];
+
+    const prompt = `You are a prediction market expert generating engaging market questions for a community called "${name}" focused on: ${nicheLabel}.
+${desc ? `Community description: ${desc}` : ''}
+Today's date: ${today}
+Points currency: ${pointsName}
+
+Generate exactly ${count} market questions for each of these 3 categories. Questions must be YES/NO binary and clearly resolvable.
+
+Categories:
+1. HAPPENING_NOW — Events actively unfolding or data dropping this week/month (earnings reports, game results, album drops, elections, economic data releases, ongoing news stories, championship series in progress). Make them feel urgent and timely.
+2. UPCOMING — Known scheduled events in the next 1–6 months (seasons starting, product launches, elections, scheduled matches, award shows, Fed meetings, major releases).
+3. MOST_VIRAL — Topics that always generate heated debate and maximum engagement in this niche (controversial takes, GOAT debates, bold predictions, polarizing personalities, all-time rankings).
+
+Return ONLY valid JSON, no markdown, no explanation:
+{
+  "happening_now": [
+    { "question": "...", "why": "one sentence on why this is hot right now" }
+  ],
+  "upcoming": [
+    { "question": "...", "why": "one sentence on the scheduled event" }
+  ],
+  "most_viral": [
+    { "question": "...", "why": "one sentence on why this sparks debate" }
+  ]
+}
+
+Rules:
+- Every question must be under 120 characters
+- No duplicate topics across categories
+- Questions should feel like something a real community member would excitedly bet on
+- Make them specific, not generic (bad: "Will Team A win?", good: "Will the Lakers make the playoffs this season?")`;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1500,
+      messages: [{ role: 'user', content: prompt }]
+    });
+
+    const raw = response.content[0].text.trim();
+    // Strip markdown code fences if present
+    const jsonStr = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+    const ideas = JSON.parse(jsonStr);
+
+    // Trim to count in case Claude returns extra
+    ['happening_now', 'upcoming', 'most_viral'].forEach(k => {
+      if (ideas[k]) ideas[k] = ideas[k].slice(0, count);
+    });
+
+    res.json({ ...ideas, count, plan, category });
+  } catch (err) {
+    console.error('market-ideas error:', err);
+    res.status(500).json({ error: 'Failed to generate ideas' });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
 // 5. UPDATE CREATOR SETTINGS
 // PUT /api/creator/settings
 // Auth: Bearer token required
@@ -2214,7 +2305,9 @@ app.put('/api/creator/settings', requireCreator, async (req, res) => {
       // Branding fields
       logo_url, banner_url, font_choice,
       social_twitter, social_youtube, social_discord, social_twitch,
-      community_description
+      community_description,
+      // Ideas niche
+      community_category
     } = req.body;
 
     const updates = {
@@ -2244,6 +2337,7 @@ app.put('/api/creator/settings', requireCreator, async (req, res) => {
     if (social_discord !== undefined) updates.social_discord = social_discord || null;
     if (social_twitch  !== undefined) updates.social_twitch  = social_twitch  || null;
     if (community_description !== undefined) updates.community_description = community_description || null;
+    if (community_category !== undefined) updates.community_category = community_category || 'other';
 
     const { error } = await supabase
       .from('creator_settings')

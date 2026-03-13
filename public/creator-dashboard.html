@@ -746,6 +746,67 @@ body.plan-premium .main {
 .plan-gate-icon { font-size: 36px; margin-bottom: 12px; }
 .plan-gate-title { font-size: 17px; font-weight: 700; font-family: var(--display); margin-bottom: 8px; }
 .plan-gate-sub { font-size: 13px; color: var(--dim); margin-bottom: 20px; }
+
+/* ── Market Ideas tab ── */
+.ideas-section-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.ideas-section-icon { font-size: 22px; margin-top: 1px; flex-shrink: 0; }
+.ideas-section-title { font-size: 14px; font-weight: 700; font-family: var(--display); margin-bottom: 2px; }
+.ideas-section-sub { font-size: 12px; color: var(--dim); }
+.ideas-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.idea-card {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: border-color .15s;
+}
+.idea-card:hover { border-color: var(--gold); }
+.idea-question {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--text);
+  flex: 1;
+}
+.idea-why {
+  font-size: 11px;
+  color: var(--dim);
+  line-height: 1.4;
+  font-style: italic;
+}
+.idea-use-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gold);
+  background: rgba(201,146,13,0.1);
+  border: 1px solid rgba(201,146,13,0.25);
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: background .15s;
+  align-self: flex-start;
+  font-family: var(--sans);
+}
+.idea-use-btn:hover { background: rgba(201,146,13,0.2); }
+
 /* Economy health grid */
 .econ-health-grid {
   display: grid;
@@ -2087,6 +2148,10 @@ body.plan-premium .main {
       <a class="nav-item" onclick="showTab('analytics')">
         <span class="nav-icon">📈</span><span class="nav-label">Analytics</span>
       </a>
+      <a class="nav-item" id="ideasNavItem" onclick="showTab('ideas')" style="display:none">
+        <span class="nav-icon">💡</span><span class="nav-label">Market Ideas</span>
+        <span class="nav-badge" style="background:var(--gold);color:#000;font-size:9px;padding:1px 5px">AI</span>
+      </a>
       <div class="nav-section-label">Community</div>
       <a class="nav-item" onclick="showTab('leaderboard')">
         <span class="nav-icon">🏆</span><span class="nav-label">Leaderboard</span>
@@ -2417,6 +2482,21 @@ body.plan-premium .main {
               <input type="text" id="settingPoints" placeholder="Flex Points"/>
             </div>
             <div class="field">
+              <label>Community Niche <span style="font-size:11px;color:var(--dim);font-weight:400">— used for AI market idea generation</span></label>
+              <select id="settingCategory" style="background:var(--paper);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--sans);font-size:13px;padding:10px 14px;width:100%;outline:none">
+                <option value="sports">🏆 Sports</option>
+                <option value="esports">🎮 Esports / Gaming</option>
+                <option value="entertainment">🎬 Entertainment & Pop Culture</option>
+                <option value="finance">📈 Finance & Stock Market</option>
+                <option value="crypto">₿ Crypto & Web3</option>
+                <option value="politics">🗳️ Politics & Elections</option>
+                <option value="news">📰 News & Current Events</option>
+                <option value="tech">💻 Technology</option>
+                <option value="music">🎵 Music</option>
+                <option value="other">🌐 Other / General</option>
+              </select>
+            </div>
+            <div class="field">
               <label>Primary Color</label>
               <div style="display:flex;gap:10px;align-items:center">
                 <input type="color" id="settingColor" style="width:48px;height:40px;padding:4px;cursor:pointer;border-radius:6px;border:1px solid var(--border);background:var(--paper)"/>
@@ -2689,6 +2769,80 @@ body.plan-premium .main {
           </div>
         </div>
       </div><!-- /tab-economy -->
+
+      <!-- ════════════════════════ MARKET IDEAS TAB ════════════════════════ -->
+      <div id="tab-ideas" style="display:none">
+
+        <!-- Free plan gate -->
+        <div id="ideasGate" class="section" style="display:none">
+          <div class="plan-gate">
+            <div class="plan-gate-icon">💡</div>
+            <div class="plan-gate-title">AI Market Ideas</div>
+            <div class="plan-gate-sub">Upgrade to Pro or Premium to get AI-powered market ideas tailored to your community's niche — powered by live trends, upcoming events, and viral topics.</div>
+            <button class="btn-primary" onclick="showTab('settings')">Upgrade Plan</button>
+          </div>
+        </div>
+
+        <!-- Ideas content (Pro/Premium) -->
+        <div id="ideasContent" style="display:none">
+          <div class="section">
+            <div class="section-header">
+              <div>
+                <div class="section-title">💡 Market Ideas</div>
+                <div class="section-subtitle" id="ideasSubtitle">AI-generated market ideas tailored to your community</div>
+              </div>
+              <button class="btn-secondary" id="ideasRefreshBtn" onclick="loadMarketIdeas(true)" style="display:flex;align-items:center;gap:6px">
+                <span id="ideasRefreshIcon">↻</span> Refresh Ideas
+              </button>
+            </div>
+
+            <div id="ideasLoading" style="padding:40px;text-align:center;color:var(--dim);font-size:13px;display:none">
+              <div style="font-size:24px;margin-bottom:12px">✨</div>
+              Generating ideas for your community…
+            </div>
+
+            <div id="ideasError" style="padding:32px;text-align:center;color:#ef4444;font-size:13px;display:none"></div>
+
+            <div id="ideasSections" style="display:none">
+              <!-- Happening Now -->
+              <div style="padding:24px 28px 0">
+                <div class="ideas-section-header">
+                  <span class="ideas-section-icon">🔥</span>
+                  <div>
+                    <div class="ideas-section-title">Happening Now</div>
+                    <div class="ideas-section-sub">Events unfolding this week — trade while they're hot</div>
+                  </div>
+                </div>
+                <div id="ideaCards-happening_now" class="ideas-grid"></div>
+              </div>
+
+              <!-- Upcoming -->
+              <div style="padding:24px 28px 0">
+                <div class="ideas-section-header">
+                  <span class="ideas-section-icon">📅</span>
+                  <div>
+                    <div class="ideas-section-title">Coming Up</div>
+                    <div class="ideas-section-sub">Scheduled events worth betting on now</div>
+                  </div>
+                </div>
+                <div id="ideaCards-upcoming" class="ideas-grid"></div>
+              </div>
+
+              <!-- Most Viral -->
+              <div style="padding:24px 28px 28px">
+                <div class="ideas-section-header">
+                  <span class="ideas-section-icon">🚀</span>
+                  <div>
+                    <div class="ideas-section-title">Most Viral</div>
+                    <div class="ideas-section-sub">Debates that get your community talking</div>
+                  </div>
+                </div>
+                <div id="ideaCards-most_viral" class="ideas-grid"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <!-- ════════════════════════ BRANDING TAB ════════════════════════ -->
       <div id="tab-branding" style="display:none">
@@ -3407,6 +3561,8 @@ function renderDashboard(data) {
   document.getElementById('settingPoints').value = creator.custom_points_name;
   document.getElementById('settingColor').value = creator.primary_color || '#c9920d';
   document.getElementById('settingColorHex').textContent = creator.primary_color || '#c9920d';
+  const catEl = document.getElementById('settingCategory');
+  if (catEl) catEl.value = creator.community_category || 'other';
 
   // Economy prefill (stored as centpoints, display as pts)
   document.getElementById('econStartingBalance').value = Math.round((creator.starting_balance ?? 100000) / 100);
@@ -3467,6 +3623,10 @@ function renderDashboard(data) {
   // Show FLEX BOT nav item for Premium only
   const flexbotNav = document.getElementById('flexbotNavItem');
   if (flexbotNav) flexbotNav.style.display = plan === 'platinum' ? 'flex' : 'none';
+
+  // Show Market Ideas nav item for Pro + Premium
+  const ideasNav = document.getElementById('ideasNavItem');
+  if (ideasNav) ideasNav.style.display = (plan === 'pro' || plan === 'platinum') ? 'flex' : 'none';
 
   // Mark current plan in upgrade modal cards
   ['free','pro','platinum'].forEach(p => {
@@ -3715,7 +3875,7 @@ function renderShareTemplates(creator) {
 
 // Tab switching
 function showTab(tab) {
-  ['overview','markets','resolve','leaderboard','share','settings','analytics','economy','branding','flexbot'].forEach(t => {
+  ['overview','markets','resolve','leaderboard','share','settings','analytics','economy','branding','flexbot','ideas'].forEach(t => {
     const el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === tab ? 'block' : 'none';
   });
@@ -3723,9 +3883,10 @@ function showTab(tab) {
   document.querySelectorAll('.nav-item').forEach(n => {
     if (n.getAttribute('onclick') && n.getAttribute('onclick').includes(`'${tab}'`)) n.classList.add('active');
   });
-  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT' };
+  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas' };
   document.getElementById('topbarTitle').textContent = titles[tab] || tab;
   if (tab === 'analytics' && !analyticsLoaded) loadAnalytics();
+  if (tab === 'ideas' && !ideasLoaded) loadMarketIdeas(false);
 }
 
 // Create market
@@ -3989,7 +4150,8 @@ async function saveSettings() {
   const payload = {
     display_name: document.getElementById('settingName').value.trim(),
     custom_points_name: document.getElementById('settingPoints').value.trim(),
-    primary_color: document.getElementById('settingColor').value
+    primary_color: document.getElementById('settingColor').value,
+    community_category: document.getElementById('settingCategory')?.value || 'other'
   };
   try {
     const r = await fetch(API + '/api/creator/settings', {
@@ -4122,6 +4284,89 @@ async function confirmDeleteAccount() {
     btn.disabled = false;
     btn.textContent = 'Delete My Account';
   }
+}
+
+// ── MARKET IDEAS ───────────────────────────────────────────
+let ideasLoaded = false;
+
+async function loadMarketIdeas(force = false) {
+  const plan = creatorData?.creator?.plan || 'free';
+  const isPro = plan === 'pro' || plan === 'platinum';
+
+  // Gate check
+  document.getElementById('ideasGate').style.display    = isPro ? 'none'  : 'block';
+  document.getElementById('ideasContent').style.display = isPro ? 'block' : 'none';
+  if (!isPro) return;
+
+  if (ideasLoaded && !force) return;
+
+  const category = creatorData?.creator?.community_category || 'other';
+  const categoryLabels = {
+    sports:'Sports', esports:'Esports', entertainment:'Entertainment',
+    finance:'Finance', crypto:'Crypto', politics:'Politics',
+    news:'News', tech:'Technology', music:'Music', other:'General'
+  };
+  document.getElementById('ideasSubtitle').textContent =
+    `AI-generated ideas for ${categoryLabels[category] || 'your'} communities — ${plan === 'platinum' ? '5 per section' : '3 per section'}`;
+
+  const loadEl    = document.getElementById('ideasLoading');
+  const errorEl   = document.getElementById('ideasError');
+  const sectionsEl = document.getElementById('ideasSections');
+  const refreshBtn = document.getElementById('ideasRefreshBtn');
+  const refreshIcon = document.getElementById('ideasRefreshIcon');
+
+  loadEl.style.display     = 'block';
+  errorEl.style.display    = 'none';
+  sectionsEl.style.display = 'none';
+  if (refreshBtn) { refreshBtn.disabled = true; refreshIcon.textContent = '…'; }
+
+  try {
+    const r = await fetch(API + '/api/creator/market-ideas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ category })
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Failed to load ideas');
+
+    renderIdeaCards('happening_now', data.happening_now || []);
+    renderIdeaCards('upcoming',      data.upcoming      || []);
+    renderIdeaCards('most_viral',    data.most_viral    || []);
+
+    loadEl.style.display     = 'none';
+    sectionsEl.style.display = 'block';
+    ideasLoaded = true;
+  } catch (err) {
+    loadEl.style.display  = 'none';
+    errorEl.style.display = 'block';
+    errorEl.textContent   = 'Could not load ideas: ' + err.message;
+  } finally {
+    if (refreshBtn) { refreshBtn.disabled = false; refreshIcon.textContent = '↻'; }
+  }
+}
+
+function renderIdeaCards(sectionKey, ideas) {
+  const container = document.getElementById('ideaCards-' + sectionKey);
+  if (!container) return;
+  container.innerHTML = ideas.map(idea => `
+    <div class="idea-card">
+      <div class="idea-question">${escapeHtml(idea.question)}</div>
+      <div class="idea-why">${escapeHtml(idea.why)}</div>
+      <button class="idea-use-btn" onclick="useIdeaQuestion(${JSON.stringify(idea.question)})">
+        Use this →
+      </button>
+    </div>
+  `).join('');
+}
+
+function useIdeaQuestion(question) {
+  openCreateModal();
+  const el = document.getElementById('newQuestion');
+  if (el) { el.value = question; el.dispatchEvent(new Event('input')); }
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 // ── BRANDING ───────────────────────────────────────────────
