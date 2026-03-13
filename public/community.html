@@ -254,6 +254,18 @@ body::before {
 }
 .hero-mini-stat strong { color: var(--text); font-weight: 700; }
 .hero-mini-stat.gold strong { color: var(--gold); }
+button.hero-mini-stat.leaderboard-jump-pill {
+  background: rgba(201,146,13,0.1);
+  border-color: rgba(201,146,13,0.3);
+  color: var(--gold);
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 11px;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  transition: background .15s;
+}
+button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,0.2); }
 
 /* ── Market carousel ── */
 @keyframes carouselScroll {
@@ -982,6 +994,21 @@ body::before {
   .market-badges { width: 100%; justify-content: flex-start; order: -1; }
   .lb-correct { display: none; }
   .user-name-pill { display: none; }
+
+  /* Fix: points value in user-bar must not overflow the powered watermark */
+  .balance-pill { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* Prevent balance number from running into fixed watermark */
+  .content { padding-bottom: 100px; }
+
+  /* Creator login bar: smaller on very narrow screens */
+  #creatorLoginBar { font-size: 10px; padding: 5px 12px; }
+
+  /* Hero mini-stats: allow leaderboard pill to wrap */
+  .hero-mini-stats { gap: 6px; }
+
+  /* Watermark: ensure it always has enough breathing room */
+  .powered { padding: 20px 16px 28px; }
 }
 
 /* ── FAQ ── */
@@ -1058,6 +1085,10 @@ body::before {
     <button class="btn-auth primary" onclick="openAuth('register')">Join free</button>
   </div>
 </header>
+<!-- Creator login micro-link — below header, non-intrusive -->
+<div id="creatorLoginBar" style="text-align:center;padding:6px 16px;background:rgba(201,146,13,0.05);border-bottom:1px solid rgba(201,146,13,0.12);font-size:11px;color:var(--dim)">
+  Creator? <a href="/creator/login" style="color:var(--gold);text-decoration:none;font-weight:600">Sign in to your dashboard →</a>
+</div>
 
 <!-- Hero -->
 <section class="hero">
@@ -1078,6 +1109,7 @@ body::before {
       <div class="hero-mini-stat"><strong id="statMarkets">—</strong> open markets</div>
       <div class="hero-mini-stat"><strong id="statTraders">—</strong> members</div>
       <div class="hero-mini-stat gold"><strong id="statPoints">—</strong> <span id="statPointsLabel">pts</span></div>
+      <button class="hero-mini-stat leaderboard-jump-pill" onclick="document.getElementById('leaderboardSection').scrollIntoView({behavior:'smooth',block:'start'})">🏆 Leaderboard</button>
     </div>
   </div>
 </section>
@@ -1613,19 +1645,32 @@ function buildCarousel(activeMarkets) {
   track.style.animationDuration = dur + 's';
 
   section.style.display = 'block';
+
+  // Pause animation on touch (mobile) — resume after 3s
+  track.addEventListener('touchstart', () => {
+    track.style.animationPlayState = 'paused';
+  }, { passive: true });
+  track.addEventListener('touchend', () => {
+    setTimeout(() => { track.style.animationPlayState = 'running'; }, 3000);
+  }, { passive: true });
 }
 
 function openMarket(id) {
-  // Scroll to the market card and click it if it exists
-  const card = document.querySelector(`[data-market-id="${id}"]`);
-  if (card) { card.scrollIntoView({ behavior:'smooth', block:'center' }); card.click(); }
-  else {
-    // Market is in a different filter — switch to All and find it
+  const scrollAndHighlight = () => {
+    const card = document.querySelector(`[data-market-id="${id}"]`);
+    if (!card) return;
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // Gold pulse highlight so user sees which market was tapped
+    card.style.transition = 'box-shadow .15s';
+    card.style.boxShadow = '0 0 0 2px var(--gold)';
+    setTimeout(() => { card.style.boxShadow = ''; }, 1600);
+  };
+  // Ensure the market is visible (it's always in 'all' filter)
+  if (currentFilter !== 'all') {
     setFilter('all');
-    setTimeout(() => {
-      const c2 = document.querySelector(`[data-market-id="${id}"]`);
-      if (c2) { c2.scrollIntoView({ behavior:'smooth', block:'center' }); c2.click(); }
-    }, 100);
+    setTimeout(scrollAndHighlight, 80);
+  } else {
+    scrollAndHighlight();
   }
 }
 
@@ -2242,12 +2287,16 @@ function showAuthError(msg) {
 // ── HEADER ────────────────────────────────────────────────────
 function renderUserHeader() {
   const hr = document.getElementById('headerRight');
+  const creatorBar = document.getElementById('creatorLoginBar');
   if (!currentUser) {
     hr.innerHTML = `
       <button class="btn-auth" onclick="openAuth('login')">Sign in</button>
       <button class="btn-auth primary" onclick="openAuth('register')">Join free</button>`;
+    if (creatorBar) creatorBar.style.display = 'block';
     return;
   }
+  // Hide creator bar once signed in as a member
+  if (creatorBar) creatorBar.style.display = 'none';
   const balRaw = communityBalance !== null ? communityBalance / 100 : (currentUser.balance || 0);
   const bal = Number(balRaw).toLocaleString();
   const pts = community?.custom_points_name || 'pts';
