@@ -7,11 +7,6 @@
 
 ## 🔴 Immediate
 
-- [ ] **⚠️ SUPABASE MIGRATIONS** — Run ALL four in Supabase SQL Editor IN ORDER before deploying:
-  1. `supabase_migration_community_economy.sql`
-  2. `supabase_migration_refill_history.sql`
-  3. `supabase_migration_cpmm.sql`
-  4. `supabase_migration_referrals.sql`
 - [ ] **Stripe env vars** — Marc needs to add to Railway: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRO_PRICE_ID`, `STRIPE_PLATINUM_PRICE_ID`
 - [ ] **Admin env var** — Marc needs to add `ADMIN_SECRET` to Railway
 
@@ -63,3 +58,6 @@
 - [x] Flex Points gamification — streak multipliers (3→1.5×, 5+→2×), streak badges, Power Predictor, Inner Circle callouts (`43c70fd`, `ca699e2`)
 - [x] Scanner redesign — YouTube/Twitch/Paste modes, removed "Claude" branding (`b8121aa`)
 - [x] Per-community points economy — community_balances table, min/max bet, economy settings UI, centpoints throughout (`c55f856`)
+- [x] Analytics dashboard — trade activity chart, top markets, market breakdown, economy health, referrals (Pro/Premium gated) (`a564fa3`)
+- [x] Economy tab — dedicated sidebar tab for all economy settings (`a564fa3`)
+- [x] Supabase migrations — all 4 run and deployed (community_economy, refill_history, cpmm, referrals)
