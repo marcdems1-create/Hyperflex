@@ -33,9 +33,9 @@
 
 ---
 
-## Current State (last updated March 12, 2026)
+## Current State (last updated March 13, 2026)
 
-- All features live on Railway. Latest commit: `2fd70c7`
+- All features live on Railway. Latest commit: `dc742bf` (local, not yet pushed)
 - **Stripe payments live** — Pro ($29/mo) + Premium ($99/mo) checkout + billing portal
   - Railway env vars needed: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRO_PRICE_ID`, `STRIPE_PLATINUM_PRICE_ID`
   - Webhook endpoint registered at: `https://hyperflex.network/stripe/webhook`
@@ -84,21 +84,28 @@
 
 ## Known Issues / Next Up
 
-- **⚠️ MUST DO BEFORE DEPLOY**: Run ALL 4 migrations in order in Supabase SQL editor:
+- **⚠️ MUST DO BEFORE DEPLOY**: Run ALL 6 migrations in order in Supabase SQL editor:
   1. `supabase_migration_community_economy.sql`
   2. `supabase_migration_refill_history.sql`
   3. `supabase_migration_cpmm.sql`
   4. `supabase_migration_referrals.sql`
+  5. `supabase_migration_custom_domains.sql`
+  6. `supabase_migration_challenges.sql`
 - Video section on landing page needs real YouTube VIDEO_ID
-- Custom domain for Premium not implemented yet
 - Old `index.html` at project root should be removed eventually
-- Gamification: could add "streak broken" toast on community.html when user loses after a streak
-- **Economy Phase 2** — ALL BUILT:
-  - [x] Activity-gated weekly refills (commit `637977c`) — Monday cron, effective gate = MIN(config, 0.5×markets), new users always qualify
-  - [x] CPMM dynamic odds (commit `24f2879`) — `yes_price = yes_pool / (yes_pool + no_pool)`, seed 50 pts/side, live price update after trade
-  - [x] User referral system (commit `2fd70c7`) — `?ref=` capture → localStorage → auto-claim after registration, 5/week cap, creator-configurable rewards
+- **This session (March 13)** — all committed, needs push:
+  - Custom domain feature (Premium) — CNAME routing middleware + DNS verification (commit `c5509cd`)
+  - Pro referral analytics access (commit `8e18b29`)
+  - Referral reward preset cards + milestone earnings preview (commit `d2d2721`)
+  - Market ideas speed improvements (commit `97f90a1`)
+  - Bulk market creation from idea cards (commit `099b162`)
+  - Stat card overflow fix (commit `1bb8bb5`)
+  - Community challenges + shareable win cards (commit `053c860`)
+  - Leaderboard upgrades: weekly tab, win rate, accuracy badges (commit `4c41d54`)
+  - Fix 4 UX issues: skeleton HTML, archived markets in overview, reward member modal + endpoint, milestone toasts (commit `b5dae24`)
+  - Tab review: duplicate market, QR code, community URL bar, leaderboard member count, reward buttons on PP/IC rows, win rate in community header (commit `dc742bf`)
 - **Economy Phase 3** (not built):
-  - FAQ section explaining points mechanics to members
+  - Streak broken toast when user loses after a streak
 
 ---
 

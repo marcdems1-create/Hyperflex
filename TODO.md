@@ -14,13 +14,10 @@
 
 ## 🟡 Up Next
 
+- [ ] **PUSH** — `git push origin main` to deploy commits `c5509cd` through `dc742bf`
+- [ ] **Run 2 new migrations** in Supabase SQL editor: `supabase_migration_custom_domains.sql` + `supabase_migration_challenges.sql`
 - [ ] **Landing page video** — Video section built, just needs real YouTube VIDEO_ID inserted in `public/index.html`
-- [ ] **Custom domain** — Premium tier promises it, not implemented in server
 - [ ] **AI scanner improvements** — auto-scan creator's YouTube channel on schedule
-- [x] Activity-gated weekly refills (commit `637977c`)
-- [x] CPMM dynamic odds — pool-based pricing, live price update after trade (commit `24f2879`)
-- [x] User referral system — ?ref= capture, auto-claim, share card, creator-configurable rewards (commit `2fd70c7`)
-- [ ] **FAQ section** — explain how Flex Points work (pending Economy Phase 2 finalization)
 
 ---
 
@@ -61,3 +58,12 @@
 - [x] Analytics dashboard — trade activity chart, top markets, market breakdown, economy health, referrals (Pro/Premium gated) (`a564fa3`)
 - [x] Economy tab — dedicated sidebar tab for all economy settings (`a564fa3`)
 - [x] Supabase migrations — all 4 run and deployed (community_economy, refill_history, cpmm, referrals)
+- [x] Custom domain routing (CNAME + DNS verify, Premium only) (`c5509cd`)
+- [x] Pro referral analytics access + preset cards + milestone preview (`8e18b29`, `d2d2721`)
+- [x] Market ideas speed boost — merged DB queries, trimmed prompt, skeleton loading fix (`97f90a1`, `b5dae24`)
+- [x] Bulk market creation from idea cards (`099b162`)
+- [x] Stat card overflow fix — abbreviation + auto font-size (`1bb8bb5`)
+- [x] Community challenges + shareable win cards (`053c860`)
+- [x] Leaderboard: weekly tab, win rate %, accuracy tier badges 🎯📊🎲 (`4c41d54`)
+- [x] UX fixes: archived markets hidden from overview, 🎁 Reward member modal + endpoint, milestone 🏆 toasts (`b5dae24`)
+- [x] Tab review additions: ↻ Duplicate market, 📱 QR code, community URL bar, leaderboard member count, reward on PP/IC rows, win rate in community header (`dc742bf`)
