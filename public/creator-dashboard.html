@@ -3229,6 +3229,65 @@ body.nav-open .sidebar-backdrop {
             <button class="btn-primary" onclick="saveEconSettings()" style="margin-top:20px">Save Economy Settings</button>
           </div>
         </div>
+
+        <!-- Community Challenge -->
+        <div class="section">
+          <div class="section-header">
+            <div>
+              <div class="section-title">🏆 Community Challenge</div>
+              <div class="section-subtitle">Set a group goal — everyone who participates earns a bonus when the community hits the target</div>
+            </div>
+          </div>
+          <div class="markets-table" style="padding:28px">
+
+            <!-- Active challenge status -->
+            <div id="challengeStatus" style="display:none;margin-bottom:20px;background:var(--surface);border:1.5px solid var(--gold);border-radius:10px;padding:16px 18px">
+              <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+                <div style="font-weight:700;font-size:14px" id="challengeStatusTitle">Active Challenge</div>
+                <div style="font-family:var(--mono);font-size:11px;color:var(--dim)" id="challengeStatusEnd"></div>
+              </div>
+              <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:8px">
+                <div id="challengeStatusBar" style="height:100%;background:var(--gold);border-radius:3px;transition:width .5s"></div>
+              </div>
+              <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--dim)">
+                <span id="challengeStatusProgress"></span>
+                <span id="challengeStatusBonus"></span>
+              </div>
+              <button onclick="clearChallenge()" style="margin-top:12px;background:none;border:1px solid var(--border);color:var(--dim);font-size:12px;padding:6px 12px;border-radius:6px;cursor:pointer">Clear Challenge</button>
+            </div>
+
+            <!-- Create / edit challenge form -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+              <div class="field" style="grid-column:1/-1">
+                <label>Challenge Title</label>
+                <input type="text" id="challengeTitle" placeholder="e.g. Big Prediction Week — hit 100 bets for a bonus!"/>
+              </div>
+              <div class="field">
+                <label>Goal Metric</label>
+                <select id="challengeMetric" style="background:var(--paper);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--sans);font-size:13px;padding:10px 14px;width:100%;outline:none">
+                  <option value="bets">🎯 Total Bets Placed</option>
+                  <option value="members">👥 Active Members</option>
+                  <option value="volume">💎 Volume (pts traded)</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Target Number</label>
+                <input type="number" id="challengeTarget" min="1" placeholder="e.g. 100"/>
+              </div>
+              <div class="field">
+                <label>Bonus Reward (pts per member)</label>
+                <input type="number" id="challengeBonus" min="0" step="10" placeholder="e.g. 200"/>
+                <div style="font-size:12px;color:var(--dim);margin-top:4px">Awarded to everyone who placed at least 1 bet this challenge period</div>
+              </div>
+              <div class="field">
+                <label>End Date</label>
+                <input type="date" id="challengeEndDate"/>
+              </div>
+            </div>
+            <button class="btn-primary" onclick="saveChallenge()" style="margin-top:20px">🏆 Launch Challenge</button>
+          </div>
+        </div>
+
       </div><!-- /tab-economy -->
 
       <!-- ════════════════════════ MARKET IDEAS TAB ════════════════════════ -->
@@ -3952,6 +4011,7 @@ async function init() {
 
 function renderDashboard(data) {
   const { creator, stats, markets, leaderboard } = data;
+  if (data.challenge_progress) renderChallengeStatus(data.challenge_progress);
 
   window.communityName = creator.display_name || '';
   window._pointsName = creator.custom_points_name || 'Flex Points';
@@ -4083,6 +4143,9 @@ function renderDashboard(data) {
     document.getElementById('refillFields').style.display = 'grid';
     document.getElementById('refillTestWrap').style.display = 'block';
   }
+  // Challenge prefill
+  prefillChallenge(creator);
+
   // Referral prefill
   document.getElementById('econReferralReward').value = Math.round((creator.referral_reward ?? 10000) / 100);
   document.getElementById('econWelcomeBonus').value   = Math.round((creator.welcome_bonus   ?? 5000)  / 100);
@@ -4733,6 +4796,65 @@ function updateReferralMilestones() {
       <div class="ms-pts">${total.toLocaleString()}</div>
       <div class="ms-label">pts earned</div>`;
   });
+}
+
+// ── COMMUNITY CHALLENGE ──────────────────────────────────────
+function prefillChallenge(creator) {
+  if (!creator.challenge_metric) return;
+  const si = (id, v) => { const el = document.getElementById(id); if (el && v != null) el.value = v; };
+  si('challengeTitle',   creator.challenge_title || '');
+  si('challengeMetric',  creator.challenge_metric);
+  si('challengeTarget',  creator.challenge_target || '');
+  si('challengeBonus',   creator.challenge_bonus_pts || '');
+  if (creator.challenge_end_date) {
+    si('challengeEndDate', creator.challenge_end_date.split('T')[0]);
+  }
+}
+
+function renderChallengeStatus(progress) {
+  const el = document.getElementById('challengeStatus');
+  if (!el || !progress) return;
+  el.style.display = 'block';
+  document.getElementById('challengeStatusTitle').textContent = progress.title;
+  document.getElementById('challengeStatusBar').style.width = progress.pct + '%';
+  const metricLabel = { bets: 'bets', members: 'members', volume: 'pts volume' }[progress.metric] || '';
+  document.getElementById('challengeStatusProgress').textContent = `${progress.current.toLocaleString()} / ${progress.target.toLocaleString()} ${metricLabel} (${progress.pct}%)`;
+  document.getElementById('challengeStatusBonus').textContent = `+${Math.round(progress.bonus_pts / 100)} pts per member if hit`;
+  document.getElementById('challengeStatusEnd').textContent = 'Ends ' + new Date(progress.end_date).toLocaleDateString();
+}
+
+async function saveChallenge() {
+  const title    = document.getElementById('challengeTitle').value.trim();
+  const metric   = document.getElementById('challengeMetric').value;
+  const target   = parseInt(document.getElementById('challengeTarget').value);
+  const bonus    = parseInt(document.getElementById('challengeBonus').value) || 0;
+  const end_date = document.getElementById('challengeEndDate').value;
+  if (!metric || !target || !end_date) { showToast('Fill in all challenge fields.', 'error'); return; }
+  try {
+    const r = await fetch(API + '/api/creator/challenge', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ title, metric, target, bonus_pts: bonus * 100, end_date })
+    });
+    const d = await r.json();
+    if (d.ok) { showToast('🏆 Challenge launched!', 'success'); init(); }
+    else showToast(d.error || 'Failed.', 'error');
+  } catch { showToast('Network error.', 'error'); }
+}
+
+async function clearChallenge() {
+  try {
+    const r = await fetch(API + '/api/creator/challenge', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ clear: true })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      document.getElementById('challengeStatus').style.display = 'none';
+      showToast('Challenge cleared.', 'success');
+    }
+  } catch {}
 }
 
 function toggleRefillFields() {

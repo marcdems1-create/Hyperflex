@@ -1089,6 +1089,26 @@ body::before {
     <button class="filter-tab"        id="ftMine"  onclick="setFilter('mine')" style="display:none">✓ My Bets <span class="filter-count" id="fcMine">0</span></button>
   </div>
 
+  <!-- Community Challenge banner -->
+  <div id="challengeBanner" style="display:none;margin-bottom:18px;border-radius:12px;overflow:hidden;border:1.5px solid rgba(201,146,13,0.4);background:rgba(201,146,13,0.06)">
+    <div style="padding:14px 18px 10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:18px">🏆</span>
+          <span id="challengeBannerTitle" style="font-weight:700;font-size:14px"></span>
+        </div>
+        <div style="font-size:11px;color:var(--dim)" id="challengeBannerEnd"></div>
+      </div>
+      <div style="height:6px;background:rgba(255,255,255,0.12);border-radius:3px;overflow:hidden;margin-bottom:7px">
+        <div id="challengeBannerBar" style="height:100%;background:var(--primary, #c9920d);border-radius:3px;transition:width .6s;width:0%"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--dim)">
+        <span id="challengeBannerProgress"></span>
+        <span id="challengeBannerBonus" style="color:var(--primary, #c9920d);font-weight:600"></span>
+      </div>
+    </div>
+  </div>
+
   <!-- Markets grid -->
   <div class="markets-grid" id="marketsGrid">
     <div class="skeleton-card">
@@ -1227,6 +1247,31 @@ body::before {
 
 <div class="toast" id="toast"></div>
 
+<!-- Win share card modal -->
+<div id="winCardOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:300;display:none;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#141412;border:1px solid rgba(201,146,13,0.4);border-radius:18px;max-width:400px;width:100%;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.6)">
+    <!-- Card preview -->
+    <div id="winCardPreview" style="padding:28px 28px 20px;text-align:center;background:linear-gradient(135deg,rgba(201,146,13,0.12) 0%,transparent 60%)">
+      <div style="font-size:36px;margin-bottom:10px">🎯</div>
+      <div style="font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:rgba(201,146,13,.7);margin-bottom:10px" id="winCardCommunity"></div>
+      <div style="font-size:16px;font-weight:700;color:#f5f0e8;line-height:1.4;margin-bottom:16px" id="winCardQuestion"></div>
+      <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(22,163,74,0.15);border:1px solid rgba(22,163,74,0.35);border-radius:8px;padding:8px 16px;margin-bottom:8px">
+        <span style="color:#4ade80;font-size:16px">✓</span>
+        <span style="font-weight:700;color:#4ade80;font-size:14px">I called it correctly</span>
+      </div>
+      <div style="font-size:12px;color:rgba(245,240,232,0.45);margin-top:6px" id="winCardSub"></div>
+    </div>
+    <!-- Actions -->
+    <div style="padding:16px 20px;border-top:1px solid rgba(255,255,255,0.07);display:flex;gap:10px;flex-wrap:wrap">
+      <button id="winCardTweetBtn" onclick="shareWinOnX()" style="flex:1;background:#000;border:1px solid #333;color:#fff;padding:10px 14px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:7px">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.253 5.622 5.911-5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+        Share on 𝕏
+      </button>
+      <button onclick="closeWinCard()" style="flex:1;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:rgba(245,240,232,0.7);padding:10px 14px;border-radius:8px;cursor:pointer;font-size:13px">Close</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const API  = window.location.origin;
 // Slug resolution: from pathname (normal) or custom domain (root path)
@@ -1292,6 +1337,7 @@ async function loadCommunity() {
     renderPage();
     renderRewards(allRewards);
     loadLeaderboard();
+    if (data.challenge_progress) renderChallengeBar(data.challenge_progress);
   } catch {
     showCommunityError();
   }
@@ -1618,7 +1664,11 @@ function marketCardHTML(m, isResolved) {
   let actionsHTML;
   if (isResolved) {
     const won = m.outcome === 'YES' || m.outcome === true;
-    actionsHTML = `<div class="outcome-banner ${won ? 'yes' : 'no'}">${won ? '✓ Resolved YES' : '✗ Resolved NO'}</div>`;
+    const userWon = pos && ((won && pos.side === 'YES') || (!won && pos.side === 'NO'));
+    const shareBtn = userWon && currentUser
+      ? `<button onclick="event.stopPropagation();openWinCard(${JSON.stringify(m.question)},${JSON.stringify(community?.display_name||'')},${JSON.stringify(pos?.amount||0)})" style="margin-left:10px;background:rgba(201,146,13,0.15);border:1px solid rgba(201,146,13,0.4);color:#c9920d;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:700">🎉 Share</button>`
+      : '';
+    actionsHTML = `<div class="outcome-banner ${won ? 'yes' : 'no'}" style="display:flex;align-items:center;justify-content:space-between">${won ? '✓ Resolved YES' : '✗ Resolved NO'}${shareBtn}</div>`;
   } else {
     actionsHTML = `<div class="market-actions">
       <button class="btn-predict yes" onclick="onPredict(event,'${m.id}','YES')">
@@ -2202,12 +2252,54 @@ function showToast(msg, type = 'success') {
 }
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeAuth(); closePredict(); }
+  if (e.key === 'Escape') { closeAuth(); closePredict(); closeWinCard(); }
   if (e.key === 'Enter') {
     if (document.getElementById('authOverlay').classList.contains('show'))    submitAuth();
     if (document.getElementById('predictOverlay').classList.contains('show')) submitPredict();
   }
 });
+
+// ── CHALLENGE BANNER ──────────────────────────────────────────
+function renderChallengeBar(p) {
+  const banner = document.getElementById('challengeBanner');
+  if (!banner || !p) return;
+  banner.style.display = 'block';
+  document.getElementById('challengeBannerTitle').textContent = p.title;
+  document.getElementById('challengeBannerBar').style.width = p.pct + '%';
+  const metricLabel = { bets: 'bets', members: 'members', volume: 'pts traded' }[p.metric] || '';
+  document.getElementById('challengeBannerProgress').textContent =
+    `${p.current.toLocaleString()} / ${p.target.toLocaleString()} ${metricLabel} (${p.pct}%)`;
+  const bonusPts = Math.round((p.bonus_pts || 0) / 100);
+  document.getElementById('challengeBannerBonus').textContent =
+    p.complete
+      ? `🏆 Goal hit! +${bonusPts} pts incoming`
+      : bonusPts > 0 ? `+${bonusPts} pts bonus if we hit it` : '';
+  const ends = new Date(p.end_date);
+  document.getElementById('challengeBannerEnd').textContent = 'Ends ' + ends.toLocaleDateString();
+}
+
+// ── WIN SHARE CARD ────────────────────────────────────────────
+let _winCardData = {};
+function openWinCard(question, communityName, ptsWagered) {
+  _winCardData = { question, communityName, ptsWagered };
+  document.getElementById('winCardCommunity').textContent = (communityName || slug).toUpperCase();
+  document.getElementById('winCardQuestion').textContent  = question;
+  document.getElementById('winCardSub').textContent       = ptsWagered > 0
+    ? `${ptsWagered.toLocaleString()} pts on the line · ${community?.custom_points_name || 'Flex Points'}`
+    : community?.custom_points_name || 'Flex Points';
+  const overlay = document.getElementById('winCardOverlay');
+  overlay.style.display = 'flex';
+}
+function closeWinCard() {
+  document.getElementById('winCardOverlay').style.display = 'none';
+}
+function shareWinOnX() {
+  const { question, communityName } = _winCardData;
+  const communityUrl = window.location.origin + '/' + slug;
+  const text = `I predicted this correctly on ${communityName || slug}:\n\n"${question}"\n\nPlay prediction markets at:`;
+  const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(communityUrl)}`;
+  window.open(url, '_blank', 'noopener');
+}
 </script>
 </body>
 </html>

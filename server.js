@@ -3659,6 +3659,94 @@ Return ONLY this JSON:
 // GET /api/community/:slug
 // Returns public data for a creator's community page
 // ════════════════════════════════════════════════════════════
+// ── Community challenge helpers ────────────────────────────────
+async function getChallengeProgress(settings) {
+  if (!settings.challenge_metric || !settings.challenge_target || !settings.challenge_end_date) return null;
+  if (new Date(settings.challenge_end_date) < new Date()) return null; // expired
+
+  const slug = settings.slug;
+  const metric = settings.challenge_metric;
+  let current = 0;
+
+  try {
+    if (metric === 'bets') {
+      // Trades placed since challenge started (approximated by week start Mon)
+      const weekStart = getWeekStart();
+      const { count } = await supabase
+        .from('positions')
+        .select('id', { count: 'exact', head: true })
+        .eq('tenant_slug', slug)
+        .gte('created_at', weekStart);
+      current = count || 0;
+    } else if (metric === 'members') {
+      const { count } = await supabase
+        .from('community_balances')
+        .select('id', { count: 'exact', head: true })
+        .eq('creator_slug', slug);
+      current = count || 0;
+    } else if (metric === 'volume') {
+      const { data: mkts } = await supabase
+        .from('markets')
+        .select('volume')
+        .or(`tenant_slug.eq.${slug},creator_id.eq.${settings.creator_id}`)
+        .eq('is_public', true);
+      current = Math.round((mkts || []).reduce((s, m) => s + (m.volume || 0), 0) / 100);
+    }
+  } catch {}
+
+  return {
+    current,
+    target:     settings.challenge_target,
+    pct:        Math.min(100, Math.round((current / settings.challenge_target) * 100)),
+    complete:   current >= settings.challenge_target,
+    end_date:   settings.challenge_end_date,
+    bonus_pts:  settings.challenge_bonus_pts || 0,
+    title:      settings.challenge_title || 'Community Challenge',
+    metric
+  };
+}
+
+function getWeekStart() {
+  const now = new Date();
+  const day = now.getUTCDay(); // 0=Sun
+  const diff = (day === 0 ? -6 : 1 - day);
+  const mon = new Date(now);
+  mon.setUTCDate(now.getUTCDate() + diff);
+  mon.setUTCHours(0, 0, 0, 0);
+  return mon.toISOString();
+}
+
+// PUT /api/creator/challenge — set or clear active challenge
+app.put('/api/creator/challenge', requireCreator, async (req, res) => {
+  try {
+    const { title, metric, target, bonus_pts, end_date, clear } = req.body;
+
+    if (clear) {
+      await supabase.from('creator_settings').update({
+        challenge_title: null, challenge_metric: null,
+        challenge_target: null, challenge_bonus_pts: 0, challenge_end_date: null
+      }).eq('creator_id', req.creator.id);
+      return res.json({ ok: true });
+    }
+
+    if (!metric || !['bets','members','volume'].includes(metric)) return res.status(400).json({ error: 'metric must be bets, members, or volume' });
+    if (!target || target < 1) return res.status(400).json({ error: 'target required' });
+    if (!end_date) return res.status(400).json({ error: 'end_date required' });
+
+    await supabase.from('creator_settings').update({
+      challenge_title:     title    || 'Community Challenge',
+      challenge_metric:    metric,
+      challenge_target:    parseInt(target),
+      challenge_bonus_pts: Math.max(0, parseInt(bonus_pts) || 0),
+      challenge_end_date:  new Date(end_date).toISOString()
+    }).eq('creator_id', req.creator.id);
+
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/community/:slug', async (req, res) => {
   try {
     const { slug } = req.params;
@@ -3704,7 +3792,13 @@ app.get('/api/community/:slug', async (req, res) => {
         social_twitter:       settings.social_twitter  || null,
         social_youtube:       settings.social_youtube  || null,
         social_discord:       settings.social_discord  || null,
-        social_twitch:        settings.social_twitch   || null
+        social_twitch:        settings.social_twitch   || null,
+        // Community challenge
+        challenge_title:      settings.challenge_title      || null,
+        challenge_metric:     settings.challenge_metric     || null,
+        challenge_target:     settings.challenge_target     || null,
+        challenge_bonus_pts:  settings.challenge_bonus_pts  || 0,
+        challenge_end_date:   settings.challenge_end_date   || null
       },
       markets: markets || [],
       rewards: await supabase
@@ -3712,7 +3806,8 @@ app.get('/api/community/:slug', async (req, res) => {
         .select('id, threshold, title, description')
         .eq('creator_id', settings.creator_id)
         .order('threshold', { ascending: true })
-        .then(r => r.data || [])
+        .then(r => r.data || []),
+      challenge_progress: await getChallengeProgress(settings)
     });
 
   } catch (err) {
