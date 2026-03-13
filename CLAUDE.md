@@ -7,7 +7,7 @@
 
 ## What This Project Is
 
-**HYPERFLEX** is a B2B SaaS platform where creators set up branded prediction markets for their communities. Play-money only (Flex Points). AI-powered market generation via YouTube scanner. Free / Pro ($29) / Platinum ($99) tiers.
+**HYPERFLEX** is a B2B SaaS platform where creators set up branded prediction markets for their communities. Play-money only (Flex Points). AI-powered market generation via YouTube scanner. Free / Pro ($29) / Premium ($99) tiers.
 
 **Live:** https://hyperflex.network
 **Railway:** auto-deploys from `git push origin main`
@@ -33,16 +33,22 @@
 
 ---
 
-## Current State (last updated March 12, 2026)
+## Current State (last updated March 13, 2026)
 
-- All features live on Railway. Latest commit: `4d8db02`
-- **Stripe payments live** — Pro ($29/mo) + Platinum ($99/mo) checkout + billing portal
-  - Needs Railway env vars: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRO_PRICE_ID`, `STRIPE_PLATINUM_PRICE_ID`
-  - Webhook endpoint: `https://hyperflex.network/stripe/webhook`
+- All features live on Railway. Latest commit: `b0b62d8`
+- **Stripe payments live** — Pro ($29/mo) + Premium ($99/mo) checkout + billing portal
+  - Railway env vars needed: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRO_PRICE_ID`, `STRIPE_PLATINUM_PRICE_ID`
+  - Webhook endpoint registered at: `https://hyperflex.network/stripe/webhook`
+  - Webhook events: `checkout.session.completed`, `customer.subscription.deleted`, `customer.subscription.paused`, `customer.subscription.updated`
+  - **NOTE:** package-lock.json must be regenerated locally with `npm install` — Railway deploy was failing due to missing stripe in lockfile. Marc was running `npm install && git add package-lock.json && git commit && git push` via Claude Code at session end.
 - **Admin dashboard** at `/admin` — password-gated, creator table, inline plan control
-  - Needs Railway env var: `ADMIN_SECRET`
-- **OAuth**: Google fully working. X/Twitter works (name + username), no email by design (Twitter API restriction)
-- **creator_settings** is the canonical table for plan/slug/display_name (not `communities`)
+  - Railway env var needed: `ADMIN_SECRET`
+- **OAuth**: Google fully working. X/Twitter works (name + username only — Twitter doesn't return email via API)
+- **Premium rebrand**: "Platinum" renamed to "Premium" in all UI. DB value stays `'platinum'` — do NOT change DB value.
+- **Watermark**: shown on Free + Pro, hidden on Premium only
+- **Video section**: added to landing page — replace `VIDEO_ID` in `public/index.html` with real YouTube video ID when ready
+- **Suggest questions fix**: was using wrong localStorage key (`creator_token` → `hf_token`), now fixed
+- **creator_settings** is the canonical creator table (not `communities`)
 - Stripe webhook updates `creator_settings.plan` on checkout + cancellation
 
 ## To deploy: `git push origin main` (Claude cannot push — no internet from VM)
@@ -53,18 +59,20 @@
 
 1. **Read this file + HYPERFLEX_Brief.md + TODO.md at session start** before touching anything
 2. **Update all three files at session end** — what was done, what's committed, what's next
-3. **Never push** — user pushes from their terminal
+3. **Never push** — user pushes from their terminal or Claude Code
 4. **Always check git status** before assuming what's deployed vs local
-5. **Brief font/color system:** Syne (display) + Space Mono (mono), gold `#c9920d`, paper `#141412`
+5. **Font/color system:** Syne (display) + Space Mono (mono), gold `#c9920d`, paper `#141412`
 6. **DB:** `creator_settings` is the main creator table (not `communities`)
+7. **Plan values in DB:** `'free'`, `'pro'`, `'platinum'` — display as Free / Pro / Premium in UI
 
 ---
 
 ## Known Issues / Next Up
 
-- Custom domain for Platinum not implemented (TODO)
+- `package-lock.json` may need regenerating if Stripe install wasn't committed yet
+- Custom domain for Premium not implemented yet
+- Video section on landing page needs real YouTube VIDEO_ID
 - Old `index.html` at project root should be removed eventually
-- Stripe billing portal requires "Customer Portal" enabled in Stripe dashboard settings
 
 ---
 
