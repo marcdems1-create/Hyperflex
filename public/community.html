@@ -234,36 +234,128 @@ body::before {
   margin-bottom: 18px;
   max-width: 560px;
 }
-.hero-stats-row {
+/* ── Compact stat pills replacing old stats row ── */
+.hero-mini-stats {
   display: flex;
-  gap: 0;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.hero-mini-stat {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   background: var(--cream);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  overflow: hidden;
-  margin-bottom: 20px;
-}
-.hero-stat {
-  flex: 1;
-  padding: 14px 18px;
-  border-right: 1px solid var(--border);
-  text-align: center;
-}
-.hero-stat:last-child { border-right: none; }
-.hero-stat-val {
-  font-size: 20px;
-  font-weight: 800;
-  color: var(--text);
-  line-height: 1;
-  margin-bottom: 4px;
-}
-.hero-stat-val.gold { color: var(--gold); }
-.hero-stat-label {
-  font-family: var(--mono);
-  font-size: 9px;
+  border-radius: 20px;
+  padding: 5px 12px;
+  font-size: 12px;
   color: var(--dim);
-  letter-spacing: 0.1em;
+}
+.hero-mini-stat strong { color: var(--text); font-weight: 700; }
+.hero-mini-stat.gold strong { color: var(--gold); }
+
+/* ── Market carousel ── */
+@keyframes carouselScroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.carousel-section {
+  margin-bottom: 24px;
+  overflow: hidden;
+  position: relative;
+}
+/* Fade edges */
+.carousel-section::before,
+.carousel-section::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 48px;
+  z-index: 2;
+  pointer-events: none;
+}
+.carousel-section::before {
+  left: 0;
+  background: linear-gradient(to right, var(--paper), transparent);
+}
+.carousel-section::after {
+  right: 0;
+  background: linear-gradient(to left, var(--paper), transparent);
+}
+.carousel-track {
+  display: flex;
+  gap: 10px;
+  width: max-content;
+  animation: carouselScroll 35s linear infinite;
+  will-change: transform;
+}
+.carousel-track:hover { animation-play-state: paused; }
+.carousel-card {
+  flex-shrink: 0;
+  width: 210px;
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  cursor: pointer;
+  transition: border-color .15s, transform .15s;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.carousel-card:hover {
+  border-color: var(--gold);
+  transform: translateY(-2px);
+}
+.carousel-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .04em;
   text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 20px;
+  width: fit-content;
+}
+.carousel-badge.hot      { background: rgba(239,68,68,0.12);  color: #ef4444; }
+.carousel-badge.upcoming { background: rgba(59,130,246,0.12); color: #60a5fa; }
+.carousel-badge.ending   { background: rgba(234,179,8,0.12);  color: #eab308; }
+.carousel-question {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  flex: 1;
+}
+.carousel-odds {
+  display: flex;
+  gap: 5px;
+}
+.carousel-odds-yes,
+.carousel-odds-no {
+  flex: 1;
+  text-align: center;
+  padding: 5px 0;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.carousel-odds-yes { background: rgba(74,222,128,0.12); color: #4ade80; }
+.carousel-odds-no  { background: rgba(248,113,113,0.12); color: #f87171; }
+.carousel-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+  color: var(--dim);
+  font-family: var(--mono);
 }
 .social-row {
   display: flex;
@@ -868,8 +960,8 @@ body::before {
   .hero-body { padding: 14px 16px 0; }
   .content { padding: 0 16px 60px; }
   .header { padding: 0 16px; }
-  .hero-stats-row { display: grid; grid-template-columns: 1fr 1fr; }
-  .hero-stat:nth-child(3) { grid-column: 1/-1; border-right: none; border-top: 1px solid var(--border); }
+  .carousel-card { width: 180px; }
+  .carousel-section::before, .carousel-section::after { width: 24px; }
   .market-top { flex-wrap: wrap; }
   .market-badges { width: 100%; justify-content: flex-start; order: -1; }
   .lb-correct { display: none; }
@@ -913,22 +1005,18 @@ body::before {
   <div class="hero-body">
     <p class="hero-desc" id="heroDesc">Make predictions, earn points, climb the leaderboard.</p>
     <div id="socialRow" class="social-row" style="display:none"></div>
-    <div class="hero-stats-row">
-      <div class="hero-stat">
-        <div class="hero-stat-val" id="statMarkets">—</div>
-        <div class="hero-stat-label">Open Markets</div>
-      </div>
-      <div class="hero-stat">
-        <div class="hero-stat-val" id="statTraders">—</div>
-        <div class="hero-stat-label">Members</div>
-      </div>
-      <div class="hero-stat">
-        <div class="hero-stat-val gold" id="statPoints">—</div>
-        <div class="hero-stat-label" id="statPointsLabel">Points Name</div>
-      </div>
+    <div class="hero-mini-stats">
+      <div class="hero-mini-stat"><strong id="statMarkets">—</strong> open markets</div>
+      <div class="hero-mini-stat"><strong id="statTraders">—</strong> members</div>
+      <div class="hero-mini-stat gold"><strong id="statPoints">—</strong> <span id="statPointsLabel">pts</span></div>
     </div>
   </div>
 </section>
+
+<!-- Market Carousel — replaces old stats row -->
+<div class="carousel-section" id="carouselSection" style="display:none">
+  <div class="carousel-track" id="carouselTrack"></div>
+</div>
 
 <!-- Content -->
 <main class="content">
@@ -1260,7 +1348,7 @@ function renderPage() {
   document.getElementById('statMarkets').textContent  = active.length;
   document.getElementById('statTraders').textContent  = totalTraders;
   document.getElementById('statPoints').textContent   = c.custom_points_name || 'Flex Points';
-  document.getElementById('statPointsLabel').textContent = 'Points Currency';
+  document.getElementById('statPointsLabel').textContent = 'currency';
   document.getElementById('amountUnit').textContent   = 'pts';
 
   // Watermark
@@ -1272,6 +1360,9 @@ function renderPage() {
   // Build filter counts + render
   buildFilterCounts();
   renderFilteredMarkets();
+
+  // Build hero carousel
+  buildCarousel(markets.filter(m => !m.resolved));
 
   // Resolved
   if (resolved.length > 0) {
@@ -1299,6 +1390,99 @@ function isHot(m)         { return (m.trader_count || 0) >= 5; }
 function isClosingSoon(m) {
   const diff = new Date(m.expiry_date) - new Date();
   return diff > 0 && diff < 72 * 60 * 60 * 1000;
+}
+
+// ── MARKET CAROUSEL ───────────────────────────────────────
+function buildCarousel(activeMarkets) {
+  const section = document.getElementById('carouselSection');
+  const track   = document.getElementById('carouselTrack');
+  if (!section || !track || !activeMarkets.length) return;
+
+  const now = new Date();
+
+  // Categorise markets
+  const ending  = [...activeMarkets]
+    .filter(m => { const d = new Date(m.expiry_date) - now; return d > 0 && d < 72*60*60*1000; })
+    .sort((a,b) => new Date(a.expiry_date) - new Date(b.expiry_date));
+
+  const hot     = [...activeMarkets]
+    .filter(m => (m.trader_count||0) >= 5)
+    .sort((a,b) => (b.trader_count||0) - (a.trader_count||0));
+
+  // Up & Coming = active, not hot, not ending soon (or newly created)
+  const usedIds = new Set([...ending, ...hot].map(m => m.id));
+  const upcoming = [...activeMarkets]
+    .filter(m => !usedIds.has(m.id))
+    .sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+
+  // Build tagged list: interleave categories for visual variety
+  const tagged = [];
+  const cats = [
+    { key: 'hot',      label: '🔥 Hot Topic',    cls: 'hot',      items: hot },
+    { key: 'upcoming', label: '📅 Up & Coming',  cls: 'upcoming', items: upcoming },
+    { key: 'ending',   label: '⏰ Ending Soon',   cls: 'ending',   items: ending  }
+  ].filter(c => c.items.length);
+
+  if (!cats.length) return;
+
+  // Round-robin pick up to 3 from each category
+  const maxPerCat = 4;
+  cats.forEach(c => c.items.slice(0, maxPerCat).forEach(m => tagged.push({ m, cat: c })));
+
+  // Need at least a few cards for the loop to feel good
+  if (tagged.length < 3) return;
+
+  function cardHTML(item) {
+    const { m, cat } = item;
+    const yesP = Math.round((m.yes_price || 0.5) * 100);
+    const noP  = 100 - yesP;
+    const traders = m.trader_count || 0;
+    const diff = new Date(m.expiry_date) - now;
+    const days = diff > 0 ? Math.ceil(diff / (1000*60*60*24)) : 0;
+    const timeStr = diff <= 0 ? 'Closed' : days <= 1
+      ? Math.ceil(diff/(1000*60*60)) + 'h left'
+      : days + 'd left';
+    return `<div class="carousel-card" onclick="openMarket(${JSON.stringify(m.id)})">
+      <span class="carousel-badge ${cat.cls}">${cat.label}</span>
+      <div class="carousel-question">${escHtml(m.question)}</div>
+      <div class="carousel-odds">
+        <div class="carousel-odds-yes">YES ${yesP}%</div>
+        <div class="carousel-odds-no">NO ${noP}%</div>
+      </div>
+      <div class="carousel-footer">
+        <span>${traders} trader${traders!==1?'s':''}</span>
+        <span>${timeStr}</span>
+      </div>
+    </div>`;
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  const html = tagged.map(cardHTML).join('');
+  // Duplicate for seamless infinite loop
+  track.innerHTML = html + html;
+
+  // Set animation duration proportional to card count (each card ~4s)
+  const dur = tagged.length * 4;
+  track.style.animationDuration = dur + 's';
+
+  section.style.display = 'block';
+}
+
+function openMarket(id) {
+  // Scroll to the market card and click it if it exists
+  const card = document.querySelector(`[data-market-id="${id}"]`);
+  if (card) { card.scrollIntoView({ behavior:'smooth', block:'center' }); card.click(); }
+  else {
+    // Market is in a different filter — switch to All and find it
+    setFilter('all');
+    setTimeout(() => {
+      const c2 = document.querySelector(`[data-market-id="${id}"]`);
+      if (c2) { c2.scrollIntoView({ behavior:'smooth', block:'center' }); c2.click(); }
+    }, 100);
+  }
 }
 
 function setFilter(f) {
@@ -1377,7 +1561,7 @@ function marketCardHTML(m, isResolved) {
   }
 
   return `
-    <div class="market-card${isResolved ? ' resolved' : ''}${pos ? ' has-position' : ''}" id="mkt-${m.id}">
+    <div class="market-card${isResolved ? ' resolved' : ''}${pos ? ' has-position' : ''}" id="mkt-${m.id}" data-market-id="${m.id}">
       <div class="market-card-inner">
         <div class="market-top">
           <div class="market-question">${escHtml(m.question)}</div>

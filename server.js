@@ -2027,11 +2027,12 @@ app.get('/api/creator/analytics', requireCreator, async (req, res) => {
     const plan = settings?.plan || 'free';
 
     // Get all markets for this creator
-    const { data: markets } = await supabase
+    const { data: markets, error: marketsErr } = await supabase
       .from('markets')
-      .select('id, question, trader_count, volume, resolved, archived, created_at, yes_price, no_price')
+      .select('id, question, trader_count, volume, resolved, archived, created_at, yes_price')
       .eq('creator_id', creatorId)
       .order('created_at', { ascending: false });
+    if (marketsErr) console.error('[analytics] markets query error:', marketsErr.message, marketsErr.details);
 
     const allMarkets = markets || [];
     const activeMarkets   = allMarkets.filter(m => !m.resolved && !m.archived);
