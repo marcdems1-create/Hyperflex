@@ -114,7 +114,7 @@ app.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (re
   res.json({ received: true });
 });
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 app.use(require("express").static("public"));
 
 // Tenant: subdomain from host (e.g. acme.hyperflex.io → req.tenant.subdomain = 'acme')
