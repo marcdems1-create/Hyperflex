@@ -2710,7 +2710,7 @@ app.post('/api/creator/oauth-complete', async (req, res) => {
 // ════════════════════════════════════════════════════════════
 const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
-  'trade', 'register', 'login', 'favicon.ico', 'robots.txt'
+  'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin'
 ]);
 
 // Read community.html once at startup and cache it
