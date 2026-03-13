@@ -1893,7 +1893,16 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
         activity_gate: settings.activity_gate ?? 5,
         // Referral fields
         referral_reward: settings.referral_reward ?? 10000,
-        welcome_bonus:   settings.welcome_bonus   ?? 5000
+        welcome_bonus:   settings.welcome_bonus   ?? 5000,
+        // Branding fields
+        logo_url:            settings.logo_url   || null,
+        banner_url:          settings.banner_url || null,
+        font_choice:         settings.font_choice || 'Syne',
+        social_twitter:      settings.social_twitter  || null,
+        social_youtube:      settings.social_youtube  || null,
+        social_discord:      settings.social_discord  || null,
+        social_twitch:       settings.social_twitch   || null,
+        community_description: settings.community_description || null
       },
       stats: {
         total_traders: totalTraders,
@@ -2078,7 +2087,11 @@ app.put('/api/creator/settings', requireCreator, async (req, res) => {
       starting_balance, min_bet, max_bet,
       refill_enabled, refill_amount, refill_cadence, activity_gate,
       // Referral fields
-      referral_reward, welcome_bonus
+      referral_reward, welcome_bonus,
+      // Branding fields
+      logo_url, banner_url, font_choice,
+      social_twitter, social_youtube, social_discord, social_twitch,
+      community_description
     } = req.body;
 
     const updates = {
@@ -2099,6 +2112,15 @@ app.put('/api/creator/settings', requireCreator, async (req, res) => {
     // Referral fields
     if (referral_reward !== undefined) updates.referral_reward = Math.max(0, parseInt(referral_reward) || 0);
     if (welcome_bonus   !== undefined) updates.welcome_bonus   = Math.max(0, parseInt(welcome_bonus) || 0);
+    // Branding fields
+    if (logo_url   !== undefined) updates.logo_url   = logo_url   || null;
+    if (banner_url !== undefined) updates.banner_url = banner_url || null;
+    if (font_choice !== undefined && ['Syne','Space Grotesk','Inter','Playfair Display','Montserrat','Raleway'].includes(font_choice)) updates.font_choice = font_choice;
+    if (social_twitter !== undefined) updates.social_twitter = social_twitter || null;
+    if (social_youtube !== undefined) updates.social_youtube = social_youtube || null;
+    if (social_discord !== undefined) updates.social_discord = social_discord || null;
+    if (social_twitch  !== undefined) updates.social_twitch  = social_twitch  || null;
+    if (community_description !== undefined) updates.community_description = community_description || null;
 
     const { error } = await supabase
       .from('creator_settings')
@@ -3198,17 +3220,26 @@ app.get('/api/community/:slug', async (req, res) => {
 
     res.json({
       community: {
-        display_name: settings.display_name,
-        slug: settings.slug,
-        custom_points_name: settings.custom_points_name,
-        primary_color: settings.primary_color,
-        plan: settings.plan || 'free',
-        // Economy settings (safe to expose — used by frontend for UI enforcement)
-        starting_balance: settings.starting_balance ?? 100000,
-        min_bet: settings.min_bet ?? 1000,
-        max_bet: settings.max_bet ?? null,
-        referral_reward: settings.referral_reward ?? 10000,
-        welcome_bonus: settings.welcome_bonus ?? 5000
+        display_name:         settings.display_name,
+        slug:                 settings.slug,
+        custom_points_name:   settings.custom_points_name,
+        primary_color:        settings.primary_color,
+        community_description: settings.community_description || null,
+        plan:                 settings.plan || 'free',
+        // Economy settings
+        starting_balance:     settings.starting_balance ?? 100000,
+        min_bet:              settings.min_bet ?? 1000,
+        max_bet:              settings.max_bet ?? null,
+        referral_reward:      settings.referral_reward ?? 10000,
+        welcome_bonus:        settings.welcome_bonus ?? 5000,
+        // Branding
+        logo_url:             settings.logo_url   || null,
+        banner_url:           settings.banner_url || null,
+        font_choice:          settings.font_choice || 'Syne',
+        social_twitter:       settings.social_twitter  || null,
+        social_youtube:       settings.social_youtube  || null,
+        social_discord:       settings.social_discord  || null,
+        social_twitch:        settings.social_twitch   || null
       },
       markets: markets || [],
       rewards: await supabase
@@ -3882,6 +3913,144 @@ app.get('/api/admin/platform-stats', requireAdmin, async (req, res) => {
     });
   } catch (err) {
     console.error('[admin] platform-stats error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── CREATOR SELF-DELETE ───────────────────────────────────
+// DELETE /api/creator/account
+// Permanently deletes the authenticated creator's account and all associated data.
+app.delete('/api/creator/account', requireCreator, async (req, res) => {
+  try {
+    const creatorId = req.creator.id;
+    const { data: settings } = await supabase
+      .from('creator_settings')
+      .select('slug')
+      .eq('creator_id', creatorId)
+      .single();
+    const slug = settings?.slug;
+
+    // Delete in dependency order
+    if (slug) {
+      await supabase.from('referral_history').delete().eq('creator_slug', slug);
+      await supabase.from('refill_history').delete().eq('creator_slug', slug);
+      await supabase.from('community_balances').delete().eq('creator_slug', slug);
+    }
+    // Get market IDs to delete positions
+    const { data: markets } = await supabase.from('markets').select('id').eq('creator_id', creatorId);
+    const marketIds = (markets || []).map(m => m.id);
+    if (marketIds.length) {
+      await supabase.from('positions').delete().in('market_id', marketIds);
+      await supabase.from('markets').delete().in('id', marketIds);
+    }
+    await supabase.from('creator_settings').delete().eq('creator_id', creatorId);
+    await supabase.from('creator_rewards').delete().eq('creator_id', creatorId);
+    await supabase.from('users').delete().eq('id', creatorId);
+
+    console.log(`[account-delete] Creator ${creatorId} (${slug}) deleted their account`);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[account-delete] error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── ADMIN DELETE USER ────────────────────────────────────
+// DELETE /api/admin/user/:id
+app.delete('/api/admin/user/:id', requireAdmin, async (req, res) => {
+  try {
+    const userId = req.params.id;
+
+    // Check if creator
+    const { data: settings } = await supabase
+      .from('creator_settings')
+      .select('slug')
+      .eq('creator_id', userId)
+      .maybeSingle();
+    const slug = settings?.slug;
+
+    if (slug) {
+      await supabase.from('referral_history').delete().eq('creator_slug', slug);
+      await supabase.from('refill_history').delete().eq('creator_slug', slug);
+      await supabase.from('community_balances').delete().eq('creator_slug', slug);
+      const { data: markets } = await supabase.from('markets').select('id').eq('creator_id', userId);
+      const marketIds = (markets || []).map(m => m.id);
+      if (marketIds.length) {
+        await supabase.from('positions').delete().in('market_id', marketIds);
+        await supabase.from('markets').delete().in('id', marketIds);
+      }
+      await supabase.from('creator_settings').delete().eq('creator_id', userId);
+      await supabase.from('creator_rewards').delete().eq('creator_id', userId);
+    }
+
+    // Member-only cleanup
+    await supabase.from('community_balances').delete().eq('user_id', userId);
+    await supabase.from('referral_history').delete().or(`referrer_id.eq.${userId},referred_id.eq.${userId}`);
+    await supabase.from('positions').delete().eq('user_id', userId);
+    await supabase.from('users').delete().eq('id', userId);
+
+    console.log(`[admin-delete] User ${userId} deleted by admin`);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[admin-delete] error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── FLEX BOT ─────────────────────────────────────────────
+// POST /api/creator/flexbot
+// Premium-only. Takes messages array, returns Claude response.
+app.post('/api/creator/flexbot', requireCreator, async (req, res) => {
+  try {
+    const { messages } = req.body;
+    if (!Array.isArray(messages) || !messages.length) {
+      return res.status(400).json({ error: 'messages array required' });
+    }
+
+    // Plan check
+    const { data: settings } = await supabase
+      .from('creator_settings')
+      .select('plan, slug, display_name, starting_balance, min_bet, max_bet, refill_enabled, refill_amount')
+      .eq('creator_id', req.creator.id)
+      .single();
+
+    if (!settings || settings.plan !== 'platinum') {
+      return res.status(403).json({ error: 'FLEX BOT is available on Premium plans only.' });
+    }
+
+    const systemPrompt = `You are FLEX BOT, an AI assistant built into HYPERFLEX — a B2B SaaS platform where creators build branded prediction markets for their communities using play-money Flex Points.
+
+The creator you're helping runs the community: "${settings.display_name || 'Unknown'}" (slug: ${settings.slug || 'unknown'}).
+Their current economy settings: starting balance ${Math.round((settings.starting_balance || 100000) / 100)} pts, min bet ${Math.round((settings.min_bet || 1000) / 100)} pts${settings.max_bet ? `, max bet ${Math.round(settings.max_bet / 100)} pts` : ''}, weekly refill ${settings.refill_enabled ? `enabled (${Math.round((settings.refill_amount || 10000) / 100)} pts)` : 'disabled'}.
+
+You help creators with:
+- Understanding and using HYPERFLEX features
+- Setting up and tuning their points economy (starting balance, min/max bets, weekly refills, referral rewards)
+- Interpreting their analytics dashboard
+- Writing engaging prediction market questions for their community
+- Growing their member base and engagement
+- Best practices for prediction markets
+
+Key platform features:
+- Markets: Binary yes/no prediction markets with CPMM dynamic odds
+- AI Scanner: Generate markets from YouTube videos, transcripts, or pasted content
+- Economy: Per-community Flex Points — configurable starting balance, bet limits, weekly refills
+- Referrals: Members share invite links, both referrer and new member get rewarded
+- Leaderboard: Rankings with streak multipliers (3+ wins = 1.5×, 5+ wins = 2×)
+- Analytics: Trade activity charts, top markets, economy health, referral stats
+
+Keep responses concise, practical, and specific to prediction markets. Use bullet points when listing steps. Never make up features that don't exist.`;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1024,
+      system: systemPrompt,
+      messages: messages.slice(-20) // cap at 20 messages to manage context
+    });
+
+    res.json({ reply: response.content[0]?.text || '' });
+  } catch (err) {
+    console.error('[flexbot] error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

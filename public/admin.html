@@ -503,6 +503,7 @@
               <th style="text-align:center">Trades</th>
               <th style="text-align:right">Total Balance (pts)</th>
               <th>Joined</th>
+              <th></th>
             </tr>
           </thead>
           <tbody id="usersBody"></tbody>
@@ -670,8 +671,28 @@ function renderUsersTable(rows) {
         <td class="td-markets">${u.trades}</td>
         <td style="text-align:right;font-family:monospace;font-size:12px">${pts}</td>
         <td class="td-date">${joined}</td>
+        <td><button class="set-plan-btn" style="background:rgba(239,68,68,0.15);border-color:#ef4444;color:#ef4444" onclick="adminDeleteUser('${esc(u.id)}', '${esc(u.display_name || u.email)}')">Delete</button></td>
       </tr>`;
   }).join('');
+}
+
+async function adminDeleteUser(userId, name) {
+  if (!confirm(`Permanently delete "${name}" and all their data? This cannot be undone.`)) return;
+  try {
+    const r = await fetch(API + '/api/admin/user/' + userId + '?secret=' + encodeURIComponent(adminSecret), {
+      method: 'DELETE'
+    });
+    const data = await r.json();
+    if (data.ok) {
+      allUsers = allUsers.filter(u => u.id !== userId);
+      filterUsers();
+      showToast('User deleted.');
+    } else {
+      showToast(data.error || 'Delete failed.', 'error');
+    }
+  } catch {
+    showToast('Network error.', 'error');
+  }
 }
 
 function filterTable() {

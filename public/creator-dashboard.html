@@ -638,7 +638,7 @@ body.plan-premium .main {
   display: flex;
   justify-content: space-between;
   font-size: 12px;
-  color: var(--ink);
+  color: var(--text);
 }
 .bar-row-label span:last-child { color: var(--dim); font-family: var(--mono); }
 .bar-track {
@@ -710,6 +710,178 @@ body.plan-premium .main {
   .analytics-stat-grid { grid-template-columns: 1fr; }
   .econ-health-grid { grid-template-columns: 1fr; }
 }
+
+/* FLEX BOT chat */
+.flexbot-wrap {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 220px);
+  min-height: 400px;
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.flexbot-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--paper);
+}
+.flexbot-header-icon { font-size: 22px; }
+.flexbot-header-title { font-weight: 700; font-size: 15px; font-family: var(--display); }
+.flexbot-header-sub { font-size: 11px; color: var(--dim); margin-top:1px; }
+.flexbot-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.flexbot-msg {
+  max-width: 80%;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+.flexbot-msg.user {
+  align-self: flex-end;
+  background: var(--gold);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+.flexbot-msg.bot {
+  align-self: flex-start;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-bottom-left-radius: 4px;
+}
+.flexbot-msg.thinking {
+  align-self: flex-start;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  color: var(--dim);
+  font-style: italic;
+}
+.flexbot-input-row {
+  display: flex;
+  gap: 10px;
+  padding: 14px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--paper);
+}
+.flexbot-input {
+  flex: 1;
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 13px;
+  padding: 10px 14px;
+  resize: none;
+  outline: none;
+  min-height: 40px;
+  max-height: 120px;
+}
+.flexbot-input:focus { border-color: var(--gold); }
+.flexbot-send {
+  background: var(--gold);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 700;
+  font-family: var(--sans);
+  font-size: 13px;
+  padding: 10px 18px;
+  align-self: flex-end;
+  transition: opacity .15s;
+}
+.flexbot-send:disabled { opacity: 0.5; cursor: default; }
+.flexbot-starter-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 16px;
+}
+.flexbot-starter {
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--dim);
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 12px;
+  padding: 10px 12px;
+  text-align: left;
+  transition: border-color .15s, color .15s;
+  line-height: 1.4;
+}
+.flexbot-starter:hover { border-color: var(--gold); color: var(--text); }
+
+/* Branding preview */
+.branding-preview {
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  margin-bottom: 20px;
+}
+.branding-preview-banner {
+  height: 80px;
+  background: var(--border);
+  background-size: cover;
+  background-position: center;
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  padding: 10px 16px;
+}
+.branding-preview-logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid var(--paper);
+  background: var(--cream);
+  object-fit: cover;
+  margin-bottom: -22px;
+}
+.branding-preview-name {
+  margin-left: 12px;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text);
+  margin-bottom: -22px;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+}
+/* Danger zone */
+.danger-zone {
+  border: 1px solid rgba(239,68,68,0.3);
+  border-radius: 10px;
+  padding: 20px 24px;
+  margin-top: 32px;
+}
+.danger-zone-title { color: #ef4444; font-weight: 700; font-size: 14px; margin-bottom: 6px; }
+.danger-zone-sub { font-size: 12px; color: var(--dim); margin-bottom: 16px; }
+.btn-danger {
+  background: transparent;
+  border: 1px solid #ef4444;
+  border-radius: 8px;
+  color: #ef4444;
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 18px;
+  transition: all .15s;
+}
+.btn-danger:hover { background: rgba(239,68,68,0.1); }
 
 /* Market filter pills */
 .mkt-filter-pills { display: flex; gap: 6px; }
@@ -1846,6 +2018,13 @@ body.plan-premium .main {
       <a class="nav-item" onclick="showTab('economy')">
         <span class="nav-icon">⚡</span><span class="nav-label">Economy</span>
       </a>
+      <a class="nav-item" onclick="showTab('branding')">
+        <span class="nav-icon">🎨</span><span class="nav-label">Branding</span>
+      </a>
+      <a class="nav-item" id="flexbotNavItem" onclick="showTab('flexbot')" style="display:none">
+        <span class="nav-icon">🤖</span><span class="nav-label">FLEX BOT</span>
+        <span class="nav-badge" style="background:var(--gold);color:#fff;font-size:9px;padding:1px 5px">AI</span>
+      </a>
       <a class="nav-item" onclick="showTab('settings')">
         <span class="nav-icon">⚙️</span><span class="nav-label">Settings</span>
       </a>
@@ -2173,6 +2352,17 @@ body.plan-premium .main {
             <div class="loading-row">Loading rewards...</div>
           </div>
         </div>
+
+        <!-- Danger Zone -->
+        <div class="section">
+          <div class="markets-table" style="padding:28px">
+            <div class="danger-zone">
+              <div class="danger-zone-title">⚠️ Danger Zone</div>
+              <div class="danger-zone-sub">Permanently delete your account, all markets, all community data, and all member balances. This cannot be undone.</div>
+              <button class="btn-danger" onclick="openDeleteAccountModal()">Delete My Account</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- ═══════════════════════════════════ ANALYTICS TAB ═══════════════════════════ -->
@@ -2411,10 +2601,156 @@ body.plan-premium .main {
           </div>
         </div>
 
+      <!-- ════════════════════════ BRANDING TAB ════════════════════════ -->
+      <div id="tab-branding" style="display:none">
+        <div class="section">
+          <div class="section-header">
+            <div>
+              <div class="section-title">🎨 Community Branding</div>
+              <div class="section-subtitle">Customize how your community looks to members</div>
+            </div>
+            <button class="btn-primary" onclick="saveBrandingSettings()">Save Branding</button>
+          </div>
+          <div class="markets-table" style="padding:28px">
+
+            <!-- Live preview -->
+            <div style="margin-bottom:24px">
+              <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);margin-bottom:10px;font-family:var(--mono)">Preview</div>
+              <div class="branding-preview" id="brandingPreview">
+                <div class="branding-preview-banner" id="previewBanner">
+                  <img src="" id="previewLogo" class="branding-preview-logo" style="display:none" onerror="this.style.display='none'"/>
+                  <span class="branding-preview-name" id="previewName">Your Community</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Identity -->
+            <div style="font-weight:700;font-size:13px;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border)">Identity</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px">
+              <div class="field">
+                <label>Community Name</label>
+                <input type="text" id="brandingName" placeholder="Your Community Name"/>
+              </div>
+              <div class="field">
+                <label>Points Name</label>
+                <input type="text" id="brandingPoints" placeholder="Flex Points"/>
+              </div>
+              <div class="field" style="grid-column:1/-1">
+                <label>Community Description</label>
+                <textarea id="brandingDesc" rows="2" style="width:100%;background:var(--paper);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--sans);font-size:13px;padding:10px 14px;resize:vertical;outline:none" placeholder="Tell members what your community is about…"></textarea>
+              </div>
+            </div>
+
+            <!-- Visuals -->
+            <div style="font-weight:700;font-size:13px;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border)">Visuals</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px">
+              <div class="field">
+                <label>Logo URL</label>
+                <input type="url" id="brandingLogo" placeholder="https://…/logo.png" oninput="updateBrandingPreview()"/>
+                <div style="font-size:11px;color:var(--dim);margin-top:4px">Square image, min 200×200px. Paste a direct image URL.</div>
+              </div>
+              <div class="field">
+                <label>Banner Image URL</label>
+                <input type="url" id="brandingBanner" placeholder="https://…/banner.jpg" oninput="updateBrandingPreview()"/>
+                <div style="font-size:11px;color:var(--dim);margin-top:4px">Wide image, ideally 1400×400px. Paste a direct image URL.</div>
+              </div>
+              <div class="field">
+                <label>Accent Color</label>
+                <div style="display:flex;gap:10px;align-items:center">
+                  <input type="color" id="brandingColor" style="width:48px;height:40px;padding:4px;cursor:pointer;border-radius:6px;border:1px solid var(--border);background:var(--paper)" oninput="updateBrandingPreview()"/>
+                  <span style="font-family:var(--mono);font-size:12px;color:var(--dim)" id="brandingColorHex">#c9920d</span>
+                </div>
+              </div>
+              <div class="field">
+                <label>Display Font</label>
+                <select id="brandingFont" onchange="updateBrandingPreview()" style="background:var(--paper);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--sans);font-size:13px;padding:10px 14px;width:100%;outline:none">
+                  <option value="Syne">Syne (Default)</option>
+                  <option value="Space Grotesk">Space Grotesk</option>
+                  <option value="Inter">Inter</option>
+                  <option value="Montserrat">Montserrat</option>
+                  <option value="Raleway">Raleway</option>
+                  <option value="Playfair Display">Playfair Display</option>
+                </select>
+                <div style="font-size:11px;color:var(--dim);margin-top:4px">Applied to your community page headings</div>
+              </div>
+            </div>
+
+            <!-- Social Links -->
+            <div style="font-weight:700;font-size:13px;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--border)">Social Links</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+              <div class="field">
+                <label>Twitter / X URL</label>
+                <input type="url" id="brandingTwitter" placeholder="https://twitter.com/yourhandle"/>
+              </div>
+              <div class="field">
+                <label>YouTube URL</label>
+                <input type="url" id="brandingYouTube" placeholder="https://youtube.com/@yourchannel"/>
+              </div>
+              <div class="field">
+                <label>Discord URL</label>
+                <input type="url" id="brandingDiscord" placeholder="https://discord.gg/yourinvite"/>
+              </div>
+              <div class="field">
+                <label>Twitch URL</label>
+                <input type="url" id="brandingTwitch" placeholder="https://twitch.tv/yourchannel"/>
+              </div>
+            </div>
+
+            <button class="btn-primary" onclick="saveBrandingSettings()" style="margin-top:24px">Save Branding</button>
+          </div>
+        </div>
       </div>
 
+      <!-- ════════════════════════ FLEX BOT TAB ═════════════════════════ -->
+      <div id="tab-flexbot" style="display:none">
+        <div class="section">
+          <div class="flexbot-wrap">
+            <div class="flexbot-header">
+              <div class="flexbot-header-icon">🤖</div>
+              <div>
+                <div class="flexbot-header-title">FLEX BOT</div>
+                <div class="flexbot-header-sub">Your AI assistant for HYPERFLEX — ask anything about your community</div>
+              </div>
+            </div>
+            <div class="flexbot-messages" id="flexbotMessages">
+              <div class="flexbot-msg bot">Hey! I'm FLEX BOT. I can help you grow your community, tune your economy settings, write better market questions, or explain any feature. What do you want to work on?</div>
+              <div class="flexbot-starter-grid">
+                <button class="flexbot-starter" onclick="flexbotSend('How should I set my starting balance and bet limits?')">💰 Help me tune my economy settings</button>
+                <button class="flexbot-starter" onclick="flexbotSend('Write 5 engaging prediction market questions for my community')">🎯 Generate market question ideas</button>
+                <button class="flexbot-starter" onclick="flexbotSend('How do I grow my community and get more active traders?')">📈 How do I grow my community?</button>
+                <button class="flexbot-starter" onclick="flexbotSend('Explain how the referral system works and how to make it effective')">🔗 Explain the referral system</button>
+              </div>
+            </div>
+            <div class="flexbot-input-row">
+              <textarea class="flexbot-input" id="flexbotInput" placeholder="Ask FLEX BOT anything…" rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();flexbotSend();}"></textarea>
+              <button class="flexbot-send" id="flexbotSendBtn" onclick="flexbotSend()">Send</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Settings tab: add Delete Account section -->
     </div><!-- /content -->
   </main>
+</div>
+
+<!-- Delete account confirmation modal -->
+<div class="modal-overlay" id="deleteAccountModal" style="display:none">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <div class="modal-title" style="color:#ef4444">⚠️ Delete Account</div>
+      <button class="modal-close" onclick="closeDeleteAccountModal()">✕</button>
+    </div>
+    <div style="padding:24px">
+      <p style="font-size:13px;color:var(--text);margin-bottom:16px;line-height:1.6">This will <strong>permanently delete</strong> your account, all markets, all community data, and all member balances. This cannot be undone.</p>
+      <p style="font-size:13px;color:var(--dim);margin-bottom:8px">Type <strong style="color:var(--text)">DELETE</strong> to confirm:</p>
+      <input type="text" id="deleteConfirmInput" placeholder="DELETE" style="width:100%;background:var(--paper);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:14px;padding:10px 14px;outline:none;box-sizing:border-box"/>
+      <div style="display:flex;gap:10px;margin-top:20px">
+        <button class="btn-secondary" onclick="closeDeleteAccountModal()" style="flex:1">Cancel</button>
+        <button class="btn-danger" onclick="confirmDeleteAccount()" style="flex:1" id="deleteAccountConfirmBtn">Delete My Account</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Create Market Modal -->
@@ -2975,6 +3311,9 @@ function renderDashboard(data) {
   document.getElementById('econReferralReward').value = Math.round((creator.referral_reward ?? 10000) / 100);
   document.getElementById('econWelcomeBonus').value   = Math.round((creator.welcome_bonus   ?? 5000)  / 100);
 
+  // Branding prefill
+  prefillBranding(creator);
+
   // ── Plan state ───────────────────────────────────────────
   const plan = creator.plan || 'free';
 
@@ -2990,6 +3329,10 @@ function renderDashboard(data) {
   }
 
   updateUpgradeBtn(plan);
+
+  // Show FLEX BOT nav item for Premium only
+  const flexbotNav = document.getElementById('flexbotNavItem');
+  if (flexbotNav) flexbotNav.style.display = plan === 'platinum' ? 'flex' : 'none';
 
   // Mark current plan in upgrade modal cards
   ['free','pro','platinum'].forEach(p => {
@@ -3238,14 +3581,15 @@ function renderShareTemplates(creator) {
 
 // Tab switching
 function showTab(tab) {
-  ['overview','markets','resolve','leaderboard','share','settings','analytics','economy'].forEach(t => {
-    document.getElementById('tab-' + t).style.display = t === tab ? 'block' : 'none';
+  ['overview','markets','resolve','leaderboard','share','settings','analytics','economy','branding','flexbot'].forEach(t => {
+    const el = document.getElementById('tab-' + t);
+    if (el) el.style.display = t === tab ? 'block' : 'none';
   });
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => {
-    if (n.getAttribute('onclick') && n.getAttribute('onclick').includes(tab)) n.classList.add('active');
+    if (n.getAttribute('onclick') && n.getAttribute('onclick').includes(`'${tab}'`)) n.classList.add('active');
   });
-  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', settings:'Settings', analytics:'Analytics', economy:'Economy' };
+  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT' };
   document.getElementById('topbarTitle').textContent = titles[tab] || tab;
   if (tab === 'analytics' && !analyticsLoaded) loadAnalytics();
 }
@@ -3609,6 +3953,161 @@ async function triggerRefillNow() {
     btn.disabled = false;
     btn.textContent = '▶ Run Refill Now (test)';
   }
+}
+
+// ── ACCOUNT DELETION ──────────────────────────────────────
+function openDeleteAccountModal() {
+  document.getElementById('deleteConfirmInput').value = '';
+  document.getElementById('deleteAccountModal').style.display = 'flex';
+}
+function closeDeleteAccountModal() {
+  document.getElementById('deleteAccountModal').style.display = 'none';
+}
+async function confirmDeleteAccount() {
+  const val = document.getElementById('deleteConfirmInput').value.trim();
+  if (val !== 'DELETE') { showToast('Type DELETE to confirm.', 'error'); return; }
+  const btn = document.getElementById('deleteAccountConfirmBtn');
+  btn.disabled = true;
+  btn.textContent = 'Deleting…';
+  try {
+    const r = await fetch(API + '/api/creator/account', {
+      method: 'DELETE',
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    const data = await r.json();
+    if (data.ok) {
+      localStorage.clear();
+      window.location.href = '/creator-login.html?deleted=1';
+    } else {
+      showToast(data.error || 'Deletion failed.', 'error');
+      btn.disabled = false;
+      btn.textContent = 'Delete My Account';
+    }
+  } catch {
+    showToast('Network error.', 'error');
+    btn.disabled = false;
+    btn.textContent = 'Delete My Account';
+  }
+}
+
+// ── BRANDING ───────────────────────────────────────────────
+function updateBrandingPreview() {
+  const logo   = document.getElementById('brandingLogo')?.value;
+  const banner = document.getElementById('brandingBanner')?.value;
+  const name   = document.getElementById('brandingName')?.value || creatorData?.creator?.display_name || 'Your Community';
+  const color  = document.getElementById('brandingColor')?.value || '#c9920d';
+  const hex    = document.getElementById('brandingColorHex');
+  if (hex) hex.textContent = color;
+
+  const bannerEl = document.getElementById('previewBanner');
+  if (bannerEl) bannerEl.style.background = banner ? `url('${banner}') center/cover, var(--border)` : 'var(--border)';
+
+  const logoEl = document.getElementById('previewLogo');
+  if (logoEl) {
+    if (logo) { logoEl.src = logo; logoEl.style.display = ''; }
+    else logoEl.style.display = 'none';
+  }
+  const nameEl = document.getElementById('previewName');
+  if (nameEl) { nameEl.textContent = name; nameEl.style.color = color; }
+}
+
+function prefillBranding(creator) {
+  const safe = v => v || '';
+  const si = (id, v) => { const el = document.getElementById(id); if (el) el.value = safe(v); };
+  si('brandingName',    creator.display_name);
+  si('brandingPoints',  creator.custom_points_name);
+  si('brandingDesc',    creator.community_description);
+  si('brandingLogo',    creator.logo_url);
+  si('brandingBanner',  creator.banner_url);
+  si('brandingTwitter', creator.social_twitter);
+  si('brandingYouTube', creator.social_youtube);
+  si('brandingDiscord', creator.social_discord);
+  si('brandingTwitch',  creator.social_twitch);
+  const colorEl = document.getElementById('brandingColor');
+  if (colorEl) colorEl.value = creator.primary_color || '#c9920d';
+  const fontEl = document.getElementById('brandingFont');
+  if (fontEl) fontEl.value = creator.font_choice || 'Syne';
+  updateBrandingPreview();
+}
+
+async function saveBrandingSettings() {
+  const payload = {
+    display_name:          document.getElementById('brandingName')?.value.trim()    || undefined,
+    custom_points_name:    document.getElementById('brandingPoints')?.value.trim()  || undefined,
+    community_description: document.getElementById('brandingDesc')?.value.trim()    || null,
+    logo_url:              document.getElementById('brandingLogo')?.value.trim()    || null,
+    banner_url:            document.getElementById('brandingBanner')?.value.trim()  || null,
+    primary_color:         document.getElementById('brandingColor')?.value          || undefined,
+    font_choice:           document.getElementById('brandingFont')?.value           || undefined,
+    social_twitter:        document.getElementById('brandingTwitter')?.value.trim() || null,
+    social_youtube:        document.getElementById('brandingYouTube')?.value.trim() || null,
+    social_discord:        document.getElementById('brandingDiscord')?.value.trim() || null,
+    social_twitch:         document.getElementById('brandingTwitch')?.value.trim()  || null
+  };
+  try {
+    const r = await fetch(API + '/api/creator/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify(payload)
+    });
+    const data = await r.json();
+    if (data.ok) showToast('Branding saved ✓', 'success');
+    else showToast(data.error || 'Failed to save.', 'error');
+  } catch {
+    showToast('Network error.', 'error');
+  }
+}
+
+// ── FLEX BOT ───────────────────────────────────────────────
+let flexbotHistory = [];
+
+async function flexbotSend(presetText) {
+  const input = document.getElementById('flexbotInput');
+  const text = presetText || input.value.trim();
+  if (!text) return;
+
+  // Clear starter buttons on first real message
+  document.querySelectorAll('.flexbot-starter-grid').forEach(el => el.remove());
+
+  if (!presetText) input.value = '';
+  const sendBtn = document.getElementById('flexbotSendBtn');
+  sendBtn.disabled = true;
+
+  appendFlexbotMsg('user', text);
+  flexbotHistory.push({ role: 'user', content: text });
+
+  const thinking = appendFlexbotMsg('bot', '…thinking', true);
+
+  try {
+    const r = await fetch(API + '/api/creator/flexbot', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ messages: flexbotHistory })
+    });
+    const data = await r.json();
+    thinking.remove();
+    if (data.reply) {
+      appendFlexbotMsg('bot', data.reply);
+      flexbotHistory.push({ role: 'assistant', content: data.reply });
+    } else {
+      appendFlexbotMsg('bot', data.error || 'Something went wrong. Try again.');
+    }
+  } catch {
+    thinking.remove();
+    appendFlexbotMsg('bot', 'Network error. Please try again.');
+  } finally {
+    sendBtn.disabled = false;
+  }
+}
+
+function appendFlexbotMsg(role, text, isThinking = false) {
+  const msgs = document.getElementById('flexbotMessages');
+  const div = document.createElement('div');
+  div.className = 'flexbot-msg ' + (isThinking ? 'thinking' : role);
+  div.textContent = text;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+  return div;
 }
 
 // ── ANALYTICS ─────────────────────────────────────────────

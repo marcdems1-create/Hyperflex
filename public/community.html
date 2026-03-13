@@ -1362,8 +1362,68 @@ function renderPage() {
 
   document.getElementById('headerCommunityName').textContent = c.display_name;
   document.getElementById('heroTitle').textContent = c.display_name;
-  document.getElementById('heroDesc').textContent =
+  document.getElementById('heroDesc').textContent = c.community_description ||
     `Make predictions on ${c.display_name}'s markets. Earn ${c.custom_points_name || 'Flex Points'} and top the leaderboard.`;
+
+  // Custom font
+  if (c.font_choice && c.font_choice !== 'Syne') {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(c.font_choice)}:wght@400;600;700;800&display=swap`;
+    document.head.appendChild(link);
+    document.documentElement.style.setProperty('--display', `'${c.font_choice}', sans-serif`);
+  }
+
+  // Banner image
+  if (c.banner_url) {
+    const heroEl = document.querySelector('.hero');
+    if (heroEl) {
+      const bannerDiv = document.createElement('div');
+      bannerDiv.style.cssText = `position:absolute;inset:0;background:url('${c.banner_url}') center/cover no-repeat;opacity:0.15;z-index:-1;border-radius:0;`;
+      heroEl.style.position = 'relative';
+      heroEl.prepend(bannerDiv);
+    }
+  }
+
+  // Logo in header
+  if (c.logo_url) {
+    const headerName = document.getElementById('headerCommunityName');
+    if (headerName) {
+      const logoImg = document.createElement('img');
+      logoImg.src = c.logo_url;
+      logoImg.alt = c.display_name;
+      logoImg.style.cssText = 'width:28px;height:28px;border-radius:50%;object-fit:cover;margin-right:6px;vertical-align:middle;';
+      logoImg.onerror = () => logoImg.remove();
+      headerName.parentNode.insertBefore(logoImg, headerName);
+    }
+  }
+
+  // Social links
+  const socials = [
+    { key: 'social_twitter',  icon: '𝕏', label: 'X / Twitter', color: '#1da1f2' },
+    { key: 'social_youtube',  icon: '▶', label: 'YouTube',     color: '#ff0000' },
+    { key: 'social_discord',  icon: '💬', label: 'Discord',    color: '#5865f2' },
+    { key: 'social_twitch',   icon: '🎮', label: 'Twitch',     color: '#9146ff' }
+  ].filter(s => c[s.key]);
+  if (socials.length) {
+    const heroEl = document.querySelector('.hero');
+    if (heroEl) {
+      const socialRow = document.createElement('div');
+      socialRow.style.cssText = 'display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;';
+      socials.forEach(s => {
+        const a = document.createElement('a');
+        a.href = c[s.key];
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.textContent = `${s.icon} ${s.label}`;
+        a.style.cssText = `font-size:12px;font-family:var(--mono);color:var(--dim);text-decoration:none;border:1px solid var(--border);border-radius:6px;padding:4px 10px;transition:border-color .15s,color .15s;`;
+        a.onmouseover = () => { a.style.borderColor = s.color; a.style.color = s.color; };
+        a.onmouseout  = () => { a.style.borderColor = ''; a.style.color = ''; };
+        socialRow.appendChild(a);
+      });
+      heroEl.appendChild(socialRow);
+    }
+  }
 
   const active = markets.filter(m => !m.resolved);
   const resolved = markets.filter(m => m.resolved);
