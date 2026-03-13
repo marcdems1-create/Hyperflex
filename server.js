@@ -1884,7 +1884,7 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
 // ════════════════════════════════════════════════════════════
 app.get('/api/creator/analytics', requireCreator, async (req, res) => {
   try {
-    const creatorId = req.creatorId;
+    const creatorId = req.creator.id;
 
     // Get creator slug
     const { data: settings } = await supabase
