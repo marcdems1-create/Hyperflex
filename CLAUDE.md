@@ -91,9 +91,10 @@
   4. `supabase_migration_referrals.sql`
   5. `supabase_migration_custom_domains.sql`
   6. `supabase_migration_challenges.sql`
+  7. `supabase_migration_plan_trial.sql` ← NEW (adds plan_trial_expires_at)
 - Video section on landing page needs real YouTube VIDEO_ID
 - Old `index.html` at project root should be removed eventually
-- **This session (March 13)** — all committed, needs push (latest: `8c20977`):
+- **This session (March 13)** — all committed, needs push (latest: `afc8501`):
   - Custom domain feature (Premium) — CNAME routing middleware + DNS verification (commit `c5509cd`)
   - Pro referral analytics access (commit `8e18b29`)
   - Referral reward preset cards + milestone earnings preview (commit `d2d2721`)
@@ -107,6 +108,10 @@
   - Mobile fixes round 1: leaderboard jump pill, creator login bar, carousel fix, watermark overlap, archived markets, milestone toasts (commit `7db546e`)
   - Reward presets + claim button (commit `258804e`)
   - Mobile fixes round 2: plan pill onclick, AI Scanner icon in topbar, Dupe→Duplicate, analytics padding (commit `8c20977`)
+  - Bug fixes: challenge fields in dashboard API, myPositions side logic, centpoints display (commit `92670b7`)
+  - Analytics tab: loading/error states, blank screen fix (commit `bf4ab8d`)
+  - Header overlap fix: balance pill + rank chip on mobile (commit `2a707ff`)
+  - Admin: gift Premium trial + transfer ownership + trial expiry cron (commit `afc8501`)
 - **Economy Phase 3** (not built):
   - Streak broken toast when user loses after a streak
 
