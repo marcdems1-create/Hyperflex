@@ -3166,7 +3166,7 @@ body.nav-open .sidebar-backdrop {
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
               <div class="field">
                 <label>Starting Balance (pts)</label>
-                <input type="number" id="econStartingBalance" min="100" step="100" placeholder="1000"/>
+                <input type="number" id="econStartingBalance" min="100" step="100" placeholder="1000" oninput="renderReferralPresets()"/>
                 <div style="font-size:12px;color:var(--dim);margin-top:4px">Points new members begin with</div>
               </div>
               <div class="field">
@@ -3191,7 +3191,7 @@ body.nav-open .sidebar-backdrop {
                 </label>
                 <span style="font-size:12px;color:var(--dim)">Top up active members every week</span>
               </div>
-              <div id="refillFields" style="display:none;display:grid;grid-template-columns:1fr 1fr;gap:20px">
+              <div id="refillFields" style="display:none;grid-template-columns:1fr 1fr;gap:20px">
                 <div class="field">
                   <label>Refill Amount (pts)</label>
                   <input type="number" id="econRefillAmount" min="1" step="10" placeholder="100"/>
@@ -3214,29 +3214,10 @@ body.nav-open .sidebar-backdrop {
               <div style="font-weight:600;font-size:14px;margin-bottom:4px">🔗 Referral Rewards</div>
               <div style="font-size:12px;color:var(--dim);margin-bottom:16px">Members share a personal invite link. Platform caps rewards at 5 referrals/member/week.</div>
 
-              <!-- Preset strategy cards -->
+              <!-- Preset strategy cards (scaled to starting balance) -->
               <div style="margin-bottom:18px">
                 <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);margin-bottom:10px">Suggested Setups</div>
-                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
-                  <div class="referral-preset-card" onclick="applyReferralPreset(50,25)" title="Low-key incentive for casual communities">
-                    <div class="rpc-name">🌱 Gentle</div>
-                    <div class="rpc-vals">+50 pts / invite</div>
-                    <div class="rpc-vals">+25 welcome bonus</div>
-                    <div class="rpc-desc">Good for tight-knit communities where referral spam isn't welcome</div>
-                  </div>
-                  <div class="referral-preset-card rpc-highlight" onclick="applyReferralPreset(150,75)" title="Balanced growth incentive">
-                    <div class="rpc-name">🚀 Growth</div>
-                    <div class="rpc-vals">+150 pts / invite</div>
-                    <div class="rpc-vals">+75 welcome bonus</div>
-                    <div class="rpc-desc">Sweet spot — rewards effort without inflating your economy</div>
-                  </div>
-                  <div class="referral-preset-card" onclick="applyReferralPreset(300,150)" title="Aggressive viral growth">
-                    <div class="rpc-name">⚡ Viral</div>
-                    <div class="rpc-vals">+300 pts / invite</div>
-                    <div class="rpc-vals">+150 welcome bonus</div>
-                    <div class="rpc-desc">Maximum growth push — works best with high weekly refills</div>
-                  </div>
-                </div>
+                <div id="referralPresetCards" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px"></div>
               </div>
 
               <!-- Reward inputs -->
@@ -3295,6 +3276,31 @@ body.nav-open .sidebar-backdrop {
                 <span id="challengeStatusBonus"></span>
               </div>
               <button onclick="clearChallenge()" style="margin-top:12px;background:none;border:1px solid var(--border);color:var(--dim);font-size:12px;padding:6px 12px;border-radius:6px;cursor:pointer">Clear Challenge</button>
+            </div>
+
+            <!-- Challenge preset cards -->
+            <div style="margin-bottom:20px">
+              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);margin-bottom:10px">Quick Start Templates</div>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px" id="challengePresetCards">
+                <div class="referral-preset-card" onclick="applyChallengePreset('📈 Prediction Surge — can we hit 200 bets this week?','bets',200,100,7)">
+                  <div class="rpc-name">📈 Surge Week</div>
+                  <div class="rpc-vals">200 total bets</div>
+                  <div class="rpc-vals">+100 pts bonus</div>
+                  <div class="rpc-desc">Perfect for boosting activity — everyone who bets gets rewarded</div>
+                </div>
+                <div class="referral-preset-card rpc-highlight" onclick="applyChallengePreset('🎯 Active Member Drive — get 50 members predicting this week!','members',50,150,7)">
+                  <div class="rpc-name">🎯 Member Drive</div>
+                  <div class="rpc-vals">50 active members</div>
+                  <div class="rpc-vals">+150 pts bonus</div>
+                  <div class="rpc-desc">Great for re-engaging lurkers and growing your active base</div>
+                </div>
+                <div class="referral-preset-card" onclick="applyChallengePreset('💎 Volume Milestone — 10,000 pts wagered this week!','volume',10000,200,7)">
+                  <div class="rpc-name">💎 Volume Push</div>
+                  <div class="rpc-vals">10,000 pts volume</div>
+                  <div class="rpc-vals">+200 pts bonus</div>
+                  <div class="rpc-desc">High-stakes challenge for competitive communities</div>
+                </div>
+              </div>
             </div>
 
             <!-- Create / edit challenge form -->
@@ -4264,6 +4270,7 @@ function renderDashboard(data) {
   document.getElementById('econReferralReward').value = Math.round((creator.referral_reward ?? 10000) / 100);
   document.getElementById('econWelcomeBonus').value   = Math.round((creator.welcome_bonus   ?? 5000)  / 100);
   updateReferralMilestones();
+  renderReferralPresets(); // scale suggested setups to current starting balance
 
   // Branding prefill
   prefillBranding(creator);
@@ -4903,6 +4910,29 @@ document.getElementById('settingColor').addEventListener('input', function() {
 });
 
 // ── REFERRAL PRESETS + MILESTONE PREVIEW ────────────────────
+function renderReferralPresets() {
+  const container = document.getElementById('referralPresetCards');
+  if (!container) return;
+  const startBal = parseInt(document.getElementById('econStartingBalance')?.value) || 1000;
+  // Scale reward percentages: Gentle 5%/2.5%, Growth 15%/7.5%, Viral 30%/15%
+  const round10 = v => Math.max(10, Math.round(v / 10) * 10);
+  const presets = [
+    { name:'🌱 Gentle', rewardPct:0.05, welcomePct:0.025, extra:'', desc:'Good for tight-knit communities where spam isn\'t welcome' },
+    { name:'🚀 Growth', rewardPct:0.15, welcomePct:0.075, extra:'rpc-highlight', desc:'Sweet spot — rewards effort without inflating your economy' },
+    { name:'⚡ Viral',  rewardPct:0.30, welcomePct:0.15,  extra:'', desc:'Maximum growth push — works best with weekly refills' },
+  ];
+  container.innerHTML = presets.map(p => {
+    const r = round10(startBal * p.rewardPct);
+    const w = round10(startBal * p.welcomePct);
+    return `<div class="referral-preset-card ${p.extra}" onclick="applyReferralPreset(${r},${w})" title="${p.desc}">
+      <div class="rpc-name">${p.name}</div>
+      <div class="rpc-vals">+${r.toLocaleString()} pts / invite</div>
+      <div class="rpc-vals">+${w.toLocaleString()} welcome bonus</div>
+      <div class="rpc-desc">${p.desc}</div>
+    </div>`;
+  }).join('');
+}
+
 function applyReferralPreset(rewardPts, welcomePts) {
   const rr = document.getElementById('econReferralReward');
   const wb = document.getElementById('econWelcomeBonus');
@@ -4963,6 +4993,27 @@ function renderChallengeStatus(progress) {
   document.getElementById('challengeStatusProgress').textContent = `${progress.current.toLocaleString()} / ${progress.target.toLocaleString()} ${metricLabel} (${progress.pct}%)`;
   document.getElementById('challengeStatusBonus').textContent = `+${Math.round(progress.bonus_pts / 100)} pts per member if hit`;
   document.getElementById('challengeStatusEnd').textContent = 'Ends ' + new Date(progress.end_date).toLocaleDateString();
+}
+
+function applyChallengePreset(title, metric, target, bonusPts, daysFromNow) {
+  const si = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  si('challengeTitle',  title);
+  si('challengeMetric', metric);
+  si('challengeTarget', target);
+  si('challengeBonus',  bonusPts);
+  // Set end date to N days from today
+  const d = new Date();
+  d.setDate(d.getDate() + daysFromNow);
+  si('challengeEndDate', d.toISOString().split('T')[0]);
+  // Scroll to form
+  document.getElementById('challengeTitle')?.scrollIntoView({ behavior:'smooth', block:'center' });
+  // Flash highlight
+  ['challengeTitle','challengeTarget','challengeBonus'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.style.borderColor = 'var(--gold)';
+    setTimeout(() => { el.style.borderColor = ''; }, 1200);
+  });
 }
 
 async function saveChallenge() {

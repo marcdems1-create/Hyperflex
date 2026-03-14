@@ -423,86 +423,84 @@ function hlSubscribePrices(coins, onPrice) {
 
 // ─── DATA ──────────────────────────────────────────────────────────────────────
 const ALL_MARKETS = [
-  // ── FRESH MARKETS · Mar 8 2026 ───────────────────────────────────────────────
-  { id:100, q:"Will WTI crude oil hit $100/barrel before the Iran conflict ends?",     cat:"OIL",      sector:"COMMODITIES", yes:58, vol:"1,240,000", closes:"Apr 30, 2026", hot:true,  icon:"🛢️", badge:"🔥 Mar 8", isNew:true },
-  { id:101, q:"Will XAU/USD hit $6,000 before July 1?",                               cat:"GOLD",     sector:"COMMODITIES", yes:63, vol:"980,000",   closes:"Jul 1, 2026",  hot:true,  icon:"🥇", badge:"🔥 Mar 8", isNew:true },
-  { id:102, q:"Will XAG/USD close above $100/oz before April 30?",                    cat:"SILVER",   sector:"COMMODITIES", yes:47, vol:"720,000",   closes:"Apr 30, 2026", hot:true,  icon:"🥈", badge:"🔥 Mar 8", isNew:true },
-  { id:103, q:"Will the Iran conflict end within 30 days?",                            cat:"GEO",      sector:"MACRO",       yes:34, vol:"890,000",   closes:"Apr 8, 2026",  hot:true,  icon:"🌍", badge:"🔥 Mar 8", isNew:true },
-  { id:104, q:"Will uranium spot price hit $100/lb before June 2026?",                 cat:"URANIUM",  sector:"COMMODITIES", yes:52, vol:"440,000",   closes:"Jun 1, 2026",  hot:true,  icon:"⚡", badge:"🔥 Mar 8", isNew:true },
-  { id:105, q:"Will the US impose copper tariffs (Section 232) in 2026?",              cat:"COPPER",   sector:"COMMODITIES", yes:61, vol:"380,000",   closes:"Dec 31, 2026", hot:false, icon:"🪙", badge:"🔥 Mar 8", isNew:true },
-  { id:106, q:"Will XAG/USD exceed $135 before end of 2026? (BofA target)",           cat:"SILVER",   sector:"COMMODITIES", yes:39, vol:"560,000",   closes:"Dec 31, 2026", hot:true,  icon:"🥈", badge:"🔥 Mar 8", isNew:true },
-  { id:107, q:"Will GDX (gold miners ETF) hit a new all-time high before July 2026?", cat:"MINERS",   sector:"COMMODITIES", yes:55, vol:"310,000",   closes:"Jul 1, 2026",  hot:false, icon:"⛏️", badge:"🔥 Mar 8", isNew:true },
+  // ── FRESH MARKETS · Mar 13 2026 ──────────────────────────────────────────────
+  { id:100, q:"Will Caitlin Clark win WNBA MVP in the 2026 season?",               cat:"WNBA",    sector:"SPORTS",   yes:71, vol:"4,840,000",  closes:"Sep 30, 2026", hot:true,  icon:"🏀", badge:"🔥 Mar 13", isNew:true },
+  { id:101, q:"Will Drake and Kendrick Lamar publicly squash their beef in 2026?", cat:"HIP-HOP", sector:"CULTURE",  yes:29, vol:"3,120,000",  closes:"Dec 31, 2026", hot:true,  icon:"🎤", badge:"🔥 Mar 13", isNew:true },
+  { id:102, q:"Will Bitcoin hit $200,000 before the end of 2026?",                 cat:"BITCOIN", sector:"CRYPTO",   yes:47, vol:"21,600,000", closes:"Dec 31, 2026", hot:true,  icon:"₿",  badge:"🔥 Mar 13", isNew:true },
+  { id:103, q:"Will Elon Musk leave his government role before September 2026?",   cat:"POLITICS",sector:"POLITICS", yes:67, vol:"6,100,000",  closes:"Sep 1, 2026",  hot:true,  icon:"🗳️", badge:"🔥 Mar 13", isNew:true },
   // ── EXISTING MARKETS ──────────────────────────────────────────────────────────
-  { id:1,  q:"Will XAG/USD hit $100/oz before June 1, 2026?",             cat:"SILVER",         sector:"COMMODITIES", yes:67, vol:"4,821,000",  closes:"Jun 1, 2026",  hot:true,  icon:"🥈" },
-  { id:3,  q:"Will XAU/USD close above $6,000/oz in 2026?",              cat:"GOLD",           sector:"COMMODITIES", yes:61, vol:"5,100,000",  closes:"Dec 31, 2026", hot:true,  icon:"🥇" },
-  { id:2,  q:"Will WTI crude exceed $100/barrel by Q3 2026?",             cat:"OIL & GAS",      sector:"COMMODITIES", yes:42, vol:"3,210,000",  closes:"Sep 30, 2026", hot:true,  icon:"🛢️" },
-  { id:4,  q:"Will copper hit $12,000/tonne before year-end?",           cat:"BASE METALS",    sector:"COMMODITIES", yes:58, vol:"2,840,000",  closes:"Dec 31, 2026", hot:true,  icon:"🟤" },
-  { id:5,  q:"Will uranium (UX) exceed $120/lb in 2026?",               cat:"URANIUM",        sector:"COMMODITIES", yes:44, vol:"1,920,000",  closes:"Dec 31, 2026", hot:false, icon:"☢️" },
-  { id:6,  q:"Will lithium carbonate rebound above $20,000/t in 2026?",  cat:"BATTERY METALS", sector:"COMMODITIES", yes:38, vol:"1,440,000",  closes:"Dec 31, 2026", hot:false, icon:"🔋" },
-  { id:8,  q:"Will Apple beat Q2 2026 earnings estimates?",             cat:"TECH EARNINGS",   sector:"EARNINGS",    yes:72, vol:"8,430,000",  closes:"May 2, 2026",  hot:true,  icon:"🍎", badge:"AAPL · May 2" },
-  { id:9,  q:"Will Nvidia beat Q1 2026 earnings estimates?",            cat:"TECH EARNINGS",   sector:"EARNINGS",    yes:78, vol:"11,200,000", closes:"May 28, 2026", hot:true,  icon:"🟩", badge:"NVDA · May 28" },
-  { id:12, q:"Will Tesla beat Q2 2026 earnings estimates?",             cat:"TECH EARNINGS",   sector:"EARNINGS",    yes:44, vol:"9,870,000",  closes:"Jul 22, 2026", hot:true,  icon:"🚗", badge:"TSLA · Jul 22" },
-  { id:20, q:"Will Bitcoin hit $150,000 before end of 2026?",           cat:"BITCOIN",         sector:"CRYPTO",      yes:54, vol:"18,300,000", closes:"Dec 31, 2026", hot:true,  icon:"₿" },
-  { id:21, q:"Will Ethereum flip Bitcoin in market cap in 2026?",       cat:"ETHEREUM",        sector:"CRYPTO",      yes:12, vol:"7,400,000",  closes:"Dec 31, 2026", hot:false, icon:"Ξ" },
-  { id:22, q:"Will HYPE token exceed $100 in 2026?",                    cat:"HYPERLIQUID",     sector:"CRYPTO",      yes:48, vol:"6,200,000",  closes:"Dec 31, 2026", hot:true,  icon:"💧" },
-  { id:31, q:"Will the US enter a recession in 2026?",                  cat:"ECONOMICS",       sector:"MACRO",       yes:34, vol:"12,400,000", closes:"Dec 31, 2026", hot:true,  icon:"📉" },
-  { id:32, q:"Will the Fed cut rates 3+ times in 2026?",                cat:"MONETARY POLICY", sector:"MACRO",       yes:47, vol:"8,900,000",  closes:"Dec 31, 2026", hot:true,  icon:"🏦" },
-  { id:15, q:"Will Exxon (XOM) outperform Google (GOOGL) in 2026?",    cat:"STOCK BATTLE",    sector:"VERSUS",      yes:44, vol:"5,430,000",  closes:"Dec 31, 2026", hot:true,  icon:"⚔️" },
-  { id:16, q:"Will silver miners (SILJ) outperform tech (QQQ) in 2026?",cat:"SECTOR BATTLE",  sector:"VERSUS",      yes:67, vol:"3,980,000",  closes:"Dec 31, 2026", hot:true,  icon:"⚔️" },
+  { id:1,  q:"Will GTA VI release before December 31, 2026?",                      cat:"GAMING",    sector:"CULTURE",  yes:79, vol:"16,800,000", closes:"Dec 31, 2026", hot:true,  icon:"🎮" },
+  { id:2,  q:"Will the LA Lakers win the 2026 NBA Championship?",                  cat:"NBA",       sector:"SPORTS",   yes:22, vol:"9,800,000",  closes:"Jun 20, 2026", hot:true,  icon:"🏀" },
+  { id:3,  q:"Will Jon Jones fight before the end of 2026?",                       cat:"UFC",       sector:"SPORTS",   yes:71, vol:"6,400,000",  closes:"Dec 31, 2026", hot:true,  icon:"🥊" },
+  { id:4,  q:"Will Novak Djokovic win a Grand Slam title in 2026?",                cat:"TENNIS",    sector:"SPORTS",   yes:58, vol:"3,200,000",  closes:"Dec 31, 2026", hot:true,  icon:"🎾" },
+  { id:5,  q:"Will Zendaya win Best Actress at the 2027 Academy Awards?",          cat:"OSCARS",    sector:"CULTURE",  yes:44, vol:"2,100,000",  closes:"Mar 15, 2027", hot:true,  icon:"🎬" },
+  { id:6,  q:"Will Squid Game Season 3 outperform Season 2 on Netflix?",           cat:"STREAMING", sector:"CULTURE",  yes:66, vol:"4,700,000",  closes:"Dec 31, 2026", hot:true,  icon:"📺" },
+  { id:7,  q:"Will Kanye West release a new studio album in 2026?",                cat:"MUSIC",     sector:"CULTURE",  yes:61, vol:"3,900,000",  closes:"Dec 31, 2026", hot:false, icon:"🎵" },
+  { id:8,  q:"Will OpenAI release GPT-5 before June 1, 2026?",                    cat:"AI",        sector:"AI",       yes:61, vol:"7,400,000",  closes:"Jun 1, 2026",  hot:true,  icon:"🤖" },
+  { id:9,  q:"Will Claude surpass ChatGPT in monthly active users by end of 2026?",cat:"AI",       sector:"AI",       yes:38, vol:"3,900,000",  closes:"Dec 31, 2026", hot:false, icon:"🤖" },
+  { id:10, q:"Will Apple release Vision Pro 2 before December 2026?",              cat:"TECH",      sector:"AI",       yes:52, vol:"5,100,000",  closes:"Dec 31, 2026", hot:true,  icon:"🍎" },
+  { id:11, q:"Will Bitcoin hit $150,000 before end of Q2 2026?",                   cat:"BITCOIN",   sector:"CRYPTO",   yes:41, vol:"12,300,000", closes:"Jun 30, 2026", hot:true,  icon:"₿" },
+  { id:12, q:"Will Ethereum hit $10,000 before end of 2026?",                      cat:"ETHEREUM",  sector:"CRYPTO",   yes:34, vol:"8,900,000",  closes:"Dec 31, 2026", hot:true,  icon:"Ξ" },
+  { id:13, q:"Will HYPE token exceed $100 before year-end?",                       cat:"HYPERLIQUID",sector:"CRYPTO",  yes:48, vol:"6,200,000",  closes:"Dec 31, 2026", hot:true,  icon:"💧" },
+  { id:14, q:"Will the US impose 25%+ tariffs on all Chinese goods in 2026?",      cat:"TRADE",     sector:"POLITICS", yes:54, vol:"8,200,000",  closes:"Dec 31, 2026", hot:true,  icon:"🏛️" },
+  { id:15, q:"Will a major Western country hold snap elections in 2026?",           cat:"ELECTIONS", sector:"POLITICS", yes:43, vol:"4,300,000",  closes:"Dec 31, 2026", hot:false, icon:"🗳️" },
 ];
 
-const SECTORS = ["ALL","COMMODITIES","EARNINGS","CRYPTO","MACRO","VERSUS"];
+const SECTORS = ["ALL","SPORTS","CULTURE","CRYPTO","AI","POLITICS"];
 const SECTOR_META = {
-  ALL:{icon:"🌐",color:"#c9920d"},COMMODITIES:{icon:"🪨",color:"#e0a820"},
-  EARNINGS:{icon:"📊",color:"#2d9b5f"},CRYPTO:{icon:"₿",color:"#c9920d"},MACRO:{icon:"🏛️",color:"#8a9ba8"},
-  VERSUS:{icon:"⚔️",color:"#e0a820"},
+  ALL:     {icon:"🌐",color:"#c9920d"},
+  SPORTS:  {icon:"🏆",color:"#1a7fd4"},
+  CULTURE: {icon:"🎭",color:"#9333ea"},
+  CRYPTO:  {icon:"₿", color:"#c9920d"},
+  AI:      {icon:"🤖",color:"#2d9b5f"},
+  POLITICS:{icon:"🏛️",color:"#e0a820"},
 };
 
 const LEADERBOARD_DATA = [
-  { rank:1, name:"SilverWhale.eth",  pnl:"+$48,230", roi:"+312%", trades:847, badge:"🏆", tier:"DIAMOND",  vol:"$184,200" },
-  { rank:2, name:"GoldStandard.eth", pnl:"+$31,440", roi:"+228%", trades:623, badge:"🥈", tier:"PLATINUM", vol:"$122,000" },
-  { rank:3, name:"0xAurum",          pnl:"+$24,110", roi:"+196%", trades:412, badge:"🥉", tier:"PLATINUM", vol:"$98,400"  },
-  { rank:4, name:"CopperKing",       pnl:"+$18,920", roi:"+154%", trades:334, badge:"",   tier:"GOLD",     vol:"$76,100"  },
-  { rank:5, name:"PreciousMetalPro", pnl:"+$14,780", roi:"+122%", trades:289, badge:"",   tier:"GOLD",     vol:"$61,800"  },
-  { rank:8, name:"YOU",              pnl:"+$2,140",  roi:"+42%",  trades:12,  badge:"⭐", tier:"BRONZE",   vol:"$5,000",  isUser:true },
+  { rank:1, name:"ClarkMaxi.eth",   pnl:"+$48,230", roi:"+312%", trades:847, badge:"🏆", tier:"DIAMOND",  vol:"$184,200" },
+  { rank:2, name:"CryptoOracle",    pnl:"+$31,440", roi:"+228%", trades:623, badge:"🥈", tier:"PLATINUM", vol:"$122,000" },
+  { rank:3, name:"GTAInvestor",     pnl:"+$24,110", roi:"+196%", trades:412, badge:"🥉", tier:"PLATINUM", vol:"$98,400"  },
+  { rank:4, name:"PoliticsWhale",   pnl:"+$18,920", roi:"+154%", trades:334, badge:"",   tier:"GOLD",     vol:"$76,100"  },
+  { rank:5, name:"AIBullish.eth",   pnl:"+$14,780", roi:"+122%", trades:289, badge:"",   tier:"GOLD",     vol:"$61,800"  },
+  { rank:8, name:"YOU",             pnl:"+$2,140",  roi:"+42%",  trades:12,  badge:"⭐", tier:"BRONZE",   vol:"$5,000",  isUser:true },
 ];
 
 // ─── NEW: COMBO MARKETS (DraftKings Same-Game Parlay inspiration) ─────────────
 const COMBO_MARKETS = [
-  { id:"c0", name:"🥈 Precious Metals Sweep", markets:[
-    { q:"XAG/USD hits $100/oz", yes:67 },
-    { q:"XAU/USD closes above $6,000", yes:61 },
-    { q:"Silver miners (SILJ) beat tech (QQQ)", yes:67 },
-  ], multiplier:"6.3x", vol:"$3.2M", hot:true },
-  { id:"c1", name:"Bull Run Bundle", markets:[
-    { q:"Bitcoin hits $150K", yes:54 },
-    { q:"Ethereum flips Bitcoin", yes:12 },
+  { id:"c0", name:"🏆 Sports Sweep", markets:[
+    { q:"Caitlin Clark wins WNBA MVP", yes:71 },
+    { q:"Jon Jones fights in 2026", yes:71 },
+    { q:"Djokovic wins a Grand Slam", yes:58 },
+  ], multiplier:"5.8x", vol:"$4.2M", hot:true },
+  { id:"c1", name:"₿ Crypto Bull Run", markets:[
+    { q:"Bitcoin hits $200K in 2026", yes:47 },
+    { q:"Ethereum hits $10K in 2026", yes:34 },
     { q:"HYPE token exceeds $100", yes:48 },
-  ], multiplier:"14.2x", vol:"$2.1M", hot:true },
-  { id:"c2", name:"Big Tech Earnings Sweep", markets:[
-    { q:"Apple beats Q2 estimates", yes:72 },
-    { q:"Nvidia beats Q1 estimates", yes:78 },
-    { q:"Tesla beats Q2 estimates", yes:44 },
-  ], multiplier:"8.7x", vol:"$5.4M", hot:true },
-  { id:"c3", name:"Macro Meltdown", markets:[
-    { q:"US enters recession in 2026", yes:34 },
-    { q:"Fed cuts rates 3+ times", yes:47 },
-    { q:"WTI crude exceeds $100/bbl", yes:42 },
-  ], multiplier:"11.4x", vol:"$1.8M", hot:false },
-  { id:"c4", name:"Commodities Explosion", markets:[
-    { q:"XAG/USD hits $100/oz", yes:67 },
-    { q:"XAU/USD closes above $6,000", yes:61 },
-    { q:"Copper hits $12,000/tonne", yes:58 },
-  ], multiplier:"6.1x", vol:"$3.8M", hot:true },
+  ], multiplier:"16.2x", vol:"$8.1M", hot:true },
+  { id:"c2", name:"🤖 AI Takeover Bundle", markets:[
+    { q:"OpenAI releases GPT-5 before June", yes:61 },
+    { q:"Claude surpasses ChatGPT in users", yes:38 },
+    { q:"Apple Vision Pro 2 before Dec", yes:52 },
+  ], multiplier:"9.7x", vol:"$3.8M", hot:true },
+  { id:"c3", name:"🎭 Culture Clash", markets:[
+    { q:"GTA VI releases in 2026", yes:79 },
+    { q:"Drake & Kendrick squash beef", yes:29 },
+    { q:"Zendaya wins Best Actress", yes:44 },
+  ], multiplier:"7.4x", vol:"$3.6M", hot:false },
+  { id:"c4", name:"🏛️ Politics Wild Card", markets:[
+    { q:"Elon Musk leaves government by Sep", yes:67 },
+    { q:"US imposes 25%+ China tariffs", yes:54 },
+    { q:"Major Western country holds snap elections", yes:43 },
+  ], multiplier:"8.3x", vol:"$2.9M", hot:true },
 ];
 
 // ─── NEW: DAILY JACKPOT (DraftKings Jackpot Pools inspiration) ────────────────
 const DAILY_QUESTIONS = [
-  { id:1, q:"Will XAG/USD be above $84.00 at midnight EST?", yesVotes:1847, noVotes:1203 },
-  { id:2, q:"Will XAU/USD close above $5,200 today?", yesVotes:2341, noVotes:987 },
-  { id:3, q:"Will BTC be above $95,000 at midnight EST?", yesVotes:1654, noVotes:1421 },
-  { id:4, q:"Will the S&P 500 close green today?", yesVotes:3102, noVotes:654 },
-  { id:5, q:"Will WTI crude be above $90/barrel at 4pm EST?", yesVotes:1234, noVotes:1876 },
+  { id:1, q:"Will Bitcoin close above $88,000 today?", yesVotes:2341, noVotes:1203 },
+  { id:2, q:"Will the S&P 500 close green today?", yesVotes:3102, noVotes:654 },
+  { id:3, q:"Will Caitlin Clark score 25+ points in tonight's game?", yesVotes:1847, noVotes:1421 },
+  { id:4, q:"Will a new AI model announcement drop today?", yesVotes:1654, noVotes:987 },
+  { id:5, q:"Will any major crypto move 10%+ today?", yesVotes:2134, noVotes:1876 },
 ];
 
 // ─── NEW: STREAK CHALLENGE (DraftKings streak inspiration) ───────────────────
@@ -592,17 +590,17 @@ function LiveTicker({ prices = {} }) {
   // Each item: array of segments — { text, chg? }
   // chg: true = green, false = red, undefined = dim
   const items = [
-    [{text:`🔴 BTC: ${btc}`}],
-    [{text:`🔵 ETH: ${eth}`}],
-    [{text:`🥈 XAG/USD: ${xag} · `},{text:"+1.4%",chg:true}],
-    [{text:`🥇 XAU/USD: ${xau} · `},{text:"+1.9%",chg:true}],
-    [{text:`🛢️ WTI: ${wti} · `},{text:"+13.2%",chg:true}],
-    [{text:`⚡ URANIUM: $94.28/lb · `},{text:"+2.1%",chg:true}],
-    [{text:`🟤 COPPER: $4.82/lb · `},{text:"+0.6%",chg:true}],
-    [{text:"🔥 Iran conflict: WTI "},{text:"+13%",chg:true},{text:" · Gold tests $5,400"}],
-    [{text:"🏆 SilverWhale.eth wins $12,400 on gold market"}],
-    [{text:"📊 34 markets open now · New markets every morning"}],
-    [{text:"⚔️ Commodities vs Tech · Commodities leading 61–39"}],
+    [{text:`₿ BTC: ${btc}`}],
+    [{text:`Ξ ETH: ${eth}`}],
+    [{text:"🏀 Caitlin Clark WNBA MVP · "},{text:"71¢ YES",chg:true}],
+    [{text:"🎮 GTA VI drops in 2026 · "},{text:"79¢ YES",chg:true}],
+    [{text:"🤖 GPT-5 before June 2026 · "},{text:"61¢ YES",chg:true}],
+    [{text:"🗳️ Elon exits gov't by Sep · "},{text:"67¢ YES",chg:true}],
+    [{text:"🥊 Jon Jones fight confirmed 2026 · "},{text:"71¢ YES",chg:true}],
+    [{text:"🎤 Drake vs Kendrick beef resolved · "},{text:"29¢",chg:false}],
+    [{text:"🏛️ US–China trade war escalation · "},{text:"54¢",chg:true}],
+    [{text:"📊 15 markets open now · New markets every day"}],
+    [{text:"⚔️ Sports vs Culture · Both trending at all-time high volume"}],
   ];
 
   const SEP = "   ·   ";
@@ -961,7 +959,7 @@ function MktCard({ m, onSelect }) {
       {isNew && (
         <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,padding:"3px 8px",background:"rgba(201,146,13,0.08)",border:"1px solid rgba(201,146,13,0.25)",borderRadius:3}}>
           <span style={{fontSize:8,color:"#e0a820",fontWeight:700,letterSpacing:0.5}}>✦ NEW TODAY</span>
-          <span style={{marginLeft:"auto",fontSize:7,color:"#c9920d",fontWeight:700}}>MAR 8</span>
+          <span style={{marginLeft:"auto",fontSize:7,color:"#c9920d",fontWeight:700}}>MAR 13</span>
         </div>
       )}
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
@@ -1633,24 +1631,24 @@ function App() {
                 );
               })()}
 
-              {/* Commodities explainer shown when COMMODITIES filter is active */}
-              {sector==="COMMODITIES" && (
-                <div style={{background:"linear-gradient(135deg,#0d0f0a,#1a1800)",border:"1px solid #4d7c0f",borderRadius:4,padding:14,marginBottom:14}}>
-                  <div style={{fontSize:9,color:"#84cc16",fontWeight:700,letterSpacing:1,marginBottom:6}}>WHY COMMODITIES?</div>
+              {/* Sports explainer shown when SPORTS filter is active */}
+              {sector==="SPORTS" && (
+                <div style={{background:"linear-gradient(135deg,#0a0f1a,#001630)",border:"1px solid #1a4a7a",borderRadius:4,padding:14,marginBottom:14}}>
+                  <div style={{fontSize:9,color:"#3da0f0",fontWeight:700,letterSpacing:1,marginBottom:6}}>🏆 SPORTS MARKETS</div>
                   <div style={{display:"flex",flexDirection:"column",gap:8}}>
                     {[
-                      ["$10T","Global commodities market — zero crypto prediction coverage until HYPERFLEX"],
-                      ["10M","Monthly precious metals readers with strong commodity convictions and no way to act on them on-chain"],
-                      ["0","Competitors on HyperLiquid HIP-4 covering silver, gold, copper, uranium or lithium"],
+                      ["500M+","Sports fans worldwide with strong opinions and no way to act on them"],
+                      ["$100B+","Prediction market cap being built across sports fandoms"],
+                      ["∞","Your community. Your call. Build markets around your sport."],
                     ].map(([stat,desc],i)=>(
                       <div key={i} style={{display:"flex",gap:10,alignItems:"flex-start"}}>
-                        <div style={{fontSize:16,fontWeight:700,color:"#a3e635",minWidth:40}}>{stat}</div>
-                        <div style={{fontSize:10,color:"#4d7c0f",lineHeight:1.5}}>{desc}</div>
+                        <div style={{fontSize:16,fontWeight:700,color:"#1a7fd4",minWidth:40}}>{stat}</div>
+                        <div style={{fontSize:10,color:"#1a4a7a",lineHeight:1.5}}>{desc}</div>
                       </div>
                     ))}
                   </div>
-                  <div style={{marginTop:10,paddingTop:10,borderTop:"1px solid #1a2e05",fontSize:9,color:"#365314"}}>
-                    💡 Real-time XAG, XAU, WTI, Copper, Uranium · Settling in USDH on HyperLiquid
+                  <div style={{marginTop:10,paddingTop:10,borderTop:"1px solid #0a2040",fontSize:9,color:"#1a4a7a"}}>
+                    💡 NFL · NBA · UFC · Tennis · Soccer · Any sport, any market
                   </div>
                 </div>
               )}
