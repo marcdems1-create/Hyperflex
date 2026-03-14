@@ -35,7 +35,7 @@
 
 ## Current State (last updated March 13, 2026)
 
-- All features live on Railway. Latest commit: `dc742bf` (local, not yet pushed)
+- All features live on Railway. Latest commit: `e06ecc2` (local, not yet pushed)
 - **Stripe payments live** — Pro ($29/mo) + Premium ($99/mo) checkout + billing portal
   - Railway env vars needed: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRO_PRICE_ID`, `STRIPE_PLATINUM_PRICE_ID`
   - Webhook endpoint registered at: `https://hyperflex.network/stripe/webhook`
@@ -84,34 +84,33 @@
 
 ## Known Issues / Next Up
 
-- **⚠️ MUST DO BEFORE DEPLOY**: Run ALL 6 migrations in order in Supabase SQL editor:
+- **⚠️ MUST DO BEFORE DEPLOY**: Run ALL migrations in order in Supabase SQL editor:
   1. `supabase_migration_community_economy.sql`
   2. `supabase_migration_refill_history.sql`
   3. `supabase_migration_cpmm.sql`
   4. `supabase_migration_referrals.sql`
   5. `supabase_migration_custom_domains.sql`
   6. `supabase_migration_challenges.sql`
-  7. `supabase_migration_plan_trial.sql` ← NEW (adds plan_trial_expires_at)
+  7. `supabase_migration_plan_trial.sql` (adds plan_trial_expires_at)
+  8. `supabase_migration_market_suggestions.sql` ← NEW (adds market_suggestions table + suggestions_enabled column)
 - Video section on landing page needs real YouTube VIDEO_ID
 - Old `index.html` at project root should be removed eventually
-- **This session (March 13)** — all committed, needs push (latest: `afc8501`):
-  - Custom domain feature (Premium) — CNAME routing middleware + DNS verification (commit `c5509cd`)
-  - Pro referral analytics access (commit `8e18b29`)
-  - Referral reward preset cards + milestone earnings preview (commit `d2d2721`)
-  - Market ideas speed improvements (commit `97f90a1`)
-  - Bulk market creation from idea cards (commit `099b162`)
-  - Stat card overflow fix (commit `1bb8bb5`)
-  - Community challenges + shareable win cards (commit `053c860`)
-  - Leaderboard upgrades: weekly tab, win rate, accuracy badges (commit `4c41d54`)
-  - Fix 4 UX issues: skeleton HTML, archived markets in overview, reward member modal + endpoint, milestone toasts (commit `b5dae24`)
-  - Tab review: duplicate market, QR code, community URL bar, leaderboard member count, reward buttons on PP/IC rows, win rate in community header (commit `dc742bf`)
-  - Mobile fixes round 1: leaderboard jump pill, creator login bar, carousel fix, watermark overlap, archived markets, milestone toasts (commit `7db546e`)
-  - Reward presets + claim button (commit `258804e`)
-  - Mobile fixes round 2: plan pill onclick, AI Scanner icon in topbar, Dupe→Duplicate, analytics padding (commit `8c20977`)
-  - Bug fixes: challenge fields in dashboard API, myPositions side logic, centpoints display (commit `92670b7`)
-  - Analytics tab: loading/error states, blank screen fix (commit `bf4ab8d`)
-  - Header overlap fix: balance pill + rank chip on mobile (commit `2a707ff`)
-  - Admin: gift Premium trial + transfer ownership + trial expiry cron (commit `afc8501`)
+- **This session (March 13, continued)** — all committed, needs push (latest: `e06ecc2`):
+  - Analytics crash fix: getWeekStart() double-definition → .toISOString() on string (commit `d25b17f`)
+  - Delete account: case-insensitive + inline error in modal (commit `d25b17f`)
+  - Landing page fresh markets: 4 viral diverse markets replacing finance-only (Sports/Culture/Crypto/Politics)
+  - Refill slider fix: duplicate display style removed from refillFields div
+  - Referral + reward preset cards now scale dynamically with starting balance
+  - Challenge quick-start templates (Surge Week, Member Drive, Volume Push)
+  - 🎁 Rewards tab: new dashboard tab with scaled suggested rewards + your rewards list (commit `a34384f`)
+  - ?ref= landing page display fix (removed code tag)
+  - Member market suggestion queue (commit `e06ecc2`):
+    - `supabase_migration_market_suggestions.sql` — new table
+    - community.html: 💡 Suggest a Market button + modal (gated by suggestions_enabled)
+    - creator-dashboard.html: suggestion queue in Markets tab with approve/reject
+    - creator-dashboard.html: approve pre-fills create market modal
+    - creator-dashboard.html: 🧩 Community Features section in Settings with toggle
+    - server.js: fix requireUser → getUserIdFromReq(), add suggestions_enabled to dashboard API
 - **Economy Phase 3** (not built):
   - Streak broken toast when user loses after a streak
 
