@@ -122,6 +122,7 @@ body::before {
   cursor: default;
 }
 .balance-pill-icon { font-size: 13px; }
+.balance-pill-text { white-space: nowrap; }
 .user-name-pill {
   font-size: 12px;
   font-weight: 600;
@@ -995,8 +996,17 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
   .lb-correct { display: none; }
   .user-name-pill { display: none; }
 
-  /* Fix: points value in user-bar must not overflow the powered watermark */
-  .balance-pill { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Header right: allow shrinking so it never overlaps the logo */
+  .header-right { flex-shrink: 1; min-width: 0; max-width: 55%; }
+  .user-bar { gap: 6px; min-width: 0; }
+
+  /* Balance pill: constrain text so it truncates cleanly */
+  .balance-pill { min-width: 0; }
+  .balance-pill-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 85px; display: inline-block; }
+
+  /* Hide rank + win-rate badge in header on mobile — too cramped */
+  .rank-chip { display: none; }
+  .win-rate-badge { display: none; }
 
   /* Prevent balance number from running into fixed watermark */
   .content { padding-bottom: 100px; }
@@ -2317,11 +2327,12 @@ function renderUserHeader() {
       winRateHTML = `<span style="font-family:var(--mono);font-size:10px;color:${wrColor};background:rgba(255,255,255,0.06);padding:3px 7px;border-radius:4px;border:1px solid rgba(255,255,255,0.1)">${wr}% accuracy</span>`;
     }
   }
+  const wrWrapped = winRateHTML ? `<span class="win-rate-badge">${winRateHTML}</span>` : '';
   hr.innerHTML = `
     <div class="user-bar">
-      <div class="balance-pill"><span class="balance-pill-icon">⚡</span>${bal} ${pts}</div>
+      <div class="balance-pill"><span class="balance-pill-icon">⚡</span><span class="balance-pill-text">${bal} ${pts}</span></div>
       ${rankHTML}
-      ${winRateHTML}
+      ${wrWrapped}
       <span class="user-name-pill">${escHtml(currentUser.display_name || currentUser.email)}</span>
       <button class="btn-auth" onclick="signOut()" style="font-size:10px;padding:5px 10px">Sign out</button>
     </div>`;
