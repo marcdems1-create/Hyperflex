@@ -2086,7 +2086,6 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
         custom_points_name: settings.custom_points_name,
         primary_color: settings.primary_color,
         plan: settings.plan || 'free',
-        community_description: settings.community_description,
         // Economy fields
         starting_balance: settings.starting_balance ?? 100000,
         min_bet: settings.min_bet ?? 1000,
@@ -2109,7 +2108,13 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
         social_twitch:       settings.social_twitch   || null,
         community_description: settings.community_description || null,
         community_category:    settings.community_category   || 'other',
-        banner_position:       settings.banner_position      || '50% 50%'
+        banner_position:       settings.banner_position      || '50% 50%',
+        // Community challenge fields
+        challenge_title:      settings.challenge_title      || null,
+        challenge_metric:     settings.challenge_metric     || null,
+        challenge_target:     settings.challenge_target     || null,
+        challenge_bonus_pts:  settings.challenge_bonus_pts  || 0,
+        challenge_end_date:   settings.challenge_end_date   || null
       },
       stats: {
         total_traders: totalTraders,
@@ -2128,7 +2133,8 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
         .select('id, threshold, title, description')
         .eq('creator_id', creatorId)
         .order('threshold', { ascending: true })
-        .then(r => r.data || [])
+        .then(r => r.data || []),
+      challenge_progress: await getChallengeProgress(settings)
     });
 
   } catch (err) {

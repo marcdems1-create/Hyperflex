@@ -4937,7 +4937,7 @@ function prefillChallenge(creator) {
   si('challengeTitle',   creator.challenge_title || '');
   si('challengeMetric',  creator.challenge_metric);
   si('challengeTarget',  creator.challenge_target || '');
-  si('challengeBonus',   creator.challenge_bonus_pts || '');
+  si('challengeBonus',   creator.challenge_bonus_pts ? Math.round(creator.challenge_bonus_pts / 100) : '');
   if (creator.challenge_end_date) {
     si('challengeEndDate', creator.challenge_end_date.split('T')[0]);
   }
@@ -5945,7 +5945,7 @@ function copyEmbed() {
 
 // ── Upgrade / Stripe checkout ─────────────────────────────
 function handlePlanPillClick() {
-  // Platinum users are already on the top tier — nothing to upgrade to
+  // Premium users are already on the top tier — nothing to upgrade to
   const plan = creatorData?.creator?.plan;
   if (plan === 'platinum') return;
   showUpgrade();

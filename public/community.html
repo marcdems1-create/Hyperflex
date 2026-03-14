@@ -1427,15 +1427,16 @@ async function fetchMyPositions() {
     if (r.ok) {
       const data = await r.json();
       (data || []).forEach(p => {
-        // Accumulate per market (user may have multiple bets)
+        // Accumulate per market (user may have multiple bets on different sides)
         if (!myPositions[p.market_id]) {
-          myPositions[p.market_id] = { side: p.side, amount: 0 };
+          myPositions[p.market_id] = { side: p.side, amount: 0, _sides: {} };
         }
-        myPositions[p.market_id].amount += Math.round((p.amount || 0) / 100);
-        // If they've bet both sides just show the larger one
-        if (p.side !== myPositions[p.market_id].side) {
-          myPositions[p.market_id].side = p.amount > (myPositions[p.market_id].amount * 100) ? p.side : myPositions[p.market_id].side;
-        }
+        const pts = Math.round((p.amount || 0) / 100);
+        myPositions[p.market_id].amount += pts;
+        myPositions[p.market_id]._sides[p.side] = (myPositions[p.market_id]._sides[p.side] || 0) + pts;
+        // Show the side they've put the most points on
+        const sides = myPositions[p.market_id]._sides;
+        myPositions[p.market_id].side = Object.keys(sides).reduce((a, b) => sides[a] >= sides[b] ? a : b);
       });
     }
   } catch {}
