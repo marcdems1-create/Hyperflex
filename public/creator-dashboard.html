@@ -2415,11 +2415,14 @@ body.nav-open .sidebar-backdrop {
   .econ-health-grid { grid-template-columns: 1fr; }
   .flexbot-starter-grid { grid-template-columns: 1fr; }
 
-  /* Analytics: reduce chart padding + prevent overflow */
-  #tab-analytics .markets-table { padding: 16px !important; }
+  /* Analytics: reduce padding + prevent all horizontal overflow */
+  #tab-analytics .markets-table { padding: 14px !important; overflow-x: hidden; }
   #tab-analytics .activity-chart { min-width: 0; overflow: hidden; }
-  #tab-analytics .bar-row-label span:first-child { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #analyticsBottomRow .section { min-width: 0; }
+  #tab-analytics .bar-row { min-width: 0; }
+  #tab-analytics .bar-row-label { min-width: 0; }
+  #tab-analytics .bar-row-label span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; max-width: 55%; }
+  #tab-analytics .bar-row-label span:last-child { white-space: nowrap; flex-shrink: 0; }
+  #analyticsBottomRow .section { min-width: 0; overflow: hidden; }
 
   /* Market table: question + status, tighter */
   .table-header { padding: 8px 14px; }
@@ -2992,7 +2995,13 @@ body.nav-open .sidebar-backdrop {
         </div>
 
         <!-- Pro + Premium analytics -->
-        <div id="analyticsContent" style="display:none">
+        <div id="analyticsContent">
+
+          <!-- Loading / error banner (hidden once data loads) -->
+          <div id="analyticsLoadingRow" class="loading-row" style="text-align:center;padding:32px;color:var(--dim);font-family:var(--mono);font-size:13px">Loading analytics…</div>
+          <div id="analyticsErrorRow" style="display:none;padding:24px;text-align:center;color:var(--dim);font-size:13px">
+            Couldn't load analytics. <button onclick="loadAnalytics()" style="background:none;border:none;color:var(--gold);cursor:pointer;font-family:var(--mono);font-size:13px;text-decoration:underline">Retry</button>
+          </div>
 
           <!-- Top stat row -->
           <div class="section">
@@ -5628,12 +5637,20 @@ function appendFlexbotMsg(role, text, isThinking = false) {
 let analyticsLoaded = false;
 
 async function loadAnalytics() {
+  const loadingEl = document.getElementById('analyticsLoadingRow');
+  const errorEl   = document.getElementById('analyticsErrorRow');
+  if (loadingEl) loadingEl.style.display = '';
+  if (errorEl)   errorEl.style.display = 'none';
   try {
     const r = await fetch(API + '/api/creator/analytics', {
       headers: { 'Authorization': 'Bearer ' + token }
     });
     const data = await r.json();
-    if (!data || data.error) return;
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (!data || data.error) {
+      if (errorEl) errorEl.style.display = '';
+      return;
+    }
 
     const plan = data.plan || 'free';
 
@@ -5644,7 +5661,6 @@ async function loadAnalytics() {
       return;
     }
     document.getElementById('analyticsGate').style.display = 'none';
-    document.getElementById('analyticsContent').style.display = '';
 
     // Top stats
     const trades30 = (data.daily_trades || []).reduce((s, d) => s + d.count, 0);
@@ -5731,6 +5747,10 @@ async function loadAnalytics() {
     analyticsLoaded = true;
   } catch (err) {
     console.error('analytics load error:', err);
+    const loadingEl = document.getElementById('analyticsLoadingRow');
+    const errorEl   = document.getElementById('analyticsErrorRow');
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (errorEl)   errorEl.style.display = '';
   }
 }
 
