@@ -10,6 +10,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const dns = require('dns').promises;
+const nodemailer = require('nodemailer');
 
 const app = express();
 app.use(cors());
@@ -1117,6 +1118,10 @@ async function settleMarkets() {
       }
     }
     console.log(`[settle] ${market.id} → ${outcome ? 'YES' : 'NO'} @ ${settlement_price}`);
+
+    // Email bettors about the outcome (fire-and-forget)
+    const creatorSlug = await getCreatorSlugForMarket(market);
+    sendResolutionEmails(market, outcome ? 'YES' : 'NO', creatorSlug, null);
   }
 }
 
@@ -2799,8 +2804,7 @@ Return ONLY valid JSON:
 app.post('/markets/:id/resolve', requireCreator, async (req, res) => {
   try {
     const { id } = req.params;
-    const { outcome } = req.body;
-    const { attestation_text } = req.body;
+    const { outcome, attestation_text, resolution_note } = req.body;
 
     if (!['YES', 'NO'].includes(outcome)) {
       return res.status(400).json({ error: 'Outcome must be YES or NO' });
@@ -2818,21 +2822,20 @@ app.post('/markets/:id/resolve', requireCreator, async (req, res) => {
     if (market.resolved) return res.status(409).json({ error: 'Market already resolved' });
 
     // Mark market resolved
+    const resolveUpdate = {
+      resolved: true,
+      outcome,
+      resolved_at: new Date().toISOString()
+    };
+    if (attestation_text) resolveUpdate.attestation_text = attestation_text;
+    if (resolution_note)  resolveUpdate.resolution_note  = resolution_note.trim().slice(0, 500);
+
     const { error: resolveErr } = await supabase
       .from('markets')
-      .update({
-        resolved: true,
-        outcome,
-        resolved_at: new Date().toISOString()
-      })
+      .update(resolveUpdate)
       .eq('id', id);
 
     if (resolveErr) throw resolveErr;
-
-    // Store attestation
-    if (attestation_text) {
-      await supabase.from('markets').update({ attestation_text }).eq('id', id);
-    }
 
     // Pay out winners — get all positions for this market
     const { data: positions } = await supabase
@@ -2868,6 +2871,14 @@ app.post('/markets/:id/resolve', requireCreator, async (req, res) => {
     }
 
     res.json({ ok: true, outcome, positions_settled: positions?.length || 0 });
+
+    // Send resolution emails to bettors (fire-and-forget, non-blocking)
+    const { data: settings } = await supabase
+      .from('creator_settings')
+      .select('slug')
+      .eq('creator_id', req.creator.id)
+      .maybeSingle();
+    sendResolutionEmails(market, outcome, settings?.slug, resolveUpdate.resolution_note || null);
 
   } catch (err) {
     console.error('resolve error:', err);
@@ -3876,7 +3887,14 @@ app.get('/api/community/:slug', async (req, res) => {
         .eq('creator_id', settings.creator_id)
         .order('threshold', { ascending: true })
         .then(r => r.data || []),
-      challenge_progress: await getChallengeProgress(settings)
+      challenge_progress: await getChallengeProgress(settings),
+      announcements: await supabase.from('creator_announcements')
+        .select('id, title, body, pinned, created_at')
+        .eq('creator_slug', slug)
+        .order('pinned', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(5)
+        .then(r => r.data || [])
     });
 
   } catch (err) {
@@ -3984,6 +4002,81 @@ app.put('/api/creator/settings/suggestions', requireCreator, async (req, res) =>
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ════════════════════════════════════════════════════════════
+// 8d. ANNOUNCEMENTS
+// POST   /api/creator/announcements         — create
+// GET    /api/community/:slug/announcements — public list
+// DELETE /api/creator/announcements/:id     — delete
+// ════════════════════════════════════════════════════════════
+
+app.post('/api/creator/announcements', requireCreator, async (req, res) => {
+  try {
+    const { data: settings } = await supabase.from('creator_settings').select('slug').eq('creator_id', req.creator.id).single();
+    const { title, body, pinned } = req.body;
+    if (!title || !title.trim()) return res.status(400).json({ error: 'Title required.' });
+    const { data, error } = await supabase.from('creator_announcements')
+      .insert({ creator_slug: settings.slug, title: title.trim().slice(0,200), body: (body||'').trim().slice(0,1000), pinned: !!pinned })
+      .select().single();
+    if (error) throw error;
+    res.json({ ok: true, announcement: data });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/community/:slug/announcements', async (req, res) => {
+  try {
+    const { data } = await supabase.from('creator_announcements')
+      .select('id, title, body, pinned, created_at')
+      .eq('creator_slug', req.params.slug)
+      .order('pinned', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(10);
+    res.json({ announcements: data || [] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/creator/announcements/:id', requireCreator, async (req, res) => {
+  try {
+    const { data: settings } = await supabase.from('creator_settings').select('slug').eq('creator_id', req.creator.id).single();
+    await supabase.from('creator_announcements').delete().eq('id', req.params.id).eq('creator_slug', settings.slug);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ════════════════════════════════════════════════════════════
+// 8e. MARKET COMMENTS
+// GET  /api/community/:slug/markets/:marketId/comments
+// POST /api/community/:slug/markets/:marketId/comments  (auth)
+// ════════════════════════════════════════════════════════════
+
+app.get('/api/community/:slug/markets/:marketId/comments', async (req, res) => {
+  try {
+    const { data } = await supabase.from('market_comments')
+      .select('id, user_name, body, created_at')
+      .eq('market_id', req.params.marketId)
+      .eq('creator_slug', req.params.slug)
+      .order('created_at', { ascending: true })
+      .limit(50);
+    res.json({ comments: data || [] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/community/:slug/markets/:marketId/comments', async (req, res) => {
+  try {
+    const userId = getUserIdFromReq(req);
+    if (!userId) return res.status(401).json({ error: 'Sign in to comment.' });
+    const { body } = req.body;
+    if (!body || body.trim().length < 1) return res.status(400).json({ error: 'Comment cannot be empty.' });
+    if (body.trim().length > 280) return res.status(400).json({ error: 'Comment too long (max 280 chars).' });
+    const { data: profile } = await supabase.from('users').select('display_name, username').eq('id', userId).maybeSingle();
+    const user_name = profile?.display_name || profile?.username || 'Anonymous';
+    const { data, error } = await supabase.from('market_comments')
+      .insert({ market_id: req.params.marketId, creator_slug: req.params.slug, user_id: userId, user_name, body: body.trim() })
+      .select().single();
+    if (error) throw error;
+    res.json({ ok: true, comment: data });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ════════════════════════════════════════════════════════════
@@ -5082,6 +5175,132 @@ app.get('/api/creator/custom-domain/status', requireCreator, async (req, res) =>
 // ════════════════════════════════════════════════════════════
 // END CREATOR PLATFORM ROUTES
 // ════════════════════════════════════════════════════════════
+
+// ── EMAIL: Resolution Notifications ─────────────────────────────────────────
+// Opt-in via Railway env vars:
+//   SMTP_HOST, SMTP_PORT (default 587), SMTP_USER, SMTP_PASS, SMTP_FROM
+// If SMTP_HOST is not set the function is a no-op — no crash, just skipped.
+// ─────────────────────────────────────────────────────────────────────────────
+function createMailTransport() {
+  if (!process.env.SMTP_HOST) return null;
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT || '587', 10),
+    secure: process.env.SMTP_SECURE === 'true',
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
+}
+
+// Send resolution emails to all bettors on a market.
+// market      — markets row (must include .question)
+// outcome     — 'YES' | 'NO'
+// creatorSlug — slug string, used to build community URL + sender name
+// resolutionNote — optional creator note (string | null)
+async function sendResolutionEmails(market, outcome, creatorSlug, resolutionNote) {
+  try {
+    const transporter = createMailTransport();
+    if (!transporter) return; // SMTP not configured — skip silently
+
+    // Fetch all distinct users who had positions on this market
+    const { data: positions } = await supabase
+      .from('positions')
+      .select('user_id')
+      .eq('market_id', market.id);
+
+    if (!positions || positions.length === 0) return;
+
+    const uniqueUserIds = [...new Set(positions.map(p => p.user_id))];
+
+    // Fetch their emails + names from users table
+    const { data: users } = await supabase
+      .from('users')
+      .select('id, email, name')
+      .in('id', uniqueUserIds);
+
+    if (!users || users.length === 0) return;
+
+    // Fetch creator display name for the email header
+    const { data: creator } = await supabase
+      .from('creator_settings')
+      .select('community_name')
+      .eq('slug', creatorSlug)
+      .maybeSingle();
+
+    const communityName = creator?.community_name || creatorSlug;
+    const communityUrl  = `https://hyperflex.network/${creatorSlug}`;
+    const fromAddress   = process.env.SMTP_FROM || `"${communityName}" <noreply@hyperflex.network>`;
+
+    const outcomeEmoji = outcome === 'YES' ? '✅' : '❌';
+    const noteSection  = resolutionNote
+      ? `<p style="margin:12px 0;padding:12px;background:#f5f5f0;border-left:3px solid #c9920d;font-size:14px;color:#444;">${resolutionNote}</p>`
+      : '';
+
+    const sendAll = users
+      .filter(u => u.email)
+      .map(u => {
+        const subject = `${outcomeEmoji} Market resolved: ${market.question}`;
+        const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"/></head>
+<body style="font-family:'Helvetica Neue',Arial,sans-serif;background:#141412;margin:0;padding:0;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#141412;padding:40px 0;">
+    <tr><td align="center">
+      <table width="540" cellpadding="0" cellspacing="0" style="background:#1e1e1b;border-radius:10px;overflow:hidden;">
+        <!-- Header -->
+        <tr><td style="background:#c9920d;padding:18px 28px;">
+          <span style="font-family:'Helvetica Neue',Arial,sans-serif;font-size:22px;font-weight:900;color:#141412;letter-spacing:-0.5px;">HYPERFLEX</span>
+          <span style="float:right;font-size:13px;color:#141412;opacity:0.7;line-height:32px;">${communityName}</span>
+        </td></tr>
+        <!-- Body -->
+        <tr><td style="padding:28px;">
+          <p style="margin:0 0 6px;font-size:12px;color:#888;text-transform:uppercase;letter-spacing:1px;">Market Resolved</p>
+          <h2 style="margin:0 0 20px;font-size:20px;color:#f5f5f0;font-weight:700;line-height:1.3;">${market.question}</h2>
+
+          <div style="background:#141412;border-radius:8px;padding:20px;text-align:center;margin-bottom:20px;">
+            <div style="font-size:40px;margin-bottom:6px;">${outcomeEmoji}</div>
+            <div style="font-size:28px;font-weight:900;color:${outcome === 'YES' ? '#22c55e' : '#ef4444'};letter-spacing:-1px;">${outcome}</div>
+            <div style="font-size:13px;color:#888;margin-top:4px;">Final outcome</div>
+          </div>
+
+          ${noteSection}
+
+          <p style="margin:20px 0 8px;font-size:14px;color:#aaa;">Your Flex Points have been updated. Head to the community to see your balance and join the next round.</p>
+
+          <a href="${communityUrl}" style="display:inline-block;margin-top:12px;padding:12px 24px;background:#c9920d;color:#141412;font-weight:700;font-size:15px;border-radius:6px;text-decoration:none;">Back to ${communityName} →</a>
+        </td></tr>
+        <!-- Footer -->
+        <tr><td style="padding:16px 28px;border-top:1px solid #2a2a27;">
+          <p style="margin:0;font-size:11px;color:#555;">You're receiving this because you participated in a market on <a href="${communityUrl}" style="color:#888;">${communityName}</a>. Powered by <a href="https://hyperflex.network" style="color:#888;">Hyperflex</a>.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+        return transporter.sendMail({
+          from: fromAddress,
+          to: u.email,
+          subject,
+          html,
+        });
+      });
+
+    const results = await Promise.allSettled(sendAll);
+    const sent    = results.filter(r => r.status === 'fulfilled').length;
+    const failed  = results.filter(r => r.status === 'rejected').length;
+    if (sent > 0 || failed > 0) {
+      console.log(`[email] Resolution emails: ${sent} sent, ${failed} failed — market ${market.id}`);
+    }
+  } catch (err) {
+    // Never crash the server over email failures
+    console.error('[email] sendResolutionEmails error:', err.message);
+  }
+}
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`HYPERFLEX server running on port ${PORT}`));

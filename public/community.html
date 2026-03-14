@@ -1200,6 +1200,9 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
     <button class="filter-tab"        id="ftMine"  onclick="setFilter('mine')" style="display:none">✓ My Bets <span class="filter-count" id="fcMine">0</span></button>
   </div>
 
+  <!-- Creator Announcements -->
+  <div id="announcementsSection" style="display:none;margin-bottom:16px"></div>
+
   <!-- Suggest a Market button -->
   <div id="suggestMarketRow" style="display:none;margin-bottom:14px">
     <button onclick="openSuggestMarket()" style="display:inline-flex;align-items:center;gap:6px;background:transparent;border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-family:var(--mono);font-size:12px;font-weight:600;color:var(--dim);cursor:pointer;letter-spacing:.05em;transition:border-color .15s,color .15s" onmouseover="this.style.borderColor='var(--gold)';this.style.color='var(--gold)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">
@@ -1462,6 +1465,7 @@ async function loadCommunity() {
     renderRewards(allRewards);
     loadLeaderboard();
     if (data.challenge_progress) renderChallengeBar(data.challenge_progress);
+    if (data.announcements && data.announcements.length) renderAnnouncements(data.announcements);
   } catch {
     showCommunityError();
   }
@@ -1875,11 +1879,18 @@ function marketCardHTML(m, isResolved, featured) {
       </div>
     </div>`;
 
-  // Meta row
-  const metaHTML = `<div class="market-meta">
-    <span class="meta-item${urgentTime && !isResolved ? ' urgent' : ''}">⏱ ${countdown}</span>
-    <span class="meta-item">👥 ${traders}</span>
-    ${vol ? `<span class="meta-item">📊 ${vol}</span>` : ''}
+  // Meta row (comment toggle only on active markets)
+  const commentBtnId = `cmtBtn-${m.id}`;
+  const commentCount = m.comment_count || 0;
+  const metaHTML = `<div class="market-meta" style="justify-content:space-between">
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <span class="meta-item${urgentTime && !isResolved ? ' urgent' : ''}">⏱ ${countdown}</span>
+      <span class="meta-item">👥 ${traders}</span>
+      ${vol ? `<span class="meta-item">📊 ${vol}</span>` : ''}
+    </div>
+    <button id="${commentBtnId}" onclick="event.stopPropagation();toggleComments('${m.id}')" style="background:transparent;border:none;font-family:var(--mono);font-size:10px;color:var(--dim);cursor:pointer;display:flex;align-items:center;gap:4px;padding:2px 0;letter-spacing:.04em" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='var(--dim)'">
+      💬 <span id="cmtCount-${m.id}">${commentCount > 0 ? commentCount : ''}</span>
+    </button>
   </div>`;
 
   // Actions
@@ -1890,7 +1901,10 @@ function marketCardHTML(m, isResolved, featured) {
     const shareBtn = userWon && currentUser
       ? `<button onclick="event.stopPropagation();openWinCard(${JSON.stringify(m.question)},${JSON.stringify(community?.display_name||'')},${JSON.stringify(pos?.amount||0)})" style="margin-left:10px;background:rgba(201,146,13,0.15);border:1px solid rgba(201,146,13,0.4);color:#c9920d;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:700">🎉 Share</button>`
       : '';
-    actionsHTML = `<div class="outcome-banner ${won ? 'yes' : 'no'}" style="display:flex;align-items:center;justify-content:space-between">${won ? '✓ Resolved YES' : '✗ Resolved NO'}${shareBtn}</div>`;
+    const noteHTML = m.resolution_note
+      ? `<div style="font-size:11px;color:var(--dim);padding:8px 16px 10px;line-height:1.5;font-style:italic;border-top:1px solid rgba(255,255,255,0.06)">📌 ${escHtml(m.resolution_note)}</div>`
+      : '';
+    actionsHTML = `<div class="outcome-banner ${won ? 'yes' : 'no'}" style="display:flex;align-items:center;justify-content:space-between">${won ? '✓ Resolved YES' : '✗ Resolved NO'}${shareBtn}</div>${noteHTML}`;
   } else {
     actionsHTML = `<div class="market-actions">
       <button class="btn-predict yes" onclick="onPredict(event,'${m.id}','YES')">
@@ -1922,6 +1936,13 @@ function marketCardHTML(m, isResolved, featured) {
         ${metaHTML}
       </div>
       ${actionsHTML}
+      <div id="comments-${m.id}" style="display:none;border-top:1px solid var(--border)">
+        <div id="commentsList-${m.id}" style="padding:12px 16px 0;display:flex;flex-direction:column;gap:8px;max-height:260px;overflow-y:auto"></div>
+        <div style="padding:10px 14px;display:flex;gap:8px;align-items:center">
+          <input id="commentInput-${m.id}" type="text" maxlength="280" placeholder="Add a comment…" onclick="event.stopPropagation()" style="flex:1;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:7px 10px;font-family:inherit" onkeydown="if(event.key==='Enter'){event.preventDefault();postComment('${m.id}')}"/>
+          <button onclick="event.stopPropagation();postComment('${m.id}')" style="background:var(--gold);border:none;border-radius:6px;padding:7px 12px;font-family:var(--mono);font-size:11px;font-weight:700;color:#000;cursor:pointer;white-space:nowrap">Send</button>
+        </div>
+      </div>
     </div>`;
 }
 
@@ -2585,6 +2606,109 @@ function renderChallengeBar(p) {
       : bonusPts > 0 ? `+${bonusPts} pts bonus if we hit it` : '';
   const ends = new Date(p.end_date);
   document.getElementById('challengeBannerEnd').textContent = 'Ends ' + ends.toLocaleDateString();
+}
+
+// ── MARKET COMMENTS ───────────────────────────────────────────
+const commentsLoaded = {};
+
+async function toggleComments(marketId) {
+  const panel = document.getElementById(`comments-${marketId}`);
+  if (!panel) return;
+  const isOpen = panel.style.display !== 'none';
+  panel.style.display = isOpen ? 'none' : 'block';
+  if (!isOpen && !commentsLoaded[marketId]) {
+    await loadComments(marketId);
+  }
+  if (!isOpen) {
+    setTimeout(() => document.getElementById(`commentInput-${marketId}`)?.focus(), 50);
+  }
+}
+
+async function loadComments(marketId) {
+  const listEl = document.getElementById(`commentsList-${marketId}`);
+  if (!listEl) return;
+  listEl.innerHTML = `<div style="text-align:center;padding:8px;color:var(--dim);font-size:12px">Loading…</div>`;
+  try {
+    const r = await fetch(`${API}/api/community/${slug}/markets/${marketId}/comments`);
+    const data = await r.json();
+    commentsLoaded[marketId] = true;
+    renderComments(marketId, data.comments || []);
+  } catch {
+    listEl.innerHTML = `<div style="text-align:center;padding:8px;color:var(--dim);font-size:12px">Failed to load.</div>`;
+  }
+}
+
+function renderComments(marketId, comments) {
+  const listEl = document.getElementById(`commentsList-${marketId}`);
+  const countEl = document.getElementById(`cmtCount-${marketId}`);
+  if (!listEl) return;
+  if (countEl) countEl.textContent = comments.length > 0 ? comments.length : '';
+  if (!comments.length) {
+    listEl.innerHTML = `<div style="text-align:center;padding:8px;color:var(--dim);font-size:12px;font-style:italic">No comments yet. Be first!</div>`;
+    return;
+  }
+  listEl.innerHTML = comments.map(c => {
+    const ago = formatTimeAgo(c.created_at);
+    const isMe = currentUser && c.user_name === (currentUser.display_name || currentUser.email);
+    return `<div style="display:flex;flex-direction:column;gap:2px">
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:${isMe ? 'var(--gold)' : 'var(--text)'}">${escHtml(c.user_name||'Anonymous')}</span>
+        <span style="font-family:var(--mono);font-size:9px;color:var(--dim)">${ago}</span>
+      </div>
+      <div style="font-size:13px;color:var(--dim);line-height:1.4">${escHtml(c.body)}</div>
+    </div>`;
+  }).join('');
+  listEl.scrollTop = listEl.scrollHeight;
+}
+
+async function postComment(marketId) {
+  if (!currentUser) { openAuth('register'); return; }
+  const input = document.getElementById(`commentInput-${marketId}`);
+  if (!input) return;
+  const body = input.value.trim();
+  if (!body) return;
+  const token = localStorage.getItem('hf_token');
+  try {
+    const r = await fetch(`${API}/api/community/${slug}/markets/${marketId}/comments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ body })
+    });
+    const data = await r.json();
+    if (!r.ok) { showToast(data.error || 'Failed to post comment.', 'error'); return; }
+    input.value = '';
+    await loadComments(marketId);
+  } catch { showToast('Network error.', 'error'); }
+}
+
+// ── ANNOUNCEMENTS ─────────────────────────────────────────────
+function renderAnnouncements(announcements) {
+  const sec = document.getElementById('announcementsSection');
+  if (!sec || !announcements.length) return;
+  sec.style.display = 'block';
+  sec.innerHTML = announcements.map(a => {
+    const timeAgo = formatTimeAgo(a.created_at);
+    const pinBadge = a.pinned ? `<span style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:rgba(201,146,13,0.15);border:1px solid rgba(201,146,13,0.3);color:var(--gold);padding:2px 7px;border-radius:3px">📌 Pinned</span>` : '';
+    return `<div style="background:var(--cream);border:1px solid ${a.pinned ? 'rgba(201,146,13,0.35)' : 'var(--border)'};border-radius:12px;padding:14px 16px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:${a.body ? '8px' : '0'}">
+        <span style="font-size:13px;font-weight:700;color:var(--text);flex:1">${escHtml(a.title)}</span>
+        ${pinBadge}
+        <span style="font-family:var(--mono);font-size:10px;color:var(--dim)">${timeAgo}</span>
+      </div>
+      ${a.body ? `<div style="font-size:13px;color:var(--dim);line-height:1.6">${escHtml(a.body)}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function formatTimeAgo(iso) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins  = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days  = Math.floor(diff / 86400000);
+  if (mins < 2)   return 'just now';
+  if (mins < 60)  return `${mins}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  return `${days}d ago`;
 }
 
 // ── MARKET SUGGESTION ─────────────────────────────────────────

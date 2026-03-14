@@ -2668,6 +2668,20 @@ body.nav-open .sidebar-backdrop {
           </div>
         </div>
 
+        <!-- Announcements -->
+        <div class="section">
+          <div class="section-header">
+            <div>
+              <div class="section-title">📢 Announcements</div>
+              <div class="section-subtitle">Post updates visible on your community page</div>
+            </div>
+            <button class="btn-secondary" style="font-size:12px;padding:6px 12px;white-space:nowrap" onclick="openAnnouncementModal()">+ Post</button>
+          </div>
+          <div id="announcementsList" style="display:flex;flex-direction:column;gap:8px">
+            <div style="text-align:center;padding:20px;color:var(--dim);font-size:13px">No announcements yet.</div>
+          </div>
+        </div>
+
         <!-- Resolution queue preview -->
         <div class="section" id="resolvePreviewSection" style="display:none">
           <div class="section-header">
@@ -3870,6 +3884,12 @@ body.nav-open .sidebar-backdrop {
         </div>
       </div>
 
+      <!-- Resolution note for community -->
+      <div class="field" style="margin-bottom:14px">
+        <label style="margin-bottom:6px;display:block">Resolution Note <span style="font-weight:400;text-transform:none;font-size:11px;color:var(--dim)">(shown to your community — optional)</span></label>
+        <textarea id="resolutionNoteInput" rows="2" maxlength="500" placeholder="e.g. Confirmed by official announcement on March 14. Source: ESPN." style="font-size:13px"></textarea>
+      </div>
+
       <!-- Attestation -->
       <label class="attest-row" onclick="toggleAttest()">
         <input type="checkbox" id="attestCheck"/>
@@ -3970,7 +3990,7 @@ body.nav-open .sidebar-backdrop {
           <div class="plan-desc">Get started and test prediction markets with your community.</div>
           <div class="plan-divider"></div>
           <ul class="plan-features">
-            <li class="plan-feature included"><span class="feature-check yes">✓</span> Up to 3 active markets</li>
+            <li class="plan-feature included"><span class="feature-check yes">✓</span> Up to 5 active markets</li>
             <li class="plan-feature included"><span class="feature-check yes">✓</span> Community leaderboard</li>
             <li class="plan-feature included"><span class="feature-check yes">✓</span> Basic analytics</li>
             <li class="plan-feature included"><span class="feature-check yes">✓</span> Flex Points system</li>
@@ -4699,6 +4719,17 @@ function showTab(tab) {
 
 // Create market
 function openCreateModal() {
+  // Free plan gate: max 5 active markets
+  const plan = creatorData?.creator?.plan || 'free';
+  if (plan === 'free') {
+    const now = new Date();
+    const live = (communityMarkets || []).filter(m => !m.archived && !m.resolved && new Date(m.expiry_date) >= now).length;
+    if (live >= 5) {
+      showToast('Free plan allows up to 5 active markets. Upgrade to Pro for unlimited.', 'error');
+      setTimeout(() => showTab('settings'), 1200);
+      return;
+    }
+  }
   const d = new Date();
   d.setDate(d.getDate() + 30);
   document.getElementById('newDate').value = d.toISOString().split('T')[0];
@@ -4851,6 +4882,7 @@ function openResolveModal(marketId, question) {
   document.getElementById('resolveNoBtn').style.opacity = '1';
   document.getElementById('resolveSuggestBtn').disabled = false;
   document.getElementById('resolveSuggestBtn').textContent = '🤖 Get AI Suggestion';
+  document.getElementById('resolutionNoteInput').value = '';
 
   document.getElementById('resolveModal').classList.add('show');
 }
@@ -4949,7 +4981,7 @@ async function confirmResolution() {
     const r = await fetch(`${API}/markets/${resolveMarketId}/resolve`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-      body: JSON.stringify({ outcome: resolveSelectedOutcome, attestation_text })
+      body: JSON.stringify({ outcome: resolveSelectedOutcome, attestation_text, resolution_note: document.getElementById('resolutionNoteInput').value.trim() || undefined })
     });
     const data = await r.json();
     if (data.ok || data.success) {
@@ -6972,8 +7004,121 @@ function formatTimeAgo(iso) {
   return `${days}d ago`;
 }
 
+// ── ANNOUNCEMENTS ─────────────────────────────────────────────
+let announcementsCache = [];
+
+async function loadAnnouncements() {
+  try {
+    const slug = creatorData?.creator?.slug;
+    if (!slug) return;
+    const r = await fetch(`${API}/api/community/${slug}/announcements`);
+    const data = await r.json();
+    announcementsCache = data.announcements || [];
+    renderAnnouncementsList();
+  } catch {}
+}
+
+function renderAnnouncementsList() {
+  const el = document.getElementById('announcementsList');
+  if (!el) return;
+  if (!announcementsCache.length) {
+    el.innerHTML = `<div style="text-align:center;padding:20px;color:var(--dim);font-size:13px">No announcements yet. Post an update for your community.</div>`;
+    return;
+  }
+  const timeAgo = iso => {
+    const d = Date.now() - new Date(iso).getTime();
+    const m = Math.floor(d/60000), h = Math.floor(d/3600000), dy = Math.floor(d/86400000);
+    if (m < 2) return 'just now'; if (m < 60) return `${m}m ago`;
+    if (h < 24) return `${h}h ago`; return `${dy}d ago`;
+  };
+  el.innerHTML = announcementsCache.map(a => `
+    <div style="background:var(--surface);border:1px solid ${a.pinned ? 'rgba(201,146,13,0.3)' : 'var(--border)'};border-radius:10px;padding:12px 14px;display:flex;align-items:flex-start;gap:10px">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:${a.body?'4px':'0'}">${escHtml(a.title)}${a.pinned ? ' <span style="font-size:10px;color:var(--gold);font-weight:400">📌</span>' : ''}</div>
+        ${a.body ? `<div style="font-size:12px;color:var(--dim);line-height:1.5">${escHtml(a.body)}</div>` : ''}
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+        <span style="font-family:var(--mono);font-size:10px;color:var(--dim)">${timeAgo(a.created_at)}</span>
+        <button onclick="deleteAnnouncement('${a.id}')" style="background:transparent;border:none;color:var(--dim);cursor:pointer;font-size:14px;padding:2px 4px;line-height:1" title="Delete">✕</button>
+      </div>
+    </div>`).join('');
+}
+
+function openAnnouncementModal() {
+  document.getElementById('annTitle').value = '';
+  document.getElementById('annBody').value = '';
+  document.getElementById('annPinned').checked = false;
+  document.getElementById('annError').style.display = 'none';
+  document.getElementById('announcementModal').classList.add('show');
+}
+function closeAnnouncementModal() {
+  document.getElementById('announcementModal').classList.remove('show');
+}
+
+async function submitAnnouncement() {
+  const title  = document.getElementById('annTitle').value.trim();
+  const body   = document.getElementById('annBody').value.trim();
+  const pinned = document.getElementById('annPinned').checked;
+  const errEl  = document.getElementById('annError');
+  errEl.style.display = 'none';
+  if (!title) { errEl.textContent = 'Title is required.'; errEl.style.display = 'block'; return; }
+  const btn = document.getElementById('annSubmitBtn');
+  btn.disabled = true; btn.textContent = 'Posting…';
+  try {
+    const r = await fetch(`${API}/api/creator/announcements`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ title, body, pinned })
+    });
+    const data = await r.json();
+    if (!r.ok) { errEl.textContent = data.error || 'Failed.'; errEl.style.display = 'block'; return; }
+    closeAnnouncementModal();
+    showToast('Announcement posted ✓', 'success');
+    loadAnnouncements();
+  } catch { errEl.textContent = 'Network error.'; errEl.style.display = 'block'; }
+  finally { btn.disabled = false; btn.textContent = 'Post'; }
+}
+
+async function deleteAnnouncement(id) {
+  try {
+    await fetch(`${API}/api/creator/announcements/${id}`, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + token } });
+    loadAnnouncements();
+  } catch { showToast('Failed to delete', 'error'); }
+}
+
 // Init
 init();
+loadAnnouncements();
 </script>
+
+<!-- Announcement Modal -->
+<div class="modal-overlay" id="announcementModal" onclick="if(event.target===this)closeAnnouncementModal()">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <div class="modal-title">📢 Post Announcement</div>
+      <button class="modal-close" onclick="closeAnnouncementModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div id="annError" style="display:none;background:rgba(192,57,43,0.1);border:1px solid rgba(192,57,43,0.3);border-radius:6px;padding:10px 14px;font-size:12px;color:#e74c3c;margin-bottom:14px"></div>
+      <div class="field">
+        <label>Title *</label>
+        <input type="text" id="annTitle" maxlength="200" placeholder="e.g. Drake market resolved — here's why"/>
+      </div>
+      <div class="field">
+        <label>Body <span style="font-weight:400;text-transform:none">(optional)</span></label>
+        <textarea id="annBody" rows="3" maxlength="1000" placeholder="Add more context, links, or details…"></textarea>
+      </div>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--dim);margin-top:4px">
+        <input type="checkbox" id="annPinned" style="width:16px;height:16px"/>
+        Pin this announcement (shows at top)
+      </label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeAnnouncementModal()">Cancel</button>
+      <button class="btn-primary" id="annSubmitBtn" onclick="submitAnnouncement()">Post</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
