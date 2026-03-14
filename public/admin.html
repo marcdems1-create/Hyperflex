@@ -366,6 +366,42 @@
   }
   .toast.show { transform: translateY(0); opacity: 1; }
   .toast.error { border-color: rgba(192,57,43,0.4); }
+
+  /* Trial badge */
+  .trial-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(201,146,13,0.12);
+    border: 1px solid rgba(201,146,13,0.3);
+    border-radius: 6px;
+    color: var(--gold);
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    padding: 2px 7px;
+    white-space: nowrap;
+  }
+  .trial-badge.expired { background: rgba(192,57,43,0.1); border-color: rgba(192,57,43,0.3); color: var(--red); }
+
+  /* Action button group in creator row */
+  .row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .action-btn {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    padding: 5px 9px;
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.04);
+    color: rgba(255,255,255,0.5);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all .15s;
+  }
+  .action-btn:hover { border-color: var(--gold); color: var(--gold); }
+  .action-btn.gift { border-color: rgba(45,155,95,0.4); color: var(--green); }
+  .action-btn.gift:hover { background: rgba(45,155,95,0.1); }
+  .action-btn.transfer { border-color: rgba(59,130,246,0.4); color: var(--blue); }
+  .action-btn.transfer:hover { background: rgba(59,130,246,0.1); }
 </style>
 </head>
 <body>
@@ -524,6 +560,24 @@
       </div>
     </div>
   </main>
+</div>
+
+<!-- Transfer Ownership Modal -->
+<div id="transferOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:200;display:none;align-items:center;justify-content:center">
+  <div style="background:#1c1c19;border:1px solid rgba(255,255,255,0.12);border-radius:14px;padding:32px;width:440px;max-width:calc(100vw - 32px)">
+    <div style="font-size:16px;font-weight:800;margin-bottom:6px;color:#fff">Transfer Ownership</div>
+    <div style="font-size:13px;color:rgba(255,255,255,0.45);margin-bottom:20px">
+      Reassign creator account <strong id="transferSlugLabel" style="color:var(--gold)"></strong> to a new owner.<br/>
+      The new owner must already have a HYPERFLEX account.
+    </div>
+    <input id="transferEmailInput" type="email" placeholder="New owner email address"
+      style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:#fff;font-family:'Space Mono',monospace;font-size:13px;padding:11px 14px;outline:none;margin-bottom:14px"/>
+    <div id="transferResult" style="display:none;font-size:12px;padding:10px 14px;border-radius:7px;margin-bottom:14px"></div>
+    <div style="display:flex;gap:10px">
+      <button onclick="doTransfer()" style="flex:1;background:var(--gold);border:none;border-radius:8px;color:#000;font-weight:700;font-size:13px;padding:11px;cursor:pointer">Transfer →</button>
+      <button onclick="closeTransferModal()" style="padding:11px 18px;background:none;border:1px solid rgba(255,255,255,0.12);border-radius:8px;color:rgba(255,255,255,0.5);font-size:13px;cursor:pointer">Cancel</button>
+    </div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -744,13 +798,24 @@ function renderTable(rows) {
   tbody.innerHTML = rows.map(c => {
     const plan = c.plan || 'free';
     const joined = c.joined ? new Date(c.joined).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : '—';
+
+    // Trial expiry badge
+    let trialBadge = '';
+    if (c.trial_expires_at) {
+      const exp = new Date(c.trial_expires_at);
+      const daysLeft = Math.ceil((exp - Date.now()) / 86400000);
+      const isExpired = daysLeft <= 0;
+      const label = isExpired ? 'Trial expired' : `Trial: ${daysLeft}d left`;
+      trialBadge = `<span class="trial-badge${isExpired ? ' expired' : ''}">${label}</span>`;
+    }
+
     return `
       <tr id="creator-row-${esc(c.slug)}">
         <td class="td-name">${esc(c.name || '—')}</td>
         <td class="td-slug">/${esc(c.slug)}</td>
         <td class="td-email">${esc(c.email)}</td>
         <td class="td-markets">${c.markets}</td>
-        <td><span class="plan-badge ${plan}">${plan}</span></td>
+        <td><span class="plan-badge ${plan}">${plan === 'platinum' ? 'Premium' : plan}</span>${trialBadge ? '<br>' + trialBadge : ''}</td>
         <td class="td-date">${joined}</td>
         <td>
           <select class="plan-select" id="sel-${esc(c.slug)}">
@@ -760,7 +825,13 @@ function renderTable(rows) {
           </select>
           <button class="set-plan-btn" id="btn-${esc(c.slug)}" onclick="setPlan('${esc(c.slug)}')">Set</button>
         </td>
-        <td><button class="set-plan-btn" style="background:rgba(239,68,68,0.15);border-color:#ef4444;color:#ef4444" onclick="deleteCreatorBySlug('${esc(c.slug)}', '${esc(c.name || c.slug)}')">Delete</button></td>
+        <td>
+          <div class="row-actions">
+            <button class="action-btn gift" onclick="giftTrial('${esc(c.slug)}', '${esc(c.name || c.slug)}')">🎁 Gift 30d</button>
+            <button class="action-btn transfer" onclick="openTransferModal('${esc(c.slug)}')">→ Transfer</button>
+            <button class="set-plan-btn" style="background:rgba(239,68,68,0.15);border-color:#ef4444;color:#ef4444" onclick="deleteCreatorBySlug('${esc(c.slug)}', '${esc(c.name || c.slug)}')">Delete</button>
+          </div>
+        </td>
       </tr>`;
   }).join('');
 }
@@ -879,6 +950,95 @@ async function deleteCreatorBySlug(slug, name) {
     showToast('Error: ' + err.message, 'error');
   }
 }
+
+// ── Gift Trial ─────────────────────────────────────────────
+async function giftTrial(slug, name) {
+  const days = prompt(`Gift Premium trial to "${name}" (/${slug}).\n\nHow many days? (default: 30)`, '30');
+  if (days === null) return; // cancelled
+  const n = parseInt(days) || 30;
+  if (n < 1 || n > 365) { showToast('Days must be 1–365', 'error'); return; }
+
+  try {
+    const r = await fetch(API + '/api/admin/gift-trial?secret=' + encodeURIComponent(adminSecret), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug, days: n })
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Failed');
+
+    // Update local data + re-render
+    const creator = allCreators.find(c => c.slug === slug);
+    if (creator) { creator.plan = 'platinum'; creator.trial_expires_at = data.expires_at; }
+    applyFilter();
+    updateStats(allCreators);
+
+    const exp = new Date(data.expires_at).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+    showToast(`🎁 ${n}-day Premium trial gifted to /${slug} — expires ${exp}`);
+  } catch (err) {
+    showToast('Error: ' + err.message, 'error');
+  }
+}
+
+// ── Transfer Ownership ─────────────────────────────────────
+let transferSlug = '';
+
+function openTransferModal(slug) {
+  transferSlug = slug;
+  document.getElementById('transferSlugLabel').textContent = '/' + slug;
+  document.getElementById('transferEmailInput').value = '';
+  const res = document.getElementById('transferResult');
+  res.style.display = 'none';
+  res.textContent = '';
+  document.getElementById('transferOverlay').style.display = 'flex';
+}
+
+function closeTransferModal() {
+  document.getElementById('transferOverlay').style.display = 'none';
+  transferSlug = '';
+}
+
+async function doTransfer() {
+  const email = document.getElementById('transferEmailInput').value.trim();
+  const res   = document.getElementById('transferResult');
+  if (!email) { showToast('Enter the new owner\'s email', 'error'); return; }
+
+  res.style.display = 'none';
+
+  try {
+    const r = await fetch(API + '/api/admin/transfer-creator?secret=' + encodeURIComponent(adminSecret), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: transferSlug, new_email: email })
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Transfer failed');
+
+    // Update local creator email display
+    const creator = allCreators.find(c => c.slug === transferSlug);
+    if (creator) { creator.email = data.new_owner.email; creator.name = data.new_owner.display_name || creator.name; }
+    applyFilter();
+
+    res.style.display = 'block';
+    res.style.background = 'rgba(45,155,95,0.1)';
+    res.style.border = '1px solid rgba(45,155,95,0.3)';
+    res.style.color = '#4ade80';
+    res.innerHTML = `✓ Transferred to <strong>${esc(data.new_owner.display_name || email)}</strong> (${esc(data.new_owner.email)})`;
+    showToast(`✓ /${transferSlug} transferred to ${data.new_owner.email}`);
+    setTimeout(closeTransferModal, 2200);
+  } catch (err) {
+    res.style.display = 'block';
+    res.style.background = 'rgba(192,57,43,0.1)';
+    res.style.border = '1px solid rgba(192,57,43,0.3)';
+    res.style.color = '#ef4444';
+    res.textContent = '✗ ' + err.message;
+  }
+}
+
+// Close transfer modal on overlay click
+document.getElementById('transferOverlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('transferOverlay')) closeTransferModal();
+});
 
 // ── Toast ──────────────────────────────────────────────────
 let toastTimer;

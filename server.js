@@ -1123,6 +1123,28 @@ async function settleMarkets() {
 // Run settlement every hour
 cron.schedule('0 * * * *', settleMarkets);
 
+// ── TRIAL EXPIRY ────────────────────────────────────────
+// Every hour: downgrade any creators whose gifted trial has expired
+async function expireTrials() {
+  try {
+    const { data: expired } = await supabase
+      .from('creator_settings')
+      .select('slug, creator_id, plan_trial_expires_at')
+      .not('plan_trial_expires_at', 'is', null)
+      .lt('plan_trial_expires_at', new Date().toISOString());
+    if (!expired?.length) return;
+    for (const cs of expired) {
+      await supabase.from('creator_settings')
+        .update({ plan: 'free', plan_trial_expires_at: null })
+        .eq('slug', cs.slug);
+      console.log(`[trial-expiry] /${cs.slug} trial expired → downgraded to free`);
+    }
+  } catch (err) {
+    console.error('[trial-expiry] error:', err.message);
+  }
+}
+cron.schedule('30 * * * *', expireTrials); // runs at :30 past each hour
+
 // ── WEEKLY REFILLS ────────────────────────────────
 
 // Returns the most recent Monday at 00:00:00 UTC
@@ -4373,7 +4395,7 @@ app.get('/api/admin/creators', requireAdmin, async (req, res) => {
     // All creator settings
     const { data: settings } = await supabase
       .from('creator_settings')
-      .select('creator_id, slug, display_name, plan, created_at, custom_points_name, primary_color')
+      .select('creator_id, slug, display_name, plan, created_at, custom_points_name, primary_color, plan_trial_expires_at')
       .order('created_at', { ascending: false });
 
     if (!settings?.length) return res.json([]);
@@ -4395,13 +4417,14 @@ app.get('/api/admin/creators', requireAdmin, async (req, res) => {
     (marketCounts || []).forEach(m => { mktMap[m.creator_id] = (mktMap[m.creator_id] || 0) + 1; });
 
     const rows = settings.map(s => ({
-      creator_id: s.creator_id,
-      slug:        s.slug,
-      name:        s.display_name,
-      email:       emailMap[s.creator_id] || '—',
-      plan:        s.plan || 'free',
-      markets:     mktMap[s.creator_id] || 0,
-      joined:      s.created_at,
+      creator_id:           s.creator_id,
+      slug:                 s.slug,
+      name:                 s.display_name,
+      email:                emailMap[s.creator_id] || '—',
+      plan:                 s.plan || 'free',
+      markets:              mktMap[s.creator_id] || 0,
+      joined:               s.created_at,
+      trial_expires_at:     s.plan_trial_expires_at || null,
     }));
 
     res.json(rows);
@@ -4421,7 +4444,7 @@ app.post('/api/admin/set-plan', requireAdmin, async (req, res) => {
     }
     const { error } = await supabase
       .from('creator_settings')
-      .update({ plan })
+      .update({ plan, plan_trial_expires_at: null }) // clear any trial when plan is set manually
       .eq('slug', slug);
     if (error) throw error;
     console.log(`[admin] set ${slug} → ${plan}`);
@@ -4656,6 +4679,69 @@ app.delete('/api/admin/creator-by-slug/:slug', requireAdmin, async (req, res) =>
     res.json({ ok: true, freed: slug });
   } catch (err) {
     console.error('[admin-free-slug] error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/gift-trial — gift N days of Premium to a creator
+// Body: { slug, days }
+app.post('/api/admin/gift-trial', requireAdmin, async (req, res) => {
+  try {
+    const { slug, days = 30 } = req.body;
+    if (!slug) return res.status(400).json({ error: 'slug required' });
+    const n = Math.min(Math.max(parseInt(days) || 30, 1), 365);
+    const expiresAt = new Date(Date.now() + n * 86400000).toISOString();
+    const { error } = await supabase
+      .from('creator_settings')
+      .update({ plan: 'platinum', plan_trial_expires_at: expiresAt })
+      .eq('slug', slug);
+    if (error) throw error;
+    console.log(`[admin] gifted ${n}d Premium trial to ${slug}, expires ${expiresAt}`);
+    res.json({ ok: true, expires_at: expiresAt });
+  } catch (err) {
+    console.error('[admin] gift-trial error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/transfer-creator — transfer creator account to a new owner
+// Body: { slug, new_email }
+app.post('/api/admin/transfer-creator', requireAdmin, async (req, res) => {
+  try {
+    const { slug, new_email } = req.body;
+    if (!slug || !new_email) return res.status(400).json({ error: 'slug and new_email required' });
+
+    // Find the new owner by email
+    const { data: newUser } = await supabase
+      .from('users')
+      .select('id, email, display_name')
+      .eq('email', new_email.toLowerCase().trim())
+      .maybeSingle();
+    if (!newUser) return res.status(404).json({ error: `No user found with email: ${new_email}` });
+
+    // Get current creator settings
+    const { data: cs } = await supabase
+      .from('creator_settings')
+      .select('creator_id, slug, display_name')
+      .eq('slug', slug)
+      .maybeSingle();
+    if (!cs) return res.status(404).json({ error: `No creator found with slug: ${slug}` });
+    if (cs.creator_id === newUser.id) return res.status(400).json({ error: 'That user already owns this account' });
+
+    // Update creator_settings and markets to new owner
+    const { error: csErr } = await supabase
+      .from('creator_settings')
+      .update({ creator_id: newUser.id })
+      .eq('slug', slug);
+    if (csErr) throw csErr;
+
+    // Reassign markets to new owner
+    await supabase.from('markets').update({ creator_id: newUser.id }).eq('creator_id', cs.creator_id).eq('tenant_slug', slug);
+
+    console.log(`[admin] transferred /${slug} from ${cs.creator_id} to ${newUser.id} (${newUser.email})`);
+    res.json({ ok: true, new_owner: { id: newUser.id, email: newUser.email, display_name: newUser.display_name } });
+  } catch (err) {
+    console.error('[admin] transfer-creator error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
