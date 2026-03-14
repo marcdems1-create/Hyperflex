@@ -2136,7 +2136,13 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
         challenge_metric:     settings.challenge_metric     || null,
         challenge_target:     settings.challenge_target     || null,
         challenge_bonus_pts:  settings.challenge_bonus_pts  || 0,
-        challenge_end_date:   settings.challenge_end_date   || null
+        challenge_end_date:   settings.challenge_end_date   || null,
+        // Feature flags
+        suggestions_enabled:  settings.suggestions_enabled  || false,
+        // Plan trial
+        plan_trial_expires_at: settings.plan_trial_expires_at || null,
+        plan_scheduled_change: settings.plan_scheduled_change || null,
+        plan_change_date:      settings.plan_change_date      || null
       },
       stats: {
         total_traders: totalTraders,
@@ -3860,7 +3866,8 @@ app.get('/api/community/:slug', async (req, res) => {
         challenge_metric:     settings.challenge_metric     || null,
         challenge_target:     settings.challenge_target     || null,
         challenge_bonus_pts:  settings.challenge_bonus_pts  || 0,
-        challenge_end_date:   settings.challenge_end_date   || null
+        challenge_end_date:   settings.challenge_end_date   || null,
+        suggestions_enabled:  settings.suggestions_enabled  || false
       },
       markets: markets || [],
       rewards: await supabase
@@ -3879,7 +3886,108 @@ app.get('/api/community/:slug', async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
-// 8b. EDIT / DELETE MARKET
+// 8b. MARKET SUGGESTIONS
+// POST   /api/community/:slug/suggest   — member submits a market idea
+// GET    /api/creator/suggestions       — creator sees pending queue
+// POST   /api/creator/suggestions/:id/approve — approve (creates market draft)
+// POST   /api/creator/suggestions/:id/reject  — reject
+// PUT    /api/creator/settings/suggestions    — toggle suggestions_enabled
+// ════════════════════════════════════════════════════════════
+
+// Member submits a suggestion (auth required)
+app.post('/api/community/:slug/suggest', async (req, res) => {
+  try {
+    const userId = getUserIdFromReq(req);
+    if (!userId) return res.status(401).json({ error: 'Sign in to suggest a market.' });
+
+    const { slug } = req.params;
+    const { question, context } = req.body;
+    if (!question || question.trim().length < 10) return res.status(400).json({ error: 'Question must be at least 10 characters.' });
+    if (question.length > 280) return res.status(400).json({ error: 'Question too long (max 280 chars).' });
+
+    // Check suggestions enabled
+    const { data: settings } = await supabase.from('creator_settings').select('suggestions_enabled, creator_id').eq('slug', slug).maybeSingle();
+    if (!settings) return res.status(404).json({ error: 'Community not found.' });
+    if (!settings.suggestions_enabled) return res.status(403).json({ error: 'Market suggestions are not enabled for this community.' });
+
+    // Rate-limit: max 3 pending suggestions per user per community
+    const { count } = await supabase.from('market_suggestions')
+      .select('id', { count: 'exact', head: true })
+      .eq('creator_slug', slug).eq('user_id', userId).eq('status', 'pending');
+    if (count >= 3) return res.status(429).json({ error: 'You have 3 pending suggestions — wait for the creator to review them first.' });
+
+    // Get user display name
+    const { data: profile } = await supabase.from('users').select('display_name, username').eq('id', userId).maybeSingle();
+    const user_name = profile?.display_name || profile?.username || 'Anonymous';
+
+    const { data: suggestion, error } = await supabase.from('market_suggestions').insert({
+      creator_slug: slug, user_id: userId, user_name,
+      question: question.trim(), context: context?.trim() || null, status: 'pending'
+    }).select().single();
+    if (error) throw error;
+
+    res.json({ ok: true, id: suggestion.id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Creator views pending suggestions
+app.get('/api/creator/suggestions', requireCreator, async (req, res) => {
+  try {
+    const { data: settings } = await supabase.from('creator_settings').select('slug').eq('creator_id', req.creator.id).single();
+    if (!settings) return res.status(404).json({ error: 'No community found.' });
+    const { data: suggestions } = await supabase.from('market_suggestions')
+      .select('id, question, context, user_name, status, created_at')
+      .eq('creator_slug', settings.slug)
+      .order('created_at', { ascending: false });
+    res.json({ suggestions: suggestions || [] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Creator approves a suggestion — sends back the question pre-filled for market creation
+app.post('/api/creator/suggestions/:id/approve', requireCreator, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { data: settings } = await supabase.from('creator_settings').select('slug').eq('creator_id', req.creator.id).single();
+    const { data: sug } = await supabase.from('market_suggestions').select('*').eq('id', id).eq('creator_slug', settings.slug).single();
+    if (!sug) return res.status(404).json({ error: 'Suggestion not found.' });
+
+    await supabase.from('market_suggestions').update({ status: 'approved', reviewed_at: new Date().toISOString() }).eq('id', id);
+    res.json({ ok: true, question: sug.question });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Creator rejects a suggestion
+app.post('/api/creator/suggestions/:id/reject', requireCreator, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { data: settings } = await supabase.from('creator_settings').select('slug').eq('creator_id', req.creator.id).single();
+    await supabase.from('market_suggestions').update({ status: 'rejected', reviewed_at: new Date().toISOString() })
+      .eq('id', id).eq('creator_slug', settings.slug);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Toggle suggestions_enabled
+app.put('/api/creator/settings/suggestions', requireCreator, async (req, res) => {
+  try {
+    const { enabled } = req.body;
+    await supabase.from('creator_settings').update({ suggestions_enabled: !!enabled }).eq('creator_id', req.creator.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+// 8c. EDIT / DELETE MARKET
 // PUT  /markets/:id   — update question, expiry_date, resolution_source, category
 // DELETE /markets/:id — archive market (set is_public=false)
 // ════════════════════════════════════════════════════════════

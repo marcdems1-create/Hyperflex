@@ -2529,6 +2529,9 @@ body.nav-open .sidebar-backdrop {
       <a class="nav-item" onclick="showTab('share')">
         <span class="nav-icon">📣</span><span class="nav-label">Share & Grow</span>
       </a>
+      <a class="nav-item" onclick="showTab('rewards')">
+        <span class="nav-icon">🎁</span><span class="nav-label">Rewards</span>
+      </a>
       <div class="nav-section-label">Account</div>
       <a class="nav-item" onclick="showTab('economy')">
         <span class="nav-icon">⚡</span><span class="nav-label">Economy</span>
@@ -2753,6 +2756,20 @@ body.nav-open .sidebar-backdrop {
             <div id="allMarketsList"><div class="loading-row">Loading markets...</div></div>
           </div>
         </div>
+
+        <!-- Member Suggestion Queue (shown when suggestions_enabled) -->
+        <div class="section" id="suggestionsSection" style="display:none">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <div>
+              <div class="section-title" style="margin-bottom:4px">💡 Member Suggestions</div>
+              <div style="font-size:12px;color:var(--dim)">Ideas your community submitted for new markets</div>
+            </div>
+            <span id="suggestionsBadge" style="display:none;background:var(--gold);color:#000;font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 8px;border-radius:20px"></span>
+          </div>
+          <div id="suggestionsList" style="display:flex;flex-direction:column;gap:10px">
+            <div style="text-align:center;padding:24px;color:var(--dim);font-size:13px">Loading suggestions…</div>
+          </div>
+        </div>
       </div>
 
       <!-- Resolve Tab -->
@@ -2906,17 +2923,22 @@ body.nav-open .sidebar-backdrop {
           </div>
         </div>
 
-        <!-- Rewards section -->
+        <!-- Community Features -->
         <div class="section">
-          <div class="section-header">
-            <div>
-              <div class="section-title">🎁 Flex Points Rewards</div>
-              <div class="section-subtitle">Define point thresholds that unlock exclusive rewards for your community</div>
+          <div class="markets-table" style="padding:28px">
+            <div class="section-title" style="margin-bottom:6px">🧩 Community Features</div>
+            <div style="font-size:13px;color:var(--dim);margin-bottom:20px;line-height:1.5">Control what members can do in your community.</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;gap:16px">
+              <div>
+                <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">💡 Market Suggestions</div>
+                <div style="font-size:12px;color:var(--dim);line-height:1.5">Let members submit market ideas. You review and approve what becomes live.</div>
+              </div>
+              <label style="position:relative;display:inline-block;width:44px;height:24px;flex-shrink:0;cursor:pointer">
+                <input type="checkbox" id="suggestionsToggle" onchange="saveSuggestionsEnabled(this.checked)" style="opacity:0;width:0;height:0">
+                <span style="position:absolute;inset:0;background:rgba(255,255,255,0.15);border-radius:24px;transition:.2s" id="suggestionsToggleTrack"></span>
+                <span id="suggestionsToggleThumb" style="position:absolute;left:3px;top:3px;width:18px;height:18px;background:#fff;border-radius:50%;transition:.2s"></span>
+              </label>
             </div>
-            <button class="btn-primary" onclick="openRewardModal()">+ Add Reward</button>
-          </div>
-          <div id="rewardsList" style="margin-top:8px">
-            <div class="loading-row">Loading rewards...</div>
           </div>
         </div>
 
@@ -3151,6 +3173,68 @@ body.nav-open .sidebar-backdrop {
         </div>
       </div>
 
+      <!-- ═══════════════════════════════════ REWARDS TAB ════════════════════════════ -->
+      <div id="tab-rewards" style="display:none">
+
+        <!-- Suggested Rewards (scaled to economy) -->
+        <div class="section">
+          <div class="section-header">
+            <div>
+              <div class="section-title">💡 Suggested Rewards</div>
+              <div class="section-subtitle">Scaled to your starting balance — click any to add it instantly</div>
+            </div>
+          </div>
+          <div id="suggestedRewardCards" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:0 0 4px"></div>
+        </div>
+
+        <!-- How Rewards Work -->
+        <div class="section">
+          <div class="markets-table" style="padding:20px 24px">
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px">
+              <div style="text-align:center">
+                <div style="font-size:22px;margin-bottom:6px">⚡</div>
+                <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:4px">Members Earn Points</div>
+                <div style="font-size:11px;color:var(--dim);line-height:1.5">By predicting markets, winning bets, and referring friends</div>
+              </div>
+              <div style="text-align:center">
+                <div style="font-size:22px;margin-bottom:6px">🏆</div>
+                <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:4px">Hit Thresholds</div>
+                <div style="font-size:11px;color:var(--dim);line-height:1.5">When a member's total points hit a milestone, the reward unlocks</div>
+              </div>
+              <div style="text-align:center">
+                <div style="font-size:22px;margin-bottom:6px">🎁</div>
+                <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:4px">You Deliver</div>
+                <div style="font-size:11px;color:var(--dim);line-height:1.5">You'll see it on the leaderboard and can reach out to fulfil the reward</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Your Rewards -->
+        <div class="section">
+          <div class="section-header">
+            <div>
+              <div class="section-title">🎁 Your Rewards</div>
+              <div class="section-subtitle">Point milestones that unlock exclusive perks for your community</div>
+            </div>
+            <button class="btn-primary" onclick="openRewardModal()">+ Add Reward</button>
+          </div>
+          <div id="rewardsList" style="margin-top:8px">
+            <div class="loading-row">Loading rewards...</div>
+          </div>
+        </div>
+
+        <!-- Member spotlight tip -->
+        <div class="section">
+          <div class="markets-table" style="padding:18px 24px;background:rgba(201,146,13,0.04);border-color:rgba(201,146,13,0.2)">
+            <div style="font-size:12px;color:var(--dim);line-height:1.7">
+              💡 <strong style="color:var(--text)">Pro tip:</strong> Pair rewards with referral milestones — top referrers who also hit point thresholds feel doubly recognised. Use <strong style="color:var(--text)">Economy → Referral Rewards</strong> to set the points they earn per invite, then put a reward milestone at 5× and 10× that amount.
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /tab-rewards -->
+
       <!-- ═══════════════════════════════════ ECONOMY TAB ════════════════════════════ -->
       <div id="tab-economy" style="display:none">
 
@@ -3166,7 +3250,7 @@ body.nav-open .sidebar-backdrop {
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
               <div class="field">
                 <label>Starting Balance (pts)</label>
-                <input type="number" id="econStartingBalance" min="100" step="100" placeholder="1000" oninput="renderReferralPresets()"/>
+                <input type="number" id="econStartingBalance" min="100" step="100" placeholder="1000" oninput="renderReferralPresets();renderSuggestedRewards()"/>
                 <div style="font-size:12px;color:var(--dim);margin-top:4px">Points new members begin with</div>
               </div>
               <div class="field">
@@ -3813,14 +3897,7 @@ body.nav-open .sidebar-backdrop {
       <!-- Preset suggestions — hidden when editing existing reward -->
       <div id="rewardPresets" style="margin-bottom:16px">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);margin-bottom:8px;font-family:var(--mono)">Quick Presets — click to fill</div>
-        <div style="display:flex;flex-wrap:wrap;gap:7px">
-          <button type="button" class="btn-secondary" style="font-size:11px;padding:5px 10px" onclick="applyRewardPreset(250,'🏷️ Shoutout','I\'ll give you a shoutout in my next post or stream')">250 — Shoutout</button>
-          <button type="button" class="btn-secondary" style="font-size:11px;padding:5px 10px" onclick="applyRewardPreset(500,'🎟️ Early Access','Get the link 24 hours before the public release')">500 — Early Access</button>
-          <button type="button" class="btn-secondary" style="font-size:11px;padding:5px 10px" onclick="applyRewardPreset(1000,'💬 Discord Role','Earn the exclusive predictor role in our Discord server')">1000 — Discord Role</button>
-          <button type="button" class="btn-secondary" style="font-size:11px;padding:5px 10px" onclick="applyRewardPreset(2500,'🎁 Merch Discount','20% off your next order in the store — DM me for the code')">2500 — Merch Discount</button>
-          <button type="button" class="btn-secondary" style="font-size:11px;padding:5px 10px" onclick="applyRewardPreset(5000,'📞 1-on-1 Call','15-minute call with me — ask me anything')">5000 — 1-on-1 Call</button>
-          <button type="button" class="btn-secondary" style="font-size:11px;padding:5px 10px" onclick="applyRewardPreset(10000,'🏆 Legend Status','Permanent legend badge and lifetime community recognition')">10K — Legend</button>
-        </div>
+        <div id="rewardModalPresetBtns" style="display:flex;flex-wrap:wrap;gap:7px"></div>
       </div>
 
       <div class="field">
@@ -4241,6 +4318,7 @@ function renderDashboard(data) {
   renderShareTemplates(creator);
   generateQR(creator.slug);
   renderRewardsList(data.rewards || []);
+  renderSuggestedRewards();
 
   // Settings prefill
   document.getElementById('settingName').value = creator.display_name;
@@ -4265,6 +4343,18 @@ function renderDashboard(data) {
   }
   // Challenge prefill
   prefillChallenge(creator);
+
+  // Suggestions enabled prefill
+  const sugToggle = document.getElementById('suggestionsToggle');
+  if (sugToggle) {
+    sugToggle.checked = !!creator.suggestions_enabled;
+    updateSuggestionsToggleUI(!!creator.suggestions_enabled);
+  }
+  if (creator.suggestions_enabled) {
+    const sec = document.getElementById('suggestionsSection');
+    if (sec) sec.style.display = 'block';
+    loadSuggestions();
+  }
 
   // Referral prefill
   document.getElementById('econReferralReward').value = Math.round((creator.referral_reward ?? 10000) / 100);
@@ -4595,10 +4685,14 @@ function showTab(tab) {
   document.querySelectorAll('.nav-item').forEach(n => {
     if (n.getAttribute('onclick') && n.getAttribute('onclick').includes(`'${tab}'`)) n.classList.add('active');
   });
-  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas' };
+  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas' };
   document.getElementById('topbarTitle').textContent = titles[tab] || tab;
   if (tab === 'analytics' && !analyticsLoaded) loadAnalytics();
   if (tab === 'ideas' && !ideasLoaded) loadMarketIdeas(false);
+  if (tab === 'markets') {
+    const sec = document.getElementById('suggestionsSection');
+    if (sec && sec.style.display !== 'none') loadSuggestions();
+  }
   // Close sidebar drawer on mobile after nav tap
   if (window.innerWidth <= 1024) closeSidebar();
 }
@@ -5816,6 +5910,47 @@ async function loadAnalytics() {
 // ── REWARDS ───────────────────────────────────────────────
 let creatorRewards = [];
 
+function renderSuggestedRewards() {
+  const container = document.getElementById('suggestedRewardCards');
+  if (!container) return;
+  // Use starting balance to scale thresholds; fall back to 1000 pts
+  const startBal = parseInt(document.getElementById('econStartingBalance')?.value) || 1000;
+  const r10 = v => Math.max(50, Math.round(v / 10) * 10);
+  const suggestions = [
+    { icon:'🏷️', title:'Shoutout',      mult:0.25,  desc:'A personal shoutout in your next post or stream' },
+    { icon:'🎟️', title:'Early Access',  mult:0.5,   desc:'Link or content 24 hours before the public' },
+    { icon:'💬', title:'Discord Role',  mult:1,     desc:'Exclusive predictor role in your community server' },
+    { icon:'🎁', title:'Merch Discount',mult:2.5,   desc:'20% off your next store order — DM for the code' },
+    { icon:'📞', title:'1-on-1 Call',   mult:5,     desc:'15-minute call — ask me anything' },
+    { icon:'🏆', title:'Legend Status', mult:10,    desc:'Permanent legend badge and lifetime recognition' },
+  ];
+  container.innerHTML = suggestions.map(s => {
+    const pts = r10(startBal * s.mult);
+    const alreadyExists = creatorRewards.some(r => r.title === `${s.icon} ${s.title}`);
+    return `<div class="referral-preset-card${alreadyExists ? '' : ''}" style="${alreadyExists ? 'opacity:.5;pointer-events:none' : 'cursor:pointer'}" onclick="${alreadyExists ? '' : `quickAddReward(${pts}, '${s.icon} ${s.title}', '${s.desc.replace(/'/g,"\\'")}')` }">
+      <div class="rpc-name">${s.icon} ${s.title}${alreadyExists ? ' <span style="font-size:9px;color:var(--dim)">(added)</span>' : ''}</div>
+      <div class="rpc-vals">${pts.toLocaleString()} pts milestone</div>
+      <div class="rpc-desc">${s.desc}</div>
+    </div>`;
+  }).join('');
+}
+
+async function quickAddReward(threshold, title, description) {
+  try {
+    const r = await fetch(API + '/api/creator/rewards', {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', 'Authorization':'Bearer ' + token },
+      body: JSON.stringify({ threshold, title, description })
+    });
+    const data = await r.json();
+    if (data.error) { showToast(data.error, 'error'); return; }
+    showToast(`${title} reward added!`, 'success');
+    creatorRewards = [...creatorRewards, data];
+    renderRewardsList(creatorRewards);
+    renderSuggestedRewards(); // grey out the one just added
+  } catch { showToast('Failed to add reward', 'error'); }
+}
+
 function renderRewardsList(rewards) {
   creatorRewards = rewards || [];
   const el = document.getElementById('rewardsList');
@@ -5844,6 +5979,28 @@ function applyRewardPreset(threshold, title, description) {
   document.getElementById('rewardDescription').value = description;
 }
 
+function renderModalPresetBtns() {
+  const container = document.getElementById('rewardModalPresetBtns');
+  if (!container) return;
+  const startBal = parseInt(document.getElementById('econStartingBalance')?.value) || 1000;
+  const r10 = v => Math.max(50, Math.round(v / 10) * 10);
+  const presets = [
+    [0.25, '🏷️ Shoutout',       'I\'ll give you a shoutout in my next post or stream'],
+    [0.5,  '🎟️ Early Access',   'Get the link 24 hours before the public release'],
+    [1,    '💬 Discord Role',   'Earn the exclusive predictor role in our Discord server'],
+    [2.5,  '🎁 Merch Discount', '20% off your next order in the store — DM me for the code'],
+    [5,    '📞 1-on-1 Call',    '15-minute call with me — ask me anything'],
+    [10,   '🏆 Legend Status',  'Permanent legend badge and lifetime community recognition'],
+  ];
+  container.innerHTML = presets.map(([mult, title, desc]) => {
+    const pts = r10(startBal * mult);
+    const label = title.split(' ').slice(1).join(' ');
+    return `<button type="button" class="btn-secondary" style="font-size:11px;padding:5px 10px" onclick="applyRewardPreset(${pts},'${title}','${desc.replace(/'/g,"\\'")}')">
+      ${pts.toLocaleString()} — ${label}
+    </button>`;
+  }).join('');
+}
+
 function openRewardModal(rewardId) {
   const r = rewardId ? creatorRewards.find(x => x.id === rewardId) : null;
   document.getElementById('rewardEditId').value = r ? r.id : '';
@@ -5851,6 +6008,7 @@ function openRewardModal(rewardId) {
   // Show presets only when creating new
   const presetsEl = document.getElementById('rewardPresets');
   if (presetsEl) presetsEl.style.display = r ? 'none' : 'block';
+  if (!r) renderModalPresetBtns();
   document.getElementById('rewardThreshold').value = r ? r.threshold : '';
   document.getElementById('rewardTitle').value = r ? r.title : '';
   document.getElementById('rewardDescription').value = r ? (r.description || '') : '';
@@ -6696,6 +6854,122 @@ async function removeCdDomain() {
   } catch (e) {
     fb.innerHTML = `<span style="color:#ef4444">${e.message}</span>`;
   }
+}
+
+// ── MARKET SUGGESTIONS ────────────────────────────────────────
+function updateSuggestionsToggleUI(on) {
+  const track = document.getElementById('suggestionsToggleTrack');
+  const thumb = document.getElementById('suggestionsToggleThumb');
+  if (!track || !thumb) return;
+  track.style.background = on ? 'var(--gold)' : 'rgba(255,255,255,0.15)';
+  thumb.style.left = on ? '23px' : '3px';
+}
+
+async function saveSuggestionsEnabled(enabled) {
+  updateSuggestionsToggleUI(enabled);
+  const sec = document.getElementById('suggestionsSection');
+  try {
+    await fetch(API + '/api/creator/settings/suggestions', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ enabled })
+    });
+    if (enabled) {
+      if (sec) sec.style.display = 'block';
+      loadSuggestions();
+    } else {
+      if (sec) sec.style.display = 'none';
+    }
+    showToast(enabled ? 'Market suggestions enabled' : 'Market suggestions disabled', 'success');
+  } catch {
+    showToast('Failed to save setting', 'error');
+  }
+}
+
+async function loadSuggestions() {
+  const listEl = document.getElementById('suggestionsList');
+  const badge  = document.getElementById('suggestionsBadge');
+  if (!listEl) return;
+  try {
+    const r = await fetch(API + '/api/creator/suggestions', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    const data = await r.json();
+    const suggestions = data.suggestions || [];
+    const pending = suggestions.filter(s => s.status === 'pending');
+    if (badge) {
+      badge.textContent = pending.length ? `${pending.length} pending` : '';
+      badge.style.display = pending.length ? 'inline-block' : 'none';
+    }
+    if (!suggestions.length) {
+      listEl.innerHTML = `<div style="text-align:center;padding:28px;color:var(--dim);font-size:13px">No suggestions yet — enable the toggle in Settings and share your community link.</div>`;
+      return;
+    }
+    listEl.innerHTML = suggestions.map(s => {
+      const isPending  = s.status === 'pending';
+      const isApproved = s.status === 'approved';
+      const timeAgo    = formatTimeAgo(s.created_at);
+      return `<div style="background:var(--surface);border:1px solid ${isPending ? 'var(--border)' : 'rgba(255,255,255,0.06)'};border-radius:10px;padding:14px 16px;display:flex;gap:14px;align-items:flex-start;opacity:${isPending ? '1' : '0.6'}">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;line-height:1.4">${escHtml(s.question)}</div>
+          ${s.context ? `<div style="font-size:11px;color:var(--dim);margin-bottom:6px;font-style:italic">"${escHtml(s.context)}"</div>` : ''}
+          <div style="font-size:11px;color:var(--dim);font-family:var(--mono)">From ${escHtml(s.user_name || 'Anonymous')} · ${timeAgo}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
+          ${isPending ? `
+            <button onclick="approveSuggestion('${s.id}',${JSON.stringify(s.question).replace(/'/g,"\\'")})" style="background:var(--gold);border:none;border-radius:6px;padding:6px 12px;font-family:var(--mono);font-size:11px;font-weight:700;color:#000;cursor:pointer;white-space:nowrap">✓ Use It</button>
+            <button onclick="rejectSuggestion('${s.id}')" style="background:transparent;border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-family:var(--mono);font-size:11px;font-weight:600;color:var(--dim);cursor:pointer">✕ Pass</button>
+          ` : `<span style="font-family:var(--mono);font-size:11px;color:${isApproved ? '#27ae60' : 'var(--dim)'};">${isApproved ? '✓ Used' : '✕ Passed'}</span>`}
+        </div>
+      </div>`;
+    }).join('');
+  } catch {
+    listEl.innerHTML = `<div style="text-align:center;padding:24px;color:var(--dim);font-size:13px">Failed to load suggestions.</div>`;
+  }
+}
+
+async function approveSuggestion(id, question) {
+  try {
+    const r = await fetch(`${API}/api/creator/suggestions/${id}/approve`, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    const data = await r.json();
+    if (!r.ok) { showToast(data.error || 'Failed', 'error'); return; }
+    // Pre-fill create market modal with the suggested question
+    openCreateModal();
+    setTimeout(() => {
+      const qInput = document.getElementById('newQuestion');
+      if (qInput) { qInput.value = data.question || question; qInput.dispatchEvent(new Event('input')); }
+    }, 100);
+    loadSuggestions();
+    showToast('Suggestion approved — review and publish below', 'success');
+  } catch { showToast('Network error', 'error'); }
+}
+
+async function rejectSuggestion(id) {
+  try {
+    await fetch(`${API}/api/creator/suggestions/${id}/reject`, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    loadSuggestions();
+  } catch { showToast('Network error', 'error'); }
+}
+
+function escHtml(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function formatTimeAgo(iso) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins  = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days  = Math.floor(diff / 86400000);
+  if (mins < 2)   return 'just now';
+  if (mins < 60)  return `${mins}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  return `${days}d ago`;
 }
 
 // Init

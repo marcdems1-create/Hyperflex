@@ -1147,6 +1147,13 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
     <button class="filter-tab"        id="ftMine"  onclick="setFilter('mine')" style="display:none">✓ My Bets <span class="filter-count" id="fcMine">0</span></button>
   </div>
 
+  <!-- Suggest a Market button -->
+  <div id="suggestMarketRow" style="display:none;margin-bottom:14px">
+    <button onclick="openSuggestMarket()" style="display:inline-flex;align-items:center;gap:6px;background:transparent;border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-family:var(--mono);font-size:12px;font-weight:600;color:var(--dim);cursor:pointer;letter-spacing:.05em;transition:border-color .15s,color .15s" onmouseover="this.style.borderColor='var(--gold)';this.style.color='var(--gold)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">
+      💡 Suggest a Market
+    </button>
+  </div>
+
   <!-- Community Challenge banner -->
   <div id="challengeBanner" style="display:none;margin-bottom:18px;border-radius:12px;overflow:hidden;border:1.5px solid rgba(201,146,13,0.4);background:rgba(201,146,13,0.06)">
     <div style="padding:14px 18px 10px">
@@ -1539,6 +1546,11 @@ function renderPage() {
   if (c.plan === 'platinum') {
     const p = document.getElementById('poweredBy');
     if (p) p.style.display = 'none';
+  }
+
+  // Market suggestions button
+  if (c.suggestions_enabled) {
+    document.getElementById('suggestMarketRow').style.display = 'block';
   }
 
   // Build filter counts + render
@@ -2447,6 +2459,56 @@ function renderChallengeBar(p) {
   document.getElementById('challengeBannerEnd').textContent = 'Ends ' + ends.toLocaleDateString();
 }
 
+// ── MARKET SUGGESTION ─────────────────────────────────────────
+function openSuggestMarket() {
+  if (!currentUser) { openAuth('register'); return; }
+  document.getElementById('suggestQuestion').value = '';
+  document.getElementById('suggestContext').value  = '';
+  document.getElementById('suggestCharCount').textContent = '0 / 280';
+  document.getElementById('suggestError').style.display = 'none';
+  document.getElementById('suggestSuccess').style.display = 'none';
+  document.getElementById('suggestOverlay').classList.add('show');
+}
+function closeSuggestMarket() {
+  document.getElementById('suggestOverlay').classList.remove('show');
+}
+function suggestQuestionInput(el) {
+  document.getElementById('suggestCharCount').textContent = `${el.value.length} / 280`;
+}
+async function submitSuggestion() {
+  const question = document.getElementById('suggestQuestion').value.trim();
+  const context  = document.getElementById('suggestContext').value.trim();
+  const errEl    = document.getElementById('suggestError');
+  const sucEl    = document.getElementById('suggestSuccess');
+  errEl.style.display = 'none';
+  if (!question || question.length < 10) {
+    errEl.textContent = 'Question must be at least 10 characters.';
+    errEl.style.display = 'block'; return;
+  }
+  if (question.length > 280) {
+    errEl.textContent = 'Question too long (max 280 chars).';
+    errEl.style.display = 'block'; return;
+  }
+  const btn = document.getElementById('suggestSubmitBtn');
+  btn.disabled = true; btn.textContent = 'Submitting…';
+  try {
+    const token = localStorage.getItem('hf_token');
+    const r = await fetch(`${API}/api/community/${slug}/suggest`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ question, context: context || undefined })
+    });
+    const data = await r.json();
+    if (!r.ok) { errEl.textContent = data.error || 'Something went wrong.'; errEl.style.display = 'block'; return; }
+    sucEl.style.display = 'block';
+    setTimeout(closeSuggestMarket, 2200);
+  } catch {
+    errEl.textContent = 'Network error — please try again.'; errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Submit Idea';
+  }
+}
+
 // ── WIN SHARE CARD ────────────────────────────────────────────
 let _winCardData = {};
 function openWinCard(question, communityName, ptsWagered) {
@@ -2470,5 +2532,36 @@ function shareWinOnX() {
   window.open(url, '_blank', 'noopener');
 }
 </script>
+
+<!-- Suggest a Market Modal -->
+<div class="overlay" id="suggestOverlay" onclick="closeOverlayOnBg(event,'suggestOverlay')">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">💡 Suggest a Market</span>
+      <button class="modal-close" onclick="closeSuggestMarket()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--dim);margin:0 0 16px">Got a great prediction idea? The creator reviews all suggestions and may turn yours into a live market.</p>
+      <div class="modal-error" id="suggestError" style="display:none"></div>
+      <div id="suggestSuccess" style="display:none;background:rgba(39,174,96,0.12);border:1px solid rgba(39,174,96,0.3);border-radius:6px;padding:12px 14px;font-size:13px;color:#27ae60;margin-bottom:14px;text-align:center">
+        ✅ Suggestion sent! The creator will review it soon.
+      </div>
+      <div style="margin-bottom:14px">
+        <label style="font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:6px">Your question *</label>
+        <textarea id="suggestQuestion" maxlength="280" oninput="suggestQuestionInput(this)" placeholder="e.g. Will [something] happen before [date]?" style="width:100%;box-sizing:border-box;background:var(--input-bg,rgba(255,255,255,0.05));border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;padding:10px 12px;resize:vertical;min-height:80px;font-family:inherit"></textarea>
+        <div id="suggestCharCount" style="font-family:var(--mono);font-size:10px;color:var(--dim);text-align:right;margin-top:4px">0 / 280</div>
+      </div>
+      <div>
+        <label style="font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:6px">Context <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></label>
+        <input id="suggestContext" type="text" maxlength="200" placeholder="Why is this timely or interesting?" style="width:100%;box-sizing:border-box;background:var(--input-bg,rgba(255,255,255,0.05));border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;padding:10px 12px;font-family:inherit">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button onclick="closeSuggestMarket()" style="flex:1;background:transparent;border:1px solid var(--border);border-radius:6px;padding:10px;font-family:var(--mono);font-size:12px;font-weight:700;color:var(--dim);cursor:pointer">Cancel</button>
+      <button id="suggestSubmitBtn" onclick="submitSuggestion()" style="flex:2;background:var(--gold);border:none;border-radius:6px;padding:10px;font-family:var(--mono);font-size:12px;font-weight:700;color:#000;cursor:pointer">Submit Idea</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
