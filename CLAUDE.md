@@ -35,7 +35,7 @@
 
 ## Current State (last updated March 13, 2026)
 
-- All features live on Railway. Latest commit: `e06ecc2` (local, not yet pushed)
+- All features live on Railway. Latest commit: `81b5c65` (local, not yet pushed)
 - **Stripe payments live** — Pro ($29/mo) + Premium ($99/mo) checkout + billing portal
   - Railway env vars needed: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRO_PRICE_ID`, `STRIPE_PLATINUM_PRICE_ID`
   - Webhook endpoint registered at: `https://hyperflex.network/stripe/webhook`
@@ -92,25 +92,22 @@
   5. `supabase_migration_custom_domains.sql`
   6. `supabase_migration_challenges.sql`
   7. `supabase_migration_plan_trial.sql` (adds plan_trial_expires_at)
-  8. `supabase_migration_market_suggestions.sql` ← NEW (adds market_suggestions table + suggestions_enabled column)
+  8. `supabase_migration_market_suggestions.sql` (adds market_suggestions table + suggestions_enabled column)
+  9. `supabase_migration_announcements_comments.sql` ← NEW (creator_announcements, market_comments, resolution_note)
+- **Email notifications**: Opt-in via Railway env vars: `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
+  - Fires after both manual resolve and cron settlement
+  - No-op if SMTP_HOST is not set — safe to deploy without configuring
 - Video section on landing page needs real YouTube VIDEO_ID
 - Old `index.html` at project root should be removed eventually
-- **This session (March 13, continued)** — all committed, needs push (latest: `e06ecc2`):
-  - Analytics crash fix: getWeekStart() double-definition → .toISOString() on string (commit `d25b17f`)
-  - Delete account: case-insensitive + inline error in modal (commit `d25b17f`)
-  - Landing page fresh markets: 4 viral diverse markets replacing finance-only (Sports/Culture/Crypto/Politics)
-  - Refill slider fix: duplicate display style removed from refillFields div
-  - Referral + reward preset cards now scale dynamically with starting balance
-  - Challenge quick-start templates (Surge Week, Member Drive, Volume Push)
-  - 🎁 Rewards tab: new dashboard tab with scaled suggested rewards + your rewards list (commit `a34384f`)
-  - ?ref= landing page display fix (removed code tag)
-  - Member market suggestion queue (commit `e06ecc2`):
-    - `supabase_migration_market_suggestions.sql` — new table
-    - community.html: 💡 Suggest a Market button + modal (gated by suggestions_enabled)
-    - creator-dashboard.html: suggestion queue in Markets tab with approve/reject
-    - creator-dashboard.html: approve pre-fills create market modal
-    - creator-dashboard.html: 🧩 Community Features section in Settings with toggle
-    - server.js: fix requireUser → getUserIdFromReq(), add suggestions_enabled to dashboard API
+- **This session (March 13, final)** — all committed, needs push (latest: `81b5c65`):
+  - Community page: full Polymarket-style 2-col card grid, featured hero card, big odds numbers, category pills, hot badge (commit `2c9897e`)
+  - Free tier: 3 → 5 active markets
+  - Resolution note: creator adds context on resolve; shown in resolved banner on community page
+  - Creator announcements: post/pin/delete from dashboard Overview; rendered above markets grid
+  - Market comments: inline expandable threads per card, lazy loaded, 280 char limit
+  - Email notifications: `sendResolutionEmails()` with branded HTML email; fires on manual + cron resolution
+  - `supabase_migration_announcements_comments.sql`: new tables + resolution_note column (commit `81b5c65`)
+  - Member market suggestion queue (commit `e06ecc2`)
 - **Economy Phase 3** (not built):
   - Streak broken toast when user loses after a streak
 
