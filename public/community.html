@@ -492,42 +492,72 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
 }
 
 /* ── MARKET CARDS ── */
-.markets-grid { display: flex; flex-direction: column; gap: 10px; margin-bottom: 40px; }
+.markets-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 40px;
+}
+.markets-grid .market-card.featured {
+  grid-column: 1 / -1;
+}
+@media (max-width: 600px) {
+  .markets-grid { grid-template-columns: 1fr; }
+  .markets-grid .market-card.featured { grid-column: 1; }
+}
 
 .market-card {
   background: var(--cream);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 14px;
   overflow: hidden;
   transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
 }
 .market-card:hover {
-  border-color: rgba(201,146,13,0.4);
-  box-shadow: 0 4px 24px rgba(0,0,0,0.25);
-  transform: translateY(-1px);
+  border-color: rgba(201,146,13,0.5);
+  box-shadow: 0 6px 28px rgba(0,0,0,0.32);
+  transform: translateY(-2px);
 }
 .market-card.resolved { opacity: 0.55; cursor: default; }
 .market-card.resolved:hover { border-color: var(--border); box-shadow: none; transform: none; }
-.market-card.has-position { border-color: rgba(201,146,13,0.3); }
+.market-card.has-position { border-color: rgba(201,146,13,0.35); }
+.market-card.featured { background: linear-gradient(135deg, var(--cream) 0%, rgba(201,146,13,0.04) 100%); }
 
-.market-card-inner { padding: 18px 20px 14px; }
+.market-card-inner { padding: 16px 18px 14px; flex: 1; display: flex; flex-direction: column; }
 
+/* Top row: category pill + badges */
 .market-top {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 6px;
-}
-.market-badges {
-  display: flex;
-  gap: 6px;
   align-items: center;
-  flex-shrink: 0;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
 }
+.cat-pill {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.cat-pill.sports     { background: rgba(59,130,246,0.15);  color: #60a5fa; }
+.cat-pill.crypto     { background: rgba(251,146,60,0.15);  color: #fb923c; }
+.cat-pill.politics   { background: rgba(167,139,250,0.15); color: #a78bfa; }
+.cat-pill.culture    { background: rgba(244,114,182,0.15); color: #f472b6; }
+.cat-pill.gaming     { background: rgba(52,211,153,0.15);  color: #34d399; }
+.cat-pill.esports    { background: rgba(52,211,153,0.15);  color: #34d399; }
+.cat-pill.finance    { background: rgba(45,155,95,0.15);   color: var(--green); }
+.cat-pill.tech       { background: rgba(99,102,241,0.15);  color: #818cf8; }
+.cat-pill.music      { background: rgba(236,72,153,0.15);  color: #ec4899; }
+.cat-pill.news       { background: rgba(156,163,175,0.15); color: #9ca3af; }
+.cat-pill.other      { background: rgba(122,120,112,0.12); color: var(--dim); }
+.market-badges { display: flex; gap: 5px; align-items: center; flex-shrink: 0; }
 .market-badge {
   font-family: var(--mono);
   font-size: 9px;
@@ -539,16 +569,29 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
 }
 .market-badge.live { background: rgba(45,155,95,0.12); border: 1px solid rgba(45,155,95,0.3); color: var(--green); }
 .market-badge.resolved-badge { background: rgba(122,120,112,0.1); border: 1px solid var(--border); color: var(--dim); }
-.market-badge.hot { background: rgba(255,140,0,0.12); border: 1px solid rgba(255,140,0,0.3); color: #ff8c00; }
 .market-badge.soon { background: rgba(192,57,43,0.12); border: 1px solid rgba(192,57,43,0.3); color: #e74c3c; }
+.market-badge.hot {
+  background: rgba(255,140,0,0.12);
+  border: 1px solid rgba(255,140,0,0.4);
+  color: #ff8c00;
+  position: relative;
+}
+@keyframes hotPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255,140,0,0.4); }
+  50%       { box-shadow: 0 0 0 4px rgba(255,140,0,0); }
+}
+.market-badge.hot { animation: hotPulse 2s ease-in-out infinite; }
 
+/* Question */
 .market-question {
   font-size: 14px;
   font-weight: 700;
   color: var(--text);
   line-height: 1.45;
+  margin-bottom: 14px;
   flex: 1;
 }
+.market-card.featured .market-question { font-size: 16px; }
 
 /* User's position indicator */
 .my-position-row {
@@ -561,55 +604,61 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
   border: 1px solid rgba(201,146,13,0.18);
   border-radius: 6px;
 }
-.my-position-label {
+.my-position-label { font-family: var(--mono); font-size: 10px; color: var(--dim); letter-spacing: 0.06em; text-transform: uppercase; }
+.my-position-side { font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 3px; }
+.my-position-side.yes { background: var(--green-lt); color: var(--green); }
+.my-position-side.no  { background: var(--red-lt);   color: var(--red); }
+.my-position-amount { font-family: var(--mono); font-size: 11px; color: var(--gold); margin-left: auto; }
+
+/* Big odds block — the hero element */
+.odds-block {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.odds-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-width: 44px;
+}
+.odds-pct {
   font-family: var(--mono);
-  font-size: 10px;
-  color: var(--dim);
-  letter-spacing: 0.06em;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.market-card.featured .odds-pct { font-size: 28px; }
+.odds-side-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
-.my-position-side {
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 3px;
-}
-.my-position-side.yes { background: var(--green-lt); color: var(--green); }
-.my-position-side.no { background: var(--red-lt); color: var(--red); }
-.my-position-amount {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--gold);
-  margin-left: auto;
-}
-
-/* Odds bar */
-.odds-bar-wrap { margin-bottom: 12px; }
-.odds-bar {
-  height: 7px;
-  border-radius: 4px;
-  background: var(--border);
+.odds-side.yes-side .odds-pct  { color: var(--green); }
+.odds-side.yes-side .odds-side-label { color: var(--green); opacity: 0.7; }
+.odds-side.no-side  .odds-pct  { color: var(--red); }
+.odds-side.no-side  .odds-side-label  { color: var(--red); opacity: 0.7; }
+.odds-bar-col { flex: 1; }
+.prob-bar {
+  height: 8px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.07);
   overflow: hidden;
-  margin-bottom: 8px;
   display: flex;
 }
-.odds-bar-yes { background: var(--green); height: 100%; transition: width 0.5s ease; border-radius: 4px 0 0 4px; }
-.odds-bar-no  { background: var(--red);   height: 100%; transition: width 0.5s ease; border-radius: 0 4px 4px 0; }
-.odds-labels { display: flex; justify-content: space-between; align-items: center; }
-.odds-label { font-family: var(--mono); font-size: 11px; display: flex; align-items: center; gap: 5px; }
-.odds-label.yes { color: var(--green); }
-.odds-label.no  { color: var(--red); }
-.odds-dot { width: 6px; height: 6px; border-radius: 50%; }
-.odds-dot.yes { background: var(--green); }
-.odds-dot.no  { background: var(--red); }
-.odds-center { font-family: var(--mono); font-size: 10px; color: var(--dim); }
+.market-card.featured .prob-bar { height: 10px; }
+.prob-fill-yes { height: 100%; background: var(--green); border-radius: 6px 0 0 6px; transition: width 0.5s ease; }
+.prob-fill-no  { height: 100%; background: var(--red);   border-radius: 0 6px 6px 0; transition: width 0.5s ease; }
 
-/* Market meta */
-.market-meta { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-.meta-item { font-family: var(--mono); font-size: 10px; color: var(--dim); display: flex; align-items: center; gap: 4px; }
-.meta-icon { font-size: 11px; }
-.meta-item.urgent { color: #e74c3c; }
+/* Market meta row */
+.market-meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: auto; }
+.meta-item { font-family: var(--mono); font-size: 10px; color: var(--dim); display: flex; align-items: center; gap: 3px; white-space: nowrap; }
+.meta-item.urgent { color: #e74c3c; font-weight: 700; }
 
 /* Predict buttons */
 .market-actions {
@@ -617,30 +666,34 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
   grid-template-columns: 1fr 1fr;
   gap: 0;
   border-top: 1px solid var(--border);
+  margin-top: 0;
 }
 .btn-predict {
-  padding: 13px 20px;
-  font-family: var(--sans);
-  font-size: 13px;
-  font-weight: 700;
+  padding: 12px 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 800;
   cursor: pointer;
   border: none;
   transition: all 0.15s;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  letter-spacing: 0.02em;
+  gap: 6px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
+.market-card.featured .btn-predict { padding: 14px 10px; font-size: 13px; }
 .btn-predict:disabled { cursor: default; opacity: 0.35; }
 .btn-predict.yes {
-  background: var(--green-lt);
+  background: rgba(45,155,95,0.1);
   color: var(--green);
   border-right: 1px solid var(--border);
 }
-.btn-predict.yes:not(:disabled):hover { background: rgba(45,155,95,0.28); }
-.btn-predict.no  { background: var(--red-lt); color: var(--red); }
-.btn-predict.no:not(:disabled):hover  { background: rgba(192,57,43,0.28); }
+.btn-predict.yes:not(:disabled):hover { background: rgba(45,155,95,0.22); }
+.btn-predict.no  { background: rgba(192,57,43,0.1); color: var(--red); }
+.btn-predict.no:not(:disabled):hover  { background: rgba(192,57,43,0.22); }
+.btn-price { opacity: 0.65; font-size: 10px; font-weight: 600; }
 
 /* Resolved outcome */
 .outcome-banner {
@@ -1198,7 +1251,7 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
     <div class="section-label" style="margin-top:8px;cursor:pointer" onclick="toggleResolved()">
       Past Results <span id="resolvedToggle" style="font-size:10px;margin-left:4px">▶ show</span>
     </div>
-    <div id="resolvedGrid" style="display:none"></div>
+    <div id="resolvedGrid" style="display:none;grid-template-columns:1fr 1fr;gap:12px"></div>
   </div>
 
   <!-- Leaderboard -->
@@ -1563,7 +1616,7 @@ function renderPage() {
   // Resolved
   if (resolved.length > 0) {
     document.getElementById('resolvedSection').style.display = 'block';
-    document.getElementById('resolvedGrid').innerHTML = resolved.map(m => marketCardHTML(m, true)).join('');
+    document.getElementById('resolvedGrid').innerHTML = resolved.map(m => marketCardHTML(m, true, false)).join('');
   }
 
   // FAQ
@@ -1725,28 +1778,75 @@ function renderFilteredMarkets() {
     const m = msgs[currentFilter] || msgs.all;
     grid.innerHTML = `<div class="empty"><div class="empty-icon">${m.icon}</div><strong>${m.title}</strong><br/><span style="font-size:12px;color:var(--dim);margin-top:6px;display:block">${m.sub}</span></div>`;
   } else {
-    grid.innerHTML = filtered.map(m => marketCardHTML(m, false)).join('');
+    // Pick featured card: hottest (most traders) first, otherwise just first
+    const sorted = [...filtered].sort((a,b) => (b.trader_count||0) - (a.trader_count||0));
+    const featuredId = sorted[0]?.id;
+    // Render featured first, then rest sorted by traders
+    const featuredCards = sorted.filter(m => m.id === featuredId).map(m => marketCardHTML(m, false, true));
+    const restCards     = sorted.filter(m => m.id !== featuredId).map(m => marketCardHTML(m, false, false));
+    grid.innerHTML = [...featuredCards, ...restCards].join('');
   }
 }
 
-function marketCardHTML(m, isResolved) {
+// Category → pill class mapping
+const CAT_CLASS = {
+  sports:'sports', sport:'sports', basketball:'sports', football:'sports', soccer:'sports', baseball:'sports', tennis:'sports', golf:'sports', mma:'sports', boxing:'sports', nfl:'sports', nba:'sports', mlb:'sports', nhl:'sports', wnba:'sports',
+  crypto:'crypto', bitcoin:'crypto', ethereum:'crypto', web3:'crypto', defi:'crypto',
+  politics:'politics', election:'politics', government:'politics',
+  culture:'culture', entertainment:'culture', 'pop culture':'culture', music:'music', film:'culture', tv:'culture', celebrity:'culture',
+  gaming:'gaming', esports:'esports', videogames:'gaming',
+  finance:'finance', stocks:'finance', market:'finance', economy:'finance',
+  tech:'tech', technology:'tech', ai:'tech', science:'tech',
+  news:'news',
+};
+function catClass(cat) {
+  return CAT_CLASS[(cat||'').toLowerCase()] || 'other';
+}
+
+function formatCountdown(dateStr) {
+  if (!dateStr) return '—';
+  const diff = new Date(dateStr) - Date.now();
+  if (diff <= 0) return 'Closed';
+  const days  = Math.floor(diff / 86400000);
+  const hours = Math.floor((diff % 86400000) / 3600000);
+  const mins  = Math.floor((diff % 3600000) / 60000);
+  if (days > 6) return new Date(dateStr).toLocaleDateString('en-US', { month:'short', day:'numeric' });
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${mins}m`;
+  return `${mins}m`;
+}
+
+function fmtVolume(v) {
+  if (!v || v < 100) return null;
+  const pts = Math.round(v / 100);
+  if (pts >= 1000) return (pts / 1000).toFixed(1).replace(/\.0$/, '') + 'K pts';
+  return pts + ' pts';
+}
+
+function marketCardHTML(m, isResolved, featured) {
   const yp      = Number(m.yes_price) || 0.5;
   const np      = Number(m.no_price)  || 0.5;
   const yesPct  = Math.round(yp * 100);
   const noPct   = Math.round(np * 100);
-  const closes  = formatDate(m.expiry_date);
   const traders = m.trader_count || 0;
-  const cat     = (m.category || 'other').toLowerCase();
+  const cc      = catClass(m.category);
   const hot     = isHot(m);
   const soon    = isClosingSoon(m);
   const pos     = myPositions[m.id];
+  const vol     = fmtVolume(m.volume);
+  const countdown = formatCountdown(m.expiry_date);
+  const urgentTime = soon || (new Date(m.expiry_date) - Date.now()) < 86400000 * 2;
 
-  // Badges
-  let badgesHTML = `<span class="market-badge ${isResolved ? 'resolved-badge' : 'live'}">${isResolved ? 'Resolved' : 'Live'}</span>`;
-  if (!isResolved && hot)  badgesHTML += `<span class="market-badge hot">🔥 Hot</span>`;
-  if (!isResolved && soon) badgesHTML += `<span class="market-badge soon">⏰ Soon</span>`;
+  // Top row
+  const catPill   = `<span class="cat-pill ${cc}">${(m.category||'Market').toUpperCase()}</span>`;
+  let badgesHTML  = '';
+  if (isResolved) badgesHTML = `<span class="market-badge resolved-badge">Resolved</span>`;
+  else {
+    if (hot)  badgesHTML += `<span class="market-badge hot">🔥 Hot</span>`;
+    if (soon) badgesHTML += `<span class="market-badge soon">⚡ Soon</span>`;
+  }
 
-  // My position
+  // My position row
   let posHTML = '';
   if (!isResolved && pos) {
     posHTML = `<div class="my-position-row">
@@ -1756,7 +1856,33 @@ function marketCardHTML(m, isResolved) {
     </div>`;
   }
 
-  // Predict buttons or resolved banner
+  // Odds block (hidden for resolved)
+  const oddsHTML = isResolved ? '' : `
+    <div class="odds-block">
+      <div class="odds-side yes-side">
+        <div class="odds-pct">${yesPct}%</div>
+        <div class="odds-side-label">YES</div>
+      </div>
+      <div class="odds-bar-col">
+        <div class="prob-bar">
+          <div class="prob-fill-yes" style="width:${yesPct}%"></div>
+          <div class="prob-fill-no"  style="width:${noPct}%"></div>
+        </div>
+      </div>
+      <div class="odds-side no-side">
+        <div class="odds-pct">${noPct}%</div>
+        <div class="odds-side-label">NO</div>
+      </div>
+    </div>`;
+
+  // Meta row
+  const metaHTML = `<div class="market-meta">
+    <span class="meta-item${urgentTime && !isResolved ? ' urgent' : ''}">⏱ ${countdown}</span>
+    <span class="meta-item">👥 ${traders}</span>
+    ${vol ? `<span class="meta-item">📊 ${vol}</span>` : ''}
+  </div>`;
+
+  // Actions
   let actionsHTML;
   if (isResolved) {
     const won = m.outcome === 'YES' || m.outcome === true;
@@ -1768,37 +1894,32 @@ function marketCardHTML(m, isResolved) {
   } else {
     actionsHTML = `<div class="market-actions">
       <button class="btn-predict yes" onclick="onPredict(event,'${m.id}','YES')">
-        ✓ YES <span style="opacity:.55;font-size:11px">${yesPct}%</span>
+        ✓ YES <span class="btn-price">${yesPct}¢</span>
       </button>
       <button class="btn-predict no" onclick="onPredict(event,'${m.id}','NO')">
-        ✗ NO <span style="opacity:.55;font-size:11px">${noPct}%</span>
+        ✗ NO <span class="btn-price">${noPct}¢</span>
       </button>
     </div>`;
   }
 
+  const cls = [
+    'market-card',
+    isResolved ? 'resolved' : '',
+    pos ? 'has-position' : '',
+    featured ? 'featured' : ''
+  ].filter(Boolean).join(' ');
+
   return `
-    <div class="market-card${isResolved ? ' resolved' : ''}${pos ? ' has-position' : ''}" id="mkt-${m.id}" data-market-id="${m.id}">
+    <div class="${cls}" id="mkt-${m.id}" data-market-id="${m.id}">
       <div class="market-card-inner">
         <div class="market-top">
-          <div class="market-question">${escHtml(m.question)}</div>
+          ${catPill}
           <div class="market-badges">${badgesHTML}</div>
         </div>
+        <div class="market-question">${escHtml(m.question)}</div>
         ${posHTML}
-        <div class="odds-bar-wrap">
-          <div class="odds-bar">
-            <div class="odds-bar-yes" style="width:${yesPct}%"></div>
-            <div class="odds-bar-no"  style="width:${noPct}%"></div>
-          </div>
-          <div class="odds-labels">
-            <span class="odds-label yes"><span class="odds-dot yes"></span>YES ${yesPct}%</span>
-            <span class="odds-center">${cat}</span>
-            <span class="odds-label no">NO ${noPct}%<span class="odds-dot no" style="margin-left:5px"></span></span>
-          </div>
-        </div>
-        <div class="market-meta">
-          <span class="meta-item${soon ? ' urgent' : ''}"><span class="meta-icon">📅</span> ${closes}</span>
-          <span class="meta-item"><span class="meta-icon">👥</span> ${traders} trader${traders !== 1 ? 's' : ''}</span>
-        </div>
+        ${oddsHTML}
+        ${metaHTML}
       </div>
       ${actionsHTML}
     </div>`;
@@ -1806,9 +1927,7 @@ function marketCardHTML(m, isResolved) {
 
 function toggleResolved() {
   resolvedVisible = !resolvedVisible;
-  document.getElementById('resolvedGrid').style.display = resolvedVisible ? 'flex' : 'none';
-  if (resolvedVisible) document.getElementById('resolvedGrid').style.flexDirection = 'column';
-  if (resolvedVisible) document.getElementById('resolvedGrid').style.gap = '10px';
+  document.getElementById('resolvedGrid').style.display = resolvedVisible ? 'grid' : 'none';
   document.getElementById('resolvedToggle').textContent = resolvedVisible ? '▼ hide' : '▶ show';
 }
 
@@ -2196,23 +2315,32 @@ function refreshMarketCard(m) {
   const np = Number(m.no_price)  || 0.5;
   const yesPct = Math.round(yp * 100);
   const noPct  = Math.round(np * 100);
-  const barYes = card.querySelector('.odds-bar-yes');
-  const barNo  = card.querySelector('.odds-bar-no');
-  if (barYes) barYes.style.width = yesPct + '%';
-  if (barNo)  barNo.style.width  = noPct  + '%';
-  const labels = card.querySelectorAll('.odds-label');
-  if (labels[0]) labels[0].innerHTML = `<span class="odds-dot yes"></span>YES ${yesPct}%`;
-  if (labels[1]) labels[1].innerHTML = `NO ${noPct}%<span class="odds-dot no" style="margin-left:5px"></span>`;
+
+  // Update big odds numbers
+  const yesPctEl = card.querySelector('.yes-side .odds-pct');
+  const noPctEl  = card.querySelector('.no-side .odds-pct');
+  if (yesPctEl) yesPctEl.textContent = yesPct + '%';
+  if (noPctEl)  noPctEl.textContent  = noPct  + '%';
+
+  // Update prob bar fills
+  const fillYes = card.querySelector('.prob-fill-yes');
+  const fillNo  = card.querySelector('.prob-fill-no');
+  if (fillYes) fillYes.style.width = yesPct + '%';
+  if (fillNo)  fillNo.style.width  = noPct  + '%';
+
+  // Update buttons
   const btnYes = card.querySelector('.btn-predict.yes');
   const btnNo  = card.querySelector('.btn-predict.no');
-  if (btnYes) btnYes.innerHTML = `✓ YES <span style="opacity:.55;font-size:11px">${yesPct}%</span>`;
-  if (btnNo)  btnNo.innerHTML  = `✗ NO <span style="opacity:.55;font-size:11px">${noPct}%</span>`;
+  if (btnYes) btnYes.innerHTML = `✓ YES <span class="btn-price">${yesPct}¢</span>`;
+  if (btnNo)  btnNo.innerHTML  = `✗ NO <span class="btn-price">${noPct}¢</span>`;
+
+  // Update trader count
   const n = (m.trader_count || 0) + 1;
   m.trader_count = n;
-  const traderEl = card.querySelector('.meta-item:nth-child(2)');
-  if (traderEl) traderEl.innerHTML = `<span class="meta-icon">👥</span> ${n} trader${n !== 1 ? 's' : ''}`;
+  const metaItems = card.querySelectorAll('.meta-item');
+  if (metaItems[1]) metaItems[1].textContent = '👥 ' + n;
 
-  // Add position indicator if not present
+  // Add / update position indicator
   card.classList.add('has-position');
   const existingPos = card.querySelector('.my-position-row');
   const pos = myPositions[m.id];
@@ -2223,8 +2351,8 @@ function refreshMarketCard(m) {
       <span class="my-position-label">Your bet</span>
       <span class="my-position-side ${pos.side.toLowerCase()}">${pos.side}</span>
       <span class="my-position-amount">${pos.amount.toLocaleString()} pts</span>`;
-    const oddsWrap = card.querySelector('.odds-bar-wrap');
-    if (oddsWrap) card.querySelector('.market-card-inner').insertBefore(posDiv, oddsWrap);
+    const oddsBlock = card.querySelector('.odds-block');
+    if (oddsBlock) card.querySelector('.market-card-inner').insertBefore(posDiv, oddsBlock);
   } else if (existingPos && pos) {
     existingPos.querySelector('.my-position-amount').textContent = pos.amount.toLocaleString() + ' pts';
   }
