@@ -35,6 +35,7 @@ body {
   color: var(--text);
   font-family: var(--sans);
   min-height: 100vh;
+  overflow-x: hidden;
 }
 body::before {
   content: '';
@@ -501,9 +502,20 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
 .markets-grid .market-card.featured {
   grid-column: 1 / -1;
 }
+/* ── Tablet (601–768px): keep 2-col but reduce padding ── */
+@media (max-width: 768px) {
+  .content { padding-left: 16px; padding-right: 16px; }
+  .header  { padding: 0 16px; }
+  .hero-body { padding-left: 16px; padding-right: 16px; }
+  .market-card-inner { padding: 14px 14px 12px; }
+  .market-card.featured .odds-pct { font-size: 24px; }
+}
+
+/* ── Mobile (≤600px): single column ── */
 @media (max-width: 600px) {
   .markets-grid { grid-template-columns: 1fr; }
   .markets-grid .market-card.featured { grid-column: 1; }
+  .market-card.featured .odds-pct { font-size: 26px; }
 }
 
 .market-card {
@@ -590,6 +602,8 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
   line-height: 1.45;
   margin-bottom: 14px;
   flex: 1;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 .market-card.featured .market-question { font-size: 16px; }
 
@@ -2690,10 +2704,12 @@ function renderAnnouncements(announcements) {
     const timeAgo = formatTimeAgo(a.created_at);
     const pinBadge = a.pinned ? `<span style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:rgba(201,146,13,0.15);border:1px solid rgba(201,146,13,0.3);color:var(--gold);padding:2px 7px;border-radius:3px">📌 Pinned</span>` : '';
     return `<div style="background:var(--cream);border:1px solid ${a.pinned ? 'rgba(201,146,13,0.35)' : 'var(--border)'};border-radius:12px;padding:14px 16px;margin-bottom:8px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:${a.body ? '8px' : '0'}">
-        <span style="font-size:13px;font-weight:700;color:var(--text);flex:1">${escHtml(a.title)}</span>
-        ${pinBadge}
-        <span style="font-family:var(--mono);font-size:10px;color:var(--dim)">${timeAgo}</span>
+      <div style="display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;margin-bottom:${a.body ? '8px' : '0'}">
+        <span style="font-size:13px;font-weight:700;color:var(--text);flex:1;min-width:0;word-break:break-word">${escHtml(a.title)}</span>
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+          ${pinBadge}
+          <span style="font-family:var(--mono);font-size:10px;color:var(--dim)">${timeAgo}</span>
+        </div>
       </div>
       ${a.body ? `<div style="font-size:13px;color:var(--dim);line-height:1.6">${escHtml(a.body)}</div>` : ''}
     </div>`;
