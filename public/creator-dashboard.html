@@ -3628,6 +3628,7 @@ body.nav-open .sidebar-backdrop {
       <p style="font-size:13px;color:var(--text);margin-bottom:16px;line-height:1.6">This will <strong>permanently delete</strong> your account, all markets, all community data, and all member balances. This cannot be undone.</p>
       <p style="font-size:13px;color:var(--dim);margin-bottom:8px">Type <strong style="color:var(--text)">DELETE</strong> to confirm:</p>
       <input type="text" id="deleteConfirmInput" placeholder="DELETE" style="width:100%;background:var(--paper);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:14px;padding:10px 14px;outline:none;box-sizing:border-box"/>
+      <div id="deleteConfirmError" style="display:none;color:#ef4444;font-size:12px;margin-top:8px;font-family:var(--mono)">Type DELETE (all caps) to confirm.</div>
       <div style="display:flex;gap:10px;margin-top:20px">
         <button class="btn-secondary" onclick="closeDeleteAccountModal()" style="flex:1">Cancel</button>
         <button class="btn-danger" onclick="confirmDeleteAccount()" style="flex:1" id="deleteAccountConfirmBtn">Delete My Account</button>
@@ -5078,6 +5079,8 @@ async function triggerRefillNow() {
 // ── ACCOUNT DELETION ──────────────────────────────────────
 function openDeleteAccountModal() {
   document.getElementById('deleteConfirmInput').value = '';
+  const errEl = document.getElementById('deleteConfirmError');
+  if (errEl) errEl.style.display = 'none';
   document.getElementById('deleteAccountModal').style.display = 'flex';
 }
 function closeDeleteAccountModal() {
@@ -5085,7 +5088,12 @@ function closeDeleteAccountModal() {
 }
 async function confirmDeleteAccount() {
   const val = document.getElementById('deleteConfirmInput').value.trim();
-  if (val !== 'DELETE') { showToast('Type DELETE to confirm.', 'error'); return; }
+  const errEl = document.getElementById('deleteConfirmError');
+  if (val.toUpperCase() !== 'DELETE') {
+    if (errEl) errEl.style.display = '';
+    return;
+  }
+  if (errEl) errEl.style.display = 'none';
   const btn = document.getElementById('deleteAccountConfirmBtn');
   btn.disabled = true;
   btn.textContent = 'Deleting…';

@@ -2272,7 +2272,7 @@ app.get('/api/creator/analytics', requireCreator, async (req, res) => {
     // Referral stats
     let referralStats = { total_referrals: 0, total_pts_distributed: 0, this_week: 0 };
     if (slug) {
-      const weekStart = getWeekStart().toISOString();
+      const weekStart = getWeekStart(); // already returns ISO string
       const { data: referrals } = await supabase
         .from('referral_history')
         .select('referrer_reward, welcome_bonus, created_at')
