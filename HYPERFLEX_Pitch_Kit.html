@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>HYPERFLEX — Creator Pitch Kit</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #f7f6f2; color: #1a1a18; line-height: 1.6; }
+
+  .cover {
+    background: #141412;
+    color: #f5f5f0;
+    padding: 80px 60px;
+    border-bottom: 4px solid #c9920d;
+  }
+  .cover-logo { font-size: 13px; letter-spacing: 0.2em; color: #c9920d; font-weight: 700; text-transform: uppercase; margin-bottom: 32px; }
+  .cover h1 { font-size: 42px; font-weight: 900; letter-spacing: -0.03em; line-height: 1.1; margin-bottom: 16px; }
+  .cover h1 span { color: #c9920d; }
+  .cover p { font-size: 16px; color: #888; max-width: 560px; line-height: 1.7; }
+  .cover-meta { margin-top: 40px; font-size: 12px; color: #555; font-family: monospace; letter-spacing: 0.05em; }
+
+  .container { max-width: 860px; margin: 0 auto; padding: 60px 40px; }
+
+  .section { margin-bottom: 60px; }
+  .section-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #c9920d;
+    margin-bottom: 8px;
+  }
+  .section h2 {
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin-bottom: 24px;
+    color: #141412;
+  }
+
+  /* Pitch cards */
+  .pitch-card {
+    background: #fff;
+    border: 1px solid #e5e3dc;
+    border-radius: 12px;
+    padding: 28px 32px;
+    margin-bottom: 20px;
+    position: relative;
+  }
+  .pitch-card.featured { border-color: #c9920d; border-width: 2px; }
+  .pitch-type {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: #999;
+    margin-bottom: 10px;
+  }
+  .pitch-type.gold { color: #c9920d; }
+  .pitch-subject {
+    font-size: 13px;
+    font-weight: 700;
+    color: #141412;
+    margin-bottom: 4px;
+  }
+  .pitch-subject span { color: #888; font-weight: 400; }
+  .pitch-body {
+    font-size: 14px;
+    color: #333;
+    line-height: 1.75;
+    white-space: pre-wrap;
+    background: #f9f8f5;
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-top: 14px;
+    border-left: 3px solid #e5e3dc;
+    font-family: inherit;
+  }
+  .pitch-card.featured .pitch-body { border-left-color: #c9920d; }
+  .pitch-note {
+    font-size: 11px;
+    color: #999;
+    margin-top: 10px;
+    font-style: italic;
+  }
+
+  /* Niche tags */
+  .niche-tag {
+    display: inline-block;
+    background: #f0ede4;
+    border: 1px solid #e0ddd4;
+    border-radius: 20px;
+    padding: 3px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #666;
+    margin-right: 6px;
+    margin-bottom: 6px;
+  }
+  .niche-tag.finance { background: #fff8e6; border-color: #f0d070; color: #8a6500; }
+  .niche-tag.sports  { background: #e8f5e9; border-color: #a5d6a7; color: #2e7d32; }
+  .niche-tag.gaming  { background: #ede7f6; border-color: #b39ddb; color: #4527a0; }
+  .niche-tag.crypto  { background: #fff3e0; border-color: #ffcc80; color: #e65100; }
+  .niche-tag.culture { background: #fce4ec; border-color: #f48fb1; color: #880e4f; }
+
+  /* Target table */
+  .target-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .target-table th {
+    text-align: left;
+    padding: 10px 14px;
+    background: #141412;
+    color: #c9920d;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .target-table td { padding: 12px 14px; border-bottom: 1px solid #eee; vertical-align: top; }
+  .target-table tr:last-child td { border-bottom: none; }
+  .target-table tr:hover td { background: #f9f8f5; }
+  .target-table td:first-child { font-weight: 700; }
+
+  /* Objections */
+  .objection { background: #fff; border: 1px solid #e5e3dc; border-radius: 10px; padding: 20px 24px; margin-bottom: 14px; }
+  .objection-q { font-weight: 700; font-size: 14px; color: #141412; margin-bottom: 8px; }
+  .objection-q::before { content: "❓ "; }
+  .objection-a { font-size: 13px; color: #444; line-height: 1.65; }
+  .objection-a::before { content: "✅ "; font-style: normal; }
+
+  /* Follow-up sequence */
+  .sequence { display: flex; flex-direction: column; gap: 0; }
+  .seq-item { display: flex; gap: 20px; align-items: flex-start; padding: 20px 0; border-bottom: 1px solid #eee; }
+  .seq-item:last-child { border-bottom: none; }
+  .seq-day {
+    min-width: 64px;
+    background: #141412;
+    color: #c9920d;
+    border-radius: 8px;
+    padding: 8px 10px;
+    text-align: center;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    line-height: 1.4;
+    flex-shrink: 0;
+  }
+  .seq-content { flex: 1; }
+  .seq-title { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+  .seq-desc { font-size: 13px; color: #555; line-height: 1.6; }
+
+  /* Demo section */
+  .demo-box {
+    background: #141412;
+    color: #f5f5f0;
+    border-radius: 14px;
+    padding: 32px 36px;
+    margin-top: 20px;
+  }
+  .demo-box h3 { font-size: 18px; font-weight: 800; margin-bottom: 10px; color: #c9920d; }
+  .demo-box p { font-size: 14px; color: #aaa; line-height: 1.7; margin-bottom: 16px; }
+  .demo-box a { color: #c9920d; font-weight: 700; text-decoration: none; font-size: 15px; }
+  .demo-box .creds { font-family: monospace; font-size: 12px; color: #666; margin-top: 12px; background: #0d0d0b; padding: 10px 14px; border-radius: 6px; display: inline-block; }
+
+  /* Print */
+  @media print {
+    body { background: white; }
+    .cover { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .pitch-body { background: #f9f8f5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+
+  @media (max-width: 640px) {
+    .cover { padding: 48px 24px; }
+    .container { padding: 40px 20px; }
+    .cover h1 { font-size: 28px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="cover">
+  <div class="cover-logo">⬡ HYPERFLEX</div>
+  <h1>Creator <span>Pitch Kit</span></h1>
+  <p>Everything you need to sell HYPERFLEX to creators — cold DMs, email sequences, objection handling, and target lists. Copy, personalize, send.</p>
+  <div class="cover-meta">hyperflex.network · Confidential · March 2026</div>
+</div>
+
+<div class="container">
+
+  <!-- ── THE ONE-LINE PITCH ── -->
+  <div class="section">
+    <div class="section-label">The pitch</div>
+    <h2>One line. Memorize it.</h2>
+    <div class="pitch-card featured">
+      <div class="pitch-body" style="font-size:18px;font-weight:700;text-align:center;background:#141412;color:#f5f5f0;border-left:none;padding:28px;">
+"Your community is already predicting in your comments. HYPERFLEX gives them a place to make it official — and keeps them coming back."</div>
+    </div>
+  </div>
+
+  <!-- ── COLD DM ── -->
+  <div class="section">
+    <div class="section-label">Format 01</div>
+    <h2>Cold DM — Twitter / Instagram</h2>
+    <p style="font-size:13px;color:#888;margin-bottom:20px;">Under 300 characters. No links in first message. Goal: get a reply, not close the deal.</p>
+
+    <div class="pitch-card featured">
+      <div class="pitch-type gold">Best performer — finance / crypto creators</div>
+      <div class="pitch-body">Hey [Name] — your comments are full of people calling market moves. Built something that turns that into a live prediction market for your community. Play-money, live in 5 min. Mind if I show you?</div>
+      <div class="pitch-note">Send cold. If they reply, drop the demo link: hyperflex.network/wallstreetbets</div>
+    </div>
+
+    <div class="pitch-card">
+      <div class="pitch-type">Sports / podcasts</div>
+      <div class="pitch-body">Hey [Name] — built a prediction market tool made for creators like you. Your audience votes on outcomes, earns points, climbs a leaderboard. AI generates the markets from your videos. Free to try — want a look?</div>
+    </div>
+
+    <div class="pitch-card">
+      <div class="pitch-type">Gaming / esports</div>
+      <div class="pitch-body">Hey [Name] — what if your community could bet Flex Points on your matches, patch predictions, roster moves? Built exactly this. Play-money, takes 5 min to set up. Worth a look?</div>
+    </div>
+
+    <div class="pitch-card">
+      <div class="pitch-type">Ultra-short (reply bait)</div>
+      <div class="pitch-body">Hey [Name] — built a prediction market for creator communities. Your audience bets on outcomes, earns points. Free. Curious?</div>
+      <div class="pitch-note">Use this if the creator has a lot of followers and probably gets spammed. Just get them to say yes to more info.</div>
+    </div>
+  </div>
+
+  <!-- ── COLD EMAIL ── -->
+  <div class="section">
+    <div class="section-label">Format 02</div>
+    <h2>Cold Email</h2>
+
+    <div class="pitch-card featured">
+      <div class="pitch-type gold">Standard — works across niches</div>
+      <div class="pitch-subject">Subject: <span>your audience is already doing this</span></div>
+      <div class="pitch-body">Hey [Name],
+
+Scroll through your last video's comments. Someone's calling a score. Someone's predicting a price move. Someone's saying "watch, this is going to happen."
+
+Your community is already playing prediction markets — they just have nowhere to track it officially.
+
+I built HYPERFLEX for exactly this. You get a branded community page where members make predictions, earn Flex Points, and climb a live leaderboard. The AI scans your YouTube comments and generates ready-to-publish markets in seconds.
+
+Play-money only — zero legal risk. Free to start. Live in 5 minutes.
+
+Here's a live example so you can see exactly what your community would look like:
+→ hyperflex.network/wallstreetbets
+
+Worth a quick call?
+
+[Your name]</div>
+      <div class="pitch-note">Keep it. Don't add more. Brevity wins.</div>
+    </div>
+
+    <div class="pitch-card">
+      <div class="pitch-type">Finance / investing creators</div>
+      <div class="pitch-subject">Subject: <span>prediction markets for your community (no real money)</span></div>
+      <div class="pitch-body">Hey [Name],
+
+Your audience debates every call you make. They're already predicting in the comments — you're just not capturing any of it.
+
+HYPERFLEX lets you spin up a branded prediction market where members bet on earnings, Fed decisions, price targets — whatever's relevant to your content. Play-money only, so zero regulatory headache.
+
+The AI reads your YouTube video and generates the markets automatically. One URL, 30 seconds, done.
+
+Live demo: hyperflex.network/wallstreetbets
+
+Free to start. Takes 5 minutes to set up. Happy to walk you through it.
+
+[Your name]</div>
+    </div>
+
+    <div class="pitch-card">
+      <div class="pitch-type">Sports creators / podcasts</div>
+      <div class="pitch-subject">Subject: <span>keep your audience engaged between episodes</span></div>
+      <div class="pitch-body">Hey [Name],
+
+The problem with sports content: you drop an episode, audience spikes, then they disappear until next week.
+
+HYPERFLEX gives them something to do between drops. They predict game outcomes, player stats, trades — earn points, climb a leaderboard, unlock rewards you define. It turns passive listeners into daily-active community members.
+
+AI generates the markets from your content. You don't have to write a single question.
+
+Free to try: hyperflex.network
+
+Thoughts?
+
+[Your name]</div>
+    </div>
+  </div>
+
+  <!-- ── FOLLOW-UP SEQUENCE ── -->
+  <div class="section">
+    <div class="section-label">Format 03</div>
+    <h2>Follow-up Sequence</h2>
+    <p style="font-size:13px;color:#888;margin-bottom:24px;">If they don't reply to the first message. Don't go more than 3 follow-ups or you're just spam.</p>
+
+    <div class="sequence">
+      <div class="seq-item">
+        <div class="seq-day">Day 1<br/>Send 1</div>
+        <div class="seq-content">
+          <div class="seq-title">The cold outreach</div>
+          <div class="seq-desc">Use any of the DM or email formats above. Keep it short. One ask.</div>
+        </div>
+      </div>
+      <div class="seq-item">
+        <div class="seq-day">Day 4<br/>Send 2</div>
+        <div class="seq-content">
+          <div class="seq-title">Drop the demo — no ask</div>
+          <div class="seq-desc" style="white-space:pre-wrap;">Hey [Name] — didn't want to just talk about it. Here's a live community running on HYPERFLEX right now: hyperflex.network/wallstreetbets
+
+This is what yours would look like. No sign-up needed to browse.</div>
+        </div>
+      </div>
+      <div class="seq-item">
+        <div class="seq-day">Day 9<br/>Send 3</div>
+        <div class="seq-content">
+          <div class="seq-title">The easy close</div>
+          <div class="seq-desc" style="white-space:pre-wrap;">Last one from me — it's free to start and takes 5 minutes. If you ever want to give your community a prediction market, hyperflex.network is the link. Would love to have you as one of our early creators.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── TARGET LIST ── -->
+  <div class="section">
+    <div class="section-label">Targeting</div>
+    <h2>Who to pitch first</h2>
+    <p style="font-size:13px;color:#888;margin-bottom:20px;">Best-fit creators are mid-tier (10k–500k audience) with highly opinionated, debate-heavy communities. Mega-creators are harder to reach and slower to move.</p>
+
+    <table class="target-table">
+      <thead>
+        <tr>
+          <th>Niche</th>
+          <th>Why they're a fit</th>
+          <th>What to lead with</th>
+          <th>Tags</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Finance / Investing</td>
+          <td>Comments are full of market calls. Communities already debate outcomes obsessively.</td>
+          <td>AI generates markets from their video. Zero compliance risk (play-money).</td>
+          <td><span class="niche-tag finance">Finance</span></td>
+        </tr>
+        <tr>
+          <td>Crypto</td>
+          <td>Audience expects gamification. Already used to prediction culture (polymarket, etc).</td>
+          <td>Show WSB demo. Lead with Tendies / play-money angle.</td>
+          <td><span class="niche-tag crypto">Crypto</span></td>
+        </tr>
+        <tr>
+          <td>Sports Podcasts</td>
+          <td>Weekly cadence creates natural market expiry. Audience debates every take.</td>
+          <td>Keeps audience engaged between episodes. Leaderboard = bragging rights.</td>
+          <td><span class="niche-tag sports">Sports</span></td>
+        </tr>
+        <tr>
+          <td>Esports / Gaming</td>
+          <td>Young audience, already gamified, very community-oriented.</td>
+          <td>Bet on match outcomes, patch changes, roster moves. No money, all glory.</td>
+          <td><span class="niche-tag gaming">Gaming</span></td>
+        </tr>
+        <tr>
+          <td>Pop Culture / Entertainment</td>
+          <td>Award shows, feuds, reality TV — extremely bet-able moments.</td>
+          <td>Prediction markets around their content calendar. Lead with fun angle.</td>
+          <td><span class="niche-tag culture">Culture</span></td>
+        </tr>
+        <tr>
+          <td>Political Commentary</td>
+          <td>Highly opinionated audiences. Everything is a prediction.</td>
+          <td>Play-money only removes controversy. Leaderboard drives return visits.</td>
+          <td><span class="niche-tag" style="background:#e3f2fd;border-color:#90caf9;color:#0d47a1;">Politics</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── OBJECTIONS ── -->
+  <div class="section">
+    <div class="section-label">Objection handling</div>
+    <h2>What they'll say. What you say back.</h2>
+
+    <div class="objection">
+      <div class="objection-q">"Isn't this gambling? I don't want legal issues."</div>
+      <div class="objection-a">Play-money only — no real money ever changes hands. It's closer to a trivia leaderboard than a sportsbook. No licenses needed, no compliance risk. Think of it like your community's own internal points game.</div>
+    </div>
+
+    <div class="objection">
+      <div class="objection-q">"I don't have time to manage this."</div>
+      <div class="objection-a">The AI does it. Paste your YouTube URL and it generates ready-to-publish markets from your comments in 30 seconds. You approve and publish. Takes 2 minutes a week, max.</div>
+    </div>
+
+    <div class="objection">
+      <div class="objection-q">"My community isn't big enough."</div>
+      <div class="objection-a">This is actually better with a tighter community. 500 highly engaged members predicting and competing on a leaderboard is more fun than 50,000 passive viewers. Start free, scale up.</div>
+    </div>
+
+    <div class="objection">
+      <div class="objection-q">"What's the cost?"</div>
+      <div class="objection-a">Free to start — no credit card. Pro is $29/month when you want unlimited markets and the AI scanner. Most creators launch free and upgrade when they see their audience is hooked.</div>
+    </div>
+
+    <div class="objection">
+      <div class="objection-q">"How is this different from a poll?"</div>
+      <div class="objection-a">Polls are static. HYPERFLEX has live moving odds — prices shift as more people bet, just like real prediction markets. Members have skin in the game (their points), a live leaderboard to climb, streak multipliers, and rewards. Engagement is 10x a poll.</div>
+    </div>
+
+    <div class="objection">
+      <div class="objection-q">"I'd have to get my community to sign up for another thing."</div>
+      <div class="objection-a">One link, Google sign-in, done. No app to download. You share the link, they click, they're in. It lives at hyperflex.network/[yourname] — as branded as you want it.</div>
+    </div>
+  </div>
+
+  <!-- ── DEMO ── -->
+  <div class="section">
+    <div class="section-label">Closer</div>
+    <h2>Send them here, not a pitch deck.</h2>
+    <div class="demo-box">
+      <h3>Live Demo Community</h3>
+      <p>Before any call, drop this link. A live community they can click into right now — browse markets, see the leaderboard, feel the product. No sign-up required to browse.</p>
+      <a href="https://hyperflex.network/wallstreetbets" target="_blank">→ hyperflex.network/wallstreetbets</a>
+      <br/>
+      <div class="creds">Creator dashboard login: demo@hyperflex.network · HyperflexDemo2026!</div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

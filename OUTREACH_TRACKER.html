@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HYPERFLEX — Creator Outreach Tracker</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Space Mono', monospace, sans-serif;
+    background: #141412;
+    color: #e8e4d9;
+    padding: 40px 24px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  h1 { font-family: 'Syne', sans-serif; font-size: 28px; color: #c9920d; margin-bottom: 6px; }
+  .subtitle { color: #888; font-size: 13px; margin-bottom: 40px; }
+  .section-label {
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: #c9920d;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    border-bottom: 1px solid #2a2a28;
+    padding-bottom: 8px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 48px;
+    font-size: 13px;
+  }
+  th {
+    text-align: left;
+    padding: 10px 12px;
+    background: #1e1e1c;
+    color: #888;
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border-bottom: 1px solid #2a2a28;
+  }
+  td {
+    padding: 12px;
+    border-bottom: 1px solid #1e1e1c;
+    vertical-align: top;
+  }
+  tr:hover td { background: #1a1a18; }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+  }
+  .badge-live { background: #166534; color: #86efac; }
+  .badge-seeded { background: #1e3a5f; color: #93c5fd; }
+  .badge-pending { background: #2a2a28; color: #888; }
+  .badge-sent { background: #3b2f00; color: #fcd34d; }
+  .badge-replied { background: #1a0040; color: #c084fc; }
+  .creator-name { font-weight: bold; color: #e8e4d9; }
+  .slug { color: #c9920d; font-size: 12px; }
+  .channel-info { color: #aaa; font-size: 12px; }
+  .dm-box {
+    background: #1a1a18;
+    border: 1px solid #2a2a28;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 24px;
+  }
+  .dm-box h3 {
+    color: #c9920d;
+    font-size: 14px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .dm-box .platform {
+    background: #2a2a28;
+    color: #aaa;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+  }
+  .dm-text {
+    color: #d4d0c8;
+    font-size: 13px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+  }
+  .copy-btn {
+    margin-top: 12px;
+    background: #c9920d;
+    color: #141412;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: monospace;
+    cursor: pointer;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+  }
+  .copy-btn:hover { background: #e5a80f; }
+  .notes { color: #666; font-size: 12px; font-style: italic; }
+  a { color: #c9920d; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 700px) { .grid-2 { grid-template-columns: 1fr; } }
+</style>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<h1>HYPERFLEX — Creator Outreach</h1>
+<p class="subtitle">Free Premium seeds + DM tracker — last updated March 14, 2026</p>
+
+<p class="section-label">🎯 Outreach Status</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Creator</th>
+      <th>Niche</th>
+      <th>Audience</th>
+      <th>Community URL</th>
+      <th>Seed Status</th>
+      <th>DM Status</th>
+      <th>Notes</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>
+        <div class="creator-name">WallStreetBets</div>
+        <div class="channel-info">Reddit community / WSB</div>
+      </td>
+      <td>Meme stocks, finance</td>
+      <td>14M+ members</td>
+      <td><a href="https://hyperflex.network/wallstreetbets" target="_blank">/wallstreetbets</a></td>
+      <td><span class="badge badge-live">LIVE</span></td>
+      <td><span class="badge badge-sent">DM SENT</span></td>
+      <td class="notes">Reddit post removed (no ads). Discord ban. X DM sent, no reply yet.</td>
+    </tr>
+    <tr>
+      <td>
+        <div class="creator-name">TraderMayne</div>
+        <div class="channel-info">YouTube @TraderMayne</div>
+      </td>
+      <td>Crypto, price action</td>
+      <td>~200K subs</td>
+      <td><a href="https://hyperflex.network/tradermayne" target="_blank">/tradermayne</a></td>
+      <td><span class="badge badge-seeded">SEEDED</span></td>
+      <td><span class="badge badge-pending">PENDING</span></td>
+      <td class="notes">Run seed_tradermayne.sql (v_creator_id fix). Then DM on X/YouTube.</td>
+    </tr>
+    <tr>
+      <td>
+        <div class="creator-name">Coin Bureau</div>
+        <div class="channel-info">YouTube @CoinBureau</div>
+      </td>
+      <td>Crypto research, macro</td>
+      <td>2.5M+ subs</td>
+      <td><a href="https://hyperflex.network/coinbureau" target="_blank">/coinbureau</a></td>
+      <td><span class="badge badge-seeded">SEEDED</span></td>
+      <td><span class="badge badge-pending">PENDING</span></td>
+      <td class="notes">Run seed_coinbureau.sql. DM on X @coinbureau. High-value target.</td>
+    </tr>
+    <tr>
+      <td>
+        <div class="creator-name">Andrei Jikh</div>
+        <div class="channel-info">YouTube @AndreiJikh</div>
+      </td>
+      <td>Investing, crypto, personal finance</td>
+      <td>2M+ subs</td>
+      <td><a href="https://hyperflex.network/andreijikh" target="_blank">/andreijikh</a></td>
+      <td><span class="badge badge-seeded">SEEDED</span></td>
+      <td><span class="badge badge-pending">PENDING</span></td>
+      <td class="notes">Run seed_andrei_jikh.sql. Active on X @AndreiJikh.</td>
+    </tr>
+    <tr>
+      <td>
+        <div class="creator-name">Meet Kevin</div>
+        <div class="channel-info">YouTube @MeetKevin</div>
+      </td>
+      <td>Finance, real estate, macro</td>
+      <td>2M+ subs</td>
+      <td><a href="https://hyperflex.network/meetkevin" target="_blank">/meetkevin</a></td>
+      <td><span class="badge badge-seeded">SEEDED</span></td>
+      <td><span class="badge badge-pending">PENDING</span></td>
+      <td class="notes">Run seed_meet_kevin.sql. Very active on X @realMeetKevin.</td>
+    </tr>
+    <tr>
+      <td>
+        <div class="creator-name">Graham Stephan</div>
+        <div class="channel-info">YouTube @GrahamStephan</div>
+      </td>
+      <td>Real estate, personal finance, investing</td>
+      <td>4.5M+ subs</td>
+      <td><a href="https://hyperflex.network/grahamstephan" target="_blank">/grahamstephan</a></td>
+      <td><span class="badge badge-seeded">SEEDED</span></td>
+      <td><span class="badge badge-pending">PENDING</span></td>
+      <td class="notes">Run seed_graham_stephan.sql. DM on X @GrahamStephan.</td>
+    </tr>
+    <tr>
+      <td>
+        <div class="creator-name">Whiteboard Finance</div>
+        <div class="channel-info">YouTube @WhiteboardFinance</div>
+      </td>
+      <td>Macro, economics, finance education</td>
+      <td>900K+ subs</td>
+      <td><a href="https://hyperflex.network/whiteboardfinance" target="_blank">/whiteboardfinance</a></td>
+      <td><span class="badge badge-seeded">SEEDED</span></td>
+      <td><span class="badge badge-pending">PENDING</span></td>
+      <td class="notes">Run seed_whiteboard_finance.sql. Good macro fit.</td>
+    </tr>
+    <tr>
+      <td>
+        <div class="creator-name">Next Target</div>
+        <div class="channel-info">TBD</div>
+      </td>
+      <td>—</td>
+      <td>—</td>
+      <td>—</td>
+      <td><span class="badge badge-pending">NOT STARTED</span></td>
+      <td><span class="badge badge-pending">PENDING</span></td>
+      <td class="notes">Suggestions: Coffeezilla, Patrick Boyle, Watcher Guru</td>
+    </tr>
+  </tbody>
+</table>
+
+<p class="section-label">✉️ DM Templates — Copy & Paste</p>
+
+<div class="grid-2">
+
+  <div class="dm-box">
+    <h3>Crypto YouTuber (X/Twitter DM) <span class="platform">X DM</span></h3>
+    <div class="dm-text" id="dm-crypto-x">Hey [Name] — big fan of the content.
+
+I built a platform called Hyperflex that lets creators like you run branded prediction markets for your community. Your audience debates price calls constantly — this gives them live odds, leaderboards, and skin in the game.
+
+I set up a free Premium community for you at hyperflex.network/[slug] — fully loaded with crypto markets your audience would bet on.
+
+No cost, no commitment. Just wanted to show you what it could look like. Happy to chat if you're curious.</div>
+    <button class="copy-btn" onclick="copyText('dm-crypto-x')">COPY</button>
+  </div>
+
+  <div class="dm-box">
+    <h3>Finance YouTuber (X/Twitter DM) <span class="platform">X DM</span></h3>
+    <div class="dm-text" id="dm-finance-x">Hey [Name] — love the channel.
+
+Built something I thought you'd appreciate: Hyperflex lets you run a branded prediction market for your audience. Think Polymarket, but it's YOUR community, YOUR branding, YOUR engagement.
+
+Spun up a free Premium community for you at hyperflex.network/[slug] — markets on the Fed, housing, stocks. Stuff your audience already debates in the comments.
+
+Completely free to try. No strings. Want to take a look?</div>
+    <button class="copy-btn" onclick="copyText('dm-finance-x')">COPY</button>
+  </div>
+
+  <div class="dm-box">
+    <h3>YouTube Community Post (for your own channel) <span class="platform">YT Community</span></h3>
+    <div class="dm-text" id="dm-yt-community">I just launched something for this community — prediction markets where you can put points on the calls everyone debates in the comments.
+
+Will BTC hit $100K? Will the Fed cut? Will NVDA beat earnings?
+
+Live odds, community leaderboard, streak multipliers for consistent winners.
+
+Try it here → hyperflex.network/[slug]
+
+First 1,000 members get 1,000 [custom points] to start.</div>
+    <button class="copy-btn" onclick="copyText('dm-yt-community')">COPY</button>
+  </div>
+
+  <div class="dm-box">
+    <h3>Email outreach (business email) <span class="platform">EMAIL</span></h3>
+    <div class="dm-text" id="dm-email">Subject: Free prediction market for your community — hyperflex.network/[slug]
+
+Hi [Name],
+
+I'm Marc, founder of Hyperflex. We build branded prediction markets for creators — think Polymarket for your community.
+
+I set up a free Premium account for you at hyperflex.network/[slug]. It's fully live with markets your audience would bet on, custom points currency, and a real-time leaderboard.
+
+No pitch call needed. Just check it out, and if you like it, it's yours — free Premium, no obligation.
+
+Would love your feedback.
+
+Marc
+hyperflex.network</div>
+    <button class="copy-btn" onclick="copyText('dm-email')">COPY</button>
+  </div>
+
+</div>
+
+<p class="section-label">📋 Supabase Seeds — Run Order</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>File</th>
+      <th>Creator</th>
+      <th>Slug</th>
+      <th>Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>seed_demo_wallstreetbets.sql</code></td>
+      <td>WallStreetBets</td>
+      <td>wallstreetbets</td>
+      <td><span class="badge badge-live">✅ DONE</span></td>
+    </tr>
+    <tr>
+      <td><code>seeds/seed_tradermayne.sql</code></td>
+      <td>TraderMayne</td>
+      <td>tradermayne</td>
+      <td><span class="badge badge-sent">⚠️ RUN FIXED VERSION</span></td>
+    </tr>
+    <tr>
+      <td><code>seeds/seed_coinbureau.sql</code></td>
+      <td>Coin Bureau</td>
+      <td>coinbureau</td>
+      <td><span class="badge badge-pending">PENDING</span></td>
+    </tr>
+    <tr>
+      <td><code>seeds/seed_andrei_jikh.sql</code></td>
+      <td>Andrei Jikh</td>
+      <td>andreijikh</td>
+      <td><span class="badge badge-pending">PENDING</span></td>
+    </tr>
+    <tr>
+      <td><code>seeds/seed_meet_kevin.sql</code></td>
+      <td>Meet Kevin</td>
+      <td>meetkevin</td>
+      <td><span class="badge badge-pending">PENDING</span></td>
+    </tr>
+    <tr>
+      <td><code>seeds/seed_graham_stephan.sql</code></td>
+      <td>Graham Stephan</td>
+      <td>grahamstephan</td>
+      <td><span class="badge badge-pending">PENDING</span></td>
+    </tr>
+    <tr>
+      <td><code>seeds/seed_whiteboard_finance.sql</code></td>
+      <td>Whiteboard Finance</td>
+      <td>whiteboardfinance</td>
+      <td><span class="badge badge-pending">PENDING</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<script>
+function copyText(id) {
+  const text = document.getElementById(id).innerText;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = event.target;
+    btn.textContent = 'COPIED ✓';
+    setTimeout(() => { btn.textContent = 'COPY'; }, 2000);
+  });
+}
+</script>
+
+</body>
+</html>

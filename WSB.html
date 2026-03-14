@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>HYPERFLEX × WallStreetBets — Pitch</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #f7f6f2; color: #1a1a18; line-height: 1.6; }
+
+  .cover {
+    background: #141412;
+    color: #f5f5f0;
+    padding: 80px 60px;
+    border-bottom: 4px solid #00b300;
+  }
+  .cover-logo { font-size: 12px; letter-spacing: 0.2em; color: #00b300; font-weight: 700; text-transform: uppercase; margin-bottom: 32px; }
+  .cover h1 { font-size: 48px; font-weight: 900; letter-spacing: -0.03em; line-height: 1.05; margin-bottom: 16px; }
+  .cover h1 span { color: #00b300; }
+  .cover p { font-size: 16px; color: #888; max-width: 560px; line-height: 1.7; margin-bottom: 32px; }
+  .cover-demo { display: inline-block; background: #00b300; color: #000; font-weight: 800; font-size: 14px; padding: 12px 24px; border-radius: 6px; text-decoration: none; }
+  .cover-meta { margin-top: 32px; font-size: 11px; color: #444; font-family: monospace; letter-spacing: 0.05em; }
+
+  .container { max-width: 800px; margin: 0 auto; padding: 60px 40px; }
+  .section { margin-bottom: 56px; }
+  .label { font-size: 10px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: #00b300; margin-bottom: 8px; }
+  h2 { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 20px; }
+
+  .pitch-block {
+    background: #fff;
+    border: 1.5px solid #e5e3dc;
+    border-radius: 12px;
+    padding: 28px 32px;
+    margin-bottom: 20px;
+  }
+  .pitch-block.hero { border-color: #00b300; border-width: 2px; }
+  .pitch-type { font-size: 10px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: #999; margin-bottom: 12px; }
+  .pitch-type.green { color: #00b300; }
+  .subject { font-size: 13px; font-weight: 700; color: #141412; margin-bottom: 4px; }
+  .subject span { color: #888; font-weight: 400; }
+  .body {
+    font-size: 14px; color: #333; line-height: 1.8; white-space: pre-wrap;
+    background: #f9f8f5; border-radius: 8px; padding: 18px 22px; margin-top: 14px;
+    border-left: 3px solid #e5e3dc; font-family: inherit;
+  }
+  .pitch-block.hero .body { border-left-color: #00b300; }
+  .note { font-size: 11px; color: #999; margin-top: 10px; font-style: italic; }
+
+  .stat-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
+  .stat { background: #141412; color: #f5f5f0; border-radius: 10px; padding: 18px 22px; flex: 1; min-width: 140px; }
+  .stat-num { font-size: 26px; font-weight: 900; color: #00b300; letter-spacing: -0.02em; }
+  .stat-label { font-size: 11px; color: #666; margin-top: 4px; font-family: monospace; letter-spacing: 0.04em; }
+
+  .why-list { display: flex; flex-direction: column; gap: 14px; }
+  .why-item { background: #fff; border: 1px solid #e5e3dc; border-radius: 10px; padding: 18px 22px; display: flex; gap: 16px; align-items: flex-start; }
+  .why-icon { font-size: 22px; flex-shrink: 0; line-height: 1; margin-top: 2px; }
+  .why-title { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+  .why-desc { font-size: 13px; color: #555; line-height: 1.6; }
+
+  .demo-box { background: #141412; color: #f5f5f0; border-radius: 14px; padding: 32px 36px; margin-top: 20px; }
+  .demo-box h3 { font-size: 18px; font-weight: 800; margin-bottom: 10px; color: #00b300; }
+  .demo-box p { font-size: 14px; color: #aaa; line-height: 1.7; margin-bottom: 16px; }
+  .demo-box a { color: #00b300; font-weight: 800; font-size: 16px; text-decoration: none; }
+
+  @media (max-width: 640px) {
+    .cover { padding: 48px 24px; }
+    .cover h1 { font-size: 32px; }
+    .container { padding: 40px 20px; }
+    .pitch-block { padding: 20px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="cover-logo">⬡ HYPERFLEX × 🦍 WallStreetBets</div>
+  <h1>Give the apes a<br/><span>prediction market.</span></h1>
+  <p>15 million members already predicting in your comments. We built the infrastructure — branded, play-money, live in a day. Here's the pitch.</p>
+  <a href="https://hyperflex.network/wallstreetbets" class="cover-demo" target="_blank">View the live demo →</a>
+  <div class="cover-meta">hyperflex.network · Confidential · March 2026</div>
+</div>
+
+<div class="container">
+
+  <!-- ── WHY WSB ── -->
+  <div class="section">
+    <div class="label">The opportunity</div>
+    <h2>WSB is already a prediction market. It just has no scoreboard.</h2>
+
+    <div class="stat-row">
+      <div class="stat">
+        <div class="stat-num">15M+</div>
+        <div class="stat-label">r/wallstreetbets members</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">100%</div>
+        <div class="stat-label">already making market calls</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">$0</div>
+        <div class="stat-label">legal risk (play-money only)</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">1 day</div>
+        <div class="stat-label">to go live</div>
+      </div>
+    </div>
+
+    <div class="why-list">
+      <div class="why-item">
+        <div class="why-icon">🦍</div>
+        <div>
+          <div class="why-title">Your community is the product</div>
+          <div class="why-desc">Every thread is a prediction. "GME to $500 EOW" is a bet waiting to be made official. HYPERFLEX turns comment-section bravado into a live, trackable market — with a leaderboard that separates the apes from the analysts.</div>
+        </div>
+      </div>
+      <div class="why-item">
+        <div class="why-icon">💎</div>
+        <div>
+          <div class="why-title">Play-money. Zero legal exposure.</div>
+          <div class="why-desc">No real money ever changes hands. Members earn Tendies — your branded in-platform currency. It's closer to a trivia leaderboard than a sportsbook. No licenses, no compliance, no lawyers.</div>
+        </div>
+      </div>
+      <div class="why-item">
+        <div class="why-icon">📊</div>
+        <div>
+          <div class="why-title">Proof-of-call culture, finally quantified</div>
+          <div class="why-desc">The ape who called the GME squeeze before anyone else should have receipts. HYPERFLEX creates a permanent, timestamped record of who called what — and a leaderboard to prove it. That's engagement nobody can get anywhere else.</div>
+        </div>
+      </div>
+      <div class="why-item">
+        <div class="why-icon">🤖</div>
+        <div>
+          <div class="why-title">AI generates markets from your posts</div>
+          <div class="why-desc">Paste any Reddit thread, YouTube link, or Discord dump. The AI reads it and writes publish-ready prediction markets in 30 seconds. One person to manage it, 15 minutes a week.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── REDDIT DM ── -->
+  <div class="section">
+    <div class="label">Outreach 01</div>
+    <h2>Reddit mod DM</h2>
+
+    <div class="pitch-block hero">
+      <div class="pitch-type green">Send to: u/[WSB mod username] via Reddit DM</div>
+      <div class="body">Hey — built something I think WSB would actually use.
+
+It's a prediction market platform for communities. Members bet play-money Tendies on earnings calls, squeezes, Fed decisions — whatever the thread is debating. Live leaderboard, streak multipliers, the whole thing.
+
+We already built a WSB version you can browse right now:
+→ hyperflex.network/wallstreetbets
+
+No real money, no legal issues. Just a way to find out who the real galaxy-brain apes are.
+
+Worth a look?</div>
+      <div class="note">Drop the link and nothing else in the follow-up if no reply after 3 days.</div>
+    </div>
+  </div>
+
+  <!-- ── EMAIL ── -->
+  <div class="section">
+    <div class="label">Outreach 02</div>
+    <h2>Email — if there's an official contact</h2>
+
+    <div class="pitch-block hero">
+      <div class="pitch-type green">To: [official WSB email / brand contact]</div>
+      <div class="subject">Subject: <span>prediction market for WSB — we already built the demo</span></div>
+      <div class="body">Hey,
+
+Your community makes more market predictions than most hedge funds. The problem is there's no scoreboard — no way to know who actually called the GME squeeze vs. who just says they did.
+
+We built HYPERFLEX specifically to fix that. It's a branded prediction market platform where WSB members bet play-money Tendies on earnings, squeezes, rate decisions, and meme stocks. Live odds, streak multipliers, a leaderboard that separates the apes from the paper hands.
+
+We already stood up a WSB community you can click through right now:
+→ hyperflex.network/wallstreetbets
+
+Play-money only — zero legal exposure. Live in a day. AI generates markets from your threads automatically.
+
+This is the engagement layer WSB has never had. Happy to walk you through it.
+
+[Your name]</div>
+    </div>
+  </div>
+
+  <!-- ── TWITTER/X DM ── -->
+  <div class="section">
+    <div class="label">Outreach 03</div>
+    <h2>X/Twitter DM — @wallstreetbets or prominent WSB accounts</h2>
+
+    <div class="pitch-block">
+      <div class="pitch-type">Short — reply bait</div>
+      <div class="body">Hey — built a prediction market platform for WSB. Members bet play-money Tendies on earnings, squeezes, meme stocks. Live leaderboard. Already built the demo: hyperflex.network/wallstreetbets — worth a look?</div>
+    </div>
+
+    <div class="pitch-block">
+      <div class="pitch-type">Slightly longer — for accounts with DM history of engaging pitches</div>
+      <div class="body">WSB is already a prediction market — it just has no scoreboard. Built something that fixes that: branded community, play-money Tendies, live odds, leaderboard that tracks who actually calls it right.
+
+Demo live at hyperflex.network/wallstreetbets. Zero real money, zero legal risk. Just apes proving receipts.</div>
+    </div>
+  </div>
+
+  <!-- ── FOLLOW UP ── -->
+  <div class="section">
+    <div class="label">Outreach 04</div>
+    <h2>If they don't reply — post the demo publicly</h2>
+    <div class="pitch-block">
+      <div class="pitch-type">Reddit post in r/wallstreetbets (or comment on a hot thread)</div>
+      <div class="body">We built a prediction market for WSB.
+
+hyperflex.network/wallstreetbets
+
+Play-money Tendies. Bet on earnings, squeezes, rate decisions. Live leaderboard. Streak multipliers.
+
+Finally a way to prove your calls aren't retroactive. 🦍💎
+
+(Not affiliated with WSB officially — just built something I thought this community would actually use. Happy to open source or partner if mods are interested.)</div>
+      <div class="note">This gets the community talking and creates inbound pressure on the mods. If it gets upvotes, mods come to you.</div>
+    </div>
+  </div>
+
+  <!-- ── DEMO ── -->
+  <div class="section">
+    <div class="label">The closer</div>
+    <h2>Always lead with this. Not a deck.</h2>
+    <div class="demo-box">
+      <h3>Live WSB Demo Community</h3>
+      <p>8 active markets — GME, NVDA earnings, Fed rate cut, BTC $120K, AMC, AAPL, recession, Roaring Kitty. Real CPMM odds, Tendies currency, announcements, full leaderboard. No sign-up to browse.</p>
+      <a href="https://hyperflex.network/wallstreetbets" target="_blank">→ hyperflex.network/wallstreetbets</a>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
