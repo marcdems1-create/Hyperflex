@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HYPERFLEX — Marketing Assets</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0f0f0e; color: #e8e4d9; font-family: 'Segoe UI', sans-serif; padding: 40px 20px; }
+  h1 { font-family: 'Courier New', monospace; color: #c9920d; font-size: 28px; margin-bottom: 6px; }
+  .subtitle { color: #888; font-size: 14px; margin-bottom: 40px; }
+
+  .section { margin-bottom: 50px; }
+  .section-title { font-family: 'Courier New', monospace; color: #c9920d; font-size: 18px; font-weight: 700; margin-bottom: 20px; padding-bottom: 8px; border-bottom: 1px solid #2a2a28; display: flex; align-items: center; gap: 10px; }
+  .section-badge { background: #c9920d22; color: #c9920d; font-size: 11px; padding: 2px 8px; border-radius: 20px; font-weight: 600; letter-spacing: 0.5px; }
+
+  .card { background: #1a1a18; border: 1px solid #2a2a28; border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+  .card-header { padding: 14px 20px; background: #1f1f1d; border-bottom: 1px solid #2a2a28; display: flex; justify-content: space-between; align-items: center; }
+  .card-label { font-size: 12px; font-weight: 700; color: #c9920d; text-transform: uppercase; letter-spacing: 1px; }
+  .card-note { font-size: 12px; color: #666; }
+  .card-body { padding: 20px; }
+
+  .template { background: #141412; border: 1px solid #333; border-radius: 8px; padding: 18px; font-size: 14px; line-height: 1.8; color: #d4cfc4; white-space: pre-wrap; font-family: 'Courier New', monospace; position: relative; }
+
+  .copy-btn { background: #c9920d; color: #0f0f0e; border: none; padding: 8px 16px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer; letter-spacing: 0.5px; transition: all 0.15s; }
+  .copy-btn:hover { background: #e6a50f; }
+  .copy-btn.copied { background: #16a34a; color: white; }
+
+  .highlight { color: #f0c040; font-weight: 600; }
+  .var { color: #7dd3fc; }
+
+  .tip { background: #1a1a18; border-left: 3px solid #c9920d; padding: 12px 16px; font-size: 13px; color: #aaa; margin-top: 12px; border-radius: 0 8px 8px 0; line-height: 1.6; }
+  .tip strong { color: #e8e4d9; }
+
+  .ph-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 700px) { .ph-grid { grid-template-columns: 1fr; } }
+
+  .char-count { font-size: 11px; color: #555; margin-top: 8px; text-align: right; }
+
+  .reddit-subreddits { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .subreddit { background: #2a2a28; color: #c9920d; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-family: monospace; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 10px 14px; color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #2a2a28; }
+  td { padding: 10px 14px; border-bottom: 1px solid #1e1e1c; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  .platform-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+  .tag-twitter { background: #1a1a2e; color: #4a9eff; }
+  .tag-discord { background: #1a1a2e; color: #7c6ef7; }
+  .tag-email { background: #1a1a2e; color: #4ade80; }
+  .tag-reddit { background: #1a1a2e; color: #ff6b35; }
+
+  .priority { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .p1 { background: #ef4444; }
+  .p2 { background: #f59e0b; }
+  .p3 { background: #22c55e; }
+</style>
+</head>
+<body>
+
+<h1>HYPERFLEX Marketing Assets</h1>
+<p class="subtitle">Outreach templates, Product Hunt copy, Reddit posts — copy/paste ready</p>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- SECTION 1: TARGET LIST STRATEGY -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-title">🎯 Who To Target First <span class="section-badge">STRATEGY</span></div>
+
+  <div class="card">
+    <div class="card-body">
+      <table>
+        <thead>
+          <tr>
+            <th></th><th>Creator Type</th><th>Size</th><th>Platform</th><th>Why They Convert</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="priority p1"></span></td>
+            <td><strong>Finance Discord admins</strong></td>
+            <td>2K–50K members</td>
+            <td><span class="platform-tag tag-discord">Discord</span></td>
+            <td>Already running communities, hungry for engagement mechanics, DMs always open</td>
+          </tr>
+          <tr>
+            <td><span class="priority p1"></span></td>
+            <td><strong>Mid-tier finance YouTubers</strong></td>
+            <td>20K–300K subs</td>
+            <td><span class="platform-tag tag-twitter">Twitter/X</span></td>
+            <td>Respond to DMs, building audiences, competition = motivation to try new tools</td>
+          </tr>
+          <tr>
+            <td><span class="priority p2"></span></td>
+            <td><strong>Finance Twitter personalities</strong></td>
+            <td>5K–100K followers</td>
+            <td><span class="platform-tag tag-twitter">Twitter/X</span></td>
+            <td>Engaged audiences, tweet-native, can demo the product in a post</td>
+          </tr>
+          <tr>
+            <td><span class="priority p2"></span></td>
+            <td><strong>Podcast hosts (finance/crypto)</strong></td>
+            <td>Any size</td>
+            <td><span class="platform-tag tag-email">Email</span></td>
+            <td>Often have a "community" segment already, looking for listener engagement</td>
+          </tr>
+          <tr>
+            <td><span class="priority p3"></span></td>
+            <td><strong>Subreddit moderators</strong></td>
+            <td>Any size</td>
+            <td><span class="platform-tag tag-reddit">Reddit</span></td>
+            <td>Active but harder pitch — better to post in community than DM mod</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="tip">
+    <strong>The unlock:</strong> For every creator you reach, set up their community page before you DM them. Send the link. "I already built this for your audience at hyperflex.network/[theirname]" converts 10× better than describing the product.
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- SECTION 2: TWITTER/X DMs -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-title">𝕏 Twitter / X DMs <span class="section-badge">HIGHEST PRIORITY</span></div>
+
+  <!-- Template A: Cold intro, already built their page -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-label">Template A — Already seeded their community</span>
+      <button class="copy-btn" onclick="copyTemplate('tmpl-a')">Copy</button>
+    </div>
+    <div class="card-body">
+      <div class="template" id="tmpl-a">Hey [NAME] — I built a prediction market for your community and your audience is already competing on it.
+
+hyperflex.network/[SLUG]
+
+Play-money only (so no legal headache), your members bet on your calls, you see who your sharpest followers are. No setup needed on your end, it's live.
+
+Happy to give you full control of it — just say the word.</div>
+      <div class="char-count">~280 chars — fits in one DM</div>
+      <div class="tip">Works because it's already live. They can click the link right now and see markets about THEIR content. That's the hook. Don't pitch features — let the page speak.</div>
+    </div>
+  </div>
+
+  <!-- Template B: Cold intro, no page yet -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-label">Template B — Cold, no page built yet</span>
+      <button class="copy-btn" onclick="copyTemplate('tmpl-b')">Copy</button>
+    </div>
+    <div class="card-body">
+      <div class="template" id="tmpl-b">Hey [NAME] — built something your community would go crazy for.
+
+It's a prediction market where your followers bet play-money on your calls — who's going to the moon, which stock hits $X by date, etc. Leaderboards, streaks, the whole thing.
+
+Takes me 10 minutes to set up for your audience. Want me to spin one up so you can see it live?</div>
+      <div class="tip">This version asks for a "yes to see it" rather than commitment. Lower friction. Once they say yes, build the page and send Template A.</div>
+    </div>
+  </div>
+
+  <!-- Template C: Reply to their content -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-label">Template C — Reply to their tweet first, then DM</span>
+      <button class="copy-btn" onclick="copyTemplate('tmpl-c')">Copy</button>
+    </div>
+    <div class="card-body">
+      <div class="template" id="tmpl-c">[Reply to a recent tweet of theirs, something genuine like "this aged well" or "curious what your community thinks the price target is"]
+
+[Then DM 24hrs later]:
+
+Loved your take on [TOPIC]. Built a prediction market platform for finance creators — your audience could literally bet on whether you're right. Play-money, leaderboards, the whole thing. Want me to set one up for you?</div>
+      <div class="tip"><strong>Best conversion rate.</strong> They recognize your handle from the reply. Not coming out of nowhere. Takes 2 minutes to write a genuine reply to their last tweet.</div>
+    </div>
+  </div>
+
+  <!-- Template D: Follow-up -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-label">Template D — Follow-up (no response after 1 week)</span>
+      <button class="copy-btn" onclick="copyTemplate('tmpl-d')">Copy</button>
+    </div>
+    <div class="card-body">
+      <div class="template" id="tmpl-d">Hey — sent this last week but figured I'd try once more because it's genuinely built for someone doing what you do.
+
+hyperflex.network/[SLUG] — that's your community, live.
+
+No strings, it's yours. Just wanted to make sure you actually saw it.</div>
+      <div class="tip">Send once, max. If no response after follow-up, move on. The link being live is your entire argument.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- SECTION 3: DISCORD OUTREACH -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-title">💬 Discord Outreach <span class="section-badge">HIGH YIELD</span></div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-label">Template E — Cold DM to Discord server admin/mod</span>
+      <button class="copy-btn" onclick="copyTemplate('tmpl-e')">Copy</button>
+    </div>
+    <div class="card-body">
+      <div class="template" id="tmpl-e">Hey [NAME] — I run a platform called HYPERFLEX and I think your server would love it.
+
+It's a prediction market for communities — your members bet play-money on finance calls. Leaderboards, streaks, who's the sharpest trader in the server. Free to set up.
+
+I already put together a demo with markets relevant to [SERVER NAME]: hyperflex.network/[SLUG]
+
+Would love your feedback on it — and if you like it, you'd get full control (add markets, settle them, see your top predictors).</div>
+      <div class="tip"><strong>How to find Discord servers:</strong> Search "finance", "stocks", "crypto", "investing" on disboard.org — filters by member count. Target servers with 1K–50K members that are active (recent bumps). Join, spend 5 min reading what they talk about, then DM the admin.</div>
+    </div>
+  </div>
+
+  <!-- Template for posting in a server you're in -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-label">Template F — Posting in #self-promo or #tools channels</span>
+      <button class="copy-btn" onclick="copyTemplate('tmpl-f')">Copy</button>
+    </div>
+    <div class="card-body">
+      <div class="template" id="tmpl-f">Built something for this community and wanted to share it here: **hyperflex.network/[SLUG]**
+
+It's a prediction market where you can bet play-money on finance calls — stocks hitting price targets, earnings outcomes, macro events. Leaderboards show who's actually sharp vs who's just lucky.
+
+I set it up specifically for [SERVER NAME]'s vibe — the markets are based on what you guys actually discuss here. Free to play.
+
+Would love to hear what you think, drop comments below ⬇️</div>
+      <div class="tip">Only post this where it's welcome (self-promo / tools channels). Make sure the markets on the page are genuinely relevant to that server's conversations. Generic = ignored. Specific = engagement.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- SECTION 4: EMAIL OUTREACH -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-title">📧 Email Outreach <span class="section-badge">PODCASTERS & NEWSLETTERS</span></div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-label">Template G — Cold email to finance podcast / newsletter creator</span>
+      <button class="copy-btn" onclick="copyTemplate('tmpl-g')">Copy</button>
+    </div>
+    <div class="card-body">
+      <div class="template" id="tmpl-g">Subject: I built a prediction market for [SHOW NAME] listeners
+
+Hey [NAME],
+
+I'm a listener of [SHOW NAME] — big fan of your take on [SPECIFIC RECENT TOPIC].
+
+I built a platform called HYPERFLEX that lets podcast audiences compete on their hosts' calls. Your listeners bet play-money on outcomes, earn points, climb leaderboards. No real money involved, so no legal headache.
+
+I already set up a community for your audience: hyperflex.network/[SLUG]
+
+The markets I built are based on calls you've made recently. Your listeners can go see who's the sharpest predictor in your community right now.
+
+If you like what you see, you'd get full creator controls — add your own markets, settle them after the fact, see your most engaged listeners. Pro plan is on me for the first 3 months.
+
+Worth 5 minutes of your time?
+
+— Marc
+HYPERFLEX founder
+hyperflex.network</div>
+      <div class="tip"><strong>Key details:</strong> Reference something specific from their recent content (shows you actually listen). Lead with the live link. The "Pro plan on me for 3 months" closes — it's a real cost to you but you want adoption.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- SECTION 5: REDDIT -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-title">🔶 Reddit Posts <span class="section-badge">VOLUME PLAY</span></div>
+
+  <div class="reddit-subreddits">
+    <span class="subreddit">r/wallstreetbets</span>
+    <span class="subreddit">r/stocks</span>
+    <span class="subreddit">r/investing</span>
+    <span class="subreddit">r/financialindependence</span>
+    <span class="subreddit">r/CryptoCurrency</span>
+    <span class="subreddit">r/options</span>
+    <span class="subreddit">r/SecurityAnalysis</span>
+    <span class="subreddit">r/Entrepreneur</span>
+    <span class="subreddit">r/SideProject</span>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-label">Post A — Show HN / Side Project style (r/SideProject, r/Entrepreneur)</span>
+      <button class="copy-btn" onclick="copyTemplate('tmpl-reddit-a')">Copy</button>
+    </div>
+    <div class="card-body">
+      <div class="template" id="tmpl-reddit-a">Title: I built a prediction market platform for finance communities — demo inside
+
+I've been building HYPERFLEX for the past few months. It's a platform where finance creators (YouTubers, Discord servers, newsletter writers) can set up prediction markets for their communities.
+
+Play-money only (Flex Points), so no gambling regulation headaches. Members bet on calls — will NVDA hit $150 by June? Does the Fed cut rates in Q3? — and earn points, build streaks, climb leaderboards.
+
+The idea came from watching finance communities endlessly debate predictions with no accountability. This gives you a scorecard.
+
+Demo community (WallStreetBets): https://hyperflex.network/wallstreetbets
+
+Would love harsh feedback — what's broken, what's missing, what would make you actually use this.</div>
+      <div class="tip">The "would love harsh feedback" line is key — it's not promotional, it's a builder asking for help. Reddit responds well to that framing vs "check out my product".</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-label">Post B — Community play (r/wallstreetbets, r/CryptoCurrency)</span>
+      <button class="copy-btn" onclick="copyTemplate('tmpl-reddit-b')">Copy</button>
+    </div>
+    <div class="card-body">
+      <div class="template" id="tmpl-reddit-b">Title: I set up a WSB prediction market — prove your calls are skill not luck
+
+Sick of people calling every 10-bagger in hindsight? I built a platform where you can put your predictions on record.
+
+We've got a WSB community live at hyperflex.network/wallstreetbets — play-money markets on earnings, price targets, macro events. Leaderboards show who's actually sharp.
+
+No real money, no sign-up required to view. If you want to play, free account takes 30 seconds.
+
+Current markets open: [LIST 2-3 current WSB-relevant markets]
+
+Who's got the strongest record here?</div>
+      <div class="tip">Include actual specific market names from the WSB community page when you post this — it makes it feel live and immediate. Post timing matters: right before/after a big earnings event or macro news.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- SECTION 6: PRODUCT HUNT -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-title">🐱 Product Hunt Launch <span class="section-badge">TIMING: TUESDAY 12:01AM PST</span></div>
+
+  <div class="ph-grid">
+    <div class="card">
+      <div class="card-header"><span class="card-label">Tagline (60 chars max)</span><button class="copy-btn" onclick="copyTemplate('tmpl-ph-tag')">Copy</button></div>
+      <div class="card-body">
+        <div class="template" id="tmpl-ph-tag">Prediction markets for creator communities</div>
+        <div class="char-count">42 chars ✓</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-label">Alt Tagline (punchier)</span><button class="copy-btn" onclick="copyTemplate('tmpl-ph-tag2')">Copy</button></div>
+      <div class="card-body">
+        <div class="template" id="tmpl-ph-tag2">Let your community bet on your calls. Play-money only.</div>
+        <div class="char-count">54 chars ✓</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-label">Product Description (260 chars)</span>
+      <button class="copy-btn" onclick="copyTemplate('tmpl-ph-desc')">Copy</button>
+    </div>
+    <div class="card-body">
+      <div class="template" id="tmpl-ph-desc">HYPERFLEX lets finance creators (YouTubers, podcasters, Discord servers) launch branded prediction markets for their communities.
+
+Members earn Flex Points betting on calls — stock targets, earnings outcomes, macro events. Leaderboards, streaks, and badges create a competition layer on top of any finance community.
+
+Play-money only, so no legal headache. Free to start. Pro/Premium plans for creators who want deeper analytics and a bigger community.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-label">Maker's First Comment (post this right after launch goes live)</span>
+      <button class="copy-btn" onclick="copyTemplate('tmpl-ph-comment')">Copy</button>
+    </div>
+    <div class="card-body">
+      <div class="template" id="tmpl-ph-comment">Hey PH! I'm Marc, solo founder of HYPERFLEX 👋
+
+The idea came from a simple frustration: finance communities spend 90% of their time debating predictions and 0% tracking who's actually right.
+
+HYPERFLEX gives creators a one-click way to turn their community's debates into a live prediction market. Their followers earn points for being right, build streaks, and compete on leaderboards — all with play-money, so no gambling compliance issues.
+
+A few communities are already live:
+• hyperflex.network/wallstreetbets
+• hyperflex.network/coinbureau
+• hyperflex.network/tradermayne
+
+I'd love brutal feedback on what's broken or what you'd want before recommending it to a creator you follow. Ask me anything!</div>
+      <div class="tip"><strong>Post timing:</strong> Launch on Tuesday 12:01AM PST for maximum day-1 exposure. Prepare 5–10 friends to upvote and comment in the first hour — velocity in hour 1 determines placement. Ask in founder Slack groups, Twitter.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-label">Topics / Categories to select on PH</span>
+    </div>
+    <div class="card-body" style="padding: 16px 20px;">
+      <div style="display:flex; flex-wrap:wrap; gap:8px;">
+        <span class="subreddit">Finance</span>
+        <span class="subreddit">Community</span>
+        <span class="subreddit">Creator Tools</span>
+        <span class="subreddit">Gamification</span>
+        <span class="subreddit">Social</span>
+      </div>
+      <div class="tip" style="margin-top:12px;"><strong>Gallery images to prep:</strong> (1) community page with live markets, (2) leaderboard screenshot, (3) creator dashboard overview, (4) mobile view. These 4 tell the whole story visually.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- SECTION 7: QUICK HITS CHECKLIST -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-title">✅ This Week Checklist <span class="section-badge">EXECUTE NOW</span></div>
+  <div class="card">
+    <div class="card-body" style="padding: 20px;">
+      <table>
+        <tbody>
+          <tr><td style="width:30px;"><input type="checkbox"></td><td><strong>Post in r/SideProject</strong> — Template Post A above. Takes 5 min.</td></tr>
+          <tr><td><input type="checkbox"></td><td><strong>Find 10 finance Discord servers</strong> on disboard.org — join, read, DM admin with Template E.</td></tr>
+          <tr><td><input type="checkbox"></td><td><strong>Search YouTube</strong> for "stock picks 2026" / "crypto analysis 2026" — find 10 channels with 20K–200K subs, DM on Twitter with Template B.</td></tr>
+          <tr><td><input type="checkbox"></td><td><strong>Fix Railway SMTP vars</strong> — unblocks emails for new signups.</td></tr>
+          <tr><td><input type="checkbox"></td><td><strong>Run all 9 Supabase migrations</strong> — especially pending_emails.sql.</td></tr>
+          <tr><td><input type="checkbox"></td><td><strong>Pick Product Hunt launch date</strong> — schedule for a Tuesday, prep 10 upvote friends in advance.</td></tr>
+          <tr><td><input type="checkbox"></td><td><strong>Post on finance Twitter</strong> — screenshot of explore feed with caption "live trades across 7 communities right now — hyperflex.network/explore".</td></tr>
+          <tr><td><input type="checkbox"></td><td><strong>DM the seeded creators</strong> from OUTREACH_TRACKER.html — Coin Bureau, Andrei Jikh, etc.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+function copyTemplate(id) {
+  const el = document.getElementById(id);
+  const text = el.innerText;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = el.closest('.card-body') ?
+      el.closest('.card').querySelector('.copy-btn') : null;
+    if (btn) {
+      const orig = btn.textContent;
+      btn.textContent = 'Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 2000);
+    }
+  });
+}
+</script>
+
+</body>
+</html>
