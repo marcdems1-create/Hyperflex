@@ -1051,13 +1051,22 @@ footer {
 /* ── RESPONSIVE ── */
 @media (max-width: 960px) {
   .nav-links { display: none; }
-  .btn-nav-login { display: none; }
   .nav { padding: 0 20px; }
+  .nav-actions { gap: 8px; }
+  .btn-nav-explore { padding: 7px 12px; font-size: 12px; }
+  .btn-nav-login { padding: 7px 12px; font-size: 12px; }
+  .btn-nav-cta { padding: 7px 14px; font-size: 12px; }
+}
+@media (max-width: 960px) {
   .steps, .features-grid, .pricing-grid, .quote-grid { grid-template-columns: 1fr; }
   .demo-markets { grid-template-columns: 1fr; }
   .how, .features, .demo, .pricing, .quotes, .cta-wrap, .video-section { padding-left: 20px; padding-right: 20px; }
   .footer-top { flex-direction: column; }
   .cta-inner { padding: 48px 24px; }
+}
+@media (max-width: 480px) {
+  /* Very small — hide Sign in, keep Explore + Get started free */
+  .btn-nav-login { display: none; }
 }
 @media (max-width: 640px) {
   .hero { padding: 100px 20px 60px; }
