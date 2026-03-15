@@ -127,6 +127,19 @@ body::before {
   transition: all 0.2s;
 }
 .btn-nav-cta:hover { background: var(--gold-bright); }
+.btn-nav-explore {
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: 13px;
+  color: #4fc3f7;
+  background: rgba(79,195,247,0.08);
+  border: 1px solid rgba(79,195,247,0.3);
+  padding: 9px 18px;
+  border-radius: 6px;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+.btn-nav-explore:hover { background: rgba(79,195,247,0.15); border-color: rgba(79,195,247,0.55); }
 
 /* ── SHARED ── */
 section { position: relative; z-index: 1; }
@@ -1074,6 +1087,7 @@ footer {
     <a href="/explore" class="nav-link" style="color:var(--gold);">🔴 Live</a>
   </div>
   <div class="nav-actions">
+    <a href="/explore" class="btn-nav-explore">Explore</a>
     <a href="/creator/login" class="btn-nav-login">Sign in</a>
     <a href="/creator/signup" class="btn-nav-cta">Get started free</a>
   </div>
