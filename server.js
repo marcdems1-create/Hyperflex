@@ -2357,15 +2357,26 @@ app.get('/api/creator/analytics', requireCreator, async (req, res) => {
     // Daily trade counts — last 30 days from positions table
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const sevenDaysAgo  = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const fourteenDaysAgo = new Date();
+    fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
 
     const marketIds = allMarkets.map(m => m.id);
     let dailyTrades = [];
+    let weeklyActiveTradersCount = 0;
+    let avgBetSize = 0;
+    let trades7d = 0;
+    let tradesPrior7d = 0;
+
     if (marketIds.length > 0) {
       const { data: positions } = await supabase
         .from('positions')
-        .select('created_at')
+        .select('created_at, user_id, amount')
         .in('market_id', marketIds)
         .gte('created_at', thirtyDaysAgo.toISOString());
+
+      const allPos = positions || [];
 
       // Bucket by day
       const buckets = {};
@@ -2375,11 +2386,46 @@ app.get('/api/creator/analytics', requireCreator, async (req, res) => {
         const key = d.toISOString().slice(0, 10);
         buckets[key] = 0;
       }
-      (positions || []).forEach(p => {
+      allPos.forEach(p => {
         const key = p.created_at.slice(0, 10);
         if (key in buckets) buckets[key]++;
       });
       dailyTrades = Object.entries(buckets).map(([date, count]) => ({ date, count }));
+
+      // Weekly active traders (unique users with a trade in last 7 days)
+      const recent7 = allPos.filter(p => new Date(p.created_at) >= sevenDaysAgo);
+      weeklyActiveTradersCount = new Set(recent7.map(p => p.user_id)).size;
+
+      // 7d vs prior 7d trend
+      trades7d      = recent7.length;
+      tradesPrior7d = allPos.filter(p => {
+        const t = new Date(p.created_at);
+        return t >= fourteenDaysAgo && t < sevenDaysAgo;
+      }).length;
+
+      // Avg bet size (in centpoints, across all 30d positions)
+      const withAmount = allPos.filter(p => p.amount > 0);
+      avgBetSize = withAmount.length
+        ? Math.round(withAmount.reduce((s, p) => s + p.amount, 0) / withAmount.length)
+        : 0;
+    }
+
+    // Top markets by comment count
+    let topMarketsByComments = [];
+    if (marketIds.length > 0) {
+      const { data: comments } = await supabase
+        .from('market_comments')
+        .select('market_id')
+        .in('market_id', marketIds);
+      if (comments && comments.length) {
+        const counts = {};
+        comments.forEach(c => { counts[c.market_id] = (counts[c.market_id] || 0) + 1; });
+        topMarketsByComments = allMarkets
+          .filter(m => counts[m.id])
+          .sort((a, b) => (counts[b.id] || 0) - (counts[a.id] || 0))
+          .slice(0, 5)
+          .map(m => ({ title: m.question, comment_count: counts[m.id] || 0, trader_count: m.trader_count || 0 }));
+      }
     }
 
     // Community balance stats
@@ -2442,7 +2488,12 @@ app.get('/api/creator/analytics', requireCreator, async (req, res) => {
         archived: archivedMarkets.length
       },
       top_markets: topMarkets,
+      top_markets_by_comments: topMarketsByComments,
       daily_trades: dailyTrades,
+      trades_7d: trades7d,
+      trades_prior_7d: tradesPrior7d,
+      weekly_active_traders: weeklyActiveTradersCount,
+      avg_bet_size: avgBetSize,
       balance_stats: balanceStats,
       refill_stats: refillStats,
       referral_stats: referralStats
@@ -3976,7 +4027,7 @@ app.get('/api/community/:slug', async (req, res) => {
     // Match on any of the three fields that market-creation routes populate
     const { data: markets } = await supabase
       .from('markets')
-      .select('id, question, category, expiry_date, yes_price, no_price, volume, trader_count, resolved, outcome')
+      .select('id, question, category, expiry_date, yes_price, no_price, volume, trader_count, resolved, outcome, resolved_at, resolution_outcome')
       .or(`tenant_slug.eq.${slug},creator_id.eq.${settings.creator_id}`)
       .eq('is_public', true)
       .order('created_at', { ascending: false });

@@ -628,21 +628,22 @@ body.plan-premium .main {
 .analytics-stat-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin-bottom: 28px;
+  gap: 14px;
+  margin-bottom: 24px;
 }
 .analytics-stat {
   background: var(--cream);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 18px 20px;
+  padding: 16px 18px;
+  position: relative;
 }
 .analytics-stat-label {
-  font-size: 11px;
+  font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: .06em;
+  letter-spacing: .07em;
   color: var(--dim);
-  margin-bottom: 6px;
+  margin-bottom: 8px;
   font-family: var(--mono);
 }
 .analytics-stat-value {
@@ -654,8 +655,49 @@ body.plan-premium .main {
 .analytics-stat-sub {
   font-size: 11px;
   color: var(--dim);
+  margin-top: 5px;
+}
+.analytics-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--mono);
   margin-top: 4px;
 }
+.analytics-trend.up   { color: #4ade80; }
+.analytics-trend.down { color: #f87171; }
+.analytics-trend.flat { color: var(--dim); }
+/* Insight card */
+.analytics-insight {
+  background: linear-gradient(135deg, rgba(201,146,13,0.07) 0%, rgba(201,146,13,0.02) 100%);
+  border: 1px solid rgba(201,146,13,0.2);
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.analytics-insight-icon { font-size: 20px; line-height: 1; flex-shrink: 0; }
+.analytics-insight-body { flex: 1; }
+.analytics-insight-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 2px; }
+.analytics-insight-sub   { font-size: 12px; color: var(--dim); line-height: 1.4; }
+/* Top markets toggle */
+.top-mkt-toggle { display: flex; gap: 6px; }
+.top-mkt-tab {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--dim);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.top-mkt-tab.active { background: var(--gold); color: var(--ink); border-color: var(--gold); }
 /* Horizontal bar chart */
 .bar-list { display: flex; flex-direction: column; gap: 10px; }
 .bar-row { display: flex; flex-direction: column; gap: 4px; }
@@ -3136,22 +3178,31 @@ body.nav-open .sidebar-backdrop {
               <div class="analytics-stat">
                 <div class="analytics-stat-label">Trades (30d)</div>
                 <div class="analytics-stat-value" id="aTrades30">—</div>
-                <div class="analytics-stat-sub">total predictions placed</div>
+                <div class="analytics-trend flat" id="aTrend">— vs prior week</div>
+              </div>
+              <div class="analytics-stat">
+                <div class="analytics-stat-label">Active Traders (7d)</div>
+                <div class="analytics-stat-value" id="aActiveTraders">—</div>
+                <div class="analytics-stat-sub">unique members trading</div>
               </div>
               <div class="analytics-stat">
                 <div class="analytics-stat-label">Active Markets</div>
                 <div class="analytics-stat-value" id="aActive">—</div>
-                <div class="analytics-stat-sub">open for predictions</div>
+                <div class="analytics-stat-sub" id="aResolutionRate">— resolved</div>
               </div>
               <div class="analytics-stat">
-                <div class="analytics-stat-label">Resolved</div>
-                <div class="analytics-stat-value" id="aResolved">—</div>
-                <div class="analytics-stat-sub">markets settled</div>
+                <div class="analytics-stat-label">Avg Bet Size</div>
+                <div class="analytics-stat-value" id="aAvgBet">—</div>
+                <div class="analytics-stat-sub" id="aAvgBetPts">pts per prediction</div>
               </div>
-              <div class="analytics-stat">
-                <div class="analytics-stat-label">Members Tracked</div>
-                <div class="analytics-stat-value" id="aMembers">—</div>
-                <div class="analytics-stat-sub">with community balance</div>
+            </div>
+
+            <!-- Auto insight callout -->
+            <div class="analytics-insight" id="analyticsInsight" style="display:none">
+              <div class="analytics-insight-icon" id="insightIcon">💡</div>
+              <div class="analytics-insight-body">
+                <div class="analytics-insight-title" id="insightTitle"></div>
+                <div class="analytics-insight-sub" id="insightSub"></div>
               </div>
             </div>
           </div>
@@ -3174,7 +3225,11 @@ body.nav-open .sidebar-backdrop {
 
             <div class="section" style="margin-bottom:0">
               <div class="section-header">
-                <div class="section-title">Top Markets by Engagement</div>
+                <div class="section-title">Top Markets</div>
+                <div class="top-mkt-toggle">
+                  <button class="top-mkt-tab active" id="tmTabTrades" onclick="switchTopMktTab('trades')">Trades</button>
+                  <button class="top-mkt-tab" id="tmTabComments" onclick="switchTopMktTab('comments')">💬 Discussed</button>
+                </div>
               </div>
               <div class="markets-table" style="padding:20px 24px">
                 <div id="topMarketsList" class="bar-list">
@@ -5958,6 +6013,86 @@ function appendFlexbotMsg(role, text, isThinking = false) {
 // ── ANALYTICS ─────────────────────────────────────────────
 let analyticsLoaded = false;
 
+function renderTopMarkets(mode, data) {
+  data = data || window._analyticsData;
+  if (!data) return;
+  const topEl = document.getElementById('topMarketsList');
+  document.querySelectorAll('.top-mkt-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(mode === 'trades' ? 'tmTabTrades' : 'tmTabComments')?.classList.add('active');
+
+  if (mode === 'trades') {
+    const mkts = data.top_markets || [];
+    const max = Math.max(...mkts.map(m => m.trader_count), 1);
+    if (!mkts.length) { topEl.innerHTML = '<div style="color:var(--dim);font-size:13px">No markets yet.</div>'; return; }
+    topEl.innerHTML = mkts.map(m => `
+      <div class="bar-row">
+        <div class="bar-row-label">
+          <span style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.title}</span>
+          <span>${m.trader_count} traders</span>
+        </div>
+        <div class="bar-track"><div class="bar-fill" style="width:${Math.round((m.trader_count / max) * 100)}%"></div></div>
+      </div>`).join('');
+  } else {
+    const mkts = data.top_markets_by_comments || [];
+    const max = Math.max(...mkts.map(m => m.comment_count), 1);
+    if (!mkts.length) { topEl.innerHTML = '<div style="color:var(--dim);font-size:13px">No comments yet.</div>'; return; }
+    topEl.innerHTML = mkts.map(m => `
+      <div class="bar-row">
+        <div class="bar-row-label">
+          <span style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.title}</span>
+          <span>💬 ${m.comment_count}</span>
+        </div>
+        <div class="bar-track"><div class="bar-fill" style="width:${Math.round((m.comment_count / max) * 100)}%;background:#60a5fa"></div></div>
+      </div>`).join('');
+  }
+}
+
+function switchTopMktTab(mode) {
+  renderTopMarkets(mode);
+}
+
+function buildInsight(data, ptsName) {
+  const el = document.getElementById('analyticsInsight');
+  const titleEl = document.getElementById('insightTitle');
+  const subEl   = document.getElementById('insightSub');
+  const iconEl  = document.getElementById('insightIcon');
+
+  const daily = data.daily_trades || [];
+  const t7  = data.trades_7d || 0;
+  const tp7 = data.trades_prior_7d || 0;
+  const topMkt = (data.top_markets || [])[0];
+  const topDiscussed = (data.top_markets_by_comments || [])[0];
+  const activeTraders = data.weekly_active_traders || 0;
+
+  let insight = null;
+
+  // Pick the most interesting insight
+  if (tp7 > 0 && t7 >= tp7 * 1.5) {
+    insight = { icon: '🔥', title: `Trading is up ${Math.round(((t7 - tp7) / tp7) * 100)}% this week`, sub: `${t7} trades this week vs ${tp7} last week. Something's driving engagement — keep it up.` };
+  } else if (tp7 > 0 && t7 < tp7 * 0.5 && tp7 > 2) {
+    insight = { icon: '📉', title: `Activity dropped this week`, sub: `${t7} trades vs ${tp7} last week. Consider posting a new market to re-engage your community.` };
+  } else if (topMkt && topMkt.trader_count > 0) {
+    const avg = data.market_breakdown?.active > 1 ? Math.round(topMkt.trader_count / (data.market_breakdown.active || 1)) : 0;
+    if (avg > 0 && topMkt.trader_count >= avg * 2) {
+      insight = { icon: '⭐', title: `"${topMkt.title.slice(0,50)}${topMkt.title.length > 50 ? '…' : ''}" is your top market`, sub: `${topMkt.trader_count} traders — more than double your average. Create more markets like this one.` };
+    }
+  } else if (topDiscussed && topDiscussed.comment_count >= 3) {
+    insight = { icon: '💬', title: `Your most discussed market has ${topDiscussed.comment_count} comments`, sub: `"${topDiscussed.title.slice(0,60)}${topDiscussed.title.length > 60 ? '…' : ''}" — high debate markets drive retention.` };
+  } else if (activeTraders > 0 && data.balance_stats?.member_count > activeTraders * 3) {
+    const dormant = data.balance_stats.member_count - activeTraders;
+    insight = { icon: '😴', title: `${dormant} members haven't traded this week`, sub: `Only ${activeTraders} of ${data.balance_stats.member_count} members are active. A new market or announcement could re-engage them.` };
+  }
+
+  if (insight) {
+    iconEl.textContent  = insight.icon;
+    titleEl.textContent = insight.title;
+    subEl.textContent   = insight.sub;
+    el.style.display = '';
+  } else {
+    el.style.display = 'none';
+  }
+}
+
 async function loadAnalytics() {
   const loadingEl = document.getElementById('analyticsLoadingRow');
   const errorEl   = document.getElementById('analyticsErrorRow');
@@ -5984,12 +6119,49 @@ async function loadAnalytics() {
     }
     document.getElementById('analyticsGate').style.display = 'none';
 
+    // Store for toggle
+    window._analyticsData = data;
+
     // Top stats
     const trades30 = (data.daily_trades || []).reduce((s, d) => s + d.count, 0);
     document.getElementById('aTrades30').textContent = trades30.toLocaleString();
-    document.getElementById('aActive').textContent = (data.market_breakdown?.active || 0).toLocaleString();
-    document.getElementById('aResolved').textContent = (data.market_breakdown?.resolved || 0).toLocaleString();
-    document.getElementById('aMembers').textContent = (data.balance_stats?.member_count || 0).toLocaleString();
+
+    // 7d trend
+    const t7 = data.trades_7d || 0;
+    const tp7 = data.trades_prior_7d || 0;
+    const trendEl = document.getElementById('aTrend');
+    if (tp7 > 0) {
+      const pct = Math.round(((t7 - tp7) / tp7) * 100);
+      const dir = pct > 0 ? 'up' : pct < 0 ? 'down' : 'flat';
+      const arrow = pct > 0 ? '↑' : pct < 0 ? '↓' : '→';
+      trendEl.className = `analytics-trend ${dir}`;
+      trendEl.textContent = `${arrow} ${Math.abs(pct)}% vs prior week`;
+    } else if (t7 > 0) {
+      trendEl.className = 'analytics-trend up';
+      trendEl.textContent = `↑ ${t7} trades this week`;
+    } else {
+      trendEl.textContent = '— vs prior week';
+    }
+
+    // Active traders 7d
+    document.getElementById('aActiveTraders').textContent = (data.weekly_active_traders || 0).toLocaleString();
+
+    // Active markets + resolution rate
+    const bk = data.market_breakdown || {};
+    document.getElementById('aActive').textContent = (bk.active || 0).toLocaleString();
+    const total = bk.total || 0;
+    const resolved = bk.resolved || 0;
+    const resRate = total > 0 ? Math.round((resolved / total) * 100) : 0;
+    document.getElementById('aResolutionRate').textContent = `${resolved} resolved (${resRate}%)`;
+
+    // Avg bet size
+    const pts = data.avg_bet_size ? Math.round(data.avg_bet_size / 100) : 0;
+    const ptsName = creatorData?.creator?.custom_points_name || 'pts';
+    document.getElementById('aAvgBet').textContent = pts > 0 ? pts.toLocaleString() : '—';
+    document.getElementById('aAvgBetPts').textContent = `${ptsName} per prediction`;
+
+    // Auto-generated insight
+    buildInsight(data, ptsName);
 
     // Subtitle
     document.getElementById('analyticsUpdatedAt').textContent = 'Last refreshed ' + new Date().toLocaleTimeString();
@@ -6009,22 +6181,8 @@ async function loadAnalytics() {
       labelsEl.innerHTML = `<span>${daily[0]?.date.slice(5)}</span><span>${daily[Math.floor(daily.length / 2)]?.date.slice(5)}</span><span>${daily[daily.length - 1]?.date.slice(5)}</span>`;
     }
 
-    // Top markets
-    const topEl = document.getElementById('topMarketsList');
-    const topMkts = data.top_markets || [];
-    const maxTrades = Math.max(...topMkts.map(m => m.trader_count), 1);
-    if (topMkts.length) {
-      topEl.innerHTML = topMkts.map(m => `
-        <div class="bar-row">
-          <div class="bar-row-label">
-            <span style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.title}</span>
-            <span>${m.trader_count} traders</span>
-          </div>
-          <div class="bar-track"><div class="bar-fill" style="width:${Math.round((m.trader_count / maxTrades) * 100)}%"></div></div>
-        </div>`).join('');
-    } else {
-      topEl.innerHTML = '<div style="color:var(--dim);font-size:13px">No markets yet.</div>';
-    }
+    // Top markets (default: by trades)
+    renderTopMarkets('trades', data);
 
     // Market breakdown
     const bkEl = document.getElementById('marketBreakdownList');

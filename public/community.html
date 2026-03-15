@@ -1519,19 +1519,56 @@ async function fetchMyPositions() {
     if (r.ok) {
       const data = await r.json();
       (data || []).forEach(p => {
-        // Accumulate per market (user may have multiple bets on different sides)
         if (!myPositions[p.market_id]) {
           myPositions[p.market_id] = { side: p.side, amount: 0, _sides: {} };
         }
         const pts = Math.round((p.amount || 0) / 100);
         myPositions[p.market_id].amount += pts;
         myPositions[p.market_id]._sides[p.side] = (myPositions[p.market_id]._sides[p.side] || 0) + pts;
-        // Show the side they've put the most points on
         const sides = myPositions[p.market_id]._sides;
         myPositions[p.market_id].side = Object.keys(sides).reduce((a, b) => sides[a] >= sides[b] ? a : b);
       });
+      checkResolutionNotifications();
     }
   } catch {}
+}
+
+function checkResolutionNotifications() {
+  if (!currentUser || !markets) return;
+  const ptsName = community?.custom_points_name || 'pts';
+  const lastVisitKey = `hf_lastvisit_${slug}_${currentUser.id}`;
+  const lastVisit = localStorage.getItem(lastVisitKey);
+  localStorage.setItem(lastVisitKey, Date.now());
+  if (!lastVisit) return; // First visit — nothing to notify yet
+
+  const lastVisitDate = new Date(parseInt(lastVisit));
+  const resolvedSince = (markets || []).filter(m =>
+    m.resolved && m.resolved_at &&
+    new Date(m.resolved_at) > lastVisitDate &&
+    myPositions[m.id]
+  );
+  if (!resolvedSince.length) return;
+
+  let wins = 0, losses = 0, totalWon = 0;
+  resolvedSince.forEach(m => {
+    const pos = myPositions[m.id];
+    const outcome = (m.resolution_outcome || '').toUpperCase();
+    const betSide = (pos?.side || '').toUpperCase();
+    if (!outcome || !betSide) return;
+    if (betSide === outcome) { wins++; totalWon += pos.amount || 0; }
+    else losses++;
+  });
+
+  setTimeout(() => {
+    if (wins > 0 && losses === 0) {
+      const wonStr = totalWon > 0 ? ` +${totalWon.toLocaleString()} ${ptsName}` : '';
+      showToast(`🎯 You called it right on ${wins} market${wins > 1 ? 's' : ''}!${wonStr}`, 'success');
+    } else if (wins > 0) {
+      showToast(`🎯 ${wins} win${wins > 1 ? 's' : ''}, ${losses} loss${losses > 1 ? 'es' : ''} since your last visit`, 'success');
+    } else if (losses > 0) {
+      showToast(`📊 ${losses} market${losses > 1 ? 's' : ''} resolved since your last visit`, 'info');
+    }
+  }, 1200);
 }
 
 // ── RENDER PAGE ───────────────────────────────────────────────
