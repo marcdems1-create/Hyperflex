@@ -5302,5 +5302,86 @@ async function sendResolutionEmails(market, outcome, creatorSlug, resolutionNote
   }
 }
 
+// ─── EXPLORE FEED ────────────────────────────────────────────────────────────
+app.get('/api/explore', async (req, res) => {
+  try {
+    const [tradesRes, hotRes, newMarketsRes, announcementsRes] = await Promise.all([
+
+      // Recent trades with market + community info
+      supabase
+        .from('positions')
+        .select('id, side, amount, created_at, market_id, markets(question, creator_slug, yes_price, no_price), users(display_name)')
+        .order('created_at', { ascending: false })
+        .limit(20),
+
+      // Hottest markets by trader_count
+      supabase
+        .from('markets')
+        .select('id, question, creator_slug, yes_price, no_price, trader_count, yes_pool, no_pool, created_at')
+        .eq('resolved', false)
+        .eq('archived', false)
+        .order('trader_count', { ascending: false })
+        .limit(10),
+
+      // Newest markets
+      supabase
+        .from('markets')
+        .select('id, question, creator_slug, yes_price, no_price, trader_count, created_at')
+        .eq('resolved', false)
+        .eq('archived', false)
+        .order('created_at', { ascending: false })
+        .limit(10),
+
+      // Recent announcements
+      supabase
+        .from('creator_announcements')
+        .select('id, creator_slug, title, body, pinned, created_at')
+        .order('created_at', { ascending: false })
+        .limit(10),
+    ]);
+
+    // Enrich trades with community display names
+    const trades = (tradesRes.data || []).map(p => ({
+      id: p.id,
+      side: p.side,
+      amount: p.amount,
+      created_at: p.created_at,
+      user: p.users?.display_name || 'Anonymous',
+      question: p.markets?.question || '',
+      creator_slug: p.markets?.creator_slug || '',
+      sentiment: p.markets ? Math.round((p.markets.yes_price || 0.5) * 100) : 50,
+    }));
+
+    // Get community display names for slugs
+    const slugs = [...new Set([
+      ...hotRes.data?.map(m => m.creator_slug) || [],
+      ...newMarketsRes.data?.map(m => m.creator_slug) || [],
+      ...announcementsRes.data?.map(a => a.creator_slug) || [],
+      ...trades.map(t => t.creator_slug),
+    ].filter(Boolean))];
+
+    const { data: communities } = await supabase
+      .from('creator_settings')
+      .select('slug, display_name, custom_points_name, primary_color')
+      .in('slug', slugs);
+
+    const communityMap = {};
+    (communities || []).forEach(c => { communityMap[c.slug] = c; });
+
+    res.json({
+      trades,
+      hot: hotRes.data || [],
+      newest: newMarketsRes.data || [],
+      announcements: announcementsRes.data || [],
+      communities: communityMap,
+    });
+  } catch (err) {
+    console.error('[explore]', err.message);
+    res.status(500).json({ error: 'Failed to load explore feed' });
+  }
+});
+
+app.get('/explore', (req, res) => res.sendFile(path.join(__dirname, 'public', 'explore.html')));
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`HYPERFLEX server running on port ${PORT}`));

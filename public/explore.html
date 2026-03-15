@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Explore — HYPERFLEX</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --gold: #c9920d;
+  --paper: #141412;
+  --cream: #1c1c19;
+  --border: #2a2a27;
+  --text: #ddd8cc;
+  --muted: #888880;
+  --green: #22c55e;
+  --red: #ef4444;
+}
+
+body {
+  background: var(--paper);
+  color: var(--text);
+  font-family: 'Space Mono', monospace;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* NAV */
+nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 40px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--paper);
+  z-index: 100;
+}
+.nav-logo {
+  font-family: 'Syne', sans-serif;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--gold);
+  text-decoration: none;
+  letter-spacing: -0.5px;
+}
+.nav-links { display: flex; gap: 24px; align-items: center; }
+.nav-links a {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 13px;
+  transition: color 0.2s;
+}
+.nav-links a:hover { color: var(--text); }
+.nav-cta {
+  background: var(--gold) !important;
+  color: #141412 !important;
+  padding: 8px 18px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 12px !important;
+}
+
+/* HERO */
+.hero {
+  padding: 60px 40px 40px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+.hero h1 {
+  font-family: 'Syne', sans-serif;
+  font-size: 42px;
+  font-weight: 800;
+  line-height: 1.1;
+  margin-bottom: 12px;
+}
+.hero h1 span { color: var(--gold); }
+.hero p {
+  color: var(--muted);
+  font-size: 14px;
+  margin-bottom: 32px;
+}
+.live-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(34,197,94,0.1);
+  border: 1px solid rgba(34,197,94,0.3);
+  color: var(--green);
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 100px;
+  margin-bottom: 24px;
+}
+.live-dot::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  background: var(--green);
+  border-radius: 50%;
+  animation: pulse 1.5s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* TABS */
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 32px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0;
+}
+.tab {
+  padding: 10px 20px;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: all 0.2s;
+  background: none;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  font-family: 'Space Mono', monospace;
+}
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--gold); border-bottom-color: var(--gold); }
+
+/* LAYOUT */
+.explore-layout {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 40px 80px;
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 32px;
+}
+@media (max-width: 900px) {
+  .explore-layout { grid-template-columns: 1fr; padding: 0 20px 60px; }
+  nav { padding: 16px 20px; }
+  .hero { padding: 40px 20px 24px; }
+  .hero h1 { font-size: 28px; }
+}
+
+/* FEED */
+.feed-section { display: none; }
+.feed-section.active { display: block; }
+
+.feed-item {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+  text-decoration: none;
+  display: block;
+  color: inherit;
+}
+.feed-item:hover { border-color: var(--gold); }
+
+.feed-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.community-pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: #141412;
+  letter-spacing: 0.3px;
+}
+.feed-time { font-size: 11px; color: var(--muted); margin-left: auto; }
+
+.feed-question {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+  margin-bottom: 12px;
+  color: var(--text);
+}
+
+.sentiment-bar {
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.sentiment-yes { height: 100%; background: var(--green); border-radius: 2px; transition: width 0.5s; }
+
+.sentiment-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+}
+.yes-label { color: var(--green); font-weight: 700; }
+.no-label { color: var(--red); font-weight: 700; }
+.trader-count { color: var(--muted); font-size: 11px; }
+
+/* TRADE FEED ITEMS */
+.trade-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.trade-item:last-child { border-bottom: none; }
+.trade-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+  color: #141412;
+}
+.trade-body { flex: 1; min-width: 0; }
+.trade-user { font-size: 12px; font-weight: 700; color: var(--text); }
+.trade-action { font-size: 12px; color: var(--muted); margin-top: 2px; line-height: 1.4; }
+.trade-action .yes { color: var(--green); font-weight: 700; }
+.trade-action .no { color: var(--red); font-weight: 700; }
+.trade-action .market-link { color: var(--gold); }
+.trade-time { font-size: 11px; color: var(--muted); flex-shrink: 0; }
+
+/* SIDEBAR */
+.sidebar {}
+.sidebar-card {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+.sidebar-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--gold);
+  margin-bottom: 16px;
+  letter-spacing: 0.5px;
+}
+.community-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  text-decoration: none;
+  color: inherit;
+  transition: opacity 0.2s;
+}
+.community-row:last-child { border-bottom: none; }
+.community-row:hover { opacity: 0.8; }
+.community-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.community-name { font-size: 13px; font-weight: 700; flex: 1; }
+.community-markets { font-size: 11px; color: var(--muted); }
+
+.announcement-item {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.announcement-item:last-child { border-bottom: none; }
+.announcement-community { font-size: 11px; font-weight: 700; color: var(--gold); margin-bottom: 4px; }
+.announcement-title { font-size: 13px; color: var(--text); line-height: 1.4; }
+.announcement-time { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+.loading {
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 40px;
+}
+
+.empty {
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 40px;
+}
+
+/* refresh indicator */
+.refresh-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 16px;
+}
+.refresh-bar button {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11px;
+  font-family: 'Space Mono', monospace;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.refresh-bar button:hover { color: var(--text); }
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="/" class="nav-logo">HYPERFLEX</a>
+  <div class="nav-links">
+    <a href="/explore">Explore</a>
+    <a href="/creator/login">Creator Login</a>
+    <a href="/creator/signup" class="nav-cta">Start Free</a>
+  </div>
+</nav>
+
+<div class="hero">
+  <div class="live-dot">Live across all communities</div>
+  <h1>What the crowd is<br><span>betting on right now</span></h1>
+  <p>Real-time prediction markets from creators across finance, crypto, and markets.</p>
+</div>
+
+<div style="max-width:1200px;margin:0 auto;padding:0 40px;" id="tabs-wrap">
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('live')">🔴 Live Feed</button>
+    <button class="tab" onclick="switchTab('hot')">🔥 Hot Markets</button>
+    <button class="tab" onclick="switchTab('new')">✨ New Markets</button>
+  </div>
+</div>
+
+<div class="explore-layout">
+  <div class="main-col">
+    <div class="refresh-bar">
+      <span id="last-updated">Updating...</span>
+      <button onclick="loadFeed()">↻ Refresh</button>
+    </div>
+
+    <!-- LIVE FEED TAB -->
+    <div class="feed-section active" id="tab-live">
+      <div id="trades-feed"><div class="loading">Loading live feed...</div></div>
+    </div>
+
+    <!-- HOT MARKETS TAB -->
+    <div class="feed-section" id="tab-hot">
+      <div id="hot-feed"><div class="loading">Loading hot markets...</div></div>
+    </div>
+
+    <!-- NEW MARKETS TAB -->
+    <div class="feed-section" id="tab-new">
+      <div id="new-feed"><div class="loading">Loading new markets...</div></div>
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <div class="sidebar-card">
+      <div class="sidebar-title">COMMUNITIES</div>
+      <div id="communities-list"><div class="loading" style="padding:16px 0;">Loading...</div></div>
+    </div>
+    <div class="sidebar-card">
+      <div class="sidebar-title">LATEST ANNOUNCEMENTS</div>
+      <div id="announcements-list"><div class="loading" style="padding:16px 0;">Loading...</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let feedData = null;
+let activeTab = 'live';
+let refreshInterval = null;
+
+function switchTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.feed-section').forEach(s => s.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('tab-' + tab).classList.add('active');
+}
+
+function timeAgo(dateStr) {
+  const diff = Math.floor((Date.now() - new Date(dateStr)) / 1000);
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
+  return `${Math.floor(diff/86400)}d ago`;
+}
+
+function getInitials(name) {
+  return (name || 'A').split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2);
+}
+
+function slugToColor(slug, communities) {
+  return communities[slug]?.primary_color || '#c9920d';
+}
+
+function renderTrades(trades, communities) {
+  if (!trades.length) {
+    document.getElementById('trades-feed').innerHTML = '<div class="empty">No trades yet — be the first to bet.</div>';
+    return;
+  }
+  const html = trades.map(t => {
+    const color = slugToColor(t.creator_slug, communities);
+    const communityName = communities[t.creator_slug]?.display_name || t.creator_slug;
+    const pts = communities[t.creator_slug]?.custom_points_name || 'Points';
+    const amt = t.amount ? Math.round(t.amount / 100).toLocaleString() : '—';
+    const side = t.side === 'yes' ? `<span class="yes">YES</span>` : `<span class="no">NO</span>`;
+    return `
+      <div class="trade-item">
+        <div class="trade-avatar" style="background:${color}">${getInitials(t.user)}</div>
+        <div class="trade-body">
+          <div class="trade-user">${t.user}</div>
+          <div class="trade-action">
+            bet ${side} · ${amt} ${pts} on
+            <a href="/${t.creator_slug}" class="market-link" style="color:${color}">${t.question.length > 60 ? t.question.slice(0,60)+'…' : t.question}</a>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px;">
+            <span style="background:${color}22;color:${color};padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700;">${communityName}</span>
+          </div>
+        </div>
+        <div class="trade-time">${timeAgo(t.created_at)}</div>
+      </div>`;
+  }).join('');
+  document.getElementById('trades-feed').innerHTML = `<div style="background:var(--cream);border:1px solid var(--border);border-radius:10px;padding:16px 18px;">${html}</div>`;
+}
+
+function renderMarkets(markets, communities, containerId) {
+  if (!markets.length) {
+    document.getElementById(containerId).innerHTML = '<div class="empty">No markets found.</div>';
+    return;
+  }
+  const html = markets.map(m => {
+    const color = slugToColor(m.creator_slug, communities);
+    const communityName = communities[m.creator_slug]?.display_name || m.creator_slug;
+    const yesPct = Math.round((m.yes_price || 0.5) * 100);
+    const noPct = 100 - yesPct;
+    return `
+      <a href="/${m.creator_slug}" class="feed-item">
+        <div class="feed-meta">
+          <span class="community-pill" style="background:${color}">${communityName}</span>
+          <span class="feed-time">${timeAgo(m.created_at)}</span>
+        </div>
+        <div class="feed-question">${m.question}</div>
+        <div class="sentiment-bar">
+          <div class="sentiment-yes" style="width:${yesPct}%;background:${yesPct > 50 ? 'var(--green)' : 'var(--red)'}"></div>
+        </div>
+        <div class="sentiment-labels">
+          <span class="yes-label">YES ${yesPct}%</span>
+          <span class="trader-count">${(m.trader_count || 0).toLocaleString()} traders</span>
+          <span class="no-label">NO ${noPct}%</span>
+        </div>
+      </a>`;
+  }).join('');
+  document.getElementById(containerId).innerHTML = html;
+}
+
+function renderCommunities(communities) {
+  const slugs = Object.keys(communities);
+  if (!slugs.length) {
+    document.getElementById('communities-list').innerHTML = '<div class="empty" style="padding:8px 0;">No communities yet.</div>';
+    return;
+  }
+  const html = slugs.map(slug => {
+    const c = communities[slug];
+    return `
+      <a href="/${slug}" class="community-row">
+        <div class="community-dot" style="background:${c.primary_color || '#c9920d'}"></div>
+        <div class="community-name">${c.display_name}</div>
+        <div class="community-markets">→</div>
+      </a>`;
+  }).join('');
+  document.getElementById('communities-list').innerHTML = html;
+}
+
+function renderAnnouncements(announcements, communities) {
+  if (!announcements.length) {
+    document.getElementById('announcements-list').innerHTML = '<div class="empty" style="padding:8px 0;">No announcements.</div>';
+    return;
+  }
+  const html = announcements.slice(0, 5).map(a => {
+    const color = slugToColor(a.creator_slug, communities);
+    const communityName = communities[a.creator_slug]?.display_name || a.creator_slug;
+    return `
+      <div class="announcement-item">
+        <div class="announcement-community" style="color:${color}">${communityName}</div>
+        <div class="announcement-title">${a.title}</div>
+        <div class="announcement-time">${timeAgo(a.created_at)}</div>
+      </div>`;
+  }).join('');
+  document.getElementById('announcements-list').innerHTML = html;
+}
+
+async function loadFeed() {
+  try {
+    const res = await fetch('/api/explore');
+    const data = await res.json();
+    feedData = data;
+
+    renderTrades(data.trades || [], data.communities || {});
+    renderMarkets(data.hot || [], data.communities || {}, 'hot-feed');
+    renderMarkets(data.newest || [], data.communities || {}, 'new-feed');
+    renderCommunities(data.communities || {});
+    renderAnnouncements(data.announcements || [], data.communities || {});
+
+    document.getElementById('last-updated').textContent = `Updated ${new Date().toLocaleTimeString()}`;
+  } catch (err) {
+    console.error('Feed error:', err);
+    document.getElementById('last-updated').textContent = 'Error loading feed';
+  }
+}
+
+// Initial load + auto-refresh every 30 seconds
+loadFeed();
+refreshInterval = setInterval(loadFeed, 30000);
+</script>
+</body>
+</html>
