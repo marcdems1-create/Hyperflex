@@ -323,6 +323,36 @@ app.post('/markets', async (req, res) => {
     }
   }
 
+  // ── Plan-based market limit ───────────────────────────────────────────────
+  if (row.tenant_slug) {
+    const { data: cs } = await supabase
+      .from('creator_settings')
+      .select('plan, plan_trial_expires_at')
+      .eq('slug', row.tenant_slug)
+      .maybeSingle();
+    if (cs) {
+      const effectivePlan = (cs.plan_trial_expires_at && new Date(cs.plan_trial_expires_at) > new Date())
+        ? cs.plan : cs.plan;
+      const FREE_MARKET_LIMIT = 5;
+      if (effectivePlan === 'free') {
+        const { count } = await supabase
+          .from('markets')
+          .select('id', { count: 'exact', head: true })
+          .eq('tenant_slug', row.tenant_slug)
+          .eq('resolved', false)
+          .eq('archived', false);
+        if ((count || 0) >= FREE_MARKET_LIMIT) {
+          return res.status(403).json({
+            error: 'Free plan limit reached',
+            upgrade_required: true,
+            limit: FREE_MARKET_LIMIT,
+            message: `Free plan allows ${FREE_MARKET_LIMIT} active markets. Upgrade to Pro for unlimited markets.`
+          });
+        }
+      }
+    }
+  }
+
   // Prohibited keyword check
   const prohibited = PROHIBITED_PATTERNS.find(p => p.re.test(row.question || ''));
   if (prohibited) return res.status(400).json({ error: prohibited.msg });
@@ -374,6 +404,25 @@ app.post('/api/creator/markets/bulk', requireCreator, async (req, res) => {
       .single();
 
     if (!creator) return res.status(404).json({ error: 'Creator not found' });
+
+    // Enforce free plan market limit on bulk create
+    if (creator.plan === 'free') {
+      const { count: activeCount } = await supabase
+        .from('markets')
+        .select('id', { count: 'exact', head: true })
+        .eq('creator_id', req.creator.id)
+        .eq('resolved', false)
+        .eq('archived', false);
+      const FREE_MARKET_LIMIT = 5;
+      if ((activeCount || 0) >= FREE_MARKET_LIMIT) {
+        return res.status(403).json({
+          error: 'Free plan limit reached',
+          upgrade_required: true,
+          limit: FREE_MARKET_LIMIT,
+          message: `Free plan allows ${FREE_MARKET_LIMIT} active markets. Upgrade to Pro for unlimited markets.`
+        });
+      }
+    }
 
     const rows = [];
     const skipped = [];
@@ -1786,6 +1835,88 @@ app.post('/api/creator/signup', async (req, res) => {
 
     // Generate token
     const token = makeToken({ id: newUser.id, email: newUser.email, slug });
+
+    // ── Onboarding email sequence ─────────────────────────────────────────
+    // Fire-and-forget — never block signup response
+    const communityUrl = `https://hyperflex.network/${slug}`;
+    const dashUrl = 'https://hyperflex.network/creator/dashboard';
+    const emailName = display_name || slug;
+
+    setTimeout(async () => {
+      const transport = createMailTransport();
+      if (!transport) return;
+      // Day 0 — welcome
+      try {
+        await transport.sendMail({
+          from: process.env.SMTP_FROM || 'HYPERFLEX <noreply@hyperflex.network>',
+          to: newUser.email,
+          subject: `Your HYPERFLEX community is live — ${communityUrl}`,
+          html: `<div style="background:#141412;padding:40px;font-family:'Courier New',monospace;color:#ddd8cc;max-width:560px;margin:0 auto;border-radius:12px;">
+            <div style="font-size:22px;font-weight:800;color:#c9920d;margin-bottom:24px;">HYPERFLEX</div>
+            <h2 style="font-size:20px;color:#f5f5f0;margin:0 0 16px;">You're live, ${emailName} 🎉</h2>
+            <p style="color:#aaa8a0;font-size:14px;line-height:1.6;margin:0 0 20px;">Your prediction market community is ready. Share this link with your audience and watch them start betting.</p>
+            <div style="background:#1c1c19;border:1px solid #2a2a27;border-radius:8px;padding:16px;margin-bottom:24px;text-align:center;">
+              <a href="${communityUrl}" style="color:#c9920d;font-size:16px;font-weight:700;text-decoration:none;">${communityUrl}</a>
+            </div>
+            <p style="color:#aaa8a0;font-size:13px;line-height:1.6;margin:0 0 20px;"><strong style="color:#ddd8cc;">Quick start:</strong><br/>1. Create 3-5 markets around topics your audience debates<br/>2. Share the link in your next video, post, or story<br/>3. Watch your community compete on the leaderboard</p>
+            <a href="${dashUrl}" style="display:inline-block;background:#c9920d;color:#141412;padding:12px 24px;border-radius:6px;font-weight:700;font-size:14px;text-decoration:none;">Go to your dashboard →</a>
+            <p style="color:#555;font-size:11px;margin:24px 0 0;">HYPERFLEX · hyperflex.network</p>
+          </div>`
+        });
+      } catch (e) { /* silent */ }
+    }, 100);
+
+    // Day 3 — engagement nudge
+    setTimeout(async () => {
+      const transport = createMailTransport();
+      if (!transport) return;
+      try {
+        await transport.sendMail({
+          from: process.env.SMTP_FROM || 'HYPERFLEX <noreply@hyperflex.network>',
+          to: newUser.email,
+          subject: 'Quick tip: how to get your first 50 community bettors',
+          html: `<div style="background:#141412;padding:40px;font-family:'Courier New',monospace;color:#ddd8cc;max-width:560px;margin:0 auto;border-radius:12px;">
+            <div style="font-size:22px;font-weight:800;color:#c9920d;margin-bottom:24px;">HYPERFLEX</div>
+            <h2 style="font-size:20px;color:#f5f5f0;margin:0 0 16px;">Getting your first bettors 🎯</h2>
+            <p style="color:#aaa8a0;font-size:14px;line-height:1.6;margin:0 0 20px;">The fastest way to activate your community is to mention your markets during your normal content — not as a separate promotion, just as a natural callout.</p>
+            <div style="background:#1c1c19;border:1px solid #2a2a27;border-radius:8px;padding:16px;margin-bottom:24px;">
+              <p style="font-size:13px;color:#ddd8cc;margin:0 0 12px;font-style:italic;">"I've got a prediction market open on this — go bet on what you think will happen at ${communityUrl}"</p>
+              <p style="font-size:12px;color:#888880;margin:0;">Drop this line once in your next post or video.</p>
+            </div>
+            <p style="color:#aaa8a0;font-size:13px;line-height:1.6;margin:0 0 20px;">Also — if you're on the free plan and want to try unlimited markets + the YouTube AI scanner, you can start a free 7-day Pro trial from your dashboard.</p>
+            <a href="${dashUrl}" style="display:inline-block;background:#c9920d;color:#141412;padding:12px 24px;border-radius:6px;font-weight:700;font-size:14px;text-decoration:none;">Go to your dashboard →</a>
+            <p style="color:#555;font-size:11px;margin:24px 0 0;">HYPERFLEX · hyperflex.network</p>
+          </div>`
+        });
+      } catch (e) { /* silent */ }
+    }, 3 * 24 * 60 * 60 * 1000);
+
+    // Day 7 — upgrade nudge
+    setTimeout(async () => {
+      const transport = createMailTransport();
+      if (!transport) return;
+      try {
+        await transport.sendMail({
+          from: process.env.SMTP_FROM || 'HYPERFLEX <noreply@hyperflex.network>',
+          to: newUser.email,
+          subject: 'Unlock unlimited markets + AI scanner — $29/mo',
+          html: `<div style="background:#141412;padding:40px;font-family:'Courier New',monospace;color:#ddd8cc;max-width:560px;margin:0 auto;border-radius:12px;">
+            <div style="font-size:22px;font-weight:800;color:#c9920d;margin-bottom:24px;">HYPERFLEX</div>
+            <h2 style="font-size:20px;color:#f5f5f0;margin:0 0 16px;">Ready to go further?</h2>
+            <p style="color:#aaa8a0;font-size:14px;line-height:1.6;margin:0 0 20px;">You've been running your community for a week. Here's what Pro unlocks for $29/mo:</p>
+            <div style="background:#1c1c19;border:1px solid #2a2a27;border-radius:8px;padding:20px;margin-bottom:24px;">
+              <div style="font-size:13px;color:#ddd8cc;margin-bottom:10px;">⚡ <strong>Unlimited active markets</strong></div>
+              <div style="font-size:13px;color:#ddd8cc;margin-bottom:10px;">🎥 <strong>YouTube AI scanner</strong> — paste any video URL, get markets instantly</div>
+              <div style="font-size:13px;color:#ddd8cc;margin-bottom:10px;">📊 <strong>Full analytics</strong> — trade volume, top markets, economy health</div>
+              <div style="font-size:13px;color:#ddd8cc;">🏆 <strong>Weekly Power Predictor</strong> — surface your top weekly winners</div>
+            </div>
+            <a href="${dashUrl}" style="display:inline-block;background:#c9920d;color:#141412;padding:12px 24px;border-radius:6px;font-weight:700;font-size:14px;text-decoration:none;margin-bottom:16px;">Upgrade to Pro — $29/mo →</a>
+            <p style="color:#888880;font-size:13px;margin:0;">Cancel anytime. No lock-in.</p>
+            <p style="color:#555;font-size:11px;margin:24px 0 0;">HYPERFLEX · hyperflex.network</p>
+          </div>`
+        });
+      } catch (e) { /* silent */ }
+    }, 7 * 24 * 60 * 60 * 1000);
 
     res.json({
       token,
@@ -4880,6 +5011,73 @@ app.delete('/api/admin/creator-by-slug/:slug', requireAdmin, async (req, res) =>
     res.json({ ok: true, freed: slug });
   } catch (err) {
     console.error('[admin-free-slug] error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/creator/start-trial — self-serve 7-day Pro trial (one-time, free plan only)
+app.post('/api/creator/start-trial', requireCreator, async (req, res) => {
+  try {
+    const { data: cs } = await supabase
+      .from('creator_settings')
+      .select('slug, plan, plan_trial_expires_at')
+      .eq('creator_id', req.creator.id)
+      .maybeSingle();
+
+    if (!cs) return res.status(404).json({ error: 'Creator not found' });
+    if (cs.plan !== 'free') return res.status(400).json({ error: 'Trial only available on free plan' });
+    if (cs.plan_trial_expires_at) return res.status(400).json({ error: 'Trial already used' });
+
+    const expiresAt = new Date(Date.now() + 7 * 86400000).toISOString();
+    const { error } = await supabase
+      .from('creator_settings')
+      .update({ plan: 'pro', plan_trial_expires_at: expiresAt })
+      .eq('creator_id', req.creator.id);
+
+    if (error) throw error;
+
+    console.log(`[trial] ${cs.slug} started 7-day Pro trial, expires ${expiresAt}`);
+
+    // Send trial start email
+    const { data: user } = await supabase
+      .from('users')
+      .select('email, display_name')
+      .eq('id', req.creator.id)
+      .maybeSingle();
+
+    if (user?.email) {
+      const transport = createMailTransport();
+      if (transport) {
+        const expireDate = new Date(expiresAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+        transport.sendMail({
+          from: process.env.SMTP_FROM || 'HYPERFLEX <noreply@hyperflex.network>',
+          to: user.email,
+          subject: 'Your 7-day Pro trial is live — here\'s what you unlocked',
+          html: `
+            <div style="background:#141412;padding:40px;font-family:'Courier New',monospace;color:#ddd8cc;max-width:560px;margin:0 auto;border-radius:12px;">
+              <div style="font-size:22px;font-weight:800;color:#c9920d;margin-bottom:24px;letter-spacing:-0.5px;">HYPERFLEX</div>
+              <h2 style="font-size:20px;color:#f5f5f0;margin:0 0 16px;">Your Pro trial is live ⚡</h2>
+              <p style="color:#aaa8a0;font-size:14px;line-height:1.6;margin:0 0 24px;">
+                You have 7 days of Pro — free. Here's what just unlocked for your community:
+              </p>
+              <div style="background:#1c1c19;border:1px solid #2a2a27;border-radius:8px;padding:20px;margin-bottom:24px;">
+                <div style="font-size:13px;color:#ddd8cc;margin-bottom:10px;">✅ <strong>Unlimited active markets</strong> (was 5)</div>
+                <div style="font-size:13px;color:#ddd8cc;margin-bottom:10px;">✅ <strong>YouTube AI scanner</strong> — generate markets from any video</div>
+                <div style="font-size:13px;color:#ddd8cc;margin-bottom:10px;">✅ <strong>Full analytics dashboard</strong> — trade activity, top markets, economy health</div>
+                <div style="font-size:13px;color:#ddd8cc;margin-bottom:10px;">✅ <strong>Market idea generator</strong> — AI-powered market suggestions</div>
+                <div style="font-size:13px;color:#ddd8cc;">✅ <strong>Weekly Power Predictor</strong> — top 3 weekly winners panel</div>
+              </div>
+              <p style="color:#888880;font-size:13px;margin:0 0 24px;">Trial ends <strong style="color:#c9920d;">${expireDate}</strong>. After that you'll move back to the free plan unless you upgrade.</p>
+              <a href="https://hyperflex.network/creator/dashboard" style="display:inline-block;background:#c9920d;color:#141412;padding:12px 24px;border-radius:6px;font-weight:700;font-size:14px;text-decoration:none;margin-bottom:24px;">Go to your dashboard →</a>
+              <p style="color:#555;font-size:11px;margin:0;">HYPERFLEX · hyperflex.network</p>
+            </div>`
+        }).catch(() => {});
+      }
+    }
+
+    res.json({ ok: true, expires_at: expiresAt, plan: 'pro' });
+  } catch (err) {
+    console.error('[trial] start-trial error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

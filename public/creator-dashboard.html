@@ -2550,6 +2550,11 @@ body.nav-open .sidebar-backdrop {
 
     <div class="sidebar-footer">
       <button class="btn-upgrade" onclick="showUpgrade()">⚡ Upgrade to Pro</button>
+      <div id="trial-btn-wrap" style="display:none;margin-bottom:8px;">
+        <button onclick="startTrial()" style="width:100%;background:rgba(201,146,13,0.12);border:1px solid rgba(201,146,13,0.35);color:#c9920d;padding:10px;border-radius:8px;font-size:12px;font-family:'Space Mono',monospace;cursor:pointer;font-weight:700;transition:all 0.2s;">
+          🎁 Try Pro free for 7 days
+        </button>
+      </div>
       <button class="signout-btn" onclick="signOut()">← Sign out</button>
     </div>
   </aside>
@@ -4399,7 +4404,9 @@ function renderDashboard(data) {
     pill.textContent = plan === 'platinum' ? '✦ Premium' : plan === 'pro' ? '⚡ Pro' : 'Free';
   }
 
-  updateUpgradeBtn(plan);
+  // Show trial button only if: free plan AND trial has never been used (plan_trial_expires_at is null AND plan is still free)
+  const trialAlreadyUsed = !!(creator.plan_trial_expires_at);
+  updateUpgradeBtn(plan, trialAlreadyUsed);
 
   // Plan change notice
   const noticeEl  = document.getElementById('planNotice');
@@ -4841,6 +4848,12 @@ async function createMarket() {
       })
     });
     const data = await r.json();
+    if (r.status === 403 && data.upgrade_required) {
+      closeCreateModal();
+      showToast(`You've hit the ${data.limit}-market free limit. Upgrade to Pro for unlimited markets.`, 'error');
+      setTimeout(() => showUpgrade(), 600);
+      return;
+    }
     if (data.id || data.market) {
       closeCreateModal();
       showToast('Market published! 🎯', 'success');
@@ -6259,20 +6272,48 @@ async function openBillingPortal() {
 }
 
 // ── Sidebar upgrade button — reflects current plan ────────
-function updateUpgradeBtn(plan) {
+function updateUpgradeBtn(plan, trialUsed) {
   const btn = document.querySelector('.btn-upgrade');
+  const trialWrap = document.getElementById('trial-btn-wrap');
   if (!btn) return;
   if (plan === 'pro') {
     btn.textContent = '⚡ Pro — Manage Billing';
     btn.onclick = openBillingPortal;
+    if (trialWrap) trialWrap.style.display = 'none';
   } else if (plan === 'platinum') {
     btn.textContent = '✦ Premium — Manage Billing';
     btn.style.background = '';
     btn.style.borderColor = '';
     btn.onclick = openBillingPortal;
+    if (trialWrap) trialWrap.style.display = 'none';
   } else {
     btn.textContent = '⚡ Upgrade to Pro';
     btn.onclick = showUpgrade;
+    // Show trial button only if trial hasn't been used
+    if (trialWrap) trialWrap.style.display = trialUsed ? 'none' : 'block';
+  }
+}
+
+// ── Self-serve 7-day Pro trial ─────────────────────────────
+async function startTrial() {
+  const btn = document.querySelector('#trial-btn-wrap button');
+  if (btn) { btn.textContent = 'Starting trial...'; btn.disabled = true; }
+  try {
+    const r = await fetch(API + '/api/creator/start-trial', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    const data = await r.json();
+    if (data.ok) {
+      showToast('🎉 7-day Pro trial started! Enjoy unlimited markets + AI scanner.', 'success');
+      setTimeout(() => init(), 800);
+    } else {
+      showToast(data.error || 'Could not start trial.', 'error');
+      if (btn) { btn.textContent = '🎁 Try Pro free for 7 days'; btn.disabled = false; }
+    }
+  } catch {
+    showToast('Network error. Try again.', 'error');
+    if (btn) { btn.textContent = '🎁 Try Pro free for 7 days'; btn.disabled = false; }
   }
 }
 
