@@ -279,7 +279,7 @@ app.get('/share/:marketId', async (req, res) => {
   try {
     const { data: market } = await supabase
       .from('markets')
-      .select('id, question, yes_price, no_price, category, expiry_date, tenant_slug, source_tweet_url, tweet_text, tweet_author, resolved, resolution_outcome')
+      .select('id, question, yes_price, no_price, category, expiry_date, tenant_slug, source_tweet_url, tweet_text, tweet_author, resolved, outcome')
       .eq('id', req.params.marketId)
       .maybeSingle();
 
@@ -371,7 +371,7 @@ app.get('/share/:marketId', async (req, res) => {
         <span class="odds-label">NO</span>
       </a>
     </div>
-    ${expiryStr ? `<div class="meta-row"><span>Resolves ${expiryStr}</span>${market.resolved ? `<span style="color:#c9920d">● ${market.resolution_outcome || 'Resolved'}</span>` : '<span style="color:#3fb950">● Live</span>'}</div>` : ''}
+    ${expiryStr ? `<div class="meta-row"><span>Resolves ${expiryStr}</span>${market.resolved ? `<span style="color:#c9920d">● ${market.outcome || 'Resolved'}</span>` : '<span style="color:#3fb950">● Live</span>'}</div>` : ''}
     <a href="${communityUrl}" class="cta-btn">Make Your Prediction →</a>
   </div>
   <div class="powered">Powered by <a href="https://hyperflex.network">HYPERFLEX</a> — prediction markets for creators</div>
@@ -4165,12 +4165,15 @@ app.get('/api/community/:slug', async (req, res) => {
     if (!settings) return res.status(404).json({ error: 'Community not found' });
 
     // Match on any of the three fields that market-creation routes populate
-    const { data: markets } = await supabase
+    const { data: rawMarkets, error: marketsErr } = await supabase
       .from('markets')
-      .select('id, question, category, expiry_date, yes_price, no_price, volume, trader_count, resolved, outcome, resolved_at, resolution_outcome')
+      .select('id, question, category, expiry_date, yes_price, no_price, trader_count, resolved, outcome, resolved_at')
       .or(`tenant_slug.eq.${slug},creator_id.eq.${settings.creator_id}`)
       .eq('is_public', true)
       .order('created_at', { ascending: false });
+    if (marketsErr) console.error('[community markets query]', marketsErr.message);
+    // Normalize outcome → resolution_outcome so community.html doesn't need changes
+    const markets = (rawMarkets || []).map(m => ({ ...m, resolution_outcome: m.outcome || null }));
 
     res.json({
       community: {
