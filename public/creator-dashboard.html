@@ -1322,43 +1322,68 @@ body.plan-premium .main {
 .onboarding {
   background: linear-gradient(135deg, rgba(201,146,13,0.06) 0%, rgba(201,146,13,0.02) 100%);
   border: 1px solid rgba(201,146,13,0.25);
-  border-radius: 12px;
-  padding: 28px 32px;
+  border-radius: 14px;
+  padding: 24px 28px 28px;
   margin-bottom: 32px;
 }
 .onboarding-header {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 24px;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 16px;
 }
 .onboarding-title {
   font-size: 18px;
   font-weight: 800;
   color: var(--text);
   font-family: var(--display);
+  line-height: 1.2;
 }
 .onboarding-sub {
   font-size: 12px;
   color: var(--dim);
-  margin-top: 2px;
+  margin-top: 3px;
+  line-height: 1.4;
+}
+/* Progress bar */
+.ob-progress-wrap {
+  margin-bottom: 20px;
+}
+.ob-progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--dim);
   font-family: var(--mono);
-  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+  letter-spacing: 0.04em;
+}
+.ob-progress-track {
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.ob-progress-fill {
+  height: 100%;
+  background: var(--gold);
+  border-radius: 2px;
+  transition: width 0.5s ease;
 }
 .onboarding-steps {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 .ob-step {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 14px 16px;
-  border-radius: 8px;
+  gap: 14px;
+  padding: 13px 16px;
+  border-radius: 10px;
   border: 1px solid var(--border);
   background: rgba(255,255,255,0.02);
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, background 0.15s;
 }
 .ob-step.done {
   border-color: rgba(45,155,95,0.3);
@@ -1368,12 +1393,10 @@ body.plan-premium .main {
   border-color: rgba(201,146,13,0.4);
   background: rgba(201,146,13,0.05);
 }
-.ob-step.locked {
-  opacity: 0.45;
-}
+.ob-step.locked { opacity: 0.4; pointer-events: none; }
 .ob-num {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   border: 2px solid var(--border);
   display: flex;
@@ -1385,31 +1408,47 @@ body.plan-premium .main {
   flex-shrink: 0;
   color: var(--dim);
 }
-.ob-step.done .ob-num {
-  border-color: #2d9b5f;
-  background: rgba(45,155,95,0.15);
-  color: #2d9b5f;
+.ob-step.done .ob-num  { border-color: #2d9b5f; background: rgba(45,155,95,0.15); color: #2d9b5f; }
+.ob-step.active .ob-num { border-color: var(--gold); background: rgba(201,146,13,0.15); color: var(--gold); }
+.ob-label { flex: 1; min-width: 0; }
+.ob-label-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 1px; }
+.ob-label-desc  { font-size: 11px; color: var(--dim); line-height: 1.4; }
+.ob-step.done .ob-label-desc { color: #2d9b5f; }
+
+/* Quick-pick market templates */
+.ob-quickpicks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(201,146,13,0.15);
 }
-.ob-step.active .ob-num {
-  border-color: var(--gold);
-  background: rgba(201,146,13,0.15);
-  color: var(--gold);
-}
-.ob-label {
-  flex: 1;
-}
-.ob-label-title {
-  font-size: 14px;
+.ob-quickpick-label {
+  font-size: 10px;
   font-weight: 700;
-  color: var(--text);
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
   margin-bottom: 2px;
 }
-.ob-label-desc {
-  font-size: 12px;
-  color: var(--dim);
-  line-height: 1.4;
+.ob-qp-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(201,146,13,0.06);
+  border: 1px solid rgba(201,146,13,0.2);
+  border-radius: 8px;
+  padding: 9px 12px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  text-align: left;
+  width: 100%;
+  color: var(--text);
 }
-.ob-step.done .ob-label-desc { color: #2d9b5f; }
+.ob-qp-btn:hover { background: rgba(201,146,13,0.12); border-color: rgba(201,146,13,0.4); }
+.ob-qp-q { font-size: 12px; font-weight: 600; flex: 1; line-height: 1.3; }
+.ob-qp-arrow { font-size: 11px; color: var(--gold); flex-shrink: 0; }
 
 .section {
   margin-bottom: 40px;
@@ -2594,12 +2633,24 @@ body.nav-open .sidebar-backdrop {
         <!-- Onboarding checklist — shown to new creators until they're active -->
         <div class="onboarding" id="onboardingPanel" style="display:none">
           <div class="onboarding-header">
-            <div style="font-size:28px">🚀</div>
-            <div>
+            <div style="font-size:28px;line-height:1">🚀</div>
+            <div style="flex:1">
               <div class="onboarding-title">You're almost live!</div>
-              <div class="onboarding-sub">Complete these steps to launch your community</div>
+              <div class="onboarding-sub">A few quick steps and your community is ready to roll.</div>
             </div>
           </div>
+
+          <!-- Progress bar -->
+          <div class="ob-progress-wrap">
+            <div class="ob-progress-label">
+              <span id="obProgressText">Step 1 of 4</span>
+              <span id="obProgressPct">25%</span>
+            </div>
+            <div class="ob-progress-track">
+              <div class="ob-progress-fill" id="obProgressFill" style="width:25%"></div>
+            </div>
+          </div>
+
           <div class="onboarding-steps">
 
             <!-- Step 1: Account created (always done) -->
@@ -2617,21 +2668,49 @@ body.nav-open .sidebar-backdrop {
               <div class="ob-label">
                 <div class="ob-label-title">Create your first market</div>
                 <div class="ob-label-desc" id="obDesc2">Ask your community something they'll actually debate.</div>
+                <!-- Quick-pick templates — only shown when step is active -->
+                <div class="ob-quickpicks" id="obQuickpicks">
+                  <div class="ob-quickpick-label">Quick start — pick one:</div>
+                  <button class="ob-qp-btn" onclick="obQuickPick('Will Bitcoin hit a new all-time high this year?','CRYPTO')">
+                    <span class="ob-qp-q">Will Bitcoin hit a new all-time high this year?</span>
+                    <span class="ob-qp-arrow">→</span>
+                  </button>
+                  <button class="ob-qp-btn" onclick="obQuickPick('Will the S&amp;P 500 end the month higher than it started?','STOCKS')">
+                    <span class="ob-qp-q">Will the S&amp;P 500 end the month higher than it started?</span>
+                    <span class="ob-qp-arrow">→</span>
+                  </button>
+                  <button class="ob-qp-btn" onclick="obQuickPick('Will ETH outperform BTC over the next 30 days?','CRYPTO')">
+                    <span class="ob-qp-q">Will ETH outperform BTC over the next 30 days?</span>
+                    <span class="ob-qp-arrow">→</span>
+                  </button>
+                </div>
               </div>
-              <div id="obAction2">
-                <button class="btn-primary" style="font-size:12px;padding:8px 16px" onclick="openCreateModal()">+ New Market</button>
+              <div id="obAction2" style="flex-shrink:0">
+                <button class="btn-primary" style="font-size:12px;padding:8px 16px;white-space:nowrap" onclick="openCreateModal()">+ New Market</button>
               </div>
             </div>
 
-            <!-- Step 3: Share link -->
+            <!-- Step 3: Customize -->
             <div class="ob-step locked" id="obStep3">
               <div class="ob-num" id="obNum3">3</div>
               <div class="ob-label">
-                <div class="ob-label-title">Share your community link</div>
-                <div class="ob-label-desc" id="obDesc3">Drop it in Discord, Reddit, or wherever your audience lives.</div>
+                <div class="ob-label-title">Customize your community</div>
+                <div class="ob-label-desc" id="obDesc3">Set your brand color, points name, and community description.</div>
               </div>
-              <div id="obAction3" style="display:none">
-                <button class="btn-secondary" style="font-size:12px;padding:8px 16px" onclick="copyLink()">📋 Copy link</button>
+              <div id="obAction3" style="display:none;flex-shrink:0">
+                <button class="btn-secondary" style="font-size:12px;padding:8px 16px;white-space:nowrap" onclick="showTab('settings')">Customize →</button>
+              </div>
+            </div>
+
+            <!-- Step 4: Share link -->
+            <div class="ob-step locked" id="obStep4">
+              <div class="ob-num" id="obNum4">4</div>
+              <div class="ob-label">
+                <div class="ob-label-title">Share your community link</div>
+                <div class="ob-label-desc" id="obDesc4">Drop it in Discord, Twitter, or wherever your audience lives.</div>
+              </div>
+              <div id="obAction4" style="display:none;flex-shrink:0">
+                <button class="btn-secondary" style="font-size:12px;padding:8px 16px;white-space:nowrap" onclick="copyLink()">📋 Copy link</button>
               </div>
             </div>
 
@@ -4242,30 +4321,60 @@ function renderDashboard(data) {
   const totalTraders = stats.total_traders || 0;
   const panel = document.getElementById('onboardingPanel');
 
+  // Check if creator has customized (has non-default color or custom points name)
+  const hasCustomized = creator && (
+    (creator.primary_color && creator.primary_color !== '#c9920d') ||
+    (creator.custom_points_name && creator.custom_points_name !== 'Points')
+  );
+
+  function setObProgress(step, total) {
+    const pct = Math.round((step / total) * 100);
+    document.getElementById('obProgressFill').style.width = pct + '%';
+    document.getElementById('obProgressText').textContent = `Step ${step} of ${total}`;
+    document.getElementById('obProgressPct').textContent  = pct + '%';
+  }
+
   if (totalMarkets === 0) {
-    // New creator — no markets yet. Show full checklist.
+    // Step 2 active — no markets yet
     panel.style.display = 'block';
-    // Step 2 active
+    setObProgress(1, 4);
     document.getElementById('obStep2').className = 'ob-step active';
-    document.getElementById('obNum2').textContent  = '2';
-    // Step 3 locked
+    document.getElementById('obNum2').textContent = '2';
+    document.getElementById('obQuickpicks').style.display = 'flex';
     document.getElementById('obStep3').className = 'ob-step locked';
-    document.getElementById('obAction3').style.display = 'none';
-  } else if (totalMarkets > 0 && totalTraders === 0) {
-    // Has markets but no traders yet — nudge to share
+    document.getElementById('obStep4').className = 'ob-step locked';
+  } else if (totalMarkets > 0 && !hasCustomized) {
+    // Step 3 active — has markets, hasn't customized yet
     panel.style.display = 'block';
-    // Step 2 done
-    document.getElementById('obStep2').className  = 'ob-step done';
+    setObProgress(2, 4);
+    document.getElementById('obStep2').className = 'ob-step done';
     document.getElementById('obNum2').textContent = '✓';
     document.getElementById('obDesc2').textContent = 'Nice — your first market is live!';
     document.getElementById('obAction2').style.display = 'none';
-    // Step 3 active
+    document.getElementById('obQuickpicks').style.display = 'none';
     document.getElementById('obStep3').className = 'ob-step active';
     document.getElementById('obNum3').textContent = '3';
-    document.getElementById('obDesc3').textContent = 'Share your link and get your first trader.';
     document.getElementById('obAction3').style.display = 'block';
+    document.getElementById('obStep4').className = 'ob-step locked';
+  } else if (totalMarkets > 0 && hasCustomized && totalTraders === 0) {
+    // Step 4 active — has markets + customized, needs to share
+    panel.style.display = 'block';
+    setObProgress(3, 4);
+    document.getElementById('obStep2').className = 'ob-step done';
+    document.getElementById('obNum2').textContent = '✓';
+    document.getElementById('obDesc2').textContent = 'Market live ✓';
+    document.getElementById('obAction2').style.display = 'none';
+    document.getElementById('obQuickpicks').style.display = 'none';
+    document.getElementById('obStep3').className = 'ob-step done';
+    document.getElementById('obNum3').textContent = '✓';
+    document.getElementById('obDesc3').textContent = 'Community branded ✓';
+    document.getElementById('obAction3').style.display = 'none';
+    document.getElementById('obStep4').className = 'ob-step active';
+    document.getElementById('obNum4').textContent = '4';
+    document.getElementById('obDesc4').textContent = 'Share your link and get your first trader in.';
+    document.getElementById('obAction4').style.display = 'block';
   } else {
-    // Active community — hide onboarding
+    // All done — hide onboarding
     panel.style.display = 'none';
   }
 
@@ -4725,6 +4834,21 @@ function showTab(tab) {
 }
 
 // Create market
+function obQuickPick(question, category) {
+  openCreateModal();
+  // Pre-fill after modal opens (short delay for DOM)
+  setTimeout(() => {
+    const qEl = document.getElementById('marketQuestion');
+    const cEl = document.getElementById('marketCategory');
+    if (qEl) { qEl.value = question; qEl.dispatchEvent(new Event('input')); }
+    if (cEl) {
+      // Find matching option (case-insensitive)
+      const opt = Array.from(cEl.options).find(o => o.value.toUpperCase() === category.toUpperCase());
+      if (opt) { cEl.value = opt.value; cEl.dispatchEvent(new Event('change')); }
+    }
+  }, 80);
+}
+
 function openCreateModal() {
   // Free plan gate: max 5 active markets
   const plan = creatorData?.creator?.plan || 'free';
