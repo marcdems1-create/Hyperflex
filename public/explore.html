@@ -770,7 +770,7 @@ function renderMarkets(markets, communities, containerId) {
     const yesPct = Math.round((m.yes_price || 0.5) * 100);
     const noPct = 100 - yesPct;
     return `
-      <a href="/${m.creator_slug}" class="feed-item">
+      <a href="/${m.creator_slug}?market=${m.id}" class="feed-item">
         <div class="feed-meta">
           <span class="community-pill" style="background:${color}">${communityName}</span>
           <span class="feed-time">${timeAgo(m.created_at)}</span>
