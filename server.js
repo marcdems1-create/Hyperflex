@@ -270,12 +270,129 @@ app.get('/markets/:id', async (req, res) => {
   res.json(data);
 });
 
+// ════════════════════════════════════════════════════════════
+// TWEET → MARKET SHARE PAGE
+// GET /share/:marketId  — public, no auth
+// Renders a shareable page showing the source tweet + market card
+// ════════════════════════════════════════════════════════════
+app.get('/share/:marketId', async (req, res) => {
+  try {
+    const { data: market } = await supabase
+      .from('markets')
+      .select('id, question, yes_price, no_price, category, expiry_date, tenant_slug, source_tweet_url, tweet_text, tweet_author, resolved, resolution_outcome')
+      .eq('id', req.params.marketId)
+      .maybeSingle();
+
+    if (!market) return res.status(404).send('<!DOCTYPE html><html><body style="font-family:monospace;padding:40px;color:#fff;background:#141412"><h2>Market not found</h2><a href="/" style="color:#c9920d">← HYPERFLEX</a></body></html>');
+
+    const yesOdds = Math.round((market.yes_price || 0.5) * 100);
+    const noOdds  = 100 - yesOdds;
+    const communityUrl = market.tenant_slug ? `https://hyperflex.network/${market.tenant_slug}?market=${market.id}` : 'https://hyperflex.network';
+    const tweetUrl     = market.source_tweet_url || null;
+    const tweetText    = market.tweet_text || null;
+    const tweetAuthor  = market.tweet_author || null;
+    const expiryStr    = market.expiry_date ? new Date(market.expiry_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+    const catLabel     = (market.category || 'other').charAt(0).toUpperCase() + (market.category || 'other').slice(1);
+    const tweetHandle  = tweetAuthor ? tweetAuthor.replace(/^@/, '') : null;
+    const tweetDisplayName = tweetHandle || 'Tweet';
+    const tweetProfileUrl  = tweetHandle ? `https://x.com/${tweetHandle}` : null;
+
+    const tweetSection = tweetText ? `
+      <div style="max-width:520px;margin:0 auto 24px;background:#16181c;border:1px solid #2f3336;border-radius:16px;padding:16px 20px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+          <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#c9920d,#e8a91a);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">🐦</div>
+          <div>
+            <div style="font-weight:700;font-size:15px;color:#e7e9ea">${tweetDisplayName}</div>
+            ${tweetHandle ? `<div style="font-size:14px;color:#71767b">@${tweetHandle}</div>` : ''}
+          </div>
+          <div style="margin-left:auto">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="#e7e9ea"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.737-8.835L1.254 2.25H8.08l4.259 5.633 5.905-5.633zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+          </div>
+        </div>
+        <p style="font-size:15px;color:#e7e9ea;line-height:1.6;margin:0 0 14px">${tweetText.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>
+        ${tweetUrl ? `<a href="${tweetUrl}" target="_blank" rel="noopener" style="font-size:13px;color:#1d9bf0;text-decoration:none">View original tweet →</a>` : ''}
+      </div>
+      <div style="max-width:520px;margin:0 auto 8px;display:flex;align-items:center;gap:0">
+        <div style="flex:1;height:1px;background:linear-gradient(90deg,transparent,#c9920d)"></div>
+        <div style="font-family:'Space Mono',monospace;font-size:10px;color:#c9920d;letter-spacing:0.12em;padding:0 12px">PREDICTION MARKET</div>
+        <div style="flex:1;height:1px;background:linear-gradient(90deg,#c9920d,transparent)"></div>
+      </div>` : '';
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${market.question} — HYPERFLEX</title>
+<meta property="og:title" content="${market.question}">
+<meta property="og:description" content="${tweetText ? tweetText.slice(0, 120) + (tweetText.length > 120 ? '…' : '') : 'Predict the outcome on HYPERFLEX'}">
+<meta property="og:image" content="https://hyperflex.network/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#0f0f0d;color:#e2ddd6;min-height:100vh;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+  .nav{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;border-bottom:1px solid rgba(201,146,13,0.15);max-width:760px;margin:0 auto}
+  .logo{font-family:'Syne',sans-serif;font-weight:800;font-size:18px;color:#c9920d;text-decoration:none;letter-spacing:0.04em}
+  .wrap{max-width:560px;margin:40px auto;padding:0 20px 80px}
+  .market-card{background:#1c1c19;border:1px solid rgba(201,146,13,0.25);border-radius:16px;padding:24px;margin-top:16px}
+  .market-cat{font-family:'Space Mono',monospace;font-size:10px;color:#c9920d;letter-spacing:0.12em;text-transform:uppercase;margin-bottom:10px}
+  .market-q{font-family:'Syne',sans-serif;font-size:22px;font-weight:700;line-height:1.3;color:#f0ebe3;margin-bottom:20px}
+  .odds-row{display:flex;gap:10px;margin-bottom:18px}
+  .odds-btn{flex:1;padding:14px 8px;border-radius:10px;border:none;font-family:'Space Mono',monospace;font-weight:700;font-size:18px;cursor:pointer;letter-spacing:0.04em;text-decoration:none;display:block;text-align:center}
+  .odds-yes{background:rgba(46,160,67,0.15);border:1.5px solid rgba(46,160,67,0.4);color:#3fb950}
+  .odds-no{background:rgba(218,54,51,0.12);border:1.5px solid rgba(218,54,51,0.3);color:#f85149}
+  .odds-label{font-size:11px;opacity:0.65;display:block;font-weight:400;margin-top:2px}
+  .meta-row{display:flex;gap:16px;font-family:'Space Mono',monospace;font-size:11px;color:#6b6860;margin-bottom:20px;flex-wrap:wrap}
+  .cta-btn{display:block;width:100%;padding:14px;background:linear-gradient(135deg,#c9920d,#e8a91a);border:none;border-radius:10px;font-family:'Syne',sans-serif;font-weight:700;font-size:15px;color:#141412;text-align:center;text-decoration:none;letter-spacing:0.03em;cursor:pointer}
+  .powered{text-align:center;margin-top:28px;font-family:'Space Mono',monospace;font-size:11px;color:#4a4844}
+  .powered a{color:#c9920d;text-decoration:none}
+  @media(max-width:480px){.market-q{font-size:18px}.odds-btn{font-size:15px}}
+</style>
+</head>
+<body>
+<nav style="max-width:760px;margin:0 auto;padding:14px 24px;border-bottom:1px solid rgba(201,146,13,0.15);display:flex;align-items:center;justify-content:space-between">
+  <a href="https://hyperflex.network" style="font-family:'Syne',sans-serif;font-weight:800;font-size:18px;color:#c9920d;text-decoration:none;letter-spacing:0.04em">HYPERFLEX</a>
+  <a href="${communityUrl}" style="font-family:'Space Mono',monospace;font-size:11px;color:#c9920d;text-decoration:none;border:1px solid rgba(201,146,13,0.3);padding:6px 14px;border-radius:6px">Make Your Prediction →</a>
+</nav>
+<div class="wrap">
+  ${tweetSection}
+  <div class="market-card">
+    <div class="market-cat">${catLabel} Market</div>
+    <div class="market-q">${market.question.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+    <div class="odds-row">
+      <a href="${communityUrl}" class="odds-btn odds-yes">
+        ${yesOdds}%
+        <span class="odds-label">YES</span>
+      </a>
+      <a href="${communityUrl}" class="odds-btn odds-no">
+        ${noOdds}%
+        <span class="odds-label">NO</span>
+      </a>
+    </div>
+    ${expiryStr ? `<div class="meta-row"><span>Resolves ${expiryStr}</span>${market.resolved ? `<span style="color:#c9920d">● ${market.resolution_outcome || 'Resolved'}</span>` : '<span style="color:#3fb950">● Live</span>'}</div>` : ''}
+    <a href="${communityUrl}" class="cta-btn">Make Your Prediction →</a>
+  </div>
+  <div class="powered">Powered by <a href="https://hyperflex.network">HYPERFLEX</a> — prediction markets for creators</div>
+</div>
+</body>
+</html>`;
+
+    res.send(html);
+  } catch (err) {
+    console.error('share page error:', err);
+    res.status(500).send('<!DOCTYPE html><html><body style="font-family:monospace;padding:40px;color:#fff;background:#141412"><h2>Error loading share page</h2></body></html>');
+  }
+});
+
 // Create market (admin)
 app.post('/markets', async (req, res) => {
   const {
     question, expiry_date,
     commodity, target_price, direction,
-    category, creator_id, tenant_slug, is_public, resolution_source
+    category, creator_id, tenant_slug, is_public, resolution_source,
+    source_tweet_url, tweet_text, tweet_author
   } = req.body;
 
   const row = {
@@ -295,6 +412,9 @@ app.post('/markets', async (req, res) => {
   if (tenant_slug       !== undefined) row.tenant_slug       = tenant_slug;
   if (is_public         !== undefined) row.is_public         = is_public;
   if (resolution_source !== undefined) row.resolution_source = resolution_source;
+  if (source_tweet_url  !== undefined) row.source_tweet_url  = source_tweet_url;
+  if (tweet_text        !== undefined) row.tweet_text        = tweet_text;
+  if (tweet_author      !== undefined) row.tweet_author      = tweet_author;
 
   const auth = req.headers.authorization;
   const token = auth && auth.startsWith('Bearer ') ? auth.slice(7) : null;
@@ -3861,7 +3981,9 @@ Return ONLY valid JSON:
 app.post('/api/creator/scan-content', requireCreator, async (req, res) => {
   try {
     const { text, source_label = 'content' } = req.body;
-    if (!text || text.trim().length < 50) return res.status(400).json({ error: 'Please paste at least a few lines of content to scan.' });
+    const isTweet = source_label === 'tweet';
+    const minLen = isTweet ? 10 : 50;
+    if (!text || text.trim().length < minLen) return res.status(400).json({ error: isTweet ? 'Paste the tweet text first.' : 'Please paste at least a few lines of content to scan.' });
     if (!ANTHROPIC_API_KEY) return res.status(503).json({ error: 'Anthropic API key not configured.' });
 
     const wordCount = text.trim().split(/\s+/).length;
@@ -3873,7 +3995,25 @@ app.post('/api/creator/scan-content', requireCreator, async (req, res) => {
     const in90 = new Date(now); in90.setDate(now.getDate() + 90);
     const fmt = d => d.toISOString().split('T')[0];
 
-    const prompt = `You are analyzing community content to generate prediction markets for a creator's audience.
+    const prompt = isTweet
+      ? `You are generating prediction markets for a creator's community based on a single tweet.
+
+TWEET:
+${truncated}
+
+Generate 1-3 tightly focused prediction markets directly inspired by the specific claim, prediction, or topic in this tweet. Each market must:
+- Be a clear YES/NO question that directly tests what the tweet is asserting or implying
+- Be objectively resolvable from public sources
+- Resolution dates: near=${fmt(in30)}, mid=${fmt(in60)}, far=${fmt(in90)}
+- Pick the most appropriate resolution date per question
+
+Return ONLY this JSON:
+{
+  "markets": [
+    { "question": "Will ...?", "category": "sports|esports|entertainment|finance|crypto|politics|news|other", "resolution_date": "YYYY-MM-DD" }
+  ]
+}`
+      : `You are analyzing community content to generate prediction markets for a creator's audience.
 
 Source type: ${source_label}
 
@@ -3908,7 +4048,7 @@ Return ONLY this JSON:
     const rawText = aiData.content?.[0]?.text || '';
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('AI returned invalid format');
-    const markets = (JSON.parse(jsonMatch[0]).markets || []).map(m => ({ ...m, source: 'paste' }));
+    const markets = (JSON.parse(jsonMatch[0]).markets || []).map(m => ({ ...m, source: isTweet ? 'tweet' : 'paste' }));
 
     return res.json({ markets, word_count: wordCount, source_label });
 

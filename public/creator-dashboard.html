@@ -4239,19 +4239,23 @@ body.nav-open .sidebar-backdrop {
         </div>
       </div>
 
-      <!-- Source toggle: YouTube | Twitch | Paste -->
-      <div style="display:flex;gap:6px;margin-bottom:16px">
+      <!-- Source toggle: YouTube | Twitch | Paste | Tweet -->
+      <div style="display:flex;gap:5px;margin-bottom:16px">
         <button id="ytToggleYoutube" onclick="setYtScanType('youtube')"
-          style="flex:1;padding:9px 4px;font-family:var(--mono);font-size:11px;letter-spacing:0.08em;border-radius:6px;border:1px solid var(--gold);background:var(--gold);color:var(--ink);cursor:pointer;font-weight:700">
+          style="flex:1;padding:9px 2px;font-family:var(--mono);font-size:10px;letter-spacing:0.06em;border-radius:6px;border:1px solid var(--gold);background:var(--gold);color:var(--ink);cursor:pointer;font-weight:700">
           ▶ YouTube
         </button>
         <button id="ytToggleTwitch" onclick="setYtScanType('twitch')"
-          style="flex:1;padding:9px 4px;font-family:var(--mono);font-size:11px;letter-spacing:0.08em;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--dim);cursor:pointer">
+          style="flex:1;padding:9px 2px;font-family:var(--mono);font-size:10px;letter-spacing:0.06em;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--dim);cursor:pointer">
           🟣 Twitch
         </button>
         <button id="ytTogglePaste" onclick="setYtScanType('paste')"
-          style="flex:1;padding:9px 4px;font-family:var(--mono);font-size:11px;letter-spacing:0.08em;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--dim);cursor:pointer">
+          style="flex:1;padding:9px 2px;font-family:var(--mono);font-size:10px;letter-spacing:0.06em;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--dim);cursor:pointer">
           📋 Paste
+        </button>
+        <button id="ytToggleTweet" onclick="setYtScanType('tweet')"
+          style="flex:1;padding:9px 2px;font-family:var(--mono);font-size:10px;letter-spacing:0.06em;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--dim);cursor:pointer">
+          𝕏 Tweet
         </button>
       </div>
 
@@ -4284,6 +4288,25 @@ body.nav-open .sidebar-backdrop {
         </div>
         <!-- Source label for context (hidden input — set programmatically) -->
         <input type="hidden" id="ytPasteSource" value="Twitch chat"/>
+      </div>
+
+      <!-- Tweet fields (Tweet mode only) -->
+      <div id="ytTweetField" style="display:none">
+        <div class="field">
+          <label>Tweet URL <span style="font-weight:400;color:var(--dim)">(optional — for share page)</span></label>
+          <input type="url" id="tweetUrl" placeholder="https://x.com/username/status/1234567890"/>
+        </div>
+        <div class="field">
+          <label>Tweet Author <span style="font-weight:400;color:var(--dim)">(@handle)</span></label>
+          <input type="text" id="tweetAuthor" placeholder="@realMeetKevin"/>
+        </div>
+        <div class="field">
+          <label>Tweet Text <span style="font-weight:400;color:var(--dim)">— paste the full tweet</span></label>
+          <textarea id="tweetText" rows="4" placeholder="Paste the tweet text here…" style="resize:vertical;font-size:12px;line-height:1.5"></textarea>
+        </div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:-6px;margin-bottom:4px;line-height:1.6">
+          AI generates 1–3 prediction markets directly from this tweet. After publishing, you'll get a shareable link that shows the tweet + market card.
+        </div>
       </div>
 
       <div id="ytScanResult" style="display:none">
@@ -6622,64 +6645,75 @@ function formatDate(d) {
 }
 
 // Toast
-function showToast(msg, type = 'success') {
+function showToast(msg, type = 'success', duration = 3000) {
   const t = document.getElementById('toast');
-  document.getElementById('toastMsg').textContent = msg;
-  document.getElementById('toastIcon').textContent = type === 'success' ? '✓' : '✗';
+  const msgEl = document.getElementById('toastMsg');
+  const iconEl = document.getElementById('toastIcon');
+  // Support HTML in toast (e.g. for share links)
+  if (msg.includes('<a ')) { msgEl.innerHTML = msg; } else { msgEl.textContent = msg; }
+  iconEl.textContent = type === 'success' ? '✓' : type === 'error' ? '✗' : 'ℹ';
   t.className = 'toast ' + type + ' show';
-  setTimeout(() => t.classList.remove('show'), 3000);
+  clearTimeout(t._toastTimer);
+  t._toastTimer = setTimeout(() => t.classList.remove('show'), duration);
 }
 
 // AI Content Scanner
 let ytSuggestedMarkets = [];
 let ytScanType = 'youtube';
+let ytTweetMeta = null; // stores { url, text, author } when scanning a tweet
 
 const YT_SCAN_LABELS = {
   youtube: { btn: 'Scan YouTube →',    scanning: 'Scanning video…',      icon: '▶', color: 'var(--gold)',  sectionLabel: '▶ AI Markets — from YouTube' },
   twitch:  { btn: 'Generate Markets →', scanning: 'Analyzing chat…',      icon: '🟣', color: '#9b59b6',    sectionLabel: '🟣 AI Markets — from Twitch chat' },
-  paste:   { btn: 'Generate Markets →', scanning: 'Analyzing content…',   icon: '📋', color: '#27ae60',    sectionLabel: '📋 AI Markets — from pasted content' }
+  paste:   { btn: 'Generate Markets →', scanning: 'Analyzing content…',   icon: '📋', color: '#27ae60',    sectionLabel: '📋 AI Markets — from pasted content' },
+  tweet:   { btn: 'Generate from Tweet →', scanning: 'Analyzing tweet…', icon: '𝕏',  color: '#1d9bf0',    sectionLabel: '𝕏 AI Markets — from Tweet' }
 };
 
 function setYtScanType(type) {
   ytScanType = type;
-  const toggleIds = { youtube: 'ytToggleYoutube', twitch: 'ytToggleTwitch', paste: 'ytTogglePaste' };
+  const toggleIds = { youtube: 'ytToggleYoutube', twitch: 'ytToggleTwitch', paste: 'ytTogglePaste', tweet: 'ytToggleTweet' };
   Object.entries(toggleIds).forEach(([t, id]) => {
     const btn = document.getElementById(id);
     if (!btn) return;
     const active = t === type;
-    btn.style.background = active ? 'var(--gold)' : 'transparent';
-    btn.style.color = active ? 'var(--ink)' : 'var(--dim)';
-    btn.style.borderColor = active ? 'var(--gold)' : 'var(--border)';
+    btn.style.background = active ? (t === 'tweet' ? '#1d9bf0' : 'var(--gold)') : 'transparent';
+    btn.style.color = active ? (t === 'tweet' ? '#fff' : 'var(--ink)') : 'var(--dim)';
+    btn.style.borderColor = active ? (t === 'tweet' ? '#1d9bf0' : 'var(--gold)') : 'var(--border)';
     btn.style.fontWeight = active ? '700' : '400';
   });
 
-  // Show/hide URL vs paste field
-  const urlField = document.getElementById('ytUrlField');
-  const pasteField = document.getElementById('ytPasteField');
-  const pasteLabel = document.getElementById('ytPasteLabel');
+  // Show/hide input sections
+  const urlField      = document.getElementById('ytUrlField');
+  const pasteField    = document.getElementById('ytPasteField');
+  const pasteLabel    = document.getElementById('ytPasteLabel');
   const pasteTextarea = document.getElementById('ytPasteText');
-  const pasteSource = document.getElementById('ytPasteSource');
-
+  const pasteSource   = document.getElementById('ytPasteSource');
   const twitchUrlField = document.getElementById('ytTwitchUrlField');
+  const tweetField    = document.getElementById('ytTweetField');
 
-  if (type === 'youtube') {
-    if (urlField) urlField.style.display = '';
-    if (twitchUrlField) twitchUrlField.style.display = 'none';
-    if (pasteField) pasteField.style.display = 'none';
-  } else if (type === 'twitch') {
-    if (urlField) urlField.style.display = 'none';
-    if (twitchUrlField) twitchUrlField.style.display = '';
-    if (pasteField) pasteField.style.display = '';
+  if (urlField)       urlField.style.display       = type === 'youtube' ? '' : 'none';
+  if (twitchUrlField) twitchUrlField.style.display  = type === 'twitch'  ? '' : 'none';
+  if (pasteField)     pasteField.style.display      = (type === 'twitch' || type === 'paste') ? '' : 'none';
+  if (tweetField)     tweetField.style.display      = type === 'tweet'   ? '' : 'none';
+
+  if (type === 'twitch') {
     if (pasteLabel) pasteLabel.textContent = 'Paste Twitch chat here (optional)';
     if (pasteTextarea) pasteTextarea.placeholder = 'Paste your Twitch chat log here — or leave empty if you provided a VOD URL above.';
     if (pasteSource) pasteSource.value = 'Twitch chat';
-  } else {
-    if (urlField) urlField.style.display = 'none';
-    if (twitchUrlField) twitchUrlField.style.display = 'none';
-    if (pasteField) pasteField.style.display = '';
+  } else if (type === 'paste') {
     if (pasteLabel) pasteLabel.textContent = 'Paste content here';
     if (pasteTextarea) pasteTextarea.placeholder = 'Paste Reddit comments, Discord messages, article text, or any community content — the AI extracts what people are already predicting.';
     if (pasteSource) pasteSource.value = 'Community content';
+  }
+
+  // Update AI description
+  const aiDesc = document.getElementById('ytAiDesc');
+  if (aiDesc) {
+    if (type === 'tweet') {
+      aiDesc.innerHTML = '<strong>Tweet → Market.</strong> Paste a tweet — any hot take, bold prediction, or breaking news — and the AI generates 1–3 tightly focused prediction markets directly from it. Publishes with a shareable link showing the tweet + market card.';
+    } else {
+      aiDesc.innerHTML = '<strong>AI reads your content.</strong> Drop in a YouTube or Twitch URL — or paste chat, Reddit threads, Discord messages, or any text — and the AI generates ready-to-publish prediction markets from what your community is already debating.';
+    }
   }
 
   const cfg = YT_SCAN_LABELS[type];
@@ -6691,6 +6725,9 @@ function openYoutubeModal() {
   document.getElementById('youtubeUrl').value = '';
   document.getElementById('ytPasteText').value = '';
   const tu = document.getElementById('twitchUrl'); if (tu) tu.value = '';
+  const tweetUrlEl = document.getElementById('tweetUrl'); if (tweetUrlEl) tweetUrlEl.value = '';
+  const tweetAuthorEl = document.getElementById('tweetAuthor'); if (tweetAuthorEl) tweetAuthorEl.value = '';
+  const tweetTextEl = document.getElementById('tweetText'); if (tweetTextEl) tweetTextEl.value = '';
   document.getElementById('ytScanResult').style.display = 'none';
   document.getElementById('ytError').style.display = 'none';
   document.getElementById('ytMarketList').innerHTML = '';
@@ -6702,6 +6739,7 @@ function openYoutubeModal() {
   `;
   setYtScanType(ytScanType);
   ytSuggestedMarkets = [];
+  ytTweetMeta = null;
   document.getElementById('youtubeModal').classList.add('show');
 }
 function closeYoutubeModal() {
@@ -6711,6 +6749,48 @@ function closeYoutubeModal() {
 async function runYoutubeScan() {
   const cfg = YT_SCAN_LABELS[ytScanType];
   const btn = document.getElementById('ytScanBtn');
+
+  // ── Tweet mode ────────────────────────────────────────────
+  if (ytScanType === 'tweet') {
+    const tweetText   = document.getElementById('tweetText')?.value.trim();
+    const tweetUrl    = document.getElementById('tweetUrl')?.value.trim();
+    const tweetAuthor = document.getElementById('tweetAuthor')?.value.trim();
+    if (!tweetText || tweetText.length < 10) {
+      document.getElementById('ytError').textContent = 'Please paste the tweet text first.';
+      document.getElementById('ytError').style.display = 'block';
+      return;
+    }
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner"></span> Analyzing tweet…`;
+    document.getElementById('ytError').style.display = 'none';
+    document.getElementById('ytScanResult').style.display = 'none';
+    try {
+      const fullText = tweetAuthor ? `${tweetAuthor}: ${tweetText}` : tweetText;
+      const r = await fetch(API + '/api/creator/scan-content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ text: fullText, source_label: 'tweet' })
+      });
+      const data = await r.json();
+      if (!r.ok) {
+        document.getElementById('ytError').textContent = data.error || 'Scan failed.';
+        document.getElementById('ytError').style.display = 'block';
+        return;
+      }
+      ytSuggestedMarkets = data.markets || [];
+      ytTweetMeta = { url: tweetUrl || '', text: tweetText, author: tweetAuthor || '' };
+      const authorBit = tweetAuthor ? `<strong style="color:var(--text)">${tweetAuthor}</strong> · ` : '';
+      const preview = tweetText.length > 100 ? tweetText.slice(0, 100) + '…' : tweetText;
+      renderYtResults(`𝕏 ${authorBit}${preview}<br><span style="opacity:0.6">${ytSuggestedMarkets.length} market${ytSuggestedMarkets.length !== 1 ? 's' : ''} generated</span>`, cfg, data.markets || []);
+    } catch (e) {
+      document.getElementById('ytError').textContent = e.message || 'Scan failed.';
+      document.getElementById('ytError').style.display = 'block';
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = cfg.btn;
+    }
+    return;
+  }
 
   // ── Twitch mode — URL takes priority, falls back to paste ─
   if (ytScanType === 'twitch') {
@@ -6906,33 +6986,52 @@ async function publishYtMarkets() {
 
   let published = 0;
   let failed = 0;
+  let firstPublishedId = null;
 
   for (const m of selected) {
     try {
+      const body = {
+        question: m.question,
+        category: m.category,
+        expiry_date: m.resolution_date || new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0],
+        creator_id: user.id,
+        tenant_slug: user.slug,
+        is_public: true,
+        yes_price: 0.5,
+        no_price: 0.5
+      };
+      // Attach tweet metadata if this came from a tweet scan
+      if (ytTweetMeta) {
+        if (ytTweetMeta.url)    body.source_tweet_url = ytTweetMeta.url;
+        if (ytTweetMeta.text)   body.tweet_text       = ytTweetMeta.text;
+        if (ytTweetMeta.author) body.tweet_author     = ytTweetMeta.author;
+      }
       const r = await fetch(API + '/markets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-        body: JSON.stringify({
-          question: m.question,
-          category: m.category,
-          expiry_date: m.resolution_date || new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0],
-          creator_id: user.id,
-          tenant_slug: user.slug,
-          is_public: true,
-          yes_price: 0.5,
-          no_price: 0.5
-        })
+        body: JSON.stringify(body)
       });
       const d = await r.json();
-      if (d.id || d.market) published++;
-      else failed++;
+      if (d.id || d.market) {
+        published++;
+        if (!firstPublishedId) firstPublishedId = d.id || d.market?.id;
+      } else { failed++; }
     } catch { failed++; }
   }
 
   closeYoutubeModal();
   if (published > 0) showToast(`${published} market${published > 1 ? 's' : ''} published! 🎯`, 'success');
   if (failed > 0) showToast(`${failed} market${failed > 1 ? 's' : ''} failed to publish.`, 'error');
-  if (published > 0) setTimeout(() => init(), 600);
+  if (published > 0) {
+    setTimeout(() => init(), 600);
+    // For tweet markets, show the share link
+    if (ytTweetMeta && firstPublishedId) {
+      setTimeout(() => {
+        const shareUrl = `${window.location.origin}/share/${firstPublishedId}`;
+        showToast(`🔗 Share page ready — <a href="${shareUrl}" target="_blank" style="color:#c9920d;font-weight:700">open it →</a>`, 'info', 8000);
+      }, 1200);
+    }
+  }
 }
 
 // ── QUESTION VALIDATOR ───────────────────────────────────
