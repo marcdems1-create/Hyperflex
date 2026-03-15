@@ -4,27 +4,40 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Explore — HYPERFLEX</title>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
   --gold: #c9920d;
-  --paper: #141412;
-  --cream: #1c1c19;
-  --border: #2a2a27;
-  --text: #ddd8cc;
-  --muted: #888880;
+  --gold-dim: rgba(201,146,13,0.15);
+  --paper: #0f0f0d;
+  --surface: #161614;
+  --card: #1c1c19;
+  --border: #262622;
+  --border-hover: #3a3a35;
+  --text: #e2ddd4;
+  --text-soft: #b0ab9f;
+  --muted: #70706a;
   --green: #22c55e;
+  --green-dim: rgba(34,197,94,0.12);
   --red: #ef4444;
+  --red-dim: rgba(239,68,68,0.12);
+  --blue: #60a5fa;
+  --blue-dim: rgba(96,165,250,0.12);
+  --radius: 12px;
+  --radius-sm: 8px;
 }
 
 body {
   background: var(--paper);
   color: var(--text);
-  font-family: 'Space Mono', monospace;
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
   min-height: 100vh;
   overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
 }
 
 /* NAV */
@@ -32,106 +45,123 @@ nav {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 40px;
+  padding: 18px 40px;
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
-  background: var(--paper);
+  background: rgba(15,15,13,0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   z-index: 100;
 }
 .nav-logo {
   font-family: 'Syne', sans-serif;
-  font-size: 20px;
+  font-size: 19px;
   font-weight: 800;
   color: var(--gold);
   text-decoration: none;
   letter-spacing: -0.5px;
 }
-.nav-links { display: flex; gap: 24px; align-items: center; }
+.nav-links { display: flex; gap: 20px; align-items: center; }
 .nav-links a {
   color: var(--muted);
   text-decoration: none;
   font-size: 13px;
+  font-weight: 500;
   transition: color 0.2s;
 }
-.nav-links a:hover { color: var(--text); }
+.nav-links a:hover { color: var(--text-soft); }
 .nav-cta {
   background: var(--gold) !important;
-  color: #141412 !important;
-  padding: 8px 18px;
-  border-radius: 6px;
+  color: #0f0f0d !important;
+  padding: 7px 16px;
+  border-radius: var(--radius-sm);
   font-weight: 700;
   font-size: 12px !important;
+  letter-spacing: 0.2px;
+  transition: opacity 0.15s !important;
 }
+.nav-cta:hover { opacity: 0.88; }
 
 /* HERO */
 .hero {
-  padding: 60px 40px 40px;
+  padding: 56px 40px 36px;
   max-width: 1200px;
   margin: 0 auto;
 }
 .hero h1 {
   font-family: 'Syne', sans-serif;
-  font-size: 42px;
+  font-size: 44px;
   font-weight: 800;
-  line-height: 1.1;
-  margin-bottom: 12px;
+  line-height: 1.08;
+  margin-bottom: 14px;
+  letter-spacing: -1.5px;
 }
 .hero h1 span { color: var(--gold); }
 .hero p {
-  color: var(--muted);
-  font-size: 14px;
-  margin-bottom: 32px;
+  color: var(--text-soft);
+  font-size: 15px;
+  font-weight: 400;
+  margin-bottom: 36px;
+  max-width: 480px;
 }
-.live-dot {
+.live-badge {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  background: rgba(34,197,94,0.1);
-  border: 1px solid rgba(34,197,94,0.3);
+  gap: 7px;
+  background: var(--green-dim);
+  border: 1px solid rgba(34,197,94,0.25);
   color: var(--green);
   font-size: 12px;
-  padding: 4px 12px;
+  font-weight: 600;
+  padding: 5px 12px;
   border-radius: 100px;
-  margin-bottom: 24px;
+  margin-bottom: 22px;
+  letter-spacing: 0.2px;
 }
-.live-dot::before {
+.live-badge::before {
   content: '';
   width: 6px;
   height: 6px;
   background: var(--green);
   border-radius: 50%;
-  animation: pulse 1.5s infinite;
+  animation: pulse-dot 1.8s infinite;
 }
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
 }
 
 /* TABS */
+.tabs-wrap {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 40px;
+}
 .tabs {
   display: flex;
-  gap: 4px;
-  margin-bottom: 32px;
+  gap: 2px;
+  margin-bottom: 28px;
   border-bottom: 1px solid var(--border);
-  padding-bottom: 0;
 }
 .tab {
-  padding: 10px 20px;
+  padding: 10px 18px;
+  font-family: 'Inter', sans-serif;
   font-size: 13px;
+  font-weight: 500;
   color: var(--muted);
   cursor: pointer;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
-  transition: all 0.2s;
+  transition: all 0.18s;
   background: none;
   border-top: none;
   border-left: none;
   border-right: none;
-  font-family: 'Space Mono', monospace;
+  letter-spacing: 0.1px;
 }
-.tab:hover { color: var(--text); }
-.tab.active { color: var(--gold); border-bottom-color: var(--gold); }
+.tab:hover { color: var(--text-soft); }
+.tab.active { color: var(--gold); border-bottom-color: var(--gold); font-weight: 600; }
 
 /* LAYOUT */
 .explore-layout {
@@ -139,33 +169,39 @@ nav {
   margin: 0 auto;
   padding: 0 40px 80px;
   display: grid;
-  grid-template-columns: 1fr 340px;
-  gap: 32px;
+  grid-template-columns: 1fr 320px;
+  gap: 28px;
 }
-@media (max-width: 900px) {
+@media (max-width: 960px) {
   .explore-layout { grid-template-columns: 1fr; padding: 0 20px 60px; }
-  nav { padding: 16px 20px; }
-  .hero { padding: 40px 20px 24px; }
-  .hero h1 { font-size: 28px; }
+  .tabs-wrap { padding: 0 20px; }
+  nav { padding: 14px 20px; }
+  .hero { padding: 36px 20px 24px; }
+  .hero h1 { font-size: 30px; letter-spacing: -1px; }
+  .hero p { font-size: 14px; }
 }
 
 /* FEED */
 .feed-section { display: none; }
 .feed-section.active { display: block; }
 
+/* MARKET CARDS */
 .feed-item {
-  background: var(--cream);
+  background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius);
   padding: 16px 18px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   cursor: pointer;
-  transition: border-color 0.2s;
+  transition: border-color 0.18s, box-shadow 0.18s;
   text-decoration: none;
   display: block;
   color: inherit;
 }
-.feed-item:hover { border-color: var(--gold); }
+.feed-item:hover {
+  border-color: var(--border-hover);
+  box-shadow: 0 0 0 1px rgba(201,146,13,0.12), 0 4px 16px rgba(0,0,0,0.3);
+}
 
 .feed-meta {
   display: flex;
@@ -175,53 +211,66 @@ nav {
   flex-wrap: wrap;
 }
 .community-pill {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   padding: 2px 8px;
   border-radius: 4px;
-  color: #141412;
-  letter-spacing: 0.3px;
+  color: #0f0f0d;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
 }
 .feed-time { font-size: 11px; color: var(--muted); margin-left: auto; }
 
 .feed-question {
-  font-size: 14px;
+  font-family: 'Space Mono', monospace;
+  font-size: 13px;
   font-weight: 700;
-  line-height: 1.4;
-  margin-bottom: 12px;
+  line-height: 1.45;
+  margin-bottom: 14px;
   color: var(--text);
 }
 
 .sentiment-bar {
-  height: 4px;
+  height: 5px;
   background: var(--border);
-  border-radius: 2px;
+  border-radius: 3px;
   overflow: hidden;
   margin-bottom: 8px;
 }
-.sentiment-yes { height: 100%; background: var(--green); border-radius: 2px; transition: width 0.5s; }
+.sentiment-yes { height: 100%; background: var(--green); border-radius: 3px; transition: width 0.6s cubic-bezier(.4,0,.2,1); }
 
 .sentiment-labels {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   font-size: 11px;
+  font-weight: 600;
 }
-.yes-label { color: var(--green); font-weight: 700; }
-.no-label { color: var(--red); font-weight: 700; }
-.trader-count { color: var(--muted); font-size: 11px; }
+.yes-label { color: var(--green); }
+.no-label { color: var(--red); }
+.trader-count { color: var(--muted); font-size: 11px; font-weight: 400; }
 
 /* TRADE FEED ITEMS */
+.trade-wrap {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px 0;
+  overflow: hidden;
+}
 .trade-item {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 12px 0;
+  padding: 12px 18px;
   border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
 }
+.trade-item:hover { background: rgba(255,255,255,0.015); }
 .trade-item:last-child { border-bottom: none; }
 .trade-avatar {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -229,52 +278,54 @@ nav {
   font-size: 12px;
   font-weight: 700;
   flex-shrink: 0;
-  color: #141412;
+  color: #0f0f0d;
+  font-family: 'Syne', sans-serif;
 }
 .trade-body { flex: 1; min-width: 0; }
-.trade-user { font-size: 12px; font-weight: 700; color: var(--text); }
-.trade-action { font-size: 12px; color: var(--muted); margin-top: 2px; line-height: 1.4; }
+.trade-user { font-size: 13px; font-weight: 600; color: var(--text); }
+.trade-action { font-size: 12px; color: var(--text-soft); margin-top: 3px; line-height: 1.45; }
 .trade-action .yes { color: var(--green); font-weight: 700; }
 .trade-action .no { color: var(--red); font-weight: 700; }
-.trade-action .market-link { color: var(--gold); }
-.trade-time { font-size: 11px; color: var(--muted); flex-shrink: 0; }
+.trade-action .market-link { color: var(--gold); text-decoration: none; }
+.trade-action .market-link:hover { text-decoration: underline; }
+.trade-time { font-size: 11px; color: var(--muted); flex-shrink: 0; padding-top: 2px; }
 
 /* SIDEBAR */
-.sidebar {}
 .sidebar-card {
-  background: var(--cream);
+  background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 20px;
-  margin-bottom: 20px;
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  margin-bottom: 16px;
 }
 .sidebar-title {
   font-family: 'Syne', sans-serif;
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 800;
   color: var(--gold);
-  margin-bottom: 16px;
-  letter-spacing: 0.5px;
+  margin-bottom: 14px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
 }
 .community-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 0;
+  padding: 9px 0;
   border-bottom: 1px solid var(--border);
   text-decoration: none;
   color: inherit;
-  transition: opacity 0.2s;
+  transition: all 0.15s;
 }
 .community-row:last-child { border-bottom: none; }
-.community-row:hover { opacity: 0.8; }
+.community-row:hover { opacity: 0.75; }
 .community-dot {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
 }
-.community-name { font-size: 13px; font-weight: 700; flex: 1; }
+.community-name { font-size: 13px; font-weight: 600; flex: 1; }
 .community-markets { font-size: 11px; color: var(--muted); }
 
 /* COMMUNITY SECTIONS (tab-communities) */
@@ -282,11 +333,12 @@ nav {
 .comm-section-title {
   font-family: 'Syne', sans-serif;
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 800;
   color: var(--text);
   margin-bottom: 12px;
-  padding-bottom: 8px;
+  padding-bottom: 10px;
   border-bottom: 1px solid var(--border);
+  letter-spacing: -0.3px;
 }
 
 .announcement-item {
@@ -294,8 +346,8 @@ nav {
   border-bottom: 1px solid var(--border);
 }
 .announcement-item:last-child { border-bottom: none; }
-.announcement-community { font-size: 11px; font-weight: 700; color: var(--gold); margin-bottom: 4px; }
-.announcement-title { font-size: 13px; color: var(--text); line-height: 1.4; }
+.announcement-community { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--gold); margin-bottom: 4px; }
+.announcement-title { font-size: 12px; color: var(--text-soft); line-height: 1.45; }
 .announcement-time { font-size: 11px; color: var(--muted); margin-top: 4px; }
 
 .loading {
@@ -303,66 +355,69 @@ nav {
   color: var(--muted);
   font-size: 13px;
   padding: 40px;
+  font-weight: 500;
 }
-
 .empty {
   text-align: center;
   color: var(--muted);
   font-size: 13px;
   padding: 40px;
+  font-weight: 500;
 }
 
 /* STATS TICKER */
 .stats-ticker {
   display: flex;
   align-items: center;
-  gap: 32px;
-  margin-top: 28px;
+  gap: 36px;
+  margin-top: 32px;
   flex-wrap: wrap;
 }
-.stat-pill {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
+.stat-pill { display: flex; flex-direction: column; gap: 3px; }
 .stat-pill-value {
   font-family: 'Syne', sans-serif;
-  font-size: 28px;
+  font-size: 30px;
   font-weight: 800;
   color: var(--gold);
   line-height: 1;
-  letter-spacing: -1px;
+  letter-spacing: -1.5px;
 }
 .stat-pill-label {
   font-size: 11px;
+  font-weight: 500;
   color: var(--muted);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
 }
-.stat-divider { width: 1px; height: 36px; background: var(--border); }
+.stat-divider { width: 1px; height: 40px; background: var(--border); }
 
 /* CREATOR CTA STRIP */
 .creator-cta-strip {
-  background: linear-gradient(135deg, #1a1a17 0%, #1f1c12 100%);
-  border: 1px solid rgba(201,146,13,0.3);
-  border-radius: 10px;
-  padding: 16px 24px;
+  background: linear-gradient(135deg, #191914 0%, #1e1a0f 100%);
+  border: 1px solid rgba(201,146,13,0.25);
+  border-radius: var(--radius);
+  padding: 16px 22px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 28px;
+  margin-bottom: 24px;
   flex-wrap: wrap;
 }
-.cta-text { font-size: 13px; color: var(--text); line-height: 1.5; }
-.cta-text strong { color: var(--gold); }
+.cta-text {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-soft);
+  line-height: 1.5;
+}
+.cta-text strong { color: var(--text); font-weight: 600; }
 .cta-btn {
   background: var(--gold);
-  color: #141412;
+  color: #0f0f0d;
   border: none;
-  padding: 10px 20px;
-  border-radius: 6px;
-  font-family: 'Space Mono', monospace;
+  padding: 9px 18px;
+  border-radius: var(--radius-sm);
+  font-family: 'Inter', sans-serif;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
@@ -370,78 +425,182 @@ nav {
   text-decoration: none;
   display: inline-block;
   transition: opacity 0.15s;
+  letter-spacing: 0.2px;
 }
 .cta-btn:hover { opacity: 0.85; }
 
 /* TOP PREDICTORS */
+.predictors-wrap {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.predictors-header {
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.predictors-header-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+}
+.predictors-header-sub {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 400;
+}
 .predictor-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 16px;
+  padding: 12px 18px;
   border-bottom: 1px solid var(--border);
   transition: background 0.15s;
 }
 .predictor-row:last-child { border-bottom: none; }
 .predictor-row:hover { background: rgba(255,255,255,0.02); }
-.predictor-rank { font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 800; width: 32px; text-align: center; color: var(--muted); flex-shrink: 0; }
+.predictor-rank {
+  font-family: 'Syne', sans-serif;
+  font-size: 16px;
+  font-weight: 800;
+  width: 32px;
+  text-align: center;
+  color: var(--muted);
+  flex-shrink: 0;
+}
 .predictor-rank.gold   { color: #ffd700; }
-.predictor-rank.silver { color: #c0c0c0; }
-.predictor-rank.bronze { color: #cd7f32; }
-.predictor-name { flex: 1; font-size: 13px; font-weight: 700; }
-.predictor-trades { font-size: 11px; color: var(--muted); }
+.predictor-rank.silver { color: #a8a8a8; }
+.predictor-rank.bronze { color: #cd8040; }
+.predictor-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  flex: 1;
+}
+.predictor-trades { font-size: 11px; color: var(--muted); margin-top: 1px; }
 .predictor-tier {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   padding: 3px 8px;
   border-radius: 4px;
   flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
-.tier-oracle  { background: rgba(201,146,13,0.15); color: var(--gold); }
-.tier-sharp   { background: rgba(34,197,94,0.12);  color: #22c55e; }
-.tier-solid   { background: rgba(96,165,250,0.12); color: #60a5fa; }
-.predictor-wr { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 800; width: 52px; text-align: right; flex-shrink: 0; }
+.tier-oracle  { background: var(--gold-dim); color: var(--gold); }
+.tier-sharp   { background: var(--green-dim); color: var(--green); }
+.tier-solid   { background: var(--blue-dim); color: var(--blue); }
+.predictor-wr {
+  font-family: 'Space Mono', monospace;
+  font-size: 18px;
+  font-weight: 700;
+  width: 54px;
+  text-align: right;
+  flex-shrink: 0;
+}
 .wr-oracle { color: var(--gold); }
-.wr-sharp  { color: #22c55e; }
-.wr-solid  { color: #60a5fa; }
+.wr-sharp  { color: var(--green); }
+.wr-solid  { color: var(--blue); }
+.predictors-footer {
+  padding: 10px 18px;
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+  border-top: 1px solid var(--border);
+  font-weight: 400;
+}
 
 /* FEATURED SPOTLIGHT */
 .featured-card {
-  background: linear-gradient(135deg, #1d1b14 0%, #1a1a17 100%);
-  border: 1px solid rgba(201,146,13,0.4);
-  border-radius: 12px;
-  padding: 20px 24px;
-  margin-bottom: 24px;
+  background: linear-gradient(135deg, #1d1b13 0%, #191917 100%);
+  border: 1px solid rgba(201,146,13,0.3);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+  margin-bottom: 20px;
   text-decoration: none;
   display: block;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
-.featured-card:hover { border-color: var(--gold); }
-.featured-label { font-size: 10px; font-weight: 700; color: var(--gold); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 10px; }
-.featured-name { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800; color: var(--text); margin-bottom: 6px; }
-.featured-meta { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
-.featured-market { font-size: 13px; color: var(--text); background: rgba(255,255,255,0.04); border-radius: 6px; padding: 10px 14px; border-left: 3px solid var(--gold); }
+.featured-card:hover {
+  border-color: rgba(201,146,13,0.7);
+  box-shadow: 0 0 0 1px rgba(201,146,13,0.08);
+}
+.featured-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--gold);
+  margin-bottom: 8px;
+}
+.featured-name {
+  font-family: 'Syne', sans-serif;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 5px;
+  letter-spacing: -0.5px;
+}
+.featured-meta {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+.featured-cta {
+  font-size: 13px;
+  color: var(--text-soft);
+  background: rgba(255,255,255,0.04);
+  border-radius: 6px;
+  padding: 9px 14px;
+  border-left: 3px solid var(--gold);
+  font-weight: 500;
+}
 
-/* refresh indicator */
+/* REFRESH BAR */
 .refresh-bar {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 11px;
   color: var(--muted);
-  margin-bottom: 16px;
+  margin-bottom: 14px;
+  font-weight: 400;
 }
 .refresh-bar button {
   background: none;
   border: 1px solid var(--border);
   color: var(--muted);
   font-size: 11px;
-  font-family: 'Space Mono', monospace;
+  font-family: 'Inter', sans-serif;
   padding: 3px 8px;
-  border-radius: 4px;
+  border-radius: 5px;
   cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
 }
-.refresh-bar button:hover { color: var(--text); }
+.refresh-bar button:hover { color: var(--text-soft); border-color: var(--border-hover); }
+
+/* SECTION HEADER (for predictors/communities tabs) */
+.section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.section-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+.section-sub {
+  font-size: 12px;
+  color: var(--muted);
+}
 </style>
 </head>
 <body>
@@ -456,7 +615,7 @@ nav {
 </nav>
 
 <div class="hero">
-  <div class="live-dot">Live across all communities</div>
+  <div class="live-badge">Live across all communities</div>
   <h1>What the crowd is<br><span>betting on right now</span></h1>
   <p>Real-time prediction markets from creators across finance, crypto, and markets.</p>
   <div class="stats-ticker" id="statsTicker">
@@ -477,7 +636,7 @@ nav {
   </div>
 </div>
 
-<div style="max-width:1200px;margin:0 auto;padding:0 40px;" id="tabs-wrap">
+<div class="tabs-wrap" id="tabs-wrap">
   <div class="tabs">
     <button class="tab active" onclick="switchTab('live')">🔴 Live Feed</button>
     <button class="tab" onclick="switchTab('hot')">🔥 Hot Markets</button>
@@ -597,7 +756,7 @@ function renderTrades(trades, communities) {
         <div class="trade-time">${timeAgo(t.created_at)}</div>
       </div>`;
   }).join('');
-  document.getElementById('trades-feed').innerHTML = `<div style="background:var(--cream);border:1px solid var(--border);border-radius:10px;padding:16px 18px;">${html}</div>`;
+  document.getElementById('trades-feed').innerHTML = `<div class="trade-wrap">${html}</div>`;
 }
 
 function renderMarkets(markets, communities, containerId) {
@@ -660,13 +819,13 @@ function renderCommunitySections(sections, communities, topPredictors) {
     const markets = c.market_count || 0;
     const name   = c.display_name || c.slug;
     return `
-      <a href="/${c.slug}" style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:#1a1a18;border:1px solid #2a2a27;border-radius:10px;text-decoration:none;color:var(--text);transition:border-color .15s;" onmouseover="this.style.borderColor='${color}'" onmouseout="this.style.borderColor='#2a2a27'">
-        <div style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0"></div>
+      <a href="/${c.slug}" style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--card);border:1px solid var(--border);border-radius:10px;text-decoration:none;color:var(--text);transition:border-color .15s,box-shadow .15s;" onmouseover="this.style.borderColor='${color}';this.style.boxShadow='0 0 0 1px ${color}18'" onmouseout="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
+        <div style="width:9px;height:9px;border-radius:50%;background:${color};flex-shrink:0;box-shadow:0 0 6px ${color}66"></div>
         <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</div>
-          <div style="font-size:11px;color:#666;margin-top:2px">${markets} market${markets !== 1 ? 's' : ''} · ${traders.toLocaleString()} trades</div>
+          <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)">${name}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px;font-weight:400">${markets} market${markets !== 1 ? 's' : ''} · ${traders.toLocaleString()} trades</div>
         </div>
-        <span style="font-size:11px;font-weight:700;padding:3px 8px;border-radius:4px;background:${color}22;color:${color};flex-shrink:0">${badge}</span>
+        <span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;background:${color}22;color:${color};flex-shrink:0;letter-spacing:0.3px">${badge}</span>
       </a>`;
   }
 
@@ -687,16 +846,16 @@ function renderCommunitySections(sections, communities, topPredictors) {
     const tp = topPredictors[0];
     const tierLabel = tp.win_rate >= 70 ? '🎯 ORACLE' : tp.win_rate >= 60 ? '🎯 SHARP' : '📊 SOLID';
     topPredCard = `
-      <div style="background:var(--cream);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:24px;display:flex;align-items:center;gap:14px">
-        <div style="font-size:28px">🥇</div>
-        <div style="flex:1">
-          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Top Global Predictor</div>
-          <div style="font-size:15px;font-weight:700;color:var(--text)">${escHtml(tp.display_name || 'Anonymous')}</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px">${tp.total_trades} predictions · ${tp.wins} correct</div>
+      <div style="background:linear-gradient(135deg,#1d1b13 0%,#191917 100%);border:1px solid rgba(201,146,13,0.25);border-radius:12px;padding:16px 20px;margin-bottom:20px;display:flex;align-items:center;gap:16px">
+        <div style="font-size:30px;line-height:1">🥇</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:10px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:1px;margin-bottom:5px">Top Global Predictor</div>
+          <div style="font-size:15px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(tp.display_name || 'Anonymous')}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px">${tp.total_trades} predictions · ${tp.wins} correct</div>
         </div>
-        <div style="text-align:right">
-          <div style="font-family:'Syne',sans-serif;font-size:24px;font-weight:800;color:var(--gold)">${tp.win_rate}%</div>
-          <div style="font-size:11px;color:var(--gold)">${tierLabel}</div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-family:'Space Mono',monospace;font-size:22px;font-weight:700;color:var(--gold);line-height:1">${tp.win_rate}%</div>
+          <div style="font-size:10px;font-weight:700;color:var(--gold);margin-top:4px;letter-spacing:0.5px">${tierLabel}</div>
         </div>
       </div>`;
   }
@@ -741,18 +900,20 @@ function renderTopPredictors(predictors) {
   const el = document.getElementById('predictors-feed');
   if (!predictors || !predictors.length) {
     el.innerHTML = `
-      <div style="text-align:center;padding:60px 20px;color:var(--muted)">
-        <div style="font-size:32px;margin-bottom:12px">🎯</div>
-        <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px">No ranked predictors yet</div>
-        <div style="font-size:13px">Predictors need 5+ settled predictions to qualify.<br>Markets must be resolved to count.</div>
+      <div class="predictors-wrap">
+        <div style="text-align:center;padding:60px 20px;color:var(--muted)">
+          <div style="font-size:36px;margin-bottom:14px">🎯</div>
+          <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:8px">No ranked predictors yet</div>
+          <div style="font-size:13px;line-height:1.6">Predictors need 5+ settled predictions to qualify.<br>Markets must be resolved to count.</div>
+        </div>
       </div>`;
     return;
   }
 
   const header = `
-    <div style="padding:16px 16px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
-      <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:800">Global Top Predictors</div>
-      <div style="font-size:11px;color:var(--muted)">Min 5 predictions · Ranked by accuracy</div>
+    <div class="predictors-header">
+      <div class="predictors-header-title">Global Top Predictors</div>
+      <div class="predictors-header-sub">Min 5 predictions · Ranked by accuracy</div>
     </div>`;
 
   const rows = predictors.map((p, i) => {
@@ -771,8 +932,8 @@ function renderTopPredictors(predictors) {
       </div>`;
   }).join('');
 
-  const note = `<div style="padding:12px 16px;font-size:11px;color:var(--muted);text-align:center;border-top:1px solid var(--border)">Accuracy ranking across all communities · All-time</div>`;
-  el.innerHTML = `<div style="background:var(--cream);border:1px solid var(--border);border-radius:12px;overflow:hidden">${header}${rows}${note}</div>`;
+  const note = `<div class="predictors-footer">Accuracy ranking across all communities · All-time</div>`;
+  el.innerHTML = `<div class="predictors-wrap">${header}${rows}${note}</div>`;
 }
 
 function renderFeaturedSpotlight(sections, communities) {
@@ -787,7 +948,7 @@ function renderFeaturedSpotlight(sections, communities) {
       <div class="featured-label" style="color:${color}">🔥 Most Active Community</div>
       <div class="featured-name" style="color:${color}">${c.display_name || top.slug}</div>
       <div class="featured-meta">${traders} total trades · ${markets} open markets</div>
-      <div class="featured-market" style="border-left-color:${color}">Visit community →</div>
+      <div class="featured-cta" style="border-left-color:${color}">Visit community →</div>
     </a>`;
 }
 
