@@ -33,9 +33,9 @@
 
 ---
 
-## Current State (last updated March 13, 2026)
+## Current State (last updated March 15, 2026)
 
-- All features live on Railway. Latest commit: `81b5c65` (local, not yet pushed)
+- All features committed locally. Latest commit: `068b03c` — needs push
 - **Stripe payments live** — Pro ($29/mo) + Premium ($99/mo) checkout + billing portal
   - Railway env vars needed: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRO_PRICE_ID`, `STRIPE_PLATINUM_PRICE_ID`
   - Webhook endpoint registered at: `https://hyperflex.network/stripe/webhook`
@@ -93,7 +93,8 @@
   6. `supabase_migration_challenges.sql`
   7. `supabase_migration_plan_trial.sql` (adds plan_trial_expires_at)
   8. `supabase_migration_market_suggestions.sql` (adds market_suggestions table + suggestions_enabled column)
-  9. `supabase_migration_announcements_comments.sql` ← NEW (creator_announcements, market_comments, resolution_note)
+  9. `supabase_migration_announcements_comments.sql` (creator_announcements, market_comments, resolution_note)
+  10. `supabase_migration_tweet_markets.sql` ← NEW (source_tweet_url, tweet_text, tweet_author on markets)
 - **Email notifications**: Opt-in via Railway env vars: `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
   - Fires after both manual resolve and cron settlement
   - No-op if SMTP_HOST is not set — safe to deploy without configuring
@@ -110,6 +111,18 @@
   - Member market suggestion queue (commit `e06ecc2`)
 - **Economy Phase 3** (not built):
   - Streak broken toast when user loses after a streak
+- **This session (March 15)** — committed `068b03c`, needs push:
+  - Tweet → Market feature: Tweet tab in AI Scanner modal (creator-dashboard.html)
+    - Paste tweet URL + author + text → generates 1-3 focused markets via AI
+    - Markets saved with `source_tweet_url`, `tweet_text`, `tweet_author` columns
+    - After publish: toast with clickable `/share/:marketId` link
+  - `/share/:marketId` route in server.js: public OG-friendly share page with tweet card + market odds
+  - `supabase_migration_tweet_markets.sql`: adds 3 columns to markets table ← RUN THIS
+  - **Community page tweet feed**: `renderTweetFeed()` renders tweet-sourced markets as X-style cards above announcements
+  - **Critical bug fix** in `/api/community/:slug`:
+    - Removed non-existent `resolution_outcome` column from SELECT (was silently nulling all data)
+    - Fixed `is_public` filter to `.neq('is_public', false)` (was dropping legacy NULL rows)
+    - Added tweet fields to SELECT
 
 ---
 
