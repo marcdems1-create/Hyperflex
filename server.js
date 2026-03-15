@@ -5509,7 +5509,7 @@ async function sendResolutionEmails(market, outcome, creatorSlug, resolutionNote
 app.get('/api/explore', async (req, res) => {
   try {
     // Run all queries in parallel; each returns {data, error} — never throws
-    const [tradesRes, hotRes, newMarketsRes, announcementsRes, allMarketsRes, allCreatorsRes] = await Promise.all([
+    const [tradesRes, hotRes, newMarketsRes, announcementsRes, allMarketsRes, allCreatorsRes, totalPositionsRes, totalMarketsRes, settledPositionsRes] = await Promise.all([
 
       // Recent trades
       supabase
@@ -5554,6 +5554,15 @@ app.get('/api/explore', async (req, res) => {
       supabase
         .from('creator_settings')
         .select('slug, display_name, custom_points_name, primary_color, created_at'),
+
+      // Platform stats: total positions count
+      supabase.from('positions').select('id', { count: 'exact', head: true }),
+
+      // Platform stats: total live markets count
+      supabase.from('markets').select('id', { count: 'exact', head: true }).eq('resolved', false).eq('archived', false),
+
+      // Global top predictors: settled positions for accuracy leaderboard
+      supabase.from('positions').select('user_id, amount, potential_payout, won').eq('settled', true).limit(5000),
     ]);
 
     if (hotRes.error)         console.warn('[explore] hot markets error:', hotRes.error.message);
@@ -5628,6 +5637,39 @@ app.get('/api/explore', async (req, res) => {
     const hotMarkets    = (hotRes.data || []).map(normalizeMarket);
     const newestMarkets = (newMarketsRes.data || []).map(normalizeMarket);
 
+    // ── Platform stats ──
+    const totalTrades      = totalPositionsRes.count || 0;
+    const totalLiveMarkets = totalMarketsRes.count   || 0;
+    const totalCommunities = Object.keys(communityMap).length;
+    const platform_stats   = { total_trades: totalTrades, total_live_markets: totalLiveMarkets, total_communities: totalCommunities };
+
+    // ── Global top predictors (accuracy-ranked) ──
+    const settledPos = settledPositionsRes.data || [];
+    const predMap = {};
+    for (const p of settledPos) {
+      if (!predMap[p.user_id]) predMap[p.user_id] = { wins: 0, total: 0, pnl: 0 };
+      predMap[p.user_id].total += 1;
+      if (p.won) {
+        predMap[p.user_id].wins += 1;
+        predMap[p.user_id].pnl  += Number(p.potential_payout) || 0;
+      }
+      predMap[p.user_id].pnl -= Number(p.amount) || 0;
+    }
+    const qualifiedPredictors = Object.entries(predMap)
+      .filter(([, a]) => a.total >= 5)
+      .map(([uid, a]) => ({ user_id: uid, win_rate: Math.round((a.wins / a.total) * 100), total_trades: a.total, wins: a.wins, total_pnl: Math.round(a.pnl) }))
+      .sort((a, b) => b.win_rate - a.win_rate || b.total_trades - a.total_trades)
+      .slice(0, 10);
+
+    // Enrich predictor display names
+    const predUserIds = qualifiedPredictors.map(p => p.user_id);
+    if (predUserIds.length) {
+      const { data: predUsers } = await supabase.from('users').select('id, display_name').in('id', predUserIds);
+      const predUserMap = {};
+      (predUsers || []).forEach(u => { predUserMap[u.id] = u.display_name || 'Anonymous'; });
+      qualifiedPredictors.forEach(p => { p.display_name = predUserMap[p.user_id] || 'Anonymous'; });
+    }
+
     res.json({
       trades,
       hot:           hotMarkets,
@@ -5635,6 +5677,8 @@ app.get('/api/explore', async (req, res) => {
       announcements: announcementsRes.data || [],
       communities:   communityMap,
       community_sections: { mostActive, upAndComing, ghostTown },
+      platform_stats,
+      top_predictors: qualifiedPredictors,
     });
   } catch (err) {
     console.error('[explore]', err.message);

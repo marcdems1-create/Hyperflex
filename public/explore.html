@@ -312,6 +312,116 @@ nav {
   padding: 40px;
 }
 
+/* STATS TICKER */
+.stats-ticker {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  margin-top: 28px;
+  flex-wrap: wrap;
+}
+.stat-pill {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.stat-pill-value {
+  font-family: 'Syne', sans-serif;
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--gold);
+  line-height: 1;
+  letter-spacing: -1px;
+}
+.stat-pill-label {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.stat-divider { width: 1px; height: 36px; background: var(--border); }
+
+/* CREATOR CTA STRIP */
+.creator-cta-strip {
+  background: linear-gradient(135deg, #1a1a17 0%, #1f1c12 100%);
+  border: 1px solid rgba(201,146,13,0.3);
+  border-radius: 10px;
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 28px;
+  flex-wrap: wrap;
+}
+.cta-text { font-size: 13px; color: var(--text); line-height: 1.5; }
+.cta-text strong { color: var(--gold); }
+.cta-btn {
+  background: var(--gold);
+  color: #141412;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-family: 'Space Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+  display: inline-block;
+  transition: opacity 0.15s;
+}
+.cta-btn:hover { opacity: 0.85; }
+
+/* TOP PREDICTORS */
+.predictor-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
+}
+.predictor-row:last-child { border-bottom: none; }
+.predictor-row:hover { background: rgba(255,255,255,0.02); }
+.predictor-rank { font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 800; width: 32px; text-align: center; color: var(--muted); flex-shrink: 0; }
+.predictor-rank.gold   { color: #ffd700; }
+.predictor-rank.silver { color: #c0c0c0; }
+.predictor-rank.bronze { color: #cd7f32; }
+.predictor-name { flex: 1; font-size: 13px; font-weight: 700; }
+.predictor-trades { font-size: 11px; color: var(--muted); }
+.predictor-tier {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.tier-oracle  { background: rgba(201,146,13,0.15); color: var(--gold); }
+.tier-sharp   { background: rgba(34,197,94,0.12);  color: #22c55e; }
+.tier-solid   { background: rgba(96,165,250,0.12); color: #60a5fa; }
+.predictor-wr { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 800; width: 52px; text-align: right; flex-shrink: 0; }
+.wr-oracle { color: var(--gold); }
+.wr-sharp  { color: #22c55e; }
+.wr-solid  { color: #60a5fa; }
+
+/* FEATURED SPOTLIGHT */
+.featured-card {
+  background: linear-gradient(135deg, #1d1b14 0%, #1a1a17 100%);
+  border: 1px solid rgba(201,146,13,0.4);
+  border-radius: 12px;
+  padding: 20px 24px;
+  margin-bottom: 24px;
+  text-decoration: none;
+  display: block;
+  transition: border-color 0.2s;
+}
+.featured-card:hover { border-color: var(--gold); }
+.featured-label { font-size: 10px; font-weight: 700; color: var(--gold); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 10px; }
+.featured-name { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800; color: var(--text); margin-bottom: 6px; }
+.featured-meta { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+.featured-market { font-size: 13px; color: var(--text); background: rgba(255,255,255,0.04); border-radius: 6px; padding: 10px 14px; border-left: 3px solid var(--gold); }
+
 /* refresh indicator */
 .refresh-bar {
   display: flex;
@@ -349,6 +459,22 @@ nav {
   <div class="live-dot">Live across all communities</div>
   <h1>What the crowd is<br><span>betting on right now</span></h1>
   <p>Real-time prediction markets from creators across finance, crypto, and markets.</p>
+  <div class="stats-ticker" id="statsTicker">
+    <div class="stat-pill">
+      <div class="stat-pill-value" id="statTotalTrades">—</div>
+      <div class="stat-pill-label">Predictions made</div>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-pill">
+      <div class="stat-pill-value" id="statLiveMarkets">—</div>
+      <div class="stat-pill-label">Markets live</div>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-pill">
+      <div class="stat-pill-value" id="statCommunities">—</div>
+      <div class="stat-pill-label">Communities</div>
+    </div>
+  </div>
 </div>
 
 <div style="max-width:1200px;margin:0 auto;padding:0 40px;" id="tabs-wrap">
@@ -356,12 +482,22 @@ nav {
     <button class="tab active" onclick="switchTab('live')">🔴 Live Feed</button>
     <button class="tab" onclick="switchTab('hot')">🔥 Hot Markets</button>
     <button class="tab" onclick="switchTab('new')">✨ New Markets</button>
+    <button class="tab" onclick="switchTab('predictors')">🎯 Top Predictors</button>
     <button class="tab" onclick="switchTab('communities')">🏘️ Communities</button>
   </div>
 </div>
 
 <div class="explore-layout">
   <div class="main-col">
+
+    <!-- CREATOR CTA STRIP -->
+    <div class="creator-cta-strip" id="creatorCta">
+      <div class="cta-text">
+        <strong>Run a finance community?</strong> Give your audience a prediction market with leaderboards, streaks, and bragging rights. Free to start — takes 2 minutes.
+      </div>
+      <a href="/creator/signup" class="cta-btn">Set up your community →</a>
+    </div>
+
     <div class="refresh-bar">
       <span id="last-updated">Updating...</span>
       <button onclick="loadFeed()">↻ Refresh</button>
@@ -380,6 +516,11 @@ nav {
     <!-- NEW MARKETS TAB -->
     <div class="feed-section" id="tab-new">
       <div id="new-feed"><div class="loading">Loading new markets...</div></div>
+    </div>
+
+    <!-- TOP PREDICTORS TAB -->
+    <div class="feed-section" id="tab-predictors">
+      <div id="predictors-feed"><div class="loading">Loading top predictors...</div></div>
     </div>
 
     <!-- COMMUNITIES TAB -->
@@ -510,7 +651,7 @@ function renderCommunities(communities) {
   document.getElementById('communities-list').innerHTML = html;
 }
 
-function renderCommunitySections(sections, communities) {
+function renderCommunitySections(sections, communities, topPredictors) {
   if (!sections) return;
 
   function communityCard(c, badge) {
@@ -538,7 +679,31 @@ function renderCommunitySections(sections, communities) {
       </div>`;
   }
 
+  const spotlight = renderFeaturedSpotlight(sections, communities);
+
+  // Top predictor shoutout card
+  let topPredCard = '';
+  if (topPredictors && topPredictors[0]) {
+    const tp = topPredictors[0];
+    const tierLabel = tp.win_rate >= 70 ? '🎯 ORACLE' : tp.win_rate >= 60 ? '🎯 SHARP' : '📊 SOLID';
+    topPredCard = `
+      <div style="background:var(--cream);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:24px;display:flex;align-items:center;gap:14px">
+        <div style="font-size:28px">🥇</div>
+        <div style="flex:1">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Top Global Predictor</div>
+          <div style="font-size:15px;font-weight:700;color:var(--text)">${escHtml(tp.display_name || 'Anonymous')}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">${tp.total_trades} predictions · ${tp.wins} correct</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-family:'Syne',sans-serif;font-size:24px;font-weight:800;color:var(--gold)">${tp.win_rate}%</div>
+          <div style="font-size:11px;color:var(--gold)">${tierLabel}</div>
+        </div>
+      </div>`;
+  }
+
   const html = `
+    ${spotlight}
+    ${topPredCard}
     ${section('Most Active', '🔥', sections.mostActive, 'No active communities yet')}
     ${section('Up & Coming', '🌱', sections.upAndComing, 'Nothing new yet')}
     ${section('Ghost Town', '👻', sections.ghostTown, 'All communities are jumping!')}
@@ -564,17 +729,84 @@ function renderAnnouncements(announcements, communities) {
   document.getElementById('announcements-list').innerHTML = html;
 }
 
+function renderStatsTicker(stats) {
+  if (!stats) return;
+  const fmt = n => n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K' : n.toLocaleString();
+  document.getElementById('statTotalTrades').textContent  = fmt(stats.total_trades);
+  document.getElementById('statLiveMarkets').textContent  = fmt(stats.total_live_markets);
+  document.getElementById('statCommunities').textContent  = fmt(stats.total_communities);
+}
+
+function renderTopPredictors(predictors) {
+  const el = document.getElementById('predictors-feed');
+  if (!predictors || !predictors.length) {
+    el.innerHTML = `
+      <div style="text-align:center;padding:60px 20px;color:var(--muted)">
+        <div style="font-size:32px;margin-bottom:12px">🎯</div>
+        <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px">No ranked predictors yet</div>
+        <div style="font-size:13px">Predictors need 5+ settled predictions to qualify.<br>Markets must be resolved to count.</div>
+      </div>`;
+    return;
+  }
+
+  const header = `
+    <div style="padding:16px 16px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+      <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:800">Global Top Predictors</div>
+      <div style="font-size:11px;color:var(--muted)">Min 5 predictions · Ranked by accuracy</div>
+    </div>`;
+
+  const rows = predictors.map((p, i) => {
+    const rankClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
+    const medal     = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`;
+    const tier      = p.win_rate >= 70 ? ['oracle', 'ORACLE', 'wr-oracle'] : p.win_rate >= 60 ? ['sharp', 'SHARP', 'wr-sharp'] : ['solid', 'SOLID', 'wr-solid'];
+    return `
+      <div class="predictor-row">
+        <div class="predictor-rank ${rankClass}">${medal}</div>
+        <div style="flex:1;min-width:0">
+          <div class="predictor-name">${escHtml(p.display_name || 'Anonymous')}</div>
+          <div class="predictor-trades">${p.total_trades} predictions · ${p.wins} correct</div>
+        </div>
+        <span class="predictor-tier tier-${tier[0]}">🎯 ${tier[1]}</span>
+        <div class="predictor-wr ${tier[2]}">${p.win_rate}%</div>
+      </div>`;
+  }).join('');
+
+  const note = `<div style="padding:12px 16px;font-size:11px;color:var(--muted);text-align:center;border-top:1px solid var(--border)">Accuracy ranking across all communities · All-time</div>`;
+  el.innerHTML = `<div style="background:var(--cream);border:1px solid var(--border);border-radius:12px;overflow:hidden">${header}${rows}${note}</div>`;
+}
+
+function renderFeaturedSpotlight(sections, communities) {
+  const top = sections?.mostActive?.[0];
+  if (!top) return '';
+  const c = communities[top.slug] || top;
+  const color = c.primary_color || '#c9920d';
+  const traders = (top.total_traders || 0).toLocaleString();
+  const markets = top.market_count || 0;
+  return `
+    <a href="/${top.slug}" class="featured-card" style="border-color:${color}44" onmouseover="this.style.borderColor='${color}'" onmouseout="this.style.borderColor='${color}44'">
+      <div class="featured-label" style="color:${color}">🔥 Most Active Community</div>
+      <div class="featured-name" style="color:${color}">${c.display_name || top.slug}</div>
+      <div class="featured-meta">${traders} total trades · ${markets} open markets</div>
+      <div class="featured-market" style="border-left-color:${color}">Visit community →</div>
+    </a>`;
+}
+
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
 async function loadFeed() {
   try {
     const res = await fetch('/api/explore');
+    if (!res.ok) { console.error('explore API', res.status); return; }
     const data = await res.json();
     feedData = data;
 
+    renderStatsTicker(data.platform_stats);
     renderTrades(data.trades || [], data.communities || {});
     renderMarkets(data.hot || [], data.communities || {}, 'hot-feed');
     renderMarkets(data.newest || [], data.communities || {}, 'new-feed');
+    renderTopPredictors(data.top_predictors || []);
     renderCommunities(data.communities || {});
-    renderCommunitySections(data.community_sections, data.communities || {});
+    renderCommunitySections(data.community_sections, data.communities || {}, data.top_predictors);
     renderAnnouncements(data.announcements || [], data.communities || {});
 
     document.getElementById('last-updated').textContent = `Updated ${new Date().toLocaleTimeString()}`;
