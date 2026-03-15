@@ -507,6 +507,27 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
 }
 .filter-tab.active .filter-count { background: rgba(0,0,0,0.25); }
 
+/* ── VIEW TABS (Markets / From the Feed) ── */
+.view-tab {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 8px 18px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.view-tab:hover { border-color: rgba(201,146,13,0.4); color: var(--text); }
+.view-tab.active {
+  background: rgba(201,146,13,0.1);
+  border-color: rgba(201,146,13,0.5);
+  color: var(--gold);
+}
+
 /* ── SECTION LABEL ── */
 .section-label {
   font-family: var(--mono);
@@ -573,7 +594,7 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
   background: rgba(201,146,13,0.35);
   transition: opacity 0.2s;
 }
-.market-card[data-category="finance"]::before     { background: linear-gradient(90deg, #2d9b5f, #4ade80); }
+.market-card[data-category="finance"]::before     { background: linear-gradient(90deg, #0369a1, #38bdf8); }
 .market-card[data-category="crypto"]::before      { background: linear-gradient(90deg, #fb923c, #fbbf24); }
 .market-card[data-category="sports"]::before      { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
 .market-card[data-category="politics"]::before    { background: linear-gradient(90deg, #8b5cf6, #a78bfa); }
@@ -630,7 +651,7 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
 .cat-pill.culture    { background: rgba(244,114,182,0.15); color: #f472b6; }
 .cat-pill.gaming     { background: rgba(52,211,153,0.15);  color: #34d399; }
 .cat-pill.esports    { background: rgba(52,211,153,0.15);  color: #34d399; }
-.cat-pill.finance    { background: rgba(45,155,95,0.15);   color: var(--green); }
+.cat-pill.finance    { background: rgba(14,165,233,0.15);  color: #38bdf8; }
 .cat-pill.tech       { background: rgba(99,102,241,0.15);  color: #818cf8; }
 .cat-pill.music      { background: rgba(236,72,153,0.15);  color: #ec4899; }
 .cat-pill.news       { background: rgba(156,163,175,0.15); color: #9ca3af; }
@@ -719,10 +740,10 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
-.odds-side.yes-side .odds-pct  { color: var(--green); }
-.odds-side.yes-side .odds-side-label { color: var(--green); opacity: 0.7; }
-.odds-side.no-side  .odds-pct  { color: var(--red); }
-.odds-side.no-side  .odds-side-label  { color: var(--red); opacity: 0.7; }
+.odds-side.yes-side .odds-pct  { color: var(--text); }
+.odds-side.yes-side .odds-side-label { color: var(--green); opacity: 0.85; }
+.odds-side.no-side  .odds-pct  { color: var(--text); }
+.odds-side.no-side  .odds-side-label  { color: var(--red); opacity: 0.85; }
 .odds-bar-col { flex: 1; }
 .prob-bar {
   height: 10px;
@@ -749,41 +770,48 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
 
 /* Predict buttons */
 .market-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 12px;
   border-top: 1px solid rgba(255,255,255,0.05);
-  margin-top: 0;
 }
 .btn-predict {
-  padding: 13px 10px;
+  flex: 1;
+  padding: 8px 10px;
   font-family: var(--mono);
-  font-size: 12px;
-  font-weight: 800;
+  font-size: 11px;
+  font-weight: 700;
   cursor: pointer;
-  border: none;
-  transition: background 0.15s, color 0.15s;
+  border-radius: 8px;
+  transition: background 0.15s, border-color 0.15s;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  letter-spacing: 0.06em;
+  gap: 5px;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
 }
-.market-card.featured .btn-predict { padding: 15px 10px; font-size: 13px; }
 .btn-predict:disabled { cursor: default; opacity: 0.3; }
 .btn-predict.yes {
-  background: rgba(34,197,94,0.1);
-  color: #22c55e;
-  border-right: 1px solid rgba(255,255,255,0.05);
+  background: rgba(34,197,94,0.08);
+  color: #4ade80;
+  border: 1px solid rgba(34,197,94,0.28);
 }
 .btn-predict.yes:not(:disabled):hover {
-  background: rgba(34,197,94,0.2);
-  color: #4ade80;
+  background: rgba(34,197,94,0.16);
+  border-color: rgba(34,197,94,0.5);
 }
-.btn-predict.no  { background: rgba(239,68,68,0.09); color: #f87171; }
-.btn-predict.no:not(:disabled):hover  { background: rgba(239,68,68,0.18); color: #fca5a5; }
-.btn-price { opacity: 0.6; font-size: 10px; font-weight: 600; }
+.btn-predict.no {
+  background: rgba(239,68,68,0.07);
+  color: #fca5a5;
+  border: 1px solid rgba(239,68,68,0.25);
+}
+.btn-predict.no:not(:disabled):hover {
+  background: rgba(239,68,68,0.15);
+  border-color: rgba(239,68,68,0.45);
+}
+.btn-price { opacity: 0.55; font-size: 10px; font-weight: 600; }
 
 /* Resolved outcome */
 .outcome-banner {
@@ -1335,18 +1363,23 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
     <div class="reward-hint-pct" id="rewardHintPct">0%</div>
   </div>
 
-  <!-- Filter tabs -->
-  <div class="filter-row" id="filterRow" style="display:none">
-    <button class="filter-tab active" id="ftAll"   onclick="setFilter('all')">All <span class="filter-count" id="fcAll">0</span></button>
-    <button class="filter-tab"        id="ftHot"   onclick="setFilter('hot')">🔥 Hot <span class="filter-count" id="fcHot">0</span></button>
-    <button class="filter-tab"        id="ftSoon"  onclick="setFilter('soon')">⏰ Closing Soon <span class="filter-count" id="fcSoon">0</span></button>
-    <button class="filter-tab"        id="ftMine"  onclick="setFilter('mine')" style="display:none">✓ My Bets <span class="filter-count" id="fcMine">0</span></button>
+  <!-- Top-level view tabs: Markets / From the Feed -->
+  <div id="viewTabRow" style="display:none;gap:6px;margin-bottom:14px">
+    <button id="vtMarkets" class="view-tab active" onclick="setViewTab('markets')">📊 Markets</button>
+    <button id="vtFeed"    class="view-tab"        onclick="setViewTab('feed')" style="display:none">𝕏 From the Feed <span id="vtFeedCount" style="font-family:var(--mono);font-size:10px;opacity:0.7;margin-left:4px"></span></button>
   </div>
 
-  <!-- Tweet Feed (shown when markets have tweet_text) -->
-  <div id="tweetFeedSection" class="tweet-feed-section" style="display:none"></div>
+  <!-- Markets panel -->
+  <div id="marketsPanel">
+    <!-- Filter tabs -->
+    <div class="filter-row" id="filterRow" style="display:none">
+      <button class="filter-tab active" id="ftAll"   onclick="setFilter('all')">All <span class="filter-count" id="fcAll">0</span></button>
+      <button class="filter-tab"        id="ftHot"   onclick="setFilter('hot')">🔥 Hot <span class="filter-count" id="fcHot">0</span></button>
+      <button class="filter-tab"        id="ftSoon"  onclick="setFilter('soon')">⏰ Closing Soon <span class="filter-count" id="fcSoon">0</span></button>
+      <button class="filter-tab"        id="ftMine"  onclick="setFilter('mine')" style="display:none">✓ My Bets <span class="filter-count" id="fcMine">0</span></button>
+    </div>
 
-  <!-- Creator Announcements -->
+    <!-- Creator Announcements -->
   <div id="announcementsSection" style="display:none;margin-bottom:16px"></div>
 
   <!-- Suggest a Market button -->
@@ -1401,6 +1434,13 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
       Past Results <span id="resolvedToggle" style="font-size:10px;margin-left:4px">▶ show</span>
     </div>
     <div id="resolvedGrid" style="display:none;grid-template-columns:1fr 1fr;gap:12px"></div>
+  </div>
+
+  </div><!-- /marketsPanel -->
+
+  <!-- From the Feed panel -->
+  <div id="feedPanel" style="display:none">
+    <div id="tweetFeedSection"></div>
   </div>
 
   <!-- Leaderboard -->
@@ -2917,45 +2957,70 @@ async function postComment(marketId) {
   } catch { showToast('Network error.', 'error'); }
 }
 
+// ── VIEW TAB SWITCHER ───────────────────────────────────────────
+function setViewTab(tab) {
+  const marketsPanel = document.getElementById('marketsPanel');
+  const feedPanel    = document.getElementById('feedPanel');
+  const vtMarkets    = document.getElementById('vtMarkets');
+  const vtFeed       = document.getElementById('vtFeed');
+  if (tab === 'feed') {
+    marketsPanel && (marketsPanel.style.display = 'none');
+    feedPanel    && (feedPanel.style.display    = 'block');
+    vtMarkets?.classList.remove('active');
+    vtFeed?.classList.add('active');
+  } else {
+    marketsPanel && (marketsPanel.style.display = 'block');
+    feedPanel    && (feedPanel.style.display    = 'none');
+    vtFeed?.classList.remove('active');
+    vtMarkets?.classList.add('active');
+  }
+}
+
 // ── TWEET FEED ─────────────────────────────────────────────────
 function renderTweetFeed(markets) {
   const sec = document.getElementById('tweetFeedSection');
-  if (!sec) return;
+  const vtFeed = document.getElementById('vtFeed');
+  const viewTabRow = document.getElementById('viewTabRow');
   const tweetMarkets = (markets || []).filter(m => m.tweet_text && !m.resolved);
-  if (!tweetMarkets.length) { sec.style.display = 'none'; return; }
-  sec.style.display = 'block';
-  sec.innerHTML = `
-    <div class="tweet-feed-section">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
-        <span style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)">From the Feed</span>
-        <div style="flex:1;height:1px;background:var(--border)"></div>
+
+  // Show/hide the "From the Feed" tab button
+  if (vtFeed) {
+    if (tweetMarkets.length) {
+      vtFeed.style.display = 'inline-flex';
+      const cntEl = document.getElementById('vtFeedCount');
+      if (cntEl) cntEl.textContent = tweetMarkets.length;
+    } else {
+      vtFeed.style.display = 'none';
+    }
+  }
+  if (viewTabRow && tweetMarkets.length) viewTabRow.style.display = 'flex';
+
+  if (!sec || !tweetMarkets.length) return;
+
+  sec.innerHTML = tweetMarkets.map(m => {
+    const handle  = m.tweet_author ? (m.tweet_author.startsWith('@') ? m.tweet_author : '@' + m.tweet_author) : '@creator';
+    const yesOdds = m.yes_price != null ? Math.round(m.yes_price * 100) : 50;
+    const noOdds  = 100 - yesOdds;
+    return `<div class="tweet-card">
+      <div class="tweet-avatar">𝕏</div>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text)">${escHtml(handle)}</span>
+          ${m.source_tweet_url ? `<a href="${escHtml(m.source_tweet_url)}" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#1d9bf0;background:rgba(29,155,240,0.1);border:1px solid rgba(29,155,240,0.2);padding:2px 7px;border-radius:3px;text-decoration:none">𝕏 View post ↗</a>` : ''}
+        </div>
+        <div style="font-size:14px;color:var(--text);line-height:1.6;margin-bottom:14px;word-break:break-word">${escHtml(m.tweet_text)}</div>
+        <button class="tweet-market-link" onclick="openMarket('${m.id}')">
+          <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600">${escHtml(m.question)}</span>
+          <span style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+            <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#4ade80">YES ${yesOdds}%</span>
+            <span style="font-family:var(--mono);font-size:10px;color:var(--dim)">·</span>
+            <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#fca5a5">NO ${noOdds}%</span>
+            <span style="font-size:11px;color:var(--gold)">Predict →</span>
+          </span>
+        </button>
       </div>
-      ${tweetMarkets.map(m => {
-        const handle = m.tweet_author ? (m.tweet_author.startsWith('@') ? m.tweet_author : '@' + m.tweet_author) : '@creator';
-        const yesOdds = m.yes_price != null ? Math.round(m.yes_price * 100) : 50;
-        const noOdds  = 100 - yesOdds;
-        return `<div class="tweet-card">
-          <div class="tweet-avatar">𝕏</div>
-          <div style="flex:1;min-width:0">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-              <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--text)">${escHtml(handle)}</span>
-              <span style="font-family:var(--mono);font-size:10px;color:var(--dim)">·</span>
-              <span style="font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#1d9bf0;background:rgba(29,155,240,0.1);border:1px solid rgba(29,155,240,0.2);padding:2px 7px;border-radius:3px">𝕏 Post</span>
-            </div>
-            <div style="font-size:14px;color:var(--text);line-height:1.55;margin-bottom:12px;word-break:break-word">${escHtml(m.tweet_text)}</div>
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-              <button class="tweet-market-link" onclick="openMarket('${m.id}')">
-                <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(m.question)}</span>
-                <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#22c55e;white-space:nowrap">YES ${yesOdds}%</span>
-                <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#f87171;white-space:nowrap">NO ${noOdds}%</span>
-                <span style="font-size:12px">→</span>
-              </button>
-              ${m.source_tweet_url ? `<a href="${escHtml(m.source_tweet_url)}" target="_blank" rel="noopener" class="tweet-source-link">View post ↗</a>` : ''}
-            </div>
-          </div>
-        </div>`;
-      }).join('')}
     </div>`;
+  }).join('');
 }
 
 // ── ANNOUNCEMENTS ─────────────────────────────────────────────
