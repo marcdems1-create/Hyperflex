@@ -4027,8 +4027,18 @@ app.get('/api/community/:slug', async (req, res) => {
         .eq('creator_slug', slug)
         .order('pinned', { ascending: false })
         .order('created_at', { ascending: false })
-        .limit(5)
-        .then(r => r.data || [])
+        .limit(20)
+        .then(r => {
+          const rows = r.data || [];
+          // Deduplicate by title — keep the first occurrence (most recent)
+          const seen = new Set();
+          return rows.filter(a => {
+            const key = a.title.trim().toLowerCase();
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          }).slice(0, 5);
+        })
     });
 
   } catch (err) {
