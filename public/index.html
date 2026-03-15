@@ -668,6 +668,175 @@ section { position: relative; z-index: 1; }
 .btn-p.platinum { background: linear-gradient(135deg, #ffe57a, var(--gold-bright), var(--gold)); color: var(--ink); box-shadow: 0 2px 20px rgba(201,146,13,0.35); font-weight: 800; letter-spacing: 0.04em; }
 .btn-p.platinum:hover { filter: brightness(1.1); transform: translateY(-2px); box-shadow: 0 6px 28px rgba(201,146,13,0.5); }
 
+/* ── EXPLORE PILL ── */
+.explore-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(201,146,13,0.08);
+  border: 1px solid rgba(201,146,13,0.3);
+  color: var(--gold);
+  font-size: 12px;
+  font-family: var(--mono);
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 100px;
+  text-decoration: none;
+  letter-spacing: 0.04em;
+  transition: background 0.2s, border-color 0.2s;
+  margin-bottom: 20px;
+}
+.explore-pill:hover { background: rgba(201,146,13,0.15); border-color: rgba(201,146,13,0.6); }
+.explore-pill-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--gold);
+  animation: pulse 1.5s infinite;
+}
+
+/* ── INFLUENCER BATTLES ── */
+.battles-section {
+  padding: 80px 40px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+.battles-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+  margin-top: 40px;
+}
+@media (max-width: 720px) { .battles-grid { grid-template-columns: 1fr; } }
+.battle-card {
+  background: #161614;
+  border: 1px solid #2a2a27;
+  border-radius: 14px;
+  overflow: hidden;
+  transition: border-color 0.2s, transform 0.2s;
+}
+.battle-card:hover { border-color: #444; transform: translateY(-2px); }
+.battle-header {
+  display: flex;
+  align-items: stretch;
+  min-height: 80px;
+}
+.battle-side {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 12px;
+  gap: 4px;
+}
+.battle-side-a { background: rgba(201,146,13,0.07); border-right: 1px solid #2a2a27; }
+.battle-side-b { background: rgba(96,165,250,0.07); }
+.battle-handle { font-family: var(--mono); font-size: 11px; color: var(--dim); }
+.battle-name { font-family: var(--display); font-size: 16px; font-weight: 800; color: var(--text); text-align: center; line-height: 1.2; }
+.battle-vs {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  font-family: var(--display);
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--dim);
+  flex-shrink: 0;
+}
+.battle-body { padding: 14px 18px 16px; }
+.battle-question { font-size: 13px; color: var(--text); line-height: 1.45; margin-bottom: 12px; font-family: var(--mono); }
+.battle-bar { height: 4px; background: #2a2a27; border-radius: 2px; overflow: hidden; margin-bottom: 8px; }
+.battle-bar-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, var(--gold), #e6a50f); transition: width 0.4s; }
+.battle-odds { display: flex; justify-content: space-between; font-size: 11px; font-family: var(--mono); margin-bottom: 14px; }
+.battle-odds .yes { color: #22c55e; font-weight: 700; }
+.battle-odds .no  { color: #ef4444; font-weight: 700; }
+.pick-side-btn {
+  display: block;
+  width: 100%;
+  text-align: center;
+  background: var(--gold);
+  color: #141412;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 9px 0;
+  border-radius: 6px;
+  text-decoration: none;
+  letter-spacing: 0.05em;
+  transition: opacity 0.15s;
+}
+.pick-side-btn:hover { opacity: 0.85; }
+
+/* ── TRENDING MARKETS ── */
+.trending-section {
+  padding: 80px 40px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+.trending-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 40px;
+}
+@media (max-width: 900px) { .trending-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .trending-grid { grid-template-columns: 1fr; } }
+.trending-card {
+  background: #161614;
+  border: 1px solid #2a2a27;
+  border-radius: 12px;
+  padding: 16px 18px;
+  text-decoration: none;
+  color: var(--text);
+  display: block;
+  transition: border-color 0.2s, transform 0.15s;
+}
+.trending-card:hover { transform: translateY(-2px); }
+.trending-community { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px; display: inline-block; margin-bottom: 10px; }
+.trending-question { font-family: var(--mono); font-size: 12px; line-height: 1.5; margin-bottom: 12px; color: var(--text); }
+.trending-bar { height: 3px; background: #2a2a27; border-radius: 2px; overflow: hidden; margin-bottom: 6px; }
+.trending-traders { font-size: 10px; color: var(--dim); margin-top: 6px; }
+
+/* ── ACCURACY LEADERBOARD ── */
+.accuracy-section {
+  padding: 80px 40px;
+  max-width: 720px;
+  margin: 0 auto;
+}
+.accuracy-board {
+  background: #161614;
+  border: 1px solid #2a2a27;
+  border-radius: 14px;
+  overflow: hidden;
+  margin-top: 40px;
+}
+.accuracy-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px;
+  border-bottom: 1px solid #1e1e1c;
+  transition: background 0.15s;
+}
+.accuracy-row:last-child { border-bottom: none; }
+.accuracy-row:hover { background: rgba(255,255,255,0.02); }
+.acc-rank { font-family: var(--display); font-size: 18px; font-weight: 800; width: 36px; text-align: center; flex-shrink: 0; }
+.acc-rank.g { color: #ffd700; }
+.acc-rank.s { color: #c0c0c0; }
+.acc-rank.b { color: #cd7f32; }
+.acc-name { flex: 1; font-size: 13px; font-weight: 700; }
+.acc-trades { font-size: 11px; color: var(--dim); }
+.acc-tier { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 4px; flex-shrink: 0; }
+.acc-tier.oracle { background: rgba(201,146,13,0.15); color: var(--gold); }
+.acc-tier.sharp  { background: rgba(34,197,94,0.12);  color: #22c55e; }
+.acc-tier.solid  { background: rgba(96,165,250,0.12); color: #60a5fa; }
+.acc-wr { font-family: var(--display); font-size: 20px; font-weight: 800; width: 56px; text-align: right; flex-shrink: 0; }
+.acc-wr.oracle { color: var(--gold); }
+.acc-wr.sharp  { color: #22c55e; }
+.acc-wr.solid  { color: #60a5fa; }
+.accuracy-empty { padding: 48px; text-align: center; color: var(--dim); font-size: 13px; font-family: var(--mono); }
+.accuracy-footer { padding: 14px 20px; text-align: center; border-top: 1px solid #2a2a27; }
+
 /* ── VIDEO ── */
 .video-section {
   padding: 80px 40px 100px;
@@ -912,6 +1081,10 @@ footer {
 
 <!-- HERO -->
 <section class="hero">
+  <a href="/explore" class="explore-pill">
+    <span class="explore-pill-dot"></span>
+    Live predictions happening now — explore →
+  </a>
   <div class="hero-eyebrow">
     <span class="eyebrow-dot"></span>
     Now in early access
@@ -1306,6 +1479,202 @@ footer {
   } catch(e) {
     document.getElementById('homepage-feed').innerHTML = '<div style="text-align:center;color:#888880;font-size:13px;padding:20px;font-family:monospace;">Could not load live feed.</div>';
   }
+})();
+</script>
+
+<!-- ⚔️ INFLUENCER BATTLES -->
+<section style="padding:80px 0;background:#0f0f0d;">
+  <div class="battles-section" style="padding:0 40px;">
+    <div style="text-align:center;">
+      <div class="section-eyebrow">Community vs Community</div>
+      <h2 class="section-title">⚔️ Influencer Battles</h2>
+      <p style="color:var(--dim);font-size:15px;max-width:520px;margin:0 auto 0;line-height:1.65;">Whose community calls the market better? Pick a side and put your Flex Points where your mouth is.</p>
+    </div>
+    <div class="battles-grid">
+
+      <!-- Battle 1 -->
+      <div class="battle-card">
+        <div class="battle-header">
+          <div class="battle-side battle-side-a">
+            <div class="battle-handle">@APompliano</div>
+            <div class="battle-name">Pomp</div>
+          </div>
+          <div class="battle-vs">VS</div>
+          <div class="battle-side battle-side-b">
+            <div class="battle-handle">@MoonCarl</div>
+            <div class="battle-name">Moon Carl</div>
+          </div>
+        </div>
+        <div class="battle-body">
+          <div class="battle-question">Will Bitcoin hit $150K before Ethereum hits $10K?</div>
+          <div class="battle-bar"><div class="battle-bar-fill" style="width:62%"></div></div>
+          <div class="battle-odds"><span class="yes">YES 62%</span><span class="no">NO 38%</span></div>
+          <a href="/explore" class="pick-side-btn">⚔️ PICK A SIDE</a>
+        </div>
+      </div>
+
+      <!-- Battle 2 -->
+      <div class="battle-card">
+        <div class="battle-header">
+          <div class="battle-side battle-side-a">
+            <div class="battle-handle">@CryptoRover</div>
+            <div class="battle-name">Crypto Rover</div>
+          </div>
+          <div class="battle-vs">VS</div>
+          <div class="battle-side battle-side-b">
+            <div class="battle-handle">@AshCrypto</div>
+            <div class="battle-name">Ash Crypto</div>
+          </div>
+        </div>
+        <div class="battle-body">
+          <div class="battle-question">Will Solana flip Ethereum in market cap by end of 2025?</div>
+          <div class="battle-bar"><div class="battle-bar-fill" style="width:34%"></div></div>
+          <div class="battle-odds"><span class="yes">YES 34%</span><span class="no">NO 66%</span></div>
+          <a href="/explore" class="pick-side-btn">⚔️ PICK A SIDE</a>
+        </div>
+      </div>
+
+      <!-- Battle 3 -->
+      <div class="battle-card">
+        <div class="battle-header">
+          <div class="battle-side battle-side-a">
+            <div class="battle-handle">@tradermayne</div>
+            <div class="battle-name">Trader Mayne</div>
+          </div>
+          <div class="battle-vs">VS</div>
+          <div class="battle-side battle-side-b">
+            <div class="battle-handle">@TheMarket</div>
+            <div class="battle-name">The Market</div>
+          </div>
+        </div>
+        <div class="battle-body">
+          <div class="battle-question">Will NVDA close above $200 before the next Fed meeting?</div>
+          <div class="battle-bar"><div class="battle-bar-fill" style="width:55%"></div></div>
+          <div class="battle-odds"><span class="yes">YES 55%</span><span class="no">NO 45%</span></div>
+          <a href="/explore" class="pick-side-btn">⚔️ PICK A SIDE</a>
+        </div>
+      </div>
+
+      <!-- Battle 4 -->
+      <div class="battle-card">
+        <div class="battle-header">
+          <div class="battle-side battle-side-a">
+            <div class="battle-handle">r/wallstreetbets</div>
+            <div class="battle-name">WSB</div>
+          </div>
+          <div class="battle-vs">VS</div>
+          <div class="battle-side battle-side-b">
+            <div class="battle-handle">CT</div>
+            <div class="battle-name">Crypto Twitter</div>
+          </div>
+        </div>
+        <div class="battle-body">
+          <div class="battle-question">Who calls the next 2× altcoin first — WSB or Crypto Twitter?</div>
+          <div class="battle-bar"><div class="battle-bar-fill" style="width:48%"></div></div>
+          <div class="battle-odds"><span class="yes">WSB 48%</span><span class="no">CT 52%</span></div>
+          <a href="/explore" class="pick-side-btn">⚔️ PICK A SIDE</a>
+        </div>
+      </div>
+
+    </div>
+    <div style="text-align:center;margin-top:32px;">
+      <a href="/creator/signup" style="font-family:var(--mono);font-size:13px;color:var(--dim);text-decoration:underline;">Run a community? Start your own battle →</a>
+    </div>
+  </div>
+</section>
+
+<!-- 🔥 TRENDING MARKETS -->
+<section style="padding:80px 0;">
+  <div class="trending-section" style="padding:0 40px;">
+    <div style="text-align:center;">
+      <div class="section-eyebrow">Live odds</div>
+      <h2 class="section-title">🔥 Trending Markets</h2>
+      <p style="color:var(--dim);font-size:15px;max-width:520px;margin:0 auto 0;line-height:1.65;">The markets with the most action right now. Odds move in real time as the crowd bets.</p>
+    </div>
+    <div class="trending-grid" id="trending-grid">
+      <div style="grid-column:1/-1;text-align:center;color:var(--dim);font-size:13px;padding:40px;font-family:var(--mono);">Loading trending markets...</div>
+    </div>
+    <div style="text-align:center;margin-top:32px;">
+      <a href="/explore" class="btn-primary" style="font-size:14px;padding:12px 28px;">See all markets on Explore →</a>
+    </div>
+  </div>
+</section>
+
+<!-- 🏆 ACCURACY LEADERBOARD -->
+<section style="padding:80px 0;background:#0f0f0d;">
+  <div class="accuracy-section" style="padding:0 40px;">
+    <div style="text-align:center;">
+      <div class="section-eyebrow">Global rankings</div>
+      <h2 class="section-title">🏆 Most Often Right</h2>
+      <p style="color:var(--dim);font-size:15px;max-width:520px;margin:0 auto 0;line-height:1.65;">Across every community on HYPERFLEX — ranked by prediction accuracy. Who's actually sharp?</p>
+    </div>
+    <div class="accuracy-board" id="accuracy-board">
+      <div class="accuracy-empty">Loading top predictors...</div>
+    </div>
+    <div style="text-align:center;margin-top:32px;">
+      <a href="/explore?tab=predictors" class="btn-ghost" style="font-size:14px;padding:12px 28px;">Full leaderboard on Explore →</a>
+    </div>
+  </div>
+</section>
+
+<script>
+(async function loadViralSections() {
+  try {
+    const res = await fetch('/api/explore');
+    if (!res.ok) return;
+    const data = await res.json();
+    const communities = data.communities || {};
+
+    // ── Trending Markets (6 hottest) ──
+    const markets = (data.hot || []).slice(0, 6);
+    const tGrid = document.getElementById('trending-grid');
+    if (markets.length) {
+      tGrid.innerHTML = markets.map(m => {
+        const color = communities[m.creator_slug]?.primary_color || '#c9920d';
+        const cname = communities[m.creator_slug]?.display_name || m.creator_slug || 'HYPERFLEX';
+        const yes = Math.round((m.yes_price || 0.5) * 100);
+        const no  = 100 - yes;
+        const yColor = yes > 50 ? '#22c55e' : '#ef4444';
+        return `
+          <a href="/${m.creator_slug || 'explore'}" class="trending-card" style="border-color:#2a2a27" onmouseover="this.style.borderColor='${color}'" onmouseout="this.style.borderColor='#2a2a27'">
+            <div class="trending-community" style="background:${color};color:#141412">${cname}</div>
+            <div class="trending-question">${m.question.length > 72 ? m.question.slice(0,72)+'…' : m.question}</div>
+            <div class="trending-bar"><div style="height:100%;width:${yes}%;background:${yColor};border-radius:2px;"></div></div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;font-family:var(--mono);margin-top:6px;">
+              <span style="color:#22c55e;font-weight:700;">YES ${yes}%</span>
+              <span style="color:#ef4444;font-weight:700;">NO ${no}%</span>
+            </div>
+            <div class="trending-traders">${(m.trader_count||0).toLocaleString()} traders</div>
+          </a>`;
+      }).join('');
+    } else {
+      tGrid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--dim);font-size:13px;padding:40px;font-family:var(--mono);">Markets loading — <a href="/explore" style="color:var(--gold)">check explore</a></div>';
+    }
+
+    // ── Accuracy Leaderboard (top 5) ──
+    const predictors = (data.top_predictors || []).slice(0, 5);
+    const board = document.getElementById('accuracy-board');
+    if (predictors.length) {
+      const medals = ['🥇','🥈','🥉','#4','#5'];
+      const rankClass = ['g','s','b','',''];
+      board.innerHTML = predictors.map((p, i) => {
+        const tier = p.win_rate >= 70 ? ['oracle','🎯 ORACLE'] : p.win_rate >= 60 ? ['sharp','🎯 SHARP'] : ['solid','📊 SOLID'];
+        return `
+          <div class="accuracy-row">
+            <div class="acc-rank ${rankClass[i]}">${medals[i]}</div>
+            <div style="flex:1;min-width:0">
+              <div class="acc-name">${(p.display_name||'Anonymous').replace(/</g,'&lt;')}</div>
+              <div class="acc-trades">${p.total_trades} predictions · ${p.wins} correct</div>
+            </div>
+            <span class="acc-tier ${tier[0]}">${tier[1]}</span>
+            <div class="acc-wr ${tier[0]}">${p.win_rate}%</div>
+          </div>`;
+      }).join('');
+      board.innerHTML += `<div class="accuracy-footer"><a href="/explore" style="font-family:var(--mono);font-size:12px;color:var(--dim);">View full leaderboard on Explore →</a></div>`;
+    } else {
+      board.innerHTML = '<div class="accuracy-empty">🎯 First markets resolving soon — leaderboard populates automatically</div>';
+    }
+  } catch(e) {}
 })();
 </script>
 

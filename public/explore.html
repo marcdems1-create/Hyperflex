@@ -817,6 +817,16 @@ async function loadFeed() {
 }
 
 // Initial load + auto-refresh every 30 seconds
+// Deep-link tab support: /explore?tab=predictors
+const urlTab = new URLSearchParams(window.location.search).get('tab');
+if (urlTab && document.getElementById('tab-' + urlTab)) {
+  activeTab = urlTab;
+  document.querySelectorAll('.feed-section').forEach(s => s.classList.remove('active'));
+  document.getElementById('tab-' + urlTab).classList.add('active');
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => { if (t.getAttribute('onclick')?.includes("'" + urlTab + "'")) t.classList.add('active'); });
+}
+
 loadFeed();
 refreshInterval = setInterval(loadFeed, 30000);
 </script>
