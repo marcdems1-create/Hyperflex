@@ -793,46 +793,58 @@ app.get('/positions/:user_id', async (req, res) => {
   res.json(data);
 });
 
-// Leaderboard: top 20 by PnL (join users + positions, settled only). If tenant subdomain, filter to that creator's markets.
+// Leaderboard: top 20 by PnL (settled) or by trades placed (fallback when no markets resolved yet).
+// Accepts ?slug= (community page) or falls back to subdomain for custom domain routing.
 app.get('/api/leaderboard', async (req, res) => {
   try {
     const period = req.query.period; // 'week' | undefined (all-time)
-    let positions;
-    let leaderboardMarketIds = null;
-    const subdomain = req.tenant?.subdomain;
+    // Accept slug param from community page; fall back to subdomain for custom domains
+    const communitySlug = req.query.slug || req.tenant?.subdomain || null;
 
     // For weekly: only positions settled this week (Mon 00:00 UTC)
     const weekStart = period === 'week' ? getWeekStart() : null;
 
-    if (subdomain) {
+    let leaderboardMarketIds = null;
+
+    if (communitySlug) {
+      // tenant_slug is the correct column — creator_slug does not exist on markets table
       const { data: tenantMarkets } = await supabase
         .from('markets')
         .select('id')
-        .eq('creator_slug', subdomain);
+        .eq('tenant_slug', communitySlug);
       leaderboardMarketIds = (tenantMarkets || []).map((m) => m.id);
       if (leaderboardMarketIds.length === 0) return res.json([]);
-      let q = supabase
-        .from('positions')
-        .select('user_id, amount, potential_payout, settled, won')
-        .eq('settled', true)
-        .in('market_id', leaderboardMarketIds);
-      if (weekStart) q = q.gte('created_at', weekStart);
-      const { data: pos } = await q;
-      positions = pos;
-    } else {
+    }
+
+    // ── Settled positions (primary ranking: PnL) ──
+    let settledPositions = [];
+    {
       let q = supabase
         .from('positions')
         .select('user_id, amount, potential_payout, settled, won, market_id')
         .eq('settled', true);
+      if (leaderboardMarketIds) q = q.in('market_id', leaderboardMarketIds);
       if (weekStart) q = q.gte('created_at', weekStart);
       const { data: pos } = await q;
-      positions = pos;
-      leaderboardMarketIds = [...new Set((pos || []).map(p => p.market_id))];
+      settledPositions = pos || [];
     }
 
-    if (!positions || positions.length === 0) {
-      return res.json([]);
+    // ── Fallback: all positions (for "most active" when nothing is settled yet) ──
+    let allPositions = [];
+    if (settledPositions.length === 0) {
+      let q = supabase
+        .from('positions')
+        .select('user_id, amount, market_id')
+      if (leaderboardMarketIds) q = q.in('market_id', leaderboardMarketIds);
+      if (weekStart) q = q.gte('created_at', weekStart);
+      const { data: pos } = await q;
+      allPositions = pos || [];
     }
+
+    const positions = settledPositions.length > 0 ? settledPositions : allPositions;
+    const isFallback = settledPositions.length === 0;
+
+    if (!positions || positions.length === 0) return res.json([]);
 
     const userIds = [...new Set(positions.map((p) => p.user_id))];
     const { data: users } = await supabase
@@ -849,44 +861,37 @@ app.get('/api/leaderboard', async (req, res) => {
       }
       const a = agg.get(p.user_id);
       a.total_trades += 1;
-      if (p.won) {
+      if (!isFallback && p.won) {
         a.wins += 1;
         a.total_pnl += Number(p.potential_payout) || 0;
       }
-      a.total_pnl -= Number(p.amount) || 0;
+      if (!isFallback) a.total_pnl -= Number(p.amount) || 0;
     }
 
-    // Streaks only meaningful for all-time view
-    const streakMap = period === 'week' ? {} : await getStreakMap(userIds, leaderboardMarketIds);
+    // Streaks only meaningful for all-time settled view
+    const mktIds = leaderboardMarketIds || [...new Set(positions.map(p => p.market_id))];
+    const streakMap = (period === 'week' || isFallback) ? {} : await getStreakMap(userIds, mktIds);
 
     const rows = [];
     for (const [userId, a] of agg) {
       const u = userMap.get(userId);
       rows.push({
-        user_id: userId,
-        username: (u?.display_name || u?.email || 'Unknown').trim() || 'Unknown',
+        user_id:      userId,
+        username:     (u?.display_name || u?.email || 'Unknown').trim() || 'Unknown',
         display_name: (u?.display_name || u?.email || 'Unknown').trim() || 'Unknown',
-        total_pnl: Math.round(a.total_pnl * 100) / 100,
-        win_rate: a.total_trades > 0 ? Math.round((a.wins / a.total_trades) * 100) : 0,
+        total_pnl:    isFallback ? 0 : Math.round(a.total_pnl * 100) / 100,
+        win_rate:     a.total_trades > 0 ? Math.round((a.wins / a.total_trades) * 100) : 0,
         total_trades: a.total_trades,
-        wins: a.wins,
-        streak: streakMap[userId] || 0,
+        wins:         a.wins,
+        streak:       streakMap[userId] || 0,
+        is_fallback:  isFallback, // frontend can show "trades placed" label instead of PnL
       });
     }
 
-    rows.sort((a, b) => b.total_pnl - a.total_pnl);
-    const top20 = rows.slice(0, 20).map((r, i) => ({
-      rank: i + 1,
-      user_id: r.user_id,
-      username: r.username,
-      display_name: r.display_name,
-      total_pnl: r.total_pnl,
-      win_rate: r.win_rate,
-      total_trades: r.total_trades,
-      wins: r.wins,
-      streak: r.streak,
-    }));
+    // Sort: settled → by PnL, fallback → by trades placed
+    rows.sort((a, b) => isFallback ? b.total_trades - a.total_trades : b.total_pnl - a.total_pnl);
 
+    const top20 = rows.slice(0, 20).map((r, i) => ({ rank: i + 1, ...r }));
     res.json(top20);
   } catch (err) {
     console.error('leaderboard error:', err.message);

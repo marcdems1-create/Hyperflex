@@ -1972,7 +1972,10 @@ let lbPeriod = 'all';
 async function loadLeaderboard(period = 'all') {
   lbPeriod = period;
   try {
-    const url = `${API}/api/leaderboard${period === 'week' ? '?period=week' : ''}`;
+    // Always pass slug so the API filters to this community (subdomain routing only works for custom domains)
+    const params = new URLSearchParams({ slug });
+    if (period === 'week') params.set('period', 'week');
+    const url = `${API}/api/leaderboard?${params}`;
     const r = await fetch(url);
     if (!r.ok) return;
     const data = await r.json();
@@ -1988,13 +1991,18 @@ async function loadLeaderboard(period = 'all') {
       return;
     }
 
+    // Detect fallback mode (no settled markets yet — ranked by trades placed)
+    const isFallback = data[0]?.is_fallback === true;
+
     // Find current user rank
     let myRank = null, myScore = null;
     if (currentUser) {
       const myRow = data.findIndex(row => row.user_id === currentUser.id);
       if (myRow !== -1) {
         myRank  = myRow + 1;
-        myScore = Math.round((data[myRow].total_pnl || 0) / 100).toLocaleString();
+        myScore = isFallback
+          ? `${data[myRow].total_trades} trades`
+          : Math.round((data[myRow].total_pnl || 0) / 100).toLocaleString();
       }
     }
 
@@ -2002,7 +2010,6 @@ async function loadLeaderboard(period = 'all') {
       const rankClass  = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
       const medal      = i === 0 ? '🥇'  : i === 1 ? '🥈'    : i === 2 ? '🥉'     : `#${i + 1}`;
       const name       = escHtml(row.display_name || row.username || 'Anonymous');
-      const pnl        = Math.round((row.total_pnl || 0) / 100).toLocaleString();
       const isYou      = currentUser && row.user_id === currentUser.id;
       const streak     = row.streak || 0;
       const winRate    = row.win_rate || 0;
@@ -2013,30 +2020,46 @@ async function loadLeaderboard(period = 'all') {
       if (streak >= 7) streakBadge = `<span class="lb-streak master">⚡ ${streak}</span>`;
       else if (streak >= 3) streakBadge = `<span class="lb-streak fire">🔥 ${streak}</span>`;
 
-      // Accuracy tier (min 3 trades to qualify)
-      let accuracyBadge = '';
-      if (trades >= 3) {
-        if (winRate >= 60)      accuracyBadge = `<span class="lb-accuracy-badge sharp">🎯 SHARP</span>`;
-        else if (winRate >= 50) accuracyBadge = `<span class="lb-accuracy-badge solid">📊 SOLID</span>`;
-        else                    accuracyBadge = `<span class="lb-accuracy-badge speculator">🎲 SPEC</span>`;
+      // Score column: PnL when settled, trades placed when fallback
+      let scoreCol, wrDisplay;
+      if (isFallback) {
+        scoreCol  = `<div class="lb-score" style="color:var(--dim);font-size:12px">${trades} trades</div>`;
+        wrDisplay = `<div class="lb-winrate" style="color:var(--dim)" title="Pending resolution">—</div>`;
+      } else {
+        const pnl = Math.round((row.total_pnl || 0) / 100).toLocaleString();
+        scoreCol  = `<div class="lb-score">+${pnl} ${pts}</div>`;
+        // Accuracy tier (min 3 trades to qualify)
+        let accuracyBadge = '';
+        if (trades >= 3) {
+          if (winRate >= 60)      accuracyBadge = `<span class="lb-accuracy-badge sharp">🎯 SHARP</span>`;
+          else if (winRate >= 50) accuracyBadge = `<span class="lb-accuracy-badge solid">📊 SOLID</span>`;
+          else                    accuracyBadge = `<span class="lb-accuracy-badge speculator">🎲 SPEC</span>`;
+        }
+        // Append accuracy badge to name section
+        streakBadge += accuracyBadge;
+        const wrClass = winRate >= 60 ? 'sharp' : winRate >= 50 ? 'solid' : '';
+        wrDisplay = trades >= 3
+          ? `<div class="lb-winrate ${wrClass}" title="${trades} predictions">${winRate}%</div>`
+          : `<div class="lb-winrate" title="Not enough trades">${trades}p</div>`;
       }
-
-      // Win rate display
-      const wrClass = winRate >= 60 ? 'sharp' : winRate >= 50 ? 'solid' : '';
-      const wrDisplay = trades >= 3 ? `<div class="lb-winrate ${wrClass}" title="${trades} predictions">${winRate}%</div>` : `<div class="lb-winrate" title="Not enough trades">${trades}p</div>`;
 
       return `
         <div class="lb-row${isYou ? ' is-you' : ''}">
           <div class="lb-rank ${rankClass}">${medal}</div>
-          <div class="lb-name">${name}${isYou ? '<span class="lb-you-tag">YOU</span>' : ''}${streakBadge}${accuracyBadge}</div>
+          <div class="lb-name">${name}${isYou ? '<span class="lb-you-tag">YOU</span>' : ''}${streakBadge}</div>
           ${wrDisplay}
-          <div class="lb-score">+${pnl} ${pts}</div>
+          ${scoreCol}
         </div>`;
     }).join('');
 
+    // Fallback caption
+    if (isFallback) {
+      card.innerHTML += `<div style="padding:10px 16px 4px;font-size:11px;color:var(--dim);text-align:center">Ranked by trades placed — PnL unlocks when first markets resolve</div>`;
+    }
+
     if (myRank && myScore) {
       document.getElementById('yourRankNum').textContent  = `#${myRank}`;
-      document.getElementById('yourRankScore').textContent = `· +${myScore} ${pts}`;
+      document.getElementById('yourRankScore').textContent = `· ${isFallback ? myScore : '+' + myScore + ' ' + pts}`;
       document.getElementById('yourRankBar').style.display = 'flex';
     }
 
