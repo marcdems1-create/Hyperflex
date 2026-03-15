@@ -1219,6 +1219,7 @@ async function processPendingEmails() {
       try {
         await transport.sendMail({
           from: process.env.SMTP_FROM || 'HYPERFLEX <noreply@hyperflex.network>',
+          replyTo: process.env.SMTP_REPLY_TO || process.env.SMTP_FROM || 'noreply@hyperflex.network',
           to: email.to_email,
           subject: email.subject,
           html: email.html,
@@ -5037,6 +5038,7 @@ app.post('/api/creator/start-trial', requireCreator, async (req, res) => {
         const expireDate = new Date(expiresAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
         transport.sendMail({
           from: process.env.SMTP_FROM || 'HYPERFLEX <noreply@hyperflex.network>',
+          replyTo: process.env.SMTP_REPLY_TO || process.env.SMTP_FROM || 'noreply@hyperflex.network',
           to: user.email,
           subject: 'Your 7-day Pro trial is live — here\'s what you unlocked',
           html: `
@@ -5468,6 +5470,7 @@ async function sendResolutionEmails(market, outcome, creatorSlug, resolutionNote
 
         return transporter.sendMail({
           from: fromAddress,
+          replyTo: process.env.SMTP_REPLY_TO || process.env.SMTP_FROM || 'noreply@hyperflex.network',
           to: u.email,
           subject,
           html,
