@@ -277,6 +277,18 @@ nav {
 .community-name { font-size: 13px; font-weight: 700; flex: 1; }
 .community-markets { font-size: 11px; color: var(--muted); }
 
+/* COMMUNITY SECTIONS (tab-communities) */
+.comm-section { margin-bottom: 32px; }
+.comm-section-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
 .announcement-item {
   padding: 10px 0;
   border-bottom: 1px solid var(--border);
@@ -344,6 +356,7 @@ nav {
     <button class="tab active" onclick="switchTab('live')">🔴 Live Feed</button>
     <button class="tab" onclick="switchTab('hot')">🔥 Hot Markets</button>
     <button class="tab" onclick="switchTab('new')">✨ New Markets</button>
+    <button class="tab" onclick="switchTab('communities')">🏘️ Communities</button>
   </div>
 </div>
 
@@ -367,6 +380,11 @@ nav {
     <!-- NEW MARKETS TAB -->
     <div class="feed-section" id="tab-new">
       <div id="new-feed"><div class="loading">Loading new markets...</div></div>
+    </div>
+
+    <!-- COMMUNITIES TAB -->
+    <div class="feed-section" id="tab-communities">
+      <div id="communities-feed"><div class="loading">Loading communities...</div></div>
     </div>
   </div>
 
@@ -477,16 +495,55 @@ function renderCommunities(communities) {
     document.getElementById('communities-list').innerHTML = '<div class="empty" style="padding:8px 0;">No communities yet.</div>';
     return;
   }
-  const html = slugs.map(slug => {
+  const sorted = slugs.sort((a, b) => (communities[b].total_traders || 0) - (communities[a].total_traders || 0));
+  const html = sorted.map(slug => {
     const c = communities[slug];
+    const traders = c.total_traders || 0;
+    const markets = c.market_count || 0;
     return `
       <a href="/${slug}" class="community-row">
         <div class="community-dot" style="background:${c.primary_color || '#c9920d'}"></div>
-        <div class="community-name">${c.display_name}</div>
-        <div class="community-markets">→</div>
+        <div class="community-name">${c.display_name || slug}</div>
+        <div class="community-markets" style="font-size:11px;color:#666">${traders > 0 ? traders.toLocaleString() + ' trades' : markets + ' mkts'}</div>
       </a>`;
   }).join('');
   document.getElementById('communities-list').innerHTML = html;
+}
+
+function renderCommunitySections(sections, communities) {
+  if (!sections) return;
+
+  function communityCard(c, badge) {
+    const color  = c.primary_color || '#c9920d';
+    const traders = c.total_traders || 0;
+    const markets = c.market_count || 0;
+    const name   = c.display_name || c.slug;
+    return `
+      <a href="/${c.slug}" style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:#1a1a18;border:1px solid #2a2a27;border-radius:10px;text-decoration:none;color:var(--text);transition:border-color .15s;" onmouseover="this.style.borderColor='${color}'" onmouseout="this.style.borderColor='#2a2a27'">
+        <div style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0"></div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</div>
+          <div style="font-size:11px;color:#666;margin-top:2px">${markets} market${markets !== 1 ? 's' : ''} · ${traders.toLocaleString()} trades</div>
+        </div>
+        <span style="font-size:11px;font-weight:700;padding:3px 8px;border-radius:4px;background:${color}22;color:${color};flex-shrink:0">${badge}</span>
+      </a>`;
+  }
+
+  function section(title, emoji, items, emptyMsg) {
+    if (!items || !items.length) return `<div class="comm-section"><div class="comm-section-title">${emoji} ${title}</div><div class="empty">${emptyMsg}</div></div>`;
+    return `
+      <div class="comm-section">
+        <div class="comm-section-title">${emoji} ${title}</div>
+        <div style="display:flex;flex-direction:column;gap:8px">${items.map((c, i) => communityCard(c, ['#1', '#2', '#3', '#4', '#5'][i] || '—')).join('')}</div>
+      </div>`;
+  }
+
+  const html = `
+    ${section('Most Active', '🔥', sections.mostActive, 'No active communities yet')}
+    ${section('Up & Coming', '🌱', sections.upAndComing, 'Nothing new yet')}
+    ${section('Ghost Town', '👻', sections.ghostTown, 'All communities are jumping!')}
+  `;
+  document.getElementById('communities-feed').innerHTML = html;
 }
 
 function renderAnnouncements(announcements, communities) {
@@ -517,6 +574,7 @@ async function loadFeed() {
     renderMarkets(data.hot || [], data.communities || {}, 'hot-feed');
     renderMarkets(data.newest || [], data.communities || {}, 'new-feed');
     renderCommunities(data.communities || {});
+    renderCommunitySections(data.community_sections, data.communities || {});
     renderAnnouncements(data.announcements || [], data.communities || {});
 
     document.getElementById('last-updated').textContent = `Updated ${new Date().toLocaleTimeString()}`;

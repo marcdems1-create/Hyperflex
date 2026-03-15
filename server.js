@@ -888,8 +888,19 @@ app.get('/api/leaderboard', async (req, res) => {
       });
     }
 
-    // Sort: settled → by PnL, fallback → by trades placed
-    rows.sort((a, b) => isFallback ? b.total_trades - a.total_trades : b.total_pnl - a.total_pnl);
+    // Sort: accuracy mode → win_rate (min 5 trades), settled → PnL, fallback → trades placed
+    const sortMode = req.query.sort || 'pnl';
+    if (sortMode === 'accuracy') {
+      // Filter to users with enough trades to be meaningful, sort by win_rate then streak
+      rows.sort((a, b) => {
+        const aQual = a.total_trades >= 5, bQual = b.total_trades >= 5;
+        if (aQual !== bQual) return bQual - aQual; // qualified first
+        if (b.win_rate !== a.win_rate) return b.win_rate - a.win_rate;
+        return b.streak - a.streak; // tiebreak by streak
+      });
+    } else {
+      rows.sort((a, b) => isFallback ? b.total_trades - a.total_trades : b.total_pnl - a.total_pnl);
+    }
 
     const top20 = rows.slice(0, 20).map((r, i) => ({ rank: i + 1, ...r }));
     res.json(top20);
@@ -5497,17 +5508,17 @@ async function sendResolutionEmails(market, outcome, creatorSlug, resolutionNote
 // ─── EXPLORE FEED ────────────────────────────────────────────────────────────
 app.get('/api/explore', async (req, res) => {
   try {
-    // Run all four queries in parallel; each returns {data, error} — never throws
-    const [tradesRes, hotRes, newMarketsRes, announcementsRes] = await Promise.all([
+    // Run all queries in parallel; each returns {data, error} — never throws
+    const [tradesRes, hotRes, newMarketsRes, announcementsRes, allMarketsRes, allCreatorsRes] = await Promise.all([
 
-      // Recent trades — avoid nested FK selects that require explicit constraints
+      // Recent trades
       supabase
         .from('positions')
         .select('id, user_id, side, amount, created_at, market_id, markets(question, tenant_slug, yes_price, no_price)')
         .order('created_at', { ascending: false })
         .limit(20),
 
-      // Hottest markets by trader_count — tenant_slug is the correct column name
+      // Hottest markets by trader_count
       supabase
         .from('markets')
         .select('id, question, tenant_slug, yes_price, no_price, trader_count, yes_pool, no_pool, created_at')
@@ -5525,12 +5536,24 @@ app.get('/api/explore', async (req, res) => {
         .order('created_at', { ascending: false })
         .limit(10),
 
-      // Recent announcements — table may not exist if migration hasn't run yet
+      // Recent announcements
       supabase
         .from('creator_announcements')
         .select('id, creator_slug, title, body, pinned, created_at')
         .order('created_at', { ascending: false })
         .limit(10),
+
+      // All active markets for community stats (trader_count, newest market per slug)
+      supabase
+        .from('markets')
+        .select('tenant_slug, trader_count, created_at')
+        .eq('resolved', false)
+        .eq('archived', false),
+
+      // All creator_settings for enrichment + community list
+      supabase
+        .from('creator_settings')
+        .select('slug, display_name, custom_points_name, primary_color, created_at'),
     ]);
 
     if (hotRes.error)         console.warn('[explore] hot markets error:', hotRes.error.message);
@@ -5538,50 +5561,72 @@ app.get('/api/explore', async (req, res) => {
     if (tradesRes.error)      console.warn('[explore] trades error:', tradesRes.error.message);
     if (announcementsRes.error) console.warn('[explore] announcements error:', announcementsRes.error.message);
 
-    // Normalize positions — use tenant_slug from joined market row
+    // ── Build community stats from all active markets ──
+    const statsMap = {}; // slug → { trader_count, market_count, newest_market_at }
+    for (const m of (allMarketsRes.data || [])) {
+      const slug = m.tenant_slug;
+      if (!slug) continue;
+      if (!statsMap[slug]) statsMap[slug] = { total_traders: 0, market_count: 0, newest_market_at: null };
+      statsMap[slug].total_traders += (m.trader_count || 0);
+      statsMap[slug].market_count  += 1;
+      const mDate = new Date(m.created_at);
+      if (!statsMap[slug].newest_market_at || mDate > new Date(statsMap[slug].newest_market_at)) {
+        statsMap[slug].newest_market_at = m.created_at;
+      }
+    }
+
+    // Build community map with stats merged in
+    const communityMap = {};
+    for (const c of (allCreatorsRes.data || [])) {
+      communityMap[c.slug] = {
+        ...c,
+        ...(statsMap[c.slug] || { total_traders: 0, market_count: 0, newest_market_at: c.created_at }),
+      };
+    }
+
+    // ── Community sections ──
+    const allCommStats = Object.values(communityMap).filter(c => c.market_count > 0);
+
+    // Most Active: highest total trader_count across all markets
+    const mostActive = [...allCommStats]
+      .sort((a, b) => b.total_traders - a.total_traders)
+      .slice(0, 5);
+
+    // Up & Coming: has markets, sorted by newest_market_at desc (freshest activity)
+    const upAndComing = [...allCommStats]
+      .sort((a, b) => new Date(b.newest_market_at) - new Date(a.newest_market_at))
+      .slice(0, 5);
+
+    // Ghost Town: has markets but fewest traders
+    const ghostTown = [...allCommStats]
+      .filter(c => c.market_count >= 1)
+      .sort((a, b) => a.total_traders - b.total_traders)
+      .slice(0, 5);
+
+    // ── Normalize positions ──
     const rawTrades = (tradesRes.data || []).map(p => ({
       id:           p.id,
       side:         p.side,
       amount:       p.amount,
       created_at:   p.created_at,
       user_id:      p.user_id,
-      user:         'Anonymous', // enriched below
+      user:         'Anonymous',
       question:     p.markets?.question || '',
       creator_slug: p.markets?.tenant_slug || '',
       sentiment:    p.markets ? Math.round((p.markets.yes_price || 0.5) * 100) : 50,
     }));
 
-    // Batch-fetch display names for users who traded (avoids FK join requirement)
     const tradeUserIds = [...new Set(rawTrades.map(t => t.user_id).filter(Boolean))];
     let userMap = {};
     if (tradeUserIds.length) {
-      const { data: tradeUsers } = await supabase
-        .from('users')
-        .select('id, display_name')
-        .in('id', tradeUserIds);
+      const { data: tradeUsers } = await supabase.from('users').select('id, display_name').in('id', tradeUserIds);
       (tradeUsers || []).forEach(u => { userMap[u.id] = u.display_name || 'Anonymous'; });
     }
     const trades = rawTrades.map(t => ({ ...t, user: userMap[t.user_id] || 'Anonymous' }));
 
-    // Normalize hot/new markets — rename tenant_slug → creator_slug for frontend compat
     const normalizeMarket = m => ({ ...m, creator_slug: m.tenant_slug || '' });
     const hotMarkets    = (hotRes.data || []).map(normalizeMarket);
     const newestMarkets = (newMarketsRes.data || []).map(normalizeMarket);
-
-    // Collect all slugs for community enrichment
-    const slugs = [...new Set([
-      ...hotMarkets.map(m => m.creator_slug),
-      ...newestMarkets.map(m => m.creator_slug),
-      ...(announcementsRes.data || []).map(a => a.creator_slug),
-      ...trades.map(t => t.creator_slug),
-    ].filter(Boolean))];
-
-    const { data: communities } = slugs.length
-      ? await supabase.from('creator_settings').select('slug, display_name, custom_points_name, primary_color').in('slug', slugs)
-      : { data: [] };
-
-    const communityMap = {};
-    (communities || []).forEach(c => { communityMap[c.slug] = c; });
 
     res.json({
       trades,
@@ -5589,6 +5634,7 @@ app.get('/api/explore', async (req, res) => {
       newest:        newestMarkets,
       announcements: announcementsRes.data || [],
       communities:   communityMap,
+      community_sections: { mostActive, upAndComing, ghostTown },
     });
   } catch (err) {
     console.error('[explore]', err.message);
