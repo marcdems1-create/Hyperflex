@@ -157,21 +157,32 @@ body::before {
   z-index: 1;
   overflow: hidden;
 }
+@keyframes heroDrift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
 .hero-banner {
-  height: 180px;
-  background: linear-gradient(135deg, rgba(201,146,13,0.06), rgba(201,146,13,0.02));
-  background-size: cover;
-  background-position: center;
+  height: 220px;
+  background:
+    linear-gradient(135deg, rgba(201,146,13,0.12) 0%, rgba(201,146,13,0.02) 40%, rgba(30,20,0,0.0) 100%),
+    linear-gradient(135deg, #141412, #1c1c14, #141412);
+  background-size: cover, 300% 300%;
+  animation: heroDrift 12s ease infinite;
+  background-position: center, 0% 50%;
   position: relative;
   display: flex;
   align-items: flex-end;
-  padding: 0 24px 20px;
+  padding: 0 24px 22px;
+}
+.hero-banner.has-image {
+  animation: none;
 }
 .hero-banner::after {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(to bottom, transparent 30%, rgba(20,20,18,0.95) 100%);
+  background: linear-gradient(to bottom, rgba(20,20,18,0.15) 0%, transparent 35%, rgba(20,20,18,0.75) 75%, rgba(20,20,18,0.98) 100%);
 }
 .hero-inner {
   max-width: 900px;
@@ -181,68 +192,85 @@ body::before {
   z-index: 1;
   display: flex;
   align-items: flex-end;
-  gap: 16px;
+  gap: 18px;
 }
 .hero-logo {
-  width: 56px;
-  height: 56px;
-  border-radius: 12px;
-  border: 2px solid var(--border);
+  width: 72px;
+  height: 72px;
+  border-radius: 16px;
+  border: 2px solid rgba(201,146,13,0.5);
   background: var(--cream);
   object-fit: cover;
   flex-shrink: 0;
-  margin-bottom: -8px;
+  margin-bottom: -12px;
+  box-shadow: 0 0 0 4px rgba(20,20,18,0.8), 0 0 24px rgba(201,146,13,0.2);
 }
 .hero-logo-placeholder {
-  width: 56px;
-  height: 56px;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  background: rgba(201,146,13,0.08);
+  width: 72px;
+  height: 72px;
+  border-radius: 16px;
+  border: 2px solid rgba(201,146,13,0.4);
+  background: linear-gradient(135deg, rgba(201,146,13,0.12), rgba(201,146,13,0.04));
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 800;
   color: var(--gold);
   flex-shrink: 0;
   font-family: var(--sans);
-  margin-bottom: -8px;
+  margin-bottom: -12px;
+  box-shadow: 0 0 0 4px rgba(20,20,18,0.8), 0 0 24px rgba(201,146,13,0.15);
 }
 .hero-title-block { flex: 1; min-width: 0; }
 .hero-eyebrow {
   font-family: var(--mono);
   font-size: 9px;
   color: var(--gold);
-  letter-spacing: 0.18em;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
-  margin-bottom: 4px;
-  opacity: 0.8;
+  margin-bottom: 5px;
+  opacity: 0.9;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.hero-live-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 6px #22c55e;
+  animation: livePulse 2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes livePulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 6px #22c55e; }
+  50% { opacity: 0.5; box-shadow: 0 0 2px #22c55e; }
 }
 .hero-name {
-  font-size: clamp(22px, 4vw, 34px);
+  font-size: clamp(24px, 4.5vw, 38px);
   font-weight: 800;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-  color: var(--text);
+  line-height: 1.05;
+  letter-spacing: -0.025em;
+  color: #f5f0e8;
   font-family: var(--display);
+  text-shadow: 0 2px 20px rgba(0,0,0,0.5);
 }
 .hero-body {
   max-width: 900px;
   margin: 0 auto;
-  padding: 18px 24px 0;
+  padding: 20px 24px 0;
 }
 .hero-desc {
   font-size: 13px;
-  color: var(--dim);
-  line-height: 1.6;
+  color: rgba(200,195,185,0.75);
+  line-height: 1.65;
   margin-bottom: 18px;
   max-width: 560px;
 }
 /* ── Compact stat pills replacing old stats row ── */
 .hero-mini-stats {
   display: flex;
-  gap: 8px;
+  gap: 7px;
   flex-wrap: wrap;
   margin-bottom: 16px;
 }
@@ -250,27 +278,29 @@ body::before {
   display: flex;
   align-items: center;
   gap: 5px;
-  background: var(--cream);
-  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: 20px;
-  padding: 5px 12px;
+  padding: 5px 13px;
   font-size: 12px;
   color: var(--dim);
+  backdrop-filter: blur(8px);
 }
 .hero-mini-stat strong { color: var(--text); font-weight: 700; }
+.hero-mini-stat.gold { background: rgba(201,146,13,0.07); border-color: rgba(201,146,13,0.2); }
 .hero-mini-stat.gold strong { color: var(--gold); }
 button.hero-mini-stat.leaderboard-jump-pill {
   background: rgba(201,146,13,0.1);
-  border-color: rgba(201,146,13,0.3);
+  border-color: rgba(201,146,13,0.35);
   color: var(--gold);
   font-family: var(--mono);
   font-weight: 700;
   font-size: 11px;
   cursor: pointer;
   letter-spacing: 0.04em;
-  transition: background .15s;
+  transition: background .15s, border-color .15s;
 }
-button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,0.2); }
+button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,0.18); border-color: rgba(201,146,13,0.5); }
 
 /* ── Market carousel ── */
 @keyframes carouselScroll {
@@ -461,12 +491,13 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
   align-items: center;
   gap: 6px;
 }
-.filter-tab:hover { border-color: rgba(201,146,13,0.4); color: var(--text); }
+.filter-tab:hover { border-color: rgba(201,146,13,0.45); color: var(--text); background: rgba(201,146,13,0.04); }
 .filter-tab.active {
-  background: var(--gold);
+  background: linear-gradient(135deg, var(--gold), #e8a91a);
   border-color: var(--gold);
-  color: var(--ink);
+  color: #0e0e0c;
   font-weight: 700;
+  box-shadow: 0 2px 12px rgba(201,146,13,0.3);
 }
 .filter-count {
   background: rgba(0,0,0,0.2);
@@ -511,7 +542,7 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
   .header  { padding: 0 16px; }
   .hero-body { padding-left: 16px; padding-right: 16px; }
   .market-card-inner { padding: 14px 14px 12px; }
-  .market-card.featured .odds-pct { font-size: 24px; }
+  .market-card.featured .odds-pct { font-size: 28px; }
 }
 
 /* ── Mobile (≤600px): single column ── */
@@ -524,22 +555,54 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
 .market-card {
   background: var(--cream);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 16px;
   overflow: hidden;
-  transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.18s;
   cursor: pointer;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
+/* Category accent bar at top */
+.market-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  border-radius: 16px 16px 0 0;
+  background: rgba(201,146,13,0.35);
+  transition: opacity 0.2s;
+}
+.market-card[data-category="finance"]::before     { background: linear-gradient(90deg, #2d9b5f, #4ade80); }
+.market-card[data-category="crypto"]::before      { background: linear-gradient(90deg, #fb923c, #fbbf24); }
+.market-card[data-category="sports"]::before      { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+.market-card[data-category="politics"]::before    { background: linear-gradient(90deg, #8b5cf6, #a78bfa); }
+.market-card[data-category="esports"]::before     { background: linear-gradient(90deg, #10b981, #34d399); }
+.market-card[data-category="gaming"]::before      { background: linear-gradient(90deg, #10b981, #34d399); }
+.market-card[data-category="entertainment"]::before { background: linear-gradient(90deg, #ec4899, #f472b6); }
+.market-card[data-category="music"]::before       { background: linear-gradient(90deg, #ec4899, #f472b6); }
+.market-card[data-category="news"]::before        { background: linear-gradient(90deg, #6b7280, #9ca3af); }
+.market-card[data-category="tech"]::before        { background: linear-gradient(90deg, #6366f1, #818cf8); }
+.market-card[data-category="other"]::before       { background: linear-gradient(90deg, rgba(201,146,13,0.5), rgba(201,146,13,0.25)); }
 .market-card:hover {
-  border-color: rgba(201,146,13,0.5);
-  box-shadow: 0 6px 28px rgba(0,0,0,0.32);
-  transform: translateY(-2px);
+  border-color: rgba(201,146,13,0.55);
+  box-shadow: 0 8px 40px rgba(0,0,0,0.4), 0 0 0 1px rgba(201,146,13,0.08);
+  transform: translateY(-3px);
 }
-.market-card.resolved { opacity: 0.55; cursor: default; }
+.market-card.resolved { opacity: 0.5; cursor: default; }
 .market-card.resolved:hover { border-color: var(--border); box-shadow: none; transform: none; }
-.market-card.has-position { border-color: rgba(201,146,13,0.35); }
-.market-card.featured { background: linear-gradient(135deg, var(--cream) 0%, rgba(201,146,13,0.04) 100%); }
+.market-card.has-position {
+  border-color: rgba(201,146,13,0.4);
+  box-shadow: 0 0 0 1px rgba(201,146,13,0.12);
+}
+.market-card.featured {
+  background: linear-gradient(160deg, #1f1f1c 0%, #1a1a17 100%);
+  border-color: rgba(201,146,13,0.3);
+}
+.market-card.featured:hover {
+  border-color: rgba(201,146,13,0.65);
+  box-shadow: 0 12px 48px rgba(0,0,0,0.5), 0 0 32px rgba(201,146,13,0.08);
+}
 
 .market-card-inner { padding: 16px 18px 14px; flex: 1; display: flex; flex-direction: column; }
 
@@ -643,12 +706,12 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
 }
 .odds-pct {
   font-family: var(--mono);
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 800;
   line-height: 1;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
 }
-.market-card.featured .odds-pct { font-size: 28px; }
+.market-card.featured .odds-pct { font-size: 36px; }
 .odds-side-label {
   font-family: var(--mono);
   font-size: 9px;
@@ -662,15 +725,22 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
 .odds-side.no-side  .odds-side-label  { color: var(--red); opacity: 0.7; }
 .odds-bar-col { flex: 1; }
 .prob-bar {
-  height: 8px;
-  border-radius: 6px;
-  background: rgba(255,255,255,0.07);
+  height: 10px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.06);
   overflow: hidden;
   display: flex;
 }
-.market-card.featured .prob-bar { height: 10px; }
-.prob-fill-yes { height: 100%; background: var(--green); border-radius: 6px 0 0 6px; transition: width 0.5s ease; }
-.prob-fill-no  { height: 100%; background: var(--red);   border-radius: 0 6px 6px 0; transition: width 0.5s ease; }
+.market-card.featured .prob-bar { height: 12px; }
+.prob-fill-yes {
+  height: 100%; background: linear-gradient(90deg, #1a8a4a, #22c55e);
+  border-radius: 8px 0 0 8px; transition: width 0.6s cubic-bezier(0.4,0,0.2,1);
+  box-shadow: 2px 0 8px rgba(34,197,94,0.35);
+}
+.prob-fill-no  {
+  height: 100%; background: linear-gradient(90deg, #e53e3e, #f87171);
+  border-radius: 0 8px 8px 0; transition: width 0.6s cubic-bezier(0.4,0,0.2,1);
+}
 
 /* Market meta row */
 .market-meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: auto; }
@@ -682,35 +752,38 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid rgba(255,255,255,0.05);
   margin-top: 0;
 }
 .btn-predict {
-  padding: 12px 10px;
+  padding: 13px 10px;
   font-family: var(--mono);
   font-size: 12px;
   font-weight: 800;
   cursor: pointer;
   border: none;
-  transition: all 0.15s;
+  transition: background 0.15s, color 0.15s;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  letter-spacing: 0.04em;
+  gap: 7px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-.market-card.featured .btn-predict { padding: 14px 10px; font-size: 13px; }
-.btn-predict:disabled { cursor: default; opacity: 0.35; }
+.market-card.featured .btn-predict { padding: 15px 10px; font-size: 13px; }
+.btn-predict:disabled { cursor: default; opacity: 0.3; }
 .btn-predict.yes {
-  background: rgba(45,155,95,0.1);
-  color: var(--green);
-  border-right: 1px solid var(--border);
+  background: rgba(34,197,94,0.1);
+  color: #22c55e;
+  border-right: 1px solid rgba(255,255,255,0.05);
 }
-.btn-predict.yes:not(:disabled):hover { background: rgba(45,155,95,0.22); }
-.btn-predict.no  { background: rgba(192,57,43,0.1); color: var(--red); }
-.btn-predict.no:not(:disabled):hover  { background: rgba(192,57,43,0.22); }
-.btn-price { opacity: 0.65; font-size: 10px; font-weight: 600; }
+.btn-predict.yes:not(:disabled):hover {
+  background: rgba(34,197,94,0.2);
+  color: #4ade80;
+}
+.btn-predict.no  { background: rgba(239,68,68,0.09); color: #f87171; }
+.btn-predict.no:not(:disabled):hover  { background: rgba(239,68,68,0.18); color: #fca5a5; }
+.btn-price { opacity: 0.6; font-size: 10px; font-weight: 600; }
 
 /* Resolved outcome */
 .outcome-banner {
@@ -718,14 +791,16 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 12px;
+  padding: 12px 14px;
   font-family: var(--mono);
   font-size: 12px;
-  border-top: 1px solid var(--border);
-  letter-spacing: 0.06em;
+  font-weight: 700;
+  border-top: 1px solid rgba(255,255,255,0.05);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
-.outcome-banner.yes { background: var(--green-lt); color: var(--green); }
-.outcome-banner.no  { background: var(--red-lt);   color: var(--red); }
+.outcome-banner.yes { background: rgba(34,197,94,0.1); color: #4ade80; }
+.outcome-banner.no  { background: rgba(239,68,68,0.1); color: #f87171; }
 
 /* ── EMPTY STATE ── */
 .empty {
@@ -744,27 +819,28 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
 .leaderboard-card {
   background: var(--cream);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 14px;
   overflow: hidden;
 }
 .lb-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 18px;
-  border-bottom: 1px solid var(--border);
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
   transition: background 0.15s;
 }
 .lb-row:last-child { border-bottom: none; }
-.lb-row:hover { background: rgba(255,255,255,0.02); }
+.lb-row:hover { background: rgba(255,255,255,0.025); }
+.lb-row:first-child { background: rgba(201,146,13,0.04); }
 .lb-row.is-you {
-  background: rgba(201,146,13,0.06);
+  background: rgba(201,146,13,0.08) !important;
   border-left: 3px solid var(--gold);
   padding-left: 15px;
 }
-.lb-rank { font-family: var(--mono); font-size: 12px; font-weight: 700; width: 22px; text-align: center; color: var(--dim); flex-shrink: 0; }
-.lb-rank.gold   { color: var(--gold); }
-.lb-rank.silver { color: #aaa; }
+.lb-rank { font-family: var(--mono); font-size: 16px; font-weight: 700; width: 28px; text-align: center; flex-shrink: 0; }
+.lb-rank.gold   { color: var(--gold); filter: drop-shadow(0 0 4px rgba(201,146,13,0.6)); }
+.lb-rank.silver { color: #c0c0c0; }
 .lb-rank.bronze { color: #cd7f32; }
 .lb-name  { flex: 1; font-size: 13px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 8px; }
 .lb-you-tag { font-family: var(--mono); font-size: 9px; color: var(--gold); background: rgba(201,146,13,0.12); border: 1px solid rgba(201,146,13,0.25); border-radius: 3px; padding: 1px 5px; letter-spacing: 0.06em; }
@@ -1055,14 +1131,17 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
 @keyframes shimmer { to { background-position: -200% 0; } }
 
 @media (max-width: 600px) {
-  .hero-banner { height: 140px; padding: 0 16px 16px; }
-  .hero-body { padding: 14px 16px 0; }
+  .hero-banner { height: 160px; padding: 0 16px 18px; }
+  .hero-logo, .hero-logo-placeholder { width: 60px; height: 60px; margin-bottom: -10px; }
+  .hero-body { padding: 16px 16px 0; }
   .content { padding: 0 16px 60px; }
   .header { padding: 0 16px; }
   .carousel-card { width: 180px; }
   .carousel-section::before, .carousel-section::after { width: 24px; }
   .market-top { flex-wrap: wrap; }
   .market-badges { width: 100%; justify-content: flex-start; order: -1; }
+  .odds-pct { font-size: 22px; }
+  .market-card.featured .odds-pct { font-size: 28px; }
   .lb-correct { display: none; }
   .user-name-pill { display: none; }
 
@@ -1177,7 +1256,7 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
       <div class="hero-logo-placeholder" id="heroLogoPlaceholder">HF</div>
       <img id="heroLogoImg" class="hero-logo" src="" alt="" style="display:none" onerror="this.style.display='none';document.getElementById('heroLogoPlaceholder').style.display='flex'"/>
       <div class="hero-title-block">
-        <div class="hero-eyebrow">Prediction Market</div>
+        <div class="hero-eyebrow"><span class="hero-live-dot"></span>Prediction Market</div>
         <div class="hero-name" id="heroTitle">Loading…</div>
       </div>
     </div>
@@ -1620,6 +1699,7 @@ function renderPage() {
     banner.style.backgroundImage    = `url('${c.banner_url}')`;
     banner.style.backgroundSize     = 'cover';
     banner.style.backgroundPosition = c.banner_position || 'center';
+    banner.classList.add('has-image');
   }
 
   // Social links
@@ -1986,7 +2066,7 @@ function marketCardHTML(m, isResolved, featured) {
   ].filter(Boolean).join(' ');
 
   return `
-    <div class="${cls}" id="mkt-${m.id}" data-market-id="${m.id}">
+    <div class="${cls}" id="mkt-${m.id}" data-market-id="${m.id}" data-category="${(m.category||'other').toLowerCase()}"
       <div class="market-card-inner">
         <div class="market-top">
           ${catPill}
