@@ -1199,6 +1199,45 @@ async function expireTrials() {
 }
 cron.schedule('30 * * * *', expireTrials); // runs at :30 past each hour
 
+// ── EMAIL QUEUE PROCESSOR ─────────────────────────────────────────────────
+// Picks up any pending_emails where send_after <= now, sends them, marks sent
+async function processPendingEmails() {
+  const transport = createMailTransport();
+  if (!transport) return; // SMTP not configured — skip silently
+
+  try {
+    const { data: due } = await supabase
+      .from('pending_emails')
+      .select('*')
+      .eq('sent', false)
+      .lte('send_after', new Date().toISOString())
+      .limit(50);
+
+    if (!due?.length) return;
+
+    for (const email of due) {
+      try {
+        await transport.sendMail({
+          from: process.env.SMTP_FROM || 'HYPERFLEX <noreply@hyperflex.network>',
+          to: email.to_email,
+          subject: email.subject,
+          html: email.html,
+        });
+        await supabase
+          .from('pending_emails')
+          .update({ sent: true, sent_at: new Date().toISOString() })
+          .eq('id', email.id);
+        console.log(`[email-queue] sent "${email.subject}" to ${email.to_email}`);
+      } catch (err) {
+        console.error(`[email-queue] failed to send to ${email.to_email}:`, err.message);
+      }
+    }
+  } catch (err) {
+    console.error('[email-queue] processor error:', err.message);
+  }
+}
+cron.schedule('15 * * * *', processPendingEmails); // runs at :15 past each hour
+
 // ── WEEKLY REFILLS ────────────────────────────────
 
 // Returns the most recent Monday at 00:00:00 UTC
@@ -1836,87 +1875,34 @@ app.post('/api/creator/signup', async (req, res) => {
     // Generate token
     const token = makeToken({ id: newUser.id, email: newUser.email, slug });
 
-    // ── Onboarding email sequence ─────────────────────────────────────────
-    // Fire-and-forget — never block signup response
+    // ── Onboarding email sequence — queued in DB, survives server restarts ──
     const communityUrl = `https://hyperflex.network/${slug}`;
     const dashUrl = 'https://hyperflex.network/creator/dashboard';
     const emailName = display_name || slug;
+    const now = Date.now();
 
-    setTimeout(async () => {
-      const transport = createMailTransport();
-      if (!transport) return;
-      // Day 0 — welcome
-      try {
-        await transport.sendMail({
-          from: process.env.SMTP_FROM || 'HYPERFLEX <noreply@hyperflex.network>',
-          to: newUser.email,
-          subject: `Your HYPERFLEX community is live — ${communityUrl}`,
-          html: `<div style="background:#141412;padding:40px;font-family:'Courier New',monospace;color:#ddd8cc;max-width:560px;margin:0 auto;border-radius:12px;">
-            <div style="font-size:22px;font-weight:800;color:#c9920d;margin-bottom:24px;">HYPERFLEX</div>
-            <h2 style="font-size:20px;color:#f5f5f0;margin:0 0 16px;">You're live, ${emailName} 🎉</h2>
-            <p style="color:#aaa8a0;font-size:14px;line-height:1.6;margin:0 0 20px;">Your prediction market community is ready. Share this link with your audience and watch them start betting.</p>
-            <div style="background:#1c1c19;border:1px solid #2a2a27;border-radius:8px;padding:16px;margin-bottom:24px;text-align:center;">
-              <a href="${communityUrl}" style="color:#c9920d;font-size:16px;font-weight:700;text-decoration:none;">${communityUrl}</a>
-            </div>
-            <p style="color:#aaa8a0;font-size:13px;line-height:1.6;margin:0 0 20px;"><strong style="color:#ddd8cc;">Quick start:</strong><br/>1. Create 3-5 markets around topics your audience debates<br/>2. Share the link in your next video, post, or story<br/>3. Watch your community compete on the leaderboard</p>
-            <a href="${dashUrl}" style="display:inline-block;background:#c9920d;color:#141412;padding:12px 24px;border-radius:6px;font-weight:700;font-size:14px;text-decoration:none;">Go to your dashboard →</a>
-            <p style="color:#555;font-size:11px;margin:24px 0 0;">HYPERFLEX · hyperflex.network</p>
-          </div>`
-        });
-      } catch (e) { /* silent */ }
-    }, 100);
-
-    // Day 3 — engagement nudge
-    setTimeout(async () => {
-      const transport = createMailTransport();
-      if (!transport) return;
-      try {
-        await transport.sendMail({
-          from: process.env.SMTP_FROM || 'HYPERFLEX <noreply@hyperflex.network>',
-          to: newUser.email,
-          subject: 'Quick tip: how to get your first 50 community bettors',
-          html: `<div style="background:#141412;padding:40px;font-family:'Courier New',monospace;color:#ddd8cc;max-width:560px;margin:0 auto;border-radius:12px;">
-            <div style="font-size:22px;font-weight:800;color:#c9920d;margin-bottom:24px;">HYPERFLEX</div>
-            <h2 style="font-size:20px;color:#f5f5f0;margin:0 0 16px;">Getting your first bettors 🎯</h2>
-            <p style="color:#aaa8a0;font-size:14px;line-height:1.6;margin:0 0 20px;">The fastest way to activate your community is to mention your markets during your normal content — not as a separate promotion, just as a natural callout.</p>
-            <div style="background:#1c1c19;border:1px solid #2a2a27;border-radius:8px;padding:16px;margin-bottom:24px;">
-              <p style="font-size:13px;color:#ddd8cc;margin:0 0 12px;font-style:italic;">"I've got a prediction market open on this — go bet on what you think will happen at ${communityUrl}"</p>
-              <p style="font-size:12px;color:#888880;margin:0;">Drop this line once in your next post or video.</p>
-            </div>
-            <p style="color:#aaa8a0;font-size:13px;line-height:1.6;margin:0 0 20px;">Also — if you're on the free plan and want to try unlimited markets + the YouTube AI scanner, you can start a free 7-day Pro trial from your dashboard.</p>
-            <a href="${dashUrl}" style="display:inline-block;background:#c9920d;color:#141412;padding:12px 24px;border-radius:6px;font-weight:700;font-size:14px;text-decoration:none;">Go to your dashboard →</a>
-            <p style="color:#555;font-size:11px;margin:24px 0 0;">HYPERFLEX · hyperflex.network</p>
-          </div>`
-        });
-      } catch (e) { /* silent */ }
-    }, 3 * 24 * 60 * 60 * 1000);
-
-    // Day 7 — upgrade nudge
-    setTimeout(async () => {
-      const transport = createMailTransport();
-      if (!transport) return;
-      try {
-        await transport.sendMail({
-          from: process.env.SMTP_FROM || 'HYPERFLEX <noreply@hyperflex.network>',
-          to: newUser.email,
-          subject: 'Unlock unlimited markets + AI scanner — $29/mo',
-          html: `<div style="background:#141412;padding:40px;font-family:'Courier New',monospace;color:#ddd8cc;max-width:560px;margin:0 auto;border-radius:12px;">
-            <div style="font-size:22px;font-weight:800;color:#c9920d;margin-bottom:24px;">HYPERFLEX</div>
-            <h2 style="font-size:20px;color:#f5f5f0;margin:0 0 16px;">Ready to go further?</h2>
-            <p style="color:#aaa8a0;font-size:14px;line-height:1.6;margin:0 0 20px;">You've been running your community for a week. Here's what Pro unlocks for $29/mo:</p>
-            <div style="background:#1c1c19;border:1px solid #2a2a27;border-radius:8px;padding:20px;margin-bottom:24px;">
-              <div style="font-size:13px;color:#ddd8cc;margin-bottom:10px;">⚡ <strong>Unlimited active markets</strong></div>
-              <div style="font-size:13px;color:#ddd8cc;margin-bottom:10px;">🎥 <strong>YouTube AI scanner</strong> — paste any video URL, get markets instantly</div>
-              <div style="font-size:13px;color:#ddd8cc;margin-bottom:10px;">📊 <strong>Full analytics</strong> — trade volume, top markets, economy health</div>
-              <div style="font-size:13px;color:#ddd8cc;">🏆 <strong>Weekly Power Predictor</strong> — surface your top weekly winners</div>
-            </div>
-            <a href="${dashUrl}" style="display:inline-block;background:#c9920d;color:#141412;padding:12px 24px;border-radius:6px;font-weight:700;font-size:14px;text-decoration:none;margin-bottom:16px;">Upgrade to Pro — $29/mo →</a>
-            <p style="color:#888880;font-size:13px;margin:0;">Cancel anytime. No lock-in.</p>
-            <p style="color:#555;font-size:11px;margin:24px 0 0;">HYPERFLEX · hyperflex.network</p>
-          </div>`
-        });
-      } catch (e) { /* silent */ }
-    }, 7 * 24 * 60 * 60 * 1000);
+    supabase.from('pending_emails').insert([
+      {
+        to_email: newUser.email,
+        subject: `Your HYPERFLEX community is live — ${communityUrl}`,
+        send_after: new Date(now + 30 * 1000).toISOString(),
+        html: `<div style="background:#141412;padding:40px;font-family:'Courier New',monospace;color:#ddd8cc;max-width:560px;margin:0 auto;border-radius:12px;"><div style="font-size:22px;font-weight:800;color:#c9920d;margin-bottom:24px;">HYPERFLEX</div><h2 style="font-size:20px;color:#f5f5f0;margin:0 0 16px;">You're live, ${emailName} 🎉</h2><p style="color:#aaa8a0;font-size:14px;line-height:1.6;margin:0 0 20px;">Your prediction market community is ready. Share this link with your audience and watch them start betting.</p><div style="background:#1c1c19;border:1px solid #2a2a27;border-radius:8px;padding:16px;margin-bottom:24px;text-align:center;"><a href="${communityUrl}" style="color:#c9920d;font-size:16px;font-weight:700;text-decoration:none;">${communityUrl}</a></div><p style="color:#aaa8a0;font-size:13px;line-height:1.6;margin:0 0 20px;"><strong style="color:#ddd8cc;">Quick start:</strong><br/>1. Create 3-5 markets around topics your audience debates<br/>2. Share the link in your next video, post, or story<br/>3. Watch your community compete on the leaderboard</p><a href="${dashUrl}" style="display:inline-block;background:#c9920d;color:#141412;padding:12px 24px;border-radius:6px;font-weight:700;font-size:14px;text-decoration:none;">Go to your dashboard →</a><p style="color:#555;font-size:11px;margin:24px 0 0;">HYPERFLEX · hyperflex.network</p></div>`
+      },
+      {
+        to_email: newUser.email,
+        subject: 'Quick tip: how to get your first 50 community bettors',
+        send_after: new Date(now + 3 * 24 * 60 * 60 * 1000).toISOString(),
+        html: `<div style="background:#141412;padding:40px;font-family:'Courier New',monospace;color:#ddd8cc;max-width:560px;margin:0 auto;border-radius:12px;"><div style="font-size:22px;font-weight:800;color:#c9920d;margin-bottom:24px;">HYPERFLEX</div><h2 style="font-size:20px;color:#f5f5f0;margin:0 0 16px;">Getting your first bettors 🎯</h2><p style="color:#aaa8a0;font-size:14px;line-height:1.6;margin:0 0 20px;">The fastest way to activate your community is to mention your markets during your normal content — not as a separate promotion, just a natural callout.</p><div style="background:#1c1c19;border:1px solid #2a2a27;border-radius:8px;padding:16px;margin-bottom:24px;"><p style="font-size:13px;color:#ddd8cc;margin:0 0 12px;font-style:italic;">"I've got a prediction market open on this — go bet on what you think will happen at ${communityUrl}"</p><p style="font-size:12px;color:#888880;margin:0;">Drop this line once in your next post or video.</p></div><p style="color:#aaa8a0;font-size:13px;line-height:1.6;margin:0 0 20px;">Also — if you're on the free plan and want to try unlimited markets + the YouTube AI scanner, start a free 7-day Pro trial from your dashboard.</p><a href="${dashUrl}" style="display:inline-block;background:#c9920d;color:#141412;padding:12px 24px;border-radius:6px;font-weight:700;font-size:14px;text-decoration:none;">Go to your dashboard →</a><p style="color:#555;font-size:11px;margin:24px 0 0;">HYPERFLEX · hyperflex.network</p></div>`
+      },
+      {
+        to_email: newUser.email,
+        subject: 'Unlock unlimited markets + AI scanner — $29/mo',
+        send_after: new Date(now + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        html: `<div style="background:#141412;padding:40px;font-family:'Courier New',monospace;color:#ddd8cc;max-width:560px;margin:0 auto;border-radius:12px;"><div style="font-size:22px;font-weight:800;color:#c9920d;margin-bottom:24px;">HYPERFLEX</div><h2 style="font-size:20px;color:#f5f5f0;margin:0 0 16px;">Ready to go further?</h2><p style="color:#aaa8a0;font-size:14px;line-height:1.6;margin:0 0 20px;">You've been running your community for a week. Here's what Pro unlocks for $29/mo:</p><div style="background:#1c1c19;border:1px solid #2a2a27;border-radius:8px;padding:20px;margin-bottom:24px;"><div style="font-size:13px;color:#ddd8cc;margin-bottom:10px;">⚡ <strong>Unlimited active markets</strong></div><div style="font-size:13px;color:#ddd8cc;margin-bottom:10px;">🎥 <strong>YouTube AI scanner</strong> — paste any video URL, get markets instantly</div><div style="font-size:13px;color:#ddd8cc;margin-bottom:10px;">📊 <strong>Full analytics</strong> — trade volume, top markets, economy health</div><div style="font-size:13px;color:#ddd8cc;">🏆 <strong>Weekly Power Predictor</strong> — surface your top weekly winners</div></div><a href="${dashUrl}" style="display:inline-block;background:#c9920d;color:#141412;padding:12px 24px;border-radius:6px;font-weight:700;font-size:14px;text-decoration:none;margin-bottom:16px;">Upgrade to Pro — $29/mo →</a><p style="color:#888880;font-size:13px;margin:0;">Cancel anytime. No lock-in.</p><p style="color:#555;font-size:11px;margin:24px 0 0;">HYPERFLEX · hyperflex.network</p></div>`
+      }
+    ]).then(({ error }) => {
+      if (error) console.error('[onboarding-email] queue error:', error.message);
+    });
 
     res.json({
       token,
