@@ -1170,6 +1170,53 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
   .powered { padding: 20px 16px 28px; }
 }
 
+/* ── TWEET FEED ── */
+.tweet-feed-section { margin-bottom: 20px; }
+.tweet-feed-label {
+  font-family: var(--mono); font-size: 10px; color: var(--dim);
+  letter-spacing: 0.12em; text-transform: uppercase;
+  margin-bottom: 10px; display: flex; align-items: center; gap: 8px;
+}
+.tweet-feed-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.tweet-card {
+  background: #16181c; border: 1px solid #2f3336; border-radius: 14px;
+  padding: 16px 18px; cursor: default;
+  display: flex; align-items: flex-start; gap: 12px;
+  transition: border-color 0.18s, background 0.18s; position: relative; overflow: hidden;
+  margin-bottom: 10px;
+}
+.tweet-card::before {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(135deg, rgba(29,155,240,0.05), transparent 60%);
+  pointer-events: none;
+}
+.tweet-card:hover { border-color: rgba(29,155,240,0.45); background: #1a1d21; }
+.tweet-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.tweet-avatar {
+  width: 38px; height: 38px; border-radius: 50%;
+  background: linear-gradient(135deg, rgba(29,155,240,0.3), rgba(29,155,240,0.1));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; flex-shrink: 0; color: #1d9bf0; border: 1px solid rgba(29,155,240,0.3);
+}
+.tweet-author-block { flex: 1; min-width: 0; }
+.tweet-author-name { font-weight: 700; font-size: 14px; color: #e7e9ea; line-height: 1.2; }
+.tweet-author-handle { font-size: 13px; color: #71767b; }
+.tweet-body { font-size: 14px; color: #e7e9ea; line-height: 1.65; margin-bottom: 12px; word-break: break-word; }
+.tweet-footer { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tweet-market-link {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--mono); font-size: 11px; color: var(--gold);
+  background: rgba(201,146,13,0.1); border: 1px solid rgba(201,146,13,0.25);
+  border-radius: 20px; padding: 5px 12px; text-decoration: none;
+  transition: background 0.15s; font-weight: 700; letter-spacing: 0.04em;
+}
+.tweet-market-link:hover { background: rgba(201,146,13,0.2); }
+.tweet-source-link {
+  font-family: var(--mono); font-size: 11px; color: #1d9bf0; text-decoration: none;
+  opacity: 0.7; transition: opacity 0.15s;
+}
+.tweet-source-link:hover { opacity: 1; }
+
 /* ── FAQ ── */
 .faq-wrap { margin-bottom: 36px; }
 .faq-list {
@@ -1295,6 +1342,9 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
     <button class="filter-tab"        id="ftSoon"  onclick="setFilter('soon')">⏰ Closing Soon <span class="filter-count" id="fcSoon">0</span></button>
     <button class="filter-tab"        id="ftMine"  onclick="setFilter('mine')" style="display:none">✓ My Bets <span class="filter-count" id="fcMine">0</span></button>
   </div>
+
+  <!-- Tweet Feed (shown when markets have tweet_text) -->
+  <div id="tweetFeedSection" class="tweet-feed-section" style="display:none"></div>
 
   <!-- Creator Announcements -->
   <div id="announcementsSection" style="display:none;margin-bottom:16px"></div>
@@ -1744,6 +1794,9 @@ function renderPage() {
   if (c.suggestions_enabled) {
     document.getElementById('suggestMarketRow').style.display = 'block';
   }
+
+  // Tweet feed — show cards for markets sourced from tweets
+  renderTweetFeed(markets);
 
   // Build filter counts + render
   buildFilterCounts();
@@ -2862,6 +2915,47 @@ async function postComment(marketId) {
     input.value = '';
     await loadComments(marketId);
   } catch { showToast('Network error.', 'error'); }
+}
+
+// ── TWEET FEED ─────────────────────────────────────────────────
+function renderTweetFeed(markets) {
+  const sec = document.getElementById('tweetFeedSection');
+  if (!sec) return;
+  const tweetMarkets = (markets || []).filter(m => m.tweet_text && !m.resolved);
+  if (!tweetMarkets.length) { sec.style.display = 'none'; return; }
+  sec.style.display = 'block';
+  sec.innerHTML = `
+    <div class="tweet-feed-section">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <span style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)">From the Feed</span>
+        <div style="flex:1;height:1px;background:var(--border)"></div>
+      </div>
+      ${tweetMarkets.map(m => {
+        const handle = m.tweet_author ? (m.tweet_author.startsWith('@') ? m.tweet_author : '@' + m.tweet_author) : '@creator';
+        const yesOdds = m.yes_price != null ? Math.round(m.yes_price * 100) : 50;
+        const noOdds  = 100 - yesOdds;
+        return `<div class="tweet-card">
+          <div class="tweet-avatar">𝕏</div>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+              <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--text)">${escHtml(handle)}</span>
+              <span style="font-family:var(--mono);font-size:10px;color:var(--dim)">·</span>
+              <span style="font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#1d9bf0;background:rgba(29,155,240,0.1);border:1px solid rgba(29,155,240,0.2);padding:2px 7px;border-radius:3px">𝕏 Post</span>
+            </div>
+            <div style="font-size:14px;color:var(--text);line-height:1.55;margin-bottom:12px;word-break:break-word">${escHtml(m.tweet_text)}</div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <button class="tweet-market-link" onclick="openMarket('${m.id}')">
+                <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(m.question)}</span>
+                <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#22c55e;white-space:nowrap">YES ${yesOdds}%</span>
+                <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#f87171;white-space:nowrap">NO ${noOdds}%</span>
+                <span style="font-size:12px">→</span>
+              </button>
+              ${m.source_tweet_url ? `<a href="${escHtml(m.source_tweet_url)}" target="_blank" rel="noopener" class="tweet-source-link">View post ↗</a>` : ''}
+            </div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
 }
 
 // ── ANNOUNCEMENTS ─────────────────────────────────────────────

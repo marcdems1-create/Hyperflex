@@ -4167,9 +4167,9 @@ app.get('/api/community/:slug', async (req, res) => {
     // Match on any of the three fields that market-creation routes populate
     const { data: rawMarkets, error: marketsErr } = await supabase
       .from('markets')
-      .select('id, question, category, expiry_date, yes_price, no_price, trader_count, resolved, outcome, resolved_at')
+      .select('id, question, category, expiry_date, yes_price, no_price, trader_count, resolved, outcome, resolved_at, tweet_text, tweet_author, source_tweet_url')
       .or(`tenant_slug.eq.${slug},creator_id.eq.${settings.creator_id}`)
-      .eq('is_public', true)
+      .neq('is_public', false)   // include true AND null (legacy markets without is_public set)
       .order('created_at', { ascending: false });
     if (marketsErr) console.error('[community markets query]', marketsErr.message);
     // Normalize outcome → resolution_outcome so community.html doesn't need changes
