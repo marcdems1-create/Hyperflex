@@ -2285,6 +2285,12 @@ function truthScore(m) {
 
 function setFilter(f) {
   currentFilter = f;
+  // Clear category filter when switching tabs
+  activeCategoryFilter = null;
+  document.querySelectorAll('#communityPulsePills span[onclick]').forEach(el => {
+    el.style.borderColor = 'rgba(255,255,255,.1)';
+    el.style.background  = 'rgba(255,255,255,.06)';
+  });
   ['all','hot','truth','soon','mine'].forEach(id => {
     const el = document.getElementById('ft' + id.charAt(0).toUpperCase() + id.slice(1));
     if (el) el.classList.toggle('active', id === f);
@@ -2294,8 +2300,30 @@ function setFilter(f) {
   renderFilteredMarkets();
 }
 
+let activeCategoryFilter = null;
+
+function filterByCategory(cat) {
+  // Toggle — clicking same category again clears the filter
+  activeCategoryFilter = activeCategoryFilter === cat ? null : cat;
+
+  // Update pill borders to show active state
+  document.querySelectorAll('#communityPulsePills span[onclick]').forEach(el => {
+    const elCat = el.getAttribute('onclick').match(/'([^']+)'/)?.[1];
+    const isActive = elCat === activeCategoryFilter;
+    el.style.borderColor  = isActive ? 'var(--gold)' : 'rgba(255,255,255,.1)';
+    el.style.background   = isActive ? 'rgba(201,146,13,.15)' : 'rgba(255,255,255,.06)';
+  });
+
+  // Scroll to markets grid
+  const grid = document.getElementById('marketsGrid');
+  if (grid) grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  renderFilteredMarkets();
+}
+
 function renderFilteredMarkets() {
-  const active = markets.filter(m => !m.resolved);
+  const active = markets.filter(m => !m.resolved &&
+    (!activeCategoryFilter || (m.category || 'other').toLowerCase() === activeCategoryFilter));
   let filtered;
   let sortFn;
 
@@ -3349,11 +3377,10 @@ function renderCommunityPulse(markets) {
   const CAT_COLORS = { crypto:'#f59e0b', sports:'#60a5fa', finance:'#38bdf8', politics:'#c084fc', entertainment:'#fb7185', gaming:'#34d399', other:'#94a3b8' };
 
   pillsEl.innerHTML = pills.map(p => {
-    const isYes = p.pct >= 50;
     const color = p.pct >= 65 ? '#4ade80' : p.pct >= 50 ? '#86efac' : p.pct >= 35 ? '#fca5a5' : '#f87171';
     const catColor = CAT_COLORS[p.cat] || '#94a3b8';
     const arrow = p.pct >= 65 ? '↑' : p.pct < 35 ? '↓' : '→';
-    return `<span style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:99px;font-size:11px;white-space:nowrap">
+    return `<span onclick="filterByCategory('${p.cat}')" style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:99px;font-size:11px;white-space:nowrap;cursor:pointer;transition:border-color .15s" onmouseenter="this.style.borderColor='rgba(255,255,255,.35)'" onmouseleave="this.style.borderColor='rgba(255,255,255,.1)'">
       <span style="width:7px;height:7px;border-radius:50%;background:${catColor};flex-shrink:0"></span>
       <span style="color:var(--text);text-transform:capitalize">${p.cat}</span>
       <span style="color:${color};font-family:var(--mono);font-weight:700">${arrow}${p.pct}% YES</span>
