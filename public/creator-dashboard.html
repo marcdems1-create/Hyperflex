@@ -3012,6 +3012,7 @@ body.nav-open .sidebar-backdrop {
               <div class="section-title">⚖️ Resolution Queue</div>
               <div class="section-subtitle">Markets that have expired and need an outcome set</div>
             </div>
+            <button class="btn-secondary" id="analyzeAllBtn" onclick="analyzeAllCards()" style="font-size:12px;white-space:nowrap">🤖 Analyze All</button>
           </div>
           <div class="resolution-queue" id="fullResolveList">
             <div class="loading-row">Loading...</div>
@@ -4228,7 +4229,7 @@ body.nav-open .sidebar-backdrop {
     </div>
     <div class="modal-footer">
       <button class="btn-secondary" onclick="closeResolveModal()">Cancel</button>
-      <button class="btn-secondary" id="resolveSuggestBtn" onclick="fetchResolutionSuggestion()">🤖 Get AI Suggestion</button>
+      <button class="btn-secondary" id="resolveSuggestBtn" onclick="fetchResolutionSuggestion()" style="display:none">🔄 Re-analyze</button>
       <button class="btn-primary" id="resolveConfirmBtn" onclick="confirmResolution()" disabled>Confirm Resolution →</button>
     </div>
   </div>
@@ -4956,23 +4957,132 @@ function updateMarketCounts() {
   document.getElementById('mktCountArchived').textContent = archived;
 }
 
+// Per-card AI suggestion cache: marketId -> { suggested_outcome, confidence, reasoning, loading, error }
+const cardSuggestions = new Map();
+
 function renderResolveList(items, containerId) {
   const el = document.getElementById(containerId);
   if (!items.length) {
     el.innerHTML = '<div class="loading-row">No items to resolve.</div>';
     return;
   }
-  el.innerHTML = items.map(m => `
-    <div class="queue-item">
-      <div style="flex:1">
+  el.innerHTML = items.map(m => {
+    const s = cardSuggestions.get(m.id);
+    let actionHtml = '';
+
+    if (!s) {
+      actionHtml = `
+        <div class="resolve-actions">
+          <button class="btn-secondary" style="font-size:12px;padding:6px 14px" onclick="analyzeCard('${m.id}')">🤖 AI Analyze</button>
+          <button class="btn-secondary" style="font-size:12px;padding:6px 14px" onclick="openResolveModal('${m.id}',\`${m.question.replace(/`/g,"'")}\`)">⚖️ Resolve</button>
+        </div>`;
+    } else if (s.loading) {
+      actionHtml = `<div style="font-size:12px;color:var(--dim);padding:6px 0;font-family:var(--mono)">⏳ Analyzing…</div>`;
+    } else if (s.error) {
+      actionHtml = `
+        <div class="resolve-actions">
+          <span style="font-size:11px;color:var(--dim)">Analysis failed</span>
+          <button class="btn-secondary" style="font-size:12px;padding:6px 14px" onclick="openResolveModal('${m.id}',\`${m.question.replace(/`/g,"'")}\`)">⚖️ Resolve</button>
+        </div>`;
+    } else {
+      const oc = s.suggested_outcome;
+      const isActionable = oc === 'YES' || oc === 'NO';
+      const outcomeColor = oc === 'YES' ? '#4ade80' : oc === 'NO' ? '#f87171' : 'var(--dim)';
+      const confDot = s.confidence === 'HIGH' ? '●' : s.confidence === 'MEDIUM' ? '◐' : '○';
+      actionHtml = `
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:7px;min-width:180px">
+          <div style="font-size:12px;font-family:var(--mono);color:${outcomeColor};font-weight:700;letter-spacing:0.05em">
+            ${confDot} AI: <span style="color:${outcomeColor}">${oc}</span>
+            <span style="color:var(--dim);font-weight:400;font-size:10px;margin-left:4px">${s.confidence || ''}</span>
+          </div>
+          ${s.reasoning ? `<div style="font-size:11px;color:var(--dim);text-align:right;max-width:210px;line-height:1.45">${s.reasoning.slice(0, 100)}${s.reasoning.length > 100 ? '…' : ''}</div>` : ''}
+          <div style="display:flex;gap:6px;align-items:center">
+            ${isActionable ? `
+            <button class="btn-yes" style="padding:5px 12px;font-size:12px" onclick="quickResolve('${m.id}','YES')">YES ✓</button>
+            <button class="btn-no"  style="padding:5px 12px;font-size:12px" onclick="quickResolve('${m.id}','NO')">NO ✗</button>` : ''}
+            <button class="btn-secondary" style="padding:5px 10px;font-size:11px" title="Full resolve options" onclick="openResolveModal('${m.id}',\`${m.question.replace(/`/g,"'")}\`)">⚙</button>
+          </div>
+        </div>`;
+    }
+
+    return `
+    <div class="queue-item" style="align-items:flex-start;gap:16px">
+      <div style="flex:1;min-width:0">
         <div class="queue-question">${m.question}</div>
         <div class="queue-meta">Expired ${formatDate(m.expiry_date)} · ${m.trader_count || 0} traders</div>
       </div>
-      <div class="resolve-actions">
-        <button class="btn-yes" onclick="openResolveModal('${m.id}', \`${m.question.replace(/`/g,"'")}\`)">Resolve ⚖️</button>
-      </div>
-    </div>
-  `).join('');
+      ${actionHtml}
+    </div>`;
+  }).join('');
+}
+
+async function analyzeCard(marketId) {
+  cardSuggestions.set(marketId, { loading: true });
+  renderResolveList(resolveQueue.slice(0, 3), 'resolvePreviewList');
+  renderResolveList(resolveQueue, 'fullResolveList');
+  try {
+    const r = await fetch(`${API}/api/creator/markets/${marketId}/suggest-resolution`, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Analysis failed');
+    cardSuggestions.set(marketId, { ...data, loading: false });
+  } catch (err) {
+    cardSuggestions.set(marketId, { error: err.message, loading: false });
+  }
+  renderResolveList(resolveQueue.slice(0, 3), 'resolvePreviewList');
+  renderResolveList(resolveQueue, 'fullResolveList');
+}
+
+async function analyzeAllCards() {
+  const btn = document.getElementById('analyzeAllBtn');
+  const unanalyzed = resolveQueue.filter(m => !cardSuggestions.has(m.id));
+  if (!unanalyzed.length) { showToast('All markets already analyzed.', 'success'); return; }
+  if (btn) { btn.disabled = true; btn.textContent = `🤖 Analyzing ${unanalyzed.length}…`; }
+  // Run sequentially to avoid hammering the API
+  for (const m of unanalyzed) {
+    await analyzeCard(m.id);
+  }
+  if (btn) { btn.disabled = false; btn.textContent = '🤖 Analyze All'; }
+  showToast('All markets analyzed ✓', 'success');
+}
+
+async function quickResolve(marketId, outcome) {
+  const m = resolveQueue.find(x => x.id === marketId);
+  if (!m) return;
+  const confirmed = await new Promise(resolve => {
+    const toast = document.createElement('div');
+    toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--ink);border:1px solid var(--border);border-radius:10px;padding:16px 20px;z-index:9999;max-width:360px;width:90%;box-shadow:0 8px 24px rgba(0,0,0,0.4)';
+    toast.innerHTML = `
+      <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:6px">Resolve ${outcome === 'YES' ? '✓ YES' : '✗ NO'}?</div>
+      <div style="font-size:12px;color:var(--dim);margin-bottom:12px;line-height:1.4">${(m.question || '').slice(0, 100)}</div>
+      <div style="display:flex;gap:8px">
+        <button style="flex:1;padding:7px;font-size:12px;font-weight:700;border-radius:6px;border:none;background:${outcome==='YES'?'#4ade80':'#f87171'};color:#000;cursor:pointer" id="_qrConfirm">Confirm ${outcome}</button>
+        <button style="flex:1;padding:7px;font-size:12px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--dim);cursor:pointer" id="_qrCancel">Cancel</button>
+      </div>`;
+    document.body.appendChild(toast);
+    toast.querySelector('#_qrConfirm').onclick = () => { document.body.removeChild(toast); resolve(true); };
+    toast.querySelector('#_qrCancel').onclick  = () => { document.body.removeChild(toast); resolve(false); };
+  });
+  if (!confirmed) return;
+  try {
+    const r = await fetch(`${API}/markets/${marketId}/resolve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ outcome, attestation_text: `Quick resolve: ${outcome}. AI-assisted.` })
+    });
+    const data = await r.json();
+    if (data.ok || data.success) {
+      showToast(`Market resolved ${outcome} ✓`, 'success');
+      cardSuggestions.delete(marketId);
+      setTimeout(() => init(), 500);
+    } else {
+      showToast(data.error || 'Failed to resolve', 'error');
+    }
+  } catch {
+    showToast('Network error. Please try again.', 'error');
+  }
 }
 
 let lbPeriod = 'all_time';
@@ -5324,10 +5434,14 @@ function openResolveModal(marketId, question) {
   document.getElementById('resolveYesBtn').style.opacity = '1';
   document.getElementById('resolveNoBtn').style.opacity = '1';
   document.getElementById('resolveSuggestBtn').disabled = false;
-  document.getElementById('resolveSuggestBtn').textContent = '🤖 Get AI Suggestion';
+  document.getElementById('resolveSuggestBtn').textContent = '🔄 Re-analyze';
+  document.getElementById('resolveSuggestBtn').style.display = 'none';
   document.getElementById('resolutionNoteInput').value = '';
 
   document.getElementById('resolveModal').classList.add('show');
+
+  // Auto-fetch AI suggestion immediately — no button click needed
+  fetchResolutionSuggestion();
 }
 function closeResolveModal() {
   document.getElementById('resolveModal').classList.remove('show');
@@ -5405,7 +5519,8 @@ async function fetchResolutionSuggestion() {
   } finally {
     document.getElementById('resolveSuggestionLoading').style.display = 'none';
     btn.disabled = false;
-    btn.textContent = '🤖 Re-analyze';
+    btn.textContent = '🔄 Re-analyze';
+    btn.style.display = '';
   }
 }
 
