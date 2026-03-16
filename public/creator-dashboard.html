@@ -684,6 +684,21 @@ body.plan-premium .main {
 .analytics-insight-body { flex: 1; }
 .analytics-insight-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 2px; }
 .analytics-insight-sub   { font-size: 12px; color: var(--dim); line-height: 1.4; }
+/* News category buttons */
+.news-cat-btn {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .05em;
+  padding: 5px 10px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+  transition: all .15s;
+}
+.news-cat-btn:hover { border-color: rgba(245,158,11,.5); color: var(--text); }
+.news-cat-btn.active { background: rgba(245,158,11,.15); border-color: #f59e0b; color: #f59e0b; font-weight: 700; }
 /* Top markets toggle */
 .top-mkt-toggle { display: flex; gap: 6px; }
 .top-mkt-tab {
@@ -4433,6 +4448,10 @@ body.nav-open .sidebar-backdrop {
           style="flex:1;padding:9px 2px;font-family:var(--mono);font-size:10px;letter-spacing:0.06em;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--dim);cursor:pointer">
           𝕏 Tweet
         </button>
+        <button id="ytToggleNews" onclick="setYtScanType('news')"
+          style="flex:1;padding:9px 2px;font-family:var(--mono);font-size:10px;letter-spacing:0.06em;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--dim);cursor:pointer">
+          📰 News
+        </button>
       </div>
 
       <!-- YouTube URL field -->
@@ -4482,6 +4501,35 @@ body.nav-open .sidebar-backdrop {
         </div>
         <div style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:-6px;margin-bottom:4px;line-height:1.6">
           AI generates 1–3 prediction markets directly from this tweet. After publishing, you'll get a shareable link that shows the tweet + market card.
+        </div>
+      </div>
+
+      <!-- News Intelligence panel -->
+      <div id="ytNewsField" style="display:none">
+        <div style="background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.2);border-radius:10px;padding:14px 16px;margin-bottom:14px">
+          <div style="font-size:12px;font-weight:700;color:#f59e0b;font-family:var(--mono);letter-spacing:.05em;margin-bottom:6px">📡 LIVE NEWS INTELLIGENCE</div>
+          <div style="font-size:12px;color:var(--dim);line-height:1.6">Scans Google News, Reddit, and X trending in real time. Claude extracts the 5–7 dominant narratives and generates prediction markets directly from what's happening now.</div>
+        </div>
+        <div style="margin-bottom:14px">
+          <label style="font-size:11px;font-family:var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:8px">Category Filter</label>
+          <div style="display:flex;gap:6px;flex-wrap:wrap" id="newsCatButtons">
+            <button onclick="toggleNewsCat('all')" class="news-cat-btn active" data-cat="all">All Topics</button>
+            <button onclick="toggleNewsCat('politics')" class="news-cat-btn" data-cat="politics">🗳 Politics</button>
+            <button onclick="toggleNewsCat('finance')" class="news-cat-btn" data-cat="finance">📈 Finance</button>
+            <button onclick="toggleNewsCat('crypto')" class="news-cat-btn" data-cat="crypto">₿ Crypto</button>
+            <button onclick="toggleNewsCat('sports')" class="news-cat-btn" data-cat="sports">⚽ Sports</button>
+            <button onclick="toggleNewsCat('tech')" class="news-cat-btn" data-cat="tech">💻 Tech</button>
+            <button onclick="toggleNewsCat('entertainment')" class="news-cat-btn" data-cat="entertainment">🎬 Entertainment</button>
+          </div>
+        </div>
+        <div id="newsStatusRow" style="display:none;font-size:11px;font-family:var(--mono);color:var(--dim);padding:8px 0;line-height:1.6">
+          <span id="newsLastScan"></span>
+        </div>
+        <div style="margin-top:4px">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--dim)">
+            <input type="checkbox" id="newsAutoToggle" onchange="toggleNewsAuto(this.checked)" style="accent-color:var(--gold)"/>
+            <span>Auto-scan every 4 hours (runs in background, adds fresh markets to your feed)</span>
+          </label>
         </div>
       </div>
 
@@ -7002,38 +7050,136 @@ let ytScanType = 'youtube';
 let ytTweetMeta = null; // stores { url, text, author } when scanning a tweet
 
 const YT_SCAN_LABELS = {
-  youtube: { btn: 'Scan YouTube →',    scanning: 'Scanning video…',      icon: '▶', color: 'var(--gold)',  sectionLabel: '▶ AI Markets — from YouTube' },
-  twitch:  { btn: 'Generate Markets →', scanning: 'Analyzing chat…',      icon: '🟣', color: '#9b59b6',    sectionLabel: '🟣 AI Markets — from Twitch chat' },
-  paste:   { btn: 'Generate Markets →', scanning: 'Analyzing content…',   icon: '📋', color: '#27ae60',    sectionLabel: '📋 AI Markets — from pasted content' },
-  tweet:   { btn: 'Generate from Tweet →', scanning: 'Analyzing tweet…', icon: '𝕏',  color: '#1d9bf0',    sectionLabel: '𝕏 AI Markets — from Tweet' }
+  youtube: { btn: 'Scan YouTube →',         scanning: 'Scanning video…',        icon: '▶',  color: 'var(--gold)', sectionLabel: '▶ AI Markets — from YouTube' },
+  twitch:  { btn: 'Generate Markets →',     scanning: 'Analyzing chat…',        icon: '🟣', color: '#9b59b6',    sectionLabel: '🟣 AI Markets — from Twitch chat' },
+  paste:   { btn: 'Generate Markets →',     scanning: 'Analyzing content…',     icon: '📋', color: '#27ae60',    sectionLabel: '📋 AI Markets — from pasted content' },
+  tweet:   { btn: 'Generate from Tweet →',  scanning: 'Analyzing tweet…',       icon: '𝕏',  color: '#1d9bf0',    sectionLabel: '𝕏 AI Markets — from Tweet' },
+  news:    { btn: 'Scan Live News →',        scanning: 'Scanning headlines…',    icon: '📰', color: '#f59e0b',    sectionLabel: '📰 AI Markets — from live news' }
 };
+
+// ── NEWS INTELLIGENCE STATE ──────────────────────────────────
+let newsCatFilter = 'all';
+
+function toggleNewsCat(cat) {
+  newsCatFilter = cat;
+  document.querySelectorAll('.news-cat-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.cat === cat);
+  });
+}
+
+async function toggleNewsAuto(enabled) {
+  try {
+    await fetch(API + '/api/creator/news-feed-settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ enabled, categories: newsCatFilter })
+    });
+    showToast(enabled ? '📡 Auto news feed enabled — scans every 4 hours' : 'Auto news feed disabled', enabled ? 'success' : 'info');
+  } catch { showToast('Failed to save setting', 'error'); }
+}
+
+async function loadNewsStatus() {
+  try {
+    const r = await fetch(API + '/api/creator/news-scan/status', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    if (!r.ok) return;
+    const data = await r.json();
+    const autoToggle = document.getElementById('newsAutoToggle');
+    if (autoToggle) autoToggle.checked = data.enabled || false;
+    if (data.categories && data.categories !== 'all') toggleNewsCat(data.categories);
+    const statusRow = document.getElementById('newsStatusRow');
+    const lastScanEl = document.getElementById('newsLastScan');
+    if (statusRow && lastScanEl && data.last_scan) {
+      const ago = Math.round((Date.now() - new Date(data.last_scan)) / 60000);
+      const agoStr = ago < 60 ? `${ago}m ago` : ago < 1440 ? `${Math.round(ago/60)}h ago` : `${Math.round(ago/1440)}d ago`;
+      lastScanEl.textContent = `Last scan: ${agoStr}`;
+      statusRow.style.display = '';
+    }
+  } catch {}
+}
+
+async function runNewsIntelligenceScan() {
+  const btn = document.getElementById('ytScanBtn');
+  const errEl = document.getElementById('ytError');
+  const resultEl = document.getElementById('ytScanResult');
+  const metaEl = document.getElementById('ytVideoMeta');
+
+  if (btn) { btn.disabled = true; btn.textContent = '📡 Scanning headlines…'; }
+  if (errEl) errEl.style.display = 'none';
+  if (resultEl) resultEl.style.display = '';
+  if (metaEl) metaEl.innerHTML = '<span style="color:var(--dim)">Fetching Google News, Reddit, and X trending… this takes ~10 seconds</span>';
+
+  // Save category preference first
+  try {
+    await fetch(API + '/api/creator/news-feed-settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ categories: newsCatFilter })
+    });
+  } catch {}
+
+  try {
+    const r = await fetch(API + '/api/creator/news-scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token }
+    });
+    const data = await r.json();
+    if (!r.ok || data.error) {
+      if (errEl) { errEl.textContent = data.error || 'Scan failed'; errEl.style.display = ''; }
+      if (metaEl) metaEl.innerHTML = '';
+      if (resultEl) resultEl.style.display = 'none';
+    } else {
+      if (metaEl) {
+        metaEl.innerHTML = `
+          <div style="color:var(--text);font-weight:700;margin-bottom:4px">✅ Scan complete</div>
+          <div>Processed <strong>${data.sources || 0}</strong> headlines across news sources</div>
+          <div>Extracted <strong>${data.narratives || 0}</strong> dominant narratives</div>
+          <div>Created <strong style="color:#4ade80">${data.markets_created || 0} new markets</strong> in your community feed</div>
+          ${data.markets_created ? '<div style="margin-top:8px;color:var(--dim)">Markets are live — visit your community page to see the feed.</div>' : ''}
+        `;
+      }
+      if (data.markets_created > 0) {
+        showToast(`📰 ${data.markets_created} news markets added to your feed`, 'success');
+        loadMarkets(); // refresh dashboard market list
+      }
+    }
+  } catch (err) {
+    if (errEl) { errEl.textContent = 'Network error: ' + err.message; errEl.style.display = ''; }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = YT_SCAN_LABELS.news.btn; }
+  }
+}
 
 function setYtScanType(type) {
   ytScanType = type;
-  const toggleIds = { youtube: 'ytToggleYoutube', twitch: 'ytToggleTwitch', paste: 'ytTogglePaste', tweet: 'ytToggleTweet' };
+  const toggleIds = { youtube: 'ytToggleYoutube', twitch: 'ytToggleTwitch', paste: 'ytTogglePaste', tweet: 'ytToggleTweet', news: 'ytToggleNews' };
+  const COLORS = { youtube: 'var(--gold)', twitch: '#9b59b6', paste: '#27ae60', tweet: '#1d9bf0', news: '#f59e0b' };
   Object.entries(toggleIds).forEach(([t, id]) => {
     const btn = document.getElementById(id);
     if (!btn) return;
     const active = t === type;
-    btn.style.background = active ? (t === 'tweet' ? '#1d9bf0' : 'var(--gold)') : 'transparent';
-    btn.style.color = active ? (t === 'tweet' ? '#fff' : 'var(--ink)') : 'var(--dim)';
-    btn.style.borderColor = active ? (t === 'tweet' ? '#1d9bf0' : 'var(--gold)') : 'var(--border)';
-    btn.style.fontWeight = active ? '700' : '400';
+    btn.style.background   = active ? COLORS[t] : 'transparent';
+    btn.style.color        = active ? (t === 'tweet' ? '#fff' : 'var(--ink)') : 'var(--dim)';
+    btn.style.borderColor  = active ? COLORS[t] : 'var(--border)';
+    btn.style.fontWeight   = active ? '700' : '400';
   });
 
   // Show/hide input sections
-  const urlField      = document.getElementById('ytUrlField');
-  const pasteField    = document.getElementById('ytPasteField');
-  const pasteLabel    = document.getElementById('ytPasteLabel');
-  const pasteTextarea = document.getElementById('ytPasteText');
-  const pasteSource   = document.getElementById('ytPasteSource');
+  const urlField       = document.getElementById('ytUrlField');
+  const pasteField     = document.getElementById('ytPasteField');
+  const pasteLabel     = document.getElementById('ytPasteLabel');
+  const pasteTextarea  = document.getElementById('ytPasteText');
+  const pasteSource    = document.getElementById('ytPasteSource');
   const twitchUrlField = document.getElementById('ytTwitchUrlField');
-  const tweetField    = document.getElementById('ytTweetField');
+  const tweetField     = document.getElementById('ytTweetField');
+  const newsField      = document.getElementById('ytNewsField');
 
   if (urlField)       urlField.style.display       = type === 'youtube' ? '' : 'none';
   if (twitchUrlField) twitchUrlField.style.display  = type === 'twitch'  ? '' : 'none';
   if (pasteField)     pasteField.style.display      = (type === 'twitch' || type === 'paste') ? '' : 'none';
   if (tweetField)     tweetField.style.display      = type === 'tweet'   ? '' : 'none';
+  if (newsField)      newsField.style.display       = type === 'news'    ? '' : 'none';
 
   if (type === 'twitch') {
     if (pasteLabel) pasteLabel.textContent = 'Paste Twitch chat here (optional)';
@@ -7043,17 +7189,17 @@ function setYtScanType(type) {
     if (pasteLabel) pasteLabel.textContent = 'Paste content here';
     if (pasteTextarea) pasteTextarea.placeholder = 'Paste Reddit comments, Discord messages, article text, or any community content — the AI extracts what people are already predicting.';
     if (pasteSource) pasteSource.value = 'Community content';
+  } else if (type === 'news') {
+    loadNewsStatus();
   }
 
   // Update AI description
   const aiDesc = document.getElementById('ytAiDesc');
-  if (aiDesc) {
-    if (type === 'tweet') {
-      aiDesc.innerHTML = '<strong>Tweet → Market.</strong> Paste a tweet — any hot take, bold prediction, or breaking news — and the AI generates 1–3 tightly focused prediction markets directly from it. Publishes with a shareable link showing the tweet + market card.';
-    } else {
-      aiDesc.innerHTML = '<strong>AI reads your content.</strong> Drop in a YouTube or Twitch URL — or paste chat, Reddit threads, Discord messages, or any text — and the AI generates ready-to-publish prediction markets from what your community is already debating.';
-    }
-  }
+  const descs = {
+    tweet: '<strong>Tweet → Market.</strong> Paste a tweet — any hot take, bold prediction, or breaking news — and the AI generates 1–3 tightly focused prediction markets directly from it.',
+    news:  '<strong>News Intelligence.</strong> Scans Google News, Reddit hot posts, and X trending right now. Claude identifies the dominant narratives and turns them into prediction markets in your community — automatically.',
+  };
+  if (aiDesc) aiDesc.innerHTML = descs[type] || '<strong>AI reads your content.</strong> Drop in a YouTube or Twitch URL — or paste chat, Reddit threads, Discord messages, or any text — and the AI generates ready-to-publish prediction markets from what your community is already debating.';
 
   const cfg = YT_SCAN_LABELS[type];
   const scanBtn = document.getElementById('ytScanBtn');
@@ -7086,6 +7232,9 @@ function closeYoutubeModal() {
 }
 
 async function runYoutubeScan() {
+  // ── News Intelligence mode ────────────────────────────────
+  if (ytScanType === 'news') { await runNewsIntelligenceScan(); return; }
+
   const cfg = YT_SCAN_LABELS[ytScanType];
   const btn = document.getElementById('ytScanBtn');
 

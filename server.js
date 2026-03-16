@@ -1627,7 +1627,7 @@ async function scanAndCreateMarkets() {
 // Run Claude scanner every 6 hours
 cron.schedule('0 */6 * * *', scanAndCreateMarkets);
 
-// Manual trigger endpoint
+// Manual trigger endpoint (legacy)
 app.post('/api/scan-markets', async (req, res) => {
   try {
     await scanAndCreateMarkets();
@@ -1635,6 +1635,341 @@ app.post('/api/scan-markets', async (req, res) => {
   } catch (err) {
     console.error('Manual scan-markets error:', err.message);
     res.status(500).json({ error: 'Scan failed' });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+// NEWS INTELLIGENCE SCANNER
+// Ingests live headlines → extracts dominant narratives → creates markets
+// Sources: Google News RSS, Reddit hot, X trending (if bearer token set)
+// ════════════════════════════════════════════════════════════
+
+// Lightweight RSS parser — extracts <item><title> + <link> pairs
+function parseRSSItems(xml, limit = 30) {
+  const items = [];
+  const itemRegex = /<item[^>]*>([\s\S]*?)<\/item>/gi;
+  let match;
+  while ((match = itemRegex.exec(xml)) !== null && items.length < limit) {
+    const block = match[1];
+    const titleMatch = block.match(/<title[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i);
+    const linkMatch  = block.match(/<link[^>]*>\s*(https?:\/\/[^\s<]+)/i)
+      || block.match(/<link[^>]*>([\s\S]*?)<\/link>/i);
+    const sourceMatch = block.match(/<source[^>]*>([\s\S]*?)<\/source>/i);
+    const title  = titleMatch  ? titleMatch[1].replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'").trim() : null;
+    const link   = linkMatch   ? linkMatch[1].trim() : null;
+    const source = sourceMatch ? sourceMatch[1].trim() : null;
+    if (title && title.length > 10) items.push({ title, link, source });
+  }
+  return items;
+}
+
+async function fetchRSSFeed(url, limit = 30) {
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'HyperflexBot/1.0', 'Accept': 'application/rss+xml, application/xml, text/xml' },
+      signal: AbortSignal.timeout(8000)
+    });
+    if (!res.ok) return [];
+    const xml = await res.text();
+    return parseRSSItems(xml, limit);
+  } catch (e) {
+    console.warn(`[news] RSS fetch failed (${url.slice(0,50)}):`, e.message);
+    return [];
+  }
+}
+
+async function fetchRedditHot(subreddit, limit = 20) {
+  try {
+    const res = await fetch(`https://www.reddit.com/r/${subreddit}/hot.json?limit=${limit}`, {
+      headers: { 'User-Agent': 'HyperflexBot/1.0', 'Accept': 'application/json' },
+      signal: AbortSignal.timeout(8000)
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data?.data?.children || [])
+      .filter(c => !c.data.stickied && c.data.score > 500)
+      .map(c => ({ title: c.data.title, link: 'https://reddit.com' + c.data.permalink, source: 'Reddit r/' + subreddit }));
+  } catch (e) {
+    console.warn(`[news] Reddit fetch failed (${subreddit}):`, e.message);
+    return [];
+  }
+}
+
+async function fetchXTrending() {
+  const bearer = process.env.X_BEARER_TOKEN;
+  if (!bearer) return [];
+  try {
+    // WOEID 1 = worldwide trending
+    const res = await fetch('https://api.twitter.com/2/trends/by/woeid/1', {
+      headers: { 'Authorization': `Bearer ${bearer}` },
+      signal: AbortSignal.timeout(8000)
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data?.data || []).slice(0, 20).map(t => ({
+      title: t.name || t.trend_name || '',
+      link: `https://x.com/search?q=${encodeURIComponent(t.name || '')}`,
+      source: 'X Trending'
+    })).filter(t => t.title.length > 2);
+  } catch (e) {
+    console.warn('[news] X trending fetch failed:', e.message);
+    return [];
+  }
+}
+
+async function extractDominantNarratives(headlines, categoryFilter) {
+  if (!headlines.length) return [];
+  const headlineText = headlines
+    .map((h, i) => `${i+1}. [${h.source || 'News'}] ${h.title}`)
+    .join('\n');
+
+  const catInstruction = categoryFilter && categoryFilter !== 'all'
+    ? `Focus ONLY on these categories: ${categoryFilter}.`
+    : 'Cover a mix of categories: politics, finance, crypto, sports, entertainment, tech, world events.';
+
+  const prompt = `You are analyzing news headlines to find the biggest stories right now for prediction markets.
+
+HEADLINES (${headlines.length} sources):
+${headlineText.slice(0, 6000)}
+
+${catInstruction}
+
+Extract the 5-7 most significant, prediction-worthy narratives from these headlines.
+For each, generate 2 binary YES/NO prediction market questions that:
+- Have a clear, verifiable resolution condition
+- Will resolve within 14-60 days
+- Are genuinely uncertain (not 99% obvious)
+- Reference specific names, numbers, or dates from the news
+
+Return ONLY a JSON array. Each object:
+{
+  "narrative": "one-sentence description of the story",
+  "category": "politics|finance|crypto|sports|entertainment|tech|world",
+  "source_headline": "the main headline that inspired this",
+  "source_url": "URL if available or null",
+  "markets": [
+    {
+      "question": "Will X happen by [specific date]?",
+      "expiry_days": 30
+    }
+  ]
+}`;
+
+  const message = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 2048,
+    messages: [{ role: 'user', content: prompt }]
+  });
+
+  const raw = message.content[0].text.trim().replace(/^```json?\s*/i,'').replace(/```\s*$/,'').trim();
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    console.error('[news] narrative parse error:', e.message, raw.slice(0, 200));
+    return [];
+  }
+}
+
+async function runNewsIntelligenceScanner(targetSlug = null) {
+  if (!anthropic) {
+    console.warn('[news-scanner] skipped: ANTHROPIC_API_KEY not set');
+    return { ok: false, reason: 'no_ai' };
+  }
+
+  console.log('[news-scanner] Starting scan…');
+  const startedAt = new Date();
+
+  // ── 1. Fetch all news sources in parallel ──────────────────
+  const [googleTop, googleWorld, googleBiz, googleTech, googleEnt,
+         redditNews, redditWorldnews, redditCrypto, xTrends] = await Promise.all([
+    fetchRSSFeed('https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en', 20),
+    fetchRSSFeed('https://news.google.com/rss/headlines/section/topic/WORLD?hl=en-US&gl=US&ceid=US:en', 15),
+    fetchRSSFeed('https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=en-US&gl=US&ceid=US:en', 15),
+    fetchRSSFeed('https://news.google.com/rss/headlines/section/topic/TECHNOLOGY?hl=en-US&gl=US&ceid=US:en', 10),
+    fetchRSSFeed('https://news.google.com/rss/headlines/section/topic/ENTERTAINMENT?hl=en-US&gl=US&ceid=US:en', 10),
+    fetchRedditHot('news', 15),
+    fetchRedditHot('worldnews', 15),
+    fetchRedditHot('CryptoCurrency', 10),
+    fetchXTrending()
+  ]);
+
+  const allHeadlines = [
+    ...googleTop, ...googleWorld, ...googleBiz, ...googleTech, ...googleEnt,
+    ...redditNews, ...redditWorldnews, ...redditCrypto,
+    ...xTrends.map(t => ({ ...t, title: `TRENDING ON X: ${t.title}` }))
+  ];
+
+  // Deduplicate by title similarity (simple prefix match)
+  const seen = new Set();
+  const deduped = allHeadlines.filter(h => {
+    const key = h.title.toLowerCase().slice(0, 40);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  console.log(`[news-scanner] Collected ${deduped.length} unique headlines from ${[googleTop,googleWorld,googleBiz,googleTech,googleEnt,redditNews,redditWorldnews,redditCrypto,xTrends].filter(a=>a.length).length} sources`);
+
+  if (deduped.length < 5) {
+    console.warn('[news-scanner] Too few headlines, aborting');
+    return { ok: false, reason: 'insufficient_headlines', count: deduped.length };
+  }
+
+  // ── 2. Determine which creators to populate ────────────────
+  let creators = [];
+  if (targetSlug) {
+    const { data } = await supabase.from('creator_settings')
+      .select('creator_id, slug, plan, news_feed_categories')
+      .eq('slug', targetSlug).eq('is_active', true).maybeSingle();
+    if (data) creators = [data];
+  } else {
+    // All Pro/Premium creators with news feed enabled
+    const { data } = await supabase.from('creator_settings')
+      .select('creator_id, slug, plan, news_feed_categories')
+      .eq('is_active', true)
+      .eq('news_feed_enabled', true)
+      .in('plan', ['pro', 'platinum']);
+    creators = data || [];
+  }
+
+  if (!creators.length) {
+    console.log('[news-scanner] No eligible creators, nothing to do');
+    return { ok: true, reason: 'no_eligible_creators', markets_created: 0 };
+  }
+
+  // ── 3. Extract narratives once (shared across all creators) ─
+  // Use the first creator's category filter; or 'all' if multiple
+  const catFilter = creators.length === 1 ? (creators[0].news_feed_categories || 'all') : 'all';
+  const narratives = await extractDominantNarratives(deduped, catFilter);
+  console.log(`[news-scanner] Extracted ${narratives.length} dominant narratives`);
+
+  if (!narratives.length) return { ok: false, reason: 'no_narratives' };
+
+  // ── 4. Create markets for each creator ────────────────────
+  let totalCreated = 0;
+  const MARKET_SEED = 10000;
+
+  for (const creator of creators) {
+    // Fetch recent questions to avoid duplicates
+    const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+    const { data: recentMkts } = await supabase.from('markets')
+      .select('question')
+      .eq('creator_id', creator.creator_id)
+      .gte('created_at', sevenDaysAgo);
+    const recentQuestions = new Set((recentMkts || []).map(m => m.question.toLowerCase().slice(0, 60)));
+
+    let creatorCreated = 0;
+    for (const n of narratives) {
+      for (const mkt of (n.markets || [])) {
+        if (!mkt.question || typeof mkt.question !== 'string') continue;
+        // Duplicate check
+        const qKey = mkt.question.toLowerCase().slice(0, 60);
+        if (recentQuestions.has(qKey)) continue;
+        recentQuestions.add(qKey);
+
+        const expiryDays = Math.min(Math.max(mkt.expiry_days || 30, 7), 90);
+        const expiry = new Date(Date.now() + expiryDays * 86400000).toISOString().split('T')[0];
+
+        const { error } = await supabase.from('markets').insert([{
+          question:       mkt.question,
+          category:       n.category || 'news',
+          expiry_date:    expiry,
+          yes_price:      0.5,
+          no_price:       0.5,
+          yes_pool:       MARKET_SEED,
+          no_pool:        MARKET_SEED,
+          resolved:       false,
+          is_public:      true,
+          creator_id:     creator.creator_id,
+          tenant_slug:    creator.slug,
+          // Reuse tweet fields to carry news context (shows in tweet feed on community page)
+          tweet_text:     n.source_headline || n.narrative,
+          source_tweet_url: n.source_url || null,
+          tweet_author:   n.narrative ? 'News Intelligence' : null
+        }]);
+
+        if (error) {
+          console.error(`[news-scanner] insert error (${creator.slug}):`, error.message);
+        } else {
+          creatorCreated++;
+          totalCreated++;
+        }
+      }
+    }
+
+    // Update last scan timestamp
+    await supabase.from('creator_settings')
+      .update({ news_feed_last_scan: startedAt.toISOString() })
+      .eq('creator_id', creator.creator_id);
+
+    console.log(`[news-scanner] ${creator.slug}: created ${creatorCreated} markets`);
+  }
+
+  console.log(`[news-scanner] Done — ${totalCreated} markets created across ${creators.length} communities in ${Date.now() - startedAt}ms`);
+  return { ok: true, narratives: narratives.length, markets_created: totalCreated, sources: deduped.length };
+}
+
+// Run news scanner every 4 hours
+cron.schedule('0 */4 * * *', () => {
+  console.log('[cron] News intelligence scanner triggered');
+  runNewsIntelligenceScanner().catch(e => console.error('[news-scanner] cron error:', e.message));
+});
+
+// POST /api/creator/news-scan — per-creator manual trigger
+app.post('/api/creator/news-scan', requireCreator, async (req, res) => {
+  try {
+    const { data: settings } = await supabase.from('creator_settings')
+      .select('slug, plan, news_feed_enabled')
+      .eq('creator_id', req.creator.id)
+      .maybeSingle();
+    if (!settings) return res.status(404).json({ error: 'Creator not found' });
+    if (!['pro','platinum'].includes(settings.plan)) {
+      return res.status(403).json({ error: 'News Intelligence requires Pro or Premium plan' });
+    }
+    const result = await runNewsIntelligenceScanner(settings.slug);
+    res.json(result);
+  } catch (err) {
+    console.error('[news-scan] error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/creator/news-scan/status — last scan info
+app.get('/api/creator/news-scan/status', requireCreator, async (req, res) => {
+  try {
+    const { data: settings } = await supabase.from('creator_settings')
+      .select('slug, plan, news_feed_enabled, news_feed_last_scan, news_feed_categories')
+      .eq('creator_id', req.creator.id)
+      .maybeSingle();
+    if (!settings) return res.status(404).json({ error: 'Not found' });
+    res.json({
+      enabled:    settings.news_feed_enabled || false,
+      last_scan:  settings.news_feed_last_scan || null,
+      categories: settings.news_feed_categories || 'all',
+      plan:       settings.plan
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/creator/news-feed-settings — toggle auto-scan + category filter
+app.put('/api/creator/news-feed-settings', requireCreator, async (req, res) => {
+  try {
+    const { enabled, categories } = req.body;
+    const updates = {};
+    if (typeof enabled === 'boolean') updates.news_feed_enabled = enabled;
+    if (typeof categories === 'string') updates.news_feed_categories = categories;
+    if (!Object.keys(updates).length) return res.status(400).json({ error: 'Nothing to update' });
+
+    const { error } = await supabase.from('creator_settings')
+      .update(updates)
+      .eq('creator_id', req.creator.id);
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ ok: true, ...updates });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
