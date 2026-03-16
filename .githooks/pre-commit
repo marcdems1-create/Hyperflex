@@ -1,0 +1,9 @@
+#!/bin/sh
+echo "Running ESLint..."
+npm run lint
+if [ $? -ne 0 ]; then
+  echo ""
+  echo "❌ ESLint found errors. Fix them before committing."
+  exit 1
+fi
+echo "✓ ESLint passed."
