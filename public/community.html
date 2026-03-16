@@ -1850,7 +1850,8 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
         <svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.253 5.622 5.911-5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
         Share on 𝕏
       </button>
-      <button onclick="closeWinCard()" style="flex:1;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:rgba(245,240,232,0.7);padding:10px 14px;border-radius:8px;cursor:pointer;font-size:13px">Close</button>
+      <button id="winCardCopyBtn" onclick="copyWinCardLink()" style="flex:1;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:rgba(245,240,232,0.7);padding:10px 14px;border-radius:8px;cursor:pointer;font-size:13px">📋 Copy</button>
+      <button onclick="closeWinCard()" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:rgba(245,240,232,0.7);padding:10px 14px;border-radius:8px;cursor:pointer;font-size:13px">✕</button>
     </div>
   </div>
 </div>
@@ -2493,7 +2494,7 @@ function marketCardHTML(m, isResolved, featured) {
     const won = m.outcome === 'YES' || m.outcome === true;
     const userWon = pos && ((won && pos.side === 'YES') || (!won && pos.side === 'NO'));
     const shareBtn = userWon && currentUser
-      ? `<button onclick="event.stopPropagation();openWinCard(${JSON.stringify(m.question)},${JSON.stringify(community?.display_name||'')},${JSON.stringify(pos?.amount||0)})" style="margin-left:10px;background:rgba(201,146,13,0.15);border:1px solid rgba(201,146,13,0.4);color:#c9920d;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:700">🎉 Share</button>`
+      ? `<button onclick="event.stopPropagation();openWinCard(${JSON.stringify(m.question)},${JSON.stringify(community?.display_name||'')},${JSON.stringify(pos?.amount||0)},${JSON.stringify(m.id)},${JSON.stringify(currentUser?.id||'')})" style="margin-left:10px;background:rgba(201,146,13,0.15);border:1px solid rgba(201,146,13,0.4);color:#c9920d;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:700">🎉 Share</button>`
       : '';
     const noteHTML = m.resolution_note
       ? `<div style="font-size:11px;color:var(--dim);padding:8px 16px 10px;line-height:1.5;font-style:italic;border-top:1px solid rgba(255,255,255,0.06)">📌 ${escHtml(m.resolution_note)}</div>`
@@ -3573,13 +3574,15 @@ async function submitSuggestion() {
 
 // ── WIN SHARE CARD ────────────────────────────────────────────
 let _winCardData = {};
-function openWinCard(question, communityName, ptsWagered) {
-  _winCardData = { question, communityName, ptsWagered };
+function openWinCard(question, communityName, ptsWagered, marketId, userId) {
+  _winCardData = { question, communityName, ptsWagered, marketId, userId };
   document.getElementById('winCardCommunity').textContent = (communityName || slug).toUpperCase();
   document.getElementById('winCardQuestion').textContent  = question;
   document.getElementById('winCardSub').textContent       = ptsWagered > 0
     ? `${ptsWagered.toLocaleString()} pts on the line · ${community?.custom_points_name || 'Flex Points'}`
     : community?.custom_points_name || 'Flex Points';
+  const btn = document.getElementById('winCardCopyBtn');
+  if (btn) btn.innerHTML = '📋 Copy';
   const overlay = document.getElementById('winCardOverlay');
   overlay.style.display = 'flex';
 }
@@ -3587,11 +3590,25 @@ function closeWinCard() {
   document.getElementById('winCardOverlay').style.display = 'none';
 }
 function shareWinOnX() {
-  const { question, communityName } = _winCardData;
-  const communityUrl = window.location.origin + '/' + slug;
-  const text = `I predicted this correctly on ${communityName || slug}:\n\n"${question}"\n\nPlay prediction markets at:`;
-  const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(communityUrl)}`;
-  window.open(url, '_blank', 'noopener');
+  const { question, communityName, marketId, userId, ptsWagered } = _winCardData;
+  const shareUrl = marketId && userId
+    ? `${location.origin}/win/${marketId}/${userId}`
+    : `${location.origin}/${slug}`;
+  const ptsLine = ptsWagered > 0
+    ? `Won ${ptsWagered.toLocaleString()} ${community?.custom_points_name || 'Flex Points'} 🎯`
+    : '🎯 Called it.';
+  const text = `I predicted this correctly on ${communityName || slug}:\n\n"${question}"\n\n${ptsLine}\n\nPlay prediction markets at hyperflex.network`;
+  window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(shareUrl)}`, '_blank', 'noopener');
+}
+function copyWinCardLink() {
+  const { marketId, userId } = _winCardData;
+  const url = marketId && userId
+    ? `${location.origin}/win/${marketId}/${userId}`
+    : `${location.origin}/${slug}`;
+  navigator.clipboard.writeText(url).then(() => {
+    const btn = document.getElementById('winCardCopyBtn');
+    if (btn) { btn.textContent = '✓ Copied!'; setTimeout(() => { btn.innerHTML = '📋 Copy'; }, 2000); }
+  });
 }
 </script>
 

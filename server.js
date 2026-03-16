@@ -5522,11 +5522,110 @@ app.post('/api/creator/oauth-complete', async (req, res) => {
 const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
-  'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u'
+  'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u', 'win'
 ]);
 
 // GET /u/:slug — public creator profile page
 app.get('/u/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'profile.html')));
+
+// GET /api/win-card/:marketId/:userId — public win card data
+app.get('/api/win-card/:marketId/:userId', async (req, res) => {
+  try {
+    const { marketId, userId } = req.params;
+
+    const [mktRes, posRes] = await Promise.all([
+      supabase.from('markets').select('id, question, category, outcome, yes_price, no_price, trader_count, tenant_slug, creator_id, resolved_at').eq('id', marketId).maybeSingle(),
+      supabase.from('positions').select('side, amount, potential_payout, won, settled').eq('market_id', marketId).eq('user_id', userId).order('created_at', { ascending: false })
+    ]);
+
+    const market = mktRes.data;
+    if (!market || !market.resolved_at) return res.status(404).json({ error: 'Market not found or not resolved' });
+
+    // Aggregate positions (user may have bet multiple times)
+    const positions = posRes.data || [];
+    if (!positions.length) return res.status(404).json({ error: 'No position found' });
+
+    const totalAmount = positions.reduce((s, p) => s + (p.amount || 0), 0);
+    const totalPayout = positions.filter(p => p.won).reduce((s, p) => s + (p.potential_payout || 0), 0);
+    const won = positions.some(p => p.won);
+    const side = positions[0].side;
+
+    // Community settings
+    const slug = market.tenant_slug;
+    const { data: settings } = await supabase.from('creator_settings')
+      .select('display_name, custom_points_name, primary_color, logo_url')
+      .or(slug ? `slug.eq.${slug}` : `creator_id.eq.${market.creator_id}`)
+      .maybeSingle();
+
+    // Winner display name
+    const { data: userRow } = await supabase.from('users').select('display_name').eq('id', userId).maybeSingle();
+
+    res.json({
+      market: {
+        id: market.id,
+        question: market.question,
+        category: market.category,
+        outcome: market.outcome,
+        trader_count: market.trader_count,
+        resolved_at: market.resolved_at,
+        slug: market.tenant_slug
+      },
+      position: {
+        side,
+        amount: Math.round(totalAmount / 100),
+        payout: Math.round(totalPayout / 100),
+        won
+      },
+      community: {
+        display_name: settings?.display_name || slug || 'HYPERFLEX',
+        custom_points_name: settings?.custom_points_name || 'Flex Points',
+        primary_color: settings?.primary_color || '#c9920d',
+        logo_url: settings?.logo_url || null,
+        slug: slug || ''
+      },
+      user: { display_name: userRow?.display_name || 'A predictor' }
+    });
+  } catch (err) {
+    console.error('[win-card]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /win/:marketId/:userId — OG-tagged win card share page
+app.get('/win/:marketId/:userId', async (req, res) => {
+  try {
+    const { marketId, userId } = req.params;
+    const apiRes = await fetch(`http://localhost:${process.env.PORT || 3000}/api/win-card/${marketId}/${userId}`);
+    if (!apiRes.ok) return res.sendFile(path.join(__dirname, 'public', 'win-card.html'));
+    const data = await apiRes.json();
+    const won = data.position?.won;
+    if (!won) return res.sendFile(path.join(__dirname, 'public', 'win-card.html'));
+
+    const title = `${data.user.display_name} called it on ${data.community.display_name} 🎯`;
+    const desc  = `"${data.market.question}" — predicted ${data.position.side} correctly. ${data.position.payout > 0 ? `Won ${data.position.payout.toLocaleString()} ${data.community.custom_points_name}.` : ''} Compete at hyperflex.network`;
+    const url   = `https://hyperflex.network/win/${marketId}/${userId}`;
+    const commUrl = `https://hyperflex.network/${data.community.slug}`;
+
+    const html = `<!DOCTYPE html><html><head>
+<meta charset="UTF-8"/>
+<title>${title}</title>
+<meta name="description" content="${desc}"/>
+<meta property="og:title" content="${title}"/>
+<meta property="og:description" content="${desc}"/>
+<meta property="og:url" content="${url}"/>
+<meta property="og:type" content="website"/>
+<meta property="og:site_name" content="HYPERFLEX"/>
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="${title}"/>
+<meta name="twitter:description" content="${desc}"/>
+<meta http-equiv="refresh" content="0;url=/win-card.html#${encodeURIComponent(JSON.stringify({ marketId, userId }))}"/>
+<script>location.href='/win-card.html?m=${marketId}&u=${userId}';</script>
+</head><body></body></html>`;
+    res.send(html);
+  } catch {
+    res.sendFile(path.join(__dirname, 'public', 'win-card.html'));
+  }
+});
 
 // Read community.html once at startup and cache it
 const COMMUNITY_HTML = fs.readFileSync(path.join(__dirname, 'public', 'community.html'), 'utf8');

@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Win Card — HYPERFLEX</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+  <style>
+    :root { --gold:#c9920d; --ink:#141412; --paper:#141412; --surface:#1c1c1a; --border:rgba(255,255,255,.1); --text:#f0ede8; --dim:rgba(240,237,232,.45); --sans:'Syne',sans-serif; --mono:'Space Mono',monospace; }
+    *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+    body { background:var(--paper); color:var(--text); font-family:var(--sans); min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px; }
+
+    .card {
+      width:100%; max-width:460px;
+      background:var(--surface); border:1px solid rgba(201,146,13,.35);
+      border-radius:20px; overflow:hidden;
+      box-shadow:0 0 0 1px rgba(201,146,13,.1), 0 32px 80px rgba(0,0,0,.6);
+    }
+    .card-top {
+      padding:36px 32px 28px; text-align:center;
+      background:linear-gradient(135deg, rgba(201,146,13,.15) 0%, transparent 55%);
+      position:relative;
+    }
+    .card-logo {
+      width:52px; height:52px; border-radius:12px; margin:0 auto 14px;
+      background:rgba(201,146,13,.15); border:1px solid rgba(201,146,13,.3);
+      display:flex; align-items:center; justify-content:center;
+      font-size:20px; font-weight:800; color:var(--gold);
+      overflow:hidden;
+    }
+    .card-logo img { width:100%; height:100%; object-fit:cover; }
+    .card-community { font-family:var(--mono); font-size:10px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:rgba(201,146,13,.8); margin-bottom:14px; }
+    .card-question { font-size:17px; font-weight:800; line-height:1.45; color:var(--text); margin-bottom:20px; }
+    .win-badge {
+      display:inline-flex; align-items:center; gap:8px;
+      background:rgba(74,222,128,.12); border:1px solid rgba(74,222,128,.3);
+      border-radius:10px; padding:10px 20px; margin-bottom:10px;
+    }
+    .win-badge-icon { font-size:18px; }
+    .win-badge-text { font-size:15px; font-weight:800; color:#4ade80; }
+    .win-side { font-family:var(--mono); font-size:11px; color:var(--dim); margin-top:6px; }
+    .card-pts {
+      margin-top:14px; font-family:var(--mono); font-size:13px;
+      color:var(--gold); font-weight:700; letter-spacing:.04em;
+    }
+    .card-user { font-size:12px; color:var(--dim); margin-top:4px; }
+
+    .card-bottom {
+      padding:16px 20px; border-top:1px solid rgba(255,255,255,.07);
+      display:flex; gap:10px;
+    }
+    .btn { flex:1; padding:12px 16px; border-radius:10px; font-size:13px; font-weight:700; cursor:pointer; border:none; display:flex; align-items:center; justify-content:center; gap:7px; transition:opacity .15s; font-family:var(--sans); }
+    .btn:hover { opacity:.85; }
+    .btn-x { background:#000; border:1px solid #333; color:#fff; }
+    .btn-copy { background:rgba(255,255,255,.07); border:1px solid var(--border); color:var(--dim); }
+    .btn-copy:hover { color:var(--text); }
+    .btn-join { background:var(--gold); color:var(--ink); }
+
+    .hf-brand { margin-top:20px; font-family:var(--mono); font-size:11px; color:var(--dim); text-align:center; }
+    .hf-brand a { color:var(--gold); text-decoration:none; }
+    .hf-brand a:hover { text-decoration:underline; }
+
+    .loading { text-align:center; color:var(--dim); font-size:14px; padding:40px; }
+    .error { text-align:center; color:#f87171; font-size:14px; padding:40px; }
+  </style>
+</head>
+<body>
+
+<div class="card" id="card">
+  <div class="card-top">
+    <div class="loading">Loading…</div>
+  </div>
+</div>
+
+<div class="hf-brand">Prediction markets by <a href="https://hyperflex.network">HYPERFLEX</a></div>
+
+<script>
+const params = new URLSearchParams(location.search);
+const marketId = params.get('m');
+const userId   = params.get('u');
+
+if (!marketId || !userId) {
+  document.querySelector('.card-top').innerHTML = '<div class="error">Invalid win card link.</div>';
+}
+
+async function load() {
+  try {
+    const r = await fetch(`/api/win-card/${marketId}/${userId}`);
+    const data = await r.json();
+    if (!r.ok || data.error) throw new Error(data.error || 'Not found');
+    render(data);
+  } catch (err) {
+    document.querySelector('.card-top').innerHTML = `<div class="error">Could not load win card.<br/><span style="font-size:12px;color:var(--dim)">${err.message}</span></div>`;
+  }
+}
+
+function render(data) {
+  const { market, position, community, user } = data;
+  const accent = community.primary_color || '#c9920d';
+  document.documentElement.style.setProperty('--gold', accent);
+  document.title = `${user.display_name} called it on ${community.display_name} 🎯`;
+
+  const logoHtml = community.logo_url
+    ? `<img src="${community.logo_url}" alt="${community.display_name}"/>`
+    : (community.display_name || 'H').split(/\s+/).map(w=>w[0]).join('').toUpperCase().slice(0,2);
+
+  const ptsHtml = position.payout > 0
+    ? `<div class="card-pts">+${position.payout.toLocaleString()} ${community.custom_points_name} won 🎯</div>`
+    : '';
+
+  document.getElementById('card').innerHTML = `
+    <div class="card-top" style="background:linear-gradient(135deg,${accent}22 0%,transparent 55%)">
+      <div class="card-logo" style="background:${accent}18;border-color:${accent}44;color:${accent}">${logoHtml}</div>
+      <div class="card-community">${(community.display_name || '').toUpperCase()}</div>
+      <div class="card-question">${escHtml(market.question)}</div>
+      <div class="win-badge">
+        <span class="win-badge-icon">🎯</span>
+        <span class="win-badge-text">I called it correctly</span>
+      </div>
+      <div class="win-side">Predicted <strong style="color:${position.side==='YES'?'#4ade80':'#f87171'}">${position.side}</strong> · Resolved ${market.outcome || position.side}</div>
+      ${ptsHtml}
+      <div class="card-user">— ${escHtml(user.display_name)}</div>
+    </div>
+    <div class="card-bottom">
+      <button class="btn btn-x" onclick="shareX()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="white"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.253 5.622 5.911-5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+        Share on 𝕏
+      </button>
+      <button class="btn btn-copy" onclick="copyLink()">📋 Copy</button>
+      <a class="btn btn-join" href="/${community.slug}" style="text-decoration:none">Join →</a>
+    </div>
+  `;
+
+  // store for share fns
+  window._wd = data;
+}
+
+function escHtml(t) {
+  if (!t) return '';
+  const d = document.createElement('div');
+  d.textContent = t;
+  return d.innerHTML;
+}
+
+function shareX() {
+  const d = window._wd;
+  if (!d) return;
+  const shareUrl = `${location.origin}/win/${marketId}/${userId}`;
+  const text = `I predicted this correctly on ${d.community.display_name}:\n\n"${d.market.question}"\n\n${d.position.payout > 0 ? `Won ${d.position.payout.toLocaleString()} ${d.community.custom_points_name} 🎯` : '🎯 Called it.'}\n\nPlay prediction markets at hyperflex.network`;
+  window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(shareUrl)}`, '_blank', 'noopener');
+}
+
+function copyLink() {
+  const url = `${location.origin}/win/${marketId}/${userId}`;
+  navigator.clipboard.writeText(url).then(() => {
+    const btn = document.querySelector('.btn-copy');
+    btn.textContent = '✓ Copied!';
+    setTimeout(() => { btn.innerHTML = '📋 Copy'; }, 2000);
+  });
+}
+
+if (marketId && userId) load();
+</script>
+</body>
+</html>
