@@ -6211,7 +6211,7 @@ async function loadAnalytics() {
 
     // Market breakdown
     const bkEl = document.getElementById('marketBreakdownList');
-    const total = data.market_breakdown?.total || 1;
+    const bkTotal = data.market_breakdown?.total || 1;
     const bkData = [
       { label: 'Active', count: data.market_breakdown?.active || 0, color: '#4ade80' },
       { label: 'Resolved', count: data.market_breakdown?.resolved || 0, color: 'var(--gold)' },
@@ -6221,9 +6221,9 @@ async function loadAnalytics() {
       <div class="bar-row">
         <div class="bar-row-label">
           <span>${b.label}</span>
-          <span>${b.count} (${total ? Math.round((b.count / total) * 100) : 0}%)</span>
+          <span>${b.count} (${bkTotal ? Math.round((b.count / bkTotal) * 100) : 0}%)</span>
         </div>
-        <div class="bar-track"><div class="bar-fill" style="width:${total ? Math.round((b.count / total) * 100) : 0}%;background:${b.color}"></div></div>
+        <div class="bar-track"><div class="bar-fill" style="width:${bkTotal ? Math.round((b.count / bkTotal) * 100) : 0}%;background:${b.color}"></div></div>
       </div>`).join('');
 
     // Referral stats — Pro + Premium
