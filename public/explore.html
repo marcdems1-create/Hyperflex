@@ -267,7 +267,75 @@ nav {
 .no-label { color: var(--red); }
 .trader-count { color: var(--muted); font-size: 11px; font-weight: 400; }
 
-/* TRADE FEED ITEMS */
+/* ACTIVITY FEED — Twitter-style cards */
+.activity-feed-wrap { display: flex; flex-direction: column; gap: 0; }
+.activity-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  padding: 16px 18px;
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  gap: 12px;
+  transition: background 0.12s;
+  cursor: pointer;
+  text-decoration: none;
+  color: inherit;
+}
+.activity-card:first-child { border-radius: var(--radius) var(--radius) 0 0; }
+.activity-card:last-child { border-bottom: 1px solid var(--border); border-radius: 0 0 var(--radius) var(--radius); }
+.activity-card:only-child { border-bottom: 1px solid var(--border); border-radius: var(--radius); }
+.activity-card:hover { background: rgba(255,255,255,0.022); }
+.ac-avatar {
+  width: 40px; height: 40px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 800;
+  flex-shrink: 0; color: #141412;
+}
+.ac-avatar-icon { font-size: 18px; background: var(--surface) !important; color: var(--text-soft) !important; border: 1px solid var(--border); }
+.ac-body { min-width: 0; }
+.ac-header { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; margin-bottom: 5px; }
+.ac-actor { font-size: 14px; font-weight: 700; color: var(--text); }
+.ac-actor-link { text-decoration: none; color: inherit; }
+.ac-actor-link:hover { text-decoration: underline; }
+.ac-action { font-size: 13px; color: var(--text-soft); }
+.ac-time { font-size: 12px; color: var(--muted); margin-left: auto; flex-shrink: 0; }
+.ac-body-text {
+  font-size: 14px; color: var(--text); line-height: 1.45; font-weight: 500;
+  margin-bottom: 10px; white-space: pre-wrap;
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+}
+/* Tweet-style card for the market/question */
+.ac-market-card {
+  border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+  margin-bottom: 10px; transition: border-color 0.15s;
+}
+.ac-market-card:hover { border-color: rgba(201,146,13,0.5); }
+.ac-market-inner { padding: 12px 14px; }
+.ac-community-pill {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+  padding: 2px 8px; border-radius: 4px; display: inline-block; margin-bottom: 6px;
+}
+.ac-question { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.45; margin-bottom: 8px; }
+.ac-odds-bar { height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; margin-bottom: 5px; }
+.ac-odds-fill { height: 100%; border-radius: 2px; }
+.ac-odds-labels { display: flex; justify-content: space-between; font-size: 11px; }
+/* Footer row */
+.ac-footer { display: flex; align-items: center; gap: 12px; }
+.ac-tag {
+  font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 100px; letter-spacing: 0.3px;
+}
+.ac-tag-yes { background: rgba(34,197,94,0.12); color: var(--green); border: 1px solid rgba(34,197,94,0.25); }
+.ac-tag-no  { background: rgba(239,68,68,0.12);  color: var(--red);   border: 1px solid rgba(239,68,68,0.25); }
+.ac-tag-bet { background: rgba(96,165,250,0.1);  color: #60a5fa;      border: 1px solid rgba(96,165,250,0.2); }
+.ac-tag-resolved-yes { background: rgba(34,197,94,0.12); color: var(--green); border: 1px solid rgba(34,197,94,0.25); }
+.ac-tag-resolved-no  { background: rgba(239,68,68,0.12);  color: var(--red);   border: 1px solid rgba(239,68,68,0.25); }
+.ac-tag-new  { background: rgba(201,146,13,0.12); color: var(--gold); border: 1px solid rgba(201,146,13,0.25); }
+.ac-stat { font-size: 11px; color: var(--muted); }
+.ac-join-link { margin-left: auto; font-size: 11px; color: var(--muted); text-decoration: none; font-weight: 600; opacity: 0; transition: opacity 0.15s; }
+.activity-card:hover .ac-join-link { opacity: 1; }
+
+/* TRADE FEED ITEMS (legacy) */
 .trade-wrap {
   background: var(--card);
   border: 1px solid var(--border);
@@ -655,7 +723,7 @@ nav {
 
 <div class="tabs-wrap" id="tabs-wrap">
   <div class="tabs">
-    <button class="tab active" onclick="switchTab('live')">🔴 Live Feed</button>
+    <button class="tab active" onclick="switchTab('activity')">⚡ Activity</button>
     <button class="tab" onclick="switchTab('hot')">🔥 Hot Markets</button>
     <button class="tab" onclick="switchTab('new')">✨ New Markets</button>
     <button class="tab" onclick="switchTab('predictors')">🎯 Top Predictors</button>
@@ -676,12 +744,22 @@ nav {
 
     <div class="refresh-bar">
       <span id="last-updated">Updating...</span>
-      <button onclick="loadFeed()">↻ Refresh</button>
+      <button onclick="refreshActivity()">↻ Refresh</button>
     </div>
 
-    <!-- LIVE FEED TAB -->
-    <div class="feed-section active" id="tab-live">
-      <div id="trades-feed"><div class="loading">Loading live feed...</div></div>
+    <!-- NEW ACTIVITY BANNER (Twitter-style "X new items") -->
+    <div id="newActivityBanner" style="display:none;background:var(--gold);color:#141412;text-align:center;padding:8px 16px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:12px;transition:opacity 0.2s;" onclick="loadNewActivity()">
+      ↑ <span id="newActivityCount">0</span> new activities — click to refresh
+    </div>
+
+    <!-- ACTIVITY FEED TAB (Twitter-like) -->
+    <div class="feed-section active" id="tab-activity">
+      <div id="activity-feed"><div class="loading">Loading activity...</div></div>
+    </div>
+
+    <!-- LEGACY LIVE FEED TAB (hidden, kept for backward compat) -->
+    <div class="feed-section" id="tab-live" style="display:none">
+      <div id="trades-feed"></div>
     </div>
 
     <!-- HOT MARKETS TAB -->
@@ -714,20 +792,32 @@ nav {
       <div class="sidebar-title">LATEST ANNOUNCEMENTS</div>
       <div id="announcements-list"><div class="loading" style="padding:16px 0;">Loading...</div></div>
     </div>
+    <!-- NOMINATE CTA -->
+    <a href="/nominate" style="display:block;background:linear-gradient(135deg,#1d1b13 0%,#191917 100%);border:1px solid rgba(201,146,13,0.3);border-radius:var(--radius);padding:16px 18px;text-decoration:none;transition:border-color 0.2s;" onmouseover="this.style.borderColor='rgba(201,146,13,0.7)'" onmouseout="this.style.borderColor='rgba(201,146,13,0.3)'">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--gold);margin-bottom:6px">For Fans</div>
+      <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px">Nominate your creator</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.4;margin-bottom:10px">Tell us which creator should have a prediction market. We'll reach out.</div>
+      <div style="font-size:12px;color:var(--gold);font-weight:600">Nominate them →</div>
+    </a>
   </div>
 </div>
 
 <script>
 let feedData = null;
-let activeTab = 'live';
+let activeTab = 'activity';
 let refreshInterval = null;
+let activityData = [];
+let activityLatestTs = null;
+let newActivityCount = 0;
+let activityPollInterval = null;
 
 function switchTab(tab) {
   activeTab = tab;
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.feed-section').forEach(s => s.classList.remove('active'));
   event.target.classList.add('active');
-  document.getElementById('tab-' + tab).classList.add('active');
+  const el = document.getElementById('tab-' + tab);
+  if (el) el.classList.add('active');
 }
 
 function timeAgo(dateStr) {
@@ -745,6 +835,170 @@ function getInitials(name) {
 function slugToColor(slug, communities) {
   return communities[slug]?.primary_color || '#c9920d';
 }
+
+// ── TWITTER-STYLE ACTIVITY FEED ─────────────────────────────────────────────
+
+function activityCard(a) {
+  const color = a.community_color || '#c9920d';
+  const initials = (a.user || a.community_name || 'H').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+  const communityUrl = a.creator_slug ? `/${a.creator_slug}` : '/explore';
+  const marketUrl    = a.market_id    ? `/${a.creator_slug}?market=${a.market_id}` : communityUrl;
+
+  // Build card HTML per type
+  if (a.type === 'bet') {
+    const sideTag = a.side === 'YES'
+      ? `<span class="ac-tag ac-tag-yes">YES</span>`
+      : `<span class="ac-tag ac-tag-no">NO</span>`;
+    const amtStr = a.amount > 0 ? `${a.amount.toLocaleString()} ${a.pts_name}` : '';
+    const yesPct = Math.round((a.market_yes_price || 0.5) * 100);
+    const noPct  = 100 - yesPct;
+    const barColor = yesPct >= 50 ? '#22c55e' : '#ef4444';
+    return `<a class="activity-card" href="${marketUrl}">
+      <div class="ac-avatar" style="background:${color}">${initials}</div>
+      <div class="ac-body">
+        <div class="ac-header">
+          <span class="ac-actor">${escHtml(a.user)}</span>
+          <span class="ac-action">placed a bet</span>
+          <span class="ac-time">${timeAgo(a.ts)}</span>
+        </div>
+        <div class="ac-market-card">
+          <div class="ac-market-inner">
+            <span class="ac-community-pill" style="background:${color}22;color:${color}">${escHtml(a.community_name)}</span>
+            <div class="ac-question">${escHtml(a.market_question || '')}</div>
+            <div class="ac-odds-bar"><div class="ac-odds-fill" style="width:${yesPct}%;background:${barColor}"></div></div>
+            <div class="ac-odds-labels"><span style="color:#22c55e;font-weight:600">YES ${yesPct}%</span><span style="color:#ef4444;font-weight:600">NO ${noPct}%</span></div>
+          </div>
+        </div>
+        <div class="ac-footer">
+          ${sideTag}
+          ${amtStr ? `<span class="ac-stat">${amtStr}</span>` : ''}
+          <span class="ac-stat">${(a.market_trader_count || 0).toLocaleString()} traders</span>
+          <span class="ac-join-link">View →</span>
+        </div>
+      </div>
+    </a>`;
+  }
+
+  if (a.type === 'resolution') {
+    const outUpper = (a.outcome || '').toUpperCase();
+    const outTag = outUpper === 'YES'
+      ? `<span class="ac-tag ac-tag-resolved-yes">✓ YES</span>`
+      : `<span class="ac-tag ac-tag-resolved-no">✗ NO</span>`;
+    return `<a class="activity-card" href="${marketUrl}">
+      <div class="ac-avatar ac-avatar-icon" style="font-size:22px">🏁</div>
+      <div class="ac-body">
+        <div class="ac-header">
+          <span class="ac-actor" style="color:${color}">${escHtml(a.community_name)}</span>
+          <span class="ac-action">resolved a market</span>
+          <span class="ac-time">${timeAgo(a.ts)}</span>
+        </div>
+        <div class="ac-market-card">
+          <div class="ac-market-inner">
+            <span class="ac-community-pill" style="background:${color}22;color:${color}">${escHtml(a.community_name)}</span>
+            <div class="ac-question">${escHtml(a.market_question || '')}</div>
+            ${a.resolution_note ? `<div style="font-size:12px;color:var(--muted);margin-top:4px;font-style:italic">"${escHtml(a.resolution_note)}"</div>` : ''}
+          </div>
+        </div>
+        <div class="ac-footer">
+          ${outTag}
+          <span class="ac-stat">${(a.trader_count || 0).toLocaleString()} traders participated</span>
+          <span class="ac-join-link">View →</span>
+        </div>
+      </div>
+    </a>`;
+  }
+
+  if (a.type === 'market_created') {
+    const yesPct = Math.round((a.market_yes_price || 0.5) * 100);
+    const noPct  = 100 - yesPct;
+    return `<a class="activity-card" href="${marketUrl}">
+      <div class="ac-avatar ac-avatar-icon" style="font-size:22px">✨</div>
+      <div class="ac-body">
+        <div class="ac-header">
+          <span class="ac-actor" style="color:${color}">${escHtml(a.community_name)}</span>
+          <span class="ac-action">posted a new market</span>
+          <span class="ac-time">${timeAgo(a.ts)}</span>
+        </div>
+        <div class="ac-market-card">
+          <div class="ac-market-inner">
+            <span class="ac-community-pill" style="background:${color}22;color:${color}">${escHtml(a.community_name)}</span>
+            <div class="ac-question">${escHtml(a.market_question || '')}</div>
+            <div class="ac-odds-bar"><div class="ac-odds-fill" style="width:${yesPct}%;background:#22c55e"></div></div>
+            <div class="ac-odds-labels"><span style="color:#22c55e;font-weight:600">YES ${yesPct}%</span><span style="color:#ef4444;font-weight:600">NO ${noPct}%</span></div>
+          </div>
+        </div>
+        <div class="ac-footer">
+          <span class="ac-tag ac-tag-new">🎯 New</span>
+          ${a.category ? `<span class="ac-stat">${a.category}</span>` : ''}
+          <span class="ac-join-link">Predict →</span>
+        </div>
+      </div>
+    </a>`;
+  }
+  return '';
+}
+
+function renderActivityFeed(activities) {
+  const el = document.getElementById('activity-feed');
+  if (!activities.length) {
+    el.innerHTML = '<div class="empty">No activity yet — be the first to bet.</div>';
+    return;
+  }
+  el.innerHTML = `<div class="activity-feed-wrap">${activities.map(activityCard).join('')}</div>`;
+  // Update latest timestamp cursor
+  if (activities[0]?.ts) activityLatestTs = activities[0].ts;
+}
+
+async function loadActivityFeed() {
+  try {
+    const r = await fetch('/api/activity?limit=40');
+    if (!r.ok) return;
+    const data = await r.json();
+    activityData = data.activities || [];
+    renderActivityFeed(activityData);
+  } catch (err) {
+    console.error('Activity feed error:', err);
+  }
+}
+
+async function pollNewActivity() {
+  if (!activityLatestTs) return;
+  try {
+    const r = await fetch(`/api/activity?since=${encodeURIComponent(activityLatestTs)}&limit=25`);
+    if (!r.ok) return;
+    const data = await r.json();
+    const newItems = data.activities || [];
+    if (newItems.length) {
+      newActivityCount += newItems.length;
+      const banner = document.getElementById('newActivityBanner');
+      const countEl = document.getElementById('newActivityCount');
+      if (banner && countEl) {
+        countEl.textContent = newActivityCount;
+        banner.style.display = 'block';
+      }
+      // Prepend to local store but don't re-render yet (user must click banner)
+      activityData = [...newItems, ...activityData].slice(0, 80);
+    }
+  } catch {}
+}
+
+function loadNewActivity() {
+  newActivityCount = 0;
+  const banner = document.getElementById('newActivityBanner');
+  if (banner) banner.style.display = 'none';
+  renderActivityFeed(activityData);
+  window.scrollTo({ top: document.getElementById('tabs-wrap')?.offsetTop - 70 || 0, behavior: 'smooth' });
+}
+
+function refreshActivity() {
+  newActivityCount = 0;
+  const banner = document.getElementById('newActivityBanner');
+  if (banner) banner.style.display = 'none';
+  loadActivityFeed();
+  loadFeed();
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 
 function renderTrades(trades, communities) {
   if (!trades.length) {
@@ -994,18 +1248,23 @@ async function loadFeed() {
   }
 }
 
-// Initial load + auto-refresh every 30 seconds
 // Deep-link tab support: /explore?tab=predictors
 const urlTab = new URLSearchParams(window.location.search).get('tab');
-if (urlTab && document.getElementById('tab-' + urlTab)) {
+if (urlTab) {
   activeTab = urlTab;
   document.querySelectorAll('.feed-section').forEach(s => s.classList.remove('active'));
-  document.getElementById('tab-' + urlTab).classList.add('active');
+  const tabEl = document.getElementById('tab-' + urlTab);
+  if (tabEl) tabEl.classList.add('active');
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => { if (t.getAttribute('onclick')?.includes("'" + urlTab + "'")) t.classList.add('active'); });
 }
 
+// Initial loads
+loadActivityFeed();
 loadFeed();
+
+// Auto-refresh: activity feed polls every 20s for new items (banner); explore every 30s
+activityPollInterval = setInterval(pollNewActivity, 20000);
 refreshInterval = setInterval(loadFeed, 30000);
 </script>
 </body>

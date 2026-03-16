@@ -1969,8 +1969,38 @@ async function fetchMyPositions() {
         myPositions[p.market_id].side = Object.keys(sides).reduce((a, b) => sides[a] >= sides[b] ? a : b);
       });
       checkResolutionNotifications();
+      checkStreakBroken(data || []);
     }
   } catch {}
+}
+
+// Streak broken: if user's stored streak was ≥3 but current settled positions
+// end with a loss, show a motivational toast.
+function checkStreakBroken(positions) {
+  if (!currentUser) return;
+  const streakKey = `hf_streak_${currentUser.id}_${slug}`;
+  const storedStreak = parseInt(localStorage.getItem(streakKey) || '0', 10);
+
+  // Calculate current streak from settled positions (most recent first)
+  const settled = positions
+    .filter(p => p.settled)
+    .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+
+  let currentStreak = 0;
+  for (const p of settled) {
+    if (p.won) currentStreak++;
+    else break;
+  }
+
+  // Persist current streak
+  localStorage.setItem(streakKey, String(currentStreak));
+
+  // Show toast if streak just broke
+  if (storedStreak >= 3 && currentStreak === 0 && settled.length > 0 && !settled[0].won) {
+    setTimeout(() => {
+      showToast(`💔 Streak ended at ${storedStreak} — time to start a new one!`, 'info');
+    }, 2000);
+  }
 }
 
 function checkResolutionNotifications() {
@@ -2641,8 +2671,11 @@ async function loadLeaderboard(period = 'all') {
           : `<div class="lb-winrate" title="Not enough trades">${trades}p</div>`;
       }
 
+      const profileLink = row.user_id
+        ? ` onclick="event.stopPropagation();window.open('/m/${row.user_id}','_blank')" style="cursor:pointer" title="View profile"`
+        : '';
       return `
-        <div class="lb-row${isYou ? ' is-you' : ''}">
+        <div class="lb-row${isYou ? ' is-you' : ''}"${profileLink}>
           <div class="lb-rank ${rankClass}">${medal}</div>
           <div class="lb-name">${name}${isYou ? '<span class="lb-you-tag">YOU</span>' : ''}${streakBadge}</div>
           ${wrDisplay}

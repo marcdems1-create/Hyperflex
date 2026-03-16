@@ -5522,11 +5522,375 @@ app.post('/api/creator/oauth-complete', async (req, res) => {
 const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
-  'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u', 'win'
+  'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u', 'win',
+  'm', 'nominate'
 ]);
 
 // GET /u/:slug — public creator profile page
 app.get('/u/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'profile.html')));
+
+// GET /m/:userId — public member profile page
+app.get('/m/:userId', (req, res) => res.sendFile(path.join(__dirname, 'public', 'member.html')));
+
+// GET /nominate — nominate your creator page
+app.get('/nominate', (req, res) => res.sendFile(path.join(__dirname, 'public', 'nominate.html')));
+
+// GET /api/member/:userId — public member profile data
+app.get('/api/member/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const [userRes, positionsRes] = await Promise.all([
+      supabase.from('users').select('id, display_name, created_at').eq('id', userId).maybeSingle(),
+      supabase.from('positions')
+        .select('id, side, amount, potential_payout, won, settled, created_at, market_id, markets(id, question, tenant_slug, resolved_at, outcome)')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(300),
+    ]);
+
+    if (!userRes.data) return res.status(404).json({ error: 'User not found' });
+
+    const positions = positionsRes.data || [];
+    const settled   = positions.filter(p => p.settled);
+    const wins      = settled.filter(p => p.won);
+    const winRate   = settled.length > 0 ? Math.round((wins.length / settled.length) * 100) : 0;
+    const totalBet  = positions.reduce((s, p) => s + (p.amount || 0), 0);
+    const totalWon  = wins.reduce((s, p) => s + (p.potential_payout || 0), 0);
+
+    // Current consecutive win streak (from most recent settled)
+    let streak = 0;
+    const settledSorted = [...settled].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    for (const p of settledSorted) {
+      if (p.won) streak++;
+      else break;
+    }
+
+    // Communities active in
+    const slugs = [...new Set(positions.map(p => p.markets?.tenant_slug).filter(Boolean))];
+    const { data: communitySettings } = slugs.length
+      ? await supabase.from('creator_settings').select('slug, display_name, primary_color, custom_points_name').in('slug', slugs.slice(0, 15))
+      : { data: [] };
+    const communityMap = {};
+    for (const c of (communitySettings || [])) communityMap[c.slug] = c;
+
+    // Recent wins (resolved markets user predicted correctly)
+    const recentWins = wins
+      .filter(p => p.markets?.resolved_at)
+      .slice(0, 6)
+      .map(p => ({
+        market_id:      p.market_id,
+        question:       p.markets.question,
+        outcome:        p.markets.outcome,
+        side:           p.side,
+        payout:         Math.round((p.potential_payout || 0) / 100),
+        community_slug: p.markets.tenant_slug,
+        community_name: communityMap[p.markets.tenant_slug]?.display_name || p.markets.tenant_slug,
+        community_color: communityMap[p.markets.tenant_slug]?.primary_color || '#c9920d',
+        resolved_at:    p.markets.resolved_at,
+      }));
+
+    res.json({
+      user: {
+        id:           userRes.data.id,
+        display_name: userRes.data.display_name || 'Anonymous',
+        member_since: userRes.data.created_at,
+      },
+      stats: {
+        total_predictions:  positions.length,
+        settled_predictions: settled.length,
+        wins:     wins.length,
+        win_rate: winRate,
+        total_bet: Math.round(totalBet / 100),
+        total_won: Math.round(totalWon / 100),
+        streak,
+      },
+      communities: slugs.slice(0, 12).map(s => communityMap[s] || { slug: s, display_name: s, primary_color: '#c9920d' }),
+      recent_wins: recentWins,
+    });
+  } catch (err) {
+    console.error('[member profile]', err);
+    res.status(500).json({ error: 'Failed to load member profile' });
+  }
+});
+
+// POST /api/nominate — save a creator nomination
+app.post('/api/nominate', async (req, res) => {
+  try {
+    const { creator_name, creator_url, fan_name, fan_email, message } = req.body;
+    if (!creator_name) return res.status(400).json({ error: 'Creator name required' });
+
+    // Store in a simple table (if it doesn't exist this is a no-op insert that will fail gracefully)
+    // Also fire an email to admin if SMTP configured
+    const transporter = createMailTransport();
+    if (transporter && process.env.ADMIN_EMAIL) {
+      await transporter.sendMail({
+        from: process.env.SMTP_FROM || 'HYPERFLEX <noreply@hyperflex.network>',
+        to: process.env.ADMIN_EMAIL,
+        subject: `🎯 New creator nomination: ${creator_name}`,
+        html: `<div style="font-family:monospace;background:#141412;color:#ddd;padding:24px;border-radius:8px;">
+          <h2 style="color:#c9920d;">New Creator Nomination</h2>
+          <p><strong>Creator:</strong> ${creator_name}</p>
+          ${creator_url ? `<p><strong>Channel/URL:</strong> ${creator_url}</p>` : ''}
+          ${fan_name ? `<p><strong>From fan:</strong> ${fan_name}</p>` : ''}
+          ${fan_email ? `<p><strong>Fan email:</strong> ${fan_email}</p>` : ''}
+          ${message ? `<p><strong>Message:</strong> ${message}</p>` : ''}
+        </div>`,
+      }).catch(e => console.warn('[nominate] email error:', e.message));
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[nominate]', err);
+    res.status(500).json({ error: 'Failed to save nomination' });
+  }
+});
+
+// GET /api/activity — global activity feed (mixed event types for Twitter-like feed)
+app.get('/api/activity', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 40, 100);
+    const since = req.query.since; // ISO cursor for polling
+
+    const [betsRes, resolutionsRes, newMarketsRes, creatorsRes] = await Promise.all([
+      supabase
+        .from('positions')
+        .select('id, user_id, side, amount, created_at, market_id, markets(id, question, tenant_slug, yes_price, no_price, trader_count)')
+        .order('created_at', { ascending: false })
+        .limit(since ? 25 : limit),
+
+      supabase
+        .from('markets')
+        .select('id, question, tenant_slug, resolved_at, outcome, resolution_note, trader_count')
+        .eq('resolved', true)
+        .not('resolved_at', 'is', null)
+        .order('resolved_at', { ascending: false })
+        .limit(15),
+
+      supabase
+        .from('markets')
+        .select('id, question, tenant_slug, created_at, yes_price, no_price, category')
+        .eq('resolved', false)
+        .neq('is_public', false)
+        .order('created_at', { ascending: false })
+        .limit(15),
+
+      supabase
+        .from('creator_settings')
+        .select('slug, display_name, primary_color, custom_points_name, logo_url'),
+    ]);
+
+    const communities = {};
+    for (const c of (creatorsRes.data || [])) communities[c.slug] = c;
+
+    // Enrich bets with user display names
+    const rawBets = (betsRes.data || []).filter(b => b.markets?.tenant_slug);
+    const userIds = [...new Set(rawBets.map(b => b.user_id))];
+    const { data: usersData } = userIds.length
+      ? await supabase.from('users').select('id, display_name').in('id', userIds)
+      : { data: [] };
+    const userMap = {};
+    for (const u of (usersData || [])) userMap[u.id] = u.display_name;
+
+    const activities = [];
+
+    for (const b of rawBets) {
+      const m    = b.markets;
+      const slug = m?.tenant_slug;
+      if (!slug) continue;
+      activities.push({
+        type:                 'bet',
+        id:                   `bet_${b.id}`,
+        ts:                   b.created_at,
+        user_id:              b.user_id,
+        user:                 userMap[b.user_id] || 'Anonymous',
+        side:                 (b.side || '').toUpperCase(),
+        amount:               b.amount ? Math.round(b.amount / 100) : 0,
+        pts_name:             communities[slug]?.custom_points_name || 'Flex Points',
+        market_id:            b.market_id,
+        market_question:      m?.question,
+        market_yes_price:     m?.yes_price,
+        market_trader_count:  m?.trader_count || 0,
+        creator_slug:         slug,
+        community_name:       communities[slug]?.display_name || slug,
+        community_color:      communities[slug]?.primary_color || '#c9920d',
+      });
+    }
+
+    for (const m of (resolutionsRes.data || [])) {
+      const slug = m.tenant_slug;
+      if (!slug) continue;
+      activities.push({
+        type:            'resolution',
+        id:              `res_${m.id}`,
+        ts:              m.resolved_at,
+        market_id:       m.id,
+        market_question: m.question,
+        outcome:         m.outcome,
+        resolution_note: m.resolution_note,
+        trader_count:    m.trader_count || 0,
+        creator_slug:    slug,
+        community_name:  communities[slug]?.display_name || slug,
+        community_color: communities[slug]?.primary_color || '#c9920d',
+      });
+    }
+
+    for (const m of (newMarketsRes.data || [])) {
+      const slug = m.tenant_slug;
+      if (!slug) continue;
+      activities.push({
+        type:            'market_created',
+        id:              `mkt_${m.id}`,
+        ts:              m.created_at,
+        market_id:       m.id,
+        market_question: m.question,
+        market_yes_price: m.yes_price,
+        category:        m.category,
+        creator_slug:    slug,
+        community_name:  communities[slug]?.display_name || slug,
+        community_color: communities[slug]?.primary_color || '#c9920d',
+      });
+    }
+
+    // Sort by ts desc and deduplicate
+    activities.sort((a, b) => new Date(b.ts) - new Date(a.ts));
+    const seen = new Set();
+    const deduped = activities.filter(a => seen.has(a.id) ? false : (seen.add(a.id), true));
+
+    const result = since
+      ? deduped.filter(a => new Date(a.ts) > new Date(since))
+      : deduped.slice(0, limit);
+
+    res.json({ activities: result, communities });
+  } catch (err) {
+    console.error('[activity feed]', err);
+    res.status(500).json({ error: 'Failed to load activity feed' });
+  }
+});
+
+// ── WEEKLY MEMBER DIGEST EMAIL ───────────────────────────────────────────────
+async function sendWeeklyDigests() {
+  const transporter = createMailTransport();
+  if (!transporter) { console.log('[digest] SMTP not configured — skipping'); return; }
+
+  console.log('[digest] Starting weekly member digests');
+  const { data: creators } = await supabase
+    .from('creator_settings')
+    .select('slug, display_name, primary_color, custom_points_name');
+
+  if (!creators?.length) return;
+
+  for (const creator of creators) {
+    try {
+      const slug         = creator.slug;
+      const communityName = creator.display_name || slug;
+      const accentColor  = creator.primary_color || '#c9920d';
+      const ptsName      = creator.custom_points_name || 'Flex Points';
+      const communityUrl = `https://hyperflex.network/${slug}`;
+
+      // Fetch top 3 hot markets
+      const { data: markets } = await supabase
+        .from('markets')
+        .select('id, question, yes_price, no_price, trader_count')
+        .eq('tenant_slug', slug)
+        .eq('resolved', false)
+        .eq('archived', false)
+        .order('trader_count', { ascending: false })
+        .limit(3);
+
+      if (!markets?.length) continue;
+
+      // Fetch community members
+      const { data: members } = await supabase
+        .from('community_members')
+        .select('user_id')
+        .eq('creator_slug', slug);
+
+      if (!members?.length) continue;
+
+      const userIds = members.map(m => m.user_id);
+      const { data: users } = await supabase
+        .from('users').select('id, email, display_name').in('id', userIds);
+      if (!users?.length) continue;
+
+      // Leaderboard top 3 for this community
+      const { data: allMktIds } = await supabase.from('markets').select('id').eq('tenant_slug', slug);
+      const mktIds = (allMktIds || []).map(m => m.id);
+      let leaderRows = [];
+      if (mktIds.length) {
+        const { data: posData } = await supabase
+          .from('positions').select('user_id, potential_payout, won')
+          .in('market_id', mktIds).eq('settled', true);
+        const lmap = {};
+        for (const p of (posData || [])) {
+          if (!lmap[p.user_id]) lmap[p.user_id] = { wins: 0, total_payout: 0 };
+          if (p.won) { lmap[p.user_id].wins++; lmap[p.user_id].total_payout += (p.potential_payout || 0); }
+        }
+        const leaderIds = Object.entries(lmap).sort((a, b) => b[1].total_payout - a[1].total_payout).slice(0, 3).map(([id]) => id);
+        const { data: lNames } = leaderIds.length ? await supabase.from('users').select('id, display_name').in('id', leaderIds) : { data: [] };
+        const nameMap = {};
+        for (const u of (lNames || [])) nameMap[u.id] = u.display_name;
+        leaderRows = leaderIds.map((id, i) => ({ rank: i + 1, name: nameMap[id] || 'Anonymous', pts: Math.round((lmap[id]?.total_payout || 0) / 100) }));
+      }
+
+      const marketsHtml = markets.map(m => {
+        const yesPct = Math.round((m.yes_price || 0.5) * 100);
+        return `<tr><td style="padding:10px 0;border-bottom:1px solid #2a2a27">
+          <div style="font-size:14px;color:#f5f5f0;margin-bottom:4px">${m.question}</div>
+          <div style="font-size:12px;color:#888">${m.trader_count || 0} traders · YES ${yesPct}%</div>
+        </td></tr>`;
+      }).join('');
+
+      const medals = ['🥇', '🥈', '🥉'];
+      const leaderHtml = leaderRows.map((r, i) => `<tr><td style="padding:8px 0">
+        <span style="font-size:16px">${medals[i]}</span>
+        <span style="font-size:14px;color:#f5f5f0;margin-left:8px">${r.name}</span>
+        <span style="float:right;font-size:13px;color:${accentColor};font-weight:700">${r.pts.toLocaleString()} ${ptsName}</span>
+      </td></tr>`).join('');
+
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/></head>
+<body style="font-family:'Helvetica Neue',Arial,sans-serif;background:#141412;margin:0;padding:0">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#141412;padding:40px 0">
+<tr><td align="center">
+  <table width="540" cellpadding="0" cellspacing="0" style="background:#1e1e1b;border-radius:10px;overflow:hidden">
+    <tr><td style="background:${accentColor};padding:18px 28px">
+      <span style="font-size:20px;font-weight:900;color:#141412">HYPERFLEX</span>
+      <span style="float:right;font-size:13px;color:#141412;opacity:.7;line-height:28px">${communityName} Weekly</span>
+    </td></tr>
+    <tr><td style="padding:28px">
+      <h2 style="margin:0 0 6px;font-size:22px;color:#f5f5f0;font-weight:800">This week in ${communityName} 🎯</h2>
+      <p style="margin:0 0 24px;font-size:14px;color:#888">Here's what's happening in your prediction community.</p>
+      <h3 style="margin:0 0 12px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:${accentColor}">🔥 Hot Markets</h3>
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px">${marketsHtml}</table>
+      ${leaderHtml ? `<h3 style="margin:0 0 12px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:${accentColor}">🏆 Top Predictors</h3>
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px">${leaderHtml}</table>` : ''}
+      <a href="${communityUrl}" style="display:inline-block;padding:12px 24px;background:${accentColor};color:#141412;font-weight:700;font-size:15px;border-radius:6px;text-decoration:none">Place your predictions →</a>
+    </td></tr>
+    <tr><td style="padding:16px 28px;border-top:1px solid #2a2a27">
+      <p style="margin:0;font-size:11px;color:#555">Weekly digest from <a href="${communityUrl}" style="color:#888">${communityName}</a>. Powered by <a href="https://hyperflex.network" style="color:#888">HYPERFLEX</a>.</p>
+    </td></tr>
+  </table>
+</td></tr>
+</table></body></html>`;
+
+      const fromAddress = process.env.SMTP_FROM || `"${communityName}" <noreply@hyperflex.network>`;
+      const sends = users.filter(u => u.email).map(u =>
+        transporter.sendMail({
+          from: fromAddress,
+          replyTo: process.env.SMTP_REPLY_TO || fromAddress,
+          to: u.email,
+          subject: `This week in ${communityName} — hot markets & leaderboard 🎯`,
+          html,
+        })
+      );
+      const results = await Promise.allSettled(sends);
+      console.log(`[digest] ${slug}: ${results.filter(r => r.status === 'fulfilled').length}/${sends.length} sent`);
+    } catch (err) {
+      console.error(`[digest] Error for ${creator.slug}:`, err.message);
+    }
+  }
+}
+// Every Monday at 9am UTC
+cron.schedule('0 9 * * 1', () => { console.log('[digest] Weekly digest cron triggered'); sendWeeklyDigests(); });
 
 // GET /api/win-card/:marketId/:userId — public win card data
 app.get('/api/win-card/:marketId/:userId', async (req, res) => {
