@@ -33,9 +33,9 @@
 
 ---
 
-## Current State (last updated March 15, 2026)
+## Current State (last updated March 15, 2026 — session 2)
 
-- All features committed locally. Latest commit: `068b03c` — needs push
+- All features committed locally. Latest commit: `16822d7` — needs push
 - **Stripe payments live** — Pro ($29/mo) + Premium ($99/mo) checkout + billing portal
   - Railway env vars needed: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRO_PRICE_ID`, `STRIPE_PLATINUM_PRICE_ID`
   - Webhook endpoint registered at: `https://hyperflex.network/stripe/webhook`
@@ -123,6 +123,11 @@
     - Removed non-existent `resolution_outcome` column from SELECT (was silently nulling all data)
     - Fixed `is_public` filter to `.neq('is_public', false)` (was dropping legacy NULL rows)
     - Added tweet fields to SELECT
+- **Audience Intelligence + AI Recommendations** (commit `16822d7`) — needs push:
+  - `POST /api/creator/insights` — sends real analytics to Claude Haiku, returns 4 data-specific growth recommendations with type/priority/metric
+  - Creator dashboard Analytics tab: Audience Intelligence section (engagement rate ring gauge, 14d member growth chart, category breakdown bars, sentiment by category)
+  - AI Growth Recommendations panel with "Generate Insights" button
+  - Community page: Community Pulse bar (category sentiment pills showing weighted avg YES% from active markets)
 
 ---
 
