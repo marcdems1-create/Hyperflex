@@ -2362,31 +2362,24 @@ function buildCarousel(activeMarkets) {
 }
 
 function openMarket(id) {
-  // If currently on the feed tab, switch back to markets first
-  const feedPanel = document.getElementById('feedPanel');
-  const onFeedTab  = feedPanel && feedPanel.style.display !== 'none';
-  if (onFeedTab) setViewTab('markets');
+  // If we have the market object, open predict modal directly (works from any tab)
+  const m = (markets || []).find(x => String(x.id) === String(id));
+  if (m) { openPredict(m, null); return; }
 
+  // Fallback: switch to markets tab + scroll to the card
+  setViewTab('markets');
   const scrollAndHighlight = () => {
-    // Try to open predict modal directly
-    const m = (markets || []).find(x => String(x.id) === String(id));
-    if (m) { openPredict(m, null); return; }
-    // Fallback: scroll + highlight the card
-    const card = document.querySelector(`[data-market-id="${id}"]`);
-    if (!card) return;
-    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    card.style.transition = 'box-shadow .15s';
-    card.style.boxShadow = '0 0 0 2px var(--gold)';
-    setTimeout(() => { card.style.boxShadow = ''; }, 1600);
+    if (currentFilter !== 'all') setFilter('all');
+    setTimeout(() => {
+      const card = document.querySelector(`[data-market-id="${id}"]`);
+      if (!card) return;
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      card.style.transition = 'box-shadow .15s';
+      card.style.boxShadow = '0 0 0 2px var(--gold)';
+      setTimeout(() => { card.style.boxShadow = ''; }, 1600);
+    }, 80);
   };
-
-  // Ensure the market is visible (it's always in 'all' filter)
-  if (currentFilter !== 'all') {
-    setFilter('all');
-    setTimeout(scrollAndHighlight, onFeedTab ? 120 : 80);
-  } else {
-    onFeedTab ? setTimeout(scrollAndHighlight, 120) : scrollAndHighlight();
-  }
+  scrollAndHighlight();
 }
 
 // ── SENTIMENT SIGNAL ─────────────────────────────────────────
@@ -3694,12 +3687,15 @@ function renderTweetFeed(markets) {
     const handle  = m.tweet_author ? (m.tweet_author.startsWith('@') ? m.tweet_author : '@' + m.tweet_author) : '@News Intelligence';
     const yesOdds = m.yes_price != null ? Math.round(m.yes_price * 100) : 50;
     const noOdds  = 100 - yesOdds;
-    const newsSource = getMarketSource(m);
-    // Derive a clean hostname label for the news source
+    // Source: prefer resolution_source, fall back to source_tweet_url
+    const newsSource = getMarketSource(m) || (m.source_tweet_url && !m.tweet_text ? m.source_tweet_url : null);
     let sourceLabel = null;
     if (newsSource) {
       try { sourceLabel = new URL(newsSource).hostname.replace(/^www\./, ''); } catch { sourceLabel = 'source'; }
     }
+    // For tweet-sourced markets, source_tweet_url is shown as the 𝕏 badge above —
+    // only show the 📰 pill for a *different* resolution source URL
+    const showNewsPill = newsSource && newsSource !== m.source_tweet_url;
     return `<div class="tweet-card">
       <div class="tweet-avatar">𝕏</div>
       <div style="flex:1;min-width:0">
@@ -3717,7 +3713,7 @@ function renderTweetFeed(markets) {
             <span style="font-size:11px;color:var(--gold);white-space:nowrap">→</span>
           </span>
         </button>
-        ${newsSource ? `<a href="${escHtml(newsSource)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;gap:5px;margin-top:10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-decoration:none;border:1px solid var(--border);border-radius:4px;padding:3px 9px;transition:color .15s" onmouseover="this.style.color='var(--gold)';this.style.borderColor='rgba(201,146,13,.4)'" onmouseout="this.style.color='var(--dim)';this.style.borderColor='var(--border)'">📰 ${escHtml(sourceLabel)} ↗</a>` : ''}
+        ${showNewsPill ? `<a href="${escHtml(newsSource)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;gap:5px;margin-top:10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-decoration:none;border:1px solid var(--border);border-radius:4px;padding:3px 9px;transition:color .15s" onmouseover="this.style.color='var(--gold)';this.style.borderColor='rgba(201,146,13,.4)'" onmouseout="this.style.color='var(--dim)';this.style.borderColor='var(--border)'">📰 ${escHtml(sourceLabel)} ↗</a>` : ''}
       </div>
     </div>`;
   }).join('');

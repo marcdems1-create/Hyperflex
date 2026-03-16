@@ -1720,7 +1720,7 @@ async function fetchXTrending() {
 async function extractDominantNarratives(headlines, categoryFilter) {
   if (!headlines.length) return [];
   const headlineText = headlines
-    .map((h, i) => `${i+1}. [${h.source || 'News'}] ${h.title}`)
+    .map((h, i) => `${i+1}. [${h.source || 'News'}] ${h.title}${h.link ? ' | ' + h.link : ''}`)
     .join('\n');
 
   const catInstruction = categoryFilter && categoryFilter !== 'all'
@@ -1882,9 +1882,10 @@ async function runNewsIntelligenceScanner(targetSlug = null) {
           creator_id:     creator.creator_id,
           tenant_slug:    creator.slug,
           // Reuse tweet fields to carry news context (shows in tweet feed on community page)
-          tweet_text:     n.source_headline || n.narrative,
+          tweet_text:       n.source_headline || n.narrative,
           source_tweet_url: n.source_url || null,
-          tweet_author:   n.narrative ? 'News Intelligence' : null
+          resolution_source: n.source_url || null,
+          tweet_author:     n.narrative ? 'News Intelligence' : null
         }]);
 
         if (error) {
