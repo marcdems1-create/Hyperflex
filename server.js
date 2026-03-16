@@ -280,7 +280,7 @@ app.get('/share/:marketId', async (req, res) => {
   try {
     const { data: market } = await supabase
       .from('markets')
-      .select('id, question, yes_price, no_price, category, expiry_date, tenant_slug, source_tweet_url, tweet_text, tweet_author, resolved, outcome')
+      .select('id, question, yes_price, no_price, yes_votes, no_votes, category, expiry_date, tenant_slug, source_tweet_url, tweet_text, tweet_author, resolved, outcome')
       .eq('id', req.params.marketId)
       .maybeSingle();
 
@@ -701,25 +701,33 @@ app.post('/trade', async (req, res) => {
     .single();
   if (posError) return res.status(400).json({ error: posError.message });
 
-  // Update pools, prices, volume, and trader_count in one call
+  // Update pools, prices, volume, trader_count, and vote counts in one call
+  const newYesVotes = (market.yes_votes || 0) + (side === 'YES' ? 1 : 0);
+  const newNoVotes  = (market.no_votes  || 0) + (side === 'NO'  ? 1 : 0);
   const marketUpdate = {
-    yes_pool:    newYesPool,
-    no_pool:     newNoPool,
-    yes_price:   newYesPrice,
-    no_price:    newNoPrice,
-    volume:      (market.volume || 0) + amount
+    yes_pool:   newYesPool,
+    no_pool:    newNoPool,
+    yes_price:  newYesPrice,
+    no_price:   newNoPrice,
+    volume:     (market.volume || 0) + amount,
+    yes_votes:  newYesVotes,
+    no_votes:   newNoVotes,
   };
   if (isNewTrader) marketUpdate.trader_count = (market.trader_count || 0) + 1;
   const { error: mktErr } = await supabase.from('markets').update(marketUpdate).eq('id', market_id);
   if (mktErr) console.error('market pool/price update error:', mktErr.message, mktErr.details);
 
+  const totalVotes = newYesVotes + newNoVotes;
   const newBalance = communityBalance - amount;
   res.json({
-    message:   'Trade placed',
+    message:    'Trade placed',
     position,
-    balance:   newBalance,
-    yes_price: newYesPrice,   // updated prices so frontend can refresh immediately
-    no_price:  newNoPrice
+    balance:    newBalance,
+    yes_price:  newYesPrice,    // CPMM price — used for payout multipliers only
+    no_price:   newNoPrice,
+    yes_votes:  newYesVotes,    // pure vote counts — used for consensus display
+    no_votes:   newNoVotes,
+    yes_consensus: totalVotes > 0 ? Math.round(newYesVotes / totalVotes * 100) : null,
   });
 });
 
@@ -2009,7 +2017,7 @@ app.get('/api/discover', async (req, res) => {
     // Active market counts + top markets per community
     const { data: allMarkets } = await supabase
       .from('markets')
-      .select('id, question, category, yes_price, no_price, trader_count, resolved, tenant_slug, creator_id, created_at')
+      .select('id, question, category, yes_price, no_price, yes_votes, no_votes, trader_count, resolved, tenant_slug, creator_id, created_at')
       .neq('is_public', false)
       .eq('resolved', false)
       .order('trader_count', { ascending: false });
@@ -4812,7 +4820,7 @@ app.get('/api/community/:slug', async (req, res) => {
     // Match on any of the three fields that market-creation routes populate
     const { data: rawMarkets, error: marketsErr } = await supabase
       .from('markets')
-      .select('id, question, category, expiry_date, yes_price, no_price, trader_count, resolved, outcome, resolved_at, resolution_note, resolution_source, resolution_sources, tweet_text, tweet_author, source_tweet_url')
+      .select('id, question, category, expiry_date, yes_price, no_price, yes_votes, no_votes, trader_count, resolved, outcome, resolved_at, resolution_note, resolution_source, resolution_sources, tweet_text, tweet_author, source_tweet_url')
       .or(`tenant_slug.eq.${slug},creator_id.eq.${settings.creator_id}`)
       .neq('is_public', false)   // include true AND null (legacy markets without is_public set)
       .order('created_at', { ascending: false });
@@ -5655,7 +5663,7 @@ app.get('/api/user/dashboard', requireAuth, async (req, res) => {
         .select('creator_slug, balance')
         .eq('user_id', userId),
       supabase.from('positions')
-        .select('id, side, amount, potential_payout, won, settled, created_at, market_id, markets(id, question, tenant_slug, resolved, resolved_at, expiry_date, yes_price, no_price)')
+        .select('id, side, amount, potential_payout, won, settled, created_at, market_id, markets(id, question, tenant_slug, resolved, resolved_at, expiry_date, yes_price, no_price, yes_votes, no_votes)')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(200),
@@ -5972,7 +5980,7 @@ app.get('/api/activity', async (req, res) => {
     const [betsRes, resolutionsRes, newMarketsRes, winsRes, creatorsRes, commentsRes] = await Promise.all([
       supabase
         .from('positions')
-        .select('id, user_id, side, amount, created_at, market_id, markets(id, question, tenant_slug, yes_price, no_price, trader_count)')
+        .select('id, user_id, side, amount, created_at, market_id, markets(id, question, tenant_slug, yes_price, no_price, yes_votes, no_votes, trader_count)')
         .order('created_at', { ascending: false })
         .limit(since ? 25 : limit),
 
@@ -5986,7 +5994,7 @@ app.get('/api/activity', async (req, res) => {
 
       supabase
         .from('markets')
-        .select('id, question, tenant_slug, created_at, yes_price, no_price, category')
+        .select('id, question, tenant_slug, created_at, yes_price, no_price, yes_votes, no_votes, category')
         .eq('resolved', false)
         .neq('is_public', false)
         .order('created_at', { ascending: false })
@@ -6045,6 +6053,8 @@ app.get('/api/activity', async (req, res) => {
         market_id:            b.market_id,
         market_question:      m?.question,
         market_yes_price:     m?.yes_price,
+        market_yes_votes:     m?.yes_votes || 0,
+        market_no_votes:      m?.no_votes  || 0,
         market_trader_count:  m?.trader_count || 0,
         creator_slug:         slug,
         community_name:       communities[slug]?.display_name || slug,
@@ -6080,6 +6090,8 @@ app.get('/api/activity', async (req, res) => {
         market_id:       m.id,
         market_question: m.question,
         market_yes_price: m.yes_price,
+        market_yes_votes: m.yes_votes || 0,
+        market_no_votes:  m.no_votes  || 0,
         category:        m.category,
         creator_slug:    slug,
         community_name:  communities[slug]?.display_name || slug,
@@ -6178,7 +6190,7 @@ async function sendWeeklyDigests() {
       // Fetch top 3 hot markets
       const { data: markets } = await supabase
         .from('markets')
-        .select('id, question, yes_price, no_price, trader_count')
+        .select('id, question, yes_price, no_price, yes_votes, no_votes, trader_count')
         .eq('tenant_slug', slug)
         .eq('resolved', false)
         .eq('archived', false)
@@ -6286,7 +6298,7 @@ app.get('/api/win-card/:marketId/:userId', async (req, res) => {
     const { marketId, userId } = req.params;
 
     const [mktRes, posRes] = await Promise.all([
-      supabase.from('markets').select('id, question, category, outcome, yes_price, no_price, trader_count, tenant_slug, creator_id, resolved_at').eq('id', marketId).maybeSingle(),
+      supabase.from('markets').select('id, question, category, outcome, yes_price, no_price, yes_votes, no_votes, trader_count, tenant_slug, creator_id, resolved_at').eq('id', marketId).maybeSingle(),
       supabase.from('positions').select('side, amount, potential_payout, won, settled').eq('market_id', marketId).eq('user_id', userId).order('created_at', { ascending: false })
     ]);
 
@@ -7361,14 +7373,14 @@ app.get('/api/explore', async (req, res) => {
       // Recent trades
       supabase
         .from('positions')
-        .select('id, user_id, side, amount, created_at, market_id, markets(question, tenant_slug, yes_price, no_price)')
+        .select('id, user_id, side, amount, created_at, market_id, markets(question, tenant_slug, yes_price, no_price, yes_votes, no_votes)')
         .order('created_at', { ascending: false })
         .limit(20),
 
       // Hottest markets by trader_count
       supabase
         .from('markets')
-        .select('id, question, tenant_slug, yes_price, no_price, trader_count, yes_pool, no_pool, created_at')
+        .select('id, question, tenant_slug, yes_price, no_price, yes_votes, no_votes, trader_count, yes_pool, no_pool, created_at')
         .eq('resolved', false)
         .eq('archived', false)
         .order('trader_count', { ascending: false })
@@ -7377,7 +7389,7 @@ app.get('/api/explore', async (req, res) => {
       // Newest markets
       supabase
         .from('markets')
-        .select('id, question, tenant_slug, yes_price, no_price, trader_count, created_at')
+        .select('id, question, tenant_slug, yes_price, no_price, yes_votes, no_votes, trader_count, created_at')
         .eq('resolved', false)
         .eq('archived', false)
         .order('created_at', { ascending: false })
@@ -7469,7 +7481,9 @@ app.get('/api/explore', async (req, res) => {
       user:         'Anonymous',
       question:     p.markets?.question || '',
       creator_slug: p.markets?.tenant_slug || '',
-      sentiment:    p.markets ? Math.round((p.markets.yes_price || 0.5) * 100) : 50,
+      yes_votes:    p.markets?.yes_votes || 0,
+      no_votes:     p.markets?.no_votes  || 0,
+      sentiment:    (() => { const yv = p.markets?.yes_votes || 0; const nv = p.markets?.no_votes || 0; const t = yv + nv; return t > 0 ? Math.round(yv / t * 100) : null; })(),
     }));
 
     const tradeUserIds = [...new Set(rawTrades.map(t => t.user_id).filter(Boolean))];
@@ -7695,7 +7709,7 @@ async function autoResolveExpiredMarkets() {
     // Find expired unresolved markets with a resolution source
     const { data: markets } = await supabase
       .from('markets')
-      .select('id, question, tenant_slug, resolution_source, resolution_sources, expiry_date, yes_price')
+      .select('id, question, tenant_slug, resolution_source, resolution_sources, expiry_date, yes_price, yes_votes, no_votes')
       .eq('resolved', false)
       .lt('expiry_date', now)
       .not('resolution_source', 'is', null);

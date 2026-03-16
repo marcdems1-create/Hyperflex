@@ -920,9 +920,10 @@ function activityCard(a) {
       ? `<span class="ac-tag ac-tag-yes">YES</span>`
       : `<span class="ac-tag ac-tag-no">NO</span>`;
     const amtStr = a.amount > 0 ? `${a.amount.toLocaleString()} ${a.pts_name}` : '';
-    const yesPct = Math.round((a.market_yes_price || 0.5) * 100);
-    const noPct  = 100 - yesPct;
-    const barColor = yesPct >= 50 ? '#22c55e' : '#ef4444';
+    const totalVotes = (a.market_yes_votes || 0) + (a.market_no_votes || 0);
+    const yesPct = totalVotes > 0 ? Math.round((a.market_yes_votes || 0) / totalVotes * 100) : null;
+    const noPct  = yesPct !== null ? 100 - yesPct : null;
+    const barColor = (yesPct !== null && yesPct >= 50) ? '#22c55e' : '#ef4444';
     return `<a class="activity-card" href="${marketUrl}">
       <div class="ac-avatar" style="background:${color}">${initials}</div>
       <div class="ac-body">
@@ -935,8 +936,10 @@ function activityCard(a) {
           <div class="ac-market-inner">
             <span class="ac-community-pill" style="background:${color}22;color:${color}">${escHtml(a.community_name)}</span>
             <div class="ac-question">${escHtml(a.market_question || '')}</div>
-            <div class="ac-odds-bar"><div class="ac-odds-fill" style="width:${yesPct}%;background:${barColor}"></div></div>
-            <div class="ac-odds-labels"><span style="color:#22c55e;font-weight:600">YES ${yesPct}%</span><span style="color:#ef4444;font-weight:600">NO ${noPct}%</span></div>
+            <div class="ac-odds-bar"><div class="ac-odds-fill" style="width:${yesPct !== null ? yesPct : 50}%;background:${barColor};opacity:${yesPct !== null ? 1 : 0.3}"></div></div>
+            ${yesPct !== null
+              ? `<div class="ac-odds-labels"><span style="color:#22c55e;font-weight:600">YES ${yesPct}%</span><span style="color:#ef4444;font-weight:600">NO ${noPct}%</span></div>`
+              : `<div class="ac-odds-labels" style="justify-content:center"><span style="color:var(--muted);font-size:11px">🎯 First prediction</span></div>`}
           </div>
         </div>
         <div class="ac-footer">
@@ -1031,8 +1034,9 @@ function activityCard(a) {
   }
 
   if (a.type === 'market_created') {
-    const yesPct = Math.round((a.market_yes_price || 0.5) * 100);
-    const noPct  = 100 - yesPct;
+    const mcTotalVotes = (a.market_yes_votes || 0) + (a.market_no_votes || 0);
+    const mcYesPct = mcTotalVotes > 0 ? Math.round((a.market_yes_votes || 0) / mcTotalVotes * 100) : null;
+    const mcNoPct  = mcYesPct !== null ? 100 - mcYesPct : null;
     return `<a class="activity-card" href="${marketUrl}">
       <div class="ac-avatar ac-avatar-icon" style="font-size:22px">✨</div>
       <div class="ac-body">
@@ -1045,8 +1049,10 @@ function activityCard(a) {
           <div class="ac-market-inner">
             <span class="ac-community-pill" style="background:${color}22;color:${color}">${escHtml(a.community_name)}</span>
             <div class="ac-question">${escHtml(a.market_question || '')}</div>
-            <div class="ac-odds-bar"><div class="ac-odds-fill" style="width:${yesPct}%;background:#22c55e"></div></div>
-            <div class="ac-odds-labels"><span style="color:#22c55e;font-weight:600">YES ${yesPct}%</span><span style="color:#ef4444;font-weight:600">NO ${noPct}%</span></div>
+            <div class="ac-odds-bar"><div class="ac-odds-fill" style="width:${mcYesPct !== null ? mcYesPct : 50}%;background:#22c55e;opacity:${mcYesPct !== null ? 1 : 0.3}"></div></div>
+            ${mcYesPct !== null
+              ? `<div class="ac-odds-labels"><span style="color:#22c55e;font-weight:600">YES ${mcYesPct}%</span><span style="color:#ef4444;font-weight:600">NO ${mcNoPct}%</span></div>`
+              : `<div class="ac-odds-labels" style="justify-content:center"><span style="color:var(--muted);font-size:11px">🎯 Be the first to predict</span></div>`}
           </div>
         </div>
         <div class="ac-footer">
@@ -1160,8 +1166,9 @@ function renderMarkets(markets, communities, containerId) {
   const html = markets.map(m => {
     const color = slugToColor(m.creator_slug, communities);
     const communityName = communities[m.creator_slug]?.display_name || m.creator_slug;
-    const yesPct = Math.round((m.yes_price || 0.5) * 100);
-    const noPct = 100 - yesPct;
+    const rmTotalVotes = (m.yes_votes || 0) + (m.no_votes || 0);
+    const yesPct = rmTotalVotes > 0 ? Math.round((m.yes_votes || 0) / rmTotalVotes * 100) : null;
+    const noPct = yesPct !== null ? 100 - yesPct : null;
     return `
       <a href="/${m.creator_slug}?market=${m.id}" class="feed-item">
         <div class="feed-meta">
@@ -1170,12 +1177,12 @@ function renderMarkets(markets, communities, containerId) {
         </div>
         <div class="feed-question">${m.question}</div>
         <div class="sentiment-bar">
-          <div class="sentiment-yes" style="width:${yesPct}%;background:${yesPct > 50 ? 'var(--green)' : 'var(--red)'}"></div>
+          <div class="sentiment-yes" style="width:${yesPct !== null ? yesPct : 50}%;background:${yesPct !== null ? (yesPct > 50 ? 'var(--green)' : 'var(--red)') : 'rgba(255,255,255,0.15)'}"></div>
         </div>
         <div class="sentiment-labels">
-          <span class="yes-label">YES ${yesPct}%</span>
-          <span class="trader-count">${(m.trader_count || 0).toLocaleString()} traders</span>
-          <span class="no-label">NO ${noPct}%</span>
+          ${yesPct !== null
+            ? `<span class="yes-label">YES ${yesPct}%</span><span class="trader-count">${(m.trader_count || 0).toLocaleString()} traders</span><span class="no-label">NO ${noPct}%</span>`
+            : `<span class="trader-count" style="margin:auto">🎯 No predictions yet · ${(m.trader_count || 0).toLocaleString()} traders</span>`}
         </div>
       </a>`;
   }).join('');

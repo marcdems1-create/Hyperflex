@@ -1866,11 +1866,25 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
     </div>
     <div class="modal-body">
       <div class="predict-market-q" id="predictQuestion"></div>
+      <!-- Community consensus bar — purely from real votes -->
+      <div id="predictConsensusWrap" style="margin-bottom:12px;padding:10px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:7px;display:none">
+        <div style="font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Community consensus (<span id="predictVoteCount">0</span> predictions)</div>
+        <div style="height:6px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden;margin-bottom:5px">
+          <div id="predictConsensusBar" style="height:100%;width:50%;background:#22c55e;border-radius:3px;transition:width .3s"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between">
+          <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#4ade80">YES <span id="predictYesPct">—</span></span>
+          <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#fca5a5">NO <span id="predictNoPct">—</span></span>
+        </div>
+      </div>
+      <div id="predictNoVotesYet" style="margin-bottom:12px;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:7px;font-family:var(--mono);font-size:11px;color:var(--dim);text-align:center">
+        🎯 Be the first to predict on this market
+      </div>
       <!-- Meta strip: expiry + multiplier + source -->
       <div style="display:flex;gap:16px;align-items:center;margin-bottom:16px;padding:9px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:7px;flex-wrap:wrap">
         <span style="font-family:var(--mono);font-size:11px;color:var(--dim);display:flex;align-items:center;gap:5px">⏱ <span id="predictExpiry">—</span></span>
         <span style="font-family:var(--mono);font-size:11px;color:rgba(255,255,255,0.15)">|</span>
-        <span style="font-family:var(--mono);font-size:11px;color:var(--gold)">⚡ <span id="predictMulti">2.00×</span> return</span>
+        <span style="font-family:var(--mono);font-size:11px;color:var(--gold)">⚡ <span id="predictMulti">2.00×</span> payout if correct</span>
         <span id="predictSourceWrap" style="display:none;font-family:var(--mono);font-size:11px;color:rgba(255,255,255,0.15)">|</span>
         <a id="predictSourceLink" href="#" target="_blank" rel="noopener" style="display:none;font-family:var(--mono);font-size:11px;color:var(--gold);text-decoration:none;opacity:.85" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.85'">📰 Source</a>
       </div>
@@ -2319,8 +2333,7 @@ function buildCarousel(activeMarkets) {
 
   function cardHTML(item) {
     const { m, cat } = item;
-    const yesP = Math.round((m.yes_price || 0.5) * 100);
-    const noP  = 100 - yesP;
+    const cv = getConsensus(m);
     const traders = m.trader_count || 0;
     const diff = new Date(m.expiry_date) - now;
     const days = diff > 0 ? Math.ceil(diff / (1000*60*60*24)) : 0;
@@ -2331,8 +2344,8 @@ function buildCarousel(activeMarkets) {
       <span class="carousel-badge ${cat.cls}">${cat.label}</span>
       <div class="carousel-question">${escHtml(m.question)}</div>
       <div class="carousel-odds">
-        <div class="carousel-odds-yes">YES ${yesP}%</div>
-        <div class="carousel-odds-no">NO ${noP}%</div>
+        <div class="carousel-odds-yes">${cv.hasVotes ? 'YES ' + cv.yesPct + '%' : 'Be first'}</div>
+        <div class="carousel-odds-no">${cv.hasVotes ? 'NO ' + cv.noPct + '%' : '⚡'}</div>
       </div>
       <div class="carousel-footer">
         <span>${traders} trader${traders!==1?'s':''}</span>
@@ -2385,9 +2398,24 @@ function openMarket(id) {
   scrollAndHighlight();
 }
 
+// ── CONSENSUS ────────────────────────────────────────────────
+// Returns pure vote-based consensus from yes_votes / no_votes.
+// This is the ONLY value shown to users — never the CPMM seed-influenced price.
+// yes_price / no_price are kept for payout multiplier math only.
+function getConsensus(m) {
+  const yv = m.yes_votes || 0;
+  const nv = m.no_votes  || 0;
+  const total = yv + nv;
+  if (!total) return { yesPct: null, noPct: null, hasVotes: false, total: 0, yesVotes: 0, noVotes: 0 };
+  const yesPct = Math.round(yv / total * 100);
+  return { yesPct, noPct: 100 - yesPct, hasVotes: true, total, yesVotes: yv, noVotes: nv };
+}
+
 // ── SENTIMENT SIGNAL ─────────────────────────────────────────
-// Returns a classification + badge HTML for a market's current probability
+// Returns a classification + badge HTML for a market's current probability.
+// Receives yesPct from getConsensus — purely user-driven.
 function sentimentSignal(yesPct) {
+  if (yesPct === null) return { cls: 'contested', label: '⚖ NEW', desc: 'Be the first to predict' };
   if (yesPct >= 43 && yesPct <= 57) return { cls: 'contested',   label: '⚖ CONTESTED',   desc: 'Split — community is genuinely uncertain' };
   if (yesPct > 57 && yesPct <= 70)  return { cls: 'leaning-yes', label: '↑ LEANING YES',  desc: `${yesPct}% lean YES` };
   if (yesPct >= 30 && yesPct < 43)  return { cls: 'leaning-no',  label: '↓ LEANING NO',   desc: `${100-yesPct}% lean NO` };
@@ -2398,7 +2426,8 @@ function sentimentSignal(yesPct) {
 // ── TRUTH SCORE ───────────────────────────────────────────────
 // Higher = more interesting (most contested + most active rises to top)
 function truthScore(m) {
-  const yp = Number(m.yes_price) || 0.5;
+  const { yesPct, hasVotes } = getConsensus(m);
+  const yp = hasVotes ? yesPct / 100 : 0.5;
   const contested   = 1 - Math.abs(yp - 0.5) * 2;      // 1.0 = perfectly 50/50, 0.0 = 100% sure
   const activity    = Math.min((m.trader_count || 0) / 15, 1); // saturates at 15 traders
   return (contested * 0.65) + (activity * 0.35);
@@ -2493,14 +2522,14 @@ function renderFilteredMarkets() {
 function updateTruthFeedSummary(sorted) {
   const sub = document.getElementById('truthFeedSub');
   if (!sub || !sorted.length) return;
-  const contested = sorted.filter(m => { const y = Math.round((m.yes_price||0.5)*100); return y >= 43 && y <= 57; });
-  const consensus = sorted.filter(m => { const y = Math.round((m.yes_price||0.5)*100); return y > 70 || y < 30; });
+  const contested = sorted.filter(m => { const c = getConsensus(m); return c.hasVotes && c.yesPct >= 43 && c.yesPct <= 57; });
+  const consensus = sorted.filter(m => { const c = getConsensus(m); return c.hasVotes && (c.yesPct > 70 || c.yesPct < 30); });
   const top = sorted[0];
-  const topYesPct = Math.round((top.yes_price||0.5)*100);
-  const topSig = sentimentSignal(topYesPct);
+  const topC = getConsensus(top);
+  const topYesPct = topC.hasVotes ? topC.yesPct : null;
   let msg = `<strong>${contested.length}</strong> market${contested.length !== 1 ? 's' : ''} are genuinely contested — no consensus yet.`;
   if (consensus.length) msg += ` <strong>${consensus.length}</strong> have strong community conviction.`;
-  msg += ` Most interesting right now: <strong>"${top.question.slice(0,60)}${top.question.length > 60 ? '…' : ''}"</strong> at ${topYesPct}% YES.`;
+  msg += ` Most interesting right now: <strong>"${top.question.slice(0,60)}${top.question.length > 60 ? '…' : ''}"</strong>${topYesPct !== null ? ' at ' + topYesPct + '% YES' : ''}.`;
   sub.innerHTML = msg;
 }
 
@@ -2551,10 +2580,8 @@ function getMarketSource(m) {
 }
 
 function marketCardHTML(m, isResolved, featured) {
-  const yp      = Number(m.yes_price) || 0.5;
-  const np      = Number(m.no_price)  || 0.5;
-  const yesPct  = Math.round(yp * 100);
-  const noPct   = Math.round(np * 100);
+  // Consensus: purely from yes_votes / no_votes — never the CPMM price
+  const { yesPct, noPct, hasVotes } = getConsensus(m);
   const traders = m.trader_count || 0;
   const cc      = catClass(m.category);
   const hot     = isHot(m);
@@ -2571,7 +2598,7 @@ function marketCardHTML(m, isResolved, featured) {
   if (isResolved) {
     badgesHTML = `<span class="market-badge resolved-badge">Resolved</span>`;
   } else {
-    const sig = sentimentSignal(yesPct);
+    const sig = sentimentSignal(hasVotes ? yesPct : null);
     badgesHTML += `<span class="sentiment-badge ${sig.cls}">${sig.label}</span>`;
     if (hot)  badgesHTML += `<span class="market-badge hot">🔥 Hot</span>`;
     if (soon) badgesHTML += `<span class="market-badge soon">⚡ Soon</span>`;
@@ -2587,10 +2614,13 @@ function marketCardHTML(m, isResolved, featured) {
     </div>`;
   }
 
-  // Slim odds bar (active markets only)
-  const oddsBarHTML = isResolved ? '' : `
+  // Slim odds bar — only rendered when real votes exist; never shows fake 50%
+  const oddsBarHTML = isResolved ? '' : hasVotes ? `
     <div class="mkt-bar-wrap">
       <div class="mkt-bar-fill" style="width:${yesPct}%"></div>
+    </div>` : `
+    <div class="mkt-bar-wrap">
+      <div class="mkt-bar-fill" style="width:0%;background:var(--border)"></div>
     </div>`;
 
   // Source link (shown only when present)
@@ -2631,10 +2661,10 @@ function marketCardHTML(m, isResolved, featured) {
     innerActionsHTML = `
       <div class="market-actions-inline">
         <button class="btn-predict yes" onclick="onPredict(event,'${m.id}','YES')">
-          ${yesPct}% YES
+          ${hasVotes ? yesPct + '% YES' : 'YES'}
         </button>
         <button class="btn-predict no" onclick="onPredict(event,'${m.id}','NO')">
-          ${noPct}% NO
+          ${hasVotes ? noPct + '% NO' : 'NO'}
         </button>
       </div>`;
   }
@@ -3026,6 +3056,23 @@ function openPredict(m, side) {
     const d = new Date(ts);
     expiryEl.textContent = 'Closes ' + d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
+  // Community consensus panel — purely from real votes
+  const cv = getConsensus(m);
+  const consensusWrap  = document.getElementById('predictConsensusWrap');
+  const noVotesYet     = document.getElementById('predictNoVotesYet');
+  if (cv.hasVotes) {
+    if (consensusWrap) {
+      document.getElementById('predictVoteCount').textContent = cv.total;
+      document.getElementById('predictConsensusBar').style.width = cv.yesPct + '%';
+      document.getElementById('predictYesPct').textContent = cv.yesPct + '%';
+      document.getElementById('predictNoPct').textContent  = cv.noPct  + '%';
+      consensusWrap.style.display = '';
+    }
+    if (noVotesYet) noVotesYet.style.display = 'none';
+  } else {
+    if (consensusWrap) consensusWrap.style.display = 'none';
+    if (noVotesYet)    noVotesYet.style.display = '';
+  }
   // Source link
   const srcUrl = getMarketSource(m);
   const srcLink = document.getElementById('predictSourceLink');
@@ -3112,12 +3159,18 @@ async function submitPredict() {
     if (!myPositions[mid]) myPositions[mid] = { side: pendingSide, amount: 0 };
     myPositions[mid].amount += inputPts;
 
-    // Update CPMM prices locally
+    // Update CPMM prices + vote counts locally (prices for payouts, votes for display)
     if (data.yes_price !== undefined) {
       pendingMarket.yes_price = data.yes_price;
       pendingMarket.no_price  = data.no_price;
       const mkt = markets.find(m => m.id === pendingMarket.id);
       if (mkt) { mkt.yes_price = data.yes_price; mkt.no_price = data.no_price; }
+    }
+    if (data.yes_votes !== undefined) {
+      pendingMarket.yes_votes = data.yes_votes;
+      pendingMarket.no_votes  = data.no_votes;
+      const mkt = markets.find(m => m.id === pendingMarket.id);
+      if (mkt) { mkt.yes_votes = data.yes_votes; mkt.no_votes = data.no_votes; }
     }
 
     // Capture comment before closePredict() clears pendingMarket
@@ -3164,28 +3217,27 @@ function closePredict() {
 function refreshMarketCard(m) {
   const card = document.getElementById(`mkt-${m.id}`);
   if (!card) return;
-  const yp = Number(m.yes_price) || 0.5;
-  const np = Number(m.no_price)  || 0.5;
-  const yesPct = Math.round(yp * 100);
-  const noPct  = Math.round(np * 100);
 
-  // Update big odds numbers
+  // Consensus from real votes — never the seeded CPMM price
+  const cv = getConsensus(m);
+  const yesPct = cv.hasVotes ? cv.yesPct : null;
+  const noPct  = cv.hasVotes ? cv.noPct  : null;
+
+  // Update big odds numbers (only when votes exist)
   const yesPctEl = card.querySelector('.yes-side .odds-pct');
   const noPctEl  = card.querySelector('.no-side .odds-pct');
-  if (yesPctEl) yesPctEl.textContent = yesPct + '%';
-  if (noPctEl)  noPctEl.textContent  = noPct  + '%';
+  if (yesPctEl) yesPctEl.textContent = yesPct !== null ? yesPct + '%' : '—';
+  if (noPctEl)  noPctEl.textContent  = noPct  !== null ? noPct  + '%' : '—';
 
-  // Update prob bar fills
-  const fillYes = card.querySelector('.prob-fill-yes');
-  const fillNo  = card.querySelector('.prob-fill-no');
-  if (fillYes) fillYes.style.width = yesPct + '%';
-  if (fillNo)  fillNo.style.width  = noPct  + '%';
+  // Update odds bar fill
+  const barFill = card.querySelector('.mkt-bar-fill');
+  if (barFill) barFill.style.width = (yesPct !== null ? yesPct : 0) + '%';
 
-  // Update buttons
+  // Update bet buttons
   const btnYes = card.querySelector('.btn-predict.yes');
   const btnNo  = card.querySelector('.btn-predict.no');
-  if (btnYes) btnYes.innerHTML = `✓ YES <span class="btn-price">${yesPct}¢</span>`;
-  if (btnNo)  btnNo.innerHTML  = `✗ NO <span class="btn-price">${noPct}¢</span>`;
+  if (btnYes) btnYes.textContent = yesPct !== null ? yesPct + '% YES' : 'YES';
+  if (btnNo)  btnNo.textContent  = noPct  !== null ? noPct  + '% NO'  : 'NO';
 
   // Update trader count
   const n = (m.trader_count || 0) + 1;
@@ -3644,33 +3696,37 @@ function renderCreatorBar(communityData) {
 }
 
 // ── COMMUNITY PULSE ────────────────────────────────────────────
-// Shows real-time category sentiment (weighted avg yes_price) from active markets
+// Shows real-time category sentiment using PURE VOTE CONSENSUS per category.
+// Only markets with at least one real vote contribute — no seeded 50% noise.
 function renderCommunityPulse(markets) {
   const pulseEl   = document.getElementById('communityPulse');
   const pillsEl   = document.getElementById('communityPulsePills');
   if (!pulseEl || !pillsEl) return;
 
   const activeMarkets = (markets || []).filter(m => !m.resolved && !m.archived);
-  if (activeMarkets.length < 2) { pulseEl.style.display = 'none'; return; }
 
-  // Compute weighted avg yes_price per category
+  // Aggregate vote-weighted YES% per category — skip markets with zero votes
   const sentMap = {};
   activeMarkets.forEach(m => {
+    const cv = getConsensus(m);
+    if (!cv.hasVotes) return; // skip unseeded markets entirely
     const cat = (m.category || 'other').toLowerCase();
-    if (!sentMap[cat]) sentMap[cat] = { sumYes: 0, weight: 0 };
-    const w = (m.trader_count || 0) + 1; // +1 so zero-trade markets still count
-    sentMap[cat].sumYes += (m.yes_price || 0.5) * w;
-    sentMap[cat].weight += w;
+    if (!sentMap[cat]) sentMap[cat] = { sumYesPct: 0, count: 0, totalVotes: 0 };
+    // Weight by vote count — busier markets drive the category signal more
+    sentMap[cat].sumYesPct += cv.yesPct * cv.total;
+    sentMap[cat].count     += 1;
+    sentMap[cat].totalVotes += cv.total;
   });
 
   const pills = Object.entries(sentMap)
     .map(([cat, s]) => ({
       cat,
-      pct: Math.round((s.sumYes / s.weight) * 100),
-      weight: s.weight
+      pct:   Math.round(s.sumYesPct / s.totalVotes), // vote-weighted avg
+      count: s.count,
+      votes: s.totalVotes,
     }))
-    .filter(p => p.weight > 0)
-    .sort((a, b) => b.weight - a.weight)
+    .filter(p => p.votes >= 2) // need at least 2 real votes to show
+    .sort((a, b) => b.votes - a.votes)
     .slice(0, 6);
 
   if (!pills.length) { pulseEl.style.display = 'none'; return; }
@@ -3733,8 +3789,9 @@ function renderTweetFeed(markets) {
 
   sec.innerHTML = tweetMarkets.map(m => {
     const handle  = m.tweet_author ? (m.tweet_author.startsWith('@') ? m.tweet_author : '@' + m.tweet_author) : '@News Intelligence';
-    const yesOdds = m.yes_price != null ? Math.round(m.yes_price * 100) : 50;
-    const noOdds  = 100 - yesOdds;
+    const _twTotalVotes = (m.yes_votes || 0) + (m.no_votes || 0);
+    const yesOdds = _twTotalVotes > 0 ? Math.round((m.yes_votes || 0) / _twTotalVotes * 100) : null;
+    const noOdds  = yesOdds !== null ? 100 - yesOdds : null;
     // Source: prefer resolution_source, fall back to source_tweet_url
     const newsSource = getMarketSource(m) || (m.source_tweet_url && !m.tweet_text ? m.source_tweet_url : null);
     let sourceLabel = null;
@@ -3755,9 +3812,11 @@ function renderTweetFeed(markets) {
         <button class="tweet-market-link" onclick="openMarket('${m.id}')">
           <span class="tweet-market-question">${escHtml(m.question)}</span>
           <span class="tweet-market-odds">
-            <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#4ade80">YES ${yesOdds}%</span>
-            <span style="font-family:var(--mono);font-size:10px;color:var(--dim)">·</span>
-            <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#fca5a5">NO ${noOdds}%</span>
+            ${yesOdds !== null
+              ? `<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#4ade80">YES ${yesOdds}%</span>
+                 <span style="font-family:var(--mono);font-size:10px;color:var(--dim)">·</span>
+                 <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#fca5a5">NO ${noOdds}%</span>`
+              : `<span style="font-family:var(--mono);font-size:11px;color:var(--dim)">🎯 Predict</span>`}
             <span style="font-size:11px;color:var(--gold);white-space:nowrap">→</span>
           </span>
         </button>

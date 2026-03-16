@@ -1481,8 +1481,9 @@ footer {
     const html = markets.map(m => {
       const color = communities[m.creator_slug]?.primary_color || '#c9920d';
       const communityName = communities[m.creator_slug]?.display_name || m.creator_slug;
-      const yesPct = Math.round((m.yes_price || 0.5) * 100);
-      const noPct = 100 - yesPct;
+      const _idxTotalVotes = (m.yes_votes || 0) + (m.no_votes || 0);
+      const yesPct = _idxTotalVotes > 0 ? Math.round((m.yes_votes || 0) / _idxTotalVotes * 100) : null;
+      const noPct = yesPct !== null ? 100 - yesPct : null;
       return `
         <a href="/${m.creator_slug}" style="display:block;background:#1c1c19;border:1px solid #2a2a27;border-radius:10px;padding:16px 18px;text-decoration:none;color:#ddd8cc;transition:border-color 0.2s;" onmouseover="this.style.borderColor='${color}'" onmouseout="this.style.borderColor='#2a2a27'">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
@@ -1491,11 +1492,12 @@ footer {
           </div>
           <div style="font-size:14px;font-weight:700;line-height:1.4;margin-bottom:12px;font-family:'Space Mono',monospace;">${m.question}</div>
           <div style="height:4px;background:#2a2a27;border-radius:2px;overflow:hidden;margin-bottom:8px;">
-            <div style="height:100%;width:${yesPct}%;background:${yesPct>50?'#22c55e':'#ef4444'};border-radius:2px;"></div>
+            <div style="height:100%;width:${yesPct !== null ? yesPct : 50}%;background:${yesPct !== null ? (yesPct>50?'#22c55e':'#ef4444') : 'rgba(255,255,255,0.15)'};border-radius:2px;opacity:${yesPct !== null ? 1 : 0.5}"></div>
           </div>
           <div style="display:flex;justify-content:space-between;font-size:11px;font-family:'Space Mono',monospace;">
-            <span style="color:#22c55e;font-weight:700;">YES ${yesPct}%</span>
-            <span style="color:#ef4444;font-weight:700;">NO ${noPct}%</span>
+            ${yesPct !== null
+              ? `<span style="color:#22c55e;font-weight:700;">YES ${yesPct}%</span><span style="color:#ef4444;font-weight:700;">NO ${noPct}%</span>`
+              : `<span style="color:#888880;font-size:10px;margin:auto;">🎯 No predictions yet</span>`}
           </div>
         </a>`;
     }).join('');
@@ -1656,17 +1658,19 @@ footer {
       tGrid.innerHTML = markets.map(m => {
         const color = communities[m.creator_slug]?.primary_color || '#c9920d';
         const cname = communities[m.creator_slug]?.display_name || m.creator_slug || 'HYPERFLEX';
-        const yes = Math.round((m.yes_price || 0.5) * 100);
-        const no  = 100 - yes;
-        const yColor = yes > 50 ? '#22c55e' : '#ef4444';
+        const _trendTotal = (m.yes_votes || 0) + (m.no_votes || 0);
+        const yes = _trendTotal > 0 ? Math.round((m.yes_votes || 0) / _trendTotal * 100) : null;
+        const no  = yes !== null ? 100 - yes : null;
+        const yColor = (yes !== null && yes > 50) ? '#22c55e' : '#ef4444';
         return `
           <a href="/${m.creator_slug || 'explore'}" class="trending-card" style="border-color:#2a2a27" onmouseover="this.style.borderColor='${color}'" onmouseout="this.style.borderColor='#2a2a27'">
             <div class="trending-community" style="background:${color};color:#141412">${cname}</div>
             <div class="trending-question">${m.question.length > 72 ? m.question.slice(0,72)+'…' : m.question}</div>
-            <div class="trending-bar"><div style="height:100%;width:${yes}%;background:${yColor};border-radius:2px;"></div></div>
+            <div class="trending-bar"><div style="height:100%;width:${yes !== null ? yes : 50}%;background:${yes !== null ? yColor : 'rgba(255,255,255,0.15)'};border-radius:2px;opacity:${yes !== null ? 1 : 0.4}"></div></div>
             <div style="display:flex;justify-content:space-between;font-size:11px;font-family:var(--mono);margin-top:6px;">
-              <span style="color:#22c55e;font-weight:700;">YES ${yes}%</span>
-              <span style="color:#ef4444;font-weight:700;">NO ${no}%</span>
+              ${yes !== null
+                ? `<span style="color:#22c55e;font-weight:700;">YES ${yes}%</span><span style="color:#ef4444;font-weight:700;">NO ${no}%</span>`
+                : `<span style="color:#888880;font-size:10px;margin:auto;">🎯 No predictions yet</span>`}
             </div>
             <div class="trending-traders">${(m.trader_count||0).toLocaleString()} traders</div>
           </a>`;

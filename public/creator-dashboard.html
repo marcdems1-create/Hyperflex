@@ -4956,7 +4956,8 @@ function renderMarketRows(markets, containerId) {
     const expired = new Date(m.expiry_date) < new Date();
     const status = m.resolved ? 'resolved' : m.archived ? 'archived' : expired ? 'pending' : 'live';
     const statusLabel = m.resolved ? 'Resolved' : m.archived ? 'Archived' : expired ? 'Needs resolve' : 'Live';
-    const yes = Math.round((m.yes_price || 0.5) * 100);
+    const _cdTotal = (m.yes_votes || 0) + (m.no_votes || 0);
+    const yes = _cdTotal > 0 ? Math.round((m.yes_votes || 0) / _cdTotal * 100) : null;
     return `
       <div class="market-row" onclick="openEditModal('${m.id}')" style="cursor:pointer" title="Click to edit">
         <div>
@@ -4967,8 +4968,9 @@ function renderMarketRows(markets, containerId) {
         <div class="market-volume">${(m.volume||0).toLocaleString()} pts</div>
         <div class="market-traders">${m.trader_count || 0}</div>
         <div class="market-price">
-          <span class="yes-price">${yes}¢</span>
-          <span class="no-price">${100-yes}¢</span>
+          ${yes !== null
+            ? `<span class="yes-price">${yes}%</span><span class="no-price">${100-yes}%</span>`
+            : `<span class="yes-price" style="color:var(--muted);font-size:10px">—</span>`}
         </div>
         <div class="market-status">
           <div class="status-dot ${status}"></div>
