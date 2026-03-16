@@ -3690,15 +3690,21 @@ function renderTweetFeed(markets) {
   if (!sec || !tweetMarkets.length) return;
 
   sec.innerHTML = tweetMarkets.map(m => {
-    const handle  = m.tweet_author ? (m.tweet_author.startsWith('@') ? m.tweet_author : '@' + m.tweet_author) : '@creator';
+    const handle  = m.tweet_author ? (m.tweet_author.startsWith('@') ? m.tweet_author : '@' + m.tweet_author) : '@News Intelligence';
     const yesOdds = m.yes_price != null ? Math.round(m.yes_price * 100) : 50;
     const noOdds  = 100 - yesOdds;
+    const newsSource = getMarketSource(m);
+    // Derive a clean hostname label for the news source
+    let sourceLabel = null;
+    if (newsSource) {
+      try { sourceLabel = new URL(newsSource).hostname.replace(/^www\./, ''); } catch { sourceLabel = 'source'; }
+    }
     return `<div class="tweet-card">
       <div class="tweet-avatar">𝕏</div>
       <div style="flex:1;min-width:0">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
           <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text)">${escHtml(handle)}</span>
-          ${m.source_tweet_url ? `<a href="${escHtml(m.source_tweet_url)}" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#1d9bf0;background:rgba(29,155,240,0.1);border:1px solid rgba(29,155,240,0.2);padding:2px 7px;border-radius:3px;text-decoration:none">𝕏 View post ↗</a>` : ''}
+          ${m.source_tweet_url ? `<a href="${escHtml(m.source_tweet_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#1d9bf0;background:rgba(29,155,240,0.1);border:1px solid rgba(29,155,240,0.2);padding:2px 7px;border-radius:3px;text-decoration:none">𝕏 View post ↗</a>` : ''}
         </div>
         <div style="font-size:14px;color:var(--text);line-height:1.6;margin-bottom:14px;word-break:break-word">${escHtml(m.tweet_text)}</div>
         <button class="tweet-market-link" onclick="openMarket('${m.id}')">
@@ -3710,6 +3716,7 @@ function renderTweetFeed(markets) {
             <span style="font-size:11px;color:var(--gold);white-space:nowrap">→</span>
           </span>
         </button>
+        ${newsSource ? `<a href="${escHtml(newsSource)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;gap:5px;margin-top:10px;font-family:var(--mono);font-size:10px;color:var(--dim);text-decoration:none;border:1px solid var(--border);border-radius:4px;padding:3px 9px;transition:color .15s" onmouseover="this.style.color='var(--gold)';this.style.borderColor='rgba(201,146,13,.4)'" onmouseout="this.style.color='var(--dim)';this.style.borderColor='var(--border)'">📰 ${escHtml(sourceLabel)} ↗</a>` : ''}
       </div>
     </div>`;
   }).join('');
