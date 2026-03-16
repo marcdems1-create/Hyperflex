@@ -822,6 +822,36 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
   border-radius: 0 8px 8px 0; transition: width 0.6s cubic-bezier(0.4,0,0.2,1);
 }
 
+/* ── SLIM PROFILE-STYLE ODDS BAR ── */
+.mkt-bar-wrap {
+  height: 4px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+.mkt-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #22c55e, #c9920d);
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+.market-card.featured .mkt-bar-wrap { height: 6px; margin-bottom: 12px; }
+/* Inline YES/NO buttons inside card body */
+.market-actions-inline {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.market-actions-inline .btn-predict {
+  min-height: 36px;
+  font-size: 12px;
+}
+.market-card.featured .market-actions-inline .btn-predict {
+  min-height: 42px;
+  font-size: 13px;
+}
+
 /* Market meta row */
 .market-meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: auto; }
 .meta-item { font-family: var(--mono); font-size: 10px; color: var(--dim); display: flex; align-items: center; gap: 3px; white-space: nowrap; }
@@ -2485,41 +2515,30 @@ function marketCardHTML(m, isResolved, featured) {
     </div>`;
   }
 
-  // Odds block (hidden for resolved)
-  const oddsHTML = isResolved ? '' : `
-    <div class="odds-block">
-      <div class="odds-side yes-side">
-        <div class="odds-pct">${yesPct}%</div>
-        <div class="odds-side-label">YES</div>
-      </div>
-      <div class="odds-bar-col">
-        <div class="prob-bar">
-          <div class="prob-fill-yes" style="width:${yesPct}%"></div>
-          <div class="prob-fill-no"  style="width:${noPct}%"></div>
-        </div>
-      </div>
-      <div class="odds-side no-side">
-        <div class="odds-pct">${noPct}%</div>
-        <div class="odds-side-label">NO</div>
-      </div>
+  // Slim odds bar (active markets only)
+  const oddsBarHTML = isResolved ? '' : `
+    <div class="mkt-bar-wrap">
+      <div class="mkt-bar-fill" style="width:${yesPct}%"></div>
     </div>`;
 
-  // Meta row (comment toggle only on active markets)
+  // Meta row
   const commentBtnId = `cmtBtn-${m.id}`;
   const commentCount = m.comment_count || 0;
-  const metaHTML = `<div class="market-meta" style="justify-content:space-between">
-    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-      <span class="meta-item${urgentTime && !isResolved ? ' urgent' : ''}">⏱ ${countdown}</span>
-      <span class="meta-item">👥 ${traders}</span>
-      ${vol ? `<span class="meta-item">📊 ${vol}</span>` : ''}
+  const metaHTML = `<div class="market-meta" style="justify-content:space-between;margin-top:auto">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <span class="meta-item">👥 ${traders} trader${traders !== 1 ? 's' : ''}</span>
+      ${!isResolved ? `<span class="meta-item${urgentTime ? ' urgent' : ''}">· ⏱ ${countdown}</span>` : ''}
+      ${vol ? `<span class="meta-item">· 📊 ${vol}</span>` : ''}
     </div>
-    <button id="${commentBtnId}" onclick="event.stopPropagation();toggleComments('${m.id}')" style="background:transparent;border:none;font-family:var(--mono);font-size:10px;color:var(--dim);cursor:pointer;display:flex;align-items:center;gap:4px;padding:2px 0;letter-spacing:.04em" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='var(--dim)'">
+    ${!isResolved ? `<button id="${commentBtnId}" onclick="event.stopPropagation();toggleComments('${m.id}')" style="background:transparent;border:none;font-family:var(--mono);font-size:10px;color:var(--dim);cursor:pointer;display:flex;align-items:center;gap:4px;padding:2px 0;letter-spacing:.04em" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='var(--dim)'">
       💬 <span id="cmtCount-${m.id}">${commentCount > 0 ? commentCount : ''}</span>
-    </button>
+    </button>` : ''}
   </div>`;
 
-  // Actions
-  let actionsHTML;
+  // Inline bet buttons (active) or resolved outcome banner
+  let innerActionsHTML = '';
+  let outerHTML = '';
+
   if (isResolved) {
     const won = m.outcome === 'YES' || m.outcome === true;
     const userWon = pos && ((won && pos.side === 'YES') || (!won && pos.side === 'NO'));
@@ -2529,16 +2548,17 @@ function marketCardHTML(m, isResolved, featured) {
     const noteHTML = m.resolution_note
       ? `<div style="font-size:11px;color:var(--dim);padding:8px 16px 10px;line-height:1.5;font-style:italic;border-top:1px solid rgba(255,255,255,0.06)">📌 ${escHtml(m.resolution_note)}</div>`
       : '';
-    actionsHTML = `<div class="outcome-banner ${won ? 'yes' : 'no'}" style="display:flex;align-items:center;justify-content:space-between">${won ? '✓ Resolved YES' : '✗ Resolved NO'}${shareBtn}</div>${noteHTML}`;
+    outerHTML = `<div class="outcome-banner ${won ? 'yes' : 'no'}" style="display:flex;align-items:center;justify-content:space-between">${won ? '✓ Resolved YES' : '✗ Resolved NO'}${shareBtn}</div>${noteHTML}`;
   } else {
-    actionsHTML = `<div class="market-actions">
-      <button class="btn-predict yes" onclick="onPredict(event,'${m.id}','YES')">
-        ✓ YES <span class="btn-price">${yesPct}¢</span>
-      </button>
-      <button class="btn-predict no" onclick="onPredict(event,'${m.id}','NO')">
-        ✗ NO <span class="btn-price">${noPct}¢</span>
-      </button>
-    </div>`;
+    innerActionsHTML = `
+      <div class="market-actions-inline">
+        <button class="btn-predict yes" onclick="onPredict(event,'${m.id}','YES')">
+          ${yesPct}% YES
+        </button>
+        <button class="btn-predict no" onclick="onPredict(event,'${m.id}','NO')">
+          ${noPct}% NO
+        </button>
+      </div>`;
   }
 
   const cls = [
@@ -2557,10 +2577,11 @@ function marketCardHTML(m, isResolved, featured) {
         </div>
         <div class="market-question">${escHtml(m.question)}</div>
         ${posHTML}
-        ${oddsHTML}
+        ${oddsBarHTML}
+        ${innerActionsHTML}
         ${metaHTML}
       </div>
-      ${actionsHTML}
+      ${outerHTML}
       <div id="comments-${m.id}" style="display:none;border-top:1px solid var(--border)">
         <div id="commentsList-${m.id}" style="padding:12px 16px 0;display:flex;flex-direction:column;gap:8px;max-height:260px;overflow-y:auto"></div>
         <div style="padding:10px 14px;display:flex;gap:8px;align-items:center">
