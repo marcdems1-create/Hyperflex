@@ -756,7 +756,7 @@ function renderTrades(trades, communities) {
     const communityName = communities[t.creator_slug]?.display_name || t.creator_slug;
     const pts = communities[t.creator_slug]?.custom_points_name || 'Points';
     const amt = t.amount ? Math.round(t.amount / 100).toLocaleString() : '—';
-    const side = t.side === 'yes' ? `<span class="yes">YES</span>` : `<span class="no">NO</span>`;
+    const side = (t.side || '').toUpperCase() === 'YES' ? `<span class="yes">YES</span>` : `<span class="no">NO</span>`;
     return `
       <div class="trade-item">
         <div class="trade-avatar" style="background:${color}">${getInitials(t.user)}</div>
