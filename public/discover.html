@@ -1,0 +1,1119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Discover — HYPERFLEX</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --ink: #0e0e0c;
+  --paper: #141412;
+  --cream: #1c1c19;
+  --text: #ddd8cc;
+  --gold: #c9920d;
+  --gold-lt: #e0a820;
+  --gold-bright: #f5c842;
+  --border: #2a2a26;
+  --dim: #7a7870;
+  --green: #2d9b5f;
+  --green-lt: rgba(45,155,95,0.15);
+  --red: #c0392b;
+  --red-lt: rgba(192,57,43,0.15);
+  --sans: 'Syne', sans-serif;
+  --mono: 'Space Mono', monospace;
+  --display: 'Syne', sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--paper); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+body {
+  background: var(--paper);
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(201,146,13,0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(201,146,13,0.02) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── HEADER ── */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(20,20,18,0.95);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border);
+  padding: 0 24px;
+  height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.logo:hover { opacity: 0.8; }
+
+.logo-hex {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, var(--gold), var(--gold-bright));
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+}
+
+.logo-name {
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  color: var(--text);
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.btn-auth {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  padding: 7px 14px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.18s;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--dim);
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.btn-auth:hover {
+  color: var(--text);
+  border-color: var(--text);
+}
+
+.btn-auth.primary {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-weight: 700;
+}
+
+.btn-auth.primary:hover {
+  background: var(--gold-bright);
+}
+
+/* ── HERO SECTION ── */
+.hero {
+  position: relative;
+  z-index: 1;
+  padding: 80px 24px;
+  text-align: center;
+  background: linear-gradient(135deg, rgba(201,146,13,0.08) 0%, rgba(201,146,13,0.02) 40%, rgba(30,20,0,0) 100%);
+  border-bottom: 1px solid var(--border);
+}
+
+.hero-content {
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.hero-headline {
+  font-size: 52px;
+  font-weight: 800;
+  line-height: 1.15;
+  margin-bottom: 16px;
+  letter-spacing: -0.02em;
+}
+
+.hero-subheadline {
+  font-size: 20px;
+  font-weight: 400;
+  color: var(--dim);
+  margin-bottom: 40px;
+  line-height: 1.5;
+}
+
+.hero-stats {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  margin-top: 40px;
+  flex-wrap: wrap;
+}
+
+.stat-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 20px 28px;
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  min-width: 140px;
+}
+
+.stat-value {
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--gold);
+  font-family: var(--mono);
+  line-height: 1;
+}
+
+.stat-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+/* ── CONTENT SECTION ── */
+.content {
+  position: relative;
+  z-index: 1;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 80px 24px;
+}
+
+/* ── TRENDING NOW SECTION ── */
+.section {
+  margin-bottom: 80px;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.section-title {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.section-subtitle {
+  font-size: 14px;
+  color: var(--dim);
+  margin-bottom: 20px;
+}
+
+.trending-scroll {
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 0;
+}
+
+.trending-scroll::before,
+.trending-scroll::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 48px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.trending-scroll::before {
+  left: 0;
+  background: linear-gradient(to right, var(--paper), transparent);
+}
+
+.trending-scroll::after {
+  right: 0;
+  background: linear-gradient(to left, var(--paper), transparent);
+}
+
+.trending-track {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  padding-bottom: 8px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) var(--paper);
+}
+
+.trending-track::-webkit-scrollbar {
+  height: 4px;
+}
+
+.trending-track::-webkit-scrollbar-track {
+  background: var(--paper);
+}
+
+.trending-track::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
+}
+
+.trending-card {
+  flex-shrink: 0;
+  width: 280px;
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--gold);
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.trending-card:hover {
+  border-color: var(--gold);
+  transform: translateY(-2px);
+  background: var(--cream);
+}
+
+.trending-community {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--gold);
+  text-transform: uppercase;
+}
+
+.trending-question {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--text);
+  flex: 1;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.trending-odds {
+  display: flex;
+  gap: 8px;
+}
+
+.trending-odd {
+  flex: 1;
+  padding: 8px 0;
+  border-radius: 6px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--mono);
+}
+
+.trending-yes {
+  background: rgba(45,155,95,0.15);
+  color: #4ade80;
+}
+
+.trending-no {
+  background: rgba(192,57,43,0.15);
+  color: #f87171;
+}
+
+.trending-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: var(--dim);
+  font-family: var(--mono);
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+/* ── COMMUNITIES GRID ── */
+.communities-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 768px) {
+  .communities-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.community-card {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.15s;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+}
+
+.community-card:hover {
+  border-color: var(--gold);
+  transform: translateY(-2px);
+}
+
+.community-banner {
+  height: 100px;
+  background-size: cover;
+  background-position: center;
+  position: relative;
+}
+
+.community-banner.no-image {
+  background: linear-gradient(135deg, rgba(201,146,13,0.15) 0%, rgba(201,146,13,0.05) 100%);
+}
+
+.community-body {
+  padding: 16px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.community-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.community-logo {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  background: var(--border);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 18px;
+  color: var(--gold);
+  overflow: hidden;
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+}
+
+.community-info {
+  flex: 1;
+}
+
+.community-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+
+.community-description {
+  font-size: 12px;
+  color: var(--dim);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.community-stats {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--dim);
+  font-family: var(--mono);
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.community-stat {
+  display: flex;
+  gap: 4px;
+}
+
+.community-stat-number {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.top-market {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.top-market-label {
+  font-size: 10px;
+  color: var(--dim);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.top-market-question {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 8px;
+  line-height: 1.3;
+}
+
+.prob-bar {
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.prob-fill {
+  height: 100%;
+  background: linear-gradient(to right, var(--green), var(--gold));
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.community-cta {
+  padding-top: 12px;
+  display: flex;
+}
+
+.btn-join {
+  flex: 1;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 10px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.btn-join:hover {
+  background: rgba(201,146,13,0.1);
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+/* ── SKELETON LOADER ── */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--cream) 0%,
+    var(--border) 50%,
+    var(--cream) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.skeleton-card {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  height: 400px;
+}
+
+.skeleton-banner {
+  height: 100px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  background: var(--border);
+}
+
+.skeleton-logo {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  background: var(--border);
+  margin-bottom: 8px;
+}
+
+.skeleton-text {
+  height: 16px;
+  background: var(--border);
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
+/* ── EMPTY STATE ── */
+.empty-state {
+  text-align: center;
+  padding: 60px 24px;
+  color: var(--dim);
+}
+
+.empty-state-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.empty-state-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.empty-state-text {
+  font-size: 14px;
+  line-height: 1.5;
+  margin-bottom: 24px;
+}
+
+/* ── FOOTER ── */
+.footer {
+  position: relative;
+  z-index: 1;
+  border-top: 1px solid var(--border);
+  padding: 40px 24px;
+  text-align: center;
+  color: var(--dim);
+  font-size: 13px;
+}
+
+.footer-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+
+.footer-copy {
+  flex: 1;
+  min-width: 200px;
+}
+
+.footer-links {
+  display: flex;
+  gap: 24px;
+  justify-content: center;
+}
+
+.footer-link {
+  color: var(--dim);
+  text-decoration: none;
+  transition: color 0.15s;
+  font-size: 13px;
+}
+
+.footer-link:hover {
+  color: var(--gold);
+}
+
+/* ── RESPONSIVE ── */
+@media (max-width: 768px) {
+  .hero {
+    padding: 60px 16px;
+  }
+
+  .hero-headline {
+    font-size: 36px;
+  }
+
+  .hero-subheadline {
+    font-size: 16px;
+  }
+
+  .hero-stats {
+    gap: 12px;
+  }
+
+  .stat-pill {
+    min-width: 110px;
+    padding: 14px 18px;
+  }
+
+  .stat-value {
+    font-size: 24px;
+  }
+
+  .content {
+    padding: 60px 16px;
+  }
+
+  .section-title {
+    font-size: 22px;
+  }
+
+  .trending-card {
+    width: 240px;
+  }
+
+  .header {
+    padding: 0 16px;
+  }
+
+  .footer-content {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .footer-links {
+    order: -1;
+  }
+}
+
+@media (max-width: 480px) {
+  .hero-headline {
+    font-size: 28px;
+  }
+
+  .hero-subheadline {
+    font-size: 14px;
+  }
+
+  .stat-pill {
+    min-width: 100%;
+  }
+
+  .hero-stats {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .trending-scroll::before,
+  .trending-scroll::after {
+    width: 32px;
+  }
+
+  .section-title {
+    font-size: 20px;
+  }
+
+  .trending-card {
+    width: 220px;
+  }
+
+  .community-name {
+    font-size: 14px;
+  }
+}
+</style>
+</head>
+<body>
+
+<!-- ──────────────────────────────────────────────────────────────── -->
+<!-- HEADER -->
+<!-- ──────────────────────────────────────────────────────────────── -->
+<header class="header">
+  <div class="header-left">
+    <a href="/" class="logo">
+      <div class="logo-hex"></div>
+      <span class="logo-name">HYPERFLEX</span>
+    </a>
+  </div>
+  <div class="header-right">
+    <a href="/creator/signup" class="btn-auth primary">Create your community →</a>
+  </div>
+</header>
+
+<!-- ──────────────────────────────────────────────────────────────── -->
+<!-- HERO SECTION -->
+<!-- ──────────────────────────────────────────────────────────────── -->
+<section class="hero">
+  <div class="hero-content">
+    <h1 class="hero-headline">Every community has a truth feed.</h1>
+    <p class="hero-subheadline">Prediction markets for creators. Real-time sentiment from your audience.</p>
+    <div class="hero-stats">
+      <div class="stat-pill">
+        <div class="stat-value" data-stat="communities">0</div>
+        <div class="stat-label">Communities</div>
+      </div>
+      <div class="stat-pill">
+        <div class="stat-value" data-stat="members">0</div>
+        <div class="stat-label">Members</div>
+      </div>
+      <div class="stat-pill">
+        <div class="stat-value" data-stat="markets">0</div>
+        <div class="stat-label">Active Markets</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ──────────────────────────────────────────────────────────────── -->
+<!-- MAIN CONTENT -->
+<!-- ──────────────────────────────────────────────────────────────── -->
+<div class="content">
+
+  <!-- TRENDING NOW SECTION -->
+  <div class="section">
+    <div class="section-header">
+      <h2 class="section-title">Trending Now</h2>
+    </div>
+    <p class="section-subtitle">Markets getting the most action</p>
+    <div class="trending-scroll" id="trendingScroll">
+      <div class="trending-track" id="trendingTrack">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ALL COMMUNITIES GRID -->
+  <div class="section">
+    <div class="section-header">
+      <h2 class="section-title">Explore Communities</h2>
+    </div>
+    <p class="section-subtitle">Find your favorite prediction market</p>
+    <div class="communities-grid" id="communitiesGrid">
+      <!-- Populated by JS -->
+    </div>
+  </div>
+
+</div>
+
+<!-- ──────────────────────────────────────────────────────────────── -->
+<!-- FOOTER -->
+<!-- ──────────────────────────────────────────────────────────────── -->
+<footer class="footer">
+  <div class="footer-content">
+    <div class="footer-copy">© 2026 HYPERFLEX</div>
+    <div class="footer-links">
+      <a href="/creator/signup" class="footer-link">Create community</a>
+      <a href="/creator/login" class="footer-link">Creator login</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+// ──────────────────────────────────────────────────────────────────
+// STATE
+// ──────────────────────────────────────────────────────────────────
+
+let discoverData = null;
+let isLoading = true;
+
+// ──────────────────────────────────────────────────────────────────
+// FETCH DISCOVER DATA
+// ──────────────────────────────────────────────────────────────────
+
+async function fetchDiscoverData() {
+  try {
+    const res = await fetch('/api/discover');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    discoverData = await res.json();
+    isLoading = false;
+    render();
+  } catch (err) {
+    console.error('Failed to fetch discover data:', err);
+    isLoading = false;
+    renderEmpty();
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────
+// HELPERS
+// ──────────────────────────────────────────────────────────────────
+
+function animateCounter(element, targetValue) {
+  const duration = 800; // ms
+  const start = Date.now();
+  const startValue = 0;
+
+  function update() {
+    const elapsed = Date.now() - start;
+    const progress = Math.min(elapsed / duration, 1);
+    const easeOutQuad = 1 - Math.pow(1 - progress, 2);
+    const current = Math.floor(startValue + (targetValue - startValue) * easeOutQuad);
+    element.textContent = current.toLocaleString();
+
+    if (progress < 1) {
+      requestAnimationFrame(update);
+    } else {
+      element.textContent = targetValue.toLocaleString();
+    }
+  }
+
+  update();
+}
+
+function getInitials(name) {
+  if (!name) return '?';
+  return name
+    .split(' ')
+    .map(w => w[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+}
+
+function formatNumber(num) {
+  if (!num) return '0';
+  if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+  if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+  return num.toLocaleString();
+}
+
+// ──────────────────────────────────────────────────────────────────
+// RENDER STATS
+// ──────────────────────────────────────────────────────────────────
+
+function renderStats() {
+  if (!discoverData || !discoverData.stats) return;
+
+  const stats = discoverData.stats;
+
+  const communitiesEl = document.querySelector('[data-stat="communities"]');
+  if (communitiesEl) {
+    animateCounter(communitiesEl, stats.total_communities || 0);
+  }
+
+  const membersEl = document.querySelector('[data-stat="members"]');
+  if (membersEl) {
+    animateCounter(membersEl, stats.total_members || 0);
+  }
+
+  const marketsEl = document.querySelector('[data-stat="markets"]');
+  if (marketsEl) {
+    animateCounter(marketsEl, stats.total_active_markets || 0);
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────
+// RENDER TRENDING
+// ──────────────────────────────────────────────────────────────────
+
+function renderTrending() {
+  if (!discoverData || !discoverData.trending_markets) return;
+
+  const track = document.getElementById('trendingTrack');
+  track.innerHTML = '';
+
+  const markets = discoverData.trending_markets;
+
+  if (markets.length === 0) {
+    track.innerHTML = '<div style="padding: 40px; color: var(--dim); text-align: center; width: 100%;">No trending markets yet</div>';
+    return;
+  }
+
+  markets.forEach(market => {
+    const yesPrice = market.yes_price || 0;
+    const noPrice = market.no_price || 0;
+    const total = yesPrice + noPrice || 1;
+
+    const yesPct = Math.round((yesPrice / total) * 100);
+    const noPct = 100 - yesPct;
+
+    const card = document.createElement('div');
+    card.className = 'trending-card';
+    card.style.cursor = 'pointer';
+    card.onclick = () => window.location.href = `/${market.slug}`;
+
+    card.innerHTML = `
+      <div class="trending-community">${escapeHtml(market.community_name)}</div>
+      <div class="trending-question">${escapeHtml(market.question)}</div>
+      <div class="trending-odds">
+        <div class="trending-odd trending-yes">${yesPct}% YES</div>
+        <div class="trending-odd trending-no">${noPct}% NO</div>
+      </div>
+      <div class="trending-footer">
+        <span>${market.trader_count || 0} traders</span>
+      </div>
+    `;
+
+    track.appendChild(card);
+  });
+}
+
+// ──────────────────────────────────────────────────────────────────
+// RENDER COMMUNITIES
+// ──────────────────────────────────────────────────────────────────
+
+function renderCommunities() {
+  if (!discoverData || !discoverData.communities) return;
+
+  const grid = document.getElementById('communitiesGrid');
+  grid.innerHTML = '';
+
+  const communities = discoverData.communities;
+
+  if (communities.length === 0) {
+    grid.innerHTML = `
+      <div style="grid-column: 1 / -1; text-align: center; padding: 60px 24px; color: var(--dim);">
+        <div style="font-size: 48px; margin-bottom: 16px;">✨</div>
+        <div style="font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 8px;">No communities yet</div>
+        <div style="font-size: 14px; line-height: 1.5;">Be the first to create a prediction market community.</div>
+      </div>
+    `;
+    return;
+  }
+
+  communities.forEach(community => {
+    const topMarket = community.top_market;
+    const yesPrice = topMarket?.yes_price || 0;
+    const noPrice = topMarket?.no_price || 0;
+    const total = yesPrice + noPrice || 1;
+    const yesPct = Math.round((yesPrice / total) * 100);
+
+    const bannerStyle = community.banner_url
+      ? `background-image: url('${escapeHtml(community.banner_url)}');`
+      : '';
+
+    const card = document.createElement('div');
+    card.className = 'community-card';
+    card.style.cursor = 'pointer';
+
+    card.innerHTML = `
+      <div class="community-banner ${!community.banner_url ? 'no-image' : ''}" style="${bannerStyle}"></div>
+      <div class="community-body">
+        <div class="community-header">
+          <div class="community-logo">
+            ${community.logo_url
+              ? `<img src="${escapeHtml(community.logo_url)}" alt="${escapeHtml(community.name)}">`
+              : getInitials(community.name)
+            }
+          </div>
+          <div class="community-info">
+            <div class="community-name">${escapeHtml(community.name)}</div>
+            <div class="community-description">${escapeHtml(community.description || '')}</div>
+          </div>
+        </div>
+
+        <div class="community-stats">
+          <div class="community-stat">
+            <span class="community-stat-number">${formatNumber(community.member_count || 0)}</span>
+            <span>members</span>
+          </div>
+          <div class="community-stat">
+            <span class="community-stat-number">${formatNumber(community.market_count || 0)}</span>
+            <span>markets</span>
+          </div>
+          <div class="community-stat">
+            <span class="community-stat-number">${formatNumber(community.trade_count || 0)}</span>
+            <span>trades</span>
+          </div>
+        </div>
+
+        ${topMarket ? `
+          <div class="top-market">
+            <div class="top-market-label">Top Market</div>
+            <div class="top-market-question">${escapeHtml(topMarket.question)}</div>
+            <div class="prob-bar">
+              <div class="prob-fill" style="width: ${yesPct}%"></div>
+            </div>
+          </div>
+        ` : ''}
+
+        <div class="community-cta">
+          <a href="/${community.slug}" class="btn-join">Join community →</a>
+        </div>
+      </div>
+    `;
+
+    card.addEventListener('click', (e) => {
+      if (e.target !== card && e.target.closest('.btn-join')) {
+        return; // Let button handle it
+      }
+      window.location.href = `/${community.slug}`;
+    });
+
+    grid.appendChild(card);
+  });
+}
+
+// ──────────────────────────────────────────────────────────────────
+// RENDER
+// ──────────────────────────────────────────────────────────────────
+
+function render() {
+  renderStats();
+  renderTrending();
+  renderCommunities();
+}
+
+function renderEmpty() {
+  const grid = document.getElementById('communitiesGrid');
+  grid.innerHTML = `
+    <div style="grid-column: 1 / -1; text-align: center; padding: 60px 24px; color: var(--dim);">
+      <div style="font-size: 48px; margin-bottom: 16px;">⚠️</div>
+      <div style="font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 8px;">Unable to load communities</div>
+      <div style="font-size: 14px; line-height: 1.5;">Please try again later or contact support.</div>
+    </div>
+  `;
+}
+
+// ──────────────────────────────────────────────────────────────────
+// UTILITIES
+// ──────────────────────────────────────────────────────────────────
+
+function escapeHtml(text) {
+  if (!text) return '';
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// ──────────────────────────────────────────────────────────────────
+// INIT
+// ──────────────────────────────────────────────────────────────────
+
+document.addEventListener('DOMContentLoaded', () => {
+  fetchDiscoverData();
+});
+</script>
+
+</body>
+</html>

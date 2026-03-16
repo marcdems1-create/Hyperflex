@@ -475,7 +475,12 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
   gap: 6px;
   margin-bottom: 20px;
   flex-wrap: wrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
 }
+.filter-row::-webkit-scrollbar { display: none; }
 .filter-tab {
   font-family: var(--mono);
   font-size: 11px;
@@ -490,6 +495,8 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
   display: flex;
   align-items: center;
   gap: 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .filter-tab:hover { border-color: rgba(201,146,13,0.45); color: var(--text); background: rgba(201,146,13,0.04); }
 .filter-tab.active {
@@ -548,6 +555,16 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
 .truth-feed-sub strong { color: var(--text); }
 
 /* ── VIEW TABS (Markets / From the Feed) ── */
+.view-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.view-tabs::-webkit-scrollbar { display: none; }
 .view-tab {
   font-family: var(--mono);
   font-size: 12px;
@@ -560,6 +577,8 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
   color: var(--dim);
   cursor: pointer;
   transition: all 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .view-tab:hover { border-color: rgba(201,146,13,0.4); color: var(--text); }
 .view-tab.active {
@@ -831,6 +850,7 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
   gap: 5px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+  min-height: 44px;
 }
 .btn-predict:disabled { cursor: default; opacity: 0.3; }
 .btn-predict.yes {
@@ -1238,6 +1258,149 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
   .powered { padding: 20px 16px 28px; }
 }
 
+/* ── SMALL PHONES (≤768px): improve horizontal scroll for tabs ── */
+@media (max-width: 768px) {
+  /* Ensure filter/view tabs don't wrap on tablets */
+  .filter-row { flex-wrap: nowrap; }
+  .view-tabs { flex-wrap: nowrap; }
+}
+
+/* ── MOBILE UX ENHANCEMENTS (≤480px) ── */
+@media (max-width: 480px) {
+  /* Header: hide secondary text, keep tight */
+  .community-name-header { max-width: 100px; font-size: 12px; }
+
+  /* Filter/View tabs: horizontal scroll without wrapping */
+  .filter-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+  }
+  .filter-row::-webkit-scrollbar { display: none; }
+  .filter-tab {
+    flex-shrink: 0;
+    padding: 6px 12px;
+    font-size: 10px;
+  }
+
+  .view-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+  }
+  .view-tabs::-webkit-scrollbar { display: none; }
+  .view-tab {
+    flex-shrink: 0;
+    padding: 6px 12px;
+    font-size: 11px;
+  }
+
+  /* Hero section: reduce height and font sizes */
+  .hero-banner { height: 140px; padding: 0 12px 16px; }
+  .hero-logo, .hero-logo-placeholder { width: 52px; height: 52px; margin-bottom: -8px; }
+  .hero-name { font-size: clamp(18px, 5vw, 24px); }
+  .hero-desc { font-size: 13px; }
+  .hero-inner { gap: 12px; }
+
+  /* Hero stats: stack to 2-col on very small screens */
+  .hero-mini-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    justify-items: start;
+  }
+  .hero-mini-stat { font-size: 11px; }
+  .leaderboard-jump-pill {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+    text-align: center;
+  }
+
+  /* Community Pulse: horizontal scroll */
+  .community-pulse {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+  }
+  .community-pulse::-webkit-scrollbar { display: none; }
+  .sentiment-badge {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  /* Odds block: reduce font size for cramped spaces */
+  .odds-pct { font-size: 20px; }
+  .market-card.featured .odds-pct { font-size: 24px; }
+  .odds-side { min-width: 40px; }
+
+  /* Predict buttons: ensure 44px min touch target */
+  .btn-predict {
+    min-height: 44px;
+    padding: 10px 8px;
+    font-size: 10px;
+  }
+
+  /* Market cards: reduce internal padding */
+  .market-card-inner { padding: 12px 12px 10px; }
+  .market-question { font-size: 13px; margin-bottom: 10px; }
+  .market-meta { gap: 8px; font-size: 9px; }
+  .odds-block { gap: 8px; margin-bottom: 10px; }
+
+  /* Leaderboard table: hide less important columns */
+  .lb-name { max-width: 120px; }
+  .lb-streak { display: none; }
+  .lb-points { font-size: 11px; }
+
+  /* Activity feed: full-width cards */
+  .feed-item { margin-bottom: 10px; padding: 10px 12px; }
+
+  /* Reduce padding throughout */
+  .content { padding-left: 12px; padding-right: 12px; }
+  .hero-body { padding-left: 12px; padding-right: 12px; }
+  .header { padding: 0 12px; }
+  .market-top { gap: 6px; }
+  .market-badges { gap: 4px; }
+}
+
+/* ── EXTRA SMALL (≤360px): iPhone SE, compact phones ── */
+@media (max-width: 360px) {
+  .header { height: 50px; padding: 0 10px; }
+  .header-left { gap: 8px; }
+  .logo-name { display: none; }
+  .community-name-header { font-size: 11px; max-width: 80px; }
+
+  .hero-banner { height: 120px; padding: 0 10px 12px; }
+  .hero-logo, .hero-logo-placeholder { width: 48px; height: 48px; }
+  .hero-name { font-size: clamp(14px, 4vw, 18px); }
+  .hero-desc { font-size: 12px; }
+
+  .market-question { font-size: 12px; }
+  .odds-pct { font-size: 18px; }
+  .market-card.featured .odds-pct { font-size: 22px; }
+  .market-card-inner { padding: 10px 10px 8px; }
+
+  .btn-predict { padding: 8px 6px; font-size: 9px; min-height: 40px; }
+  .filter-tab { padding: 5px 10px; font-size: 9px; }
+  .view-tab { padding: 5px 10px; font-size: 10px; }
+
+  .content { padding-left: 10px; padding-right: 10px; padding-bottom: 80px; }
+  .hero-body { padding-left: 10px; padding-right: 10px; }
+
+  .market-meta { gap: 6px; font-size: 8px; }
+  .odds-side { min-width: 38px; gap: 0; }
+  .odds-side-label { font-size: 8px; }
+}
+
 /* ── TWEET FEED ── */
 .tweet-feed-section { margin-bottom: 20px; }
 .tweet-feed-label {
@@ -1402,6 +1565,7 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
     <span class="community-name-header" id="headerCommunityName">Loading…</span>
   </div>
   <div class="header-right" id="headerRight">
+    <a href="/discover" style="font-family:var(--mono);font-size:11px;color:var(--dim);text-decoration:none;padding:6px 10px;border-radius:6px;transition:color .15s" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='var(--dim)'">Explore</a>
     <button class="btn-auth" onclick="openAuth('login')">Sign in</button>
     <button class="btn-auth primary" onclick="openAuth('register')">Join free</button>
   </div>

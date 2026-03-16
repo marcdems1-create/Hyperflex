@@ -1971,6 +1971,112 @@ app.put('/api/creator/news-feed-settings', requireCreator, async (req, res) => {
   }
 });
 
+// ════════════════════════════════════════════════════════════
+// GET /api/discover
+// Public endpoint — returns all active communities + platform stats
+// ════════════════════════════════════════════════════════════
+app.get('/api/discover', async (req, res) => {
+  try {
+    // All active communities
+    const { data: communities } = await supabase
+      .from('creator_settings')
+      .select('slug, display_name, logo_url, banner_url, primary_color, community_description, plan, starting_balance, custom_points_name')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false });
+
+    if (!communities || !communities.length) return res.json({ communities: [], trending: [], stats: {} });
+
+    const slugs = communities.map(c => c.slug);
+
+    // Member counts per community
+    const { data: balanceRows } = await supabase
+      .from('community_balances')
+      .select('creator_slug, user_id');
+
+    const memberCounts = {};
+    (balanceRows || []).forEach(r => {
+      memberCounts[r.creator_slug] = (memberCounts[r.creator_slug] || 0) + 1;
+    });
+
+    // Active market counts + top markets per community
+    const { data: allMarkets } = await supabase
+      .from('markets')
+      .select('id, question, category, yes_price, no_price, trader_count, resolved, tenant_slug, creator_id, created_at')
+      .neq('is_public', false)
+      .eq('resolved', false)
+      .order('trader_count', { ascending: false });
+
+    const marketsBySlug = {};
+    (allMarkets || []).forEach(m => {
+      const slug = m.tenant_slug || 'unknown';
+      if (!marketsBySlug[slug]) marketsBySlug[slug] = [];
+      marketsBySlug[slug].push(m);
+    });
+
+    // Build community cards
+    const communityCards = communities.map(c => {
+      const members = memberCounts[c.slug] || 0;
+      const markets = marketsBySlug[c.slug] || [];
+      const topMarket = markets[0] || null;
+      const totalTraders = markets.reduce((s, m) => s + (m.trader_count || 0), 0);
+      return {
+        slug:           c.slug,
+        display_name:   c.display_name,
+        logo_url:       c.logo_url,
+        banner_url:     c.banner_url,
+        primary_color:  c.primary_color || '#c9920d',
+        description:    c.community_description,
+        plan:           c.plan || 'free',
+        points_name:    c.custom_points_name || 'Flex Points',
+        members,
+        active_markets: markets.length,
+        total_trades:   totalTraders,
+        top_market:     topMarket ? {
+          id:        topMarket.id,
+          question:  topMarket.question,
+          category:  topMarket.category,
+          yes_price: topMarket.yes_price,
+          traders:   topMarket.trader_count || 0
+        } : null
+      };
+    }).sort((a, b) => (b.members + b.total_trades) - (a.members + a.total_trades));
+
+    // Trending markets across all communities (most traders, active only)
+    const trending = (allMarkets || [])
+      .filter(m => (m.trader_count || 0) > 0)
+      .slice(0, 20)
+      .map(m => ({
+        id:        m.id,
+        question:  m.question,
+        category:  m.category,
+        yes_price: m.yes_price,
+        no_price:  m.no_price,
+        traders:   m.trader_count || 0,
+        slug:      m.tenant_slug,
+        community_name: communities.find(c => c.slug === m.tenant_slug)?.display_name || m.tenant_slug
+      }));
+
+    // Platform-wide stats
+    const totalMembers  = Object.values(memberCounts).reduce((s, v) => s + v, 0);
+    const totalMarkets  = (allMarkets || []).length;
+    const totalTrades   = (allMarkets || []).reduce((s, m) => s + (m.trader_count || 0), 0);
+
+    res.json({
+      communities: communityCards,
+      trending,
+      stats: {
+        communities: communities.length,
+        members:     totalMembers,
+        markets:     totalMarkets,
+        trades:      totalTrades
+      }
+    });
+  } catch (err) {
+    console.error('[discover]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/creator/resolve/:marketId — creator manually resolves a market (YES/NO)
 app.post('/api/creator/resolve/:marketId', requireAuth, async (req, res) => {
   const { marketId } = req.params;
@@ -5066,6 +5172,11 @@ app.delete('/markets/:id', requireCreator, async (req, res) => {
 // ════════════════════════════════════════════════════════════
 
 // Signup page
+// Public discovery page
+app.get('/discover', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'discover.html'));
+});
+
 app.get('/creator/signup', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'creator-signup.html'));
 });
@@ -5411,7 +5522,7 @@ app.post('/api/creator/oauth-complete', async (req, res) => {
 const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
-  'explore', 'signup', 'pricing', 'about', 'terms', 'privacy'
+  'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover'
 ]);
 
 // Read community.html once at startup and cache it
