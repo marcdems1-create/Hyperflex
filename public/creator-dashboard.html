@@ -5309,7 +5309,7 @@ function renderShareTemplates(creator) {
 
 // Tab switching
 function showTab(tab) {
-  ['overview','markets','resolve','leaderboard','share','settings','analytics','economy','branding','flexbot','ideas'].forEach(t => {
+  ['overview','markets','resolve','leaderboard','share','rewards','settings','analytics','economy','branding','flexbot','ideas'].forEach(t => {
     const el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === tab ? 'block' : 'none';
   });
