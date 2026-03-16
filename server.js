@@ -240,6 +240,7 @@ function requireAuth(req, res, next) {
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET || 'hyperflex_secret');
     req.userId = payload.id;
+    req.user   = { id: payload.id };   // used by newer endpoints
     next();
   } catch (e) {
     return res.status(401).json({ error: 'Invalid token' });

@@ -272,11 +272,47 @@ html,body { background:var(--paper); color:var(--text); font-family:var(--sans);
 </div>
 
 <!-- AUTH GATE (shown if not logged in) -->
-<div id="authGate" style="display:none;min-height:60vh;display:none;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:40px">
-  <div style="font-size:40px;margin-bottom:16px">🔒</div>
-  <div style="font-size:22px;font-weight:800;font-family:var(--display);margin-bottom:8px">Sign in to view your dashboard</div>
-  <div style="font-size:14px;color:var(--dim);margin-bottom:28px">Join any HYPERFLEX community to get started.</div>
-  <a href="/explore" style="padding:12px 28px;background:var(--gold);color:var(--ink);font-family:var(--mono);font-size:13px;font-weight:700;border-radius:8px;text-decoration:none;">Explore communities →</a>
+<div id="authGate" style="display:none;min-height:70vh;align-items:center;justify-content:center;flex-direction:column;padding:40px 20px">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;width:100%;max-width:380px;padding:36px 32px">
+    <!-- Tab row -->
+    <div style="display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:24px">
+      <button id="gateTabLogin" onclick="switchGateTab('login')" style="flex:1;padding:10px;background:var(--gold);color:var(--ink);font-weight:700;font-size:13px;border:none;cursor:pointer;font-family:var(--sans)">Sign in</button>
+      <button id="gateTabRegister" onclick="switchGateTab('register')" style="flex:1;padding:10px;background:transparent;color:var(--dim);font-size:13px;border:none;cursor:pointer;font-family:var(--sans)">Create account</button>
+    </div>
+
+    <div id="gateLoginFields">
+      <div style="margin-bottom:14px">
+        <label style="display:block;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Email</label>
+        <input id="gateLoginEmail" type="email" placeholder="you@email.com" class="edit-name-input"/>
+      </div>
+      <div style="margin-bottom:20px">
+        <label style="display:block;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Password</label>
+        <input id="gateLoginPassword" type="password" placeholder="••••••••" class="edit-name-input" onkeydown="if(event.key==='Enter')submitGateAuth()"/>
+      </div>
+    </div>
+
+    <div id="gateRegisterFields" style="display:none">
+      <div style="margin-bottom:14px">
+        <label style="display:block;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Username</label>
+        <input id="gateRegisterName" type="text" maxlength="30" placeholder="Your display name" class="edit-name-input"/>
+      </div>
+      <div style="margin-bottom:14px">
+        <label style="display:block;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Email</label>
+        <input id="gateRegisterEmail" type="email" placeholder="you@email.com" class="edit-name-input"/>
+      </div>
+      <div style="margin-bottom:20px">
+        <label style="display:block;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Password</label>
+        <input id="gateRegisterPassword" type="password" placeholder="Min 8 characters" class="edit-name-input" onkeydown="if(event.key==='Enter')submitGateAuth()"/>
+      </div>
+    </div>
+
+    <div id="gateError" style="font-size:12px;color:#ef4444;margin-bottom:12px;display:none"></div>
+    <button id="gateSubmitBtn" onclick="submitGateAuth()" class="btn-save">Sign in</button>
+
+    <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--border);text-align:center;font-size:12px;color:var(--dim)">
+      Are you a creator? <a href="/creator/login" style="color:var(--gold);text-decoration:none">Creator login →</a>
+    </div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -292,7 +328,63 @@ function getToken() { return localStorage.getItem('hf_token'); }
 function signOut() {
   localStorage.removeItem('hf_token');
   localStorage.removeItem('hf_user');
-  window.location.href = '/explore';
+  window.location.reload();
+}
+
+// ── GATE AUTH ────────────────────────────────────────────────
+let gateTab = 'login';
+
+function switchGateTab(tab) {
+  gateTab = tab;
+  const isLogin = tab === 'login';
+  document.getElementById('gateLoginFields').style.display    = isLogin ? 'block' : 'none';
+  document.getElementById('gateRegisterFields').style.display = isLogin ? 'none'  : 'block';
+  document.getElementById('gateTabLogin').style.background    = isLogin ? 'var(--gold)' : 'transparent';
+  document.getElementById('gateTabLogin').style.color         = isLogin ? 'var(--ink)'  : 'var(--dim)';
+  document.getElementById('gateTabRegister').style.background = isLogin ? 'transparent' : 'var(--gold)';
+  document.getElementById('gateTabRegister').style.color      = isLogin ? 'var(--dim)'  : 'var(--ink)';
+  document.getElementById('gateSubmitBtn').textContent        = isLogin ? 'Sign in' : 'Create account';
+  document.getElementById('gateError').style.display = 'none';
+}
+
+async function submitGateAuth() {
+  const btn   = document.getElementById('gateSubmitBtn');
+  const errEl = document.getElementById('gateError');
+  errEl.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = gateTab === 'login' ? 'Signing in…' : 'Creating account…';
+  try {
+    let data;
+    if (gateTab === 'register') {
+      const name  = document.getElementById('gateRegisterName').value.trim();
+      const email = document.getElementById('gateRegisterEmail').value.trim();
+      const pw    = document.getElementById('gateRegisterPassword').value;
+      if (!name || !email || !pw) throw new Error('All fields required.');
+      if (pw.length < 8) throw new Error('Password must be at least 8 characters.');
+      const r1 = await fetch('/register', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ display_name: name, email, password: pw }) });
+      const d1 = await r1.json();
+      if (!r1.ok) throw new Error(d1.error || 'Registration failed.');
+      const r2 = await fetch('/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, password: pw }) });
+      data = await r2.json();
+      if (!r2.ok) throw new Error(data.error || 'Login failed.');
+    } else {
+      const email = document.getElementById('gateLoginEmail').value.trim();
+      const pw    = document.getElementById('gateLoginPassword').value;
+      if (!email || !pw) throw new Error('Email and password required.');
+      const r = await fetch('/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, password: pw }) });
+      data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Invalid credentials.');
+    }
+    localStorage.setItem('hf_token', data.token);
+    localStorage.setItem('hf_user', JSON.stringify(data.user));
+    // Reload to show dashboard
+    window.location.reload();
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = gateTab === 'login' ? 'Sign in' : 'Create account';
+  }
 }
 
 // ── INIT ─────────────────────────────────────────────────────
@@ -300,8 +392,7 @@ async function init() {
   const token = getToken();
   if (!token) {
     document.getElementById('loadingWrap').style.display = 'none';
-    const gate = document.getElementById('authGate');
-    gate.style.display = 'flex';
+    document.getElementById('authGate').style.display = 'flex';
     return;
   }
 
@@ -311,7 +402,9 @@ async function init() {
     });
     if (r.status === 401) {
       localStorage.removeItem('hf_token');
-      window.location.href = '/explore';
+      localStorage.removeItem('hf_user');
+      document.getElementById('loadingWrap').style.display = 'none';
+      document.getElementById('authGate').style.display = 'flex';
       return;
     }
     if (!r.ok) throw new Error('Failed to load dashboard');
@@ -319,7 +412,7 @@ async function init() {
     renderAll();
   } catch (err) {
     document.getElementById('loadingWrap').innerHTML =
-      `<div style="text-align:center;color:var(--dim);font-family:var(--mono);font-size:13px">Failed to load dashboard.<br><a href="/explore" style="color:var(--gold)">Go to explore →</a></div>`;
+      `<div style="text-align:center;color:var(--dim);font-family:var(--mono);font-size:13px">Failed to load dashboard.<br><button onclick="window.location.reload()" style="margin-top:12px;background:var(--gold);color:var(--ink);border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-weight:700">Retry</button></div>`;
   }
 }
 

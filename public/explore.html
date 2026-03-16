@@ -706,11 +706,65 @@ nav {
   <a href="/" class="nav-logo">HYPERFLEX</a>
   <div class="nav-links">
     <a href="/explore">Explore</a>
+    <!-- logged-in state -->
     <a href="/my" id="navDashboardLink" style="display:none;color:var(--gold)">My Dashboard</a>
-    <a href="/creator/login" id="navCreatorLogin">Creator Login</a>
+    <button id="navSignOutBtn" onclick="memberSignOut()" style="display:none;background:none;border:1px solid rgba(255,255,255,.15);color:#aaa8a0;font-size:13px;padding:6px 14px;border-radius:6px;cursor:pointer;font-family:inherit">Sign out</button>
+    <!-- logged-out state -->
+    <button id="navMemberSignIn" onclick="openMemberAuth('login')" style="background:none;border:1px solid rgba(255,255,255,.15);color:#aaa8a0;font-size:13px;padding:6px 14px;border-radius:6px;cursor:pointer;font-family:inherit">Member sign in</button>
+    <a href="/creator/login" id="navCreatorLogin" style="color:#aaa8a0;font-size:13px;text-decoration:none;padding:6px 14px">Creator login</a>
     <a href="/creator/signup" class="nav-cta" id="navStartFree">Start Free</a>
   </div>
 </nav>
+
+<!-- Member Auth Modal -->
+<div id="memberAuthOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeMemberAuth()">
+  <div style="background:#1c1c19;border:1px solid #2a2a27;border-radius:16px;width:100%;max-width:400px;padding:32px">
+    <!-- Tab row -->
+    <div style="display:flex;border:1px solid #2a2a27;border-radius:8px;overflow:hidden;margin-bottom:24px">
+      <button id="maTabLogin" onclick="switchMemberTab('login')" style="flex:1;padding:10px;background:var(--gold,#c9920d);color:#141412;font-weight:700;font-size:13px;border:none;cursor:pointer;font-family:inherit">Sign in</button>
+      <button id="maTabRegister" onclick="switchMemberTab('register')" style="flex:1;padding:10px;background:transparent;color:#aaa8a0;font-size:13px;border:none;cursor:pointer;font-family:inherit">Create account</button>
+    </div>
+
+    <!-- Login fields -->
+    <div id="maLoginFields">
+      <div style="margin-bottom:14px">
+        <label style="display:block;font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;font-family:monospace">Email</label>
+        <input id="maLoginEmail" type="email" placeholder="you@email.com" style="width:100%;background:#141412;border:1px solid #2a2a27;border-radius:8px;color:#f5f5f0;font-size:14px;padding:11px 14px;outline:none;box-sizing:border-box"/>
+      </div>
+      <div style="margin-bottom:20px">
+        <label style="display:block;font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;font-family:monospace">Password</label>
+        <input id="maLoginPassword" type="password" placeholder="••••••••" style="width:100%;background:#141412;border:1px solid #2a2a27;border-radius:8px;color:#f5f5f0;font-size:14px;padding:11px 14px;outline:none;box-sizing:border-box" onkeydown="if(event.key==='Enter')submitMemberAuth()"/>
+      </div>
+    </div>
+
+    <!-- Register fields -->
+    <div id="maRegisterFields" style="display:none">
+      <div style="margin-bottom:14px">
+        <label style="display:block;font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;font-family:monospace">Username</label>
+        <input id="maRegisterName" type="text" maxlength="30" placeholder="Your display name" style="width:100%;background:#141412;border:1px solid #2a2a27;border-radius:8px;color:#f5f5f0;font-size:14px;padding:11px 14px;outline:none;box-sizing:border-box"/>
+      </div>
+      <div style="margin-bottom:14px">
+        <label style="display:block;font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;font-family:monospace">Email</label>
+        <input id="maRegisterEmail" type="email" placeholder="you@email.com" style="width:100%;background:#141412;border:1px solid #2a2a27;border-radius:8px;color:#f5f5f0;font-size:14px;padding:11px 14px;outline:none;box-sizing:border-box"/>
+      </div>
+      <div style="margin-bottom:20px">
+        <label style="display:block;font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;font-family:monospace">Password</label>
+        <input id="maRegisterPassword" type="password" placeholder="Min 8 characters" style="width:100%;background:#141412;border:1px solid #2a2a27;border-radius:8px;color:#f5f5f0;font-size:14px;padding:11px 14px;outline:none;box-sizing:border-box" onkeydown="if(event.key==='Enter')submitMemberAuth()"/>
+      </div>
+    </div>
+
+    <div id="maError" style="font-size:13px;color:#ef4444;margin-bottom:12px;display:none"></div>
+
+    <button id="maSubmitBtn" onclick="submitMemberAuth()" style="width:100%;padding:13px;background:#c9920d;color:#141412;font-weight:800;font-size:14px;border:none;border-radius:8px;cursor:pointer;font-family:inherit;letter-spacing:.02em">Sign in</button>
+
+    <div style="margin-top:16px;padding-top:16px;border-top:1px solid #2a2a27;text-align:center">
+      <div style="font-size:12px;color:#888;margin-bottom:10px">Are you a creator?</div>
+      <a href="/creator/login" style="font-size:13px;color:#c9920d;text-decoration:none">Creator login →</a>
+      &nbsp;·&nbsp;
+      <a href="/creator/signup" style="font-size:13px;color:#c9920d;text-decoration:none">Create a community →</a>
+    </div>
+  </div>
+</div>
 
 <div class="hero">
   <div class="live-badge">Live across all communities</div>
@@ -1327,19 +1381,99 @@ if (urlTab) {
   document.querySelectorAll('.tab').forEach(t => { if (t.getAttribute('onclick')?.includes("'" + urlTab + "'")) t.classList.add('active'); });
 }
 
-// Show "My Dashboard" in nav if user is logged in
-(function() {
+// ── MEMBER AUTH (explore page) ──────────────────────────────
+let memberAuthTab = 'login';
+
+function updateNavAuthState() {
   const token = localStorage.getItem('hf_token');
-  const raw   = localStorage.getItem('hf_user');
-  if (token && raw) {
-    try {
-      const u = JSON.parse(raw);
-      const dashLink = document.getElementById('navDashboardLink');
-      if (dashLink) dashLink.style.display = '';
-      // Swap Start Free → creator dashboard if creator; otherwise keep as-is
-    } catch {}
+  const loggedIn = !!token;
+  document.getElementById('navDashboardLink').style.display  = loggedIn ? '' : 'none';
+  document.getElementById('navSignOutBtn').style.display     = loggedIn ? '' : 'none';
+  document.getElementById('navMemberSignIn').style.display   = loggedIn ? 'none' : '';
+  document.getElementById('navCreatorLogin').style.display   = loggedIn ? 'none' : '';
+  document.getElementById('navStartFree').style.display      = loggedIn ? 'none' : '';
+}
+
+function openMemberAuth(tab) {
+  document.getElementById('memberAuthOverlay').style.display = 'flex';
+  switchMemberTab(tab || 'login');
+  setTimeout(() => {
+    const f = tab === 'register'
+      ? document.getElementById('maRegisterName')
+      : document.getElementById('maLoginEmail');
+    if (f) f.focus();
+  }, 100);
+}
+
+function closeMemberAuth() {
+  document.getElementById('memberAuthOverlay').style.display = 'none';
+  document.getElementById('maError').style.display = 'none';
+}
+
+function switchMemberTab(tab) {
+  memberAuthTab = tab;
+  const isLogin = tab === 'login';
+  document.getElementById('maLoginFields').style.display    = isLogin ? 'block' : 'none';
+  document.getElementById('maRegisterFields').style.display = isLogin ? 'none'  : 'block';
+  document.getElementById('maTabLogin').style.background    = isLogin ? '#c9920d' : 'transparent';
+  document.getElementById('maTabLogin').style.color         = isLogin ? '#141412' : '#aaa8a0';
+  document.getElementById('maTabRegister').style.background = isLogin ? 'transparent' : '#c9920d';
+  document.getElementById('maTabRegister').style.color      = isLogin ? '#aaa8a0' : '#141412';
+  document.getElementById('maSubmitBtn').textContent        = isLogin ? 'Sign in' : 'Create account';
+  document.getElementById('maError').style.display = 'none';
+}
+
+async function submitMemberAuth() {
+  const btn = document.getElementById('maSubmitBtn');
+  const errEl = document.getElementById('maError');
+  errEl.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = memberAuthTab === 'login' ? 'Signing in…' : 'Creating account…';
+
+  try {
+    let data;
+    if (memberAuthTab === 'register') {
+      const name  = document.getElementById('maRegisterName').value.trim();
+      const email = document.getElementById('maRegisterEmail').value.trim();
+      const pw    = document.getElementById('maRegisterPassword').value;
+      if (!name || !email || !pw) throw new Error('All fields required.');
+      if (pw.length < 8) throw new Error('Password must be at least 8 characters.');
+      const r1 = await fetch('/register', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ display_name: name, email, password: pw }) });
+      const d1 = await r1.json();
+      if (!r1.ok) throw new Error(d1.error || 'Registration failed.');
+      const r2 = await fetch('/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email, password: pw }) });
+      data = await r2.json();
+      if (!r2.ok) throw new Error(data.error || 'Login failed.');
+    } else {
+      const email = document.getElementById('maLoginEmail').value.trim();
+      const pw    = document.getElementById('maLoginPassword').value;
+      if (!email || !pw) throw new Error('Email and password required.');
+      const r = await fetch('/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email, password: pw }) });
+      data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Invalid credentials.');
+    }
+
+    localStorage.setItem('hf_token', data.token);
+    localStorage.setItem('hf_user', JSON.stringify(data.user));
+    closeMemberAuth();
+    updateNavAuthState();
+    // Redirect to dashboard
+    window.location.href = '/my';
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = memberAuthTab === 'login' ? 'Sign in' : 'Create account';
   }
-})();
+}
+
+function memberSignOut() {
+  localStorage.removeItem('hf_token');
+  localStorage.removeItem('hf_user');
+  updateNavAuthState();
+}
+
+updateNavAuthState();
 
 // Initial loads
 loadActivityFeed();
