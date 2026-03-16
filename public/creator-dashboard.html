@@ -4361,7 +4361,9 @@ async function init() {
       headers: { 'Authorization': 'Bearer ' + token }
     });
     if (r.status === 401) { signOut(); return; }
+    if (!r.ok) { signOut(); return; }
     const data = await r.json();
+    if (!data.creator) { signOut(); return; }
     creatorData = data;
     if (!user && data.creator) {
       localStorage.setItem('hf_user', JSON.stringify({
