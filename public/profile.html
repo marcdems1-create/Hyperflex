@@ -180,6 +180,17 @@
       .stats-row { grid-template-columns: repeat(2, 1fr); }
       .page { padding: 24px 16px 60px; }
       .join-cta { padding: 24px 20px; }
+      /* Nav: hide Explore link on very small, keep Join */
+      .nav { padding: 0 16px; }
+      .btn-ghost { display: none; }
+      /* Markets grid: single column */
+      .markets-grid { grid-template-columns: 1fr; }
+      /* Join CTA title */
+      .join-cta-title { font-size: 18px; }
+    }
+    @media (max-width: 400px) {
+      .hero-name { font-size: 18px; }
+      .hero-desc { font-size: 12px; }
     }
   </style>
 </head>

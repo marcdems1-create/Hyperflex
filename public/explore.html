@@ -196,6 +196,18 @@ nav {
   .stats-ticker { gap: 16px; }
   .feed-question { font-size: 12px; }
   .predictor-tier { display: none; }
+
+  /* Activity cards: tighter on small screens */
+  .activity-card { padding: 12px 12px; gap: 10px; }
+  .ac-avatar { width: 34px; height: 34px; font-size: 12px; }
+  .activity-card { grid-template-columns: 34px 1fr; }
+  .ac-actor { font-size: 13px; }
+  .ac-action { font-size: 12px; }
+  .ac-footer { flex-wrap: wrap; gap: 8px; }
+  /* Always show the view link on touch (no hover) */
+  .ac-join-link { opacity: 1; }
+  .ac-market-inner { padding: 10px 12px; }
+  .ac-question { font-size: 12px; }
 }
 
 /* FEED */

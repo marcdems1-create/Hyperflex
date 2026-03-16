@@ -1400,6 +1400,25 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
   .header { padding: 0 12px; }
   .market-top { gap: 6px; }
   .market-badges { gap: 4px; }
+
+  /* Predict modal: full-screen sheet on mobile */
+  .overlay { align-items: flex-end; padding: 0; }
+  .modal {
+    border-radius: 20px 20px 0 0;
+    max-width: 100%;
+    max-height: 92vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .modal-body { padding: 16px; }
+  .modal-footer { padding: 12px 16px; }
+  .predict-market-q { font-size: 13px; padding: 11px 12px; }
+
+  /* Tweet cards: reduce padding on mobile */
+  .tweet-card { padding: 12px 14px; }
+
+  /* Win card modal on mobile */
+  #winCardOverlay { padding: 12px; }
 }
 
 /* ── EXTRA SMALL (≤360px): iPhone SE, compact phones ── */
@@ -1465,13 +1484,16 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
 .tweet-body { font-size: 14px; color: #e7e9ea; line-height: 1.65; margin-bottom: 12px; word-break: break-word; }
 .tweet-footer { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .tweet-market-link {
-  display: inline-flex; align-items: center; gap: 6px;
+  display: flex; align-items: center; gap: 6px; width: 100%;
   font-family: var(--mono); font-size: 11px; color: var(--gold);
   background: rgba(201,146,13,0.1); border: 1px solid rgba(201,146,13,0.25);
-  border-radius: 20px; padding: 5px 12px; text-decoration: none;
+  border-radius: 10px; padding: 8px 12px; text-decoration: none;
   transition: background 0.15s; font-weight: 700; letter-spacing: 0.04em;
+  overflow: hidden;
 }
 .tweet-market-link:hover { background: rgba(201,146,13,0.2); }
+.tweet-market-question { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
+.tweet-market-odds { display:flex; align-items:center; gap:6px; flex-shrink:0; }
 .tweet-source-link {
   font-family: var(--mono); font-size: 11px; color: #1d9bf0; text-decoration: none;
   opacity: 0.7; transition: opacity 0.15s;
@@ -3596,12 +3618,12 @@ function renderTweetFeed(markets) {
         </div>
         <div style="font-size:14px;color:var(--text);line-height:1.6;margin-bottom:14px;word-break:break-word">${escHtml(m.tweet_text)}</div>
         <button class="tweet-market-link" onclick="openMarket('${m.id}')">
-          <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600">${escHtml(m.question)}</span>
-          <span style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+          <span class="tweet-market-question">${escHtml(m.question)}</span>
+          <span class="tweet-market-odds">
             <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#4ade80">YES ${yesOdds}%</span>
             <span style="font-family:var(--mono);font-size:10px;color:var(--dim)">·</span>
             <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#fca5a5">NO ${noOdds}%</span>
-            <span style="font-size:11px;color:var(--gold)">Predict →</span>
+            <span style="font-size:11px;color:var(--gold);white-space:nowrap">→</span>
           </span>
         </button>
       </div>

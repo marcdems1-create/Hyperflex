@@ -19,8 +19,8 @@
   --green: #22c55e;
   --red: #ef4444;
 }
-body { background: var(--paper); color: var(--text); font-family: 'Inter', sans-serif; font-size: 14px; min-height: 100vh; -webkit-font-smoothing: antialiased; }
-nav { display: flex; align-items: center; justify-content: space-between; padding: 16px 32px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: rgba(20,20,18,0.94); backdrop-filter: blur(12px); z-index: 50; }
+body { background: var(--paper); color: var(--text); font-family: 'Inter', sans-serif; font-size: 14px; min-height: 100vh; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+nav { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: rgba(20,20,18,0.94); backdrop-filter: blur(12px); z-index: 50; }
 .nav-logo { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 800; color: var(--gold); text-decoration: none; letter-spacing: -0.5px; }
 .nav-back { color: var(--muted); text-decoration: none; font-size: 13px; display: flex; align-items: center; gap: 6px; transition: color 0.2s; }
 .nav-back:hover { color: var(--text-soft); }
@@ -72,6 +72,18 @@ nav { display: flex; align-items: center; justify-content: space-between; paddin
 /* Win rate bar */
 .wr-bar-wrap { background: var(--surface); border-radius: 4px; height: 6px; margin-top: 8px; overflow: hidden; }
 .wr-bar { height: 100%; border-radius: 4px; background: var(--green); transition: width 0.4s ease; }
+/* Mobile */
+@media (max-width: 480px) {
+  .page { padding: 24px 16px 60px; }
+  .hero { gap: 14px; }
+  .avatar { width: 58px; height: 58px; font-size: 20px; }
+  .hero-name { font-size: 20px; }
+  .share-btn { font-size: 12px; padding: 7px 12px; }
+  .win-item { gap: 10px; }
+  .win-question { font-size: 12px; }
+  .cta-card { padding: 16px; }
+  .cta-title { font-size: 16px; }
+}
 /* CTA */
 .cta-card { background: linear-gradient(135deg, #1d1b13 0%, #1a1a17 100%); border: 1px solid rgba(201,146,13,0.25); border-radius: 12px; padding: 20px 22px; text-align: center; margin-top: 32px; }
 .cta-title { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 800; color: var(--gold); margin-bottom: 6px; }

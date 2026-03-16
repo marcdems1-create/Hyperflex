@@ -63,6 +63,14 @@
 
     .loading { text-align:center; color:var(--dim); font-size:14px; padding:40px; }
     .error { text-align:center; color:#f87171; font-size:14px; padding:40px; }
+
+    @media (max-width: 400px) {
+      body { padding: 16px; }
+      .card-top { padding: 24px 20px 18px; }
+      .card-question { font-size: 15px; }
+      .card-bottom { flex-wrap: wrap; padding: 12px 14px; }
+      .btn { min-width: calc(50% - 5px); font-size: 12px; padding: 10px 12px; }
+    }
   </style>
 </head>
 <body>
