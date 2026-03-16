@@ -516,6 +516,7 @@
               <th>Slug</th>
               <th>Email</th>
               <th style="text-align:center">Markets</th>
+              <th style="text-align:center">Members</th>
               <th>Plan</th>
               <th>Joined</th>
               <th>Set Plan</th>
@@ -809,12 +810,16 @@ function renderTable(rows) {
       trialBadge = `<span class="trial-badge${isExpired ? ' expired' : ''}">${label}</span>`;
     }
 
+    const nameDisplay = c.name
+      ? esc(c.name)
+      : `<span style="color:var(--dim);font-style:italic;font-size:11px">no display name</span>`;
     return `
       <tr id="creator-row-${esc(c.slug)}">
-        <td class="td-name">${esc(c.name || '—')}</td>
+        <td class="td-name">${nameDisplay}</td>
         <td class="td-slug">/${esc(c.slug)}</td>
         <td class="td-email">${esc(c.email)}</td>
         <td class="td-markets">${c.markets}</td>
+        <td class="td-markets">${c.members || 0}</td>
         <td><span class="plan-badge ${plan}">${plan === 'platinum' ? 'Premium' : plan}</span>${trialBadge ? '<br>' + trialBadge : ''}</td>
         <td class="td-date">${joined}</td>
         <td>

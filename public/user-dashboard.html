@@ -125,10 +125,46 @@ html,body { background:var(--paper); color:var(--text); font-family:var(--sans);
 .section-title { font-size:17px; font-weight:800; font-family:var(--display); }
 .section-count { font-family:var(--mono); font-size:11px; color:var(--dim); }
 
+/* ── SEARCH ── */
+.search-wrap { position:relative; flex:1; max-width:320px; }
+.search-input { width:100%; background:var(--surface); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:13px; padding:8px 12px 8px 36px; outline:none; font-family:var(--sans); transition:border-color .15s; }
+.search-input:focus { border-color:rgba(201,146,13,.5); }
+.search-icon { position:absolute; left:11px; top:50%; transform:translateY(-50%); font-size:14px; pointer-events:none; opacity:.5; }
+.search-panel { position:absolute; top:calc(100% + 6px); left:0; right:0; background:var(--surface); border:1px solid var(--border); border-radius:10px; z-index:200; box-shadow:0 8px 30px rgba(0,0,0,.5); max-height:480px; overflow-y:auto; }
+.search-section { padding:10px 14px 4px; }
+.search-section-label { font-family:var(--mono); font-size:9px; text-transform:uppercase; letter-spacing:.1em; color:var(--dim); padding:6px 0 4px; }
+.search-result { display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:8px; cursor:pointer; transition:background .12s; }
+.search-result:hover { background:var(--surface2); }
+.search-result-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+.search-result-avatar { width:30px; height:30px; border-radius:50%; background:var(--gold); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:800; color:var(--ink); flex-shrink:0; }
+.search-result-body { flex:1; min-width:0; }
+.search-result-name { font-size:13px; font-weight:700; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.search-result-meta { font-size:10px; font-family:var(--mono); color:var(--dim); margin-top:2px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.common-chip { background:rgba(201,146,13,.15); color:var(--gold); border:1px solid rgba(201,146,13,.3); border-radius:4px; padding:1px 6px; font-family:var(--mono); font-size:9px; font-weight:700; }
+.follow-chip { background:rgba(74,222,128,.1); color:#4ade80; border:1px solid rgba(74,222,128,.25); border-radius:4px; padding:1px 6px; font-family:var(--mono); font-size:9px; font-weight:700; }
+.search-empty { padding:20px; text-align:center; font-family:var(--mono); font-size:12px; color:var(--dim); }
+
+/* ── USER PROFILE MODAL ── */
+.user-modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:500; display:flex; align-items:center; justify-content:center; padding:20px; }
+.user-modal { background:var(--surface); border:1px solid var(--border); border-radius:14px; width:100%; max-width:460px; overflow:hidden; }
+.user-modal-header { padding:20px 24px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:14px; }
+.user-modal-avatar { width:52px; height:52px; border-radius:50%; background:var(--gold); display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:800; color:var(--ink); font-family:var(--display); flex-shrink:0; }
+.user-modal-name { font-size:20px; font-weight:800; font-family:var(--display); }
+.user-modal-sub { font-size:11px; font-family:var(--mono); color:var(--dim); margin-top:2px; }
+.user-modal-body { padding:20px 24px; }
+.user-modal-section { margin-bottom:18px; }
+.user-modal-section:last-child { margin-bottom:0; }
+.user-modal-section-label { font-family:var(--mono); font-size:9px; text-transform:uppercase; letter-spacing:.1em; color:var(--dim); margin-bottom:8px; }
+.common-community-row { display:flex; align-items:center; gap:8px; padding:8px 10px; background:var(--surface2); border-radius:8px; margin-bottom:6px; cursor:pointer; text-decoration:none; transition:border-color .15s; border:1px solid transparent; }
+.common-community-row:hover { border-color:rgba(201,146,13,.4); }
+.user-modal-close { margin-left:auto; background:none; border:none; color:var(--dim); cursor:pointer; font-size:18px; padding:4px 8px; border-radius:6px; transition:color .15s; }
+.user-modal-close:hover { color:var(--text); }
+
 /* ── MOBILE ── */
 @media(max-width:860px) {
   .two-col { grid-template-columns:1fr; }
   .communities-grid { grid-template-columns:1fr; }
+  .search-wrap { max-width:100%; }
 }
 @media(max-width:500px) {
   .page { padding:20px 16px 60px; }
@@ -146,12 +182,34 @@ html,body { background:var(--paper); color:var(--text); font-family:var(--sans);
     <div class="nav-logo-hex"></div>
     <span class="nav-wordmark">HYPERFLEX</span>
   </a>
+  <!-- Search -->
+  <div class="search-wrap" id="searchWrap">
+    <span class="search-icon">🔍</span>
+    <input id="searchInput" class="search-input" type="text" placeholder="Search communities &amp; members…" autocomplete="off"
+      oninput="onSearchInput()" onfocus="onSearchFocus()" onblur="setTimeout(closeSearch, 200)"/>
+    <div id="searchPanel" class="search-panel" style="display:none"></div>
+  </div>
   <div class="nav-right">
     <a href="/explore" class="nav-btn">Explore</a>
     <span id="navName" class="nav-btn" style="color:var(--text);cursor:default;border-color:transparent"></span>
     <button class="nav-btn" onclick="signOut()">Sign out</button>
   </div>
 </nav>
+
+<!-- USER PROFILE MODAL -->
+<div id="userModalOverlay" class="user-modal-overlay" style="display:none" onclick="if(event.target===this)closeUserModal()">
+  <div class="user-modal">
+    <div class="user-modal-header">
+      <div class="user-modal-avatar" id="umAvatar">?</div>
+      <div>
+        <div class="user-modal-name" id="umName"></div>
+        <div class="user-modal-sub" id="umSub"></div>
+      </div>
+      <button class="user-modal-close" onclick="closeUserModal()">✕</button>
+    </div>
+    <div class="user-modal-body" id="umBody"></div>
+  </div>
+</div>
 
 <!-- LOADING -->
 <div id="loadingWrap" class="spinner-wrap">
@@ -451,6 +509,7 @@ function renderAll() {
 
   // Communities
   renderCommunities(communities);
+  buildCommunityInfoMap();
 
   // Predictions
   renderOpen(open);
@@ -617,6 +676,163 @@ async function leaveCommunity(slug) {
     renderCommunities(userData.communities);
     showToast(`Left ${slug} ✓`, 'success');
   } catch { showToast('Failed to leave community', 'error'); }
+}
+
+// ── SEARCH ────────────────────────────────────────────────────
+let searchTimer = null;
+let lastSearchQuery = '';
+
+function onSearchInput() {
+  clearTimeout(searchTimer);
+  const q = document.getElementById('searchInput').value.trim();
+  if (!q || q.length < 2) { closeSearch(); return; }
+  searchTimer = setTimeout(() => runSearch(q), 280);
+}
+
+function onSearchFocus() {
+  const q = document.getElementById('searchInput').value.trim();
+  if (q.length >= 2 && lastSearchQuery === q) {
+    document.getElementById('searchPanel').style.display = 'block';
+  }
+}
+
+function closeSearch() {
+  document.getElementById('searchPanel').style.display = 'none';
+}
+
+async function runSearch(q) {
+  const panel = document.getElementById('searchPanel');
+  panel.innerHTML = `<div class="search-empty">Searching…</div>`;
+  panel.style.display = 'block';
+  lastSearchQuery = q;
+
+  try {
+    const r = await fetch(`${API}/api/search?q=${encodeURIComponent(q)}`, {
+      headers: getToken() ? { 'Authorization': 'Bearer ' + getToken() } : {}
+    });
+    if (!r.ok) throw new Error();
+    const { communities, users } = await r.json();
+
+    if (!communities.length && !users.length) {
+      panel.innerHTML = `<div class="search-empty">No results for "${escHtml(q)}"</div>`;
+      return;
+    }
+
+    let html = '';
+
+    if (communities.length) {
+      html += `<div class="search-section">
+        <div class="search-section-label">Communities</div>`;
+      html += communities.map(c => {
+        const followBadge = c.i_follow ? `<span class="follow-chip">Following</span>` : '';
+        return `<div class="search-result" onclick="window.location='/${escHtml(c.slug)}'">
+          <div class="search-result-dot" style="background:${escHtml(c.primary_color)}"></div>
+          <div class="search-result-body">
+            <div class="search-result-name">${escHtml(c.display_name)}</div>
+            <div class="search-result-meta">
+              <span>/${escHtml(c.slug)}</span>
+              <span>·</span>
+              <span>${c.member_count} member${c.member_count !== 1 ? 's' : ''}</span>
+              ${followBadge}
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+      html += `</div>`;
+    }
+
+    if (users.length) {
+      html += `<div class="search-section">
+        <div class="search-section-label">Members</div>`;
+      html += users.map(u => {
+        const initials = (u.display_name || '?').slice(0,2).toUpperCase();
+        const commonCount = u.communities_in_common.length;
+        const commonBadge = commonCount > 0
+          ? `<span class="common-chip">🤝 ${commonCount} in common</span>` : '';
+        const commCount = u.community_slugs.length;
+        return `<div class="search-result" onclick="closeSearch();openUserModal(${JSON.stringify(u).replace(/"/g,'&quot;')})">
+          <div class="search-result-avatar">${escHtml(initials)}</div>
+          <div class="search-result-body">
+            <div class="search-result-name">${escHtml(u.display_name)}</div>
+            <div class="search-result-meta">
+              <span>${commCount} communit${commCount !== 1 ? 'ies' : 'y'}</span>
+              ${commonBadge}
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+      html += `</div><div style="height:6px"></div>`;
+    }
+
+    panel.innerHTML = html;
+  } catch {
+    panel.innerHTML = `<div class="search-empty">Search unavailable</div>`;
+  }
+}
+
+// ── USER PROFILE MODAL ─────────────────────────────────────────
+// communityMap: slug → community info (built from userData after load)
+let communityInfoMap = {};
+
+function buildCommunityInfoMap() {
+  if (!userData?.communities) return;
+  communityInfoMap = {};
+  userData.communities.forEach(c => { communityInfoMap[c.slug] = c; });
+}
+
+function openUserModal(user) {
+  const overlay = document.getElementById('userModalOverlay');
+  const initials = (user.display_name || '?').slice(0,2).toUpperCase();
+  document.getElementById('umAvatar').textContent = initials;
+  document.getElementById('umName').textContent = user.display_name;
+
+  const commCount = user.community_slugs.length;
+  document.getElementById('umSub').textContent = `Member · ${commCount} communit${commCount !== 1 ? 'ies' : 'y'}`;
+
+  const common = user.communities_in_common;
+  let body = '';
+
+  if (common.length) {
+    body += `<div class="user-modal-section">
+      <div class="user-modal-section-label">🤝 Communities in Common (${common.length})</div>`;
+    body += common.map(slug => {
+      const info = communityInfoMap[slug];
+      const color = info?.primary_color || '#c9920d';
+      const name  = info?.display_name || slug;
+      return `<a href="/${escHtml(slug)}" class="common-community-row">
+        <div style="width:10px;height:10px;border-radius:50%;background:${escHtml(color)};flex-shrink:0"></div>
+        <span style="font-size:13px;font-weight:700;color:var(--text)">${escHtml(name)}</span>
+        <span style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-left:auto">/${escHtml(slug)}</span>
+      </a>`;
+    }).join('');
+    body += `</div>`;
+  }
+
+  const otherSlugs = user.community_slugs.filter(s => !common.includes(s));
+  if (otherSlugs.length) {
+    body += `<div class="user-modal-section">
+      <div class="user-modal-section-label">All Communities (${otherSlugs.length})</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">`;
+    body += otherSlugs.map(slug => {
+      return `<a href="/${escHtml(slug)}" style="font-family:var(--mono);font-size:11px;padding:4px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--dim);text-decoration:none;transition:border-color .12s" onmouseover="this.style.borderColor='rgba(201,146,13,.4)'" onmouseout="this.style.borderColor='var(--border)'">/${escHtml(slug)}</a>`;
+    }).join('');
+    body += `</div></div>`;
+  }
+
+  if (!common.length && !otherSlugs.length) {
+    body = `<div style="text-align:center;padding:24px 0;font-family:var(--mono);font-size:13px;color:var(--dim)">No communities yet</div>`;
+  }
+
+  body += `<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+    <a href="/m/${escHtml(user.id)}" style="font-family:var(--mono);font-size:12px;color:var(--gold);text-decoration:none">View full profile →</a>
+  </div>`;
+
+  document.getElementById('umBody').innerHTML = body;
+  overlay.style.display = 'flex';
+}
+
+function closeUserModal() {
+  document.getElementById('userModalOverlay').style.display = 'none';
 }
 
 // ── HELPERS ───────────────────────────────────────────────────

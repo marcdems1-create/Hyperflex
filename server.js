@@ -5530,6 +5530,98 @@ app.post('/api/creator/oauth-complete', async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
+// SEARCH — GET /api/search?q=query[&userId=...for communities in common]
+// Returns: { communities: [...], users: [...] }
+// No auth required; pass Authorization header to get communities_in_common
+// ════════════════════════════════════════════════════════════
+app.get('/api/search', async (req, res) => {
+  try {
+    const q = (req.query.q || '').trim().toLowerCase();
+    if (!q || q.length < 2) return res.json({ communities: [], users: [] });
+
+    // Optional: resolve caller's community slugs for "in common" calc
+    let mySlugSet = new Set();
+    const auth = req.headers.authorization;
+    const token = auth && auth.startsWith('Bearer ') ? auth.slice(7) : null;
+    if (token) {
+      try {
+        const payload = jwt.verify(token, process.env.JWT_SECRET || 'hyperflex_secret');
+        const { data: myBals } = await supabase
+          .from('community_balances')
+          .select('creator_slug')
+          .eq('user_id', payload.id);
+        (myBals || []).forEach(b => mySlugSet.add(b.creator_slug));
+      } catch {}
+    }
+
+    // Run community + user search in parallel
+    const [settingsRes, usersRes] = await Promise.all([
+      supabase
+        .from('creator_settings')
+        .select('slug, display_name, logo_url, primary_color, custom_points_name')
+        .or(`slug.ilike.%${q}%,display_name.ilike.%${q}%`)
+        .limit(12),
+      supabase
+        .from('users')
+        .select('id, display_name')
+        .ilike('display_name', `%${q}%`)
+        .limit(12),
+    ]);
+
+    // Enrich communities with member count
+    const slugs = (settingsRes.data || []).map(s => s.slug);
+    let memberCounts = {};
+    if (slugs.length) {
+      const { data: balRows } = await supabase
+        .from('community_balances')
+        .select('creator_slug')
+        .in('creator_slug', slugs);
+      (balRows || []).forEach(b => { memberCounts[b.creator_slug] = (memberCounts[b.creator_slug] || 0) + 1; });
+    }
+
+    const communities = (settingsRes.data || []).map(s => ({
+      slug:               s.slug,
+      display_name:       s.display_name || s.slug,
+      logo_url:           s.logo_url || null,
+      primary_color:      s.primary_color || '#c9920d',
+      custom_points_name: s.custom_points_name || 'Flex Points',
+      member_count:       memberCounts[s.slug] || 0,
+      i_follow:           mySlugSet.has(s.slug),
+    }));
+
+    // Enrich users with their community slugs for "in common" calc
+    const userIds = (usersRes.data || []).map(u => u.id);
+    let userCommunityMap = {};
+    if (userIds.length) {
+      const { data: ubals } = await supabase
+        .from('community_balances')
+        .select('user_id, creator_slug')
+        .in('user_id', userIds);
+      (ubals || []).forEach(b => {
+        if (!userCommunityMap[b.user_id]) userCommunityMap[b.user_id] = [];
+        userCommunityMap[b.user_id].push(b.creator_slug);
+      });
+    }
+
+    const users = (usersRes.data || []).map(u => {
+      const theirSlugs = userCommunityMap[u.id] || [];
+      const common = theirSlugs.filter(s => mySlugSet.has(s));
+      return {
+        id:           u.id,
+        display_name: u.display_name || 'Member',
+        community_slugs: theirSlugs,
+        communities_in_common: common,
+      };
+    });
+
+    res.json({ communities, users });
+  } catch (err) {
+    console.error('[search] error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
 // 10. PUBLIC COMMUNITY PAGE (slug catch-all — must be last)
 // GET /:slug  →  serves community.html with SSR'd OG meta tags
 // Crawlers (Discord, Twitter, Slack, iMessage) need meta tags in the HTML
@@ -6387,31 +6479,39 @@ app.get('/api/admin/creators', requireAdmin, async (req, res) => {
 
     if (!settings?.length) return res.json([]);
 
-    // Get user emails in one query
-    const creatorIds = settings.map(s => s.creator_id);
-    const { data: users } = await supabase
-      .from('users')
-      .select('id, email')
-      .in('id', creatorIds);
-    const emailMap = Object.fromEntries((users || []).map(u => [u.id, u.email]));
+    const slugs      = settings.map(s => s.slug);
+    const creatorIds = settings.map(s => s.creator_id).filter(Boolean);
 
-    // Market counts per creator
-    const { data: marketCounts } = await supabase
-      .from('markets')
-      .select('creator_id')
-      .in('creator_id', creatorIds);
+    // Run all enrichment queries in parallel
+    const [usersRes, marketRes, memberRes] = await Promise.all([
+      // Emails
+      creatorIds.length
+        ? supabase.from('users').select('id, email').in('id', creatorIds)
+        : Promise.resolve({ data: [] }),
+      // Market counts (by tenant_slug — more accurate than creator_id join)
+      supabase.from('markets').select('tenant_slug').in('tenant_slug', slugs),
+      // Member counts (community_balances rows per slug)
+      supabase.from('community_balances').select('creator_slug').in('creator_slug', slugs),
+    ]);
+
+    const emailMap = Object.fromEntries((usersRes.data || []).map(u => [u.id, u.email]));
+
     const mktMap = {};
-    (marketCounts || []).forEach(m => { mktMap[m.creator_id] = (mktMap[m.creator_id] || 0) + 1; });
+    (marketRes.data || []).forEach(m => { mktMap[m.tenant_slug] = (mktMap[m.tenant_slug] || 0) + 1; });
+
+    const memMap = {};
+    (memberRes.data || []).forEach(b => { memMap[b.creator_slug] = (memMap[b.creator_slug] || 0) + 1; });
 
     const rows = settings.map(s => ({
-      creator_id:           s.creator_id,
-      slug:                 s.slug,
-      name:                 s.display_name,
-      email:                emailMap[s.creator_id] || '—',
-      plan:                 s.plan || 'free',
-      markets:              mktMap[s.creator_id] || 0,
-      joined:               s.created_at,
-      trial_expires_at:     s.plan_trial_expires_at || null,
+      creator_id:       s.creator_id,
+      slug:             s.slug,
+      name:             s.display_name,
+      email:            emailMap[s.creator_id] || '—',
+      plan:             s.plan || 'free',
+      markets:          mktMap[s.slug] || 0,
+      members:          memMap[s.slug] || 0,
+      joined:           s.created_at,
+      trial_expires_at: s.plan_trial_expires_at || null,
     }));
 
     res.json(rows);
