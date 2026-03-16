@@ -270,6 +270,18 @@ html,body { background:var(--paper); color:var(--text); font-family:var(--sans);
             <input id="editNameInput" class="edit-name-input" type="text" maxlength="30" placeholder="Your username…" onkeydown="if(event.key==='Enter')saveName()"/>
           </div>
           <button class="btn-save" onclick="saveName()">Save name</button>
+          <button class="btn-save" onclick="toggleChangePassword()" id="changePwBtn" style="margin-top:8px;background:transparent;border:1px solid var(--border);color:var(--dim)">🔒 Change password</button>
+          <div id="changePwForm" style="display:none;margin-top:14px;text-align:left">
+            <div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Change Password</div>
+            <input id="cpCurrent" class="edit-name-input" type="password" placeholder="Current password" style="margin-bottom:8px"/>
+            <input id="cpNew"     class="edit-name-input" type="password" placeholder="New password (min 8 chars)" style="margin-bottom:8px"/>
+            <input id="cpConfirm" class="edit-name-input" type="password" placeholder="Confirm new password" style="margin-bottom:10px"/>
+            <div style="display:flex;gap:8px">
+              <button class="btn-save" onclick="submitChangePassword()" style="flex:1">Update password</button>
+              <button class="btn-save" onclick="toggleChangePassword()" style="flex:1;background:transparent;border:1px solid var(--border);color:var(--dim)">Cancel</button>
+            </div>
+            <div id="cpError" style="display:none;font-size:12px;color:#ef4444;margin-top:8px;font-family:var(--mono)"></div>
+          </div>
         </div>
       </div>
 
@@ -654,6 +666,44 @@ async function saveName() {
     if (raw) { try { const u = JSON.parse(raw); u.display_name = val; localStorage.setItem('hf_user', JSON.stringify(u)); } catch {} }
     showToast('Name updated ✓', 'success');
   } catch { showToast('Failed to save name', 'error'); }
+}
+
+// ── CHANGE PASSWORD ───────────────────────────────────────────
+function toggleChangePassword() {
+  const form = document.getElementById('changePwForm');
+  const open = form.style.display === 'none';
+  form.style.display = open ? 'block' : 'none';
+  document.getElementById('changePwBtn').style.display = open ? 'none' : 'block';
+  if (!open) {
+    document.getElementById('cpCurrent').value = '';
+    document.getElementById('cpNew').value     = '';
+    document.getElementById('cpConfirm').value = '';
+    document.getElementById('cpError').style.display = 'none';
+  }
+}
+
+async function submitChangePassword() {
+  const current  = document.getElementById('cpCurrent').value;
+  const newPw    = document.getElementById('cpNew').value;
+  const confirm  = document.getElementById('cpConfirm').value;
+  const errEl    = document.getElementById('cpError');
+  errEl.style.display = 'none';
+
+  if (!current || !newPw || !confirm) { errEl.textContent = 'All fields are required'; errEl.style.display = 'block'; return; }
+  if (newPw.length < 8)               { errEl.textContent = 'New password must be at least 8 characters'; errEl.style.display = 'block'; return; }
+  if (newPw !== confirm)              { errEl.textContent = 'New passwords do not match'; errEl.style.display = 'block'; return; }
+
+  try {
+    const r = await fetch(`${API}/api/user/change-password`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getToken() },
+      body: JSON.stringify({ current_password: current, new_password: newPw })
+    });
+    const data = await r.json();
+    if (!r.ok) { errEl.textContent = data.error || 'Failed to update password'; errEl.style.display = 'block'; return; }
+    toggleChangePassword();
+    showToast('Password updated ✓', 'success');
+  } catch { errEl.textContent = 'Network error — try again'; errEl.style.display = 'block'; }
 }
 
 // ── LEAVE COMMUNITY ───────────────────────────────────────────

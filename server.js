@@ -7567,6 +7567,50 @@ app.put('/api/user/display-name', requireAuth, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
+// PUT /api/user/change-password
+// Works for both members and creators (all in users table).
+// Requires current password + new password (min 8 chars).
+// ════════════════════════════════════════════════════════════
+app.put('/api/user/change-password', requireAuth, async (req, res) => {
+  try {
+    const { current_password, new_password } = req.body;
+    if (!current_password || !new_password) {
+      return res.status(400).json({ error: 'current_password and new_password are required' });
+    }
+    if (new_password.length < 8) {
+      return res.status(400).json({ error: 'New password must be at least 8 characters' });
+    }
+    if (current_password === new_password) {
+      return res.status(400).json({ error: 'New password must be different from current password' });
+    }
+
+    // Fetch current hash
+    const { data: user, error: fetchErr } = await supabase
+      .from('users')
+      .select('password_hash')
+      .eq('id', req.user.id)
+      .single();
+    if (fetchErr || !user) return res.status(404).json({ error: 'User not found' });
+
+    // Verify current password
+    const valid = await bcrypt.compare(current_password, user.password_hash);
+    if (!valid) return res.status(400).json({ error: 'Current password is incorrect' });
+
+    // Hash and save new password
+    const new_hash = await bcrypt.hash(new_password, 12);
+    const { error: updateErr } = await supabase
+      .from('users')
+      .update({ password_hash: new_hash })
+      .eq('id', req.user.id);
+    if (updateErr) return res.status(500).json({ error: updateErr.message });
+
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
 // FEATURE 3 — GET/PUT /api/creator/youtube-scan-settings
 // Per-creator YouTube auto-scan schedule
 // ════════════════════════════════════════════════════════════
