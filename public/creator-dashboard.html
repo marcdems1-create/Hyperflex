@@ -2748,6 +2748,7 @@ body.nav-open .sidebar-backdrop {
         </div>
         <a id="viewCommunityBtn" href="#" target="_blank" class="btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:5px;font-size:13px">👁 <span class="scanner-label">View Community</span></a>
         <a id="viewProfileBtn" href="#" target="_blank" class="btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:5px;font-size:13px">👤 <span class="scanner-label">Profile</span></a>
+        <button class="btn-secondary" onclick="shareCommunityPage(this)" style="font-size:13px;display:inline-flex;align-items:center;gap:5px">↗ <span class="scanner-label">Share</span></button>
         <button class="btn-secondary" id="aiScannerTopbarBtn" onclick="openYoutubeModal()">🤖<span class="scanner-label"> AI Scanner</span></button>
         <button class="btn-primary" onclick="openCreateModal()">+ New Market</button>
       </div>
@@ -4999,6 +5000,7 @@ function renderMarketRows(markets, containerId) {
           <span class="status-text">${statusLabel}</span>
           ${status === 'pending' ? `<button class="resolve-btn" onclick="event.stopPropagation();openResolveModal('${m.id}', \`${m.question.replace(/`/g,"'")}\`)">Resolve</button>` : ''}
           <button class="resolve-btn" style="background:rgba(201,146,13,0.1);color:var(--gold);border-color:rgba(201,146,13,0.25)" title="Duplicate this market" onclick="event.stopPropagation();duplicateMarket('${m.id}')">↻ Duplicate</button>
+          <button class="resolve-btn" style="background:rgba(255,255,255,0.04);color:var(--dim);border-color:var(--border)" title="Share this market" onclick="event.stopPropagation();shareMarketRow(this,${JSON.stringify(m.id)},${JSON.stringify(m.question.replace(/"/g,"'"))},${m.yes_votes||0},${m.no_votes||0})">↗ Share</button>
         </div>
       </div>
     `;
@@ -8423,6 +8425,24 @@ loadAnnouncements();
 .wz-qpick.selected { border-color:var(--gold);background:rgba(201,146,13,.08) }
 .wz-qpick-q { font-size:13px;color:var(--text);flex:1;text-align:left;line-height:1.4 }
 .wz-qpick-arr { color:var(--gold);font-size:14px;flex-shrink:0 }
+/* ── Share Sheet ─────────────────────────────────────────── */
+#shareSheet {
+  position: fixed; z-index: 9999;
+  background: #1e1e1b; border: 1px solid rgba(201,146,13,0.25);
+  border-radius: 10px; padding: 6px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.55);
+  display: none; flex-direction: column; gap: 2px; min-width: 194px;
+}
+#shareSheet.open { display: flex; }
+.ss-btn {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 14px; border: none; background: transparent; cursor: pointer;
+  color: #ddd8cc; font-size: 13px; font-family: inherit;
+  border-radius: 7px; text-align: left; width: 100%; transition: background .12s;
+}
+.ss-btn:hover { background: rgba(201,146,13,0.1); color: #c9920d; }
+.ss-icon { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
+.ss-divider { height: 1px; background: rgba(255,255,255,0.06); margin: 2px 0; }
 </style>
 
 <script>
@@ -8600,6 +8620,65 @@ async function wzCreateMarket() {
 function wzCopyLink() {
   const url = document.getElementById('wzShareUrl').textContent;
   navigator.clipboard.writeText(url).then(() => showToast('Link copied! ✓', 'success'));
+}
+</script>
+
+<!-- ── Share Sheet ──────────────────────────────────────── -->
+<div id="shareSheet" role="menu" aria-label="Share options">
+  <button class="ss-btn" onclick="ssAction('x')"><span class="ss-icon">𝕏</span>Share on X</button>
+  <button class="ss-btn" onclick="ssAction('linkedin')"><span class="ss-icon">💼</span>Share on LinkedIn</button>
+  <button class="ss-btn" onclick="ssAction('facebook')"><span class="ss-icon">📘</span>Share on Facebook</button>
+  <div class="ss-divider"></div>
+  <button class="ss-btn" onclick="ssAction('copy')"><span class="ss-icon">🔗</span>Copy link</button>
+</div>
+
+<script>
+// ── SHARE SHEET ───────────────────────────────────────────────────────────────
+let _ssUrl = '', _ssTxt = '';
+
+function openShareSheet(anchorEl, url, text) {
+  _ssUrl = url; _ssTxt = text;
+  const sheet = document.getElementById('shareSheet');
+  sheet.classList.add('open');
+  const r = anchorEl.getBoundingClientRect();
+  const top  = r.bottom + 6;
+  const left = Math.min(r.left, window.innerWidth - 210);
+  sheet.style.top  = top  + 'px';
+  sheet.style.left = Math.max(8, left) + 'px';
+  setTimeout(() => document.addEventListener('click', _ssDismiss, { once: true }), 0);
+}
+function _ssDismiss(e) {
+  if (!document.getElementById('shareSheet').contains(e.target)) closeShareSheet();
+}
+function closeShareSheet() { document.getElementById('shareSheet').classList.remove('open'); }
+
+function ssAction(platform) {
+  const url = encodeURIComponent(_ssUrl);
+  const txt = encodeURIComponent(_ssTxt);
+  if (platform === 'x')        window.open(`https://twitter.com/intent/tweet?text=${txt}&url=${url}`, '_blank', 'width=600,height=400');
+  if (platform === 'linkedin') window.open(`https://www.linkedin.com/shareArticle?mini=true&url=${url}&title=${txt}`, '_blank', 'width=600,height=500');
+  if (platform === 'facebook') window.open(`https://www.facebook.com/sharer/sharer.php?u=${url}`, '_blank', 'width=600,height=400');
+  if (platform === 'copy') navigator.clipboard.writeText(_ssUrl).then(() => showToast('Link copied ✓', 'success'));
+  closeShareSheet();
+}
+
+// Share a specific market
+function shareMarketRow(anchorEl, marketId, question, yesVotes, noVotes) {
+  const total = (yesVotes || 0) + (noVotes || 0);
+  const odds = total > 0 ? ` · YES ${Math.round(yesVotes/total*100)}% / NO ${Math.round(noVotes/total*100)}%` : '';
+  const name = window._creatorSlug ? (document.getElementById('headerCommunityName')?.textContent || window._creatorSlug) : '';
+  const url  = `${location.origin}/${window._creatorSlug}?market=${marketId}`;
+  const text = `"${question}"${odds} — predict on ${name} 🎯`;
+  openShareSheet(anchorEl, url, text);
+}
+
+// Share the whole community
+function shareCommunityPage(anchorEl) {
+  const slug = window._creatorSlug;
+  const name = document.getElementById('headerCommunityName')?.textContent || slug;
+  const url  = `${location.origin}/${slug}`;
+  const text = `Join ${name} on HYPERFLEX — predict the future with your community 🎯`;
+  openShareSheet(anchorEl, url, text);
 }
 </script>
 
