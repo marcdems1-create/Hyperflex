@@ -4444,7 +4444,8 @@ app.get('/api/community/:slug', async (req, res) => {
         challenge_target:     settings.challenge_target     || null,
         challenge_bonus_pts:  settings.challenge_bonus_pts  || 0,
         challenge_end_date:   settings.challenge_end_date   || null,
-        suggestions_enabled:  settings.suggestions_enabled  || false
+        suggestions_enabled:  settings.suggestions_enabled  || false,
+        creator_id:           settings.creator_id
       },
       member_count: memberCount || 0,
       markets: markets || [],
