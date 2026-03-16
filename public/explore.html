@@ -1063,6 +1063,35 @@ function activityCard(a) {
       </div>
     </a>`;
   }
+
+  if (a.type === 'reward_unlock') {
+    const profileUrl = a.user_id ? `/m/${a.user_id}` : communityUrl;
+    const threshStr  = (a.reward_threshold || 0).toLocaleString();
+    const ptsLabel   = a.pts_name || 'Flex Points';
+    return `<a class="activity-card" href="${profileUrl}">
+      <div class="ac-avatar" style="background:${color}">${initials}</div>
+      <div class="ac-body">
+        <div class="ac-header">
+          <span class="ac-actor">${escHtml(a.user)}</span>
+          <span class="ac-action">unlocked a reward 🎁</span>
+          <span class="ac-time">${timeAgo(a.ts)}</span>
+        </div>
+        <div class="ac-market-card" style="border-color:rgba(201,146,13,0.25)">
+          <div class="ac-market-inner" style="background:rgba(201,146,13,0.04)">
+            <span class="ac-community-pill" style="background:${color}22;color:${color}">${escHtml(a.community_name)}</span>
+            <div class="ac-question" style="font-size:14px">${escHtml(a.reward_title || 'Reward')}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px">Reached ${threshStr} ${ptsLabel}</div>
+          </div>
+        </div>
+        <div class="ac-footer">
+          <span class="ac-tag" style="background:rgba(201,146,13,0.12);color:#c9920d;border:1px solid rgba(201,146,13,0.3)">🎁 Reward</span>
+          <span class="ac-stat">${threshStr} pts milestone</span>
+          <span class="ac-join-link">View profile →</span>
+        </div>
+      </div>
+    </a>`;
+  }
+
   return '';
 }
 

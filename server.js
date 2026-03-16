@@ -1179,6 +1179,53 @@ async function setCommunityBalance(userId, creatorSlug, newBalance) {
       { user_id: userId, creator_slug: creatorSlug, balance: newBalance, updated_at: new Date().toISOString() },
       { onConflict: 'user_id,creator_slug' }
     );
+  // Fire-and-forget: log any newly crossed reward thresholds
+  maybeLogRewardUnlocks(userId, creatorSlug, newBalance)
+    .catch(e => console.error('[reward_unlock]', e.message));
+}
+
+// Check if a balance update crossed any new reward thresholds and record them.
+// newBalance is in centpoints; creator_rewards.threshold is in points.
+async function maybeLogRewardUnlocks(userId, creatorSlug, newBalance) {
+  const pointBalance = Math.floor(newBalance / 100);
+
+  // Fetch creator_id for this slug
+  const { data: cs } = await supabase
+    .from('creator_settings')
+    .select('creator_id')
+    .eq('slug', creatorSlug)
+    .maybeSingle();
+  if (!cs?.creator_id) return;
+
+  // All rewards at or below current point balance
+  const { data: rewards } = await supabase
+    .from('creator_rewards')
+    .select('id, title, threshold')
+    .eq('creator_id', cs.creator_id)
+    .lte('threshold', pointBalance);
+  if (!rewards?.length) return;
+
+  // Already-logged unlocks for this user in this community
+  const { data: existing } = await supabase
+    .from('reward_unlocks')
+    .select('reward_id')
+    .eq('user_id', userId)
+    .eq('creator_slug', creatorSlug);
+  const alreadyUnlocked = new Set((existing || []).map(r => r.reward_id));
+
+  const toInsert = rewards
+    .filter(r => !alreadyUnlocked.has(r.id))
+    .map(r => ({
+      user_id:          userId,
+      creator_slug:     creatorSlug,
+      reward_id:        r.id,
+      reward_title:     r.title,
+      reward_threshold: r.threshold,
+    }));
+
+  if (toInsert.length) {
+    await supabase.from('reward_unlocks').insert(toInsert);
+  }
 }
 
 // Resolve the creator slug for a market (prefer tenant_slug, fall back to creator_id lookup)
@@ -5989,7 +6036,7 @@ app.get('/api/activity', async (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 40, 100);
     const since = req.query.since; // ISO cursor for polling
 
-    const [betsRes, resolutionsRes, newMarketsRes, winsRes, creatorsRes, commentsRes] = await Promise.all([
+    const [betsRes, resolutionsRes, newMarketsRes, winsRes, creatorsRes, commentsRes, rewardUnlocksRes] = await Promise.all([
       supabase
         .from('positions')
         .select('id, user_id, side, amount, created_at, market_id, markets(id, question, tenant_slug, yes_price, no_price, yes_votes, no_votes, trader_count)')
@@ -6032,15 +6079,23 @@ app.get('/api/activity', async (req, res) => {
         .select('id, user_id, user_name, body, created_at, market_id, creator_slug, markets(id, question, tenant_slug)')
         .order('created_at', { ascending: false })
         .limit(since ? 25 : 20),
+
+      // Recent reward unlocks
+      supabase
+        .from('reward_unlocks')
+        .select('id, user_id, creator_slug, reward_title, reward_threshold, unlocked_at')
+        .order('unlocked_at', { ascending: false })
+        .limit(since ? 20 : 15),
     ]);
 
     const communities = {};
     for (const c of (creatorsRes.data || [])) communities[c.slug] = c;
 
-    // Enrich bets + wins with user display names
-    const rawBets = (betsRes.data || []).filter(b => b.markets?.tenant_slug);
-    const rawWins = (winsRes.data || []).filter(w => w.markets?.tenant_slug && w.markets?.resolved_at);
-    const allUserIds = [...new Set([...rawBets.map(b => b.user_id), ...rawWins.map(w => w.user_id)])];
+    // Enrich bets + wins + reward unlocks with user display names
+    const rawBets    = (betsRes.data    || []).filter(b => b.markets?.tenant_slug);
+    const rawWins    = (winsRes.data    || []).filter(w => w.markets?.tenant_slug && w.markets?.resolved_at);
+    const rawUnlocks = (rewardUnlocksRes.data || []).filter(u => u.creator_slug);
+    const allUserIds = [...new Set([...rawBets.map(b => b.user_id), ...rawWins.map(w => w.user_id), ...rawUnlocks.map(u => u.user_id)])];
     const { data: usersData } = allUserIds.length
       ? await supabase.from('users').select('id, display_name').in('id', allUserIds)
       : { data: [] };
@@ -6160,6 +6215,24 @@ app.get('/api/activity', async (req, res) => {
         creator_slug:    cSlug,
         community_name:  communities[cSlug]?.display_name || cSlug,
         community_color: communities[cSlug]?.primary_color || '#c9920d',
+      });
+    }
+
+    // Reward unlock events
+    for (const u of rawUnlocks) {
+      const slug = u.creator_slug;
+      activities.push({
+        type:             'reward_unlock',
+        id:               `rwu_${u.id}`,
+        ts:               u.unlocked_at,
+        user_id:          u.user_id,
+        user:             userMap[u.user_id] || 'Anonymous',
+        reward_title:     u.reward_title,
+        reward_threshold: u.reward_threshold,
+        creator_slug:     slug,
+        community_name:   communities[slug]?.display_name || slug,
+        community_color:  communities[slug]?.primary_color || '#c9920d',
+        pts_name:         communities[slug]?.custom_points_name || 'Flex Points',
       });
     }
 
