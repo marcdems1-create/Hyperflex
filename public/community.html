@@ -3559,7 +3559,9 @@ function renderAnnouncements(announcements) {
 }
 
 function formatTimeAgo(iso) {
-  const diff = Date.now() - new Date(iso).getTime();
+  if (!iso) return '';
+  const ts   = iso.endsWith('Z') || iso.includes('+') ? iso : iso + 'Z';
+  const diff = Date.now() - new Date(ts).getTime();
   const mins  = Math.floor(diff / 60000);
   const hours = Math.floor(diff / 3600000);
   const days  = Math.floor(diff / 86400000);
