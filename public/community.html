@@ -1647,6 +1647,7 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
       <div class="hero-mini-stat"><strong id="statTraders">—</strong> members</div>
       <div class="hero-mini-stat gold"><strong id="statPoints">—</strong> <span id="statPointsLabel">pts</span></div>
       <button class="hero-mini-stat leaderboard-jump-pill" onclick="document.getElementById('leaderboardSection').scrollIntoView({behavior:'smooth',block:'start'})">🏆 Leaderboard</button>
+      <button id="heroFollowBtn" class="hero-mini-stat" onclick="currentUser ? followCommunity() : openAuth('register')" style="display:none;background:rgba(201,146,13,0.15);border:1px solid rgba(201,146,13,0.4);color:var(--gold);font-weight:700;cursor:pointer">🔔 Follow</button>
     </div>
   </div>
 </section>
@@ -1969,6 +1970,8 @@ let allRewards      = [];
   await loadCommunity();
   if (currentUser) {
     await Promise.all([fetchCommunityBalance(), fetchMyPositions()]);
+    // Auto-follow if this is a returning user visiting a community they haven't joined yet
+    if (communityBalance === null) await followCommunity();
     renderUserHeader();
     renderReferralSection();
   }
@@ -3316,6 +3319,8 @@ async function submitAuth() {
     localStorage.setItem('hf_token', data.token);
     localStorage.setItem('hf_user', JSON.stringify(data.user));
     await Promise.all([fetchCommunityBalance(), fetchMyPositions()]);
+    // Auto-follow community on first login/register here
+    if (communityBalance === null) await followCommunity();
     renderUserHeader();
     buildFilterCounts();
     renderFilteredMarkets();
@@ -3345,16 +3350,38 @@ function showAuthError(msg) {
 function renderUserHeader() {
   const hr = document.getElementById('headerRight');
   const creatorBar = document.getElementById('creatorLoginBar');
+  const heroFollowBtn = document.getElementById('heroFollowBtn');
   if (!currentUser) {
     hr.innerHTML = `
       <button class="btn-auth" onclick="openAuth('login')">Sign in</button>
-      <button class="btn-auth primary" onclick="openAuth('register')">Join free</button>`;
+      <button class="btn-auth primary" onclick="openAuth('register')">🔔 Follow &amp; Join free</button>`;
     if (creatorBar) creatorBar.style.display = 'block';
+    // Show Follow button in hero for non-members
+    if (heroFollowBtn) heroFollowBtn.style.display = '';
     return;
   }
   // Hide creator bar once signed in as a member
   if (creatorBar) creatorBar.style.display = 'none';
-  const balRaw = communityBalance !== null ? communityBalance / 100 : (currentUser.balance || 0);
+
+  // Not yet following this community — show follow CTA instead of balance
+  if (communityBalance === null) {
+    hr.innerHTML = `
+      <div class="user-bar">
+        <span class="user-name-pill">${escHtml(currentUser.display_name || currentUser.email)}</span>
+        <button class="btn-auth primary" onclick="followCommunity()" style="font-size:11px;padding:6px 14px;">🔔 Follow Community</button>
+        <a href="/my" class="btn-auth" style="text-decoration:none;font-size:10px;padding:5px 10px;color:var(--gold);border-color:rgba(201,146,13,.4)">My Dashboard</a>
+        <button class="btn-auth" onclick="signOut()" style="font-size:10px;padding:5px 10px">Sign out</button>
+      </div>`;
+    if (creatorBar) creatorBar.style.display = 'none';
+    // Show hero follow button too
+    if (heroFollowBtn) { heroFollowBtn.style.display = ''; heroFollowBtn.textContent = '🔔 Follow'; }
+    return;
+  }
+
+  // Following — hide hero follow button
+  if (heroFollowBtn) heroFollowBtn.style.display = 'none';
+
+  const balRaw = communityBalance / 100;
   const bal = Number(balRaw).toLocaleString();
   const pts = community?.custom_points_name || 'pts';
   // Find rank
@@ -3385,6 +3412,27 @@ function renderUserHeader() {
     </div>`;
   // Show reward hint
   if (allRewards.length) renderRewardHint();
+}
+
+// Follow community: creates a community_balances row with starting points.
+// Called automatically after login/register and can be triggered by Follow button.
+async function followCommunity() {
+  const token = localStorage.getItem('hf_token');
+  if (!token || !slug || communityBalance !== null) return;
+  try {
+    const r = await fetch(`${API}/api/community/${slug}/follow`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (r.ok) {
+      const data = await r.json();
+      communityBalance = data.balance;
+      renderUserHeader();
+      const pts = community?.custom_points_name || 'pts';
+      const bal = Math.floor(communityBalance / 100).toLocaleString();
+      showToast(`Following! You've been given ${bal} ${pts} to start predicting. 🎯`, 'success');
+    }
+  } catch {}
 }
 
 function signOut() {

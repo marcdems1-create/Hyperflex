@@ -498,6 +498,10 @@ app.post('/markets', async (req, res) => {
     scoreMarketResonance(data.question, data.category).then(score => {
       if (score) supabase.from('markets').update({ resonance_score: score }).eq('id', data.id).then(() => {});
     });
+    // Notify followers if market is published immediately
+    if (row.is_public === true && row.tenant_slug) {
+      sendNewMarketNotifications(data, row.tenant_slug).catch(() => {});
+    }
   }
   res.json(data);
 });
@@ -590,11 +594,13 @@ app.post('/api/creator/markets/bulk', requireCreator, async (req, res) => {
 
     if (error) throw error;
 
-    // Score resonance async for each
-    for (const mkt of inserted || []) {
+    // Score resonance async for each; notify followers for first market only (avoid inbox spam on bulk)
+    for (let i = 0; i < (inserted || []).length; i++) {
+      const mkt = inserted[i];
       scoreMarketResonance(mkt.question, mkt.category).then(score => {
         if (score) supabase.from('markets').update({ resonance_score: score }).eq('id', mkt.id).then(() => {});
       });
+      if (i === 0) sendNewMarketNotifications(mkt, creator.slug).catch(() => {});
     }
 
     console.log(`[bulk-create] ${inserted?.length} markets created by ${creator.slug}`);
@@ -5108,12 +5114,12 @@ app.post('/api/community/:slug/markets/:marketId/comments', async (req, res) => 
 app.put('/markets/:id', requireCreator, async (req, res) => {
   try {
     const { id } = req.params;
-    const { question, expiry_date, resolution_source, category } = req.body;
+    const { question, expiry_date, resolution_source, category, is_public } = req.body;
 
-    // Verify ownership
+    // Verify ownership; also fetch current is_public so we can detect publish transition
     const { data: market } = await supabase
       .from('markets')
-      .select('id, creator_id')
+      .select('id, creator_id, is_public, tenant_slug, question')
       .eq('id', id)
       .eq('creator_id', req.creator.id)
       .maybeSingle();
@@ -5125,6 +5131,7 @@ app.put('/markets/:id', requireCreator, async (req, res) => {
     if (expiry_date !== undefined) updates.expiry_date = expiry_date;
     if (resolution_source !== undefined) updates.resolution_source = resolution_source;
     if (category !== undefined) { updates.category = category; updates.commodity = category; }
+    if (is_public !== undefined) updates.is_public = is_public;
 
     const { data, error } = await supabase
       .from('markets')
@@ -5134,6 +5141,13 @@ app.put('/markets/:id', requireCreator, async (req, res) => {
       .single();
 
     if (error) throw error;
+
+    // Fire new-market notifications when a draft gets published
+    const beingPublished = is_public === true && market.is_public !== true;
+    if (beingPublished && market.tenant_slug) {
+      sendNewMarketNotifications(data, market.tenant_slug).catch(() => {});
+    }
+
     res.json({ ok: true, market: data });
   } catch (err) {
     console.error('market update error:', err);
@@ -5685,6 +5699,41 @@ app.get('/api/user/dashboard', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[user/dashboard]', err.message);
     res.status(500).json({ error: 'Failed to load dashboard' });
+  }
+});
+
+// POST /api/community/:slug/follow — follow (join) a community; creates balance row with starting points
+app.post('/api/community/:slug/follow', requireAuth, async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const userId = req.user.id;
+
+    const { data: settings } = await supabase
+      .from('creator_settings')
+      .select('starting_balance, custom_points_name, display_name')
+      .eq('slug', slug)
+      .maybeSingle();
+    if (!settings) return res.status(404).json({ error: 'Community not found' });
+
+    const startingBalance = settings.starting_balance ?? 100000;
+
+    // Idempotent upsert — won't overwrite existing balance
+    await supabase
+      .from('community_balances')
+      .upsert({ user_id: userId, creator_slug: slug, balance: startingBalance },
+               { onConflict: 'user_id,creator_slug', ignoreDuplicates: true });
+
+    // Return current balance (may be higher than starting if they already had one)
+    const { data: row } = await supabase
+      .from('community_balances')
+      .select('balance')
+      .eq('user_id', userId)
+      .eq('creator_slug', slug)
+      .maybeSingle();
+
+    res.json({ balance: row?.balance ?? startingBalance, starting_balance: startingBalance });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -6997,6 +7046,101 @@ function createMailTransport() {
       pass: process.env.SMTP_PASS,
     },
   });
+}
+
+// Send new-market notification emails to all community followers (community_balances rows).
+// Fires when a market is published (is_public = true).
+// No-op if SMTP_HOST is not set.
+async function sendNewMarketNotifications(market, creatorSlug) {
+  if (!creatorSlug || !market?.question) return;
+  try {
+    const transporter = createMailTransport();
+    if (!transporter) return;
+
+    // Get creator display info
+    const { data: settings } = await supabase
+      .from('creator_settings')
+      .select('display_name, primary_color')
+      .eq('slug', creatorSlug)
+      .maybeSingle();
+
+    // Get all followers via community_balances
+    const { data: followers } = await supabase
+      .from('community_balances')
+      .select('user_id')
+      .eq('creator_slug', creatorSlug);
+    if (!followers?.length) return;
+
+    const userIds = [...new Set(followers.map(f => f.user_id))];
+    const { data: users } = await supabase
+      .from('users')
+      .select('email, display_name')
+      .in('id', userIds)
+      .not('email', 'is', null);
+    if (!users?.length) return;
+
+    const communityName = settings?.display_name || creatorSlug;
+    const communityUrl  = `https://hyperflex.network/${creatorSlug}`;
+    const fromAddress   = process.env.SMTP_FROM || `"${communityName}" <noreply@hyperflex.network>`;
+    const expiryLine    = market.expiry_date
+      ? `<p style="margin:8px 0 0;font-size:13px;color:#888;">Closes ${new Date(market.expiry_date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</p>`
+      : '';
+    const yesPct = Math.round((market.yes_price || 0.5) * 100);
+    const noPct  = 100 - yesPct;
+
+    const subject = `🎯 New prediction live: ${market.question.slice(0, 60)}${market.question.length > 60 ? '...' : ''}`;
+    const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"/></head>
+<body style="font-family:'Helvetica Neue',Arial,sans-serif;background:#141412;margin:0;padding:0;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#141412;padding:40px 0;">
+    <tr><td align="center">
+      <table width="540" cellpadding="0" cellspacing="0" style="background:#1e1e1b;border-radius:10px;overflow:hidden;">
+        <tr><td style="background:#c9920d;padding:18px 28px;">
+          <span style="font-family:'Helvetica Neue',Arial,sans-serif;font-size:22px;font-weight:900;color:#141412;letter-spacing:-0.5px;">HYPERFLEX</span>
+          <span style="float:right;font-size:13px;color:#141412;opacity:0.7;line-height:32px;">${communityName}</span>
+        </td></tr>
+        <tr><td style="padding:28px;">
+          <p style="margin:0 0 6px;font-size:12px;color:#888;text-transform:uppercase;letter-spacing:1px;">New Market Posted</p>
+          <h2 style="margin:0 0 16px;font-size:20px;color:#f5f5f0;font-weight:700;line-height:1.4;">${market.question}</h2>
+          <div style="background:#141412;border-radius:8px;padding:16px;margin-bottom:20px;">
+            <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+              <span style="font-size:13px;color:#888;">Current odds</span>
+            </div>
+            <div style="height:8px;background:#2a2a27;border-radius:4px;overflow:hidden;">
+              <div style="height:100%;width:${yesPct}%;background:#22c55e;border-radius:4px;"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-top:6px;">
+              <span style="font-size:13px;font-weight:700;color:#22c55e;">YES ${yesPct}%</span>
+              <span style="font-size:13px;font-weight:700;color:#ef4444;">NO ${noPct}%</span>
+            </div>
+            ${expiryLine}
+          </div>
+          <a href="${communityUrl}" style="display:inline-block;padding:12px 24px;background:#c9920d;color:#141412;font-weight:700;font-size:15px;border-radius:6px;text-decoration:none;">Make your prediction →</a>
+        </td></tr>
+        <tr><td style="padding:16px 28px;border-top:1px solid #2a2a27;">
+          <p style="margin:0;font-size:11px;color:#555;">You're following <a href="${communityUrl}" style="color:#888;">${communityName}</a>. Powered by <a href="https://hyperflex.network" style="color:#888;">Hyperflex</a>.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+    // Send individually (respect rate limits — cap at 500)
+    let sent = 0, failed = 0;
+    for (const user of users.slice(0, 500)) {
+      if (!user.email) continue;
+      try {
+        await transporter.sendMail({ from: fromAddress, to: user.email, subject, html });
+        sent++;
+      } catch { failed++; }
+    }
+    console.log(`[email] New market notifications: ${sent} sent, ${failed} failed — market ${market.id}`);
+  } catch (err) {
+    console.error('[email] sendNewMarketNotifications error:', err.message);
+  }
 }
 
 // Send resolution emails to all bettors on a market.
