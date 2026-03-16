@@ -706,8 +706,9 @@ nav {
   <a href="/" class="nav-logo">HYPERFLEX</a>
   <div class="nav-links">
     <a href="/explore">Explore</a>
-    <a href="/creator/login">Creator Login</a>
-    <a href="/creator/signup" class="nav-cta">Start Free</a>
+    <a href="/my" id="navDashboardLink" style="display:none;color:var(--gold)">My Dashboard</a>
+    <a href="/creator/login" id="navCreatorLogin">Creator Login</a>
+    <a href="/creator/signup" class="nav-cta" id="navStartFree">Start Free</a>
   </div>
 </nav>
 
@@ -1325,6 +1326,20 @@ if (urlTab) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => { if (t.getAttribute('onclick')?.includes("'" + urlTab + "'")) t.classList.add('active'); });
 }
+
+// Show "My Dashboard" in nav if user is logged in
+(function() {
+  const token = localStorage.getItem('hf_token');
+  const raw   = localStorage.getItem('hf_user');
+  if (token && raw) {
+    try {
+      const u = JSON.parse(raw);
+      const dashLink = document.getElementById('navDashboardLink');
+      if (dashLink) dashLink.style.display = '';
+      // Swap Start Free → creator dashboard if creator; otherwise keep as-is
+    } catch {}
+  }
+})();
 
 // Initial loads
 loadActivityFeed();
