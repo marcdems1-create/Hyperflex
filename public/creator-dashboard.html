@@ -6599,16 +6599,16 @@ function buildInsight(data, ptsName) {
 
   let insight = null;
 
-  // Pick the most interesting insight
+  // Pick the most interesting insight — all stats must be from real recent data
+  const realAvg = data.market_breakdown?.avg_trader_count || 0; // true mean across all markets
+
   if (tp7 > 0 && t7 >= tp7 * 1.5) {
     insight = { icon: '🔥', title: `Trading is up ${Math.round(((t7 - tp7) / tp7) * 100)}% this week`, sub: `${t7} trades this week vs ${tp7} last week. Something's driving engagement — keep it up.` };
   } else if (tp7 > 0 && t7 < tp7 * 0.5 && tp7 > 2) {
     insight = { icon: '📉', title: `Activity dropped this week`, sub: `${t7} trades vs ${tp7} last week. Consider posting a new market to re-engage your community.` };
-  } else if (topMkt && topMkt.trader_count > 0) {
-    const avg = data.market_breakdown?.active > 1 ? Math.round(topMkt.trader_count / (data.market_breakdown.active || 1)) : 0;
-    if (avg > 0 && topMkt.trader_count >= avg * 2) {
-      insight = { icon: '⭐', title: `"${topMkt.title.slice(0,50)}${topMkt.title.length > 50 ? '…' : ''}" is your top market`, sub: `${topMkt.trader_count} traders — more than double your average. Create more markets like this one.` };
-    }
+  } else if (t7 > 0 && topMkt && topMkt.trader_count > 0 && realAvg > 0 && topMkt.trader_count >= realAvg * 2) {
+    // Only show this when there's been real recent activity AND the top market is a genuine outlier
+    insight = { icon: '⭐', title: `"${topMkt.title.slice(0,50)}${topMkt.title.length > 50 ? '…' : ''}" is your top market`, sub: `${topMkt.trader_count} all-time traders — ${Math.round(topMkt.trader_count / realAvg)}× your average of ${realAvg}. Create more markets like this one.` };
   } else if (topDiscussed && topDiscussed.comment_count >= 3) {
     insight = { icon: '💬', title: `Your most discussed market has ${topDiscussed.comment_count} comments`, sub: `"${topDiscussed.title.slice(0,60)}${topDiscussed.title.length > 60 ? '…' : ''}" — high debate markets drive retention.` };
   } else if (activeTraders > 0 && data.balance_stats?.member_count > activeTraders * 3) {

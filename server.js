@@ -3144,13 +3144,19 @@ app.get('/api/creator/analytics', requireCreator, async (req, res) => {
       }))
       .sort((a, b) => b.market_count - a.market_count);
 
+    // Real average trader_count across all markets (for insight card accuracy)
+    const avgTraderCount = allMarkets.length > 0
+      ? Math.round(allMarkets.reduce((s, m) => s + (m.trader_count || 0), 0) / allMarkets.length)
+      : 0;
+
     res.json({
       plan,
       market_breakdown: {
         total: allMarkets.length,
         active: activeMarkets.length,
         resolved: resolvedMarkets.length,
-        archived: archivedMarkets.length
+        archived: archivedMarkets.length,
+        avg_trader_count: avgTraderCount,
       },
       top_markets: topMarkets,
       top_markets_by_comments: topMarketsByComments,
