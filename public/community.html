@@ -2362,21 +2362,30 @@ function buildCarousel(activeMarkets) {
 }
 
 function openMarket(id) {
+  // If currently on the feed tab, switch back to markets first
+  const feedPanel = document.getElementById('feedPanel');
+  const onFeedTab  = feedPanel && feedPanel.style.display !== 'none';
+  if (onFeedTab) setViewTab('markets');
+
   const scrollAndHighlight = () => {
+    // Try to open predict modal directly
+    const m = (markets || []).find(x => String(x.id) === String(id));
+    if (m) { openPredict(m, null); return; }
+    // Fallback: scroll + highlight the card
     const card = document.querySelector(`[data-market-id="${id}"]`);
     if (!card) return;
     card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    // Gold pulse highlight so user sees which market was tapped
     card.style.transition = 'box-shadow .15s';
     card.style.boxShadow = '0 0 0 2px var(--gold)';
     setTimeout(() => { card.style.boxShadow = ''; }, 1600);
   };
+
   // Ensure the market is visible (it's always in 'all' filter)
   if (currentFilter !== 'all') {
     setFilter('all');
-    setTimeout(scrollAndHighlight, 80);
+    setTimeout(scrollAndHighlight, onFeedTab ? 120 : 80);
   } else {
-    scrollAndHighlight();
+    onFeedTab ? setTimeout(scrollAndHighlight, 120) : scrollAndHighlight();
   }
 }
 
