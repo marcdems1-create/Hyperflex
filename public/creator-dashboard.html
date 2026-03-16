@@ -7141,7 +7141,6 @@ async function runNewsIntelligenceScan() {
       }
       if (data.markets_created > 0) {
         showToast(`📰 ${data.markets_created} news markets added to your feed`, 'success');
-        loadMarkets(); // refresh dashboard market list
       }
     }
   } catch (err) {
