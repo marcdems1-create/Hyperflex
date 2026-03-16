@@ -2865,6 +2865,7 @@ async function renderReferralSection() {
   const pts      = community?.custom_points_name || 'pts';
   const rewardPts = community?.referral_reward ? Math.round(community.referral_reward / 100) : 100;
   const bonusPts  = community?.welcome_bonus   ? Math.round(community.welcome_bonus   / 100) : 50;
+  const communityName = community?.display_name || slug;
   section.innerHTML = `
     <div class="referral-card">
       <div class="referral-title">🔗 Invite Friends, Earn ${pts}</div>
@@ -2873,6 +2874,10 @@ async function renderReferralSection() {
         <input class="referral-input" id="refLinkInput" type="text" value="${refLink}" readonly/>
         <button class="btn-copy" onclick="copyRefLink()">Copy</button>
       </div>
+      <button onclick="shareRefOnX()" style="margin-top:10px;width:100%;background:#000;border:1px solid #333;color:#fff;padding:9px 14px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="white"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.253 5.622 5.911-5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+        Share invite on 𝕏
+      </button>
       ${statsHTML}
     </div>`;
   section.style.display = 'block';
@@ -2884,6 +2889,15 @@ function copyRefLink() {
   navigator.clipboard.writeText(input.value)
     .then(() => showToast('Referral link copied!', 'success'))
     .catch(() => { input.select(); document.execCommand('copy'); showToast('Referral link copied!', 'success'); });
+}
+
+function shareRefOnX() {
+  const refLink = `${location.origin}/${slug}?ref=${currentUser?.id || ''}`;
+  const communityName = community?.display_name || slug;
+  const pts      = community?.custom_points_name || 'Flex Points';
+  const bonusPts = community?.welcome_bonus ? Math.round(community.welcome_bonus / 100) : 50;
+  const text = `I'm predicting on ${communityName} — join with my link and get ${bonusPts} free ${pts} to start 🎯`;
+  window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(refLink)}`, '_blank', 'noopener');
 }
 
 // ── PREDICT FLOW ──────────────────────────────────────────────

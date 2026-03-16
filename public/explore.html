@@ -908,6 +908,33 @@ function activityCard(a) {
     </a>`;
   }
 
+  if (a.type === 'win') {
+    const outUpper = (a.outcome || a.side || '').toUpperCase();
+    const shareUrl = `/win/${a.market_id}/${a.user_id}`;
+    const ptStr    = a.payout > 0 ? `Won <strong style="color:#22c55e">+${a.payout.toLocaleString()} ${a.pts_name}</strong>` : 'Correct call';
+    return `<a class="activity-card" href="${shareUrl}" target="_blank" rel="noopener">
+      <div class="ac-avatar" style="background:${a.community_color}">${(a.user||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)}</div>
+      <div class="ac-body">
+        <div class="ac-header">
+          <span class="ac-actor">${escHtml(a.user)}</span>
+          <span class="ac-action">called it correctly 🏆</span>
+          <span class="ac-time">${timeAgo(a.ts)}</span>
+        </div>
+        <div class="ac-market-card" style="border-color:rgba(34,197,94,0.2)">
+          <div class="ac-market-inner" style="background:rgba(34,197,94,0.025)">
+            <span class="ac-community-pill" style="background:${a.community_color}22;color:${a.community_color}">${escHtml(a.community_name)}</span>
+            <div class="ac-question">${escHtml(a.market_question || '')}</div>
+          </div>
+        </div>
+        <div class="ac-footer">
+          <span class="ac-tag" style="background:rgba(34,197,94,0.12);color:#22c55e;border:1px solid rgba(34,197,94,0.25)">✓ ${outUpper}</span>
+          <span class="ac-stat">${ptStr} · ${(a.trader_count||0).toLocaleString()} traders</span>
+          <span class="ac-join-link">View win card →</span>
+        </div>
+      </div>
+    </a>`;
+  }
+
   if (a.type === 'market_created') {
     const yesPct = Math.round((a.market_yes_price || 0.5) * 100);
     const noPct  = 100 - yesPct;

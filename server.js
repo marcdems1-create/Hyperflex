@@ -5651,7 +5651,7 @@ app.get('/api/activity', async (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 40, 100);
     const since = req.query.since; // ISO cursor for polling
 
-    const [betsRes, resolutionsRes, newMarketsRes, creatorsRes] = await Promise.all([
+    const [betsRes, resolutionsRes, newMarketsRes, winsRes, creatorsRes] = await Promise.all([
       supabase
         .from('positions')
         .select('id, user_id, side, amount, created_at, market_id, markets(id, question, tenant_slug, yes_price, no_price, trader_count)')
@@ -5674,6 +5674,16 @@ app.get('/api/activity', async (req, res) => {
         .order('created_at', { ascending: false })
         .limit(15),
 
+      // Recent wins: settled positions where user predicted correctly
+      supabase
+        .from('positions')
+        .select('id, user_id, side, amount, potential_payout, created_at, market_id, markets(id, question, tenant_slug, resolved_at, outcome, trader_count)')
+        .eq('settled', true)
+        .eq('won', true)
+        .not('markets', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(20),
+
       supabase
         .from('creator_settings')
         .select('slug, display_name, primary_color, custom_points_name, logo_url'),
@@ -5682,11 +5692,12 @@ app.get('/api/activity', async (req, res) => {
     const communities = {};
     for (const c of (creatorsRes.data || [])) communities[c.slug] = c;
 
-    // Enrich bets with user display names
+    // Enrich bets + wins with user display names
     const rawBets = (betsRes.data || []).filter(b => b.markets?.tenant_slug);
-    const userIds = [...new Set(rawBets.map(b => b.user_id))];
-    const { data: usersData } = userIds.length
-      ? await supabase.from('users').select('id, display_name').in('id', userIds)
+    const rawWins = (winsRes.data || []).filter(w => w.markets?.tenant_slug && w.markets?.resolved_at);
+    const allUserIds = [...new Set([...rawBets.map(b => b.user_id), ...rawWins.map(w => w.user_id)])];
+    const { data: usersData } = allUserIds.length
+      ? await supabase.from('users').select('id, display_name').in('id', allUserIds)
       : { data: [] };
     const userMap = {};
     for (const u of (usersData || [])) userMap[u.id] = u.display_name;
@@ -5750,6 +5761,38 @@ app.get('/api/activity', async (req, res) => {
         community_color: communities[slug]?.primary_color || '#c9920d',
       });
     }
+
+    // Win events — trophy cards for correct predictions
+    // Deduplicate per market: one win card per market (not per user), showing the biggest winner
+    const winsByMarket = {};
+    for (const w of rawWins) {
+      const m    = w.markets;
+      const slug = m?.tenant_slug;
+      if (!slug || !m?.resolved_at) continue;
+      const existing = winsByMarket[w.market_id];
+      const payout = w.potential_payout || 0;
+      if (!existing || payout > (existing.payout || 0)) {
+        winsByMarket[w.market_id] = {
+          type:            'win',
+          id:              `win_${w.market_id}`,
+          ts:              m.resolved_at,
+          user_id:         w.user_id,
+          user:            userMap[w.user_id] || 'Anonymous',
+          side:            (w.side || '').toUpperCase(),
+          amount:          w.amount ? Math.round(w.amount / 100) : 0,
+          payout:          Math.round(payout / 100),
+          pts_name:        communities[slug]?.custom_points_name || 'Flex Points',
+          market_id:       w.market_id,
+          market_question: m.question,
+          outcome:         m.outcome,
+          trader_count:    m.trader_count || 0,
+          creator_slug:    slug,
+          community_name:  communities[slug]?.display_name || slug,
+          community_color: communities[slug]?.primary_color || '#c9920d',
+        };
+      }
+    }
+    activities.push(...Object.values(winsByMarket));
 
     // Sort by ts desc and deduplicate
     activities.sort((a, b) => new Date(b.ts) - new Date(a.ts));
