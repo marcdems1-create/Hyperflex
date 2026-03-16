@@ -4804,7 +4804,7 @@ app.get('/api/community/:slug', async (req, res) => {
     // Match on any of the three fields that market-creation routes populate
     const { data: rawMarkets, error: marketsErr } = await supabase
       .from('markets')
-      .select('id, question, category, expiry_date, yes_price, no_price, trader_count, resolved, outcome, resolved_at, tweet_text, tweet_author, source_tweet_url')
+      .select('id, question, category, expiry_date, yes_price, no_price, trader_count, resolved, outcome, resolved_at, resolution_note, resolution_source, resolution_sources, tweet_text, tweet_author, source_tweet_url')
       .or(`tenant_slug.eq.${slug},creator_id.eq.${settings.creator_id}`)
       .neq('is_public', false)   // include true AND null (legacy markets without is_public set)
       .order('created_at', { ascending: false });
@@ -4953,8 +4953,8 @@ app.post('/api/community/:slug/suggest', async (req, res) => {
     if (count >= 3) return res.status(429).json({ error: 'You have 3 pending suggestions — wait for the creator to review them first.' });
 
     // Get user display name
-    const { data: profile } = await supabase.from('users').select('display_name, username').eq('id', userId).maybeSingle();
-    const user_name = profile?.display_name || profile?.username || 'Anonymous';
+    const { data: profile } = await supabase.from('users').select('display_name, username, email').eq('id', userId).maybeSingle();
+    const user_name = profile?.display_name || profile?.username || (profile?.email ? profile.email.split('@')[0] : 'Anonymous');
 
     const { data: suggestion, error } = await supabase.from('market_suggestions').insert({
       creator_slug: slug, user_id: userId, user_name,
@@ -5087,8 +5087,8 @@ app.post('/api/community/:slug/markets/:marketId/comments', async (req, res) => 
     const { body } = req.body;
     if (!body || body.trim().length < 1) return res.status(400).json({ error: 'Comment cannot be empty.' });
     if (body.trim().length > 280) return res.status(400).json({ error: 'Comment too long (max 280 chars).' });
-    const { data: profile } = await supabase.from('users').select('display_name, username').eq('id', userId).maybeSingle();
-    const user_name = profile?.display_name || profile?.username || 'Anonymous';
+    const { data: profile } = await supabase.from('users').select('display_name, username, email').eq('id', userId).maybeSingle();
+    const user_name = profile?.display_name || profile?.username || (profile?.email ? profile.email.split('@')[0] : 'Anonymous');
     const { data, error } = await supabase.from('market_comments')
       .insert({ market_id: req.params.marketId, creator_slug: req.params.slug, user_id: userId, user_name, body: body.trim() })
       .select().single();
