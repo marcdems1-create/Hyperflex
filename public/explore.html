@@ -1064,6 +1064,33 @@ function activityCard(a) {
     </a>`;
   }
 
+  if (a.type === 'markets_burst') {
+    const burstUrl = `/${a.creator_slug}`;
+    const preview  = (a.markets || []).slice(0, 3);
+    const extra    = (a.count || 0) - preview.length;
+    return `<a class="activity-card" href="${burstUrl}">
+      <div class="ac-avatar ac-avatar-icon" style="font-size:22px">✨</div>
+      <div class="ac-body">
+        <div class="ac-header">
+          <span class="ac-actor" style="color:${color}">${escHtml(a.community_name)}</span>
+          <span class="ac-action">posted ${a.count} new markets</span>
+          <span class="ac-time">${timeAgo(a.ts)}</span>
+        </div>
+        <div class="ac-market-card">
+          <div class="ac-market-inner">
+            <span class="ac-community-pill" style="background:${color}22;color:${color}">${escHtml(a.community_name)}</span>
+            ${preview.map(m => `<div style="font-size:13px;color:var(--text);padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05);line-height:1.4">🎯 ${escHtml(m.question || '')}</div>`).join('')}
+            ${extra > 0 ? `<div style="font-size:12px;color:var(--muted);padding-top:6px">+${extra} more market${extra > 1 ? 's' : ''}</div>` : ''}
+          </div>
+        </div>
+        <div class="ac-footer">
+          <span class="ac-tag ac-tag-new">🎯 ${a.count} New</span>
+          <span class="ac-join-link">Predict now →</span>
+        </div>
+      </div>
+    </a>`;
+  }
+
   if (a.type === 'reward_unlock') {
     const profileUrl = a.user_id ? `/m/${a.user_id}` : communityUrl;
     const threshStr  = (a.reward_threshold || 0).toLocaleString();

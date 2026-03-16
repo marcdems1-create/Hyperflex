@@ -6236,6 +6236,52 @@ app.get('/api/activity', async (req, res) => {
       });
     }
 
+    // Collapse market_created bursts: same creator within 5 minutes → one card
+    const BURST_WINDOW_MS = 5 * 60 * 1000;
+    const mktEvents   = activities.filter(a => a.type === 'market_created');
+    const otherEvents = activities.filter(a => a.type !== 'market_created');
+    // Sort by creator then time asc so we can walk windows
+    mktEvents.sort((a, b) => {
+      if (a.creator_slug < b.creator_slug) return -1;
+      if (a.creator_slug > b.creator_slug) return  1;
+      return new Date(a.ts) - new Date(b.ts);
+    });
+    const processedMarkets = [];
+    let mi = 0;
+    while (mi < mktEvents.length) {
+      const cur   = mktEvents[mi];
+      const group = [cur];
+      let   mj    = mi + 1;
+      while (
+        mj < mktEvents.length &&
+        mktEvents[mj].creator_slug === cur.creator_slug &&
+        Math.abs(new Date(mktEvents[mj].ts) - new Date(cur.ts)) <= BURST_WINDOW_MS
+      ) {
+        group.push(mktEvents[mj]);
+        mj++;
+      }
+      if (group.length >= 2) {
+        // Use the latest timestamp in the group as the event time
+        const latestTs = group.reduce((max, e) => new Date(e.ts) > new Date(max) ? e.ts : max, group[0].ts);
+        processedMarkets.push({
+          type:           'markets_burst',
+          id:             `burst_${cur.creator_slug}_${new Date(latestTs).getTime()}`,
+          ts:             latestTs,
+          count:          group.length,
+          markets:        group.map(e => ({ id: e.market_id, question: e.market_question, category: e.category })),
+          creator_slug:   cur.creator_slug,
+          community_name: cur.community_name,
+          community_color: cur.community_color,
+        });
+      } else {
+        processedMarkets.push(cur);
+      }
+      mi = mj;
+    }
+    // Rebuild activities with burst-collapsed markets
+    activities.length = 0;
+    activities.push(...otherEvents, ...processedMarkets);
+
     // Sort by ts desc and deduplicate
     activities.sort((a, b) => new Date(b.ts) - new Date(a.ts));
     const seen = new Set();
