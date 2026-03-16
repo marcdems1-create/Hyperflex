@@ -2583,7 +2583,7 @@ app.get('/api/creator/analytics', requireCreator, async (req, res) => {
     // Referral stats
     let referralStats = { total_referrals: 0, total_pts_distributed: 0, this_week: 0 };
     if (slug) {
-      const weekStart = getWeekStart(); // already returns ISO string
+      const weekStart = getWeekStart();
       const { data: referrals } = await supabase
         .from('referral_history')
         .select('referrer_reward, welcome_bonus, created_at')
@@ -2598,6 +2598,96 @@ app.get('/api/creator/analytics', requireCreator, async (req, res) => {
         };
       }
     }
+
+    // ── Engagement Rate ──────────────────────────────────────
+    // % of community members who have placed at least one bet (real engagement, not vanity metric)
+    let engagementRate = 0;
+    let activeMembers  = 0;
+    let newMembers7d   = 0;
+    let memberGrowth   = []; // daily new members for last 14 days
+    if (slug && balanceStats.member_count > 0 && marketIds.length > 0) {
+      // Unique bettors ever
+      const { data: allBettors } = await supabase
+        .from('positions')
+        .select('user_id')
+        .in('market_id', marketIds);
+      const uniqueBettors = new Set((allBettors || []).map(p => p.user_id)).size;
+      activeMembers  = uniqueBettors;
+      engagementRate = balanceStats.member_count > 0
+        ? Math.round((uniqueBettors / balanceStats.member_count) * 100)
+        : 0;
+    }
+
+    // New members last 7 days (community_balances created_at)
+    if (slug) {
+      const { count: newCount } = await supabase
+        .from('community_balances')
+        .select('user_id', { count: 'exact', head: true })
+        .eq('creator_slug', slug)
+        .gte('created_at', sevenDaysAgo.toISOString());
+      newMembers7d = newCount || 0;
+
+      // Daily new member growth — last 14 days
+      const fourteenDaysAgoStr = fourteenDaysAgo.toISOString();
+      const { data: growthRows } = await supabase
+        .from('community_balances')
+        .select('created_at')
+        .eq('creator_slug', slug)
+        .gte('created_at', fourteenDaysAgoStr);
+      const growthBuckets = {};
+      for (let i = 0; i < 14; i++) {
+        const d = new Date(); d.setDate(d.getDate() - (13 - i));
+        growthBuckets[d.toISOString().slice(0, 10)] = 0;
+      }
+      (growthRows || []).forEach(r => {
+        const k = r.created_at.slice(0, 10);
+        if (k in growthBuckets) growthBuckets[k]++;
+      });
+      memberGrowth = Object.entries(growthBuckets).map(([date, count]) => ({ date, count }));
+    }
+
+    // ── Category Breakdown ───────────────────────────────────
+    // Real bet volume and count per category — tells creator what topics their audience actually cares about
+    let categoryBreakdown = [];
+    if (marketIds.length > 0) {
+      const { data: catPositions } = await supabase
+        .from('positions')
+        .select('market_id, amount')
+        .in('market_id', marketIds);
+
+      const catMap = Object.fromEntries(allMarkets.map(m => [m.id, (m.category || 'other').toLowerCase()]));
+      const catStats = {};
+      (catPositions || []).forEach(p => {
+        const cat = catMap[p.market_id] || 'other';
+        if (!catStats[cat]) catStats[cat] = { bets: 0, volume: 0 };
+        catStats[cat].bets++;
+        catStats[cat].volume += p.amount || 0;
+      });
+      categoryBreakdown = Object.entries(catStats)
+        .map(([category, stats]) => ({ category, bets: stats.bets, volume: stats.volume }))
+        .sort((a, b) => b.bets - a.bets)
+        .slice(0, 8);
+    }
+
+    // ── Sentiment Map ────────────────────────────────────────
+    // Per-category: what does your audience actually believe?
+    // Aggregate yes_price (weighted by trader_count) per category for active markets
+    const sentimentMap = {};
+    activeMarkets.forEach(m => {
+      const cat = (m.category || 'other').toLowerCase();
+      if (!sentimentMap[cat]) sentimentMap[cat] = { sumYes: 0, count: 0, volume: 0 };
+      const w = m.trader_count || 1;
+      sentimentMap[cat].sumYes += (m.yes_price || 0.5) * w;
+      sentimentMap[cat].count  += w;
+      sentimentMap[cat].volume += m.volume || 0;
+    });
+    const sentimentByCategory = Object.entries(sentimentMap)
+      .map(([category, s]) => ({
+        category,
+        avg_yes_pct: Math.round((s.sumYes / s.count) * 100),
+        market_count: activeMarkets.filter(m => (m.category || 'other').toLowerCase() === category).length
+      }))
+      .sort((a, b) => b.market_count - a.market_count);
 
     res.json({
       plan,
@@ -2616,7 +2706,14 @@ app.get('/api/creator/analytics', requireCreator, async (req, res) => {
       avg_bet_size: avgBetSize,
       balance_stats: balanceStats,
       refill_stats: refillStats,
-      referral_stats: referralStats
+      referral_stats: referralStats,
+      // New real-data fields
+      engagement_rate: engagementRate,
+      active_members: activeMembers,
+      new_members_7d: newMembers7d,
+      member_growth: memberGrowth,
+      category_breakdown: categoryBreakdown,
+      sentiment_by_category: sentimentByCategory
     });
 
   } catch (err) {
@@ -2626,7 +2723,108 @@ app.get('/api/creator/analytics', requireCreator, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
-// 4b. UPLOAD BRAND ASSET (logo or banner)
+// 4b. AI INSIGHTS
+// POST /api/creator/insights
+// Auth: Bearer token required
+// Uses analytics data to generate 3-5 actionable growth recommendations via Claude
+// ════════════════════════════════════════════════════════════
+app.post('/api/creator/insights', requireCreator, async (req, res) => {
+  try {
+    const { analytics } = req.body;
+    if (!analytics) return res.status(400).json({ error: 'analytics data required' });
+
+    if (!anthropic) return res.status(503).json({ error: 'AI not configured' });
+
+    const {
+      market_breakdown = {},
+      engagement_rate = 0,
+      active_members = 0,
+      new_members_7d = 0,
+      trades_7d = 0,
+      trades_prior_7d = 0,
+      weekly_active_traders = 0,
+      avg_bet_size = 0,
+      balance_stats = {},
+      category_breakdown = [],
+      sentiment_by_category = [],
+      top_markets = [],
+      top_markets_by_comments = [],
+      referral_stats = {},
+      plan = 'free'
+    } = analytics;
+
+    const trend = trades_prior_7d > 0
+      ? `${trades_7d > trades_prior_7d ? '+' : ''}${Math.round(((trades_7d - trades_prior_7d) / trades_prior_7d) * 100)}% vs prior week`
+      : 'first week of data';
+
+    const topCats = category_breakdown.slice(0, 3).map(c =>
+      `${c.category} (${c.bets} bets, ${Math.round(c.volume / 100)} pts volume)`
+    ).join(', ');
+
+    const sentimentLines = sentiment_by_category.slice(0, 4).map(s =>
+      `${s.category}: ${s.avg_yes_pct}% YES avg across ${s.market_count} markets`
+    ).join('; ');
+
+    const topMkt = top_markets[0];
+    const topMktLine = topMkt
+      ? `Most-traded market: "${topMkt.title}" with ${topMkt.trader_count} traders`
+      : 'No markets yet';
+
+    const prompt = `You are a growth advisor for a creator running a prediction market community on Hyperflex.
+Analyze these real statistics and give exactly 4 specific, actionable recommendations. Each one must reference the actual numbers.
+
+COMMUNITY STATS:
+- Plan: ${plan}
+- Total members: ${balance_stats.member_count || 0} (joined community)
+- Active bettors: ${active_members} (${engagement_rate}% engagement rate)
+- New members this week: ${new_members_7d}
+- Weekly active traders: ${weekly_active_traders}
+- Trades this week: ${trades_7d} (${trend})
+- Avg bet size: ${Math.round(avg_bet_size / 100)} Flex Points
+- Active markets: ${market_breakdown.active || 0}, Resolved: ${market_breakdown.resolved || 0}
+- Top categories by bets: ${topCats || 'none yet'}
+- Audience sentiment: ${sentimentLines || 'no active markets'}
+- ${topMktLine}
+- Referrals this week: ${referral_stats.this_week || 0}
+- Most-discussed market: ${top_markets_by_comments[0]?.title || 'none'} (${top_markets_by_comments[0]?.comment_count || 0} comments)
+
+Return JSON array of exactly 4 insight objects. Each object must have:
+- "title": 5-8 words, punchy
+- "body": 2 sentences. First sentence = specific observation from the data. Second sentence = concrete action they can take today.
+- "metric": the key stat this insight is based on (short string, e.g. "42% engagement rate")
+- "type": one of "growth", "engagement", "content", "retention"
+- "priority": "high", "medium", or "low" based on impact
+
+Rules: No generic advice. Every insight must cite a specific number from the data. Be direct. If engagement is low, say it's low. If a category dominates, say which one.
+
+Return only valid JSON array, no markdown, no explanation.`;
+
+    const message = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: prompt }]
+    });
+
+    const raw = message.content[0].text.trim();
+    // Strip markdown code fences if present
+    const clean = raw.replace(/^```json?\s*/i, '').replace(/```\s*$/, '').trim();
+    let insights;
+    try {
+      insights = JSON.parse(clean);
+    } catch (e) {
+      console.error('[insights] JSON parse error:', e.message, '\nRaw:', raw.slice(0, 300));
+      return res.status(500).json({ error: 'AI returned invalid JSON' });
+    }
+
+    res.json({ insights });
+  } catch (err) {
+    console.error('[insights] error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+// 4c. UPLOAD BRAND ASSET (logo or banner)
 // POST /api/creator/upload-asset
 // Auth: Bearer token required
 // Body: { type: 'logo'|'banner', data: '<base64>', mime: 'image/png' }

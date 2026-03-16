@@ -1410,6 +1410,14 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
     <div class="reward-hint-pct" id="rewardHintPct">0%</div>
   </div>
 
+  <!-- Community Pulse — real-time category sentiment from active markets -->
+  <div id="communityPulse" style="display:none;margin-bottom:16px">
+    <div id="communityPulseBar" style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;overflow-x:auto;scrollbar-width:none">
+      <span style="font-size:10px;font-family:var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.06em;flex-shrink:0;margin-right:4px">Pulse</span>
+      <div id="communityPulsePills" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+    </div>
+  </div>
+
   <!-- Top-level view tabs: Markets / From the Feed -->
   <div id="viewTabRow" style="display:none;gap:6px;margin-bottom:14px">
     <button id="vtMarkets" class="view-tab active" onclick="setViewTab('markets')">📊 Markets</button>
@@ -1884,6 +1892,9 @@ function renderPage(data) {
   if (c.suggestions_enabled) {
     document.getElementById('suggestMarketRow').style.display = 'block';
   }
+
+  // Community Pulse — category sentiment bar
+  renderCommunityPulse(markets);
 
   // Tweet feed — show cards for markets sourced from tweets
   renderTweetFeed(markets);
@@ -3005,6 +3016,55 @@ async function postComment(marketId) {
     input.value = '';
     await loadComments(marketId);
   } catch { showToast('Network error.', 'error'); }
+}
+
+// ── COMMUNITY PULSE ────────────────────────────────────────────
+// Shows real-time category sentiment (weighted avg yes_price) from active markets
+function renderCommunityPulse(markets) {
+  const pulseEl   = document.getElementById('communityPulse');
+  const pillsEl   = document.getElementById('communityPulsePills');
+  if (!pulseEl || !pillsEl) return;
+
+  const activeMarkets = (markets || []).filter(m => !m.resolved && !m.archived);
+  if (activeMarkets.length < 2) { pulseEl.style.display = 'none'; return; }
+
+  // Compute weighted avg yes_price per category
+  const sentMap = {};
+  activeMarkets.forEach(m => {
+    const cat = (m.category || 'other').toLowerCase();
+    if (!sentMap[cat]) sentMap[cat] = { sumYes: 0, weight: 0 };
+    const w = (m.trader_count || 0) + 1; // +1 so zero-trade markets still count
+    sentMap[cat].sumYes += (m.yes_price || 0.5) * w;
+    sentMap[cat].weight += w;
+  });
+
+  const pills = Object.entries(sentMap)
+    .map(([cat, s]) => ({
+      cat,
+      pct: Math.round((s.sumYes / s.weight) * 100),
+      weight: s.weight
+    }))
+    .filter(p => p.weight > 0)
+    .sort((a, b) => b.weight - a.weight)
+    .slice(0, 6);
+
+  if (!pills.length) { pulseEl.style.display = 'none'; return; }
+
+  const CAT_COLORS = { crypto:'#f59e0b', sports:'#60a5fa', finance:'#38bdf8', politics:'#c084fc', entertainment:'#fb7185', gaming:'#34d399', other:'#94a3b8' };
+
+  pillsEl.innerHTML = pills.map(p => {
+    const isYes = p.pct >= 50;
+    const color = p.pct >= 65 ? '#4ade80' : p.pct >= 50 ? '#86efac' : p.pct >= 35 ? '#fca5a5' : '#f87171';
+    const catColor = CAT_COLORS[p.cat] || '#94a3b8';
+    const arrow = p.pct >= 65 ? '↑' : p.pct < 35 ? '↓' : '→';
+    return `<span style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:99px;font-size:11px;white-space:nowrap">
+      <span style="width:7px;height:7px;border-radius:50%;background:${catColor};flex-shrink:0"></span>
+      <span style="color:var(--text);text-transform:capitalize">${p.cat}</span>
+      <span style="color:${color};font-family:var(--mono);font-weight:700">${arrow}${p.pct}% YES</span>
+    </span>`;
+  }).join('');
+
+  pulseEl.style.display = '';
 }
 
 // ── VIEW TAB SWITCHER ───────────────────────────────────────────
