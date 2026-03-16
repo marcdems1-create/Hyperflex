@@ -26,6 +26,11 @@
 | `public/community.html` | Member-facing page at `/:slug` |
 | `public/creator-terms.html` | Terms of Service |
 | `public/admin.html` | Internal ops dashboard at `/admin` |
+| `public/explore.html` | Global discover/explore page with Twitter-like activity feed |
+| `public/profile.html` | Creator public profile at `/u/:slug` |
+| `public/member.html` | Member public profile at `/m/:userId` |
+| `public/win-card.html` | Shareable win card page at `/win-card.html?m=&u=` |
+| `public/nominate.html` | "Nominate your creator" fan-facing page at `/nominate` |
 | `server.js` | Express backend — all API routes, Claude scanner, settlement cron |
 | `index.html` | ⚠️ OLD React trading app at project root — NOT served, ignore |
 | `HYPERFLEX_Brief.md` | Full detailed brief — read this for deep context |
@@ -33,7 +38,7 @@
 
 ---
 
-## Current State (last updated March 15, 2026 — session 2)
+## Current State (last updated March 16, 2026 — session 3)
 
 - All features committed locally. Latest commit: `16822d7` — needs push
 - **Stripe payments live** — Pro ($29/mo) + Premium ($99/mo) checkout + billing portal
@@ -109,8 +114,7 @@
   - Email notifications: `sendResolutionEmails()` with branded HTML email; fires on manual + cron resolution
   - `supabase_migration_announcements_comments.sql`: new tables + resolution_note column (commit `81b5c65`)
   - Member market suggestion queue (commit `e06ecc2`)
-- **Economy Phase 3** (not built):
-  - Streak broken toast when user loses after a streak
+- **Economy Phase 3** — streak broken toast ✅ built (March 16)
 - **This session (March 15)** — committed `068b03c`, needs push:
   - Tweet → Market feature: Tweet tab in AI Scanner modal (creator-dashboard.html)
     - Paste tweet URL + author + text → generates 1-3 focused markets via AI
@@ -123,6 +127,16 @@
     - Removed non-existent `resolution_outcome` column from SELECT (was silently nulling all data)
     - Fixed `is_public` filter to `.neq('is_public', false)` (was dropping legacy NULL rows)
     - Added tweet fields to SELECT
+- **This session (March 16)** — committed `64b92c3`, needs push:
+  - **Twitter-like activity feed** on explore.html: new ⚡ Activity tab replaces Live Feed; Twitter-style cards for bets/resolutions/market creations; live polling every 20s with "N new activities" banner; `/api/activity` endpoint
+  - **Member public profiles** at `/m/:userId` — stats (win rate, streak, correct calls), recent wins, community chips; leaderboard rows now clickable → member profile
+  - **Nominate your creator** page at `/nominate` — fan form with creator name/URL/message, sends admin email; "Nominate Your Creator" CTA in explore sidebar
+  - **Weekly digest email** — `sendWeeklyDigests()` sends branded HTML with hot markets + top 3 leaderboard to all community members; cron: Mon 9am UTC
+  - **Streak broken toast** — `checkStreakBroken()` in community.html uses localStorage to detect streak collapse ≥3→0, shows motivational toast
+  - **Win cards fully wired** (commit `93428a4`): `openWinCard()` now takes marketId + userId, `shareWinOnX()` uses `/win/:marketId/:userId` URL, Copy link button added
+  - **Creator public profiles** at `/u/:slug` — `public/profile.html`
+  - `'m'` + `'nominate'` + `'win'` + `'u'` added to RESERVED_SLUGS
+
 - **Audience Intelligence + AI Recommendations** (commit `16822d7`) — needs push:
   - `POST /api/creator/insights` — sends real analytics to Claude Haiku, returns 4 data-specific growth recommendations with type/priority/metric
   - Creator dashboard Analytics tab: Audience Intelligence section (engagement rate ring gauge, 14d member growth chart, category breakdown bars, sentiment by category)
