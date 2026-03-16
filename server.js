@@ -5653,8 +5653,8 @@ app.get('/api/user/dashboard', requireAuth, async (req, res) => {
   try {
     const userId = req.user.id;
 
-    // Parallel: user profile, all community balances, all positions
-    const [userRes, balancesRes, positionsRes] = await Promise.all([
+    // Parallel: user profile, all community balances, all positions, creator check
+    const [userRes, balancesRes, positionsRes, creatorRes] = await Promise.all([
       supabase.from('users')
         .select('id, display_name, email, created_at')
         .eq('id', userId)
@@ -5667,6 +5667,10 @@ app.get('/api/user/dashboard', requireAuth, async (req, res) => {
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(200),
+      supabase.from('creator_settings')
+        .select('slug')
+        .eq('creator_id', userId)
+        .maybeSingle(),
     ]);
 
     const user = userRes.data;
@@ -5777,6 +5781,8 @@ app.get('/api/user/dashboard', requireAuth, async (req, res) => {
         display_name: user.display_name || 'Anonymous',
         email:        user.email,
         member_since: user.created_at,
+        is_creator:   !!creatorRes.data,
+        creator_slug: creatorRes.data?.slug || null,
       },
       stats: {
         total_predictions: positions.length,

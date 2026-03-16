@@ -270,6 +270,9 @@ html,body { background:var(--paper); color:var(--text); font-family:var(--sans);
             <input id="editNameInput" class="edit-name-input" type="text" maxlength="30" placeholder="Your username…" onkeydown="if(event.key==='Enter')saveName()"/>
           </div>
           <button class="btn-save" onclick="saveName()">Save name</button>
+          <a id="creatorDashBtn" href="/my" style="display:none;margin-top:8px;text-decoration:none">
+            <button class="btn-save" style="width:100%;background:rgba(201,146,13,0.12);border:1px solid rgba(201,146,13,0.4);color:var(--gold);font-weight:700">🎛 Creator Dashboard →</button>
+          </a>
           <button class="btn-save" onclick="toggleChangePassword()" id="changePwBtn" style="margin-top:8px;background:transparent;border:1px solid var(--border);color:var(--dim)">🔒 Change password</button>
           <div id="changePwForm" style="display:none;margin-top:14px;text-align:left">
             <div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Change Password</div>
@@ -507,6 +510,13 @@ function renderAll() {
   }
   document.getElementById('editNameInput').value = user.display_name;
   document.getElementById('publicProfileLink').href = `/m/${user.id}`;
+
+  // Show creator dashboard button only if this user also has a creator account
+  if (user.is_creator) {
+    const btn = document.getElementById('creatorDashBtn');
+    btn.style.display = 'block';
+    btn.href = '/my';
+  }
 
   // Stats bar
   document.getElementById('statWinRate').textContent     = stats.win_rate + '%';
