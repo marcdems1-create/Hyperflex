@@ -1851,20 +1851,18 @@ async function runNewsIntelligenceScanner(targetSlug = null) {
   const MARKET_SEED = 10000;
 
   for (const creator of creators) {
-    // Fetch recent questions to avoid duplicates
-    const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+    // Fetch ALL existing questions for this creator (no time limit) to prevent any duplicates
     const { data: recentMkts } = await supabase.from('markets')
       .select('question')
-      .eq('creator_id', creator.creator_id)
-      .gte('created_at', sevenDaysAgo);
-    const recentQuestions = new Set((recentMkts || []).map(m => m.question.toLowerCase().slice(0, 60)));
+      .eq('creator_id', creator.creator_id);
+    const recentQuestions = new Set((recentMkts || []).map(m => m.question.toLowerCase().trim()));
 
     let creatorCreated = 0;
     for (const n of narratives) {
       for (const mkt of (n.markets || [])) {
         if (!mkt.question || typeof mkt.question !== 'string') continue;
-        // Duplicate check
-        const qKey = mkt.question.toLowerCase().slice(0, 60);
+        // Duplicate check — full question match
+        const qKey = mkt.question.toLowerCase().trim();
         if (recentQuestions.has(qKey)) continue;
         recentQuestions.add(qKey);
 
