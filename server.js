@@ -4172,6 +4172,46 @@ app.get('/api/community/:slug', async (req, res) => {
       .neq('is_public', false)   // include true AND null (legacy markets without is_public set)
       .order('created_at', { ascending: false });
     if (marketsErr) console.error('[community markets query]', marketsErr.message);
+
+    // Real unique member count — distinct users who have a community_balances row for this slug
+    const { count: memberCount } = await supabase
+      .from('community_balances')
+      .select('user_id', { count: 'exact', head: true })
+      .eq('creator_slug', slug);
+
+    // Recent activity feed — last 20 real bets across this community's markets
+    const marketIds = (rawMarkets || []).map(m => m.id);
+    let recentActivity = [];
+    if (marketIds.length > 0) {
+      const { data: recentPositions } = await supabase
+        .from('positions')
+        .select('user_id, market_id, side, amount, created_at')
+        .in('market_id', marketIds)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (recentPositions && recentPositions.length > 0) {
+        // Fetch display names for unique users (anonymise if null)
+        const uniqueUserIds = [...new Set(recentPositions.map(p => p.user_id))];
+        const { data: userRows } = await supabase
+          .from('users')
+          .select('id, display_name')
+          .in('id', uniqueUserIds);
+        const userMap = Object.fromEntries((userRows || []).map(u => [u.id, u.display_name || 'Someone']));
+
+        // Build market question lookup
+        const mktMap = Object.fromEntries((rawMarkets || []).map(m => [m.id, m.question]));
+
+        recentActivity = recentPositions.map(p => ({
+          name:       userMap[p.user_id] || 'Someone',
+          side:       p.side,
+          amount:     Math.round((p.amount || 0) / 100),
+          question:   mktMap[p.market_id] || '',
+          market_id:  p.market_id,
+          created_at: p.created_at,
+        }));
+      }
+    }
     // Normalize outcome → resolution_outcome so community.html doesn't need changes
     const markets = (rawMarkets || []).map(m => ({ ...m, resolution_outcome: m.outcome || null }));
 
@@ -4208,7 +4248,9 @@ app.get('/api/community/:slug', async (req, res) => {
         challenge_end_date:   settings.challenge_end_date   || null,
         suggestions_enabled:  settings.suggestions_enabled  || false
       },
+      member_count: memberCount || 0,
       markets: markets || [],
+      recent_activity: recentActivity,
       rewards: await supabase
         .from('creator_rewards')
         .select('id, threshold, title, description')
