@@ -5523,8 +5523,183 @@ const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
   'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u', 'win',
-  'm', 'nominate'
+  'm', 'nominate', 'my'
 ]);
+
+// GET /my — private member dashboard
+app.get('/my', (req, res) => res.sendFile(path.join(__dirname, 'public', 'user-dashboard.html')));
+
+// ════════════════════════════════════════════════════════════
+// GET /api/user/dashboard — authenticated member dashboard data
+// Returns: communities joined, open predictions, history, stats, profile
+// ════════════════════════════════════════════════════════════
+app.get('/api/user/dashboard', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Parallel: user profile, all community balances, all positions
+    const [userRes, balancesRes, positionsRes] = await Promise.all([
+      supabase.from('users')
+        .select('id, display_name, email, created_at')
+        .eq('id', userId)
+        .maybeSingle(),
+      supabase.from('community_balances')
+        .select('creator_slug, balance')
+        .eq('user_id', userId),
+      supabase.from('positions')
+        .select('id, side, amount, potential_payout, won, settled, created_at, market_id, markets(id, question, tenant_slug, resolved, resolved_at, expiry_date, yes_price, no_price)')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(200),
+    ]);
+
+    const user = userRes.data;
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const balances = balancesRes.data || [];
+    const positions = positionsRes.data || [];
+
+    // Get all community slugs (from balances + positions)
+    const balanceSlugs = balances.map(b => b.creator_slug);
+    const positionSlugs = [...new Set(positions.map(p => p.markets?.tenant_slug).filter(Boolean))];
+    const allSlugs = [...new Set([...balanceSlugs, ...positionSlugs])];
+
+    // Fetch community info for all slugs
+    const { data: communityRows } = allSlugs.length
+      ? await supabase.from('creator_settings')
+          .select('slug, display_name, primary_color, logo_url, custom_points_name, is_active')
+          .in('slug', allSlugs.slice(0, 30))
+      : { data: [] };
+
+    const communityMap = {};
+    for (const c of (communityRows || [])) communityMap[c.slug] = c;
+
+    // For each community the user has a balance in, get their rank
+    const communityStats = await Promise.all(
+      balances.map(async b => {
+        const c = communityMap[b.creator_slug] || { slug: b.creator_slug, display_name: b.creator_slug, primary_color: '#c9920d' };
+        // Get rank: count users with higher balance in same community
+        const { count } = await supabase.from('community_balances')
+          .select('*', { count: 'exact', head: true })
+          .eq('creator_slug', b.creator_slug)
+          .gt('balance', b.balance);
+        const rank = (count || 0) + 1;
+        // Count open positions in this community
+        const openCount = positions.filter(p =>
+          p.markets?.tenant_slug === b.creator_slug && !p.settled
+        ).length;
+        return {
+          slug:              b.creator_slug,
+          display_name:      c.display_name || b.creator_slug,
+          primary_color:     c.primary_color || '#c9920d',
+          logo_url:          c.logo_url || null,
+          custom_points_name: c.custom_points_name || 'Flex Points',
+          balance:           Math.floor(b.balance / 100),
+          rank,
+          open_positions:    openCount,
+        };
+      })
+    );
+
+    // Separate open vs settled positions
+    const open = positions
+      .filter(p => !p.settled && p.markets && !p.markets.resolved)
+      .slice(0, 50)
+      .map(p => ({
+        id:             p.id,
+        market_id:      p.market_id,
+        question:       p.markets?.question,
+        side:           p.side,
+        amount:         Math.floor((p.amount || 0) / 100),
+        potential_payout: Math.floor((p.potential_payout || 0) / 100),
+        expiry_date:    p.markets?.expiry_date,
+        yes_price:      p.markets?.yes_price,
+        no_price:       p.markets?.no_price,
+        community_slug: p.markets?.tenant_slug,
+        community_name: communityMap[p.markets?.tenant_slug]?.display_name || p.markets?.tenant_slug,
+        community_color: communityMap[p.markets?.tenant_slug]?.primary_color || '#c9920d',
+        created_at:     p.created_at,
+      }));
+
+    const settled = positions
+      .filter(p => p.settled)
+      .slice(0, 100)
+      .map(p => ({
+        id:             p.id,
+        market_id:      p.market_id,
+        question:       p.markets?.question,
+        side:           p.side,
+        amount:         Math.floor((p.amount || 0) / 100),
+        payout:         p.won ? Math.floor((p.potential_payout || 0) / 100) : 0,
+        won:            p.won,
+        resolved_at:    p.markets?.resolved_at,
+        community_slug: p.markets?.tenant_slug,
+        community_name: communityMap[p.markets?.tenant_slug]?.display_name || p.markets?.tenant_slug,
+        community_color: communityMap[p.markets?.tenant_slug]?.primary_color || '#c9920d',
+        created_at:     p.created_at,
+      }));
+
+    // Aggregate stats
+    const wins      = settled.filter(p => p.won);
+    const losses    = settled.filter(p => !p.won);
+    const winRate   = settled.length > 0 ? Math.round((wins.length / settled.length) * 100) : 0;
+    const totalWon  = wins.reduce((s, p) => s + (p.payout || 0), 0);
+    const totalBet  = positions.reduce((s, p) => s + Math.floor((p.amount || 0) / 100), 0);
+    const biggestWin = wins.reduce((max, p) => Math.max(max, p.payout || 0), 0);
+
+    // Current streak (consecutive wins from most recent settled)
+    let streak = 0;
+    for (const p of settled) { if (p.won) streak++; else break; }
+
+    // Net PnL
+    const totalPayout = wins.reduce((s, p) => s + (p.payout || 0), 0);
+    const netPnl = totalPayout - totalBet;
+
+    res.json({
+      user: {
+        id:           user.id,
+        display_name: user.display_name || 'Anonymous',
+        email:        user.email,
+        member_since: user.created_at,
+      },
+      stats: {
+        total_predictions: positions.length,
+        open_predictions:  open.length,
+        settled_predictions: settled.length,
+        wins:       wins.length,
+        losses:     losses.length,
+        win_rate:   winRate,
+        streak,
+        biggest_win: biggestWin,
+        total_bet:  totalBet,
+        total_won:  totalWon,
+        net_pnl:    netPnl,
+        communities_joined: communityStats.length,
+      },
+      communities: communityStats.sort((a, b) => b.balance - a.balance),
+      open,
+      history: settled,
+    });
+  } catch (err) {
+    console.error('[user/dashboard]', err.message);
+    res.status(500).json({ error: 'Failed to load dashboard' });
+  }
+});
+
+// DELETE /api/user/community/:slug — leave a community (removes balance record)
+app.delete('/api/user/community/:slug', requireAuth, async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const { error } = await supabase.from('community_balances')
+      .delete()
+      .eq('user_id', req.user.id)
+      .eq('creator_slug', slug);
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // GET /u/:slug — public creator profile page
 app.get('/u/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'profile.html')));

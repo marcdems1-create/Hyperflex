@@ -3386,7 +3386,7 @@ function renderUserHeader() {
       <div class="balance-pill" title="View rewards" onclick="(function(){const r=document.getElementById('rewardsSection');const t=document.getElementById('leaderboardSection');const el=r&&r.style.display!=='none'?r:t;if(el)el.scrollIntoView({behavior:'smooth',block:'start'});})()"><span class="balance-pill-icon">⚡</span><span class="balance-pill-text">${bal} ${pts}</span></div>
       ${rankHTML}
       ${wrWrapped}
-      <span class="user-name-pill">${escHtml(currentUser.display_name || currentUser.email)}</span>
+      <a href="/my" class="user-name-pill" style="text-decoration:none;cursor:pointer" title="My Dashboard">${escHtml(currentUser.display_name || currentUser.email)}</a>
       <button class="btn-auth" onclick="signOut()" style="font-size:10px;padding:5px 10px">Sign out</button>
     </div>`;
   // Show reward hint

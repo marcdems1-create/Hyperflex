@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>My Dashboard — HYPERFLEX</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --paper:   #141412;
+  --surface: #1c1c19;
+  --surface2:#242420;
+  --border:  #2a2a27;
+  --text:    #f5f5f0;
+  --dim:     #888880;
+  --gold:    #c9920d;
+  --ink:     #141412;
+  --sans:    'Syne', sans-serif;
+  --mono:    'Space Mono', monospace;
+  --display: 'Syne', sans-serif;
+  --radius:  12px;
+}
+*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+html,body { background:var(--paper); color:var(--text); font-family:var(--sans); min-height:100vh; overflow-x:hidden; }
+
+/* ── NAV ── */
+.nav { display:flex; align-items:center; justify-content:space-between; padding:0 24px; height:60px; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--paper); z-index:100; }
+.nav-logo { display:flex; align-items:center; gap:10px; text-decoration:none; }
+.nav-logo-hex { width:30px; height:30px; background:var(--gold); clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%); display:flex; align-items:center; justify-content:center; }
+.nav-wordmark { font-family:var(--display); font-weight:800; font-size:15px; letter-spacing:.08em; color:var(--text); }
+.nav-right { display:flex; align-items:center; gap:10px; }
+.nav-btn { font-family:var(--mono); font-size:11px; padding:7px 14px; border-radius:6px; border:1px solid var(--border); background:transparent; color:var(--dim); cursor:pointer; text-decoration:none; letter-spacing:.04em; transition:all .15s; }
+.nav-btn:hover { border-color:var(--gold); color:var(--text); }
+.nav-btn.gold { background:var(--gold); color:var(--ink); border-color:var(--gold); font-weight:700; }
+
+/* ── LAYOUT ── */
+.page { max-width:1100px; margin:0 auto; padding:32px 24px 60px; }
+.two-col { display:grid; grid-template-columns:320px 1fr; gap:24px; align-items:start; }
+
+/* ── SECTIONS ── */
+.card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
+.card-header { padding:20px 24px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+.card-title { font-size:13px; font-weight:700; font-family:var(--mono); text-transform:uppercase; letter-spacing:.08em; color:var(--dim); }
+.card-body { padding:20px 24px; }
+
+/* ── PROFILE CARD ── */
+.profile-avatar { width:72px; height:72px; border-radius:50%; background:var(--gold); display:flex; align-items:center; justify-content:center; font-size:26px; font-weight:800; color:var(--ink); font-family:var(--display); margin:0 auto 16px; }
+.profile-name { font-size:22px; font-weight:800; font-family:var(--display); text-align:center; margin-bottom:4px; }
+.profile-email { font-size:12px; color:var(--dim); font-family:var(--mono); text-align:center; margin-bottom:4px; }
+.profile-since { font-size:11px; color:var(--dim); font-family:var(--mono); text-align:center; margin-bottom:20px; }
+.edit-name-wrap { margin-bottom:16px; }
+.edit-name-input { width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:14px; padding:10px 12px; outline:none; font-family:var(--sans); }
+.edit-name-input:focus { border-color:var(--gold); }
+.btn-save { width:100%; padding:10px; background:var(--gold); color:var(--ink); font-family:var(--mono); font-size:12px; font-weight:700; border:none; border-radius:8px; cursor:pointer; letter-spacing:.04em; transition:opacity .15s; }
+.btn-save:hover { opacity:.85; }
+
+/* ── STAT PILLS ── */
+.stats-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.stat-pill { background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:14px 16px; }
+.stat-pill .val { font-size:22px; font-weight:800; font-family:var(--display); color:var(--gold); line-height:1; margin-bottom:4px; }
+.stat-pill .lbl { font-size:10px; font-family:var(--mono); color:var(--dim); letter-spacing:.06em; text-transform:uppercase; }
+
+/* ── COMMUNITY CARDS ── */
+.communities-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.comm-card { background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:16px; position:relative; transition:border-color .15s; }
+.comm-card:hover { border-color:rgba(201,146,13,.4); }
+.comm-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+.comm-name { font-size:14px; font-weight:700; color:var(--text); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.comm-balance { font-size:20px; font-weight:800; font-family:var(--display); color:var(--gold); line-height:1; margin:10px 0 4px; }
+.comm-meta { font-size:11px; font-family:var(--mono); color:var(--dim); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.comm-actions { display:flex; gap:8px; margin-top:12px; }
+.btn-visit { flex:1; padding:8px 10px; background:var(--gold); color:var(--ink); font-family:var(--mono); font-size:11px; font-weight:700; border:none; border-radius:6px; cursor:pointer; text-align:center; text-decoration:none; letter-spacing:.04em; transition:opacity .15s; }
+.btn-visit:hover { opacity:.85; }
+.btn-leave { padding:8px 10px; background:transparent; color:var(--dim); font-family:var(--mono); font-size:11px; border:1px solid var(--border); border-radius:6px; cursor:pointer; transition:all .15s; letter-spacing:.04em; }
+.btn-leave:hover { border-color:#ef4444; color:#ef4444; }
+
+/* ── TABS ── */
+.tab-row { display:flex; gap:0; border-bottom:1px solid var(--border); padding:0 24px; }
+.tab-btn { padding:14px 18px; font-family:var(--mono); font-size:12px; letter-spacing:.05em; background:none; border:none; color:var(--dim); cursor:pointer; border-bottom:2px solid transparent; transition:all .15s; }
+.tab-btn.active { color:var(--gold); border-bottom-color:var(--gold); }
+
+/* ── PREDICTION ROWS ── */
+.pred-list { list-style:none; }
+.pred-row { display:flex; align-items:flex-start; gap:12px; padding:14px 0; border-bottom:1px solid var(--border); }
+.pred-row:last-child { border-bottom:none; }
+.side-badge { font-family:var(--mono); font-size:10px; font-weight:700; padding:4px 9px; border-radius:4px; letter-spacing:.05em; flex-shrink:0; margin-top:2px; }
+.side-badge.yes { background:rgba(74,222,128,.15); color:#4ade80; border:1px solid rgba(74,222,128,.3); }
+.side-badge.no  { background:rgba(252,165,165,.12); color:#fca5a5; border:1px solid rgba(252,165,165,.25); }
+.pred-body { flex:1; min-width:0; }
+.pred-q { font-size:13px; color:var(--text); line-height:1.4; margin-bottom:5px; font-weight:600; }
+.pred-meta { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.pred-community { display:inline-flex; align-items:center; gap:5px; font-family:var(--mono); font-size:10px; padding:2px 8px; border-radius:4px; text-decoration:none; }
+.pred-pts { font-family:var(--mono); font-size:11px; color:var(--dim); }
+.pred-expiry { font-family:var(--mono); font-size:10px; color:var(--dim); }
+.pred-right { text-align:right; flex-shrink:0; }
+.pred-payout { font-size:14px; font-weight:700; font-family:var(--display); }
+.pred-payout.win { color:#4ade80; }
+.pred-payout.loss { color:#fca5a5; }
+.pred-payout.open { color:var(--gold); }
+.pred-result { font-family:var(--mono); font-size:10px; color:var(--dim); margin-top:2px; }
+.win-badge { font-family:var(--mono); font-size:9px; font-weight:700; background:rgba(74,222,128,.15); color:#4ade80; border:1px solid rgba(74,222,128,.3); padding:2px 7px; border-radius:3px; }
+.loss-badge { font-family:var(--mono); font-size:9px; font-weight:700; background:rgba(252,165,165,.1); color:#fca5a5; border:1px solid rgba(252,165,165,.2); padding:2px 7px; border-radius:3px; }
+
+/* ── EMPTY STATE ── */
+.empty { text-align:center; padding:40px 20px; }
+.empty-icon { font-size:36px; margin-bottom:12px; }
+.empty-title { font-size:15px; font-weight:700; color:var(--text); margin-bottom:6px; }
+.empty-sub { font-size:13px; color:var(--dim); line-height:1.5; }
+.empty-link { display:inline-block; margin-top:16px; padding:10px 22px; background:var(--gold); color:var(--ink); font-family:var(--mono); font-size:12px; font-weight:700; border-radius:8px; text-decoration:none; }
+
+/* ── TOAST ── */
+.toast { position:fixed; bottom:28px; left:50%; transform:translateX(-50%) translateY(20px); background:#1c1c19; border:1px solid var(--border); border-radius:10px; padding:12px 22px; font-family:var(--mono); font-size:13px; color:var(--text); opacity:0; pointer-events:none; transition:all .3s; z-index:9999; white-space:nowrap; }
+.toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+.toast.success { border-color:rgba(74,222,128,.4); color:#4ade80; }
+.toast.error   { border-color:rgba(239,68,68,.4); color:#ef4444; }
+
+/* ── LOADING ── */
+.spinner-wrap { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:60vh; gap:16px; }
+.spinner { width:36px; height:36px; border:3px solid var(--border); border-top-color:var(--gold); border-radius:50%; animation:spin .8s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* ── SECTION HEADER ── */
+.section-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+.section-title { font-size:17px; font-weight:800; font-family:var(--display); }
+.section-count { font-family:var(--mono); font-size:11px; color:var(--dim); }
+
+/* ── MOBILE ── */
+@media(max-width:860px) {
+  .two-col { grid-template-columns:1fr; }
+  .communities-grid { grid-template-columns:1fr; }
+}
+@media(max-width:500px) {
+  .page { padding:20px 16px 60px; }
+  .nav { padding:0 16px; }
+  .stats-grid { grid-template-columns:1fr 1fr; }
+  .pred-row { gap:8px; }
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <a class="nav-logo" href="/">
+    <div class="nav-logo-hex"></div>
+    <span class="nav-wordmark">HYPERFLEX</span>
+  </a>
+  <div class="nav-right">
+    <a href="/explore" class="nav-btn">Explore</a>
+    <span id="navName" class="nav-btn" style="color:var(--text);cursor:default;border-color:transparent"></span>
+    <button class="nav-btn" onclick="signOut()">Sign out</button>
+  </div>
+</nav>
+
+<!-- LOADING -->
+<div id="loadingWrap" class="spinner-wrap">
+  <div class="spinner"></div>
+  <div style="font-family:var(--mono);font-size:12px;color:var(--dim)">Loading your dashboard…</div>
+</div>
+
+<!-- MAIN PAGE (hidden until loaded) -->
+<div id="mainPage" style="display:none">
+<div class="page">
+
+  <!-- TOP STATS BAR -->
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:28px">
+    <div class="stat-pill" style="flex:1;min-width:120px">
+      <div class="val" id="statWinRate">—</div>
+      <div class="lbl">Win Rate</div>
+    </div>
+    <div class="stat-pill" style="flex:1;min-width:120px">
+      <div class="val" id="statPredictions">—</div>
+      <div class="lbl">Predictions</div>
+    </div>
+    <div class="stat-pill" style="flex:1;min-width:120px">
+      <div class="val" id="statStreak">—</div>
+      <div class="lbl">Win Streak</div>
+    </div>
+    <div class="stat-pill" style="flex:1;min-width:120px">
+      <div class="val" id="statCommunities">—</div>
+      <div class="lbl">Communities</div>
+    </div>
+    <div class="stat-pill" style="flex:1;min-width:120px">
+      <div class="val" id="statNetPnl">—</div>
+      <div class="lbl">Net P&L (pts)</div>
+    </div>
+    <div class="stat-pill" style="flex:1;min-width:120px">
+      <div class="val" id="statBiggest">—</div>
+      <div class="lbl">Biggest Win</div>
+    </div>
+  </div>
+
+  <div class="two-col">
+
+    <!-- LEFT COLUMN: Profile + Communities -->
+    <div style="display:flex;flex-direction:column;gap:20px">
+
+      <!-- Profile Card -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Profile</span>
+          <a id="publicProfileLink" href="#" style="font-family:var(--mono);font-size:11px;color:var(--dim);text-decoration:none">View public ↗</a>
+        </div>
+        <div class="card-body" style="text-align:center">
+          <div class="profile-avatar" id="profileAvatar">?</div>
+          <div class="profile-name" id="profileName">—</div>
+          <div class="profile-email" id="profileEmail"></div>
+          <div class="profile-since" id="profileSince"></div>
+          <div class="edit-name-wrap">
+            <div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;text-align:left;margin-bottom:6px">Display name</div>
+            <input id="editNameInput" class="edit-name-input" type="text" maxlength="30" placeholder="Your username…" onkeydown="if(event.key==='Enter')saveName()"/>
+          </div>
+          <button class="btn-save" onclick="saveName()">Save name</button>
+        </div>
+      </div>
+
+      <!-- Communities -->
+      <div>
+        <div class="section-header">
+          <div class="section-title">My Communities</div>
+          <span class="section-count" id="commCount"></span>
+        </div>
+        <div id="communitiesGrid" class="communities-grid"></div>
+        <div id="communitiesEmpty" class="empty" style="display:none">
+          <div class="empty-icon">🔍</div>
+          <div class="empty-title">No communities yet</div>
+          <div class="empty-sub">Explore and join a community to start making predictions.</div>
+          <a href="/explore" class="empty-link">Explore communities →</a>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT COLUMN: Predictions -->
+    <div>
+      <div class="section-header" style="margin-bottom:0">
+        <div class="section-title">My Predictions</div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <div class="tab-row">
+          <button class="tab-btn active" id="tabOpen" onclick="showTab('open')">Open <span id="openCount" style="opacity:.6"></span></button>
+          <button class="tab-btn" id="tabHistory" onclick="showTab('history')">History <span id="histCount" style="opacity:.6"></span></button>
+        </div>
+
+        <!-- Open predictions -->
+        <div id="panelOpen">
+          <div id="openList" style="padding:4px 24px 8px">
+            <div class="empty" style="padding:40px 20px">
+              <div class="empty-icon">⚡</div>
+              <div class="empty-title">No open predictions</div>
+              <div class="empty-sub">Head to a community and place your first prediction.</div>
+              <a href="/explore" class="empty-link">Find a community →</a>
+            </div>
+          </div>
+        </div>
+
+        <!-- History -->
+        <div id="panelHistory" style="display:none">
+          <div id="histList" style="padding:4px 24px 8px">
+            <div class="empty" style="padding:40px 20px">
+              <div class="empty-icon">📜</div>
+              <div class="empty-title">No prediction history yet</div>
+              <div class="empty-sub">Resolved markets will appear here once they settle.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- AUTH GATE (shown if not logged in) -->
+<div id="authGate" style="display:none;min-height:60vh;display:none;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:40px">
+  <div style="font-size:40px;margin-bottom:16px">🔒</div>
+  <div style="font-size:22px;font-weight:800;font-family:var(--display);margin-bottom:8px">Sign in to view your dashboard</div>
+  <div style="font-size:14px;color:var(--dim);margin-bottom:28px">Join any HYPERFLEX community to get started.</div>
+  <a href="/explore" style="padding:12px 28px;background:var(--gold);color:var(--ink);font-family:var(--mono);font-size:13px;font-weight:700;border-radius:8px;text-decoration:none;">Explore communities →</a>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = '';
+
+let userData = null;
+
+// ── AUTH ─────────────────────────────────────────────────────
+function getToken() { return localStorage.getItem('hf_token'); }
+
+function signOut() {
+  localStorage.removeItem('hf_token');
+  localStorage.removeItem('hf_user');
+  window.location.href = '/explore';
+}
+
+// ── INIT ─────────────────────────────────────────────────────
+async function init() {
+  const token = getToken();
+  if (!token) {
+    document.getElementById('loadingWrap').style.display = 'none';
+    const gate = document.getElementById('authGate');
+    gate.style.display = 'flex';
+    return;
+  }
+
+  try {
+    const r = await fetch(`${API}/api/user/dashboard`, {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    if (r.status === 401) {
+      localStorage.removeItem('hf_token');
+      window.location.href = '/explore';
+      return;
+    }
+    if (!r.ok) throw new Error('Failed to load dashboard');
+    userData = await r.json();
+    renderAll();
+  } catch (err) {
+    document.getElementById('loadingWrap').innerHTML =
+      `<div style="text-align:center;color:var(--dim);font-family:var(--mono);font-size:13px">Failed to load dashboard.<br><a href="/explore" style="color:var(--gold)">Go to explore →</a></div>`;
+  }
+}
+
+// ── RENDER ────────────────────────────────────────────────────
+function renderAll() {
+  document.getElementById('loadingWrap').style.display = 'none';
+  document.getElementById('mainPage').style.display = 'block';
+
+  const { user, stats, communities, open, history } = userData;
+
+  // Nav
+  document.getElementById('navName').textContent = user.display_name;
+
+  // Profile
+  const initials = (user.display_name || '?').slice(0, 2).toUpperCase();
+  document.getElementById('profileAvatar').textContent = initials;
+  document.getElementById('profileName').textContent = user.display_name;
+  document.getElementById('profileEmail').textContent = user.email || '';
+  if (user.member_since) {
+    const d = new Date(user.member_since);
+    document.getElementById('profileSince').textContent = 'Member since ' + d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+  }
+  document.getElementById('editNameInput').value = user.display_name;
+  document.getElementById('publicProfileLink').href = `/m/${user.id}`;
+
+  // Stats bar
+  document.getElementById('statWinRate').textContent     = stats.win_rate + '%';
+  document.getElementById('statPredictions').textContent = stats.total_predictions.toLocaleString();
+  document.getElementById('statStreak').textContent      = stats.streak > 0 ? stats.streak + (stats.streak >= 3 ? ' 🔥' : '') : '—';
+  document.getElementById('statCommunities').textContent = stats.communities_joined;
+  const pnl = stats.net_pnl;
+  const pnlEl = document.getElementById('statNetPnl');
+  pnlEl.textContent = (pnl >= 0 ? '+' : '') + pnl.toLocaleString();
+  pnlEl.style.color = pnl >= 0 ? '#4ade80' : '#fca5a5';
+  document.getElementById('statBiggest').textContent     = stats.biggest_win > 0 ? stats.biggest_win.toLocaleString() : '—';
+
+  // Communities
+  renderCommunities(communities);
+
+  // Predictions
+  renderOpen(open);
+  renderHistory(history);
+}
+
+function renderCommunities(communities) {
+  const grid  = document.getElementById('communitiesGrid');
+  const empty = document.getElementById('communitiesEmpty');
+  document.getElementById('commCount').textContent = communities.length + ' joined';
+
+  if (!communities.length) {
+    grid.style.display = 'none';
+    empty.style.display = 'block';
+    return;
+  }
+
+  grid.innerHTML = communities.map(c => {
+    const color = c.primary_color || '#c9920d';
+    const pts   = (c.balance || 0).toLocaleString();
+    const rank  = c.rank || '?';
+    const open  = c.open_positions || 0;
+    const ptsLabel = c.custom_points_name || 'Flex Points';
+    return `<div class="comm-card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
+        <div class="comm-dot" style="background:${color}"></div>
+        <span class="comm-name">${escHtml(c.display_name)}</span>
+      </div>
+      <div class="comm-balance">${pts}</div>
+      <div class="comm-meta">
+        <span style="color:${color}">${ptsLabel}</span>
+        <span>·</span>
+        <span>Rank #${rank}</span>
+        ${open > 0 ? `<span>·</span><span style="color:var(--gold)">${open} open bet${open !== 1 ? 's' : ''}</span>` : ''}
+      </div>
+      <div class="comm-actions">
+        <a href="/${c.slug}" class="btn-visit">Go to community →</a>
+        <button class="btn-leave" onclick="leaveConfirm('${c.slug}','${escHtml(c.display_name)}')">Leave</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderOpen(open) {
+  const el = document.getElementById('openList');
+  document.getElementById('openCount').textContent = open.length ? `(${open.length})` : '';
+
+  if (!open.length) {
+    el.innerHTML = `<div class="empty" style="padding:40px 20px">
+      <div class="empty-icon">⚡</div>
+      <div class="empty-title">No open predictions</div>
+      <div class="empty-sub">Head to a community and place your first prediction.</div>
+      <a href="/explore" class="empty-link">Find a community →</a>
+    </div>`;
+    return;
+  }
+
+  el.innerHTML = `<ul class="pred-list">${open.map(p => {
+    const color = p.community_color || '#c9920d';
+    const price = p.side === 'YES' ? (p.yes_price || .5) : (p.no_price || .5);
+    const mult  = price > 0 ? (1 / price).toFixed(2) : '—';
+    const expiry = p.expiry_date ? formatDate(p.expiry_date) : null;
+    return `<li class="pred-row">
+      <span class="side-badge ${p.side === 'YES' ? 'yes' : 'no'}">${p.side}</span>
+      <div class="pred-body">
+        <div class="pred-q"><a href="/${p.community_slug}" style="color:inherit;text-decoration:none">${escHtml(p.question || '—')}</a></div>
+        <div class="pred-meta">
+          <a href="/${p.community_slug}" class="pred-community" style="background:${color}20;color:${color};border:1px solid ${color}40">${escHtml(p.community_name || p.community_slug)}</a>
+          <span class="pred-pts">${p.amount.toLocaleString()} pts bet</span>
+          ${expiry ? `<span class="pred-expiry">closes ${expiry}</span>` : ''}
+        </div>
+      </div>
+      <div class="pred-right">
+        <div class="pred-payout open">+${p.potential_payout.toLocaleString()}</div>
+        <div class="pred-result">${mult}× if correct</div>
+      </div>
+    </li>`;
+  }).join('')}</ul>`;
+}
+
+function renderHistory(history) {
+  const el = document.getElementById('histList');
+  document.getElementById('histCount').textContent = history.length ? `(${history.length})` : '';
+
+  if (!history.length) {
+    el.innerHTML = `<div class="empty" style="padding:40px 20px">
+      <div class="empty-icon">📜</div>
+      <div class="empty-title">No history yet</div>
+      <div class="empty-sub">Resolved markets will appear here once they settle.</div>
+    </div>`;
+    return;
+  }
+
+  el.innerHTML = `<ul class="pred-list">${history.map(p => {
+    const color = p.community_color || '#c9920d';
+    const date  = p.resolved_at ? formatDate(p.resolved_at) : (p.created_at ? formatDate(p.created_at) : '');
+    return `<li class="pred-row">
+      <span class="side-badge ${p.side === 'YES' ? 'yes' : 'no'}">${p.side}</span>
+      <div class="pred-body">
+        <div class="pred-q"><a href="/${p.community_slug}" style="color:inherit;text-decoration:none">${escHtml(p.question || '—')}</a></div>
+        <div class="pred-meta">
+          <a href="/${p.community_slug}" class="pred-community" style="background:${color}20;color:${color};border:1px solid ${color}40">${escHtml(p.community_name || p.community_slug)}</a>
+          <span class="pred-pts">${p.amount.toLocaleString()} pts bet</span>
+          ${date ? `<span class="pred-expiry">${date}</span>` : ''}
+        </div>
+      </div>
+      <div class="pred-right">
+        ${p.won
+          ? `<div class="pred-payout win">+${p.payout.toLocaleString()}</div><div class="pred-result"><span class="win-badge">✓ WIN</span></div>`
+          : `<div class="pred-payout loss">−${p.amount.toLocaleString()}</div><div class="pred-result"><span class="loss-badge">✗ LOSS</span></div>`}
+      </div>
+    </li>`;
+  }).join('')}</ul>`;
+}
+
+// ── TABS ─────────────────────────────────────────────────────
+function showTab(tab) {
+  document.getElementById('panelOpen').style.display    = tab === 'open'    ? 'block' : 'none';
+  document.getElementById('panelHistory').style.display = tab === 'history' ? 'block' : 'none';
+  document.getElementById('tabOpen').classList.toggle('active', tab === 'open');
+  document.getElementById('tabHistory').classList.toggle('active', tab === 'history');
+}
+
+// ── PROFILE EDIT ─────────────────────────────────────────────
+async function saveName() {
+  const val = document.getElementById('editNameInput').value.trim();
+  if (!val || val.length < 2) { showToast('Name must be at least 2 characters', 'error'); return; }
+  try {
+    const r = await fetch(`${API}/api/user/display-name`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getToken() },
+      body: JSON.stringify({ display_name: val })
+    });
+    if (!r.ok) throw new Error();
+    // Update UI
+    document.getElementById('profileName').textContent = val;
+    document.getElementById('navName').textContent = val;
+    const initials = val.slice(0, 2).toUpperCase();
+    document.getElementById('profileAvatar').textContent = initials;
+    // Sync localStorage
+    const raw = localStorage.getItem('hf_user');
+    if (raw) { try { const u = JSON.parse(raw); u.display_name = val; localStorage.setItem('hf_user', JSON.stringify(u)); } catch {} }
+    showToast('Name updated ✓', 'success');
+  } catch { showToast('Failed to save name', 'error'); }
+}
+
+// ── LEAVE COMMUNITY ───────────────────────────────────────────
+function leaveConfirm(slug, name) {
+  if (!confirm(`Leave "${name}"? Your prediction history won't be deleted, but your points balance in this community will be removed.`)) return;
+  leaveCommunity(slug);
+}
+
+async function leaveCommunity(slug) {
+  try {
+    const r = await fetch(`${API}/api/user/community/${slug}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': 'Bearer ' + getToken() }
+    });
+    if (!r.ok) throw new Error();
+    // Remove from local data and re-render
+    userData.communities = userData.communities.filter(c => c.slug !== slug);
+    userData.stats.communities_joined = userData.communities.length;
+    document.getElementById('statCommunities').textContent = userData.communities.length;
+    renderCommunities(userData.communities);
+    showToast(`Left ${slug} ✓`, 'success');
+  } catch { showToast('Failed to leave community', 'error'); }
+}
+
+// ── HELPERS ───────────────────────────────────────────────────
+function formatDate(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function escHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showToast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + type;
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(() => { t.className = 'toast'; }, 3000);
+}
+
+init();
+</script>
+</body>
+</html>
