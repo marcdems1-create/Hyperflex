@@ -3332,7 +3332,9 @@ function renderCreatorBar(communityData) {
     // This person IS the creator — show dashboard link
     content.innerHTML = `<span style="color:var(--gold);font-weight:700">You're viewing your community</span>
       &nbsp;·&nbsp;
-      <a href="/creator/dashboard" style="color:var(--gold);text-decoration:none;font-weight:600">← Back to Dashboard</a>`;
+      <a href="/creator/dashboard" style="color:var(--gold);text-decoration:none;font-weight:600">← Back to Dashboard</a>
+      &nbsp;·&nbsp;
+      <a href="/u/${communityData?.slug || ''}" style="color:var(--dim);text-decoration:none;font-size:11px">👤 Public profile</a>`;
     bar.style.display = '';
   } else if (!storedUser) {
     // Not logged in — quiet creator prompt

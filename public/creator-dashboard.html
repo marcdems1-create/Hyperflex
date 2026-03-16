@@ -2747,6 +2747,7 @@ body.nav-open .sidebar-backdrop {
           <span class="community-url-copy">📋</span>
         </div>
         <a id="viewCommunityBtn" href="#" target="_blank" class="btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:5px;font-size:13px">👁 <span class="scanner-label">View Community</span></a>
+        <a id="viewProfileBtn" href="#" target="_blank" class="btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:5px;font-size:13px">👤 <span class="scanner-label">Profile</span></a>
         <button class="btn-secondary" id="aiScannerTopbarBtn" onclick="openYoutubeModal()">🤖<span class="scanner-label"> AI Scanner</span></button>
         <button class="btn-primary" onclick="openCreateModal()">+ New Market</button>
       </div>
@@ -4695,6 +4696,8 @@ function renderDashboard(data) {
   document.getElementById('topbarCommunityUrl').textContent = 'hyperflex.network/' + creator.slug;
   const vcBtn = document.getElementById('viewCommunityBtn');
   if (vcBtn) vcBtn.href = 'https://hyperflex.network/' + creator.slug;
+  const vpBtn = document.getElementById('viewProfileBtn');
+  if (vpBtn) vpBtn.href = 'https://hyperflex.network/u/' + creator.slug;
   // Avatar initials — up to 2 chars from display name
   const initials = (creator.display_name || '?')
     .split(/\s+/).slice(0, 2).map(w => w[0].toUpperCase()).join('');

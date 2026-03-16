@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Creator Profile — HYPERFLEX</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --gold:    #c9920d;
+      --ink:     #141412;
+      --paper:   #141412;
+      --surface: #1c1c1a;
+      --border:  rgba(255,255,255,.1);
+      --text:    #f0ede8;
+      --dim:     rgba(240,237,232,.45);
+      --sans:    'Syne', sans-serif;
+      --mono:    'Space Mono', monospace;
+      --radius:  12px;
+      --accent:  #c9920d;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { background: var(--paper); color: var(--text); font-family: var(--sans); min-height: 100vh; }
+    a { color: inherit; text-decoration: none; }
+
+    /* ── NAV ── */
+    .nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(20,20,18,.92); backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 24px; height: 56px;
+    }
+    .nav-logo { font-family: var(--sans); font-weight: 800; font-size: 16px; letter-spacing: .04em; color: var(--gold); }
+    .nav-actions { display: flex; gap: 10px; align-items: center; }
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 700; font-family: var(--sans); cursor: pointer; border: none; transition: opacity .15s; }
+    .btn:hover { opacity: .85; }
+    .btn-gold { background: var(--gold); color: var(--ink); }
+    .btn-ghost { background: transparent; color: var(--dim); border: 1px solid var(--border); }
+    .btn-ghost:hover { color: var(--text); border-color: rgba(255,255,255,.3); }
+
+    /* ── HERO ── */
+    .hero {
+      position: relative; overflow: hidden;
+      min-height: 280px;
+    }
+    .hero-banner {
+      position: absolute; inset: 0;
+      background: linear-gradient(135deg, #1a1a18 0%, #222220 100%);
+      background-size: cover; background-position: center;
+    }
+    .hero-banner::after {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(to bottom, rgba(20,20,18,.3) 0%, rgba(20,20,18,.85) 100%);
+    }
+    .hero-content {
+      position: relative; z-index: 1;
+      max-width: 860px; margin: 0 auto;
+      padding: 48px 24px 36px;
+      display: flex; gap: 24px; align-items: flex-end;
+    }
+    .hero-logo {
+      width: 88px; height: 88px; border-radius: 16px;
+      border: 3px solid rgba(255,255,255,.15);
+      background: var(--surface);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 32px; font-weight: 800; color: var(--gold);
+      flex-shrink: 0; overflow: hidden;
+    }
+    .hero-logo img { width: 100%; height: 100%; object-fit: cover; }
+    .hero-meta { flex: 1; min-width: 0; }
+    .hero-name { font-size: 28px; font-weight: 800; line-height: 1.1; margin-bottom: 6px; }
+    .hero-url { font-family: var(--mono); font-size: 11px; color: var(--gold); margin-bottom: 10px; }
+    .hero-desc { font-size: 13px; color: var(--dim); line-height: 1.6; max-width: 520px; }
+    .hero-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+    .badge {
+      padding: 3px 10px; border-radius: 99px; font-family: var(--mono);
+      font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+    }
+    .badge-cat { background: rgba(255,255,255,.08); color: var(--dim); }
+    .badge-plan-pro { background: rgba(201,146,13,.2); color: var(--gold); }
+    .badge-plan-premium { background: rgba(201,146,13,.35); color: var(--gold); }
+
+    /* ── BODY ── */
+    .page { max-width: 860px; margin: 0 auto; padding: 32px 24px 80px; }
+
+    /* ── STATS ── */
+    .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 32px; }
+    .stat-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 16px 18px; text-align: center;
+    }
+    .stat-val { font-size: 26px; font-weight: 800; color: var(--text); line-height: 1; margin-bottom: 4px; }
+    .stat-lbl { font-family: var(--mono); font-size: 10px; color: var(--dim); letter-spacing: .08em; text-transform: uppercase; }
+
+    /* ── SOCIAL ── */
+    .social-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 32px; }
+    .social-btn {
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 7px 14px; border-radius: 8px; font-size: 12px; font-weight: 700;
+      background: var(--surface); border: 1px solid var(--border); color: var(--dim);
+      cursor: pointer; transition: all .15s;
+    }
+    .social-btn:hover { color: var(--text); border-color: rgba(255,255,255,.3); }
+
+    /* ── SECTIONS ── */
+    .section { margin-bottom: 36px; }
+    .section-head {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .section-title { font-size: 15px; font-weight: 800; letter-spacing: .01em; }
+    .section-link { font-family: var(--mono); font-size: 11px; color: var(--gold); cursor: pointer; }
+    .section-link:hover { text-decoration: underline; }
+
+    /* ── MARKET CARDS ── */
+    .markets-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+    .mkt-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 16px; display: flex; flex-direction: column; gap: 10px;
+      transition: border-color .15s; cursor: pointer;
+    }
+    .mkt-card:hover { border-color: rgba(255,255,255,.25); }
+    .mkt-cat { font-family: var(--mono); font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; }
+    .mkt-q { font-size: 13px; font-weight: 700; line-height: 1.45; color: var(--text); flex: 1; }
+    .mkt-odds { display: flex; gap: 8px; }
+    .mkt-yes { background: rgba(74,222,128,.12); color: #4ade80; padding: 5px 12px; border-radius: 6px; font-family: var(--mono); font-size: 13px; font-weight: 700; flex: 1; text-align: center; }
+    .mkt-no  { background: rgba(248,113,113,.12); color: #f87171; padding: 5px 12px; border-radius: 6px; font-family: var(--mono); font-size: 13px; font-weight: 700; flex: 1; text-align: center; }
+    .mkt-meta { font-family: var(--mono); font-size: 10px; color: var(--dim); }
+    .mkt-bar-wrap { height: 4px; background: rgba(255,255,255,.06); border-radius: 2px; overflow: hidden; }
+    .mkt-bar-fill { height: 100%; background: linear-gradient(90deg, #4ade80, #c9920d); border-radius: 2px; transition: width .4s; }
+
+    /* ── LEADERBOARD ── */
+    .lb-list { display: flex; flex-direction: column; gap: 8px; }
+    .lb-item {
+      display: flex; align-items: center; gap: 12px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      padding: 12px 16px;
+    }
+    .lb-rank { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--dim); width: 24px; text-align: center; flex-shrink: 0; }
+    .lb-avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--gold); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: var(--ink); flex-shrink: 0; }
+    .lb-name { flex: 1; font-size: 13px; font-weight: 700; }
+    .lb-trades { font-family: var(--mono); font-size: 11px; color: var(--dim); }
+    .lb-pnl { font-family: var(--mono); font-size: 13px; font-weight: 700; }
+    .lb-pnl.pos { color: #4ade80; }
+    .lb-pnl.neg { color: #f87171; }
+
+    /* ── JOIN CTA ── */
+    .join-cta {
+      background: linear-gradient(135deg, rgba(201,146,13,.12) 0%, rgba(201,146,13,.04) 100%);
+      border: 1px solid rgba(201,146,13,.3); border-radius: 16px;
+      padding: 36px 32px; text-align: center;
+    }
+    .join-cta-title { font-size: 22px; font-weight: 800; margin-bottom: 8px; }
+    .join-cta-sub { font-size: 14px; color: var(--dim); line-height: 1.6; margin-bottom: 24px; max-width: 480px; margin-left: auto; margin-right: auto; }
+    .join-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--gold); color: var(--ink); padding: 14px 32px;
+      border-radius: 10px; font-size: 15px; font-weight: 800; border: none; cursor: pointer;
+      transition: opacity .15s;
+    }
+    .join-btn:hover { opacity: .88; }
+
+    /* ── EMPTY / LOADING ── */
+    .empty { text-align: center; padding: 40px 20px; color: var(--dim); font-size: 13px; }
+    .loading-shimmer {
+      background: linear-gradient(90deg, var(--surface) 25%, rgba(255,255,255,.04) 50%, var(--surface) 75%);
+      background-size: 200% 100%; animation: shimmer 1.4s infinite;
+      border-radius: 8px; height: 20px;
+    }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+    /* ── MOBILE ── */
+    @media (max-width: 600px) {
+      .hero-content { flex-direction: column; align-items: flex-start; padding: 32px 16px 24px; }
+      .hero-logo { width: 64px; height: 64px; font-size: 24px; }
+      .hero-name { font-size: 22px; }
+      .stats-row { grid-template-columns: repeat(2, 1fr); }
+      .page { padding: 24px 16px 60px; }
+      .join-cta { padding: 24px 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <a href="/" class="nav-logo">HYPERFLEX</a>
+  <div class="nav-actions">
+    <a href="/explore" class="btn btn-ghost">Explore</a>
+    <a id="navJoinBtn" href="#join" class="btn btn-gold">Join Community →</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div class="hero" id="hero">
+  <div class="hero-banner" id="heroBanner"></div>
+  <div class="hero-content">
+    <div class="hero-logo" id="heroLogo"></div>
+    <div class="hero-meta">
+      <div class="hero-name" id="heroName"><div class="loading-shimmer" style="width:200px;height:28px"></div></div>
+      <div class="hero-url" id="heroUrl"></div>
+      <div class="hero-desc" id="heroDesc"></div>
+      <div class="hero-badges" id="heroBadges"></div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE BODY -->
+<div class="page">
+
+  <!-- Stats -->
+  <div class="stats-row" id="statsRow">
+    <div class="stat-card"><div class="loading-shimmer" style="height:26px;margin-bottom:6px"></div><div class="loading-shimmer" style="height:12px;width:60%;margin:0 auto"></div></div>
+    <div class="stat-card"><div class="loading-shimmer" style="height:26px;margin-bottom:6px"></div><div class="loading-shimmer" style="height:12px;width:60%;margin:0 auto"></div></div>
+    <div class="stat-card"><div class="loading-shimmer" style="height:26px;margin-bottom:6px"></div><div class="loading-shimmer" style="height:12px;width:60%;margin:0 auto"></div></div>
+    <div class="stat-card"><div class="loading-shimmer" style="height:26px;margin-bottom:6px"></div><div class="loading-shimmer" style="height:12px;width:60%;margin:0 auto"></div></div>
+  </div>
+
+  <!-- Social -->
+  <div class="social-row" id="socialRow" style="display:none"></div>
+
+  <!-- Active Markets -->
+  <div class="section">
+    <div class="section-head">
+      <div class="section-title">🔥 Active Markets</div>
+      <a id="allMarketsLink" href="#" class="section-link">See all →</a>
+    </div>
+    <div class="markets-grid" id="marketsGrid">
+      <div class="empty">Loading markets…</div>
+    </div>
+  </div>
+
+  <!-- Top Predictors -->
+  <div class="section" id="lbSection" style="display:none">
+    <div class="section-head">
+      <div class="section-title">🏆 Top Predictors</div>
+    </div>
+    <div class="lb-list" id="lbList"></div>
+  </div>
+
+  <!-- Join CTA -->
+  <div class="join-cta" id="join">
+    <div class="join-cta-title" id="ctaTitle">Join the community</div>
+    <div class="join-cta-sub" id="ctaSub">Predict outcomes, earn points, and compete on the leaderboard.</div>
+    <a id="ctaBtn" href="#" class="join-btn">Start Predicting →</a>
+  </div>
+
+</div>
+
+<script>
+const slug = location.pathname.replace(/^\/u\//, '').replace(/\/$/, '');
+if (!slug) location.href = '/explore';
+
+// Update all community links
+document.getElementById('navJoinBtn').href = '/' + slug;
+document.getElementById('allMarketsLink').href = '/' + slug;
+document.getElementById('ctaBtn').href = '/' + slug;
+
+function fmt(n) {
+  if (!n) return '0';
+  if (n >= 1000000) return (n/1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n/1000).toFixed(1) + 'K';
+  return n.toLocaleString();
+}
+function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
+function initials(name) {
+  return (name || '?').split(/\s+/).slice(0,2).map(w=>w[0].toUpperCase()).join('');
+}
+function timeAgo(iso) {
+  const s = Math.floor((Date.now() - new Date(iso)) / 1000);
+  if (s < 60) return s + 's ago';
+  if (s < 3600) return Math.floor(s/60) + 'm ago';
+  if (s < 86400) return Math.floor(s/3600) + 'h ago';
+  return Math.floor(s/86400) + 'd ago';
+}
+
+async function load() {
+  const [commRes, lbRes] = await Promise.all([
+    fetch('/api/community/' + slug),
+    fetch('/api/leaderboard?slug=' + slug)
+  ]);
+
+  if (!commRes.ok) {
+    document.body.innerHTML = '<div style="text-align:center;padding:80px 24px;color:#888;font-family:monospace">Community not found.</div>';
+    return;
+  }
+
+  const { community: c, markets, member_count } = await commRes.json();
+  const leaderboard = lbRes.ok ? await lbRes.json() : [];
+
+  const accent = c.primary_color || '#c9920d';
+  document.documentElement.style.setProperty('--accent', accent);
+  document.documentElement.style.setProperty('--gold', accent);
+
+  // Meta / title
+  document.title = (c.display_name || slug) + ' — HYPERFLEX';
+
+  // Hero
+  if (c.banner_url) {
+    document.getElementById('heroBanner').style.backgroundImage = `url('${c.banner_url}')`;
+  }
+  const logoEl = document.getElementById('heroLogo');
+  if (c.logo_url) {
+    logoEl.innerHTML = `<img src="${c.logo_url}" alt="${c.display_name}"/>`;
+  } else {
+    logoEl.textContent = initials(c.display_name);
+    logoEl.style.background = accent + '22';
+    logoEl.style.color = accent;
+  }
+  document.getElementById('heroName').textContent = c.display_name || slug;
+  document.getElementById('heroUrl').textContent = 'hyperflex.network/' + slug;
+  if (c.community_description) document.getElementById('heroDesc').textContent = c.community_description;
+
+  const badges = document.getElementById('heroBadges');
+  if (c.community_category) {
+    const catEmojis = { finance:'💹', crypto:'₿', sports:'🏆', politics:'🗳', entertainment:'🎬', tech:'💻', gaming:'🎮', other:'✦' };
+    const em = catEmojis[c.community_category] || '✦';
+    badges.innerHTML = `<span class="badge badge-cat">${em} ${cap(c.community_category)}</span>`;
+  }
+  if (c.plan === 'platinum') badges.innerHTML += `<span class="badge badge-plan-premium">⭐ Premium</span>`;
+  else if (c.plan === 'pro')  badges.innerHTML += `<span class="badge badge-plan-pro">Pro</span>`;
+
+  // Update CTAs
+  document.getElementById('ctaTitle').textContent = `Join ${c.display_name || 'the community'}`;
+  document.getElementById('ctaSub').textContent = `Predict outcomes, earn ${c.custom_points_name || 'Flex Points'}, and compete on the leaderboard.`;
+
+  // Stats
+  const active = (markets || []).filter(m => !m.resolved && !m.archived);
+  const resolved = (markets || []).filter(m => m.resolved);
+  const totalTrades = active.reduce((s, m) => s + (m.trader_count || 0), 0) + resolved.reduce((s, m) => s + (m.trader_count || 0), 0);
+
+  document.getElementById('statsRow').innerHTML = `
+    <div class="stat-card">
+      <div class="stat-val">${fmt(member_count || 0)}</div>
+      <div class="stat-lbl">Members</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-val">${fmt(active.length)}</div>
+      <div class="stat-lbl">Live Markets</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-val">${fmt(totalTrades)}</div>
+      <div class="stat-lbl">Trades Made</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-val">${fmt(resolved.length)}</div>
+      <div class="stat-lbl">Resolved</div>
+    </div>
+  `;
+
+  // Socials
+  const socials = [
+    c.social_twitter  && { icon: '𝕏', label: 'Twitter',  href: 'https://twitter.com/' + c.social_twitter.replace('@','') },
+    c.social_youtube  && { icon: '▶', label: 'YouTube',  href: c.social_youtube.startsWith('http') ? c.social_youtube : 'https://youtube.com/' + c.social_youtube },
+    c.social_discord  && { icon: '◈', label: 'Discord',  href: c.social_discord.startsWith('http') ? c.social_discord : 'https://discord.gg/' + c.social_discord },
+    c.social_twitch   && { icon: '◉', label: 'Twitch',   href: 'https://twitch.tv/' + c.social_twitch.replace('@','') },
+  ].filter(Boolean);
+
+  if (socials.length) {
+    const sr = document.getElementById('socialRow');
+    sr.style.display = 'flex';
+    sr.innerHTML = socials.map(s => `<a href="${s.href}" target="_blank" rel="noopener" class="social-btn">${s.icon} ${s.label}</a>`).join('');
+  }
+
+  // Markets
+  const grid = document.getElementById('marketsGrid');
+  const hotMarkets = [...active]
+    .sort((a,b) => (b.trader_count||0) - (a.trader_count||0))
+    .slice(0, 6);
+
+  if (!hotMarkets.length) {
+    grid.innerHTML = '<div class="empty">No active markets right now.</div>';
+  } else {
+    grid.innerHTML = hotMarkets.map(m => {
+      const yp = Math.round((m.yes_price || 0.5) * 100);
+      const np = 100 - yp;
+      return `
+        <div class="mkt-card" onclick="location.href='/${slug}'">
+          <div class="mkt-cat">${cap(m.category || 'general')}</div>
+          <div class="mkt-q">${m.question}</div>
+          <div class="mkt-bar-wrap"><div class="mkt-bar-fill" style="width:${yp}%"></div></div>
+          <div class="mkt-odds">
+            <div class="mkt-yes">${yp}% YES</div>
+            <div class="mkt-no">${np}% NO</div>
+          </div>
+          <div class="mkt-meta">${m.trader_count || 0} traders · closes ${new Date(m.expiry_date).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</div>
+        </div>`;
+    }).join('');
+  }
+
+  // Leaderboard
+  const top = (Array.isArray(leaderboard) ? leaderboard : []).slice(0, 5);
+  if (top.length) {
+    const ptsName = c.custom_points_name || 'pts';
+    const lbSection = document.getElementById('lbSection');
+    lbSection.style.display = '';
+    const medals = ['🥇','🥈','🥉'];
+    document.getElementById('lbList').innerHTML = top.map((l, i) => {
+      const pnl = Math.round((l.pnl || 0) / 100);
+      return `
+        <div class="lb-item">
+          <div class="lb-rank">${medals[i] || '#'+(i+1)}</div>
+          <div class="lb-avatar" style="background:${accent}">${initials(l.display_name)}</div>
+          <div class="lb-name">${l.display_name || 'Anonymous'}</div>
+          <div class="lb-trades">${l.trade_count || 0} trades</div>
+          <div class="lb-pnl ${pnl >= 0 ? 'pos' : 'neg'}">${pnl >= 0 ? '+' : ''}${pnl.toLocaleString()} ${ptsName}</div>
+        </div>`;
+    }).join('');
+  }
+}
+
+load().catch(err => console.error('profile load error:', err));
+</script>
+</body>
+</html>

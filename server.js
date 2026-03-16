@@ -5522,8 +5522,11 @@ app.post('/api/creator/oauth-complete', async (req, res) => {
 const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
-  'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover'
+  'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u'
 ]);
+
+// GET /u/:slug — public creator profile page
+app.get('/u/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'profile.html')));
 
 // Read community.html once at startup and cache it
 const COMMUNITY_HTML = fs.readFileSync(path.join(__dirname, 'public', 'community.html'), 'utf8');
