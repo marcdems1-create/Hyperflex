@@ -507,6 +507,46 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
 }
 .filter-tab.active .filter-count { background: rgba(0,0,0,0.25); }
 
+/* ── SENTIMENT BADGE ── */
+.sentiment-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 9px;
+  font-family: var(--mono);
+  font-weight: 700;
+  letter-spacing: .05em;
+  padding: 2px 7px;
+  border-radius: 99px;
+  border: 1px solid;
+  white-space: nowrap;
+}
+.sentiment-badge.contested  { color: #f59e0b; border-color: rgba(245,158,11,.35); background: rgba(245,158,11,.08); }
+.sentiment-badge.leaning-yes { color: #86efac; border-color: rgba(134,239,172,.3); background: rgba(74,222,128,.07); }
+.sentiment-badge.leaning-no  { color: #fca5a5; border-color: rgba(252,165,165,.3); background: rgba(248,113,113,.07); }
+.sentiment-badge.strong-yes  { color: #4ade80; border-color: rgba(74,222,128,.4); background: rgba(74,222,128,.1); }
+.sentiment-badge.strong-no   { color: #f87171; border-color: rgba(248,113,113,.4); background: rgba(248,113,113,.1); }
+
+/* ── TRUTH FEED header ── */
+#truthFeedHeader {
+  margin-bottom: 16px;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, rgba(245,158,11,.07) 0%, rgba(201,146,13,.03) 100%);
+  border: 1px solid rgba(245,158,11,.2);
+  border-radius: 12px;
+  display: none;
+}
+.truth-feed-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #f59e0b;
+  font-family: var(--mono);
+  letter-spacing: .05em;
+  margin-bottom: 6px;
+}
+.truth-feed-sub { font-size: 12px; color: var(--dim); line-height: 1.5; }
+.truth-feed-sub strong { color: var(--text); }
+
 /* ── VIEW TABS (Markets / From the Feed) ── */
 .view-tab {
   font-family: var(--mono);
@@ -1430,8 +1470,15 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
     <div class="filter-row" id="filterRow" style="display:none">
       <button class="filter-tab active" id="ftAll"   onclick="setFilter('all')">All <span class="filter-count" id="fcAll">0</span></button>
       <button class="filter-tab"        id="ftHot"   onclick="setFilter('hot')">🔥 Hot <span class="filter-count" id="fcHot">0</span></button>
+      <button class="filter-tab"        id="ftTruth" onclick="setFilter('truth')">🧭 Truth Feed</button>
       <button class="filter-tab"        id="ftSoon"  onclick="setFilter('soon')">⏰ Closing Soon <span class="filter-count" id="fcSoon">0</span></button>
       <button class="filter-tab"        id="ftMine"  onclick="setFilter('mine')" style="display:none">✓ My Bets <span class="filter-count" id="fcMine">0</span></button>
+    </div>
+
+    <!-- Truth feed context header (visible in truth mode) -->
+    <div id="truthFeedHeader">
+      <div class="truth-feed-title">🧭 TRUTH FEED — Most Contested First</div>
+      <div class="truth-feed-sub" id="truthFeedSub">Prediction markets surface collective intelligence. Markets closest to 50/50 represent genuine uncertainty — where truth is still being discovered.</div>
     </div>
 
     <!-- Creator Announcements -->
@@ -2053,42 +2100,95 @@ function openMarket(id) {
   }
 }
 
+// ── SENTIMENT SIGNAL ─────────────────────────────────────────
+// Returns a classification + badge HTML for a market's current probability
+function sentimentSignal(yesPct) {
+  if (yesPct >= 43 && yesPct <= 57) return { cls: 'contested',   label: '⚖ CONTESTED',   desc: 'Split — community is genuinely uncertain' };
+  if (yesPct > 57 && yesPct <= 70)  return { cls: 'leaning-yes', label: '↑ LEANING YES',  desc: `${yesPct}% lean YES` };
+  if (yesPct >= 30 && yesPct < 43)  return { cls: 'leaning-no',  label: '↓ LEANING NO',   desc: `${100-yesPct}% lean NO` };
+  if (yesPct > 70)                  return { cls: 'strong-yes',  label: '✓ CONSENSUS YES', desc: `Strong community conviction at ${yesPct}%` };
+  return                                   { cls: 'strong-no',   label: '✗ CONSENSUS NO',  desc: `Strong community conviction at ${100-yesPct}% NO` };
+}
+
+// ── TRUTH SCORE ───────────────────────────────────────────────
+// Higher = more interesting (most contested + most active rises to top)
+function truthScore(m) {
+  const yp = Number(m.yes_price) || 0.5;
+  const contested   = 1 - Math.abs(yp - 0.5) * 2;      // 1.0 = perfectly 50/50, 0.0 = 100% sure
+  const activity    = Math.min((m.trader_count || 0) / 15, 1); // saturates at 15 traders
+  return (contested * 0.65) + (activity * 0.35);
+}
+
 function setFilter(f) {
   currentFilter = f;
-  ['all','hot','soon','mine'].forEach(id => {
+  ['all','hot','truth','soon','mine'].forEach(id => {
     const el = document.getElementById('ft' + id.charAt(0).toUpperCase() + id.slice(1));
     if (el) el.classList.toggle('active', id === f);
   });
+  const truthHeader = document.getElementById('truthFeedHeader');
+  if (truthHeader) truthHeader.style.display = f === 'truth' ? '' : 'none';
   renderFilteredMarkets();
 }
 
 function renderFilteredMarkets() {
   const active = markets.filter(m => !m.resolved);
   let filtered;
-  if (currentFilter === 'hot')   filtered = active.filter(m => isHot(m));
-  else if (currentFilter === 'soon') filtered = active.filter(m => isClosingSoon(m));
-  else if (currentFilter === 'mine') filtered = active.filter(m => myPositions[m.id]);
-  else filtered = active;
+  let sortFn;
+
+  if (currentFilter === 'hot') {
+    filtered = active.filter(m => isHot(m));
+    sortFn = (a, b) => (b.trader_count||0) - (a.trader_count||0);
+  } else if (currentFilter === 'truth') {
+    filtered = active;
+    sortFn = (a, b) => truthScore(b) - truthScore(a);
+  } else if (currentFilter === 'soon') {
+    filtered = active.filter(m => isClosingSoon(m));
+    sortFn = (a, b) => new Date(a.expiry_date) - new Date(b.expiry_date);
+  } else if (currentFilter === 'mine') {
+    filtered = active.filter(m => myPositions[m.id]);
+    sortFn = (a, b) => (b.trader_count||0) - (a.trader_count||0);
+  } else {
+    // Default "All": smart relevance — blend of truth score + recency
+    filtered = active;
+    sortFn = (a, b) => truthScore(b) - truthScore(a);
+  }
 
   const grid = document.getElementById('marketsGrid');
   if (filtered.length === 0) {
     const msgs = {
-      hot:  { icon: '🔥', title: 'No hot markets yet', sub: 'Markets with 5+ traders will show here.' },
-      soon: { icon: '⏰', title: 'Nothing closing soon', sub: 'Markets closing within 72 hours will show here.' },
-      mine: { icon: '✓', title: 'No active bets', sub: 'Your open predictions will show here.' },
-      all:  { icon: '📊', title: 'No open markets', sub: 'Check back soon!' }
+      hot:   { icon: '🔥', title: 'No hot markets yet', sub: 'Markets with 5+ traders will show here.' },
+      truth: { icon: '🧭', title: 'No active markets', sub: 'Publish markets to start the truth feed.' },
+      soon:  { icon: '⏰', title: 'Nothing closing soon', sub: 'Markets closing within 72 hours will show here.' },
+      mine:  { icon: '✓', title: 'No active bets', sub: 'Your open predictions will show here.' },
+      all:   { icon: '📊', title: 'No open markets', sub: 'Check back soon!' }
     };
     const m = msgs[currentFilter] || msgs.all;
     grid.innerHTML = `<div class="empty"><div class="empty-icon">${m.icon}</div><strong>${m.title}</strong><br/><span style="font-size:12px;color:var(--dim);margin-top:6px;display:block">${m.sub}</span></div>`;
   } else {
-    // Pick featured card: hottest (most traders) first, otherwise just first
-    const sorted = [...filtered].sort((a,b) => (b.trader_count||0) - (a.trader_count||0));
+    const sorted = [...filtered].sort(sortFn);
+    // Featured card: most contested (or highest truth score) gets hero spot
     const featuredId = sorted[0]?.id;
-    // Render featured first, then rest sorted by traders
     const featuredCards = sorted.filter(m => m.id === featuredId).map(m => marketCardHTML(m, false, true));
     const restCards     = sorted.filter(m => m.id !== featuredId).map(m => marketCardHTML(m, false, false));
     grid.innerHTML = [...featuredCards, ...restCards].join('');
+
+    // Update truth feed header with live summary if in truth mode
+    if (currentFilter === 'truth') updateTruthFeedSummary(sorted);
   }
+}
+
+function updateTruthFeedSummary(sorted) {
+  const sub = document.getElementById('truthFeedSub');
+  if (!sub || !sorted.length) return;
+  const contested = sorted.filter(m => { const y = Math.round((m.yes_price||0.5)*100); return y >= 43 && y <= 57; });
+  const consensus = sorted.filter(m => { const y = Math.round((m.yes_price||0.5)*100); return y > 70 || y < 30; });
+  const top = sorted[0];
+  const topYesPct = Math.round((top.yes_price||0.5)*100);
+  const topSig = sentimentSignal(topYesPct);
+  let msg = `<strong>${contested.length}</strong> market${contested.length !== 1 ? 's' : ''} are genuinely contested — no consensus yet.`;
+  if (consensus.length) msg += ` <strong>${consensus.length}</strong> have strong community conviction.`;
+  msg += ` Most interesting right now: <strong>"${top.question.slice(0,60)}${top.question.length > 60 ? '…' : ''}"</strong> at ${topYesPct}% YES.`;
+  sub.innerHTML = msg;
 }
 
 // Category → pill class mapping
@@ -2143,8 +2243,11 @@ function marketCardHTML(m, isResolved, featured) {
   // Top row
   const catPill   = `<span class="cat-pill ${cc}">${(m.category||'Market').toUpperCase()}</span>`;
   let badgesHTML  = '';
-  if (isResolved) badgesHTML = `<span class="market-badge resolved-badge">Resolved</span>`;
-  else {
+  if (isResolved) {
+    badgesHTML = `<span class="market-badge resolved-badge">Resolved</span>`;
+  } else {
+    const sig = sentimentSignal(yesPct);
+    badgesHTML += `<span class="sentiment-badge ${sig.cls}">${sig.label}</span>`;
     if (hot)  badgesHTML += `<span class="market-badge hot">🔥 Hot</span>`;
     if (soon) badgesHTML += `<span class="market-badge soon">⚡ Soon</span>`;
   }
