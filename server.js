@@ -5651,7 +5651,7 @@ app.get('/api/activity', async (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 40, 100);
     const since = req.query.since; // ISO cursor for polling
 
-    const [betsRes, resolutionsRes, newMarketsRes, winsRes, creatorsRes] = await Promise.all([
+    const [betsRes, resolutionsRes, newMarketsRes, winsRes, creatorsRes, commentsRes] = await Promise.all([
       supabase
         .from('positions')
         .select('id, user_id, side, amount, created_at, market_id, markets(id, question, tenant_slug, yes_price, no_price, trader_count)')
@@ -5687,6 +5687,13 @@ app.get('/api/activity', async (req, res) => {
       supabase
         .from('creator_settings')
         .select('slug, display_name, primary_color, custom_points_name, logo_url'),
+
+      // Recent comments
+      supabase
+        .from('market_comments')
+        .select('id, user_id, user_name, body, created_at, market_id, creator_slug, markets(id, question, tenant_slug)')
+        .order('created_at', { ascending: false })
+        .limit(since ? 25 : 20),
     ]);
 
     const communities = {};
@@ -5793,6 +5800,26 @@ app.get('/api/activity', async (req, res) => {
       }
     }
     activities.push(...Object.values(winsByMarket));
+
+    // Comment events
+    for (const c of (commentsRes.data || [])) {
+      const mkt  = c.markets;
+      const cSlug = c.creator_slug || mkt?.tenant_slug;
+      if (!cSlug || !mkt?.question) continue;
+      activities.push({
+        type:            'comment',
+        id:              `cmt_${c.id}`,
+        ts:              c.created_at,
+        user_id:         c.user_id,
+        user:            c.user_name || 'Anonymous',
+        body:            c.body,
+        market_id:       c.market_id,
+        market_question: mkt.question,
+        creator_slug:    cSlug,
+        community_name:  communities[cSlug]?.display_name || cSlug,
+        community_color: communities[cSlug]?.primary_color || '#c9920d',
+      });
+    }
 
     // Sort by ts desc and deduplicate
     activities.sort((a, b) => new Date(b.ts) - new Date(a.ts));

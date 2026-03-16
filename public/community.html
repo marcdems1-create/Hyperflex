@@ -1828,6 +1828,12 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
     </div>
     <div class="modal-body">
       <div class="predict-market-q" id="predictQuestion"></div>
+      <!-- Meta strip: expiry + multiplier -->
+      <div style="display:flex;gap:16px;align-items:center;margin-bottom:16px;padding:9px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:7px;flex-wrap:wrap">
+        <span style="font-family:var(--mono);font-size:11px;color:var(--dim);display:flex;align-items:center;gap:5px">⏱ <span id="predictExpiry">—</span></span>
+        <span style="font-family:var(--mono);font-size:11px;color:rgba(255,255,255,0.15)">|</span>
+        <span style="font-family:var(--mono);font-size:11px;color:var(--gold)">⚡ <span id="predictMulti">2.00×</span> return</span>
+      </div>
       <div class="modal-error" id="predictError"></div>
       <div style="margin-bottom:16px">
         <div style="font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px">Your pick</div>
@@ -1847,6 +1853,12 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
       <div class="payout-preview">
         <span class="payout-label">Potential payout</span>
         <span class="payout-val" id="payoutVal">200 pts</span>
+      </div>
+      <!-- Optional comment -->
+      <div style="margin-top:14px">
+        <div style="font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px">Add a comment <span style="opacity:.45;font-weight:400;text-transform:none;letter-spacing:0">(optional — posts to feed)</span></div>
+        <textarea id="predictComment" maxlength="280" placeholder="Share your reasoning…" rows="2" style="width:100%;background:var(--paper);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;padding:9px 12px;font-family:inherit;resize:none;line-height:1.45;outline:none;transition:border-color .15s" onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='var(--border)'" oninput="document.getElementById('predictCommentCount').textContent=this.value.length"></textarea>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:4px;text-align:right"><span id="predictCommentCount">0</span>/280</div>
       </div>
     </div>
     <div class="modal-footer">
@@ -2941,6 +2953,16 @@ function openPredict(m, side) {
   document.getElementById('amountInput').value = minPts;
   const balPts = communityBalance !== null ? Math.floor(communityBalance / 100) : (currentUser?.balance || 0);
   document.getElementById('amountHint').textContent = `Balance: ${Number(balPts).toLocaleString()} pts`;
+  // Expiry date
+  const expiryEl = document.getElementById('predictExpiry');
+  if (expiryEl && m.expiry_date) {
+    const ts = m.expiry_date.endsWith('Z') || m.expiry_date.includes('+') ? m.expiry_date : m.expiry_date + 'Z';
+    const d = new Date(ts);
+    expiryEl.textContent = 'Closes ' + d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+  // Clear comment
+  const cmtEl = document.getElementById('predictComment');
+  if (cmtEl) { cmtEl.value = ''; document.getElementById('predictCommentCount').textContent = '0'; }
   updatePayout();
   document.getElementById('predictOverlay').classList.add('show');
 }
@@ -2949,6 +2971,7 @@ function selectSide(side) {
   pendingSide = side;
   document.getElementById('sideYes').classList.toggle('active', side === 'YES');
   document.getElementById('sideNo').classList.toggle('active',  side === 'NO');
+  updateMultiplier();
 }
 
 function updatePayout() {
@@ -2958,6 +2981,16 @@ function updatePayout() {
   const price  = pendingSide === 'YES' ? (Number(m.yes_price) || 0.5) : (Number(m.no_price) || 0.5);
   const payout = price > 0 ? (amount / price) : amount * 2;
   document.getElementById('payoutVal').textContent = `${Math.round(payout).toLocaleString()} pts`;
+  updateMultiplier();
+}
+
+function updateMultiplier() {
+  const m = pendingMarket;
+  const el = document.getElementById('predictMulti');
+  if (!el || !m || !pendingSide) return;
+  const price = pendingSide === 'YES' ? (Number(m.yes_price) || 0.5) : (Number(m.no_price) || 0.5);
+  const multi = price > 0 ? (1 / price) : 2;
+  el.textContent = multi.toFixed(2) + '×';
 }
 
 async function submitPredict() {
@@ -3009,12 +3042,29 @@ async function submitPredict() {
       if (mkt) { mkt.yes_price = data.yes_price; mkt.no_price = data.no_price; }
     }
 
+    // Capture comment before closePredict() clears pendingMarket
+    const commentText   = document.getElementById('predictComment')?.value?.trim();
+    const commentMktId  = pendingMarket.id;
     closePredict();
     showToast(`✓ ${pendingSide} · ${inputPts.toLocaleString()} pts placed`, 'success');
     refreshMarketCard(pendingMarket);
     renderUserHeader();
     buildFilterCounts();
     renderRewardHint();
+    // Post optional comment to feed
+    if (commentText && commentMktId) {
+      const token = localStorage.getItem('hf_token');
+      fetch(`${API}/api/community/${slug}/markets/${commentMktId}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ body: commentText })
+      }).then(async r => {
+        if (r.ok) {
+          commentsLoaded[commentMktId] = false; // force reload next open
+          showToast('💬 Comment posted to feed', 'success');
+        }
+      }).catch(() => {});
+    }
   } catch {
     showPredictError('Network error. Try again.');
   } finally {
