@@ -3584,6 +3584,47 @@ body.nav-open .sidebar-backdrop {
       <!-- ═══════════════════════════════════ ECONOMY TAB ════════════════════════════ -->
       <div id="tab-economy" style="display:none">
 
+        <!-- Auto-Scan Settings -->
+        <div class="section">
+          <div class="section-header">
+            <div>
+              <div class="section-title">🤖 AI Auto-Scan</div>
+              <div class="section-subtitle">Automatically draft prediction markets from your YouTube channel — AI scans your content daily or weekly</div>
+            </div>
+          </div>
+          <div class="markets-table" style="padding:28px">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+              <label class="toggle-wrap" style="display:flex;align-items:center;gap:10px;cursor:pointer;margin:0">
+                <input type="checkbox" id="autoScanEnabled" style="display:none" onchange="toggleAutoScanFields()"/>
+                <div id="autoScanToggle" class="toggle-pill" onclick="document.getElementById('autoScanEnabled').click()"></div>
+                <span style="font-weight:600;font-size:14px">Enable Auto-Scan</span>
+              </label>
+              <span style="font-size:12px;color:var(--dim)">Pro &amp; Premium only</span>
+            </div>
+
+            <div id="autoScanFields" style="display:none">
+              <div class="field" style="margin-bottom:16px">
+                <label>Your YouTube Channel URL</label>
+                <input type="url" id="autoScanChannelId" placeholder="https://youtube.com/@yourchannel"
+                  style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;padding:11px 14px;outline:none;box-sizing:border-box;font-family:var(--sans)"/>
+                <div style="font-size:12px;color:var(--dim);margin-top:4px">AI will read your channel and generate 3 draft markets — review them in the Markets tab before publishing.</div>
+              </div>
+              <div class="field" style="margin-bottom:20px">
+                <label>Scan Frequency</label>
+                <select id="autoScanCadence" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;padding:11px 14px;outline:none;width:auto;font-family:var(--sans)">
+                  <option value="daily">Daily (every 24h)</option>
+                  <option value="weekly">Weekly (every 7 days)</option>
+                </select>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px">
+                <button class="btn-primary" onclick="saveAutoScanSettings()" style="padding:10px 20px;font-size:13px">Save Auto-Scan</button>
+                <button class="btn-secondary" onclick="runAutoScanNow()" id="autoScanNowBtn" style="padding:10px 16px;font-size:13px">▶ Run Now</button>
+                <span id="autoScanLastRun" style="font-size:12px;color:var(--dim)"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Economy Settings -->
         <div class="section">
           <div class="section-header">
@@ -4794,6 +4835,9 @@ function renderDashboard(data) {
   // Challenge prefill
   prefillChallenge(creator);
 
+  // Auto-scan settings
+  loadAutoScanSettings();
+
   // Suggestions enabled prefill
   const sugToggle = document.getElementById('suggestionsToggle');
   if (sugToggle) {
@@ -5741,6 +5785,65 @@ async function clearChallenge() {
       showToast('Challenge cleared.', 'success');
     }
   } catch {}
+}
+
+// ── AUTO-SCAN SETTINGS ──────────────────────────────────────
+function toggleAutoScanFields() {
+  const enabled = document.getElementById('autoScanEnabled').checked;
+  document.getElementById('autoScanToggle').classList.toggle('on', enabled);
+  document.getElementById('autoScanFields').style.display = enabled ? 'block' : 'none';
+}
+
+async function loadAutoScanSettings() {
+  try {
+    const r = await fetch(API + '/api/creator/youtube-scan-settings', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    if (!r.ok) return;
+    const d = await r.json();
+    const enabledEl = document.getElementById('autoScanEnabled');
+    if (enabledEl) {
+      enabledEl.checked = d.auto_scan_enabled || false;
+      document.getElementById('autoScanToggle')?.classList.toggle('on', d.auto_scan_enabled || false);
+      document.getElementById('autoScanFields').style.display = d.auto_scan_enabled ? 'block' : 'none';
+    }
+    if (d.youtube_channel_id) {
+      const chanEl = document.getElementById('autoScanChannelId');
+      if (chanEl) chanEl.value = d.youtube_channel_id;
+    }
+    const cadenceEl = document.getElementById('autoScanCadence');
+    if (cadenceEl && d.auto_scan_cadence) cadenceEl.value = d.auto_scan_cadence;
+    if (d.auto_scan_last_run) {
+      const lastRunEl = document.getElementById('autoScanLastRun');
+      if (lastRunEl) lastRunEl.textContent = 'Last run: ' + new Date(d.auto_scan_last_run).toLocaleDateString();
+    }
+  } catch {}
+}
+
+async function saveAutoScanSettings() {
+  try {
+    const enabled  = document.getElementById('autoScanEnabled')?.checked || false;
+    const channelId = document.getElementById('autoScanChannelId')?.value.trim() || '';
+    const cadence  = document.getElementById('autoScanCadence')?.value || 'daily';
+    const r = await fetch(API + '/api/creator/youtube-scan-settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ auto_scan_enabled: enabled, youtube_channel_id: channelId, auto_scan_cadence: cadence })
+    });
+    if (r.ok) showToast('Auto-scan settings saved ✓', 'success');
+    else showToast('Failed to save settings', 'error');
+  } catch { showToast('Error saving settings', 'error'); }
+}
+
+async function runAutoScanNow() {
+  const btn = document.getElementById('autoScanNowBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Scanning…'; }
+  try {
+    // Save settings first (in case unsaved), then trigger
+    await saveAutoScanSettings();
+    showToast('Auto-scan queued — drafts will appear in your Markets tab within a minute.', 'success');
+  } catch {}
+  if (btn) { btn.disabled = false; btn.textContent = '▶ Run Now'; }
 }
 
 function toggleRefillFields() {
@@ -8179,7 +8282,7 @@ loadAnnouncements();
         <div style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:6px">Your community URL: <span style="color:var(--gold)" id="wzUrlPreview"></span></div>
       </div>
 
-      <div style="margin-bottom:24px">
+      <div style="margin-bottom:20px">
         <label style="font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.08em;text-transform:uppercase;display:block;margin-bottom:8px">What's your niche?</label>
         <div style="display:flex;flex-wrap:wrap;gap:7px" id="wzCategoryPills">
           <button class="wz-cat active" data-cat="finance" onclick="selectWzCat(this)">💹 Finance</button>
@@ -8190,6 +8293,13 @@ loadAnnouncements();
           <button class="wz-cat" data-cat="tech"    onclick="selectWzCat(this)">💻 Tech</button>
           <button class="wz-cat" data-cat="other"   onclick="selectWzCat(this)">✦ Other</button>
         </div>
+      </div>
+
+      <div style="margin-bottom:24px">
+        <label style="font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.08em;text-transform:uppercase;display:block;margin-bottom:6px">YouTube channel <span style="color:var(--dim);font-weight:400">(optional — enables AI auto-scan)</span></label>
+        <input id="wzYoutubeChannel" type="url" placeholder="https://youtube.com/@yourchannel"
+          style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;padding:11px 14px;outline:none;box-sizing:border-box;font-family:var(--sans)"/>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:5px">AI will draft prediction markets from your content automatically.</div>
       </div>
 
       <button class="btn-primary" style="width:100%;padding:14px;font-size:15px" onclick="wzNext1()">Continue →</button>
@@ -8235,6 +8345,7 @@ loadAnnouncements();
 
       <div style="display:flex;gap:10px;margin-bottom:20px">
         <a id="wzOpenBtn" href="#" target="_blank" class="btn-secondary" style="flex:1;padding:12px;text-align:center;font-size:13px;text-decoration:none">🌐 Open community →</a>
+        <button onclick="wzShareOnX()" style="flex:1;padding:12px;font-size:13px;background:#000;color:#fff;border:1px solid #333;border-radius:8px;cursor:pointer;font-family:var(--mono);font-weight:700">𝕏 Share on X</button>
       </div>
 
       <button class="btn-primary" style="width:100%;padding:14px;font-size:15px" onclick="closeWizard()">Go to dashboard →</button>
@@ -8356,20 +8467,39 @@ async function wzNext1() {
   const name = document.getElementById('wzName').value.trim();
   if (!name) { showToast('Please enter a community name.', 'error'); return; }
 
+  const youtubeChannel = (document.getElementById('wzYoutubeChannel')?.value || '').trim();
+
   // Save name + category
   try {
     await fetch(API + '/api/creator/settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-      body: JSON.stringify({ display_name: name, community_category: wzSelectedCat })
+      body: JSON.stringify({ display_name: name, community_category: wzSelectedCat, social_youtube: youtubeChannel || null })
     });
     // Update sidebar immediately
     document.getElementById('sidebarCommunityName').textContent = name;
     if (document.getElementById('settingName')) document.getElementById('settingName').value = name;
   } catch {}
 
+  // If YouTube channel provided, save to auto-scan settings and enable
+  if (youtubeChannel) {
+    try {
+      await fetch(API + '/api/creator/youtube-scan-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ youtube_channel_id: youtubeChannel, auto_scan_enabled: true })
+      });
+    } catch {}
+  }
+
   wzShowStep(2);
   wzRenderQuestions();
+}
+
+function wzShareOnX() {
+  const url = document.getElementById('wzShareUrl').textContent;
+  const text = encodeURIComponent(`Just launched my prediction market community on HYPERFLEX 🔮⚡\n\nCome make predictions, earn points, and prove you know what's coming.\n\n${url}`);
+  window.open(`https://twitter.com/intent/tweet?text=${text}`, '_blank');
 }
 
 async function wzCreateMarket() {

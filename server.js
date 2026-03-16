@@ -7114,5 +7114,328 @@ app.get('/api/explore', async (req, res) => {
 
 app.get('/explore', (req, res) => res.sendFile(path.join(__dirname, 'public', 'explore.html')));
 
+// ════════════════════════════════════════════════════════════
+// FEATURE 2 — PUT /api/user/display-name
+// Members set or update their display name from community.html
+// ════════════════════════════════════════════════════════════
+app.put('/api/user/display-name', requireAuth, async (req, res) => {
+  try {
+    const { display_name } = req.body;
+    if (!display_name || !display_name.trim()) return res.status(400).json({ error: 'display_name required' });
+    const name = display_name.trim().slice(0, 40);
+    const { error } = await supabase.from('users').update({ display_name: name }).eq('id', req.user.id);
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ ok: true, display_name: name });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+// FEATURE 3 — GET/PUT /api/creator/youtube-scan-settings
+// Per-creator YouTube auto-scan schedule
+// ════════════════════════════════════════════════════════════
+app.get('/api/creator/youtube-scan-settings', requireCreator, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('creator_settings')
+      .select('youtube_channel_id, auto_scan_enabled, auto_scan_cadence, auto_scan_last_run')
+      .eq('creator_id', req.creator.id)
+      .maybeSingle();
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({
+      youtube_channel_id: data?.youtube_channel_id || '',
+      auto_scan_enabled:  data?.auto_scan_enabled  || false,
+      auto_scan_cadence:  data?.auto_scan_cadence  || 'daily',
+      auto_scan_last_run: data?.auto_scan_last_run || null,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/creator/youtube-scan-settings', requireCreator, async (req, res) => {
+  try {
+    const { youtube_channel_id, auto_scan_enabled, auto_scan_cadence } = req.body;
+    const updates = {};
+    if (youtube_channel_id !== undefined) updates.youtube_channel_id = youtube_channel_id || null;
+    if (typeof auto_scan_enabled === 'boolean') updates.auto_scan_enabled = auto_scan_enabled;
+    if (auto_scan_cadence)   updates.auto_scan_cadence  = auto_scan_cadence;
+    if (!Object.keys(updates).length) return res.status(400).json({ error: 'Nothing to update' });
+    const { error } = await supabase.from('creator_settings').update(updates).eq('creator_id', req.creator.id);
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ ok: true, ...updates });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+// FEATURE 3 — scanCreatorYouTubeChannels()
+// Daily cron: scan each creator's YouTube channel → draft markets for their community
+// ════════════════════════════════════════════════════════════
+async function scanCreatorYouTubeChannels() {
+  if (!process.env.ANTHROPIC_API_KEY) return;
+  try {
+    // Find all creators with auto-scan enabled and a channel ID set
+    const { data: creators } = await supabase
+      .from('creator_settings')
+      .select('creator_id, slug, display_name, youtube_channel_id, auto_scan_cadence, auto_scan_last_run, plan')
+      .eq('auto_scan_enabled', true)
+      .not('youtube_channel_id', 'is', null);
+
+    if (!creators || !creators.length) return;
+
+    const now = new Date();
+    for (const creator of creators) {
+      try {
+        // Respect cadence: skip if ran recently
+        if (creator.auto_scan_last_run) {
+          const last = new Date(creator.auto_scan_last_run);
+          const hoursAgo = (now - last) / 3600000;
+          const threshold = creator.auto_scan_cadence === 'weekly' ? 168 : 23;
+          if (hoursAgo < threshold) continue;
+        }
+
+        // Only Pro+ creators get auto-scan
+        if (!['pro', 'platinum'].includes(creator.plan)) continue;
+
+        const channelId = creator.youtube_channel_id.trim();
+        const today = now.toISOString().split('T')[0];
+
+        console.log(`[auto-scan] Scanning YouTube channel for creator: ${creator.slug}`);
+
+        const systemPrompt = `You are a prediction market creator for a content creator community. Today is ${today}. Based on a YouTube creator's channel niche and content style, generate 3 engaging prediction market questions their community would love to bet on. The creator's channel: "${channelId}". Return ONLY a valid JSON array with objects: { question, category, resolution_date (YYYY-MM-DD, 14-60 days from today) }. No other text.`;
+
+        const response = await anthropic.messages.create({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 512,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: 'Generate 3 prediction markets for this creator\'s community.' }],
+        });
+
+        const content = response?.content?.[0]?.text || '';
+        if (!content) continue;
+
+        let markets;
+        try { markets = JSON.parse(content); } catch { continue; }
+        if (!Array.isArray(markets)) continue;
+
+        for (const m of markets) {
+          if (!m?.question || typeof m.question !== 'string') continue;
+          // Check for duplicate question for this creator
+          const { data: existing } = await supabase
+            .from('markets')
+            .select('id')
+            .eq('question', m.question)
+            .eq('tenant_slug', creator.slug)
+            .maybeSingle();
+          if (existing) continue;
+
+          await supabase.from('markets').insert([{
+            question:        m.question,
+            category:        m.category || 'other',
+            expiry_date:     m.resolution_date || today,
+            resolution_date: m.resolution_date || today,
+            yes_price: 0.5, no_price: 0.5,
+            yes_pool: 1000,  no_pool: 1000,
+            resolved: false,
+            tenant_slug: creator.slug,
+            is_public: false, // drafts — creator reviews before publishing
+          }]);
+        }
+
+        // Update last run timestamp
+        await supabase.from('creator_settings')
+          .update({ auto_scan_last_run: now.toISOString() })
+          .eq('creator_id', creator.creator_id);
+
+        console.log(`[auto-scan] Generated ${markets.length} draft markets for ${creator.slug}`);
+      } catch (e) {
+        console.error(`[auto-scan] Error for creator ${creator.slug}:`, e.message);
+      }
+    }
+  } catch (err) {
+    console.error('[auto-scan] Fatal:', err.message);
+  }
+}
+
+// Run creator YouTube auto-scan daily at 8am UTC
+cron.schedule('0 8 * * *', scanCreatorYouTubeChannels);
+
+// ════════════════════════════════════════════════════════════
+// FEATURE 4 — autoResolveExpiredMarkets()
+// Cron: find expired markets with a resolution_source → ask Claude → auto-resolve or notify creator
+// ════════════════════════════════════════════════════════════
+async function autoResolveExpiredMarkets() {
+  if (!process.env.ANTHROPIC_API_KEY) return;
+  try {
+    const now = new Date().toISOString();
+    // Find expired unresolved markets with a resolution source
+    const { data: markets } = await supabase
+      .from('markets')
+      .select('id, question, tenant_slug, resolution_source, resolution_sources, expiry_date, yes_price')
+      .eq('resolved', false)
+      .lt('expiry_date', now)
+      .not('resolution_source', 'is', null);
+
+    if (!markets || !markets.length) return;
+
+    for (const market of markets) {
+      try {
+        // Get the source URL
+        let sourceUrl = market.resolution_source;
+        if (!sourceUrl || !sourceUrl.startsWith('http')) {
+          try {
+            const arr = typeof market.resolution_sources === 'string'
+              ? JSON.parse(market.resolution_sources) : (market.resolution_sources || []);
+            const first = arr.find(s => s && (typeof s === 'string' ? s.startsWith('http') : s.url?.startsWith('http')));
+            if (first) sourceUrl = typeof first === 'string' ? first : first.url;
+          } catch {}
+        }
+        if (!sourceUrl || !sourceUrl.startsWith('http')) continue;
+
+        console.log(`[auto-resolve] Checking market ${market.id}: "${market.question}"`);
+
+        // Fetch source content (with timeout)
+        let sourceText = '';
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 8000);
+          const resp = await fetch(sourceUrl, {
+            signal: controller.signal,
+            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; HyperflexBot/1.0)' }
+          });
+          clearTimeout(timeout);
+          if (resp.ok) {
+            const raw = await resp.text();
+            // Strip HTML tags, take first 3000 chars
+            sourceText = raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 3000);
+          }
+        } catch {}
+
+        if (!sourceText) {
+          console.log(`[auto-resolve] Could not fetch source for market ${market.id}, skipping`);
+          continue;
+        }
+
+        // Ask Claude Haiku to determine outcome
+        const aiResponse = await anthropic.messages.create({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 256,
+          system: 'You are a prediction market resolver. Given a market question and source content, determine if the outcome is YES, NO, or UNCERTAIN. Return ONLY valid JSON: { "outcome": "YES"|"NO"|"UNCERTAIN", "confidence": 0.0-1.0, "reasoning": "brief explanation" }',
+          messages: [{
+            role: 'user',
+            content: `Market question: "${market.question}"\n\nSource content:\n${sourceText}\n\nDetermine: did this prediction come true?`
+          }],
+        });
+
+        const aiText = aiResponse?.content?.[0]?.text || '';
+        let resolution;
+        try { resolution = JSON.parse(aiText); } catch { continue; }
+        if (!resolution?.outcome || !['YES', 'NO', 'UNCERTAIN'].includes(resolution.outcome)) continue;
+
+        // Get creator info for notification
+        const { data: creatorSettings } = await supabase
+          .from('creator_settings')
+          .select('creator_id, display_name')
+          .eq('slug', market.tenant_slug)
+          .maybeSingle();
+
+        let creatorEmail = null;
+        if (creatorSettings?.creator_id) {
+          const { data: creatorUser } = await supabase
+            .from('users')
+            .select('email')
+            .eq('id', creatorSettings.creator_id)
+            .maybeSingle();
+          creatorEmail = creatorUser?.email;
+        }
+
+        if (resolution.outcome !== 'UNCERTAIN' && resolution.confidence >= 0.82) {
+          // High confidence — auto-resolve
+          const outcome = resolution.outcome; // 'YES' or 'NO'
+          const winningSide = outcome;
+          const losingSide  = outcome === 'YES' ? 'NO' : 'YES';
+
+          // Settle positions (same logic as manual settle)
+          const { data: positions } = await supabase
+            .from('positions')
+            .select('*')
+            .eq('market_id', market.id)
+            .eq('settled', false);
+
+          if (positions && positions.length) {
+            for (const pos of positions) {
+              const won = pos.side === winningSide;
+              const payout = won ? (Number(pos.potential_payout) || 0) : 0;
+              await supabase.from('positions').update({ settled: true, won }).eq('id', pos.id);
+              if (won && payout > 0) {
+                // Credit community balance
+                const { data: bal } = await supabase
+                  .from('community_balances')
+                  .select('balance')
+                  .eq('user_id', pos.user_id)
+                  .eq('creator_slug', market.tenant_slug)
+                  .maybeSingle();
+                const cur = Number(bal?.balance) || 0;
+                await supabase.from('community_balances')
+                  .upsert({ user_id: pos.user_id, creator_slug: market.tenant_slug, balance: cur + payout },
+                           { onConflict: 'user_id,creator_slug' });
+              }
+            }
+          }
+
+          await supabase.from('markets').update({
+            resolved: true,
+            resolved_at: new Date().toISOString(),
+            resolution_outcome: outcome,
+            resolution_note: `Auto-resolved by AI (${Math.round(resolution.confidence * 100)}% confidence): ${resolution.reasoning}`,
+          }).eq('id', market.id);
+
+          console.log(`[auto-resolve] Auto-resolved market ${market.id} as ${outcome} (${Math.round(resolution.confidence * 100)}%)`);
+
+          // Notify creator
+          if (creatorEmail && process.env.SMTP_HOST) {
+            const transporter = nodemailer.createTransport({ host: process.env.SMTP_HOST, port: Number(process.env.SMTP_PORT) || 587, secure: false, auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } });
+            await transporter.sendMail({
+              from: process.env.SMTP_FROM || 'noreply@hyperflex.network',
+              to: creatorEmail,
+              subject: `✅ Market auto-resolved: ${market.question.slice(0, 60)}`,
+              html: `<div style="background:#141412;padding:32px;font-family:'Courier New',monospace;color:#ddd8cc;max-width:540px;border-radius:12px;"><div style="font-size:20px;font-weight:800;color:#c9920d;margin-bottom:20px;">HYPERFLEX</div><p style="color:#f5f5f0;font-size:16px;font-weight:700;margin:0 0 12px;">A market was auto-resolved ✅</p><div style="background:#1c1c19;border:1px solid #2a2a27;border-radius:8px;padding:16px;margin-bottom:20px;"><div style="font-size:13px;color:#ddd8cc;margin-bottom:8px;">"${market.question}"</div><div style="font-size:14px;font-weight:700;color:#c9920d;margin-bottom:4px;">Outcome: ${outcome}</div><div style="font-size:12px;color:#888880;">${resolution.reasoning}</div></div><p style="font-size:12px;color:#888880;">If this seems incorrect, you can override it from your <a href="https://hyperflex.network/creator-dashboard.html" style="color:#c9920d;">dashboard</a>.</p></div>`
+            }).catch(() => {});
+          }
+
+        } else {
+          // Uncertain or low-confidence — flag for creator review
+          await supabase.from('markets').update({
+            resolution_note: `⚠️ AI suggested ${resolution.outcome} (${Math.round((resolution.confidence || 0) * 100)}% confidence) — needs manual review. ${resolution.reasoning}`,
+          }).eq('id', market.id);
+
+          console.log(`[auto-resolve] Flagged market ${market.id} for creator review (${resolution.outcome}, ${resolution.confidence})`);
+
+          // Email creator to manually resolve
+          if (creatorEmail && process.env.SMTP_HOST) {
+            const transporter = nodemailer.createTransport({ host: process.env.SMTP_HOST, port: Number(process.env.SMTP_PORT) || 587, secure: false, auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } });
+            await transporter.sendMail({
+              from: process.env.SMTP_FROM || 'noreply@hyperflex.network',
+              to: creatorEmail,
+              subject: `⚠️ Market needs your resolution: ${market.question.slice(0, 60)}`,
+              html: `<div style="background:#141412;padding:32px;font-family:'Courier New',monospace;color:#ddd8cc;max-width:540px;border-radius:12px;"><div style="font-size:20px;font-weight:800;color:#c9920d;margin-bottom:20px;">HYPERFLEX</div><p style="color:#f5f5f0;font-size:16px;font-weight:700;margin:0 0 12px;">A market needs your resolution ⚠️</p><div style="background:#1c1c19;border:1px solid #2a2a27;border-radius:8px;padding:16px;margin-bottom:20px;"><div style="font-size:13px;color:#ddd8cc;margin-bottom:8px;">"${market.question}"</div><div style="font-size:12px;color:#888880;margin-bottom:8px;">AI suggested <strong style="color:#c9920d;">${resolution.outcome}</strong> but wasn't confident enough to auto-resolve (${Math.round((resolution.confidence || 0) * 100)}%).</div><div style="font-size:12px;color:#888880;">${resolution.reasoning}</div></div><a href="https://hyperflex.network/creator-dashboard.html" style="display:inline-block;background:#c9920d;color:#141412;padding:10px 20px;border-radius:6px;font-weight:700;font-size:13px;text-decoration:none;">Resolve from dashboard →</a></div>`
+            }).catch(() => {});
+          }
+        }
+      } catch (e) {
+        console.error(`[auto-resolve] Error on market ${market.id}:`, e.message);
+      }
+    }
+  } catch (err) {
+    console.error('[auto-resolve] Fatal:', err.message);
+  }
+}
+
+// Run auto-resolve check every 30 minutes
+cron.schedule('*/30 * * * *', autoResolveExpiredMarkets);
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`HYPERFLEX server running on port ${PORT}`));

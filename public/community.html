@@ -1810,6 +1810,21 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
 </div>
 
 <!-- AUTH MODAL -->
+<!-- Display Name Prompt Modal -->
+<div class="overlay" id="displayNameOverlay" style="z-index:9999">
+  <div class="modal" style="max-width:400px;text-align:center">
+    <div style="font-size:32px;margin-bottom:12px">👋</div>
+    <div style="font-size:20px;font-weight:800;color:var(--text);font-family:var(--display);margin-bottom:8px">What should we call you?</div>
+    <div style="font-size:13px;color:var(--dim);margin-bottom:22px;line-height:1.5">Pick a username that'll show up on the leaderboard and activity feed.</div>
+    <input id="displayNameInput" type="text" maxlength="30" placeholder="Your username…"
+      style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;padding:12px 14px;outline:none;box-sizing:border-box;font-family:var(--sans);margin-bottom:14px"
+      onkeydown="if(event.key==='Enter')saveDisplayName()"/>
+    <div id="displayNameError" style="font-size:12px;color:#ef4444;margin-bottom:10px;display:none"></div>
+    <button class="btn-primary" style="width:100%;padding:13px;font-size:14px" onclick="saveDisplayName()">Save name →</button>
+    <button onclick="closeDisplayNamePrompt()" style="display:block;width:100%;text-align:center;margin-top:10px;background:none;border:none;color:var(--dim);font-size:12px;cursor:pointer;font-family:var(--mono)">Skip for now</button>
+  </div>
+</div>
+
 <div class="overlay" id="authOverlay" onclick="closeOverlayOnBg(event,'authOverlay')">
   <div class="modal">
     <div class="modal-header">
@@ -1972,7 +1987,11 @@ function restoreSession() {
   const raw   = localStorage.getItem('hf_user');
   if (token && raw) {
     try { currentUser = JSON.parse(raw); } catch {}
-    if (currentUser) renderUserHeader();
+    if (currentUser) {
+      renderUserHeader();
+      // Show display name prompt if needed (deferred so page renders first)
+      setTimeout(checkDisplayNamePrompt, 1200);
+    }
   }
 }
 
@@ -3188,6 +3207,60 @@ function refreshMarketCard(m) {
 }
 
 // ── AUTH ──────────────────────────────────────────────────────
+// ── DISPLAY NAME PROMPT ──────────────────────────────────────
+function checkDisplayNamePrompt() {
+  if (!currentUser) return;
+  const key = `hf_named_${currentUser.id}`;
+  if (localStorage.getItem(key)) return; // Already named
+  // Show if display_name looks auto-generated (null, empty, or looks like email prefix)
+  const dn = currentUser.display_name || '';
+  const email = currentUser.email || '';
+  const emailPrefix = email.split('@')[0];
+  const needsName = !dn || dn === emailPrefix || dn.length < 2;
+  if (!needsName) { localStorage.setItem(key, '1'); return; }
+  const overlay = document.getElementById('displayNameOverlay');
+  if (overlay) {
+    overlay.classList.add('show');
+    document.getElementById('displayNameInput').value = '';
+    setTimeout(() => document.getElementById('displayNameInput')?.focus(), 300);
+  }
+}
+
+async function saveDisplayName() {
+  const val = (document.getElementById('displayNameInput')?.value || '').trim();
+  const errEl = document.getElementById('displayNameError');
+  if (!val || val.length < 2) {
+    if (errEl) { errEl.textContent = 'Name must be at least 2 characters.'; errEl.style.display = 'block'; }
+    return;
+  }
+  if (errEl) errEl.style.display = 'none';
+  const token = localStorage.getItem('hf_token');
+  try {
+    const r = await fetch(`${API}/api/user/display-name`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ display_name: val })
+    });
+    const d = await r.json();
+    if (!r.ok) { if (errEl) { errEl.textContent = d.error || 'Failed to save.'; errEl.style.display = 'block'; } return; }
+    // Update local state
+    currentUser.display_name = val;
+    localStorage.setItem('hf_user', JSON.stringify(currentUser));
+    localStorage.setItem(`hf_named_${currentUser.id}`, '1');
+    closeDisplayNamePrompt();
+    renderUserHeader();
+    showToast(`Welcome, ${val}! 🎉`, 'success');
+  } catch {
+    if (errEl) { errEl.textContent = 'Network error, try again.'; errEl.style.display = 'block'; }
+  }
+}
+
+function closeDisplayNamePrompt() {
+  const overlay = document.getElementById('displayNameOverlay');
+  if (overlay) overlay.classList.remove('show');
+  if (currentUser) localStorage.setItem(`hf_named_${currentUser.id}`, '1');
+}
+
 function openAuth(tab) {
   switchTab(tab);
   document.getElementById('authError').classList.remove('show');
@@ -3249,6 +3322,8 @@ async function submitAuth() {
     if (authTab === 'register') claimReferralIfPending(data.token);
     renderReferralSection();
     renderRewardHint();
+    // Prompt for display name if not set (OAuth users / email-only users)
+    checkDisplayNamePrompt();
     if (pendingMarket) setTimeout(() => openPredict(pendingMarket, pendingSide), 300);
   } catch {
     showAuthError('Network error. Please try again.');

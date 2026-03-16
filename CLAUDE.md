@@ -38,9 +38,9 @@
 
 ---
 
-## Current State (last updated March 16, 2026 — session 3)
+## Current State (last updated March 16, 2026 — session 4)
 
-- All features committed locally. Latest commit: `16822d7` — needs push
+- All features committed locally. Latest commit pending — needs push
 - **Stripe payments live** — Pro ($29/mo) + Premium ($99/mo) checkout + billing portal
   - Railway env vars needed: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRO_PRICE_ID`, `STRIPE_PLATINUM_PRICE_ID`
   - Webhook endpoint registered at: `https://hyperflex.network/stripe/webhook`
@@ -99,7 +99,8 @@
   7. `supabase_migration_plan_trial.sql` (adds plan_trial_expires_at)
   8. `supabase_migration_market_suggestions.sql` (adds market_suggestions table + suggestions_enabled column)
   9. `supabase_migration_announcements_comments.sql` (creator_announcements, market_comments, resolution_note)
-  10. `supabase_migration_tweet_markets.sql` ← NEW (source_tweet_url, tweet_text, tweet_author on markets)
+  10. `supabase_migration_tweet_markets.sql` (source_tweet_url, tweet_text, tweet_author on markets)
+  11. `supabase_migration_autoscan_autoresolve.sql` ← NEW (youtube_channel_id, auto_scan_enabled, resolution_outcome, resolved_at)
 - **Email notifications**: Opt-in via Railway env vars: `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
   - Fires after both manual resolve and cron settlement
   - No-op if SMTP_HOST is not set — safe to deploy without configuring
@@ -142,6 +143,21 @@
   - Creator dashboard Analytics tab: Audience Intelligence section (engagement rate ring gauge, 14d member growth chart, category breakdown bars, sentiment by category)
   - AI Growth Recommendations panel with "Generate Insights" button
   - Community page: Community Pulse bar (category sentiment pills showing weighted avg YES% from active markets)
+
+- **This session (March 16, session 4)** — committed, needs push:
+  - **Market card redesign** on community.html: slim 4px odds bar, inline YES%/NO% bet buttons, cleaner card style matching profile page
+  - **Predict modal enhancements**: expiry date, payout multiplier (e.g. 2×), optional comment field that posts to activity feed
+  - **Comments → activity feed**: comment events wired to global explore.html feed as Twitter-style cards
+  - **Source links**: `getMarketSource()` helper, 📰 source link on card meta + predict modal; fixed anonymous comment posting
+  - **Full mobile audit**: tweet cards overflow fixed, bottom-sheet predict modal at ≤480px, all pages audited
+  - **Feature 1 — Onboarding wizard**: YouTube channel ID field in step 1 (seeds auto-scan), Share on X button in step 3
+  - **Feature 2 — Member display name prompt**: modal after first login if no name set; `PUT /api/user/display-name`; localStorage key `hf_named_{userId}`
+  - **Feature 3 — Auto-scan per creator**: `youtube_channel_id`, `auto_scan_enabled`, `auto_scan_cadence` columns; `scanCreatorYouTubeChannels()` cron (daily 8am UTC); GET/PUT `/api/creator/youtube-scan-settings`; Auto-Scan panel in Settings tab
+  - **Feature 4 — Market auto-resolution**: `autoResolveExpiredMarkets()` cron (every 30 min); fetches resolution_source URL → Claude Haiku → auto-resolves at ≥82% confidence or flags + emails creator for manual review
+  - **Migration**: `supabase_migration_autoscan_autoresolve.sql` — adds `youtube_channel_id`, `auto_scan_enabled`, `auto_scan_cadence`, `auto_scan_last_run` to `creator_settings`; adds `resolution_outcome`, `resolved_at` to `markets`
+  - ⚠️ Add migration to the ordered list below
+
+- **⚠️ MUST DO BEFORE DEPLOY**: Also run `supabase_migration_autoscan_autoresolve.sql` (11th in the list)
 
 ---
 
