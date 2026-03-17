@@ -281,7 +281,7 @@ app.get('/share/:marketId', async (req, res) => {
   try {
     const { data: market } = await supabase
       .from('markets')
-      .select('id, question, yes_price, no_price, yes_votes, no_votes, category, expiry_date, tenant_slug, creator_slug, source_tweet_url, tweet_text, tweet_author, resolved, outcome')
+      .select('*')
       .eq('id', req.params.marketId)
       .maybeSingle();
 
@@ -5521,10 +5521,11 @@ app.get('/api/community/:slug', async (req, res) => {
 
     if (!settings) return res.status(404).json({ error: 'Community not found' });
 
-    // Match on any of the three fields that market-creation routes populate
+    // Match on any of the three fields that market-creation routes populate.
+    // Use select('*') so missing columns from pending migrations never break the query.
     const { data: rawMarkets, error: marketsErr } = await supabase
       .from('markets')
-      .select('id, question, category, expiry_date, yes_price, no_price, yes_votes, no_votes, trader_count, resolved, outcome, resolved_at, resolution_note, resolution_source, resolution_sources, tweet_text, tweet_author, source_tweet_url, season_id')
+      .select('*')
       .or(`tenant_slug.eq.${slug},creator_id.eq.${settings.creator_id}`)
       .neq('is_public', false)   // include true AND null (legacy markets without is_public set)
       .order('created_at', { ascending: false });
