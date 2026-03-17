@@ -25,9 +25,10 @@
 | `public/creator-dashboard.html` | Creator dashboard (markets, YouTube scanner, analytics, rewards) |
 | `public/community.html` | Member-facing page at `/:slug` |
 | `public/creator-terms.html` | Terms of Service |
-| `public/admin.html` | Internal ops dashboard at `/admin` |
+| `public/admin.html` | Internal ops dashboard at `/admin` — includes ✉️ Outreach tab |
 | `public/explore.html` | Global discover/explore page with Twitter-like activity feed |
 | `public/profile.html` | Creator public profile at `/u/:slug` |
+| `public/embed.html` | Embeddable widget at `/embed/:slug` (iframeable, themed) |
 | `public/member.html` | Member public profile at `/m/:userId` |
 | `public/win-card.html` | Shareable win card page at `/win-card.html?m=&u=` |
 | `public/nominate.html` | "Nominate your creator" fan-facing page at `/nominate` |
@@ -87,20 +88,55 @@
 
 ---
 
+## This session (March 16, session 5) — committed `140755e`, pushed
+
+- **Rewards tab fix**: `'rewards'` was missing from `showTab()` array — tab was permanently invisible. Fixed.
+- **Reward unlocks in explore feed**: `reward_unlocks` table + `maybeLogRewardUnlocks()` in `setCommunityBalance` + `reward_unlock` card in explore.html. Migration: `supabase_migration_reward_unlocks.sql`
+- **Market burst consolidation**: 2+ markets from same creator within 5 min → single `markets_burst` card in explore feed showing count + preview list.
+- **A — Live stats bar**: Public `/api/stats` endpoint (5-min cache). Landing page shows live markets / predictions / communities below hero.
+- **B — Admin outreach tool**: ✉️ Outreach tab in admin.html. Compose + send personalized invite emails to creators. `creator_invites` table tracks sent/accepted. Auto-marks accepted on creator signup.
+- **C — Embeddable widget**: `/embed/:slug` + `/api/embed/:slug`. Lightweight iframeable widget showing top 3 markets, branded colors. Creator dashboard Settings tab has "Get Embed Code" section.
+- **D — Creator referral**: `/ref/:slug` → redirects to `/creator/signup?ref=slug`. `creator_referrals` table. Share tab shows referral link + stats. Referrer gets credited on tracked signups.
+- **E — Resolution disputes**: Members can file dispute within 24h of resolution via ⚠ Dispute button. `market_disputes` table. Creator reviews (uphold/overturn) in Resolution Queue tab. Email notification on dispute filed.
+- **F — Cross-community follows**: `creator_follows` table + `/api/community/:slug/follow-social` toggle + `/api/user/following`. Follow button on community hero + creator profile page. Explore sidebar shows Following card.
+
+**New migrations to run (in order after existing list):**
+12. `supabase_migration_reward_unlocks.sql`
+13. `supabase_migration_creator_invites.sql`
+14. `supabase_migration_creator_referrals.sql`
+15. `supabase_migration_market_disputes.sql`
+16. `supabase_migration_creator_follows.sql`
+
+---
+
 ## Known Issues / Next Up
 
-- **⚠️ MUST DO BEFORE DEPLOY**: Run ALL migrations in order in Supabase SQL editor:
+- **Creator referral acceptance**: `accepted` on `creator_referrals` currently stays false — need to flip it to true when the referred creator publishes their first market (currently manual via admin or future automation)
+- **Embed widget**: No auth in embed — members can't bet from inside the iframe. Intentional for now (links out to community page). Could add predict-in-iframe later.
+- **Admin invite emails**: Require SMTP configured in Railway env vars — silently skips if not set (invite still logged to DB)
+- **Remote URL**: Update git remote to `https://github.com/marcdems1-create/Hyperflex.git` (capital H) to stop redirect warnings
+
+---
+
+## ⚠️ MUST DO BEFORE DEPLOY — Run ALL migrations in order in Supabase SQL editor:
   1. `supabase_migration_community_economy.sql`
   2. `supabase_migration_refill_history.sql`
   3. `supabase_migration_cpmm.sql`
   4. `supabase_migration_referrals.sql`
   5. `supabase_migration_custom_domains.sql`
   6. `supabase_migration_challenges.sql`
-  7. `supabase_migration_plan_trial.sql` (adds plan_trial_expires_at)
-  8. `supabase_migration_market_suggestions.sql` (adds market_suggestions table + suggestions_enabled column)
-  9. `supabase_migration_announcements_comments.sql` (creator_announcements, market_comments, resolution_note)
-  10. `supabase_migration_tweet_markets.sql` (source_tweet_url, tweet_text, tweet_author on markets)
-  11. `supabase_migration_autoscan_autoresolve.sql` ← NEW (youtube_channel_id, auto_scan_enabled, resolution_outcome, resolved_at)
+  7. `supabase_migration_plan_trial.sql`
+  8. `supabase_migration_market_suggestions.sql`
+  9. `supabase_migration_announcements_comments.sql`
+  10. `supabase_migration_tweet_markets.sql`
+  11. `supabase_migration_autoscan_autoresolve.sql`
+  12. `supabase_migration_vote_consensus.sql`
+  13. `supabase_migration_creator_rewards.sql`
+  14. `supabase_migration_reward_unlocks.sql`
+  15. `supabase_migration_creator_invites.sql`
+  16. `supabase_migration_creator_referrals.sql`
+  17. `supabase_migration_market_disputes.sql`
+  18. `supabase_migration_creator_follows.sql`
 - **Email notifications**: Opt-in via Railway env vars: `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
   - Fires after both manual resolve and cron settlement
   - No-op if SMTP_HOST is not set — safe to deploy without configuring
