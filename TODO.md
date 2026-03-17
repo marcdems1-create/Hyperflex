@@ -14,10 +14,13 @@
 
 ## 🟡 Up Next
 
-- [ ] **PUSH** — `git push origin main` to deploy commits `c5509cd` through `8c20977`
-- [ ] **Run 2 new migrations** in Supabase SQL editor: `supabase_migration_custom_domains.sql` + `supabase_migration_challenges.sql`
+- [ ] **PUSH** — `git push origin main` — commits `ada5a38` through `4a84d63` all pending
+- [ ] **Run migrations** in Supabase SQL editor (in order, all 26):
+  - #25 `supabase_migration_blast.sql` — blasted_at column on markets
+  - #26 `supabase_migration_dispute_votes.sql` — dispute_type, requested_outcome, unique index
+  - (plus all prior migrations if not yet run — see CLAUDE.md ordered list)
 - [ ] **Landing page video** — Video section built, just needs real YouTube VIDEO_ID inserted in `public/index.html`
-- [ ] **AI scanner improvements** — auto-scan creator's YouTube channel on schedule
+- [ ] **Update Railway remote** — `git remote set-url origin https://github.com/marcdems1-create/Hyperflex.git` (capital H) to stop redirect warnings
 
 ---
 
@@ -70,3 +73,11 @@
 - [x] Mobile UX round 1 — leaderboard pill, creator login bar, carousel tap fix, watermark overlap, archived markets, milestone toasts (`7db546e`)
 - [x] Reward presets + member claim button (`258804e`)
 - [x] Mobile UX round 2 — plan pill onclick, AI Scanner icon in topbar, Dupe→Duplicate, analytics overflow (`8c20977`)
+- [x] Members tab fully wired — `loadMembers()` in `showTab()`, tab title, ROI dashboard (`ada5a38`)
+- [x] Per-market email blast — 📬 Blast in ⋯ menu, `blasted_at` rate limit, `supabase_migration_blast.sql` (`ada5a38`)
+- [x] One-click X/Twitter market share card — canvas 1200×630 preview, Post on X / Download / Copy link (`ceda3ed`)
+- [x] Dynamic OG images — `GET /og/:marketId.png` via sharp SVG→PNG, per-market og:image on share + win pages (`ceda3ed`)
+- [x] YouTube scanner demo mode — animated steps, category-aware demo markets, real thumbnail, deterministic fallback stats, upgrade CTA (`6216449`, `477377a`)
+- [x] Real YouTube meta endpoint — `GET /api/public/youtube-meta/:videoId` using YouTube Data API v3 (`4a84d63`)
+- [x] Community-gated resolution — expiry check + 30% vote threshold, `resolution_vote` dispute type, vote progress bar in queue + community page (`4a84d63`)
+- [x] `supabase_migration_dispute_votes.sql` — dispute_type, requested_outcome, unique index (#26) (`4a84d63`)

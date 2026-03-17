@@ -40,7 +40,7 @@
 
 ---
 
-## Current State (last updated March 16, 2026 — session 7)
+## Current State (last updated March 17, 2026 — session 10)
 
 - All features committed locally. Latest commit pending — needs push
 - **Stripe payments live** — Pro ($29/mo) + Premium ($99/mo) checkout + billing portal
@@ -313,6 +313,44 @@
 
 ---
 
+## Session 10 — Share cards, demo mode, community-gated resolution (commits `ceda3ed` → `4a84d63`)
+
+**Members tab wired**: `showTab('members')` now calls `loadMembers()` + tab titles object includes `'members':'Members'`. Was the final missing wire from session 9.
+
+**One-click X/Twitter market share card** (commit `ceda3ed`):
+- `openShareCard(marketId)` → modal with 1200×630 canvas preview
+- `_drawShareCard()`: full canvas rendering — gradient background, card border, category pill, HYPERFLEX wordmark, word-wrapped question, YES/NO odds buttons, branded footer
+- Actions: 🐦 Post on X (opens tweet intent), ⬇ Download PNG (canvas toBlob), 📋 Copy Link
+- `GET /og/:marketId.png` server endpoint — builds SVG card → `sharp` converts to PNG; OG/Twitter meta tags on `/share/:marketId` and `/win/:marketId/:userId` updated to use per-market OG images
+- `sharp` added to `package.json`; lazy-loaded via `getSharp()` so server starts without it
+- Win card OG upgraded to `summary_large_image`
+
+**YouTube scanner demo mode** (commits `6216449`, `477377a`):
+- Free-tier creators see a multi-step animated scan (4 steps: fetch → analyze → debates → generate)
+- Fetches real YouTube meta via `GET /api/public/youtube-meta/:videoId` (YouTube Data API v3) — real title, channelTitle, commentCount, viewCount, durationSec
+- Category-aware demo markets: 7 sets × 6 markets each (Sports, Crypto, Gaming, Fitness, Tech, Music, Finance)
+- Real thumbnail from YouTube CDN; real stats shown when available
+- Deterministic seeded fallback via `_seedRand(videoId, min, max)` for consistent small-channel numbers
+- Locked results with upgrade CTA; "Upgrade to Pro to unlock AI scanner →" button
+
+**Community-gated resolution** (commit `4a84d63`):
+- **Removed creator self-resolution**: creators can no longer resolve markets whenever they want
+- Markets must be **expired** before resolution is possible (403 if not expired)
+- Markets with ≥3 traders require **community vote threshold**: `Math.max(3, ceil(traderCount × 0.30))` resolution votes
+- Auto-resolution cron bypasses gate (writes directly — not an API call)
+- `POST /api/markets/:id/dispute` extended: `dispute_type` = `'resolution_vote'` | `'outcome_contest'`; `requested_outcome` = YES/NO for resolution_vote type
+- `GET /api/market/:id/votes`: public endpoint → `{ vote_count, threshold, yes_votes, no_votes, unlocked, trader_count }`
+- Creator dashboard Resolution Queue: vote progress bar per market, locked/unlocked Resolve button, toast with votes_needed on 403
+- Community.html: expired unresolved markets show vote bar + Vote YES / Vote NO buttons; `voteOutcome()` + `loadMarketVoteData()` + `window._marketVoteCache` / `window._myVotes`
+- `GET /api/public/youtube-meta/:videoId`: calls YouTube Data API v3, returns real stats
+- **New migration**: `supabase_migration_dispute_votes.sql` (#26)
+
+**New migrations to run:**
+25. `supabase_migration_blast.sql`
+26. `supabase_migration_dispute_votes.sql`
+
+---
+
 ## Known Issues / Next Up
 
 **Next highest-ROI builds:**
@@ -350,6 +388,10 @@
 20. `supabase_migration_multi_option.sql`
 21. `supabase_migration_discord_webhook.sql`
 22. `supabase_migration_notifications.sql`
+23. `supabase_migration_creator_wall.sql`
+24. `supabase_migration_seasons.sql`
+25. `supabase_migration_blast.sql`
+26. `supabase_migration_dispute_votes.sql`
 - **Email notifications**: Opt-in via Railway env vars: `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
   - Fires after both manual resolve and cron settlement
   - No-op if SMTP_HOST is not set — safe to deploy without configuring
