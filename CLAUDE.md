@@ -237,6 +237,19 @@
 
 ---
 
+## Session 7 continued — profile page discussion + wall (commit `95d6053`)
+
+**W — Profile page engagement tabs:**
+- Two tabs on `/u/:slug` below the leaderboard: 💬 Market Discussion | 📌 Community Wall
+- **Market Discussion**: aggregates recent comments from across ALL the creator's markets; each item shows username, time, market pill linking back to source market; auto-loads on page open
+  - API: `GET /api/profile/:slug/comments` (joins `market_comments` × `markets` filtered by `creator_slug`)
+- **Community Wall**: freestanding message board — logged-in members post directly; non-members see join nudge; new posts prepend inline without refresh; 280 char limit
+  - API: `GET /api/profile/:slug/wall`, `POST /api/profile/:slug/wall` (auth required)
+  - New table: `creator_wall` (id, creator_slug, user_id, content, created_at)
+- Migration: `supabase_migration_creator_wall.sql` → run as #23 in ordered list
+
+---
+
 ## Known Issues / Next Up
 
 - **Creator referral acceptance**: `accepted` on `creator_referrals` currently stays false — need to flip it to true when the referred creator publishes their first market (currently manual via admin or future automation)
