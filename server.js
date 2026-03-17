@@ -9277,6 +9277,137 @@ app.post('/api/creator/digest/send', requireCreator, async (req, res) => {
   }
 });
 
+// ════════════════════════════════════════════════════════════
+// POST /api/creator/markets/:marketId/blast
+// Send a focused "new market" email to all community members right now.
+// Rate-limited: one blast per market ever (stored in markets.blasted_at).
+// ════════════════════════════════════════════════════════════
+app.post('/api/creator/markets/:marketId/blast', requireCreator, async (req, res) => {
+  try {
+    const transporter = createMailTransport();
+    if (!transporter) return res.status(503).json({ error: 'Email not configured. Add SMTP_HOST to Railway env vars.' });
+
+    const { marketId } = req.params;
+    const slug = req.creator.slug;
+
+    // Verify market belongs to this creator and is public
+    const { data: market } = await supabase
+      .from('markets')
+      .select('id, question, category, expiry_date, yes_price, yes_votes, no_votes, trader_count, resolved, archived, blasted_at')
+      .eq('id', marketId)
+      .eq('tenant_slug', slug)
+      .maybeSingle();
+
+    if (!market) return res.status(404).json({ error: 'Market not found' });
+    if (market.resolved)  return res.status(400).json({ error: 'Market is already resolved' });
+    if (market.archived)  return res.status(400).json({ error: 'Market is archived' });
+    if (market.blasted_at) {
+      const hrs = Math.round((Date.now() - new Date(market.blasted_at)) / 36e5);
+      return res.status(429).json({ error: `Already blasted ${hrs}h ago — each market can only be blasted once` });
+    }
+
+    // Get creator branding
+    const { data: creator } = await supabase
+      .from('creator_settings')
+      .select('display_name, primary_color, custom_points_name, email_unsubscribed')
+      .eq('slug', slug).single();
+    if (!creator) return res.status(404).json({ error: 'Creator not found' });
+
+    const communityName = creator.display_name || slug;
+    const accent        = creator.primary_color || '#c9920d';
+    const ptsName       = creator.custom_points_name || 'Flex Points';
+    const communityUrl  = `https://hyperflex.network/${slug}`;
+    const marketUrl     = `${communityUrl}?market=${marketId}&ref=blast`;
+
+    const yesPct = Math.round((market.yes_price || 0.5) * 100);
+    const closes = market.expiry_date
+      ? new Date(market.expiry_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      : null;
+
+    // Get community members with emails
+    const { data: members } = await supabase
+      .from('community_balances')
+      .select('user_id')
+      .eq('creator_slug', slug);
+
+    if (!members?.length) return res.json({ ok: true, sent: 0, message: 'No members to email yet' });
+
+    const userIds = members.map(m => m.user_id);
+    const { data: users } = await supabase
+      .from('users')
+      .select('id, email, display_name, email_unsubscribed')
+      .in('id', userIds);
+
+    const eligible = (users || []).filter(u => u.email && !u.email_unsubscribed);
+    if (!eligible.length) return res.json({ ok: true, sent: 0, message: 'No eligible subscribers' });
+
+    // Mark blasted immediately to prevent double-sends
+    await supabase.from('markets').update({ blasted_at: new Date().toISOString() }).eq('id', marketId);
+
+    const fromAddr = process.env.SMTP_FROM || `"${communityName}" <noreply@hyperflex.network>`;
+
+    const sends = await Promise.allSettled(eligible.map(async u => {
+      const unsubToken = await getMemberUnsubToken(u.id);
+      const unsubUrl   = `https://hyperflex.network/unsubscribe?token=${unsubToken}`;
+
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/></head>
+<body style="font-family:'Helvetica Neue',Arial,sans-serif;background:#141412;margin:0;padding:0">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#141412;padding:40px 0">
+<tr><td align="center">
+  <table width="520" cellpadding="0" cellspacing="0" style="background:#1e1e1b;border-radius:12px;overflow:hidden">
+    <tr><td style="background:${accent};padding:16px 28px">
+      <span style="font-size:18px;font-weight:900;color:#141412">${communityName}</span>
+      <span style="float:right;font-size:13px;color:#141412;opacity:.7;line-height:28px;font-weight:700">NEW MARKET</span>
+    </td></tr>
+    <tr><td style="padding:32px 28px 8px">
+      <p style="margin:0 0 8px;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:${accent}">🎯 Make your call</p>
+      <h2 style="margin:0 0 20px;font-size:22px;color:#f5f5f0;font-weight:800;line-height:1.35">${market.question}</h2>
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px">
+        <tr>
+          <td width="50%" style="padding-right:6px">
+            <div style="background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);border-radius:8px;padding:14px;text-align:center">
+              <div style="font-size:11px;color:#888;font-weight:700;letter-spacing:.08em;margin-bottom:4px">YES</div>
+              <div style="font-size:26px;font-weight:900;color:#22c55e">${yesPct}%</div>
+            </div>
+          </td>
+          <td width="50%" style="padding-left:6px">
+            <div style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);border-radius:8px;padding:14px;text-align:center">
+              <div style="font-size:11px;color:#888;font-weight:700;letter-spacing:.08em;margin-bottom:4px">NO</div>
+              <div style="font-size:26px;font-weight:900;color:#ef4444">${100-yesPct}%</div>
+            </div>
+          </td>
+        </tr>
+      </table>
+      ${closes ? `<p style="margin:0 0 20px;font-size:12px;color:#666">⏰ Closes ${closes}</p>` : ''}
+      <a href="${marketUrl}" style="display:inline-block;padding:14px 28px;background:${accent};color:#141412;font-weight:800;font-size:15px;border-radius:8px;text-decoration:none">Place your prediction →</a>
+    </td></tr>
+    <tr><td style="padding:20px 28px 0;border-top:1px solid #2a2a27;margin-top:24px">
+      <p style="margin:0;font-size:12px;color:#555">You're receiving this because you joined <a href="${communityUrl}" style="color:#888">${communityName}</a> on HYPERFLEX.</p>
+    </td></tr>
+    ${unsubscribeFooterHtml(unsubUrl)}
+  </table>
+</td></tr>
+</table></body></html>`;
+
+      return transporter.sendMail({
+        from:    fromAddr,
+        replyTo: process.env.SMTP_REPLY_TO || fromAddr,
+        to:      u.email,
+        subject: `📣 New market in ${communityName}: "${market.question.length > 60 ? market.question.slice(0,57)+'…' : market.question}"`,
+        html,
+      });
+    }));
+
+    const sent    = sends.filter(r => r.status === 'fulfilled').length;
+    const skipped = eligible.length - sent;
+    console.log(`[blast] ${slug} market ${marketId}: ${sent}/${eligible.length} sent`);
+    res.json({ ok: true, sent, skipped, message: `Blasted to ${sent} member${sent !== 1 ? 's' : ''}${skipped ? ` (${skipped} failed)` : ''}` });
+  } catch (err) {
+    console.error('[blast]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Send resolution emails to all bettors on a market.
 // market      — markets row (must include .question)
 // outcome     — 'YES' | 'NO'
