@@ -3178,6 +3178,21 @@ body.nav-open .sidebar-backdrop {
             <div id="innerCircleList"></div>
           </div>
         </div>
+
+        <!-- ── Weekly Digest ──────────────────────────────────────── -->
+        <div class="section">
+          <div class="section-header">
+            <div class="section-title">📬 Weekly Digest</div>
+          </div>
+          <div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:20px">
+            <p style="font-size:13px;color:var(--dim);margin:0 0 14px;line-height:1.6">Send a digest email to all your community members right now — your 3 hottest markets, top leaderboard entries, and a CTA back to your community. Auto-sends every Monday at 9am UTC too.</p>
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+              <button id="sendDigestBtn" class="btn-primary" style="font-size:13px;padding:10px 20px" onclick="sendDigestNow()">📤 Send digest now</button>
+              <span id="digestStatus" style="font-size:12px;color:var(--dim)"></span>
+            </div>
+          </div>
+        </div>
+
       </div>
 
       <!-- Share Tab -->
@@ -7999,6 +8014,35 @@ function downloadQR() {
 }
 
 // Share helpers
+async function sendDigestNow() {
+  const btn = document.getElementById('sendDigestBtn');
+  const status = document.getElementById('digestStatus');
+  if (!btn) return;
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+  status.textContent = '';
+  try {
+    const r = await fetch('/api/creator/digest/send', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('hf_token') } });
+    const d = await r.json();
+    if (r.ok) {
+      btn.textContent = '✓ Sent!';
+      status.textContent = d.message || 'Digest sent successfully.';
+      status.style.color = '#3fb950';
+      setTimeout(() => { btn.textContent = '📤 Send digest now'; btn.disabled = false; status.textContent = ''; status.style.color = ''; }, 4000);
+    } else {
+      btn.textContent = '📤 Send digest now';
+      btn.disabled = false;
+      status.textContent = d.error || 'Failed to send.';
+      status.style.color = '#f85149';
+    }
+  } catch (e) {
+    btn.textContent = '📤 Send digest now';
+    btn.disabled = false;
+    status.textContent = 'Network error.';
+    status.style.color = '#f85149';
+  }
+}
+
 function copyLink() {
   if (!creatorData) return;
   copyText('https://hyperflex.network/' + creatorData.creator.slug);

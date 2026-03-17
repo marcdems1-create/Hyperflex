@@ -2421,7 +2421,10 @@ function onMarketSearch(val) {
   }, 180);
 }
 
-function isHot(m)         { return (m.trader_count || 0) >= 5; }
+// Only count traders from CPMM-era bets (yes_price has moved from initial 0.5).
+// Legacy markets have trader_count from the old app but yes_price still = 0.5.
+function realTraders(m)   { return (m.yes_price && Math.abs(m.yes_price - 0.5) > 0.005) ? (m.trader_count || 0) : 0; }
+function isHot(m)         { return realTraders(m) >= 5; }
 function isClosingSoon(m) {
   const diff = new Date(m.expiry_date) - new Date();
   return diff > 0 && diff < 72 * 60 * 60 * 1000;
@@ -2441,8 +2444,8 @@ function buildCarousel(activeMarkets) {
     .sort((a,b) => new Date(a.expiry_date) - new Date(b.expiry_date));
 
   const hot     = [...activeMarkets]
-    .filter(m => (m.trader_count||0) >= 5)
-    .sort((a,b) => (b.trader_count||0) - (a.trader_count||0));
+    .filter(m => realTraders(m) >= 5)
+    .sort((a,b) => realTraders(b) - realTraders(a));
 
   // Up & Coming = active, not hot, not ending soon (or newly created)
   const usedIds = new Set([...ending, ...hot].map(m => m.id));
@@ -2640,7 +2643,7 @@ function renderFilteredMarkets() {
 
   if (currentFilter === 'hot') {
     filtered = active.filter(m => isHot(m));
-    sortFn = (a, b) => (b.trader_count||0) - (a.trader_count||0);
+    sortFn = (a, b) => realTraders(b) - realTraders(a);
   } else if (currentFilter === 'truth') {
     filtered = active;
     sortFn = (a, b) => truthScore(b) - truthScore(a);
@@ -2649,7 +2652,7 @@ function renderFilteredMarkets() {
     sortFn = (a, b) => new Date(a.expiry_date) - new Date(b.expiry_date);
   } else if (currentFilter === 'mine') {
     filtered = active.filter(m => myPositions[m.id]);
-    sortFn = (a, b) => (b.trader_count||0) - (a.trader_count||0);
+    sortFn = (a, b) => realTraders(b) - realTraders(a);
   } else {
     // Default "All": smart relevance — blend of truth score + recency
     filtered = active;
@@ -2748,7 +2751,7 @@ function getMarketSource(m) {
 function marketCardHTML(m, isResolved, featured) {
   // Consensus: purely from yes_votes / no_votes — never the CPMM price
   const { yesPct, noPct, hasVotes } = getConsensus(m);
-  const traders = m.trader_count || 0;
+  const traders = realTraders(m);
   const cc      = catClass(m.category);
   const hot     = isHot(m);
   const soon    = isClosingSoon(m);

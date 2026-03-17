@@ -9024,6 +9024,73 @@ app.put('/api/creator/discord-webhook', requireCreator, async (req, res) => {
   }
 });
 
+// POST /api/creator/digest/send — manually trigger digest for this creator right now
+app.post('/api/creator/digest/send', requireCreator, async (req, res) => {
+  try {
+    const transporter = createMailTransport();
+    if (!transporter) return res.status(503).json({ error: 'Email not configured on this server. Add SMTP_HOST to Railway env vars.' });
+
+    const slug = req.creator.slug;
+    const { data: creator } = await supabase.from('creator_settings').select('slug, display_name, primary_color, custom_points_name').eq('slug', slug).single();
+    if (!creator) return res.status(404).json({ error: 'Creator not found' });
+
+    const communityName = creator.display_name || slug;
+    const accentColor   = creator.primary_color || '#c9920d';
+    const ptsName       = creator.custom_points_name || 'Flex Points';
+    const communityUrl  = `https://hyperflex.network/${slug}`;
+
+    const { data: markets } = await supabase.from('markets').select('id, question, yes_price, no_price, trader_count').eq('tenant_slug', slug).eq('resolved', false).eq('archived', false).order('trader_count', { ascending: false }).limit(3);
+    if (!markets?.length) return res.status(400).json({ error: 'No active markets to include in digest.' });
+
+    const { data: members } = await supabase.from('community_members').select('user_id').eq('creator_slug', slug);
+    if (!members?.length) return res.status(400).json({ error: 'No community members yet.' });
+
+    const userIds = members.map(m => m.user_id);
+    const { data: users } = await supabase.from('users').select('id, email, display_name, email_unsubscribed').in('id', userIds);
+    const eligible = (users || []).filter(u => u.email && !u.email_unsubscribed);
+    if (!eligible.length) return res.status(400).json({ error: 'No eligible subscribers.' });
+
+    // Top 3 leaderboard
+    const { data: allMktIds } = await supabase.from('markets').select('id').eq('tenant_slug', slug);
+    const mktIds = (allMktIds || []).map(m => m.id);
+    let leaderRows = [];
+    if (mktIds.length) {
+      const { data: posData } = await supabase.from('positions').select('user_id, potential_payout, won').in('market_id', mktIds).eq('settled', true);
+      const lmap = {};
+      for (const p of (posData || [])) {
+        if (!lmap[p.user_id]) lmap[p.user_id] = { wins: 0, total_payout: 0 };
+        if (p.won) { lmap[p.user_id].wins++; lmap[p.user_id].total_payout += (p.potential_payout || 0); }
+      }
+      const leaderIds = Object.entries(lmap).sort((a, b) => b[1].total_payout - a[1].total_payout).slice(0, 3).map(([id]) => id);
+      const { data: lNames } = leaderIds.length ? await supabase.from('users').select('id, display_name').in('id', leaderIds) : { data: [] };
+      const nameMap = {}; for (const u of (lNames || [])) nameMap[u.id] = u.display_name;
+      leaderRows = leaderIds.map((id, i) => ({ rank: i + 1, name: nameMap[id] || 'Anonymous', pts: Math.round((lmap[id]?.total_payout || 0) / 100) }));
+    }
+
+    const marketsHtml = markets.map(m => {
+      const yesPct = Math.round((m.yes_price || 0.5) * 100);
+      return `<tr><td style="padding:10px 0;border-bottom:1px solid #2a2a27"><div style="font-size:14px;color:#f5f5f0;margin-bottom:4px">${m.question}</div><div style="font-size:12px;color:#888">YES ${yesPct}%</div></td></tr>`;
+    }).join('');
+    const medals = ['🥇','🥈','🥉'];
+    const leaderHtml = leaderRows.map((r, i) => `<tr><td style="padding:8px 0"><span style="font-size:16px">${medals[i]}</span><span style="font-size:14px;color:#f5f5f0;margin-left:8px">${r.name}</span><span style="float:right;font-size:13px;color:${accentColor};font-weight:700">${r.pts.toLocaleString()} ${ptsName}</span></td></tr>`).join('');
+
+    const baseHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"/></head><body style="font-family:'Helvetica Neue',Arial,sans-serif;background:#141412;margin:0;padding:0"><table width="100%" cellpadding="0" cellspacing="0" style="background:#141412;padding:40px 0"><tr><td align="center"><table width="540" cellpadding="0" cellspacing="0" style="background:#1e1e1b;border-radius:10px;overflow:hidden"><tr><td style="background:${accentColor};padding:18px 28px"><span style="font-size:20px;font-weight:900;color:#141412">HYPERFLEX</span><span style="float:right;font-size:13px;color:#141412;opacity:.7;line-height:28px">${communityName} Digest</span></td></tr><tr><td style="padding:28px"><h2 style="margin:0 0 6px;font-size:22px;color:#f5f5f0;font-weight:800">What's happening in ${communityName} 🎯</h2><p style="margin:0 0 24px;font-size:14px;color:#888">Here's what your community is predicting right now.</p><h3 style="margin:0 0 12px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:${accentColor}">🔥 Hot Markets</h3><table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px">${marketsHtml}</table>${leaderHtml ? `<h3 style="margin:0 0 12px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:${accentColor}">🏆 Top Predictors</h3><table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px">${leaderHtml}</table>` : ''}<a href="${communityUrl}" style="display:inline-block;padding:12px 24px;background:${accentColor};color:#141412;font-weight:700;font-size:15px;border-radius:6px;text-decoration:none">Place your predictions →</a></td></tr><tr><td style="padding:16px 28px;border-top:1px solid #2a2a27"><p style="margin:0;font-size:11px;color:#555">Digest from <a href="${communityUrl}" style="color:#888">${communityName}</a>. Powered by <a href="https://hyperflex.network" style="color:#888">HYPERFLEX</a>.</p></td></tr></table></td></tr></table></body></html>`;
+
+    const fromAddress = process.env.SMTP_FROM || `"${communityName}" <noreply@hyperflex.network>`;
+    const sends = await Promise.allSettled(eligible.map(async u => {
+      const unsubToken = await getMemberUnsubToken(u.id);
+      const unsubUrl = `https://hyperflex.network/unsubscribe?token=${unsubToken}`;
+      const html = baseHtml.replace('</table></body></html>', `${unsubscribeFooterHtml(unsubUrl)}</table></body></html>`);
+      return transporter.sendMail({ from: fromAddress, to: u.email, subject: `What's happening in ${communityName} 🎯`, html });
+    }));
+    const sent = sends.filter(r => r.status === 'fulfilled').length;
+    res.json({ ok: true, message: `Digest sent to ${sent} of ${eligible.length} subscribers.` });
+  } catch (err) {
+    console.error('[digest/send]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Send resolution emails to all bettors on a market.
 // market      — markets row (must include .question)
 // outcome     — 'YES' | 'NO'
