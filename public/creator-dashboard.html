@@ -4601,7 +4601,14 @@ body.nav-open .sidebar-backdrop {
       </div>
       <div class="field">
         <label>Resolution Date</label>
-        <input type="date" id="newDate"/>
+        <input type="datetime-local" id="newDate" style="font-size:13px"/>
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+          <button type="button" onclick="setQuickExpiry(1)" style="font-size:11px;font-family:var(--mono);background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.25);color:var(--gold);padding:5px 10px;border-radius:5px;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(201,146,13,0.18)'" onmouseout="this.style.background='rgba(201,146,13,0.08)'">1 min</button>
+          <button type="button" onclick="setQuickExpiry(60)" style="font-size:11px;font-family:var(--mono);background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.25);color:var(--gold);padding:5px 10px;border-radius:5px;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(201,146,13,0.18)'" onmouseout="this.style.background='rgba(201,146,13,0.08)'">1 hour</button>
+          <button type="button" onclick="setQuickExpiry(1440)" style="font-size:11px;font-family:var(--mono);background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.25);color:var(--gold);padding:5px 10px;border-radius:5px;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(201,146,13,0.18)'" onmouseout="this.style.background='rgba(201,146,13,0.08)'">1 day</button>
+          <button type="button" onclick="setQuickExpiry(10080)" style="font-size:11px;font-family:var(--mono);background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.25);color:var(--gold);padding:5px 10px;border-radius:5px;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(201,146,13,0.18)'" onmouseout="this.style.background='rgba(201,146,13,0.08)'">7 days</button>
+          <button type="button" onclick="setQuickExpiry(43200)" style="font-size:11px;font-family:var(--mono);background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.25);color:var(--gold);padding:5px 10px;border-radius:5px;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(201,146,13,0.18)'" onmouseout="this.style.background='rgba(201,146,13,0.08)'">30 days</button>
+        </div>
       </div>
       <div class="field" id="sponsorField">
         <label>Sponsored by <span style="font-weight:400;text-transform:none;font-size:11px;color:var(--dim)">(optional — brand name shown on card)</span></label>
@@ -6425,7 +6432,7 @@ function openCreateModal() {
   }
   const d = new Date();
   d.setDate(d.getDate() + 30);
-  document.getElementById('newDate').value = d.toISOString().split('T')[0];
+  document.getElementById('newDate').value = _toDatetimeLocal(d);
   document.getElementById('newQuestion').value = '';
   document.getElementById('questionWarning').style.display = 'none';
   document.getElementById('newCategory').value = 'sports';
@@ -6494,7 +6501,7 @@ function duplicateMarket(marketId) {
   // Open create modal with question pre-filled, close date set to +30 days
   const d = new Date();
   d.setDate(d.getDate() + 30);
-  document.getElementById('newDate').value = d.toISOString().split('T')[0];
+  document.getElementById('newDate').value = _toDatetimeLocal(d);
   document.getElementById('newQuestion').value = m.question;
   document.getElementById('questionWarning').style.display = 'none';
   const cat = m.category || 'other';
@@ -6551,6 +6558,18 @@ async function suggestQuestions() {
   }
 }
 
+
+// Quick expiry helper — sets datetime-local input to now + offsetMinutes
+function setQuickExpiry(offsetMinutes) {
+  const d = new Date(Date.now() + offsetMinutes * 60 * 1000);
+  document.getElementById('newDate').value = _toDatetimeLocal(d);
+}
+function _toDatetimeLocal(d) {
+  // Returns YYYY-MM-DDTHH:MM in local time (required by datetime-local input)
+  const pad = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) +
+    'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+}
 async function createMarket() {
   const question = document.getElementById('newQuestion').value.trim();
   const category = document.getElementById('newCategory').value;
