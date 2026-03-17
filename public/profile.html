@@ -147,6 +147,63 @@
     .lb-pnl.pos { color: #4ade80; }
     .lb-pnl.neg { color: #f87171; }
 
+    /* ── DISCUSSION TABS ── */
+    .disc-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+    .disc-tab {
+      padding: 10px 18px; font-size: 13px; font-weight: 700; cursor: pointer;
+      border: none; background: none; color: var(--dim); font-family: inherit;
+      border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color .15s;
+    }
+    .disc-tab.active { color: var(--text); border-bottom-color: var(--gold); }
+    .disc-tab:hover { color: var(--text); }
+    .disc-panel { display: none; }
+    .disc-panel.active { display: block; }
+
+    /* Comment/post items */
+    .disc-item {
+      display: flex; gap: 12px; padding: 14px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .disc-item:last-child { border-bottom: none; }
+    .disc-avatar {
+      width: 34px; height: 34px; border-radius: 50%; background: var(--gold);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 800; color: var(--ink); flex-shrink: 0;
+    }
+    .disc-body { flex: 1; min-width: 0; }
+    .disc-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+    .disc-name { font-size: 13px; font-weight: 700; }
+    .disc-time { font-family: var(--mono); font-size: 10px; color: var(--dim); }
+    .disc-mkt-link {
+      font-family: var(--mono); font-size: 10px; color: var(--gold);
+      background: rgba(201,146,13,.1); border-radius: 4px; padding: 2px 7px;
+      text-decoration: none; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: middle;
+    }
+    .disc-mkt-link:hover { text-decoration: underline; }
+    .disc-text { font-size: 13px; line-height: 1.55; color: var(--text); word-break: break-word; }
+
+    /* Compose box */
+    .disc-compose {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+      padding: 14px 16px; margin-bottom: 20px;
+    }
+    .disc-compose textarea {
+      width: 100%; box-sizing: border-box; background: var(--bg);
+      border: 1.5px solid var(--border); border-radius: 8px; color: var(--text);
+      font-family: inherit; font-size: 13px; line-height: 1.5; padding: 10px 12px;
+      resize: vertical; min-height: 68px; outline: none;
+    }
+    .disc-compose textarea:focus { border-color: rgba(201,146,13,.5); }
+    .disc-compose-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; }
+    .disc-char { font-family: var(--mono); font-size: 11px; color: var(--dim); }
+    .disc-submit {
+      background: var(--gold); color: var(--ink); border: none; border-radius: 8px;
+      padding: 8px 18px; font-size: 13px; font-weight: 800; font-family: inherit; cursor: pointer;
+    }
+    .disc-submit:disabled { opacity: .45; cursor: default; }
+    .disc-login-nudge { font-size: 12px; color: var(--dim); padding: 8px 0; }
+    .disc-login-nudge a { color: var(--gold); }
+
     /* ── JOIN CTA ── */
     .join-cta {
       background: linear-gradient(135deg, rgba(201,146,13,.12) 0%, rgba(201,146,13,.04) 100%);
@@ -253,6 +310,35 @@
       <div class="section-title">🏆 Top Predictors</div>
     </div>
     <div class="lb-list" id="lbList"></div>
+  </div>
+
+  <!-- Discussion / Wall tabs -->
+  <div class="section" id="discSection">
+    <div class="disc-tabs">
+      <button class="disc-tab active" onclick="switchDiscTab('discussion', this)">💬 Market Discussion</button>
+      <button class="disc-tab" onclick="switchDiscTab('wall', this)">📌 Community Wall</button>
+    </div>
+
+    <!-- Market Discussion panel -->
+    <div class="disc-panel active" id="discPanel-discussion">
+      <div id="discList-discussion"><div class="empty">Loading discussion…</div></div>
+    </div>
+
+    <!-- Community Wall panel -->
+    <div class="disc-panel" id="discPanel-wall">
+      <!-- Compose box -->
+      <div class="disc-compose" id="wallCompose" style="display:none">
+        <textarea id="wallTextarea" placeholder="Leave a message for the community…" maxlength="280" oninput="updateWallChar()"></textarea>
+        <div class="disc-compose-foot">
+          <span class="disc-char"><span id="wallCharCount">0</span>/280</span>
+          <button class="disc-submit" id="wallSubmitBtn" onclick="submitWallPost()">Post</button>
+        </div>
+      </div>
+      <div class="disc-login-nudge" id="wallLoginNudge" style="display:none">
+        <a href="#join" onclick="openJoinCta()">Join the community</a> to leave a message on the wall.
+      </div>
+      <div id="discList-wall"><div class="empty">Loading wall…</div></div>
+    </div>
   </div>
 
   <!-- Join CTA -->
@@ -455,6 +541,125 @@ async function load() {
 }
 
 load().catch(err => console.error('profile load error:', err));
+
+// ── DISCUSSION + WALL ────────────────────────────────────────────────────────
+let _activeDiscTab = 'discussion';
+let _discLoaded = { discussion: false, wall: false };
+
+function switchDiscTab(tab, btn) {
+  _activeDiscTab = tab;
+  document.querySelectorAll('.disc-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.disc-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('discPanel-' + tab).classList.add('active');
+  if (!_discLoaded[tab]) {
+    if (tab === 'discussion') loadDiscussion();
+    else loadWall();
+  }
+}
+
+function discInitials(name) {
+  return (name || '?').split(/\s+/).slice(0,2).map(w=>w[0].toUpperCase()).join('');
+}
+
+function discTimeAgo(iso) {
+  if (!iso) return '';
+  const diff = Math.floor((Date.now() - new Date(iso.endsWith('Z')||iso.includes('+')?iso:iso+'Z')) / 1000);
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
+  return `${Math.floor(diff/86400)}d ago`;
+}
+
+function renderDiscItems(items, container) {
+  const el = document.getElementById(container);
+  if (!items.length) { el.innerHTML = '<div class="empty">Nothing here yet — be the first to comment!</div>'; return; }
+  el.innerHTML = items.map(item => `
+    <div class="disc-item">
+      <div class="disc-avatar">${discInitials(item.display_name)}</div>
+      <div class="disc-body">
+        <div class="disc-meta">
+          <span class="disc-name">${escHtml(item.display_name)}</span>
+          <span class="disc-time">${discTimeAgo(item.created_at)}</span>
+          ${item.market_question ? `<a class="disc-mkt-link" href="/${slug}?market=${item.market_id}" title="${escHtml(item.market_question)}">📊 ${escHtml(item.market_question.slice(0,45))}${item.market_question.length>45?'…':''}</a>` : ''}
+        </div>
+        <div class="disc-text">${escHtml(item.content)}</div>
+      </div>
+    </div>`).join('');
+}
+
+async function loadDiscussion() {
+  _discLoaded.discussion = true;
+  try {
+    const r = await fetch(`/api/profile/${slug}/comments`);
+    const data = await r.json();
+    renderDiscItems(data.comments || [], 'discList-discussion');
+  } catch { document.getElementById('discList-discussion').innerHTML = '<div class="empty">Could not load discussion.</div>'; }
+}
+
+async function loadWall() {
+  _discLoaded.wall = true;
+  // Show compose box or login nudge
+  const token = localStorage.getItem('hf_member_token') || localStorage.getItem('hf_token');
+  if (token) {
+    document.getElementById('wallCompose').style.display = '';
+    document.getElementById('wallLoginNudge').style.display = 'none';
+  } else {
+    document.getElementById('wallCompose').style.display = 'none';
+    document.getElementById('wallLoginNudge').style.display = '';
+  }
+  try {
+    const r = await fetch(`/api/profile/${slug}/wall`);
+    const data = await r.json();
+    renderDiscItems(data.posts || [], 'discList-wall');
+  } catch { document.getElementById('discList-wall').innerHTML = '<div class="empty">Could not load wall.</div>'; }
+}
+
+function updateWallChar() {
+  const len = document.getElementById('wallTextarea').value.length;
+  document.getElementById('wallCharCount').textContent = len;
+  document.getElementById('wallSubmitBtn').disabled = len === 0;
+}
+
+async function submitWallPost() {
+  const token = localStorage.getItem('hf_member_token') || localStorage.getItem('hf_token');
+  if (!token) return;
+  const textarea = document.getElementById('wallTextarea');
+  const content = textarea.value.trim();
+  if (!content) return;
+  const btn = document.getElementById('wallSubmitBtn');
+  btn.disabled = true;
+  try {
+    const r = await fetch(`/api/profile/${slug}/wall`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ content }),
+    });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Post failed'); }
+    const data = await r.json();
+    textarea.value = '';
+    document.getElementById('wallCharCount').textContent = '0';
+    // Prepend new post to list
+    const el = document.getElementById('discList-wall');
+    const empty = el.querySelector('.empty');
+    if (empty) el.innerHTML = '';
+    const div = document.createElement('div');
+    div.className = 'disc-item';
+    div.innerHTML = `
+      <div class="disc-avatar">${discInitials(data.post.display_name)}</div>
+      <div class="disc-body">
+        <div class="disc-meta"><span class="disc-name">${escHtml(data.post.display_name)}</span><span class="disc-time">just now</span></div>
+        <div class="disc-text">${escHtml(data.post.content)}</div>
+      </div>`;
+    el.insertBefore(div, el.firstChild);
+  } catch (e) { alert(e.message); }
+  btn.disabled = false;
+}
+
+function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// Auto-load discussion tab on page load
+window.addEventListener('load', () => loadDiscussion());
 
 // Follow button on profile page
 let _profileFollowing = false;

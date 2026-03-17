@@ -9665,5 +9665,105 @@ async function autoResolveExpiredMarkets() {
 // Run auto-resolve check every 30 minutes
 cron.schedule('*/30 * * * *', autoResolveExpiredMarkets);
 
+// ── PROFILE PAGE: WALL + AGGREGATED COMMENTS ─────────────────────────────────
+
+// GET /api/profile/:slug/wall — public, returns last 40 wall posts
+app.get('/api/profile/:slug/wall', async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const { data, error } = await supabase
+      .from('creator_wall')
+      .select('id, content, created_at, user_id, users(display_name)')
+      .eq('creator_slug', slug)
+      .order('created_at', { ascending: false })
+      .limit(40);
+    if (error) throw error;
+    const posts = (data || []).map(p => ({
+      id: p.id,
+      content: p.content,
+      created_at: p.created_at,
+      user_id: p.user_id,
+      display_name: p.users?.display_name || 'Anonymous',
+    }));
+    res.json({ posts });
+  } catch (err) {
+    console.error('[profile wall GET]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/profile/:slug/wall — auth required, post to creator wall
+app.post('/api/profile/:slug/wall', requireAuth, async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const userId = req.user.id;
+    const content = (req.body.content || '').trim().slice(0, 280);
+    if (!content) return res.status(400).json({ error: 'Content required' });
+
+    // Verify creator exists
+    const { data: creator } = await supabase
+      .from('creator_settings')
+      .select('slug')
+      .eq('slug', slug)
+      .single();
+    if (!creator) return res.status(404).json({ error: 'Community not found' });
+
+    const { data: post, error } = await supabase
+      .from('creator_wall')
+      .insert({ creator_slug: slug, user_id: userId, content })
+      .select('id, content, created_at, user_id')
+      .single();
+    if (error) throw error;
+
+    // Get display name for response
+    const { data: u } = await supabase.from('users').select('display_name').eq('id', userId).single();
+    res.json({ post: { ...post, display_name: u?.display_name || 'Anonymous' } });
+  } catch (err) {
+    console.error('[profile wall POST]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/profile/:slug/comments — aggregated market comments for this creator's community
+app.get('/api/profile/:slug/comments', async (req, res) => {
+  try {
+    const { slug } = req.params;
+
+    // Get all market IDs for this creator
+    const { data: markets } = await supabase
+      .from('markets')
+      .select('id, question')
+      .eq('creator_slug', slug)
+      .eq('is_public', true);
+    if (!markets || !markets.length) return res.json({ comments: [] });
+
+    const marketIds = markets.map(m => m.id);
+    const marketMap = Object.fromEntries(markets.map(m => [m.id, m.question]));
+
+    // Fetch recent comments across all those markets
+    const { data: comments, error } = await supabase
+      .from('market_comments')
+      .select('id, market_id, content, created_at, user_id, users(display_name)')
+      .in('market_id', marketIds)
+      .order('created_at', { ascending: false })
+      .limit(40);
+    if (error) throw error;
+
+    const result = (comments || []).map(c => ({
+      id: c.id,
+      market_id: c.market_id,
+      market_question: marketMap[c.market_id] || '',
+      content: c.content,
+      created_at: c.created_at,
+      user_id: c.user_id,
+      display_name: c.users?.display_name || 'Anonymous',
+    }));
+    res.json({ comments: result });
+  } catch (err) {
+    console.error('[profile comments GET]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`HYPERFLEX server running on port ${PORT}`));
