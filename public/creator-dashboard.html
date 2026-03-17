@@ -1792,6 +1792,32 @@ body.plan-premium .main {
 }
 .resolve-btn:hover { background: rgba(201,146,13,0.22); border-color: var(--gold); }
 
+/* Market row ⋯ actions menu */
+.mkt-actions { position: relative; display: inline-flex; align-items: center; }
+.mkt-more-btn {
+  background: transparent; border: 1px solid transparent; color: var(--dim);
+  font-size: 15px; line-height: 1; padding: 2px 7px; border-radius: 5px;
+  cursor: pointer; transition: all .15s; margin-left: 4px; font-family: var(--mono);
+}
+.mkt-more-btn:hover { background: rgba(255,255,255,0.06); border-color: var(--border); color: var(--text); }
+.mkt-more-menu {
+  display: none; position: absolute; right: 0; top: calc(100% + 4px);
+  background: #1a1a17; border: 1px solid var(--border); border-radius: 8px;
+  padding: 4px; z-index: 50; min-width: 148px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+.mkt-more-menu.open { display: block; }
+.mkt-menu-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; font-size: 12px; font-family: var(--mono);
+  color: var(--text); cursor: pointer; border-radius: 5px;
+  transition: background .12s; white-space: nowrap; border: none;
+  background: transparent; width: 100%; text-align: left;
+}
+.mkt-menu-item:hover { background: rgba(255,255,255,0.07); }
+.mkt-menu-item.danger { color: #ef4444; }
+.mkt-menu-item.danger:hover { background: rgba(239,68,68,0.1); }
+
 /* Resolution queue */
 .resolution-queue {
   background: var(--cream);
@@ -5408,8 +5434,15 @@ function renderMarketRows(markets, containerId) {
           <div class="status-dot ${status}"></div>
           <span class="status-text">${statusLabel}</span>
           ${status === 'pending' ? `<button class="resolve-btn" onclick="event.stopPropagation();openResolveModal('${m.id}', \`${m.question.replace(/`/g,"'")}\`)">Resolve</button>` : ''}
-          <button class="resolve-btn" style="background:rgba(201,146,13,0.1);color:var(--gold);border-color:rgba(201,146,13,0.25)" title="Duplicate this market" onclick="event.stopPropagation();duplicateMarket('${m.id}')">↻ Duplicate</button>
-          <button class="resolve-btn" style="background:rgba(255,255,255,0.04);color:var(--dim);border-color:var(--border)" title="Share this market" onclick="event.stopPropagation();shareMarketRow(this,${JSON.stringify(m.id)},${JSON.stringify(m.question.replace(/"/g,"'"))},${m.yes_price||0.5},${m.no_price||0.5})">↗ Share</button>
+          <div class="mkt-actions" onclick="event.stopPropagation()">
+            <button class="mkt-more-btn" title="More actions" onclick="toggleMktMenu(this)">⋯</button>
+            <div class="mkt-more-menu">
+              <button class="mkt-menu-item" onclick="shareMarketRow(this,${JSON.stringify(m.id)},${JSON.stringify(m.question.replace(/"/g,"'"))},${m.yes_price||0.5},${m.no_price||0.5});closeMktMenus()">↗ Share</button>
+              <button class="mkt-menu-item" onclick="duplicateMarket('${m.id}');closeMktMenus()">↻ Duplicate</button>
+              <button class="mkt-menu-item" onclick="openQrModal && openQrModal('${m.id}');closeMktMenus()">📱 QR Code</button>
+              <button class="mkt-menu-item danger" onclick="openEditModal('${m.id}');closeMktMenus()">✎ Edit / Archive</button>
+            </div>
+          </div>
         </div>
       </div>
     `;
@@ -6144,6 +6177,20 @@ function openCreateModal() {
 function closeCreateModal() {
   document.getElementById('createModal').classList.remove('show');
   clearQuestionSuggestions();
+}
+
+function toggleMktMenu(btn) {
+  const menu = btn.nextElementSibling;
+  const isOpen = menu.classList.contains('open');
+  closeMktMenus();
+  if (!isOpen) {
+    menu.classList.add('open');
+    // Close on outside click
+    setTimeout(() => document.addEventListener('click', closeMktMenus, { once: true }), 0);
+  }
+}
+function closeMktMenus() {
+  document.querySelectorAll('.mkt-more-menu.open').forEach(m => m.classList.remove('open'));
 }
 
 function duplicateMarket(marketId) {
