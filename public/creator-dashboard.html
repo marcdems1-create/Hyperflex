@@ -2970,6 +2970,14 @@ body.nav-open .sidebar-backdrop {
 
       <!-- Markets Tab -->
       <div id="tab-markets" style="display:none">
+        <!-- Free plan limit banner — shown when at/near 5-market cap -->
+        <div id="marketLimitBanner" style="display:none;margin-bottom:16px;background:rgba(201,146,13,.1);border:1px solid rgba(201,146,13,.35);border-radius:12px;padding:14px 18px;display:none;align-items:center;gap:14px;flex-wrap:wrap">
+          <div style="flex:1;min-width:180px">
+            <div style="font-size:13px;font-weight:800;color:#f0ede8;margin-bottom:3px" id="marketLimitTitle">You're at your market limit</div>
+            <div style="font-size:12px;color:rgba(240,237,232,.6)" id="marketLimitSub">Free plan allows 5 active markets. Upgrade to publish unlimited markets.</div>
+          </div>
+          <button onclick="handlePlanPillClick()" style="background:#c9920d;color:#141412;border:none;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap;font-family:inherit">Upgrade to Pro →</button>
+        </div>
         <div class="section">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
             <div class="mkt-filter-pills">
@@ -5005,6 +5013,24 @@ function renderDashboard(data) {
   const trialAlreadyUsed = !!(creator.plan_trial_expires_at);
   updateUpgradeBtn(plan, trialAlreadyUsed);
 
+  // Free limit banner — show when free plan AND at/near 5-market cap
+  const limitBanner = document.getElementById('marketLimitBanner');
+  if (limitBanner && plan === 'free') {
+    const liveCount = (markets || []).filter(m => !m.resolved && !m.archived).length;
+    if (liveCount >= 4) { // show at 4/5 (one away) and 5/5 (at limit)
+      const atLimit = liveCount >= 5;
+      document.getElementById('marketLimitTitle').textContent = atLimit
+        ? `You've hit the 5-market limit on the Free plan.`
+        : `You're at ${liveCount}/5 markets on the Free plan.`;
+      document.getElementById('marketLimitSub').textContent = atLimit
+        ? 'Archive a market or upgrade to Pro to publish more.'
+        : 'One more slot remaining. Upgrade to Pro for unlimited markets.';
+      limitBanner.style.display = 'flex';
+    }
+  } else if (limitBanner) {
+    limitBanner.style.display = 'none';
+  }
+
   // Plan change notice
   const noticeEl  = document.getElementById('planNotice');
   const noticeText = document.getElementById('planNoticeText');
@@ -5637,6 +5663,14 @@ async function createMarket() {
     if (r.status === 403 && data.upgrade_required) {
       closeCreateModal();
       showToast(`You've hit the ${data.limit}-market free limit. Upgrade to Pro for unlimited markets.`, 'error');
+      // Show the inline banner in the markets tab
+      const lb = document.getElementById('marketLimitBanner');
+      if (lb) {
+        document.getElementById('marketLimitTitle').textContent = `You've hit the ${data.limit}-market limit on the Free plan.`;
+        document.getElementById('marketLimitSub').textContent = 'Archive a market or upgrade to Pro to publish more.';
+        lb.style.display = 'flex';
+      }
+      showTab('markets');
       setTimeout(() => showUpgrade(), 600);
       return;
     }

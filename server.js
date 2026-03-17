@@ -505,6 +505,7 @@ app.post('/markets', async (req, res) => {
     // Notify followers if market is published immediately
     if (row.is_public === true && row.tenant_slug) {
       sendNewMarketNotifications(data, row.tenant_slug).catch(() => {});
+      maybeAcceptReferral(row.tenant_slug).catch(() => {});
     }
   }
   res.json(data);
@@ -2677,6 +2678,13 @@ app.post('/api/creator/signup', async (req, res) => {
         .insert([{ referrer_slug: referred_by, new_creator_slug: slug, accepted: false }])
         .then(() => {})
         .catch(() => {});
+    }
+
+    // Schedule a drop-off nudge: if creator has no public markets 2h after signup, send them an email
+    const signupEmail = newUser.email;
+    const signupSlug  = slug;
+    if (signupEmail) {
+      setTimeout(() => maybeFireSignupDropoffEmail(signupSlug, signupEmail).catch(() => {}), 2 * 60 * 60 * 1000);
     }
 
     res.json({
@@ -5599,6 +5607,7 @@ app.put('/markets/:id', requireCreator, async (req, res) => {
     const beingPublished = is_public === true && market.is_public !== true;
     if (beingPublished && market.tenant_slug) {
       sendNewMarketNotifications(data, market.tenant_slug).catch(() => {});
+      maybeAcceptReferral(market.tenant_slug).catch(() => {});
     }
 
     res.json({ ok: true, market: data });
@@ -7335,6 +7344,162 @@ async function sendDeadMarketNudges() {
 // Every Wednesday at 10am UTC
 cron.schedule('0 10 * * 3', () => { console.log('[dead-market] Dead market nudge cron triggered'); sendDeadMarketNudges(); });
 
+// ─── MEMBER WIN-BACK EMAILS ────────────────────────────────────────────────────
+// Fridays at 11am UTC — re-engage members who placed at least one bet ever but
+// haven't been active in 14+ days. Shows them what they're missing.
+async function sendMemberWinBackEmails() {
+  const transporter = createMailTransport();
+  if (!transporter) { console.log('[winback] SMTP not configured — skipping'); return; }
+
+  console.log('[winback] Starting member win-back emails');
+  try {
+    const cutoff14d = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+    const cutoff60d = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(); // don't email if dormant 60+ days (avoid spam)
+
+    // Find users who have placed at least one bet but none in last 14 days
+    // Strategy: get all users with positions, find those whose most recent is 14-60 days ago
+    const { data: recentPos } = await supabase
+      .from('positions')
+      .select('user_id, created_at')
+      .gte('created_at', cutoff60d)
+      .order('created_at', { ascending: false })
+      .limit(5000);
+
+    if (!recentPos?.length) return;
+
+    // For each user, find their most recent bet
+    const latestByUser = {};
+    for (const p of recentPos) {
+      if (!latestByUser[p.user_id]) latestByUser[p.user_id] = p.created_at;
+    }
+
+    // Keep users whose latest bet is older than 14 days
+    const inactiveUserIds = Object.entries(latestByUser)
+      .filter(([, ts]) => ts < cutoff14d)
+      .map(([id]) => id);
+
+    if (!inactiveUserIds.length) { console.log('[winback] No inactive users found'); return; }
+
+    // Fetch user info + unsubscribe status
+    const { data: users } = await supabase
+      .from('users')
+      .select('id, email, display_name, email_unsubscribed')
+      .in('id', inactiveUserIds);
+
+    if (!users?.length) return;
+
+    // For each user, find their communities + hottest open market
+    const { data: memberships } = await supabase
+      .from('community_balances')
+      .select('user_id, creator_slug')
+      .in('user_id', inactiveUserIds);
+
+    const userSlugs = {};
+    for (const m of (memberships || [])) {
+      if (!userSlugs[m.user_id]) userSlugs[m.user_id] = [];
+      userSlugs[m.user_id].push(m.creator_slug);
+    }
+
+    const allSlugs = [...new Set(Object.values(userSlugs).flat())];
+    const { data: openMarkets } = await supabase
+      .from('markets')
+      .select('id, question, tenant_slug, yes_price, trader_count')
+      .in('tenant_slug', allSlugs)
+      .eq('resolved', false)
+      .eq('archived', false)
+      .neq('is_public', false)
+      .order('trader_count', { ascending: false })
+      .limit(300);
+
+    const marketsBySlug = {};
+    for (const m of (openMarkets || [])) {
+      if (!marketsBySlug[m.tenant_slug]) marketsBySlug[m.tenant_slug] = [];
+      marketsBySlug[m.tenant_slug].push(m);
+    }
+
+    const { data: creators } = await supabase
+      .from('creator_settings')
+      .select('slug, display_name, primary_color, custom_points_name')
+      .in('slug', allSlugs);
+    const creatorMap = {};
+    for (const c of (creators || [])) creatorMap[c.slug] = c;
+
+    let sent = 0;
+    for (const user of users) {
+      if (!user.email || user.email_unsubscribed) continue;
+
+      const slugs = userSlugs[user.id] || [];
+      const candidateMarkets = [];
+      for (const slug of slugs) {
+        const ms = (marketsBySlug[slug] || []).slice(0, 2);
+        const cs = creatorMap[slug] || {};
+        for (const m of ms) {
+          candidateMarkets.push({ ...m, community_name: cs.display_name || slug, slug, accent: cs.primary_color || '#c9920d', ptsName: cs.custom_points_name || 'Flex Points' });
+        }
+      }
+      candidateMarkets.sort((a, b) => (b.trader_count || 0) - (a.trader_count || 0));
+      const topMarkets = candidateMarkets.slice(0, 3);
+      if (!topMarkets.length) continue;
+
+      const firstName = (user.display_name || 'there').split(' ')[0];
+      const accent = topMarkets[0]?.accent || '#c9920d';
+      const communityUrl = `https://hyperflex.network/${topMarkets[0]?.slug}`;
+      const daysSince = Math.floor((Date.now() - new Date(latestByUser[user.id])) / (1000 * 60 * 60 * 24));
+
+      const marketsHtml = topMarkets.map(m => {
+        const yesPct = Math.round((m.yes_price || 0.5) * 100);
+        const url = `https://hyperflex.network/${m.slug}?market=${m.id}`;
+        return `<tr><td style="padding:11px 0;border-bottom:1px solid #2a2a27">
+          <a href="${url}" style="text-decoration:none">
+            <div style="font-size:14px;color:#f5f5f0;margin-bottom:3px;line-height:1.4">${m.question}</div>
+            <div style="font-size:12px;color:#888">${m.community_name} · ${m.trader_count || 0} traders · YES ${yesPct}%</div>
+          </a>
+        </td></tr>`;
+      }).join('');
+
+      const unsubToken = await getMemberUnsubToken(user.id);
+      const unsubUrl = `https://hyperflex.network/unsubscribe?token=${unsubToken}`;
+
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/></head>
+<body style="font-family:'Helvetica Neue',Arial,sans-serif;background:#141412;margin:0;padding:0">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#141412;padding:40px 0">
+<tr><td align="center">
+  <table width="520" cellpadding="0" cellspacing="0" style="background:#1e1e1b;border-radius:12px;overflow:hidden">
+    <tr><td style="background:${accent};padding:16px 28px">
+      <span style="font-size:18px;font-weight:900;color:#141412">HYPERFLEX</span>
+    </td></tr>
+    <tr><td style="padding:30px 28px 24px">
+      <h2 style="margin:0 0 10px;font-size:20px;color:#f5f5f0;font-weight:800;line-height:1.3">You've been away ${daysSince} days, ${firstName}.</h2>
+      <p style="margin:0 0 22px;font-size:14px;color:#888;line-height:1.7">Your communities kept going without you. Here's what's hot right now — jump back in and make your predictions.</p>
+      <h3 style="margin:0 0 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.4px;color:${accent}">🔥 Active markets in your communities</h3>
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px">${marketsHtml}</table>
+      <a href="${communityUrl}" style="display:inline-block;padding:13px 28px;background:${accent};color:#141412;font-weight:800;font-size:15px;border-radius:8px;text-decoration:none">Make a prediction →</a>
+    </td></tr>
+    <table width="100%" cellpadding="0" cellspacing="0"><tbody>${unsubscribeFooterHtml(unsubUrl)}</tbody></table>
+  </table>
+</td></tr>
+</table></body></html>`;
+
+      try {
+        await transporter.sendMail({
+          from: process.env.SMTP_FROM || 'HYPERFLEX <noreply@hyperflex.network>',
+          to: user.email,
+          subject: `You've been away — here's what's happening in your communities`,
+          html,
+        });
+        sent++;
+      } catch (e) {
+        console.error(`[winback] Failed to send to ${user.email}:`, e.message);
+      }
+    }
+    console.log(`[winback] Sent ${sent} win-back emails`);
+  } catch (err) {
+    console.error('[winback] Error:', err.message);
+  }
+}
+// Every Friday at 11am UTC
+cron.schedule('0 11 * * 5', () => { console.log('[winback] Win-back cron triggered'); sendMemberWinBackEmails(); });
+
 // GET /api/win-card/:marketId/:userId — public win card data
 app.get('/api/win-card/:marketId/:userId', async (req, res) => {
   try {
@@ -8260,6 +8425,114 @@ app.get('/api/creator/custom-domain/status', requireCreator, async (req, res) =>
 //   SMTP_HOST, SMTP_PORT (default 587), SMTP_USER, SMTP_PASS, SMTP_FROM
 // If SMTP_HOST is not set the function is a no-op — no crash, just skipped.
 // ─────────────────────────────────────────────────────────────────────────────
+// ─── REFERRAL ACCEPTANCE ─────────────────────────────────────────────────────
+// Called when a creator publishes their first public market.
+// Flips creator_referrals.accepted = true for their pending referral row (if any).
+// Idempotent — does nothing if already accepted or no referral exists.
+async function maybeAcceptReferral(creatorSlug) {
+  try {
+    // Only flip if they have exactly 1 public market (i.e. this is their first)
+    const { count } = await supabase
+      .from('markets')
+      .select('id', { count: 'exact', head: true })
+      .eq('tenant_slug', creatorSlug)
+      .eq('is_public', true)
+      .eq('archived', false);
+
+    if (count !== 1) return; // not their first market, skip
+
+    const { data: ref } = await supabase
+      .from('creator_referrals')
+      .select('id, accepted')
+      .eq('new_creator_slug', creatorSlug)
+      .maybeSingle();
+
+    if (!ref || ref.accepted) return; // no referral or already accepted
+
+    await supabase
+      .from('creator_referrals')
+      .update({ accepted: true, accepted_at: new Date().toISOString() })
+      .eq('id', ref.id);
+
+    console.log(`[referral] Accepted referral for ${creatorSlug} (ref id ${ref.id})`);
+  } catch (err) {
+    console.error('[referral] maybeAcceptReferral error:', err.message);
+  }
+}
+
+// ─── SIGNUP DROP-OFF EMAIL ────────────────────────────────────────────────────
+// Fires 2h after signup (via setTimeout in signup handler).
+// If the creator still has zero public markets, sends a gentle nudge.
+async function maybeFireSignupDropoffEmail(slug, email) {
+  const transporter = createMailTransport();
+  if (!transporter) return;
+
+  try {
+    // Check if they've published anything yet
+    const { count } = await supabase
+      .from('markets')
+      .select('id', { count: 'exact', head: true })
+      .eq('tenant_slug', slug)
+      .eq('is_public', true);
+
+    if (count > 0) return; // already active — no nudge needed
+
+    // Check they haven't unsubscribed
+    const { data: creator } = await supabase
+      .from('creator_settings')
+      .select('id, display_name, primary_color, email_unsubscribed, email_unsubscribe_token')
+      .eq('slug', slug)
+      .maybeSingle();
+
+    if (!creator || creator.email_unsubscribed) return;
+
+    const accent = creator.primary_color || '#c9920d';
+    const communityName = creator.display_name || slug;
+    const dashUrl = 'https://hyperflex.network/creator/dashboard';
+
+    const unsubToken = creator.email_unsubscribe_token || await getCreatorUnsubToken(creator.id);
+    const unsubUrl = `https://hyperflex.network/unsubscribe?token=${unsubToken}`;
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/></head>
+<body style="font-family:'Helvetica Neue',Arial,sans-serif;background:#141412;margin:0;padding:0">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#141412;padding:40px 0">
+<tr><td align="center">
+  <table width="520" cellpadding="0" cellspacing="0" style="background:#1e1e1b;border-radius:12px;overflow:hidden">
+    <tr><td style="background:${accent};padding:16px 28px">
+      <span style="font-size:18px;font-weight:900;color:#141412">HYPERFLEX</span>
+    </td></tr>
+    <tr><td style="padding:32px 28px 24px">
+      <h2 style="margin:0 0 12px;font-size:21px;color:#f5f5f0;font-weight:800;line-height:1.3">Your community is set up — just needs its first market.</h2>
+      <p style="margin:0 0 18px;font-size:14px;color:#888;line-height:1.7">
+        <strong style="color:#f5f5f0">${communityName}</strong> is live and ready. The fastest way to get your first predictions is to paste a YouTube URL — the AI will write the markets for you in under 30 seconds.
+      </p>
+      <div style="background:rgba(201,146,13,.08);border:1px solid rgba(201,146,13,.2);border-radius:10px;padding:16px 20px;margin-bottom:24px">
+        <div style="font-size:13px;color:#f5f5f0;margin-bottom:8px;font-weight:700">Three ways to get your first market live:</div>
+        <div style="font-size:13px;color:#aaa;line-height:1.8">
+          1. Paste a YouTube URL → AI writes markets from the video<br/>
+          2. Pick from the <a href="https://hyperflex.network/templates" style="color:${accent}">template gallery</a> — 72 pre-written questions<br/>
+          3. Type a question manually — takes 30 seconds
+        </div>
+      </div>
+      <a href="${dashUrl}" style="display:inline-block;padding:13px 28px;background:${accent};color:#141412;font-weight:800;font-size:15px;border-radius:8px;text-decoration:none">Publish your first market →</a>
+    </td></tr>
+    ${creatorUnsubscribeFooterHtml(unsubUrl)}
+  </table>
+</td></tr>
+</table></body></html>`;
+
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM || 'HYPERFLEX <noreply@hyperflex.network>',
+      to: email,
+      subject: `${communityName} is set up — publish your first market`,
+      html,
+    });
+    console.log(`[dropoff] Sent signup drop-off nudge to ${email} (${slug})`);
+  } catch (err) {
+    console.error('[dropoff] Error:', err.message);
+  }
+}
+
 // ─── EMAIL UNSUBSCRIBE SYSTEM ─────────────────────────────────────────────────
 // One-click unsubscribe for all outgoing member/creator emails.
 // Tokens are stored in users.email_unsubscribe_token (UUID, generated on first send).

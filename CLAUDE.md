@@ -140,6 +140,18 @@
 
 ---
 
+## AARRR gap closers (session 6 continued)
+
+**M — Referral accepted fix**: `maybeAcceptReferral(slug)` fires from both POST /markets and PUT /markets when `is_public` flips to true. Checks if this is creator's first public market; if so, flips `creator_referrals.accepted = true` and sets `accepted_at`. Resolves the known bug.
+
+**N — Signup drop-off email**: 2h after creator signup, `maybeFireSignupDropoffEmail()` checks if they have zero public markets and sends a "publish your first market" nudge with three paths. Fires via `setTimeout` in signup handler.
+
+**O — Free plan limit banner**: Inline banner in Markets tab appears at 4/5 and 5/5 active markets for free creators. On 403 limit hit, banner shows + upgrade modal opens. Removes the invisible wall.
+
+**P — Member win-back emails**: `sendMemberWinBackEmails()` every Friday 11am UTC. Targets members active at some point but idle for 14–60 days. Personalised with days-away count + 3 hot markets from their communities.
+
+---
+
 ## SaaS Pillar features (session 6)
 
 **G — Streak warning emails** (`sendStreakWarningEmails()` in server.js):
