@@ -562,6 +562,9 @@ app.post('/markets', async (req, res) => {
     .single();
   if (error) {
     console.error('POST /markets insert error:', JSON.stringify({ message: error.message, code: error.code, details: error.details, hint: error.hint, row }));
+    if (error.code === '23505') {
+      return res.status(409).json({ error: 'A market with this question already exists in your community. Try editing the wording slightly.' });
+    }
     return res.status(400).json({ error: error.message, details: error.details, hint: error.hint });
   }
   // Score resonance async — don't block response
@@ -665,7 +668,21 @@ app.post('/api/creator/markets/bulk', requireCreator, async (req, res) => {
       .insert(rows)
       .select('id, question, category');
 
-    if (error) throw error;
+    if (error) {
+      if (error.code === '23505') {
+        // One or more questions already exist — retry one-by-one, skipping dupes
+        const results = [];
+        for (const r of rows) {
+          const { data: d, error: e } = await supabase.from('markets').insert([r]).select('id, question, category').single();
+          if (e && e.code === '23505') { skipped.push({ question: r.question, reason: 'Duplicate question already exists' }); }
+          else if (e) { skipped.push({ question: r.question, reason: e.message }); }
+          else if (d) results.push(d);
+        }
+        if (!results.length) return res.status(409).json({ error: 'All markets already exist in your community', skipped });
+        return res.json({ created: results.length, markets: results, skipped });
+      }
+      throw error;
+    }
 
     // Score resonance async for each; notify followers for first market only (avoid inbox spam on bulk)
     for (let i = 0; i < (inserted || []).length; i++) {
@@ -3987,12 +4004,22 @@ app.put('/api/creator/settings/slug', requireCreator, async (req, res) => {
       .maybeSingle();
     if (taken) return res.status(409).json({ error: 'Slug already taken — try a different one' });
 
-    // Cascade updates in parallel
-    await Promise.all([
-      supabase.from('creator_settings').update({ slug: new_slug }).eq('creator_id', req.creator.id),
-      supabase.from('markets').update({ tenant_slug: new_slug }).eq('tenant_slug', old_slug),
-      supabase.from('community_balances').update({ creator_slug: new_slug }).eq('creator_slug', old_slug),
-    ]);
+    // Cascade updates
+    await supabase.from('creator_settings').update({ slug: new_slug }).eq('creator_id', req.creator.id);
+
+    // Markets: update one-by-one to skip any duplicate-question conflicts
+    const { data: oldMarkets } = await supabase.from('markets').select('id, question').eq('tenant_slug', old_slug);
+    const { data: newMarkets } = await supabase.from('markets').select('question').eq('tenant_slug', new_slug);
+    const newQs = new Set((newMarkets || []).map(m => m.question));
+    let mktMigrated = 0, mktSkipped = 0;
+    for (const m of (oldMarkets || [])) {
+      if (newQs.has(m.question)) { mktSkipped++; continue; } // dupe — leave it, or delete it
+      await supabase.from('markets').update({ tenant_slug: new_slug }).eq('id', m.id);
+      mktMigrated++;
+    }
+    if (mktSkipped > 0) console.log(`[slug-change] skipped ${mktSkipped} duplicate-question markets`);
+
+    await supabase.from('community_balances').update({ creator_slug: new_slug }).eq('creator_slug', old_slug);
 
     // Best-effort cascade on tables that may or may not exist
     const softCascades = [
