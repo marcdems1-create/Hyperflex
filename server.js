@@ -5389,7 +5389,7 @@ app.get('/api/community/:slug', async (req, res) => {
     // Match on any of the three fields that market-creation routes populate
     const { data: rawMarkets, error: marketsErr } = await supabase
       .from('markets')
-      .select('id, question, category, expiry_date, yes_price, no_price, yes_votes, no_votes, trader_count, resolved, outcome, resolved_at, resolution_note, resolution_source, resolution_sources, tweet_text, tweet_author, source_tweet_url')
+      .select('id, question, category, expiry_date, yes_price, no_price, yes_votes, no_votes, trader_count, resolved, outcome, resolved_at, resolution_note, resolution_source, resolution_sources, tweet_text, tweet_author, source_tweet_url, season_id')
       .or(`tenant_slug.eq.${slug},creator_id.eq.${settings.creator_id}`)
       .neq('is_public', false)   // include true AND null (legacy markets without is_public set)
       .order('created_at', { ascending: false });
@@ -9761,6 +9761,233 @@ app.get('/api/profile/:slug/comments', async (req, res) => {
     res.json({ comments: result });
   } catch (err) {
     console.error('[profile comments GET]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── SEASONS / TOURNAMENTS ─────────────────────────────────────────────────────
+
+// POST /api/creator/seasons — create a season (Pro/Premium required)
+app.post('/api/creator/seasons', requireCreatorAuth, async (req, res) => {
+  try {
+    const creatorSlug = req.creator.slug;
+    const { data: settings } = await supabase
+      .from('creator_settings').select('plan').eq('slug', creatorSlug).single();
+    const plan = settings?.plan || 'free';
+    if (plan === 'free') {
+      return res.status(403).json({ error: 'Seasons require Pro or Premium. Upgrade to run tournaments.' });
+    }
+
+    const { name, description, ends_at, prize_description, market_ids } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ error: 'Season name is required' });
+
+    // Create the season
+    const { data: season, error: sErr } = await supabase
+      .from('seasons')
+      .insert({
+        creator_slug: creatorSlug,
+        name: name.trim().slice(0, 80),
+        description: (description || '').trim().slice(0, 300) || null,
+        ends_at: ends_at || null,
+        prize_description: (prize_description || '').trim().slice(0, 200) || null,
+        status: 'active',
+      })
+      .select()
+      .single();
+    if (sErr) throw sErr;
+
+    // Optionally assign existing markets to this season
+    if (Array.isArray(market_ids) && market_ids.length) {
+      await supabase
+        .from('markets')
+        .update({ season_id: season.id })
+        .in('id', market_ids)
+        .eq('creator_slug', creatorSlug);
+    }
+
+    res.json({ season });
+  } catch (err) {
+    console.error('[seasons POST]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/creator/seasons — list creator's seasons with stats
+app.get('/api/creator/seasons', requireCreatorAuth, async (req, res) => {
+  try {
+    const creatorSlug = req.creator.slug;
+    const { data: seasons, error } = await supabase
+      .from('seasons')
+      .select('*')
+      .eq('creator_slug', creatorSlug)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+
+    // Attach market count to each season
+    const ids = (seasons || []).map(s => s.id);
+    let marketCounts = {};
+    if (ids.length) {
+      const { data: mkts } = await supabase
+        .from('markets')
+        .select('season_id')
+        .in('season_id', ids);
+      (mkts || []).forEach(m => { marketCounts[m.season_id] = (marketCounts[m.season_id] || 0) + 1; });
+    }
+
+    const enriched = (seasons || []).map(s => ({
+      ...s,
+      market_count: marketCounts[s.id] || 0,
+    }));
+    res.json({ seasons: enriched });
+  } catch (err) {
+    console.error('[seasons GET]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/creator/seasons/:id — update name, description, prize, status, ends_at
+app.put('/api/creator/seasons/:id', requireCreatorAuth, async (req, res) => {
+  try {
+    const creatorSlug = req.creator.slug;
+    const { id } = req.params;
+    const { name, description, ends_at, prize_description, status } = req.body;
+
+    // Ownership check
+    const { data: existing } = await supabase
+      .from('seasons').select('id, creator_slug').eq('id', id).single();
+    if (!existing || existing.creator_slug !== creatorSlug)
+      return res.status(404).json({ error: 'Season not found' });
+
+    const update = {};
+    if (name !== undefined)              update.name = name.trim().slice(0, 80);
+    if (description !== undefined)       update.description = description.trim().slice(0, 300) || null;
+    if (ends_at !== undefined)           update.ends_at = ends_at || null;
+    if (prize_description !== undefined) update.prize_description = prize_description.trim().slice(0, 200) || null;
+    if (status !== undefined && ['active','ended','draft'].includes(status)) update.status = status;
+
+    const { data: season, error } = await supabase
+      .from('seasons').update(update).eq('id', id).select().single();
+    if (error) throw error;
+
+    // If ending a season, unlink all its markets so they go back to being independent
+    // (keep season_id for leaderboard history — do NOT unlink)
+    res.json({ season });
+  } catch (err) {
+    console.error('[seasons PUT]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/creator/seasons/:id/markets — add/remove markets from a season
+// body: { add: [marketId, ...], remove: [marketId, ...] }
+app.post('/api/creator/seasons/:id/markets', requireCreatorAuth, async (req, res) => {
+  try {
+    const creatorSlug = req.creator.slug;
+    const { id } = req.params;
+    const { add = [], remove = [] } = req.body;
+
+    const { data: season } = await supabase
+      .from('seasons').select('id, creator_slug').eq('id', id).single();
+    if (!season || season.creator_slug !== creatorSlug)
+      return res.status(404).json({ error: 'Season not found' });
+
+    if (add.length) {
+      await supabase.from('markets').update({ season_id: id })
+        .in('id', add).eq('creator_slug', creatorSlug);
+    }
+    if (remove.length) {
+      await supabase.from('markets').update({ season_id: null })
+        .in('id', remove).eq('creator_slug', creatorSlug).eq('season_id', id);
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[seasons markets POST]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/community/:slug/seasons — public list of active/recent seasons
+app.get('/api/community/:slug/seasons', async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const { data: seasons, error } = await supabase
+      .from('seasons')
+      .select('id, name, description, status, starts_at, ends_at, prize_description, created_at')
+      .eq('creator_slug', slug)
+      .neq('status', 'draft')
+      .order('created_at', { ascending: false })
+      .limit(10);
+    if (error) throw error;
+
+    // Market counts
+    const ids = (seasons || []).map(s => s.id);
+    let marketCounts = {};
+    if (ids.length) {
+      const { data: mkts } = await supabase.from('markets').select('season_id').in('season_id', ids);
+      (mkts || []).forEach(m => { marketCounts[m.season_id] = (marketCounts[m.season_id] || 0) + 1; });
+    }
+
+    res.json({ seasons: (seasons || []).map(s => ({ ...s, market_count: marketCounts[s.id] || 0 })) });
+  } catch (err) {
+    console.error('[community seasons GET]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/community/:slug/seasons/:seasonId — season detail + leaderboard
+app.get('/api/community/:slug/seasons/:seasonId', async (req, res) => {
+  try {
+    const { slug, seasonId } = req.params;
+
+    // Season meta
+    const { data: season, error: sErr } = await supabase
+      .from('seasons')
+      .select('*')
+      .eq('id', seasonId)
+      .eq('creator_slug', slug)
+      .single();
+    if (sErr || !season) return res.status(404).json({ error: 'Season not found' });
+
+    // Season markets
+    const { data: markets } = await supabase
+      .from('markets')
+      .select('id, question, category, resolved, outcome, yes_price, no_price, trader_count, expiry_date')
+      .eq('season_id', seasonId)
+      .order('created_at', { ascending: true });
+
+    const marketIds = (markets || []).map(m => m.id);
+
+    // Leaderboard — sum settled positions across all season markets
+    let leaderboard = [];
+    if (marketIds.length) {
+      const { data: positions } = await supabase
+        .from('positions')
+        .select('user_id, amount, potential_payout, settled, won, users(display_name)')
+        .in('market_id', marketIds)
+        .eq('settled', true);
+
+      const totals = {};
+      (positions || []).forEach(p => {
+        if (!totals[p.user_id]) totals[p.user_id] = {
+          user_id: p.user_id,
+          display_name: p.users?.display_name || 'Anonymous',
+          pnl: 0, wins: 0, trades: 0,
+        };
+        const pnl = p.won ? Math.round((p.potential_payout - p.amount) / 100) : -Math.round(p.amount / 100);
+        totals[p.user_id].pnl += pnl;
+        totals[p.user_id].trades += 1;
+        if (p.won) totals[p.user_id].wins += 1;
+      });
+
+      leaderboard = Object.values(totals)
+        .sort((a, b) => b.pnl - a.pnl)
+        .slice(0, 20);
+    }
+
+    res.json({ season, markets: markets || [], leaderboard });
+  } catch (err) {
+    console.error('[season detail GET]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

@@ -1798,6 +1798,30 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
     </div>
   </div>
 
+  <!-- Active Season Banner -->
+  <div id="seasonBanner" style="display:none;margin-bottom:18px;border-radius:14px;overflow:hidden;border:1.5px solid rgba(201,146,13,0.45);background:linear-gradient(135deg,rgba(201,146,13,0.10) 0%,rgba(201,146,13,0.04) 100%)">
+    <div style="padding:16px 18px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:20px">🏆</span>
+          <div>
+            <div id="seasonBannerName" style="font-weight:800;font-size:14px"></div>
+            <div id="seasonBannerDesc" style="font-size:11px;color:var(--dim);margin-top:2px"></div>
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div id="seasonBannerDays" style="font-size:11px;color:var(--gold);font-weight:700;font-family:var(--mono)"></div>
+          <div id="seasonBannerPrize" style="font-size:11px;color:var(--dim);margin-top:2px"></div>
+        </div>
+      </div>
+      <!-- Mini season leaderboard -->
+      <div id="seasonBannerLb" style="margin-top:10px;background:rgba(0,0,0,0.2);border-radius:8px;padding:8px 12px;display:none">
+        <div style="font-size:10px;font-weight:700;color:var(--dim);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">Season Standings</div>
+        <div id="seasonBannerLbRows"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- Markets grid -->
   <div class="markets-grid" id="marketsGrid">
     <div class="skeleton-card">
@@ -2103,6 +2127,8 @@ async function loadCommunity() {
     if (data.challenge_progress) renderChallengeBar(data.challenge_progress);
     if (data.announcements && data.announcements.length) renderAnnouncements(data.announcements);
     if (data.recent_activity && data.recent_activity.length) renderActivityFeed(data.recent_activity);
+    // Load active season (non-blocking)
+    loadActiveSeason();
   } catch {
     showCommunityError();
   }
@@ -4277,6 +4303,57 @@ function renderActivityFeed(activity) {
 }
 
 // ── ANNOUNCEMENTS ─────────────────────────────────────────────
+// ── SEASONS ──────────────────────────────────────────────────────────────────
+async function loadActiveSeason() {
+  try {
+    const r = await fetch(`/api/community/${slug}/seasons`);
+    if (!r.ok) return;
+    const data = await r.json();
+    const active = (data.seasons || []).find(s => s.status === 'active');
+    if (!active) return;
+    // Fetch season detail for leaderboard
+    const dr = await fetch(`/api/community/${slug}/seasons/${active.id}`);
+    if (!dr.ok) return;
+    const detail = await dr.json();
+    renderSeasonBanner(detail.season, detail.leaderboard || []);
+  } catch {}
+}
+
+function renderSeasonBanner(s, lb) {
+  const banner = document.getElementById('seasonBanner');
+  if (!banner) return;
+  document.getElementById('seasonBannerName').textContent = s.name;
+  document.getElementById('seasonBannerDesc').textContent = s.description || '';
+  if (!s.description) document.getElementById('seasonBannerDesc').style.display = 'none';
+
+  // Days left
+  if (s.ends_at) {
+    const daysLeft = Math.max(0, Math.ceil((new Date(s.ends_at) - Date.now()) / 86400000));
+    document.getElementById('seasonBannerDays').textContent = daysLeft > 0 ? `${daysLeft} days left` : 'Final day!';
+  } else {
+    document.getElementById('seasonBannerDays').textContent = 'Ongoing';
+  }
+
+  document.getElementById('seasonBannerPrize').textContent = s.prize_description ? `🏅 ${s.prize_description}` : '';
+
+  // Mini leaderboard (top 5)
+  if (lb.length) {
+    const medals = ['🥇','🥈','🥉'];
+    document.getElementById('seasonBannerLbRows').innerHTML = lb.slice(0,5).map((p,i) => `
+      <div style="display:flex;align-items:center;gap:8px;padding:4px 0;${i<lb.length-1?'border-bottom:1px solid rgba(255,255,255,0.06)':''}">
+        <span style="font-size:13px;width:20px;text-align:center">${medals[i] || '#'+(i+1)}</span>
+        <span style="flex:1;font-size:12px;font-weight:600">${escHtmlComm(p.display_name)}</span>
+        <span style="font-family:var(--mono);font-size:11px;color:${p.pnl>=0?'#4ade80':'#f87171'}">${p.pnl>=0?'+':''}${p.pnl.toLocaleString()} pts</span>
+        <span style="font-family:var(--mono);font-size:10px;color:var(--dim)">${p.wins}W</span>
+      </div>`).join('');
+    document.getElementById('seasonBannerLb').style.display = '';
+  }
+
+  banner.style.display = '';
+}
+
+function escHtmlComm(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
 function renderAnnouncements(announcements) {
   const sec = document.getElementById('announcementsSection');
   if (!sec || !announcements.length) return;

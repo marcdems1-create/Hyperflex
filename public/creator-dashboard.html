@@ -2759,6 +2759,9 @@ body.nav-open .sidebar-backdrop {
       <a class="nav-item" onclick="showTab('rewards')">
         <span class="nav-icon">🎁</span><span class="nav-label">Rewards</span>
       </a>
+      <a class="nav-item" onclick="showTab('seasons')">
+        <span class="nav-icon">🏆</span><span class="nav-label">Seasons</span>
+      </a>
       <div class="nav-section-label">Account</div>
       <a class="nav-item" onclick="showTab('economy')">
         <span class="nav-icon">⚡</span><span class="nav-label">Economy</span>
@@ -3773,6 +3776,35 @@ body.nav-open .sidebar-backdrop {
 
       </div><!-- /tab-rewards -->
 
+      <!-- ══════════════════════════════════ SEASONS TAB ══════════════════════════════ -->
+      <div id="tab-seasons" style="display:none">
+
+        <!-- Pro gate -->
+        <div id="seasonsGate" style="display:none" class="section">
+          <div style="text-align:center;padding:40px 20px">
+            <div style="font-size:32px;margin-bottom:12px">🏆</div>
+            <div style="font-size:17px;font-weight:800;margin-bottom:8px">Seasons &amp; Tournaments</div>
+            <div style="font-size:13px;color:var(--muted);max-width:360px;margin:0 auto 20px;line-height:1.6">Run a structured prediction contest — name it, set an end date, assign markets, and crown a champion. Upgrade to Pro to launch your first season.</div>
+            <button class="btn-primary" onclick="showUpgrade()">Upgrade to Pro →</button>
+          </div>
+        </div>
+
+        <!-- Active content (Pro+) -->
+        <div id="seasonsContent" style="display:none">
+          <div class="section">
+            <div class="section-header">
+              <div>
+                <div class="section-title">🏆 Seasons &amp; Tournaments</div>
+                <div class="section-subtitle">Run a named prediction contest. Members compete on a season leaderboard.</div>
+              </div>
+              <button class="btn-primary" style="font-size:13px" onclick="openCreateSeasonModal()">+ New Season</button>
+            </div>
+            <div id="seasonsList"><div class="loading-row">Loading seasons…</div></div>
+          </div>
+        </div>
+
+      </div><!-- /tab-seasons -->
+
       <!-- ═══════════════════════════════════ ECONOMY TAB ════════════════════════════ -->
       <div id="tab-economy" style="display:none">
 
@@ -4596,6 +4628,49 @@ body.nav-open .sidebar-backdrop {
     <div class="modal-footer">
       <button class="btn-secondary" onclick="closeMemberRewardModal()">Cancel</button>
       <button class="btn-primary" onclick="submitMemberReward()">Send Reward</button>
+    </div>
+  </div>
+</div>
+
+<!-- Create / Edit Season Modal -->
+<div class="modal-overlay" id="seasonModal" style="display:none" onclick="if(event.target===this)closeSeasonModal()">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header">
+      <div class="modal-title" id="seasonModalTitle">🏆 New Season</div>
+      <button class="modal-close" onclick="closeSeasonModal()">✕</button>
+    </div>
+    <div class="modal-body" style="padding:24px">
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div>
+          <label class="form-label">Season Name *</label>
+          <input id="seasonName" type="text" class="form-input" placeholder="e.g. Q2 2026 Crypto Season" maxlength="80" />
+        </div>
+        <div>
+          <label class="form-label">Description <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+          <textarea id="seasonDesc" class="form-input" placeholder="What are members competing for? What's the theme?" maxlength="300" style="min-height:72px;resize:vertical"></textarea>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div>
+            <label class="form-label">Ends On <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+            <input id="seasonEndsAt" type="date" class="form-input" />
+          </div>
+          <div>
+            <label class="form-label">Prize / Reward <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+            <input id="seasonPrize" type="text" class="form-input" placeholder="e.g. Shoutout + $50 gift card" maxlength="200" />
+          </div>
+        </div>
+        <div id="seasonMarketsSection">
+          <label class="form-label">Add Markets to This Season <span style="color:var(--muted);font-weight:400">(optional — you can add later)</span></label>
+          <div id="seasonMarketPicker" style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;background:var(--cream)">
+            <div style="font-size:12px;color:var(--muted)">Loading markets…</div>
+          </div>
+        </div>
+        <div id="seasonModalError" style="display:none;color:#f87171;font-size:12px"></div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;padding-top:8px">
+          <button class="btn-secondary" onclick="closeSeasonModal()">Cancel</button>
+          <button class="btn-primary" id="seasonSubmitBtn" onclick="submitSeason()">Create Season →</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -5629,7 +5704,7 @@ function renderShareTemplates(creator) {
 
 // Tab switching
 function showTab(tab) {
-  ['overview','markets','resolve','leaderboard','share','rewards','settings','analytics','economy','branding','flexbot','ideas'].forEach(t => {
+  ['overview','markets','resolve','leaderboard','share','rewards','seasons','settings','analytics','economy','branding','flexbot','ideas'].forEach(t => {
     const el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === tab ? 'block' : 'none';
   });
@@ -5637,7 +5712,7 @@ function showTab(tab) {
   document.querySelectorAll('.nav-item').forEach(n => {
     if (n.getAttribute('onclick') && n.getAttribute('onclick').includes(`'${tab}'`)) n.classList.add('active');
   });
-  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas' };
+  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas' };
   document.getElementById('topbarTitle').textContent = titles[tab] || tab;
   if (tab === 'analytics' && !analyticsLoaded) loadAnalytics();
   if (tab === 'ideas' && !ideasLoaded) loadMarketIdeas(false);
@@ -5648,6 +5723,7 @@ function showTab(tab) {
     if (kitSection) kitSection.style.display = (plan === 'pro' || plan === 'platinum') ? '' : 'none';
   }
   if (tab === 'resolve') loadDisputes();
+  if (tab === 'seasons' && !seasonsLoaded) loadSeasons();
   if (tab === 'markets') {
     const sec = document.getElementById('suggestionsSection');
     if (sec && sec.style.display !== 'none') loadSuggestions();
@@ -5655,6 +5731,180 @@ function showTab(tab) {
   // Close sidebar drawer on mobile after nav tap
   if (window.innerWidth <= 1024) closeSidebar();
 }
+
+// ── SEASONS ──────────────────────────────────────────────────────────────────
+let seasonsLoaded = false;
+let seasonsData = [];
+let editingSeasonId = null;
+
+async function loadSeasons() {
+  seasonsLoaded = true;
+  const plan = creatorData?.creator?.plan || 'free';
+  const gate = document.getElementById('seasonsGate');
+  const content = document.getElementById('seasonsContent');
+  if (plan === 'free') {
+    if (gate) gate.style.display = '';
+    if (content) content.style.display = 'none';
+    return;
+  }
+  if (gate) gate.style.display = 'none';
+  if (content) content.style.display = '';
+
+  const token = localStorage.getItem('hf_creator_token');
+  try {
+    const r = await fetch('/api/creator/seasons', { headers: { Authorization: 'Bearer ' + token } });
+    const data = await r.json();
+    seasonsData = data.seasons || [];
+    renderSeasonsList();
+  } catch { document.getElementById('seasonsList').innerHTML = '<div class="empty-row">Could not load seasons.</div>'; }
+}
+
+function renderSeasonsList() {
+  const el = document.getElementById('seasonsList');
+  if (!seasonsData.length) {
+    el.innerHTML = `<div style="text-align:center;padding:40px 20px;color:var(--muted)">
+      <div style="font-size:32px;margin-bottom:12px">🏆</div>
+      <div style="font-size:14px;font-weight:700;margin-bottom:6px">No seasons yet</div>
+      <div style="font-size:12px;margin-bottom:16px">Create your first season to run a community-wide prediction tournament.</div>
+      <button class="btn-primary" onclick="openCreateSeasonModal()">+ Create First Season</button>
+    </div>`;
+    return;
+  }
+  const now = new Date();
+  el.innerHTML = seasonsData.map(s => {
+    const statusColor = s.status === 'active' ? '#4ade80' : s.status === 'ended' ? '#888' : '#c9920d';
+    const endsStr = s.ends_at ? `Ends ${new Date(s.ends_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}` : 'No end date';
+    const daysLeft = s.ends_at && s.status === 'active' ? Math.max(0, Math.ceil((new Date(s.ends_at)-now)/86400000)) : null;
+    return `<div style="background:var(--cream);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin-bottom:12px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+            <span style="font-size:15px;font-weight:800">${escHtmlDash(s.name)}</span>
+            <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:${statusColor}22;color:${statusColor};text-transform:uppercase;letter-spacing:.05em">${s.status}</span>
+            ${daysLeft !== null ? `<span style="font-size:11px;color:var(--muted)">${daysLeft}d left</span>` : ''}
+          </div>
+          ${s.description ? `<div style="font-size:12px;color:var(--muted);margin-bottom:8px;line-height:1.5">${escHtmlDash(s.description)}</div>` : ''}
+          <div style="display:flex;gap:16px;flex-wrap:wrap">
+            <span style="font-size:11px;color:var(--muted)">📊 ${s.market_count || 0} markets</span>
+            <span style="font-size:11px;color:var(--muted)">📅 ${endsStr}</span>
+            ${s.prize_description ? `<span style="font-size:11px;color:#c9920d">🏅 ${escHtmlDash(s.prize_description)}</span>` : ''}
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-shrink:0">
+          <button class="btn-secondary" style="font-size:12px;padding:6px 12px" onclick="openEditSeasonModal('${s.id}')">Edit</button>
+          ${s.status === 'active' ? `<button class="btn-secondary" style="font-size:12px;padding:6px 12px;color:#f87171;border-color:rgba(248,113,113,.3)" onclick="endSeason('${s.id}')">End Season</button>` : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openCreateSeasonModal() {
+  editingSeasonId = null;
+  document.getElementById('seasonModalTitle').textContent = '🏆 New Season';
+  document.getElementById('seasonName').value = '';
+  document.getElementById('seasonDesc').value = '';
+  document.getElementById('seasonEndsAt').value = '';
+  document.getElementById('seasonPrize').value = '';
+  document.getElementById('seasonSubmitBtn').textContent = 'Create Season →';
+  document.getElementById('seasonModalError').style.display = 'none';
+  // Populate market picker
+  populateSeasonMarketPicker(null);
+  document.getElementById('seasonModal').style.display = 'flex';
+}
+
+function openEditSeasonModal(id) {
+  const s = seasonsData.find(x => x.id === id);
+  if (!s) return;
+  editingSeasonId = id;
+  document.getElementById('seasonModalTitle').textContent = '✏️ Edit Season';
+  document.getElementById('seasonName').value = s.name || '';
+  document.getElementById('seasonDesc').value = s.description || '';
+  document.getElementById('seasonEndsAt').value = s.ends_at ? s.ends_at.slice(0,10) : '';
+  document.getElementById('seasonPrize').value = s.prize_description || '';
+  document.getElementById('seasonSubmitBtn').textContent = 'Save Changes →';
+  document.getElementById('seasonModalError').style.display = 'none';
+  populateSeasonMarketPicker(id);
+  document.getElementById('seasonModal').style.display = 'flex';
+}
+
+function populateSeasonMarketPicker(seasonId) {
+  const picker = document.getElementById('seasonMarketPicker');
+  const liveMarkets = (communityMarkets || []).filter(m => !m.archived && !m.resolved);
+  if (!liveMarkets.length) { picker.innerHTML = '<div style="font-size:12px;color:var(--muted)">No active markets to assign.</div>'; return; }
+  picker.innerHTML = liveMarkets.map(m => {
+    const checked = seasonId && m.season_id === seasonId ? 'checked' : '';
+    return `<label style="display:flex;align-items:center;gap:8px;padding:6px 4px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border)">
+      <input type="checkbox" value="${m.id}" ${checked} style="accent-color:var(--gold)">
+      <span style="flex:1;line-height:1.4">${escHtmlDash(m.question)}</span>
+    </label>`;
+  }).join('');
+}
+
+function closeSeasonModal() {
+  document.getElementById('seasonModal').style.display = 'none';
+}
+
+async function submitSeason() {
+  const name = document.getElementById('seasonName').value.trim();
+  if (!name) { showSeasonError('Season name is required.'); return; }
+  const errEl = document.getElementById('seasonModalError');
+  errEl.style.display = 'none';
+  const btn = document.getElementById('seasonSubmitBtn');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+
+  const checkedMarkets = [...document.querySelectorAll('#seasonMarketPicker input[type=checkbox]:checked')].map(c => c.value);
+  const token = localStorage.getItem('hf_creator_token');
+  try {
+    const body = {
+      name,
+      description: document.getElementById('seasonDesc').value.trim(),
+      ends_at: document.getElementById('seasonEndsAt').value || null,
+      prize_description: document.getElementById('seasonPrize').value.trim(),
+    };
+    let r, data;
+    if (editingSeasonId) {
+      r = await fetch(`/api/creator/seasons/${editingSeasonId}`, { method:'PUT', headers:{'Content-Type':'application/json',Authorization:'Bearer '+token}, body: JSON.stringify(body) });
+      data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Save failed');
+      // Update market assignments
+      const prev = (communityMarkets || []).filter(m => m.season_id === editingSeasonId).map(m => m.id);
+      const toAdd = checkedMarkets.filter(id => !prev.includes(id));
+      const toRemove = prev.filter(id => !checkedMarkets.includes(id));
+      if (toAdd.length || toRemove.length) {
+        await fetch(`/api/creator/seasons/${editingSeasonId}/markets`, { method:'POST', headers:{'Content-Type':'application/json',Authorization:'Bearer '+token}, body: JSON.stringify({ add: toAdd, remove: toRemove }) });
+      }
+      // Update local
+      const idx = seasonsData.findIndex(s => s.id === editingSeasonId);
+      if (idx >= 0) seasonsData[idx] = { ...seasonsData[idx], ...data.season, market_count: checkedMarkets.length };
+    } else {
+      body.market_ids = checkedMarkets;
+      r = await fetch('/api/creator/seasons', { method:'POST', headers:{'Content-Type':'application/json',Authorization:'Bearer '+token}, body: JSON.stringify(body) });
+      data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Create failed');
+      seasonsData.unshift({ ...data.season, market_count: checkedMarkets.length });
+    }
+    closeSeasonModal();
+    renderSeasonsList();
+  } catch (e) { showSeasonError(e.message); }
+  btn.disabled = false;
+  btn.textContent = editingSeasonId ? 'Save Changes →' : 'Create Season →';
+}
+
+async function endSeason(id) {
+  if (!confirm('End this season? The leaderboard will be frozen. Members can still view results.')) return;
+  const token = localStorage.getItem('hf_creator_token');
+  const r = await fetch(`/api/creator/seasons/${id}`, { method:'PUT', headers:{'Content-Type':'application/json',Authorization:'Bearer '+token}, body: JSON.stringify({ status:'ended' }) });
+  if (r.ok) { const idx = seasonsData.findIndex(s => s.id === id); if (idx>=0) seasonsData[idx].status='ended'; renderSeasonsList(); }
+}
+
+function showSeasonError(msg) {
+  const el = document.getElementById('seasonModalError');
+  el.textContent = msg; el.style.display = '';
+}
+
+function escHtmlDash(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 // Create market
 function obQuickPick(question, category) {
