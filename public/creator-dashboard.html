@@ -9914,6 +9914,66 @@ async function loadTemplate(templateId) {
 .wz-qpick-q { font-size:13px;color:var(--text);flex:1;text-align:left;line-height:1.4 }
 .wz-qpick-arr { color:var(--gold);font-size:14px;flex-shrink:0 }
 /* ── Share Sheet ─────────────────────────────────────────── */
+/* ── Share card modal ─────────────────────────────────────── */
+#shareCardModal {
+  display: none; position: fixed; inset: 0; z-index: 9100;
+  background: rgba(0,0,0,0.72); align-items: center; justify-content: center;
+  padding: 20px;
+}
+#shareCardModal.open { display: flex; }
+#shareCardBox {
+  background: #1a1a17; border: 1px solid rgba(201,146,13,0.3);
+  border-radius: 18px; padding: 28px; width: 100%; max-width: 560px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+}
+.sc-title {
+  font-family: var(--display); font-size: 17px; font-weight: 700;
+  color: var(--text); margin-bottom: 18px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.sc-preview {
+  width: 100%; aspect-ratio: 1200/630; border-radius: 12px;
+  overflow: hidden; background: #0f0f0d; margin-bottom: 18px;
+  border: 1px solid rgba(255,255,255,0.06);
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+}
+.sc-preview canvas { width: 100%; height: 100%; display: block; }
+.sc-preview .sc-loading { color: var(--dim); font-family: var(--mono); font-size: 12px; }
+.sc-actions {
+  display: flex; gap: 10px; flex-wrap: wrap;
+}
+.sc-act-btn {
+  flex: 1; min-width: 130px; padding: 11px 16px;
+  border-radius: 10px; font-family: var(--display); font-weight: 700;
+  font-size: 14px; cursor: pointer; border: none; transition: all .15s;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+}
+.sc-act-btn.primary {
+  background: linear-gradient(135deg, #000, #111);
+  border: 1.5px solid #e7e9ea; color: #e7e9ea;
+}
+.sc-act-btn.primary:hover { background: #1a1a1a; }
+.sc-act-btn.secondary {
+  background: var(--paper); border: 1px solid var(--border); color: var(--dim);
+}
+.sc-act-btn.secondary:hover { border-color: var(--gold); color: var(--gold); }
+.sc-link-row {
+  margin-top: 14px; display: flex; gap: 8px; align-items: center;
+}
+.sc-link-input {
+  flex: 1; background: var(--paper); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 12px; color: var(--dim);
+  font-family: var(--mono); font-size: 12px; outline: none;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sc-copy-btn {
+  padding: 8px 14px; background: none; border: 1px solid var(--border);
+  border-radius: 8px; color: var(--dim); font-size: 12px; cursor: pointer;
+  font-family: var(--mono); white-space: nowrap; transition: all .12s;
+}
+.sc-copy-btn:hover { border-color: var(--gold); color: var(--gold); }
+
 #shareSheet {
   position: fixed; z-index: 9999;
   background: #1e1e1b; border: 1px solid rgba(201,146,13,0.25);
@@ -10112,6 +10172,42 @@ function wzCopyLink() {
 </script>
 
 <!-- ── Share Sheet ──────────────────────────────────────── -->
+<!-- ── Share Card Modal ───────────────────────────────────────────────── -->
+<div id="shareCardModal" onclick="if(event.target===this)closeShareCard()">
+  <div id="shareCardBox">
+    <div class="sc-title">
+      <span>📤 Share this market</span>
+      <button onclick="closeShareCard()" style="background:none;border:none;color:var(--dim);font-size:20px;cursor:pointer;line-height:1">×</button>
+    </div>
+
+    <!-- Card preview -->
+    <div class="sc-preview" id="scPreview">
+      <span class="sc-loading" id="scLoading">Generating card…</span>
+      <canvas id="scCanvas" style="display:none"></canvas>
+    </div>
+
+    <!-- Primary action buttons -->
+    <div class="sc-actions">
+      <button class="sc-act-btn primary" onclick="scTweetCard()">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.737-8.835L1.254 2.25H8.08l4.259 5.633 5.905-5.633zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+        Post on X
+      </button>
+      <button class="sc-act-btn secondary" onclick="scDownloadCard()" id="scDownloadBtn">
+        📥 Download card
+      </button>
+      <button class="sc-act-btn secondary" onclick="window.open(window._scShareUrl,'_blank')">
+        ↗ Preview page
+      </button>
+    </div>
+
+    <!-- Link copy row -->
+    <div class="sc-link-row">
+      <input class="sc-link-input" id="scLinkInput" readonly value="" onclick="this.select()"/>
+      <button class="sc-copy-btn" onclick="scCopyLink()">Copy link</button>
+    </div>
+  </div>
+</div>
+
 <div id="shareSheet" role="menu" aria-label="Share options">
   <button class="ss-btn" onclick="ssAction('x')"><span class="ss-icon">𝕏</span>Share on X</button>
   <button class="ss-btn" onclick="ssAction('linkedin')"><span class="ss-icon">💼</span>Share on LinkedIn</button>
@@ -10152,22 +10248,192 @@ function ssAction(platform) {
   closeShareSheet();
 }
 
-// Share a specific market
+// Share a specific market — opens the share card modal
 function shareMarketRow(anchorEl, marketId, question, yesPrice, noPrice) {
-  // Use dedicated share page as the URL — clean OG landing for Twitter/X
-  const sharePageUrl = `${location.origin}/share/${marketId}`;
-  const yp = Math.round((yesPrice || 0.5) * 100);
-  const np = 100 - yp;
-  const name = document.getElementById('headerCommunityName')?.textContent || window._creatorSlug || '';
-  let text;
-  if (yp !== 50) {
-    text = `"${question}"\n\n🟢 YES ${yp}%  🔴 NO ${np}%\n\nWhat's your call? 👇`;
-  } else {
-    text = `"${question}"\n\nNew prediction on ${name} — make your call 🎯`;
+  openShareCard(marketId, question, yesPrice, noPrice);
+}
+
+// ── SHARE CARD MODAL ───────────────────────────────────────────────────────
+let _scMarketId = null, _scQuestion = '', _scYesPrice = 0.5, _scNoPrice = 0.5;
+
+function openShareCard(marketId, question, yesPrice, noPrice) {
+  _scMarketId  = marketId;
+  _scQuestion  = question;
+  _scYesPrice  = yesPrice || 0.5;
+  _scNoPrice   = noPrice  || 0.5;
+
+  const shareUrl = `${location.origin}/share/${marketId}`;
+  window._scShareUrl = shareUrl;
+  document.getElementById('scLinkInput').value = shareUrl;
+
+  // Show modal
+  document.getElementById('shareCardModal').classList.add('open');
+
+  // Draw canvas card
+  _drawShareCard(marketId, question, yesPrice, noPrice);
+}
+
+function closeShareCard() {
+  document.getElementById('shareCardModal').classList.remove('open');
+}
+
+function _drawShareCard(marketId, question, yesPrice, noPrice) {
+  const canvas  = document.getElementById('scCanvas');
+  const loading = document.getElementById('scLoading');
+  const W = 1200, H = 630;
+  canvas.width  = W;
+  canvas.height = H;
+
+  const ctx = canvas.getContext('2d');
+  const yp  = Math.round((yesPrice || 0.5) * 100);
+  const np  = 100 - yp;
+  const hasOdds = yesPrice && Math.abs(yesPrice - 0.5) > 0.005;
+  const slug   = window._creatorSlug || '';
+  const name   = document.getElementById('headerCommunityName')?.textContent || slug;
+  const accent = getComputedStyle(document.documentElement)
+    .getPropertyValue('--gold').trim() || '#c9920d';
+  const cat    = (window._creatorData?.markets?.find(m => m.id === marketId)?.category || 'prediction').toUpperCase();
+
+  // Background gradient
+  const bgGrad = ctx.createLinearGradient(0,0,W,H);
+  bgGrad.addColorStop(0, '#1a1a17');
+  bgGrad.addColorStop(1, '#0f0f0d');
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, W, H);
+
+  // Card border
+  ctx.strokeStyle = 'rgba(201,146,13,0.35)';
+  ctx.lineWidth   = 2;
+  _roundRect(ctx, 40, 40, 1120, 550, 24, false, true);
+
+  // Category pill
+  ctx.fillStyle = 'rgba(201,146,13,0.18)';
+  _roundRect(ctx, 60, 68, cat.length * 11 + 24, 28, 6, true, false);
+  ctx.fillStyle = accent;
+  ctx.font = 'bold 13px "Courier New", monospace';
+  ctx.letterSpacing = '2px';
+  ctx.fillText(cat, 72, 87);
+  ctx.letterSpacing = '0px';
+
+  // HYPERFLEX wordmark
+  ctx.fillStyle = accent;
+  ctx.font = 'bold 20px Arial Black, Impact, sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText('HYPERFLEX', 1140, 90);
+  ctx.textAlign = 'left';
+
+  // Question — word-wrap
+  ctx.fillStyle = '#f0ebe3';
+  ctx.font = 'bold 52px Arial Black, Impact, sans-serif';
+  const words  = question.split(' ');
+  const qLines = [];
+  let cur = '';
+  for (const w of words) {
+    const test = cur ? cur + ' ' + w : w;
+    if (ctx.measureText(test).width > 1080 && cur) { qLines.push(cur); cur = w; }
+    else cur = test;
   }
-  // Stash share page URL so "Open share page" button works
-  window._sharePageUrl = sharePageUrl;
-  openShareSheet(anchorEl, sharePageUrl, text);
+  if (cur) qLines.push(cur);
+  const clipped = qLines.slice(0, 3);
+  if (qLines.length > 3) clipped[2] = clipped[2].replace(/\s*\S+$/, '') + '…';
+
+  const qY = 310 - (clipped.length - 1) * 34;
+  clipped.forEach((line, i) => ctx.fillText(line, 60, qY + i * 68));
+
+  // Odds buttons
+  if (hasOdds) {
+    const btnY = qY + clipped.length * 68 + 16;
+    // YES
+    ctx.fillStyle = 'rgba(46,160,67,0.15)';
+    _roundRect(ctx, 60, btnY, 520, 84, 14, true, false);
+    ctx.strokeStyle = 'rgba(46,160,67,0.4)'; ctx.lineWidth = 1.5;
+    _roundRect(ctx, 60, btnY, 520, 84, 14, false, true);
+    ctx.fillStyle = '#3fb950'; ctx.font = 'bold 36px "Courier New", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('YES', 320, btnY + 47);
+    ctx.font = 'bold 22px "Courier New", monospace';
+    ctx.fillText(`${yp}%`, 320, btnY + 79);
+
+    // NO
+    ctx.fillStyle = 'rgba(218,54,51,0.12)';
+    _roundRect(ctx, 620, btnY, 520, 84, 14, true, false);
+    ctx.strokeStyle = 'rgba(218,54,51,0.3)'; ctx.lineWidth = 1.5;
+    _roundRect(ctx, 620, btnY, 520, 84, 14, false, true);
+    ctx.fillStyle = '#f85149'; ctx.font = 'bold 36px "Courier New", monospace';
+    ctx.fillText('NO', 880, btnY + 47);
+    ctx.font = 'bold 22px "Courier New", monospace';
+    ctx.fillText(`${np}%`, 880, btnY + 79);
+    ctx.textAlign = 'left';
+  } else {
+    ctx.fillStyle = '#6b6860';
+    ctx.font = '26px "Courier New", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('Make your prediction →', 600, qY + clipped.length * 68 + 64);
+    ctx.textAlign = 'left';
+  }
+
+  // Footer
+  ctx.fillStyle = '#6b6860'; ctx.font = '18px Arial, sans-serif';
+  ctx.fillText(name, 60, 566);
+  ctx.fillStyle = accent; ctx.font = '16px "Courier New", monospace';
+  ctx.textAlign = 'right';
+  ctx.globalAlpha = 0.7;
+  ctx.fillText(`hyperflex.network/${slug}`, 1140, 566);
+  ctx.globalAlpha = 1;
+  ctx.textAlign = 'left';
+
+  // Bottom accent line
+  ctx.fillStyle = accent;
+  ctx.globalAlpha = 0.4;
+  _roundRect(ctx, 60, 578, Math.min(480, name.length * 12), 2, 1, true, false);
+  ctx.globalAlpha = 1;
+
+  // Show canvas
+  canvas.style.display = 'block';
+  loading.style.display = 'none';
+}
+
+function _roundRect(ctx, x, y, w, h, r, fill, stroke) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arcTo(x + w, y, x + w, y + r, r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h);
+  ctx.arcTo(x, y + h, x, y + h - r, r);
+  ctx.lineTo(x, y + r);
+  ctx.arcTo(x, y, x + r, y, r);
+  ctx.closePath();
+  if (fill)   ctx.fill();
+  if (stroke) ctx.stroke();
+}
+
+function scTweetCard() {
+  const yp = Math.round((_scYesPrice || 0.5) * 100);
+  const np = 100 - yp;
+  const hasOdds = _scYesPrice && Math.abs(_scYesPrice - 0.5) > 0.005;
+  const name = document.getElementById('headerCommunityName')?.textContent || '';
+  const text = hasOdds
+    ? `"${_scQuestion}"\n\n🟢 YES ${yp}%  🔴 NO ${np}%\n\nWhat's your call? 👇`
+    : `"${_scQuestion}"\n\nNew prediction on ${name} — make your call 🎯`;
+  const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(window._scShareUrl)}`;
+  window.open(tweetUrl, '_blank', 'width=600,height=400');
+  closeShareCard();
+}
+
+function scDownloadCard() {
+  const canvas = document.getElementById('scCanvas');
+  if (!canvas || canvas.style.display === 'none') { showToast('Card still loading…', 'info'); return; }
+  const a = document.createElement('a');
+  a.href     = canvas.toDataURL('image/png');
+  a.download = `hyperflex-market-${_scMarketId}.png`;
+  a.click();
+}
+
+function scCopyLink() {
+  const url = document.getElementById('scLinkInput').value;
+  navigator.clipboard.writeText(url).then(() => showToast('Link copied ✓', 'success'));
 }
 
 // Share the whole community

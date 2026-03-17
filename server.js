@@ -13,6 +13,14 @@ const dns = require('dns').promises;
 const nodemailer = require('nodemailer');
 const { execFile } = require('child_process');
 
+// sharp is optional — loaded lazily so server starts even before npm install runs on Railway
+let _sharp = null;
+function getSharp() {
+  if (_sharp) return _sharp;
+  try { _sharp = require('sharp'); } catch { _sharp = null; }
+  return _sharp;
+}
+
 const app = express();
 app.use(cors());
 
@@ -314,11 +322,12 @@ app.get('/share/:marketId', async (req, res) => {
     const xTweetText = `"${market.question}"${oddsLine}\n\nWhat's your call? 👇\n`;
     const xShareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(xTweetText)}&url=${encodeURIComponent(sharePageUrl)}`;
 
-    // OG meta
+    // OG meta — dynamic image card
     const ogTitle = market.question;
     const ogDesc = hasOdds
       ? `YES ${yesOdds}% · NO ${noOdds}% — Predict the outcome on ${communityName} via HYPERFLEX`
       : `New prediction market on ${communityName} — make your call on HYPERFLEX`;
+    const ogImageUrl = `https://hyperflex.network/og/${market.id}.png`;
 
     const tweetSection = tweetText ? `
       <div style="max-width:520px;margin:0 auto 24px;background:#16181c;border:1px solid #2f3336;border-radius:16px;padding:16px 20px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
@@ -349,11 +358,12 @@ app.get('/share/:marketId', async (req, res) => {
 <title>${market.question.replace(/</g,'&lt;')} — HYPERFLEX</title>
 <meta property="og:title" content="${ogTitle.replace(/"/g,'&quot;')}">
 <meta property="og:description" content="${ogDesc.replace(/"/g,'&quot;')}">
-<meta property="og:image" content="https://hyperflex.network/og-image.png">
+<meta property="og:image" content="${ogImageUrl}">
 <meta property="og:url" content="${sharePageUrl}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${ogTitle.replace(/"/g,'&quot;')}">
 <meta name="twitter:description" content="${ogDesc.replace(/"/g,'&quot;')}">
+<meta name="twitter:image" content="${ogImageUrl}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
@@ -432,6 +442,149 @@ function copyShareLink(btn) {
   } catch (err) {
     console.error('share page error:', err);
     res.status(500).send('<!DOCTYPE html><html><body style="font-family:monospace;padding:40px;color:#fff;background:#141412"><h2>Error loading share page</h2></body></html>');
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// GET /og/:marketId.png  — dynamic OG share card image (1200×630)
+// Used as og:image on /share/:marketId and /win/:marketId/:userId pages
+// ════════════════════════════════════════════════════════════════════════════
+app.get('/og/:marketId.png', async (req, res) => {
+  const sharp = getSharp();
+  if (!sharp) return res.redirect('/og-image.png'); // fallback to static
+
+  try {
+    const { data: market } = await supabase
+      .from('markets').select('question,yes_price,no_price,category,creator_slug,tenant_slug,expiry_date')
+      .eq('id', req.params.marketId).maybeSingle();
+
+    if (!market) return res.redirect('/og-image.png');
+
+    const slug = market.creator_slug || market.tenant_slug || '';
+    let communityName = slug;
+    let accentColor = '#c9920d';
+    if (slug) {
+      const { data: cs } = await supabase.from('creator_settings')
+        .select('display_name,accent_color').eq('slug', slug).maybeSingle();
+      if (cs) {
+        communityName = cs.display_name || slug;
+        if (cs.accent_color) accentColor = cs.accent_color;
+      }
+    }
+
+    const yesOdds = Math.round((market.yes_price || 0.5) * 100);
+    const noOdds  = 100 - yesOdds;
+    const hasOdds = market.yes_price && Math.abs(market.yes_price - 0.5) > 0.005;
+    const cat     = (market.category || 'other').toUpperCase();
+
+    // Word-wrap question text (~45 chars per line at font-size 52)
+    const q = (market.question || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    const words = q.split(' ');
+    const lines = [];
+    let cur = '';
+    for (const w of words) {
+      if ((cur + ' ' + w).length > 44) { lines.push(cur.trim()); cur = w; }
+      else cur += ' ' + w;
+    }
+    if (cur.trim()) lines.push(cur.trim());
+    const qLines = lines.slice(0, 3); // max 3 lines
+    if (lines.length > 3) qLines[2] = qLines[2].replace(/.{3}$/, '…');
+
+    const qY = 310 - (qLines.length - 1) * 34;
+    const qSvg = qLines.map((l, i) =>
+      `<text x="60" y="${qY + i * 68}" font-family="Arial Black,Impact,sans-serif" font-size="52" font-weight="900" fill="#f0ebe3">${l}</text>`
+    ).join('\n');
+
+    const yesBarW = Math.round(1080 * (yesOdds / 100));
+    const noBarW  = 1080 - yesBarW;
+
+    const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1a1a17"/>
+      <stop offset="100%" stop-color="#0f0f0d"/>
+    </linearGradient>
+    <linearGradient id="yesBar" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#2ea043"/>
+      <stop offset="100%" stop-color="#3fb950"/>
+    </linearGradient>
+    <linearGradient id="noBar" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#da3633"/>
+      <stop offset="100%" stop-color="#f85149"/>
+    </linearGradient>
+    <clipPath id="card"><rect x="40" y="40" width="1120" height="550" rx="24"/></clipPath>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- Card border -->
+  <rect x="40" y="40" width="1120" height="550" rx="24" fill="none"
+        stroke="${accentColor}" stroke-width="2" stroke-opacity="0.35"/>
+
+  <!-- Category pill -->
+  <rect x="60" y="68" width="${cat.length * 11 + 24}" height="28" rx="6"
+        fill="${accentColor}" fill-opacity="0.18"/>
+  <text x="72" y="87" font-family="'Courier New',Courier,monospace" font-size="13"
+        font-weight="700" fill="${accentColor}" letter-spacing="2">${cat}</text>
+
+  <!-- HYPERFLEX logo -->
+  <text x="1140" y="90" font-family="Arial Black,Impact,sans-serif" font-size="20"
+        font-weight="900" fill="${accentColor}" text-anchor="end" letter-spacing="1">HYPERFLEX</text>
+
+  <!-- Market question -->
+  ${qSvg}
+
+  ${hasOdds ? `
+  <!-- Odds row -->
+  <!-- YES button -->
+  <rect x="60" y="${qY + qLines.length * 68 + 16}" width="520" height="84" rx="14"
+        fill="#2ea043" fill-opacity="0.15"/>
+  <rect x="60" y="${qY + qLines.length * 68 + 16}" width="520" height="84" rx="14"
+        fill="none" stroke="#2ea043" stroke-opacity="0.4" stroke-width="1.5"/>
+  <text x="320" y="${qY + qLines.length * 68 + 48}" font-family="'Courier New',Courier,monospace"
+        font-size="36" font-weight="700" fill="#3fb950" text-anchor="middle">YES</text>
+  <text x="320" y="${qY + qLines.length * 68 + 80}" font-family="'Courier New',Courier,monospace"
+        font-size="22" font-weight="700" fill="#3fb950" text-anchor="middle">${yesOdds}%</text>
+
+  <!-- NO button -->
+  <rect x="620" y="${qY + qLines.length * 68 + 16}" width="520" height="84" rx="14"
+        fill="#da3633" fill-opacity="0.12"/>
+  <rect x="620" y="${qY + qLines.length * 68 + 16}" width="520" height="84" rx="14"
+        fill="none" stroke="#da3633" stroke-opacity="0.3" stroke-width="1.5"/>
+  <text x="880" y="${qY + qLines.length * 68 + 48}" font-family="'Courier New',Courier,monospace"
+        font-size="36" font-weight="700" fill="#f85149" text-anchor="middle">NO</text>
+  <text x="880" y="${qY + qLines.length * 68 + 80}" font-family="'Courier New',Courier,monospace"
+        font-size="22" font-weight="700" fill="#f85149" text-anchor="middle">${noOdds}%</text>
+  ` : `
+  <!-- Open market nudge -->
+  <text x="600" y="${qY + qLines.length * 68 + 64}" font-family="'Courier New',Courier,monospace"
+        font-size="26" fill="#6b6860" text-anchor="middle">Make your prediction →</text>
+  `}
+
+  <!-- Community name + domain footer -->
+  <text x="60" y="566" font-family="Arial,Helvetica,sans-serif" font-size="18"
+        fill="#6b6860">${communityName.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</text>
+  <text x="1140" y="566" font-family="'Courier New',Courier,monospace" font-size="16"
+        fill="${accentColor}" text-anchor="end" fill-opacity="0.7">hyperflex.network/${slug}</text>
+
+  <!-- Bottom accent line -->
+  <rect x="60" y="578" width="${Math.min(480, communityName.length * 12)}" height="2"
+        fill="${accentColor}" fill-opacity="0.4" rx="1"/>
+</svg>`;
+
+    const png = await sharp(Buffer.from(svg))
+      .resize(1200, 630)
+      .png({ compressionLevel: 6 })
+      .toBuffer();
+
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=3600');
+    res.send(png);
+  } catch (err) {
+    console.error('og image error:', err);
+    res.redirect('/og-image.png');
   }
 });
 
@@ -8072,6 +8225,7 @@ app.get('/win/:marketId/:userId', async (req, res) => {
     const url   = `https://hyperflex.network/win/${marketId}/${userId}`;
     const commUrl = `https://hyperflex.network/${data.community.slug}`;
 
+    const winOgImage = `https://hyperflex.network/og/${marketId}.png`;
     const html = `<!DOCTYPE html><html><head>
 <meta charset="UTF-8"/>
 <title>${title}</title>
@@ -8081,9 +8235,11 @@ app.get('/win/:marketId/:userId', async (req, res) => {
 <meta property="og:url" content="${url}"/>
 <meta property="og:type" content="website"/>
 <meta property="og:site_name" content="HYPERFLEX"/>
-<meta name="twitter:card" content="summary"/>
+<meta property="og:image" content="${winOgImage}"/>
+<meta name="twitter:card" content="summary_large_image"/>
 <meta name="twitter:title" content="${title}"/>
 <meta name="twitter:description" content="${desc}"/>
+<meta name="twitter:image" content="${winOgImage}"/>
 <meta http-equiv="refresh" content="0;url=/win-card.html#${encodeURIComponent(JSON.stringify({ marketId, userId }))}"/>
 <script>location.href='/win-card.html?m=${marketId}&u=${userId}';</script>
 </head><body></body></html>`;
