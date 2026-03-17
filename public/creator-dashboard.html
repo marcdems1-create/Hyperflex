@@ -9195,11 +9195,6 @@ function renderYtDemoResults(videoUrl) {
 
   const demoSet = DEMO_SETS[topCat] || DEMO_SETS.general;
 
-  // ── Fake but realistic scan meta ────────────────────────────────
-  const commentCount    = (Math.floor(Math.random() * 28) + 8) * 100;
-  const transcriptWords = (Math.floor(Math.random() * 80)  + 30) * 100;
-  const liveChatCount   = Math.floor(Math.random() * 400) + 100;
-
   // ── Extract YouTube video ID for thumbnail ──────────────────────
   let videoId = null;
   try {
@@ -9210,11 +9205,34 @@ function renderYtDemoResults(videoUrl) {
   } catch {}
   const thumbUrl = videoId ? `https://img.youtube.com/vi/${videoId}/mqdefault.jpg` : null;
 
+  // ── Deterministic meta seeded from video ID ──────────────────────
+  // Same URL always shows the same numbers. Ranges match real small-mid
+  // creator stats so they feel authentic, not inflated.
+  function _seedRand(seed, min, max) {
+    let h = 0;
+    for (let i = 0; i < seed.length; i++) h = Math.imul(31, h) + seed.charCodeAt(i) | 0;
+    return min + Math.abs(h) % (max - min + 1);
+  }
+  const seed = videoId || (videoUrl || 'demo').slice(-8);
+  const commentCount    = _seedRand(seed + 'c', 11, 312);
+  const transcriptMins  = _seedRand(seed + 't', 6,  54);   // video length proxy
+  const transcriptWords = transcriptMins * _seedRand(seed + 'w', 110, 160);
+  // Live chat only on longer videos and not always present
+  const hasLiveChat     = _seedRand(seed + 'l', 0, 4) > 2; // ~40% chance
+  const liveChatCount   = hasLiveChat ? _seedRand(seed + 'lc', 18, 280) : 0;
+
+  const metaParts = [
+    `${commentCount} comment${commentCount !== 1 ? 's' : ''}`,
+    `${transcriptWords.toLocaleString()}-word transcript`,
+    ...(liveChatCount ? [`${liveChatCount} live chat messages`] : []),
+    `<strong style="color:var(--text)">6 markets generated</strong>`,
+  ];
+
   // ── Render ──────────────────────────────────────────────────────
   document.getElementById('ytVideoMeta').innerHTML = `
     ${thumbUrl ? `<img src="${thumbUrl}" onerror="this.style.display='none'" style="width:100%;border-radius:8px;margin-bottom:10px;opacity:0.85"/>` : ''}
     <span style="color:var(--gold)">▶ Scan complete</span> —
-    <span style="color:var(--dim)">${commentCount.toLocaleString()} comments · ${transcriptWords.toLocaleString()} transcript words · ${liveChatCount} live chat messages · <strong style="color:var(--text)">6 markets generated</strong></span>
+    <span style="color:var(--dim)">${metaParts.join(' · ')}</span>
   `;
   document.getElementById('ytMarketSectionLabel').style.color = 'var(--gold)';
   document.getElementById('ytMarketSectionLabel').textContent = '🔒 AI-Generated Markets — Pro plan required to publish';
