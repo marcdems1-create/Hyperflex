@@ -9815,7 +9815,7 @@ app.get('/api/profile/:slug/comments', async (req, res) => {
 // ── SEASONS / TOURNAMENTS ─────────────────────────────────────────────────────
 
 // POST /api/creator/seasons — create a season (Pro/Premium required)
-app.post('/api/creator/seasons', requireCreatorAuth, async (req, res) => {
+app.post('/api/creator/seasons', requireCreator, async (req, res) => {
   try {
     const creatorSlug = req.creator.slug;
     const { data: settings } = await supabase
@@ -9860,7 +9860,7 @@ app.post('/api/creator/seasons', requireCreatorAuth, async (req, res) => {
 });
 
 // GET /api/creator/seasons — list creator's seasons with stats
-app.get('/api/creator/seasons', requireCreatorAuth, async (req, res) => {
+app.get('/api/creator/seasons', requireCreator, async (req, res) => {
   try {
     const creatorSlug = req.creator.slug;
     const { data: seasons, error } = await supabase
@@ -9893,7 +9893,7 @@ app.get('/api/creator/seasons', requireCreatorAuth, async (req, res) => {
 });
 
 // PUT /api/creator/seasons/:id — update name, description, prize, status, ends_at
-app.put('/api/creator/seasons/:id', requireCreatorAuth, async (req, res) => {
+app.put('/api/creator/seasons/:id', requireCreator, async (req, res) => {
   try {
     const creatorSlug = req.creator.slug;
     const { id } = req.params;
@@ -9927,7 +9927,7 @@ app.put('/api/creator/seasons/:id', requireCreatorAuth, async (req, res) => {
 
 // POST /api/creator/seasons/:id/markets — add/remove markets from a season
 // body: { add: [marketId, ...], remove: [marketId, ...] }
-app.post('/api/creator/seasons/:id/markets', requireCreatorAuth, async (req, res) => {
+app.post('/api/creator/seasons/:id/markets', requireCreator, async (req, res) => {
   try {
     const creatorSlug = req.creator.slug;
     const { id } = req.params;
