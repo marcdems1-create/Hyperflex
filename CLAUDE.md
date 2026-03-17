@@ -39,7 +39,7 @@
 
 ---
 
-## Current State (last updated March 16, 2026 — session 4)
+## Current State (last updated March 16, 2026 — session 5)
 
 - All features committed locally. Latest commit pending — needs push
 - **Stripe payments live** — Pro ($29/mo) + Premium ($99/mo) checkout + billing portal
@@ -88,7 +88,7 @@
 
 ---
 
-## This session (March 16, session 5) — committed `140755e`, pushed
+## This session (March 16, session 5) — committed `a6a2b7d`, needs push
 
 - **Rewards tab fix**: `'rewards'` was missing from `showTab()` array — tab was permanently invisible. Fixed.
 - **Reward unlocks in explore feed**: `reward_unlocks` table + `maybeLogRewardUnlocks()` in `setCommunityBalance` + `reward_unlock` card in explore.html. Migration: `supabase_migration_reward_unlocks.sql`
@@ -99,6 +99,8 @@
 - **D — Creator referral**: `/ref/:slug` → redirects to `/creator/signup?ref=slug`. `creator_referrals` table. Share tab shows referral link + stats. Referrer gets credited on tracked signups.
 - **E — Resolution disputes**: Members can file dispute within 24h of resolution via ⚠ Dispute button. `market_disputes` table. Creator reviews (uphold/overturn) in Resolution Queue tab. Email notification on dispute filed.
 - **F — Cross-community follows**: `creator_follows` table + `/api/community/:slug/follow-social` toggle + `/api/user/following`. Follow button on community hero + creator profile page. Explore sidebar shows Following card.
+
+**Landing page embed section** — `public/index.html` now has full two-column embed showcase between VIDEO comment and PRICING section. Mock widget preview, copy bullets, embed code snippet, CTA. Committed `a6a2b7d`.
 
 **New migrations to run (in order after existing list):**
 12. `supabase_migration_reward_unlocks.sql`
