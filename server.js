@@ -471,6 +471,8 @@ app.post('/markets', async (req, res) => {
             message: `Free plan allows ${FREE_MARKET_LIMIT} active markets. Upgrade to Pro for unlimited markets.`
           });
         }
+        // Sponsor labels are Pro/Premium only — strip silently on free
+        if (row.sponsor_name) delete row.sponsor_name;
       }
     }
   }

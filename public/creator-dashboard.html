@@ -4247,9 +4247,12 @@ body.nav-open .sidebar-backdrop {
         <label>Resolution Date</label>
         <input type="date" id="newDate"/>
       </div>
-      <div class="field">
+      <div class="field" id="sponsorField">
         <label>Sponsored by <span style="font-weight:400;text-transform:none;font-size:11px;color:var(--dim)">(optional — brand name shown on card)</span></label>
         <input type="text" id="newSponsor" placeholder="e.g. Nike, Coinbase…" style="font-size:13px"/>
+        <div id="sponsorUpgradeHint" style="display:none;margin-top:6px;font-size:11px;font-family:var(--mono);color:var(--gold)">
+          ✦ Pro/Premium only — <a href="#" onclick="showUpgrade();return false;" style="color:var(--gold)">upgrade to charge brands for sponsored markets</a>
+        </div>
       </div>
       <div class="field">
         <label>Resolution Sources <span style="font-weight:400;text-transform:none;font-size:11px">(min 3 required)</span></label>
@@ -5491,6 +5494,17 @@ function openCreateModal() {
   document.getElementById('newCategory').value = 'sports';
   loadSourceTemplate('sports');
   clearQuestionSuggestions();
+  // Sponsor field: disabled + upgrade hint on free plan
+  const isFree = (creatorData?.creator?.plan || 'free') === 'free';
+  const sponsorInput = document.getElementById('newSponsor');
+  const sponsorHint  = document.getElementById('sponsorUpgradeHint');
+  if (sponsorInput) {
+    sponsorInput.value = '';
+    sponsorInput.disabled = isFree;
+    sponsorInput.placeholder = isFree ? 'Upgrade to Pro to add sponsors' : 'e.g. Nike, Coinbase…';
+    sponsorInput.style.opacity = isFree ? '0.4' : '1';
+  }
+  if (sponsorHint) sponsorHint.style.display = isFree ? 'block' : 'none';
   document.getElementById('createModal').classList.add('show');
 }
 function closeCreateModal() {
