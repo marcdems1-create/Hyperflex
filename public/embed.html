@@ -105,7 +105,7 @@
 
     document.getElementById('headerDot').style.background   = color;
     document.getElementById('headerName').textContent       = community.name;
-    document.getElementById('headerCta').href               = community.url;
+    document.getElementById('headerCta').href               = community.url + '?ref=embed';
     document.getElementById('footerPts').textContent        = community.pts_name + ' · play-money';
 
     if (!markets.length) {
@@ -118,7 +118,7 @@
       const yesPct = total > 0 ? Math.round((m.yes_votes / total) * 100) : null;
       const noPct  = yesPct !== null ? 100 - yesPct : null;
       const barColor = yesPct !== null ? (yesPct >= 50 ? '#22c55e' : '#ef4444') : 'rgba(255,255,255,0.2)';
-      const url = community.url + '?market=' + m.id;
+      const url = community.url + '?market=' + m.id + '&ref=embed';
       return `<a class="market-row" href="${url}" target="_blank" rel="noopener">
         <div class="market-q">${escHtml(m.question)}</div>
         <div class="market-bar"><div class="market-fill" style="width:${yesPct !== null ? yesPct : 50}%;background:${barColor};opacity:${yesPct !== null ? 1 : 0.35}"></div></div>

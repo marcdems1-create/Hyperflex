@@ -2623,6 +2623,7 @@ function marketCardHTML(m, isResolved, featured) {
     if (hot)  badgesHTML += `<span class="market-badge hot">🔥 Hot</span>`;
     if (soon) badgesHTML += `<span class="market-badge soon">⚡ Soon</span>`;
   }
+  if (m.sponsor_name) badgesHTML += `<span class="market-badge" style="background:rgba(201,146,13,0.12);color:#c9920d;border-color:rgba(201,146,13,0.3)">✦ ${escHtml(m.sponsor_name)}</span>`;
 
   // My position row
   let posHTML = '';
@@ -3557,9 +3558,12 @@ async function followCommunity() {
   // Join community economy (first time)
   if (!token || !slug || communityBalance !== null) return;
   try {
+    const _refSource = new URLSearchParams(window.location.search).get('ref');
+    const join_source = _refSource === 'embed' ? 'embed' : 'direct';
     const r = await fetch(`${API}/api/community/${slug}/follow`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` }
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ join_source })
     });
     if (r.ok) {
       const data = await r.json();

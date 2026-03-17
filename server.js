@@ -393,7 +393,7 @@ app.post('/markets', async (req, res) => {
     question, expiry_date,
     commodity, target_price, direction,
     category, creator_id, tenant_slug, is_public, resolution_source,
-    source_tweet_url, tweet_text, tweet_author
+    source_tweet_url, tweet_text, tweet_author, sponsor_name
   } = req.body;
 
   const row = {
@@ -416,6 +416,7 @@ app.post('/markets', async (req, res) => {
   if (source_tweet_url  !== undefined) row.source_tweet_url  = source_tweet_url;
   if (tweet_text        !== undefined) row.tweet_text        = tweet_text;
   if (tweet_author      !== undefined) row.tweet_author      = tweet_author;
+  if (sponsor_name      !== undefined) row.sponsor_name      = sponsor_name || null;
 
   const auth = req.headers.authorization;
   const token = auth && auth.startsWith('Bearer ') ? auth.slice(7) : null;
@@ -3148,6 +3149,14 @@ app.get('/api/creator/analytics', requireCreator, async (req, res) => {
         .gte('created_at', sevenDaysAgo.toISOString());
       newMembers7d = newCount || 0;
 
+      // Embed attribution — total members who joined via embedded widget
+      const { count: embedCount } = await supabase
+        .from('community_balances')
+        .select('user_id', { count: 'exact', head: true })
+        .eq('creator_slug', slug)
+        .eq('join_source', 'embed');
+      balanceStats.embed_joins = embedCount || 0;
+
       // Daily new member growth — last 14 days
       const fourteenDaysAgoStr = fourteenDaysAgo.toISOString();
       const { data: growthRows } = await supabase
@@ -5338,7 +5347,7 @@ app.post('/api/community/:slug/markets/:marketId/comments', async (req, res) => 
 app.put('/markets/:id', requireCreator, async (req, res) => {
   try {
     const { id } = req.params;
-    const { question, expiry_date, resolution_source, category, is_public } = req.body;
+    const { question, expiry_date, resolution_source, category, is_public, sponsor_name } = req.body;
 
     // Verify ownership; also fetch current is_public so we can detect publish transition
     const { data: market } = await supabase
@@ -5356,6 +5365,7 @@ app.put('/markets/:id', requireCreator, async (req, res) => {
     if (resolution_source !== undefined) updates.resolution_source = resolution_source;
     if (category !== undefined) { updates.category = category; updates.commodity = category; }
     if (is_public !== undefined) updates.is_public = is_public;
+    if (sponsor_name !== undefined) updates.sponsor_name = sponsor_name || null;
 
     const { data, error } = await supabase
       .from('markets')
@@ -6115,6 +6125,7 @@ app.post('/api/community/:slug/follow', requireAuth, async (req, res) => {
   try {
     const { slug } = req.params;
     const userId = req.user.id;
+    const join_source = req.body?.join_source || 'direct';
 
     const { data: settings } = await supabase
       .from('creator_settings')
@@ -6128,7 +6139,7 @@ app.post('/api/community/:slug/follow', requireAuth, async (req, res) => {
     // Idempotent upsert — won't overwrite existing balance
     await supabase
       .from('community_balances')
-      .upsert({ user_id: userId, creator_slug: slug, balance: startingBalance },
+      .upsert({ user_id: userId, creator_slug: slug, balance: startingBalance, join_source },
                { onConflict: 'user_id,creator_slug', ignoreDuplicates: true });
 
     // Return current balance (may be higher than starting if they already had one)
