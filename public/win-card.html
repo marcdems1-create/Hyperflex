@@ -57,12 +57,60 @@
     .btn-copy:hover { color:var(--text); }
     .btn-join { background:var(--gold); color:var(--ink); }
 
-    .hf-brand { margin-top:20px; font-family:var(--mono); font-size:11px; color:var(--dim); text-align:center; }
-    .hf-brand a { color:var(--gold); text-decoration:none; }
-    .hf-brand a:hover { text-decoration:underline; }
-
     .loading { text-align:center; color:var(--dim); font-size:14px; padding:40px; }
     .error { text-align:center; color:#f87171; font-size:14px; padding:40px; }
+
+    /* Acquisition CTA block */
+    .acq-block {
+      margin-top:16px; width:100%; max-width:460px;
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:16px; overflow:hidden;
+    }
+    .acq-top {
+      padding:20px 22px 16px;
+      background:linear-gradient(135deg,rgba(201,146,13,.1) 0%,transparent 60%);
+    }
+    .acq-kicker {
+      font-family:var(--mono); font-size:10px; font-weight:700;
+      letter-spacing:.12em; text-transform:uppercase;
+      color:rgba(201,146,13,.7); margin-bottom:10px;
+    }
+    .acq-headline {
+      font-size:15px; font-weight:800; color:var(--text);
+      line-height:1.4; margin-bottom:8px;
+    }
+    .acq-sub { font-size:12px; color:var(--dim); line-height:1.6; }
+    .acq-features {
+      padding:0 22px 16px;
+      display:grid; grid-template-columns:1fr 1fr;
+      gap:8px; margin-top:12px;
+    }
+    .acq-feat {
+      font-size:12px; color:var(--dim);
+      display:flex; align-items:flex-start; gap:7px; line-height:1.45;
+    }
+    .acq-feat-icon { color:var(--gold); flex-shrink:0; font-size:13px; }
+    .acq-foot {
+      padding:14px 22px; border-top:1px solid rgba(255,255,255,.06);
+      display:flex; gap:10px; align-items:center;
+    }
+    .acq-cta {
+      flex:1; display:flex; align-items:center; justify-content:center;
+      padding:11px 16px; background:var(--gold); color:var(--ink);
+      border-radius:9px; font-size:13px; font-weight:800;
+      text-decoration:none; transition:opacity .15s;
+    }
+    .acq-cta:hover { opacity:.88; }
+    .acq-free-note {
+      font-family:var(--mono); font-size:10px; color:var(--dim);
+      text-align:center; white-space:nowrap;
+    }
+    .acq-powered {
+      text-align:center; margin-top:12px;
+      font-family:var(--mono); font-size:10px; color:rgba(240,237,232,.25);
+    }
+    .acq-powered a { color:rgba(201,146,13,.5); text-decoration:none; }
+    .acq-powered a:hover { color:var(--gold); }
 
     @media (max-width: 400px) {
       body { padding: 16px; }
@@ -70,6 +118,7 @@
       .card-question { font-size: 15px; }
       .card-bottom { flex-wrap: wrap; padding: 12px 14px; }
       .btn { min-width: calc(50% - 5px); font-size: 12px; padding: 10px 12px; }
+      .acq-features { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -81,7 +130,27 @@
   </div>
 </div>
 
-<div class="hf-brand">Prediction markets by <a href="https://hyperflex.network">HYPERFLEX</a></div>
+<!-- Acquisition CTA — shown after card loads -->
+<div class="acq-block" id="acqBlock" style="display:none">
+  <div class="acq-top">
+    <div class="acq-kicker">🎯 Built on HYPERFLEX</div>
+    <div class="acq-headline">Want prediction markets for your community?</div>
+    <div class="acq-sub">The same tool <span id="acqCommunityName">this community</span> uses. Paste a YouTube URL — AI writes the markets. Embed them anywhere. Free to start.</div>
+  </div>
+  <div class="acq-features">
+    <div class="acq-feat"><span class="acq-feat-icon">▶️</span><span>AI markets from any YouTube video</span></div>
+    <div class="acq-feat"><span class="acq-feat-icon">📎</span><span>Embed in newsletters & bio links</span></div>
+    <div class="acq-feat"><span class="acq-feat-icon">🏆</span><span>Leaderboards that keep fans coming back</span></div>
+    <div class="acq-feat"><span class="acq-feat-icon">✦</span><span>Charge brands to sponsor markets</span></div>
+  </div>
+  <div class="acq-foot">
+    <a class="acq-cta" href="https://hyperflex.network/creator/signup?ref=wincard">Start free — takes 2 min →</a>
+    <div class="acq-free-note">Free forever<br/>No card needed</div>
+  </div>
+</div>
+<div class="acq-powered" id="acqPowered" style="display:none">
+  Prediction markets by <a href="https://hyperflex.network">HYPERFLEX</a>
+</div>
 
 <script>
 const params = new URLSearchParams(location.search);
@@ -142,6 +211,17 @@ function render(data) {
 
   // store for share fns
   window._wd = data;
+
+  // Show acquisition CTA — only if community is NOT watermark-free (Premium hides it)
+  // We show it to everyone here since this page is a viral acquisition surface
+  const acqBlock = document.getElementById('acqBlock');
+  const acqPowered = document.getElementById('acqPowered');
+  const acqCommunityName = document.getElementById('acqCommunityName');
+  if (acqBlock) {
+    if (acqCommunityName) acqCommunityName.textContent = community.display_name || 'this community';
+    acqBlock.style.display = 'block';
+  }
+  if (acqPowered) acqPowered.style.display = 'block';
 }
 
 function escHtml(t) {

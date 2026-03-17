@@ -1178,6 +1178,12 @@ async function submitSignup() {
       document.querySelector('.login-link').style.display = 'none';
       document.getElementById('successScreen').classList.add('show');
       document.querySelector('.form-header h2').textContent = 'Welcome aboard! 🎉';
+      // If creator arrived via a template link, pass it to dashboard
+      const _tpl = new URLSearchParams(location.search).get('template');
+      if (_tpl) {
+        const dashBtn = document.querySelector('.btn-dashboard');
+        if (dashBtn) dashBtn.href = `/creator/dashboard?template=${encodeURIComponent(_tpl)}`;
+      }
     } else {
       showError(data.error || 'Signup failed. Please try again.');
       btn.classList.remove('loading');

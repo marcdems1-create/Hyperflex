@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Market Templates — HYPERFLEX</title>
+  <meta name="description" content="Ready-to-use prediction market templates for sports, crypto, podcasts, YouTube, finance, gaming, and more. Launch your community in 60 seconds."/>
+  <meta property="og:title" content="Prediction Market Templates — HYPERFLEX"/>
+  <meta property="og:description" content="Copy-paste market questions for your niche. Sports, crypto, finance, YouTube, gaming, and more. Free to use."/>
+  <meta property="og:url" content="https://hyperflex.network/templates"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --gold: #c9920d;
+      --ink: #141412;
+      --paper: #141412;
+      --surface: #1c1c1a;
+      --surface2: #242422;
+      --border: rgba(255,255,255,.08);
+      --text: #f0ede8;
+      --dim: rgba(240,237,232,.5);
+      --sans: 'Syne', sans-serif;
+      --mono: 'Space Mono', monospace;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--paper); color: var(--text); font-family: var(--sans); min-height: 100vh; }
+
+    /* NAV */
+    nav {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 18px 40px; border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; background: rgba(20,20,18,.92);
+      backdrop-filter: blur(12px); z-index: 100;
+    }
+    .nav-logo { font-size: 18px; font-weight: 900; letter-spacing: .04em; color: var(--gold); text-decoration: none; }
+    .nav-links { display: flex; gap: 24px; align-items: center; }
+    .nav-links a { font-size: 13px; color: var(--dim); text-decoration: none; transition: color .15s; }
+    .nav-links a:hover { color: var(--text); }
+    .nav-cta { background: var(--gold); color: var(--ink); padding: 9px 20px; border-radius: 8px; font-size: 13px; font-weight: 700; text-decoration: none; transition: opacity .15s; }
+    .nav-cta:hover { opacity: .88; color: var(--ink); }
+
+    /* HERO */
+    .hero {
+      text-align: center;
+      padding: 72px 24px 56px;
+      max-width: 640px;
+      margin: 0 auto;
+    }
+    .hero-kicker {
+      font-family: var(--mono); font-size: 11px; font-weight: 700;
+      letter-spacing: .14em; text-transform: uppercase; color: var(--gold);
+      margin-bottom: 18px;
+    }
+    .hero h1 {
+      font-size: clamp(32px, 5vw, 48px); font-weight: 800; line-height: 1.15;
+      color: var(--text); margin-bottom: 16px;
+    }
+    .hero h1 span { color: var(--gold); }
+    .hero p {
+      font-size: 17px; color: var(--dim); line-height: 1.7;
+      margin-bottom: 32px;
+    }
+    .hero-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .btn-primary {
+      background: var(--gold); color: var(--ink); padding: 13px 28px;
+      border-radius: 10px; font-size: 15px; font-weight: 800; text-decoration: none;
+      transition: opacity .15s;
+    }
+    .btn-primary:hover { opacity: .88; }
+    .btn-ghost {
+      background: rgba(255,255,255,.07); color: var(--text); padding: 13px 24px;
+      border-radius: 10px; font-size: 15px; font-weight: 700; text-decoration: none;
+      border: 1px solid var(--border); transition: background .15s;
+    }
+    .btn-ghost:hover { background: rgba(255,255,255,.11); }
+
+    /* FILTER PILLS */
+    .filter-wrap {
+      max-width: 960px; margin: 0 auto 40px; padding: 0 24px;
+      display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+    }
+    .filter-pill {
+      font-family: var(--mono); font-size: 12px; font-weight: 700;
+      padding: 7px 16px; border-radius: 999px; cursor: pointer;
+      border: 1px solid var(--border); background: var(--surface);
+      color: var(--dim); transition: all .15s; user-select: none;
+    }
+    .filter-pill.active, .filter-pill:hover {
+      background: rgba(201,146,13,.15); border-color: rgba(201,146,13,.5);
+      color: var(--gold);
+    }
+
+    /* TEMPLATE GRID */
+    .grid {
+      max-width: 1040px; margin: 0 auto 80px; padding: 0 24px;
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 18px;
+    }
+
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 16px; overflow: hidden;
+      transition: border-color .2s, box-shadow .2s;
+      display: flex; flex-direction: column;
+    }
+    .card:hover {
+      border-color: rgba(201,146,13,.35);
+      box-shadow: 0 8px 32px rgba(0,0,0,.3);
+    }
+
+    .card-head {
+      padding: 24px 24px 16px;
+      display: flex; align-items: flex-start; gap: 14px;
+    }
+    .card-emoji {
+      width: 48px; height: 48px; border-radius: 12px;
+      background: rgba(201,146,13,.1); border: 1px solid rgba(201,146,13,.2);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; flex-shrink: 0;
+    }
+    .card-meta { flex: 1; min-width: 0; }
+    .card-name { font-size: 16px; font-weight: 800; color: var(--text); margin-bottom: 4px; }
+    .card-desc { font-size: 13px; color: var(--dim); line-height: 1.5; }
+    .card-count {
+      font-family: var(--mono); font-size: 11px; font-weight: 700;
+      color: var(--gold); letter-spacing: .06em; margin-top: 6px;
+    }
+
+    .card-preview {
+      padding: 0 24px 16px; flex: 1;
+    }
+    .card-preview-list { list-style: none; }
+    .card-preview-list li {
+      font-size: 13px; color: var(--dim); padding: 8px 0;
+      border-bottom: 1px solid var(--border); line-height: 1.5;
+      display: flex; gap: 8px; align-items: flex-start;
+    }
+    .card-preview-list li:last-child { border-bottom: none; }
+    .card-preview-list li::before {
+      content: '→'; color: rgba(201,146,13,.5); flex-shrink: 0;
+      margin-top: 1px; font-family: var(--mono); font-size: 11px;
+    }
+
+    /* Collapsed state — show only first 2, expand on click */
+    .card.collapsed .card-preview-list li:nth-child(n+3) { display: none; }
+    .more-toggle {
+      font-size: 12px; color: var(--gold); cursor: pointer;
+      margin-top: 6px; display: inline-block; font-weight: 700;
+      font-family: var(--mono); letter-spacing: .04em;
+    }
+    .more-toggle:hover { text-decoration: underline; }
+    .card:not(.collapsed) .more-toggle { display: none; }
+
+    .card-foot {
+      padding: 14px 24px; border-top: 1px solid var(--border);
+      display: flex; gap: 10px;
+    }
+    .btn-use {
+      flex: 1; background: var(--gold); color: var(--ink);
+      border: none; border-radius: 8px; padding: 10px 16px;
+      font-size: 13px; font-weight: 800; cursor: pointer;
+      transition: opacity .15s; font-family: var(--sans);
+      text-decoration: none; display: flex; align-items: center; justify-content: center;
+    }
+    .btn-use:hover { opacity: .88; }
+    .btn-expand {
+      background: rgba(255,255,255,.06); color: var(--dim);
+      border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px;
+      font-size: 12px; font-weight: 700; cursor: pointer;
+      transition: all .15s; font-family: var(--mono); white-space: nowrap;
+    }
+    .btn-expand:hover { background: rgba(255,255,255,.1); color: var(--text); }
+
+    /* HOW IT WORKS STRIP */
+    .how-strip {
+      background: var(--surface2); border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border); padding: 40px 24px;
+      margin-bottom: 0;
+    }
+    .how-strip-inner {
+      max-width: 840px; margin: 0 auto;
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 32px; text-align: center;
+    }
+    .how-step-num {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: rgba(201,146,13,.15); border: 1px solid rgba(201,146,13,.35);
+      color: var(--gold); font-family: var(--mono); font-size: 13px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center; margin: 0 auto 12px;
+    }
+    .how-step-title { font-size: 14px; font-weight: 800; color: var(--text); margin-bottom: 6px; }
+    .how-step-body { font-size: 13px; color: var(--dim); line-height: 1.6; }
+
+    /* FOOTER */
+    footer {
+      padding: 32px 40px; border-top: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 16px;
+    }
+    footer a { color: var(--dim); font-size: 13px; text-decoration: none; }
+    footer a:hover { color: var(--text); }
+    .footer-brand { font-size: 15px; font-weight: 900; color: var(--gold); letter-spacing: .04em; }
+
+    /* Loading / empty states */
+    .loading-state { text-align: center; padding: 60px; color: var(--dim); font-size: 14px; }
+
+    @media (max-width: 600px) {
+      nav { padding: 16px 20px; }
+      .nav-links { display: none; }
+      .hero { padding: 48px 20px 40px; }
+      .grid { grid-template-columns: 1fr; padding: 0 16px; }
+      footer { padding: 24px 20px; flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="/">HYPERFLEX</a>
+  <div class="nav-links">
+    <a href="/">Home</a>
+    <a href="/explore">Explore</a>
+    <a href="/creator/login">Log in</a>
+    <a class="nav-cta" href="/creator/signup">Start free →</a>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="hero-kicker">🎯 Market Templates</div>
+  <h1>Your first markets, <span>already written.</span></h1>
+  <p>Pick a niche, copy the questions, launch in 60 seconds. Built for creators who want engaged communities — not a blank page.</p>
+  <div class="hero-actions">
+    <a class="btn-primary" href="/creator/signup">Start free — use a template →</a>
+    <a class="btn-ghost" href="/explore">See live communities</a>
+  </div>
+</section>
+
+<!-- Filter pills -->
+<div class="filter-wrap" id="filterWrap">
+  <div class="filter-pill active" data-filter="all">All niches</div>
+</div>
+
+<!-- Template grid -->
+<div class="grid" id="grid">
+  <div class="loading-state">Loading templates…</div>
+</div>
+
+<!-- How it works strip -->
+<div class="how-strip">
+  <div class="how-strip-inner">
+    <div>
+      <div class="how-step-num">1</div>
+      <div class="how-step-title">Pick your niche</div>
+      <div class="how-step-body">Choose the template pack that matches your content. Sports, crypto, gaming, finance — we've got it.</div>
+    </div>
+    <div>
+      <div class="how-step-num">2</div>
+      <div class="how-step-title">Paste & publish</div>
+      <div class="how-step-body">Questions load straight into your dashboard. Edit them, publish them, or let AI generate more from your latest video.</div>
+    </div>
+    <div>
+      <div class="how-step-num">3</div>
+      <div class="how-step-title">Embed anywhere</div>
+      <div class="how-step-body">Drop your live markets into your newsletter, bio link, or website. Your audience predicts without leaving.</div>
+    </div>
+    <div>
+      <div class="how-step-num">4</div>
+      <div class="how-step-title">Watch them return</div>
+      <div class="how-step-body">Members check back daily to see results, climb the leaderboard, and protect their win streaks.</div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <span class="footer-brand">HYPERFLEX</span>
+  <div style="display:flex;gap:24px;flex-wrap:wrap">
+    <a href="/">Home</a>
+    <a href="/explore">Explore</a>
+    <a href="/creator/signup">Start free</a>
+    <a href="/creator-terms.html">Terms</a>
+  </div>
+</footer>
+
+<script>
+// Fetch templates from API then render
+const NICHE_LABELS = {
+  sports: 'Sports', crypto: 'Crypto', podcast: 'Podcast', finance: 'Finance',
+  entertainment: 'Entertainment', youtube: 'YouTube', tech: 'Tech', gaming: 'Gaming',
+  fitness: 'Fitness', music: 'Music', newsletter: 'Newsletter', politics: 'Politics',
+};
+
+let allTemplates = [];
+let activeFilter = 'all';
+let expandedCards = new Set();
+
+async function loadTemplates() {
+  try {
+    const r = await fetch('/api/templates');
+    const data = await r.json();
+    allTemplates = data;
+    buildFilters(data);
+    renderGrid(data);
+  } catch(e) {
+    document.getElementById('grid').innerHTML = '<div class="loading-state">Could not load templates. Please try again.</div>';
+  }
+}
+
+function buildFilters(templates) {
+  const wrap = document.getElementById('filterWrap');
+  // Add a pill per template (by id)
+  templates.forEach(t => {
+    const pill = document.createElement('div');
+    pill.className = 'filter-pill';
+    pill.dataset.filter = t.id;
+    pill.textContent = `${t.emoji} ${t.name}`;
+    pill.addEventListener('click', () => setFilter(t.id, pill));
+    wrap.appendChild(pill);
+  });
+
+  // Wire up "All" pill
+  wrap.querySelector('[data-filter="all"]').addEventListener('click', (e) => setFilter('all', e.currentTarget));
+}
+
+function setFilter(id, pill) {
+  activeFilter = id;
+  document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+  pill.classList.add('active');
+  const filtered = id === 'all' ? allTemplates : allTemplates.filter(t => t.id === id);
+  renderGrid(filtered);
+}
+
+function renderGrid(templates) {
+  const grid = document.getElementById('grid');
+  if (!templates.length) {
+    grid.innerHTML = '<div class="loading-state">No templates found.</div>';
+    return;
+  }
+  grid.innerHTML = templates.map(t => buildCard(t)).join('');
+}
+
+function buildCard(t) {
+  const previewItems = t.preview.map(q =>
+    `<li>${escHtml(q)}</li>`
+  ).join('');
+
+  // Determine if card is expanded
+  const expanded = expandedCards.has(t.id);
+
+  return `<div class="card ${expanded ? '' : 'collapsed'}" id="card-${t.id}">
+    <div class="card-head">
+      <div class="card-emoji">${t.emoji}</div>
+      <div class="card-meta">
+        <div class="card-name">${escHtml(t.name)}</div>
+        <div class="card-desc">${escHtml(t.description)}</div>
+        <div class="card-count">${t.count} markets included</div>
+      </div>
+    </div>
+    <div class="card-preview">
+      <ul class="card-preview-list" id="list-${t.id}">
+        ${previewItems}
+      </ul>
+      <span class="more-toggle" onclick="expandCard('${t.id}')">+ ${t.count - 2} more questions →</span>
+    </div>
+    <div class="card-foot">
+      <a class="btn-use" href="/creator/signup?template=${t.id}">Use this template →</a>
+      <button class="btn-expand" onclick="toggleExpand('${t.id}', this)">${expanded ? 'Collapse ▲' : 'Preview all ▼'}</button>
+    </div>
+  </div>`;
+}
+
+function expandCard(id) {
+  const card = document.getElementById('card-' + id);
+  if (!card) return;
+  expandedCards.add(id);
+  card.classList.remove('collapsed');
+  // If we only have 2 preview questions, fetch full list
+  const list = document.getElementById('list-' + id);
+  if (list.querySelectorAll('li').length <= 2) {
+    loadFullMarkets(id, list);
+  }
+  // Update toggle button
+  const btn = card.querySelector('.btn-expand');
+  if (btn) btn.textContent = 'Collapse ▲';
+}
+
+function toggleExpand(id, btn) {
+  const card = document.getElementById('card-' + id);
+  if (!card) return;
+  if (card.classList.contains('collapsed')) {
+    expandedCards.add(id);
+    card.classList.remove('collapsed');
+    btn.textContent = 'Collapse ▲';
+    const list = document.getElementById('list-' + id);
+    if (list.querySelectorAll('li').length <= 2) {
+      loadFullMarkets(id, list);
+    }
+  } else {
+    expandedCards.delete(id);
+    card.classList.add('collapsed');
+    btn.textContent = 'Preview all ▼';
+  }
+}
+
+async function loadFullMarkets(id, listEl) {
+  try {
+    const r = await fetch(`/api/templates/${id}`);
+    const data = await r.json();
+    if (!data.markets) return;
+    listEl.innerHTML = data.markets.map(m => `<li>${escHtml(m.question)}</li>`).join('');
+  } catch(e) {}
+}
+
+function escHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str || '';
+  return d.innerHTML;
+}
+
+loadTemplates();
+
+// If creator is already logged in and came from dashboard, pre-select template
+const urlTemplate = new URLSearchParams(location.search).get('from');
+if (urlTemplate) {
+  // Scroll to card after load
+  setTimeout(() => {
+    const el = document.getElementById('card-' + urlTemplate);
+    if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.style.borderColor = 'rgba(201,146,13,.6)'; }
+  }, 500);
+}
+</script>
+</body>
+</html>

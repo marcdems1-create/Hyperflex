@@ -30,7 +30,8 @@
 | `public/profile.html` | Creator public profile at `/u/:slug` |
 | `public/embed.html` | Embeddable widget at `/embed/:slug` (iframeable, themed) |
 | `public/member.html` | Member public profile at `/m/:userId` |
-| `public/win-card.html` | Shareable win card page at `/win-card.html?m=&u=` |
+| `public/win-card.html` | Shareable win card page at `/win-card.html?m=&u=` — includes acquisition CTA |
+| `public/templates.html` | Market template gallery at `/templates` — 12 niches, 72 markets, SEO-friendly |
 | `public/nominate.html` | "Nominate your creator" fan-facing page at `/nominate` |
 | `server.js` | Express backend — all API routes, Claude scanner, settlement cron |
 | `index.html` | ⚠️ OLD React trading app at project root — NOT served, ignore |
@@ -39,7 +40,7 @@
 
 ---
 
-## Current State (last updated March 16, 2026 — session 5)
+## Current State (last updated March 16, 2026 — session 6)
 
 - All features committed locally. Latest commit pending — needs push
 - **Stripe payments live** — Pro ($29/mo) + Premium ($99/mo) checkout + billing portal
@@ -88,7 +89,7 @@
 
 ---
 
-## This session (March 16, session 5) — committed `a6a2b7d`, needs push
+## This session (March 16, session 6) — committed `a6a2b7d`, needs push + new commits
 
 - **Rewards tab fix**: `'rewards'` was missing from `showTab()` array — tab was permanently invisible. Fixed.
 - **Reward unlocks in explore feed**: `reward_unlocks` table + `maybeLogRewardUnlocks()` in `setCommunityBalance` + `reward_unlock` card in explore.html. Migration: `supabase_migration_reward_unlocks.sql`
@@ -108,6 +109,32 @@
 14. `supabase_migration_creator_referrals.sql`
 15. `supabase_migration_market_disputes.sql`
 16. `supabase_migration_creator_follows.sql`
+
+---
+
+## SaaS Pillar features (session 6)
+
+**G — Streak warning emails** (`sendStreakWarningEmails()` in server.js):
+- Cron: daily 6pm UTC
+- Targets users with streak ≥ 3 who haven't bet in last 24h
+- Finds open markets in their communities, sends urgency email
+- Three urgency tiers based on streak length (3+, 5+, 7+)
+
+**H — Market template gallery** at `/templates`:
+- 12 niches × 6 markets = 72 ready-to-use prediction questions
+- Niches: Sports, Crypto, Podcast, Finance, Entertainment, YouTube, Tech, Gaming, Fitness, Music, Newsletter, Politics
+- `GET /api/templates` returns gallery metadata; `GET /api/templates/:id` returns full market list
+- Filter pills, expandable cards, "Use this template →" links to `/creator/signup?template=id`
+- After signup, dashboard detects `?template=` param, auto-opens create modal with first question pre-filled
+- "Templates" added to landing page nav
+- `'templates'` added to RESERVED_SLUGS
+
+**I — Win card acquisition loop**:
+- `win-card.html` now shows a full acquisition CTA block below every win card
+- Shows after card loads; names the community; 4 feature bullets; CTA: "Start free — takes 2 min →"
+- Links to `/creator/signup?ref=wincard` for tracking
+- "Free forever / No card needed" social proof
+- Premium creator note: CTA shows on all tiers (win cards are a viral acquisition surface, not a Premium feature)
 
 ---
 

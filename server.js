@@ -2233,57 +2233,170 @@ app.get('/api/creator/:slug/theme', async (req, res) => {
 const TEMPLATES = {
   sports: {
     name: 'Sports',
+    emoji: '🏆',
+    description: 'Game outcomes, player props, and season predictions. Works for any sport, any season.',
     category: 'entertainment',
     markets: [
-      { question: 'Will the home team win tonight\'s game?', category: 'entertainment', target_price: 0, direction: 'above', days: 1 },
-      { question: 'Will there be overtime in the next playoff game?', category: 'entertainment', target_price: 0, direction: 'above', days: 7 },
-      { question: 'Will the leading scorer finish the season above 30 PPG?', category: 'entertainment', target_price: 30, direction: 'above', days: 60 },
-      { question: 'Will the #1 seed make the finals?', category: 'entertainment', target_price: 0, direction: 'above', days: 45 },
-      { question: 'Will any underdog ranked 5+ win the championship?', category: 'entertainment', target_price: 0, direction: 'above', days: 60 },
+      { question: 'Will the home team win tonight\'s game?', category: 'entertainment', days: 1 },
+      { question: 'Will there be overtime in the next playoff game?', category: 'entertainment', days: 7 },
+      { question: 'Will the leading scorer finish the season above 30 PPG?', category: 'entertainment', days: 60 },
+      { question: 'Will the #1 seed make the finals?', category: 'entertainment', days: 45 },
+      { question: 'Will any underdog (ranked 5+) win the championship?', category: 'entertainment', days: 60 },
+      { question: 'Will a player get traded before the trade deadline?', category: 'entertainment', days: 30 },
     ],
   },
   crypto: {
     name: 'Crypto',
+    emoji: '₿',
+    description: 'Price targets, protocol upgrades, and macro crypto events. Perfect for CT communities.',
     category: 'crypto',
     markets: [
-      { question: 'Will Bitcoin exceed $100,000 by end of month?', category: 'crypto', target_price: 100000, direction: 'above', days: 30 },
-      { question: 'Will Ethereum stay above $3,000 this week?', category: 'crypto', target_price: 3000, direction: 'above', days: 7 },
-      { question: 'Will a new country adopt Bitcoin as legal tender?', category: 'crypto', target_price: 0, direction: 'above', days: 90 },
-      { question: 'Will BTC dominance exceed 60% this month?', category: 'crypto', target_price: 0, direction: 'above', days: 30 },
-      { question: 'Will a spot ETH ETF see $1B+ in weekly inflows?', category: 'crypto', target_price: 0, direction: 'above', days: 45 },
+      { question: 'Will Bitcoin exceed $100,000 this month?', category: 'crypto', days: 30 },
+      { question: 'Will Ethereum stay above $3,000 this week?', category: 'crypto', days: 7 },
+      { question: 'Will a new country announce Bitcoin as legal tender?', category: 'crypto', days: 90 },
+      { question: 'Will BTC dominance exceed 60% this month?', category: 'crypto', days: 30 },
+      { question: 'Will any altcoin in the top 10 flip ETH by market cap?', category: 'crypto', days: 60 },
+      { question: 'Will the next Ethereum upgrade ship on schedule?', category: 'crypto', days: 45 },
     ],
   },
   podcast: {
     name: 'Podcast',
+    emoji: '🎙️',
+    description: 'Guest predictions, episode milestones, and show announcements for podcast communities.',
     category: 'entertainment',
     markets: [
-      { question: 'Will the next episode hit #1 on Spotify charts?', category: 'entertainment', target_price: 0, direction: 'above', days: 14 },
-      { question: 'Will the host interview a political figure this month?', category: 'entertainment', target_price: 0, direction: 'above', days: 30 },
-      { question: 'Will the next guest be a repeat appearance?', category: 'entertainment', target_price: 0, direction: 'above', days: 7 },
-      { question: 'Will the show cross 1M downloads this quarter?', category: 'entertainment', target_price: 0, direction: 'above', days: 90 },
-      { question: 'Will there be a live show announcement this month?', category: 'entertainment', target_price: 0, direction: 'above', days: 30 },
+      { question: 'Will next week\'s episode crack the top 10 on Spotify?', category: 'entertainment', days: 14 },
+      { question: 'Will the host interview a sitting politician this month?', category: 'entertainment', days: 30 },
+      { question: 'Will the next guest be someone who\'s never been on before?', category: 'entertainment', days: 7 },
+      { question: 'Will the show cross 1M monthly downloads this quarter?', category: 'entertainment', days: 90 },
+      { question: 'Will there be a live show or tour announcement this month?', category: 'entertainment', days: 30 },
+      { question: 'Will the host bring on a co-host for more than 3 episodes?', category: 'entertainment', days: 60 },
     ],
   },
   finance: {
-    name: 'Finance',
+    name: 'Finance & Markets',
+    emoji: '📈',
+    description: 'Macro calls, Fed decisions, and market predictions for investing and finance communities.',
     category: 'macro',
     markets: [
-      { question: 'Will the Fed cut rates at the next FOMC meeting?', category: 'macro', target_price: 0, direction: 'above', days: 45 },
-      { question: 'Will the S&P 500 close above 5,500 this month?', category: 'macro', target_price: 5500, direction: 'above', days: 30 },
-      { question: 'Will US CPI come in below 3% this quarter?', category: 'macro', target_price: 0, direction: 'above', days: 60 },
-      { question: 'Will gold exceed $3,000/oz before July?', category: 'commodities', target_price: 3000, direction: 'above', days: 60 },
-      { question: 'Will any Magnificent 7 stock drop 20%+ from its high?', category: 'earnings', target_price: 0, direction: 'above', days: 90 },
+      { question: 'Will the Fed cut rates at the next FOMC meeting?', category: 'macro', days: 45 },
+      { question: 'Will the S&P 500 close above 5,500 this month?', category: 'macro', days: 30 },
+      { question: 'Will US CPI come in below 3% this quarter?', category: 'macro', days: 60 },
+      { question: 'Will gold exceed $3,000/oz before year-end?', category: 'commodities', days: 60 },
+      { question: 'Will any Magnificent 7 stock drop 20%+ from its 52-week high?', category: 'earnings', days: 90 },
+      { question: 'Will the US dollar index (DXY) break below 100 this quarter?', category: 'macro', days: 60 },
     ],
   },
   entertainment: {
     name: 'Entertainment',
+    emoji: '🎬',
+    description: 'Box office, awards, streaming cancellations, and pop culture moments.',
     category: 'entertainment',
     markets: [
-      { question: 'Will this weekend\'s #1 movie gross over $50M?', category: 'entertainment', target_price: 0, direction: 'above', days: 7 },
-      { question: 'Will the Best Picture winner be a sequel or franchise film?', category: 'entertainment', target_price: 0, direction: 'above', days: 60 },
-      { question: 'Will a major streaming show be cancelled this month?', category: 'entertainment', target_price: 0, direction: 'above', days: 30 },
-      { question: 'Will a music artist announce a world tour this quarter?', category: 'entertainment', target_price: 0, direction: 'above', days: 90 },
-      { question: 'Will a video game release score 90+ on Metacritic?', category: 'entertainment', target_price: 0, direction: 'above', days: 45 },
+      { question: 'Will this weekend\'s #1 movie gross over $50M domestically?', category: 'entertainment', days: 7 },
+      { question: 'Will the Best Picture winner be a sequel or franchise film?', category: 'entertainment', days: 60 },
+      { question: 'Will a major streaming show be renewed or cancelled this month?', category: 'entertainment', days: 30 },
+      { question: 'Will a music artist announce a world tour this quarter?', category: 'entertainment', days: 90 },
+      { question: 'Will a video game release this month score 90+ on Metacritic?', category: 'entertainment', days: 45 },
+      { question: 'Will a celebrity couple announce a split before the end of the month?', category: 'entertainment', days: 30 },
+    ],
+  },
+  youtube: {
+    name: 'YouTube Creator',
+    emoji: '▶️',
+    description: 'Subscriber milestones, upload schedules, and channel events. Built for YouTubers.',
+    category: 'entertainment',
+    markets: [
+      { question: 'Will I hit 100K subscribers by the end of this month?', category: 'entertainment', days: 30 },
+      { question: 'Will my next video get more views than my last one?', category: 'entertainment', days: 14 },
+      { question: 'Will I post a video this week?', category: 'entertainment', days: 7 },
+      { question: 'Will I collab with another creator in the next 30 days?', category: 'entertainment', days: 30 },
+      { question: 'Will my next video cross 1M views within 7 days of upload?', category: 'entertainment', days: 21 },
+      { question: 'Will I start a new series or content format this month?', category: 'entertainment', days: 30 },
+    ],
+  },
+  tech: {
+    name: 'Tech & Startups',
+    emoji: '🚀',
+    description: 'Product launches, funding rounds, and industry calls for tech-focused communities.',
+    category: 'tech',
+    markets: [
+      { question: 'Will Apple announce a new product at the next event?', category: 'tech', days: 45 },
+      { question: 'Will OpenAI release a new frontier model before June?', category: 'tech', days: 90 },
+      { question: 'Will a major tech company announce layoffs this quarter?', category: 'tech', days: 60 },
+      { question: 'Will any unicorn IPO before the end of this year?', category: 'tech', days: 90 },
+      { question: 'Will a new AI coding tool overtake Copilot on GitHub?', category: 'tech', days: 90 },
+      { question: 'Will a major acquisition (>$1B) be announced in tech this month?', category: 'tech', days: 30 },
+    ],
+  },
+  gaming: {
+    name: 'Gaming',
+    emoji: '🎮',
+    description: 'Game releases, esports results, and gaming industry predictions for gaming communities.',
+    category: 'entertainment',
+    markets: [
+      { question: 'Will the next major game release hit 1M players in its first week?', category: 'entertainment', days: 30 },
+      { question: 'Will this game get a balance patch before the end of the month?', category: 'entertainment', days: 30 },
+      { question: 'Will [Team] win the next major esports tournament?', category: 'entertainment', days: 21 },
+      { question: 'Will GTA VI release this year?', category: 'entertainment', days: 90 },
+      { question: 'Will a popular streamer switch their main game this month?', category: 'entertainment', days: 30 },
+      { question: 'Will any game pass 100K concurrent Steam players this week?', category: 'entertainment', days: 7 },
+    ],
+  },
+  fitness: {
+    name: 'Fitness & Health',
+    emoji: '💪',
+    description: 'Personal challenges, athlete performance, and wellness goals for fitness communities.',
+    category: 'entertainment',
+    markets: [
+      { question: 'Will I hit my PR on the squat / bench / deadlift this month?', category: 'entertainment', days: 30 },
+      { question: 'Will the creator finish a marathon or race they\'ve entered?', category: 'entertainment', days: 60 },
+      { question: 'Will a major supplement brand be exposed for false claims?', category: 'entertainment', days: 45 },
+      { question: 'Will a popular fitness influencer announce a new program or course?', category: 'entertainment', days: 30 },
+      { question: 'Will I train 5+ days this week?', category: 'entertainment', days: 7 },
+      { question: 'Will this athlete compete again within 3 months after injury?', category: 'entertainment', days: 90 },
+    ],
+  },
+  music: {
+    name: 'Music',
+    emoji: '🎵',
+    description: 'Album drops, chart positions, and music industry moments for music-focused communities.',
+    category: 'entertainment',
+    markets: [
+      { question: 'Will the new album debut at #1 on the Billboard 200?', category: 'entertainment', days: 14 },
+      { question: 'Will this artist release new music before the end of the month?', category: 'entertainment', days: 30 },
+      { question: 'Will the song cross 1B streams on Spotify before year-end?', category: 'entertainment', days: 90 },
+      { question: 'Will the artist win Artist of the Year at the next awards show?', category: 'entertainment', days: 60 },
+      { question: 'Will the artist add more tour dates after the initial announcement?', category: 'entertainment', days: 30 },
+      { question: 'Will a beef between two artists result in diss tracks this month?', category: 'entertainment', days: 30 },
+    ],
+  },
+  newsletter: {
+    name: 'Newsletter / Substack',
+    emoji: '✉️',
+    description: 'Subscriber growth, content predictions, and niche topic calls for newsletter creators.',
+    category: 'entertainment',
+    markets: [
+      { question: 'Will the newsletter hit its next subscriber milestone this month?', category: 'entertainment', days: 30 },
+      { question: 'Will the next edition get a 50%+ open rate?', category: 'entertainment', days: 14 },
+      { question: 'Will the creator launch a paid tier or cohort program?', category: 'entertainment', days: 45 },
+      { question: 'Will the newsletter publish a piece that goes viral (50K+ views)?', category: 'entertainment', days: 30 },
+      { question: 'Will the creator be featured in another major publication?', category: 'entertainment', days: 60 },
+      { question: 'Will there be a guest writer edition this month?', category: 'entertainment', days: 30 },
+    ],
+  },
+  politics: {
+    name: 'Politics & Policy',
+    emoji: '🏛️',
+    description: 'Election outcomes, policy decisions, and geopolitical events. For civics communities.',
+    category: 'macro',
+    markets: [
+      { question: 'Will the bill pass the Senate before the recess?', category: 'macro', days: 45 },
+      { question: 'Will the approval rating for the current administration rise this month?', category: 'macro', days: 30 },
+      { question: 'Will there be a snap election announced in the next 90 days?', category: 'macro', days: 90 },
+      { question: 'Will a trade deal be announced between two major economies?', category: 'macro', days: 60 },
+      { question: 'Will the primary polling leader win their state\'s primary?', category: 'macro', days: 30 },
+      { question: 'Will a sitting official resign or step down this month?', category: 'macro', days: 30 },
     ],
   },
 };
@@ -5971,11 +6084,27 @@ const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
   'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u', 'win',
-  'm', 'nominate', 'my', 'embed', 'ref'
+  'm', 'nominate', 'my', 'embed', 'ref', 'templates'
 ]);
 
 // GET /my — private member dashboard
 app.get('/my', (req, res) => res.sendFile(path.join(__dirname, 'public', 'user-dashboard.html')));
+
+// GET /templates — market template gallery (SEO + activation)
+app.get('/templates', (req, res) => res.sendFile(path.join(__dirname, 'public', 'templates.html')));
+
+// GET /api/templates — return all template metadata (no markets, for gallery)
+app.get('/api/templates', (req, res) => {
+  const gallery = Object.entries(TEMPLATES).map(([id, tpl]) => ({
+    id,
+    name: tpl.name,
+    emoji: tpl.emoji || '🎯',
+    description: tpl.description || '',
+    count: tpl.markets.length,
+    preview: tpl.markets.slice(0, 2).map(m => m.question),
+  }));
+  res.json(gallery);
+});
 
 // ── CREATOR REFERRAL PROGRAM ─────────────────────────────────────────────────
 // GET /ref/:slug — referral landing page: tracks the referring creator then
@@ -6788,6 +6917,202 @@ async function sendWeeklyDigests() {
 }
 // Every Monday at 9am UTC
 cron.schedule('0 9 * * 1', () => { console.log('[digest] Weekly digest cron triggered'); sendWeeklyDigests(); });
+
+// ─── STREAK WARNING EMAILS ─────────────────────────────────────────────────────
+// Daily at 6pm UTC — sends "Your X-win streak ends tonight" to users who:
+//   • have a current consecutive win streak ≥ 3
+//   • have NOT placed any bet in the last 24 hours (i.e. they're inactive today)
+//   • belong to at least one community with open markets they haven't bet on
+// No-op if SMTP_HOST is not configured.
+async function sendStreakWarningEmails() {
+  const transporter = createMailTransport();
+  if (!transporter) { console.log('[streak-warn] SMTP not configured — skipping'); return; }
+
+  console.log('[streak-warn] Starting streak warning emails');
+
+  try {
+    // 1. Find users who placed at least one settled position (ever)
+    //    We'll compute their streak from settled positions, sorted desc
+    const { data: allSettled } = await supabase
+      .from('positions')
+      .select('user_id, won, created_at')
+      .eq('settled', true)
+      .order('created_at', { ascending: false })
+      .limit(10000);
+
+    if (!allSettled?.length) return;
+
+    // Group settled positions per user (already sorted desc)
+    const possByUser = {};
+    for (const p of allSettled) {
+      if (!possByUser[p.user_id]) possByUser[p.user_id] = [];
+      possByUser[p.user_id].push(p);
+    }
+
+    // Compute streak per user — only keep those with streak ≥ 3
+    const streakUsers = []; // [{ userId, streak }]
+    for (const [uid, positions] of Object.entries(possByUser)) {
+      let s = 0;
+      for (const p of positions) { if (p.won) s++; else break; }
+      if (s >= 3) streakUsers.push({ userId: uid, streak: s });
+    }
+
+    if (!streakUsers.length) { console.log('[streak-warn] No users with streak ≥ 3'); return; }
+
+    // 2. Find users who placed a bet in the last 24 hours (active today — skip them)
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data: recentBets } = await supabase
+      .from('positions')
+      .select('user_id')
+      .gte('created_at', since24h);
+    const activeToday = new Set((recentBets || []).map(p => p.user_id));
+
+    // Only email users who are NOT active today
+    const inactiveStreakers = streakUsers.filter(u => !activeToday.has(u.userId));
+    if (!inactiveStreakers.length) { console.log('[streak-warn] All streaking users already active today'); return; }
+
+    // 3. Fetch user emails + display names
+    const userIds = inactiveStreakers.map(u => u.userId);
+    const { data: users } = await supabase
+      .from('users')
+      .select('id, email, display_name')
+      .in('id', userIds);
+    if (!users?.length) return;
+
+    const userMap = {};
+    for (const u of users) userMap[u.id] = u;
+
+    // 4. For each inactive streaking user, find their communities + open markets
+    //    community_balances gives us which communities they belong to
+    const { data: memberships } = await supabase
+      .from('community_balances')
+      .select('user_id, creator_slug')
+      .in('user_id', userIds);
+
+    // Group creator slugs per user
+    const userSlugs = {};
+    for (const m of (memberships || [])) {
+      if (!userSlugs[m.user_id]) userSlugs[m.user_id] = [];
+      userSlugs[m.user_id].push(m.creator_slug);
+    }
+
+    // Fetch open markets per creator slug (batch by unique slugs)
+    const allSlugs = [...new Set(Object.values(userSlugs).flat())];
+    const { data: openMarkets } = await supabase
+      .from('markets')
+      .select('id, question, tenant_slug, yes_price, trader_count')
+      .in('tenant_slug', allSlugs)
+      .eq('resolved', false)
+      .eq('archived', false)
+      .neq('is_public', false)
+      .order('trader_count', { ascending: false })
+      .limit(200);
+
+    // Map: slug → markets[]
+    const marketsBySlug = {};
+    for (const m of (openMarkets || [])) {
+      if (!marketsBySlug[m.tenant_slug]) marketsBySlug[m.tenant_slug] = [];
+      marketsBySlug[m.tenant_slug].push(m);
+    }
+
+    // Fetch creator settings for community name + color
+    const { data: creatorSettings } = await supabase
+      .from('creator_settings')
+      .select('slug, display_name, primary_color, custom_points_name')
+      .in('slug', allSlugs);
+    const settingsBySlug = {};
+    for (const c of (creatorSettings || [])) settingsBySlug[c.slug] = c;
+
+    // 5. Send emails
+    let sent = 0;
+    for (const { userId, streak } of inactiveStreakers) {
+      const user = userMap[userId];
+      if (!user?.email) continue;
+
+      const slugs = userSlugs[userId] || [];
+      // Gather up to 3 open markets across their communities (prefer most active)
+      const candidateMarkets = [];
+      for (const slug of slugs) {
+        const ms = (marketsBySlug[slug] || []).slice(0, 2);
+        for (const m of ms) {
+          const cs = settingsBySlug[slug] || {};
+          candidateMarkets.push({ ...m, community_name: cs.display_name || slug, slug, accent: cs.primary_color || '#c9920d', ptsName: cs.custom_points_name || 'Flex Points' });
+        }
+      }
+      // Sort by trader_count desc, take top 3
+      candidateMarkets.sort((a, b) => (b.trader_count || 0) - (a.trader_count || 0));
+      const topMarkets = candidateMarkets.slice(0, 3);
+
+      if (!topMarkets.length) continue; // no open markets in their communities
+
+      const firstName = (user.display_name || 'there').split(' ')[0];
+      const accent = topMarkets[0]?.accent || '#c9920d';
+      const communityUrl = `https://hyperflex.network/${topMarkets[0]?.slug}`;
+
+      const streakLabel = streak >= 10 ? `${streak}-WIN STREAK 🔥🔥` : streak >= 5 ? `${streak}-WIN STREAK 🔥` : `${streak}-WIN STREAK`;
+      const urgencyLine = streak >= 7
+        ? `You're on an absolute tear — ${streak} correct calls in a row. Legendary status is within reach.`
+        : streak >= 5
+        ? `${streak} wins in a row. You're in the zone. Don't let momentum slip away.`
+        : `${streak} correct calls in a row. You're on a roll — keep it going.`;
+
+      const marketsHtml = topMarkets.map(m => {
+        const yesPct = Math.round((m.yes_price || 0.5) * 100);
+        const url = `https://hyperflex.network/${m.slug}?market=${m.id}`;
+        return `<tr>
+          <td style="padding:12px 0;border-bottom:1px solid #2a2a27">
+            <a href="${url}" style="text-decoration:none">
+              <div style="font-size:14px;color:#f5f5f0;margin-bottom:4px;line-height:1.4">${m.question}</div>
+              <div style="font-size:12px;color:#888">${m.community_name} · ${m.trader_count || 0} traders · YES ${yesPct}%</div>
+            </a>
+          </td>
+        </tr>`;
+      }).join('');
+
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/></head>
+<body style="font-family:'Helvetica Neue',Arial,sans-serif;background:#141412;margin:0;padding:0">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#141412;padding:40px 0">
+<tr><td align="center">
+  <table width="520" cellpadding="0" cellspacing="0" style="background:#1e1e1b;border-radius:12px;overflow:hidden;border:1px solid rgba(201,146,13,.25)">
+    <tr><td style="background:${accent};padding:16px 28px">
+      <span style="font-size:18px;font-weight:900;color:#141412">HYPERFLEX</span>
+    </td></tr>
+    <tr><td style="padding:32px 28px 24px">
+      <div style="display:inline-block;background:rgba(201,146,13,.12);border:1px solid rgba(201,146,13,.35);border-radius:8px;padding:8px 16px;margin-bottom:20px">
+        <span style="font-family:monospace;font-size:13px;font-weight:700;color:${accent};letter-spacing:.08em">${streakLabel}</span>
+      </div>
+      <h2 style="margin:0 0 10px;font-size:22px;color:#f5f5f0;font-weight:800;line-height:1.3">Don't lose your streak, ${firstName}.</h2>
+      <p style="margin:0 0 24px;font-size:14px;color:#888;line-height:1.6">${urgencyLine} Place a prediction today to keep the fire alive.</p>
+      <h3 style="margin:0 0 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.4px;color:${accent}">🔥 Open markets — predict now</h3>
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px">${marketsHtml}</table>
+      <a href="${communityUrl}" style="display:inline-block;padding:13px 28px;background:${accent};color:#141412;font-weight:800;font-size:15px;border-radius:8px;text-decoration:none">Keep my streak →</a>
+    </td></tr>
+    <tr><td style="padding:14px 28px;border-top:1px solid #2a2a27">
+      <p style="margin:0;font-size:11px;color:#555">You're getting this because you have an active streak on <a href="https://hyperflex.network" style="color:#888">HYPERFLEX</a>.</p>
+    </td></tr>
+  </table>
+</td></tr>
+</table></body></html>`;
+
+      try {
+        await transporter.sendMail({
+          from: process.env.SMTP_FROM || 'HYPERFLEX <noreply@hyperflex.network>',
+          to: user.email,
+          subject: `🔥 You're on a ${streak}-win streak — don't lose it tonight`,
+          html,
+        });
+        sent++;
+      } catch (e) {
+        console.error(`[streak-warn] Failed to send to ${user.email}:`, e.message);
+      }
+    }
+    console.log(`[streak-warn] Sent ${sent} streak warning emails`);
+  } catch (err) {
+    console.error('[streak-warn] Error:', err.message);
+  }
+}
+// Every day at 6pm UTC
+cron.schedule('0 18 * * *', () => { console.log('[streak-warn] Streak warning cron triggered'); sendStreakWarningEmails(); });
 
 // GET /api/win-card/:marketId/:userId — public win card data
 app.get('/api/win-card/:marketId/:userId', async (req, res) => {
