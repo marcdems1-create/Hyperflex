@@ -5619,17 +5619,74 @@ async function reviewDispute(disputeId, decision) {
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 
+// marketVotes: Map<marketId, { vote_count, threshold, unlocked, yes_votes, no_votes }>
+const marketVotes = new Map();
+
+async function loadMarketVotes(marketIds) {
+  await Promise.all(marketIds.map(async id => {
+    try {
+      const r = await fetch(`${API}/api/market/${id}/votes`);
+      if (r.ok) marketVotes.set(id, await r.json());
+    } catch {}
+  }));
+}
+
 function renderResolveList(items, containerId) {
   const el = document.getElementById(containerId);
   if (!items.length) {
     el.innerHTML = '<div class="loading-row">No items to resolve.</div>';
     return;
   }
+
+  // Load vote data for any market not yet cached
+  const uncached = items.filter(m => !marketVotes.has(m.id)).map(m => m.id);
+  if (uncached.length) {
+    loadMarketVotes(uncached).then(() => renderResolveList(items, containerId));
+  }
+
   el.innerHTML = items.map(m => {
-    const s = cardSuggestions.get(m.id);
+    const s     = cardSuggestions.get(m.id);
+    const votes = marketVotes.get(m.id);
+    const traderCount = m.trader_count || 0;
+
+    // Determine if creator can resolve: need vote threshold OR < 3 traders
+    const unlocked = votes ? votes.unlocked : (traderCount < 3);
+    const voteCount  = votes?.vote_count  || 0;
+    const threshold  = votes?.threshold   || Math.max(3, Math.ceil(traderCount * 0.30));
+    const yesVotes   = votes?.yes_votes   || 0;
+    const noVotes    = votes?.no_votes    || 0;
+    const votesNeeded = Math.max(0, threshold - voteCount);
+    const pct = threshold > 0 ? Math.min(100, Math.round(voteCount / threshold * 100)) : 100;
+
+    // Vote progress bar (shown when locked and there are traders)
+    const voteBar = traderCount >= 3 ? `
+      <div style="margin-top:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+          <span style="font-family:var(--mono);font-size:10px;color:var(--dim)">
+            ${unlocked
+              ? `<span style="color:#4ade80">✓ Vote threshold met</span>`
+              : `🗳 ${voteCount}/${threshold} community votes to unlock`}
+          </span>
+          ${voteCount > 0 ? `<span style="font-family:var(--mono);font-size:10px;color:var(--dim)">YES ${yesVotes} · NO ${noVotes}</span>` : ''}
+        </div>
+        <div style="height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:${unlocked ? '#4ade80' : 'var(--gold)'};border-radius:2px;transition:width .3s"></div>
+        </div>
+        ${!unlocked ? `<div style="font-size:10px;color:var(--dim);margin-top:4px;font-family:var(--mono)">Members must vote YES/NO on the community page before you can resolve.</div>` : ''}
+      </div>` : '';
+
     let actionHtml = '';
 
-    if (!s) {
+    if (!unlocked) {
+      // Locked — show disabled button with hint
+      actionHtml = `
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:7px;min-width:180px">
+          <div style="font-size:11px;color:var(--dim);text-align:right;font-family:var(--mono);line-height:1.4">
+            🔒 ${votesNeeded} more vote${votesNeeded !== 1 ? 's' : ''} needed
+          </div>
+          <button class="btn-secondary" style="font-size:12px;padding:6px 14px;opacity:0.4;cursor:not-allowed" disabled>⚖️ Resolve</button>
+        </div>`;
+    } else if (!s) {
       actionHtml = `
         <div class="resolve-actions">
           <button class="btn-secondary" style="font-size:12px;padding:6px 14px" onclick="analyzeCard('${m.id}')">🤖 AI Analyze</button>
@@ -5668,7 +5725,8 @@ function renderResolveList(items, containerId) {
     <div class="queue-item" style="align-items:flex-start;gap:16px">
       <div style="flex:1;min-width:0">
         <div class="queue-question">${m.question}</div>
-        <div class="queue-meta">Expired ${formatDate(m.expiry_date)} · ${m.trader_count || 0} traders</div>
+        <div class="queue-meta">Expired ${formatDate(m.expiry_date)} · ${traderCount} traders</div>
+        ${voteBar}
       </div>
       ${actionHtml}
     </div>`;
@@ -5735,7 +5793,10 @@ async function quickResolve(marketId, outcome) {
     if (data.ok || data.success) {
       showToast(`Market resolved ${outcome} ✓`, 'success');
       cardSuggestions.delete(marketId);
+      marketVotes.delete(marketId);
       setTimeout(() => init(), 500);
+    } else if (r.status === 403 && data.votes_needed) {
+      showToast(`🔒 Need ${data.votes_needed} more community vote${data.votes_needed !== 1 ? 's' : ''} to unlock resolution.`, 'info', 5000);
     } else {
       showToast(data.error || 'Failed to resolve', 'error');
     }
@@ -9069,6 +9130,22 @@ async function runYoutubeScan() {
     document.getElementById('ytError').style.display = 'none';
     document.getElementById('ytScanResult').style.display = 'none';
 
+    // Extract video ID for real stats fetch + thumbnail
+    let _demoVid = null;
+    try {
+      const m1 = url.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
+      const m2 = url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
+      const m3 = url.match(/shorts\/([a-zA-Z0-9_-]{11})/);
+      _demoVid = (m1 || m2 || m3)?.[1] || null;
+    } catch {}
+
+    // Fetch real video stats in parallel with the animation
+    let _realMeta = null;
+    const metaFetch = _demoVid
+      ? fetch(`${API}/api/public/youtube-meta/${_demoVid}`, { headers: { Authorization: 'Bearer ' + token } })
+          .then(r => r.ok ? r.json() : null).then(d => { _realMeta = d; }).catch(() => {})
+      : Promise.resolve();
+
     // Multi-step scanning animation that mirrors the real flow
     const steps = [
       { label: '⏳ Fetching video transcript…', ms: 800 },
@@ -9080,9 +9157,10 @@ async function runYoutubeScan() {
       btn.innerHTML = `<span class="spinner"></span> ${step.label}`;
       await new Promise(r => setTimeout(r, step.ms));
     }
+    await metaFetch; // ensure meta fetch done before render
 
     btn.disabled = false; btn.textContent = cfg.btn;
-    renderYtDemoResults(url);
+    renderYtDemoResults(url, _realMeta);
     return;
   }
 
@@ -9126,7 +9204,7 @@ async function runYoutubeScan() {
   }
 }
 
-function renderYtDemoResults(videoUrl) {
+function renderYtDemoResults(videoUrl, realMeta) {
   // ── Detect creator's primary category from existing markets ─────
   const existingMarkets = creatorData?.markets || [];
   const catCounts = {};
@@ -9214,23 +9292,42 @@ function renderYtDemoResults(videoUrl) {
     return min + Math.abs(h) % (max - min + 1);
   }
   const seed = videoId || (videoUrl || 'demo').slice(-8);
-  const commentCount    = _seedRand(seed + 'c', 11, 312);
-  const transcriptMins  = _seedRand(seed + 't', 6,  54);   // video length proxy
-  const transcriptWords = transcriptMins * _seedRand(seed + 'w', 110, 160);
-  // Live chat only on longer videos and not always present
-  const hasLiveChat     = _seedRand(seed + 'l', 0, 4) > 2; // ~40% chance
-  const liveChatCount   = hasLiveChat ? _seedRand(seed + 'lc', 18, 280) : 0;
+
+  // ── Use real YouTube stats if available, else fall back to seeded estimates ──
+  let commentCount, transcriptWords, liveChatCount, videoTitle, channelTitle;
+  if (realMeta && (realMeta.commentCount || realMeta.durationMin)) {
+    commentCount    = realMeta.commentCount || 0;
+    const dMin      = realMeta.durationMin  || _seedRand(seed + 't', 6, 54);
+    transcriptWords = dMin * _seedRand(seed + 'w', 110, 160);
+    liveChatCount   = 0; // live chat can't be known from API without separate call
+    videoTitle      = realMeta.title        || null;
+    channelTitle    = realMeta.channelTitle || null;
+  } else {
+    // Seeded fallback — deterministic, small realistic ranges
+    commentCount    = _seedRand(seed + 'c', 11, 312);
+    const tMins     = _seedRand(seed + 't', 6,  54);
+    transcriptWords = tMins * _seedRand(seed + 'w', 110, 160);
+    const hasLC     = _seedRand(seed + 'l', 0, 4) > 2;
+    liveChatCount   = hasLC ? _seedRand(seed + 'lc', 18, 280) : 0;
+    videoTitle      = null;
+    channelTitle    = null;
+  }
 
   const metaParts = [
-    `${commentCount} comment${commentCount !== 1 ? 's' : ''}`,
+    ...(commentCount ? [`${commentCount.toLocaleString()} comment${commentCount !== 1 ? 's' : ''}`] : []),
     `${transcriptWords.toLocaleString()}-word transcript`,
     ...(liveChatCount ? [`${liveChatCount} live chat messages`] : []),
     `<strong style="color:var(--text)">6 markets generated</strong>`,
   ];
 
+  const titleLine = videoTitle
+    ? `<div style="font-weight:700;color:var(--text);margin-bottom:4px;font-size:13px">${videoTitle}${channelTitle ? ` <span style="font-weight:400;color:var(--dim)">· ${channelTitle}</span>` : ''}</div>`
+    : '';
+
   // ── Render ──────────────────────────────────────────────────────
   document.getElementById('ytVideoMeta').innerHTML = `
     ${thumbUrl ? `<img src="${thumbUrl}" onerror="this.style.display='none'" style="width:100%;border-radius:8px;margin-bottom:10px;opacity:0.85"/>` : ''}
+    ${titleLine}
     <span style="color:var(--gold)">▶ Scan complete</span> —
     <span style="color:var(--dim)">${metaParts.join(' · ')}</span>
   `;

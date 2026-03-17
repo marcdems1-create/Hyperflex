@@ -4582,51 +4582,121 @@ Return ONLY valid JSON:
 app.post('/api/markets/:id/dispute', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { reason } = req.body;
-    if (!reason?.trim()) return res.status(400).json({ error: 'Reason is required' });
+    const { reason, requested_outcome } = req.body;
 
-    // Market must exist, be resolved, and within 24h window
     const { data: market } = await supabase
       .from('markets')
-      .select('id, question, resolved, resolved_at, tenant_slug, outcome')
+      .select('id, question, resolved, resolved_at, tenant_slug, outcome, expiry_date, trader_count')
       .eq('id', id)
       .maybeSingle();
     if (!market) return res.status(404).json({ error: 'Market not found' });
-    if (!market.resolved) return res.status(400).json({ error: 'Market is not resolved' });
-    const resolvedAt = market.resolved_at ? new Date(market.resolved_at) : null;
-    if (!resolvedAt || Date.now() - resolvedAt.getTime() > 24 * 60 * 60 * 1000) {
-      return res.status(400).json({ error: 'Dispute window closed (24 hours after resolution)' });
+
+    const now = Date.now();
+    let disputeType, insertReason;
+
+    if (market.resolved) {
+      // ── Type 1: outcome contest — filed after resolution within 24h ──
+      if (!reason?.trim()) return res.status(400).json({ error: 'Reason is required' });
+      const resolvedAt = market.resolved_at ? new Date(market.resolved_at) : null;
+      if (!resolvedAt || now - resolvedAt.getTime() > 24 * 60 * 60 * 1000) {
+        return res.status(400).json({ error: 'Dispute window closed (24 hours after resolution)' });
+      }
+      disputeType  = 'outcome_contest';
+      insertReason = reason.trim().slice(0, 500);
+    } else {
+      // ── Type 2: resolution vote — on expired unresolved market ──
+      if (!market.expiry_date || new Date(market.expiry_date) > new Date()) {
+        return res.status(400).json({ error: 'You can only vote on expired markets' });
+      }
+      if (!['YES', 'NO'].includes(requested_outcome)) {
+        return res.status(400).json({ error: 'requested_outcome must be YES or NO' });
+      }
+      disputeType  = 'resolution_vote';
+      insertReason = (reason?.trim() || '').slice(0, 500);
     }
 
     const { error } = await supabase.from('market_disputes').insert([{
-      market_id:    id,
-      user_id:      req.user.id,
-      creator_slug: market.tenant_slug,
-      reason:       reason.trim().slice(0, 500),
+      market_id:         id,
+      user_id:           req.user.id,
+      creator_slug:      market.tenant_slug,
+      reason:            insertReason,
+      dispute_type:      disputeType,
+      requested_outcome: disputeType === 'resolution_vote' ? requested_outcome : null,
     }]);
     if (error) {
-      if (error.code === '23505') return res.status(409).json({ error: 'You already filed a dispute for this market' });
+      if (error.code === '23505') return res.status(409).json({ error: 'You already voted on this market' });
       throw error;
     }
 
-    // Notify creator via email (fire-and-forget)
+    // Notify creator (fire-and-forget)
     const transporter = createMailTransport();
     if (transporter) {
       const { data: cs } = await supabase.from('creator_settings').select('creator_id').eq('slug', market.tenant_slug).maybeSingle();
       if (cs) {
-        const { data: creator } = await supabase.from('users').select('email, display_name').eq('id', cs.creator_id).maybeSingle();
+        const { data: creator } = await supabase.from('users').select('email').eq('id', cs.creator_id).maybeSingle();
         if (creator?.email) {
-          transporter.sendMail({
-            from: process.env.SMTP_FROM || process.env.SMTP_USER,
-            to: creator.email,
-            subject: `⚠️ Resolution disputed: ${market.question}`,
-            text: `A member disputed the resolution of your market:\n\n"${market.question}"\n\nResolved: ${market.outcome}\nReason: ${reason}\n\nReview it in your dashboard → Resolution Queue.`,
-          }).catch(() => {});
+          if (disputeType === 'outcome_contest') {
+            transporter.sendMail({
+              from: process.env.SMTP_FROM || process.env.SMTP_USER,
+              to: creator.email,
+              subject: `⚠️ Resolution disputed: ${market.question}`,
+              text: `A member disputed the resolution of your market:\n\n"${market.question}"\n\nResolved: ${market.outcome}\nReason: ${insertReason}\n\nReview in dashboard → Resolution Queue.`,
+            }).catch(() => {});
+          } else {
+            // Check if this vote just unlocked resolution — notify creator
+            const { count: voteCount } = await supabase
+              .from('market_disputes').select('id', { count: 'exact', head: true })
+              .eq('market_id', id).eq('dispute_type', 'resolution_vote');
+            const threshold = Math.max(3, Math.ceil((market.trader_count || 0) * 0.30));
+            if (voteCount >= threshold) {
+              transporter.sendMail({
+                from: process.env.SMTP_FROM || process.env.SMTP_USER,
+                to: creator.email,
+                subject: `🗳️ Resolution unlocked: ${market.question}`,
+                text: `Your community has voted on this market and resolution is now unlocked:\n\n"${market.question}"\n\n${voteCount} traders have voted. Review and resolve in your dashboard → Resolution Queue.`,
+              }).catch(() => {});
+            }
+          }
         }
       }
     }
 
-    res.json({ ok: true });
+    // Return updated vote counts for UI
+    const { count: voteCount } = await supabase
+      .from('market_disputes').select('id', { count: 'exact', head: true })
+      .eq('market_id', id).eq('dispute_type', 'resolution_vote');
+    const threshold = Math.max(3, Math.ceil((market.trader_count || 0) * 0.30));
+
+    res.json({ ok: true, vote_count: voteCount || 1, threshold, unlocked: (voteCount || 1) >= threshold });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/market/:id/votes — public, returns resolution vote counts for a market
+app.get('/api/market/:id/votes', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { data: market } = await supabase
+      .from('markets').select('trader_count, resolved, expiry_date').eq('id', id).maybeSingle();
+    if (!market) return res.status(404).json({ error: 'Market not found' });
+
+    const { count: voteCount } = await supabase
+      .from('market_disputes').select('id', { count: 'exact', head: true })
+      .eq('market_id', id).eq('dispute_type', 'resolution_vote');
+
+    // Yes/No breakdown
+    const { data: votes } = await supabase
+      .from('market_disputes').select('requested_outcome')
+      .eq('market_id', id).eq('dispute_type', 'resolution_vote');
+    const yesVotes = (votes || []).filter(v => v.requested_outcome === 'YES').length;
+    const noVotes  = (votes || []).filter(v => v.requested_outcome === 'NO').length;
+
+    const traderCount = market.trader_count || 0;
+    const threshold   = Math.max(3, Math.ceil(traderCount * 0.30));
+    const unlocked    = (voteCount || 0) >= threshold || traderCount < 3;
+
+    res.json({ vote_count: voteCount || 0, threshold, unlocked, yes_votes: yesVotes, no_votes: noVotes, trader_count: traderCount });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -4695,6 +4765,30 @@ app.post('/markets/:id/resolve', requireCreator, async (req, res) => {
 
     if (!market) return res.status(404).json({ error: 'Market not found or not yours' });
     if (market.resolved) return res.status(409).json({ error: 'Market already resolved' });
+
+    // ── Gate: market must be expired ─────────────────────────────────
+    const now = new Date();
+    const isExpired = market.expiry_date && new Date(market.expiry_date) <= now;
+    if (!isExpired) {
+      return res.status(403).json({ error: 'Market has not expired yet. Markets can only be resolved after their expiry date.' });
+    }
+
+    // ── Gate: community vote threshold (skip for markets with < 3 traders) ──
+    const traderCount = market.trader_count || 0;
+    if (traderCount >= 3) {
+      const { count: voteCount } = await supabase
+        .from('market_disputes').select('id', { count: 'exact', head: true })
+        .eq('market_id', id).eq('dispute_type', 'resolution_vote');
+      const threshold = Math.max(3, Math.ceil(traderCount * 0.30));
+      if ((voteCount || 0) < threshold) {
+        return res.status(403).json({
+          error: `Community vote required before resolving. ${voteCount || 0} of ${threshold} votes received.`,
+          vote_count:  voteCount || 0,
+          threshold,
+          votes_needed: threshold - (voteCount || 0),
+        });
+      }
+    }
 
     // Validate outcome against market type
     const isMultiOptionMarket = Array.isArray(market.options) && market.options.length > 0;
@@ -5121,6 +5215,46 @@ async function fetchYouTubeLiveChat(videoId) {
     return null;
   }
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// GET /api/public/youtube-meta/:videoId — real video stats for demo scanner
+// Uses YOUTUBE_API_KEY (same one as scan-youtube). No auth required.
+// ════════════════════════════════════════════════════════════════════════════
+app.get('/api/public/youtube-meta/:videoId', async (req, res) => {
+  try {
+    const { videoId } = req.params;
+    if (!YOUTUBE_API_KEY) return res.status(503).json({ error: 'YouTube API not configured' });
+
+    const apiUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics,contentDetails&id=${encodeURIComponent(videoId)}&key=${YOUTUBE_API_KEY}`;
+    const r = await fetch(apiUrl);
+    const data = await r.json();
+
+    const item = data?.items?.[0];
+    if (!item) return res.status(404).json({ error: 'Video not found' });
+
+    const stats   = item.statistics || {};
+    const snippet = item.snippet    || {};
+    const duration = item.contentDetails?.duration || 'PT0S'; // ISO 8601 e.g. PT14M23S
+
+    // Parse ISO 8601 duration to seconds
+    const durMatch = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+    const durationSec = durMatch
+      ? (parseInt(durMatch[1] || 0) * 3600 + parseInt(durMatch[2] || 0) * 60 + parseInt(durMatch[3] || 0))
+      : 0;
+
+    res.json({
+      title:        snippet.title          || '',
+      channelTitle: snippet.channelTitle   || '',
+      commentCount: parseInt(stats.commentCount  || 0),
+      viewCount:    parseInt(stats.viewCount     || 0),
+      likeCount:    parseInt(stats.likeCount     || 0),
+      durationSec,                              // seconds
+      durationMin:  Math.round(durationSec / 60),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 app.post('/api/creator/scan-youtube', requireCreator, async (req, res) => {
   try {

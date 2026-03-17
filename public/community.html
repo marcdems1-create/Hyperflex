@@ -2708,8 +2708,17 @@ function renderFilteredMarkets() {
     sortFn = (a, b) => truthScore(b) - truthScore(a);
   }
 
+  // Include expired unresolved markets in all-tab (awaiting resolution)
+  const expiredUnresolved = currentFilter === 'all' || currentFilter === 'mine'
+    ? markets.filter(m => !m.resolved && m.expiry_date && new Date(m.expiry_date) < new Date()
+        && (!activeCategoryFilter || (m.category || 'other').toLowerCase() === activeCategoryFilter)
+        && (!_marketSearchQuery || m.question.toLowerCase().includes(_marketSearchQuery)))
+    : [];
+
   const grid = document.getElementById('marketsGrid');
-  if (filtered.length === 0) {
+  const allToShow = [...filtered, ...expiredUnresolved.filter(eu => !filtered.find(f => f.id === eu.id))];
+
+  if (allToShow.length === 0) {
     const msgs = {
       hot:   { icon: '🔥', title: 'No hot markets yet', sub: 'Markets with 5+ traders will show here.' },
       truth: { icon: '🧭', title: 'No active markets', sub: 'Publish markets to start the truth feed.' },
@@ -2725,11 +2734,16 @@ function renderFilteredMarkets() {
     const featuredId = sorted[0]?.id;
     const featuredCards = sorted.filter(m => m.id === featuredId).map(m => marketCardHTML(m, false, true));
     const restCards     = sorted.filter(m => m.id !== featuredId).map(m => marketCardHTML(m, false, false));
-    grid.innerHTML = [...featuredCards, ...restCards].join('');
+    // Expired unresolved shown at bottom
+    const expiredCards  = expiredUnresolved.map(m => marketCardHTML(m, false, false));
+    grid.innerHTML = [...featuredCards, ...restCards, ...expiredCards].join('');
 
     // Update truth feed header with live summary if in truth mode
     if (currentFilter === 'truth') updateTruthFeedSummary(sorted);
   }
+
+  // Load vote data for expired unresolved markets (non-blocking)
+  if (expiredUnresolved.length) loadMarketVoteData(expiredUnresolved);
 }
 
 function updateTruthFeedSummary(sorted) {
@@ -2890,7 +2904,43 @@ function marketCardHTML(m, isResolved, featured) {
   let innerActionsHTML = '';
   let outerHTML = '';
 
-  if (isResolved) {
+  const isExpiredUnresolved = !m.resolved && m.expiry_date && new Date(m.expiry_date) < new Date();
+
+  if (isExpiredUnresolved) {
+    // Market has expired but creator hasn't resolved yet — show vote CTA
+    const voteData = window._marketVoteCache?.[m.id];
+    const vc = voteData?.vote_count || 0;
+    const vt = voteData?.threshold || 3;
+    const pct = vt > 0 ? Math.min(100, Math.round(vc / vt * 100)) : 0;
+    const hasVoted = window._myVotes?.[m.id];
+    innerActionsHTML = `
+      <div style="padding:10px 0 4px">
+        <div style="font-size:11px;color:var(--dim);font-family:var(--mono);margin-bottom:8px;display:flex;justify-content:space-between">
+          <span>⏳ Awaiting resolution</span>
+          <span>${vc}/${vt} community votes</span>
+        </div>
+        <div style="height:3px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;margin-bottom:10px">
+          <div style="height:100%;width:${pct}%;background:var(--gold);border-radius:2px;transition:width .3s"></div>
+        </div>
+        ${currentUser && !hasVoted ? `
+        <div style="display:flex;gap:8px">
+          <button class="btn-predict yes" style="flex:1;font-size:12px;padding:8px 0"
+            onclick="event.stopPropagation();voteOutcome('${m.id}','YES')">
+            Vote YES
+          </button>
+          <button class="btn-predict no" style="flex:1;font-size:12px;padding:8px 0"
+            onclick="event.stopPropagation();voteOutcome('${m.id}','NO')">
+            Vote NO
+          </button>
+        </div>` : currentUser && hasVoted ? `
+        <div style="text-align:center;font-family:var(--mono);font-size:11px;color:var(--gold);padding:4px 0">
+          ✓ You voted ${hasVoted} — waiting for more votes to unlock resolution
+        </div>` : `
+        <div style="text-align:center;font-family:var(--mono);font-size:11px;color:var(--dim);padding:4px 0">
+          Log in to vote on the outcome
+        </div>`}
+      </div>`;
+  } else if (isResolved) {
     const won = m.outcome === 'YES' || m.outcome === true;
     const userWon = pos && (isMultiOpt
       ? pos.side === m.outcome
@@ -2913,7 +2963,7 @@ function marketCardHTML(m, isResolved, featured) {
       ? (m.outcome ? `✓ ${escHtml(m.outcome)}` : '✓ Resolved')
       : (won ? '✓ Resolved YES' : '✗ Resolved NO');
     outerHTML = `<div class="outcome-banner ${isMultiOpt ? 'yes' : (won ? 'yes' : 'no')}" style="display:flex;align-items:center;justify-content:space-between">${outcomeLabel}<div style="display:flex;gap:6px;align-items:center">${winCardBtn}${shareBtn}${disputeBtn}</div></div>${noteHTML}`;
-  } else {
+  } else if (!isExpiredUnresolved) {
     if (isMultiOpt) {
       const colors = ['#22c55e','#3b82f6','#f59e0b','#ec4899','#8b5cf6','#14b8a6'];
       const totalVotesMO = m.options.reduce((s, o) => s + (o.votes || 0), 0);
@@ -4660,6 +4710,47 @@ function shareCommunity(anchorEl) {
   const name = community?.display_name || slug;
   const text = `Join ${name} — predict the future with your community 🎯 #HyperFlex`;
   openShareSheet(anchorEl, url, text);
+}
+
+// ── Community vote on outcome (expired unresolved markets) ───────────────────
+window._marketVoteCache = {};
+window._myVotes = {};
+
+// Pre-load vote data for all expired unresolved markets after render
+async function loadMarketVoteData(marketList) {
+  const expired = (marketList || []).filter(m => !m.resolved && m.expiry_date && new Date(m.expiry_date) < new Date());
+  if (!expired.length) return;
+  await Promise.all(expired.map(async m => {
+    try {
+      const r = await fetch(`/api/market/${m.id}/votes`);
+      if (r.ok) window._marketVoteCache[m.id] = await r.json();
+    } catch {}
+  }));
+}
+
+async function voteOutcome(marketId, requestedOutcome) {
+  if (!currentUser) { showToast('Log in to vote', 'info'); return; }
+  try {
+    const r = await fetch(`/api/markets/${marketId}/dispute`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('hf_token') || '') },
+      body: JSON.stringify({ requested_outcome: requestedOutcome, reason: '' })
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      showToast(data.error || 'Could not submit vote', 'error');
+      return;
+    }
+    window._myVotes[marketId] = requestedOutcome;
+    window._marketVoteCache[marketId] = { vote_count: data.vote_count, threshold: data.threshold, unlocked: data.unlocked };
+    showToast(data.unlocked
+      ? '✅ Vote submitted — resolution is now unlocked!'
+      : `✓ Voted ${requestedOutcome} — ${data.threshold - data.vote_count} more vote${data.threshold - data.vote_count !== 1 ? 's' : ''} needed`,
+      data.unlocked ? 'success' : 'success');
+    renderMarkets(markets); // re-render to update progress bar
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
 }
 
 // ── Resolution Dispute ────────────────────────────────────────────────────────
