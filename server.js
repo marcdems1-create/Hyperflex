@@ -6372,10 +6372,11 @@ app.post('/api/community/:slug/follow', requireAuth, async (req, res) => {
     const startingBalance = settings.starting_balance ?? 100000;
 
     // Idempotent upsert — won't overwrite existing balance
-    await supabase
+    const { error: upsertErr, data: upserted } = await supabase
       .from('community_balances')
       .upsert({ user_id: userId, creator_slug: slug, balance: startingBalance, join_source },
-               { onConflict: 'user_id,creator_slug', ignoreDuplicates: true });
+               { onConflict: 'user_id,creator_slug', ignoreDuplicates: true })
+      .select('balance');
 
     // Return current balance (may be higher than starting if they already had one)
     const { data: row } = await supabase
@@ -6386,6 +6387,9 @@ app.post('/api/community/:slug/follow', requireAuth, async (req, res) => {
       .maybeSingle();
 
     res.json({ balance: row?.balance ?? startingBalance, starting_balance: startingBalance });
+
+    // Fire milestone email async — non-blocking
+    maybeFireMilestoneEmail(slug).catch(() => {});
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -6405,6 +6409,104 @@ app.delete('/api/user/community/:slug', requireAuth, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// ─── CREATOR MILESTONE EMAILS ────────────────────────────────────────────────
+// Fires when a community crosses 5, 10, 25, or 50 members.
+// Uses creator_settings.last_milestone_notified (int) to avoid re-sending.
+// No-op if SMTP not configured.
+
+const MILESTONES = [5, 10, 25, 50, 100, 250, 500];
+
+async function maybeFireMilestoneEmail(slug) {
+  const transporter = createMailTransport();
+  if (!transporter) return;
+
+  try {
+    // Count current members
+    const { count } = await supabase
+      .from('community_balances')
+      .select('user_id', { count: 'exact', head: true })
+      .eq('creator_slug', slug);
+    if (!count) return;
+
+    // Get creator info + last notified milestone
+    const { data: creator } = await supabase
+      .from('creator_settings')
+      .select('id, email, display_name, primary_color, last_milestone_notified, email_unsubscribed, email_unsubscribe_token')
+      .eq('slug', slug)
+      .maybeSingle();
+    if (!creator?.email || creator.email_unsubscribed) return;
+
+    const lastNotified = creator.last_milestone_notified || 0;
+
+    // Find highest milestone crossed that hasn't been notified
+    const milestone = [...MILESTONES].reverse().find(m => count >= m && m > lastNotified);
+    if (!milestone) return;
+
+    // Mark as notified immediately to prevent duplicate sends from concurrent requests
+    await supabase
+      .from('creator_settings')
+      .update({ last_milestone_notified: milestone })
+      .eq('slug', slug);
+
+    const accent = creator.primary_color || '#c9920d';
+    const communityName = creator.display_name || slug;
+    const dashUrl = 'https://hyperflex.network/creator/dashboard';
+    const communityUrl = `https://hyperflex.network/${slug}`;
+
+    const milestoneEmoji = milestone >= 100 ? '🚀' : milestone >= 50 ? '🎉' : milestone >= 25 ? '🔥' : '⭐';
+    const headline = milestone >= 100
+      ? `${count} members and counting. You're building something real.`
+      : milestone >= 50
+      ? `${milestone} members in ${communityName}. Your community is alive.`
+      : `${milestone} people joined ${communityName}. The momentum is real.`;
+
+    const bodyLine = milestone >= 100
+      ? `You've crossed ${milestone} members. That's not a small thing — that's a community. Keep publishing markets and your audience will keep coming back.`
+      : milestone >= 25
+      ? `${milestone} people chose to join your prediction community. They're watching your markets, placing predictions, and checking back daily. This is the engine of engagement that most creators never build.`
+      : `Your first ${milestone} members are in. Now's the time to keep publishing — communities with consistent markets grow 3× faster.`;
+
+    // Get unsubscribe token
+    const unsubToken = creator.email_unsubscribe_token || await getCreatorUnsubToken(creator.id);
+    const unsubUrl = `https://hyperflex.network/unsubscribe?token=${unsubToken}`;
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/></head>
+<body style="font-family:'Helvetica Neue',Arial,sans-serif;background:#141412;margin:0;padding:0">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#141412;padding:40px 0">
+<tr><td align="center">
+  <table width="520" cellpadding="0" cellspacing="0" style="background:#1e1e1b;border-radius:12px;overflow:hidden">
+    <tr><td style="background:${accent};padding:16px 28px">
+      <span style="font-size:18px;font-weight:900;color:#141412">HYPERFLEX</span>
+      <span style="float:right;font-size:22px;line-height:28px">${milestoneEmoji}</span>
+    </td></tr>
+    <tr><td style="padding:32px 28px 24px">
+      <div style="display:inline-block;background:rgba(201,146,13,.1);border:1px solid rgba(201,146,13,.3);border-radius:6px;padding:6px 14px;margin-bottom:18px">
+        <span style="font-family:monospace;font-size:11px;font-weight:700;color:${accent};letter-spacing:.1em">${milestone} MEMBERS REACHED</span>
+      </div>
+      <h2 style="margin:0 0 12px;font-size:22px;color:#f5f5f0;font-weight:800;line-height:1.3">${headline}</h2>
+      <p style="margin:0 0 24px;font-size:14px;color:#888;line-height:1.7">${bodyLine}</p>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <a href="${dashUrl}" style="display:inline-block;padding:12px 24px;background:${accent};color:#141412;font-weight:800;font-size:14px;border-radius:8px;text-decoration:none">Go to dashboard →</a>
+        <a href="${communityUrl}" style="display:inline-block;padding:12px 20px;background:rgba(255,255,255,.07);color:#f0ede8;font-weight:700;font-size:14px;border-radius:8px;text-decoration:none;border:1px solid rgba(255,255,255,.1)">View community</a>
+      </div>
+    </td></tr>
+    ${creatorUnsubscribeFooterHtml(unsubUrl)}
+  </table>
+</td></tr>
+</table></body></html>`;
+
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM || 'HYPERFLEX <noreply@hyperflex.network>',
+      to: creator.email,
+      subject: `${milestoneEmoji} ${communityName} just hit ${milestone} members`,
+      html,
+    });
+    console.log(`[milestone] Sent ${milestone}-member email to ${creator.email} for ${slug}`);
+  } catch (err) {
+    console.error('[milestone] Error:', err.message);
+  }
+}
 
 // GET /u/:slug — public creator profile page
 app.get('/u/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'profile.html')));
@@ -6899,17 +7001,21 @@ async function sendWeeklyDigests() {
 </table></body></html>`;
 
       const fromAddress = process.env.SMTP_FROM || `"${communityName}" <noreply@hyperflex.network>`;
-      const sends = users.filter(u => u.email).map(u =>
-        transporter.sendMail({
+      const eligibleUsers = users.filter(u => u.email && !u.email_unsubscribed);
+      const sends = await Promise.allSettled(eligibleUsers.map(async u => {
+        const unsubToken = await getMemberUnsubToken(u.id);
+        const unsubUrl = `https://hyperflex.network/unsubscribe?token=${unsubToken}`;
+        const personalizedHtml = html.replace('</table></body></html>',
+          `${unsubscribeFooterHtml(unsubUrl)}</table></body></html>`);
+        return transporter.sendMail({
           from: fromAddress,
           replyTo: process.env.SMTP_REPLY_TO || fromAddress,
           to: u.email,
           subject: `This week in ${communityName} — hot markets & leaderboard 🎯`,
-          html,
-        })
-      );
-      const results = await Promise.allSettled(sends);
-      console.log(`[digest] ${slug}: ${results.filter(r => r.status === 'fulfilled').length}/${sends.length} sent`);
+          html: personalizedHtml,
+        });
+      }));
+      console.log(`[digest] ${slug}: ${sends.filter(r => r.status === 'fulfilled').length}/${eligibleUsers.length} sent`);
     } catch (err) {
       console.error(`[digest] Error for ${creator.slug}:`, err.message);
     }
@@ -6975,7 +7081,7 @@ async function sendStreakWarningEmails() {
     const userIds = inactiveStreakers.map(u => u.userId);
     const { data: users } = await supabase
       .from('users')
-      .select('id, email, display_name')
+      .select('id, email, display_name, email_unsubscribed')
       .in('id', userIds);
     if (!users?.length) return;
 
@@ -7087,19 +7193,23 @@ async function sendStreakWarningEmails() {
       <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px">${marketsHtml}</table>
       <a href="${communityUrl}" style="display:inline-block;padding:13px 28px;background:${accent};color:#141412;font-weight:800;font-size:15px;border-radius:8px;text-decoration:none">Keep my streak →</a>
     </td></tr>
-    <tr><td style="padding:14px 28px;border-top:1px solid #2a2a27">
-      <p style="margin:0;font-size:11px;color:#555">You're getting this because you have an active streak on <a href="https://hyperflex.network" style="color:#888">HYPERFLEX</a>.</p>
-    </td></tr>
   </table>
 </td></tr>
 </table></body></html>`;
 
+      // Skip unsubscribed users
+      if (user.email_unsubscribed) continue;
+
       try {
+        const unsubToken = await getMemberUnsubToken(userId);
+        const unsubUrl = `https://hyperflex.network/unsubscribe?token=${unsubToken}`;
+        const finalHtml = html.replace('</table></body></html>',
+          `<table width="100%" cellpadding="0" cellspacing="0"><tbody>${unsubscribeFooterHtml(unsubUrl)}</tbody></table></body></html>`);
         await transporter.sendMail({
           from: process.env.SMTP_FROM || 'HYPERFLEX <noreply@hyperflex.network>',
           to: user.email,
           subject: `🔥 You're on a ${streak}-win streak — don't lose it tonight`,
-          html,
+          html: finalHtml,
         });
         sent++;
       } catch (e) {
@@ -7113,6 +7223,117 @@ async function sendStreakWarningEmails() {
 }
 // Every day at 6pm UTC
 cron.schedule('0 18 * * *', () => { console.log('[streak-warn] Streak warning cron triggered'); sendStreakWarningEmails(); });
+
+// ─── DEAD MARKET NUDGE EMAILS ─────────────────────────────────────────────────
+// Weekly on Wednesday at 10am UTC.
+// Finds creators who have markets that have been open for 7+ days with < 3 traders.
+// Sends a friendly nudge: "These markets need love — share them or close them."
+// Skips creators who are unsubscribed or have no email configured.
+async function sendDeadMarketNudges() {
+  const transporter = createMailTransport();
+  if (!transporter) { console.log('[dead-market] SMTP not configured — skipping'); return; }
+
+  console.log('[dead-market] Starting dead market nudge emails');
+  try {
+    const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    // Find open markets older than 7 days with fewer than 3 traders
+    const { data: deadMarkets } = await supabase
+      .from('markets')
+      .select('id, question, tenant_slug, trader_count, created_at')
+      .eq('resolved', false)
+      .eq('archived', false)
+      .neq('is_public', false)
+      .lt('created_at', cutoff)
+      .lt('trader_count', 3)
+      .order('trader_count', { ascending: true })
+      .limit(500);
+
+    if (!deadMarkets?.length) { console.log('[dead-market] No dead markets found'); return; }
+
+    // Group by creator slug
+    const bySlug = {};
+    for (const m of deadMarkets) {
+      if (!bySlug[m.tenant_slug]) bySlug[m.tenant_slug] = [];
+      bySlug[m.tenant_slug].push(m);
+    }
+
+    const slugs = Object.keys(bySlug);
+    const { data: creators } = await supabase
+      .from('creator_settings')
+      .select('id, slug, email, display_name, primary_color, email_unsubscribed, email_unsubscribe_token')
+      .in('slug', slugs);
+
+    let sent = 0;
+    for (const creator of (creators || [])) {
+      if (!creator.email || creator.email_unsubscribed) continue;
+      const markets = bySlug[creator.slug] || [];
+      if (!markets.length) continue;
+
+      const accent = creator.primary_color || '#c9920d';
+      const communityName = creator.display_name || creator.slug;
+      const dashUrl = 'https://hyperflex.network/creator/dashboard';
+
+      const marketRows = markets.slice(0, 5).map(m => {
+        const daysOld = Math.floor((Date.now() - new Date(m.created_at)) / (1000 * 60 * 60 * 24));
+        return `<tr>
+          <td style="padding:10px 0;border-bottom:1px solid #2a2a27">
+            <div style="font-size:13px;color:#f5f5f0;margin-bottom:3px;line-height:1.4">${m.question}</div>
+            <div style="font-size:11px;color:#666">${daysOld} days old · ${m.trader_count || 0} traders</div>
+          </td>
+        </tr>`;
+      }).join('');
+
+      const unsubToken = creator.email_unsubscribe_token || await getCreatorUnsubToken(creator.id);
+      const unsubUrl = `https://hyperflex.network/unsubscribe?token=${unsubToken}`;
+
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/></head>
+<body style="font-family:'Helvetica Neue',Arial,sans-serif;background:#141412;margin:0;padding:0">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#141412;padding:40px 0">
+<tr><td align="center">
+  <table width="520" cellpadding="0" cellspacing="0" style="background:#1e1e1b;border-radius:12px;overflow:hidden">
+    <tr><td style="background:#1c1c1a;padding:16px 28px;border-bottom:1px solid #2a2a27">
+      <span style="font-size:17px;font-weight:900;color:${accent}">HYPERFLEX</span>
+    </td></tr>
+    <tr><td style="padding:28px 28px 20px">
+      <h2 style="margin:0 0 10px;font-size:20px;color:#f5f5f0;font-weight:800">These markets need some love 💬</h2>
+      <p style="margin:0 0 20px;font-size:14px;color:#888;line-height:1.6">
+        ${markets.length} market${markets.length > 1 ? 's' : ''} in <strong style="color:#f5f5f0">${communityName}</strong>
+        ${markets.length > 1 ? 'have' : 'has'} been open for over a week with very few predictions.
+        Share ${markets.length > 1 ? 'them' : 'it'} with your audience — or archive ${markets.length > 1 ? 'them' : 'it'} to keep your community focused.
+      </p>
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px">${marketRows}</table>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <a href="${dashUrl}" style="display:inline-block;padding:12px 24px;background:${accent};color:#141412;font-weight:800;font-size:14px;border-radius:8px;text-decoration:none">Manage markets →</a>
+      </div>
+      <p style="margin:20px 0 0;font-size:12px;color:#666;line-height:1.6">
+        <strong style="color:#888">Tip:</strong> Share your community link on your next post with a call to action — "Predict what happens next →". Markets with even 5 traders feel much more alive.
+      </p>
+    </td></tr>
+    ${creatorUnsubscribeFooterHtml(unsubUrl)}
+  </table>
+</td></tr>
+</table></body></html>`;
+
+      try {
+        await transporter.sendMail({
+          from: process.env.SMTP_FROM || 'HYPERFLEX <noreply@hyperflex.network>',
+          to: creator.email,
+          subject: `${markets.length} market${markets.length > 1 ? 's' : ''} in ${communityName} need${markets.length === 1 ? 's' : ''} attention`,
+          html,
+        });
+        sent++;
+      } catch (e) {
+        console.error(`[dead-market] Failed for ${creator.email}:`, e.message);
+      }
+    }
+    console.log(`[dead-market] Sent ${sent} nudge emails`);
+  } catch (err) {
+    console.error('[dead-market] Error:', err.message);
+  }
+}
+// Every Wednesday at 10am UTC
+cron.schedule('0 10 * * 3', () => { console.log('[dead-market] Dead market nudge cron triggered'); sendDeadMarketNudges(); });
 
 // GET /api/win-card/:marketId/:userId — public win card data
 app.get('/api/win-card/:marketId/:userId', async (req, res) => {
@@ -8039,6 +8260,97 @@ app.get('/api/creator/custom-domain/status', requireCreator, async (req, res) =>
 //   SMTP_HOST, SMTP_PORT (default 587), SMTP_USER, SMTP_PASS, SMTP_FROM
 // If SMTP_HOST is not set the function is a no-op — no crash, just skipped.
 // ─────────────────────────────────────────────────────────────────────────────
+// ─── EMAIL UNSUBSCRIBE SYSTEM ─────────────────────────────────────────────────
+// One-click unsubscribe for all outgoing member/creator emails.
+// Tokens are stored in users.email_unsubscribe_token (UUID, generated on first send).
+// Route: GET /unsubscribe?token=XXX  → marks users.email_unsubscribed = true
+//
+// Migration: supabase_migration_email_unsubscribe.sql
+// ALTER TABLE users ADD COLUMN IF NOT EXISTS email_unsubscribe_token TEXT;
+// ALTER TABLE users ADD COLUMN IF NOT EXISTS email_unsubscribed BOOLEAN NOT NULL DEFAULT false;
+// CREATE INDEX IF NOT EXISTS users_unsubscribe_token_idx ON users (email_unsubscribe_token);
+//
+// Also applies to creator_settings for creator emails:
+// ALTER TABLE creator_settings ADD COLUMN IF NOT EXISTS email_unsubscribed BOOLEAN NOT NULL DEFAULT false;
+// ALTER TABLE creator_settings ADD COLUMN IF NOT EXISTS email_unsubscribe_token TEXT;
+// CREATE INDEX IF NOT EXISTS creator_settings_unsubscribe_token_idx ON creator_settings (email_unsubscribe_token);
+
+// Get or create an unsubscribe token for a member (user row).
+async function getMemberUnsubToken(userId) {
+  const { data: u } = await supabase.from('users').select('email_unsubscribe_token').eq('id', userId).maybeSingle();
+  if (u?.email_unsubscribe_token) return u.email_unsubscribe_token;
+  const token = crypto.randomUUID();
+  await supabase.from('users').update({ email_unsubscribe_token: token }).eq('id', userId);
+  return token;
+}
+
+// Get or create an unsubscribe token for a creator.
+async function getCreatorUnsubToken(creatorId) {
+  const { data: c } = await supabase.from('creator_settings').select('email_unsubscribe_token').eq('id', creatorId).maybeSingle();
+  if (c?.email_unsubscribe_token) return c.email_unsubscribe_token;
+  const token = crypto.randomUUID();
+  await supabase.from('creator_settings').update({ email_unsubscribe_token: token }).eq('id', creatorId);
+  return token;
+}
+
+// Build unsubscribe footer HTML. unsub_url is the one-click link.
+function unsubscribeFooterHtml(unsubUrl) {
+  return `<tr><td style="padding:14px 28px 20px;border-top:1px solid #252523">
+    <p style="margin:0;font-size:11px;color:#444;text-align:center;line-height:1.7">
+      You're receiving this because you're a member of a HYPERFLEX community.<br/>
+      <a href="${unsubUrl}" style="color:#666;text-decoration:underline">Unsubscribe from all HYPERFLEX emails</a>
+    </p>
+  </td></tr>`;
+}
+
+function creatorUnsubscribeFooterHtml(unsubUrl) {
+  return `<tr><td style="padding:14px 28px 20px;border-top:1px solid #252523">
+    <p style="margin:0;font-size:11px;color:#444;text-align:center;line-height:1.7">
+      You're receiving this as a HYPERFLEX creator.<br/>
+      <a href="${unsubUrl}" style="color:#666;text-decoration:underline">Unsubscribe from creator emails</a>
+    </p>
+  </td></tr>`;
+}
+
+// GET /unsubscribe?token=XXX — one-click, no login required
+app.get('/unsubscribe', async (req, res) => {
+  const { token } = req.query;
+  if (!token) return res.status(400).send('<p style="font-family:sans-serif;text-align:center;padding:60px">Invalid unsubscribe link.</p>');
+
+  // Try users table first, then creator_settings
+  let unsubbed = false;
+  const { data: u } = await supabase.from('users').select('id, email').eq('email_unsubscribe_token', token).maybeSingle();
+  if (u) {
+    await supabase.from('users').update({ email_unsubscribed: true }).eq('id', u.id);
+    unsubbed = true;
+  } else {
+    const { data: c } = await supabase.from('creator_settings').select('id, email').eq('email_unsubscribe_token', token).maybeSingle();
+    if (c) {
+      await supabase.from('creator_settings').update({ email_unsubscribed: true }).eq('id', c.id);
+      unsubbed = true;
+    }
+  }
+
+  const html = unsubbed
+    ? `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Unsubscribed — HYPERFLEX</title></head>
+<body style="font-family:'Helvetica Neue',Arial,sans-serif;background:#141412;color:#f0ede8;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0">
+<div style="text-align:center;max-width:440px;padding:40px">
+  <div style="font-size:36px;margin-bottom:16px">✓</div>
+  <h1 style="font-size:22px;font-weight:800;margin:0 0 10px">You're unsubscribed.</h1>
+  <p style="font-size:14px;color:#888;line-height:1.6;margin:0 0 28px">You won't receive any more HYPERFLEX emails. If you change your mind, you can re-enable notifications from your account settings.</p>
+  <a href="https://hyperflex.network" style="display:inline-block;padding:11px 24px;background:#c9920d;color:#141412;font-weight:700;font-size:14px;border-radius:8px;text-decoration:none">Back to HYPERFLEX</a>
+</div>
+</body></html>`
+    : `<!DOCTYPE html><html><head><meta charset="utf-8"/></head>
+<body style="font-family:sans-serif;text-align:center;padding:60px;background:#141412;color:#888">
+<p>Unsubscribe link not found or already processed.</p>
+</body></html>`;
+
+  res.status(unsubbed ? 200 : 404).send(html);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 function createMailTransport() {
   if (!process.env.SMTP_HOST) return null;
   return nodemailer.createTransport({

@@ -112,6 +112,34 @@
 
 ---
 
+## Session 6 continued — email lifecycle + engagement automation
+
+**J — Email unsubscribe** (`/unsubscribe?token=XXX` route in server.js):
+- Token-based, one-click, no login needed
+- `getMemberUnsubToken()` / `getCreatorUnsubToken()` helpers generate + cache UUID tokens
+- `unsubscribeFooterHtml()` / `creatorUnsubscribeFooterHtml()` injected into weekly digest + streak warnings
+- Weekly digest + streak warning emails now skip `email_unsubscribed = true` users
+- Migration: `supabase_migration_email_unsubscribe.sql` — adds columns to `users` + `creator_settings`
+
+**K — Creator milestone emails** (`maybeFireMilestoneEmail(slug)` in server.js):
+- Fires async (fire-and-forget) from the community join/follow endpoint
+- Milestones: 5, 10, 25, 50, 100, 250, 500 members
+- Tracks `creator_settings.last_milestone_notified` to prevent re-sends
+- Branded email with community accent color, two CTAs (dashboard + community)
+- Respects `email_unsubscribed` flag on creator
+
+**L — Dead market nudge emails** (`sendDeadMarketNudges()`, Wed 10am UTC):
+- Finds markets open 7+ days with < 3 traders
+- Groups by creator, sends one email per creator listing their dead markets
+- Includes age + trader count per market, tip copy to share or archive
+- Skips unsubscribed creators
+
+**Migration for J + K:** `supabase_migration_email_unsubscribe.sql`
+- `users`: `email_unsubscribe_token TEXT`, `email_unsubscribed BOOLEAN DEFAULT false`
+- `creator_settings`: same columns + `last_milestone_notified INTEGER DEFAULT 0`
+
+---
+
 ## SaaS Pillar features (session 6)
 
 **G — Streak warning emails** (`sendStreakWarningEmails()` in server.js):
@@ -166,6 +194,7 @@
   16. `supabase_migration_creator_referrals.sql`
   17. `supabase_migration_market_disputes.sql`
   18. `supabase_migration_creator_follows.sql`
+19. `supabase_migration_email_unsubscribe.sql`
 - **Email notifications**: Opt-in via Railway env vars: `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
   - Fires after both manual resolve and cron settlement
   - No-op if SMTP_HOST is not set — safe to deploy without configuring
