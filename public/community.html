@@ -4556,11 +4556,16 @@ function ssAction(platform) {
 function shareMarket(anchorEl, marketId, question) {
   const m = markets.find(x => x.id === marketId);
   const con = m ? getConsensus(m) : null;
-  const odds = con?.hasVotes ? ` · YES ${con.yesPct}% / NO ${con.noPct}%` : '';
   const communityName = community?.display_name || slug;
-  const url = `${location.origin}/${slug}?market=${marketId}`;
-  const text = `"${question}"${odds} — predict on ${communityName} 🎯`;
-  openShareSheet(anchorEl, url, text);
+  // Use the dedicated share page — clean OG landing for people coming from X/Twitter
+  const sharePageUrl = `${location.origin}/share/${marketId}`;
+  let text;
+  if (con?.hasVotes) {
+    text = `"${question}"\n\n🟢 YES ${con.yesPct}%  🔴 NO ${con.noPct}%\n\nWhat's your call? 👇`;
+  } else {
+    text = `"${question}"\n\nNew prediction market on ${communityName} — what's your call? 🎯`;
+  }
+  openShareSheet(anchorEl, sharePageUrl, text);
 }
 
 function shareCommunity(anchorEl) {

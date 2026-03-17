@@ -5342,7 +5342,7 @@ function renderMarketRows(markets, containerId) {
           <span class="status-text">${statusLabel}</span>
           ${status === 'pending' ? `<button class="resolve-btn" onclick="event.stopPropagation();openResolveModal('${m.id}', \`${m.question.replace(/`/g,"'")}\`)">Resolve</button>` : ''}
           <button class="resolve-btn" style="background:rgba(201,146,13,0.1);color:var(--gold);border-color:rgba(201,146,13,0.25)" title="Duplicate this market" onclick="event.stopPropagation();duplicateMarket('${m.id}')">↻ Duplicate</button>
-          <button class="resolve-btn" style="background:rgba(255,255,255,0.04);color:var(--dim);border-color:var(--border)" title="Share this market" onclick="event.stopPropagation();shareMarketRow(this,${JSON.stringify(m.id)},${JSON.stringify(m.question.replace(/"/g,"'"))},${m.yes_votes||0},${m.no_votes||0})">↗ Share</button>
+          <button class="resolve-btn" style="background:rgba(255,255,255,0.04);color:var(--dim);border-color:var(--border)" title="Share this market" onclick="event.stopPropagation();shareMarketRow(this,${JSON.stringify(m.id)},${JSON.stringify(m.question.replace(/"/g,"'"))},${m.yes_price||0.5},${m.no_price||0.5})">↗ Share</button>
         </div>
       </div>
     `;
@@ -9645,7 +9645,8 @@ function wzCopyLink() {
   <button class="ss-btn" onclick="ssAction('linkedin')"><span class="ss-icon">💼</span>Share on LinkedIn</button>
   <button class="ss-btn" onclick="ssAction('facebook')"><span class="ss-icon">📘</span>Share on Facebook</button>
   <div class="ss-divider"></div>
-  <button class="ss-btn" onclick="ssAction('copy')"><span class="ss-icon">🔗</span>Copy link</button>
+  <button class="ss-btn" onclick="ssAction('copy')"><span class="ss-icon">🔗</span>Copy share link</button>
+  <button class="ss-btn" onclick="ssAction('open')"><span class="ss-icon">↗</span>Open share page</button>
 </div>
 
 <script>
@@ -9675,17 +9676,26 @@ function ssAction(platform) {
   if (platform === 'linkedin') window.open(`https://www.linkedin.com/shareArticle?mini=true&url=${url}&title=${txt}`, '_blank', 'width=600,height=500');
   if (platform === 'facebook') window.open(`https://www.facebook.com/sharer/sharer.php?u=${url}`, '_blank', 'width=600,height=400');
   if (platform === 'copy') navigator.clipboard.writeText(_ssUrl).then(() => showToast('Link copied ✓', 'success'));
+  if (platform === 'open') { window.open(window._sharePageUrl || _ssUrl, '_blank'); }
   closeShareSheet();
 }
 
 // Share a specific market
-function shareMarketRow(anchorEl, marketId, question, yesVotes, noVotes) {
-  const total = (yesVotes || 0) + (noVotes || 0);
-  const odds = total > 0 ? ` · YES ${Math.round(yesVotes/total*100)}% / NO ${Math.round(noVotes/total*100)}%` : '';
-  const name = window._creatorSlug ? (document.getElementById('headerCommunityName')?.textContent || window._creatorSlug) : '';
-  const url  = `${location.origin}/${window._creatorSlug}?market=${marketId}`;
-  const text = `"${question}"${odds} — predict on ${name} 🎯`;
-  openShareSheet(anchorEl, url, text);
+function shareMarketRow(anchorEl, marketId, question, yesPrice, noPrice) {
+  // Use dedicated share page as the URL — clean OG landing for Twitter/X
+  const sharePageUrl = `${location.origin}/share/${marketId}`;
+  const yp = Math.round((yesPrice || 0.5) * 100);
+  const np = 100 - yp;
+  const name = document.getElementById('headerCommunityName')?.textContent || window._creatorSlug || '';
+  let text;
+  if (yp !== 50) {
+    text = `"${question}"\n\n🟢 YES ${yp}%  🔴 NO ${np}%\n\nWhat's your call? 👇`;
+  } else {
+    text = `"${question}"\n\nNew prediction on ${name} — make your call 🎯`;
+  }
+  // Stash share page URL so "Open share page" button works
+  window._sharePageUrl = sharePageUrl;
+  openShareSheet(anchorEl, sharePageUrl, text);
 }
 
 // Share the whole community

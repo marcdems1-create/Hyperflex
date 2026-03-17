@@ -281,15 +281,24 @@ app.get('/share/:marketId', async (req, res) => {
   try {
     const { data: market } = await supabase
       .from('markets')
-      .select('id, question, yes_price, no_price, yes_votes, no_votes, category, expiry_date, tenant_slug, source_tweet_url, tweet_text, tweet_author, resolved, outcome')
+      .select('id, question, yes_price, no_price, yes_votes, no_votes, category, expiry_date, tenant_slug, creator_slug, source_tweet_url, tweet_text, tweet_author, resolved, outcome')
       .eq('id', req.params.marketId)
       .maybeSingle();
 
     if (!market) return res.status(404).send('<!DOCTYPE html><html><body style="font-family:monospace;padding:40px;color:#fff;background:#141412"><h2>Market not found</h2><a href="/" style="color:#c9920d">← HYPERFLEX</a></body></html>');
 
+    const communitySlug = market.creator_slug || market.tenant_slug || '';
+    // Fetch community display name for branding
+    let communityName = communitySlug;
+    if (communitySlug) {
+      const { data: cs } = await supabase.from('creator_settings').select('display_name').eq('slug', communitySlug).single();
+      communityName = cs?.display_name || communitySlug;
+    }
+
     const yesOdds = Math.round((market.yes_price || 0.5) * 100);
     const noOdds  = 100 - yesOdds;
-    const communityUrl = market.tenant_slug ? `https://hyperflex.network/${market.tenant_slug}?market=${market.id}` : 'https://hyperflex.network';
+    const communityUrl = communitySlug ? `https://hyperflex.network/${communitySlug}?market=${market.id}` : 'https://hyperflex.network';
+    const sharePageUrl = `https://hyperflex.network/share/${market.id}`;
     const tweetUrl     = market.source_tweet_url || null;
     const tweetText    = market.tweet_text || null;
     const tweetAuthor  = market.tweet_author || null;
@@ -298,6 +307,18 @@ app.get('/share/:marketId', async (req, res) => {
     const tweetHandle  = tweetAuthor ? tweetAuthor.replace(/^@/, '') : null;
     const tweetDisplayName = tweetHandle || 'Tweet';
     const tweetProfileUrl  = tweetHandle ? `https://x.com/${tweetHandle}` : null;
+
+    // Pre-composed X tweet text
+    const hasOdds = market.yes_price && market.yes_price !== 0.5;
+    const oddsLine = hasOdds ? `\n🟢 YES ${yesOdds}%  🔴 NO ${noOdds}%` : '';
+    const xTweetText = `"${market.question}"${oddsLine}\n\nWhat's your call? 👇\n`;
+    const xShareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(xTweetText)}&url=${encodeURIComponent(sharePageUrl)}`;
+
+    // OG meta
+    const ogTitle = market.question;
+    const ogDesc = hasOdds
+      ? `YES ${yesOdds}% · NO ${noOdds}% — Predict the outcome on ${communityName} via HYPERFLEX`
+      : `New prediction market on ${communityName} — make your call on HYPERFLEX`;
 
     const tweetSection = tweetText ? `
       <div style="max-width:520px;margin:0 auto 24px;background:#16181c;border:1px solid #2f3336;border-radius:16px;padding:16px 20px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
@@ -325,11 +346,14 @@ app.get('/share/:marketId', async (req, res) => {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${market.question} — HYPERFLEX</title>
-<meta property="og:title" content="${market.question}">
-<meta property="og:description" content="${tweetText ? tweetText.slice(0, 120) + (tweetText.length > 120 ? '…' : '') : 'Predict the outcome on HYPERFLEX'}">
+<title>${market.question.replace(/</g,'&lt;')} — HYPERFLEX</title>
+<meta property="og:title" content="${ogTitle.replace(/"/g,'&quot;')}">
+<meta property="og:description" content="${ogDesc.replace(/"/g,'&quot;')}">
 <meta property="og:image" content="https://hyperflex.network/og-image.png">
+<meta property="og:url" content="${sharePageUrl}">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${ogTitle.replace(/"/g,'&quot;')}">
+<meta name="twitter:description" content="${ogDesc.replace(/"/g,'&quot;')}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
@@ -376,8 +400,31 @@ app.get('/share/:marketId', async (req, res) => {
     ${expiryStr ? `<div class="meta-row"><span>Resolves ${expiryStr}</span>${market.resolved ? `<span style="color:#c9920d">● ${market.outcome || 'Resolved'}</span>` : '<span style="color:#3fb950">● Live</span>'}</div>` : ''}
     <a href="${communityUrl}" class="cta-btn">Make Your Prediction →</a>
   </div>
-  <div class="powered">Powered by <a href="https://hyperflex.network">HYPERFLEX</a> — prediction markets for creators</div>
+
+  <!-- Share buttons -->
+  <div style="display:flex;gap:10px;margin-top:16px;max-width:520px;margin-left:auto;margin-right:auto">
+    <a href="${xShareUrl}" target="_blank" rel="noopener"
+       style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;background:#000;border:1px solid #2f3336;border-radius:10px;color:#e7e9ea;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;text-decoration:none;letter-spacing:.02em;transition:background .15s"
+       onmouseover="this.style.background='#111'" onmouseout="this.style.background='#000'">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.737-8.835L1.254 2.25H8.08l4.259 5.633 5.905-5.633zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+      Share on X
+    </a>
+    <button onclick="copyShareLink(this)"
+       style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;background:rgba(201,146,13,0.1);border:1px solid rgba(201,146,13,0.35);border-radius:10px;color:#c9920d;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;cursor:pointer;letter-spacing:.02em">
+      🔗 Copy Link
+    </button>
+  </div>
+
+  <div class="powered" style="margin-top:20px">Powered by <a href="https://hyperflex.network">HYPERFLEX</a> — prediction markets for creators</div>
 </div>
+<script>
+function copyShareLink(btn) {
+  navigator.clipboard.writeText('${sharePageUrl}').then(() => {
+    btn.textContent = '✓ Copied!';
+    setTimeout(() => { btn.innerHTML = '🔗 Copy Link'; }, 2000);
+  });
+}
+</script>
 </body>
 </html>`;
 
