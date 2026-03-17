@@ -376,18 +376,26 @@ function renderProfileMarkets(mktList) {
     return;
   }
   grid.innerHTML = mktList.map(m => {
-    const totalVotes = (m.yes_votes || 0) + (m.no_votes || 0);
-    const yp = totalVotes > 0 ? Math.round((m.yes_votes || 0) / totalVotes * 100) : null;
-    const np = yp !== null ? 100 - yp : null;
+    // Use yes_price/no_price (CPMM — always accurate)
+    // Fall back to vote-share only if price fields absent
+    let yp, np;
+    if (m.yes_price != null && m.yes_price > 0) {
+      yp = Math.round(m.yes_price * 100);
+      np = 100 - yp;
+    } else {
+      const totalVotes = (m.yes_votes || 0) + (m.no_votes || 0);
+      yp = totalVotes > 0 ? Math.round((m.yes_votes || 0) / totalVotes * 100) : null;
+      np = yp !== null ? 100 - yp : null;
+    }
     return `
-      <div class="mkt-card" onclick="location.href='/${slug}'">
+      <div class="mkt-card" onclick="location.href='/${slug}?market=${m.id}'">
         <div class="mkt-cat">${cap(m.category || 'general')}</div>
         <div class="mkt-q">${m.question}</div>
         <div class="mkt-bar-wrap"><div class="mkt-bar-fill" style="width:${yp !== null ? yp : 50}%;opacity:${yp !== null ? 1 : 0.3}"></div></div>
         <div class="mkt-odds">
           ${yp !== null
             ? `<div class="mkt-yes">${yp}% YES</div><div class="mkt-no">${np}% NO</div>`
-            : `<div class="mkt-yes" style="color:var(--muted);font-size:11px">No predictions yet</div>`}
+            : `<div class="mkt-yes" style="color:var(--muted);font-size:11px">Be first to predict</div>`}
         </div>
         <div class="mkt-meta">${m.trader_count || 0} traders · closes ${new Date(m.expiry_date).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</div>
       </div>`;
