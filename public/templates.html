@@ -236,6 +236,11 @@
   </div>
 </section>
 
+<!-- Search bar -->
+<div style="max-width:720px;margin:0 auto 20px;padding:0 40px;box-sizing:border-box;">
+  <input type="search" id="templateSearchInput" placeholder="🔍 Search templates and market questions…" oninput="onTemplateSearch(this.value)" style="width:100%;box-sizing:border-box;padding:11px 16px;border-radius:12px;border:1.5px solid #2a2a27;background:#1c1c19;color:#e8e3d5;font-size:14px;font-family:inherit;outline:none;" />
+</div>
+
 <!-- Filter pills -->
 <div class="filter-wrap" id="filterWrap">
   <div class="filter-pill active" data-filter="all">All niches</div>
@@ -293,6 +298,29 @@ const NICHE_LABELS = {
 let allTemplates = [];
 let activeFilter = 'all';
 let expandedCards = new Set();
+let _templateSearchQuery = '';
+let _templateSearchTimer = null;
+
+function onTemplateSearch(val) {
+  clearTimeout(_templateSearchTimer);
+  _templateSearchTimer = setTimeout(() => {
+    _templateSearchQuery = val.trim().toLowerCase();
+    applyTemplateFilter();
+  }, 180);
+}
+
+function applyTemplateFilter() {
+  const q = _templateSearchQuery;
+  let filtered = activeFilter === 'all' ? allTemplates : allTemplates.filter(t => t.id === activeFilter);
+  if (q) {
+    filtered = filtered.filter(t =>
+      t.name.toLowerCase().includes(q) ||
+      t.description.toLowerCase().includes(q) ||
+      (t.preview || []).some(pq => pq.toLowerCase().includes(q))
+    );
+  }
+  renderGrid(filtered);
+}
 
 async function loadTemplates() {
   try {
@@ -326,8 +354,7 @@ function setFilter(id, pill) {
   activeFilter = id;
   document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
   pill.classList.add('active');
-  const filtered = id === 'all' ? allTemplates : allTemplates.filter(t => t.id === id);
-  renderGrid(filtered);
+  applyTemplateFilter();
 }
 
 function renderGrid(templates) {

@@ -239,6 +239,9 @@
       <div class="section-title">🔥 Active Markets</div>
       <a id="allMarketsLink" href="#" class="section-link">See all →</a>
     </div>
+    <div style="margin-bottom:14px">
+      <input type="search" id="profileMktSearch" placeholder="🔍 Search markets…" oninput="onProfileSearch(this.value)" style="width:100%;box-sizing:border-box;padding:10px 14px;border-radius:10px;border:1.5px solid #2a2a27;background:#1c1c19;color:#e8e3d5;font-size:14px;font-family:inherit;outline:none;" />
+    </div>
     <div class="markets-grid" id="marketsGrid">
       <div class="empty">Loading markets…</div>
     </div>
@@ -267,6 +270,43 @@
 <script>
 const slug = location.pathname.replace(/^\/u\//, '').replace(/\/$/, '');
 if (!slug) location.href = '/explore';
+
+let profileActiveMarkets = [];
+let _profileSearchTimer = null;
+
+function onProfileSearch(val) {
+  clearTimeout(_profileSearchTimer);
+  _profileSearchTimer = setTimeout(() => {
+    const q = val.trim().toLowerCase();
+    const filtered = q ? profileActiveMarkets.filter(m => (m.question||'').toLowerCase().includes(q) || (m.category||'').toLowerCase().includes(q)) : profileActiveMarkets;
+    renderProfileMarkets(filtered);
+  }, 180);
+}
+
+function renderProfileMarkets(mktList) {
+  const grid = document.getElementById('marketsGrid');
+  if (!mktList.length) {
+    grid.innerHTML = '<div class="empty">No markets found.</div>';
+    return;
+  }
+  grid.innerHTML = mktList.map(m => {
+    const totalVotes = (m.yes_votes || 0) + (m.no_votes || 0);
+    const yp = totalVotes > 0 ? Math.round((m.yes_votes || 0) / totalVotes * 100) : null;
+    const np = yp !== null ? 100 - yp : null;
+    return `
+      <div class="mkt-card" onclick="location.href='/${slug}'">
+        <div class="mkt-cat">${cap(m.category || 'general')}</div>
+        <div class="mkt-q">${m.question}</div>
+        <div class="mkt-bar-wrap"><div class="mkt-bar-fill" style="width:${yp !== null ? yp : 50}%;opacity:${yp !== null ? 1 : 0.3}"></div></div>
+        <div class="mkt-odds">
+          ${yp !== null
+            ? `<div class="mkt-yes">${yp}% YES</div><div class="mkt-no">${np}% NO</div>`
+            : `<div class="mkt-yes" style="color:var(--muted);font-size:11px">No predictions yet</div>`}
+        </div>
+        <div class="mkt-meta">${m.trader_count || 0} traders · closes ${new Date(m.expiry_date).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</div>
+      </div>`;
+  }).join('');
+}
 
 // Update all community links
 document.getElementById('navJoinBtn').href = '/' + slug;
@@ -390,32 +430,8 @@ async function load() {
   }
 
   // Markets
-  const grid = document.getElementById('marketsGrid');
-  const hotMarkets = [...active]
-    .sort((a,b) => (b.trader_count||0) - (a.trader_count||0))
-    .slice(0, 6);
-
-  if (!hotMarkets.length) {
-    grid.innerHTML = '<div class="empty">No active markets right now.</div>';
-  } else {
-    grid.innerHTML = hotMarkets.map(m => {
-      const totalVotes = (m.yes_votes || 0) + (m.no_votes || 0);
-      const yp = totalVotes > 0 ? Math.round((m.yes_votes || 0) / totalVotes * 100) : null;
-      const np = yp !== null ? 100 - yp : null;
-      return `
-        <div class="mkt-card" onclick="location.href='/${slug}'">
-          <div class="mkt-cat">${cap(m.category || 'general')}</div>
-          <div class="mkt-q">${m.question}</div>
-          <div class="mkt-bar-wrap"><div class="mkt-bar-fill" style="width:${yp !== null ? yp : 50}%;opacity:${yp !== null ? 1 : 0.3}"></div></div>
-          <div class="mkt-odds">
-            ${yp !== null
-              ? `<div class="mkt-yes">${yp}% YES</div><div class="mkt-no">${np}% NO</div>`
-              : `<div class="mkt-yes" style="color:var(--muted);font-size:11px">No predictions yet</div>`}
-          </div>
-          <div class="mkt-meta">${m.trader_count || 0} traders · closes ${new Date(m.expiry_date).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</div>
-        </div>`;
-    }).join('');
-  }
+  profileActiveMarkets = [...active].sort((a,b) => (b.trader_count||0) - (a.trader_count||0));
+  renderProfileMarkets(profileActiveMarkets);
 
   // Leaderboard
   const top = (Array.isArray(leaderboard) ? leaderboard : []).slice(0, 5);

@@ -2815,7 +2815,7 @@ body.nav-open .sidebar-backdrop {
         </div>
         <div class="view-toggle" title="Switch views">
           <span class="view-toggle-btn active">🛠 Creator</span>
-          <a href="#" id="toggleToMemberBtn" class="view-toggle-btn" onclick="goToMemberView(event)">👤 Member</a>
+          <a href="#" id="toggleToMemberBtn" class="view-toggle-btn" onclick="goToMemberView(event)">👤 Member Dashboard</a>
         </div>
         <a id="viewCommunityBtn" href="#" target="_blank" class="btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:5px;font-size:13px">👁 <span class="scanner-label">View Community</span></a>
         <a id="viewProfileBtn" href="#" target="_blank" class="btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:5px;font-size:13px">👤 <span class="scanner-label">Profile</span></a>
@@ -3049,6 +3049,9 @@ body.nav-open .sidebar-backdrop {
           <button onclick="handlePlanPillClick()" style="background:#c9920d;color:#141412;border:none;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap;font-family:inherit">Upgrade to Pro →</button>
         </div>
         <div class="section">
+          <div style="margin-bottom:14px">
+            <input type="search" id="mktSearchInput" placeholder="🔍 Search your markets…" oninput="onDashMarketSearch(this.value)" style="width:100%;box-sizing:border-box;padding:10px 14px;border-radius:10px;border:1.5px solid #2a2a27;background:#1c1c19;color:#e8e3d5;font-size:14px;font-family:inherit;outline:none" />
+          </div>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
             <div class="mkt-filter-pills">
               <button class="mkt-pill active" onclick="filterMarkets('live')" id="mktPillLive">Live <span class="mkt-pill-count" id="mktCountLive">0</span></button>
@@ -5272,6 +5275,15 @@ function renderMarketRows(markets, containerId) {
 }
 
 let currentMarketFilter = 'live';
+let _dashMktSearchQuery = '';
+let _dashMktSearchTimer = null;
+function onDashMarketSearch(val) {
+  clearTimeout(_dashMktSearchTimer);
+  _dashMktSearchTimer = setTimeout(() => {
+    _dashMktSearchQuery = val.trim().toLowerCase();
+    filterMarkets(currentMarketFilter);
+  }, 180);
+}
 function filterMarkets(filter) {
   currentMarketFilter = filter;
   ['live','expired','archived'].forEach(f => {
@@ -5281,12 +5293,15 @@ function filterMarkets(filter) {
   const newMktBtn = document.getElementById('newMarketBtn');
   if (newMktBtn) newMktBtn.style.display = filter === 'archived' ? 'none' : '';
   const now = new Date();
-  const filtered = communityMarkets.filter(m => {
+  let filtered = communityMarkets.filter(m => {
     if (filter === 'live')     return !m.archived && !m.resolved && new Date(m.expiry_date) >= now;
     if (filter === 'expired')  return !m.archived && (m.resolved || new Date(m.expiry_date) < now);
     if (filter === 'archived') return m.archived;
     return true;
   });
+  if (_dashMktSearchQuery) {
+    filtered = filtered.filter(m => (m.question||'').toLowerCase().includes(_dashMktSearchQuery));
+  }
   renderMarketRows(filtered, 'allMarketsList');
 }
 
