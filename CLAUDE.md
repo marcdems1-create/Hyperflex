@@ -40,7 +40,7 @@
 
 ---
 
-## Current State (last updated March 16, 2026 — session 6)
+## Current State (last updated March 16, 2026 — session 7)
 
 - All features committed locally. Latest commit pending — needs push
 - **Stripe payments live** — Pro ($29/mo) + Premium ($99/mo) checkout + billing portal
@@ -178,6 +178,23 @@
 
 ---
 
+## Session 7 — Multi-option markets (commit `fb9c67d`)
+
+**Q — Multi-option markets** — creators can now create markets with 3–6 answer options instead of just YES/NO:
+
+- **Create modal**: Binary/Multi-option toggle. Multi-option reveals an options builder — add/remove up to 6 options, enter labels + starting %, "Balance %" auto-splits evenly. Validation: all pcts must sum to 100.
+- **`POST /markets`**: accepts `options[]` array (`[{label, pct}]`), stores normalised as JSONB in `options` column. `null` = binary (unchanged).
+- **`/trade`**: multi-option branch already in place (vote-share parimutuel: `payout = amount / (pct/100)`). Options array updated with new vote counts + recalculated pcts.
+- **`POST /markets/:id/resolve`**: validates outcome against option labels for multi-option; winners identified by `pos.side === outcome`; payout uses stored `potential_payout`, credits `community_balances`.
+- **Community card**: segmented colour bar (up to 6 colours); N coloured option bet buttons replace YES/NO.
+- **Predict modal**: shows multi-option grid buttons (label + live % + payout multiplier per option); `updatePayout`/`updateMultiplier` calculate from option pct.
+- **Resolve modal** (creator dashboard): renders option label buttons instead of YES/NO; AI suggestion hidden for multi-option (not yet supported).
+- **Migration**: `supabase_migration_multi_option.sql` → `ALTER TABLE markets ADD COLUMN IF NOT EXISTS options JSONB`
+
+**New migration to run:** 20. `supabase_migration_multi_option.sql`
+
+---
+
 ## Known Issues / Next Up
 
 - **Creator referral acceptance**: `accepted` on `creator_referrals` currently stays false — need to flip it to true when the referred creator publishes their first market (currently manual via admin or future automation)
@@ -207,6 +224,7 @@
   17. `supabase_migration_market_disputes.sql`
   18. `supabase_migration_creator_follows.sql`
 19. `supabase_migration_email_unsubscribe.sql`
+20. `supabase_migration_multi_option.sql`
 - **Email notifications**: Opt-in via Railway env vars: `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
   - Fires after both manual resolve and cron settlement
   - No-op if SMTP_HOST is not set — safe to deploy without configuring
