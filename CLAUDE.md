@@ -195,6 +195,37 @@
 
 ---
 
+## Session 7 continued — view toggle, search, Discord, notifications (commit `ee1733c`)
+
+**R — Creator/Member view toggle:**
+- Styled pill toggle in creator dashboard topbar: 🛠 Creator (active) | 👤 Member (links to own community)
+- Same toggle in community creatorLoginBar when creator views their own community: 🛠 Creator | 👤 Member (active)
+- Replaces the old plain-text "← Back to Dashboard" bar
+
+**S — Market search on community page:**
+- Instant search input above market grid; debounced 180ms, client-side on `market.question`
+- Respects active category filter + sort mode simultaneously; shows result count
+
+**T — Discord webhook integration:**
+- Creator pastes incoming webhook URL in Settings → Discord Integration
+- `sendDiscordWebhook()` fires from POST /markets + PUT /markets on publish transition
+- Rich embed: question, category, close date, multi-option list; community brand color
+- Test button sends test embed directly from browser; `PUT /api/creator/discord-webhook`
+- Migration: `supabase_migration_discord_webhook.sql`
+
+**U — In-app notification bell:**
+- 🔔 bell + unread badge in community header AND creator dashboard topbar
+- Dropdown: last 30 notifications, unread gold-highlighted, mark-all-read, click → navigate
+- Types: `you_won`, `you_lost` (resolution payout loop), `new_market` (on publish)
+- `pushNotification()` helper — non-blocking; `GET /api/notifications`, `POST /api/notifications/read`
+- Migration: `supabase_migration_notifications.sql`
+
+**New migrations to run:**
+21. `supabase_migration_discord_webhook.sql`
+22. `supabase_migration_notifications.sql`
+
+---
+
 ## Known Issues / Next Up
 
 - **Creator referral acceptance**: `accepted` on `creator_referrals` currently stays false — need to flip it to true when the referred creator publishes their first market (currently manual via admin or future automation)
@@ -225,6 +256,8 @@
   18. `supabase_migration_creator_follows.sql`
 19. `supabase_migration_email_unsubscribe.sql`
 20. `supabase_migration_multi_option.sql`
+21. `supabase_migration_discord_webhook.sql`
+22. `supabase_migration_notifications.sql`
 - **Email notifications**: Opt-in via Railway env vars: `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
   - Fires after both manual resolve and cron settlement
   - No-op if SMTP_HOST is not set — safe to deploy without configuring
