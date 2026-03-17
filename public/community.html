@@ -2284,10 +2284,17 @@ function renderPage(data) {
   renderFAQ(c.custom_points_name);
 
   // Deep-link: ?market=<id> scrolls to and highlights the specific card
-  const deepMarketId = new URLSearchParams(window.location.search).get('market');
+  const _deepParams   = new URLSearchParams(window.location.search);
+  const deepMarketId  = _deepParams.get('market');
+  const deepComments  = _deepParams.get('comments') === '1';
   if (deepMarketId) {
     try { window.history.replaceState({}, '', window.location.pathname); } catch {}
-    setTimeout(() => openMarket(deepMarketId), 120);
+    if (deepComments) {
+      // Scroll to card and open the comments panel instead of the predict modal
+      setTimeout(() => openMarketComments(deepMarketId), 120);
+    } else {
+      setTimeout(() => openMarket(deepMarketId), 120);
+    }
   }
 }
 
@@ -2417,6 +2424,30 @@ function openMarket(id) {
     }, 80);
   };
   scrollAndHighlight();
+}
+
+// Open a market's comments panel (used when arriving via ?comments=1 from explore)
+function openMarketComments(id) {
+  setViewTab('markets');
+  if (currentFilter !== 'all') setFilter('all');
+  setTimeout(() => {
+    const card = document.querySelector(`[data-market-id="${id}"]`);
+    if (!card) return;
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    card.style.transition = 'box-shadow .15s';
+    card.style.boxShadow = '0 0 0 2px var(--gold)';
+    setTimeout(() => { card.style.boxShadow = ''; }, 1600);
+    // Open the comments panel if not already open
+    const commentPanel = document.getElementById(`comments-${id}`);
+    if (commentPanel && commentPanel.style.display === 'none') {
+      toggleComments(id);
+    }
+    // Focus the comment input
+    setTimeout(() => {
+      const input = document.getElementById(`commentInput-${id}`);
+      if (input) input.focus();
+    }, 300);
+  }, 80);
 }
 
 // ── CONSENSUS ────────────────────────────────────────────────

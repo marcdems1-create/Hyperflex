@@ -1041,7 +1041,8 @@ function activityCard(a) {
 
   if (a.type === 'comment') {
     const initials2 = (a.user || '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
-    return `<a class="activity-card" href="${marketUrl}">
+    const commentUrl = a.market_id ? `/${a.creator_slug}?market=${a.market_id}&comments=1` : communityUrl;
+    return `<a class="activity-card" href="${commentUrl}">
       <div class="ac-avatar" style="background:${color}">${initials2}</div>
       <div class="ac-body">
         <div class="ac-header">
