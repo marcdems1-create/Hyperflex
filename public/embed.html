@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>HYPERFLEX — Prediction Markets</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{--gold:#c9920d;--bg:#141412;--card:#1c1c19;--border:#2a2a27;--text:#ddd8cc;--dim:#6b6760;--mono:'Space Mono',monospace}
+  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Space+Mono:wght@400;700&display=swap');
+  html,body{width:100%;height:100%;background:var(--bg);font-family:'Syne',sans-serif;color:var(--text)}
+  body{display:flex;flex-direction:column;gap:0;overflow:hidden}
+
+  .widget-header{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:12px 14px 10px;
+    border-bottom:1px solid var(--border);
+    background:var(--card);
+    flex-shrink:0;
+  }
+  .widget-community{display:flex;align-items:center;gap:8px}
+  .widget-dot{width:8px;height:8px;border-radius:50%;animation:pulse 2s ease-in-out infinite;flex-shrink:0}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+  .widget-name{font-size:13px;font-weight:800;letter-spacing:0.02em}
+  .widget-badge{font-size:10px;font-family:var(--mono);color:var(--dim);letter-spacing:0.06em;text-transform:uppercase}
+  .widget-cta{
+    font-size:11px;font-family:var(--mono);font-weight:700;
+    color:var(--gold);text-decoration:none;letter-spacing:0.04em;
+    padding:5px 10px;border:1px solid rgba(201,146,13,0.3);
+    border-radius:5px;background:rgba(201,146,13,0.08);
+    transition:background .15s;
+  }
+  .widget-cta:hover{background:rgba(201,146,13,0.18)}
+
+  .markets-list{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:0}
+  .market-row{
+    display:flex;flex-direction:column;gap:7px;
+    padding:12px 14px;
+    border-bottom:1px solid var(--border);
+    text-decoration:none;color:var(--text);
+    transition:background .12s;
+  }
+  .market-row:hover{background:rgba(255,255,255,0.03)}
+  .market-row:last-child{border-bottom:none}
+  .market-q{font-size:12px;font-weight:700;line-height:1.4;font-family:var(--mono)}
+  .market-bar{height:3px;background:#2a2a27;border-radius:2px;overflow:hidden}
+  .market-fill{height:100%;border-radius:2px;transition:width .3s}
+  .market-odds{display:flex;justify-content:space-between;font-size:10px;font-family:var(--mono);font-weight:700}
+  .market-traders{font-size:10px;font-family:var(--mono);color:var(--dim);text-align:right;margin-top:2px}
+
+  .empty{display:flex;align-items:center;justify-content:center;flex:1;font-size:12px;font-family:var(--mono);color:var(--dim);padding:24px;text-align:center;line-height:1.6}
+  .loading{display:flex;align-items:center;justify-content:center;flex:1;font-size:11px;font-family:var(--mono);color:var(--dim)}
+
+  .widget-footer{
+    padding:8px 14px;
+    background:rgba(201,146,13,0.04);
+    border-top:1px solid rgba(201,146,13,0.12);
+    display:flex;align-items:center;justify-content:space-between;
+    flex-shrink:0;
+  }
+  .footer-logo{display:flex;align-items:center;gap:5px;text-decoration:none}
+  .footer-logo-text{font-size:10px;font-family:var(--mono);font-weight:700;color:var(--dim);letter-spacing:0.08em}
+  .footer-logo svg{width:14px;height:14px;flex-shrink:0}
+  .footer-pts{font-size:10px;font-family:var(--mono);color:var(--dim)}
+
+  ::-webkit-scrollbar{width:3px}
+  ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:2px}
+</style>
+</head>
+<body>
+
+<div class="widget-header">
+  <div class="widget-community">
+    <div class="widget-dot" id="headerDot" style="background:#c9920d"></div>
+    <div class="widget-name" id="headerName">Loading…</div>
+  </div>
+  <a class="widget-cta" id="headerCta" href="#" target="_blank" rel="noopener">Join →</a>
+</div>
+
+<div class="markets-list" id="marketsList">
+  <div class="loading">Loading markets…</div>
+</div>
+
+<div class="widget-footer">
+  <a class="footer-logo" href="https://hyperflex.network" target="_blank" rel="noopener">
+    <svg viewBox="0 0 32 32" fill="none">
+      <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="#c9920d" stroke-width="1.5" fill="rgba(201,146,13,0.1)"/>
+      <path d="M16 8L22 11.5V18.5L16 22L10 18.5V11.5L16 8Z" fill="#c9920d" opacity="0.6"/>
+    </svg>
+    <span class="footer-logo-text">HYPERFLEX</span>
+  </a>
+  <div class="footer-pts" id="footerPts">Play-money predictions</div>
+</div>
+
+<script>
+(async function() {
+  const slug = location.pathname.replace('/embed/', '').replace(/\/$/, '');
+  try {
+    const res  = await fetch('/api/embed/' + slug);
+    const data = await res.json();
+    if (!res.ok || !data.community) throw new Error(data.error || 'Not found');
+
+    const { community, markets } = data;
+    const color = community.color || '#c9920d';
+
+    document.getElementById('headerDot').style.background   = color;
+    document.getElementById('headerName').textContent       = community.name;
+    document.getElementById('headerCta').href               = community.url;
+    document.getElementById('footerPts').textContent        = community.pts_name + ' · play-money';
+
+    if (!markets.length) {
+      document.getElementById('marketsList').innerHTML = '<div class="empty">No open markets yet.<br/>Be the first to predict!</div>';
+      return;
+    }
+
+    document.getElementById('marketsList').innerHTML = markets.map(m => {
+      const total = (m.yes_votes || 0) + (m.no_votes || 0);
+      const yesPct = total > 0 ? Math.round((m.yes_votes / total) * 100) : null;
+      const noPct  = yesPct !== null ? 100 - yesPct : null;
+      const barColor = yesPct !== null ? (yesPct >= 50 ? '#22c55e' : '#ef4444') : 'rgba(255,255,255,0.2)';
+      const url = community.url + '?market=' + m.id;
+      return `<a class="market-row" href="${url}" target="_blank" rel="noopener">
+        <div class="market-q">${escHtml(m.question)}</div>
+        <div class="market-bar"><div class="market-fill" style="width:${yesPct !== null ? yesPct : 50}%;background:${barColor};opacity:${yesPct !== null ? 1 : 0.35}"></div></div>
+        ${yesPct !== null
+          ? `<div class="market-odds"><span style="color:#22c55e">YES ${yesPct}%</span><span style="color:#ef4444">NO ${noPct}%</span></div>`
+          : `<div class="market-odds" style="justify-content:center"><span style="color:var(--dim);font-size:9px">🎯 First prediction</span></div>`}
+        <div class="market-traders">${m.trader_count > 0 ? m.trader_count.toLocaleString() + ' traders' : 'Be first to predict'}</div>
+      </a>`;
+    }).join('');
+  } catch(e) {
+    document.getElementById('marketsList').innerHTML = '<div class="empty">Could not load markets.</div>';
+  }
+})();
+
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+</script>
+</body>
+</html>

@@ -859,6 +859,12 @@ nav {
       <div class="sidebar-title">LATEST ANNOUNCEMENTS</div>
       <div id="announcements-list"><div class="loading" style="padding:16px 0;">Loading...</div></div>
     </div>
+    <!-- FOLLOWING -->
+    <div class="sidebar-card" id="followingCard" style="display:none">
+      <div class="sidebar-title">FOLLOWING</div>
+      <div id="following-list"></div>
+    </div>
+
     <!-- NOMINATE CTA -->
     <a href="/nominate" style="display:block;background:linear-gradient(135deg,#1d1b13 0%,#191917 100%);border:1px solid rgba(201,146,13,0.3);border-radius:var(--radius);padding:16px 18px;text-decoration:none;transition:border-color 0.2s;" onmouseover="this.style.borderColor='rgba(201,146,13,0.7)'" onmouseout="this.style.borderColor='rgba(201,146,13,0.3)'">
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--gold);margin-bottom:6px">For Fans</div>
@@ -877,6 +883,31 @@ let activityData = [];
 let activityLatestTs = null;
 let newActivityCount = 0;
 let activityPollInterval = null;
+let _exploreFollowing = [];
+
+// Load following list if logged in
+(async function loadFollowing() {
+  const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token');
+  if (!token) return;
+  try {
+    const r = await fetch('/api/user/following', { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) return;
+    const d = await r.json();
+    _exploreFollowing = d.following || [];
+    if (!_exploreFollowing.length) return;
+    const card = document.getElementById('followingCard');
+    const list = document.getElementById('following-list');
+    if (!card || !list) return;
+    card.style.display = 'block';
+    list.innerHTML = _exploreFollowing.map(slug => `
+      <a href="/${slug}" style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);text-decoration:none;color:var(--text);" onmouseover="this.style.color='#c9920d'" onmouseout="this.style.color='var(--text)'">
+        <div style="width:28px;height:28px;border-radius:50%;background:#c9920d22;border:1px solid rgba(201,146,13,0.3);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#c9920d;flex-shrink:0">${slug[0].toUpperCase()}</div>
+        <span style="font-size:13px;font-weight:600">${slug}</span>
+        <span style="font-size:10px;color:#c9920d;margin-left:auto;font-family:monospace">→</span>
+      </a>`).join('');
+    list.lastElementChild && (list.lastElementChild.style.borderBottom = 'none');
+  } catch {}
+})();
 
 function switchTab(tab) {
   activeTab = tab;

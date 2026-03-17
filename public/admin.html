@@ -478,6 +478,7 @@
     <div style="display:flex;gap:8px;margin-bottom:20px">
       <button class="admin-tab active" id="tabBtnCreators" onclick="showAdminTab('creators')">Creators</button>
       <button class="admin-tab" id="tabBtnUsers" onclick="showAdminTab('users')">All Users</button>
+      <button class="admin-tab" id="tabBtnOutreach" onclick="showAdminTab('outreach')">✉️ Outreach</button>
     </div>
 
     <!-- Creators tab -->
@@ -560,6 +561,67 @@
         </table>
       </div>
     </div>
+
+    <!-- Outreach tab -->
+    <div id="adminTabOutreach" style="display:none">
+      <div class="section-header" style="margin-bottom:20px">
+        <div>
+          <div class="section-title">✉️ Creator Outreach</div>
+          <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:3px">Send personalized invite emails to potential creators. Each invite is tracked.</div>
+        </div>
+      </div>
+
+      <!-- Compose invite -->
+      <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:24px;margin-bottom:28px">
+        <div style="font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:16px">Compose Invite</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+          <div>
+            <label style="font-size:11px;color:rgba(255,255,255,0.4);display:block;margin-bottom:6px;font-family:var(--mono);letter-spacing:.04em">CREATOR NAME</label>
+            <input class="filter-input" id="inviteName" placeholder="e.g. Marques Brownlee" style="margin:0;width:100%"/>
+          </div>
+          <div>
+            <label style="font-size:11px;color:rgba(255,255,255,0.4);display:block;margin-bottom:6px;font-family:var(--mono);letter-spacing:.04em">EMAIL ADDRESS</label>
+            <input class="filter-input" id="inviteEmail" type="email" placeholder="creator@gmail.com" style="margin:0;width:100%"/>
+          </div>
+        </div>
+        <div style="margin-bottom:14px">
+          <label style="font-size:11px;color:rgba(255,255,255,0.4);display:block;margin-bottom:6px;font-family:var(--mono);letter-spacing:.04em">YOUTUBE / CHANNEL URL (optional)</label>
+          <input class="filter-input" id="inviteChannel" placeholder="https://youtube.com/@mkbhd" style="margin:0;width:100%"/>
+        </div>
+        <div style="margin-bottom:14px">
+          <label style="font-size:11px;color:rgba(255,255,255,0.4);display:block;margin-bottom:6px;font-family:var(--mono);letter-spacing:.04em">PERSONAL NOTE (optional — shown in email)</label>
+          <textarea id="inviteNote" placeholder="Hey [Name], huge fan of your channel — I think your community would love this..." style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:10px 12px;color:#ddd8cc;font-family:inherit;font-size:13px;resize:vertical;min-height:72px;box-sizing:border-box"></textarea>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <button class="refresh-btn" onclick="sendCreatorInvite()" style="background:rgba(201,146,13,0.2);border-color:rgba(201,146,13,0.5);color:#c9920d;padding:8px 20px">Send Invite Email</button>
+          <button class="refresh-btn" onclick="previewInviteEmail()" style="padding:8px 16px">Preview</button>
+          <div id="inviteStatus" style="font-size:12px;color:rgba(255,255,255,0.4)"></div>
+        </div>
+      </div>
+
+      <!-- Invite history -->
+      <div class="section-header" style="margin-bottom:12px">
+        <div class="section-title" style="font-size:14px">Sent Invites</div>
+        <button class="refresh-btn" onclick="loadInvites()">↺ Refresh</button>
+      </div>
+      <div class="table-wrap">
+        <div class="table-msg" id="invitesMsg"><span class="spinner-inline"></span> Loading…</div>
+        <table id="invitesTable" style="display:none">
+          <thead>
+            <tr>
+              <th>Creator Name</th>
+              <th>Email</th>
+              <th>Channel</th>
+              <th>Sent</th>
+              <th>Status</th>
+              <th>Signed Up</th>
+            </tr>
+          </thead>
+          <tbody id="invitesBody"></tbody>
+        </table>
+      </div>
+    </div>
+
   </main>
 </div>
 
@@ -647,12 +709,75 @@ async function loadCreators() {
 
 // ── Admin tabs ────────────────────────────────────────────
 function showAdminTab(tab) {
-  ['creators','users'].forEach(t => {
+  ['creators','users','outreach'].forEach(t => {
     document.getElementById('adminTab' + t.charAt(0).toUpperCase() + t.slice(1)).style.display = t === tab ? 'block' : 'none';
     document.getElementById('tabBtn' + t.charAt(0).toUpperCase() + t.slice(1)).classList.toggle('active', t === tab);
   });
   if (tab === 'users' && !allUsers.length) loadUsers();
+  if (tab === 'outreach') loadInvites();
 }
+
+// ── Outreach ──────────────────────────────────────────────
+async function loadInvites() {
+  const msg = document.getElementById('invitesMsg');
+  const tbl = document.getElementById('invitesTable');
+  msg.style.display = 'block'; tbl.style.display = 'none';
+  try {
+    const r = await fetch(API + '/api/admin/invites?secret=' + encodeURIComponent(adminSecret));
+    const data = await r.json();
+    const rows = data.invites || [];
+    if (!rows.length) { msg.textContent = 'No invites sent yet.'; return; }
+    document.getElementById('invitesBody').innerHTML = rows.map(i => `
+      <tr>
+        <td>${escHtml(i.name || '')}</td>
+        <td style="font-family:var(--mono);font-size:12px">${escHtml(i.email || '')}</td>
+        <td style="font-size:12px">${i.channel_url ? `<a href="${escHtml(i.channel_url)}" target="_blank" style="color:#c9920d">↗</a>` : '—'}</td>
+        <td style="font-size:12px;color:rgba(255,255,255,0.4)">${new Date(i.sent_at).toLocaleDateString()}</td>
+        <td><span style="font-size:11px;padding:2px 8px;border-radius:4px;background:${i.accepted ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.06)'};color:${i.accepted ? '#22c55e' : 'rgba(255,255,255,0.4)'}">${i.accepted ? '✓ Signed up' : 'Pending'}</span></td>
+        <td style="font-size:12px;color:rgba(255,255,255,0.4)">${i.accepted_at ? new Date(i.accepted_at).toLocaleDateString() : '—'}</td>
+      </tr>`).join('');
+    msg.style.display = 'none'; tbl.style.display = 'table';
+  } catch(e) { msg.textContent = 'Error: ' + e.message; }
+}
+
+async function sendCreatorInvite() {
+  const name    = document.getElementById('inviteName').value.trim();
+  const email   = document.getElementById('inviteEmail').value.trim();
+  const channel = document.getElementById('inviteChannel').value.trim();
+  const note    = document.getElementById('inviteNote').value.trim();
+  const status  = document.getElementById('inviteStatus');
+  if (!name || !email) { status.textContent = '⚠ Name and email are required'; status.style.color = '#ef4444'; return; }
+  status.textContent = 'Sending…'; status.style.color = 'rgba(255,255,255,0.4)';
+  try {
+    const r = await fetch(API + '/api/admin/invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ secret: adminSecret, name, email, channel_url: channel, note })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Failed');
+    status.textContent = '✓ Invite sent!'; status.style.color = '#22c55e';
+    document.getElementById('inviteName').value = '';
+    document.getElementById('inviteEmail').value = '';
+    document.getElementById('inviteChannel').value = '';
+    document.getElementById('inviteNote').value = '';
+    loadInvites();
+  } catch(e) { status.textContent = '✗ ' + e.message; status.style.color = '#ef4444'; }
+}
+
+function previewInviteEmail() {
+  const name = document.getElementById('inviteName').value.trim() || 'Creator';
+  const note = document.getElementById('inviteNote').value.trim();
+  const preview = `Subject: Your community deserves a prediction market, ${name}\n\n` +
+    `Hey ${name},\n\n` +
+    (note ? note + '\n\n' : '') +
+    `I wanted to personally invite you to HYPERFLEX — a platform that turns your YouTube content into a live prediction game for your community.\n\n` +
+    `Your audience predicts on your content, competes on a leaderboard, and earns rewards you design. AI scans your videos to generate the markets automatically.\n\n` +
+    `Free to start. Live in 5 minutes.\n\nhttps://hyperflex.network\n\n— Marc, HYPERFLEX`;
+  alert(preview);
+}
+
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 // ── Platform stats ────────────────────────────────────────
 async function loadPlatformStats() {

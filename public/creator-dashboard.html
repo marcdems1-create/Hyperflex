@@ -3021,6 +3021,20 @@ body.nav-open .sidebar-backdrop {
             <div class="loading-row">Loading...</div>
           </div>
         </div>
+
+        <!-- Member Disputes -->
+        <div class="section">
+          <div class="section-header">
+            <div>
+              <div class="section-title">⚠️ Member Disputes</div>
+              <div class="section-subtitle">Members who challenged a resolution within 24 hours</div>
+            </div>
+            <button class="btn-secondary" onclick="loadDisputes()" style="font-size:12px">↺ Refresh</button>
+          </div>
+          <div id="disputesList" style="margin-top:4px">
+            <div class="loading-row">Loading disputes…</div>
+          </div>
+        </div>
       </div>
 
       <!-- Leaderboard Tab -->
@@ -3104,6 +3118,30 @@ body.nav-open .sidebar-backdrop {
             <div id="shareTemplates"></div>
           </div>
         </div>
+        <!-- Creator referral -->
+        <div class="section">
+          <div class="share-section">
+            <div class="share-title">🤝 Refer a Creator — Earn Free Pro</div>
+            <p style="font-size:13px;color:var(--dim);margin-bottom:16px;line-height:1.6">
+              Know another creator who'd love this? Send them your referral link. When they sign up and publish their first market, you both get <strong style="color:var(--text)">1 month of Pro free</strong>.
+            </p>
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+              <input id="creatorRefLink" readonly onclick="this.select()" style="flex:1;min-width:200px;background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:var(--mono);font-size:12px" value="Loading…"/>
+              <button class="btn-primary" style="font-size:12px;padding:9px 16px;white-space:nowrap" onclick="copyCreatorRefLink()">📋 Copy</button>
+            </div>
+            <div style="display:flex;gap:20px;flex-wrap:wrap">
+              <div style="background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;padding:14px 18px;flex:1;min-width:120px;text-align:center">
+                <div style="font-family:var(--mono);font-size:22px;font-weight:700;color:var(--gold)" id="refCreatorCount">—</div>
+                <div style="font-size:11px;color:var(--dim);margin-top:4px;font-family:var(--mono)">Creators referred</div>
+              </div>
+              <div style="background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;padding:14px 18px;flex:1;min-width:120px;text-align:center">
+                <div style="font-family:var(--mono);font-size:22px;font-weight:700;color:#22c55e" id="refCreatorEarned">—</div>
+                <div style="font-size:11px;color:var(--dim);margin-top:4px;font-family:var(--mono)">Months earned</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="section">
           <div class="share-section">
             <div class="share-title">📱 QR Code</div>
@@ -3246,6 +3284,29 @@ body.nav-open .sidebar-backdrop {
             </div>
             <div id="crError" style="display:none;font-size:12px;color:#ef4444;margin-bottom:12px;font-family:var(--mono);padding:10px 12px;background:rgba(239,68,68,0.08);border-radius:6px;border:1px solid rgba(239,68,68,0.2)"></div>
             <button class="btn-primary" onclick="submitCreatorChangePassword()">Update Password</button>
+          </div>
+        </div>
+
+        <!-- Embed Widget -->
+        <div class="section">
+          <div class="section-header">
+            <div>
+              <div class="section-title">🔗 Embed Widget</div>
+              <div class="section-subtitle">Drop your prediction markets anywhere — website, Substack, bio link, or newsletter</div>
+            </div>
+          </div>
+          <div class="markets-table" style="padding:20px 24px">
+            <div style="font-size:13px;color:var(--dim);margin-bottom:14px;line-height:1.6">Copy this code and paste it into any webpage or site builder. The widget shows your top 3 live markets, themed to your community colors, and links directly to your page.</div>
+            <div style="position:relative">
+              <textarea id="embedCodeArea" readonly onclick="this.select()" style="width:100%;background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:8px;padding:12px 14px;color:var(--text);font-family:var(--mono);font-size:11px;resize:none;height:80px;cursor:text;line-height:1.6"></textarea>
+            </div>
+            <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap">
+              <button class="btn-primary" style="font-size:12px;padding:8px 16px" onclick="copyEmbedCode()">📋 Copy Code</button>
+              <a id="embedPreviewLink" href="#" target="_blank" class="btn-secondary" style="font-size:12px;padding:8px 16px;text-decoration:none">👁 Preview Widget</a>
+            </div>
+            <div style="margin-top:16px;font-size:12px;color:var(--dim);line-height:1.7">
+              💡 <strong style="color:var(--text)">Works in:</strong> Squarespace, Wix, Webflow, Notion, Substack (embed block), Linktree (custom HTML), any HTML page.
+            </div>
           </div>
         </div>
 
@@ -4835,6 +4896,16 @@ function renderDashboard(data) {
   renderRewardsList(data.rewards || []);
   renderSuggestedRewards();
 
+  // Embed widget code
+  if (creator.slug) {
+    const embedSlug = creator.slug;
+    const embedCode = `<iframe src="https://hyperflex.network/embed/${embedSlug}" width="380" height="320" frameborder="0" style="border-radius:12px;overflow:hidden" allow="*" title="${(creator.display_name || embedSlug)} Predictions"></iframe>`;
+    const codeArea = document.getElementById('embedCodeArea');
+    const previewLink = document.getElementById('embedPreviewLink');
+    if (codeArea) codeArea.value = embedCode;
+    if (previewLink) previewLink.href = 'https://hyperflex.network/embed/' + embedSlug;
+  }
+
   // Settings prefill
   document.getElementById('settingName').value = creator.display_name;
   document.getElementById('settingPoints').value = creator.custom_points_name;
@@ -5039,6 +5110,48 @@ function updateMarketCounts() {
 
 // Per-card AI suggestion cache: marketId -> { suggested_outcome, confidence, reasoning, loading, error }
 const cardSuggestions = new Map();
+
+async function loadDisputes() {
+  const el = document.getElementById('disputesList');
+  if (!el) return;
+  el.innerHTML = '<div class="loading-row">Loading disputes…</div>';
+  try {
+    const r = await fetch(API + '/api/creator/disputes', { headers: { Authorization: 'Bearer ' + token } });
+    const d = await r.json();
+    const disputes = d.disputes || [];
+    if (!disputes.length) { el.innerHTML = '<div class="loading-row" style="color:var(--dim)">No disputes filed.</div>'; return; }
+    el.innerHTML = disputes.map(dp => {
+      const mkt = dp.markets;
+      const statusColor = dp.status === 'open' ? '#f59e0b' : dp.status === 'upheld' ? '#22c55e' : '#ef4444';
+      const statusLabel = dp.status === 'open' ? '⏳ Open' : dp.status === 'upheld' ? '✓ Upheld' : '↩ Overturned';
+      return `<div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:10px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px">
+          <div style="font-size:13px;font-weight:700;color:var(--text);font-family:var(--mono);line-height:1.4;flex:1">${escHtml(mkt?.question || '—')}</div>
+          <span style="font-size:11px;padding:3px 8px;border-radius:4px;background:${statusColor}20;color:${statusColor};font-family:var(--mono);font-weight:700;white-space:nowrap;flex-shrink:0">${statusLabel}</span>
+        </div>
+        <div style="font-size:12px;color:var(--dim);margin-bottom:8px">By <strong style="color:var(--text)">${escHtml(dp.user_name || 'Anonymous')}</strong> · ${new Date(dp.created_at).toLocaleDateString()}</div>
+        <div style="font-size:13px;color:rgba(220,215,205,0.8);line-height:1.6;padding:10px 12px;background:rgba(239,68,68,0.05);border-left:3px solid rgba(239,68,68,0.3);border-radius:0 6px 6px 0;margin-bottom:${dp.status === 'open' ? '12px' : '0'}">${escHtml(dp.reason)}</div>
+        ${dp.status === 'open' ? `<div style="display:flex;gap:8px">
+          <button class="btn-secondary" style="font-size:12px;padding:6px 14px" onclick="reviewDispute('${dp.id}','upheld')">✓ Uphold Resolution</button>
+          <button class="btn-secondary" style="font-size:12px;padding:6px 14px;color:#ef4444;border-color:rgba(239,68,68,0.3)" onclick="reviewDispute('${dp.id}','overturned')">↩ Overturn</button>
+        </div>` : ''}
+      </div>`;
+    }).join('');
+  } catch(e) { el.innerHTML = '<div class="loading-row" style="color:#ef4444">Error loading disputes.</div>'; }
+}
+
+async function reviewDispute(disputeId, decision) {
+  try {
+    const r = await fetch(API + '/api/creator/disputes/' + disputeId + '/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ decision })
+    });
+    if (!r.ok) throw new Error((await r.json()).error);
+    showToast(decision === 'upheld' ? 'Resolution upheld ✓' : 'Marked as overturned — remember to re-resolve the market.', decision === 'upheld' ? 'success' : 'info');
+    loadDisputes();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
 
 function renderResolveList(items, containerId) {
   const el = document.getElementById(containerId);
@@ -5321,6 +5434,8 @@ function showTab(tab) {
   document.getElementById('topbarTitle').textContent = titles[tab] || tab;
   if (tab === 'analytics' && !analyticsLoaded) loadAnalytics();
   if (tab === 'ideas' && !ideasLoaded) loadMarketIdeas(false);
+  if (tab === 'share') loadCreatorReferralStats();
+  if (tab === 'resolve') loadDisputes();
   if (tab === 'markets') {
     const sec = document.getElementById('suggestionsSection');
     if (sec && sec.style.display !== 'none') loadSuggestions();
@@ -7181,6 +7296,32 @@ function copyLink() {
 }
 function copyText(text) {
   navigator.clipboard.writeText(text).then(() => showToast('Copied! 📋', 'success'));
+}
+function copyEmbedCode() {
+  const area = document.getElementById('embedCodeArea');
+  if (!area) return;
+  navigator.clipboard.writeText(area.value).then(() => showToast('Embed code copied! Paste it into your site 🔗', 'success'));
+}
+function copyCreatorRefLink() {
+  const el = document.getElementById('creatorRefLink');
+  if (!el) return;
+  navigator.clipboard.writeText(el.value).then(() => showToast('Referral link copied! 🤝', 'success'));
+}
+async function loadCreatorReferralStats() {
+  const slug = creatorData?.creator?.slug;
+  if (!slug) return;
+  const refLink = 'https://hyperflex.network/ref/' + slug;
+  const el = document.getElementById('creatorRefLink');
+  if (el) el.value = refLink;
+  try {
+    const r = await fetch(API + '/api/creator/referral-stats', { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) return;
+    const d = await r.json();
+    const countEl  = document.getElementById('refCreatorCount');
+    const earnedEl = document.getElementById('refCreatorEarned');
+    if (countEl)  countEl.textContent  = (d.referred_creators || 0).toString();
+    if (earnedEl) earnedEl.textContent = (d.months_earned || 0).toString();
+  } catch(e) {}
 }
 function shareTwitter() {
   if (!creatorData) return;

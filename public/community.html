@@ -2005,6 +2005,7 @@ let allRewards      = [];
     await Promise.all([fetchCommunityBalance(), fetchMyPositions()]);
     // Auto-follow if this is a returning user visiting a community they haven't joined yet
     if (communityBalance === null) await followCommunity();
+    loadFollowStatus();
     renderUserHeader();
     renderReferralSection();
   }
@@ -2678,10 +2679,16 @@ function marketCardHTML(m, isResolved, featured) {
       ? `<button onclick="event.stopPropagation();openWinCard(${JSON.stringify(m.question)},${JSON.stringify(community?.display_name||'')},${JSON.stringify(pos?.amount||0)},${JSON.stringify(m.id)},${JSON.stringify(currentUser?.id||'')})" style="background:rgba(201,146,13,0.15);border:1px solid rgba(201,146,13,0.4);color:#c9920d;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:700">🎉 Win Card</button>`
       : '';
     const shareBtn = `<button onclick="event.stopPropagation();shareMarket(this,${JSON.stringify(m.id)},${JSON.stringify(m.question)})" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);color:rgba(220,215,205,0.7);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:700" onmouseover="this.style.color='#c9920d'" onmouseout="this.style.color='rgba(220,215,205,0.7)'">↗ Share</button>`;
+    // Dispute button — only show if resolved within last 24h and user is logged in
+    const resolvedAt = m.resolved_at ? new Date(m.resolved_at) : null;
+    const withinWindow = resolvedAt && (Date.now() - resolvedAt.getTime() < 24 * 60 * 60 * 1000);
+    const disputeBtn = (withinWindow && currentUser)
+      ? `<button onclick="event.stopPropagation();openDisputeModal(${JSON.stringify(m.id)},${JSON.stringify(m.question)})" style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);color:rgba(248,113,113,0.8);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:700" title="Challenge this resolution within 24h">⚠ Dispute</button>`
+      : '';
     const noteHTML = m.resolution_note
       ? `<div style="font-size:11px;color:var(--dim);padding:8px 16px 10px;line-height:1.5;font-style:italic;border-top:1px solid rgba(255,255,255,0.06)">📌 ${escHtml(m.resolution_note)}</div>`
       : '';
-    outerHTML = `<div class="outcome-banner ${won ? 'yes' : 'no'}" style="display:flex;align-items:center;justify-content:space-between">${won ? '✓ Resolved YES' : '✗ Resolved NO'}<div style="display:flex;gap:6px;align-items:center">${winCardBtn}${shareBtn}</div></div>${noteHTML}`;
+    outerHTML = `<div class="outcome-banner ${won ? 'yes' : 'no'}" style="display:flex;align-items:center;justify-content:space-between">${won ? '✓ Resolved YES' : '✗ Resolved NO'}<div style="display:flex;gap:6px;align-items:center">${winCardBtn}${shareBtn}${disputeBtn}</div></div>${noteHTML}`;
   } else {
     innerActionsHTML = `
       <div class="market-actions-inline">
@@ -3398,6 +3405,7 @@ async function submitAuth() {
     await Promise.all([fetchCommunityBalance(), fetchMyPositions()]);
     // Auto-follow community on first login/register here
     if (communityBalance === null) await followCommunity();
+    loadFollowStatus();
     renderUserHeader();
     buildFilterCounts();
     renderFilteredMarkets();
@@ -3493,8 +3501,60 @@ function renderUserHeader() {
 
 // Follow community: creates a community_balances row with starting points.
 // Called automatically after login/register and can be triggered by Follow button.
+let _socialFollowing = false;
+
+async function loadFollowStatus() {
+  const token = localStorage.getItem('hf_token');
+  if (!token || !slug) return;
+  try {
+    const r = await fetch(`${API}/api/user/following`, { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) return;
+    const d = await r.json();
+    _socialFollowing = (d.following || []).includes(slug);
+    updateFollowBtn();
+  } catch {}
+}
+
+function updateFollowBtn() {
+  const btn = document.getElementById('heroFollowBtn');
+  if (!btn) return;
+  if (_socialFollowing) {
+    btn.textContent = '✓ Following';
+    btn.style.background = 'rgba(34,197,94,0.12)';
+    btn.style.borderColor = 'rgba(34,197,94,0.4)';
+    btn.style.color = '#4ade80';
+  } else {
+    btn.textContent = '🔔 Follow';
+    btn.style.background = 'rgba(201,146,13,0.15)';
+    btn.style.borderColor = 'rgba(201,146,13,0.4)';
+    btn.style.color = 'var(--gold)';
+  }
+}
+
+async function toggleSocialFollow() {
+  const token = localStorage.getItem('hf_token');
+  if (!token) return;
+  try {
+    const r = await fetch(`${API}/api/community/${slug}/follow-social`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    if (!r.ok) return;
+    const d = await r.json();
+    _socialFollowing = d.following;
+    updateFollowBtn();
+    showToast(_socialFollowing ? `Following ${community?.display_name || slug}! Their markets will appear in your feed. 🔔` : 'Unfollowed.', 'success');
+  } catch {}
+}
+
 async function followCommunity() {
   const token = localStorage.getItem('hf_token');
+  // Social follow toggle (always available when logged in)
+  if (currentUser && communityBalance !== null) {
+    await toggleSocialFollow();
+    return;
+  }
+  // Join community economy (first time)
   if (!token || !slug || communityBalance !== null) return;
   try {
     const r = await fetch(`${API}/api/community/${slug}/follow`, {
@@ -3507,6 +3567,9 @@ async function followCommunity() {
       renderUserHeader();
       const pts = community?.custom_points_name || 'pts';
       const bal = Math.floor(communityBalance / 100).toLocaleString();
+      // Also mark as socially following on first join
+      _socialFollowing = true;
+      updateFollowBtn();
       showToast(`Following! You've been given ${bal} ${pts} to start predicting. 🎯`, 'success');
     }
   } catch {}
@@ -4098,7 +4161,68 @@ function shareCommunity(anchorEl) {
   const text = `Join ${name} — predict the future with your community 🎯 #HyperFlex`;
   openShareSheet(anchorEl, url, text);
 }
+
+// ── Resolution Dispute ────────────────────────────────────────────────────────
+let _disputeMarketId = null;
+
+function openDisputeModal(marketId, question) {
+  _disputeMarketId = marketId;
+  document.getElementById('disputeQuestion').textContent = question;
+  document.getElementById('disputeReason').value = '';
+  document.getElementById('disputeError').textContent = '';
+  document.getElementById('disputeOverlay').classList.add('show');
+}
+function closeDisputeModal() {
+  document.getElementById('disputeOverlay').classList.remove('show');
+  _disputeMarketId = null;
+}
+async function submitDispute() {
+  const reason = document.getElementById('disputeReason').value.trim();
+  const errEl  = document.getElementById('disputeError');
+  const btn    = document.getElementById('disputeSubmitBtn');
+  if (!reason) { errEl.textContent = 'Please explain why you think the resolution is incorrect.'; return; }
+  if (!currentUser) { errEl.textContent = 'You must be logged in to dispute.'; return; }
+  const token = localStorage.getItem('hf_member_token');
+  btn.disabled = true; btn.textContent = 'Submitting…';
+  try {
+    const r = await fetch('/api/markets/' + _disputeMarketId + '/dispute', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ reason })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Failed');
+    closeDisputeModal();
+    showToast('Dispute filed. The creator has been notified.', 'success');
+  } catch(e) {
+    errEl.textContent = e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Submit Dispute';
+  }
+}
 </script>
+
+<!-- Dispute Modal -->
+<div id="disputeOverlay" class="overlay" onclick="if(event.target===this)closeDisputeModal()" style="z-index:400">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <div class="modal-title">⚠️ Challenge Resolution</div>
+      <button class="modal-close" onclick="closeDisputeModal()">✕</button>
+    </div>
+    <div style="padding:20px 24px">
+      <div style="font-size:13px;color:var(--dim);margin-bottom:12px;line-height:1.5">You're challenging the resolution of:</div>
+      <div id="disputeQuestion" style="font-size:14px;font-weight:700;color:var(--text);font-family:var(--mono);margin-bottom:20px;line-height:1.4;padding:12px;background:rgba(255,255,255,0.04);border-radius:8px;border:1px solid var(--border)"></div>
+      <div style="font-size:12px;color:var(--dim);margin-bottom:8px">Why do you believe this resolution is incorrect? <span style="color:rgba(239,68,68,0.7)">(required)</span></div>
+      <textarea id="disputeReason" maxlength="500" placeholder="e.g. The outcome clearly showed YES but it was resolved NO because..." style="width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:inherit;font-size:13px;resize:vertical;min-height:96px;box-sizing:border-box"></textarea>
+      <div id="disputeError" style="font-size:12px;color:#f87171;margin-top:6px;min-height:18px"></div>
+      <div style="font-size:11px;color:var(--dim);margin-top:8px;margin-bottom:20px;line-height:1.5">Disputes are reviewed by the community creator. The 24-hour window closes after resolution.</div>
+      <div style="display:flex;gap:10px">
+        <button id="disputeSubmitBtn" class="btn-primary" style="flex:1" onclick="submitDispute()">Submit Dispute</button>
+        <button class="btn-secondary" onclick="closeDisputeModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>

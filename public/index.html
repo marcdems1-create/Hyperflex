@@ -292,6 +292,49 @@ section { position: relative; z-index: 1; }
 }
 .proof-sep { width: 1px; height: 14px; background: var(--border); }
 
+/* ── LIVE STATS BAR ── */
+.stats-bar {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0;
+  padding: 0;
+  background: rgba(201,146,13,0.04);
+  border-top: 1px solid rgba(201,146,13,0.15);
+  border-bottom: 1px solid rgba(201,146,13,0.15);
+}
+.stats-bar-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 18px 48px;
+  border-right: 1px solid rgba(201,146,13,0.12);
+  flex: 1;
+  max-width: 260px;
+}
+.stats-bar-item:last-child { border-right: none; }
+.stats-bar-num {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--gold);
+  letter-spacing: -0.02em;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.stats-bar-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+@media (max-width: 600px) {
+  .stats-bar { gap: 0; }
+  .stats-bar-item { padding: 14px 16px; }
+  .stats-bar-num { font-size: 18px; }
+}
+
 /* ── MARQUEE ── */
 .marquee {
   border-top: 1px solid var(--border);
@@ -1129,6 +1172,37 @@ footer {
     <div class="proof-item"><div class="proof-check">✓</div>Play-money only</div>
   </div>
 </section>
+
+<!-- LIVE STATS BAR -->
+<div class="stats-bar">
+  <div class="stats-bar-item">
+    <div class="stats-bar-num" id="stat-markets">—</div>
+    <div class="stats-bar-label">Live Markets</div>
+  </div>
+  <div class="stats-bar-item">
+    <div class="stats-bar-num" id="stat-predictions">—</div>
+    <div class="stats-bar-label">Predictions Made</div>
+  </div>
+  <div class="stats-bar-item">
+    <div class="stats-bar-num" id="stat-communities">—</div>
+    <div class="stats-bar-label">Communities</div>
+  </div>
+</div>
+<script>
+(async function loadStats() {
+  try {
+    const d = await fetch('/api/stats').then(r => r.json());
+    function fmt(n) {
+      if (n >= 1000000) return (n/1000000).toFixed(1).replace(/\.0$/,'') + 'M';
+      if (n >= 1000) return (n/1000).toFixed(1).replace(/\.0$/,'') + 'K';
+      return n.toLocaleString();
+    }
+    document.getElementById('stat-markets').textContent     = fmt(d.live_markets || 0);
+    document.getElementById('stat-predictions').textContent = fmt(d.total_predictions || 0);
+    document.getElementById('stat-communities').textContent = fmt(d.communities || 0);
+  } catch(e) {}
+})();
+</script>
 
 <!-- MARQUEE -->
 <div class="marquee">

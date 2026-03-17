@@ -2397,7 +2397,8 @@ app.post('/api/creator/signup', async (req, res) => {
       custom_points_name = 'Flex Points',
       primary_color = '#c9920d',
       community_description = '',
-      selected_markets = []
+      selected_markets = [],
+      referred_by = null,   // creator slug of referrer (from ?ref= param)
     } = req.body;
 
     // Validate required fields
@@ -2542,6 +2543,24 @@ app.post('/api/creator/signup', async (req, res) => {
     ]).then(({ error }) => {
       if (error) console.error('[onboarding-email] queue error:', error.message);
     });
+
+    // Mark any matching outreach invite as accepted (fire-and-forget)
+    if (email) {
+      supabase.from('creator_invites')
+        .update({ accepted: true, accepted_at: new Date().toISOString() })
+        .eq('email', email.toLowerCase())
+        .eq('accepted', false)
+        .then(() => {})
+        .catch(() => {});
+    }
+
+    // Record creator referral if signup came via a /ref/:slug link
+    if (referred_by && referred_by !== slug) {
+      supabase.from('creator_referrals')
+        .insert([{ referrer_slug: referred_by, new_creator_slug: slug, accepted: false }])
+        .then(() => {})
+        .catch(() => {});
+    }
 
     res.json({
       token,
@@ -3808,6 +3827,108 @@ Return ONLY valid JSON:
 
 // ════════════════════════════════════════════════════════════
 // 6. RESOLVE MARKET (Creator only)
+// ── MARKET DISPUTES ──────────────────────────────────────────────────────────
+// POST /api/markets/:id/dispute      — member files a dispute (auth required)
+// GET  /api/creator/disputes         — creator views open disputes for their community
+// POST /api/creator/disputes/:id/review — creator upholds or overturns
+
+app.post('/api/markets/:id/dispute', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+    if (!reason?.trim()) return res.status(400).json({ error: 'Reason is required' });
+
+    // Market must exist, be resolved, and within 24h window
+    const { data: market } = await supabase
+      .from('markets')
+      .select('id, question, resolved, resolved_at, tenant_slug, outcome')
+      .eq('id', id)
+      .maybeSingle();
+    if (!market) return res.status(404).json({ error: 'Market not found' });
+    if (!market.resolved) return res.status(400).json({ error: 'Market is not resolved' });
+    const resolvedAt = market.resolved_at ? new Date(market.resolved_at) : null;
+    if (!resolvedAt || Date.now() - resolvedAt.getTime() > 24 * 60 * 60 * 1000) {
+      return res.status(400).json({ error: 'Dispute window closed (24 hours after resolution)' });
+    }
+
+    const { error } = await supabase.from('market_disputes').insert([{
+      market_id:    id,
+      user_id:      req.user.id,
+      creator_slug: market.tenant_slug,
+      reason:       reason.trim().slice(0, 500),
+    }]);
+    if (error) {
+      if (error.code === '23505') return res.status(409).json({ error: 'You already filed a dispute for this market' });
+      throw error;
+    }
+
+    // Notify creator via email (fire-and-forget)
+    const transporter = createMailTransport();
+    if (transporter) {
+      const { data: cs } = await supabase.from('creator_settings').select('creator_id').eq('slug', market.tenant_slug).maybeSingle();
+      if (cs) {
+        const { data: creator } = await supabase.from('users').select('email, display_name').eq('id', cs.creator_id).maybeSingle();
+        if (creator?.email) {
+          transporter.sendMail({
+            from: process.env.SMTP_FROM || process.env.SMTP_USER,
+            to: creator.email,
+            subject: `⚠️ Resolution disputed: ${market.question}`,
+            text: `A member disputed the resolution of your market:\n\n"${market.question}"\n\nResolved: ${market.outcome}\nReason: ${reason}\n\nReview it in your dashboard → Resolution Queue.`,
+          }).catch(() => {});
+        }
+      }
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/creator/disputes', requireCreator, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('market_disputes')
+      .select('id, market_id, user_id, reason, status, created_at, markets(question, outcome, resolved_at)')
+      .eq('creator_slug', req.creator.slug)
+      .order('created_at', { ascending: false })
+      .limit(50);
+    if (error) throw error;
+
+    // Enrich with user display names
+    const userIds = [...new Set((data || []).map(d => d.user_id))];
+    const { data: users } = userIds.length
+      ? await supabase.from('users').select('id, display_name').in('id', userIds)
+      : { data: [] };
+    const userMap = {};
+    for (const u of (users || [])) userMap[u.id] = u.display_name;
+
+    res.json({ disputes: (data || []).map(d => ({ ...d, user_name: userMap[d.user_id] || 'Anonymous' })) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/creator/disputes/:id/review', requireCreator, async (req, res) => {
+  try {
+    const { decision } = req.body; // 'upheld' or 'overturned'
+    if (!['upheld', 'overturned'].includes(decision)) return res.status(400).json({ error: 'decision must be upheld or overturned' });
+
+    const { data: dispute } = await supabase
+      .from('market_disputes')
+      .select('id, market_id, creator_slug')
+      .eq('id', req.params.id)
+      .eq('creator_slug', req.creator.slug)
+      .maybeSingle();
+    if (!dispute) return res.status(404).json({ error: 'Dispute not found' });
+
+    await supabase.from('market_disputes').update({ status: decision, reviewed_at: new Date().toISOString() }).eq('id', req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /markets/:id/resolve
 // Auth: Bearer token required
 // Body: { outcome: 'YES' | 'NO' }
@@ -4992,6 +5113,48 @@ app.get('/api/community/:slug', async (req, res) => {
 
 // ════════════════════════════════════════════════════════════
 // 8b. MARKET SUGGESTIONS
+// ── CREATOR FOLLOWS ──────────────────────────────────────────────────────────
+// POST /api/community/:slug/follow-social — social follow/unfollow toggle (auth)
+// GET  /api/user/following                — list slugs the current user follows
+
+app.post('/api/community/:slug/follow-social', requireAuth, async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const userId = req.user.id;
+
+    const { data: existing } = await supabase
+      .from('creator_follows')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('creator_slug', slug)
+      .maybeSingle();
+
+    if (existing) {
+      await supabase.from('creator_follows').delete().eq('id', existing.id);
+      res.json({ following: false });
+    } else {
+      await supabase.from('creator_follows').insert([{ user_id: userId, creator_slug: slug }]);
+      res.json({ following: true });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/user/following', requireAuth, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('creator_follows')
+      .select('creator_slug, followed_at')
+      .eq('user_id', req.user.id)
+      .order('followed_at', { ascending: false });
+    if (error) throw error;
+    res.json({ following: (data || []).map(r => r.creator_slug) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST   /api/community/:slug/suggest   — member submits a market idea
 // GET    /api/creator/suggestions       — creator sees pending queue
 // POST   /api/creator/suggestions/:id/approve — approve (creates market draft)
@@ -5692,11 +5855,97 @@ const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
   'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u', 'win',
-  'm', 'nominate', 'my'
+  'm', 'nominate', 'my', 'embed', 'ref'
 ]);
 
 // GET /my — private member dashboard
 app.get('/my', (req, res) => res.sendFile(path.join(__dirname, 'public', 'user-dashboard.html')));
+
+// ── CREATOR REFERRAL PROGRAM ─────────────────────────────────────────────────
+// GET /ref/:slug — referral landing page: tracks the referring creator then
+//   redirects to creator signup with ?ref=slug so the signup page can claim it.
+app.get('/ref/:slug', async (req, res) => {
+  const { slug } = req.params;
+  if (RESERVED_SLUGS.has(slug)) return res.redirect('/creator/signup');
+  // Verify the referring creator exists
+  const { data: cs } = await supabase
+    .from('creator_settings')
+    .select('slug, display_name')
+    .eq('slug', slug)
+    .maybeSingle();
+  if (!cs) return res.redirect('/creator/signup');
+  // Redirect to signup with referral attribution
+  res.redirect(`/creator/signup?ref=${encodeURIComponent(slug)}`);
+});
+
+// GET /api/creator/referral-stats — how many creators this creator has referred
+app.get('/api/creator/referral-stats', requireCreator, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('creator_referrals')
+      .select('id, accepted, accepted_at')
+      .eq('referrer_slug', req.creator.slug);
+    if (error) throw error;
+    const rows = data || [];
+    const accepted = rows.filter(r => r.accepted);
+    res.json({
+      referred_creators: rows.length,
+      accepted_creators: accepted.length,
+      months_earned:     accepted.length, // 1 month free per accepted referral
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /embed/:slug — embeddable widget (iframeable, no auth required)
+app.get('/embed/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'embed.html')));
+
+// GET /api/embed/:slug — widget data (top 3 active markets + community branding)
+app.get('/api/embed/:slug', async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const { data: cs } = await supabase
+      .from('creator_settings')
+      .select('creator_id, display_name, primary_color, custom_points_name, logo_url')
+      .eq('slug', slug)
+      .maybeSingle();
+    if (!cs) return res.status(404).json({ error: 'Community not found' });
+
+    const { data: markets } = await supabase
+      .from('markets')
+      .select('id, question, yes_votes, no_votes, trader_count, expiry_date, category')
+      .eq('tenant_slug', slug)
+      .eq('resolved', false)
+      .neq('is_public', false)
+      .order('trader_count', { ascending: false })
+      .limit(3);
+
+    res.setHeader('X-Frame-Options', 'ALLOWALL');
+    res.setHeader('Content-Security-Policy', "frame-ancestors *");
+    res.json({
+      community: {
+        slug,
+        name:       cs.display_name || slug,
+        color:      cs.primary_color || '#c9920d',
+        pts_name:   cs.custom_points_name || 'Flex Points',
+        logo_url:   cs.logo_url || null,
+        url:        `https://hyperflex.network/${slug}`,
+      },
+      markets: (markets || []).map(m => ({
+        id:          m.id,
+        question:    m.question,
+        yes_votes:   m.yes_votes || 0,
+        no_votes:    m.no_votes  || 0,
+        trader_count: m.trader_count || 0,
+        expiry_date: m.expiry_date,
+        category:    m.category,
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ════════════════════════════════════════════════════════════
 // GET /api/user/dashboard — authenticated member dashboard data
@@ -6770,6 +7019,76 @@ app.get('/api/admin/platform-stats', requireAdmin, async (req, res) => {
   }
 });
 
+// ── CREATOR OUTREACH / INVITES ────────────────────────────
+// GET  /api/admin/invites  — list all sent invites
+// POST /api/admin/invite   — send a personalized invite email
+
+app.get('/api/admin/invites', requireAdmin, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('creator_invites')
+      .select('*')
+      .order('sent_at', { ascending: false })
+      .limit(200);
+    if (error) throw error;
+    res.json({ invites: data || [] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/admin/invite', requireAdmin, async (req, res) => {
+  try {
+    const { name, email, channel_url, note } = req.body;
+    if (!name || !email) return res.status(400).json({ error: 'name and email required' });
+
+    // Save to DB
+    const { data: invite, error } = await supabase
+      .from('creator_invites')
+      .insert([{ name, email, channel_url: channel_url || null, note: note || null }])
+      .select()
+      .single();
+    if (error) throw error;
+
+    // Send email if SMTP configured
+    const transporter = createMailTransport();
+    if (transporter) {
+      const personalNote = note ? `<p style="font-size:15px;line-height:1.7;color:#ddd8cc;font-style:italic;border-left:3px solid #c9920d;padding-left:16px;margin:20px 0">"${note}"</p>` : '';
+      const html = `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#141412;font-family:'Helvetica Neue',sans-serif">
+<div style="max-width:560px;margin:40px auto;background:#1c1c19;border:1px solid #2a2a27;border-radius:14px;overflow:hidden">
+  <div style="background:#c9920d;padding:20px 32px">
+    <div style="font-size:18px;font-weight:800;color:#141412;letter-spacing:0.05em">HYPERFLEX</div>
+  </div>
+  <div style="padding:32px">
+    <h1 style="font-size:22px;font-weight:800;color:#ddd8cc;margin:0 0 16px">Hey ${name}, your community deserves a prediction market.</h1>
+    ${personalNote}
+    <p style="font-size:15px;line-height:1.7;color:#9a9590">I built HYPERFLEX to give creators like you a way to make your content interactive. Your audience predicts on what you cover — who wins, what happens next, what you'll say — and competes on a live leaderboard.</p>
+    <p style="font-size:15px;line-height:1.7;color:#9a9590">The AI scans your YouTube videos and writes the markets for you. Takes about 5 minutes to set up.</p>
+    <div style="background:#141412;border-radius:10px;padding:20px 24px;margin:24px 0">
+      <div style="font-size:13px;color:#c9920d;font-weight:700;margin-bottom:12px;letter-spacing:0.06em;text-transform:uppercase">What you get</div>
+      <div style="font-size:13px;color:#ddd8cc;line-height:2">✓ Branded community page at hyperflex.network/yourname<br/>✓ AI generates markets from your YouTube videos<br/>✓ Live leaderboard + streak bonuses keep members coming back<br/>✓ Custom rewards you design for top predictors<br/>✓ Free forever to start</div>
+    </div>
+    <a href="https://hyperflex.network/creator/signup" style="display:inline-block;background:#c9920d;color:#141412;font-weight:800;font-size:15px;padding:14px 28px;border-radius:8px;text-decoration:none;margin-bottom:24px">Claim your community →</a>
+    <p style="font-size:13px;color:#5a5550;line-height:1.6">— Marc<br/>Founder, HYPERFLEX<br/><a href="https://hyperflex.network" style="color:#c9920d;text-decoration:none">hyperflex.network</a></p>
+  </div>
+</div></body></html>`;
+
+      await transporter.sendMail({
+        from:    process.env.SMTP_FROM || process.env.SMTP_USER,
+        to:      email,
+        subject: `Your community deserves a prediction market, ${name}`,
+        html,
+        text: `Hey ${name},\n\nI built HYPERFLEX to give creators like you a way to make your content interactive.\n\nYour audience predicts on what you cover — who wins, what happens next — and competes on a live leaderboard. The AI scans your YouTube videos and writes the markets for you. Takes 5 minutes to set up.\n\nClaim your community free: https://hyperflex.network/creator/signup\n\n— Marc, HYPERFLEX`,
+      });
+    }
+
+    res.json({ ok: true, invite });
+  } catch (err) {
+    console.error('[admin invite]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── CREATOR SELF-DELETE ───────────────────────────────────
 // DELETE /api/creator/account
 // Permanently deletes the authenticated creator's account and all associated data.
@@ -7494,6 +7813,33 @@ async function sendResolutionEmails(market, outcome, creatorSlug, resolutionNote
     console.error('[email] sendResolutionEmails error:', err.message);
   }
 }
+
+// ─── PUBLIC PLATFORM STATS ───────────────────────────────────────────────────
+// Cached for 5 minutes so the landing page doesn't hammer the DB on every load
+let _statsCache = null;
+let _statsCacheAt = 0;
+app.get('/api/stats', async (req, res) => {
+  try {
+    const now = Date.now();
+    if (_statsCache && now - _statsCacheAt < 5 * 60 * 1000) {
+      return res.json(_statsCache);
+    }
+    const [marketsRes, positionsRes, creatorsRes] = await Promise.all([
+      supabase.from('markets').select('id', { count: 'exact', head: true }).eq('resolved', false).neq('is_public', false),
+      supabase.from('positions').select('id', { count: 'exact', head: true }),
+      supabase.from('creator_settings').select('creator_id', { count: 'exact', head: true }),
+    ]);
+    _statsCache = {
+      live_markets:   marketsRes.count  || 0,
+      total_predictions: positionsRes.count || 0,
+      communities:    creatorsRes.count  || 0,
+    };
+    _statsCacheAt = now;
+    res.json(_statsCache);
+  } catch (err) {
+    res.json({ live_markets: 0, total_predictions: 0, communities: 0 });
+  }
+});
 
 // ─── EXPLORE FEED ────────────────────────────────────────────────────────────
 app.get('/api/explore', async (req, res) => {

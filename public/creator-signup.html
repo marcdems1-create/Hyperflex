@@ -1137,6 +1137,7 @@ async function submitSignup() {
   btn.classList.add('loading');
   btn.textContent = 'Launching...';
 
+  const _refParam = new URLSearchParams(location.search).get('ref') || null;
   const payload = {
     display_name: document.getElementById('displayName').value.trim(),
     email: document.getElementById('email').value.trim() || (document.getElementById('_twitterEmail')?.value || ''),
@@ -1145,7 +1146,8 @@ async function submitSignup() {
     custom_points_name: document.getElementById('pointsName').value.trim() || 'Flex Points',
     primary_color: document.getElementById('primaryColor').value,
     community_description: document.getElementById('communityDesc').value.trim(),
-    selected_markets: selectedSuggestions
+    selected_markets: selectedSuggestions,
+    referred_by: _refParam,
   };
 
   try {
