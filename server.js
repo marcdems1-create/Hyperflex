@@ -3264,6 +3264,107 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
 
 // ════════════════════════════════════════════════════════════
 // 5b. ANALYTICS
+// ════════════════════════════════════════════════════════════
+// GET /api/creator/members
+// Returns full member roster with per-member stats for the Members tab
+// ════════════════════════════════════════════════════════════
+app.get('/api/creator/members', requireCreator, async (req, res) => {
+  try {
+    const { data: settings } = await supabase
+      .from('creator_settings')
+      .select('slug, plan, custom_points_name')
+      .eq('creator_id', req.creator.id)
+      .single();
+    const slug    = settings?.slug;
+    const plan    = settings?.plan || 'free';
+    const ptsName = settings?.custom_points_name || 'Flex Points';
+    if (!slug) return res.status(404).json({ error: 'Creator not found' });
+
+    // All members + their balances
+    const { data: balances } = await supabase
+      .from('community_balances')
+      .select('user_id, balance, created_at')
+      .eq('creator_slug', slug)
+      .order('created_at', { ascending: false });
+
+    if (!balances?.length) return res.json({ members: [], summary: { total: 0, active: 0, total_predictions: 0, engagement_rate: 0 }, pts_name: ptsName, plan });
+
+    const userIds = balances.map(b => b.user_id);
+
+    // Fetch user display names + emails in parallel with position stats
+    const [usersRes, positionsRes] = await Promise.all([
+      supabase.from('users').select('id, display_name, email, created_at').in('id', userIds),
+      supabase.from('positions')
+        .select('user_id, market_id, won, settled, created_at')
+        .in('user_id', userIds)
+        .eq('markets.tenant_slug', slug)  // best-effort filter
+        .order('created_at', { ascending: false }),
+    ]);
+
+    // Also get all market IDs for this community to filter positions correctly
+    const { data: mktRows } = await supabase
+      .from('markets')
+      .select('id')
+      .eq('tenant_slug', slug);
+    const communityMarketIds = new Set((mktRows || []).map(m => m.id));
+
+    const userMap   = Object.fromEntries((usersRes.data || []).map(u => [u.id, u]));
+    const posMap    = {};  // userId → { total, wins, last_active }
+    for (const p of (positionsRes.data || [])) {
+      if (!communityMarketIds.has(p.market_id)) continue;
+      if (!posMap[p.user_id]) posMap[p.user_id] = { total: 0, wins: 0, last_active: null };
+      posMap[p.user_id].total++;
+      if (p.won && p.settled) posMap[p.user_id].wins++;
+      if (!posMap[p.user_id].last_active || p.created_at > posMap[p.user_id].last_active) {
+        posMap[p.user_id].last_active = p.created_at;
+      }
+    }
+
+    const members = balances.map(b => {
+      const user  = userMap[b.user_id] || {};
+      const stats = posMap[b.user_id]  || { total: 0, wins: 0, last_active: null };
+      return {
+        user_id:      b.user_id,
+        display_name: user.display_name || 'Anonymous',
+        email:        plan !== 'free' ? (user.email || null) : null, // emails gated to Pro+
+        joined_at:    b.created_at,
+        balance:      b.balance || 0,         // centpoints
+        total_bets:   stats.total,
+        wins:         stats.wins,
+        win_rate:     stats.total > 0 ? Math.round((stats.wins / stats.total) * 100) : null,
+        last_active:  stats.last_active,
+      };
+    });
+
+    // Summary stats
+    const totalPredictions = members.reduce((s, m) => s + m.total_bets, 0);
+    const activeMembers    = members.filter(m => m.total_bets > 0).length;
+    const engagementRate   = members.length > 0 ? Math.round((activeMembers / members.length) * 100) : 0;
+    // ROI equivalent: each prediction = ~1 engaged action at industry avg $0.80 CPC
+    const engagementValue  = Math.round(totalPredictions * 0.8);
+
+    res.json({
+      members,
+      pts_name: ptsName,
+      plan,
+      summary: {
+        total:             members.length,
+        active:            activeMembers,
+        total_predictions: totalPredictions,
+        engagement_rate:   engagementRate,
+        engagement_value:  engagementValue,   // estimated $ equivalent
+        new_this_week:     members.filter(m => {
+          const d = new Date(m.joined_at);
+          return d >= new Date(Date.now() - 7 * 864e5);
+        }).length,
+      },
+    });
+  } catch (err) {
+    console.error('[members]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/creator/analytics
 // Auth: Bearer token required
 // Returns rich analytics data for the analytics dashboard

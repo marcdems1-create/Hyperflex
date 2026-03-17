@@ -2776,6 +2776,9 @@ body.nav-open .sidebar-backdrop {
         <span class="nav-badge" style="background:var(--gold);color:#000;font-size:9px;padding:1px 5px">AI</span>
       </a>
       <div class="nav-section-label">Community</div>
+      <a class="nav-item" onclick="showTab('members')">
+        <span class="nav-icon">👥</span><span class="nav-label">Members</span>
+      </a>
       <a class="nav-item" onclick="showTab('leaderboard')">
         <span class="nav-icon">🏆</span><span class="nav-label">Leaderboard</span>
       </a>
@@ -3148,6 +3151,86 @@ body.nav-open .sidebar-backdrop {
       </div>
 
       <!-- Leaderboard Tab -->
+      <!-- ══ MEMBERS TAB ══════════════════════════════════════ -->
+      <div id="tab-members" style="display:none">
+
+        <!-- ROI Summary Bar -->
+        <div class="section" id="membersRoiBar" style="display:none">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;padding:20px 24px">
+            <div style="text-align:center">
+              <div style="font-size:11px;font-family:var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Total Members</div>
+              <div style="font-size:28px;font-weight:900;color:var(--text)" id="mbrStatTotal">—</div>
+            </div>
+            <div style="text-align:center">
+              <div style="font-size:11px;font-family:var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Active Predictors</div>
+              <div style="font-size:28px;font-weight:900;color:var(--gold)" id="mbrStatActive">—</div>
+              <div style="font-size:11px;font-family:var(--mono);color:var(--dim)" id="mbrStatEngRate">— engagement</div>
+            </div>
+            <div style="text-align:center">
+              <div style="font-size:11px;font-family:var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Total Predictions</div>
+              <div style="font-size:28px;font-weight:900;color:var(--text)" id="mbrStatPreds">—</div>
+            </div>
+            <div style="text-align:center">
+              <div style="font-size:11px;font-family:var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">New This Week</div>
+              <div style="font-size:28px;font-weight:900;color:#22c55e" id="mbrStatNew">—</div>
+            </div>
+            <div style="text-align:center;background:rgba(201,146,13,0.06);border:1px solid rgba(201,146,13,0.2);border-radius:10px;padding:12px">
+              <div style="font-size:11px;font-family:var(--mono);color:var(--gold);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Est. Engagement Value</div>
+              <div style="font-size:26px;font-weight:900;color:var(--gold)" id="mbrStatValue">—</div>
+              <div style="font-size:10px;color:var(--dim);margin-top:3px">vs. paid ad clicks @ $0.80 CPC</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Controls row -->
+        <div class="section">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 20px;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:200px">
+              <input type="text" id="memberSearch" placeholder="Search members…" oninput="filterMembers(this.value)"
+                style="flex:1;max-width:260px;background:var(--paper);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:12px;padding:8px 12px;outline:none"/>
+              <select id="memberSort" onchange="sortMembers(this.value)"
+                style="background:var(--paper);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:11px;padding:8px 10px;outline:none;cursor:pointer">
+                <option value="joined_desc">Newest first</option>
+                <option value="preds_desc">Most predictions</option>
+                <option value="balance_desc">Most points</option>
+                <option value="winrate_desc">Highest win rate</option>
+                <option value="active_desc">Recently active</option>
+              </select>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <span style="font-size:12px;font-family:var(--mono);color:var(--dim)" id="memberCountLabel"></span>
+              <button class="btn-secondary" style="font-size:11px;padding:7px 14px" onclick="exportMembersCSV()" id="exportMembersBtn">⬇ Export CSV</button>
+            </div>
+          </div>
+
+          <!-- Member table -->
+          <div style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse" id="membersTable">
+              <thead>
+                <tr style="border-bottom:1px solid var(--border)">
+                  <th style="text-align:left;padding:10px 20px;font-size:10px;font-family:var(--mono);color:var(--dim);font-weight:700;letter-spacing:.08em;text-transform:uppercase">Member</th>
+                  <th style="text-align:right;padding:10px 12px;font-size:10px;font-family:var(--mono);color:var(--dim);font-weight:700;letter-spacing:.08em;text-transform:uppercase">Balance</th>
+                  <th style="text-align:right;padding:10px 12px;font-size:10px;font-family:var(--mono);color:var(--dim);font-weight:700;letter-spacing:.08em;text-transform:uppercase">Predictions</th>
+                  <th style="text-align:right;padding:10px 12px;font-size:10px;font-family:var(--mono);color:var(--dim);font-weight:700;letter-spacing:.08em;text-transform:uppercase">Win Rate</th>
+                  <th style="text-align:right;padding:10px 12px;font-size:10px;font-family:var(--mono);color:var(--dim);font-weight:700;letter-spacing:.08em;text-transform:uppercase">Joined</th>
+                  <th style="text-align:right;padding:10px 12px;font-size:10px;font-family:var(--mono);color:var(--dim);font-weight:700;letter-spacing:.08em;text-transform:uppercase">Last Active</th>
+                  <th style="text-align:right;padding:10px 20px;font-size:10px;font-family:var(--mono);color:var(--dim);font-weight:700;letter-spacing:.08em;text-transform:uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="membersTableBody">
+                <tr><td colspan="7" style="padding:32px;text-align:center;font-family:var(--mono);font-size:12px;color:var(--dim)">Loading members…</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Pro gate for email column -->
+          <div id="membersEmailGate" style="display:none;padding:16px 20px;border-top:1px solid var(--border);background:rgba(201,146,13,0.04)">
+            <span style="font-size:12px;font-family:var(--mono);color:var(--dim)">🔒 Member email addresses are visible on <strong style="color:var(--gold)">Pro</strong> and above — <a href="#" onclick="showUpgrade()" style="color:var(--gold);text-decoration:none">upgrade to unlock →</a></span>
+          </div>
+        </div>
+      </div>
+      <!-- ══ /MEMBERS TAB ══════════════════════════════════════ -->
+
       <div id="tab-leaderboard" style="display:none">
         <div class="section">
           <div style="display:flex;gap:6px;margin-bottom:16px">
@@ -5663,6 +5746,134 @@ async function quickResolve(marketId, outcome) {
 
 let lbPeriod = 'all_time';
 
+// ══════════════════════════════════════════════════════════
+// MEMBERS TAB
+// ══════════════════════════════════════════════════════════
+let _membersData    = [];   // full roster from API
+let _membersFiltered = [];  // after search/sort
+let _membersPtsName  = 'Flex Points';
+let _membersPlan     = 'free';
+
+async function loadMembers() {
+  if (_membersData.length) { renderMembersTable(); return; } // cached
+  document.getElementById('membersTableBody').innerHTML =
+    '<tr><td colspan="7" style="padding:32px;text-align:center;font-family:var(--mono);font-size:12px;color:var(--dim)">Loading…</td></tr>';
+  try {
+    const r    = await fetch(API + '/api/creator/members', { headers: { 'Authorization': 'Bearer ' + token } });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error);
+    _membersData    = data.members || [];
+    _membersFiltered = [..._membersData];
+    _membersPtsName  = data.pts_name || 'Flex Points';
+    _membersPlan     = data.plan || 'free';
+
+    // ROI summary
+    const s = data.summary || {};
+    document.getElementById('mbrStatTotal').textContent   = (s.total || 0).toLocaleString();
+    document.getElementById('mbrStatActive').textContent  = (s.active || 0).toLocaleString();
+    document.getElementById('mbrStatEngRate').textContent = (s.engagement_rate || 0) + '% engagement';
+    document.getElementById('mbrStatPreds').textContent   = (s.total_predictions || 0).toLocaleString();
+    document.getElementById('mbrStatNew').textContent     = '+' + (s.new_this_week || 0);
+    document.getElementById('mbrStatValue').textContent   = '$' + (s.engagement_value || 0).toLocaleString();
+    document.getElementById('membersRoiBar').style.display = 'block';
+
+    // Show email gate for free plan
+    if (_membersPlan === 'free') {
+      document.getElementById('membersEmailGate').style.display = 'block';
+    }
+
+    renderMembersTable();
+  } catch (err) {
+    document.getElementById('membersTableBody').innerHTML =
+      `<tr><td colspan="7" style="padding:32px;text-align:center;font-family:var(--mono);font-size:12px;color:#e74c3c">${err.message}</td></tr>`;
+  }
+}
+
+function filterMembers(q) {
+  const query = q.trim().toLowerCase();
+  _membersFiltered = query
+    ? _membersData.filter(m => m.display_name.toLowerCase().includes(query) || (m.email || '').toLowerCase().includes(query))
+    : [..._membersData];
+  renderMembersTable();
+}
+
+function sortMembers(mode) {
+  const fns = {
+    joined_desc:   (a, b) => new Date(b.joined_at) - new Date(a.joined_at),
+    preds_desc:    (a, b) => b.total_bets - a.total_bets,
+    balance_desc:  (a, b) => b.balance - a.balance,
+    winrate_desc:  (a, b) => (b.win_rate ?? -1) - (a.win_rate ?? -1),
+    active_desc:   (a, b) => new Date(b.last_active || 0) - new Date(a.last_active || 0),
+  };
+  _membersFiltered = [..._membersFiltered].sort(fns[mode] || fns.joined_desc);
+  renderMembersTable();
+}
+
+function renderMembersTable() {
+  const tbody = document.getElementById('membersTableBody');
+  document.getElementById('memberCountLabel').textContent = _membersFiltered.length + ' member' + (_membersFiltered.length !== 1 ? 's' : '');
+
+  if (!_membersFiltered.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="padding:32px;text-align:center;font-family:var(--mono);font-size:12px;color:var(--dim)">No members found</td></tr>';
+    return;
+  }
+
+  const fmtDate = iso => iso ? new Date(iso).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'2-digit' }) : '—';
+  const fmtAgo  = iso => {
+    if (!iso) return '—';
+    const diff = Date.now() - new Date(iso);
+    const d = Math.floor(diff / 864e5);
+    return d === 0 ? 'Today' : d === 1 ? 'Yesterday' : d + 'd ago';
+  };
+
+  tbody.innerHTML = _membersFiltered.map(m => {
+    const balPts    = Math.floor(m.balance / 100).toLocaleString();
+    const winRateTxt = m.win_rate !== null ? m.win_rate + '%' : '—';
+    const winColor   = m.win_rate !== null ? (m.win_rate >= 60 ? '#22c55e' : m.win_rate >= 40 ? 'var(--text)' : '#ef4444') : 'var(--dim)';
+    const actColor   = !m.last_active ? 'var(--dim)' : (Date.now() - new Date(m.last_active) < 7*864e5 ? '#22c55e' : 'var(--dim)');
+
+    return `<tr style="border-bottom:1px solid var(--border);transition:background .1s" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background=''">
+      <td style="padding:12px 20px">
+        <div style="font-size:13px;font-weight:700;color:var(--text)">${escHtml(m.display_name)}</div>
+        ${m.email ? `<div style="font-size:10px;font-family:var(--mono);color:var(--dim)">${m.email}</div>` : ''}
+      </td>
+      <td style="text-align:right;padding:12px;font-family:var(--mono);font-size:12px;color:var(--gold)">${balPts} <span style="font-size:10px;color:var(--dim)">${_membersPtsName}</span></td>
+      <td style="text-align:right;padding:12px;font-family:var(--mono);font-size:13px;font-weight:700;color:var(--text)">${m.total_bets}</td>
+      <td style="text-align:right;padding:12px;font-family:var(--mono);font-size:12px;font-weight:700;color:${winColor}">${winRateTxt}</td>
+      <td style="text-align:right;padding:12px;font-family:var(--mono);font-size:11px;color:var(--dim)">${fmtDate(m.joined_at)}</td>
+      <td style="text-align:right;padding:12px;font-family:var(--mono);font-size:11px;color:${actColor}">${fmtAgo(m.last_active)}</td>
+      <td style="text-align:right;padding:12px 20px">
+        <button onclick="openRewardMemberModal('${m.user_id}','${escHtml(m.display_name).replace(/'/g,"\\'")}',${Math.floor(m.balance/100)})"
+          style="font-size:10px;font-family:var(--mono);padding:4px 9px;border:1px solid var(--border);border-radius:4px;background:transparent;color:var(--dim);cursor:pointer"
+          onmouseover="this.style.color='var(--gold)';this.style.borderColor='rgba(201,146,13,0.4)'"
+          onmouseout="this.style.color='var(--dim)';this.style.borderColor='var(--border)'">🎁 Reward</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function exportMembersCSV() {
+  if (!_membersData.length) return;
+  const headers = ['Name', 'Email', 'Balance (' + _membersPtsName + ')', 'Predictions', 'Wins', 'Win Rate %', 'Joined', 'Last Active'];
+  const rows = _membersData.map(m => [
+    m.display_name,
+    m.email || '',
+    Math.floor(m.balance / 100),
+    m.total_bets,
+    m.wins,
+    m.win_rate ?? '',
+    m.joined_at ? new Date(m.joined_at).toISOString().split('T')[0] : '',
+    m.last_active ? new Date(m.last_active).toISOString().split('T')[0] : '',
+  ]);
+  const csv  = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  a.download = 'members-' + (creatorData?.creator?.slug || 'community') + '-' + new Date().toISOString().split('T')[0] + '.csv';
+  a.click();
+  showToast('CSV downloaded ✓', 'success');
+}
+
 async function setLbPeriod(period) {
   lbPeriod = period;
   const tabs = { all_time: 'lbTabAllTime', monthly: 'lbTabMonthly', weekly: 'lbTabWeekly' };
@@ -5805,7 +6016,7 @@ function renderShareTemplates(creator) {
 
 // Tab switching
 function showTab(tab) {
-  ['overview','markets','resolve','leaderboard','share','rewards','seasons','settings','analytics','economy','branding','flexbot','ideas'].forEach(t => {
+  ['overview','markets','resolve','members','leaderboard','share','rewards','seasons','settings','analytics','economy','branding','flexbot','ideas'].forEach(t => {
     const el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === tab ? 'block' : 'none';
   });
@@ -5813,9 +6024,10 @@ function showTab(tab) {
   document.querySelectorAll('.nav-item').forEach(n => {
     if (n.getAttribute('onclick') && n.getAttribute('onclick').includes(`'${tab}'`)) n.classList.add('active');
   });
-  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas' };
+  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Members' };
   document.getElementById('topbarTitle').textContent = titles[tab] || tab;
   if (tab === 'analytics' && !analyticsLoaded) loadAnalytics();
+  if (tab === 'members') loadMembers();
   if (tab === 'ideas' && !ideasLoaded) loadMarketIdeas(false);
   if (tab === 'share') {
     loadCreatorReferralStats();
