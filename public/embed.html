@@ -28,9 +28,18 @@
     color:var(--gold);text-decoration:none;letter-spacing:0.04em;
     padding:5px 10px;border:1px solid rgba(201,146,13,0.3);
     border-radius:5px;background:rgba(201,146,13,0.08);
-    transition:background .15s;
+    transition:background .15s;cursor:pointer;
   }
   .widget-cta:hover{background:rgba(201,146,13,0.18)}
+  .widget-share-x{
+    font-size:10px;font-family:var(--mono);font-weight:700;
+    color:#e7e9ea;text-decoration:none;letter-spacing:0.04em;
+    padding:4px 9px;border:1px solid #2f3336;
+    border-radius:5px;background:#000;
+    display:flex;align-items:center;gap:5px;
+    transition:background .15s;
+  }
+  .widget-share-x:hover{background:#111}
 
   .markets-list{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:0}
   .market-row{
@@ -74,7 +83,13 @@
     <div class="widget-dot" id="headerDot" style="background:#c9920d"></div>
     <div class="widget-name" id="headerName">Loading…</div>
   </div>
-  <a class="widget-cta" id="headerCta" href="#" target="_blank" rel="noopener">Join →</a>
+  <div style="display:flex;align-items:center;gap:6px">
+    <a class="widget-share-x" id="shareXBtn" href="#" target="_blank" rel="noopener" title="Share on X">
+      <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.737-8.835L1.254 2.25H8.08l4.259 5.633 5.905-5.633zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+      Share
+    </a>
+    <a class="widget-cta" id="headerCta" href="#" target="_blank" rel="noopener">Predict →</a>
+  </div>
 </div>
 
 <div class="markets-list" id="marketsList">
@@ -108,24 +123,38 @@
     document.getElementById('headerCta').href               = community.url + '?ref=embed';
     document.getElementById('footerPts').textContent        = community.pts_name + ' · play-money';
 
+    // Wire Share on X button — links to /widget/:slug which has Player Card meta
+    const widgetUrl = 'https://hyperflex.network/widget/' + community.slug;
+    const topQ = markets[0]?.question;
+    const tweetText = topQ
+      ? `"${topQ}" — predict on ${community.name} 🎯\n`
+      : `Live prediction markets on ${community.name} — make your call 🎯\n`;
+    const xHref = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(tweetText) + '&url=' + encodeURIComponent(widgetUrl);
+    document.getElementById('shareXBtn').href = xHref;
+
     if (!markets.length) {
       document.getElementById('marketsList').innerHTML = '<div class="empty">No open markets yet.<br/>Be the first to predict!</div>';
       return;
     }
 
     document.getElementById('marketsList').innerHTML = markets.map(m => {
-      const total = (m.yes_votes || 0) + (m.no_votes || 0);
-      const yesPct = total > 0 ? Math.round((m.yes_votes / total) * 100) : null;
-      const noPct  = yesPct !== null ? 100 - yesPct : null;
+      // Use CPMM yes_price for accurate odds; fall back to vote-share for legacy markets
+      const hasPrice = m.yes_price && Math.abs(m.yes_price - 0.5) > 0.005;
+      const yesPct   = hasPrice ? Math.round(m.yes_price * 100) : (() => {
+        const t = (m.yes_votes || 0) + (m.no_votes || 0);
+        return t > 0 ? Math.round(m.yes_votes / t * 100) : null;
+      })();
+      const noPct    = yesPct !== null ? 100 - yesPct : null;
       const barColor = yesPct !== null ? (yesPct >= 50 ? '#22c55e' : '#ef4444') : 'rgba(255,255,255,0.2)';
       const url = community.url + '?market=' + m.id + '&ref=embed';
+      const hasRealTraders = hasPrice && (m.trader_count || 0) > 0;
       return `<a class="market-row" href="${url}" target="_blank" rel="noopener">
         <div class="market-q">${escHtml(m.question)}</div>
         <div class="market-bar"><div class="market-fill" style="width:${yesPct !== null ? yesPct : 50}%;background:${barColor};opacity:${yesPct !== null ? 1 : 0.35}"></div></div>
         ${yesPct !== null
           ? `<div class="market-odds"><span style="color:#22c55e">YES ${yesPct}%</span><span style="color:#ef4444">NO ${noPct}%</span></div>`
           : `<div class="market-odds" style="justify-content:center"><span style="color:var(--dim);font-size:9px">🎯 First prediction</span></div>`}
-        <div class="market-traders">${m.trader_count > 0 ? m.trader_count.toLocaleString() + ' traders' : 'Be first to predict'}</div>
+        <div class="market-traders">${hasRealTraders ? m.trader_count.toLocaleString() + ' traders' : 'Be first to predict'}</div>
       </a>`;
     }).join('');
   } catch(e) {

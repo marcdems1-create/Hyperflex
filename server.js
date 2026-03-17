@@ -6300,7 +6300,7 @@ const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
   'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u', 'win',
-  'm', 'nominate', 'my', 'embed', 'ref', 'templates'
+  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share'
 ]);
 
 // GET /my — private member dashboard
@@ -6359,8 +6359,101 @@ app.get('/api/creator/referral-stats', requireCreator, async (req, res) => {
   }
 });
 
-// GET /embed/:slug — embeddable widget (iframeable, no auth required)
-app.get('/embed/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'embed.html')));
+// GET /embed/:slug — iframeable widget. Sets frame-ancestors * so Twitter can embed it.
+app.get('/embed/:slug', async (req, res) => {
+  // Serve the static embed.html but with frame-allow headers
+  res.setHeader('X-Frame-Options', 'ALLOWALL');
+  res.setHeader('Content-Security-Policy', "frame-ancestors *");
+  res.sendFile(path.join(__dirname, 'public', 'embed.html'));
+});
+
+// GET /widget/:slug — Twitter Player Card landing page.
+// This is what creators share on X. Twitter sees the player card meta tags
+// and renders the /embed/:slug widget inline in the tweet.
+app.get('/widget/:slug', async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const { data: cs } = await supabase
+      .from('creator_settings')
+      .select('display_name, primary_color, custom_points_name')
+      .eq('slug', slug)
+      .maybeSingle();
+    if (!cs) return res.status(404).send('Community not found');
+
+    const communityName = cs.display_name || slug;
+    const accentColor   = cs.primary_color || '#c9920d';
+    const embedUrl      = `https://hyperflex.network/embed/${slug}`;
+    const communityUrl  = `https://hyperflex.network/${slug}`;
+    const widgetUrl     = `https://hyperflex.network/widget/${slug}`;
+    const ogImage       = `https://hyperflex.network/og-image.png`;
+
+    // Fetch top 3 markets for fallback description
+    const { data: markets } = await supabase
+      .from('markets')
+      .select('id, question, yes_price, no_price')
+      .eq('tenant_slug', slug)
+      .eq('resolved', false)
+      .neq('is_public', false)
+      .order('trader_count', { ascending: false })
+      .limit(3);
+
+    const mktCount   = markets?.length || 0;
+    const topQ       = markets?.[0]?.question;
+    const description = topQ
+      ? `${mktCount} live market${mktCount !== 1 ? 's' : ''} — "${topQ}" and more. Make your predictions on ${communityName}.`
+      : `Live prediction markets on ${communityName}. Make your predictions on HYPERFLEX.`;
+
+    res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${communityName} — Live Prediction Markets</title>
+
+<!-- Standard OG (LinkedIn, Slack, etc.) -->
+<meta property="og:title" content="${communityName} — Live Prediction Markets">
+<meta property="og:description" content="${description.replace(/"/g,'&quot;')}">
+<meta property="og:image" content="${ogImage}">
+<meta property="og:url" content="${widgetUrl}">
+<meta property="og:type" content="website">
+
+<!-- Twitter Player Card — lets the embed widget render inline in tweets -->
+<!-- Note: Player Cards require Twitter's domain approval for interactive mode. -->
+<!-- Until approved, Twitter falls back to summary_large_image card. -->
+<meta name="twitter:card" content="player">
+<meta name="twitter:site" content="@HyperFlexapp">
+<meta name="twitter:title" content="${communityName} — Live Prediction Markets">
+<meta name="twitter:description" content="${description.replace(/"/g,'&quot;')}">
+<meta name="twitter:image" content="${ogImage}">
+<meta name="twitter:player" content="${embedUrl}">
+<meta name="twitter:player:width" content="480">
+<meta name="twitter:player:height" content="480">
+<meta name="twitter:player:stream" content="">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#0f0f0d;color:#e2ddd6;min-height:100vh;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px}
+  .logo{font-family:'Syne',sans-serif;font-weight:800;font-size:16px;color:#c9920d;letter-spacing:.06em;margin-bottom:12px}
+  h1{font-family:'Syne',sans-serif;font-size:26px;font-weight:800;color:#f0ebe3;text-align:center;margin-bottom:8px}
+  .sub{font-size:14px;color:#6b6860;text-align:center;margin-bottom:32px;line-height:1.6;max-width:440px}
+  .widget-frame{width:100%;max-width:480px;height:480px;border:1px solid rgba(201,146,13,0.25);border-radius:16px;overflow:hidden}
+  .cta{display:inline-block;margin-top:20px;padding:12px 28px;background:linear-gradient(135deg,#c9920d,#e8a91a);border-radius:8px;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;color:#141412;text-decoration:none;letter-spacing:.02em}
+</style>
+</head>
+<body>
+  <div class="logo">HYPERFLEX</div>
+  <h1>${communityName}</h1>
+  <p class="sub">${description}</p>
+  <iframe class="widget-frame" src="${embedUrl}" frameborder="0" allowtransparency="true" scrolling="no"></iframe>
+  <a href="${communityUrl}" class="cta">Make Your Predictions →</a>
+</body>
+</html>`);
+  } catch (err) {
+    res.status(500).send('Error: ' + err.message);
+  }
+});
 
 // GET /api/embed/:slug — widget data (top 3 active markets + community branding)
 app.get('/api/embed/:slug', async (req, res) => {
@@ -6375,7 +6468,7 @@ app.get('/api/embed/:slug', async (req, res) => {
 
     const { data: markets } = await supabase
       .from('markets')
-      .select('id, question, yes_votes, no_votes, trader_count, expiry_date, category')
+      .select('id, question, yes_price, no_price, yes_votes, no_votes, trader_count, expiry_date, category')
       .eq('tenant_slug', slug)
       .eq('resolved', false)
       .neq('is_public', false)
@@ -6394,13 +6487,15 @@ app.get('/api/embed/:slug', async (req, res) => {
         url:        `https://hyperflex.network/${slug}`,
       },
       markets: (markets || []).map(m => ({
-        id:          m.id,
-        question:    m.question,
-        yes_votes:   m.yes_votes || 0,
-        no_votes:    m.no_votes  || 0,
+        id:           m.id,
+        question:     m.question,
+        yes_price:    m.yes_price || 0.5,
+        no_price:     m.no_price  || 0.5,
+        yes_votes:    m.yes_votes || 0,
+        no_votes:     m.no_votes  || 0,
         trader_count: m.trader_count || 0,
-        expiry_date: m.expiry_date,
-        category:    m.category,
+        expiry_date:  m.expiry_date,
+        category:     m.category,
       })),
     });
   } catch (err) {
