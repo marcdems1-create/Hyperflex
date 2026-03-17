@@ -3142,6 +3142,25 @@ body.nav-open .sidebar-backdrop {
           </div>
         </div>
 
+        <!-- Sponsor Kit — Pro/Premium only -->
+        <div class="section" id="sponsorKitSection" style="display:none">
+          <div class="share-section">
+            <div class="share-title">📄 Sponsor Media Kit</div>
+            <p style="font-size:13px;color:var(--dim);margin-bottom:16px;line-height:1.6">
+              A branded 3-page PDF with your community's live stats — ready to send to brands and sponsors. Shows member count, weekly active traders, total predictions, top categories, and example sponsored market formats.
+            </p>
+            <div style="display:flex;align-items:center;gap:16px;padding:16px 20px;background:rgba(201,146,13,0.06);border:1px solid rgba(201,146,13,0.2);border-radius:10px;flex-wrap:wrap">
+              <div style="flex:1;min-width:200px">
+                <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px">Your community stats, formatted for brands</div>
+                <div style="font-size:12px;color:var(--dim)">Cover page · Audience overview · Sponsorship options — auto-generated from your live data</div>
+              </div>
+              <button id="downloadKitBtn" onclick="downloadSponsorKit()" class="btn-primary" style="white-space:nowrap;padding:10px 20px;font-size:13px">
+                ⬇ Download Sponsor Kit
+              </button>
+            </div>
+          </div>
+        </div>
+
         <div class="section">
           <div class="share-section">
             <div class="share-title">📱 QR Code</div>
@@ -5448,7 +5467,12 @@ function showTab(tab) {
   document.getElementById('topbarTitle').textContent = titles[tab] || tab;
   if (tab === 'analytics' && !analyticsLoaded) loadAnalytics();
   if (tab === 'ideas' && !ideasLoaded) loadMarketIdeas(false);
-  if (tab === 'share') loadCreatorReferralStats();
+  if (tab === 'share') {
+    loadCreatorReferralStats();
+    const plan = creatorData?.creator?.plan || 'free';
+    const kitSection = document.getElementById('sponsorKitSection');
+    if (kitSection) kitSection.style.display = (plan === 'pro' || plan === 'platinum') ? '' : 'none';
+  }
   if (tab === 'resolve') loadDisputes();
   if (tab === 'markets') {
     const sec = document.getElementById('suggestionsSection');
@@ -7338,6 +7362,37 @@ function copyEmbedCode() {
   if (!area) return;
   navigator.clipboard.writeText(area.value).then(() => showToast('Embed code copied! Paste it into your site 🔗', 'success'));
 }
+async function downloadSponsorKit() {
+  const plan = creatorData?.creator?.plan || 'free';
+  if (plan === 'free') { showUpgrade(); return; }
+  const btn = document.getElementById('downloadKitBtn');
+  if (btn) { btn.textContent = '⏳ Generating…'; btn.disabled = true; }
+  try {
+    const r = await fetch(API + '/api/creator/sponsor-kit', {
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      if (d.upgrade_required) { showUpgrade(); return; }
+      showToast(d.error || 'Failed to generate kit', 'error');
+      return;
+    }
+    const blob = await r.blob();
+    const slug = creatorData?.creator?.slug || 'community';
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `${slug}-sponsor-kit.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Sponsor Kit downloaded! 📄', 'success');
+  } catch(e) {
+    showToast('Download failed — please try again', 'error');
+  } finally {
+    if (btn) { btn.textContent = '⬇ Download Sponsor Kit'; btn.disabled = false; }
+  }
+}
+
 function copyCreatorRefLink() {
   const el = document.getElementById('creatorRefLink');
   if (!el) return;

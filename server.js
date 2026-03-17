@@ -11,6 +11,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const dns = require('dns').promises;
 const nodemailer = require('nodemailer');
+const { execFile } = require('child_process');
 
 const app = express();
 app.use(cors());
@@ -3256,6 +3257,109 @@ app.get('/api/creator/analytics', requireCreator, async (req, res) => {
 
   } catch (err) {
     console.error('analytics error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+// 4b. SPONSOR KIT PDF
+// GET /api/creator/sponsor-kit
+// Pro/Premium only — generates a branded 3-page PDF with community stats
+// ════════════════════════════════════════════════════════════
+app.get('/api/creator/sponsor-kit', requireCreator, async (req, res) => {
+  try {
+    const creatorId = req.creator.id;
+
+    // Plan gate — Pro/Premium only
+    const { data: settings } = await supabase
+      .from('creator_settings')
+      .select('slug, plan, display_name, custom_points_name')
+      .eq('creator_id', creatorId)
+      .single();
+    if (!settings) return res.status(404).json({ error: 'Creator not found' });
+
+    const plan = settings.plan || 'free';
+    if (plan === 'free') {
+      return res.status(403).json({ error: 'Sponsor Kit requires Pro or Premium', upgrade_required: true });
+    }
+
+    const slug     = settings.slug;
+    const ptsName  = settings.custom_points_name || 'Flex Points';
+    const name     = settings.display_name || slug;
+
+    // Fetch stats
+    const [marketsRes, balancesRes, positionsRes] = await Promise.all([
+      supabase.from('markets').select('id, category, resolved, archived, trader_count').eq('tenant_slug', slug),
+      supabase.from('community_balances').select('user_id', { count: 'exact', head: true }).eq('creator_slug', slug),
+      supabase.from('positions').select('market_id, amount, user_id, created_at')
+        .in('market_id',
+          (await supabase.from('markets').select('id').eq('tenant_slug', slug)).data?.map(m => m.id) || [])
+    ]);
+
+    const allMarkets    = marketsRes.data || [];
+    const memberCount   = balancesRes.count || 0;
+    const allPositions  = positionsRes.data || [];
+
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const weeklyTraders = new Set(
+      allPositions.filter(p => new Date(p.created_at) >= sevenDaysAgo).map(p => p.user_id)
+    ).size;
+
+    const totalPreds  = allPositions.length;
+    const marketsRun  = allMarkets.length;
+    const engagement  = memberCount > 0 ? Math.round((new Set(allPositions.map(p => p.user_id)).size / memberCount) * 100) : 0;
+    const avgBet      = allPositions.length > 0
+      ? Math.round(allPositions.reduce((s, p) => s + (p.amount || 0), 0) / allPositions.length / 100)
+      : 0;
+
+    // Category breakdown
+    const catMap = {};
+    for (const m of allMarkets) {
+      const cat = m.category || 'other';
+      if (!catMap[cat]) catMap[cat] = { category: cat, bets: 0 };
+    }
+    for (const p of allPositions) {
+      const m = allMarkets.find(x => x.id === p.market_id);
+      if (m) {
+        const cat = m.category || 'other';
+        if (!catMap[cat]) catMap[cat] = { category: cat, bets: 0 };
+        catMap[cat].bets++;
+      }
+    }
+    const categories = Object.values(catMap).sort((a, b) => b.bets - a.bets).slice(0, 5);
+
+    const payload = JSON.stringify({
+      community: { name, slug, pts_name: ptsName },
+      stats: {
+        member_count:       memberCount,
+        weekly_traders:     weeklyTraders,
+        total_predictions:  totalPreds,
+        markets_run:        marketsRun,
+        engagement_rate:    engagement,
+        avg_bet_size:       avgBet
+      },
+      categories
+    });
+
+    const scriptPath = path.join(__dirname, 'scripts', 'generate_sponsor_kit.py');
+
+    const child = execFile('python3', [scriptPath], { maxBuffer: 5 * 1024 * 1024 }, (err, stdout, stderr) => {
+      if (err) {
+        console.error('[sponsor-kit] python error:', err.message, stderr);
+        return res.status(500).json({ error: 'PDF generation failed' });
+      }
+      const filename = `${slug}-sponsor-kit.pdf`;
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.send(Buffer.from(stdout, 'binary'));
+    });
+
+    child.stdin.write(payload);
+    child.stdin.end();
+
+  } catch (err) {
+    console.error('[sponsor-kit]', err);
     res.status(500).json({ error: err.message });
   }
 });

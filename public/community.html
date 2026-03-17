@@ -1790,11 +1790,12 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
     <div id="yourRankBar" style="display:none" class="your-rank-bar">
       <span>Your rank:</span> <strong id="yourRankNum"></strong> <span id="yourRankScore"></span>
     </div>
+    <div id="lbAccuracyCallout" style="display:none;align-items:center;gap:6px;padding:8px 14px;margin-bottom:10px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;flex-wrap:wrap"></div>
     <div class="leaderboard-card">
       <div class="lb-tabs">
         <div class="lb-tab active" id="lbTabAllTime" onclick="switchLbTab('all')">All Time</div>
         <div class="lb-tab" id="lbTabWeek" onclick="switchLbTab('week')">This Week</div>
-        <div class="lb-tab" id="lbTabAccuracy" onclick="switchLbTab('accuracy')">🎯 Most Right</div>
+        <div class="lb-tab" id="lbTabAccuracy" onclick="switchLbTab('accuracy')" style="position:relative">🎯 Most Right<span style="position:absolute;top:-4px;right:-4px;width:6px;height:6px;border-radius:50%;background:#c9920d"></span></div>
       </div>
       <div id="leaderboardCard"></div>
     </div>
@@ -2854,6 +2855,20 @@ async function loadLeaderboard(period = 'all') {
       document.getElementById('yourRankNum').textContent  = `#${myRank}`;
       document.getElementById('yourRankScore').textContent = `· ${isFallback ? myScore : '+' + myScore + ' ' + pts}`;
       document.getElementById('yourRankBar').style.display = 'flex';
+    }
+
+    // "Your accuracy" callout — shown when logged-in user has settled trades
+    if (currentUser) {
+      const myRow = data.find(r => r.user_id === currentUser.id);
+      const myWr  = myRow?.win_rate || 0;
+      const myTrades = myRow?.total_trades || 0;
+      const accuracyCallout = document.getElementById('lbAccuracyCallout');
+      if (accuracyCallout && myTrades >= 3) {
+        const color = myWr >= 60 ? '#22c55e' : myWr >= 50 ? '#c9920d' : 'var(--dim)';
+        const label = myWr >= 70 ? '🎯 ORACLE' : myWr >= 60 ? '🎯 SHARP' : myWr >= 50 ? '📊 SOLID' : '🎲 SPEC';
+        accuracyCallout.innerHTML = `<span style="color:var(--dim);font-size:11px">Your accuracy:</span> <span style="color:${color};font-weight:700;font-size:13px;font-family:var(--mono)">${myWr}%</span> <span style="font-size:11px;color:${color};font-weight:700">${label}</span> <a href="/m/${currentUser.id}" target="_blank" style="font-size:10px;color:var(--gold);text-decoration:none;margin-left:4px">View profile →</a>`;
+        accuracyCallout.style.display = 'flex';
+      }
     }
 
     document.getElementById('leaderboardSection').style.display = 'block';
