@@ -250,7 +250,45 @@
 
 ---
 
+## Session 8 — Seasons & Tournaments (commit `553c8b4`)
+
+**X — Prediction Seasons** — Pro/Premium only — first dedicated paid conversion driver:
+- Creator creates a named season (e.g. "Q2 2026 Crypto Season") with end date + prize description
+- Assigns any of their active markets to the season
+- Members automatically compete on a season-specific leaderboard (PnL across season markets)
+- Creator can end the season at any time (leaderboard freezes; history preserved)
+
+**Creator dashboard — 🏆 Seasons tab:**
+- Season cards showing status badge (Active/Ended), days left, market count, prize
+- Create/Edit modal: name, description, end date, prize, market picker
+- "End Season" button
+- Free creators see upgrade gate with explanation
+
+**Community page:**
+- Active season banner auto-renders above the markets grid (non-blocking fetch)
+- Shows season name, description, days remaining, prize text
+- Mini top-5 season leaderboard with PnL + win count right in the banner
+
+**API (server.js):**
+- `POST /api/creator/seasons` — create (Pro/Premium gate)
+- `GET /api/creator/seasons` — list creator's seasons with market counts
+- `PUT /api/creator/seasons/:id` — edit / end
+- `POST /api/creator/seasons/:id/markets` — assign/remove markets
+- `GET /api/community/:slug/seasons` — public season list
+- `GET /api/community/:slug/seasons/:id` — season detail + live leaderboard
+
+**Migration:** `supabase_migration_seasons.sql` → run as #24 in ordered list
+- `seasons` table
+- `markets.season_id` nullable FK column
+
+---
+
 ## Known Issues / Next Up
+
+**Next highest-ROI builds:**
+- One-click market share card for X/Twitter (drives member acquisition)
+- "Send to community" weekly email digest button (creator → all members)
+- YouTube scanner demo mode for free tier (show blurred suggestions → upgrade trigger)
 
 - **Creator referral acceptance**: `accepted` on `creator_referrals` currently stays false — need to flip it to true when the referred creator publishes their first market (currently manual via admin or future automation)
 - **Embed widget**: No auth in embed — members can't bet from inside the iframe. Intentional for now (links out to community page). Could add predict-in-iframe later.
