@@ -198,8 +198,8 @@
 ## Session 7 continued — view toggle, search, Discord, notifications (commit `ee1733c`)
 
 **R — Creator/Member view toggle:**
-- Styled pill toggle in creator dashboard topbar: 🛠 Creator (active) | 👤 Member (links to own community)
-- Same toggle in community creatorLoginBar when creator views their own community: 🛠 Creator | 👤 Member (active)
+- Styled pill toggle in creator dashboard topbar: 🛠 Creator (active) | 👤 Member Dashboard (links to own community)
+- Same toggle in community creatorLoginBar when creator views their own community: 🛠 Creator | 👤 Member Dashboard (active)
 - Replaces the old plain-text "← Back to Dashboard" bar
 
 **S — Market search on community page:**
@@ -223,6 +223,17 @@
 **New migrations to run:**
 21. `supabase_migration_discord_webhook.sql`
 22. `supabase_migration_notifications.sql`
+
+---
+
+## Session 7 continued — global search bars (commit `30e9d10`)
+
+**V — Search bars across pages:**
+- **creator-dashboard Markets tab**: debounced text search above filter pills; filters across Live/Expired/Archived by question text (`_dashMktSearchQuery` + `onDashMarketSearch()`)
+- **explore.html**: full-width search bar above tabs; filters Activity feed (by question + community + username), Hot/New markets (by question + community name), and Communities tab (shows filtered community cards)
+- **templates.html**: search input above filter pills; filters by template name, description, and preview questions; stacks with niche pills (`applyTemplateFilter()`)
+- **profile.html**: search input on Active Markets grid; now shows ALL active markets (was capped at 6); filters by question + category (`renderProfileMarkets()`, `onProfileSearch()`)
+- **community.html**: already had search (session 7, feature S above)
 
 ---
 
