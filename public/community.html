@@ -1264,6 +1264,39 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
 .toast.error     { border-color: rgba(192,57,43,0.4); color: #e74c3c; }
 .toast.milestone { border-color: rgba(201,146,13,0.6); color: var(--gold); font-size: 14px; }
 
+/* Post-bet share nudge */
+.share-nudge {
+  position: fixed; bottom: 88px; right: 20px;
+  background: #0f0f0e; border: 1px solid rgba(201,146,13,0.35);
+  border-radius: 12px; padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 6px;
+  z-index: 998; min-width: 220px; max-width: 280px;
+  transform: translateY(20px) scale(0.95); opacity: 0;
+  transition: transform 0.28s cubic-bezier(0.34,1.56,0.64,1), opacity 0.22s;
+  pointer-events: none; box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+.share-nudge.show { transform: translateY(0) scale(1); opacity: 1; pointer-events: all; }
+.share-nudge-label { font-size: 10px; font-family: var(--mono); color: rgba(201,146,13,0.8); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.share-nudge-q { font-size: 11px; font-family: var(--mono); color: var(--text); line-height: 1.4; max-height: 2.8em; overflow: hidden; }
+.share-nudge-actions { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+.share-nudge-x {
+  display: flex; align-items: center; gap: 5px;
+  background: #000; border: 1px solid #333; color: #e7e9ea;
+  font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+  padding: 5px 10px; border-radius: 6px; cursor: pointer; text-decoration: none;
+  transition: background .15s;
+}
+.share-nudge-x:hover { background: #111; }
+.share-nudge-close {
+  font-size: 10px; font-family: var(--mono); color: rgba(245,240,232,0.3);
+  background: transparent; border: none; cursor: pointer; padding: 4px;
+  margin-left: auto; line-height: 1;
+}
+.share-nudge-close:hover { color: rgba(245,240,232,0.6); }
+@media (max-width: 480px) {
+  .share-nudge { right: 12px; left: 12px; min-width: 0; max-width: none; bottom: 80px; }
+}
+
 /* Spinner */
 .spinner { width: 14px; height: 14px; border: 2px solid rgba(201,146,13,0.3); border-top-color: var(--gold); border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -2023,6 +2056,19 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- Post-bet share nudge -->
+<div class="share-nudge" id="shareNudge">
+  <div class="share-nudge-label" id="shareNudgeLabel">You predicted YES 📢</div>
+  <div class="share-nudge-q" id="shareNudgeQ"></div>
+  <div class="share-nudge-actions">
+    <a class="share-nudge-x" id="shareNudgeXBtn" href="#" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.737-8.835L1.254 2.25H8.08l4.259 5.633 5.905-5.633zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+      Share your call
+    </a>
+    <button class="share-nudge-close" onclick="closeShareNudge()" title="Dismiss">✕</button>
+  </div>
+</div>
 
 <!-- Win share card modal -->
 <div id="winCardOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:300;display:none;align-items:center;justify-content:center;padding:20px">
@@ -3474,11 +3520,18 @@ async function submitPredict() {
       }
     }
 
-    // Capture comment before closePredict() clears pendingMarket
+    // Capture market context before closePredict() wipes it
     const commentText   = document.getElementById('predictComment')?.value?.trim();
     const commentMktId  = pendingMarket.id;
+    const _shareMktId   = pendingMarket.id;
+    const _shareSide    = pendingSide;
+    const _shareQ       = pendingMarket.question;
+    const _shareYesPct  = pendingMarket.yes_price
+      ? Math.round((data.yes_price ?? pendingMarket.yes_price) * 100)
+      : null;
     closePredict();
     showToast(`✓ ${pendingSide} · ${inputPts.toLocaleString()} pts placed`, 'success');
+    showShareNudge(_shareMktId, _shareQ, _shareSide, _shareYesPct);
     refreshMarketCard(pendingMarket);
     renderUserHeader();
     buildFilterCounts();
@@ -3513,6 +3566,34 @@ function showPredictError(msg) {
 function closePredict() {
   document.getElementById('predictOverlay').classList.remove('show');
   pendingMarket = null;
+}
+
+let _shareNudgeTimer = null;
+function showShareNudge(marketId, question, side, yesPct) {
+  const nudge   = document.getElementById('shareNudge');
+  const label   = document.getElementById('shareNudgeLabel');
+  const qEl     = document.getElementById('shareNudgeQ');
+  const xBtn    = document.getElementById('shareNudgeXBtn');
+
+  const sideLabel = side === 'YES' ? 'YES' : 'NO';
+  const pct       = yesPct !== null
+    ? (side === 'YES' ? `${yesPct}%` : `${100 - yesPct}%`)
+    : '';
+  label.textContent = `You predicted ${sideLabel}${pct ? ' ' + pct : ''} 📣`;
+  qEl.textContent   = question;
+
+  const shareUrl  = `${location.origin}/share/${marketId}`;
+  const tweetText = `I just predicted ${sideLabel}${pct ? ' (' + pct + ')' : ''} on "${question}" 🎯\nMake your call →`;
+  xBtn.href = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}&url=${encodeURIComponent(shareUrl)}`;
+
+  // Show
+  clearTimeout(_shareNudgeTimer);
+  nudge.classList.add('show');
+  _shareNudgeTimer = setTimeout(closeShareNudge, 9000);
+}
+function closeShareNudge() {
+  document.getElementById('shareNudge').classList.remove('show');
+  clearTimeout(_shareNudgeTimer);
 }
 
 function refreshMarketCard(m) {
