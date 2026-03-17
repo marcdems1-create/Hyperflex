@@ -8683,6 +8683,19 @@ async function runYoutubeScan() {
   const url = document.getElementById('youtubeUrl').value.trim();
   if (!url) { showToast('Paste a YouTube URL first.', 'error'); return; }
 
+  // ── FREE PLAN DEMO MODE ──────────────────────────────────
+  const planNowForScan = creatorData?.creator?.plan || 'free';
+  if (planNowForScan === 'free') {
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner"></span> Scanning video…`;
+    document.getElementById('ytError').style.display = 'none';
+    document.getElementById('ytScanResult').style.display = 'none';
+    await new Promise(r => setTimeout(r, 1800)); // realistic delay
+    btn.disabled = false; btn.textContent = cfg.btn;
+    renderYtDemoResults();
+    return;
+  }
+
   btn.disabled = true;
   btn.innerHTML = `<span class="spinner"></span> ${cfg.scanning}`;
   document.getElementById('ytError').style.display = 'none';
@@ -8721,6 +8734,42 @@ async function runYoutubeScan() {
     const b = document.getElementById('ytScanBtn');
     if (b) { b.disabled = false; b.textContent = cfg.btn; }
   }
+}
+
+function renderYtDemoResults() {
+  const DEMO_MARKETS = [
+    { question: 'Will this topic result in a major announcement within 30 days?', category: 'GENERAL' },
+    { question: 'Will the creator follow up with a part 2 before next month?', category: 'CONTENT' },
+    { question: 'Will the community reach consensus on the main debate point?', category: 'COMMUNITY' },
+  ];
+  document.getElementById('ytVideoMeta').innerHTML = `<span style="color:var(--gold)">▶ Scan preview</span> — <span style="color:var(--dim)">3 markets detected from this video</span>`;
+  document.getElementById('ytMarketSectionLabel').style.color = 'var(--gold)';
+  document.getElementById('ytMarketSectionLabel').textContent = '▶ AI Markets — upgrade to unlock';
+
+  document.getElementById('ytMarketList').innerHTML = `
+    ${DEMO_MARKETS.map((m, i) => `
+      <div class="yt-market-item" style="position:relative;cursor:default;opacity:0.7;user-select:none">
+        <input type="checkbox" disabled style="opacity:0.3"/>
+        <div style="flex:1;filter:blur(3px);pointer-events:none">
+          <div class="yt-market-question">${m.question}</div>
+          <div class="yt-market-meta">${m.category} · Closes in 30 days</div>
+        </div>
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(20,20,18,0.45);border-radius:8px">
+          <span style="font-size:18px">🔒</span>
+        </div>
+      </div>`).join('')}
+    <div style="margin-top:16px;padding:16px;background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.3);border-radius:10px;text-align:center">
+      <div style="font-size:14px;font-weight:700;color:var(--gold);margin-bottom:6px">🤖 Unlock AI Market Generation</div>
+      <div style="font-size:12px;color:var(--dim);margin-bottom:14px;line-height:1.6">Upgrade to Pro to scan any YouTube video and auto-generate prediction markets from the comments, transcript, and live chat.</div>
+      <button class="btn-primary" style="font-size:13px;padding:10px 24px" onclick="closeYoutubeModal();showTab('settings');setTimeout(()=>{document.getElementById('upgradeModal')?.style&&openUpgradeModal()},300)">Upgrade to Pro →</button>
+    </div>
+  `;
+  document.getElementById('ytMarketSection').style.display = 'block';
+  document.getElementById('ytScanResult').style.display = 'block';
+  document.getElementById('ytFooter').innerHTML = `
+    <button class="btn-secondary" onclick="closeYoutubeModal()">Close</button>
+    <button class="btn-primary" onclick="closeYoutubeModal();showTab('settings');setTimeout(()=>openUpgradeModal(),300)">Upgrade to Pro →</button>
+  `;
 }
 
 function renderYtResults(metaSummary, cfg, markets) {
