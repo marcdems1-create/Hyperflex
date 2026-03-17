@@ -43,22 +43,53 @@
 
   .markets-list{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:0}
   .market-row{
-    display:flex;flex-direction:column;gap:7px;
-    padding:12px 14px;
+    display:flex;flex-direction:column;gap:6px;
+    padding:10px 14px;
     border-bottom:1px solid var(--border);
-    text-decoration:none;color:var(--text);
+    color:var(--text);
     transition:background .12s;
   }
-  .market-row:hover{background:rgba(255,255,255,0.03)}
   .market-row:last-child{border-bottom:none}
-  .market-q{font-size:12px;font-weight:700;line-height:1.4;font-family:var(--mono)}
+  .market-q{font-size:12px;font-weight:700;line-height:1.4;font-family:var(--mono);cursor:pointer;text-decoration:none;color:var(--text)}
+  .market-q:hover{color:var(--gold)}
   .market-bar{height:3px;background:#2a2a27;border-radius:2px;overflow:hidden}
   .market-fill{height:100%;border-radius:2px;transition:width .3s}
   .market-odds{display:flex;justify-content:space-between;font-size:10px;font-family:var(--mono);font-weight:700}
-  .market-traders{font-size:10px;font-family:var(--mono);color:var(--dim);text-align:right;margin-top:2px}
+  .market-traders{font-size:10px;font-family:var(--mono);color:var(--dim);text-align:right;margin-top:1px}
+
+  /* Bet buttons (logged-in) */
+  .market-bet-row{display:flex;gap:5px;margin-top:2px}
+  .bet-btn{
+    flex:1;padding:5px 0;border:none;border-radius:4px;
+    font-size:10px;font-family:var(--mono);font-weight:700;letter-spacing:0.03em;
+    cursor:pointer;transition:opacity .15s;
+  }
+  .bet-yes{background:rgba(34,197,94,0.18);color:#22c55e;border:1px solid rgba(34,197,94,0.3)}
+  .bet-yes:hover{background:rgba(34,197,94,0.28)}
+  .bet-no{background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.25)}
+  .bet-no:hover{background:rgba(239,68,68,0.25)}
+
+  /* Login nudge (logged-out) */
+  .market-login-nudge{
+    font-size:9px;font-family:var(--mono);color:var(--dim);
+    text-align:right;margin-top:1px;
+  }
+  .market-login-nudge a{color:var(--gold);text-decoration:none}
+  .market-login-nudge a:hover{text-decoration:underline}
 
   .empty{display:flex;align-items:center;justify-content:center;flex:1;font-size:12px;font-family:var(--mono);color:var(--dim);padding:24px;text-align:center;line-height:1.6}
   .loading{display:flex;align-items:center;justify-content:center;flex:1;font-size:11px;font-family:var(--mono);color:var(--dim)}
+
+  /* Balance bar */
+  .widget-balance-bar{
+    padding:5px 14px;
+    background:rgba(201,146,13,0.04);
+    border-bottom:1px solid rgba(201,146,13,0.1);
+    display:flex;align-items:center;justify-content:space-between;
+    flex-shrink:0;
+  }
+  .balance-label{font-size:9px;font-family:var(--mono);color:var(--dim);letter-spacing:0.06em;text-transform:uppercase}
+  .balance-val{font-size:11px;font-family:var(--mono);font-weight:700;color:var(--gold)}
 
   .widget-footer{
     padding:8px 14px;
@@ -71,6 +102,56 @@
   .footer-logo-text{font-size:10px;font-family:var(--mono);font-weight:700;color:var(--dim);letter-spacing:0.08em}
   .footer-logo svg{width:14px;height:14px;flex-shrink:0}
   .footer-pts{font-size:10px;font-family:var(--mono);color:var(--dim)}
+
+  /* Mini predict modal */
+  .predict-overlay{
+    position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:100;
+    display:none;align-items:flex-end;
+  }
+  .predict-overlay.open{display:flex}
+  .predict-sheet{
+    width:100%;background:var(--card);border-top:1px solid var(--border);
+    border-radius:14px 14px 0 0;padding:16px 14px 20px;
+    display:flex;flex-direction:column;gap:10px;
+  }
+  .predict-sheet-q{font-size:11px;font-family:var(--mono);font-weight:700;color:var(--text);line-height:1.4;max-height:2.8em;overflow:hidden}
+  .predict-side-label{font-size:10px;font-family:var(--mono);font-weight:700;letter-spacing:0.04em}
+  .predict-input-row{display:flex;align-items:center;gap:8px}
+  .predict-input-row input{
+    flex:1;background:#111;border:1px solid var(--border);border-radius:6px;
+    color:var(--text);font-family:var(--mono);font-size:13px;font-weight:700;
+    padding:8px 10px;outline:none;
+  }
+  .predict-input-row input:focus{border-color:rgba(201,146,13,0.5)}
+  .predict-pts-label{font-size:10px;font-family:var(--mono);color:var(--dim)}
+  .predict-payout{font-size:10px;font-family:var(--mono);color:var(--dim)}
+  .predict-payout span{color:var(--gold);font-weight:700}
+  .predict-actions{display:flex;gap:8px}
+  .predict-cancel{
+    flex:0 0 auto;padding:9px 14px;border:1px solid var(--border);border-radius:6px;
+    background:transparent;color:var(--dim);font-family:var(--mono);font-size:11px;
+    cursor:pointer;
+  }
+  .predict-submit{
+    flex:1;padding:9px;border:none;border-radius:6px;
+    font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:0.03em;
+    cursor:pointer;transition:opacity .15s;
+  }
+  .predict-submit:disabled{opacity:0.5;cursor:default}
+  .predict-submit.yes{background:#22c55e;color:#000}
+  .predict-submit.no{background:#ef4444;color:#fff}
+
+  /* Toast */
+  .toast{
+    position:fixed;bottom:70px;left:50%;transform:translateX(-50%) translateY(20px);
+    background:#1c1c19;border:1px solid var(--border);border-radius:8px;
+    padding:9px 16px;font-size:11px;font-family:var(--mono);color:var(--text);
+    opacity:0;transition:opacity .2s, transform .2s;z-index:200;white-space:nowrap;
+    pointer-events:none;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast.success{border-color:rgba(34,197,94,0.4);color:#22c55e}
+  .toast.error{border-color:rgba(239,68,68,0.4);color:#ef4444}
 
   ::-webkit-scrollbar{width:3px}
   ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:2px}
@@ -92,6 +173,12 @@
   </div>
 </div>
 
+<!-- Balance bar (shown only when logged in) -->
+<div class="widget-balance-bar" id="balanceBar" style="display:none">
+  <span class="balance-label" id="balancePtsName">Points</span>
+  <span class="balance-val" id="balanceVal">—</span>
+</div>
+
 <div class="markets-list" id="marketsList">
   <div class="loading">Loading markets…</div>
 </div>
@@ -107,62 +194,280 @@
   <div class="footer-pts" id="footerPts">Play-money predictions</div>
 </div>
 
+<!-- Mini predict modal -->
+<div class="predict-overlay" id="predictOverlay">
+  <div class="predict-sheet">
+    <div class="predict-sheet-q" id="psQuestion"></div>
+    <div class="predict-side-label" id="psSideLabel"></div>
+    <div class="predict-input-row">
+      <input type="number" id="psAmount" min="1" step="1" placeholder="100"/>
+      <span class="predict-pts-label" id="psPtsName">pts</span>
+    </div>
+    <div class="predict-payout" id="psPayoutLine">Potential payout: <span id="psPayoutAmt">—</span></div>
+    <div class="predict-actions">
+      <button class="predict-cancel" onclick="closePredictSheet()">Cancel</button>
+      <button class="predict-submit" id="psSubmit" onclick="submitPredict()">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
 <script>
 (async function() {
   const slug = location.pathname.replace('/embed/', '').replace(/\/$/, '');
+  const token = localStorage.getItem('hf_token');
+  let _community = null;
+  let _markets = [];
+  let _userBalance = null;  // in centpoints (÷100 for display)
+  let _minBet = 100;        // centpoints
+  let _maxBet = 100000;     // centpoints
+  let _ptsName = 'Flex Points';
+  let _userId = null;
+
+  // --- Fetch community + markets ---
   try {
     const res  = await fetch('/api/embed/' + slug);
     const data = await res.json();
     if (!res.ok || !data.community) throw new Error(data.error || 'Not found');
 
-    const { community, markets } = data;
-    const color = community.color || '#c9920d';
+    _community = data.community;
+    _markets   = data.markets;
+    const color = _community.color || '#c9920d';
+    _ptsName    = _community.pts_name || 'Flex Points';
 
-    document.getElementById('headerDot').style.background   = color;
-    document.getElementById('headerName').textContent       = community.name;
-    document.getElementById('headerCta').href               = community.url + '?ref=embed';
-    document.getElementById('footerPts').textContent        = community.pts_name + ' · play-money';
+    document.getElementById('headerDot').style.background = color;
+    document.getElementById('headerName').textContent     = _community.name;
+    document.getElementById('headerCta').href             = _community.url + '?ref=embed';
+    document.getElementById('footerPts').textContent      = _ptsName + ' · play-money';
+    document.getElementById('balancePtsName').textContent = _ptsName;
 
-    // Wire Share on X button — links to /widget/:slug which has Player Card meta
-    const widgetUrl = 'https://hyperflex.network/widget/' + community.slug;
-    const topQ = markets[0]?.question;
-    const tweetText = topQ
-      ? `"${topQ}" — predict on ${community.name} 🎯\n`
-      : `Live prediction markets on ${community.name} — make your call 🎯\n`;
-    const xHref = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(tweetText) + '&url=' + encodeURIComponent(widgetUrl);
-    document.getElementById('shareXBtn').href = xHref;
+    // Wire Share on X
+    const widgetUrl  = 'https://hyperflex.network/widget/' + _community.slug;
+    const topQ       = _markets[0]?.question;
+    const tweetText  = topQ
+      ? `"${topQ}" — predict on ${_community.name} 🎯\n`
+      : `Live prediction markets on ${_community.name} — make your call 🎯\n`;
+    document.getElementById('shareXBtn').href =
+      'https://twitter.com/intent/tweet?text=' + encodeURIComponent(tweetText) +
+      '&url=' + encodeURIComponent(widgetUrl);
 
-    if (!markets.length) {
-      document.getElementById('marketsList').innerHTML = '<div class="empty">No open markets yet.<br/>Be the first to predict!</div>';
-      return;
-    }
+    // Min/max from community settings
+    if (_community.min_bet != null) _minBet = _community.min_bet;
+    if (_community.max_bet != null) _maxBet = _community.max_bet;
 
-    document.getElementById('marketsList').innerHTML = markets.map(m => {
-      // Use CPMM yes_price for accurate odds; fall back to vote-share for legacy markets
-      const hasPrice = m.yes_price && Math.abs(m.yes_price - 0.5) > 0.005;
-      const yesPct   = hasPrice ? Math.round(m.yes_price * 100) : (() => {
-        const t = (m.yes_votes || 0) + (m.no_votes || 0);
-        return t > 0 ? Math.round(m.yes_votes / t * 100) : null;
-      })();
-      const noPct    = yesPct !== null ? 100 - yesPct : null;
-      const barColor = yesPct !== null ? (yesPct >= 50 ? '#22c55e' : '#ef4444') : 'rgba(255,255,255,0.2)';
-      const url = community.url + '?market=' + m.id + '&ref=embed';
-      const hasRealTraders = hasPrice && (m.trader_count || 0) > 0;
-      return `<a class="market-row" href="${url}" target="_blank" rel="noopener">
-        <div class="market-q">${escHtml(m.question)}</div>
-        <div class="market-bar"><div class="market-fill" style="width:${yesPct !== null ? yesPct : 50}%;background:${barColor};opacity:${yesPct !== null ? 1 : 0.35}"></div></div>
-        ${yesPct !== null
-          ? `<div class="market-odds"><span style="color:#22c55e">YES ${yesPct}%</span><span style="color:#ef4444">NO ${noPct}%</span></div>`
-          : `<div class="market-odds" style="justify-content:center"><span style="color:var(--dim);font-size:9px">🎯 First prediction</span></div>`}
-        <div class="market-traders">${hasRealTraders ? m.trader_count.toLocaleString() + ' traders' : 'Be first to predict'}</div>
-      </a>`;
-    }).join('');
   } catch(e) {
     document.getElementById('marketsList').innerHTML = '<div class="empty">Could not load markets.</div>';
+    return;
   }
+
+  // --- Auth: fetch balance if logged in ---
+  if (token) {
+    try {
+      // Get user id from token payload (base64 decode middle segment)
+      try {
+        const pl = JSON.parse(atob(token.split('.')[1]));
+        _userId = pl.sub || pl.user_id || pl.id || null;
+      } catch(_) {}
+
+      const bRes  = await fetch('/api/user/community-balance/' + slug, {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      if (bRes.ok) {
+        const bData = await bRes.json();
+        _userBalance = bData.balance ?? null; // centpoints
+        if (_userBalance !== null) {
+          document.getElementById('balanceBar').style.display = 'flex';
+          document.getElementById('balanceVal').textContent   = fmtPts(_userBalance) + ' ' + _ptsName;
+        }
+      }
+    } catch(_) {}
+  }
+
+  // --- Render markets ---
+  if (!_markets.length) {
+    document.getElementById('marketsList').innerHTML =
+      '<div class="empty">No open markets yet.<br/>Be the first to predict!</div>';
+    return;
+  }
+
+  document.getElementById('marketsList').innerHTML = _markets.map(m => {
+    const hasPrice = m.yes_price && Math.abs(m.yes_price - 0.5) > 0.005;
+    const yesPct   = hasPrice ? Math.round(m.yes_price * 100) : (() => {
+      const t = (m.yes_votes || 0) + (m.no_votes || 0);
+      return t > 0 ? Math.round(m.yes_votes / t * 100) : null;
+    })();
+    const noPct    = yesPct !== null ? 100 - yesPct : null;
+    const barColor = yesPct !== null ? (yesPct >= 50 ? '#22c55e' : '#ef4444') : 'rgba(255,255,255,0.2)';
+    const hasRealTraders = hasPrice && (m.trader_count || 0) > 0;
+    const communityUrl   = _community.url + '?market=' + m.id + '&ref=embed';
+
+    const yp = m.yes_price || 0.5;
+    const np = m.no_price  || 0.5;
+
+    let betRow = '';
+    if (token && _userBalance !== null) {
+      // Logged in — show YES/NO bet buttons
+      const yl = yesPct !== null ? `YES ${yesPct}%` : 'YES';
+      const nl = noPct  !== null ? `NO ${noPct}%`   : 'NO';
+      betRow = `<div class="market-bet-row">
+        <button class="bet-btn bet-yes" onclick="openPredict(event,'${escJs(m.id)}','${escJs(m.question)}','yes',${yp},${np})">⬆ ${yl}</button>
+        <button class="bet-btn bet-no"  onclick="openPredict(event,'${escJs(m.id)}','${escJs(m.question)}','no',${yp},${np})">⬇ ${nl}</button>
+      </div>`;
+    } else if (token) {
+      // Token present but balance null (community not joined?)
+      betRow = `<div class="market-login-nudge"><a href="${communityUrl}" target="_blank">Join to predict →</a></div>`;
+    } else {
+      // Not logged in
+      betRow = `<div class="market-login-nudge">🔒 <a href="${_community.url}?ref=embed" target="_blank">Login to predict</a></div>`;
+    }
+
+    return `<div class="market-row">
+      <a class="market-q" href="${communityUrl}" target="_blank" rel="noopener">${escHtml(m.question)}</a>
+      <div class="market-bar"><div class="market-fill" style="width:${yesPct !== null ? yesPct : 50}%;background:${barColor};opacity:${yesPct !== null ? 1 : 0.35}"></div></div>
+      ${yesPct !== null
+        ? `<div class="market-odds"><span style="color:#22c55e">YES ${yesPct}%</span><span style="color:#ef4444">NO ${noPct}%</span></div>`
+        : `<div class="market-odds" style="justify-content:center"><span style="color:var(--dim);font-size:9px">🎯 First prediction</span></div>`}
+      <div class="market-traders">${hasRealTraders ? m.trader_count.toLocaleString() + ' traders' : 'Be first to predict'}</div>
+      ${betRow}
+    </div>`;
+  }).join('');
 })();
 
+// --- Mini predict modal ---
+let _activeMarket = null;
+
+function openPredict(evt, marketId, question, side, yesPrice, noPrice) {
+  evt.stopPropagation();
+  _activeMarket = { marketId, question, side, yesPrice, noPrice };
+
+  const ptsName = _ptsName;
+  const defaultAmt = Math.max(Math.round(_minBet / 100), 100); // default in pts
+  const sideColor  = side === 'yes' ? '#22c55e' : '#ef4444';
+  const sideLabel  = side === 'yes' ? '⬆ YES' : '⬇ NO';
+  const price      = side === 'yes' ? yesPrice : noPrice;
+
+  document.getElementById('psQuestion').textContent   = question;
+  document.getElementById('psSideLabel').innerHTML    = `<span style="color:${sideColor}">${sideLabel}</span>`;
+  document.getElementById('psPtsName').textContent    = ptsName;
+  document.getElementById('psAmount').value           = defaultAmt;
+  document.getElementById('psAmount').min             = Math.max(1, Math.round(_minBet / 100));
+  document.getElementById('psAmount').max             = Math.round(_maxBet / 100);
+
+  const sub = document.getElementById('psSubmit');
+  sub.className = 'predict-submit ' + side;
+  sub.textContent = 'Confirm ' + (side === 'yes' ? 'YES' : 'NO');
+
+  updatePayoutLine(defaultAmt, price);
+
+  document.getElementById('psAmount').oninput = function() {
+    updatePayoutLine(parseFloat(this.value) || 0, price);
+  };
+
+  document.getElementById('predictOverlay').classList.add('open');
+}
+
+function updatePayoutLine(amtPts, price) {
+  if (!amtPts || amtPts <= 0 || !price || price <= 0) {
+    document.getElementById('psPayoutAmt').textContent = '—';
+    return;
+  }
+  const payout = Math.round(amtPts / price);
+  document.getElementById('psPayoutAmt').textContent = payout.toLocaleString() + ' ' + _ptsName;
+}
+
+function closePredictSheet() {
+  document.getElementById('predictOverlay').classList.remove('open');
+  _activeMarket = null;
+}
+
+async function submitPredict() {
+  if (!_activeMarket) return;
+  const token  = localStorage.getItem('hf_token');
+  if (!token) { showToast('Please log in first', 'error'); closePredictSheet(); return; }
+
+  const amtPts = parseFloat(document.getElementById('psAmount').value) || 0;
+  if (amtPts < 1) { showToast('Enter a valid amount', 'error'); return; }
+
+  const amtCentpoints = Math.round(amtPts * 100);
+  if (amtCentpoints < _minBet) {
+    showToast('Min bet is ' + fmtPts(_minBet) + ' pts', 'error'); return;
+  }
+  if (amtCentpoints > _maxBet) {
+    showToast('Max bet is ' + fmtPts(_maxBet) + ' pts', 'error'); return;
+  }
+
+  const sub = document.getElementById('psSubmit');
+  sub.disabled = true;
+  sub.textContent = 'Placing…';
+
+  try {
+    const body = {
+      market_id: _activeMarket.marketId,
+      side:      _activeMarket.side,
+      amount:    amtCentpoints
+    };
+    const res  = await fetch('/api/trade', {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': 'Bearer ' + token
+      },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Trade failed');
+
+    closePredictSheet();
+
+    // Update balance display — server returns balance in centpoints
+    if (data.balance != null) {
+      _userBalance = data.balance;
+    } else if (_userBalance !== null) {
+      _userBalance = Math.max(0, _userBalance - amtCentpoints);
+    }
+    document.getElementById('balanceVal').textContent = fmtPts(_userBalance) + ' ' + _ptsName;
+
+    // potential_payout is on the nested position object (centpoints)
+    const rawPayout = data.position?.potential_payout ?? null;
+    const payout    = rawPayout ? Math.round(rawPayout / 100) : null;
+    const msg       = payout
+      ? `✓ Placed! Win up to ${payout.toLocaleString()} ${_ptsName}`
+      : `✓ Prediction placed!`;
+    showToast(msg, 'success');
+
+  } catch(err) {
+    showToast(err.message || 'Something went wrong', 'error');
+    sub.disabled    = false;
+    sub.textContent = 'Confirm ' + (_activeMarket?.side === 'yes' ? 'YES' : 'NO');
+  }
+}
+
+// Close overlay on backdrop click
+document.getElementById('predictOverlay').addEventListener('click', function(e) {
+  if (e.target === this) closePredictSheet();
+});
+
+// --- Toast ---
+let _toastTimer = null;
+function showToast(msg, type) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className   = 'toast ' + (type || '');
+  clearTimeout(_toastTimer);
+  requestAnimationFrame(() => {
+    el.classList.add('show');
+    _toastTimer = setTimeout(() => el.classList.remove('show'), 3200);
+  });
+}
+
+// --- Helpers ---
+function fmtPts(centpoints) {
+  return Math.floor(centpoints / 100).toLocaleString();
+}
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escJs(s)   { return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'\\"'); }
 </script>
 </body>
 </html>

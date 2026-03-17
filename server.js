@@ -6461,7 +6461,7 @@ app.get('/api/embed/:slug', async (req, res) => {
     const { slug } = req.params;
     const { data: cs } = await supabase
       .from('creator_settings')
-      .select('creator_id, display_name, primary_color, custom_points_name, logo_url')
+      .select('creator_id, display_name, primary_color, custom_points_name, logo_url, min_bet, max_bet')
       .eq('slug', slug)
       .maybeSingle();
     if (!cs) return res.status(404).json({ error: 'Community not found' });
@@ -6485,6 +6485,8 @@ app.get('/api/embed/:slug', async (req, res) => {
         pts_name:   cs.custom_points_name || 'Flex Points',
         logo_url:   cs.logo_url || null,
         url:        `https://hyperflex.network/${slug}`,
+        min_bet:    cs.min_bet  ?? 10000,   // centpoints (default 100 pts)
+        max_bet:    cs.max_bet  ?? 1000000, // centpoints (default 10,000 pts)
       },
       markets: (markets || []).map(m => ({
         id:           m.id,
