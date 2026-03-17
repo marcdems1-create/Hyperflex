@@ -283,6 +283,36 @@
 
 ---
 
+## Session 9 — Members tab + community fixes (commit `ada5a38`)
+
+**AA — Members tab** (creator dashboard `👥 Members` nav item):
+- `GET /api/creator/members` — full roster with per-member: display_name, email (Pro+ only), balance (centpoints), total_bets, wins, win_rate, joined_at, last_active. Summary: total_members, active_members (bet in last 30d), total_predictions, engagement_rate, est_engagement_value ($0.80/prediction = industry avg CPC), new_this_week
+- ROI summary bar: 5 stat cards including 💰 Est. Engagement Value to anchor upgrade conversations
+- Member table: Name, Balance, Predictions, Win Rate, Joined, Last Active, Actions
+- Search (name/email), sort (joined, predictions, win rate, balance), CSV export
+- Email column gated for Pro+ — free plan sees upgrade nudge
+- `showTab('members')` triggers `loadMembers()` — tab title: "Members"
+
+**BB — Per-market email blast** (📬 Blast to members in ⋯ menu):
+- `POST /api/creator/markets/:marketId/blast` — sends market-focused email to all community members. Rate-limited: `blasted_at` column, once per market ever. Returns `{ sent, skipped }`.
+- Migration: `supabase_migration_blast.sql` → `ALTER TABLE markets ADD COLUMN blasted_at TIMESTAMPTZ`
+- Confirms via dialog, shows toast with send count
+
+**⋯ dropdown menu on market rows:**
+- Replaced standalone Duplicate button with ⋯ dropdown containing: Share, 📬 Blast, 📋 Duplicate, QR Code, Edit/Archive
+
+**Critical fixes this session:**
+- **PUT /api/creator/settings/slug** — cascade slug rename across markets.tenant_slug, community_balances.creator_slug, creator_follows, seasons, creator_wall, users.tenant_slug. Skips duplicate-question conflicts (returns partial success). Community URL field added to Settings tab.
+- **POST /markets 23505** — catches unique constraint violation, returns friendly "A market with this question already exists". Bulk create retries one-by-one.
+- **GET /api/community/:slug** + **/share/:marketId** — `select('*')` replaces explicit column list, prevents 0-markets bug caused by non-existent columns from pending migrations (e.g. season_id).
+- **Carousel fix** — hot filter uses raw `trader_count >= 2` instead of `realTraders()`. Legacy CPMM markets (yes_price=0.5) had realTraders()=0, making carousel always empty.
+- **predict-in-widget** (embed.html) — auth via localStorage hf_token, balance bar, YES/NO buttons, mini bottom-sheet predict modal, post-bet share nudge.
+- **Post-bet share nudge** (community.html) — captures market context before closePredict() clears pendingMarket, shows "Share your YES call on X →" after successful bet.
+
+**New migration to run:** 25. `supabase_migration_blast.sql`
+
+---
+
 ## Known Issues / Next Up
 
 **Next highest-ROI builds:**
