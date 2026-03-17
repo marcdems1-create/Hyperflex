@@ -2489,9 +2489,10 @@ function buildCarousel(activeMarkets) {
     .filter(m => { const d = new Date(m.expiry_date) - now; return d > 0 && d < 72*60*60*1000; })
     .sort((a,b) => new Date(a.expiry_date) - new Date(b.expiry_date));
 
+  // Use raw trader_count for carousel sort (social proof) — realTraders() only affects display numbers
   const hot     = [...activeMarkets]
-    .filter(m => realTraders(m) >= 5)
-    .sort((a,b) => realTraders(b) - realTraders(a));
+    .filter(m => (m.trader_count || 0) >= 2)
+    .sort((a,b) => (b.trader_count || 0) - (a.trader_count || 0));
 
   // Up & Coming = active, not hot, not ending soon (or newly created)
   const usedIds = new Set([...ending, ...hot].map(m => m.id));
@@ -2513,8 +2514,8 @@ function buildCarousel(activeMarkets) {
   const maxPerCat = 4;
   cats.forEach(c => c.items.slice(0, maxPerCat).forEach(m => tagged.push({ m, cat: c })));
 
-  // Need at least a few cards for the loop to feel good
-  if (tagged.length < 3) return;
+  // Need at least 1 card to show carousel
+  if (tagged.length < 1) return;
 
   function cardHTML(item) {
     const { m, cat } = item;
@@ -2525,6 +2526,8 @@ function buildCarousel(activeMarkets) {
     const timeStr = diff <= 0 ? 'Closed' : days <= 1
       ? Math.ceil(diff/(1000*60*60)) + 'h left'
       : days + 'd left';
+    const displayTraders = realTraders(m);
+    const traderStr = displayTraders > 0 ? `${displayTraders} trader${displayTraders !== 1 ? 's' : ''}` : 'Open';
     return `<div class="carousel-card" onclick="openMarket(${JSON.stringify(m.id)})">
       <span class="carousel-badge ${cat.cls}">${cat.label}</span>
       <div class="carousel-question">${escHtml(m.question)}</div>
@@ -2533,7 +2536,7 @@ function buildCarousel(activeMarkets) {
         <div class="carousel-odds-no">${cv.hasVotes ? 'NO ' + cv.noPct + '%' : '⚡'}</div>
       </div>
       <div class="carousel-footer">
-        <span>${traders} trader${traders!==1?'s':''}</span>
+        <span>${traderStr}</span>
         <span>${timeStr}</span>
       </div>
     </div>`;
