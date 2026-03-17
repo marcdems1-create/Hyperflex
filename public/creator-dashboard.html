@@ -4241,9 +4241,40 @@ body.nav-open .sidebar-backdrop {
       <button class="modal-close" onclick="closeCreateModal()">×</button>
     </div>
     <div class="modal-body">
-      <div class="modal-ai-box">
+      <!-- Market type selector -->
+      <div class="field" style="margin-bottom:14px">
+        <label>Market Type</label>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <button type="button" id="typeBinaryBtn" onclick="setMarketType('binary')"
+            style="flex:1;padding:9px 0;border-radius:6px;font-size:12px;font-family:var(--mono);cursor:pointer;border:1px solid var(--gold);background:var(--gold);color:#141412;font-weight:700;transition:all 0.15s">
+            Binary (Yes / No)
+          </button>
+          <button type="button" id="typeMultiBtn" onclick="setMarketType('multi')"
+            style="flex:1;padding:9px 0;border-radius:6px;font-size:12px;font-family:var(--mono);cursor:pointer;border:1px solid rgba(201,146,13,0.35);background:transparent;color:var(--dim);transition:all 0.15s">
+            Multi-option
+          </button>
+        </div>
+      </div>
+
+      <!-- Multi-option builder (hidden by default) -->
+      <div id="optionsBuilder" style="display:none;margin-bottom:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <label style="margin-bottom:0">Answer Options</label>
+          <button type="button" onclick="balanceOptions()" style="font-size:11px;font-family:var(--mono);background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.25);color:var(--gold);padding:4px 10px;border-radius:5px;cursor:pointer">⚖ Balance %</button>
+        </div>
+        <div id="optionRows"></div>
+        <button type="button" onclick="addOptionRow()" id="addOptionBtn"
+          style="margin-top:8px;width:100%;padding:8px;background:transparent;border:1px dashed rgba(201,146,13,0.3);color:var(--dim);border-radius:6px;font-size:12px;font-family:var(--mono);cursor:pointer">
+          + Add option
+        </button>
+        <div id="optionsTotalWarn" style="display:none;margin-top:6px;font-size:11px;font-family:var(--mono);color:#e05353">
+          Percentages must add up to 100%
+        </div>
+      </div>
+
+      <div class="modal-ai-box" id="modalAiTip">
         <div class="modal-ai-icon">🤖</div>
-        <div class="modal-ai-text">
+        <div class="modal-ai-text" id="modalAiTipText">
           <strong>AI Tip:</strong> Keep questions clear and binary — they must resolve YES or NO.
           "Will X happen by [date]?" works best.
         </div>
@@ -4369,10 +4400,13 @@ body.nav-open .sidebar-backdrop {
       <!-- Outcome selection -->
       <div style="margin-bottom:16px">
         <div style="font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px">Resolution Outcome</div>
-        <div style="display:flex;gap:10px">
+        <!-- Binary outcomes (default) -->
+        <div id="resolveBinaryBtns" style="display:flex;gap:10px">
           <button class="btn-yes" id="resolveYesBtn" onclick="selectOutcome('YES')" style="flex:1">YES ✓</button>
           <button class="btn-no"  id="resolveNoBtn"  onclick="selectOutcome('NO')"  style="flex:1">NO ✗</button>
         </div>
+        <!-- Multi-option outcomes (shown dynamically) -->
+        <div id="resolveMultiOptionBtns" style="display:none;display:flex;flex-wrap:wrap;gap:8px"></div>
       </div>
 
       <!-- Override reason (shown when outcome differs from suggestion) -->
@@ -5524,6 +5558,121 @@ function obQuickPick(question, category) {
   }, 80);
 }
 
+// ── Multi-option market type ──────────────────────────────
+let currentMarketType = 'binary'; // 'binary' | 'multi'
+
+function setMarketType(type) {
+  currentMarketType = type;
+  const binaryBtn = document.getElementById('typeBinaryBtn');
+  const multiBtn  = document.getElementById('typeMultiBtn');
+  const builder   = document.getElementById('optionsBuilder');
+  const aiTip     = document.getElementById('modalAiTipText');
+  if (type === 'multi') {
+    binaryBtn.style.background = 'transparent';
+    binaryBtn.style.color = 'var(--dim)';
+    binaryBtn.style.border = '1px solid rgba(201,146,13,0.35)';
+    multiBtn.style.background = 'var(--gold)';
+    multiBtn.style.color = '#141412';
+    multiBtn.style.border = '1px solid var(--gold)';
+    multiBtn.style.fontWeight = '700';
+    builder.style.display = 'block';
+    if (aiTip) aiTip.innerHTML = '<strong>Multi-option:</strong> Each answer gets a starting percentage. Payouts are proportional — betting on a 25% option returns 4× your stake if it wins.';
+    if (document.getElementById('optionRows').children.length === 0) initOptionRows();
+  } else {
+    multiBtn.style.background = 'transparent';
+    multiBtn.style.color = 'var(--dim)';
+    multiBtn.style.border = '1px solid rgba(201,146,13,0.35)';
+    multiBtn.style.fontWeight = '400';
+    binaryBtn.style.background = 'var(--gold)';
+    binaryBtn.style.color = '#141412';
+    binaryBtn.style.border = '1px solid var(--gold)';
+    binaryBtn.style.fontWeight = '700';
+    builder.style.display = 'none';
+    if (aiTip) aiTip.innerHTML = '<strong>AI Tip:</strong> Keep questions clear and binary — they must resolve YES or NO. "Will X happen by [date]?" works best.';
+  }
+}
+
+function initOptionRows() {
+  const rows = document.getElementById('optionRows');
+  rows.innerHTML = '';
+  [['Option A', 34], ['Option B', 33], ['Option C', 33]].forEach(([label, pct]) => addOptionRow(label, pct));
+}
+
+function addOptionRow(label = '', pct = 0) {
+  const rows = document.getElementById('optionRows');
+  if (rows.children.length >= 6) { showToast('Maximum 6 options allowed.', 'error'); return; }
+  const idx = rows.children.length;
+  const row = document.createElement('div');
+  row.className = 'option-row';
+  row.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:8px';
+  row.innerHTML = `
+    <input type="text" placeholder="Option label" value="${label}"
+      style="flex:1;padding:8px 10px;background:var(--surface);border:1px solid rgba(255,255,255,0.08);border-radius:6px;color:var(--text);font-size:13px;font-family:var(--mono)"
+      oninput="validateOptionPcts()" />
+    <div style="display:flex;align-items:center;gap:4px;min-width:80px">
+      <input type="number" min="1" max="99" value="${pct || ''}" placeholder="%"
+        style="width:54px;padding:8px;background:var(--surface);border:1px solid rgba(255,255,255,0.08);border-radius:6px;color:var(--text);font-size:13px;text-align:right;font-family:var(--mono)"
+        oninput="validateOptionPcts()" />
+      <span style="color:var(--dim);font-size:12px">%</span>
+    </div>
+    <button type="button" onclick="removeOptionRow(this)"
+      style="width:28px;height:28px;border-radius:50%;background:rgba(224,83,83,0.1);border:1px solid rgba(224,83,83,0.25);color:#e05353;cursor:pointer;font-size:16px;line-height:1;display:flex;align-items:center;justify-content:center;flex-shrink:0">×</button>
+  `;
+  rows.appendChild(row);
+  validateOptionPcts();
+  const addBtn = document.getElementById('addOptionBtn');
+  if (addBtn) addBtn.style.display = rows.children.length >= 6 ? 'none' : '';
+}
+
+function removeOptionRow(btn) {
+  const rows = document.getElementById('optionRows');
+  if (rows.children.length <= 2) { showToast('Need at least 2 options.', 'error'); return; }
+  btn.closest('.option-row').remove();
+  validateOptionPcts();
+  const addBtn = document.getElementById('addOptionBtn');
+  if (addBtn) addBtn.style.display = rows.children.length >= 6 ? 'none' : '';
+}
+
+function validateOptionPcts() {
+  const rows = document.getElementById('optionRows');
+  if (!rows) return;
+  const inputs = [...rows.querySelectorAll('input[type="number"]')];
+  const total = inputs.reduce((s, i) => s + (parseInt(i.value) || 0), 0);
+  const warn = document.getElementById('optionsTotalWarn');
+  if (warn) warn.style.display = (total !== 100) ? 'block' : 'none';
+  inputs.forEach(i => {
+    i.style.border = (parseInt(i.value) || 0) === 0
+      ? '1px solid rgba(224,83,83,0.4)'
+      : '1px solid rgba(255,255,255,0.08)';
+  });
+}
+
+function balanceOptions() {
+  const rows = document.getElementById('optionRows');
+  if (!rows) return;
+  const inputs = [...rows.querySelectorAll('input[type="number"]')];
+  const n = inputs.length;
+  const base = Math.floor(100 / n);
+  const rem  = 100 - base * n;
+  inputs.forEach((inp, i) => { inp.value = base + (i === 0 ? rem : 0); });
+  validateOptionPcts();
+}
+
+function getOptionsFromBuilder() {
+  if (currentMarketType !== 'multi') return null;
+  const rows = document.getElementById('optionRows');
+  if (!rows) return null;
+  const result = [];
+  for (const row of rows.children) {
+    const labelInput = row.querySelector('input[type="text"]');
+    const pctInput   = row.querySelector('input[type="number"]');
+    const label = (labelInput?.value || '').trim();
+    const pct   = parseInt(pctInput?.value) || 0;
+    if (label) result.push({ label, pct });
+  }
+  return result.length >= 2 ? result : null;
+}
+
 function openCreateModal() {
   // Free plan gate: max 5 active markets
   const plan = creatorData?.creator?.plan || 'free';
@@ -5543,6 +5692,10 @@ function openCreateModal() {
   document.getElementById('questionWarning').style.display = 'none';
   document.getElementById('newCategory').value = 'sports';
   loadSourceTemplate('sports');
+  // Reset to binary market type
+  currentMarketType = 'binary';
+  setMarketType('binary');
+  document.getElementById('optionRows').innerHTML = '';
   clearQuestionSuggestions();
   // Sponsor field: disabled + upgrade hint on free plan
   const isFree = (creatorData?.creator?.plan || 'free') === 'free';
@@ -5637,6 +5790,19 @@ async function createMarket() {
   const prohibited = checkProhibited(question);
   if (prohibited) { showToast(prohibited, 'error'); return; }
 
+  // Multi-option validation
+  let marketOptions = null;
+  if (currentMarketType === 'multi') {
+    marketOptions = getOptionsFromBuilder();
+    if (!marketOptions || marketOptions.length < 2) {
+      showToast('Add at least 2 labeled options.', 'error'); return;
+    }
+    const totalPct = marketOptions.reduce((s, o) => s + o.pct, 0);
+    if (totalPct !== 100) {
+      showToast(`Option percentages must add up to 100% (currently ${totalPct}%).`, 'error'); return;
+    }
+  }
+
   // Source validation
   if (marketSources.length < 3) {
     document.getElementById('sourceMinWarn').style.display = 'block';
@@ -5656,7 +5822,8 @@ async function createMarket() {
         creator_id: user.id,
         tenant_slug: user.slug,
         is_public: true,
-        ...(sponsor && { sponsor_name: sponsor })
+        ...(sponsor && { sponsor_name: sponsor }),
+        ...(marketOptions && { options: marketOptions }),
       })
     });
     const data = await r.json();
@@ -5711,17 +5878,39 @@ function openResolveModal(marketId, question) {
   document.getElementById('overrideReasonArea').style.display = 'none';
   document.getElementById('attestCheck').checked = false;
   document.getElementById('resolveConfirmBtn').disabled = true;
-  document.getElementById('resolveYesBtn').style.opacity = '1';
-  document.getElementById('resolveNoBtn').style.opacity = '1';
-  document.getElementById('resolveSuggestBtn').disabled = false;
-  document.getElementById('resolveSuggestBtn').textContent = '🔄 Re-analyze';
-  document.getElementById('resolveSuggestBtn').style.display = 'none';
   document.getElementById('resolutionNoteInput').value = '';
+
+  // Binary vs multi-option outcome buttons
+  const isMultiOption = Array.isArray(m?.options) && m.options.length > 0;
+  const binaryBtns = document.getElementById('resolveBinaryBtns');
+  const multiOptionBtns = document.getElementById('resolveMultiOptionBtns');
+
+  if (isMultiOption) {
+    binaryBtns.style.display = 'none';
+    multiOptionBtns.style.display = 'flex';
+    multiOptionBtns.innerHTML = m.options.map(opt => `
+      <button type="button"
+        onclick="selectOutcome(${JSON.stringify(opt.label)})"
+        data-label="${opt.label}"
+        style="flex:1;min-width:80px;padding:10px 14px;border-radius:6px;font-size:13px;font-family:var(--mono);cursor:pointer;border:1px solid rgba(201,146,13,0.35);background:rgba(201,146,13,0.08);color:var(--text);transition:all 0.15s">
+        ${opt.label} <span style="color:var(--dim);font-size:11px">${opt.pct}%</span>
+      </button>`).join('');
+    // Hide AI suggestion for multi-option (not yet supported)
+    document.getElementById('resolveSuggestBtn').style.display = 'none';
+  } else {
+    binaryBtns.style.display = 'flex';
+    multiOptionBtns.style.display = 'none';
+    document.getElementById('resolveYesBtn').style.opacity = '1';
+    document.getElementById('resolveNoBtn').style.opacity = '1';
+    document.getElementById('resolveSuggestBtn').disabled = false;
+    document.getElementById('resolveSuggestBtn').textContent = '🔄 Re-analyze';
+    document.getElementById('resolveSuggestBtn').style.display = 'none';
+  }
 
   document.getElementById('resolveModal').classList.add('show');
 
-  // Auto-fetch AI suggestion immediately — no button click needed
-  fetchResolutionSuggestion();
+  // Auto-fetch AI suggestion for binary markets only
+  if (!isMultiOption) fetchResolutionSuggestion();
 }
 function closeResolveModal() {
   document.getElementById('resolveModal').classList.remove('show');
@@ -5729,10 +5918,26 @@ function closeResolveModal() {
 
 function selectOutcome(outcome) {
   resolveSelectedOutcome = outcome;
-  document.getElementById('resolveYesBtn').style.opacity = outcome === 'YES' ? '1' : '0.4';
-  document.getElementById('resolveNoBtn').style.opacity  = outcome === 'NO'  ? '1' : '0.4';
 
-  // Show override reason if outcome differs from AI suggestion
+  // Binary buttons
+  const yesBtn = document.getElementById('resolveYesBtn');
+  const noBtn  = document.getElementById('resolveNoBtn');
+  if (yesBtn) yesBtn.style.opacity = outcome === 'YES' ? '1' : '0.4';
+  if (noBtn)  noBtn.style.opacity  = outcome === 'NO'  ? '1' : '0.4';
+
+  // Multi-option buttons
+  const multiContainer = document.getElementById('resolveMultiOptionBtns');
+  if (multiContainer && multiContainer.style.display !== 'none') {
+    multiContainer.querySelectorAll('button').forEach(btn => {
+      const selected = btn.dataset.label === outcome;
+      btn.style.background = selected ? 'var(--gold)' : 'rgba(201,146,13,0.08)';
+      btn.style.color       = selected ? '#141412'   : 'var(--text)';
+      btn.style.border      = selected ? '1px solid var(--gold)' : '1px solid rgba(201,146,13,0.35)';
+      btn.style.fontWeight  = selected ? '700' : '400';
+    });
+  }
+
+  // Show override reason if outcome differs from AI suggestion (binary only)
   const differs = resolveSuggestedOutcome && resolveSuggestedOutcome !== 'UNRESOLVABLE' && outcome !== resolveSuggestedOutcome;
   document.getElementById('overrideReasonArea').style.display = differs ? 'block' : 'none';
 

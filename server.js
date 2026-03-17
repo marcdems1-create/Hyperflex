@@ -488,6 +488,26 @@ app.post('/markets', async (req, res) => {
     row.resolution_sources = JSON.stringify(resolution_sources);
   }
 
+  // Multi-option markets — options array with {label, pct?} items
+  const { options: rawOptions } = req.body;
+  if (Array.isArray(rawOptions) && rawOptions.length >= 2) {
+    // Strip empty labels
+    const cleaned = rawOptions.map(o => ({ label: (o.label || '').trim(), pct: Number(o.pct) || 0 }))
+                               .filter(o => o.label.length > 0);
+    if (cleaned.length >= 2) {
+      // Normalise percentages so they sum to 100
+      const totalPct = cleaned.reduce((s, o) => s + o.pct, 0) || 100;
+      row.options = cleaned.map(o => ({
+        label: o.label,
+        votes: 0,
+        pct:   Math.round((o.pct / totalPct) * 100),
+      }));
+      // Ensure sum === 100 (fix rounding)
+      const pctSum = row.options.reduce((s, o) => s + o.pct, 0);
+      if (pctSum !== 100) row.options[0].pct += (100 - pctSum);
+    }
+  }
+
   const { data, error } = await supabase
     .from('markets')
     .insert([row])
@@ -667,7 +687,59 @@ app.post('/trade', async (req, res) => {
 
   if (communityBalance < amount) return res.status(400).json({ error: 'Insufficient balance' });
 
-  // ── CPMM Pricing ──────────────────────────────────────────────────────────
+  // ── Multi-option vs Binary pricing ────────────────────────────────────────
+  const isMultiOption = Array.isArray(market.options) && market.options.length > 0;
+
+  let potential_payout, marketUpdate, responseExtra;
+
+  if (isMultiOption) {
+    // ── Multi-option: vote-share percentages, parimutuel-style payout ──────
+    const opts = market.options;
+    const optIdx = opts.findIndex(o => o.label === side);
+    if (optIdx === -1) return res.status(400).json({ error: `Invalid option "${side}"` });
+
+    // Current pct for this option (used for payout calculation)
+    const currentPct = (opts[optIdx].pct || (100 / opts.length)) / 100;
+    potential_payout = Math.round(amount / currentPct);
+
+    // Update vote counts and recalculate pcts
+    const updatedOpts = opts.map((o, i) => ({ ...o, votes: (o.votes || 0) + (i === optIdx ? 1 : 0) }));
+    const totalVotes  = updatedOpts.reduce((s, o) => s + (o.votes || 0), 0);
+    const finalOpts   = updatedOpts.map(o => ({
+      ...o,
+      pct: totalVotes > 0 ? Math.round((o.votes / totalVotes) * 100) : Math.round(100 / updatedOpts.length),
+    }));
+
+    // Check trader count
+    const { count: priorPositionsM } = await supabase
+      .from('positions')
+      .select('id', { count: 'exact', head: true })
+      .eq('market_id', market_id)
+      .eq('user_id', user_id);
+    const isNewTraderM = (priorPositionsM || 0) === 0;
+
+    if (creatorSlug) await setCommunityBalance(user_id, creatorSlug, communityBalance - amount);
+
+    const { data: position, error: posError } = await supabase
+      .from('positions')
+      .insert([{ user_id, market_id, side, amount, potential_payout }])
+      .select().single();
+    if (posError) return res.status(400).json({ error: posError.message });
+
+    marketUpdate = { options: finalOpts, volume: (market.volume || 0) + amount };
+    if (isNewTraderM) marketUpdate.trader_count = (market.trader_count || 0) + 1;
+    const { error: mktErr } = await supabase.from('markets').update(marketUpdate).eq('id', market_id);
+    if (mktErr) console.error('multi-option market update error:', mktErr.message);
+
+    return res.json({
+      message:  'Trade placed',
+      position,
+      balance:  communityBalance - amount,
+      options:  finalOpts,
+    });
+  }
+
+  // ── Binary CPMM Pricing ───────────────────────────────────────────────────
   // Use pool balances for current price. Fall back to stored price if pools are missing.
   const yesPool = market.yes_pool || MARKET_SEED;
   const noPool  = market.no_pool  || MARKET_SEED;
@@ -676,7 +748,7 @@ app.post('/trade', async (req, res) => {
     ? yesPool / totalPool
     : noPool  / totalPool;
 
-  const potential_payout = amount / price;
+  potential_payout = amount / price;
 
   // Compute updated pools after this trade
   const newYesPool = side === 'YES' ? yesPool + amount : yesPool;
@@ -709,7 +781,7 @@ app.post('/trade', async (req, res) => {
   // Update pools, prices, volume, trader_count, and vote counts in one call
   const newYesVotes = (market.yes_votes || 0) + (side === 'YES' ? 1 : 0);
   const newNoVotes  = (market.no_votes  || 0) + (side === 'NO'  ? 1 : 0);
-  const marketUpdate = {
+  const binaryUpdate = {
     yes_pool:   newYesPool,
     no_pool:    newNoPool,
     yes_price:  newYesPrice,
@@ -718,8 +790,8 @@ app.post('/trade', async (req, res) => {
     yes_votes:  newYesVotes,
     no_votes:   newNoVotes,
   };
-  if (isNewTrader) marketUpdate.trader_count = (market.trader_count || 0) + 1;
-  const { error: mktErr } = await supabase.from('markets').update(marketUpdate).eq('id', market_id);
+  if (isNewTrader) binaryUpdate.trader_count = (market.trader_count || 0) + 1;
+  const { error: mktErr } = await supabase.from('markets').update(binaryUpdate).eq('id', market_id);
   if (mktErr) console.error('market pool/price update error:', mktErr.message, mktErr.details);
 
   const totalVotes = newYesVotes + newNoVotes;
@@ -728,9 +800,9 @@ app.post('/trade', async (req, res) => {
     message:    'Trade placed',
     position,
     balance:    newBalance,
-    yes_price:  newYesPrice,    // CPMM price — used for payout multipliers only
+    yes_price:  newYesPrice,
     no_price:   newNoPrice,
-    yes_votes:  newYesVotes,    // pure vote counts — used for consensus display
+    yes_votes:  newYesVotes,
     no_votes:   newNoVotes,
     yes_consensus: totalVotes > 0 ? Math.round(newYesVotes / totalVotes * 100) : null,
   });
@@ -4174,10 +4246,6 @@ app.post('/markets/:id/resolve', requireCreator, async (req, res) => {
     const { id } = req.params;
     const { outcome, attestation_text, resolution_note } = req.body;
 
-    if (!['YES', 'NO'].includes(outcome)) {
-      return res.status(400).json({ error: 'Outcome must be YES or NO' });
-    }
-
     // Verify market belongs to this creator
     const { data: market } = await supabase
       .from('markets')
@@ -4188,6 +4256,19 @@ app.post('/markets/:id/resolve', requireCreator, async (req, res) => {
 
     if (!market) return res.status(404).json({ error: 'Market not found or not yours' });
     if (market.resolved) return res.status(409).json({ error: 'Market already resolved' });
+
+    // Validate outcome against market type
+    const isMultiOptionMarket = Array.isArray(market.options) && market.options.length > 0;
+    if (isMultiOptionMarket) {
+      const validLabels = market.options.map(o => o.label);
+      if (!outcome || !validLabels.includes(outcome)) {
+        return res.status(400).json({ error: `Outcome must be one of: ${validLabels.join(', ')}` });
+      }
+    } else {
+      if (!['YES', 'NO'].includes(outcome)) {
+        return res.status(400).json({ error: 'Outcome must be YES or NO' });
+      }
+    }
 
     // Mark market resolved
     const resolveUpdate = {
@@ -4215,7 +4296,12 @@ app.post('/markets/:id/resolve', requireCreator, async (req, res) => {
       const payouts = [];
       for (const pos of positions) {
         const isWinner = pos.side === outcome;
-        const pnl = isWinner ? pos.amount : -pos.amount; // simplified pnl
+        // Multi-option: use stored potential_payout (set at bet time based on odds).
+        // Binary: fall back to amount*2 for backwards compat with old positions that may lack potential_payout.
+        const winAmount = isMultiOptionMarket
+          ? (pos.potential_payout || pos.amount * 2)
+          : (pos.potential_payout || pos.amount * 2);
+        const pnl = isWinner ? (winAmount - pos.amount) : -pos.amount;
 
         payouts.push(
           supabase.from('positions').update({
@@ -4226,11 +4312,17 @@ app.post('/markets/:id/resolve', requireCreator, async (req, res) => {
         );
 
         if (isWinner) {
-          // Credit winner's balance — fetch current then increment
+          // Credit winner's community balance
           payouts.push(
             (async () => {
-              const { data: u } = await supabase.from('users').select('balance').eq('id', pos.user_id).single();
-              if (u) await supabase.from('users').update({ balance: (u.balance || 0) + pos.amount * 2 }).eq('id', pos.user_id);
+              const slug = market.tenant_slug;
+              if (slug) {
+                const bal = await getCommunityBalance(pos.user_id, slug);
+                await setCommunityBalance(pos.user_id, slug, bal + winAmount);
+              } else {
+                const { data: u } = await supabase.from('users').select('balance').eq('id', pos.user_id).single();
+                if (u) await supabase.from('users').update({ balance: (u.balance || 0) + winAmount }).eq('id', pos.user_id);
+              }
             })()
           );
         }
