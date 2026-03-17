@@ -525,6 +525,7 @@ app.post('/markets', async (req, res) => {
     // Notify followers if market is published immediately
     if (row.is_public === true && row.tenant_slug) {
       sendNewMarketNotifications(data, row.tenant_slug).catch(() => {});
+      sendDiscordWebhook(data, row.tenant_slug).catch(() => {});
       maybeAcceptReferral(row.tenant_slug).catch(() => {});
     }
   }
@@ -818,6 +819,55 @@ function getUserIdFromReq(req) {
     return payload.id || null;
   } catch {
     return null;
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// IN-APP NOTIFICATIONS
+// GET  /api/notifications       — list unread (+ recent read, max 30)
+// POST /api/notifications/read  — mark one or all as read
+// ════════════════════════════════════════════════════════════
+app.get('/api/notifications', async (req, res) => {
+  try {
+    const userId = getUserIdFromReq(req);
+    if (!userId) return res.status(401).json({ error: 'Auth required' });
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(30);
+    if (error) throw error;
+    res.json({ notifications: data || [] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/notifications/read', async (req, res) => {
+  try {
+    const userId = getUserIdFromReq(req);
+    if (!userId) return res.status(401).json({ error: 'Auth required' });
+    const { id } = req.body; // if id provided, mark single; else mark all
+    const query = supabase.from('notifications').update({ read: true }).eq('user_id', userId);
+    if (id) query.eq('id', id);
+    const { error } = await query;
+    if (error) throw error;
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Helper: push a notification to a user
+async function pushNotification(userId, type, title, body, marketId = null, communitySlug = null) {
+  try {
+    await supabase.from('notifications').insert([{
+      user_id: userId, type, title, body: body || null,
+      market_id: marketId || null, community_slug: communitySlug || null,
+    }]);
+  } catch (err) {
+    // non-blocking — swallow errors
   }
 }
 
@@ -4332,13 +4382,30 @@ app.post('/markets/:id/resolve', requireCreator, async (req, res) => {
 
     res.json({ ok: true, outcome, positions_settled: positions?.length || 0 });
 
-    // Send resolution emails to bettors (fire-and-forget, non-blocking)
+    // Send resolution emails + push in-app notifications (fire-and-forget, non-blocking)
     const { data: settings } = await supabase
       .from('creator_settings')
       .select('slug')
       .eq('creator_id', req.creator.id)
       .maybeSingle();
     sendResolutionEmails(market, outcome, settings?.slug, resolveUpdate.resolution_note || null);
+
+    // In-app notifications for each bettor
+    if (positions && positions.length > 0) {
+      const shortQ = market.question.length > 60 ? market.question.slice(0, 57) + '…' : market.question;
+      for (const pos of positions) {
+        const isWin = pos.side === outcome;
+        const winAmt = Math.floor((pos.potential_payout || pos.amount * 2) / 100);
+        pushNotification(
+          pos.user_id,
+          isWin ? 'you_won' : 'you_lost',
+          isWin ? `🎉 You won! ${winAmt.toLocaleString()} pts` : `Market resolved: ${outcome}`,
+          `${shortQ} resolved ${outcome}.${isWin ? ` You called it right and earned ${winAmt.toLocaleString()} pts.` : ' Better luck next time!'}`,
+          market.id,
+          settings?.slug || market.tenant_slug || null
+        ).catch(() => {});
+      }
+    }
 
   } catch (err) {
     console.error('resolve error:', err);
@@ -5699,6 +5766,7 @@ app.put('/markets/:id', requireCreator, async (req, res) => {
     const beingPublished = is_public === true && market.is_public !== true;
     if (beingPublished && market.tenant_slug) {
       sendNewMarketNotifications(data, market.tenant_slug).catch(() => {});
+      sendDiscordWebhook(data, market.tenant_slug).catch(() => {});
       maybeAcceptReferral(market.tenant_slug).catch(() => {});
     }
 
@@ -8819,10 +8887,95 @@ async function sendNewMarketNotifications(market, creatorSlug) {
       } catch { failed++; }
     }
     console.log(`[email] New market notifications: ${sent} sent, ${failed} failed — market ${market.id}`);
+
+    // Also push in-app notification to all followers
+    const shortQ = market.question.length > 60 ? market.question.slice(0, 57) + '…' : market.question;
+    const communityDisplayName = settings?.display_name || creatorSlug;
+    for (const uid of userIds) {
+      pushNotification(
+        uid, 'new_market',
+        `🎯 New market on ${communityDisplayName}`,
+        shortQ,
+        market.id, creatorSlug
+      ).catch(() => {});
+    }
   } catch (err) {
     console.error('[email] sendNewMarketNotifications error:', err.message);
   }
 }
+
+// ── Discord webhook — posts a card when a new market goes public ──────────────
+async function sendDiscordWebhook(market, creatorSlug) {
+  if (!creatorSlug || !market?.question) return;
+  try {
+    const { data: settings } = await supabase
+      .from('creator_settings')
+      .select('discord_webhook_url, display_name, primary_color')
+      .eq('slug', creatorSlug)
+      .maybeSingle();
+    if (!settings?.discord_webhook_url) return;
+
+    const communityUrl = `${process.env.SITE_URL || 'https://hyperflex.network'}/${creatorSlug}`;
+    const color = parseInt((settings.primary_color || '#c9920d').replace('#', ''), 16);
+    const expiryStr = market.expiry_date
+      ? new Date(market.expiry_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      : null;
+    const categoryStr = market.category
+      ? market.category.charAt(0).toUpperCase() + market.category.slice(1)
+      : null;
+
+    const fields = [];
+    if (categoryStr) fields.push({ name: 'Category', value: categoryStr, inline: true });
+    if (expiryStr)   fields.push({ name: 'Closes',   value: expiryStr,   inline: true });
+    if (Array.isArray(market.options) && market.options.length > 0) {
+      fields.push({
+        name: 'Options',
+        value: market.options.map(o => `**${o.label}** — ${o.pct}%`).join('\n'),
+        inline: false
+      });
+    }
+
+    const body = {
+      embeds: [{
+        title: market.question,
+        description: `A new prediction market is live on **${settings.display_name || creatorSlug}**!`,
+        url: communityUrl,
+        color,
+        fields,
+        footer: { text: `Predict at ${communityUrl}` },
+        timestamp: new Date().toISOString(),
+      }]
+    };
+
+    const resp = await fetch(settings.discord_webhook_url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) console.error('[discord] webhook failed:', resp.status, await resp.text());
+  } catch (err) {
+    console.error('[discord] webhook error:', err.message);
+  }
+}
+
+// ── Expose discord webhook settings ──────────────────────────────────────────
+app.put('/api/creator/discord-webhook', requireCreator, async (req, res) => {
+  try {
+    const { discord_webhook_url } = req.body;
+    // Basic validation — must be empty string (to clear) or a Discord webhook URL
+    if (discord_webhook_url && !discord_webhook_url.startsWith('https://discord.com/api/webhooks/') && !discord_webhook_url.startsWith('https://discordapp.com/api/webhooks/')) {
+      return res.status(400).json({ error: 'Must be a valid Discord webhook URL (https://discord.com/api/webhooks/…)' });
+    }
+    const { error } = await supabase
+      .from('creator_settings')
+      .update({ discord_webhook_url: discord_webhook_url || null })
+      .eq('creator_id', req.creator.id);
+    if (error) throw error;
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // Send resolution emails to all bettors on a market.
 // market      — markets row (must include .question)

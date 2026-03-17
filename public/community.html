@@ -78,6 +78,31 @@ body::before {
   text-overflow: ellipsis;
 }
 .header-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+/* Creator/Member view toggle */
+.view-toggle { display:inline-flex;align-items:center;background:rgba(255,255,255,0.04);border:1px solid rgba(201,146,13,0.25);border-radius:8px;padding:3px;gap:2px;flex-shrink:0 }
+.view-toggle-btn { font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:0.04em;padding:4px 10px;border-radius:5px;border:none;cursor:pointer;transition:background .15s,color .15s;color:var(--dim);background:transparent;text-decoration:none;display:inline-flex;align-items:center;gap:4px;white-space:nowrap }
+.view-toggle-btn.active { background:var(--gold);color:#141412 }
+.view-toggle-btn:hover:not(.active) { color:var(--text) }
+
+/* Notification bell */
+.notif-wrap { position:relative;flex-shrink:0 }
+.notif-bell { background:transparent;border:1px solid var(--border);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:15px;line-height:1;transition:border-color .15s,background .15s;display:flex;align-items:center;gap:5px }
+.notif-bell:hover { border-color:var(--gold);background:rgba(201,146,13,0.07) }
+.notif-badge { background:var(--gold);color:#141412;font-family:var(--mono);font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;min-width:14px;text-align:center }
+.notif-dropdown { display:none;position:absolute;right:0;top:calc(100% + 6px);width:320px;max-width:92vw;background:#1c1b19;border:1px solid rgba(255,255,255,0.1);border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.5);z-index:9999;overflow:hidden }
+.notif-dropdown.show { display:block }
+.notif-dropdown-header { display:flex;align-items:center;justify-content:space-between;padding:12px 16px 10px;border-bottom:1px solid rgba(255,255,255,0.07) }
+.notif-dropdown-title { font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim) }
+.notif-mark-all { font-family:var(--mono);font-size:10px;color:var(--gold);background:none;border:none;cursor:pointer;padding:0 }
+.notif-mark-all:hover { text-decoration:underline }
+.notif-list { max-height:340px;overflow-y:auto }
+.notif-item { padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;transition:background .15s }
+.notif-item:hover { background:rgba(255,255,255,0.04) }
+.notif-item.unread { background:rgba(201,146,13,0.05) }
+.notif-item-title { font-size:13px;font-weight:600;color:var(--text);margin-bottom:2px }
+.notif-item-body { font-size:11px;color:var(--dim);line-height:1.45;font-family:var(--mono) }
+.notif-item-time { font-size:10px;color:rgba(255,255,255,0.25);margin-top:4px;font-family:var(--mono) }
+.notif-empty { padding:28px 16px;text-align:center;font-size:13px;color:var(--dim) }
 
 .btn-auth {
   font-family: var(--mono);
@@ -1636,13 +1661,27 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
   </div>
   <div class="header-right" id="headerRight">
     <a href="/discover" style="font-family:var(--mono);font-size:11px;color:var(--dim);text-decoration:none;padding:6px 10px;border-radius:6px;transition:color .15s" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='var(--dim)'">Explore</a>
+    <!-- Notification bell — injected by renderUserHeader() when logged in -->
+    <div class="notif-wrap" id="notifWrap" style="display:none">
+      <button class="notif-bell" onclick="toggleNotifDropdown(event)" id="notifBell" title="Notifications">
+        🔔 <span class="notif-badge" id="notifBadge" style="display:none">0</span>
+      </button>
+      <div class="notif-dropdown" id="notifDropdown">
+        <div class="notif-dropdown-header">
+          <span class="notif-dropdown-title">Notifications</span>
+          <button class="notif-mark-all" onclick="markAllNotifsRead()">Mark all read</button>
+        </div>
+        <div class="notif-list" id="notifList"><div class="notif-empty">All caught up ✓</div></div>
+      </div>
+    </div>
     <button class="btn-auth" onclick="openAuth('login')">Sign in</button>
     <button class="btn-auth primary" onclick="openAuth('register')">Join free</button>
   </div>
 </header>
-<!-- Creator context bar — shows "← Dashboard" if you own this community, otherwise a quiet creator login link -->
-<div id="creatorLoginBar" style="display:none;text-align:center;padding:7px 16px;background:rgba(201,146,13,0.07);border-bottom:1px solid rgba(201,146,13,0.15);font-size:12px;color:var(--dim)">
-  <span id="creatorBarContent"></span>
+<!-- Creator context bar — shows compact toggle when logged-in creator views their own community -->
+<div id="creatorLoginBar" style="display:none;padding:6px 16px;background:rgba(201,146,13,0.06);border-bottom:1px solid rgba(201,146,13,0.13);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+  <span id="creatorBarContent" style="font-size:12px;color:var(--dim)"></span>
+  <span id="creatorBarRight"></span>
 </div>
 
 <!-- Hero -->
@@ -1702,6 +1741,18 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
 
   <!-- Markets panel -->
   <div id="marketsPanel">
+    <!-- Search bar -->
+    <div id="marketSearchWrap" style="display:none;padding:0 0 10px">
+      <div style="position:relative">
+        <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:14px;pointer-events:none;opacity:.5">🔍</span>
+        <input id="marketSearchInput" type="text" placeholder="Search markets…"
+          style="width:100%;box-sizing:border-box;padding:9px 12px 9px 36px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s"
+          onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='var(--border)'"
+          oninput="onMarketSearch(this.value)" />
+        <span id="marketSearchCount" style="display:none;position:absolute;right:12px;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:10px;color:var(--dim)"></span>
+      </div>
+    </div>
+
     <!-- Filter tabs -->
     <div class="filter-row" id="filterRow" style="display:none">
       <button class="filter-tab active" id="ftAll"   onclick="setFilter('all')">All <span class="filter-count" id="fcAll">0</span></button>
@@ -2032,6 +2083,8 @@ function restoreSession() {
       renderUserHeader();
       // Show display name prompt if needed (deferred so page renders first)
       setTimeout(checkDisplayNamePrompt, 1200);
+      // Load notifications
+      loadNotifications();
     }
   }
 }
@@ -2312,8 +2365,34 @@ function buildFilterCounts() {
   document.getElementById('fcSoon').textContent = soon.length;
   document.getElementById('fcMine').textContent = mine.length;
 
-  if (active.length > 0) document.getElementById('filterRow').style.display = 'flex';
+  if (active.length > 0) {
+    document.getElementById('filterRow').style.display = 'flex';
+    // Show search bar once there are markets to search
+    const sw = document.getElementById('marketSearchWrap');
+    if (sw) sw.style.display = 'block';
+  }
   if (mine.length > 0)   document.getElementById('ftMine').style.display = 'flex';
+}
+
+let _marketSearchQuery = '';
+let _searchDebounce = null;
+
+function onMarketSearch(val) {
+  clearTimeout(_searchDebounce);
+  _searchDebounce = setTimeout(() => {
+    _marketSearchQuery = val.trim().toLowerCase();
+    renderFilteredMarkets();
+    const countEl = document.getElementById('marketSearchCount');
+    if (countEl) {
+      if (_marketSearchQuery) {
+        const active = markets.filter(m => !m.resolved && m.question.toLowerCase().includes(_marketSearchQuery));
+        countEl.textContent = active.length + ' result' + (active.length !== 1 ? 's' : '');
+        countEl.style.display = '';
+      } else {
+        countEl.style.display = 'none';
+      }
+    }
+  }, 180);
 }
 
 function isHot(m)         { return (m.trader_count || 0) >= 5; }
@@ -2528,7 +2607,8 @@ function filterByCategory(cat) {
 
 function renderFilteredMarkets() {
   const active = markets.filter(m => !m.resolved &&
-    (!activeCategoryFilter || (m.category || 'other').toLowerCase() === activeCategoryFilter));
+    (!activeCategoryFilter || (m.category || 'other').toLowerCase() === activeCategoryFilter) &&
+    (!_marketSearchQuery || m.question.toLowerCase().includes(_marketSearchQuery)));
   let filtered;
   let sortFn;
 
@@ -3592,6 +3672,89 @@ function showAuthError(msg) {
 }
 
 // ── HEADER ────────────────────────────────────────────────────
+// ── IN-APP NOTIFICATION BELL ─────────────────────────────────
+let _notifs = [];
+
+async function loadNotifications() {
+  if (!currentUser) return;
+  const tok = localStorage.getItem('hf_token');
+  if (!tok) return;
+  try {
+    const r = await fetch(`${API}/api/notifications`, { headers: { Authorization: 'Bearer ' + tok } });
+    if (!r.ok) return;
+    const d = await r.json();
+    _notifs = d.notifications || [];
+    renderNotifBell();
+  } catch {}
+}
+
+function renderNotifBell() {
+  const wrap  = document.getElementById('notifWrap');
+  const badge = document.getElementById('notifBadge');
+  const list  = document.getElementById('notifList');
+  if (!wrap) return;
+  wrap.style.display = '';
+  const unread = _notifs.filter(n => !n.read).length;
+  if (badge) {
+    badge.style.display = unread > 0 ? '' : 'none';
+    badge.textContent   = unread > 9 ? '9+' : String(unread);
+  }
+  if (!list) return;
+  if (_notifs.length === 0) {
+    list.innerHTML = '<div class="notif-empty">All caught up ✓</div>';
+    return;
+  }
+  list.innerHTML = _notifs.map(n => {
+    const ago = timeAgo(n.created_at);
+    const cls = n.read ? 'notif-item' : 'notif-item unread';
+    const dest = n.market_id && n.community_slug
+      ? `/${n.community_slug}?market=${n.market_id}`
+      : n.community_slug ? `/${n.community_slug}` : '#';
+    return `<div class="${cls}" onclick="notifClick(${JSON.stringify(n.id)},${JSON.stringify(dest)})">
+      <div class="notif-item-title">${escHtml(n.title)}</div>
+      ${n.body ? `<div class="notif-item-body">${escHtml(n.body)}</div>` : ''}
+      <div class="notif-item-time">${ago}</div>
+    </div>`;
+  }).join('');
+}
+
+function toggleNotifDropdown(e) {
+  e.stopPropagation();
+  document.getElementById('notifDropdown')?.classList.toggle('show');
+}
+
+document.addEventListener('click', () => {
+  document.getElementById('notifDropdown')?.classList.remove('show');
+});
+
+async function notifClick(id, dest) {
+  // Mark read
+  const tok = localStorage.getItem('hf_token');
+  if (tok) fetch(`${API}/api/notifications/read`, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':'Bearer '+tok }, body: JSON.stringify({ id }) }).catch(()=>{});
+  const n = _notifs.find(x => x.id === id);
+  if (n) n.read = true;
+  renderNotifBell();
+  document.getElementById('notifDropdown')?.classList.remove('show');
+  if (dest && dest !== '#') window.location.href = dest;
+}
+
+async function markAllNotifsRead() {
+  const tok = localStorage.getItem('hf_token');
+  if (!tok) return;
+  fetch(`${API}/api/notifications/read`, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':'Bearer '+tok }, body: JSON.stringify({}) }).catch(()=>{});
+  _notifs.forEach(n => n.read = true);
+  renderNotifBell();
+}
+
+function timeAgo(ts) {
+  if (!ts) return '';
+  const diff = (Date.now() - new Date(ts)) / 1000;
+  if (diff < 60)   return 'just now';
+  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
+  return `${Math.floor(diff/86400)}d ago`;
+}
+
 function renderUserHeader() {
   const hr = document.getElementById('headerRight');
   const creatorBar = document.getElementById('creatorLoginBar');
@@ -3925,25 +4088,30 @@ async function postComment(marketId) {
 function renderCreatorBar(communityData) {
   const bar     = document.getElementById('creatorLoginBar');
   const content = document.getElementById('creatorBarContent');
+  const right   = document.getElementById('creatorBarRight');
   if (!bar || !content) return;
 
-  const storedUser = currentUser; // set by restoreSession()
+  const storedUser = currentUser;
   const creatorId  = communityData?.creator_id;
 
   if (storedUser && creatorId && String(storedUser.id) === String(creatorId)) {
-    // This person IS the creator — show dashboard link
-    content.innerHTML = `<span style="color:var(--gold);font-weight:700">You're viewing your community</span>
-      &nbsp;·&nbsp;
-      <a href="/creator/dashboard" style="color:var(--gold);text-decoration:none;font-weight:600">← Back to Dashboard</a>
-      &nbsp;·&nbsp;
-      <a href="/u/${communityData?.slug || ''}" style="color:var(--dim);text-decoration:none;font-size:11px">👤 Public profile</a>`;
-    bar.style.display = '';
+    // This person IS the creator — show view toggle
+    content.innerHTML = `<span style="color:var(--gold);font-weight:600;font-size:11px;font-family:var(--mono);letter-spacing:.04em">CREATOR MODE</span>
+      <span style="margin:0 8px;opacity:.3">|</span>
+      <a href="/u/${communityData?.slug || ''}" style="color:var(--dim);text-decoration:none;font-size:11px;font-family:var(--mono)" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='var(--dim)'">👤 Public profile</a>`;
+    if (right) right.innerHTML = `
+      <div class="view-toggle">
+        <a href="/creator/dashboard" class="view-toggle-btn">🛠 Creator</a>
+        <span class="view-toggle-btn active">👤 Member</span>
+      </div>`;
+    bar.style.display = 'flex';
   } else if (!storedUser) {
-    // Not logged in — quiet creator prompt
-    content.innerHTML = `Creator? <a href="/creator/login" style="color:var(--gold);text-decoration:none;font-weight:600">Sign in to your dashboard →</a>`;
-    bar.style.display = '';
+    content.innerHTML = `Creator? <a href="/creator/login" style="color:var(--gold);text-decoration:none;font-weight:600;font-size:12px">Sign in to your dashboard →</a>`;
+    if (right) right.innerHTML = '';
+    bar.style.display = 'flex';
+  } else {
+    bar.style.display = 'none';
   }
-  // Regular member logged in — hide the bar entirely (already display:none by default)
 }
 
 // ── COMMUNITY PULSE ────────────────────────────────────────────

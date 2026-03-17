@@ -397,6 +397,61 @@ body.plan-premium .main {
   letter-spacing: -0.01em;
 }
 .topbar-actions { display: flex; gap: 10px; align-items: center; }
+
+/* ── Notification bell ── */
+.notif-wrap { position:relative;flex-shrink:0 }
+.notif-bell { background:transparent;border:1px solid var(--border);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:15px;line-height:1;transition:border-color .15s,background .15s;display:flex;align-items:center;gap:5px }
+.notif-bell:hover { border-color:var(--gold);background:rgba(201,146,13,0.07) }
+.notif-badge { background:var(--gold);color:#141412;font-family:var(--mono);font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;min-width:14px;text-align:center }
+.notif-dropdown { display:none;position:absolute;right:0;top:calc(100% + 6px);width:320px;max-width:92vw;background:#1c1b19;border:1px solid rgba(255,255,255,0.1);border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.5);z-index:9999;overflow:hidden }
+.notif-dropdown.show { display:block }
+.notif-dropdown-header { display:flex;align-items:center;justify-content:space-between;padding:12px 16px 10px;border-bottom:1px solid rgba(255,255,255,0.07) }
+.notif-dropdown-title { font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim) }
+.notif-mark-all { font-family:var(--mono);font-size:10px;color:var(--gold);background:none;border:none;cursor:pointer;padding:0 }
+.notif-mark-all:hover { text-decoration:underline }
+.notif-list { max-height:340px;overflow-y:auto }
+.notif-item { padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;transition:background .15s }
+.notif-item:hover { background:rgba(255,255,255,0.04) }
+.notif-item.unread { background:rgba(201,146,13,0.05) }
+.notif-item-title { font-size:13px;font-weight:600;color:var(--text);margin-bottom:2px }
+.notif-item-body { font-size:11px;color:var(--dim);line-height:1.45;font-family:var(--mono) }
+.notif-item-time { font-size:10px;color:rgba(255,255,255,0.25);margin-top:4px;font-family:var(--mono) }
+.notif-empty { padding:28px 16px;text-align:center;font-size:13px;color:var(--dim) }
+
+/* ── Creator / Member view toggle ── */
+.view-toggle {
+  display: inline-flex;
+  align-items: center;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.view-toggle-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+  color: var(--dim);
+  background: transparent;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.view-toggle-btn.active {
+  background: var(--gold);
+  color: #141412;
+}
+.view-toggle-btn:hover:not(.active) { color: var(--text); }
 .community-url-pill {
   display: flex;
   align-items: center;
@@ -2746,7 +2801,22 @@ body.nav-open .sidebar-backdrop {
           <span class="community-url-text" id="topbarCommunityUrl">hyperflex.network/…</span>
           <span class="community-url-copy">📋</span>
         </div>
-        <a href="/my" class="btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:5px;font-size:13px" title="Switch to member dashboard">🎮 <span class="scanner-label">Member View</span></a>
+        <div class="notif-wrap">
+          <button class="notif-bell" onclick="toggleNotifDropdown(event)" title="Notifications">
+            🔔 <span class="notif-badge" id="notifBadge" style="display:none">0</span>
+          </button>
+          <div class="notif-dropdown" id="notifDropdown">
+            <div class="notif-dropdown-header">
+              <span class="notif-dropdown-title">Notifications</span>
+              <button class="notif-mark-all" onclick="markAllNotifsRead()">Mark all read</button>
+            </div>
+            <div class="notif-list" id="notifList"><div class="notif-empty">All caught up ✓</div></div>
+          </div>
+        </div>
+        <div class="view-toggle" title="Switch views">
+          <span class="view-toggle-btn active">🛠 Creator</span>
+          <a href="#" id="toggleToMemberBtn" class="view-toggle-btn" onclick="goToMemberView(event)">👤 Member</a>
+        </div>
         <a id="viewCommunityBtn" href="#" target="_blank" class="btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:5px;font-size:13px">👁 <span class="scanner-label">View Community</span></a>
         <a id="viewProfileBtn" href="#" target="_blank" class="btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:5px;font-size:13px">👤 <span class="scanner-label">Profile</span></a>
         <button class="btn-secondary" onclick="shareCommunityPage(this)" style="font-size:13px;display:inline-flex;align-items:center;gap:5px">↗ <span class="scanner-label">Share</span></button>
@@ -3740,6 +3810,34 @@ body.nav-open .sidebar-backdrop {
                 <button class="btn-secondary" onclick="runAutoScanNow()" id="autoScanNowBtn" style="padding:10px 16px;font-size:13px">▶ Run Now</button>
                 <span id="autoScanLastRun" style="font-size:12px;color:var(--dim)"></span>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Discord Webhook -->
+        <div class="section">
+          <div class="section-header">
+            <div>
+              <div class="section-title">💬 Discord Integration</div>
+              <div class="section-subtitle">Auto-post new markets to your Discord server as rich embed cards</div>
+            </div>
+          </div>
+          <div class="markets-table" style="padding:28px">
+            <div class="field" style="margin-bottom:8px">
+              <label>Webhook URL</label>
+              <input type="url" id="discordWebhookInput" placeholder="https://discord.com/api/webhooks/…"
+                style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;padding:11px 14px;outline:none;box-sizing:border-box;font-family:var(--mono);transition:border-color .15s"
+                onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='var(--border)'" />
+              <div style="font-size:12px;color:var(--dim);margin-top:5px;line-height:1.5">
+                In Discord: <strong>Server Settings → Integrations → Webhooks → New Webhook</strong> → copy the URL.
+                Every time you publish a new market, a card is automatically posted to that channel.
+              </div>
+            </div>
+            <div id="discordTestResult" style="display:none;margin-bottom:14px;padding:10px 14px;border-radius:8px;font-size:13px;font-family:var(--mono)"></div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <button class="btn-primary" onclick="saveDiscordWebhook()" style="padding:10px 20px;font-size:13px">Save</button>
+              <button class="btn-secondary" onclick="testDiscordWebhook()" style="padding:10px 16px;font-size:13px">🔔 Test</button>
+              <button class="btn-secondary" onclick="clearDiscordWebhook()" style="padding:10px 16px;font-size:13px;color:var(--dim)">Clear</button>
             </div>
           </div>
         </div>
@@ -4801,6 +4899,7 @@ async function init() {
       }));
     }
     renderDashboard(data);
+    loadNotifications();
   } catch (e) {
     showToast('Could not load dashboard. Check your connection.', 'error');
   }
@@ -6252,6 +6351,50 @@ async function loadAutoScanSettings() {
   } catch {}
 }
 
+// ── Discord webhook ───────────────────────────────────────────
+async function saveDiscordWebhook() {
+  const url = (document.getElementById('discordWebhookInput')?.value || '').trim();
+  try {
+    const r = await fetch(`${API}/api/creator/discord-webhook`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ discord_webhook_url: url })
+    });
+    const d = await r.json();
+    if (!r.ok) { showToast(d.error || 'Failed to save.', 'error'); return; }
+    showToast(url ? '💬 Discord webhook saved!' : 'Discord webhook cleared.', 'success');
+  } catch { showToast('Network error.', 'error'); }
+}
+
+async function testDiscordWebhook() {
+  const url = (document.getElementById('discordWebhookInput')?.value || '').trim();
+  if (!url) { showToast('Enter a webhook URL first.', 'error'); return; }
+  const res = document.getElementById('discordTestResult');
+  if (res) { res.style.display = 'block'; res.style.background = 'rgba(201,146,13,0.08)'; res.style.border = '1px solid rgba(201,146,13,0.25)'; res.style.color = 'var(--dim)'; res.textContent = 'Sending test message…'; }
+  try {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ embeds: [{ title: '✅ HYPERFLEX webhook connected!', description: 'New prediction markets will be posted here automatically when you publish them.', color: 0xc9920d }] })
+    });
+    if (resp.ok) {
+      if (res) { res.style.background = 'rgba(34,197,94,0.08)'; res.style.border = '1px solid rgba(34,197,94,0.25)'; res.style.color = '#4ade80'; res.textContent = '✓ Test message sent — check your Discord channel!'; }
+    } else {
+      if (res) { res.style.background = 'rgba(224,83,83,0.08)'; res.style.border = '1px solid rgba(224,83,83,0.25)'; res.style.color = '#f87171'; res.textContent = `Discord returned ${resp.status} — double-check the URL.`; }
+    }
+  } catch (err) {
+    if (res) { res.style.background = 'rgba(224,83,83,0.08)'; res.style.border = '1px solid rgba(224,83,83,0.25)'; res.style.color = '#f87171'; res.textContent = 'Request failed — check the URL and try again.'; }
+  }
+}
+
+function clearDiscordWebhook() {
+  const inp = document.getElementById('discordWebhookInput');
+  if (inp) inp.value = '';
+  saveDiscordWebhook();
+  const res = document.getElementById('discordTestResult');
+  if (res) res.style.display = 'none';
+}
+
 async function saveAutoScanSettings() {
   try {
     const enabled  = document.getElementById('autoScanEnabled')?.checked || false;
@@ -6860,6 +7003,8 @@ function prefillBranding(creator) {
   si('brandingYouTube', creator.social_youtube);
   si('brandingDiscord', creator.social_discord);
   si('brandingTwitch',  creator.social_twitch);
+  // Discord webhook
+  si('discordWebhookInput', creator.discord_webhook_url);
   const colorEl = document.getElementById('brandingColor');
   if (colorEl) colorEl.value = creator.primary_color || '#c9920d';
   const fontEl = document.getElementById('brandingFont');
@@ -7776,6 +7921,89 @@ function signOut() {
   localStorage.removeItem('hf_token');
   localStorage.removeItem('hf_user');
   window.location.href = '/';
+}
+
+// ── Notification bell ─────────────────────────────────────────
+let _notifs = [];
+
+async function loadNotifications() {
+  if (!token) return;
+  try {
+    const r = await fetch(`${API}/api/notifications`, { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) return;
+    const d = await r.json();
+    _notifs = d.notifications || [];
+    renderNotifBell();
+  } catch {}
+}
+
+function renderNotifBell() {
+  const badge = document.getElementById('notifBadge');
+  const list  = document.getElementById('notifList');
+  const unread = _notifs.filter(n => !n.read).length;
+  if (badge) {
+    badge.style.display = unread > 0 ? '' : 'none';
+    badge.textContent   = unread > 9 ? '9+' : String(unread);
+  }
+  if (!list) return;
+  if (_notifs.length === 0) { list.innerHTML = '<div class="notif-empty">All caught up ✓</div>'; return; }
+  list.innerHTML = _notifs.map(n => {
+    const ago = timeAgo(n.created_at);
+    const cls = n.read ? 'notif-item' : 'notif-item unread';
+    const dest = n.market_id ? '#' : n.community_slug ? '/' + n.community_slug : '#';
+    return `<div class="${cls}" onclick="notifClick(${JSON.stringify(n.id)},${JSON.stringify(dest)})">
+      <div class="notif-item-title">${escHtml(n.title)}</div>
+      ${n.body ? `<div class="notif-item-body">${escHtml(n.body)}</div>` : ''}
+      <div class="notif-item-time">${ago}</div>
+    </div>`;
+  }).join('');
+}
+
+function toggleNotifDropdown(e) {
+  e.stopPropagation();
+  document.getElementById('notifDropdown')?.classList.toggle('show');
+}
+
+document.addEventListener('click', () => document.getElementById('notifDropdown')?.classList.remove('show'));
+
+async function notifClick(id, dest) {
+  fetch(`${API}/api/notifications/read`, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':'Bearer '+token }, body: JSON.stringify({ id }) }).catch(()=>{});
+  const n = _notifs.find(x => x.id === id);
+  if (n) n.read = true;
+  renderNotifBell();
+  document.getElementById('notifDropdown')?.classList.remove('show');
+  if (dest && dest !== '#') window.location.href = dest;
+}
+
+async function markAllNotifsRead() {
+  fetch(`${API}/api/notifications/read`, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':'Bearer '+token }, body: JSON.stringify({}) }).catch(()=>{});
+  _notifs.forEach(n => n.read = true);
+  renderNotifBell();
+}
+
+function timeAgo(ts) {
+  if (!ts) return '';
+  const diff = (Date.now() - new Date(ts)) / 1000;
+  if (diff < 60)   return 'just now';
+  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
+  return `${Math.floor(diff/86400)}d ago`;
+}
+
+function escHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function goToMemberView(e) {
+  e.preventDefault();
+  // Navigate to the creator's own community page (member view)
+  const slug = user?.slug || creatorData?.creator?.slug;
+  if (slug) {
+    window.location.href = '/' + slug;
+  } else {
+    window.location.href = '/my';
+  }
 }
 
 // Helpers
