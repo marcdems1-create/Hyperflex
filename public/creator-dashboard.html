@@ -3315,6 +3315,28 @@ body.nav-open .sidebar-backdrop {
           </div>
         </div>
 
+        <!-- Community URL / Slug Change -->
+        <div class="section">
+          <div class="markets-table" style="padding:28px">
+            <div class="section-title" style="margin-bottom:6px">🔗 Community URL</div>
+            <div style="font-size:13px;color:var(--dim);margin-bottom:20px;line-height:1.5">
+              Your community URL is <strong id="currentSlugDisplay" style="color:var(--text)">hyperflex.network/…</strong>.
+              Changing it will update all your markets and member data automatically.
+            </div>
+            <div style="display:flex;gap:10px;align-items:flex-end">
+              <div class="field" style="flex:1;margin:0">
+                <label>New Community Slug</label>
+                <div style="display:flex;align-items:center;gap:0;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--paper)">
+                  <span style="padding:10px 12px;font-size:12px;font-family:var(--mono);color:var(--dim);border-right:1px solid var(--border);white-space:nowrap">hyperflex.network/</span>
+                  <input type="text" id="newSlugInput" placeholder="your-slug" style="flex:1;background:transparent;border:none;color:var(--text);font-family:var(--mono);font-size:13px;padding:10px 12px;outline:none" oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9-]/g,'')"/>
+                </div>
+              </div>
+              <button class="btn-secondary" onclick="changeSlug()" style="white-space:nowrap;padding:10px 18px;flex-shrink:0">Change URL</button>
+            </div>
+            <div id="slugChangeMsg" style="font-size:12px;margin-top:8px;display:none"></div>
+          </div>
+        </div>
+
         <!-- Community Features -->
         <div class="section">
           <div class="markets-table" style="padding:28px">
@@ -5208,6 +5230,8 @@ function renderDashboard(data) {
   document.getElementById('settingColorHex').textContent = creator.primary_color || '#c9920d';
   const catEl = document.getElementById('settingCategory');
   if (catEl) catEl.value = creator.community_category || 'other';
+  const slugDisplayEl = document.getElementById('currentSlugDisplay');
+  if (slugDisplayEl && creator.slug) slugDisplayEl.textContent = `hyperflex.network/${creator.slug}`;
 
   // Economy prefill (stored as centpoints, display as pts)
   document.getElementById('econStartingBalance').value = Math.round((creator.starting_balance ?? 100000) / 100);
@@ -6484,6 +6508,47 @@ async function saveSettings() {
 document.getElementById('settingColor').addEventListener('input', function() {
   document.getElementById('settingColorHex').textContent = this.value;
 });
+
+async function changeSlug() {
+  const newSlug = document.getElementById('newSlugInput').value.trim();
+  const msgEl   = document.getElementById('slugChangeMsg');
+  msgEl.style.display = 'none';
+
+  if (!newSlug || newSlug.length < 3) {
+    msgEl.textContent = 'Slug must be at least 3 characters.';
+    msgEl.style.color = '#e74c3c';
+    msgEl.style.display = 'block';
+    return;
+  }
+
+  if (!confirm(`Change your community URL to hyperflex.network/${newSlug}?\n\nThis will update all your markets and member data. Your old URL will stop working immediately.`)) return;
+
+  try {
+    const r = await fetch(API + '/api/creator/settings/slug', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ new_slug: newSlug })
+    });
+    const data = await r.json();
+    if (data.ok) {
+      msgEl.textContent = `✓ URL changed to hyperflex.network/${data.new_slug} — refresh to continue`;
+      msgEl.style.color = '#27ae60';
+      msgEl.style.display = 'block';
+      document.getElementById('currentSlugDisplay').textContent = `hyperflex.network/${data.new_slug}`;
+      document.getElementById('newSlugInput').value = '';
+      // Update stored token/creator data if slug changed
+      if (creatorData?.creator) creatorData.creator.slug = data.new_slug;
+    } else {
+      msgEl.textContent = data.error || 'Failed to change URL.';
+      msgEl.style.color = '#e74c3c';
+      msgEl.style.display = 'block';
+    }
+  } catch {
+    msgEl.textContent = 'Network error. Try again.';
+    msgEl.style.color = '#e74c3c';
+    msgEl.style.display = 'block';
+  }
+}
 
 // ── REFERRAL PRESETS + MILESTONE PREVIEW ────────────────────
 function renderReferralPresets() {

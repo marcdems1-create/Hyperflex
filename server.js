@@ -3953,6 +3953,67 @@ app.put('/api/creator/settings', requireCreator, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
+// PUT /api/creator/settings/slug — change community slug + cascade to all tables
+// Body: { new_slug }
+// Cascades: creator_settings, markets.tenant_slug, community_balances.creator_slug,
+//           creator_referrals, creator_follows, seasons, notifications, market_disputes
+// ════════════════════════════════════════════════════════════
+app.put('/api/creator/settings/slug', requireCreator, async (req, res) => {
+  try {
+    const { new_slug } = req.body;
+    if (!new_slug) return res.status(400).json({ error: 'new_slug required' });
+    if (!/^[a-z0-9-]{3,30}$/.test(new_slug)) return res.status(400).json({ error: 'Slug must be 3-30 chars, lowercase letters, numbers, hyphens only' });
+
+    // Reserved slugs
+    const RESERVED = ['admin','api','embed','share','widget','win','u','m','nominate','templates','explore','profile','login','signup','creator'];
+    if (RESERVED.includes(new_slug)) return res.status(400).json({ error: 'That slug is reserved' });
+
+    // Get current slug
+    const { data: current } = await supabase
+      .from('creator_settings')
+      .select('slug')
+      .eq('creator_id', req.creator.id)
+      .single();
+    if (!current) return res.status(404).json({ error: 'Creator not found' });
+    const old_slug = current.slug;
+
+    if (old_slug === new_slug) return res.json({ ok: true, slug: new_slug });
+
+    // Check availability
+    const { data: taken } = await supabase
+      .from('creator_settings')
+      .select('slug')
+      .eq('slug', new_slug)
+      .maybeSingle();
+    if (taken) return res.status(409).json({ error: 'Slug already taken — try a different one' });
+
+    // Cascade updates in parallel
+    await Promise.all([
+      supabase.from('creator_settings').update({ slug: new_slug }).eq('creator_id', req.creator.id),
+      supabase.from('markets').update({ tenant_slug: new_slug }).eq('tenant_slug', old_slug),
+      supabase.from('community_balances').update({ creator_slug: new_slug }).eq('creator_slug', old_slug),
+    ]);
+
+    // Best-effort cascade on tables that may or may not exist
+    const softCascades = [
+      supabase.from('creator_referrals').update({ referrer_slug: new_slug }).eq('referrer_slug', old_slug),
+      supabase.from('creator_follows').update({ creator_slug: new_slug }).eq('creator_slug', old_slug),
+      supabase.from('seasons').update({ creator_slug: new_slug }).eq('creator_slug', old_slug),
+      supabase.from('creator_wall').update({ creator_slug: new_slug }).eq('creator_slug', old_slug),
+      supabase.from('market_disputes').update({ creator_slug: new_slug }).eq('creator_slug', old_slug),
+      supabase.from('users').update({ tenant_slug: new_slug }).eq('tenant_slug', old_slug),
+    ];
+    await Promise.allSettled(softCascades);
+
+    console.log(`[slug-change] ${old_slug} → ${new_slug} for creator ${req.creator.id}`);
+    res.json({ ok: true, old_slug, new_slug });
+  } catch (err) {
+    console.error('slug change error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
 // 5a. QUESTION VALIDATOR
 // POST /api/creator/validate-question
 // Body: { question }
