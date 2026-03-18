@@ -8365,6 +8365,140 @@ async function sendWeeklyDigests() {
 // Every Monday at 9am UTC
 cron.schedule('0 9 * * 1', () => { console.log('[digest] Weekly digest cron triggered'); sendWeeklyDigests(); });
 
+// ── PREDICTOR SPOTLIGHT EMAIL ─────────────────────────────────────────────────
+// Every Monday 8am UTC — top predictors this week + hottest markets → all bettors
+async function sendPredictorSpotlightEmail() {
+  const transporter = createMailTransport();
+  if (!transporter) { console.log('[spotlight] SMTP not configured — skipping'); return; }
+  console.log('[spotlight] Starting predictor spotlight email');
+
+  try {
+    const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+
+    // 1. Top 3 predictors by win rate this week (among settled positions)
+    const { data: weeklyPositions } = await supabase
+      .from('positions')
+      .select('user_id, won, markets(resolved_at)')
+      .eq('settled', true)
+      .gte('created_at', weekAgo);
+
+    const statsMap = {};
+    for (const p of (weeklyPositions || [])) {
+      if (!statsMap[p.user_id]) statsMap[p.user_id] = { wins: 0, total: 0 };
+      statsMap[p.user_id].total++;
+      if (p.won) statsMap[p.user_id].wins++;
+    }
+    const topIds = Object.entries(statsMap)
+      .filter(([, s]) => s.total >= 2)
+      .sort((a, b) => (b[1].wins / b[1].total) - (a[1].wins / a[1].total))
+      .slice(0, 3)
+      .map(([id]) => id);
+
+    const { data: topUsers } = topIds.length
+      ? await supabase.from('users').select('id, display_name').in('id', topIds)
+      : { data: [] };
+    const userMap = {};
+    for (const u of (topUsers || [])) userMap[u.id] = u.display_name || 'Anonymous';
+
+    const topPredictorsHtml = topIds.map((id, i) => {
+      const s = statsMap[id];
+      const wr = Math.round((s.wins / s.total) * 100);
+      const medals = ['🥇', '🥈', '🥉'];
+      return `<tr><td style="padding:10px 0;border-bottom:1px solid #252523">
+        <span style="font-size:16px">${medals[i]}</span>
+        <a href="https://hyperflex.network/m/${id}" style="font-size:14px;color:#f5f5f0;margin-left:10px;text-decoration:none;font-weight:600">${userMap[id]}</a>
+        <span style="float:right;font-size:13px;color:#c9920d;font-weight:700">${wr}% win rate · ${s.total} calls</span>
+      </td></tr>`;
+    }).join('');
+
+    // 2. 3 hottest markets right now across all communities
+    const { data: hotMarkets } = await supabase
+      .from('markets')
+      .select('id, question, yes_price, trader_count, tenant_slug')
+      .eq('resolved', false)
+      .eq('archived', false)
+      .eq('is_public', true)
+      .order('trader_count', { ascending: false })
+      .limit(3);
+
+    const hotMarketsHtml = (hotMarkets || []).map(m => {
+      const yesPct = Math.round((m.yes_price || 0.5) * 100);
+      return `<tr><td style="padding:10px 0;border-bottom:1px solid #252523">
+        <div style="font-size:14px;color:#f5f5f0;margin-bottom:4px">${m.question}</div>
+        <div style="font-size:12px;color:#888">${m.tenant_slug} · ${m.trader_count || 0} traders · YES ${yesPct}%
+          <a href="https://hyperflex.network/${m.tenant_slug}" style="color:#c9920d;margin-left:8px;text-decoration:none">Predict →</a>
+        </div>
+      </td></tr>`;
+    }).join('');
+
+    if (!topPredictorsHtml && !hotMarketsHtml) {
+      console.log('[spotlight] No data to send — skipping');
+      return;
+    }
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/></head>
+<body style="font-family:'Helvetica Neue',Arial,sans-serif;background:#141412;margin:0;padding:0">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#141412;padding:40px 0">
+<tr><td align="center">
+  <table width="540" cellpadding="0" cellspacing="0" style="background:#1e1e1b;border-radius:10px;overflow:hidden">
+    <tr><td style="background:#c9920d;padding:18px 28px">
+      <span style="font-size:20px;font-weight:900;color:#141412">HYPERFLEX</span>
+      <span style="float:right;font-size:13px;color:#141412;opacity:.7;line-height:28px">Weekly Spotlight</span>
+    </td></tr>
+    <tr><td style="padding:28px">
+      <h2 style="margin:0 0 6px;font-size:22px;color:#f5f5f0;font-weight:800">🏆 This week on HYPERFLEX</h2>
+      <p style="margin:0 0 24px;font-size:14px;color:#888">Top predictors and the hottest markets right now.</p>
+      ${topPredictorsHtml ? `
+      <h3 style="margin:0 0 12px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:#c9920d">🏆 Top Predictors This Week</h3>
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px">${topPredictorsHtml}</table>` : ''}
+      ${hotMarketsHtml ? `
+      <h3 style="margin:0 0 12px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:#c9920d">🔥 Hot Markets Right Now</h3>
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px">${hotMarketsHtml}</table>` : ''}
+      <a href="https://hyperflex.network/predictors" style="display:inline-block;padding:12px 24px;background:#c9920d;color:#141412;font-weight:700;font-size:15px;border-radius:6px;text-decoration:none">See full leaderboard →</a>
+    </td></tr>
+    <tr><td style="padding:16px 28px;border-top:1px solid #2a2a27">
+      <p style="margin:0;font-size:11px;color:#555">Weekly spotlight from <a href="https://hyperflex.network" style="color:#888">HYPERFLEX</a>.</p>
+    </td></tr>
+  </table>
+</td></tr>
+</table></body></html>`;
+
+    // 3. Send to every user who has ever placed a bet
+    const { data: bettors } = await supabase
+      .from('positions')
+      .select('user_id')
+      .limit(5000);
+    const bettor_ids = [...new Set((bettors || []).map(p => p.user_id))];
+    if (!bettor_ids.length) return;
+
+    const { data: allUsers } = await supabase
+      .from('users')
+      .select('id, email, email_unsubscribed')
+      .in('id', bettor_ids);
+
+    const eligible = (allUsers || []).filter(u => u.email && !u.email_unsubscribed);
+    const fromAddress = process.env.SMTP_FROM || 'HYPERFLEX <noreply@hyperflex.network>';
+
+    const sends = await Promise.allSettled(eligible.map(async u => {
+      const unsubToken = await getMemberUnsubToken(u.id);
+      const unsubUrl = `https://hyperflex.network/unsubscribe?token=${unsubToken}`;
+      const personalizedHtml = html.replace('</table></body></html>',
+        `${unsubscribeFooterHtml(unsubUrl)}</table></body></html>`);
+      return transporter.sendMail({
+        from: fromAddress,
+        to: u.email,
+        subject: '🏆 This week on HYPERFLEX',
+        html: personalizedHtml,
+      });
+    }));
+
+    console.log(`[spotlight] ${sends.filter(r => r.status === 'fulfilled').length}/${eligible.length} sent`);
+  } catch (err) {
+    console.error('[spotlight] Error:', err.message);
+  }
+}
+cron.schedule('0 8 * * 1', () => { console.log('[spotlight] Predictor spotlight cron triggered'); sendPredictorSpotlightEmail(); });
+
 // ─── STREAK WARNING EMAILS ─────────────────────────────────────────────────────
 // Daily at 6pm UTC — sends "Your X-win streak ends tonight" to users who:
 //   • have a current consecutive win streak ≥ 3
@@ -11364,6 +11498,19 @@ app.get('/api/community/:slug/seasons/:seasonId', async (req, res) => {
   } catch (err) {
     console.error('[season detail GET]', err.message);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/user/profile-share-stats — follower count for the authed user's profile
+app.get('/api/user/profile-share-stats', requireAuth, async (req, res) => {
+  try {
+    const { count } = await supabase
+      .from('predictor_follows')
+      .select('id', { count: 'exact', head: true })
+      .eq('following_id', req.userId);
+    res.json({ followers: count || 0, profile_views: 0 });
+  } catch (e) {
+    res.json({ followers: 0, profile_views: 0 });
   }
 });
 
