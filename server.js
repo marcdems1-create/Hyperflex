@@ -7467,24 +7467,30 @@ app.get('/api/feed/following', requireAuth, async (req, res) => {
   if (!follows || follows.length === 0) return res.json({ items: [] });
   const followingIds = follows.map(f => f.following_id);
 
-  // Fetch shared positions from followed users
-  const { data: positions } = await supabase
-    .from('shared_positions')
-    .select('*, users(display_name, username)')
-    .in('user_id', followingIds)
-    .order('created_at', { ascending: false })
-    .limit(50);
-
-  // Fetch recent Hyperflex bets from followed users
-  const { data: bets } = await supabase
-    .from('positions')
-    .select('*, markets(question, tenant_slug, id), users(display_name, username)')
-    .in('user_id', followingIds)
-    .order('created_at', { ascending: false })
-    .limit(50);
+  // Fetch shared + cached external positions and HFX bets from followed users
+  const [sharedRes, cachedRes, betsRes] = await Promise.all([
+    supabase
+      .from('shared_positions')
+      .select('*, users(display_name, username)')
+      .in('user_id', followingIds)
+      .order('created_at', { ascending: false })
+      .limit(50),
+    supabase
+      .from('cached_positions')
+      .select('*, users(display_name, username)')
+      .in('user_id', followingIds)
+      .order('updated_at', { ascending: false })
+      .limit(50),
+    supabase
+      .from('positions')
+      .select('*, markets(question, tenant_slug, id), users(display_name, username)')
+      .in('user_id', followingIds)
+      .order('created_at', { ascending: false })
+      .limit(50),
+  ]);
 
   const items = [];
-  (positions || []).forEach(p => {
+  (sharedRes.data || []).forEach(p => {
     items.push({
       type: 'external_bet',
       id: `sp_${p.id}`,
@@ -7499,7 +7505,21 @@ app.get('/api/feed/following', requireAuth, async (req, res) => {
       created_at: p.created_at
     });
   });
-  (bets || []).forEach(b => {
+  (cachedRes.data || []).forEach(p => {
+    items.push({
+      type: 'external_bet',
+      id: `cp_${p.id}`,
+      user_id: p.user_id,
+      username: p.users?.username || p.users?.display_name || 'Predictor',
+      platform: p.platform,
+      market_title: p.market_title,
+      side: p.side,
+      pnl: p.pnl,
+      market_url: p.market_url,
+      created_at: p.updated_at
+    });
+  });
+  (betsRes.data || []).forEach(b => {
     if (!b.markets) return;
     items.push({
       type: 'hyperflex_bet',
@@ -7521,19 +7541,20 @@ app.get('/api/feed/following', requireAuth, async (req, res) => {
 // Public portfolio for any user
 app.get('/api/predictors/:userId/portfolio', async (req, res) => {
   const { userId } = req.params;
-  const { data: shared } = await supabase
-    .from('shared_positions')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(30);
-  const { data: hfBets } = await supabase
-    .from('positions')
-    .select('*, markets(question, tenant_slug, id, resolved, outcome)')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(30);
-  res.json({ shared_positions: shared || [], hyperflex_bets: hfBets || [] });
+  const [cachedRes, hfBetsRes] = await Promise.all([
+    supabase
+      .from('cached_positions')
+      .select('*')
+      .eq('user_id', userId)
+      .order('updated_at', { ascending: false }),
+    supabase
+      .from('positions')
+      .select('*, markets(question, tenant_slug, id, resolved, outcome)')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(30),
+  ]);
+  res.json({ cached_positions: cachedRes.data || [], hyperflex_bets: hfBetsRes.data || [] });
 });
 
 // GET /api/member/:userId — public member profile data
@@ -7965,6 +7986,125 @@ app.post('/api/activity/share-position', requireAuth, async (req, res) => {
     res.status(500).json({ error: 'Failed to share position' });
   }
 });
+
+// ── CROSS-PLATFORM POSITION AUTO-SYNC ────────────────────────────────────────
+async function syncAllUserPositions() {
+  console.log('[auto-sync] Starting position sync for all connected users');
+  try {
+    const { data: users } = await supabase
+      .from('users')
+      .select('id, wallet_address, kalshi_api_key, kalshi_username')
+      .or('wallet_address.not.is.null,kalshi_api_key.not.is.null,kalshi_username.not.is.null');
+    if (!users || users.length === 0) return;
+    console.log(`[auto-sync] Syncing ${users.length} users`);
+    for (const user of users) {
+      await syncUserPositions(user).catch(e => console.warn(`[auto-sync] Failed for ${user.id}:`, e.message));
+    }
+    console.log('[auto-sync] Done');
+  } catch(e) {
+    console.error('[auto-sync] Error:', e.message);
+  }
+}
+
+async function syncUserPositions(user) {
+  const upserts = [];
+
+  // Polymarket
+  if (user.wallet_address) {
+    try {
+      const cacheKey = `poly_${user.wallet_address}`;
+      let positions = _polyCache?.get(cacheKey);
+      if (!positions) {
+        const res = await fetch(`https://data-api.polymarket.com/positions?user=${user.wallet_address}&limit=50&sortBy=CURRENT&winning=false`);
+        positions = await res.json();
+        if (_polyCache) {
+          _polyCache.set(cacheKey, positions);
+          setTimeout(() => _polyCache.delete(cacheKey), 5 * 60 * 1000);
+        }
+      }
+      (Array.isArray(positions) ? positions : []).forEach(p => {
+        if (!p.conditionId) return;
+        upserts.push({
+          user_id: user.id,
+          platform: 'polymarket',
+          external_id: p.conditionId,
+          market_title: p.title || p.question || 'Unknown market',
+          side: p.outcome || 'YES',
+          shares: parseFloat(p.size) || 0,
+          pnl: parseFloat(p.cashPnl) || 0,
+          probability: parseFloat(p.currentPrice) || 0,
+          market_url: `https://polymarket.com/event/${p.conditionId}`,
+          updated_at: new Date().toISOString()
+        });
+      });
+    } catch(e) { console.warn('[sync-poly]', e.message); }
+  }
+
+  // Kalshi
+  if (user.kalshi_api_key) {
+    try {
+      const resp = await fetch('https://trading-api.kalshi.com/trade-api/v2/portfolio/positions?limit=50', {
+        headers: { Authorization: `Bearer ${user.kalshi_api_key}` }
+      });
+      const data = await resp.json();
+      ((data.market_positions || [])).forEach(p => {
+        upserts.push({
+          user_id: user.id,
+          platform: 'kalshi',
+          external_id: p.market_id,
+          market_title: p.market_title || p.market_id,
+          side: (p.position > 0) ? 'YES' : 'NO',
+          shares: Math.abs(p.position) || 0,
+          pnl: parseFloat(p.realized_pnl || 0) / 100,
+          probability: parseFloat(p.market_exposure || 0) / 100,
+          market_url: `https://kalshi.com/markets/${p.market_id}`,
+          updated_at: new Date().toISOString()
+        });
+      });
+    } catch(e) { console.warn('[sync-kalshi]', e.message); }
+  }
+
+  // Manifold (stored under kalshi_username field)
+  if (user.kalshi_username) {
+    try {
+      const res = await fetch(`https://api.manifold.markets/v0/bets?username=${encodeURIComponent(user.kalshi_username)}&limit=50`);
+      const bets = await res.json();
+      const grouped = {};
+      (Array.isArray(bets) ? bets : []).filter(b => !b.isRedemption && b.amount > 0).forEach(b => {
+        if (!grouped[b.contractId]) grouped[b.contractId] = { bets: [], contractId: b.contractId };
+        grouped[b.contractId].bets.push(b);
+      });
+      for (const contractId of Object.keys(grouped).slice(0, 20)) {
+        try {
+          const mRes = await fetch(`https://api.manifold.markets/v0/market/${contractId}`);
+          const market = await mRes.json();
+          if (market.isResolved) continue;
+          const group = grouped[contractId];
+          const totalAmount = group.bets.reduce((s, b) => s + b.amount, 0);
+          const lastSide = group.bets[group.bets.length - 1]?.outcome || 'YES';
+          upserts.push({
+            user_id: user.id,
+            platform: 'manifold',
+            external_id: contractId,
+            market_title: market.question,
+            side: lastSide,
+            shares: totalAmount,
+            pnl: 0,
+            probability: parseFloat(market.probability) || 0,
+            market_url: market.url,
+            updated_at: new Date().toISOString()
+          });
+        } catch(e2) { /* skip */ }
+      }
+    } catch(e) { console.warn('[sync-manifold]', e.message); }
+  }
+
+  if (upserts.length > 0) {
+    await supabase.from('cached_positions').delete().eq('user_id', user.id);
+    await supabase.from('cached_positions').insert(upserts);
+    console.log(`[auto-sync] Synced ${upserts.length} positions for user ${user.id}`);
+  }
+}
 
 // ── WEEKLY MEMBER DIGEST EMAIL ───────────────────────────────────────────────
 async function sendWeeklyDigests() {
@@ -10767,6 +10907,9 @@ async function autoResolveExpiredMarkets() {
 // Run auto-resolve check every 30 minutes
 cron.schedule('*/30 * * * *', autoResolveExpiredMarkets);
 
+// Auto-sync platform positions — every hour
+cron.schedule('0 * * * *', syncAllUserPositions);
+
 // ── PROFILE PAGE: WALL + AGGREGATED COMMENTS ─────────────────────────────────
 
 // GET /api/profile/:slug/wall — public, returns last 40 wall posts
@@ -11221,6 +11364,16 @@ app.get('/api/kalshi/positions', requireAuth, async (req, res) => {
     res.json(data);
   } catch (err) {
     console.error('[kalshi proxy]', err.message);
+    // Fallback: return cached_positions from DB if fresh (within 30 min)
+    try {
+      const { data: fallback } = await supabase
+        .from('cached_positions')
+        .select('*')
+        .eq('user_id', req.userId)
+        .eq('platform', 'kalshi')
+        .gte('updated_at', new Date(Date.now() - 30 * 60 * 1000).toISOString());
+      if (fallback?.length) return res.json({ positions: fallback, fetched_at: fallback[0].updated_at, from_cache: true });
+    } catch {}
     res.status(502).json({ error: 'Failed to fetch Kalshi positions', detail: err.message });
   }
 });
@@ -11259,7 +11412,19 @@ app.get('/api/manifold/positions/:username', async (req, res) => {
     const data = { positions, username, fetched_at: new Date().toISOString() };
     _manifoldCache.set(username, { ts: Date.now(), data });
     res.json(data);
-  } catch (err) { console.error('[manifold proxy]', err.message); res.status(502).json({ error: 'Failed to fetch Manifold positions', detail: err.message }); }
+  } catch (err) {
+    console.error('[manifold proxy]', err.message);
+    // Fallback: return cached_positions from DB if fresh (within 30 min)
+    try {
+      const { data: fallback } = await supabase
+        .from('cached_positions')
+        .select('*')
+        .eq('platform', 'manifold')
+        .gte('updated_at', new Date(Date.now() - 30 * 60 * 1000).toISOString());
+      if (fallback?.length) return res.json({ positions: fallback, fetched_at: fallback[0].updated_at, from_cache: true });
+    } catch {}
+    res.status(502).json({ error: 'Failed to fetch Manifold positions', detail: err.message });
+  }
 });
 
 const PORT = process.env.PORT || 3000;
