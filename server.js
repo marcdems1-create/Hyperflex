@@ -258,6 +258,9 @@ function requireAuth(req, res, next) {
   }
 }
 
+// ── EXTERNAL API CACHES ───────────────────────────
+const _kalshiCache = new Map();
+
 // ── MARKETS ───────────────────────────────────────
 
 // Get all open markets
@@ -10913,6 +10916,137 @@ app.get('/api/community/:slug/seasons/:seasonId', async (req, res) => {
   } catch (err) {
     console.error('[season detail GET]', err.message);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ── WALLETS / CONNECTED ACCOUNTS ─────────────────────────────────────────────
+
+// GET /api/user/wallets — return connected wallet/platform info for authed user
+app.get('/api/user/wallets', requireAuth, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('polymarket_address, kalshi_api_key, kalshi_username, manifold_username')
+      .eq('id', req.userId)
+      .maybeSingle();
+    if (error) throw error;
+    res.json({
+      polymarket_address: data?.polymarket_address || null,
+      kalshi_api_key_set: !!(data?.kalshi_api_key),
+      kalshi_username:    data?.kalshi_username    || null,
+      manifold_username:  data?.manifold_username  || null,
+    });
+  } catch (err) {
+    console.error('[wallets GET]', err.message);
+    res.status(500).json({ error: 'Failed to load wallet info' });
+  }
+});
+
+// PUT /api/user/wallets — update connected wallet/platform info
+app.put('/api/user/wallets', requireAuth, async (req, res) => {
+  try {
+    const { polymarket_address, kalshi_api_key, kalshi_username, manifold_username } = req.body;
+    const updates = {};
+
+    if (polymarket_address !== undefined) {
+      const addr = (polymarket_address || '').trim();
+      if (addr && !/^0x[0-9a-fA-F]{40}$/.test(addr))
+        return res.status(400).json({ error: 'Invalid Ethereum address format' });
+      updates.polymarket_address = addr || null;
+    }
+
+    if (manifold_username !== undefined) {
+      updates.manifold_username = (manifold_username || '').trim() || null;
+    }
+
+    if (kalshi_username !== undefined) {
+      updates.kalshi_username = (kalshi_username || '').trim() || null;
+    }
+
+    if (kalshi_api_key !== undefined) {
+      const key = (kalshi_api_key || '').trim();
+      if (key && !/^[0-9a-f-]{36}$/.test(key))
+        return res.status(400).json({ error: 'Invalid Kalshi API key format (expected UUID)' });
+      updates.kalshi_api_key = key || null;
+      if (key) _kalshiCache.delete(key);
+    }
+
+    if (!Object.keys(updates).length) return res.status(400).json({ error: 'Nothing to update' });
+
+    const { error } = await supabase.from('users').update(updates).eq('id', req.userId);
+    if (error) throw error;
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[wallets PUT]', err.message);
+    res.status(500).json({ error: 'Failed to update wallet info' });
+  }
+});
+
+// GET /api/kalshi/positions — proxy Kalshi API using stored user API key
+app.get('/api/kalshi/positions', requireAuth, async (req, res) => {
+  try {
+    const { data: user } = await supabase
+      .from('users')
+      .select('kalshi_api_key')
+      .eq('id', req.userId)
+      .maybeSingle();
+    if (!user?.kalshi_api_key) return res.status(400).json({ error: 'No Kalshi API key connected' });
+
+    const apiKey = user.kalshi_api_key;
+    const cached = _kalshiCache.get(apiKey);
+    if (cached && Date.now() - cached.ts < 5 * 60 * 1000) return res.json(cached.data);
+
+    const r = await fetch('https://trading-api.kalshi.com/trade-api/v2/portfolio/positions', {
+      headers: { Authorization: 'Bearer ' + apiKey, Accept: 'application/json' }
+    });
+    if (r.status === 401) return res.status(401).json({ error: 'Invalid Kalshi API key' });
+    if (!r.ok) throw new Error('Kalshi API returned ' + r.status);
+    const raw = await r.json();
+
+    // Enrich with market details (batch up to 20 unique tickers)
+    const positions = raw.positions || [];
+    const tickers = [...new Set(positions.map(p => p.ticker))].slice(0, 20);
+    const marketMap = {};
+    await Promise.all(tickers.map(async ticker => {
+      try {
+        const mr = await fetch('https://trading-api.kalshi.com/trade-api/v2/markets/' + ticker, {
+          headers: { Authorization: 'Bearer ' + apiKey, Accept: 'application/json' }
+        });
+        if (mr.ok) { const md = await mr.json(); marketMap[ticker] = md.market; }
+      } catch {}
+    }));
+
+    const normalized = positions
+      .filter(p => p.position !== 0)
+      .map(p => {
+        const m = marketMap[p.ticker] || {};
+        const isYes = p.position > 0;
+        const currentPrice = isYes ? (m.yes_bid || 0.5) : (1 - (m.yes_ask || 0.5));
+        const contracts = Math.abs(p.position);
+        return {
+          id:              p.ticker,
+          question:        m.title || p.ticker,
+          side:            isYes ? 'YES' : 'NO',
+          contracts,
+          current_price:   currentPrice,
+          cash_value:      Math.round(contracts * currentPrice * 100) / 100,
+          realized_pnl:    p.realized_pnl   || 0,
+          unrealized_pnl:  p.unrealized_pnl || 0,
+          market_url:      'https://kalshi.com/markets/' + p.ticker,
+          end_date:        m.close_time || null,
+          closed:          m.status === 'finalized',
+          pnl_pct:         p.unrealized_pnl && contracts > 0
+            ? Math.round((p.unrealized_pnl / (contracts * 0.5)) * 100) : 0,
+          platform:        'kalshi',
+        };
+      });
+
+    const data = { positions: normalized, fetched_at: new Date().toISOString() };
+    _kalshiCache.set(apiKey, { ts: Date.now(), data });
+    res.json(data);
+  } catch (err) {
+    console.error('[kalshi proxy]', err.message);
+    res.status(502).json({ error: 'Failed to fetch Kalshi positions', detail: err.message });
   }
 });
 

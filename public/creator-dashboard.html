@@ -2791,6 +2791,9 @@ body.nav-open .sidebar-backdrop {
       <a class="nav-item" onclick="showTab('seasons')">
         <span class="nav-icon">🏆</span><span class="nav-label">Seasons</span>
       </a>
+      <a class="nav-item" onclick="showTab('portfolio')">
+        <span class="nav-icon">📊</span><span class="nav-label">Portfolio</span>
+      </a>
       <div class="nav-section-label">Account</div>
       <a class="nav-item" onclick="showTab('economy')">
         <span class="nav-icon">⚡</span><span class="nav-label">Economy</span>
@@ -4506,6 +4509,82 @@ body.nav-open .sidebar-backdrop {
         </div>
       </div>
 
+      <!-- PORTFOLIO TAB -->
+      <div id="tab-portfolio" style="display:none">
+        <div class="section">
+          <div style="max-width:860px">
+
+            <!-- Stats bar -->
+            <div id="portfolioStats" style="display:none;display:flex;gap:16px;flex-wrap:wrap;margin-bottom:24px"></div>
+
+            <!-- Kalshi card -->
+            <div style="background:var(--cream);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:20px">
+              <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+                <div style="width:36px;height:36px;border-radius:8px;background:#0a0a0a;border:1px solid #333;display:flex;align-items:center;justify-content:center;font-size:18px">🟡</div>
+                <div>
+                  <div style="font-size:15px;font-weight:700;color:var(--text)">Kalshi</div>
+                  <div style="font-size:12px;color:var(--muted)">Real-money prediction markets</div>
+                </div>
+                <div style="margin-left:auto" id="kalshiStatusBadge"></div>
+              </div>
+
+              <!-- Connect form -->
+              <div id="kalshiConnectForm">
+                <div style="margin-bottom:12px">
+                  <input type="password" id="kalshiApiKeyInput"
+                    placeholder="Kalshi API Key (UUID format)"
+                    style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-family:var(--mono);font-size:13px;color:var(--text);outline:none;margin-bottom:6px"
+                    onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='var(--border)'"/>
+                  <div style="font-size:11px;color:var(--muted)">
+                    Get your key at
+                    <a href="https://kalshi.com/profile/api" target="_blank" style="color:var(--gold)">kalshi.com/profile/api</a>
+                    → Settings → API Access
+                  </div>
+                </div>
+                <button class="btn-primary" id="kalshiConnectBtn" onclick="connectKalshi()" style="font-size:13px;padding:9px 20px">
+                  Connect Kalshi →
+                </button>
+              </div>
+
+              <!-- Disconnect row (shown when connected) -->
+              <div id="kalshiConnectedRow" style="display:none;align-items:center;gap:12px">
+                <div style="font-size:13px;color:var(--green);font-weight:600">✓ API key connected</div>
+                <button onclick="disconnectKalshi()" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:11px;color:var(--muted);cursor:pointer;font-family:var(--mono)">Disconnect</button>
+                <button onclick="loadKalshiPositions(true)" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:11px;color:var(--dim);cursor:pointer;font-family:var(--mono)">↺ Refresh</button>
+              </div>
+
+              <!-- Positions list -->
+              <div id="kalshiPositions" style="margin-top:20px"></div>
+            </div>
+
+            <!-- Polymarket placeholder -->
+            <div style="background:var(--cream);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:20px;opacity:0.6">
+              <div style="display:flex;align-items:center;gap:12px">
+                <div style="width:36px;height:36px;border-radius:8px;background:#0a0a0a;border:1px solid #333;display:flex;align-items:center;justify-content:center;font-size:18px">🟣</div>
+                <div>
+                  <div style="font-size:15px;font-weight:700;color:var(--text)">Polymarket</div>
+                  <div style="font-size:12px;color:var(--muted)">Crypto prediction markets — coming soon</div>
+                </div>
+                <div style="margin-left:auto;font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid var(--border);color:var(--muted)">COMING SOON</div>
+              </div>
+            </div>
+
+            <!-- Manifold placeholder -->
+            <div style="background:var(--cream);border:1px solid var(--border);border-radius:12px;padding:24px;opacity:0.6">
+              <div style="display:flex;align-items:center;gap:12px">
+                <div style="width:36px;height:36px;border-radius:8px;background:#0a0a0a;border:1px solid #333;display:flex;align-items:center;justify-content:center;font-size:18px">🟢</div>
+                <div>
+                  <div style="font-size:15px;font-weight:700;color:var(--text)">Manifold</div>
+                  <div style="font-size:12px;color:var(--muted)">Play-money prediction markets — coming soon</div>
+                </div>
+                <div style="margin-left:auto;font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid var(--border);color:var(--muted)">COMING SOON</div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div><!-- /tab-portfolio -->
+
       <!-- Settings tab: add Delete Account section -->
     </div><!-- /content -->
   </main>
@@ -6084,7 +6163,7 @@ function renderShareTemplates(creator) {
 
 // Tab switching
 function showTab(tab) {
-  ['overview','markets','resolve','members','leaderboard','share','rewards','seasons','settings','analytics','economy','branding','flexbot','ideas'].forEach(t => {
+  ['overview','markets','resolve','members','leaderboard','share','rewards','seasons','settings','analytics','economy','branding','flexbot','ideas','portfolio'].forEach(t => {
     const el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === tab ? 'block' : 'none';
   });
@@ -6092,7 +6171,7 @@ function showTab(tab) {
   document.querySelectorAll('.nav-item').forEach(n => {
     if (n.getAttribute('onclick') && n.getAttribute('onclick').includes(`'${tab}'`)) n.classList.add('active');
   });
-  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Members' };
+  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Members', portfolio:'Portfolio' };
   document.getElementById('topbarTitle').textContent = titles[tab] || tab;
   if (tab === 'analytics' && !analyticsLoaded) loadAnalytics();
   if (tab === 'members') loadMembers();
@@ -6104,6 +6183,7 @@ function showTab(tab) {
     if (kitSection) kitSection.style.display = (plan === 'pro' || plan === 'platinum') ? '' : 'none';
   }
   if (tab === 'resolve') loadDisputes();
+  if (tab === 'portfolio') loadPortfolio();
   if (tab === 'seasons' && !seasonsLoaded) loadSeasons();
   if (tab === 'markets') {
     const sec = document.getElementById('suggestionsSection');
@@ -10695,6 +10775,177 @@ function shareCommunityPage(anchorEl) {
   const url  = `${location.origin}/${slug}`;
   const text = `Join ${name} on HYPERFLEX — predict the future with your community 🎯`;
   openShareSheet(anchorEl, url, text);
+}
+</script>
+
+<script>
+// ── PORTFOLIO / KALSHI INTEGRATION ───────────────────────────────────────────
+
+let _portfolioLoaded = false;
+let _kalshiConnected = false;
+
+async function loadPortfolio() {
+  if (_portfolioLoaded) return;
+  _portfolioLoaded = true;
+  try {
+    const token = localStorage.getItem('hf_token');
+    const r = await fetch('/api/user/wallets', { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) return;
+    const data = await r.json();
+    _kalshiConnected = data.kalshi_api_key_set;
+    renderKalshiConnectState();
+    if (_kalshiConnected) loadKalshiPositions(false);
+  } catch (e) {
+    console.warn('[portfolio]', e);
+  }
+}
+
+function renderKalshiConnectState() {
+  const form = document.getElementById('kalshiConnectForm');
+  const row  = document.getElementById('kalshiConnectedRow');
+  const badge = document.getElementById('kalshiStatusBadge');
+  if (_kalshiConnected) {
+    if (form)  form.style.display  = 'none';
+    if (row)   row.style.display   = 'flex';
+    if (badge) badge.innerHTML = '<span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid rgba(45,155,95,0.4);color:#2d9b5f;background:rgba(45,155,95,0.1)">CONNECTED</span>';
+  } else {
+    if (form)  form.style.display  = 'block';
+    if (row)   row.style.display   = 'none';
+    if (badge) badge.innerHTML = '<span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid var(--border);color:var(--muted)">NOT CONNECTED</span>';
+    document.getElementById('kalshiPositions').innerHTML = '';
+  }
+}
+
+async function connectKalshi() {
+  const key = (document.getElementById('kalshiApiKeyInput').value || '').trim();
+  if (!key) return showToast('Enter your Kalshi API key', 'error');
+  if (!/^[0-9a-f-]{36}$/.test(key)) return showToast('API key must be a UUID (36 chars)', 'error');
+  const btn = document.getElementById('kalshiConnectBtn');
+  btn.disabled = true; btn.textContent = 'Connecting…';
+  try {
+    const token = localStorage.getItem('hf_token');
+    const r = await fetch('/api/user/wallets', {
+      method: 'PUT',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kalshi_api_key: key })
+    });
+    const d = await r.json();
+    if (!r.ok) { showToast(d.error || 'Failed to connect', 'error'); btn.disabled = false; btn.textContent = 'Connect Kalshi →'; return; }
+    _kalshiConnected = true;
+    renderKalshiConnectState();
+    showToast('Kalshi connected!', 'success');
+    loadKalshiPositions(false);
+  } catch (e) {
+    showToast('Connection failed', 'error');
+    btn.disabled = false; btn.textContent = 'Connect Kalshi →';
+  }
+}
+
+async function disconnectKalshi() {
+  if (!confirm('Disconnect Kalshi? Your API key will be removed.')) return;
+  try {
+    const token = localStorage.getItem('hf_token');
+    await fetch('/api/user/wallets', {
+      method: 'PUT',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kalshi_api_key: '' })
+    });
+    _kalshiConnected = false;
+    _portfolioLoaded = false;
+    renderKalshiConnectState();
+    showToast('Kalshi disconnected', 'success');
+  } catch (e) {
+    showToast('Failed to disconnect', 'error');
+  }
+}
+
+async function loadKalshiPositions(forceRefresh) {
+  const el = document.getElementById('kalshiPositions');
+  if (!el) return;
+  el.innerHTML = '<div style="padding:16px 0;font-size:13px;color:var(--muted);font-family:var(--mono)">Loading positions…</div>';
+  try {
+    const token = localStorage.getItem('hf_token');
+    const url = '/api/kalshi/positions' + (forceRefresh ? '?refresh=1' : '');
+    const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+    if (r.status === 401) {
+      el.innerHTML = '<div style="color:#c0392b;font-size:13px;padding:8px 0">Invalid API key — please disconnect and reconnect.</div>';
+      return;
+    }
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      el.innerHTML = `<div style="color:#c0392b;font-size:13px;padding:8px 0">${d.error || 'Failed to load positions'}</div>`;
+      return;
+    }
+    const data = await r.json();
+    const positions = data.positions || [];
+
+    // Update stats bar
+    const statsEl = document.getElementById('portfolioStats');
+    if (statsEl) {
+      const totalUnrealized = positions.reduce((s, p) => s + (p.unrealized_pnl || 0), 0);
+      const totalRealized   = positions.reduce((s, p) => s + (p.realized_pnl   || 0), 0);
+      const pnlColor = totalUnrealized >= 0 ? '#2d9b5f' : '#c0392b';
+      statsEl.style.display = 'flex';
+      statsEl.innerHTML = `
+        <div style="background:var(--cream);border:1px solid var(--border);border-radius:10px;padding:14px 20px;flex:1;min-width:140px">
+          <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:4px">KALSHI POSITIONS</div>
+          <div style="font-size:22px;font-weight:800;color:var(--text)">${positions.length}</div>
+        </div>
+        <div style="background:var(--cream);border:1px solid var(--border);border-radius:10px;padding:14px 20px;flex:1;min-width:140px">
+          <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:4px">UNREALIZED P&L</div>
+          <div style="font-size:22px;font-weight:800;color:${pnlColor}">${totalUnrealized >= 0 ? '+' : ''}$${(totalUnrealized/100).toFixed(2)}</div>
+        </div>
+        <div style="background:var(--cream);border:1px solid var(--border);border-radius:10px;padding:14px 20px;flex:1;min-width:140px">
+          <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:4px">REALIZED P&L</div>
+          <div style="font-size:22px;font-weight:800;color:${totalRealized >= 0 ? '#2d9b5f' : '#c0392b'}">${totalRealized >= 0 ? '+' : ''}$${(totalRealized/100).toFixed(2)}</div>
+        </div>`;
+    }
+
+    if (!positions.length) {
+      el.innerHTML = '<div style="padding:20px 0;font-size:13px;color:var(--muted);text-align:center">No open positions found on Kalshi.</div>';
+      return;
+    }
+
+    el.innerHTML = positions.map(p => {
+      const pnl = p.unrealized_pnl || 0;
+      const pnlColor = pnl >= 0 ? '#2d9b5f' : '#c0392b';
+      const sideColor = p.side === 'YES' ? '#2d9b5f' : '#c0392b';
+      const price = Math.round((p.current_price || 0) * 100);
+      const endDate = p.end_date ? new Date(p.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
+      return `
+        <a href="${p.market_url}" target="_blank" style="display:block;text-decoration:none;background:var(--ink);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:10px;transition:border-color 0.15s"
+          onmouseover="this.style.borderColor='rgba(201,146,13,0.4)'" onmouseout="this.style.borderColor='var(--border)'">
+          <div style="display:flex;align-items:flex-start;gap:12px">
+            <div style="flex-shrink:0;margin-top:2px">
+              <span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;background:${p.side==='YES'?'rgba(45,155,95,0.15)':'rgba(192,57,43,0.15)'};color:${sideColor};border:1px solid ${sideColor}40">${p.side}</span>
+            </div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13px;font-weight:600;color:var(--text);line-height:1.4;margin-bottom:8px">${escHtmlDash(p.question)}</div>
+              <div style="display:flex;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--muted)">
+                <span>${p.contracts} contract${p.contracts !== 1 ? 's' : ''}</span>
+                <span>@ ${price}¢</span>
+                <span>Value: $${(p.cash_value||0).toFixed(2)}</span>
+                <span>Exp: ${endDate}</span>
+              </div>
+            </div>
+            <div style="text-align:right;flex-shrink:0">
+              <div style="font-family:var(--mono);font-size:14px;font-weight:700;color:${pnlColor}">${pnl>=0?'+':''}$${(pnl/100).toFixed(2)}</div>
+              <div style="font-family:var(--mono);font-size:10px;color:var(--muted)">unrealized</div>
+            </div>
+          </div>
+        </a>`;
+    }).join('');
+
+    const ts = new Date(data.fetched_at).toLocaleTimeString();
+    el.insertAdjacentHTML('beforeend', `<div style="font-family:var(--mono);font-size:10px;color:var(--muted);text-align:right;margin-top:4px">Fetched ${ts} · 5 min cache</div>`);
+  } catch (e) {
+    console.error('[kalshi positions]', e);
+    el.innerHTML = '<div style="color:#c0392b;font-size:13px;padding:8px 0">Failed to load positions</div>';
+  }
+}
+
+function escHtmlDash(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 </script>
 
