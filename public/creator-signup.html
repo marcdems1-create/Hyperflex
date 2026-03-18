@@ -1195,17 +1195,52 @@ async function submitSignup() {
 // Init
 updateStepUI();
 
-// ── PLATFORM CONNECT INTERSTITIAL ──────────────────────────────────────────
+// ── PLATFORM CONNECT WELCOME SCREEN ──────────────────────────────────────
+let _connectedPlatforms = 0;
+
 function _showOnboardingModal() {
   if (localStorage.getItem('hf_onboarded')) return;
   document.getElementById('hf-onboarding-modal').style.display = 'flex';
+  _connectedPlatforms = 0;
+  _updateOnboardingProgress();
+}
+
+function _updateOnboardingProgress() {
+  const bar = document.getElementById('hf-ob-progress-fill');
+  const label = document.getElementById('hf-ob-progress-label');
+  const cta = document.getElementById('hf-ob-cta');
+  if (bar) bar.style.width = `${Math.min((_connectedPlatforms / 3) * 100, 100)}%`;
+  if (label) label.textContent = _connectedPlatforms > 0
+    ? `${_connectedPlatforms} platform${_connectedPlatforms > 1 ? 's' : ''} connected`
+    : 'No platforms connected yet';
+  if (cta && _connectedPlatforms > 0) {
+    cta.textContent = 'Continue to dashboard →';
+    cta.style.background = '#c9920d';
+    cta.style.color = '#141412';
+    cta.style.borderColor = '#c9920d';
+    cta.style.fontWeight = '700';
+  }
+}
+
+function _markConnected(platform) {
+  const card = document.getElementById(`hf-ob-card-${platform}`);
+  const form = document.getElementById(`hf-ob-form-${platform}`);
+  if (!card || !form) return;
+  form.innerHTML = `<div style="display:flex;align-items:center;gap:8px;padding:6px 0">
+    <span style="color:#22c55e;font-size:16px">✓</span>
+    <span style="color:#22c55e;font-size:13px;font-weight:600">Connected</span>
+  </div>`;
+  card.style.borderColor = 'rgba(34,197,94,0.4)';
+  card.style.background = 'rgba(34,197,94,0.04)';
+  _connectedPlatforms++;
+  _updateOnboardingProgress();
 }
 
 function _closeOnboarding(goToPortfolio) {
   localStorage.setItem('hf_onboarded', '1');
   document.getElementById('hf-onboarding-modal').style.display = 'none';
   const _tpl = new URLSearchParams(location.search).get('template');
-  const dest = goToPortfolio
+  const dest = goToPortfolio || _connectedPlatforms > 0
     ? '/creator/dashboard?tab=portfolio'
     : (_tpl ? `/creator/dashboard?template=${encodeURIComponent(_tpl)}` : '/creator/dashboard');
   window.location.href = dest;
@@ -1215,16 +1250,21 @@ async function _connectPlatform(platform) {
   const token = localStorage.getItem('hf_token');
   if (!token) { _closeOnboarding(false); return; }
 
-  const errEl   = document.getElementById('hf-ob-err');
-  const btn     = document.getElementById(`hf-ob-connect-${platform}`);
+  const errEl = document.getElementById('hf-ob-err');
+  const btn   = document.getElementById(`hf-ob-connect-${platform}`);
   errEl.textContent = '';
 
   let body = {};
   if (platform === 'polymarket') {
     const val = document.getElementById('hf-ob-poly').value.trim();
     if (!val) { errEl.textContent = 'Enter your Polymarket wallet address.'; return; }
-    if (!/^0x[0-9a-fA-F]{40}$/.test(val)) { errEl.textContent = 'Invalid wallet address format.'; return; }
+    if (!/^0x[0-9a-fA-F]{40}$/.test(val)) { errEl.textContent = 'Invalid wallet address format (0x + 40 hex chars).'; return; }
     body.polymarket_address = val;
+  } else if (platform === 'kalshi') {
+    const val = document.getElementById('hf-ob-kalshi').value.trim();
+    if (!val) { errEl.textContent = 'Enter your Kalshi API key.'; return; }
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)) { errEl.textContent = 'Invalid API key format (UUID).'; return; }
+    body.kalshi_api_key = val;
   } else {
     const val = document.getElementById('hf-ob-mani').value.trim();
     if (!val) { errEl.textContent = 'Enter your Manifold username.'; return; }
@@ -1241,7 +1281,8 @@ async function _connectPlatform(platform) {
     });
     const d = await r.json();
     if (!r.ok) { errEl.textContent = d.error || 'Connection failed — try again.'; btn.disabled = false; btn.textContent = 'Connect'; return; }
-    _closeOnboarding(true);
+    _markConnected(platform);
+    errEl.textContent = '';
   } catch {
     errEl.textContent = 'Network error — try again.';
     btn.disabled = false;
@@ -1250,42 +1291,95 @@ async function _connectPlatform(platform) {
 }
 </script>
 
-<!-- PLATFORM CONNECT INTERSTITIAL MODAL -->
-<div id="hf-onboarding-modal" style="display:none;position:fixed;inset:0;background:rgba(10,10,9,.85);z-index:9999;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);">
-  <div style="background:#191917;border:1px solid #2a2a26;border-radius:16px;max-width:540px;width:100%;padding:36px 32px;position:relative;">
-    <div style="text-align:center;margin-bottom:28px;">
-      <div style="font-size:32px;margin-bottom:10px;">🎉</div>
-      <h2 style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:#ddd8cc;margin:0 0 8px;">Welcome to HYPERFLEX</h2>
-      <p style="color:#7a7870;font-size:14px;margin:0;">Connect your first platform to import your prediction history</p>
+<!-- PLATFORM CONNECT WELCOME SCREEN -->
+<div id="hf-onboarding-modal" style="display:none;position:fixed;inset:0;background:#0e0e0c;z-index:9999;align-items:center;justify-content:center;padding:20px;overflow-y:auto;">
+  <!-- Subtle grid bg -->
+  <div style="position:fixed;inset:0;background-image:linear-gradient(rgba(201,146,13,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(201,146,13,0.03) 1px,transparent 1px);background-size:48px 48px;pointer-events:none;z-index:0"></div>
+
+  <div style="max-width:560px;width:100%;position:relative;z-index:1">
+    <!-- Header -->
+    <div style="text-align:center;margin-bottom:32px">
+      <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(201,146,13,0.1);border:1px solid rgba(201,146,13,0.25);border-radius:20px;padding:6px 16px;margin-bottom:20px">
+        <span style="font-size:14px">🎯</span>
+        <span style="font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:#c9920d;letter-spacing:0.06em">EARLY ACCESS</span>
+      </div>
+      <h2 style="font-family:'Syne',sans-serif;font-size:28px;font-weight:800;color:#f0ebe3;margin:0 0 10px;letter-spacing:-0.5px">All your predictions.<br/>One place.</h2>
+      <p style="color:#7a7870;font-size:14px;margin:0;max-width:400px;margin:0 auto;line-height:1.5">Connect your platforms to import positions, track P&L, and build your forecaster profile.</p>
+    </div>
+
+    <!-- Progress bar -->
+    <div style="margin-bottom:24px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span id="hf-ob-progress-label" style="font-family:'Space Mono',monospace;font-size:10px;color:#7a7870;letter-spacing:0.04em">No platforms connected yet</span>
+        <span style="font-family:'Space Mono',monospace;font-size:10px;color:#7a7870">All free during beta</span>
+      </div>
+      <div style="height:3px;background:#2a2a26;border-radius:2px;overflow:hidden">
+        <div id="hf-ob-progress-fill" style="width:0%;height:100%;background:linear-gradient(90deg,#c9920d,#f5c842);border-radius:2px;transition:width 0.4s ease"></div>
+      </div>
     </div>
 
     <!-- Polymarket card -->
-    <div style="background:#141412;border:1px solid #2a2a26;border-radius:10px;padding:18px 20px;margin-bottom:12px;">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
-        <span style="background:#0066ff22;color:#4d8fff;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;">Polymarket</span>
-        <span style="color:#7a7870;font-size:13px;">Paste your wallet address</span>
+    <div id="hf-ob-card-polymarket" style="background:#141412;border:1px solid #2a2a26;border-radius:12px;padding:20px;margin-bottom:10px;transition:all 0.2s">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <div style="width:32px;height:32px;border-radius:8px;background:rgba(0,102,255,0.12);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">🟣</div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-family:'Syne',sans-serif;font-weight:700;font-size:14px;color:#ddd8cc">Polymarket</span>
+            <span style="background:#0066ff22;color:#4d8fff;font-family:'Space Mono',monospace;font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;letter-spacing:0.05em">LIVE</span>
+          </div>
+          <div style="font-size:12px;color:#7a7870;margin-top:2px">Import open positions and P&L from your wallet</div>
+        </div>
       </div>
-      <div style="display:flex;gap:8px;">
-        <input id="hf-ob-poly" type="text" placeholder="0x... wallet address" style="flex:1;background:#0e0e0c;border:1px solid #2a2a26;border-radius:7px;padding:10px 12px;color:#ddd8cc;font-family:'Space Mono',monospace;font-size:12px;outline:none;min-width:0;" onkeydown="if(event.key==='Enter')_connectPlatform('polymarket')"/>
-        <button id="hf-ob-connect-polymarket" onclick="_connectPlatform('polymarket')" style="background:#c9920d;color:#141412;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;padding:10px 16px;border:none;border-radius:7px;cursor:pointer;white-space:nowrap;">Connect</button>
+      <div id="hf-ob-form-polymarket" style="display:flex;gap:8px">
+        <input id="hf-ob-poly" type="text" placeholder="0x... wallet address" style="flex:1;background:#0e0e0c;border:1px solid #2a2a26;border-radius:8px;padding:11px 14px;color:#ddd8cc;font-family:'Space Mono',monospace;font-size:12px;outline:none;min-width:0;transition:border-color 0.15s" onfocus="this.style.borderColor='#c9920d'" onblur="this.style.borderColor='#2a2a26'" onkeydown="if(event.key==='Enter')_connectPlatform('polymarket')"/>
+        <button id="hf-ob-connect-polymarket" onclick="_connectPlatform('polymarket')" style="background:#c9920d;color:#141412;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;padding:11px 18px;border:none;border-radius:8px;cursor:pointer;white-space:nowrap;transition:opacity 0.15s;min-height:44px" onmouseover="this.style.opacity='0.88'" onmouseout="this.style.opacity='1'">Connect</button>
+      </div>
+    </div>
+
+    <!-- Kalshi card -->
+    <div id="hf-ob-card-kalshi" style="background:#141412;border:1px solid #2a2a26;border-radius:12px;padding:20px;margin-bottom:10px;transition:all 0.2s">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <div style="width:32px;height:32px;border-radius:8px;background:rgba(139,92,246,0.12);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">🟡</div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-family:'Syne',sans-serif;font-weight:700;font-size:14px;color:#ddd8cc">Kalshi</span>
+            <span style="background:rgba(139,92,246,0.15);color:#a78bfa;font-family:'Space Mono',monospace;font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;letter-spacing:0.05em">LIVE</span>
+          </div>
+          <div style="font-size:12px;color:#7a7870;margin-top:2px">Sync contracts and real-money P&L via API key</div>
+        </div>
+      </div>
+      <div id="hf-ob-form-kalshi" style="display:flex;gap:8px">
+        <input id="hf-ob-kalshi" type="password" placeholder="Kalshi API key (UUID)" style="flex:1;background:#0e0e0c;border:1px solid #2a2a26;border-radius:8px;padding:11px 14px;color:#ddd8cc;font-family:'Space Mono',monospace;font-size:12px;outline:none;min-width:0;transition:border-color 0.15s" onfocus="this.style.borderColor='#c9920d'" onblur="this.style.borderColor='#2a2a26'" onkeydown="if(event.key==='Enter')_connectPlatform('kalshi')"/>
+        <button id="hf-ob-connect-kalshi" onclick="_connectPlatform('kalshi')" style="background:#c9920d;color:#141412;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;padding:11px 18px;border:none;border-radius:8px;cursor:pointer;white-space:nowrap;transition:opacity 0.15s;min-height:44px" onmouseover="this.style.opacity='0.88'" onmouseout="this.style.opacity='1'">Connect</button>
       </div>
     </div>
 
     <!-- Manifold card -->
-    <div style="background:#141412;border:1px solid #2a2a26;border-radius:10px;padding:18px 20px;margin-bottom:16px;">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
-        <span style="background:#6d28d922;color:#a78bfa;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;">Manifold</span>
-        <span style="color:#7a7870;font-size:13px;">Enter your username</span>
+    <div id="hf-ob-card-manifold" style="background:#141412;border:1px solid #2a2a26;border-radius:12px;padding:20px;margin-bottom:16px;transition:all 0.2s">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <div style="width:32px;height:32px;border-radius:8px;background:rgba(16,185,129,0.12);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">🟢</div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-family:'Syne',sans-serif;font-weight:700;font-size:14px;color:#ddd8cc">Manifold</span>
+            <span style="background:rgba(16,185,129,0.15);color:#34d399;font-family:'Space Mono',monospace;font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;letter-spacing:0.05em">LIVE</span>
+          </div>
+          <div style="font-size:12px;color:#7a7870;margin-top:2px">Track play-money positions with just your username</div>
+        </div>
       </div>
-      <div style="display:flex;gap:8px;">
-        <input id="hf-ob-mani" type="text" placeholder="manifold username" style="flex:1;background:#0e0e0c;border:1px solid #2a2a26;border-radius:7px;padding:10px 12px;color:#ddd8cc;font-family:'Space Mono',monospace;font-size:12px;outline:none;min-width:0;" onkeydown="if(event.key==='Enter')_connectPlatform('manifold')"/>
-        <button id="hf-ob-connect-manifold" onclick="_connectPlatform('manifold')" style="background:#c9920d;color:#141412;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;padding:10px 16px;border:none;border-radius:7px;cursor:pointer;white-space:nowrap;">Connect</button>
+      <div id="hf-ob-form-manifold" style="display:flex;gap:8px">
+        <input id="hf-ob-mani" type="text" placeholder="Manifold username" style="flex:1;background:#0e0e0c;border:1px solid #2a2a26;border-radius:8px;padding:11px 14px;color:#ddd8cc;font-family:'Space Mono',monospace;font-size:12px;outline:none;min-width:0;transition:border-color 0.15s" onfocus="this.style.borderColor='#c9920d'" onblur="this.style.borderColor='#2a2a26'" onkeydown="if(event.key==='Enter')_connectPlatform('manifold')"/>
+        <button id="hf-ob-connect-manifold" onclick="_connectPlatform('manifold')" style="background:#c9920d;color:#141412;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;padding:11px 18px;border:none;border-radius:8px;cursor:pointer;white-space:nowrap;transition:opacity 0.15s;min-height:44px" onmouseover="this.style.opacity='0.88'" onmouseout="this.style.opacity='1'">Connect</button>
       </div>
     </div>
 
-    <div id="hf-ob-err" style="color:#c0392b;font-size:13px;min-height:18px;margin-bottom:12px;text-align:center;"></div>
+    <!-- Error display -->
+    <div id="hf-ob-err" style="color:#c0392b;font-size:13px;min-height:18px;margin-bottom:12px;text-align:center"></div>
 
-    <button onclick="_closeOnboarding(false)" style="width:100%;background:transparent;border:1px solid #2a2a26;border-radius:8px;padding:11px;color:#7a7870;font-family:'Syne',sans-serif;font-size:13px;cursor:pointer;">Skip for now — go to dashboard</button>
+    <!-- CTA button -->
+    <button id="hf-ob-cta" onclick="_closeOnboarding(false)" style="width:100%;background:transparent;border:1px solid #2a2a26;border-radius:10px;padding:14px;color:#7a7870;font-family:'Syne',sans-serif;font-size:14px;cursor:pointer;transition:all 0.15s;min-height:48px" onmouseover="this.style.borderColor='#7a7870'" onmouseout="this.style.borderColor='#2a2a26'">Skip for now — go to dashboard</button>
+
+    <!-- Footer note -->
+    <p style="text-align:center;font-size:11px;color:#5a5854;margin-top:16px;font-family:'Space Mono',monospace">You can always connect platforms later from your Portfolio tab.</p>
   </div>
 </div>
 
