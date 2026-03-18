@@ -1334,9 +1334,7 @@ footer {
   </a>
   <div class="nav-links">
     <a href="/predictors" class="nav-link">Predictors</a>
-    <a href="#features" class="nav-link">Features</a>
-    <a href="#how" class="nav-link">How it works</a>
-    <a href="/templates" class="nav-link">Templates</a>
+    <a href="/explore" class="nav-link">Explore</a>
     <a href="#pricing" class="nav-link">Pricing</a>
     <a href="/explore" class="nav-link" style="color:var(--gold);">🔴 Live</a>
   </div>
@@ -1454,8 +1452,8 @@ footer {
     <h2 style="font-family:'Syne',sans-serif;font-size:24px;font-weight:800;color:#ddd8cc;margin:0 0 8px;">See your prediction stats in 10 seconds</h2>
     <p style="color:#7a7870;font-size:15px;margin:0 0 28px;">No account needed — paste your Polymarket wallet or Manifold username</p>
     <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
-      <input id="qp-wallet" type="text" placeholder="0x... Polymarket wallet" style="flex:1;min-width:180px;background:#0e0e0c;border:1px solid #2a2a26;border-radius:8px;padding:12px 14px;color:#ddd8cc;font-family:'Space Mono',monospace;font-size:13px;outline:none;"/>
-      <input id="qp-username" type="text" placeholder="Manifold username" style="flex:1;min-width:140px;background:#0e0e0c;border:1px solid #2a2a26;border-radius:8px;padding:12px 14px;color:#ddd8cc;font-family:'Space Mono',monospace;font-size:13px;outline:none;"/>
+      <input id="qp-wallet" type="text" placeholder="0x... Polymarket wallet" style="flex:1;min-width:180px;background:#1a1916;border:1px solid #444;border-radius:8px;padding:12px 14px;color:#f0ebe3;font-family:'Space Mono',monospace;font-size:13px;outline:none;" onfocus="this.style.borderColor='#c9920d'" onblur="this.style.borderColor='#444'"/>
+      <input id="qp-username" type="text" placeholder="Manifold username" style="flex:1;min-width:140px;background:#1a1916;border:1px solid #444;border-radius:8px;padding:12px 14px;color:#f0ebe3;font-family:'Space Mono',monospace;font-size:13px;outline:none;" onfocus="this.style.borderColor='#c9920d'" onblur="this.style.borderColor='#444'"/>
       <button onclick="runQuickPreview()" style="background:#c9920d;color:#141412;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;padding:12px 22px;border:none;border-radius:8px;cursor:pointer;white-space:nowrap;">Show my stats →</button>
     </div>
     <div id="qp-result" style="display:none;"></div>

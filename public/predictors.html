@@ -644,7 +644,12 @@ function render() {
   const list = filtered();
   const grid = document.getElementById('predictorGrid');
   if (!list.length) {
-    grid.innerHTML = '<div class="state-msg">No predictors found.</div>';
+    grid.innerHTML = `<div class="state-msg">
+      <div style="font-size:42px;margin-bottom:14px">🎯</div>
+      <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:8px">No predictors found</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.6;max-width:340px;margin:0 auto 20px">Be the first — connect your Polymarket wallet and start tracking your prediction history.</div>
+      <a href="/creator/signup" style="display:inline-flex;align-items:center;gap:6px;background:var(--gold);color:var(--ink);padding:11px 22px;border-radius:8px;font-family:var(--sans);font-weight:700;font-size:13px;text-decoration:none;transition:opacity 0.15s" onmouseover="this.style.opacity='0.88'" onmouseout="this.style.opacity='1'">Get started free →</a>
+    </div>`;
     return;
   }
   grid.innerHTML = list.map(renderCard).join('');

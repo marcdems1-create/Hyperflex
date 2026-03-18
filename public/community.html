@@ -1885,7 +1885,21 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
 <!-- Market Carousel — replaces old stats row -->
 <div class="carousel-section" id="carouselSection" style="display:none">
   <div class="carousel-track" id="carouselTrack"></div>
+  <div id="carouselScrollHint" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);z-index:3;font-family:var(--mono);font-size:10px;color:var(--dim);background:rgba(20,20,18,0.85);padding:4px 10px;border-radius:12px;border:1px solid var(--border);pointer-events:none;opacity:1;transition:opacity 0.4s">scroll →</div>
 </div>
+<script>
+(function(){
+  const cs = document.getElementById('carouselSection');
+  if (!cs) return;
+  let dismissed = false;
+  cs.addEventListener('scroll', function() {
+    if (!dismissed) { dismissed = true; const h = document.getElementById('carouselScrollHint'); if (h) h.style.opacity = '0'; }
+  }, { passive: true });
+  cs.addEventListener('touchstart', function() {
+    if (!dismissed) { dismissed = true; const h = document.getElementById('carouselScrollHint'); if (h) h.style.opacity = '0'; }
+  }, { passive: true });
+})();
+</script>
 
 <!-- Content -->
 <main class="content">
@@ -2749,8 +2763,8 @@ function buildCarousel(activeMarkets) {
       <span class="carousel-badge ${cat.cls}">${cat.label}</span>
       <div class="carousel-question">${escHtml(m.question)}</div>
       <div class="carousel-odds">
-        <div class="carousel-odds-yes">${cv.hasVotes ? 'YES ' + cv.yesPct + '%' : 'Be first'}</div>
-        <div class="carousel-odds-no">${cv.hasVotes ? 'NO ' + cv.noPct + '%' : '⚡'}</div>
+        <div class="carousel-odds-yes">${cv.hasVotes ? 'YES ' + cv.yesPct + '%' : (displayTraders > 0 ? 'Predict →' : 'Be first')}</div>
+        <div class="carousel-odds-no">${cv.hasVotes ? 'NO ' + cv.noPct + '%' : ''}</div>
       </div>
       <div class="carousel-footer">
         <span>${traderStr}</span>
@@ -3057,10 +3071,10 @@ function formatDaysRemaining(dateStr) {
   if (diff <= 0) return '🔒 Closed';
   const days  = Math.floor(diff / 86400000);
   const hours = Math.floor((diff % 86400000) / 3600000);
-  if (days > 30) return `📅 ${Math.round(days / 7)}w left`;
+  if (days > 60) return `📅 ${Math.round(days / 7)} weeks left`;
   if (days > 1)  return `📅 ${days} days left`;
-  if (days === 1) return `⏰ 1 day left`;
-  if (hours > 0) return `⏰ ${hours}h left`;
+  if (days === 1) return `⏰ < 24h left`;
+  if (hours > 0) return `⏰ < 24h left`;
   const mins = Math.floor((diff % 3600000) / 60000);
   return `🔴 ${mins}m left`;
 }
@@ -3093,7 +3107,7 @@ function marketCardHTML(m, isResolved, featured) {
   const pos     = myPositions[m.id];
   const vol     = fmtVolume(m.volume);
   const countdown = formatCountdown(m.expiry_date);
-  const urgentTime = soon || (new Date(m.expiry_date) - Date.now()) < 86400000 * 2;
+  const urgentTime = soon || (new Date(m.expiry_date) - Date.now()) < 86400000;
   const sourceUrl  = getMarketSource(m);
 
   // Top row
@@ -3253,15 +3267,24 @@ function marketCardHTML(m, isResolved, featured) {
       }).join('');
       innerActionsHTML = `<div class="market-actions-inline" style="flex-wrap:wrap">${optBtns}</div>`;
     } else {
-      innerActionsHTML = `
-        <div class="market-actions-inline">
-          <button class="btn-predict yes" onclick="onPredict(event,'${m.id}','YES')">
-            ${hasVotes ? yesPct + '% YES' : 'YES'}
-          </button>
-          <button class="btn-predict no" onclick="onPredict(event,'${m.id}','NO')">
-            ${hasVotes ? noPct + '% NO' : 'NO'}
-          </button>
-        </div>`;
+      const noTraders = traders === 0 && !hasVotes;
+      innerActionsHTML = noTraders
+        ? `<div class="market-actions-inline">
+            <button class="btn-predict yes" onclick="onPredict(event,'${m.id}','YES')" style="flex:1">
+              Be first — predict YES
+            </button>
+            <button class="btn-predict no" onclick="onPredict(event,'${m.id}','NO')" style="flex:1">
+              Predict NO
+            </button>
+          </div>`
+        : `<div class="market-actions-inline">
+            <button class="btn-predict yes" onclick="onPredict(event,'${m.id}','YES')">
+              ${yesPct}% YES
+            </button>
+            <button class="btn-predict no" onclick="onPredict(event,'${m.id}','NO')">
+              ${noPct}% NO
+            </button>
+          </div>`;
     }
   }
 
