@@ -541,6 +541,42 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
 }
 .filter-tab.active .filter-count { background: rgba(0,0,0,0.25); }
 
+/* ── SORT DROPDOWN ── */
+.sort-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.sort-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.sort-select {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 32px 7px 12px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%237a7870'%3E%3Cpath d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  min-height: 36px;
+}
+.sort-select:focus { border-color: var(--gold); }
+.sort-select:hover { border-color: rgba(201,146,13,0.4); }
+
 /* ── SENTIMENT BADGE ── */
 .sentiment-badge {
   display: inline-flex;
@@ -1898,6 +1934,17 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
     <!-- Category filter pills -->
     <div class="cat-filter-row" id="catFilterRow" style="display:none"></div>
 
+    <!-- Sort dropdown -->
+    <div class="sort-row" id="sortRow" style="display:none">
+      <span class="sort-label">Sort by</span>
+      <select class="sort-select" id="sortSelect" onchange="setSort(this.value)">
+        <option value="trending">📈 Trending</option>
+        <option value="newest">🆕 Newest</option>
+        <option value="closing">⏰ Closing Soon</option>
+        <option value="most-traded">🔥 Most Traded</option>
+      </select>
+    </div>
+
     <!-- Truth feed context header (visible in truth mode) -->
     <div id="truthFeedHeader">
       <div class="truth-feed-title">🧭 TRUTH FEED — Most Contested First</div>
@@ -2214,6 +2261,7 @@ let communityBalance = null;
 let myPositions     = {};   // marketId → { side, amount }
 let leaderboardData = [];
 let currentFilter   = 'all';
+let currentSort     = 'trending';
 let resolvedVisible = false;
 let allRewards      = [];
 
@@ -2544,6 +2592,8 @@ function buildFilterCounts() {
     document.getElementById('filterRow').style.display = 'flex';
     const sw = document.getElementById('marketSearchWrap');
     if (sw) sw.style.display = 'block';
+    const sr = document.getElementById('sortRow');
+    if (sr && (currentFilter === 'all' || currentFilter === 'mine')) sr.style.display = 'flex';
   }
   if (mine.length > 0) document.getElementById('ftMine').style.display = 'flex';
 
@@ -2690,7 +2740,7 @@ function buildCarousel(activeMarkets) {
       ? Math.ceil(diff/(1000*60*60)) + 'h left'
       : days + 'd left';
     const displayTraders = realTraders(m);
-    const traderStr = displayTraders > 0 ? `${displayTraders} trader${displayTraders !== 1 ? 's' : ''}` : 'Open';
+    const traderStr = displayTraders > 0 ? `${displayTraders} predictor${displayTraders !== 1 ? 's' : ''}` : 'Open';
     return `<div class="carousel-card" onclick="openMarket(${JSON.stringify(m.id)})">
       <span class="carousel-badge ${cat.cls}">${cat.label}</span>
       <div class="carousel-question">${escHtml(m.question)}</div>
@@ -2822,6 +2872,14 @@ function setFilter(f) {
   });
   const truthHeader = document.getElementById('truthFeedHeader');
   if (truthHeader) truthHeader.style.display = f === 'truth' ? '' : 'none';
+  // Show/hide sort row — hidden for truth feed (has its own sort) and specific filter tabs
+  const sortRow = document.getElementById('sortRow');
+  if (sortRow) sortRow.style.display = (f === 'all' || f === 'mine') ? 'flex' : 'none';
+  renderFilteredMarkets();
+}
+
+function setSort(val) {
+  currentSort = val;
   renderFilteredMarkets();
 }
 
@@ -2859,6 +2917,19 @@ function renderFilteredMarkets() {
   let filtered;
   let sortFn;
 
+  // Sort function based on dropdown (used for 'all' and 'mine' filters)
+  function getSortFn() {
+    if (currentSort === 'newest')      return (a, b) => new Date(b.created_at) - new Date(a.created_at);
+    if (currentSort === 'closing')     return (a, b) => new Date(a.expiry_date) - new Date(b.expiry_date);
+    if (currentSort === 'most-traded') return (a, b) => realTraders(b) - realTraders(a);
+    // 'trending' default: blend of activity velocity + truth score
+    return (a, b) => {
+      const aScore = truthScore(a) + (isTrending(a) ? 0.5 : 0) + (isHot(a) ? 0.3 : 0) + (isNewMarket(a) ? 0.15 : 0);
+      const bScore = truthScore(b) + (isTrending(b) ? 0.5 : 0) + (isHot(b) ? 0.3 : 0) + (isNewMarket(b) ? 0.15 : 0);
+      return bScore - aScore;
+    };
+  }
+
   if (currentFilter === 'hot') {
     filtered = active.filter(m => isHot(m));
     sortFn = (a, b) => realTraders(b) - realTraders(a);
@@ -2870,11 +2941,11 @@ function renderFilteredMarkets() {
     sortFn = (a, b) => new Date(a.expiry_date) - new Date(b.expiry_date);
   } else if (currentFilter === 'mine') {
     filtered = active.filter(m => myPositions[m.id]);
-    sortFn = (a, b) => realTraders(b) - realTraders(a);
+    sortFn = getSortFn();
   } else {
-    // Default "All": smart relevance — blend of truth score + recency
+    // "All" tab — uses sort dropdown
     filtered = active;
-    sortFn = (a, b) => truthScore(b) - truthScore(a);
+    sortFn = getSortFn();
   }
 
   // Include expired unresolved markets in all-tab (awaiting resolution)
@@ -2974,6 +3045,20 @@ function formatCountdown(dateStr) {
   return `${mins}m`;
 }
 
+function formatDaysRemaining(dateStr) {
+  if (!dateStr) return '';
+  const diff = new Date(dateStr) - Date.now();
+  if (diff <= 0) return '🔒 Closed';
+  const days  = Math.floor(diff / 86400000);
+  const hours = Math.floor((diff % 86400000) / 3600000);
+  if (days > 30) return `📅 ${Math.round(days / 7)}w left`;
+  if (days > 1)  return `📅 ${days} days left`;
+  if (days === 1) return `⏰ 1 day left`;
+  if (hours > 0) return `⏰ ${hours}h left`;
+  const mins = Math.floor((diff % 3600000) / 60000);
+  return `🔴 ${mins}m left`;
+}
+
 function fmtVolume(v) {
   if (!v || v < 100) return null;
   const pts = Math.round(v / 100);
@@ -3066,10 +3151,11 @@ function marketCardHTML(m, isResolved, featured) {
   // Meta row
   const commentBtnId = `cmtBtn-${m.id}`;
   const commentCount = m.comment_count || 0;
+  const daysLeft = formatDaysRemaining(m.expiry_date);
   const metaHTML = `<div class="market-meta" style="justify-content:space-between;margin-top:auto">
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <span class="meta-item">👥 ${traders} trader${traders !== 1 ? 's' : ''}</span>
-      ${!isResolved ? `<span class="meta-item${urgentTime ? ' urgent' : ''}">· ⏱ ${countdown}</span>` : ''}
+      <span class="meta-item">👥 ${traders} predictor${traders !== 1 ? 's' : ''}</span>
+      ${!isResolved && daysLeft ? `<span class="meta-item${urgentTime ? ' urgent' : ''}">· ${daysLeft}</span>` : ''}
       ${vol ? `<span class="meta-item">· 📊 ${vol}</span>` : ''}
       ${sourceLinkHTML}
     </div>
