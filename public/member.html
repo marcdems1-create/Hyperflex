@@ -227,6 +227,8 @@ async function load() {
             ${tierBadge(stats.win_rate, stats.streak)}
           </div>
           <button id="shareBtn" class="share-btn" onclick="shareProfile()">📋 Copy profile link</button>
+          <button id="followBtn" onclick="toggleFollow()" style="background:none;border:1px solid var(--gold);border-radius:20px;padding:6px 18px;font-size:12px;font-family:var(--mono);font-weight:700;color:var(--gold);cursor:pointer;transition:all 0.15s;margin-top:6px" onmouseover="this.style.background='rgba(201,146,13,0.12)'" onmouseout="this.style.background='none'">Follow</button>
+          <span id="followerCount" style="font-size:12px;color:var(--muted);font-family:var(--mono);margin-top:2px"></span>
         </div>
       </div>
 
@@ -276,7 +278,63 @@ async function load() {
   }
 }
 
-load();
+load().then(loadFollowStatus);
+
+// ── FOLLOW SYSTEM ─────────────────────────────────────────────────────────────
+let _isFollowing = false;
+
+async function loadFollowStatus() {
+  try {
+    const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token');
+    const headers = token ? { Authorization: 'Bearer ' + token } : {};
+    const r = await fetch(`${API}/api/predictors/${userId}/follow-status`, { headers });
+    if (!r.ok) return;
+    const d = await r.json();
+    _isFollowing = d.is_following;
+    const btn = document.getElementById('followBtn');
+    const countEl = document.getElementById('followerCount');
+    if (btn) {
+      btn.textContent = _isFollowing ? 'Following' : 'Follow';
+      if (_isFollowing) {
+        btn.style.background = 'rgba(201,146,13,0.15)';
+        btn.style.color = 'var(--gold)';
+      }
+    }
+    if (countEl && d.follower_count > 0) {
+      countEl.textContent = `${d.follower_count} follower${d.follower_count !== 1 ? 's' : ''}`;
+    }
+  } catch (e) {
+    console.warn('[follow-status]', e);
+  }
+}
+
+async function toggleFollow() {
+  const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token');
+  if (!token) { alert('Sign in to follow predictors'); return; }
+  const btn = document.getElementById('followBtn');
+  if (btn) btn.disabled = true;
+  try {
+    const r = await fetch(`${API}/api/predictors/${userId}/follow`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    if (!r.ok) throw new Error('Failed');
+    const d = await r.json();
+    _isFollowing = d.following;
+    if (btn) {
+      btn.textContent = _isFollowing ? 'Following' : 'Follow';
+      btn.style.background = _isFollowing ? 'rgba(201,146,13,0.15)' : 'none';
+    }
+    // Refresh count
+    await loadFollowStatus();
+  } catch (e) {
+    console.warn('[toggle-follow]', e);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+// loadFollowStatus() is called after load() resolves (button is injected by load())
 </script>
 </body>
 </html>

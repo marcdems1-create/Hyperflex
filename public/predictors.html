@@ -520,40 +520,65 @@ function renderCard(p) {
   const pnlClass = p.pnl_pts >= 0 ? 'pos' : 'neg';
   const winPct = Math.round(p.win_rate || 0);
   const barWidth = Math.min(winPct, 100);
+  const uid = escHtml(p.user_id);
 
   return `
-    <a href="/m/${p.user_id}" class="predictor-card">
-      <div class="card-top">
-        <div class="avatar">${avatarInitial(p.display_name)}</div>
-        <div class="card-info">
-          <div class="card-name">${escHtml(p.display_name || 'Anonymous')}</div>
-          <div class="badges">${badges.join('')}</div>
+    <div class="predictor-card" style="position:relative">
+      <button id="follow-btn-${uid}" onclick="toggleFollowCard('${uid}',this)" style="position:absolute;top:14px;right:14px;background:none;border:1px solid var(--gold);border-radius:20px;padding:4px 12px;font-size:10px;font-family:var(--mono);font-weight:700;color:var(--gold);cursor:pointer;transition:background 0.15s;z-index:1" onmouseover="this.style.background='rgba(201,146,13,0.12)'" onmouseout="if(!this.dataset.following)this.style.background='none'">Follow</button>
+      <a href="/m/${uid}" style="text-decoration:none;display:block">
+        <div class="card-top">
+          <div class="avatar">${avatarInitial(p.display_name)}</div>
+          <div class="card-info">
+            <div class="card-name">${escHtml(p.display_name || 'Anonymous')}</div>
+            <div class="badges">${badges.join('')}</div>
+          </div>
         </div>
-      </div>
-      <div class="win-bar-wrap">
-        <div class="win-bar-label">
-          <span>Win Rate</span>
-          <span>${winPct}%</span>
+        <div class="win-bar-wrap">
+          <div class="win-bar-label">
+            <span>Win Rate</span>
+            <span>${winPct}%</span>
+          </div>
+          <div class="win-bar">
+            <div class="win-bar-fill" style="width:${barWidth}%"></div>
+          </div>
         </div>
-        <div class="win-bar">
-          <div class="win-bar-fill" style="width:${barWidth}%"></div>
+        <div class="card-stats">
+          <div class="stat">
+            <div class="stat-val">${p.streak || 0}</div>
+            <div class="stat-lbl">Streak</div>
+          </div>
+          <div class="stat">
+            <div class="stat-val">${p.total_predictions || 0}</div>
+            <div class="stat-lbl">Predictions</div>
+          </div>
+          <div class="stat">
+            <div class="stat-val ${pnlClass}">${pnlDisplay(p.pnl_pts || 0)}</div>
+            <div class="stat-lbl">P&amp;L</div>
+          </div>
         </div>
-      </div>
-      <div class="card-stats">
-        <div class="stat">
-          <div class="stat-val">${p.streak || 0}</div>
-          <div class="stat-lbl">Streak</div>
-        </div>
-        <div class="stat">
-          <div class="stat-val">${p.total_predictions || 0}</div>
-          <div class="stat-lbl">Predictions</div>
-        </div>
-        <div class="stat">
-          <div class="stat-val ${pnlClass}">${pnlDisplay(p.pnl_pts || 0)}</div>
-          <div class="stat-lbl">P&amp;L</div>
-        </div>
-      </div>
-    </a>`;
+      </a>
+    </div>`;
+}
+
+async function toggleFollowCard(userId, btn) {
+  const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token');
+  if (!token) { alert('Sign in to follow predictors'); return; }
+  btn.disabled = true;
+  try {
+    const r = await fetch(`/api/predictors/${userId}/follow`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    if (!r.ok) throw new Error('Failed');
+    const d = await r.json();
+    btn.textContent = d.following ? 'Following' : 'Follow';
+    btn.style.background = d.following ? 'rgba(201,146,13,0.15)' : 'none';
+    btn.dataset.following = d.following ? '1' : '';
+  } catch (e) {
+    console.warn('[follow-card]', e);
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 function escHtml(s) {
