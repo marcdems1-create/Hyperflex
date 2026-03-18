@@ -1477,6 +1477,17 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
 
   /* Win card modal on mobile */
   #winCardOverlay { padding: 12px; }
+
+  /* Side-select bet buttons (YES/NO in predict modal): full-width, 44px tap target */
+  .side-btn { flex: 1; min-height: 44px; font-size: 13px; }
+
+  /* Tweet feed: prevent long text/URLs from causing horizontal overflow */
+  .tweet-card { max-width: 100%; word-break: break-word; overflow-wrap: break-word; }
+  .tweet-card-body, .tweet-card-head { overflow: hidden; }
+
+  /* Vote bar buttons on expired markets: full width stacked */
+  .vote-bar-wrap { flex-direction: column; gap: 8px; }
+  .vote-bar-wrap button { width: 100%; min-height: 44px; }
 }
 
 /* ── EXTRA SMALL (≤360px): iPhone SE, compact phones ── */

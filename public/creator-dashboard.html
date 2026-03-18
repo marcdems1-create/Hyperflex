@@ -2729,6 +2729,31 @@ body.nav-open .sidebar-backdrop {
   }
   .mkt-pill { white-space: nowrap; flex-shrink: 0; }
 }
+/* ── Narrow phone ≤480px ── */
+@media (max-width: 480px) {
+  .content { padding: 10px; }
+  .topbar { padding: 8px 12px; }
+
+  /* Portfolio platform card headers: wrap logo+title+badge on very narrow screens */
+  #tab-portfolio .section > div > div { padding: 16px !important; }
+  #tab-portfolio [style*="display:flex"][style*="align-items:center"][style*="gap:12px"] {
+    flex-wrap: wrap;
+    gap: 8px !important;
+  }
+  /* Early Access banner: stack on mobile */
+  #tab-portfolio [style*="display:flex"][style*="align-items:center"][style*="gap:10px"]:first-child {
+    flex-direction: column;
+    align-items: flex-start !important;
+  }
+
+  /* Stats row: ensure 2-col on 480px */
+  .stats-row { grid-template-columns: 1fr 1fr !important; }
+  .stat-value { font-size: 20px; }
+
+  /* Members tab: hide email col */
+  .member-table-row > *:nth-child(2),
+  .member-table-header > *:nth-child(2) { display: none; }
+}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>

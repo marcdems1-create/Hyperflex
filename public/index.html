@@ -334,6 +334,35 @@ section { position: relative; z-index: 1; }
   .stats-bar-item { padding: 14px 16px; }
   .stats-bar-num { font-size: 18px; }
 }
+@media (max-width: 480px) {
+  /* Stats bar: 2×2 grid so 4 items fit without squishing */
+  .stats-bar { flex-wrap: wrap; }
+  .stats-bar-item {
+    min-width: 50%;
+    max-width: 50%;
+    border-right: none;
+    border-bottom: 1px solid rgba(201,146,13,0.12);
+    padding: 14px 10px;
+  }
+  .stats-bar-item:nth-child(odd) { border-right: 1px solid rgba(201,146,13,0.12); }
+  .stats-bar-item:nth-last-child(-n+2) { border-bottom: none; }
+  .stats-bar-num { font-size: 20px; }
+
+  /* Hero: tighten padding */
+  .hero { padding-left: 16px; padding-right: 16px; }
+
+  /* How it works: single column */
+  .steps { grid-template-columns: 1fr; }
+  .how { padding: 60px 16px; }
+  .step { padding: 28px 20px 32px; }
+
+  /* Features: single column */
+  .features-grid { grid-template-columns: 1fr; gap: 12px; }
+  .features { padding: 60px 16px; }
+
+  /* Quick Preview card: reduce padding on mobile */
+  #qp-wallet, #qp-username { min-width: 0; width: 100%; }
+}
 
 /* ── MARQUEE ── */
 .marquee {

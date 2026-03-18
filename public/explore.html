@@ -214,6 +214,19 @@ nav {
   .ac-join-link { opacity: 1; }
   .ac-market-inner { padding: 10px 12px; }
   .ac-question { font-size: 12px; }
+
+  /* Search bar: full width on mobile */
+  .explore-search-wrap { padding: 0 12px; }
+  .explore-search-wrap input,
+  .search-input { width: 100%; min-width: 0; box-sizing: border-box; }
+
+  /* Feed items: no horizontal overflow */
+  .feed-item { max-width: 100%; overflow: hidden; word-break: break-word; }
+  .feed-item .feed-question { overflow: hidden; text-overflow: ellipsis; }
+
+  /* Sidebar cards (render below feed on mobile): full width, no side margins */
+  .sidebar { width: 100%; min-width: 0; }
+  .sidebar-card { margin-bottom: 12px; }
 }
 
 /* FEED */

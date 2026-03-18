@@ -95,6 +95,22 @@ nav { display: flex; align-items: center; justify-content: space-between; paddin
   .win-question { font-size: 12px; }
   .cta-card { padding: 16px; }
   .cta-title { font-size: 16px; }
+
+  /* Platform stat cards: let them wrap in 2-col */
+  #platformCards { gap: 8px !important; }
+  #platformCards > div { flex: 1 1 calc(50% - 8px); min-width: 0; box-sizing: border-box; }
+
+  /* Analytics chart grid: single column */
+  #analyticsSection > div:nth-child(2) { grid-template-columns: 1fr !important; }
+
+  /* Charts: scale to container */
+  #calibrationChart, #pnlChart { width: 100% !important; max-width: 100%; height: auto !important; }
+
+  /* Trophy card: full width, wrap inner flex */
+  #trophyCard { padding: 16px !important; }
+  #trophyCard > div:last-child { flex-wrap: wrap; gap: 8px !important; }
+  #trophyCard button { margin-left: 0 !important; width: 100%; min-height: 44px; }
+  #trophyQuestion { font-size: 14px !important; }
 }
 /* CTA */
 .cta-card { background: linear-gradient(135deg, #1d1b13 0%, #1a1a17 100%); border: 1px solid rgba(201,146,13,0.25); border-radius: 12px; padding: 20px 22px; text-align: center; margin-top: 32px; }
