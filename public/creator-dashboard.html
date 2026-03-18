@@ -192,6 +192,26 @@ body {
   line-height: 1.4;
 }
 
+/* More toggle */
+.nav-more-toggle .nav-icon {
+  transition: transform 0.2s;
+  font-style: normal;
+}
+.nav-more-toggle.expanded .nav-icon {
+  transform: rotate(90deg);
+}
+.nav-more-toggle {
+  color: var(--dim);
+  opacity: 0.7;
+}
+.nav-more-toggle:hover {
+  opacity: 1;
+}
+.nav-more-section .nav-item {
+  padding-left: 30px;
+  font-size: 12px;
+}
+
 .sidebar-footer {
   padding: 18px 22px;
   border-top: 1px solid var(--border);
@@ -2797,57 +2817,62 @@ body.nav-open .sidebar-backdrop {
     </div>
 
     <nav class="sidebar-nav">
-      <div class="nav-section-label">Main</div>
-      <a class="nav-item active" onclick="showTab('overview')">
-        <span class="nav-icon">📊</span><span class="nav-label">Overview</span>
-      </a>
-      <a class="nav-item" onclick="showTab('markets')">
-        <span class="nav-icon">🎯</span><span class="nav-label">Markets</span>
-      </a>
-      <a class="nav-item" onclick="showTab('resolve')" id="resolveNavItem">
-        <span class="nav-icon">⚖️</span><span class="nav-label">Resolve</span>
-        <span class="nav-badge" id="resolveBadge" style="display:none">0</span>
+      <div class="nav-section-label">Portfolio</div>
+      <a class="nav-item active" onclick="showTab('portfolio')">
+        <span class="nav-icon">🌐</span><span class="nav-label">My Portfolio</span>
       </a>
       <a class="nav-item" onclick="showTab('analytics')">
         <span class="nav-icon">📈</span><span class="nav-label">Analytics</span>
       </a>
-      <a class="nav-item" id="ideasNavItem" onclick="showTab('ideas')" style="display:none">
-        <span class="nav-icon">💡</span><span class="nav-label">Market Ideas</span>
-        <span class="nav-badge" style="background:var(--gold);color:#000;font-size:9px;padding:1px 5px">AI</span>
+      <a class="nav-item" onclick="showTab('overview')">
+        <span class="nav-icon">📊</span><span class="nav-label">Overview</span>
       </a>
       <div class="nav-section-label">Community</div>
+      <a class="nav-item" onclick="showTab('markets')">
+        <span class="nav-icon">🎯</span><span class="nav-label">Markets</span>
+      </a>
       <a class="nav-item" onclick="showTab('members')">
         <span class="nav-icon">👥</span><span class="nav-label">Members</span>
       </a>
       <a class="nav-item" onclick="showTab('leaderboard')">
         <span class="nav-icon">🏆</span><span class="nav-label">Leaderboard</span>
       </a>
-      <a class="nav-item" onclick="showTab('share')">
-        <span class="nav-icon">📣</span><span class="nav-label">Share & Grow</span>
+      <a class="nav-item" onclick="showTab('resolve')" id="resolveNavItem">
+        <span class="nav-icon">⚖️</span><span class="nav-label">Resolve</span>
+        <span class="nav-badge" id="resolveBadge" style="display:none">0</span>
       </a>
-      <a class="nav-item" onclick="showTab('rewards')">
-        <span class="nav-icon">🎁</span><span class="nav-label">Rewards</span>
+      <!-- Collapsed "More" section -->
+      <a class="nav-item nav-more-toggle" onclick="toggleMoreNav()" id="navMoreToggle">
+        <span class="nav-icon">›</span><span class="nav-label">More</span>
       </a>
-      <a class="nav-item" onclick="showTab('seasons')">
-        <span class="nav-icon">🏆</span><span class="nav-label">Seasons</span>
-      </a>
-      <a class="nav-item" onclick="showTab('portfolio')">
-        <span class="nav-icon">📊</span><span class="nav-label">Portfolio</span>
-      </a>
-      <div class="nav-section-label">Account</div>
-      <a class="nav-item" onclick="showTab('economy')">
-        <span class="nav-icon">⚡</span><span class="nav-label">Economy</span>
-      </a>
-      <a class="nav-item" onclick="showTab('branding')">
-        <span class="nav-icon">🎨</span><span class="nav-label">Branding</span>
-      </a>
-      <a class="nav-item" id="flexbotNavItem" onclick="showTab('flexbot')" style="display:none">
-        <span class="nav-icon">🤖</span><span class="nav-label">FLEX BOT</span>
-        <span class="nav-badge" style="background:var(--gold);color:#fff;font-size:9px;padding:1px 5px">AI</span>
-      </a>
-      <a class="nav-item" onclick="showTab('settings')">
-        <span class="nav-icon">⚙️</span><span class="nav-label">Settings</span>
-      </a>
+      <div id="navMoreSection" class="nav-more-section" style="display:none">
+        <a class="nav-item" onclick="showTab('rewards')">
+          <span class="nav-icon">🎁</span><span class="nav-label">Rewards</span>
+        </a>
+        <a class="nav-item" onclick="showTab('seasons')">
+          <span class="nav-icon">🏆</span><span class="nav-label">Seasons</span>
+        </a>
+        <a class="nav-item" onclick="showTab('economy')">
+          <span class="nav-icon">⚡</span><span class="nav-label">Economy</span>
+        </a>
+        <a class="nav-item" onclick="showTab('branding')">
+          <span class="nav-icon">🎨</span><span class="nav-label">Branding</span>
+        </a>
+        <a class="nav-item" id="ideasNavItem" onclick="showTab('ideas')" style="display:none">
+          <span class="nav-icon">💡</span><span class="nav-label">Market Ideas</span>
+          <span class="nav-badge" style="background:var(--gold);color:#000;font-size:9px;padding:1px 5px">AI</span>
+        </a>
+        <a class="nav-item" onclick="showTab('share')">
+          <span class="nav-icon">📣</span><span class="nav-label">Share & Grow</span>
+        </a>
+        <a class="nav-item" id="flexbotNavItem" onclick="showTab('flexbot')" style="display:none">
+          <span class="nav-icon">🤖</span><span class="nav-label">FLEX BOT</span>
+          <span class="nav-badge" style="background:var(--gold);color:#fff;font-size:9px;padding:1px 5px">AI</span>
+        </a>
+        <a class="nav-item" onclick="showTab('settings')">
+          <span class="nav-icon">⚙️</span><span class="nav-label">Settings</span>
+        </a>
+      </div>
     </nav>
 
     <div class="sidebar-footer">
@@ -2910,7 +2935,7 @@ body.nav-open .sidebar-backdrop {
       </div>
 
       <!-- Overview Tab -->
-      <div id="tab-overview">
+      <div id="tab-overview" style="display:none">
 
         <!-- Onboarding checklist — shown to new creators until they're active -->
         <div class="onboarding" id="onboardingPanel" style="display:none">
@@ -4550,7 +4575,7 @@ body.nav-open .sidebar-backdrop {
       </div>
 
       <!-- PORTFOLIO TAB -->
-      <div id="tab-portfolio" style="display:none">
+      <div id="tab-portfolio">
         <div class="section">
           <div style="max-width:860px">
 
@@ -6273,8 +6298,30 @@ function renderShareTemplates(creator) {
   `).join('');
 }
 
+// More nav toggle
+function toggleMoreNav() {
+  const section = document.getElementById('navMoreSection');
+  const toggle = document.getElementById('navMoreToggle');
+  if (!section) return;
+  const isOpen = section.style.display !== 'none';
+  section.style.display = isOpen ? 'none' : 'block';
+  toggle.classList.toggle('expanded', !isOpen);
+}
+
+// Auto-expand More if a hidden tab is selected
+const _moreTabNames = ['rewards','seasons','economy','branding','ideas','share','flexbot','settings'];
+function ensureMoreExpanded(tab) {
+  if (_moreTabNames.includes(tab)) {
+    const section = document.getElementById('navMoreSection');
+    const toggle = document.getElementById('navMoreToggle');
+    if (section) section.style.display = 'block';
+    if (toggle) toggle.classList.add('expanded');
+  }
+}
+
 // Tab switching
 function showTab(tab) {
+  ensureMoreExpanded(tab);
   ['overview','markets','resolve','members','leaderboard','share','rewards','seasons','settings','analytics','economy','branding','flexbot','ideas','portfolio'].forEach(t => {
     const el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === tab ? 'block' : 'none';
@@ -6283,7 +6330,7 @@ function showTab(tab) {
   document.querySelectorAll('.nav-item').forEach(n => {
     if (n.getAttribute('onclick') && n.getAttribute('onclick').includes(`'${tab}'`)) n.classList.add('active');
   });
-  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Members', portfolio:'Portfolio' };
+  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Members', portfolio:'My Portfolio' };
   document.getElementById('topbarTitle').textContent = titles[tab] || tab;
   if (tab === 'analytics' && !analyticsLoaded) loadAnalytics();
   if (tab === 'members') loadMembers();
@@ -10159,14 +10206,19 @@ async function deleteAnnouncement(id) {
 
 // Init
 init().then(() => {
-  // If creator arrived from a template link, open the AI Scanner pre-loaded with template
-  const _tplParam = new URLSearchParams(location.search).get('template');
+  const params = new URLSearchParams(location.search);
+  const _tplParam = params.get('template');
+  const _tabParam = params.get('tab');
   if (_tplParam) {
-    // Remove param from URL so a refresh doesn't re-trigger
     history.replaceState({}, '', '/creator/dashboard');
-    // Show the markets tab and pre-load template
     showTab('markets');
     loadTemplate(_tplParam);
+  } else if (_tabParam) {
+    history.replaceState({}, '', '/creator/dashboard');
+    showTab(_tabParam);
+  } else {
+    // Default to portfolio tab (aggregator-first)
+    showTab('portfolio');
   }
 });
 loadAnnouncements();
