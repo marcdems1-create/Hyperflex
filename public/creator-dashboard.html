@@ -4579,6 +4579,65 @@ body.nav-open .sidebar-backdrop {
         <div class="section">
           <div style="max-width:860px">
 
+            <!-- Welcome state (shown when nothing connected) -->
+            <div id="portfolioWelcome" style="display:none">
+              <div style="text-align:center;padding:48px 20px 40px">
+                <!-- Subtle grid bg -->
+                <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(201,146,13,0.1);border:1px solid rgba(201,146,13,0.25);border-radius:20px;padding:5px 14px;margin-bottom:24px">
+                  <span style="font-size:12px">🎯</span>
+                  <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--gold);letter-spacing:0.08em">EARLY ACCESS — FREE DURING BETA</span>
+                </div>
+                <h2 style="font-family:var(--sans);font-size:clamp(24px,4vw,32px);font-weight:800;color:var(--text);margin:0 0 12px;letter-spacing:-0.5px">Connect your first platform</h2>
+                <p style="color:var(--dim);font-size:14px;max-width:440px;margin:0 auto 36px;line-height:1.6">Import your positions, track P&L across platforms, and build your forecaster profile — all in one place.</p>
+
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;text-align:left;max-width:800px;margin:0 auto">
+                  <!-- Polymarket welcome card -->
+                  <div style="background:var(--cream);border:1px solid var(--border);border-radius:14px;padding:24px;transition:border-color 0.2s,box-shadow 0.2s" onmouseover="this.style.borderColor='rgba(99,102,241,0.5)';this.style.boxShadow='0 0 20px rgba(99,102,241,0.08)'" onmouseout="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+                      <div style="width:40px;height:40px;border-radius:10px;background:rgba(99,102,241,0.12);display:flex;align-items:center;justify-content:center;font-size:20px">🟣</div>
+                      <div>
+                        <div style="font-weight:700;font-size:15px;color:var(--text)">Polymarket</div>
+                        <span style="font-family:var(--mono);font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:rgba(45,155,95,0.1);color:#2d9b5f;border:1px solid rgba(45,155,95,0.3)">LIVE</span>
+                      </div>
+                    </div>
+                    <p style="font-size:13px;color:var(--dim);line-height:1.5;margin-bottom:16px">Paste your wallet address to import all open positions and P&L instantly.</p>
+                    <button onclick="document.getElementById('poly-wallet-input').focus();document.getElementById('portfolioWelcome').style.display='none';document.getElementById('portfolioMain').style.display='block'" style="width:100%;background:var(--gold);color:#141412;font-family:var(--sans);font-weight:700;font-size:13px;padding:11px;border:none;border-radius:8px;cursor:pointer;transition:opacity 0.15s;min-height:44px" onmouseover="this.style.opacity='0.88'" onmouseout="this.style.opacity='1'">Connect Polymarket</button>
+                  </div>
+
+                  <!-- Kalshi welcome card -->
+                  <div style="background:var(--cream);border:1px solid var(--border);border-radius:14px;padding:24px;transition:border-color 0.2s,box-shadow 0.2s" onmouseover="this.style.borderColor='rgba(139,92,246,0.5)';this.style.boxShadow='0 0 20px rgba(139,92,246,0.08)'" onmouseout="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+                      <div style="width:40px;height:40px;border-radius:10px;background:rgba(139,92,246,0.12);display:flex;align-items:center;justify-content:center;font-size:20px">🟡</div>
+                      <div>
+                        <div style="font-weight:700;font-size:15px;color:var(--text)">Kalshi</div>
+                        <span style="font-family:var(--mono);font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:rgba(45,155,95,0.1);color:#2d9b5f;border:1px solid rgba(45,155,95,0.3)">LIVE</span>
+                      </div>
+                    </div>
+                    <p style="font-size:13px;color:var(--dim);line-height:1.5;margin-bottom:16px">Connect with your API key to sync real-money contracts and track P&L.</p>
+                    <button onclick="document.getElementById('kalshiApiKeyInput').focus();document.getElementById('portfolioWelcome').style.display='none';document.getElementById('portfolioMain').style.display='block'" style="width:100%;background:var(--gold);color:#141412;font-family:var(--sans);font-weight:700;font-size:13px;padding:11px;border:none;border-radius:8px;cursor:pointer;transition:opacity 0.15s;min-height:44px" onmouseover="this.style.opacity='0.88'" onmouseout="this.style.opacity='1'">Connect Kalshi</button>
+                  </div>
+
+                  <!-- Manifold welcome card -->
+                  <div style="background:var(--cream);border:1px solid var(--border);border-radius:14px;padding:24px;transition:border-color 0.2s,box-shadow 0.2s" onmouseover="this.style.borderColor='rgba(16,185,129,0.5)';this.style.boxShadow='0 0 20px rgba(16,185,129,0.08)'" onmouseout="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+                      <div style="width:40px;height:40px;border-radius:10px;background:rgba(16,185,129,0.12);display:flex;align-items:center;justify-content:center;font-size:20px">🟢</div>
+                      <div>
+                        <div style="font-weight:700;font-size:15px;color:var(--text)">Manifold</div>
+                        <span style="font-family:var(--mono);font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:rgba(45,155,95,0.1);color:#2d9b5f;border:1px solid rgba(45,155,95,0.3)">LIVE</span>
+                      </div>
+                    </div>
+                    <p style="font-size:13px;color:var(--dim);line-height:1.5;margin-bottom:16px">Enter your username to track play-money positions and calibration score.</p>
+                    <button onclick="document.getElementById('manifold-username-input').focus();document.getElementById('portfolioWelcome').style.display='none';document.getElementById('portfolioMain').style.display='block'" style="width:100%;background:var(--gold);color:#141412;font-family:var(--sans);font-weight:700;font-size:13px;padding:11px;border:none;border-radius:8px;cursor:pointer;transition:opacity 0.15s;min-height:44px" onmouseover="this.style.opacity='0.88'" onmouseout="this.style.opacity='1'">Connect Manifold</button>
+                  </div>
+                </div>
+
+                <p style="text-align:center;font-size:11px;color:#5a5854;margin-top:24px;font-family:var(--mono)">All connections are free during Early Access. Your data stays private.</p>
+              </div>
+            </div>
+
+            <!-- Main portfolio content (hidden when welcome is shown) -->
+            <div id="portfolioMain">
+
             <!-- Early Access banner -->
             <div style="background:linear-gradient(135deg,#c9920d22,#c9920d11);border:1px solid #c9920d44;border-radius:10px;padding:12px 16px;margin-bottom:20px;display:flex;align-items:center;gap:10px">
               <span style="font-size:18px">🎁</span>
@@ -4717,6 +4776,7 @@ body.nav-open .sidebar-backdrop {
               <div id="manifoldPositions" style="margin-top:20px"></div>
             </div>
 
+          </div><!-- /portfolioMain -->
           </div>
         </div>
       </div><!-- /tab-portfolio -->
@@ -10961,6 +11021,14 @@ async function loadPortfolio() {
     _kalshiConnected = data.kalshi_api_key_set;
     _manifoldUsername = data.manifold_username || '';
     _polyWalletAddress = data.wallet_address || '';
+
+    // Show welcome state if nothing connected, otherwise show main
+    const hasAny = _kalshiConnected || _manifoldUsername || _polyWalletAddress;
+    const welcomeEl = document.getElementById('portfolioWelcome');
+    const mainEl = document.getElementById('portfolioMain');
+    if (welcomeEl) welcomeEl.style.display = hasAny ? 'none' : 'block';
+    if (mainEl) mainEl.style.display = hasAny ? 'block' : 'none';
+
     renderKalshiConnectState();
     renderManifoldConnectState();
     renderPolymarketConnectState();
