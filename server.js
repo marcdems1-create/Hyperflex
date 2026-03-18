@@ -11658,6 +11658,40 @@ app.get('/api/kalshi/positions', requireAuth, async (req, res) => {
   }
 });
 
+app.get('/api/polymarket/positions/:address', async (req, res) => {
+  const address = req.params.address.trim();
+  if (!address || !/^0x[0-9a-fA-F]{40}$/.test(address)) return res.status(400).json({ error: 'Invalid Polymarket wallet address' });
+  const cacheKey = `poly_pub_${address}`;
+  const cached = _polyCache?.get(cacheKey);
+  if (cached) return res.json(cached);
+  try {
+    const upstream = await fetch(`https://data-api.polymarket.com/positions?user=${address}&limit=50&sortBy=CURRENT&winning=false`, {
+      headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+    });
+    if (!upstream.ok) throw new Error('Polymarket API ' + upstream.status);
+    const raw = await upstream.json();
+    const positions = (Array.isArray(raw) ? raw : []).map(p => ({
+      id: p.conditionId,
+      question: p.title || p.question || 'Unknown market',
+      side: p.outcome || 'YES',
+      shares: parseFloat(p.size) || 0,
+      current_price: parseFloat(p.currentPrice) || 0,
+      cash_value: parseFloat(p.currentValue) || 0,
+      cost_basis: parseFloat(p.initialValue) || 0,
+      pnl: parseFloat(p.cashPnl) || 0,
+      pnl_pct: parseFloat(p.percentPnl) || 0,
+      market_url: `https://polymarket.com/event/${p.conditionId}`,
+      platform: 'polymarket'
+    }));
+    const data = { positions, address, fetched_at: new Date().toISOString() };
+    if (_polyCache) { _polyCache.set(cacheKey, data); setTimeout(() => _polyCache.delete(cacheKey), 5 * 60 * 1000); }
+    res.json(data);
+  } catch (err) {
+    console.error('[polymarket proxy]', err.message);
+    res.status(502).json({ error: 'Failed to fetch Polymarket positions', detail: err.message });
+  }
+});
+
 app.get('/api/manifold/positions/:username', async (req, res) => {
   const username = req.params.username.trim();
   if (!username || !/^[a-zA-Z0-9_-]{1,50}$/.test(username)) return res.status(400).json({ error: 'Invalid username' });
