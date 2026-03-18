@@ -260,6 +260,7 @@ function requireAuth(req, res, next) {
 
 // ── EXTERNAL API CACHES ───────────────────────────
 const _kalshiCache = new Map();
+const _manifoldCache = new Map();
 
 // ── MARKETS ───────────────────────────────────────
 
