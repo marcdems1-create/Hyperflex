@@ -475,6 +475,26 @@
 
 ---
 
+## Session 12 (March 17, 2026)
+
+**Migrations #29 + #30 confirmed run in Supabase.**
+
+**Predictor ecosystem polish (commits `4a20ba4` → `d29d68d`):**
+
+- **Portfolio Early Access banner + Polymarket LIVE connect UI** (`4a20ba4`): tier-gated portfolio tab — Free shows HFX-only + upgrade banner, Pro unlocks Polymarket + Manifold, Premium gets auto-sync; Polymarket card marked LIVE with wallet connect UI
+- **Trophy card + share to X** (`7413493`): best-call trophy card on member profiles — shows top resolved win (question, outcome, payout), 1-click "Share on X" intent with pre-filled copy; replaces earlier draft commit `68bc9ad`
+- **Predictor Spotlight weekly email + profile share stats** (`c28084f`): `sendPredictorSpotlight()` cron (Mon 9am UTC) — picks top predictor by 30d PnL, sends branded HTML email to all connected users; `GET /api/predictors/:userId/share-stats` returns win rate + top call for share cards
+- **Profile referral/invite section** (`b2af9d2`): member.html owner-only panel — shows referral link, invite copy, tracks invites sent via existing `creator_referrals` system
+- **Polymarket LIVE fix** (`e9476a8`): marquee updated to reflect Kalshi + Manifold now live
+- **SEO meta tags on /predictors** (`9d29ce1`): full SEO head — `<title>` targeting "polymarket portfolio tracker", meta description, keywords, Open Graph (og:title, og:description, og:url `https://hyperflex.network/predictors`, og:image), Twitter card (summary_large_image)
+- **Predictors tracked stat** (`9d29ce1`): `/api/stats` now returns `predictors` field (distinct user_id count from positions table, Set-dedup in JS, 5-min cache); landing page stats bar has 4th tile "Predictors Tracked" (`id="stat-predictors"`)
+- **Quick Preview hook on landing page** (`d29d68d`): dark card between marquee and How It Works — wallet + username inputs, gold "Show my stats →" button; calls `GET /api/polymarket/positions/:address` (new public endpoint) or `GET /api/manifold/positions/:username`; shows inline result card with platform badge, open position count, total P&L (green/red), top market; upgrade CTA "Save your full portfolio + track Kalshi → Get started free" → `/creator/signup`; Enter key supported
+- **`GET /api/polymarket/positions/:address`** (new, public, no auth): validates `0x...` hex address, proxies `data-api.polymarket.com`, 5-min cache via `_polyCache`, normalised response shape
+
+**Latest commits: `b2af9d2`, `c28084f`, `7413493`, `4a20ba4` + `e9476a8`, `9d29ce1`, `d29d68d`**
+
+---
+
 ## The Ask
 
 Marc is the founder. Claude is the CTO. Be proactive, stay in context, don't ask what we're building — you already know. Read the brief, check git status, and get to work.
