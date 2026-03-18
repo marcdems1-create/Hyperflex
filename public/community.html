@@ -3100,7 +3100,8 @@ function getMarketSource(m) {
 function marketCardHTML(m, isResolved, featured) {
   // Consensus: purely from yes_votes / no_votes — never the CPMM price
   const { yesPct, noPct, hasVotes } = getConsensus(m);
-  const traders = realTraders(m);
+  // Display trader_count as-is from DB; realTraders() is only for hot/trending scoring
+  const traders = m.trader_count || 0;
   const cc      = catClass(m.category);
   const hot     = isHot(m);
   const soon    = isClosingSoon(m);
@@ -3267,23 +3268,23 @@ function marketCardHTML(m, isResolved, featured) {
       }).join('');
       innerActionsHTML = `<div class="market-actions-inline" style="flex-wrap:wrap">${optBtns}</div>`;
     } else {
-      const noTraders = traders === 0 && !hasVotes;
-      innerActionsHTML = noTraders
+      // "Be first" only when zero votes AND zero traders
+      // "Predict YES/NO" when traders exist but no vote data
+      // "X% YES / X% NO" when votes exist
+      const virgin = !hasVotes && traders === 0;
+      innerActionsHTML = virgin
         ? `<div class="market-actions-inline">
-            <button class="btn-predict yes" onclick="onPredict(event,'${m.id}','YES')" style="flex:1">
-              Be first — predict YES
-            </button>
-            <button class="btn-predict no" onclick="onPredict(event,'${m.id}','NO')" style="flex:1">
-              Predict NO
-            </button>
+            <button class="btn-predict yes" onclick="onPredict(event,'${m.id}','YES')" style="flex:1">Be first — predict YES</button>
+            <button class="btn-predict no" onclick="onPredict(event,'${m.id}','NO')" style="flex:1">Predict NO</button>
+          </div>`
+        : hasVotes
+        ? `<div class="market-actions-inline">
+            <button class="btn-predict yes" onclick="onPredict(event,'${m.id}','YES')">${yesPct}% YES</button>
+            <button class="btn-predict no" onclick="onPredict(event,'${m.id}','NO')">${noPct}% NO</button>
           </div>`
         : `<div class="market-actions-inline">
-            <button class="btn-predict yes" onclick="onPredict(event,'${m.id}','YES')">
-              ${yesPct}% YES
-            </button>
-            <button class="btn-predict no" onclick="onPredict(event,'${m.id}','NO')">
-              ${noPct}% NO
-            </button>
+            <button class="btn-predict yes" onclick="onPredict(event,'${m.id}','YES')" style="flex:1">Predict YES</button>
+            <button class="btn-predict no" onclick="onPredict(event,'${m.id}','NO')" style="flex:1">Predict NO</button>
           </div>`;
     }
   }
