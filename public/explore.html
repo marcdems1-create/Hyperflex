@@ -1221,6 +1221,50 @@ function activityCard(a) {
     </a>`;
   }
 
+  if (a.type === 'external_bet') {
+    const isYes = (a.side || 'YES') === 'YES';
+    const conf = a.current_price ? Math.round(a.current_price * 100) : null;
+    const platform = (a.platform || 'polymarket').toLowerCase();
+    const platformMeta = {
+      polymarket: { label: 'Polymarket', color: '#818cf8', bg: 'rgba(99,102,241,0.12)', border: 'rgba(99,102,241,0.3)', emoji: '🔵' },
+      kalshi:     { label: 'Kalshi',     color: '#a78bfa', bg: 'rgba(167,139,250,0.12)', border: 'rgba(167,139,250,0.3)', emoji: '🟣' },
+      manifold:   { label: 'Manifold',   color: '#34d399', bg: 'rgba(52,211,153,0.12)',  border: 'rgba(52,211,153,0.3)',  emoji: '🟢' },
+    };
+    const pm = platformMeta[platform] || platformMeta.polymarket;
+    const dest = a.market_url || '/explore';
+    const isExt = dest.startsWith('http');
+    const pnlBadge = a.pnl_pct ? `<span style="font-size:11px;font-family:var(--mono);font-weight:700;color:${a.pnl_pct > 0 ? '#22c55e' : '#ef4444'}">${a.pnl_pct > 0 ? '+' : ''}${a.pnl_pct}%</span>` : '';
+    const cashBadge = a.cash_value ? `<span class="ac-stat">${platform === 'manifold' ? 'M$' : '$'}${parseFloat(a.cash_value).toFixed(2)}</span>` : '';
+    const tweetText = encodeURIComponent(`${a.user} went ${a.side} on "${a.question}" at ${conf !== null ? conf + '%' : '?'} on ${pm.label} — tracked on HYPERFLEX\nhttps://hyperflex.network`);
+    return `<div class="activity-card" style="cursor:default">
+      <div class="ac-avatar" style="background:${pm.bg};border:1px solid ${pm.border};font-size:18px;display:flex;align-items:center;justify-content:center">${pm.emoji}</div>
+      <div class="ac-body">
+        <div class="ac-header">
+          <a href="/m/${escHtml(a.user_id || '')}" style="color:var(--text);font-weight:700;text-decoration:none">${escHtml(a.user)}</a>
+          <span class="ac-action">went <strong style="color:${isYes ? '#22c55e' : '#ef4444'}">${a.side}</strong> on</span>
+          <span class="ac-time">${timeAgo(a.ts)}</span>
+        </div>
+        <a class="ac-market-card" href="${escHtml(dest)}" ${isExt ? 'target="_blank" rel="noopener"' : ''} style="text-decoration:none;display:block">
+          <div class="ac-market-inner">
+            <span class="ac-community-pill" style="background:${pm.bg};color:${pm.color};border:1px solid ${pm.border}">${pm.label}</span>
+            <div class="ac-question">${escHtml(a.question || '')}</div>
+            ${conf !== null ? `<div class="ac-odds-bar"><div class="ac-odds-fill" style="width:${isYes ? conf : 100-conf}%;background:${isYes ? '#22c55e' : '#ef4444'}"></div></div>
+            <div class="ac-odds-labels"><span style="color:#22c55e;font-weight:600">YES ${conf}%</span><span style="color:#ef4444;font-weight:600">NO ${100-conf}%</span></div>` : ''}
+          </div>
+        </a>
+        <div class="ac-footer">
+          <span class="ac-tag ${isYes ? 'ac-tag-yes' : 'ac-tag-no'}">${a.side}</span>
+          ${cashBadge}
+          ${pnlBadge}
+          <span style="margin-left:auto;display:flex;gap:8px;align-items:center">
+            <a href="/m/${escHtml(a.user_id||'')}" style="font-size:11px;color:var(--gold);font-family:var(--mono);text-decoration:none">Follow →</a>
+            <a href="https://x.com/intent/tweet?text=${tweetText}" target="_blank" rel="noopener" style="font-size:11px;color:var(--dim);font-family:var(--mono);text-decoration:none">𝕏 Share</a>
+          </span>
+        </div>
+      </div>
+    </div>`;
+  }
+
   return '';
 }
 
