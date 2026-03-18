@@ -10602,20 +10602,23 @@ app.get('/api/stats', async (req, res) => {
     if (_statsCache && now - _statsCacheAt < 5 * 60 * 1000) {
       return res.json(_statsCache);
     }
-    const [marketsRes, positionsRes, creatorsRes] = await Promise.all([
+    const [marketsRes, positionsRes, creatorsRes, predictorRowsRes] = await Promise.all([
       supabase.from('markets').select('id', { count: 'exact', head: true }).eq('resolved', false).neq('is_public', false),
       supabase.from('positions').select('id', { count: 'exact', head: true }),
       supabase.from('creator_settings').select('creator_id', { count: 'exact', head: true }),
+      supabase.from('positions').select('user_id').not('user_id', 'is', null),
     ]);
+    const predictorCount = new Set((predictorRowsRes.data || []).map(r => r.user_id)).size;
     _statsCache = {
-      live_markets:   marketsRes.count  || 0,
+      live_markets:      marketsRes.count   || 0,
       total_predictions: positionsRes.count || 0,
-      communities:    creatorsRes.count  || 0,
+      communities:       creatorsRes.count  || 0,
+      predictors:        predictorCount,
     };
     _statsCacheAt = now;
     res.json(_statsCache);
   } catch (err) {
-    res.json({ live_markets: 0, total_predictions: 0, communities: 0 });
+    res.json({ live_markets: 0, total_predictions: 0, communities: 0, predictors: 0 });
   }
 });
 

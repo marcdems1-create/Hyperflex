@@ -4,7 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>HYPERFLEX — All Your Predictions. One Place.</title>
-<meta name="description" content="Track Polymarket, Kalshi, and Manifold positions in one unified dashboard. Or launch your own branded prediction market community in 5 minutes."/>
+<meta name="description" content="Track your Polymarket, Kalshi &amp; Manifold positions in one place. See win rates, P&amp;L, calibration scores. Plus launch your own prediction market community — free."/>
 <!-- Open Graph -->
 <meta property="og:type" content="website"/>
 <meta property="og:url" content="https://hyperflex.network/"/>
@@ -1359,6 +1359,10 @@ footer {
     <div class="stats-bar-num" id="stat-communities">—</div>
     <div class="stats-bar-label">Communities</div>
   </div>
+  <div class="stats-bar-item">
+    <div class="stats-bar-num" id="stat-predictors">—</div>
+    <div class="stats-bar-label">Predictors Tracked</div>
+  </div>
 </div>
 <script>
 (async function loadStats() {
@@ -1372,6 +1376,7 @@ footer {
     document.getElementById('stat-markets').textContent     = fmt(d.live_markets || 0);
     document.getElementById('stat-predictions').textContent = fmt(d.total_predictions || 0);
     document.getElementById('stat-communities').textContent = fmt(d.communities || 0);
+    document.getElementById('stat-predictors').textContent  = fmt(d.predictors || 0);
     // Social proof section mirrors same data
     const spM = document.getElementById('sp-markets');
     const spP = document.getElementById('sp-predictions');
