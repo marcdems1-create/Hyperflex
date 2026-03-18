@@ -368,17 +368,48 @@
 
 ---
 
-## Known Issues / Next Up
+## Roadmap — Next Highest-ROI Builds
 
-**Next highest-ROI builds:**
-- One-click market share card for X/Twitter (drives member acquisition)
-- "Send to community" weekly email digest button (creator → all members)
-- YouTube scanner demo mode for free tier (show blurred suggestions → upgrade trigger)
+### 1. Mobile Audit ✅ (in progress — session 13)
+- 44px touch targets across all pages
+- Bottom sheet modals on mobile
+- Single-column layouts, no horizontal scroll
+- overflow-x hidden, iOS zoom prevention
 
-- **Creator referral acceptance**: `accepted` on `creator_referrals` currently stays false — need to flip it to true when the referred creator publishes their first market (currently manual via admin or future automation)
-- **Embed widget**: No auth in embed — members can't bet from inside the iframe. Intentional for now (links out to community page). Could add predict-in-iframe later.
-- **Admin invite emails**: Require SMTP configured in Railway env vars — silently skips if not set (invite still logged to DB)
-- **Remote URL**: Update git remote to `https://github.com/marcdems1-create/Hyperflex.git` (capital H) to stop redirect warnings
+### 2. Core Community Polish ✅ (in progress — session 13)
+- Trending/hot/new badges with velocity detection (`📈 Trending`, `🆕 New`, `🔥 Hot 7`)
+- Category filter pills with colored dots + per-category counts
+- Compelling empty states with contextual CTAs per filter tab
+- Carousel gains Trending + Just Added lanes
+
+### 3. Post-Signup Onboarding ✅ (session 13)
+- Full-page welcome screen replacing old modal interstitial
+- All 3 platforms (Polymarket + Kalshi + Manifold) with LIVE badges
+- Progress bar tracking connections, cards turn green on success
+- Multi-connect before proceeding, CTA upgrades after first connect
+
+### 4. Monetization Gating (next up)
+- **Early Access → paid flip**: all platform connections currently free; need gate logic for when EA ends
+- **Kalshi = Premium only**: real-money platform, highest value — gate behind $99/mo tier
+- **Calibration score = Premium only**: advanced analytics feature, strong upgrade driver
+- **Portfolio sync frequency tiers**: Free = manual refresh, Pro = daily auto-sync, Premium = hourly auto-sync
+- Stripe checkout already wired — just need UI gates + middleware checks per feature
+
+### Known Issues
+- **Creator referral acceptance**: `accepted` on `creator_referrals` stays false — needs flip on first public market publish
+- **Admin invite emails**: Require SMTP env vars — silently skips if not set
+- Video section on landing page needs real YouTube VIDEO_ID
+- Old `index.html` at project root should be removed eventually
+
+---
+
+## Workflow
+
+**Plan in Cowork (VM), build in Claude Code (Mac).**
+- Cowork sessions: strategy, feature planning, architecture decisions, CLAUDE.md updates
+- Claude Code sessions: file edits, git commits, pushes, code implementation
+- Files are shared via mount — both environments see the same codebase
+- Only Claude Code (Mac) should run git commands
 
 ---
 
@@ -509,6 +540,33 @@
 - **`GET /api/polymarket/positions/:address`** (new, public, no auth): validates `0x...` hex address, proxies `data-api.polymarket.com`, 5-min cache via `_polyCache`, normalised response shape
 
 **Latest commits: `b2af9d2`, `c28084f`, `7413493`, `4a20ba4` + `e9476a8`, `9d29ce1`, `d29d68d`**
+
+---
+
+## Session 13 (March 18, 2026) — Claude Code
+
+**Mobile responsiveness** (commit `8c21f5e`):
+- 44px touch targets on all interactive elements across all 6 pages
+- Bottom sheet modals on explore.html auth + creator-dashboard modals
+- overflow-x hidden, single-column enforcement, hamburger 44px
+
+**Market discovery** (commit `747dfea`):
+- 📈 Trending badge (velocity: 3+ traders in <72h)
+- 🆕 New badge (created <24h ago)
+- 🔥 Hot badge now shows trader count
+- Category filter pills row with colored dots + counts
+- Compelling empty states with contextual CTAs per filter
+- Carousel gains Trending + Just Added lanes
+
+**CLAUDE.md rewrite** (commit `af5da7c`):
+- Aggregator-first vision in "What This Project Is"
+- New Platform Integrations section
+- Updated file map + current state
+
+**Post-signup welcome screen** (commit `af3e765`):
+- Full-page onboarding with all 3 platforms (Polymarket/Kalshi/Manifold)
+- Progress bar, green checkmarks on connect, multi-connect flow
+- CTA upgrades after first connection
 
 ---
 
