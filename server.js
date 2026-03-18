@@ -11051,5 +11051,42 @@ app.get('/api/kalshi/positions', requireAuth, async (req, res) => {
   }
 });
 
+app.get('/api/manifold/positions/:username', async (req, res) => {
+  const username = req.params.username.trim();
+  if (!username || !/^[a-zA-Z0-9_-]{1,50}$/.test(username)) return res.status(400).json({ error: 'Invalid username' });
+  const cached = _manifoldCache.get(username);
+  if (cached && Date.now() - cached.ts < 5 * 60 * 1000) return res.json(cached.data);
+  try {
+    const betsRes = await fetch(`https://api.manifold.markets/v0/bets?username=${encodeURIComponent(username)}&limit=200`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } });
+    if (betsRes.status === 404) return res.status(404).json({ error: 'Manifold user not found' });
+    if (!betsRes.ok) throw new Error('Manifold bets API ' + betsRes.status);
+    const bets = await betsRes.json();
+    const contractMap = {};
+    for (const b of bets) {
+      if (b.isRedemption) continue;
+      if (!contractMap[b.contractId]) contractMap[b.contractId] = { shares: 0, amount: 0, outcome: b.outcome, contractId: b.contractId };
+      contractMap[b.contractId].shares += (b.shares || 0);
+      contractMap[b.contractId].amount += (b.amount || 0);
+    }
+    const openContracts = Object.values(contractMap).filter(c => c.shares > 0.01);
+    if (!openContracts.length) { const data = { positions: [], fetched_at: new Date().toISOString() }; _manifoldCache.set(username, { ts: Date.now(), data }); return res.json(data); }
+    const enriched = await Promise.all(openContracts.slice(0, 20).map(async c => {
+      try {
+        const mr = await fetch(`https://api.manifold.markets/v0/market/${c.contractId}`, { headers: { Accept: 'application/json' } });
+        const m = mr.ok ? await mr.json() : {};
+        if (m.isResolved) return null;
+        const currentProb = m.probability || 0.5;
+        const currentPrice = c.outcome === 'YES' ? currentProb : (1 - currentProb);
+        const cashValue = Math.round(c.shares * currentPrice * 100) / 100;
+        return { id: c.contractId, question: m.question || c.contractId, side: c.outcome, shares: Math.round(c.shares * 100) / 100, current_price: Math.round(currentPrice * 1000) / 1000, cash_value: cashValue, cost_basis: Math.round(c.amount * 100) / 100, pnl_pct: c.amount > 0 ? Math.round(((cashValue - c.amount) / c.amount) * 100) : 0, market_url: m.url || `https://manifold.markets/market/${c.contractId}`, end_date: m.closeTime ? new Date(m.closeTime).toISOString() : null, closed: !!m.isResolved, platform: 'manifold' };
+      } catch { return null; }
+    }));
+    const positions = enriched.filter(Boolean);
+    const data = { positions, username, fetched_at: new Date().toISOString() };
+    _manifoldCache.set(username, { ts: Date.now(), data });
+    res.json(data);
+  } catch (err) { console.error('[manifold proxy]', err.message); res.status(502).json({ error: 'Failed to fetch Manifold positions', detail: err.message }); }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`HYPERFLEX server running on port ${PORT}`));
