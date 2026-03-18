@@ -11,7 +11,6 @@ const fs = require('fs');
 const crypto = require('crypto');
 const dns = require('dns').promises;
 const nodemailer = require('nodemailer');
-const { execFile } = require('child_process');
 
 // sharp is optional — loaded lazily so server starts even before npm install runs on Railway
 let _sharp = null;
@@ -22,6 +21,9 @@ function getSharp() {
 }
 
 const app = express();
+
+const JWT_SECRET = process.env.JWT_SECRET || 'hyperflex-dev-secret-change-in-prod';
+
 app.use(cors());
 
 // ── Stripe webhook needs raw body — must be registered BEFORE express.json() ──
@@ -237,7 +239,7 @@ app.post('/login', async (req, res) => {
   if (error || !user) return res.status(400).json({ error: 'User not found' });
   const valid = await bcrypt.compare(password, user.password_hash);
   if (!valid) return res.status(400).json({ error: 'Invalid password' });
-  const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET || 'hyperflex_secret');
+  const token = jwt.sign({ id: user.id }, JWT_SECRET);
   res.json({ token, user: { id: user.id, email: user.email, display_name: user.display_name, balance: user.balance } });
 });
 
@@ -247,7 +249,7 @@ function requireAuth(req, res, next) {
   const token = auth && auth.startsWith('Bearer ') ? auth.slice(7) : null;
   if (!token) return res.status(401).json({ error: 'Auth required' });
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET || 'hyperflex_secret');
+    const payload = jwt.verify(token, JWT_SECRET);
     req.userId = payload.id;
     req.user   = { id: payload.id };   // used by newer endpoints
     next();
@@ -623,7 +625,7 @@ app.post('/markets', async (req, res) => {
   const token = auth && auth.startsWith('Bearer ') ? auth.slice(7) : null;
   if (token) {
     try {
-      const payload = jwt.verify(token, process.env.JWT_SECRET || 'hyperflex_secret');
+      const payload = jwt.verify(token, JWT_SECRET);
       // Try creator_id first (new schema), fall back to user_id (old schema)
       let { data: settings } = await supabase
         .from('creator_settings')
@@ -655,7 +657,7 @@ app.post('/markets', async (req, res) => {
       .maybeSingle();
     if (cs) {
       const effectivePlan = (cs.plan_trial_expires_at && new Date(cs.plan_trial_expires_at) > new Date())
-        ? cs.plan : cs.plan;
+        ? 'pro' : cs.plan;
       const FREE_MARKET_LIMIT = 5;
       if (effectivePlan === 'free') {
         const { count } = await supabase
@@ -857,8 +859,9 @@ app.post('/api/creator/markets/bulk', requireCreator, async (req, res) => {
 // ── TRADING ───────────────────────────────────────
 
 // Place a trade
-app.post('/trade', async (req, res) => {
-  const { user_id, market_id, side, amount } = req.body;
+app.post('/trade', requireAuth, async (req, res) => {
+  const { market_id, side, amount } = req.body;
+  const user_id = req.userId;
 
   // Validate user exists
   const { data: user, error: userError } = await supabase
@@ -1032,7 +1035,7 @@ function getUserIdFromReq(req) {
     const auth = req.headers.authorization || '';
     const token = auth.replace('Bearer ', '').trim();
     if (!token) return null;
-    const payload = jwt.verify(token, process.env.JWT_SECRET || 'hyperflex_secret');
+    const payload = jwt.verify(token, JWT_SECRET);
     return payload.id || null;
   } catch {
     return null;
@@ -1263,7 +1266,8 @@ app.get('/api/user/my-positions/:slug', async (req, res) => {
 });
 
 // Get user positions
-app.get('/positions/:user_id', async (req, res) => {
+app.get('/positions/:user_id', requireAuth, async (req, res) => {
+  if (req.userId !== req.params.user_id) return res.status(403).json({ error: 'Forbidden' });
   const { data, error } = await supabase
     .from('positions')
     .select('*, markets(*)')
@@ -2034,7 +2038,7 @@ async function scanAndCreateMarkets() {
 cron.schedule('0 */6 * * *', scanAndCreateMarkets);
 
 // Manual trigger endpoint (legacy)
-app.post('/api/scan-markets', async (req, res) => {
+app.post('/api/scan-markets', requireAdmin, async (req, res) => {
   try {
     await scanAndCreateMarkets();
     res.json({ ok: true });
@@ -2769,7 +2773,6 @@ app.get('/api/templates/:id', (req, res) => {
 // Run: npm install bcrypt jsonwebtoken
 // ============================================================
 
-const JWT_SECRET = process.env.JWT_SECRET || 'hyperflex-dev-secret-change-in-prod';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 
@@ -6691,7 +6694,7 @@ app.get('/api/search', async (req, res) => {
     const token = auth && auth.startsWith('Bearer ') ? auth.slice(7) : null;
     if (token) {
       try {
-        const payload = jwt.verify(token, process.env.JWT_SECRET || 'hyperflex_secret');
+        const payload = jwt.verify(token, JWT_SECRET);
         const { data: myBals } = await supabase
           .from('community_balances')
           .select('creator_slug')
@@ -8461,8 +8464,7 @@ app.get('/:slug', async (req, res, next) => {
 function requireAdmin(req, res, next) {
   const secret = process.env.ADMIN_SECRET;
   if (!secret) return res.status(503).json({ error: 'Admin not configured (set ADMIN_SECRET)' });
-  const provided = req.query.secret
-    || (req.headers.authorization || '').replace('Bearer ', '').trim();
+  const provided = (req.headers.authorization || '').replace('Bearer ', '').trim();
   if (provided !== secret) return res.status(403).json({ error: 'Forbidden' });
   next();
 }
