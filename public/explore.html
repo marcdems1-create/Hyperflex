@@ -825,11 +825,8 @@ nav {
 <div class="tabs-wrap" id="tabs-wrap">
   <div class="tabs">
     <button class="tab active" onclick="switchTab('activity')">⚡ Activity</button>
-    <button class="tab" id="tab-pill-following" onclick="switchTab('following')">👥 Following</button>
-    <button class="tab" onclick="switchTab('hot')">🔥 Hot Markets</button>
-    <button class="tab" onclick="switchTab('new')">✨ New Markets</button>
-    <button class="tab" onclick="switchTab('predictors')">🎯 Top Predictors</button>
-    <button class="tab" onclick="switchTab('communities')">🏘️ Communities</button>
+    <button class="tab" onclick="switchTab('discover')">🔍 Discover</button>
+    <button class="tab" onclick="switchTab('predictors')">👥 Predictors</button>
   </div>
 </div>
 
@@ -854,40 +851,39 @@ nav {
       ↑ <span id="newActivityCount">0</span> new activities — click to refresh
     </div>
 
-    <!-- ACTIVITY FEED TAB (Twitter-like) -->
+    <!-- ACTIVITY FEED TAB -->
     <div class="feed-section active" id="tab-activity">
       <div id="activity-feed"><div class="loading">Loading activity...</div></div>
     </div>
 
-    <!-- FOLLOWING FEED TAB -->
-    <div class="feed-section" id="tab-following">
-      <div id="followingFeed" style="display:none"></div>
+    <!-- DISCOVER TAB (Hot + New + Communities merged) -->
+    <div class="feed-section" id="tab-discover">
+      <div style="margin-bottom:28px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gold);margin-bottom:12px;font-family:'Space Mono',monospace">🔥 Hot Markets</div>
+        <div id="hot-feed"><div class="loading">Loading hot markets...</div></div>
+      </div>
+      <div style="margin-bottom:28px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-soft);margin-bottom:12px;font-family:'Space Mono',monospace">✨ New Markets</div>
+        <div id="new-feed"><div class="loading">Loading new markets...</div></div>
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-soft);margin-bottom:12px;font-family:'Space Mono',monospace">🏘️ Communities</div>
+        <div id="communities-feed"><div class="loading">Loading communities...</div></div>
+      </div>
     </div>
 
-    <!-- LEGACY LIVE FEED TAB (hidden, kept for backward compat) -->
-    <div class="feed-section" id="tab-live" style="display:none">
-      <div id="trades-feed"></div>
-    </div>
-
-    <!-- HOT MARKETS TAB -->
-    <div class="feed-section" id="tab-hot">
-      <div id="hot-feed"><div class="loading">Loading hot markets...</div></div>
-    </div>
-
-    <!-- NEW MARKETS TAB -->
-    <div class="feed-section" id="tab-new">
-      <div id="new-feed"><div class="loading">Loading new markets...</div></div>
-    </div>
-
-    <!-- TOP PREDICTORS TAB -->
+    <!-- PREDICTORS TAB (Top Predictors + Following merged) -->
     <div class="feed-section" id="tab-predictors">
+      <div id="followingFeed" style="display:none;margin-bottom:28px"></div>
       <div id="predictors-feed"><div class="loading">Loading top predictors...</div></div>
     </div>
 
-    <!-- COMMUNITIES TAB -->
-    <div class="feed-section" id="tab-communities">
-      <div id="communities-feed"><div class="loading">Loading communities...</div></div>
-    </div>
+    <!-- Hidden legacy sections for backward compat -->
+    <div style="display:none" id="tab-following"></div>
+    <div style="display:none" id="tab-live"><div id="trades-feed"></div></div>
+    <div style="display:none" id="tab-hot"></div>
+    <div style="display:none" id="tab-new"></div>
+    <div style="display:none" id="tab-communities"></div>
   </div>
 
   <div class="sidebar">
@@ -1015,10 +1011,11 @@ function switchTab(tab) {
   event.target.classList.add('active');
   const el = document.getElementById('tab-' + tab);
   if (el) el.classList.add('active');
-  if (tab === 'following') {
+  // Predictors tab includes Following feed at the top
+  if (tab === 'predictors') {
     const ff = document.getElementById('followingFeed');
-    if (ff) ff.style.display = 'block';
-    loadFollowingFeed();
+    const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token');
+    if (ff && token) { ff.style.display = 'block'; loadFollowingFeed(); }
   }
   // Re-apply search filter for new tab if there's an active query
   if (_exploreSearchQuery) applyExploreSearch();
@@ -1615,15 +1612,23 @@ async function loadFeed() {
   }
 }
 
-// Deep-link tab support: /explore?tab=predictors
-const urlTab = new URLSearchParams(window.location.search).get('tab');
+// Deep-link tab support: /explore?tab=discover
+const _tabRedirects = { hot: 'discover', new: 'discover', communities: 'discover', following: 'predictors' };
+let urlTab = new URLSearchParams(window.location.search).get('tab');
 if (urlTab) {
+  urlTab = _tabRedirects[urlTab] || urlTab; // Redirect old tab names
   activeTab = urlTab;
   document.querySelectorAll('.feed-section').forEach(s => s.classList.remove('active'));
   const tabEl = document.getElementById('tab-' + urlTab);
   if (tabEl) tabEl.classList.add('active');
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => { if (t.getAttribute('onclick')?.includes("'" + urlTab + "'")) t.classList.add('active'); });
+  // Load following feed if on predictors tab
+  if (urlTab === 'predictors') {
+    const ff = document.getElementById('followingFeed');
+    const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token');
+    if (ff && token) { ff.style.display = 'block'; loadFollowingFeed(); }
+  }
 }
 
 // ── MEMBER AUTH (explore page) ──────────────────────────────
@@ -1733,18 +1738,19 @@ async function loadFollowingFeed() {
   if (!el) return;
   const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token');
   if (!token) {
-    el.innerHTML = '<div style="text-align:center;padding:40px;color:#888">Sign in to see your following feed</div>';
+    el.style.display = 'none';
     return;
   }
-  el.innerHTML = '<div style="text-align:center;padding:40px;color:#888">Loading...</div>';
+  el.innerHTML = '<div style="text-align:center;padding:20px;color:#888">Loading...</div>';
   try {
     const res = await fetch('/api/feed/following', { headers: { 'Authorization': 'Bearer ' + token } });
     const data = await res.json();
     if (!data.items || data.items.length === 0) {
-      el.innerHTML = '<div style="text-align:center;padding:40px;color:#888">Follow some predictors to see their activity here.<br><br><a href="/predictors" style="color:#c9920d">Browse top predictors →</a></div>';
+      el.style.display = 'none';
       return;
     }
-    el.innerHTML = data.items.map(item => {
+    const header = `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gold);margin-bottom:12px;font-family:'Space Mono',monospace">👥 Following</div>`;
+    el.innerHTML = header + data.items.map(item => {
       if (item.type === 'external_bet') {
         const platformColor = item.platform === 'polymarket' ? '#6366f1' : item.platform === 'kalshi' ? '#8b5cf6' : '#10b981';
         const platformName  = item.platform === 'polymarket' ? 'Polymarket' : item.platform === 'kalshi' ? 'Kalshi' : 'Manifold';
