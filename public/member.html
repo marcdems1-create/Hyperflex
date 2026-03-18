@@ -225,6 +225,7 @@ async function load() {
           <div class="hero-since">Member since ${new Date(user.member_since).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</div>
           <div class="hero-badges">
             ${tierBadge(stats.win_rate, stats.streak)}
+            <span id="sharpBadge" style="display:none;font-size:11px;font-weight:700;padding:4px 10px;border-radius:100px;letter-spacing:0.3px;background:rgba(201,146,13,0.15);color:var(--gold);border:1px solid rgba(201,146,13,0.35)"></span>
           </div>
           <button id="shareBtn" class="share-btn" onclick="shareProfile()">📋 Copy profile link</button>
           <button id="followBtn" onclick="toggleFollow()" style="background:none;border:1px solid var(--gold);border-radius:20px;padding:6px 18px;font-size:12px;font-family:var(--mono);font-weight:700;color:var(--gold);cursor:pointer;transition:all 0.15s;margin-top:6px" onmouseover="this.style.background='rgba(201,146,13,0.12)'" onmouseout="this.style.background='none'">Follow</button>
@@ -254,6 +255,21 @@ async function load() {
         </div>
       </div>
 
+      <div id="analyticsSection" style="margin:24px 0;display:none">
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px" id="platformCards"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+          <div style="background:#1a1916;border:1px solid #333;border-radius:12px;padding:20px">
+            <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Calibration Chart</div>
+            <div style="font-size:11px;color:#666;margin-bottom:12px">Predicted % vs actual outcomes</div>
+            <canvas id="calibrationChart" width="300" height="180"></canvas>
+          </div>
+          <div style="background:#1a1916;border:1px solid #333;border-radius:12px;padding:20px">
+            <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Cumulative P&amp;L (30d)</div>
+            <canvas id="pnlChart" width="300" height="180"></canvas>
+          </div>
+        </div>
+      </div>
+
       ${recent_wins.length ? `
       <div class="section">
         <div class="section-title">Recent Wins</div>
@@ -272,6 +288,7 @@ async function load() {
         <a href="/explore" class="cta-link">Explore Communities →</a>
       </div>
     `;
+    loadAnalytics(userId);
   } catch (err) {
     console.error(err);
     page.innerHTML = `<div class="error-state"><div class="error-icon">⚡</div><div class="error-msg">Failed to load profile</div><div class="error-sub">Please try again later.</div></div>`;
@@ -279,6 +296,91 @@ async function load() {
 }
 
 load().then(loadFollowStatus);
+
+// ── P&L ANALYTICS ─────────────────────────────────────────────────────────────
+async function loadAnalytics(userId) {
+  try {
+    const res = await fetch(`/api/predictors/${userId}/analytics`);
+    const data = await res.json();
+    if (!data.platforms) return;
+    document.getElementById('analyticsSection').style.display = 'block';
+
+    // Platform stat cards
+    const platformColors = { hyperflex: '#c9920d', polymarket: '#6366f1', kalshi: '#8b5cf6', manifold: '#10b981' };
+    const platformLabels = { hyperflex: 'HYPERFLEX', polymarket: 'Polymarket', kalshi: 'Kalshi', manifold: 'Manifold' };
+    document.getElementById('platformCards').innerHTML = Object.entries(data.platforms)
+      .filter(([, p]) => p.total > 0)
+      .map(([name, p]) => {
+        const wr = (p.wins + p.losses) > 0 ? Math.round(p.wins / (p.wins + p.losses) * 100) : 0;
+        const pnlColor = p.pnl >= 0 ? '#10b981' : '#ef4444';
+        return `<div style="background:#1a1916;border:1px solid ${platformColors[name]}44;border-radius:10px;padding:14px 18px;min-width:130px">
+          <div style="font-size:11px;color:${platformColors[name]};font-weight:700;margin-bottom:6px">${platformLabels[name] || name}</div>
+          <div style="font-size:22px;font-weight:700;color:#fff">${wr}%</div>
+          <div style="font-size:11px;color:#888">win rate</div>
+          <div style="font-size:13px;font-weight:700;color:${pnlColor};margin-top:4px">${p.pnl >= 0 ? '+' : ''}${Math.round(p.pnl)} pts</div>
+          <div style="font-size:11px;color:#555">${p.total} positions</div>
+        </div>`;
+      }).join('');
+
+    // Sharp score badge
+    const sharpEl = document.getElementById('sharpBadge');
+    if (sharpEl) {
+      sharpEl.textContent = `⚡ ${data.sharp_score} Sharp Score`;
+      sharpEl.style.display = 'inline-block';
+    }
+
+    // Calibration chart — simple bar chart using canvas
+    const calCtx = document.getElementById('calibrationChart')?.getContext('2d');
+    if (calCtx) {
+      const calData = data.calibration.filter(c => c.predicted > 0);
+      const barW = calData.length > 0 ? 240 / calData.length : 30;
+      calCtx.clearRect(0, 0, 300, 180);
+      calData.forEach((c, i) => {
+        const x = 30 + i * (barW + 4);
+        const expectedH = (c.predicted / 100) * 140;
+        const actualH = c.actual !== null ? (c.actual / 100) * 140 : 0;
+        calCtx.fillStyle = '#c9920d44';
+        calCtx.fillRect(x, 150 - actualH, barW - 2, actualH);
+        calCtx.fillStyle = '#888';
+        calCtx.fillRect(x, 150 - expectedH, barW - 2, 2);
+        calCtx.fillStyle = '#666';
+        calCtx.font = '9px monospace';
+        calCtx.fillText(c.predicted + '%', x, 165);
+      });
+      calCtx.fillStyle = '#888';
+      calCtx.font = '10px monospace';
+      calCtx.fillText('gold=actual  gray=expected', 10, 178);
+    }
+
+    // P&L line chart
+    const pnlCtx = document.getElementById('pnlChart')?.getContext('2d');
+    if (pnlCtx && data.timeline.length > 1) {
+      const vals = data.timeline.map(t => t.pnl);
+      const min = Math.min(...vals, 0);
+      const max = Math.max(...vals, 0);
+      const range = max - min || 1;
+      pnlCtx.clearRect(0, 0, 300, 180);
+      pnlCtx.strokeStyle = data.total_pnl >= 0 ? '#10b981' : '#ef4444';
+      pnlCtx.lineWidth = 2;
+      pnlCtx.beginPath();
+      data.timeline.forEach((t, i) => {
+        const x = 10 + (i / (data.timeline.length - 1)) * 280;
+        const y = 160 - ((t.pnl - min) / range) * 140;
+        i === 0 ? pnlCtx.moveTo(x, y) : pnlCtx.lineTo(x, y);
+      });
+      pnlCtx.stroke();
+      // Zero line
+      const zeroY = 160 - ((0 - min) / range) * 140;
+      pnlCtx.strokeStyle = '#333';
+      pnlCtx.lineWidth = 1;
+      pnlCtx.setLineDash([4, 4]);
+      pnlCtx.beginPath();
+      pnlCtx.moveTo(10, zeroY);
+      pnlCtx.lineTo(290, zeroY);
+      pnlCtx.stroke();
+    }
+  } catch(e) { console.warn('analytics', e); }
+}
 
 // ── FOLLOW SYSTEM ─────────────────────────────────────────────────────────────
 let _isFollowing = false;
