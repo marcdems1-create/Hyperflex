@@ -1,0 +1,1492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>HYPERFLEX — AI Market Scanner</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --ink: #0e0e0c;
+      --paper: #141412;
+      --cream: #1c1c19;
+      --card: #181816;
+      --text: #ddd8cc;
+      --gold: #c9920d;
+      --gold-lt: #e0a820;
+      --gold-bright: #f5c842;
+      --green: #1a5c3a;
+      --green-lt: #2d9b5f;
+      --red-lt: #c0392b;
+      --border: #2a2a26;
+      --border-lt: #333330;
+      --dim: #7a7870;
+      --mono: 'DM Mono', monospace;
+      --serif: 'Playfair Display', serif;
+      --sans: 'DM Sans', sans-serif;
+    }
+    html { scroll-behavior: smooth; }
+    body { background: var(--paper); color: var(--text); font-family: var(--sans); min-height: 100vh; overflow-x: hidden; }
+    ::-webkit-scrollbar { width: 3px; }
+    ::-webkit-scrollbar-thumb { background: var(--border); }
+
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    @keyframes ticker { from{transform:translateX(0)} to{transform:translateX(-50%)} }
+    @keyframes spin { to{transform:rotate(360deg)} }
+    @keyframes slideIn { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes progressFill { from{width:0} to{width:var(--target)} }
+    @keyframes logAppear { from{opacity:0;transform:translateX(-8px)} to{opacity:1;transform:translateX(0)} }
+    @keyframes flash { 0%{background:rgba(201,146,13,0.15)} 100%{background:transparent} }
+
+    /* ── TICKER ── */
+    .ticker-wrap { background: var(--ink); padding: 7px 0; overflow: hidden; white-space: nowrap; border-bottom: 1px solid #1a1a1a; }
+    .ticker-inner { display: inline-block; animation: ticker 32s linear infinite; font-family: var(--mono); font-size: 10px; color: #444; letter-spacing: 0.5px; }
+    .ticker-inner .up { color: var(--green-lt); }
+    .ticker-inner .hi { color: var(--gold-lt); }
+    .ticker-sep { margin: 0 18px; color: #222; }
+
+    /* ── NAV ── */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(20,20,18,0.97); backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 40px;
+      display: flex; align-items: stretch; justify-content: space-between;
+    }
+    .nav-logo {
+      display: flex; align-items: center; gap: 12px;
+      text-decoration: none; padding: 14px 24px 14px 0;
+      border-right: 1px solid var(--border); margin-right: 24px;
+    }
+    .nav-logo-mark svg { width: 28px; height: 28px; }
+    .nav-wordmark { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--text); letter-spacing: 3px; }
+    .nav-title {
+      display: flex; align-items: center; gap: 10px; flex: 1;
+      font-family: var(--mono); font-size: 10px; color: var(--dim); letter-spacing: 2px;
+    }
+    .nav-badge {
+      background: rgba(201,146,13,0.12); border: 1px solid rgba(201,146,13,0.3);
+      color: var(--gold-lt); font-size: 9px; padding: 2px 8px; letter-spacing: 1px;
+    }
+    .nav-right { display: flex; align-items: center; gap: 12px; }
+    .nav-back {
+      color: var(--dim); font-family: var(--mono); font-size: 10px;
+      text-decoration: none; letter-spacing: 1px; padding: 10px 16px;
+      border: 1px solid var(--border); transition: color 0.2s, border-color 0.2s;
+    }
+    .nav-back:hover { color: var(--text); border-color: var(--dim); }
+    .nav-app {
+      background: var(--gold); color: var(--ink);
+      font-family: var(--mono); font-size: 11px; font-weight: 500;
+      letter-spacing: 1px; padding: 10px 20px; text-decoration: none;
+      transition: background 0.2s;
+    }
+    .nav-app:hover { background: var(--gold-bright); }
+
+    /* ── LAYOUT ── */
+    .scanner-wrap {
+      display: grid; grid-template-columns: 320px 1fr;
+      min-height: calc(100vh - 88px);
+      border-top: none;
+    }
+
+    /* ── LEFT SIDEBAR ── */
+    .sidebar {
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      background: var(--cream);
+    }
+    .sidebar-section {
+      padding: 24px; border-bottom: 1px solid var(--border);
+    }
+    .sidebar-label {
+      font-family: var(--mono); font-size: 9px; color: var(--dim);
+      letter-spacing: 3px; margin-bottom: 16px;
+    }
+
+    /* API Key */
+    .api-key-wrap { display: flex; flex-direction: column; gap: 8px; }
+    .api-input {
+      background: var(--paper); border: 1px solid var(--border);
+      color: var(--text); font-family: var(--mono); font-size: 11px;
+      padding: 10px 12px; outline: none; width: 100%;
+      transition: border-color 0.2s;
+    }
+    .api-input:focus { border-color: var(--gold); }
+    .api-input::placeholder { color: var(--dim); }
+    .api-note { font-family: var(--mono); font-size: 9px; color: var(--dim); }
+    .api-note a { color: var(--gold-lt); text-decoration: none; }
+
+    /* Sources */
+    .source-list { display: flex; flex-direction: column; gap: 6px; }
+    .source-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 10px; background: var(--paper); border: 1px solid var(--border);
+      cursor: pointer; transition: border-color 0.2s;
+      user-select: none;
+    }
+    .source-item.active { border-color: var(--gold); }
+    .source-item-left { display: flex; align-items: center; gap: 8px; }
+    .source-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); flex-shrink: 0; }
+    .source-item.active .source-dot { background: var(--gold-lt); }
+    .source-name { font-family: var(--mono); font-size: 10px; color: var(--dim); letter-spacing: 0.5px; }
+    .source-item.active .source-name { color: var(--text); }
+    .source-check { font-size: 10px; color: var(--gold-lt); opacity: 0; }
+    .source-item.active .source-check { opacity: 1; }
+
+    /* Schedule */
+    .schedule-row { display: flex; flex-direction: column; gap: 8px; }
+    .schedule-select {
+      background: var(--paper); border: 1px solid var(--border);
+      color: var(--text); font-family: var(--mono); font-size: 11px;
+      padding: 9px 10px; outline: none; cursor: pointer;
+      width: 100%;
+    }
+    .schedule-select:focus { border-color: var(--gold); }
+    .schedule-time-row { display: flex; gap: 8px; }
+    .schedule-time {
+      flex: 1; background: var(--paper); border: 1px solid var(--border);
+      color: var(--text); font-family: var(--mono); font-size: 11px;
+      padding: 9px 10px; outline: none; width: 100%;
+    }
+    .schedule-time:focus { border-color: var(--gold); }
+    .schedule-btn {
+      background: var(--green); color: #fff;
+      border: none; padding: 9px 14px;
+      font-family: var(--mono); font-size: 10px; font-weight: 500;
+      letter-spacing: 1px; cursor: pointer;
+      transition: background 0.2s;
+    }
+    .schedule-btn:hover { background: var(--green-lt); }
+    .next-scans { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
+    .next-scan-item {
+      font-family: var(--mono); font-size: 10px; color: var(--dim);
+      padding: 5px 0; border-top: 1px solid var(--border);
+      display: flex; justify-content: space-between;
+    }
+    .next-scan-item .time { color: var(--gold-lt); }
+
+    /* Scan button */
+    .scan-btn-wrap { padding: 20px 24px; }
+    .scan-btn {
+      width: 100%; padding: 16px;
+      background: var(--gold); color: var(--ink);
+      border: none; font-family: var(--mono); font-size: 12px; font-weight: 500;
+      letter-spacing: 2px; cursor: pointer;
+      transition: background 0.2s;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+    }
+    .scan-btn:hover:not(:disabled) { background: var(--gold-bright); }
+    .scan-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .scan-spinner {
+      width: 14px; height: 14px;
+      border: 2px solid rgba(14,14,12,0.3);
+      border-top-color: var(--ink);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      display: none;
+    }
+    .scan-btn.scanning .scan-spinner { display: block; }
+
+    /* Stats bar */
+    .stats-bar {
+      padding: 16px 24px; border-top: 1px solid var(--border);
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 0;
+      margin-top: auto;
+    }
+    .stat-cell {
+      text-align: center; padding: 8px 0;
+      border-right: 1px solid var(--border);
+    }
+    .stat-cell:last-child { border-right: none; }
+    .stat-num { font-family: var(--serif); font-size: 22px; font-weight: 700; color: var(--gold); }
+    .stat-lbl { font-family: var(--mono); font-size: 8px; color: var(--dim); letter-spacing: 1px; margin-top: 2px; }
+
+    /* ── MAIN PANEL ── */
+    .main-panel { display: flex; flex-direction: column; }
+
+    /* Tabs */
+    .tabs {
+      display: flex; border-bottom: 1px solid var(--border);
+      background: var(--ink);
+    }
+    .tab {
+      padding: 16px 28px; font-family: var(--mono); font-size: 10px;
+      color: var(--dim); letter-spacing: 1px; cursor: pointer;
+      border-right: 1px solid var(--border);
+      transition: color 0.2s, background 0.2s;
+      border-bottom: 2px solid transparent; margin-bottom: -1px;
+    }
+    .tab:hover { color: var(--text); background: var(--cream); }
+    .tab.active { color: var(--gold-lt); border-bottom-color: var(--gold); background: var(--paper); }
+
+    /* ── SCAN TAB ── */
+    .scan-panel { flex: 1; display: flex; flex-direction: column; }
+
+    /* Progress */
+    .progress-wrap {
+      padding: 20px 32px; border-bottom: 1px solid var(--border);
+      display: none;
+    }
+    .progress-wrap.visible { display: block; }
+    .progress-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 12px;
+    }
+    .progress-label { font-family: var(--mono); font-size: 10px; color: var(--dim); letter-spacing: 1px; }
+    .progress-pct { font-family: var(--mono); font-size: 12px; color: var(--gold-lt); }
+    .progress-bar { height: 2px; background: var(--border); position: relative; overflow: hidden; }
+    .progress-fill {
+      height: 100%; background: linear-gradient(90deg, var(--gold), var(--gold-bright));
+      transition: width 0.4s ease;
+    }
+    .progress-sources { margin-top: 12px; display: flex; flex-direction: column; gap: 4px; }
+    .progress-source {
+      display: flex; align-items: center; gap: 10px;
+      font-family: var(--mono); font-size: 9px; color: var(--dim);
+    }
+    .progress-source.done { color: var(--green-lt); }
+    .progress-source.active { color: var(--gold-lt); }
+    .progress-source-icon { width: 12px; text-align: center; }
+
+    /* Empty state */
+    .empty-state {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 80px 40px; text-align: center;
+    }
+    .empty-icon { font-size: 48px; margin-bottom: 24px; opacity: 0.4; }
+    .empty-title { font-family: var(--serif); font-size: 28px; font-weight: 700; margin-bottom: 12px; color: var(--text); opacity: 0.6; }
+    .empty-sub { font-family: var(--mono); font-size: 11px; color: var(--dim); letter-spacing: 1px; line-height: 1.8; }
+
+    /* Markets grid */
+    .markets-header {
+      padding: 16px 32px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      display: none;
+    }
+    .markets-header.visible { display: flex; }
+    .markets-header-left { font-family: var(--mono); font-size: 10px; color: var(--dim); letter-spacing: 1px; }
+    .markets-header-right { display: flex; gap: 10px; }
+    .deploy-all-btn {
+      background: var(--gold); color: var(--ink);
+      border: none; padding: 8px 18px;
+      font-family: var(--mono); font-size: 10px; font-weight: 500;
+      letter-spacing: 1px; cursor: pointer; transition: background 0.2s;
+    }
+    .deploy-all-btn:hover { background: var(--gold-bright); }
+    .clear-btn {
+      background: transparent; color: var(--dim);
+      border: 1px solid var(--border); padding: 8px 14px;
+      font-family: var(--mono); font-size: 10px;
+      letter-spacing: 1px; cursor: pointer; transition: all 0.2s;
+    }
+    .clear-btn:hover { color: var(--red-lt); border-color: var(--red-lt); }
+
+    .markets-list { flex: 1; overflow-y: auto; }
+    .markets-list::-webkit-scrollbar { width: 3px; }
+    .markets-list::-webkit-scrollbar-thumb { background: var(--gold); }
+
+    /* Market card */
+    .market-card {
+      border-bottom: 1px solid var(--border);
+      animation: slideIn 0.4s ease forwards;
+    }
+    .market-card-header {
+      padding: 16px 32px 12px;
+      display: grid; grid-template-columns: auto 1fr auto;
+      align-items: flex-start; gap: 16px;
+    }
+    .market-icon { font-size: 22px; margin-top: 2px; }
+    .market-meta { display: flex; flex-direction: column; gap: 4px; }
+    .market-source-row {
+      display: flex; align-items: center; gap: 8px;
+      font-family: var(--mono); font-size: 9px; color: var(--dim); letter-spacing: 1px;
+    }
+    .market-sector-tag {
+      background: rgba(201,146,13,0.1); border: 1px solid rgba(201,146,13,0.25);
+      color: var(--gold-lt); font-size: 8px; padding: 1px 6px; letter-spacing: 1px;
+    }
+    .market-confidence {
+      font-size: 9px; padding: 1px 6px; letter-spacing: 1px;
+      border: 1px solid;
+    }
+    .market-confidence.high { color: var(--green-lt); border-color: rgba(45,155,95,0.4); background: rgba(45,155,95,0.08); }
+    .market-confidence.medium { color: var(--gold-lt); border-color: rgba(201,146,13,0.4); background: rgba(201,146,13,0.08); }
+    .market-confidence.low { color: var(--red-lt); border-color: rgba(192,57,43,0.4); background: rgba(192,57,43,0.08); }
+    .market-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+    .deploy-btn {
+      background: var(--gold); color: var(--ink);
+      border: none; padding: 7px 14px;
+      font-family: var(--mono); font-size: 9px; font-weight: 500;
+      letter-spacing: 1px; cursor: pointer; white-space: nowrap;
+      transition: background 0.2s;
+    }
+    .deploy-btn:hover { background: var(--gold-bright); }
+    .deploy-btn.deployed {
+      background: var(--green); color: #fff; cursor: default;
+    }
+    .simplify-btn {
+      background: transparent; color: var(--dim);
+      border: 1px solid var(--border); padding: 5px 10px;
+      font-family: var(--mono); font-size: 9px;
+      letter-spacing: 1px; cursor: pointer; white-space: nowrap;
+      transition: all 0.2s;
+    }
+    .simplify-btn:hover { color: var(--gold-lt); border-color: var(--gold); }
+    .simplify-btn.simplified { color: var(--gold-lt); border-color: var(--gold); }
+    .restore-btn {
+      background: transparent; color: #555;
+      border: 1px solid var(--border); padding: 5px 10px;
+      font-family: var(--mono); font-size: 9px;
+      letter-spacing: 1px; cursor: pointer;
+      transition: color 0.2s;
+    }
+    .restore-btn:hover { color: var(--dim); }
+
+    /* Question display */
+    .market-question-wrap { padding: 0 32px 0 70px; }
+    .market-question {
+      font-family: var(--serif); font-size: 17px; font-weight: 700;
+      line-height: 1.35; color: var(--text); margin-bottom: 6px;
+    }
+    .simplified-badge {
+      display: inline-block;
+      font-family: var(--mono); font-size: 8px; color: var(--gold-lt);
+      border: 1px solid rgba(201,146,13,0.3); padding: 1px 6px; letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+    .market-question-edit {
+      width: 100%; background: var(--ink); border: 1px solid var(--gold);
+      color: var(--text); font-family: var(--serif); font-size: 16px;
+      font-weight: 700; padding: 10px 12px; resize: vertical; outline: none;
+      line-height: 1.35; min-height: 60px;
+      display: none;
+    }
+    .edit-actions { display: flex; gap: 8px; margin-top: 6px; display: none; }
+    .save-edit-btn {
+      background: var(--green); color: #fff; border: none;
+      padding: 5px 12px; font-family: var(--mono); font-size: 9px;
+      letter-spacing: 1px; cursor: pointer;
+    }
+    .cancel-edit-btn {
+      background: transparent; color: var(--dim); border: 1px solid var(--border);
+      padding: 5px 12px; font-family: var(--mono); font-size: 9px;
+      letter-spacing: 1px; cursor: pointer;
+    }
+    .edit-btn {
+      background: transparent; color: #555; border: none;
+      font-family: var(--mono); font-size: 9px; cursor: pointer;
+      letter-spacing: 1px; padding: 0; transition: color 0.2s;
+      margin-left: 8px;
+    }
+    .edit-btn:hover { color: var(--dim); }
+
+    /* Headline */
+    .market-headline {
+      font-size: 12px; color: #555; line-height: 1.5;
+      font-style: italic; margin-bottom: 12px; font-family: var(--sans);
+    }
+
+    /* Odds bar */
+    .market-odds-row { padding: 0 32px 0 70px; margin-bottom: 16px; }
+    .odds-bar-wrap { display: flex; height: 4px; margin-bottom: 8px; }
+    .odds-yes-fill { background: var(--green-lt); transition: flex 0.6s ease; }
+    .odds-no-fill { background: var(--red-lt); transition: flex 0.6s ease; }
+    .odds-btns { display: flex; gap: 8px; }
+    .odds-yes { flex: 1; padding: 7px; background: rgba(26,92,58,0.15); border: 1px solid rgba(45,155,95,0.3); color: var(--green-lt); font-family: var(--mono); font-size: 10px; text-align: center; }
+    .odds-no { flex: 1; padding: 7px; background: rgba(139,26,26,0.15); border: 1px solid rgba(192,57,43,0.3); color: var(--red-lt); font-family: var(--mono); font-size: 10px; text-align: center; }
+
+    /* Rationale */
+    .market-rationale {
+      padding: 12px 32px 20px 70px;
+      font-size: 12px; color: var(--dim); line-height: 1.7; font-weight: 300;
+      border-top: 1px solid #1e1e1c;
+    }
+    .market-rationale strong { color: #aaa; font-weight: 500; }
+    .close-date { font-family: var(--mono); font-size: 10px; color: var(--dim); margin-top: 6px; }
+    .close-date span { color: var(--gold-lt); }
+
+    /* ── SCHEDULE TAB ── */
+    .schedule-panel { flex: 1; padding: 40px; display: none; }
+    .schedule-panel.active { display: block; }
+    .schedule-title { font-family: var(--serif); font-size: 32px; font-weight: 700; margin-bottom: 8px; }
+    .schedule-title em { font-style: italic; color: var(--gold); }
+    .schedule-sub { font-size: 13px; color: var(--dim); margin-bottom: 40px; font-weight: 300; }
+    .schedule-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    .schedule-card { border: 1px solid var(--border); padding: 28px; }
+    .schedule-card-label { font-family: var(--mono); font-size: 9px; color: var(--dim); letter-spacing: 3px; margin-bottom: 16px; }
+    .schedule-card-title { font-family: var(--serif); font-size: 20px; font-weight: 700; margin-bottom: 12px; }
+    .schedule-toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border); }
+    .schedule-toggle-label { font-size: 13px; color: var(--dim); font-weight: 300; }
+    .toggle {
+      width: 40px; height: 22px; background: var(--border); border-radius: 11px;
+      position: relative; cursor: pointer; transition: background 0.2s;
+    }
+    .toggle.on { background: var(--green-lt); }
+    .toggle::after {
+      content: ''; position: absolute; width: 16px; height: 16px;
+      background: #fff; border-radius: 50%; top: 3px; left: 3px;
+      transition: left 0.2s;
+    }
+    .toggle.on::after { left: 21px; }
+    .upcoming-wrap { margin-top: 32px; }
+    .upcoming-title { font-family: var(--mono); font-size: 9px; color: var(--dim); letter-spacing: 3px; margin-bottom: 16px; }
+    .upcoming-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 0; border-bottom: 1px solid var(--border);
+      font-family: var(--mono); font-size: 11px;
+    }
+    .upcoming-time { color: var(--gold-lt); }
+    .upcoming-freq { color: var(--dim); font-size: 10px; }
+    .upcoming-sources { color: #555; font-size: 10px; }
+
+    /* ── LOGS TAB ── */
+    .logs-panel { flex: 1; display: none; }
+    .logs-panel.active { display: flex; flex-direction: column; }
+    .logs-header {
+      padding: 16px 32px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .logs-title { font-family: var(--mono); font-size: 10px; color: var(--dim); letter-spacing: 2px; }
+    .logs-clear { background: transparent; color: var(--dim); border: 1px solid var(--border); padding: 6px 12px; font-family: var(--mono); font-size: 9px; cursor: pointer; letter-spacing: 1px; transition: all 0.2s; }
+    .logs-clear:hover { color: var(--red-lt); border-color: var(--red-lt); }
+    .logs-terminal {
+      flex: 1; background: var(--ink); padding: 20px 32px;
+      font-family: var(--mono); font-size: 11px; overflow-y: auto;
+      min-height: 400px;
+    }
+    .logs-terminal::-webkit-scrollbar { width: 3px; }
+    .logs-terminal::-webkit-scrollbar-thumb { background: var(--border); }
+    .log-line {
+      display: flex; gap: 16px; padding: 3px 0;
+      animation: logAppear 0.2s ease forwards;
+      line-height: 1.6;
+    }
+    .log-time { color: #333; flex-shrink: 0; }
+    .log-type { flex-shrink: 0; width: 60px; }
+    .log-type.info { color: #555; }
+    .log-type.scan { color: var(--gold-lt); }
+    .log-type.ok { color: var(--green-lt); }
+    .log-type.err { color: var(--red-lt); }
+    .log-type.api { color: #6688aa; }
+    .log-msg { color: #888; }
+    .log-msg .highlight { color: var(--text); }
+    .log-msg .gold { color: var(--gold-lt); }
+
+    /* ── HOW IT WORKS ── */
+    .how-panel { flex: 1; display: none; }
+    .how-panel.active { display: block; }
+    .how-steps-wrap { display: grid; grid-template-columns: repeat(5, 1fr); }
+    .how-step-card {
+      padding: 40px 32px; border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .how-step-card:last-child { border-right: none; }
+    .how-step-num { font-family: var(--serif); font-size: 48px; font-weight: 900; color: #2a2a26; line-height: 1; margin-bottom: 16px; }
+    .how-step-title { font-family: var(--serif); font-size: 17px; font-weight: 700; margin-bottom: 8px; }
+    .how-step-text { font-size: 12px; color: var(--dim); line-height: 1.8; font-weight: 300; }
+    .how-step-icon { font-size: 24px; margin-bottom: 12px; }
+    .how-bottom { padding: 40px; border-top: 1px solid var(--border); background: var(--cream); }
+    .how-bottom-title { font-family: var(--serif); font-size: 22px; font-weight: 700; margin-bottom: 16px; }
+    .how-bottom-title em { font-style: italic; color: var(--gold); }
+    .how-bottom-text { font-size: 13px; color: var(--dim); line-height: 1.8; max-width: 700px; }
+
+    /* ── TOAST ── */
+    .toast {
+      position: fixed; bottom: 32px; right: 32px;
+      background: var(--cream); border: 1px solid var(--border);
+      padding: 14px 20px; font-family: var(--mono); font-size: 11px;
+      color: var(--text); display: none; z-index: 999;
+      animation: slideIn 0.3s ease;
+    }
+    .toast.show { display: block; }
+    .toast.success { border-color: var(--green); color: var(--green-lt); }
+    .toast.error { border-color: var(--red-lt); color: var(--red-lt); }
+
+    @media (max-width: 900px) {
+      .scanner-wrap { grid-template-columns: 1fr; }
+      .sidebar { border-right: none; border-bottom: 1px solid var(--border); }
+      .how-steps-wrap { grid-template-columns: 1fr; }
+      nav { padding: 0 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- TICKER -->
+<div class="ticker-wrap">
+  <div class="ticker-inner">
+    <span class="hi">XAU/USD</span> $5,171.00 <span class="up">▲ +1.2%</span>
+    <span class="ticker-sep">|</span>
+    <span class="hi">XAG/USD</span> $83.48 <span class="up">▲ +0.8%</span>
+    <span class="ticker-sep">|</span>
+    WTI <span class="up">$89.00 ▲ +0.4%</span>
+    <span class="ticker-sep">|</span>
+    AI SCANNER <span class="up">ACTIVE</span>
+    <span class="ticker-sep">|</span>
+    8 SOURCES MONITORED
+    <span class="ticker-sep">|</span>
+    <span class="hi">XAU/USD</span> $5,171.00 <span class="up">▲ +1.2%</span>
+    <span class="ticker-sep">|</span>
+    <span class="hi">XAG/USD</span> $83.48 <span class="up">▲ +0.8%</span>
+    <span class="ticker-sep">|</span>
+    WTI <span class="up">$89.00 ▲ +0.4%</span>
+    <span class="ticker-sep">|</span>
+    AI SCANNER <span class="up">ACTIVE</span>
+    <span class="ticker-sep">|</span>
+    8 SOURCES MONITORED
+    <span class="ticker-sep">|</span>
+  </div>
+</div>
+
+<!-- NAV -->
+<nav>
+  <a href="index.html" class="nav-logo">
+    <div class="nav-logo-mark">
+      <svg width="28" height="28" viewBox="0 0 100 100" fill="none">
+        <defs>
+          <linearGradient id="lg1" x1="0" y1="0" x2="100" y2="100" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#c9920d"/><stop offset="100%" stop-color="#f5c842"/>
+          </linearGradient>
+        </defs>
+        <polygon points="50,4 93,27 93,73 50,96 7,73 7,27" fill="none" stroke="url(#lg1)" stroke-width="3" opacity="0.7"/>
+        <polygon points="50,18 82,50 50,82 18,50" fill="none" stroke="url(#lg1)" stroke-width="2" opacity="0.5"/>
+        <path d="M33 35 L33 65 M33 50 L67 50 M67 35 L67 65" stroke="url(#lg1)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <span class="nav-wordmark">HYPERFLEX</span>
+  </a>
+  <div class="nav-title">
+    AI NEWS SCANNER
+    <span class="nav-badge">BETA</span>
+  </div>
+  <div class="nav-right">
+    <a href="index.html" class="nav-back">← Landing Page</a>
+    <a href="hyperflex-v5-themed_.html" class="nav-app">◆ Trading App →</a>
+  </div>
+</nav>
+
+<!-- MAIN LAYOUT -->
+<div class="scanner-wrap">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+
+    <!-- API Key -->
+    <div class="sidebar-section">
+      <div class="sidebar-label">ANTHROPIC API KEY</div>
+      <div class="api-key-wrap">
+        <input type="password" class="api-input" id="api-key" placeholder="sk-ant-api03-..." autocomplete="off"/>
+        <div class="api-note">Key stays in your browser only. <a href="https://console.anthropic.com" target="_blank">Get one →</a></div>
+      </div>
+    </div>
+
+    <!-- Sources -->
+    <div class="sidebar-section">
+      <div class="sidebar-label">NEWS SOURCES</div>
+      <div class="source-list" id="source-list">
+        <div class="source-item active" data-source="Kitco">
+          <div class="source-item-left">
+            <div class="source-dot"></div>
+            <span class="source-name">KITCO NEWS</span>
+          </div>
+          <span class="source-check">✓</span>
+        </div>
+        <div class="source-item active" data-source="Reuters">
+          <div class="source-item-left">
+            <div class="source-dot"></div>
+            <span class="source-name">REUTERS</span>
+          </div>
+          <span class="source-check">✓</span>
+        </div>
+        <div class="source-item active" data-source="Bloomberg">
+          <div class="source-item-left">
+            <div class="source-dot"></div>
+            <span class="source-name">BLOOMBERG</span>
+          </div>
+          <span class="source-check">✓</span>
+        </div>
+        <div class="source-item active" data-source="Mining.com">
+          <div class="source-item-left">
+            <div class="source-dot"></div>
+            <span class="source-name">MINING.COM</span>
+          </div>
+          <span class="source-check">✓</span>
+        </div>
+        <div class="source-item active" data-source="CoinDesk">
+          <div class="source-item-left">
+            <div class="source-dot"></div>
+            <span class="source-name">COINDESK</span>
+          </div>
+          <span class="source-check">✓</span>
+        </div>
+        <div class="source-item" data-source="OilPrice.com">
+          <div class="source-item-left">
+            <div class="source-dot"></div>
+            <span class="source-name">OILPRICE.COM</span>
+          </div>
+          <span class="source-check">✓</span>
+        </div>
+        <div class="source-item" data-source="Seeking Alpha">
+          <div class="source-item-left">
+            <div class="source-dot"></div>
+            <span class="source-name">SEEKING ALPHA</span>
+          </div>
+          <span class="source-check">✓</span>
+        </div>
+        <div class="source-item" data-source="CNN Business">
+          <div class="source-item-left">
+            <div class="source-dot"></div>
+            <span class="source-name">CNN BUSINESS</span>
+          </div>
+          <span class="source-check">✓</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scan button -->
+    <div class="scan-btn-wrap">
+      <button class="scan-btn" id="scan-btn">
+        <div class="scan-spinner" id="scan-spinner"></div>
+        <span id="scan-btn-text">⚡ RUN SCAN NOW</span>
+      </button>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-bar">
+      <div class="stat-cell">
+        <div class="stat-num" id="stat-markets">0</div>
+        <div class="stat-lbl">MARKETS</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-num" id="stat-deployed">0</div>
+        <div class="stat-lbl">DEPLOYED</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-num" id="stat-scans">0</div>
+        <div class="stat-lbl">SCANS</div>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- MAIN PANEL -->
+  <main class="main-panel">
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <div class="tab active" data-tab="scan">MARKETS</div>
+      <div class="tab" data-tab="schedule">SCHEDULE</div>
+      <div class="tab" data-tab="logs">LOGS</div>
+      <div class="tab" data-tab="how">HOW IT WORKS</div>
+    </div>
+
+    <!-- SCAN TAB -->
+    <div class="scan-panel" id="tab-scan">
+
+      <!-- Progress -->
+      <div class="progress-wrap" id="progress-wrap">
+        <div class="progress-header">
+          <span class="progress-label" id="progress-label">SCANNING SOURCES...</span>
+          <span class="progress-pct" id="progress-pct">0%</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+        </div>
+        <div class="progress-sources" id="progress-sources"></div>
+      </div>
+
+      <!-- Markets header -->
+      <div class="markets-header" id="markets-header">
+        <span class="markets-header-left" id="markets-count-label">0 MARKETS GENERATED</span>
+        <div class="markets-header-right">
+          <button class="deploy-all-btn" id="deploy-all-btn">⚡ DEPLOY ALL TO HYPERFLEX</button>
+          <button class="clear-btn" id="clear-btn">CLEAR</button>
+        </div>
+      </div>
+
+      <!-- Empty state -->
+      <div class="empty-state" id="empty-state">
+        <div class="empty-icon">⚡</div>
+        <div class="empty-title">Ready to scan.</div>
+        <div class="empty-sub">
+          SELECT YOUR NEWS SOURCES · ADD API KEY · HIT SCAN<br>
+          CLAUDE READS THE HEADLINES AND BUILDS YOUR MARKETS
+        </div>
+      </div>
+
+      <!-- Markets list -->
+      <div class="markets-list" id="markets-list"></div>
+
+    </div>
+
+    <!-- SCHEDULE TAB -->
+    <div class="schedule-panel" id="tab-schedule">
+      <h2 class="schedule-title">Automated <em>scanning.</em></h2>
+      <p class="schedule-sub">Set HYPERFLEX to scan news sources on a schedule. Fresh markets open automatically before US market open.</p>
+      <div class="schedule-grid">
+        <div class="schedule-card">
+          <div class="schedule-card-label">SCAN FREQUENCY</div>
+          <div class="schedule-card-title">When to scan</div>
+          <select class="schedule-select" id="freq-select">
+            <option value="daily">Once daily</option>
+            <option value="twice">Twice daily</option>
+            <option value="hourly">Hourly</option>
+          </select>
+          <div style="margin-top:12px;">
+            <div class="schedule-time-row">
+              <input type="time" class="schedule-time" id="scan-time" value="06:30"/>
+              <button class="schedule-btn" id="save-schedule-btn">SAVE</button>
+            </div>
+          </div>
+          <div class="schedule-toggle-row" style="margin-top:12px;">
+            <span class="schedule-toggle-label">Auto-deploy to HYPERFLEX</span>
+            <div class="toggle" id="auto-deploy-toggle"></div>
+          </div>
+          <div class="schedule-toggle-row">
+            <span class="schedule-toggle-label">Notify on new markets</span>
+            <div class="toggle on" id="notify-toggle"></div>
+          </div>
+        </div>
+        <div class="schedule-card">
+          <div class="schedule-card-label">AUTO-DEPLOY SETTINGS</div>
+          <div class="schedule-card-title">Deploy filters</div>
+          <div class="schedule-toggle-row">
+            <span class="schedule-toggle-label">Only HIGH confidence markets</span>
+            <div class="toggle on" id="high-conf-toggle"></div>
+          </div>
+          <div class="schedule-toggle-row">
+            <span class="schedule-toggle-label">Auto-simplify questions</span>
+            <div class="toggle" id="auto-simplify-toggle"></div>
+          </div>
+          <div class="schedule-toggle-row">
+            <span class="schedule-toggle-label">Commodities sector only</span>
+            <div class="toggle" id="commodities-toggle"></div>
+          </div>
+          <div class="schedule-toggle-row">
+            <span class="schedule-toggle-label">Require review before deploy</span>
+            <div class="toggle on" id="review-toggle"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="upcoming-wrap">
+        <div class="upcoming-title">UPCOMING SCANS</div>
+        <div class="upcoming-item">
+          <span class="upcoming-time">06:30 EST</span>
+          <span class="upcoming-freq">DAILY</span>
+          <span class="upcoming-sources">5 sources active</span>
+        </div>
+        <div class="upcoming-item">
+          <span class="upcoming-time">Tomorrow 06:30 EST</span>
+          <span class="upcoming-freq">DAILY</span>
+          <span class="upcoming-sources">5 sources active</span>
+        </div>
+        <div class="upcoming-item">
+          <span class="upcoming-time">Mon Mar 9 06:30 EST</span>
+          <span class="upcoming-freq">DAILY</span>
+          <span class="upcoming-sources">5 sources active</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOGS TAB -->
+    <div class="logs-panel" id="tab-logs">
+      <div class="logs-header">
+        <span class="logs-title">SCAN LOGS</span>
+        <button class="logs-clear" id="logs-clear-btn">CLEAR LOGS</button>
+      </div>
+      <div class="logs-terminal" id="logs-terminal">
+        <div class="log-line">
+          <span class="log-time">06:30:01</span>
+          <span class="log-type info">SYS</span>
+          <span class="log-msg"><span class="highlight">HYPERFLEX AI Scanner</span> initialized · v1.0.0</span>
+        </div>
+        <div class="log-line">
+          <span class="log-time">06:30:01</span>
+          <span class="log-type info">SYS</span>
+          <span class="log-msg">Awaiting scan command...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- HOW IT WORKS TAB -->
+    <div class="how-panel" id="tab-how">
+      <div class="how-steps-wrap">
+        <div class="how-step-card">
+          <div class="how-step-num">01</div>
+          <div class="how-step-icon">📰</div>
+          <div class="how-step-title">Scan Sources</div>
+          <div class="how-step-text">HYPERFLEX monitors 8 financial news sources — Kitco, Reuters, Bloomberg, Mining.com and more. Select which sources to include in each scan.</div>
+        </div>
+        <div class="how-step-card">
+          <div class="how-step-num">02</div>
+          <div class="how-step-icon">🤖</div>
+          <div class="how-step-title">Claude Reads</div>
+          <div class="how-step-text">All headlines are sent to Claude AI via the Anthropic API. Claude identifies market-moving events and generates structured prediction market questions.</div>
+        </div>
+        <div class="how-step-card">
+          <div class="how-step-num">03</div>
+          <div class="how-step-icon">📊</div>
+          <div class="how-step-title">Markets Built</div>
+          <div class="how-step-text">Each market comes with a probability estimate, rationale, confidence rating, close date and sector tag. Review and edit before deploying.</div>
+        </div>
+        <div class="how-step-card">
+          <div class="how-step-num">04</div>
+          <div class="how-step-icon">✂️</div>
+          <div class="how-step-title">Simplify</div>
+          <div class="how-step-text">One click rewrites verbose AI questions into punchy Polymarket-style YES/NO questions. Restore to original anytime. Your call.</div>
+        </div>
+        <div class="how-step-card">
+          <div class="how-step-num">05</div>
+          <div class="how-step-icon">🚀</div>
+          <div class="how-step-title">Deploy</div>
+          <div class="how-step-text">Deploy markets one at a time or all at once. Each deploys as a HyperLiquid HIP-4 outcome contract, settling in USDH at zero gas cost.</div>
+        </div>
+      </div>
+      <div class="how-bottom">
+        <div class="how-bottom-title">The AI flywheel: more news → more markets → more volume → <em>more fees.</em></div>
+        <div class="how-bottom-text">The scanner is the engine of HYPERFLEX. While competitors manually curate markets, HYPERFLEX reads the financial world every morning and opens fresh positions before the US market opens. Kitco's price data settles the markets. Claude builds them. Traders fill them.</div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════
+var state = {
+  markets: [],
+  deployed: 0,
+  scans: 0,
+  scanning: false,
+  scheduleActive: false,
+  logs: []
+};
+
+// ══════════════════════════════════════════
+// SIMULATED HEADLINES (fallback data)
+// ══════════════════════════════════════════
+var SIMULATED_HEADLINES = [
+  { source: 'Kitco', headline: 'Gold surges past $5,100 as central banks accelerate buying — ANZ raises target to $5,800' },
+  { source: 'Kitco', headline: 'Silver outperforms gold for third straight week, industrial demand cited as key driver' },
+  { source: 'Reuters', headline: 'Iran tensions push WTI crude toward $95/barrel; analysts warn of $100 breach by Q2' },
+  { source: 'Bloomberg', headline: 'Copper hits 18-month high on Chinese manufacturing recovery and EV demand surge' },
+  { source: 'Mining.com', headline: 'Uranium spot price climbs to $92/lb as nuclear energy renaissance drives utility buying' },
+  { source: 'CoinDesk', headline: 'Bitcoin consolidates at $94,000 as institutional inflows remain strong post-ETF approval' },
+  { source: 'Reuters', headline: 'Fed signals potential rate cut in May meeting; probability markets price in 67% chance' },
+  { source: 'Kitco', headline: 'Mexico silver output falls 8% on security concerns — supply squeeze fears intensify' }
+];
+
+var SIMULATED_MARKETS = [
+  {
+    icon: '🥇', sector: 'COMMODITIES', confidence: 'high',
+    sourceHeadline: 'Gold surges past $5,100 as central banks accelerate buying — ANZ raises target to $5,800',
+    source: 'Kitco',
+    question: 'Will XAU/USD close above $5,800 before the end of Q2 2026?',
+    yesProb: 61,
+    closes: 'Jun 30, 2026',
+    rationale: 'ANZ Bank has raised its gold price target to $5,800, citing accelerating central bank purchases — particularly from China, Turkey and Poland. With gold already above $5,100, the remaining 14% move requires sustained institutional buying. The structural bid from de-dollarization is intact.'
+  },
+  {
+    icon: '🥈', sector: 'COMMODITIES', confidence: 'medium',
+    sourceHeadline: 'Silver outperforms gold for third straight week, industrial demand cited as key driver',
+    source: 'Kitco',
+    question: 'Will XAG/USD hit $100/oz before April 30, 2026?',
+    yesProb: 47,
+    closes: 'Apr 30, 2026',
+    rationale: 'Silver has rallied strongly on dual demand — monetary and industrial. The solar panel manufacturing boom is consuming record silver volumes. However, $100/oz requires a further 20% move in under 8 weeks, which is aggressive even in a bull market. The gold/silver ratio would need to compress significantly.'
+  },
+  {
+    icon: '🛢️', sector: 'ENERGY', confidence: 'high',
+    sourceHeadline: 'Iran tensions push WTI crude toward $95/barrel; analysts warn of $100 breach by Q2',
+    source: 'Reuters',
+    question: 'Will WTI crude oil exceed $100/barrel before July 1, 2026?',
+    yesProb: 58,
+    closes: 'Jul 1, 2026',
+    rationale: 'Geopolitical risk premium is building in crude markets as Iranian tensions escalate. Multiple Wall Street desks have raised $100 price targets. OPEC+ supply discipline remains intact. The risk is a diplomatic resolution reducing the premium, but the supply fundamentals support upside.'
+  },
+  {
+    icon: '🔶', sector: 'COMMODITIES', confidence: 'high',
+    sourceHeadline: 'Copper hits 18-month high on Chinese manufacturing recovery and EV demand surge',
+    source: 'Bloomberg',
+    question: 'Will COMEX copper close above $5.50/lb before June 2026?',
+    yesProb: 52,
+    closes: 'Jun 30, 2026',
+    rationale: 'Copper is at an 18-month high driven by genuine demand improvement in China and structural EV-related consumption growth. Supply from major mines in Chile and Peru faces increasing political and operational risk. A move to $5.50 represents roughly 14% upside from current levels.'
+  },
+  {
+    icon: '⚛️', sector: 'COMMODITIES', confidence: 'medium',
+    sourceHeadline: 'Uranium spot price climbs to $92/lb as nuclear energy renaissance drives utility buying',
+    source: 'Mining.com',
+    question: 'Will uranium spot price hit $100/lb before September 2026?',
+    yesProb: 63,
+    closes: 'Sep 30, 2026',
+    rationale: 'The nuclear energy renaissance is driving sustained utility buying. At $92/lb the market is 8% away from the $100 threshold. New reactor commitments in the US, France and UK are creating forward demand. Supply from Kazakhstan and Canada is tight. The structural bull case is intact.'
+  },
+  {
+    icon: '₿', sector: 'CRYPTO', confidence: 'medium',
+    sourceHeadline: 'Bitcoin consolidates at $94,000 as institutional inflows remain strong post-ETF approval',
+    source: 'CoinDesk',
+    question: 'Will Bitcoin exceed $100,000 before the end of March 2026?',
+    yesProb: 44,
+    closes: 'Mar 31, 2026',
+    rationale: 'Bitcoin is consolidating near all-time highs with strong institutional inflows via spot ETFs. The halving cycle dynamics favor upside, but $100K is a psychologically significant level with heavy options open interest. The 3-week timeframe is tight. Below 50% but a realistic outcome.'
+  },
+  {
+    icon: '🏛️', sector: 'MACRO', confidence: 'high',
+    sourceHeadline: 'Fed signals potential rate cut in May meeting; probability markets price in 67% chance',
+    source: 'Reuters',
+    question: 'Will the Federal Reserve cut rates at its May 2026 meeting?',
+    yesProb: 67,
+    closes: 'May 7, 2026',
+    rationale: 'Fed officials have signaled openness to rate cuts conditional on continued inflation progress. Current market pricing implies a 67% probability. Inflation data over the next 6 weeks will be the key determinant. If CPI comes in at or below 2.5%, the cut is highly likely.'
+  },
+  {
+    icon: '🥈', sector: 'COMMODITIES', confidence: 'low',
+    sourceHeadline: 'Mexico silver output falls 8% on security concerns — supply squeeze fears intensify',
+    source: 'Kitco',
+    question: 'Will Mexico\'s silver production decline more than 10% year-over-year in 2026?',
+    yesProb: 38,
+    closes: 'Dec 31, 2026',
+    rationale: 'An 8% production decline is significant but the full-year 10% threshold requires the security situation to worsen further or extend into H2. Silver mining companies have contingency plans. Lower confidence given the long time horizon and multiple variables.'
+  }
+];
+
+// ══════════════════════════════════════════
+// UTILS
+// ══════════════════════════════════════════
+function now() {
+  return new Date().toLocaleTimeString('en-US', { hour12: false });
+}
+
+function addLog(type, msg) {
+  var term = document.getElementById('logs-terminal');
+  var line = document.createElement('div');
+  line.className = 'log-line';
+  line.innerHTML = '<span class="log-time">' + now() + '</span>' +
+    '<span class="log-type ' + type + '">' + type.toUpperCase() + '</span>' +
+    '<span class="log-msg">' + msg + '</span>';
+  term.appendChild(line);
+  term.scrollTop = term.scrollHeight;
+}
+
+function showToast(msg, type) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + (type || '');
+  setTimeout(function() { t.className = 'toast'; }, 3000);
+}
+
+function updateStats() {
+  document.getElementById('stat-markets').textContent = state.markets.length;
+  document.getElementById('stat-deployed').textContent = state.deployed;
+  document.getElementById('stat-scans').textContent = state.scans;
+}
+
+function getActiveSources() {
+  var active = [];
+  document.querySelectorAll('.source-item.active').forEach(function(el) {
+    active.push(el.dataset.source);
+  });
+  return active;
+}
+
+// ══════════════════════════════════════════
+// RENDER MARKET CARD
+// ══════════════════════════════════════════
+function renderMarket(m, index) {
+  var card = document.createElement('div');
+  card.className = 'market-card';
+  card.dataset.index = index;
+  card.style.animationDelay = (index * 0.08) + 's';
+  card.style.opacity = '0';
+
+  var confClass = m.confidence === 'high' ? 'high' : m.confidence === 'medium' ? 'medium' : 'low';
+  var confLabel = m.confidence.toUpperCase() + ' CONFIDENCE';
+  var yes = m.yesProb;
+  var no = 100 - yes;
+
+  card.innerHTML =
+    '<div class="market-card-header">' +
+      '<div class="market-icon">' + m.icon + '</div>' +
+      '<div class="market-meta">' +
+        '<div class="market-source-row">' +
+          '<span class="market-sector-tag">' + m.sector + '</span>' +
+          '<span class="market-confidence ' + confClass + '">' + confLabel + '</span>' +
+          '<span style="color:#555;font-family:var(--mono);font-size:9px;letter-spacing:1px;">' + m.source + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="market-actions">' +
+        '<button class="deploy-btn" data-idx="' + index + '">DEPLOY →</button>' +
+        '<button class="simplify-btn" data-idx="' + index + '">✂ SIMPLIFY</button>' +
+        '<button class="restore-btn" data-idx="' + index + '" style="display:none;">RESTORE</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="market-question-wrap">' +
+      '<div class="market-question" id="q-' + index + '">' + m.question + '</div>' +
+      '<textarea class="market-question-edit" id="qedit-' + index + '">' + m.question + '</textarea>' +
+      '<div class="edit-actions" id="edit-actions-' + index + '">' +
+        '<button class="save-edit-btn" data-idx="' + index + '">SAVE</button>' +
+        '<button class="cancel-edit-btn" data-idx="' + index + '">CANCEL</button>' +
+      '</div>' +
+      '<div class="market-headline">📰 ' + m.sourceHeadline + ' <button class="edit-btn" data-idx="' + index + '">EDIT</button></div>' +
+    '</div>' +
+    '<div class="market-odds-row">' +
+      '<div class="odds-bar-wrap">' +
+        '<div class="odds-yes-fill" style="flex:' + yes + '"></div>' +
+        '<div class="odds-no-fill" style="flex:' + no + '"></div>' +
+      '</div>' +
+      '<div class="odds-btns">' +
+        '<div class="odds-yes">YES ' + yes + '¢</div>' +
+        '<div class="odds-no">NO ' + no + '¢</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="market-rationale">' +
+      m.rationale +
+      '<div class="close-date">CLOSES: <span>' + m.closes + '</span></div>' +
+    '</div>';
+
+  return card;
+}
+
+function renderAllMarkets() {
+  var list = document.getElementById('markets-list');
+  list.innerHTML = '';
+  state.markets.forEach(function(m, i) {
+    list.appendChild(renderMarket(m, i));
+  });
+  document.getElementById('empty-state').style.display = state.markets.length ? 'none' : 'flex';
+  var hdr = document.getElementById('markets-header');
+  if (state.markets.length) {
+    hdr.classList.add('visible');
+    document.getElementById('markets-count-label').textContent = state.markets.length + ' MARKETS GENERATED';
+  } else {
+    hdr.classList.remove('visible');
+  }
+  updateStats();
+  attachCardListeners();
+}
+
+// ══════════════════════════════════════════
+// CARD LISTENERS
+// ══════════════════════════════════════════
+function attachCardListeners() {
+  // Deploy
+  document.querySelectorAll('.deploy-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var idx = parseInt(this.dataset.idx);
+      if (this.classList.contains('deployed')) return;
+      this.classList.add('deployed');
+      this.textContent = '✓ DEPLOYED';
+      state.deployed++;
+      updateStats();
+      addLog('ok', '<span class="highlight">Market deployed:</span> <span class="gold">' + state.markets[idx].question.substring(0, 60) + '…</span>');
+      showToast('✓ Market deployed to HYPERFLEX', 'success');
+    });
+  });
+
+  // Simplify
+  document.querySelectorAll('.simplify-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var idx = parseInt(this.dataset.idx);
+      simplifyMarket(idx, this);
+    });
+  });
+
+  // Restore
+  document.querySelectorAll('.restore-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var idx = parseInt(this.dataset.idx);
+      var m = state.markets[idx];
+      document.getElementById('q-' + idx).textContent = m.question;
+      document.getElementById('q-' + idx).querySelector && null;
+      // remove simplified badge
+      var badge = document.getElementById('badge-' + idx);
+      if (badge) badge.remove();
+      this.style.display = 'none';
+      var simpBtn = document.querySelector('.simplify-btn[data-idx="' + idx + '"]');
+      if (simpBtn) { simpBtn.classList.remove('simplified'); simpBtn.textContent = '✂ SIMPLIFY'; }
+      addLog('info', 'Restored original question for market ' + (idx + 1));
+    });
+  });
+
+  // Edit
+  document.querySelectorAll('.edit-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var idx = parseInt(this.dataset.idx);
+      var qEl = document.getElementById('q-' + idx);
+      var editEl = document.getElementById('qedit-' + idx);
+      var actionsEl = document.getElementById('edit-actions-' + idx);
+      editEl.value = qEl.textContent;
+      qEl.style.display = 'none';
+      editEl.style.display = 'block';
+      actionsEl.style.display = 'flex';
+      editEl.focus();
+    });
+  });
+
+  // Save edit
+  document.querySelectorAll('.save-edit-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var idx = parseInt(this.dataset.idx);
+      var qEl = document.getElementById('q-' + idx);
+      var editEl = document.getElementById('qedit-' + idx);
+      var actionsEl = document.getElementById('edit-actions-' + idx);
+      state.markets[idx].question = editEl.value;
+      qEl.textContent = editEl.value;
+      qEl.style.display = 'block';
+      editEl.style.display = 'none';
+      actionsEl.style.display = 'none';
+      addLog('ok', 'Question manually edited for market ' + (idx + 1));
+      showToast('Question saved', 'success');
+    });
+  });
+
+  // Cancel edit
+  document.querySelectorAll('.cancel-edit-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var idx = parseInt(this.dataset.idx);
+      document.getElementById('q-' + idx).style.display = 'block';
+      document.getElementById('qedit-' + idx).style.display = 'none';
+      document.getElementById('edit-actions-' + idx).style.display = 'none';
+    });
+  });
+}
+
+// ══════════════════════════════════════════
+// SIMPLIFY (real API or simulated)
+// ══════════════════════════════════════════
+var SIMPLIFIED = {
+  0: 'Gold above $5,800 by June 30?',
+  1: 'Silver hits $100 by April 30?',
+  2: 'Oil above $100 by July 1?',
+  3: 'Copper above $5.50 by June?',
+  4: 'Uranium hits $100/lb by September?',
+  5: 'Bitcoin above $100K by end of March?',
+  6: 'Fed cuts rates in May?',
+  7: 'Mexico silver output down 10%+ in 2026?'
+};
+
+async function simplifyMarket(idx, btn) {
+  var m = state.markets[idx];
+  var originalQ = m.question;
+  var apiKey = document.getElementById('api-key').value.trim();
+
+  btn.textContent = '...';
+  btn.disabled = true;
+  addLog('api', 'Calling Claude to simplify market ' + (idx + 1) + '…');
+
+  var simplified = null;
+
+  if (apiKey) {
+    try {
+      var prompt = 'Rewrite this prediction market question in the style of Polymarket — punchy, direct, under 10 words, YES/NO binary. Question: "' + originalQ + '". Return ONLY the rewritten question, nothing else.';
+      var res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 100,
+          messages: [{ role: 'user', content: prompt }]
+        })
+      });
+      if (res.ok) {
+        var data = await res.json();
+        simplified = data.content[0].text.trim().replace(/^"|"$/g, '');
+        addLog('ok', 'Claude simplified: <span class="gold">' + simplified + '</span>');
+      }
+    } catch(e) {
+      addLog('err', 'API call failed — using simulated simplification');
+    }
+  }
+
+  if (!simplified) {
+    // Fallback
+    await new Promise(function(r){ setTimeout(r, 800); });
+    simplified = SIMPLIFIED[idx] || originalQ.split(' ').slice(0, 8).join(' ') + '?';
+    addLog('ok', '[SIM] Simplified: <span class="gold">' + simplified + '</span>');
+  }
+
+  // Store original for restore
+  if (!m._original) m._original = m.question;
+  m.question = simplified;
+
+  var qEl = document.getElementById('q-' + idx);
+  // Add badge
+  var existing = document.getElementById('badge-' + idx);
+  if (!existing) {
+    var badge = document.createElement('div');
+    badge.className = 'simplified-badge';
+    badge.id = 'badge-' + idx;
+    badge.textContent = 'AI SIMPLIFIED';
+    qEl.parentNode.insertBefore(badge, qEl);
+  }
+  qEl.textContent = simplified;
+
+  btn.classList.add('simplified');
+  btn.textContent = '✓ SIMPLIFIED';
+  btn.disabled = false;
+
+  // Show restore
+  var restoreBtn = document.querySelector('.restore-btn[data-idx="' + idx + '"]');
+  if (restoreBtn) restoreBtn.style.display = 'inline-block';
+
+  showToast('Question simplified by Claude', 'success');
+}
+
+// ══════════════════════════════════════════
+// MAIN SCAN FUNCTION
+// ══════════════════════════════════════════
+async function runScan() {
+  if (state.scanning) return;
+  state.scanning = true;
+
+  var btn = document.getElementById('scan-btn');
+  btn.classList.add('scanning');
+  btn.disabled = true;
+  document.getElementById('scan-btn-text').textContent = 'SCANNING...';
+
+  var sources = getActiveSources();
+  var apiKey = document.getElementById('api-key').value.trim();
+
+  addLog('scan', '<span class="highlight">Scan started</span> · ' + sources.length + ' sources · ' + now());
+
+  // Show progress
+  var progWrap = document.getElementById('progress-wrap');
+  progWrap.classList.add('visible');
+  var progFill = document.getElementById('progress-fill');
+  var progPct = document.getElementById('progress-pct');
+  var progLabel = document.getElementById('progress-label');
+  var progSources = document.getElementById('progress-sources');
+
+  // Build source list in progress
+  progSources.innerHTML = '';
+  sources.forEach(function(s) {
+    var div = document.createElement('div');
+    div.className = 'progress-source';
+    div.id = 'ps-' + s.replace(/\W/g, '');
+    div.innerHTML = '<span class="progress-source-icon">○</span> ' + s;
+    progSources.appendChild(div);
+  });
+
+  // Simulate per-source scanning with delays
+  for (var i = 0; i < sources.length; i++) {
+    var src = sources[i];
+    var srcEl = document.getElementById('ps-' + src.replace(/\W/g, ''));
+    if (srcEl) { srcEl.className = 'progress-source active'; srcEl.querySelector('.progress-source-icon').textContent = '⟳'; }
+    addLog('scan', 'Reading <span class="gold">' + src + '</span>…');
+    await new Promise(function(r){ setTimeout(r, 400 + Math.random() * 300); });
+    if (srcEl) { srcEl.className = 'progress-source done'; srcEl.querySelector('.progress-source-icon').textContent = '✓'; }
+    var pct = Math.round(((i + 1) / sources.length) * 60);
+    progFill.style.width = pct + '%';
+    progPct.textContent = pct + '%';
+    addLog('ok', src + ' scanned · ' + (2 + Math.floor(Math.random() * 4)) + ' headlines captured');
+  }
+
+  progLabel.textContent = 'SENDING TO CLAUDE AI…';
+  progFill.style.width = '75%';
+  progPct.textContent = '75%';
+  addLog('api', 'Sending ' + (sources.length * 3) + ' headlines to <span class="highlight">Claude Sonnet</span>…');
+
+  var markets = null;
+
+  // Try real API
+  if (apiKey) {
+    try {
+      var headlineList = SIMULATED_HEADLINES
+        .filter(function(h) { return sources.includes(h.source); })
+        .map(function(h) { return '- [' + h.source + '] ' + h.headline; })
+        .join('\n');
+
+      var systemPrompt = 'You are a financial prediction market specialist. Given news headlines, generate exactly 8 prediction market questions. Return ONLY a JSON array with this exact structure for each item: {"icon":"emoji","sector":"COMMODITIES|CRYPTO|MACRO|ENERGY|EARNINGS","confidence":"high|medium|low","source":"source name","sourceHeadline":"the headline","question":"full question","yesProb":number,"closes":"Mon DD, YYYY","rationale":"2-3 sentence rationale"}. Sectors must be one of: COMMODITIES, CRYPTO, MACRO, ENERGY, EARNINGS. yesProb is 5-95. closes is within 1-6 months. Return only the JSON array, no other text.';
+
+      var res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 3000,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: 'Generate 8 prediction markets from these headlines:\n' + headlineList }]
+        })
+      });
+
+      if (res.ok) {
+        var data = await res.json();
+        var raw = data.content[0].text.trim();
+        raw = raw.replace(/```json|```/g, '').trim();
+        markets = JSON.parse(raw);
+        addLog('ok', '<span class="highlight">Claude generated ' + markets.length + ' markets</span> via live API');
+      } else {
+        addLog('err', 'API returned ' + res.status + ' — falling back to simulated markets');
+      }
+    } catch(e) {
+      addLog('err', 'API error: ' + e.message + ' — using simulated data');
+    }
+  } else {
+    addLog('api', 'No API key — using simulated market data');
+    await new Promise(function(r){ setTimeout(r, 1200); });
+  }
+
+  if (!markets) {
+    markets = SIMULATED_MARKETS;
+    addLog('ok', '<span class="highlight">8 simulated markets loaded</span> · Add API key for live generation');
+  }
+
+  progFill.style.width = '100%';
+  progPct.textContent = '100%';
+  progLabel.textContent = 'SCAN COMPLETE';
+
+  await new Promise(function(r){ setTimeout(r, 600); });
+  progWrap.classList.remove('visible');
+
+  state.markets = markets;
+  state.scans++;
+  renderAllMarkets();
+
+  addLog('ok', '<span class="highlight">Scan complete</span> · ' + markets.length + ' markets ready for review');
+
+  btn.classList.remove('scanning');
+  btn.disabled = false;
+  document.getElementById('scan-btn-text').textContent = '⚡ RUN SCAN NOW';
+  state.scanning = false;
+
+  showToast('⚡ ' + markets.length + ' markets generated', 'success');
+
+  // Switch to scan tab
+  switchTab('scan');
+}
+
+// ══════════════════════════════════════════
+// TABS
+// ══════════════════════════════════════════
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+  document.querySelector('[data-tab="' + name + '"]').classList.add('active');
+
+  // Hide all panels
+  document.getElementById('tab-scan').style.display = 'none';
+  document.getElementById('tab-schedule').style.display = 'none';
+  document.getElementById('tab-logs').style.display = 'none';
+  document.getElementById('tab-how').style.display = 'none';
+
+  // Show correct
+  if (name === 'scan') {
+    document.getElementById('tab-scan').style.display = 'flex';
+    document.getElementById('tab-scan').style.flexDirection = 'column';
+  } else if (name === 'schedule') {
+    document.getElementById('tab-schedule').style.display = 'block';
+    document.getElementById('tab-schedule').classList.add('active');
+  } else if (name === 'logs') {
+    document.getElementById('tab-logs').style.display = 'flex';
+    document.getElementById('tab-logs').classList.add('active');
+  } else if (name === 'how') {
+    document.getElementById('tab-how').style.display = 'block';
+    document.getElementById('tab-how').classList.add('active');
+  }
+}
+
+// ══════════════════════════════════════════
+// DEPLOY ALL
+// ══════════════════════════════════════════
+function deployAll() {
+  var count = 0;
+  document.querySelectorAll('.deploy-btn:not(.deployed)').forEach(function(btn, i) {
+    setTimeout(function() {
+      btn.classList.add('deployed');
+      btn.textContent = '✓ DEPLOYED';
+      state.deployed++;
+      updateStats();
+    }, i * 150);
+    count++;
+  });
+  if (count) {
+    addLog('ok', '<span class="highlight">Batch deploy:</span> ' + count + ' markets deployed to HYPERFLEX');
+    showToast('✓ ' + count + ' markets deployed', 'success');
+  } else {
+    showToast('All markets already deployed', '');
+  }
+}
+
+// ══════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', function() {
+
+  // Source toggles
+  document.querySelectorAll('.source-item').forEach(function(item) {
+    item.addEventListener('click', function() {
+      this.classList.toggle('active');
+    });
+  });
+
+  // Scan button
+  document.getElementById('scan-btn').addEventListener('click', runScan);
+
+  // Deploy all
+  document.getElementById('deploy-all-btn').addEventListener('click', deployAll);
+
+  // Clear
+  document.getElementById('clear-btn').addEventListener('click', function() {
+    state.markets = [];
+    state.deployed = 0;
+    renderAllMarkets();
+    document.getElementById('markets-header').classList.remove('visible');
+    document.getElementById('empty-state').style.display = 'flex';
+    addLog('info', 'Markets cleared');
+  });
+
+  // Tabs
+  document.querySelectorAll('.tab').forEach(function(tab) {
+    tab.addEventListener('click', function() {
+      switchTab(this.dataset.tab);
+    });
+  });
+
+  // Logs clear
+  document.getElementById('logs-clear-btn').addEventListener('click', function() {
+    document.getElementById('logs-terminal').innerHTML = '';
+    addLog('info', 'Logs cleared');
+  });
+
+  // Toggle buttons
+  document.querySelectorAll('.toggle').forEach(function(t) {
+    t.addEventListener('click', function() { this.classList.toggle('on'); });
+  });
+
+  // Save schedule
+  document.getElementById('save-schedule-btn').addEventListener('click', function() {
+    var freq = document.getElementById('freq-select').value;
+    var time = document.getElementById('scan-time').value;
+    addLog('ok', 'Schedule saved: <span class="gold">' + freq + ' at ' + time + '</span>');
+    showToast('Schedule saved', 'success');
+  });
+
+  // Init panel visibility
+  switchTab('scan');
+
+  addLog('info', 'Scanner ready · Select sources and click <span class="gold">RUN SCAN NOW</span>');
+  addLog('info', 'Add an Anthropic API key for live Claude generation, or run without for demo mode');
+});
+</script>
+</body>
+</html>

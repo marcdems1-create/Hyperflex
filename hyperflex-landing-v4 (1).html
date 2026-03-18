@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>HYPERFLEX — The Commodity Prediction Market</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:       #080808;
+      --bg2:      #0a0a0a;
+      --bg3:      #0d0d0d;
+      --border:   #1a1a1a;
+      --border2:  #222;
+      --gold:     #d4a017;
+      --gold-lt:  #f0c040;
+      --gold-dim: #7a5c0a;
+      --green:    #1a5c3a;
+      --green-lt: #2d9b5f;
+      --red-lt:   #c0392b;
+      --ink:      #e8e0d0;
+      --ink2:     #a09080;
+      --ink3:     #504030;
+      --dim:      #333;
+      --mono:     'DM Mono', monospace;
+      --serif:    'Playfair Display', serif;
+      --sans:     'DM Sans', sans-serif;
+    }
+    html { scroll-behavior: smooth; }
+    body { background: var(--bg); color: var(--ink); font-family: var(--sans); overflow-x: hidden; }
+    ::-webkit-scrollbar { width: 3px; }
+    ::-webkit-scrollbar-thumb { background: var(--border2); }
+
+    @keyframes ticker   { from{transform:translateX(0)} to{transform:translateX(-50%)} }
+    @keyframes pulse    { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    @keyframes floatY   { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+
+    /* ── TICKER ── */
+    .ticker-wrap { background: #050505; border-bottom: 1px solid var(--border); padding: 8px 0; overflow: hidden; white-space: nowrap; }
+    .ticker-inner { display: inline-block; animation: ticker 35s linear infinite; font-family: var(--mono); font-size: 10px; color: var(--ink3); letter-spacing: 0.5px; }
+    .ticker-inner .up  { color: var(--green-lt); }
+    .ticker-inner .hi  { color: var(--gold); }
+    .ticker-inner .sep { margin: 0 24px; color: var(--border2); }
+
+    /* ── NAV ── */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(8,8,8,0.96); backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 48px;
+      display: flex; align-items: stretch; justify-content: space-between;
+      height: 56px;
+    }
+    .nav-logo { display:flex; align-items:center; gap:12px; text-decoration:none; padding-right:32px; border-right:1px solid var(--border); }
+    .nav-hex {
+      width:26px; height:26px; background:var(--gold);
+      clip-path: polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);
+      display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    }
+    .nav-hex svg { width:12px; height:12px; }
+    .nav-wordmark { font-family:var(--mono); font-size:12px; font-weight:500; color:var(--ink); letter-spacing:4px; }
+    .nav-links { display:flex; align-items:center; gap:0; flex:1; padding-left:0; }
+    .nav-links a {
+      color:var(--ink3); font-size:10px; text-decoration:none;
+      letter-spacing:2px; font-family:var(--mono);
+      padding:0 20px; height:100%; display:flex; align-items:center;
+      border-right:1px solid var(--border);
+      transition:color 0.2s, background 0.2s;
+    }
+    .nav-links a:hover { color:var(--gold); background:rgba(212,160,23,0.04); }
+    .nav-cta {
+      background:var(--gold); color:var(--bg);
+      border:none; padding:0 24px; height:100%;
+      font-family:var(--mono); font-size:11px; font-weight:500; letter-spacing:1px;
+      cursor:pointer; transition:background 0.2s; white-space:nowrap;
+    }
+    .nav-cta:hover { background:var(--gold-lt); }
+
+    /* ── HERO ── */
+    .hero { display:grid; grid-template-columns:1fr 1fr; min-height:calc(100vh - 56px); border-bottom:1px solid var(--border); }
+
+    .hero-left {
+      padding:72px 60px 60px;
+      border-right:1px solid var(--border);
+      display:flex; flex-direction:column; justify-content:space-between;
+    }
+    .hero-eyebrow {
+      font-family:var(--mono); font-size:9px; color:var(--ink3);
+      letter-spacing:4px; margin-bottom:36px;
+      display:flex; align-items:center; gap:12px;
+    }
+    .hero-eyebrow::before { content:''; width:28px; height:1px; background:var(--gold); flex-shrink:0; }
+    .hero-headline {
+      font-family:var(--serif); font-size:clamp(44px,5.5vw,80px);
+      font-weight:900; line-height:1.0; letter-spacing:-1px; color:var(--ink);
+    }
+    .hero-headline em { font-style:italic; color:var(--gold); }
+    .hero-rule { width:48px; height:2px; background:var(--gold); margin:36px 0; }
+    .hero-sub { font-size:15px; color:var(--ink2); line-height:1.85; max-width:420px; margin-bottom:48px; font-weight:300; }
+    .hero-sub strong { color:var(--ink); font-weight:400; }
+
+    .hero-form-block { display:flex; flex-direction:column; gap:12px; max-width:420px; }
+    .hero-form { display:flex; border:1px solid var(--border2); }
+    .hero-form:focus-within { border-color:var(--gold-dim); }
+    .hero-input {
+      flex:1; background:transparent; border:none; outline:none;
+      padding:14px 18px; font-family:var(--mono); font-size:12px; color:var(--ink);
+    }
+    .hero-input::placeholder { color:var(--ink3); }
+    .hero-btn {
+      background:var(--gold); color:var(--bg); border:none;
+      padding:14px 22px; font-family:var(--mono); font-size:11px; font-weight:500;
+      letter-spacing:1px; cursor:pointer; white-space:nowrap; transition:background 0.2s;
+    }
+    .hero-btn:hover { background:var(--gold-lt); }
+    .hero-note { font-family:var(--mono); font-size:10px; color:var(--ink3); }
+    .hero-note span { color:var(--green-lt); }
+    .hero-success { display:none; font-family:var(--mono); font-size:12px; color:var(--green-lt); padding:14px 0; border-top:1px solid var(--green); }
+
+    .hero-stats { display:grid; grid-template-columns:1fr 1fr; border-top:1px solid var(--border); margin-top:60px; }
+    .hero-stat { padding:28px 0; border-right:1px solid var(--border); border-bottom:1px solid var(--border); }
+    .hero-stat:nth-child(2n) { border-right:none; padding-left:28px; }
+    .hero-stat:nth-child(3), .hero-stat:nth-child(4) { border-bottom:none; }
+    .hero-stat-num { font-family:var(--serif); font-size:38px; font-weight:700; color:var(--ink); }
+    .hero-stat-num.gold { color:var(--gold); }
+    .hero-stat-label { font-family:var(--mono); font-size:8px; color:var(--ink3); letter-spacing:2px; margin-top:6px; }
+
+    /* ── HERO RIGHT ── */
+    .hero-right { background:var(--bg2); display:flex; flex-direction:column; }
+    .panel-header {
+      padding:18px 32px; border-bottom:1px solid var(--border);
+      display:flex; align-items:center; justify-content:space-between;
+    }
+    .panel-title { font-family:var(--mono); font-size:9px; color:var(--dim); letter-spacing:3px; }
+    .live-pill { display:flex; align-items:center; gap:6px; font-family:var(--mono); font-size:9px; color:var(--green-lt); }
+    .live-pill::before { content:''; width:5px; height:5px; background:var(--green-lt); border-radius:50%; animation:pulse 1.5s infinite; }
+
+    .price-table { flex:0 0 auto; }
+    .price-row {
+      display:grid; grid-template-columns:1fr auto auto;
+      gap:20px; align-items:center;
+      padding:18px 32px; border-bottom:1px solid var(--border);
+      transition:background 0.2s;
+    }
+    .price-row:hover { background:rgba(212,160,23,0.03); }
+    .p-label { font-family:var(--mono); font-size:8px; color:var(--ink3); letter-spacing:1px; }
+    .p-name  { font-family:var(--serif); font-size:17px; color:var(--ink); margin-top:2px; }
+    .p-val   { font-family:var(--mono); font-size:22px; color:var(--gold-lt); font-weight:500; text-align:right; }
+    .p-chg   { font-family:var(--mono); font-size:10px; text-align:right; }
+    .p-chg.up { color:var(--green-lt); }
+    .p-chg.dn { color:var(--red-lt); }
+
+    .markets-panel { flex:1; display:flex; flex-direction:column; }
+    .markets-header {
+      padding:14px 32px; background:var(--bg3); border-bottom:1px solid var(--border);
+      border-top:1px solid var(--border);
+      font-family:var(--mono); font-size:9px; color:var(--dim); letter-spacing:2px;
+    }
+    .market-item { padding:16px 32px; border-bottom:1px solid var(--border); }
+    .market-item:last-child { border-bottom:none; }
+    .market-q { font-size:12px; color:var(--ink2); line-height:1.5; margin-bottom:10px; font-weight:300; }
+    .market-bar-wrap { display:flex; height:2px; margin-bottom:9px; }
+    .m-yes-bar { background:var(--green-lt); }
+    .m-no-bar  { background:var(--red-lt); }
+    .market-btns { display:flex; gap:6px; }
+    .m-yes { flex:1; padding:6px; background:rgba(26,92,58,0.15); border:1px solid rgba(45,155,95,0.2); color:var(--green-lt); font-family:var(--mono); font-size:9px; text-align:center; cursor:pointer; transition:background 0.15s; }
+    .m-yes:hover { background:rgba(45,155,95,0.25); }
+    .m-no  { flex:1; padding:6px; background:rgba(139,26,26,0.15); border:1px solid rgba(192,57,43,0.2); color:var(--red-lt); font-family:var(--mono); font-size:9px; text-align:center; cursor:pointer; transition:background 0.15s; }
+    .m-no:hover { background:rgba(192,57,43,0.25); }
+
+    .panel-footer {
+      padding:14px 32px; border-top:1px solid var(--border); margin-top:auto;
+      display:flex; align-items:center; justify-content:space-between;
+    }
+    .panel-footer-note { font-family:var(--mono); font-size:9px; color:var(--dim); }
+    .panel-demo-link { font-family:var(--mono); font-size:9px; color:var(--gold); text-decoration:none; letter-spacing:1px; transition:color 0.2s; }
+    .panel-demo-link:hover { color:var(--gold-lt); }
+
+    /* ── DIVIDER STRIP ── */
+    .strip { display:flex; border-top:1px solid var(--border); border-bottom:1px solid var(--border); overflow:hidden; }
+    .strip-cell {
+      padding:14px 28px; border-right:1px solid var(--border); white-space:nowrap;
+      font-family:var(--mono); font-size:9px; letter-spacing:2px; color:var(--ink3);
+      flex-shrink:0;
+    }
+    .strip-cell.gold { color:var(--gold); }
+    .strip-cell.green { color:var(--green-lt); }
+    .strip-cell:last-child { border-right:none; }
+
+    /* ── HOW IT WORKS ── */
+    .how-section { display:grid; grid-template-columns:260px 1fr; border-bottom:1px solid var(--border); }
+    .how-sidebar {
+      padding:60px 40px; border-right:1px solid var(--border); background:var(--bg2);
+      display:flex; flex-direction:column; justify-content:flex-start;
+    }
+    .section-label { font-family:var(--mono); font-size:8px; color:var(--gold-dim); letter-spacing:4px; margin-bottom:20px; }
+    .how-title { font-family:var(--serif); font-size:34px; font-weight:700; line-height:1.15; color:var(--ink); }
+    .how-title em { font-style:italic; color:var(--gold); }
+    .how-steps {}
+    .how-step {
+      display:grid; grid-template-columns:56px 1fr;
+      border-bottom:1px solid var(--border);
+      opacity:0; transform:translateY(10px);
+      transition:opacity 0.5s ease, transform 0.5s ease;
+    }
+    .how-step.visible { opacity:1; transform:translateY(0); }
+    .how-step:last-child { border-bottom:none; }
+    .how-step-num {
+      padding:32px 16px; border-right:1px solid var(--border);
+      font-family:var(--serif); font-size:24px; font-weight:700; color:var(--border2);
+      display:flex; align-items:flex-start; justify-content:center; padding-top:36px;
+    }
+    .how-step-body { padding:32px 40px; }
+    .how-step-title { font-family:var(--serif); font-size:20px; font-weight:700; color:var(--ink); margin-bottom:10px; }
+    .how-step-text { font-size:13px; color:var(--ink2); line-height:1.85; font-weight:300; }
+
+    /* ── WHY US ── */
+    .why-section { border-bottom:1px solid var(--border); }
+    .why-header {
+      padding:48px 60px; border-bottom:1px solid var(--border);
+      display:flex; align-items:baseline; gap:28px;
+    }
+    .why-title { font-family:var(--serif); font-size:44px; font-weight:900; color:var(--ink); }
+    .why-title em { font-style:italic; color:var(--gold); }
+    .why-grid { display:grid; grid-template-columns:repeat(3,1fr); }
+    .why-card {
+      padding:44px 40px; border-right:1px solid var(--border);
+      opacity:0; transform:translateY(10px);
+      transition:opacity 0.5s ease, transform 0.5s ease;
+    }
+    .why-card.visible { opacity:1; transform:translateY(0); }
+    .why-card:last-child { border-right:none; }
+    .why-num { font-family:var(--serif); font-size:64px; font-weight:900; color:var(--border2); line-height:1; margin-bottom:20px; }
+    .why-card-title { font-family:var(--serif); font-size:22px; font-weight:700; color:var(--ink); line-height:1.2; margin-bottom:14px; }
+    .why-card-title em { font-style:italic; color:var(--gold); }
+    .why-card-text { font-size:13px; color:var(--ink2); line-height:1.85; font-weight:300; }
+    .why-tag {
+      display:inline-block; margin-top:20px;
+      font-family:var(--mono); font-size:8px; letter-spacing:2px;
+      padding:4px 10px; border:1px solid var(--border2); color:var(--ink3);
+    }
+    .why-tag.gold  { border-color:var(--gold-dim); color:var(--gold); }
+    .why-tag.green { border-color:var(--green); color:var(--green-lt); }
+
+    /* ── PROOF ── */
+    .proof-section { border-bottom:1px solid var(--border); }
+    .proof-header { padding:40px 60px; border-bottom:1px solid var(--border); display:flex; align-items:baseline; gap:28px; }
+    .proof-title { font-family:var(--serif); font-size:36px; font-weight:700; color:var(--ink); }
+    .proof-grid { display:grid; grid-template-columns:repeat(3,1fr); }
+    .proof-card {
+      padding:40px; border-right:1px solid var(--border);
+      opacity:0; transform:translateY(10px);
+      transition:opacity 0.5s ease, transform 0.5s ease;
+    }
+    .proof-card.visible { opacity:1; transform:translateY(0); }
+    .proof-card:last-child { border-right:none; }
+    .proof-qmark { font-family:var(--serif); font-size:72px; color:var(--border2); line-height:0.7; margin-bottom:24px; display:block; }
+    .proof-text { font-family:var(--serif); font-size:15px; color:var(--ink2); line-height:1.75; font-style:italic; margin-bottom:28px; }
+    .proof-author { font-family:var(--mono); font-size:9px; color:var(--ink3); letter-spacing:2px; }
+    .proof-stars { color:var(--gold); font-size:11px; margin-top:8px; letter-spacing:3px; }
+
+    /* ── CTA ── */
+    .cta-section { display:grid; grid-template-columns:1fr 1fr; border-bottom:1px solid var(--border); }
+    .cta-left { padding:80px 60px; display:flex; flex-direction:column; justify-content:center; border-right:1px solid var(--border); }
+    .cta-pre { font-family:var(--mono); font-size:8px; color:var(--gold-dim); letter-spacing:4px; margin-bottom:24px; }
+    .cta-title { font-family:var(--serif); font-size:clamp(32px,4vw,54px); font-weight:900; color:var(--ink); line-height:1.05; margin-bottom:16px; }
+    .cta-title em { font-style:italic; color:var(--gold); }
+    .cta-sub { font-size:14px; color:var(--ink2); line-height:1.85; margin-bottom:40px; font-weight:300; max-width:400px; }
+    .cta-form { display:flex; border:1px solid var(--border2); max-width:420px; }
+    .cta-form:focus-within { border-color:var(--gold-dim); }
+    .cta-input { flex:1; background:transparent; border:none; outline:none; padding:14px 18px; font-family:var(--mono); font-size:12px; color:var(--ink); }
+    .cta-input::placeholder { color:var(--ink3); }
+    .cta-btn { background:var(--gold); color:var(--bg); border:none; padding:14px 22px; font-family:var(--mono); font-size:11px; font-weight:500; letter-spacing:1px; cursor:pointer; white-space:nowrap; transition:background 0.2s; }
+    .cta-btn:hover { background:var(--gold-lt); }
+    .cta-note { font-family:var(--mono); font-size:10px; color:var(--ink3); margin-top:12px; }
+    .cta-success { display:none; font-family:var(--mono); font-size:12px; color:var(--green-lt); padding:14px 0; }
+
+    .cta-right { padding:80px 60px; display:flex; flex-direction:column; justify-content:center; }
+    .cta-links-label { font-family:var(--mono); font-size:8px; color:var(--ink3); letter-spacing:4px; margin-bottom:32px; }
+    .cta-link {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:20px 0; border-top:1px solid var(--border);
+      text-decoration:none; color:var(--ink);
+      transition:padding-left 0.2s;
+    }
+    .cta-link:last-child { border-bottom:1px solid var(--border); }
+    .cta-link:hover { padding-left:10px; }
+    .cta-link-name { font-family:var(--serif); font-size:18px; font-weight:700; }
+    .cta-link-arrow { font-family:var(--mono); font-size:14px; color:var(--ink3); }
+    .cta-link:hover .cta-link-arrow { color:var(--gold); }
+
+    /* ── FOOTER ── */
+    footer {
+      padding:22px 48px; background:var(--bg2);
+      border-top:1px solid var(--border);
+      display:flex; align-items:center; justify-content:space-between;
+    }
+    .footer-brand { font-family:var(--mono); font-size:11px; letter-spacing:4px; color:var(--ink3); }
+    .footer-links { display:flex; gap:24px; }
+    .footer-links a { font-family:var(--mono); font-size:9px; color:var(--ink3); text-decoration:none; letter-spacing:1px; transition:color 0.2s; }
+    .footer-links a:hover { color:var(--gold); }
+    .footer-copy { font-family:var(--mono); font-size:9px; color:var(--border2); }
+
+    /* ── MOBILE ── */
+    @media (max-width:860px) {
+      nav { padding:0 16px; }
+      .nav-links { display:none; }
+      .hero { grid-template-columns:1fr; min-height:auto; }
+      .hero-left { padding:48px 24px 40px; border-right:none; border-bottom:1px solid var(--border); }
+      .hero-right { min-height:360px; }
+      .hero-stats { margin-top:40px; }
+      .how-section { grid-template-columns:1fr; }
+      .how-sidebar { border-right:none; border-bottom:1px solid var(--border); padding:40px 24px; }
+      .why-header { padding:32px 24px; flex-direction:column; gap:8px; }
+      .why-grid { grid-template-columns:1fr; }
+      .why-card { border-right:none; border-bottom:1px solid var(--border); }
+      .proof-header { padding:32px 24px; }
+      .proof-grid { grid-template-columns:1fr; }
+      .proof-card { border-right:none; border-bottom:1px solid var(--border); }
+      .cta-section { grid-template-columns:1fr; }
+      .cta-left { padding:48px 24px; border-right:none; border-bottom:1px solid var(--border); }
+      .cta-right { padding:48px 24px; }
+      footer { flex-direction:column; gap:16px; text-align:center; padding:24px; }
+      .strip { overflow-x:auto; }
+      .price-row { padding:16px 20px; }
+      .market-item { padding:14px 20px; }
+      .panel-header, .markets-header, .panel-footer { padding-left:20px; padding-right:20px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- TICKER -->
+<div class="ticker-wrap">
+  <div class="ticker-inner">
+    <span class="hi">XAU/USD</span>&nbsp; $5,171.00 &nbsp;<span class="up">▲ +1.2%</span>
+    <span class="sep">|</span>
+    <span class="hi">XAG/USD</span>&nbsp; $83.48 &nbsp;<span class="up">▲ +0.8%</span>
+    <span class="sep">|</span>
+    WTI CRUDE &nbsp;$89.00 &nbsp;<span class="up">▲ +0.4%</span>
+    <span class="sep">|</span>
+    COPPER &nbsp;$4.82/lb &nbsp;<span class="up">▲ +0.6%</span>
+    <span class="sep">|</span>
+    34 MARKETS LIVE
+    <span class="sep">|</span>
+    TOP PREDICTOR &nbsp;<span class="up">+312% ROI</span>&nbsp; THIS WEEK
+    <span class="sep">|</span>
+    DAILY JACKPOT &nbsp;<span class="hi">$10,000</span>
+    <span class="sep">|</span>
+    <span class="hi">XAU/USD</span>&nbsp; $5,171.00 &nbsp;<span class="up">▲ +1.2%</span>
+    <span class="sep">|</span>
+    <span class="hi">XAG/USD</span>&nbsp; $83.48 &nbsp;<span class="up">▲ +0.8%</span>
+    <span class="sep">|</span>
+    WTI CRUDE &nbsp;$89.00 &nbsp;<span class="up">▲ +0.4%</span>
+    <span class="sep">|</span>
+    COPPER &nbsp;$4.82/lb &nbsp;<span class="up">▲ +0.6%</span>
+    <span class="sep">|</span>
+    34 MARKETS LIVE
+    <span class="sep">|</span>
+  </div>
+</div>
+
+<!-- NAV -->
+<nav>
+  <a href="#" class="nav-logo">
+    <div class="nav-hex">
+      <svg viewBox="0 0 12 12" fill="none">
+        <path d="M2 2 L2 10 M2 6 L10 6 M10 2 L10 10" stroke="#080808" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <span class="nav-wordmark">HYPERFLEX</span>
+  </a>
+  <div class="nav-links">
+    <a href="#how">HOW IT WORKS</a>
+    <a href="#why">WHY US</a>
+    <a href="#proof">FEEDBACK</a>
+    <a href="https://twitter.com/hyperflexio" target="_blank">@HYPERFLEXIO</a>
+  </div>
+  <button class="nav-cta" id="nav-cta-btn">JOIN WAITLIST →</button>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-left">
+    <div>
+      <div class="hero-eyebrow">THE COMMODITY PREDICTION MARKET</div>
+      <h1 class="hero-headline">
+        Your conviction.<br>
+        <em>Finally</em><br>
+        has a price.
+      </h1>
+      <div class="hero-rule"></div>
+      <p class="hero-sub">
+        Real-money prediction markets for <strong>gold, silver, oil & commodities</strong> — a $10 trillion asset class with zero prediction market coverage. Until now.
+      </p>
+      <div class="hero-form-block">
+        <div class="hero-form" id="hero-form">
+          <input id="hero-email" class="hero-input" type="email" placeholder="your@email.com"/>
+          <button class="hero-btn" id="hero-btn">GET EARLY ACCESS →</button>
+        </div>
+        <div class="hero-success" id="hero-success">✓ You're on the list. We'll be in touch.</div>
+        <p class="hero-note"><span id="counter">1,247</span> people on the waitlist · No spam, ever.</p>
+      </div>
+    </div>
+    <div class="hero-stats">
+      <div class="hero-stat">
+        <div class="hero-stat-num gold">$124M+</div>
+        <div class="hero-stat-label">PROJECTED VOLUME Y1</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-num">34</div>
+        <div class="hero-stat-label">MARKETS AT LAUNCH</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-num gold">$10K</div>
+        <div class="hero-stat-label">DAILY JACKPOT</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-num">100×</div>
+        <div class="hero-stat-label">MAX COMBO MULTIPLIER</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="hero-right">
+    <div class="panel-header">
+      <span class="panel-title">LIVE COMMODITY PRICES</span>
+      <span class="live-pill">LIVE</span>
+    </div>
+    <div class="price-table">
+      <div class="price-row">
+        <div><div class="p-label">XAU/USD</div><div class="p-name">Gold</div></div>
+        <div class="p-val">$5,171</div>
+        <div class="p-chg up">▲ +1.2%</div>
+      </div>
+      <div class="price-row">
+        <div><div class="p-label">XAG/USD</div><div class="p-name">Silver</div></div>
+        <div class="p-val">$83.48</div>
+        <div class="p-chg up">▲ +0.8%</div>
+      </div>
+      <div class="price-row">
+        <div><div class="p-label">WTI CRUDE</div><div class="p-name">Oil</div></div>
+        <div class="p-val">$89.00</div>
+        <div class="p-chg up">▲ +0.4%</div>
+      </div>
+      <div class="price-row">
+        <div><div class="p-label">COMEX</div><div class="p-name">Copper</div></div>
+        <div class="p-val">$4.82</div>
+        <div class="p-chg up">▲ +0.6%</div>
+      </div>
+    </div>
+    <div class="markets-panel">
+      <div class="markets-header">TODAY'S MARKETS</div>
+      <div class="market-item">
+        <div class="market-q">Will XAU/USD hit $5,800 before June 30?</div>
+        <div class="market-bar-wrap"><div class="m-yes-bar" style="flex:61"></div><div class="m-no-bar" style="flex:39"></div></div>
+        <div class="market-btns"><div class="m-yes">YES 61¢</div><div class="m-no">NO 39¢</div></div>
+      </div>
+      <div class="market-item">
+        <div class="market-q">Will XAG/USD hit $90/oz before April 1?</div>
+        <div class="market-bar-wrap"><div class="m-yes-bar" style="flex:52"></div><div class="m-no-bar" style="flex:48"></div></div>
+        <div class="market-btns"><div class="m-yes">YES 52¢</div><div class="m-no">NO 48¢</div></div>
+      </div>
+      <div class="market-item">
+        <div class="market-q">Will WTI crude exceed $100/barrel by Q3?</div>
+        <div class="market-bar-wrap"><div class="m-yes-bar" style="flex:42"></div><div class="m-no-bar" style="flex:58"></div></div>
+        <div class="market-btns"><div class="m-yes">YES 42¢</div><div class="m-no">NO 58¢</div></div>
+      </div>
+    </div>
+    <div class="panel-footer">
+      <span class="panel-footer-note">New markets added daily</span>
+      <a href="https://marcdems1-create.github.io/Hyperflex/" target="_blank" class="panel-demo-link">VIEW FULL DEMO →</a>
+    </div>
+  </div>
+</section>
+
+<!-- STRIP -->
+<div class="strip">
+  <div class="strip-cell gold">🥇 GOLD AT $5,171/OZ</div>
+  <div class="strip-cell gold">🥈 SILVER AT $83.48/OZ</div>
+  <div class="strip-cell">ZERO COMPETITORS IN THIS SPACE</div>
+  <div class="strip-cell green">FIRST MOVER ADVANTAGE</div>
+  <div class="strip-cell">NEW MARKETS EVERY MORNING</div>
+  <div class="strip-cell">ZERO GAS FEES · INSTANT SETTLEMENT</div>
+</div>
+
+<!-- HOW IT WORKS -->
+<section class="how-section" id="how">
+  <div class="how-sidebar">
+    <div class="section-label">HOW IT WORKS</div>
+    <h2 class="how-title">Simple.<br>Transparent.<br><em>Powerful.</em></h2>
+  </div>
+  <div class="how-steps">
+    <div class="how-step">
+      <div class="how-step-num">01</div>
+      <div class="how-step-body">
+        <div class="how-step-title">Browse Markets</div>
+        <div class="how-step-text">Explore live prediction markets across commodities, earnings & macro. Fresh markets published every morning based on the day's most important headlines.</div>
+      </div>
+    </div>
+    <div class="how-step">
+      <div class="how-step-num">02</div>
+      <div class="how-step-body">
+        <div class="how-step-title">Take a Position</div>
+        <div class="how-step-text">Buy YES or NO contracts. Prices move 0–100¢ based on crowd conviction. The market sets the odds in real time — your knowledge is your edge.</div>
+      </div>
+    </div>
+    <div class="how-step">
+      <div class="how-step-num">03</div>
+      <div class="how-step-body">
+        <div class="how-step-title">Market Resolves</div>
+        <div class="how-step-text">Every winning contract pays $1.00. Losers go to zero. Outcomes are enforced automatically — no middlemen, no disputes, no delays.</div>
+      </div>
+    </div>
+    <div class="how-step">
+      <div class="how-step-num">04</div>
+      <div class="how-step-body">
+        <div class="how-step-title">Climb the Board</div>
+        <div class="how-step-text">Track your edge across every position. Top predictors earn prizes and leaderboard recognition. Win streaks unlock escalating cash rewards.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- WHY US -->
+<section class="why-section" id="why">
+  <div class="why-header">
+    <div class="section-label">WHY HYPERFLEX</div>
+    <h2 class="why-title">An <em>unfair</em> advantage.</h2>
+  </div>
+  <div class="why-grid">
+    <div class="why-card">
+      <div class="why-num">01</div>
+      <div class="why-card-title">The <em>only</em> prediction market for commodities</div>
+      <div class="why-card-text">Gold, silver, oil, copper, uranium — a $10 trillion asset class. Every commodity trader in the world has conviction. None of them have had anywhere to act on it. Until now.</div>
+      <div class="why-tag gold">FIRST MOVER</div>
+    </div>
+    <div class="why-card">
+      <div class="why-num">02</div>
+      <div class="why-card-title">New markets every <em>morning.</em></div>
+      <div class="why-card-text">Fresh prediction markets published daily, built around the morning's most important commodity headlines. Always relevant. Always timely. Always something to trade.</div>
+      <div class="why-tag">DAILY CONTENT</div>
+    </div>
+    <div class="why-card">
+      <div class="why-num">03</div>
+      <div class="why-card-title">No fees. <em>No friction.</em> No limits.</div>
+      <div class="why-card-text">Instant settlement. Zero transaction fees. A $5 trade is as viable as a $5,000 trade. No account minimums. No withdrawal delays. Your money moves at the speed of your conviction.</div>
+      <div class="why-tag green">ZERO FEES</div>
+    </div>
+  </div>
+</section>
+
+<!-- PROOF -->
+<section class="proof-section" id="proof">
+  <div class="proof-header">
+    <div class="section-label">EARLY FEEDBACK</div>
+    <h2 class="proof-title">People are paying attention.</h2>
+  </div>
+  <div class="proof-grid">
+    <div class="proof-card">
+      <span class="proof-qmark">"</span>
+      <div class="proof-text">Finally a prediction market that actually feels like a real trading platform. The order book alone sets it apart from everything else out there.</div>
+      <div class="proof-author">@CRYPTOTRADER_K</div>
+      <div class="proof-stars">★★★★★</div>
+    </div>
+    <div class="proof-card">
+      <span class="proof-qmark">"</span>
+      <div class="proof-text">Stacked a 3-leg commodities combo and got 8x. Nothing else lets you do this on real-world events. The combo markets feature is unlike anything available.</div>
+      <div class="proof-author">@MACROBULL2026</div>
+      <div class="proof-stars">★★★★★</div>
+    </div>
+    <div class="proof-card">
+      <span class="proof-qmark">"</span>
+      <div class="proof-text">Silver at $83 and nobody has a prediction market for it? HYPERFLEX is the only place I can put my conviction on precious metals. This is going to be massive.</div>
+      <div class="proof-author">@GOLDSTACKER2026</div>
+      <div class="proof-stars">★★★★★</div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+  <div class="cta-left">
+    <div class="cta-pre">EARLY ACCESS</div>
+    <h2 class="cta-title">The future belongs to those who <em>predict it.</em></h2>
+    <p class="cta-sub">Join the waitlist. Get early access before public launch. Start earning when you're right.</p>
+    <div class="cta-form" id="cta-form">
+      <input class="cta-input" id="cta-email" type="email" placeholder="your@email.com"/>
+      <button class="cta-btn" id="cta-btn">GET EARLY ACCESS →</button>
+    </div>
+    <div class="cta-success" id="cta-success">✓ You're on the list. We'll be in touch.</div>
+    <p class="cta-note">hyperflex.network · <a href="https://twitter.com/hyperflexio" style="color:var(--ink3);text-decoration:none;">@hyperflexio</a></p>
+  </div>
+  <div class="cta-right">
+    <div class="cta-links-label">QUICK LINKS</div>
+    <div class="cta-links">
+      <a href="https://marcdems1-create.github.io/Hyperflex/" target="_blank" class="cta-link">
+        <span class="cta-link-name">View Live Demo</span>
+        <span class="cta-link-arrow">→</span>
+      </a>
+      <a href="https://twitter.com/hyperflexio" target="_blank" class="cta-link">
+        <span class="cta-link-name">Follow @hyperflexio</span>
+        <span class="cta-link-arrow">→</span>
+      </a>
+      <a href="#how" class="cta-link">
+        <span class="cta-link-name">How It Works</span>
+        <span class="cta-link-arrow">→</span>
+      </a>
+      <a href="#why" class="cta-link">
+        <span class="cta-link-name">Why HYPERFLEX</span>
+        <span class="cta-link-arrow">→</span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <span class="footer-brand">HYPERFLEX</span>
+  <div class="footer-links">
+    <a href="https://twitter.com/hyperflexio" target="_blank">Twitter</a>
+    <a href="https://marcdems1-create.github.io/Hyperflex/" target="_blank">Demo</a>
+    <a href="mailto:hello@hyperflex.network">Contact</a>
+  </div>
+  <span class="footer-copy">© 2026 HYPERFLEX · hyperflex.network</span>
+</footer>
+
+<script>
+var count = 1247;
+
+async function doSubmit(email) {
+  try {
+    var r = await fetch('https://formspree.io/f/mdawowwj', {
+      method:'POST',
+      headers:{'Content-Type':'application/json','Accept':'application/json'},
+      body:JSON.stringify({email:email})
+    });
+    return r.ok;
+  } catch(e) { return false; }
+}
+
+function confirmSignup() {
+  count++;
+  document.getElementById('counter').textContent = count.toLocaleString();
+  document.getElementById('hero-form').style.display = 'none';
+  document.getElementById('hero-success').style.display = 'block';
+  document.getElementById('cta-form').style.display = 'none';
+  document.getElementById('cta-success').style.display = 'block';
+}
+
+window.addEventListener('DOMContentLoaded', function() {
+  document.getElementById('hero-btn').addEventListener('click', function() {
+    var e = document.getElementById('hero-email').value;
+    if (!e || !e.includes('@')) { document.getElementById('hero-email').style.outline = '1px solid #c0392b'; return; }
+    doSubmit(e).then(function(ok){ if(ok) confirmSignup(); });
+  });
+
+  document.getElementById('cta-btn').addEventListener('click', function() {
+    var e = document.getElementById('cta-email').value;
+    if (!e || !e.includes('@')) return;
+    doSubmit(e).then(function(ok){ if(ok) confirmSignup(); });
+  });
+
+  document.getElementById('nav-cta-btn').addEventListener('click', function() {
+    document.getElementById('hero-email').scrollIntoView({behavior:'smooth'});
+    setTimeout(function(){ document.getElementById('hero-email').focus(); }, 500);
+  });
+
+  // Scroll animations
+  var io = new IntersectionObserver(function(entries) {
+    entries.forEach(function(e) {
+      if (e.isIntersecting) { e.target.classList.add('visible'); io.unobserve(e.target); }
+    });
+  }, {threshold:0.1});
+  document.querySelectorAll('.how-step, .why-card, .proof-card').forEach(function(el, i) {
+    el.style.transitionDelay = (i % 3 * 0.1) + 's';
+    io.observe(el);
+  });
+
+  // Counter drift
+  setInterval(function() {
+    if (Math.random() > 0.65) { count++; document.getElementById('counter').textContent = count.toLocaleString(); }
+  }, 9000);
+});
+</script>
+</body>
+</html>

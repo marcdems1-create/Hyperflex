@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>HYPERFLEX — Predict Everything</title>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <!-- Ethers.js for EIP-712 signing -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
+  <!-- WalletConnect Web3Modal v3 -->
+  <script type="module">
+    import { createWeb3Modal, defaultConfig } from 'https://esm.sh/@web3modal/ethers@4.2.2';
+
+    const projectId = '8882a0900b744b0c73bd57b36b57ca03';
+
+    const mainnet = {
+      chainId: 1,
+      name: 'Ethereum',
+      currency: 'ETH',
+      explorerUrl: 'https://etherscan.io',
+      rpcUrl: 'https://cloudflare-eth.com',
+    };
+
+    const metadata = {
+      name: 'HYPERFLEX',
+      description: 'Predict Everything · Powered by Hyperliquid',
+      url: window.location.origin,
+      icons: ['https://avatars.githubusercontent.com/u/37784886']
+    };
+
+    const modal = createWeb3Modal({
+      ethersConfig: defaultConfig({ metadata }),
+      chains: [mainnet],
+      projectId,
+      themeMode: 'dark',
+      themeVariables: {
+        '--w3m-color-mix': '#6366f1',
+        '--w3m-color-mix-strength': 40,
+        '--w3m-accent': '#6366f1',
+        '--w3m-border-radius-master': '8px',
+      }
+    });
+
+    // Expose modal globally so Babel/React script can use it
+    window.__w3modal = modal;
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #050810; }
+    ::-webkit-scrollbar { display: none; }
+    input::placeholder, textarea::placeholder { color: #1e293b; }
+    input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
+    select option { background: #0d1220; }
+    @keyframes fadeSlide { from{opacity:0;transform:translateX(16px);}to{opacity:1;transform:translateX(0);} }
+    @keyframes float { 0%,100%{transform:translateY(0);}50%{transform:translateY(-30px);} }
+    @keyframes spin { from{transform:rotate(0deg);}to{transform:rotate(360deg);} }
+    @keyframes pulse { 0%,100%{opacity:1;}50%{opacity:0.4;} }
+    @keyframes chartDraw { from{stroke-dashoffset:400;}to{stroke-dashoffset:0;} }
+    @keyframes slideUp { from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);} }
+    @keyframes ticker { from{transform:translateX(0);}to{transform:translateX(-50%);} }
+    .live-dot { animation: pulse 1.5s infinite; }
+    .fade-in { animation: slideUp 0.3s ease forwards; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+// ─── LOGO ─────────────────────────────────────────────────────────────────────
+function HyperflexLogo({ size = 32, animated = false }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg"
+      style={animated ? { animation: "spin 8s linear infinite" } : {}}>
+      <defs>
+        <linearGradient id="lg1" x1="0" y1="0" x2="100" y2="100" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#6366f1" /><stop offset="50%" stopColor="#8b5cf6" /><stop offset="100%" stopColor="#06b6d4" />
+        </linearGradient>
+        <linearGradient id="lg2" x1="100" y1="0" x2="0" y2="100" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#06b6d4" /><stop offset="100%" stopColor="#6366f1" />
+        </linearGradient>
+      </defs>
+      <polygon points="50,4 93,27 93,73 50,96 7,73 7,27" fill="none" stroke="url(#lg1)" strokeWidth="3" opacity="0.6" />
+      <polygon points="50,18 82,50 50,82 18,50" fill="none" stroke="url(#lg2)" strokeWidth="2.5" opacity="0.8" />
+      <path d="M33 35 L33 65 M33 50 L67 50 M67 35 L67 65" stroke="url(#lg1)" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="50" cy="4" r="3" fill="#6366f1" /><circle cx="93" cy="27" r="3" fill="#8b5cf6" />
+      <circle cx="93" cy="73" r="3" fill="#06b6d4" /><circle cx="50" cy="96" r="3" fill="#6366f1" />
+      <circle cx="7" cy="73" r="3" fill="#8b5cf6" /><circle cx="7" cy="27" r="3" fill="#06b6d4" />
+    </svg>
+  );
+}
+
+// ─── HYPERLIQUID INTEGRATION ──────────────────────────────────────────────────
+// Official HL endpoints
+const HL_INFO_URL   = "https://api.hyperliquid.xyz/info";
+const HL_EXCHANGE_URL = "https://api.hyperliquid.xyz/exchange";
+const HL_WS_URL     = "wss://api.hyperliquid.xyz/ws";
+
+// ── REST helpers ──────────────────────────────────────────────────────────────
+async function hlPost(url, payload) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`HL API ${res.status}`);
+  return res.json();
+}
+
+// Fetch spot/perp mid-prices for a list of coins
+async function hlGetMids(coins = ["BTC","ETH","HYPE"]) {
+  const data = await hlPost(HL_INFO_URL, { type: "allMids" });
+  // data is { COIN: "price", ... }
+  const result = {};
+  coins.forEach(c => { if (data[c]) result[c] = parseFloat(data[c]); });
+  return result;
+}
+
+// Fetch user's USDC + HYPE spot balances
+async function hlGetSpotBalances(address) {
+  const data = await hlPost(HL_INFO_URL, { type: "spotClearinghouseState", user: address });
+  const balances = {};
+  if (data && data.balances) {
+    data.balances.forEach(b => { balances[b.coin] = parseFloat(b.total); });
+  }
+  return balances;
+}
+
+// Fetch user's perpetual account summary (margin, unrealised PnL, etc.)
+async function hlGetPerpState(address) {
+  return hlPost(HL_INFO_URL, { type: "clearinghouseState", user: address });
+}
+
+// ── WALLET CONNECT — MetaMask direct OR WalletConnect via Web3Modal ──────────
+async function connectMetaMask() {
+  if (!window.ethereum) throw new Error("MetaMask not found — install the extension");
+  const provider = new ethers.BrowserProvider(window.ethereum);
+  await provider.send("eth_requestAccounts", []);
+  const signer = await provider.getSigner();
+  const address = await signer.getAddress();
+  return { provider, signer, address };
+}
+
+async function connectViaWeb3Modal() {
+  const modal = window.__w3modal;
+  if (!modal) throw new Error("WalletConnect not loaded yet — please try again");
+
+  // Open the modal and wait for the user to connect
+  await modal.open();
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+
+    const unsub = modal.subscribeProvider(({ provider, providerType, address, isConnected, error }) => {
+      if (settled) return;
+      if (error) { settled = true; unsub(); reject(new Error(error.message || "Connection failed")); return; }
+      if (isConnected && provider && address) {
+        settled = true;
+        unsub();
+        const ethersProvider = new ethers.BrowserProvider(provider);
+        ethersProvider.getSigner().then(signer => {
+          resolve({ provider: ethersProvider, signer, address });
+        }).catch(reject);
+      }
+    });
+
+    // Timeout after 3 minutes (user closed modal)
+    setTimeout(() => {
+      if (!settled) { settled = true; unsub(); reject(new Error("Connection timed out")); }
+    }, 180000);
+  });
+}
+
+// ── PLACE ORDER on Hyperliquid ────────────────────────────────────────────────
+// coin: "BTC", isBuy: true, limitPx: "95000", sz: "0.001", reduceOnly: false
+async function hlPlaceOrder({ signer, address, coin, isBuy, limitPx, sz, reduceOnly = false }) {
+  const timestamp = Date.now();
+
+  // Build the action object per HL spec
+  const action = {
+    type: "order",
+    orders: [{
+      a: 0,          // asset index — HL resolves by coin name server-side when using meta
+      b: isBuy,
+      p: String(limitPx),
+      s: String(sz),
+      r: reduceOnly,
+      t: { limit: { tif: "Gtc" } },
+    }],
+    grouping: "na",
+  };
+
+  // EIP-712 domain & types as per HL docs
+  const domain = {
+    name: "Exchange",
+    version: "1",
+    chainId: 1337,
+    verifyingContract: "0x0000000000000000000000000000000000000000",
+  };
+  const types = {
+    Agent: [
+      { name: "source", type: "string" },
+      { name: "connectionId", type: "bytes32" },
+    ],
+  };
+  const connectionId = ethers.keccak256(
+    ethers.toUtf8Bytes(JSON.stringify(action) + timestamp)
+  );
+  const value = { source: "a", connectionId };
+
+  const signature = await signer.signTypedData(domain, types, value);
+  const { r, s, v } = ethers.Signature.from(signature);
+
+  const payload = {
+    action,
+    nonce: timestamp,
+    signature: { r, s, v },
+    vaultAddress: null,
+  };
+
+  return hlPost(HL_EXCHANGE_URL, payload);
+}
+
+// ── LIVE PRICES via WebSocket ─────────────────────────────────────────────────
+// Returns an unsubscribe function. onPrice(coin, price) called on each tick.
+function hlSubscribePrices(coins, onPrice) {
+  let ws;
+  let reconnectTimer;
+  let alive = true;
+
+  function connect() {
+    ws = new WebSocket(HL_WS_URL);
+    ws.onopen = () => {
+      if (!alive) return ws.close();
+      ws.send(JSON.stringify({ method: "subscribe", subscription: { type: "allMids" } }));
+    };
+    ws.onmessage = (evt) => {
+      try {
+        const msg = JSON.parse(evt.data);
+        if (msg.channel === "allMids" && msg.data && msg.data.mids) {
+          coins.forEach(c => {
+            if (msg.data.mids[c]) onPrice(c, parseFloat(msg.data.mids[c]));
+          });
+        }
+      } catch {}
+    };
+    ws.onclose = () => {
+      if (alive) reconnectTimer = setTimeout(connect, 3000);
+    };
+    ws.onerror = () => ws.close();
+  }
+  connect();
+  return () => { alive = false; clearTimeout(reconnectTimer); ws && ws.close(); };
+}
+
+// ─── DATA ──────────────────────────────────────────────────────────────────────
+const ALL_MARKETS = [
+  { id:1, q:"Will silver hit $100/oz before June 1, 2026?", cat:"PRECIOUS METALS", sector:"COMMODITIES", yes:67, vol:"4,821,000", closes:"Jun 1, 2026", hot:true, icon:"🥈" },
+  { id:2, q:"Will WTI crude exceed $100/barrel by Q3 2026?", cat:"OIL & GAS", sector:"COMMODITIES", yes:42, vol:"3,210,000", closes:"Sep 30, 2026", hot:true, icon:"🛢️" },
+  { id:3, q:"Will gold close above $6,000/oz in 2026?", cat:"PRECIOUS METALS", sector:"COMMODITIES", yes:61, vol:"5,100,000", closes:"Dec 31, 2026", hot:true, icon:"🥇" },
+  { id:8, q:"Will Apple beat Q2 2026 earnings estimates?", cat:"TECH EARNINGS", sector:"EARNINGS", yes:72, vol:"8,430,000", closes:"May 2, 2026", hot:true, icon:"🍎", badge:"AAPL · May 2" },
+  { id:9, q:"Will Nvidia beat Q1 2026 earnings estimates?", cat:"TECH EARNINGS", sector:"EARNINGS", yes:78, vol:"11,200,000", closes:"May 28, 2026", hot:true, icon:"🟩", badge:"NVDA · May 28" },
+  { id:12, q:"Will Tesla beat Q2 2026 earnings estimates?", cat:"TECH EARNINGS", sector:"EARNINGS", yes:44, vol:"9,870,000", closes:"Jul 22, 2026", hot:true, icon:"🚗", badge:"TSLA · Jul 22" },
+  { id:20, q:"Will Bitcoin hit $150,000 before end of 2026?", cat:"BITCOIN", sector:"CRYPTO", yes:54, vol:"18,300,000", closes:"Dec 31, 2026", hot:true, icon:"₿" },
+  { id:21, q:"Will Ethereum flip Bitcoin in market cap in 2026?", cat:"ETHEREUM", sector:"CRYPTO", yes:12, vol:"7,400,000", closes:"Dec 31, 2026", hot:false, icon:"Ξ" },
+  { id:22, q:"Will HYPE token exceed $100 in 2026?", cat:"HYPERLIQUID", sector:"CRYPTO", yes:48, vol:"6,200,000", closes:"Dec 31, 2026", hot:true, icon:"💧" },
+  { id:25, q:"Will the Toronto Maple Leafs win the 2026 Stanley Cup?", cat:"NHL", sector:"SPORTS", yes:14, vol:"2,300,000", closes:"Jun 30, 2026", hot:true, icon:"🏒" },
+  { id:28, q:"Will the Super Bowl 2027 be won by a Canadian-market team?", cat:"NFL", sector:"SPORTS", yes:22, vol:"3,400,000", closes:"Feb 7, 2027", hot:true, icon:"🏈" },
+  { id:31, q:"Will the US enter a recession in 2026?", cat:"ECONOMICS", sector:"MACRO", yes:34, vol:"12,400,000", closes:"Dec 31, 2026", hot:true, icon:"📉" },
+  { id:32, q:"Will the Fed cut rates 3+ times in 2026?", cat:"MONETARY POLICY", sector:"MACRO", yes:47, vol:"8,900,000", closes:"Dec 31, 2026", hot:true, icon:"🏦" },
+  { id:15, q:"Will Exxon (XOM) outperform Google (GOOGL) in 2026?", cat:"STOCK BATTLE", sector:"VERSUS", yes:44, vol:"5,430,000", closes:"Dec 31, 2026", hot:true, icon:"⚔️" },
+  { id:16, q:"Will silver miners (SILJ) outperform tech (QQQ) in 2026?", cat:"SECTOR BATTLE", sector:"VERSUS", yes:67, vol:"3,980,000", closes:"Dec 31, 2026", hot:true, icon:"⚔️" },
+];
+
+const SECTORS = ["ALL","COMMODITIES","EARNINGS","CRYPTO","SPORTS","MACRO","VERSUS"];
+const SECTOR_META = {
+  ALL:{icon:"🌐",color:"#6366f1"},COMMODITIES:{icon:"🪨",color:"#f59e0b"},
+  EARNINGS:{icon:"📊",color:"#10b981"},CRYPTO:{icon:"₿",color:"#f97316"},
+  SPORTS:{icon:"🏆",color:"#ec4899"},MACRO:{icon:"🏛️",color:"#06b6d4"},
+  VERSUS:{icon:"⚔️",color:"#8b5cf6"},
+};
+
+const LEADERBOARD_DATA = [
+  { rank:1, name:"SilverWhale.eth", pnl:"+$48,230", roi:"+312%", trades:847, badge:"🏆", tier:"DIAMOND", vol:"$184,200" },
+  { rank:2, name:"CopperKing", pnl:"+$31,440", roi:"+228%", trades:623, badge:"🥈", tier:"PLATINUM", vol:"$122,000" },
+  { rank:3, name:"0xAurum", pnl:"+$24,110", roi:"+196%", trades:412, badge:"🥉", tier:"PLATINUM", vol:"$98,400" },
+  { rank:4, name:"NvidiaBeliever", pnl:"+$18,920", roi:"+154%", trades:334, badge:"", tier:"GOLD", vol:"$76,100" },
+  { rank:5, name:"BitcoinMaxi420", pnl:"+$14,780", roi:"+122%", trades:289, badge:"", tier:"GOLD", vol:"$61,800" },
+  { rank:8, name:"YOU", pnl:"+$2,140", roi:"+42%", trades:12, badge:"⭐", tier:"BRONZE", vol:"$5,000", isUser:true },
+];
+
+// ─── NEW: COMBO MARKETS (DraftKings Same-Game Parlay inspiration) ─────────────
+const COMBO_MARKETS = [
+  { id:"c1", name:"Bull Run Bundle", markets:[
+    { q:"Bitcoin hits $150K", yes:54 },
+    { q:"Ethereum flips Bitcoin", yes:12 },
+    { q:"HYPE token exceeds $100", yes:48 },
+  ], multiplier:"14.2x", vol:"$2.1M", hot:true },
+  { id:"c2", name:"Big Tech Earnings Sweep", markets:[
+    { q:"Apple beats Q2 estimates", yes:72 },
+    { q:"Nvidia beats Q1 estimates", yes:78 },
+    { q:"Tesla beats Q2 estimates", yes:44 },
+  ], multiplier:"8.7x", vol:"$5.4M", hot:true },
+  { id:"c3", name:"Macro Meltdown", markets:[
+    { q:"US enters recession in 2026", yes:34 },
+    { q:"Fed cuts rates 3+ times", yes:47 },
+    { q:"WTI crude exceeds $100/bbl", yes:42 },
+  ], multiplier:"11.4x", vol:"$1.8M", hot:false },
+  { id:"c4", name:"Commodities Explosion", markets:[
+    { q:"Silver hits $100/oz", yes:67 },
+    { q:"Gold closes above $6,000", yes:61 },
+    { q:"Copper hits $12,000/tonne", yes:58 },
+  ], multiplier:"6.3x", vol:"$3.2M", hot:true },
+];
+
+// ─── NEW: DAILY JACKPOT (DraftKings Jackpot Pools inspiration) ────────────────
+const DAILY_QUESTIONS = [
+  { id:1, q:"Will BTC be above $95,000 at midnight EST?", yesVotes:1847, noVotes:1203 },
+  { id:2, q:"Will the S&P 500 close green today?", yesVotes:2341, noVotes:987 },
+  { id:3, q:"Will gold be above $3,200/oz at close?", yesVotes:1654, noVotes:1421 },
+  { id:4, q:"Will any crypto in top 10 move >5% today?", yesVotes:3102, noVotes:654 },
+  { id:5, q:"Will oil be above $72/barrel at 4pm EST?", yesVotes:1234, noVotes:1876 },
+];
+
+// ─── NEW: STREAK CHALLENGE (DraftKings streak inspiration) ───────────────────
+const STREAK_DATA = { current: 4, best: 7, prize: "$500", nextPrize: "$1,000", needed: 3 };
+
+// ─── MINI ODDS CHART (Polymarket chart inspiration) ──────────────────────────
+function OddsChart({ marketId, currentYes }) {
+  const points = [];
+  let val = currentYes - 15 + Math.random() * 5;
+  for (let i = 0; i < 30; i++) {
+    val += (Math.random() - 0.48) * 3;
+    val = Math.max(5, Math.min(95, val));
+    points.push(val);
+  }
+  points[points.length - 1] = currentYes;
+  const w = 120, h = 40;
+  const minV = Math.min(...points), maxV = Math.max(...points);
+  const range = maxV - minV || 1;
+  const coords = points.map((p, i) => {
+    const x = (i / (points.length - 1)) * w;
+    const y = h - ((p - minV) / range) * (h - 4) - 2;
+    return `${x},${y}`;
+  }).join(" ");
+  const isUp = points[points.length - 1] >= points[0];
+  const color = isUp ? "#10b981" : "#ef4444";
+  return (
+    <svg width={w} height={h} style={{display:"block"}}>
+      <defs>
+        <linearGradient id={`grad-${marketId}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.3"/>
+          <stop offset="100%" stopColor={color} stopOpacity="0"/>
+        </linearGradient>
+      </defs>
+      <polygon
+        points={`0,${h} ${coords} ${w},${h}`}
+        fill={`url(#grad-${marketId})`}
+      />
+      <polyline points={coords} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
+// ─── ORDER BOOK (Kalshi order book inspiration) ───────────────────────────────
+function OrderBook({ yes }) {
+  const asks = [
+    { price: yes + 3, size: 420 }, { price: yes + 2, size: 280 }, { price: yes + 1, size: 650 },
+  ].reverse();
+  const bids = [
+    { price: yes, size: 890 }, { price: yes - 1, size: 340 }, { price: yes - 2, size: 210 },
+  ];
+  const maxSize = 890;
+  return (
+    <div style={{background:"#070e1c",border:"1px solid #0f1a30",borderRadius:10,overflow:"hidden",marginBottom:12}}>
+      <div style={{display:"flex",justifyContent:"space-between",padding:"6px 10px",borderBottom:"1px solid #0f1a30"}}>
+        <span style={{fontSize:9,color:"#334155",fontWeight:700,letterSpacing:1}}>ORDER BOOK</span>
+        <span style={{fontSize:9,color:"#334155"}}>SIZE · PRICE</span>
+      </div>
+      {asks.map((a,i) => (
+        <div key={i} style={{display:"flex",alignItems:"center",padding:"3px 10px",position:"relative"}}>
+          <div style={{position:"absolute",right:0,top:0,bottom:0,background:"rgba(239,68,68,0.08)",width:`${(a.size/maxSize)*100}%`}}/>
+          <span style={{flex:1,fontSize:10,color:"#ef4444",fontWeight:700,zIndex:1}}>{a.price}¢</span>
+          <span style={{fontSize:10,color:"#475569",zIndex:1}}>{a.size.toLocaleString()}</span>
+        </div>
+      ))}
+      <div style={{height:1,background:"#1e293b",margin:"2px 0"}}/>
+      {bids.map((b,i) => (
+        <div key={i} style={{display:"flex",alignItems:"center",padding:"3px 10px",position:"relative"}}>
+          <div style={{position:"absolute",left:0,top:0,bottom:0,background:"rgba(16,185,129,0.08)",width:`${(b.size/maxSize)*100}%`}}/>
+          <span style={{flex:1,fontSize:10,color:"#10b981",fontWeight:700,zIndex:1}}>{b.price}¢</span>
+          <span style={{fontSize:10,color:"#475569",zIndex:1}}>{b.size.toLocaleString()}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── LIVE TICKER (Polymarket-style news ticker) ───────────────────────────────
+function LiveTicker({ prices = {} }) {
+  const btc  = prices.BTC  ? `$${prices.BTC.toLocaleString(undefined,{maximumFractionDigits:0})}` : "$—";
+  const eth  = prices.ETH  ? `$${prices.ETH.toLocaleString(undefined,{maximumFractionDigits:0})}` : "$—";
+  const hype = prices.HYPE ? `$${prices.HYPE.toFixed(2)}` : "$—";
+  const items = [
+    `🔴 LIVE · BTC: ${btc}`,
+    `🔵 LIVE · ETH: ${eth}`,
+    `💧 LIVE · HYPE: ${hype}`,
+    "⚡ NVIDIA earnings in 83 days · Market: 78% YES",
+    "🔥 Silver hits 3-year high · $34.21/oz",
+    "📊 New market: Will Apple launch AR glasses in 2026?",
+    "🏆 SilverWhale.eth wins $12,400 on gold market",
+    "🟢 Fed minutes: Rate cut odds surge to 67%",
+    "⚔️ Commodities vs Tech: Commodities leading 61-39",
+  ];
+  const text = items.join("   ·   ");
+  return (
+    <div style={{background:"#070e1c",borderBottom:"1px solid #0f1a30",padding:"6px 0",overflow:"hidden",whiteSpace:"nowrap"}}>
+      <div style={{display:"inline-block",animation:"ticker 30s linear infinite",fontFamily:"'IBM Plex Mono', monospace",fontSize:10,color:"#475569"}}>
+        <span style={{paddingRight:40}}>{text}</span>
+        <span style={{paddingRight:40}}>{text}</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── MARKET DETAIL VIEW (with chart + order book) ────────────────────────────
+function MarketDetail({ m, onBack, onTrade, hlSigner, hlAddress, refreshBalances }) {
+  const [side, setSide] = useState("YES");
+  const [amt, setAmt] = useState("");
+  const [limitMode, setLimitMode] = useState(false);
+  const [limitPrice, setLimitPrice] = useState(String(m.yes));
+  const [placing, setPlacing] = useState(false);
+
+  const notify = (msg) => {
+    const el = document.createElement("div");
+    el.style.cssText = "position:fixed;top:20px;right:16px;background:#1e1b4b;border:1px solid #6366f1;color:#e2e8f0;padding:10px 16px;border-radius:10px;font-family:'IBM Plex Mono',monospace;font-size:12px;z-index:9999;animation:fadeSlide 0.3s ease";
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 2500);
+  };
+
+  const handleTrade = async () => {
+    if (!amt) return;
+    if (!hlSigner || !hlAddress) {
+      notify("⚠️ Connect your wallet first");
+      return;
+    }
+    setPlacing(true);
+    try {
+      // Map prediction market to HL perp asset (best-effort for crypto markets)
+      const coinMap = {
+        "BITCOIN": "BTC", "ETHEREUM": "ETH", "HYPERLIQUID": "HYPE",
+      };
+      const coin = coinMap[m.sector] || "BTC"; // default BTC for non-crypto markets
+      const isBuy = side === "YES";
+      // Use the market's yes% as a price signal; user enters USDC amount
+      const pricePx = limitMode ? parseFloat(limitPrice) : (isBuy ? m.yes : 100 - m.yes);
+      const contracts = parseFloat(amt) / pricePx;
+
+      const result = await hlPlaceOrder({
+        signer: hlSigner,
+        address: hlAddress,
+        coin,
+        isBuy,
+        limitPx: pricePx.toFixed(2),
+        sz: contracts.toFixed(4),
+      });
+
+      if (result && result.status === "ok") {
+        const fills = result.response?.data?.statuses;
+        const filled = fills && fills[0]?.filled;
+        notify(`✓ Order filled · ${side} ${contracts.toFixed(4)} ${coin}`);
+        if (refreshBalances) refreshBalances();
+        onTrade && onTrade(`✓ Trade placed on Hyperliquid`);
+      } else {
+        notify(`⚠️ ${result?.response?.data?.statuses?.[0]?.error || "Order rejected"}`);
+      }
+    } catch (err) {
+      notify(`✗ ${err.message || "Trade failed"}`);
+    } finally {
+      setPlacing(false);
+      setAmt("");
+    }
+  };
+  return (
+    <div style={{animation:"fadeSlide 0.2s ease",fontFamily:"'IBM Plex Mono', monospace"}}>
+      <button onClick={onBack} style={{background:"none",border:"none",color:"#6366f1",fontSize:12,cursor:"pointer",padding:"8px 0 14px",display:"flex",alignItems:"center",gap:6}}>
+        ← Back to markets
+      </button>
+      {/* Header */}
+      <div style={{background:"#0d1220",border:"1px solid #1e293b",borderRadius:12,padding:14,marginBottom:12}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+          <span style={{fontSize:22}}>{m.icon}</span>
+          <div>
+            <div style={{fontSize:8,color:"#6366f1",fontWeight:700,letterSpacing:1}}>{m.cat}</div>
+            <div style={{fontSize:13,color:"#e2e8f0",lineHeight:1.4}}>{m.q}</div>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:16,fontSize:10,color:"#475569"}}>
+          <span>📊 Vol: ${m.vol}</span>
+          <span>📅 Closes: {m.closes}</span>
+          {m.hot && <span style={{color:"#f59e0b"}}>🔥 Trending</span>}
+        </div>
+      </div>
+
+      {/* Odds Chart — Polymarket style */}
+      <div style={{background:"#0d1220",border:"1px solid #1e293b",borderRadius:12,padding:14,marginBottom:12}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+          <span style={{fontSize:9,color:"#334155",fontWeight:700,letterSpacing:1}}>ODDS HISTORY · 30 DAYS</span>
+          <span style={{fontSize:14,fontWeight:700,color:"#818cf8"}}>{m.yes}¢ YES</span>
+        </div>
+        <OddsChart marketId={m.id} currentYes={m.yes}/>
+        <div style={{display:"flex",justifyContent:"space-between",marginTop:6,fontSize:9,color:"#334155"}}>
+          <span>30d ago</span><span>15d ago</span><span>Today</span>
+        </div>
+      </div>
+
+      {/* Order Book — Kalshi style */}
+      <OrderBook yes={m.yes}/>
+
+      {/* Trade Panel */}
+      <div style={{background:"#0d1220",border:"1px solid #1e293b",borderRadius:12,padding:14}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <span style={{fontSize:9,color:"#334155",fontWeight:700,letterSpacing:1}}>PLACE ORDER</span>
+          <div style={{display:"flex",gap:4}}>
+            {["Market","Limit"].map(mode => (
+              <button key={mode} onClick={()=>setLimitMode(mode==="Limit")} style={{padding:"4px 10px",background:((limitMode&&mode==="Limit")||(!limitMode&&mode==="Market"))?"#1e1b4b":"transparent",border:"1px solid #1e293b",borderRadius:6,color:((limitMode&&mode==="Limit")||(!limitMode&&mode==="Market"))?"#818cf8":"#475569",cursor:"pointer",fontFamily:"inherit",fontSize:9,fontWeight:700}}>
+                {mode}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{display:"flex",gap:6,marginBottom:10}}>
+          {["YES","NO"].map(s => (
+            <button key={s} onClick={()=>setSide(s)} style={{flex:1,padding:"12px 0",borderRadius:8,border:side===s?`1px solid ${s==="YES"?"#166534":"#7f1d1d"}`:"1px solid #1e293b",background:side===s?(s==="YES"?"#052e16":"#1c0a0a"):"#0d1220",color:side===s?(s==="YES"?"#4ade80":"#f87171"):"#475569",cursor:"pointer",fontFamily:"inherit",fontSize:13,fontWeight:700,transition:"all 0.2s"}}>
+              {s} {s==="YES"?m.yes:100-m.yes}¢
+            </button>
+          ))}
+        </div>
+        {limitMode && (
+          <div style={{marginBottom:10}}>
+            <div style={{fontSize:9,color:"#475569",marginBottom:4}}>LIMIT PRICE (¢)</div>
+            <input value={limitPrice} onChange={e=>setLimitPrice(e.target.value)} type="number" placeholder="Enter price 1-99" style={{width:"100%",background:"#070e1c",border:"1px solid #1e293b",borderRadius:8,color:"#e2e8f0",padding:"8px 12px",fontFamily:"inherit",fontSize:12}}/>
+          </div>
+        )}
+        <input value={amt} onChange={e=>setAmt(e.target.value)} type="number" placeholder="Amount ($)" style={{width:"100%",background:"#070e1c",border:"1px solid #1e293b",borderRadius:8,color:"#e2e8f0",padding:"8px 12px",fontFamily:"inherit",fontSize:12,marginBottom:10}}/>
+        {amt && (
+          <div style={{background:"#070e1c",borderRadius:8,padding:"8px 12px",marginBottom:10,fontSize:10,color:"#475569"}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span>Contracts</span><span style={{color:"#e2e8f0"}}>{Math.floor(parseFloat(amt)||0 / ((limitMode?parseFloat(limitPrice):side==="YES"?m.yes:100-m.yes)/100))}</span></div>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span>Max payout</span><span style={{color:"#4ade80"}}>${(Math.floor(parseFloat(amt)||0 / ((limitMode?parseFloat(limitPrice):side==="YES"?m.yes:100-m.yes)/100))).toFixed(2)}</span></div>
+            <div style={{display:"flex",justifyContent:"space-between"}}><span>Max profit</span><span style={{color:"#4ade80"}}>${(Math.floor(parseFloat(amt)||0 / ((limitMode?parseFloat(limitPrice):side==="YES"?m.yes:100-m.yes)/100)) - (parseFloat(amt)||0)).toFixed(2)}</span></div>
+          </div>
+        )}
+        <button onClick={handleTrade} disabled={placing} style={{width:"100%",padding:"13px 0",background:placing?"#1e293b":side==="YES"?"linear-gradient(135deg,#052e16,#065f46)":"linear-gradient(135deg,#1c0a0a,#450a0a)",border:`1px solid ${side==="YES"?"#166534":"#7f1d1d"}`,borderRadius:10,color:side==="YES"?"#4ade80":"#f87171",cursor:placing?"not-allowed":"pointer",fontFamily:"inherit",fontSize:14,fontWeight:700,transition:"all 0.2s",opacity:placing?0.6:1}}>
+          {placing ? "⏳ Signing & Submitting…" : `${limitMode?"Place Limit Order":"Buy"} ${side} on Hyperliquid`}
+        </button>
+        {!hlSigner && (
+          <div style={{textAlign:"center",fontSize:9,color:"#475569",marginTop:8}}>
+            ⚠️ Connect MetaMask to place real orders on Hyperliquid
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── COMBO CARD (DraftKings parlay inspiration) ───────────────────────────────
+function ComboCard({ combo, onSelect }) {
+  const combinedOdds = combo.markets.reduce((acc, m) => acc * (m.yes / 100), 1);
+  return (
+    <div onClick={onSelect} style={{background:"#0d1220",border:"1px solid #1e293b",borderRadius:12,padding:14,marginBottom:10,cursor:"pointer",transition:"border-color 0.2s"}}
+      onMouseEnter={e=>e.currentTarget.style.borderColor="#6366f1"}
+      onMouseLeave={e=>e.currentTarget.style.borderColor="#1e293b"}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+        <div>
+          {combo.hot && <span style={{fontSize:8,background:"rgba(245,158,11,0.15)",color:"#f59e0b",border:"1px solid rgba(245,158,11,0.3)",borderRadius:4,padding:"2px 6px",marginRight:6,fontWeight:700}}>🔥 HOT</span>}
+          <span style={{fontSize:13,fontWeight:700,color:"#e2e8f0"}}>{combo.name}</span>
+        </div>
+        <div style={{textAlign:"right"}}>
+          <div style={{fontSize:18,fontWeight:700,color:"#818cf8"}}>{combo.multiplier}</div>
+          <div style={{fontSize:8,color:"#475569"}}>MULTIPLIER</div>
+        </div>
+      </div>
+      {combo.markets.map((m,i) => (
+        <div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:i<combo.markets.length-1?6:0,paddingBottom:i<combo.markets.length-1?6:0,borderBottom:i<combo.markets.length-1?"1px solid #0f1a30":"none"}}>
+          <div style={{width:28,textAlign:"center",fontSize:10,fontWeight:700,color:m.yes>50?"#4ade80":"#f87171"}}>{m.yes}¢</div>
+          <div style={{fontSize:11,color:"#94a3b8",flex:1}}>{m.q}</div>
+        </div>
+      ))}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:10,paddingTop:10,borderTop:"1px solid #0f1a30"}}>
+        <span style={{fontSize:10,color:"#475569"}}>Combined odds: {(combinedOdds*100).toFixed(1)}%</span>
+        <span style={{fontSize:10,color:"#475569"}}>Vol: ${combo.vol}</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── DAILY JACKPOT (DraftKings pools inspiration) ─────────────────────────────
+function DailyJackpot({ answers, setAnswers, onSubmit, submitted }) {
+  return (
+    <div style={{background:"linear-gradient(135deg,#0d1220,#0a0d1a)",border:"1px solid #1e1b4b",borderRadius:14,padding:16,marginBottom:14}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+        <div>
+          <div style={{fontSize:9,color:"#818cf8",fontWeight:700,letterSpacing:1,marginBottom:3}}>DAILY JACKPOT</div>
+          <div style={{fontSize:16,fontWeight:700,color:"#e2e8f0"}}>5 for 5 = $10,000 🎯</div>
+        </div>
+        <div style={{textAlign:"right"}}>
+          <div style={{fontSize:11,color:"#475569"}}>{Object.keys(answers).length}/5 picked</div>
+          <div style={{fontSize:9,color:"#334155"}}>Resets midnight EST</div>
+        </div>
+      </div>
+      {DAILY_QUESTIONS.map((q,i) => {
+        const total = q.yesVotes + q.noVotes;
+        const yesPct = Math.round((q.yesVotes / total) * 100);
+        const picked = answers[q.id];
+        return (
+          <div key={q.id} style={{background:"#070e1c",border:`1px solid ${picked?"#1e1b4b":"#0f1a30"}`,borderRadius:10,padding:"10px 12px",marginBottom:8}}>
+            <div style={{fontSize:12,color:"#e2e8f0",marginBottom:8}}>{q.q}</div>
+            <div style={{display:"flex",gap:4}}>
+              {["YES","NO"].map(s => {
+                const pct = s==="YES"?yesPct:100-yesPct;
+                return (
+                  <button key={s} onClick={()=>!submitted&&setAnswers({...answers,[q.id]:s})}
+                    style={{flex:1,padding:"7px 0",borderRadius:7,border:`1px solid ${picked===s?(s==="YES"?"#166534":"#7f1d1d"):"#1e293b"}`,background:picked===s?(s==="YES"?"#052e16":"#1c0a0a"):"#0d1220",color:picked===s?(s==="YES"?"#4ade80":"#f87171"):"#475569",cursor:submitted?"default":"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700,transition:"all 0.15s"}}>
+                    {s} · {pct}%
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+      <button onClick={onSubmit} disabled={Object.keys(answers).length < 5 || submitted}
+        style={{width:"100%",padding:"12px 0",background:Object.keys(answers).length===5&&!submitted?"linear-gradient(135deg,#4f46e5,#7c3aed)":"#0d1220",border:`1px solid ${Object.keys(answers).length===5&&!submitted?"#6366f1":"#1e293b"}`,borderRadius:10,color:Object.keys(answers).length===5&&!submitted?"#e2e8f0":"#334155",cursor:Object.keys(answers).length===5&&!submitted?"pointer":"default",fontFamily:"inherit",fontSize:13,fontWeight:700,marginTop:4,transition:"all 0.2s"}}>
+        {submitted?"✓ Entry Submitted — Check back tomorrow!":Object.keys(answers).length===5?"Submit Entry →":`Pick ${5-Object.keys(answers).length} more to enter`}
+      </button>
+    </div>
+  );
+}
+
+// ─── STREAK WIDGET (DraftKings streak inspiration) ───────────────────────────
+function StreakWidget() {
+  const { current, best, prize, nextPrize, needed } = STREAK_DATA;
+  return (
+    <div style={{background:"linear-gradient(135deg,#0a1a0a,#052e16)",border:"1px solid #166534",borderRadius:12,padding:14,marginBottom:14}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+        <div>
+          <div style={{fontSize:9,color:"#34d399",fontWeight:700,letterSpacing:1}}>WIN STREAK 🔥</div>
+          <div style={{fontSize:22,fontWeight:700,color:"#4ade80"}}>{current} in a row</div>
+        </div>
+        <div style={{textAlign:"right"}}>
+          <div style={{fontSize:11,color:"#475569"}}>Best: {best}</div>
+          <div style={{fontSize:20,fontWeight:700,color:"#4ade80"}}>{prize}</div>
+          <div style={{fontSize:9,color:"#475569"}}>current prize</div>
+        </div>
+      </div>
+      <div style={{background:"#052e16",borderRadius:8,height:6,overflow:"hidden",marginBottom:8}}>
+        <div style={{height:"100%",width:`${(current/7)*100}%`,background:"linear-gradient(90deg,#10b981,#4ade80)",borderRadius:8,transition:"width 0.5s"}}/>
+      </div>
+      <div style={{fontSize:10,color:"#475569"}}>{needed} more wins → <span style={{color:"#4ade80",fontWeight:700}}>{nextPrize} prize</span></div>
+    </div>
+  );
+}
+
+// ─── PORTFOLIO P&L (Kalshi portfolio tracking inspiration) ───────────────────
+function Portfolio() {
+  const positions = [
+    { market:"Will Bitcoin hit $150K?", side:"YES", contracts:50, avgPrice:54, currentPrice:58, status:"open" },
+    { market:"Will Nvidia beat earnings?", side:"YES", contracts:30, avgPrice:72, currentPrice:76, status:"open" },
+    { market:"Will Tesla beat Q2 estimates?", side:"NO", contracts:20, avgPrice:56, currentPrice:52, status:"open" },
+    { market:"Will gold close above $6K?", side:"YES", contracts:40, avgPrice:58, currentPrice:61, status:"open" },
+    { market:"Will Fed cut 3+ times?", side:"YES", contracts:25, avgPrice:44, currentPrice:47, status:"settled", won:true },
+  ];
+  const totalPnl = positions.reduce((acc, p) => {
+    const pnlPerContract = p.side==="YES" ? p.currentPrice - p.avgPrice : p.avgPrice - p.currentPrice;
+    return acc + (pnlPerContract * p.contracts / 100);
+  }, 0);
+  return (
+    <div>
+      {/* P&L Summary */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14}}>
+        {[
+          { label:"Portfolio Value", val:"$5,000", color:"#e2e8f0" },
+          { label:"Unrealized P&L", val:`${totalPnl>=0?"+":""}$${totalPnl.toFixed(0)}`, color:totalPnl>=0?"#4ade80":"#f87171" },
+          { label:"Win Rate", val:"67%", color:"#818cf8" },
+        ].map(s => (
+          <div key={s.label} style={{background:"#0d1220",border:"1px solid #1e293b",borderRadius:10,padding:"10px 12px"}}>
+            <div style={{fontSize:8,color:"#475569",marginBottom:4}}>{s.label}</div>
+            <div style={{fontSize:15,fontWeight:700,color:s.color}}>{s.val}</div>
+          </div>
+        ))}
+      </div>
+      {/* Positions */}
+      <div style={{fontSize:9,color:"#334155",fontWeight:700,letterSpacing:1,marginBottom:8}}>OPEN POSITIONS</div>
+      {positions.map((p,i) => {
+        const pnlPerContract = p.side==="YES" ? p.currentPrice - p.avgPrice : p.avgPrice - p.currentPrice;
+        const totalPnlPos = pnlPerContract * p.contracts / 100;
+        return (
+          <div key={i} style={{background:"#0d1220",border:`1px solid ${p.status==="settled"?p.won?"#166534":"#7f1d1d":"#1e293b"}`,borderRadius:10,padding:"10px 12px",marginBottom:8}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+              <div style={{fontSize:11,color:"#94a3b8",flex:1,marginRight:8}}>{p.market}</div>
+              {p.status==="settled" && <span style={{fontSize:8,fontWeight:700,color:p.won?"#4ade80":"#f87171",background:p.won?"rgba(16,185,129,0.1)":"rgba(239,68,68,0.1)",padding:"2px 6px",borderRadius:4}}>SETTLED {p.won?"WIN":"LOSS"}</span>}
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:10}}>
+              <span style={{color:p.side==="YES"?"#4ade80":"#f87171",fontWeight:700}}>{p.side} · {p.contracts} contracts</span>
+              <span style={{color:"#475569"}}>avg {p.avgPrice}¢ → {p.currentPrice}¢</span>
+              <span style={{color:totalPnlPos>=0?"#4ade80":"#f87171",fontWeight:700}}>{totalPnlPos>=0?"+":""}${totalPnlPos.toFixed(2)}</span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── MARKET CARD ──────────────────────────────────────────────────────────────
+function MktCard({ m, onSelect }) {
+  return (
+    <div onClick={onSelect} style={{background:"#0d1220",border:"1px solid #1e293b",borderRadius:12,padding:12,marginBottom:8,cursor:"pointer",transition:"border-color 0.2s,transform 0.15s"}}
+      onMouseEnter={e=>{e.currentTarget.style.borderColor="#6366f1";e.currentTarget.style.transform="translateY(-1px)";}}
+      onMouseLeave={e=>{e.currentTarget.style.borderColor="#1e293b";e.currentTarget.style.transform="translateY(0)";}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+        <span style={{fontSize:18}}>{m.icon}</span>
+        <div style={{flex:1}}>
+          {m.hot && <span style={{fontSize:7,background:"rgba(245,158,11,0.15)",color:"#f59e0b",border:"1px solid rgba(245,158,11,0.3)",borderRadius:4,padding:"1px 5px",marginRight:6,fontWeight:700}}>🔥 HOT</span>}
+          {m.badge && <span style={{fontSize:7,background:"rgba(99,102,241,0.15)",color:"#818cf8",border:"1px solid rgba(99,102,241,0.3)",borderRadius:4,padding:"1px 5px",fontWeight:700}}>{m.badge}</span>}
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:4}}>
+          <OddsChart marketId={m.id} currentYes={m.yes}/>
+        </div>
+      </div>
+      <div style={{fontSize:13,lineHeight:1.45,color:"#94a3b8",marginBottom:10}}>{m.q}</div>
+      <div style={{display:"flex",gap:2,height:4,borderRadius:3,overflow:"hidden",marginBottom:8}}>
+        <div style={{flex:m.yes,background:"linear-gradient(90deg,#10b981,#34d399)",transition:"flex 0.5s"}}/>
+        <div style={{flex:100-m.yes,background:"linear-gradient(90deg,#ef4444,#f87171)",transition:"flex 0.5s"}}/>
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        <div style={{flex:1,textAlign:"center",padding:"7px 0",background:"#052e16",border:"1px solid #166534",borderRadius:7,color:"#4ade80",fontSize:12,fontWeight:700}}>YES {m.yes}¢</div>
+        <div style={{flex:1,textAlign:"center",padding:"7px 0",background:"#1c0a0a",border:"1px solid #7f1d1d",borderRadius:7,color:"#f87171",fontSize:12,fontWeight:700}}>NO {100-m.yes}¢</div>
+      </div>
+      <div style={{fontSize:8,color:"#1e293b",marginTop:8,textAlign:"right"}}>Closes {m.closes} · Vol ${m.vol}</div>
+    </div>
+  );
+}
+
+// ─── MAIN APP ─────────────────────────────────────────────────────────────────
+function App() {
+  const [tab, setTab] = useState("markets");
+  const [sector, setSector] = useState("ALL");
+  const [subTab, setSubTab] = useState("hot");
+  const [selected, setSelected] = useState(null);
+  const [tradeSide, setTradeSide] = useState("YES");
+  const [tradeAmt, setTradeAmt] = useState("");
+  const [leaderTab, setLeaderTab] = useState("weekly");
+  const [walletOpen, setWalletOpen] = useState(false);
+  const [connecting, setConnecting] = useState(null);
+  const [connected, setConnected] = useState(null);   // wallet address string
+  const [hlSigner, setHlSigner] = useState(null);     // ethers Signer
+  const [balance, setBalance] = useState(0);           // USDC on HL
+  const [hypeBalance, setHypeBalance] = useState(0);   // HYPE spot balance
+  const [livePrices, setLivePrices] = useState({});    // { BTC: 94821, ETH: ..., HYPE: ... }
+  const [createModal, setCreateModal] = useState(false);
+  const [shareModal, setShareModal] = useState(null);
+  const [notification, setNotification] = useState(null);
+  const [comboTab, setComboTab] = useState(false);
+  const [jackpotAnswers, setJackpotAnswers] = useState({});
+  const [jackpotSubmitted, setJackpotSubmitted] = useState(false);
+  const [marketDetailView, setMarketDetailView] = useState(null);
+  const wsUnsubRef = useRef(null);
+
+  // ── Live price WebSocket ───────────────────────────────────────────────────
+  useEffect(() => {
+    const unsub = hlSubscribePrices(["BTC","ETH","HYPE","SOL","BNB"], (coin, price) => {
+      setLivePrices(prev => ({ ...prev, [coin]: price }));
+    });
+    wsUnsubRef.current = unsub;
+    return () => unsub();
+  }, []);
+
+  // ── Poll REST prices as fallback (every 10s) ───────────────────────────────
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const mids = await hlGetMids(["BTC","ETH","HYPE"]);
+        setLivePrices(prev => ({ ...prev, ...mids }));
+      } catch {}
+    };
+    poll();
+    const t = setInterval(poll, 10000);
+    return () => clearInterval(t);
+  }, []);
+
+  const notify = (msg) => {
+    setNotification(msg);
+    setTimeout(() => setNotification(null), 3000);
+  };
+
+  const filtered = ALL_MARKETS.filter(m => sector === "ALL" || m.sector === sector);
+
+  // ── Real wallet connect ────────────────────────────────────────────────────
+  const WALLETS = [
+    { id:"metamask",      name:"MetaMask",        icon:"🦊", desc:"Browser extension · direct connect" },
+    { id:"walletconnect", name:"WalletConnect",    icon:"🔗", desc:"QR code · any mobile wallet" },
+    { id:"coinbase",      name:"Coinbase Wallet",  icon:"🔵", desc:"Mobile & browser extension" },
+    { id:"phantom",       name:"Phantom",          icon:"👻", desc:"Browser extension · EVM mode" },
+  ];
+
+  const connectWallet = async (id) => {
+    setConnecting(id);
+    try {
+      let signer, address;
+
+      if (id === "metamask") {
+        ({ signer, address } = await connectMetaMask());
+
+      } else if (id === "walletconnect" || id === "coinbase") {
+        // Both use Web3Modal — WalletConnect shows QR, Coinbase shows its own flow
+        ({ signer, address } = await connectViaWeb3Modal());
+
+      } else if (id === "phantom") {
+        // Phantom EVM (window.phantom.ethereum)
+        const phantomProvider = window.phantom?.ethereum;
+        if (!phantomProvider) throw new Error("Phantom not found — install the extension");
+        const provider = new ethers.BrowserProvider(phantomProvider);
+        await provider.send("eth_requestAccounts", []);
+        signer = await provider.getSigner();
+        address = await signer.getAddress();
+
+      } else {
+        throw new Error("Unsupported wallet");
+      }
+
+      setHlSigner(signer);
+      setConnected(address);
+
+      // Load balances from Hyperliquid
+      try {
+        const spotBals = await hlGetSpotBalances(address);
+        setHypeBalance(spotBals["HYPE"] || 0);
+        const perpState = await hlGetPerpState(address);
+        const usdc = perpState?.marginSummary?.accountValue
+          ? parseFloat(perpState.marginSummary.accountValue)
+          : (spotBals["USDC"] || spotBals["USDC:0xaf88d065e77c8cc2239327c5edb3a432268e5831"] || 0);
+        setBalance(usdc);
+        notify(`✓ Connected · ${address.slice(0,6)}…${address.slice(-4)} · $${usdc.toFixed(2)} USDC`);
+      } catch {
+        notify(`✓ Wallet connected · ${address.slice(0,6)}…${address.slice(-4)}`);
+      }
+
+    } catch (err) {
+      if (err.message !== "Connection timed out") {
+        notify(`✗ ${err.message || "Connection failed"}`);
+      }
+    } finally {
+      setConnecting(null);
+      setWalletOpen(false);
+    }
+  };
+
+  // ── Refresh balances after a trade ────────────────────────────────────────
+  const refreshBalances = async () => {
+    if (!connected || connected === "0x0000000000000000000000000000000000000000") return;
+    try {
+      const spotBals = await hlGetSpotBalances(connected);
+      setHypeBalance(spotBals["HYPE"] || 0);
+      const perpState = await hlGetPerpState(connected);
+      const usdc = perpState?.marginSummary?.accountValue
+        ? parseFloat(perpState.marginSummary.accountValue) : (spotBals["USDC"] || 0);
+      setBalance(usdc);
+    } catch {}
+  };
+
+  return (
+    <div style={{maxWidth:430,margin:"0 auto",minHeight:"100vh",background:"#050810",fontFamily:"'IBM Plex Mono', monospace",color:"#e2e8f0",paddingBottom:80}}>
+
+      {/* Live ticker */}
+      <LiveTicker prices={livePrices}/>
+
+      {/* Notification */}
+      {notification && (
+        <div style={{position:"fixed",top:36,left:"50%",transform:"translateX(-50%)",background:"#1e1b4b",border:"1px solid #6366f1",color:"#e2e8f0",padding:"10px 20px",borderRadius:10,fontSize:12,zIndex:9999,animation:"fadeSlide 0.3s ease",whiteSpace:"nowrap"}}>
+          {notification}
+        </div>
+      )}
+
+      {/* Header */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",borderBottom:"1px solid #0f1a30",background:"#050810",position:"sticky",top:0,zIndex:100}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <HyperflexLogo size={28}/>
+          <span style={{fontSize:14,fontWeight:700,letterSpacing:2,color:"#e2e8f0"}}>HYPERFLEX</span>
+          <span style={{fontSize:7,background:"rgba(99,102,241,0.2)",color:"#818cf8",border:"1px solid rgba(99,102,241,0.4)",borderRadius:4,padding:"1px 6px",fontWeight:700}}>v4</span>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{textAlign:"right"}}>
+            {connected ? (
+              <>
+                <div style={{fontSize:8,color:"#475569"}}>HL BALANCE</div>
+                <div style={{fontSize:13,fontWeight:700,color:"#4ade80"}}>${balance.toLocaleString(undefined,{minimumFractionDigits:2})} USDC</div>
+                {hypeBalance > 0 && <div style={{fontSize:9,color:"#818cf8"}}>💧 {hypeBalance.toFixed(2)} HYPE</div>}
+              </>
+            ) : (
+              <>
+                <div style={{fontSize:8,color:"#475569"}}>BTC LIVE</div>
+                <div style={{fontSize:13,fontWeight:700,color:"#4ade80"}}>{livePrices.BTC ? `$${livePrices.BTC.toLocaleString(undefined,{maximumFractionDigits:0})}` : "—"}</div>
+              </>
+            )}
+          </div>
+          <button onClick={()=>setWalletOpen(true)} style={{background:connected?"#052e16":"#1e1b4b",border:`1px solid ${connected?"#166534":"#4f46e5"}`,borderRadius:8,color:connected?"#4ade80":"#818cf8",padding:"6px 10px",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700}}>
+            {connected ? `● ${connected.slice(0,4)}…${connected.slice(-3)}` : "CONNECT"}
+          </button>
+        </div>
+      </div>
+
+      <div style={{padding:"12px 16px"}}>
+
+        {/* STREAK WIDGET - always visible */}
+        <StreakWidget/>
+
+        {/* Tabs */}
+        <div style={{display:"flex",borderBottom:"1px solid #0f1a30",marginBottom:14}}>
+          {[["markets","Markets"],["combos","Combos ✨"],["jackpot","Jackpot 🎯"],["portfolio","Portfolio"],["leaderboard","Board"],["profile","Profile"]].map(([t,label]) => (
+            <button key={t} onClick={()=>{setTab(t);if(t==="markets")setMarketDetailView(null);}} style={{flex:1,padding:"9px 0",background:"transparent",border:"none",borderBottom:tab===t?"2px solid #6366f1":"2px solid transparent",color:tab===t?"#818cf8":"#334155",cursor:"pointer",fontFamily:"inherit",fontSize:8,fontWeight:tab===t?700:400,letterSpacing:0.5,textTransform:"uppercase",transition:"all 0.2s",whiteSpace:"nowrap"}}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* MARKETS */}
+        {tab==="markets" && (
+          marketDetailView ? (
+            <MarketDetail m={marketDetailView} onBack={()=>setMarketDetailView(null)} onTrade={notify} hlSigner={hlSigner} hlAddress={connected} refreshBalances={refreshBalances}/>
+          ) : (
+            <div className="fade-in">
+              {/* Sector filters */}
+              <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:8,marginBottom:12}}>
+                {SECTORS.map(s => (
+                  <button key={s} onClick={()=>setSector(s)} style={{whiteSpace:"nowrap",padding:"5px 10px",background:sector===s?"#1e1b4b":"#0a1020",border:`1px solid ${sector===s?"#6366f1":"#1e293b"}`,borderRadius:20,color:sector===s?"#818cf8":"#334155",cursor:"pointer",fontFamily:"inherit",fontSize:9,fontWeight:700,letterSpacing:0.5,transition:"all 0.2s",boxShadow:sector===s?"0 0 10px rgba(99,102,241,0.2)":"none"}}>
+                    {SECTOR_META[s].icon} {s}
+                  </button>
+                ))}
+              </div>
+
+              {/* Sub tabs */}
+              <div style={{display:"flex",gap:4,marginBottom:12}}>
+                {["hot","all","new"].map(t => (
+                  <button key={t} onClick={()=>setSubTab(t)} style={{flex:1,padding:"7px 0",background:subTab===t?"#1e1b4b":"#0a1020",border:`1px solid ${subTab===t?"#6366f1":"#1e293b"}`,borderRadius:8,color:subTab===t?"#818cf8":"#334155",cursor:"pointer",fontFamily:"inherit",fontSize:10,fontWeight:700,transition:"all 0.2s"}}>
+                    {t==="hot"?"🔥 Trending":t==="all"?"All Markets":"🆕 New"}
+                  </button>
+                ))}
+              </div>
+
+              {/* Stats bar */}
+              <div style={{display:"flex",gap:6,marginBottom:12,overflowX:"auto"}}>
+                {[{l:"Total Volume",v:"$124M+"},{l:"Markets Live",v:"34"},{l:"Traders",v:"48,291"}].map((s,i) => (
+                  <div key={i} style={{flex:1,background:"#0a1020",border:"1px solid #0f1a30",borderRadius:8,padding:"7px 10px",textAlign:"center",minWidth:80}}>
+                    <div style={{fontSize:13,fontWeight:700,color:"#818cf8"}}>{s.v}</div>
+                    <div style={{fontSize:8,color:"#334155"}}>{s.l}</div>
+                  </div>
+                ))}
+              </div>
+
+              {(subTab==="hot"?filtered.filter(m=>m.hot):filtered).map(m=>(
+                <MktCard key={m.id} m={m} onSelect={()=>setMarketDetailView(m)}/>
+              ))}
+            </div>
+          )
+        )}
+
+        {/* COMBOS — DraftKings Same-Game Parlay style */}
+        {tab==="combos" && (
+          <div className="fade-in">
+            <div style={{background:"linear-gradient(135deg,#0d0a1a,#1e1b4b)",border:"1px solid #312e81",borderRadius:12,padding:14,marginBottom:14}}>
+              <div style={{fontSize:9,color:"#818cf8",fontWeight:700,letterSpacing:1,marginBottom:4}}>COMBO MARKETS</div>
+              <div style={{fontSize:15,fontWeight:700,color:"#e2e8f0",marginBottom:4}}>Stack multiple markets for bigger payouts</div>
+              <div style={{fontSize:11,color:"#475569"}}>All legs must win. Higher risk, exponential reward.</div>
+            </div>
+            {COMBO_MARKETS.map(combo => (
+              <ComboCard key={combo.id} combo={combo} onSelect={()=>notify(`✓ Viewing ${combo.name} · ${combo.multiplier} payout`)}/>
+            ))}
+            <div style={{background:"#0d1220",border:"1px solid #1e293b",borderRadius:12,padding:14,marginTop:8}}>
+              <div style={{fontSize:11,color:"#475569",marginBottom:8}}>🛠️ Build Your Own Combo</div>
+              <div style={{fontSize:10,color:"#334155",marginBottom:10}}>Select 2-5 markets to create a custom combo with calculated multiplier</div>
+              <button onClick={()=>notify("Custom combo builder coming soon!")} style={{width:"100%",padding:"11px 0",background:"#1e1b4b",border:"1px solid #4f46e5",borderRadius:10,color:"#818cf8",cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:700}}>
+                + Create Custom Combo
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* JACKPOT — DraftKings pools style */}
+        {tab==="jackpot" && (
+          <div className="fade-in">
+            <DailyJackpot answers={jackpotAnswers} setAnswers={setJackpotAnswers} onSubmit={()=>{setJackpotSubmitted(true);notify("✓ Jackpot entry submitted! Results at midnight.");}} submitted={jackpotSubmitted}/>
+            <div style={{background:"#0d1220",border:"1px solid #1e293b",borderRadius:12,padding:14}}>
+              <div style={{fontSize:9,color:"#334155",fontWeight:700,letterSpacing:1,marginBottom:10}}>PRIZE STRUCTURE</div>
+              {[["5/5","$10,000 🎯"],["4/5","$500"],["3/5","$50"],["2/5","Entry refund"]].map(([k,v])=>(
+                <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #0f1a30",fontSize:12}}>
+                  <span style={{color:"#94a3b8"}}>{k} correct</span>
+                  <span style={{color:"#4ade80",fontWeight:700}}>{v}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* PORTFOLIO — Kalshi portfolio tracking style */}
+        {tab==="portfolio" && (
+          <div className="fade-in">
+            <Portfolio/>
+          </div>
+        )}
+
+        {/* LEADERBOARD */}
+        {tab==="leaderboard" && (
+          <div className="fade-in">
+            <div style={{display:"flex",gap:4,marginBottom:12}}>
+              {["weekly","monthly","alltime"].map(t=>(
+                <button key={t} onClick={()=>setLeaderTab(t)} style={{flex:1,padding:"6px 0",background:leaderTab===t?"#1e1b4b":"#0a1020",border:`1px solid ${leaderTab===t?"#6366f1":"#1e293b"}`,borderRadius:8,color:leaderTab===t?"#818cf8":"#334155",cursor:"pointer",fontFamily:"inherit",fontSize:9,fontWeight:700,transition:"all 0.2s"}}>
+                  {t==="alltime"?"All Time":t.charAt(0).toUpperCase()+t.slice(1)}
+                </button>
+              ))}
+            </div>
+            {LEADERBOARD_DATA.map((p,i)=>(
+              <div key={p.rank} style={{background:p.isUser?"#0d1a10":"#0a1020",border:`1px solid ${p.isUser?"#166534":"#0f1a30"}`,borderRadius:12,padding:14,marginBottom:8,display:"flex",alignItems:"center",gap:10,position:"relative",overflow:"hidden"}}>
+                {p.rank<=3&&<div style={{position:"absolute",top:0,left:0,width:3,height:"100%",background:p.rank===1?"#f59e0b":p.rank===2?"#94a3b8":"#cd7c4e"}}/>}
+                <div style={{fontSize:18,fontWeight:700,color:"#334155",minWidth:24,textAlign:"center"}}>{p.badge||p.rank}</div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:13,fontWeight:700,color:p.isUser?"#4ade80":"#e2e8f0"}}>{p.name}{p.isUser?" (You)":""}</div>
+                  <div style={{fontSize:9,color:"#475569"}}>{p.trades} trades · {p.vol} volume</div>
+                </div>
+                <div style={{textAlign:"right"}}>
+                  <div style={{fontSize:14,fontWeight:700,color:"#4ade80"}}>{p.pnl}</div>
+                  <div style={{fontSize:10,color:"#818cf8"}}>{p.roi} ROI</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* PROFILE */}
+        {tab==="profile" && (
+          <div className="fade-in">
+            <div style={{background:"#0d1220",border:"1px solid #1e293b",borderRadius:14,padding:16,marginBottom:14,textAlign:"center"}}>
+              <div style={{fontSize:42,marginBottom:8}}>⭐</div>
+              <div style={{fontSize:16,fontWeight:700,color:"#e2e8f0",marginBottom:2}}>YOU</div>
+              <div style={{fontSize:10,color:"#475569",marginBottom:12}}>BRONZE TIER · Rank #8</div>
+              <div style={{display:"flex",justifyContent:"center",gap:16}}>
+                {[{l:"P&L",v:"+$2,140"},{l:"ROI",v:"+42%"},{l:"Trades",v:"12"},{l:"Streak",v:"🔥4"}].map(s=>(
+                  <div key={s.l}>
+                    <div style={{fontSize:14,fontWeight:700,color:"#818cf8"}}>{s.v}</div>
+                    <div style={{fontSize:8,color:"#334155"}}>{s.l}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Achievements */}
+            <div style={{fontSize:9,color:"#334155",fontWeight:700,letterSpacing:1,marginBottom:8}}>ACHIEVEMENTS</div>
+            {[
+              {icon:"🎯",name:"First Blood",desc:"Placed your first trade",done:true},
+              {icon:"🔥",name:"4-Streak",desc:"4 correct picks in a row",done:true},
+              {icon:"🏆",name:"Top 10",desc:"Reached the leaderboard",done:true},
+              {icon:"💎",name:"Diamond",desc:"Trade $100K+ total volume",done:false},
+              {icon:"🐋",name:"Whale",desc:"Hold $50K+ in one market",done:false},
+            ].map((a,i)=>(
+              <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",background:a.done?"#0d1a10":"#0a1020",border:`1px solid ${a.done?"#166534":"#0f1a30"}`,borderRadius:10,marginBottom:6}}>
+                <span style={{fontSize:20,opacity:a.done?1:0.3}}>{a.icon}</span>
+                <div>
+                  <div style={{fontSize:12,fontWeight:700,color:a.done?"#e2e8f0":"#334155"}}>{a.name}</div>
+                  <div style={{fontSize:10,color:"#475569"}}>{a.desc}</div>
+                </div>
+                {a.done&&<span style={{marginLeft:"auto",fontSize:9,color:"#4ade80",fontWeight:700}}>✓</span>}
+              </div>
+            ))}
+
+            {/* Referral */}
+            <div style={{background:"linear-gradient(135deg,#0d1220,#1e1b4b)",border:"1px solid #312e81",borderRadius:12,padding:14,marginTop:12}}>
+              <div style={{fontSize:11,fontWeight:700,color:"#818cf8",marginBottom:4}}>💰 Refer & Earn</div>
+              <div style={{fontSize:10,color:"#475569",marginBottom:10}}>Get $25 for every friend who trades $100+</div>
+              <button onClick={()=>notify("✓ Referral link copied!")} style={{width:"100%",padding:"10px 0",background:"#1e1b4b",border:"1px solid #4f46e5",borderRadius:8,color:"#818cf8",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700}}>
+                Copy Referral Link
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Bottom Nav */}
+      <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,background:"#050810",borderTop:"1px solid #0f1a30",display:"flex",padding:"8px 0 12px"}}>
+        {[["markets","📊","Markets"],["combos","🎰","Combos"],["jackpot","🎯","Jackpot"],["portfolio","💼","Portfolio"],["leaderboard","🏆","Board"]].map(([t,icon,label])=>(
+          <button key={t} onClick={()=>{setTab(t);if(t==="markets")setMarketDetailView(null);}} style={{flex:1,background:"none",border:"none",color:tab===t?"#818cf8":"#334155",cursor:"pointer",fontFamily:"inherit",fontSize:8,display:"flex",flexDirection:"column",alignItems:"center",gap:2,transition:"color 0.2s"}}>
+            <span style={{fontSize:18}}>{icon}</span>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Wallet Modal */}
+      {walletOpen && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:1000,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={()=>setWalletOpen(false)}>
+          <div style={{background:"#0d1220",border:"1px solid #1e293b",borderRadius:"20px 20px 0 0",padding:20,width:"100%",maxWidth:430,maxHeight:"80vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
+            {connected ? (
+              <>
+                <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>Wallet Connected</div>
+                <div style={{fontSize:10,color:"#475569",marginBottom:16,wordBreak:"break-all"}}>{connected}</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
+                  <div style={{background:"#0a1020",border:"1px solid #0f1a30",borderRadius:10,padding:"10px 12px"}}>
+                    <div style={{fontSize:8,color:"#475569",marginBottom:2}}>USDC BALANCE</div>
+                    <div style={{fontSize:14,fontWeight:700,color:"#4ade80"}}>${balance.toLocaleString(undefined,{minimumFractionDigits:2})}</div>
+                  </div>
+                  <div style={{background:"#0a1020",border:"1px solid #0f1a30",borderRadius:10,padding:"10px 12px"}}>
+                    <div style={{fontSize:8,color:"#475569",marginBottom:2}}>HYPE BALANCE</div>
+                    <div style={{fontSize:14,fontWeight:700,color:"#818cf8"}}>💧 {hypeBalance.toFixed(4)}</div>
+                  </div>
+                </div>
+                <a href={`https://app.hyperliquid.xyz/portfolio?address=${connected}`} target="_blank" rel="noopener noreferrer" style={{display:"block",textAlign:"center",padding:"10px 0",background:"#0a1020",border:"1px solid #1e293b",borderRadius:8,color:"#818cf8",textDecoration:"none",fontFamily:"inherit",fontSize:11,fontWeight:700,marginBottom:8}}>
+                  View on Hyperliquid ↗
+                </a>
+                <button onClick={()=>{setConnected(null);setHlSigner(null);setBalance(0);setHypeBalance(0);setWalletOpen(false);notify("Wallet disconnected");}} style={{width:"100%",padding:"10px 0",background:"#1c0a0a",border:"1px solid #7f1d1d",borderRadius:8,color:"#f87171",cursor:"pointer",fontFamily:"inherit",fontSize:11,fontWeight:700}}>
+                  Disconnect
+                </button>
+              </>
+            ) : (
+              <>
+                <div style={{fontSize:13,fontWeight:700,marginBottom:16}}>Connect Wallet</div>
+                {WALLETS.map(w=>(
+                  <button key={w.id} onClick={()=>connectWallet(w.id)} disabled={!!connecting} style={{width:"100%",display:"flex",alignItems:"center",gap:12,padding:"13px 14px",background:connecting===w.id?"#1e1b4b":"#0d1220",border:`1px solid ${connecting===w.id?"#6366f1":"#1e293b"}`,borderRadius:10,color:"#e2e8f0",cursor:"pointer",fontFamily:"inherit",marginBottom:6,transition:"all 0.2s",textAlign:"left"}}>
+                    <span style={{fontSize:22}}>{w.icon}</span>
+                    <div><div style={{fontSize:13,fontWeight:700}}>{w.name}</div><div style={{fontSize:10,color:"#475569"}}>{w.desc}</div></div>
+                    {connecting===w.id&&<span style={{marginLeft:"auto",fontSize:10,color:"#818cf8"}}>Connecting...</span>}
+                  </button>
+                ))}
+                <div style={{fontSize:9,color:"#334155",textAlign:"center",marginTop:12}}>🔒 Non-custodial · Powered by Hyperliquid · Your keys, your funds</div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>

@@ -1,0 +1,122 @@
+# HYPERFLEX Creator Platform — Setup Guide
+# Do these steps when you get to your desktop
+
+## Files delivered:
+# - creator-signup.html    → the 3-step signup page
+# - creator-dashboard.html → the full creator dashboard
+# - creator-routes.js      → all backend routes (paste into server.js)
+# - creator-migrations.sql → run in Supabase SQL Editor
+
+═══════════════════════════════════════════════════
+STEP 1 — Run the SQL migrations
+═══════════════════════════════════════════════════
+1. Go to supabase.com → your project → SQL Editor
+2. Paste the entire contents of creator-migrations.sql
+3. Click Run
+4. Should see green checkmarks — no errors
+
+═══════════════════════════════════════════════════
+STEP 2 — Install new npm packages
+═══════════════════════════════════════════════════
+In your project root:
+
+  npm install bcrypt jsonwebtoken
+
+═══════════════════════════════════════════════════
+STEP 3 — Add env variable
+═══════════════════════════════════════════════════
+In Railway → your project → Variables, add:
+
+  JWT_SECRET = hyperflex-super-secret-2026-change-this
+
+(Make it long and random — it signs all creator tokens)
+
+═══════════════════════════════════════════════════
+STEP 4 — Copy HTML files to public folder
+═══════════════════════════════════════════════════
+In your project:
+
+  cp creator-signup.html public/creator-signup.html
+  cp creator-dashboard.html public/creator-dashboard.html
+
+═══════════════════════════════════════════════════
+STEP 5 — Paste routes into server.js
+═══════════════════════════════════════════════════
+Open server.js and find your 404 handler. It looks like:
+
+  app.use((req, res) => {
+    res.status(404).json({ error: 'Not found' });
+  });
+
+Paste the ENTIRE contents of creator-routes.js
+ABOVE that 404 handler.
+
+═══════════════════════════════════════════════════
+STEP 6 — Add require() at top of server.js
+═══════════════════════════════════════════════════
+Near the top of server.js, with your other requires:
+
+  const bcrypt = require('bcrypt');
+  const jwt = require('jsonwebtoken');
+
+(Remove these two lines from creator-routes.js
+ since you'll have them at the top of server.js)
+
+═══════════════════════════════════════════════════
+STEP 7 — Commit and deploy
+═══════════════════════════════════════════════════
+  git add -A
+  git commit -m "feat: creator platform — signup, dashboard, AI market suggester"
+  git push origin main
+
+Railway auto-deploys. Takes ~2 minutes.
+
+═══════════════════════════════════════════════════
+STEP 8 — Test it
+═══════════════════════════════════════════════════
+Visit: https://hyperflex-production-4294.up.railway.app/creator/signup
+
+Try creating a community:
+  - Display name: "Test Community"
+  - Email: your email
+  - Password: anything 8+ chars
+  - Slug: "test-community"
+  - Points name: "Test Coins"
+  - Describe the community and hit AI Suggest
+  - Select a few markets → Launch
+
+Then check: /creator/dashboard
+
+═══════════════════════════════════════════════════
+ROUTES ADDED:
+═══════════════════════════════════════════════════
+GET  /creator/signup              → signup page
+GET  /creator/login               → login page  
+GET  /creator/dashboard           → dashboard page
+GET  /api/creator/check-slug      → slug availability
+POST /api/creator/signup          → create account
+POST /api/creator/login           → get JWT token
+GET  /api/creator/dashboard       → dashboard data
+PUT  /api/creator/settings        → update settings
+POST /markets/:id/resolve         → resolve a market
+POST /api/suggest-markets         → AI market ideas
+GET  /api/community/:slug         → public community data
+
+═══════════════════════════════════════════════════
+IF ANYTHING BREAKS:
+═══════════════════════════════════════════════════
+1. Check Railway logs first (most issues show there)
+2. Common issues:
+   - "bcrypt not found" → run: npm install bcrypt jsonwebtoken
+   - "JWT_SECRET undefined" → add to Railway env vars
+   - Supabase errors → check SQL ran without errors
+   - 404 on /creator/signup → check HTML files are in /public
+
+═══════════════════════════════════════════════════
+NEXT SESSION (after this works):
+═══════════════════════════════════════════════════
+1. Creator login page (forgot password flow)
+2. Public community page (what fans see at /slug)
+3. Subdomain routing (gridiron-picks.hyperflex.network)
+4. Stripe integration for Pro tier ($29/mo)
+5. Share card image generator (og:image for social)

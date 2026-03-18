@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HYPERFLEX — Master Roadmap</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #060810;
+    color: #E8E8F0;
+    font-family: 'Space Mono', monospace;
+    min-height: 100vh;
+  }
+
+  /* HEADER */
+  .hfx-header {
+    background: linear-gradient(180deg, #060810 0%, #0A0F1E 100%);
+    border-bottom: 1px solid rgba(0,255,178,0.15);
+    padding: 32px 40px 24px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+  }
+  .hfx-logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 52px;
+    letter-spacing: 8px;
+    color: #00FFB2;
+    text-shadow: 0 0 40px rgba(0,255,178,0.45);
+    line-height: 1;
+  }
+  .hfx-tagline {
+    font-size: 10px;
+    letter-spacing: 4px;
+    color: rgba(0,255,178,0.5);
+    text-transform: uppercase;
+    margin-top: 6px;
+  }
+  .hfx-meta {
+    text-align: right;
+    font-size: 10px;
+    color: rgba(255,255,255,0.3);
+    letter-spacing: 2px;
+    line-height: 1.8;
+  }
+  .hfx-meta span { color: rgba(0,255,178,0.5); }
+
+  /* TIMELINE BAR */
+  .timeline-bar {
+    display: flex;
+    align-items: center;
+    padding: 14px 40px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    background: rgba(255,255,255,0.01);
+  }
+  .tl-segment {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+  }
+  .tl-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .tl-label {
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    white-space: nowrap;
+  }
+  .tl-line {
+    flex: 1;
+    height: 1px;
+    opacity: 0.35;
+  }
+
+  /* KITCO ALERT */
+  .kitco-alert {
+    margin: 16px 40px;
+    padding: 13px 18px;
+    background: rgba(0,255,178,0.04);
+    border: 1px solid rgba(0,255,178,0.25);
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .kitco-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #00FFB2;
+    box-shadow: 0 0 14px #00FFB2;
+    flex-shrink: 0;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 14px #00FFB2; }
+    50% { opacity: 0.3; box-shadow: 0 0 4px #00FFB2; }
+  }
+  .kitco-text { font-size: 10px; color: #00FFB2; letter-spacing: 1px; }
+  .kitco-sub { font-size: 9px; color: rgba(0,255,178,0.45); margin-top: 3px; }
+
+  /* PHASE GRID */
+  .hfx-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    padding: 0 24px 28px;
+  }
+  .phase-col {
+    border-right: 1px solid rgba(255,255,255,0.05);
+    padding: 24px 18px;
+  }
+  .phase-col:last-child { border-right: none; }
+  .phase-num {
+    font-size: 9px;
+    letter-spacing: 3px;
+    color: rgba(255,255,255,0.22);
+    margin-bottom: 6px;
+  }
+  .phase-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 24px;
+    letter-spacing: 2px;
+    line-height: 1.1;
+    margin-bottom: 4px;
+  }
+  .phase-time {
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: rgba(255,255,255,0.28);
+    margin-bottom: 18px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+  }
+
+  /* STEP CARDS */
+  .step-item {
+    margin-bottom: 12px;
+    padding: 10px 12px;
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.06);
+    background: rgba(255,255,255,0.02);
+    position: relative;
+    transition: background 0.15s;
+  }
+  .step-item:hover {
+    background: rgba(255,255,255,0.045);
+    border-color: rgba(255,255,255,0.12);
+  }
+  .step-item.done {
+    opacity: 0.48;
+    background: rgba(0,255,178,0.03);
+    border-color: rgba(0,255,178,0.18);
+  }
+  .step-item.urgent {
+    border-left: 2px solid #FF3366;
+  }
+  .done-check {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    font-size: 11px;
+    color: #00FFB2;
+  }
+  .urgent-badge {
+    font-size: 7px;
+    letter-spacing: 2px;
+    color: #FF3366;
+    display: block;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+  }
+  .step-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-bottom: 7px;
+    display: inline-block;
+  }
+  .step-title {
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.45;
+    margin-bottom: 5px;
+    color: #E8E8F0;
+  }
+  .step-detail {
+    font-size: 8.5px;
+    color: rgba(255,255,255,0.28);
+    line-height: 1.55;
+  }
+
+  /* MOAT SECTION */
+  .moat-section {
+    padding: 0 40px 36px;
+    border-top: 1px solid rgba(255,255,255,0.05);
+  }
+  .moat-header {
+    font-size: 9px;
+    letter-spacing: 4px;
+    color: rgba(255,255,255,0.18);
+    padding: 20px 0 16px;
+    text-transform: uppercase;
+  }
+  .moat-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+  }
+  .moat-card {
+    padding: 14px;
+    border: 1px solid rgba(255,215,0,0.1);
+    border-radius: 4px;
+    background: rgba(255,215,0,0.018);
+  }
+  .moat-icon { color: #FFD700; font-size: 15px; margin-bottom: 9px; display: block; }
+  .moat-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: #FFD700;
+    margin-bottom: 7px;
+    text-transform: uppercase;
+  }
+  .moat-desc {
+    font-size: 8px;
+    color: rgba(255,255,255,0.28);
+    line-height: 1.65;
+  }
+
+  /* FOOTER */
+  .hfx-footer {
+    padding: 14px 40px;
+    border-top: 1px solid rgba(255,255,255,0.05);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .footer-l { font-size: 9px; color: rgba(255,255,255,0.18); letter-spacing: 2px; }
+  .footer-r { font-size: 9px; color: rgba(0,255,178,0.35); letter-spacing: 2px; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="hfx-header">
+  <div>
+    <div class="hfx-logo">HYPERFLEX</div>
+    <div class="hfx-tagline">◆ Predict Everything · Built on HyperLiquid HIP-4</div>
+  </div>
+  <div class="hfx-meta">
+    <div>MASTER ROADMAP</div>
+    <div>MARCH 2026 → LAUNCH</div>
+    <div><span>20 MILESTONES · 5 PHASES</span></div>
+  </div>
+</div>
+
+<!-- TIMELINE BAR -->
+<div class="timeline-bar">
+  <div class="tl-segment">
+    <div class="tl-dot" style="background:#00FFB2;box-shadow:0 0 8px #00FFB260"></div>
+    <div class="tl-label" style="color:#00FFB2">THIS WEEK</div>
+    <div class="tl-line" style="background:linear-gradient(90deg,#00FFB240,#FFD70040)"></div>
+  </div>
+  <div class="tl-segment">
+    <div class="tl-dot" style="background:#FFD700;box-shadow:0 0 8px #FFD70060"></div>
+    <div class="tl-label" style="color:#FFD700">WEEK 1–2</div>
+    <div class="tl-line" style="background:linear-gradient(90deg,#FFD70040,#FF6B3540)"></div>
+  </div>
+  <div class="tl-segment">
+    <div class="tl-dot" style="background:#FF6B35;box-shadow:0 0 8px #FF6B3560"></div>
+    <div class="tl-label" style="color:#FF6B35">WEEK 2–4</div>
+    <div class="tl-line" style="background:linear-gradient(90deg,#FF6B3540,#A78BFF40)"></div>
+  </div>
+  <div class="tl-segment">
+    <div class="tl-dot" style="background:#A78BFF;box-shadow:0 0 8px #A78BFF60"></div>
+    <div class="tl-label" style="color:#A78BFF">MONTH 2</div>
+    <div class="tl-line" style="background:linear-gradient(90deg,#A78BFF40,#FF336640)"></div>
+  </div>
+  <div class="tl-segment">
+    <div class="tl-dot" style="background:#FF3366;box-shadow:0 0 8px #FF336660"></div>
+    <div class="tl-label" style="color:#FF3366">DAY 1 HIP-4 OPEN</div>
+  </div>
+</div>
+
+<!-- KITCO ALERT -->
+<div class="kitco-alert">
+  <div class="kitco-dot"></div>
+  <div>
+    <div class="kitco-text">◆ KITCO PARTNERSHIP — CALL CONFIRMED · John Dourekas responding same evening</div>
+    <div class="kitco-sub">Send deck the day before · Mon/Tue call · 3 asks: price feed · article links · oracle status</div>
+  </div>
+</div>
+
+<!-- PHASE GRID -->
+<div class="hfx-grid">
+
+  <!-- PHASE 01 -->
+  <div class="phase-col">
+    <div class="phase-num">PHASE 01</div>
+    <div class="phase-title" style="color:#00FFB2">Legal Shield</div>
+    <div class="phase-time">This Week</div>
+
+    <div class="step-item urgent">
+      <span class="urgent-badge">▲ Do first</span>
+      <div class="step-dot" style="background:#00FFB2"></div>
+      <div class="step-title">Register HYPERFLEX business name</div>
+      <div class="step-detail">Quebec registry · $38 CAD · 20 mins online</div>
+    </div>
+    <div class="step-item urgent">
+      <span class="urgent-badge">▲ Do first</span>
+      <div class="step-dot" style="background:#00FFB2"></div>
+      <div class="step-title">IP Assignment Agreement</div>
+      <div class="step-detail">Claude drafts · assigns all IP to your entity</div>
+    </div>
+    <div class="step-item urgent">
+      <span class="urgent-badge">▲ Do first</span>
+      <div class="step-dot" style="background:#00FFB2"></div>
+      <div class="step-title">Basic NDA template</div>
+      <div class="step-detail">Required before any co-founder or partner sees code</div>
+    </div>
+    <div class="step-item">
+      <div class="step-dot" style="background:#00FFB2"></div>
+      <div class="step-title">Register domain — hyperflex.xyz</div>
+      <div class="step-detail">Namecheap · ~$12/year · do before going public</div>
+    </div>
+  </div>
+
+  <!-- PHASE 02 -->
+  <div class="phase-col">
+    <div class="phase-num">PHASE 02</div>
+    <div class="phase-title" style="color:#FFD700">Funding & Partners</div>
+    <div class="phase-time">Week 1–2</div>
+
+    <div class="step-item">
+      <div class="step-dot" style="background:#FFD700"></div>
+      <div class="step-title">Apply — Anthropic for Startups</div>
+      <div class="step-detail">anthropic.com/startups · free API credits for scanner</div>
+    </div>
+    <div class="step-item">
+      <div class="step-dot" style="background:#FFD700"></div>
+      <div class="step-title">Submit HyperLiquid Foundation grant</div>
+      <div class="step-detail">Discord #builders intro → DM → submit grant doc</div>
+    </div>
+    <div class="step-item done">
+      <span class="done-check">✓</span>
+      <div class="step-dot" style="background:#00FFB2"></div>
+      <div class="step-title">Kitco call — John Dourekas</div>
+      <div class="step-detail">✅ Meeting confirmed · send deck day before · Mon/Tue</div>
+    </div>
+    <div class="step-item">
+      <div class="step-dot" style="background:#FFD700"></div>
+      <div class="step-title">Register Twitter/X @hyperflex</div>
+      <div class="step-detail">Secure handle now · do NOT post yet</div>
+    </div>
+  </div>
+
+  <!-- PHASE 03 -->
+  <div class="phase-col">
+    <div class="phase-num">PHASE 03</div>
+    <div class="phase-title" style="color:#FF6B35">Smart Contracts</div>
+    <div class="phase-time">Week 2–4</div>
+
+    <div class="step-item">
+      <div class="step-dot" style="background:#FF6B35"></div>
+      <div class="step-title">Write HIP-4 outcome contract</div>
+      <div class="step-detail">Claude writes full Solidity · ready before co-founder</div>
+    </div>
+    <div class="step-item">
+      <div class="step-dot" style="background:#FF6B35"></div>
+      <div class="step-title">Find HyperEVM co-founder</div>
+      <div class="step-detail">HyperLiquid Discord #builders · NDA + IP assign first</div>
+    </div>
+    <div class="step-item">
+      <div class="step-dot" style="background:#FF6B35"></div>
+      <div class="step-title">Oracle & fee distribution contracts</div>
+      <div class="step-detail">Reads Kitco price feed · splits fees auto</div>
+    </div>
+    <div class="step-item">
+      <div class="step-dot" style="background:#FF6B35"></div>
+      <div class="step-title">Deploy to HyperLiquid testnet</div>
+      <div class="step-detail">Test resolution, USDH settlement, price feeds</div>
+    </div>
+  </div>
+
+  <!-- PHASE 04 -->
+  <div class="phase-col">
+    <div class="phase-num">PHASE 04</div>
+    <div class="phase-title" style="color:#A78BFF">Platform Polish</div>
+    <div class="phase-time">Month 2</div>
+
+    <div class="step-item">
+      <div class="step-dot" style="background:#A78BFF"></div>
+      <div class="step-title">Merge scanner into main platform</div>
+      <div class="step-detail">AI markets flow directly into trading feed</div>
+    </div>
+    <div class="step-item">
+      <div class="step-dot" style="background:#A78BFF"></div>
+      <div class="step-title">Replace simulated data with live feeds</div>
+      <div class="step-detail">Pyth Network / HyperLiquid oracle for prices</div>
+    </div>
+    <div class="step-item">
+      <div class="step-dot" style="background:#A78BFF"></div>
+      <div class="step-title">Real wallet transaction signing</div>
+      <div class="step-detail">ethers.js / wagmi against HIP-4 contracts</div>
+    </div>
+    <div class="step-item">
+      <div class="step-dot" style="background:#A78BFF"></div>
+      <div class="step-title">Landing page + email waitlist</div>
+      <div class="step-detail">Vercel free tier · no product details · logo + tagline</div>
+    </div>
+  </div>
+
+  <!-- PHASE 05 -->
+  <div class="phase-col">
+    <div class="phase-num">PHASE 05</div>
+    <div class="phase-title" style="color:#FF3366">Launch</div>
+    <div class="phase-time">Day 1 HIP-4 Open</div>
+
+    <div class="step-item">
+      <div class="step-dot" style="background:#FF3366"></div>
+      <div class="step-title">Mainnet deployment — Day 1 HIP-4</div>
+      <div class="step-detail">Deploy all contracts · first mover on permissionless HIP-4</div>
+    </div>
+    <div class="step-item">
+      <div class="step-dot" style="background:#FF3366"></div>
+      <div class="step-title">Seed liquidity across markets</div>
+      <div class="step-detail">Activate referral program · prime the flywheel</div>
+    </div>
+    <div class="step-item">
+      <div class="step-dot" style="background:#FF3366"></div>
+      <div class="step-title">Public announcement tweet</div>
+      <div class="step-detail">Thread showing live product + real trades · tag @HyperLiquid_</div>
+    </div>
+    <div class="step-item">
+      <div class="step-dot" style="background:#FF3366"></div>
+      <div class="step-title">ETHGlobal hackathon submission</div>
+      <div class="step-detail">April 2026 · HyperLiquid track prize</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- MOAT SECTION -->
+<div class="moat-section">
+  <div class="moat-header">◈ The Five Moats — Why This Cannot Be Copied</div>
+  <div class="moat-grid">
+    <div class="moat-card">
+      <span class="moat-icon">◈</span>
+      <div class="moat-label">Resolution Dataset</div>
+      <div class="moat-desc">Every market = labeled training data. 12 months = uncopiable.</div>
+    </div>
+    <div class="moat-card">
+      <span class="moat-icon">◈</span>
+      <div class="moat-label">Liquidity Flywheel</div>
+      <div class="moat-desc">First on HIP-4 with volume captures spreads forever.</div>
+    </div>
+    <div class="moat-card">
+      <span class="moat-icon">◈</span>
+      <div class="moat-label">Commodity Expertise</div>
+      <div class="moat-desc">Junior miner drill results. Mexican security risk. Rare vertical knowledge.</div>
+    </div>
+    <div class="moat-card">
+      <span class="moat-icon">◈</span>
+      <div class="moat-label">Oracle Partnerships</div>
+      <div class="moat-desc">Kitco settles HYPERFLEX = infrastructure. Competitors need separate deals.</div>
+    </div>
+    <div class="moat-card">
+      <span class="moat-icon">◈</span>
+      <div class="moat-label">Grant Relationship</div>
+      <div class="moat-desc">Foundation won't fund a direct competitor. Endorsement = moat.</div>
+    </div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<div class="hfx-footer">
+  <div class="footer-l">HYPERFLEX · MARC DESMARAIS · MONTREAL · CONFIDENTIAL</div>
+  <div class="footer-r">THE PROTOTYPE TOOK ONE SESSION · THE MOAT TAKES ONE YEAR</div>
+</div>
+
+</body>
+</html>
