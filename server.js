@@ -7530,7 +7530,7 @@ app.get('/api/activity', async (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 40, 100);
     const since = req.query.since; // ISO cursor for polling
 
-    const [betsRes, resolutionsRes, newMarketsRes, winsRes, creatorsRes, commentsRes, rewardUnlocksRes] = await Promise.all([
+    const [betsRes, resolutionsRes, newMarketsRes, winsRes, creatorsRes, commentsRes, rewardUnlocksRes, sharedPositionsRes] = await Promise.all([
       supabase
         .from('positions')
         .select('id, user_id, side, amount, created_at, market_id, markets(id, question, tenant_slug, yes_price, no_price, yes_votes, no_votes, trader_count)')
@@ -7580,6 +7580,13 @@ app.get('/api/activity', async (req, res) => {
         .select('id, user_id, creator_slug, reward_title, reward_threshold, unlocked_at')
         .order('unlocked_at', { ascending: false })
         .limit(since ? 20 : 15),
+
+      // Shared external positions (Kalshi, Manifold, Polymarket)
+      supabase
+        .from('shared_positions')
+        .select('id, user_id, question, side, platform, current_price, pnl_pct, cash_value, market_url, created_at')
+        .order('created_at', { ascending: false })
+        .limit(since ? 20 : 15),
     ]);
 
     const communities = {};
@@ -7589,7 +7596,8 @@ app.get('/api/activity', async (req, res) => {
     const rawBets    = (betsRes.data    || []).filter(b => b.markets?.tenant_slug);
     const rawWins    = (winsRes.data    || []).filter(w => w.markets?.tenant_slug && w.markets?.resolved_at);
     const rawUnlocks = (rewardUnlocksRes.data || []).filter(u => u.creator_slug);
-    const allUserIds = [...new Set([...rawBets.map(b => b.user_id), ...rawWins.map(w => w.user_id), ...rawUnlocks.map(u => u.user_id)])];
+    const rawShared  = (sharedPositionsRes.data || []);
+    const allUserIds = [...new Set([...rawBets.map(b => b.user_id), ...rawWins.map(w => w.user_id), ...rawUnlocks.map(u => u.user_id), ...rawShared.map(s => s.user_id)])];
     const { data: usersData } = allUserIds.length
       ? await supabase.from('users').select('id, display_name').in('id', allUserIds)
       : { data: [] };
@@ -7730,6 +7738,24 @@ app.get('/api/activity', async (req, res) => {
       });
     }
 
+    // Shared external positions (external_bet feed cards)
+    for (const s of rawShared) {
+      activities.push({
+        type:          'external_bet',
+        id:            `ext_${s.id}`,
+        ts:            s.created_at,
+        user_id:       s.user_id,
+        user:          userMap[s.user_id] || 'Anonymous',
+        question:      s.question,
+        side:          (s.side || 'YES').toUpperCase(),
+        platform:      s.platform || 'kalshi',
+        current_price: s.current_price,
+        pnl_pct:       s.pnl_pct,
+        cash_value:    s.cash_value,
+        market_url:    s.market_url,
+      });
+    }
+
     // Collapse market_created bursts: same creator within 5 minutes → one card
     const BURST_WINDOW_MS = 5 * 60 * 1000;
     const mktEvents   = activities.filter(a => a.type === 'market_created');
@@ -7789,6 +7815,32 @@ app.get('/api/activity', async (req, res) => {
   } catch (err) {
     console.error('[activity feed]', err);
     res.status(500).json({ error: 'Failed to load activity feed' });
+  }
+});
+
+// POST /api/activity/share-position — log an external position to the shared feed
+app.post('/api/activity/share-position', requireAuth, async (req, res) => {
+  try {
+    const { question, side, platform, current_price, pnl_pct, cash_value, market_url } = req.body;
+    if (!question || !side || !platform) return res.status(400).json({ error: 'question, side, and platform are required' });
+    const validPlatforms = ['kalshi', 'manifold', 'polymarket'];
+    if (!validPlatforms.includes(platform.toLowerCase())) return res.status(400).json({ error: 'Invalid platform' });
+
+    const { error } = await supabase.from('shared_positions').insert({
+      user_id:       req.userId,
+      question:      String(question).slice(0, 500),
+      side:          (side || '').toUpperCase(),
+      platform:      platform.toLowerCase(),
+      current_price: current_price != null ? parseFloat(current_price) : null,
+      pnl_pct:       pnl_pct      != null ? parseInt(pnl_pct)         : null,
+      cash_value:    cash_value   != null ? parseFloat(cash_value)    : null,
+      market_url:    market_url   ? String(market_url).slice(0, 1000) : null,
+    });
+    if (error) throw error;
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[share-position]', err.message);
+    res.status(500).json({ error: 'Failed to share position' });
   }
 });
 
