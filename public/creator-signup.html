@@ -839,7 +839,7 @@ body::before {
           <p>Your prediction market is ready. Share this link with your community:</p>
           <div class="success-url" id="successUrl"></div>
           <p style="font-size:13px;color:var(--dim)">Your first markets are already published and waiting for predictions.</p>
-          <a href="/creator/dashboard" class="btn-dashboard">
+          <a href="/creator/dashboard" class="btn-dashboard" onclick="event.preventDefault();_showOnboardingModal()||(_closeOnboarding(false))">
             Go to Dashboard →
           </a>
         </div>
@@ -1178,12 +1178,8 @@ async function submitSignup() {
       document.querySelector('.login-link').style.display = 'none';
       document.getElementById('successScreen').classList.add('show');
       document.querySelector('.form-header h2').textContent = 'Welcome aboard! 🎉';
-      // If creator arrived via a template link, pass it to dashboard
-      const _tpl = new URLSearchParams(location.search).get('template');
-      if (_tpl) {
-        const dashBtn = document.querySelector('.btn-dashboard');
-        if (dashBtn) dashBtn.href = `/creator/dashboard?template=${encodeURIComponent(_tpl)}`;
-      }
+      // Show platform connect interstitial (skips if already onboarded)
+      setTimeout(_showOnboardingModal, 800);
     } else {
       showError(data.error || 'Signup failed. Please try again.');
       btn.classList.remove('loading');
@@ -1198,6 +1194,100 @@ async function submitSignup() {
 
 // Init
 updateStepUI();
+
+// ── PLATFORM CONNECT INTERSTITIAL ──────────────────────────────────────────
+function _showOnboardingModal() {
+  if (localStorage.getItem('hf_onboarded')) return;
+  document.getElementById('hf-onboarding-modal').style.display = 'flex';
+}
+
+function _closeOnboarding(goToPortfolio) {
+  localStorage.setItem('hf_onboarded', '1');
+  document.getElementById('hf-onboarding-modal').style.display = 'none';
+  const _tpl = new URLSearchParams(location.search).get('template');
+  const dest = goToPortfolio
+    ? '/creator/dashboard?tab=portfolio'
+    : (_tpl ? `/creator/dashboard?template=${encodeURIComponent(_tpl)}` : '/creator/dashboard');
+  window.location.href = dest;
+}
+
+async function _connectPlatform(platform) {
+  const token = localStorage.getItem('hf_token');
+  if (!token) { _closeOnboarding(false); return; }
+
+  const errEl   = document.getElementById('hf-ob-err');
+  const btn     = document.getElementById(`hf-ob-connect-${platform}`);
+  errEl.textContent = '';
+
+  let body = {};
+  if (platform === 'polymarket') {
+    const val = document.getElementById('hf-ob-poly').value.trim();
+    if (!val) { errEl.textContent = 'Enter your Polymarket wallet address.'; return; }
+    if (!/^0x[0-9a-fA-F]{40}$/.test(val)) { errEl.textContent = 'Invalid wallet address format.'; return; }
+    body.polymarket_address = val;
+  } else {
+    const val = document.getElementById('hf-ob-mani').value.trim();
+    if (!val) { errEl.textContent = 'Enter your Manifold username.'; return; }
+    body.manifold_username = val;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Connecting…';
+  try {
+    const r = await fetch('/api/user/wallets', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body)
+    });
+    const d = await r.json();
+    if (!r.ok) { errEl.textContent = d.error || 'Connection failed — try again.'; btn.disabled = false; btn.textContent = 'Connect'; return; }
+    _closeOnboarding(true);
+  } catch {
+    errEl.textContent = 'Network error — try again.';
+    btn.disabled = false;
+    btn.textContent = 'Connect';
+  }
+}
 </script>
+
+<!-- PLATFORM CONNECT INTERSTITIAL MODAL -->
+<div id="hf-onboarding-modal" style="display:none;position:fixed;inset:0;background:rgba(10,10,9,.85);z-index:9999;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);">
+  <div style="background:#191917;border:1px solid #2a2a26;border-radius:16px;max-width:540px;width:100%;padding:36px 32px;position:relative;">
+    <div style="text-align:center;margin-bottom:28px;">
+      <div style="font-size:32px;margin-bottom:10px;">🎉</div>
+      <h2 style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:#ddd8cc;margin:0 0 8px;">Welcome to HYPERFLEX</h2>
+      <p style="color:#7a7870;font-size:14px;margin:0;">Connect your first platform to import your prediction history</p>
+    </div>
+
+    <!-- Polymarket card -->
+    <div style="background:#141412;border:1px solid #2a2a26;border-radius:10px;padding:18px 20px;margin-bottom:12px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <span style="background:#0066ff22;color:#4d8fff;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;">Polymarket</span>
+        <span style="color:#7a7870;font-size:13px;">Paste your wallet address</span>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <input id="hf-ob-poly" type="text" placeholder="0x... wallet address" style="flex:1;background:#0e0e0c;border:1px solid #2a2a26;border-radius:7px;padding:10px 12px;color:#ddd8cc;font-family:'Space Mono',monospace;font-size:12px;outline:none;min-width:0;" onkeydown="if(event.key==='Enter')_connectPlatform('polymarket')"/>
+        <button id="hf-ob-connect-polymarket" onclick="_connectPlatform('polymarket')" style="background:#c9920d;color:#141412;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;padding:10px 16px;border:none;border-radius:7px;cursor:pointer;white-space:nowrap;">Connect</button>
+      </div>
+    </div>
+
+    <!-- Manifold card -->
+    <div style="background:#141412;border:1px solid #2a2a26;border-radius:10px;padding:18px 20px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <span style="background:#6d28d922;color:#a78bfa;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;">Manifold</span>
+        <span style="color:#7a7870;font-size:13px;">Enter your username</span>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <input id="hf-ob-mani" type="text" placeholder="manifold username" style="flex:1;background:#0e0e0c;border:1px solid #2a2a26;border-radius:7px;padding:10px 12px;color:#ddd8cc;font-family:'Space Mono',monospace;font-size:12px;outline:none;min-width:0;" onkeydown="if(event.key==='Enter')_connectPlatform('manifold')"/>
+        <button id="hf-ob-connect-manifold" onclick="_connectPlatform('manifold')" style="background:#c9920d;color:#141412;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;padding:10px 16px;border:none;border-radius:7px;cursor:pointer;white-space:nowrap;">Connect</button>
+      </div>
+    </div>
+
+    <div id="hf-ob-err" style="color:#c0392b;font-size:13px;min-height:18px;margin-bottom:12px;text-align:center;"></div>
+
+    <button onclick="_closeOnboarding(false)" style="width:100%;background:transparent;border:1px solid #2a2a26;border-radius:8px;padding:11px;color:#7a7870;font-family:'Syne',sans-serif;font-size:13px;cursor:pointer;">Skip for now — go to dashboard</button>
+  </div>
+</div>
+
 </body>
 </html>
