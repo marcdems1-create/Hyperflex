@@ -2642,29 +2642,83 @@ app.get('/api/odds/search', async (req, res) => {
       // Pick the shortest title as the topic label
       const topic = cluster.reduce((a, b) => a.market_title.length <= b.market_title.length ? a : b).market_title;
 
+      const mkts = cluster.map(m => ({
+        platform: m.platform,
+        title: m.market_title,
+        probability: Math.round((m.probability || 0) * 100),
+        url: m.market_url || '#',
+        side: m.side || 'YES'
+      }));
+
+      // Arbitrage detection: multi-platform cluster with >5% probability spread
+      const platforms = new Set(mkts.map(m => m.platform));
+      const probs = mkts.map(m => m.probability);
+      const spread = probs.length > 1 ? Math.max(...probs) - Math.min(...probs) : 0;
+      const hasArbitrage = platforms.size >= 2 && spread > 5;
+
       clusters.push({
         topic,
-        markets: cluster.map(m => ({
-          platform: m.platform,
-          title: m.market_title,
-          probability: Math.round((m.probability || 0) * 100),
-          url: m.market_url || '#',
-          side: m.side || 'YES'
-        }))
+        markets: mkts,
+        arbitrage: hasArbitrage,
+        spread: hasArbitrage ? spread : 0,
+        platform_count: platforms.size
       });
     }
 
-    // Sort clusters by number of platforms represented (more platforms = more useful comparison)
+    // Sort: arbitrage opportunities first, then by platform diversity
     clusters.sort((a, b) => {
-      const platA = new Set(a.markets.map(m => m.platform)).size;
-      const platB = new Set(b.markets.map(m => m.platform)).size;
-      return platB - platA || b.markets.length - a.markets.length;
+      if (a.arbitrage !== b.arbitrage) return b.arbitrage ? 1 : -1;
+      if (a.arbitrage && b.arbitrage) return b.spread - a.spread;
+      return b.platform_count - a.platform_count || b.markets.length - a.markets.length;
     });
 
     res.json({ clusters: clusters.slice(0, 20) });
   } catch (err) {
     console.error('[odds-search]', err);
     res.json({ clusters: [] });
+  }
+});
+
+// ── SMART MONEY ───────────────────────────────────
+app.get('/api/smart-money', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('cached_positions')
+      .select('market_title, side, platform')
+      .order('updated_at', { ascending: false })
+      .limit(500);
+
+    if (error || !data || !data.length) return res.json({ markets: [] });
+
+    // Group by market_title, count YES vs NO
+    const grouped = {};
+    data.forEach(row => {
+      const key = row.market_title;
+      if (!key) return;
+      if (!grouped[key]) grouped[key] = { title: key, yes: 0, no: 0, total: 0, platforms: new Set() };
+      if (row.side === 'YES') grouped[key].yes++;
+      else grouped[key].no++;
+      grouped[key].total++;
+      grouped[key].platforms.add(row.platform);
+    });
+
+    // Top 10 most-traded, need at least 2 positions
+    const markets = Object.values(grouped)
+      .filter(m => m.total >= 2)
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 10)
+      .map(m => ({
+        title: m.title,
+        yes_pct: Math.round((m.yes / m.total) * 100),
+        no_pct: Math.round((m.no / m.total) * 100),
+        total: m.total,
+        platforms: [...m.platforms]
+      }));
+
+    res.json({ markets });
+  } catch (err) {
+    console.error('[smart-money]', err);
+    res.json({ markets: [] });
   }
 });
 

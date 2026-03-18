@@ -160,6 +160,50 @@ body::before {
   border-radius: 8px; font-weight: 700; font-size: 13px;
   text-decoration: none; transition: opacity 0.15s;
 }
+/* ARBITRAGE BADGE */
+.arb-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: rgba(201,146,13,0.12); border: 1px solid rgba(201,146,13,0.4);
+  color: var(--gold); font-family: var(--mono); font-size: 10px; font-weight: 700;
+  padding: 4px 10px; border-radius: 20px; letter-spacing: 0.04em;
+  animation: arbPulse 2s ease-in-out infinite;
+}
+@keyframes arbPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(201,146,13,0.3); }
+  50%       { box-shadow: 0 0 0 6px rgba(201,146,13,0); }
+}
+.arb-spread { color: var(--green); font-weight: 700; }
+
+/* FILTER TABS */
+.odds-tabs {
+  display: flex; gap: 4px; max-width: 600px; margin: 0 auto 32px;
+  position: relative; z-index: 1;
+  border: 1px solid var(--border); border-radius: 10px; padding: 3px;
+  background: var(--card);
+}
+.odds-tab {
+  flex: 1; padding: 9px 14px; text-align: center;
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  color: var(--dim); cursor: pointer; border: none; background: transparent;
+  border-radius: 7px; transition: all 0.15s; letter-spacing: 0.03em;
+}
+.odds-tab:hover { color: var(--text); }
+.odds-tab.active { background: var(--gold); color: var(--ink); }
+
+/* LAYOUT */
+.odds-layout { display: grid; grid-template-columns: 1fr 300px; gap: 24px; max-width: 1200px; margin: 0 auto; padding: 0 24px 80px; position: relative; z-index: 1; }
+@media (max-width: 960px) { .odds-layout { grid-template-columns: 1fr; } }
+
+/* SMART MONEY SIDEBAR */
+.sm-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+.sm-title { font-family: var(--mono); font-size: 10px; font-weight: 700; color: var(--gold); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 14px; }
+.sm-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.sm-row:last-child { border-bottom: none; }
+.sm-question { font-size: 12px; color: var(--text); flex: 1; min-width: 0; line-height: 1.4; }
+.sm-bar-wrap { width: 60px; height: 6px; border-radius: 3px; background: rgba(239,68,68,0.2); overflow: hidden; flex-shrink: 0; }
+.sm-bar-fill { height: 100%; border-radius: 3px; background: var(--green); }
+.sm-pct { font-family: var(--mono); font-size: 11px; font-weight: 700; width: 36px; text-align: right; flex-shrink: 0; }
+
 .empty-cta:hover { opacity: 0.88; }
 
 /* LOADING */
@@ -208,10 +252,27 @@ body::before {
     oninput="debounceSearch()" onkeydown="if(event.key==='Enter')searchOdds()"/>
 </div>
 
-<div class="results" id="results"></div>
+<!-- Filter tabs -->
+<div class="odds-tabs" id="oddsTabs" style="display:none">
+  <button class="odds-tab active" onclick="setOddsFilter('all')">All Results</button>
+  <button class="odds-tab" onclick="setOddsFilter('arbitrage')">⚡ Arbitrage</button>
+  <button class="odds-tab" onclick="setOddsFilter('multi')">Multi-Platform</button>
+</div>
+
+<div class="odds-layout">
+  <div class="results" id="results"></div>
+  <aside>
+    <div class="sm-card" id="smartMoneyCard" style="display:none">
+      <div class="sm-title">🧠 How sharp predictors are positioned</div>
+      <div id="smartMoneyList"></div>
+    </div>
+  </aside>
+</div>
 
 <script>
 let _searchTimeout = null;
+let _lastClusters = [];
+let _oddsFilter = 'all';
 const PLATFORM_NAMES = { polymarket: 'Polymarket', kalshi: 'Kalshi', manifold: 'Manifold', hyperflex: 'HYPERFLEX' };
 
 function debounceSearch() {
@@ -219,18 +280,27 @@ function debounceSearch() {
   _searchTimeout = setTimeout(searchOdds, 300);
 }
 
+function setOddsFilter(f) {
+  _oddsFilter = f;
+  document.querySelectorAll('.odds-tab').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+  renderResults(_lastClusters);
+}
+
 async function searchOdds() {
   const q = document.getElementById('oddsSearch').value.trim();
   const el = document.getElementById('results');
-  if (!q || q.length < 2) { el.innerHTML = ''; return; }
+  if (!q || q.length < 2) { el.innerHTML = ''; document.getElementById('oddsTabs').style.display = 'none'; return; }
 
   el.innerHTML = '<div class="loading">Searching across platforms...</div>';
 
   try {
     const res = await fetch(`/api/odds/search?q=${encodeURIComponent(q)}`);
     const data = await res.json();
+    _lastClusters = data.clusters || [];
 
-    if (!data.clusters || data.clusters.length === 0) {
+    if (!_lastClusters.length) {
+      document.getElementById('oddsTabs').style.display = 'none';
       el.innerHTML = `
         <div class="empty-state">
           <div class="empty-icon">🔍</div>
@@ -241,16 +311,41 @@ async function searchOdds() {
       return;
     }
 
-    el.innerHTML = `<div class="result-count">${data.clusters.length} topic${data.clusters.length !== 1 ? 's' : ''} found</div>` +
-      data.clusters.map(cluster => renderCluster(cluster)).join('');
+    // Show filter tabs
+    document.getElementById('oddsTabs').style.display = 'flex';
+    renderResults(_lastClusters);
   } catch (err) {
     el.innerHTML = '<div class="loading">Error searching — try again.</div>';
   }
 }
 
+function renderResults(clusters) {
+  const el = document.getElementById('results');
+  let filtered = clusters;
+  if (_oddsFilter === 'arbitrage') filtered = clusters.filter(c => c.arbitrage);
+  else if (_oddsFilter === 'multi') filtered = clusters.filter(c => c.platform_count >= 2);
+
+  if (!filtered.length) {
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">${_oddsFilter === 'arbitrage' ? '⚡' : '🔍'}</div><div class="empty-title">${_oddsFilter === 'arbitrage' ? 'No arbitrage opportunities right now' : 'No multi-platform results'}</div><div class="empty-sub">${_oddsFilter === 'arbitrage' ? 'Arbitrage alerts appear when the same market has >5% odds difference across platforms.' : 'Try a broader search term.'}</div></div>`;
+    return;
+  }
+
+  const arbCount = clusters.filter(c => c.arbitrage).length;
+  const countLine = _oddsFilter === 'all' && arbCount > 0
+    ? `<div class="result-count">${filtered.length} topic${filtered.length !== 1 ? 's' : ''} found · <span style="color:var(--gold)">${arbCount} arbitrage opportunit${arbCount !== 1 ? 'ies' : 'y'}</span></div>`
+    : `<div class="result-count">${filtered.length} result${filtered.length !== 1 ? 's' : ''}</div>`;
+
+  el.innerHTML = countLine + filtered.map(renderCluster).join('');
+}
+
 function renderCluster(cluster) {
-  // Find the highest probability to mark as "best"
   const maxProb = Math.max(...cluster.markets.map(m => m.probability));
+  const minProb = Math.min(...cluster.markets.map(m => m.probability));
+
+  // Arbitrage header
+  const arbHTML = cluster.arbitrage
+    ? `<span class="arb-badge">⚡ Arbitrage <span class="arb-spread">+${cluster.spread}% spread</span></span>`
+    : '';
 
   const cols = cluster.markets.map(m => {
     const isBest = m.probability === maxProb && cluster.markets.length > 1;
@@ -266,8 +361,11 @@ function renderCluster(cluster) {
   }).join('');
 
   return `
-    <div class="cluster">
-      <div class="cluster-topic">${escHtml(cluster.topic)}</div>
+    <div class="cluster" ${cluster.arbitrage ? 'style="border-color:rgba(201,146,13,0.35)"' : ''}>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+        <div class="cluster-topic" style="margin-bottom:0">${escHtml(cluster.topic)}</div>
+        ${arbHTML}
+      </div>
       <div class="cluster-grid">${cols}</div>
     </div>`;
 }
@@ -276,12 +374,38 @@ function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// Auto-search from URL param
+// ── SMART MONEY ──
+async function loadSmartMoney() {
+  try {
+    const res = await fetch('/api/smart-money');
+    const data = await res.json();
+    if (!data.markets || !data.markets.length) return;
+
+    const card = document.getElementById('smartMoneyCard');
+    const list = document.getElementById('smartMoneyList');
+    if (!card || !list) return;
+
+    list.innerHTML = data.markets.map(m => {
+      const color = m.yes_pct >= 60 ? '#22c55e' : m.yes_pct <= 40 ? '#ef4444' : '#c9920d';
+      return `
+        <div class="sm-row">
+          <div class="sm-question">${escHtml(m.title)}</div>
+          <div class="sm-bar-wrap"><div class="sm-bar-fill" style="width:${m.yes_pct}%"></div></div>
+          <div class="sm-pct" style="color:${color}">${m.yes_pct}%</div>
+        </div>`;
+    }).join('');
+
+    card.style.display = 'block';
+  } catch (e) { /* silent */ }
+}
+
+// Auto-search from URL param + load smart money
 const urlQ = new URLSearchParams(location.search).get('q');
 if (urlQ) {
   document.getElementById('oddsSearch').value = urlQ;
   searchOdds();
 }
+loadSmartMoney();
 </script>
 </body>
 </html>

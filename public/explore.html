@@ -909,6 +909,14 @@ nav {
       <a href="/predictors" style="display:block;margin-top:12px;font-family:var(--mono);font-size:11px;color:var(--gold);text-decoration:none;font-weight:700;">See all →</a>
     </div>
 
+    <!-- SMART MONEY -->
+    <div class="sidebar-card" id="smartMoneyCardExplore" style="display:none">
+      <div class="sidebar-title">🧠 SMART MONEY</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px">How sharp predictors are positioned</div>
+      <div id="smartMoneyListExplore"></div>
+      <a href="/odds" style="display:block;margin-top:12px;font-family:'Space Mono',monospace;font-size:11px;color:var(--gold);text-decoration:none;font-weight:700;">Compare odds →</a>
+    </div>
+
     <!-- NOMINATE CTA -->
     <a href="/nominate" style="display:block;background:linear-gradient(135deg,#1d1b13 0%,#191917 100%);border:1px solid rgba(201,146,13,0.3);border-radius:var(--radius);padding:16px 18px;text-decoration:none;transition:border-color 0.2s;" onmouseover="this.style.borderColor='rgba(201,146,13,0.7)'" onmouseout="this.style.borderColor='rgba(201,146,13,0.3)'">
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--gold);margin-bottom:6px">For Fans</div>
@@ -1814,6 +1822,27 @@ async function loadFollowingFeed() {
     const el = document.getElementById('top-predictors-list');
     if (el) el.innerHTML = '';
   }
+})();
+
+// SMART MONEY sidebar
+(async function loadSmartMoneyExplore() {
+  try {
+    const res = await fetch('/api/smart-money');
+    const data = await res.json();
+    if (!data.markets || !data.markets.length) return;
+    const card = document.getElementById('smartMoneyCardExplore');
+    const list = document.getElementById('smartMoneyListExplore');
+    if (!card || !list) return;
+    list.innerHTML = data.markets.slice(0, 5).map(m => {
+      const color = m.yes_pct >= 60 ? '#22c55e' : m.yes_pct <= 40 ? '#ef4444' : '#c9920d';
+      return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
+        <div style="flex:1;min-width:0;font-size:11px;color:var(--text);line-height:1.4;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${m.title}</div>
+        <div style="width:40px;height:5px;border-radius:3px;background:rgba(239,68,68,0.2);overflow:hidden;flex-shrink:0"><div style="height:100%;width:${m.yes_pct}%;background:#22c55e;border-radius:3px"></div></div>
+        <div style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:${color};width:30px;text-align:right;flex-shrink:0">${m.yes_pct}%</div>
+      </div>`;
+    }).join('');
+    card.style.display = 'block';
+  } catch(e) { /* silent */ }
 })();
 
 // Auto-refresh: activity feed polls every 20s for new items (banner); explore every 30s
