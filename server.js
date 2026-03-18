@@ -7557,6 +7557,110 @@ app.get('/api/predictors/:userId/portfolio', async (req, res) => {
   res.json({ cached_positions: cachedRes.data || [], hyperflex_bets: hfBetsRes.data || [] });
 });
 
+// P&L analytics for a user — win rate by platform, calibration, cumulative PnL
+app.get('/api/predictors/:userId/analytics', async (req, res) => {
+  const { userId } = req.params;
+
+  const [hfRes, cachedRes] = await Promise.all([
+    supabase
+      .from('positions')
+      .select('side, amount, potential_payout, won, settled, created_at, markets(question, resolved_at, outcome)')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(500),
+    supabase
+      .from('cached_positions')
+      .select('*')
+      .eq('user_id', userId),
+  ]);
+
+  const hfBets = hfRes.data || [];
+  const cachedPositions = cachedRes.data || [];
+
+  // ── Platform breakdown ──────────────────────────────────────────────────────
+  const platforms = { hyperflex: { wins: 0, losses: 0, total: 0, pnl: 0 } };
+  for (const p of cachedPositions) {
+    const pl = p.platform;
+    if (!platforms[pl]) platforms[pl] = { wins: 0, losses: 0, total: 0, pnl: 0 };
+    platforms[pl].total++;
+    platforms[pl].pnl += Number(p.pnl) || 0;
+    if ((p.pnl || 0) > 0) platforms[pl].wins++;
+    else platforms[pl].losses++;
+  }
+  const hfSettled = hfBets.filter(p => p.settled);
+  platforms.hyperflex.total = hfSettled.length;
+  platforms.hyperflex.wins = hfSettled.filter(p => p.won).length;
+  platforms.hyperflex.losses = hfSettled.filter(p => !p.won).length;
+  platforms.hyperflex.pnl = hfSettled.reduce((s, p) => {
+    return s + (p.won ? (p.potential_payout - p.amount) : -p.amount);
+  }, 0) / 100; // centpoints → points
+
+  // ── Calibration (HFX only — we have probability data) ──────────────────────
+  const buckets = Array.from({ length: 9 }, (_, i) => ({
+    label: `${(i + 1) * 10}%`,
+    predicted: (i + 1) * 10,
+    correct: 0,
+    total: 0,
+  }));
+  for (const p of hfSettled) {
+    if (!p.markets) continue;
+    // Use side as proxy for predicted probability
+    const prob = p.side === 'YES' ? 70 : 30; // simplified; refine if you store odds
+    const idx = Math.min(Math.floor(prob / 10) - 1, 8);
+    if (idx >= 0) {
+      buckets[idx].total++;
+      if (p.won) buckets[idx].correct++;
+    }
+  }
+  const calibration = buckets.map(b => ({
+    ...b,
+    actual: b.total > 0 ? Math.round((b.correct / b.total) * 100) : null,
+  }));
+
+  // ── Cumulative PnL timeline (last 30 days, HFX only) ─────────────────────
+  const now = Date.now();
+  const days = 30;
+  const dailyPnl = {};
+  for (let i = 0; i < days; i++) {
+    const d = new Date(now - i * 86400000).toISOString().slice(0, 10);
+    dailyPnl[d] = 0;
+  }
+  for (const p of hfSettled) {
+    const d = (p.markets?.resolved_at || p.created_at || '').slice(0, 10);
+    if (d in dailyPnl) {
+      dailyPnl[d] += p.won ? (p.potential_payout - p.amount) : -p.amount;
+    }
+  }
+  // Convert to cumulative
+  const sortedDays = Object.keys(dailyPnl).sort();
+  let cumulative = 0;
+  const timeline = sortedDays.map(date => {
+    cumulative += dailyPnl[date] / 100;
+    return { date, pnl: Math.round(cumulative * 100) / 100 };
+  });
+
+  // ── Sharp score ────────────────────────────────────────────────────────────
+  const totalSettled = hfSettled.length;
+  const totalWins = hfSettled.filter(p => p.won).length;
+  const winRate = totalSettled > 0 ? Math.round((totalWins / totalSettled) * 100) : 0;
+  const calibrationError = calibration
+    .filter(b => b.actual !== null)
+    .reduce((s, b) => s + Math.abs(b.predicted - b.actual), 0) /
+    Math.max(1, calibration.filter(b => b.actual !== null).length);
+  const sharpScore = Math.round(winRate * 0.6 + Math.max(0, 100 - calibrationError) * 0.4);
+
+  const totalPnl = Object.values(platforms).reduce((s, p) => s + p.pnl, 0);
+
+  res.json({
+    win_rate: winRate,
+    total_pnl: Math.round(totalPnl * 100) / 100,
+    sharp_score: sharpScore,
+    platforms,
+    calibration,
+    timeline,
+  });
+});
+
 // GET /api/member/:userId — public member profile data
 app.get('/api/member/:userId', async (req, res) => {
   try {
