@@ -4514,34 +4514,27 @@ body.nav-open .sidebar-backdrop {
         <div class="section">
           <div style="max-width:860px">
 
-            <!-- Plan banner (auto-sync badge / upgrade CTA) -->
-            <div id="portfolioPlanBanner" style="margin-bottom:20px"></div>
-
-            <!-- HFX positions summary (free plan only) -->
-            <div id="portfolioHfxSection" style="display:none;background:var(--cream);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:20px">
-              <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-                <div style="width:36px;height:36px;border-radius:8px;background:rgba(201,146,13,0.12);border:1px solid rgba(201,146,13,0.3);display:flex;align-items:center;justify-content:center;font-size:18px">⚡</div>
-                <div>
-                  <div style="font-size:15px;font-weight:700;color:var(--text)">HYPERFLEX Positions</div>
-                  <div style="font-size:12px;color:var(--muted)">Your predictions across all communities</div>
-                </div>
+            <!-- Early Access banner -->
+            <div style="background:linear-gradient(135deg,#c9920d22,#c9920d11);border:1px solid #c9920d44;border-radius:10px;padding:12px 16px;margin-bottom:20px;display:flex;align-items:center;gap:10px">
+              <span style="font-size:18px">🎁</span>
+              <div>
+                <div style="font-weight:700;color:#c9920d;font-size:13px">Early Access — All platform connections free during beta</div>
+                <div style="font-size:12px;color:#888;margin-top:2px">Connect Polymarket, Kalshi &amp; Manifold at no cost while we're in beta. Lock in your portfolio history now.</div>
               </div>
-              <div id="portfolioHfxPositions" style="font-size:13px;color:var(--muted)">Loading…</div>
             </div>
 
-            <!-- Stats bar -->
-            <div id="portfolioStats" style="display:none;display:flex;gap:16px;flex-wrap:wrap;margin-bottom:24px"></div>
-
             <!-- Kalshi card -->
-            <div id="kalshiCardWrap" style="margin-bottom:20px">
-            <div style="background:var(--cream);border:1px solid var(--border);border-radius:12px;padding:24px;position:relative">
+            <div style="background:var(--cream);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:20px">
               <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
                 <div style="width:36px;height:36px;border-radius:8px;background:#0a0a0a;border:1px solid #333;display:flex;align-items:center;justify-content:center;font-size:18px">🟡</div>
                 <div>
                   <div style="font-size:15px;font-weight:700;color:var(--text)">Kalshi</div>
                   <div style="font-size:12px;color:var(--muted)">Real-money prediction markets</div>
                 </div>
-                <div style="margin-left:auto" id="kalshiStatusBadge"></div>
+                <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+                  <span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid rgba(45,155,95,0.4);color:#2d9b5f;background:rgba(45,155,95,0.1)">LIVE</span>
+                  <div id="kalshiStatusBadge"></div>
+                </div>
               </div>
 
               <!-- Connect form -->
@@ -4571,32 +4564,10 @@ body.nav-open .sidebar-backdrop {
 
               <!-- Positions list -->
               <div id="kalshiPositions" style="margin-top:20px"></div>
-
-              <!-- Premium-only lock overlay (shown for Pro plan) -->
-              <div id="kalshiPremiumOverlay" style="display:none;position:absolute;inset:0;border-radius:12px;background:rgba(20,20,18,0.88);backdrop-filter:blur(4px);display:none;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:24px">
-                <div style="font-size:28px">🔒</div>
-                <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;color:var(--text)">Premium Feature</div>
-                <div style="font-size:13px;color:var(--muted);max-width:280px">Kalshi uses real money — connect it on the Premium plan.</div>
-                <a href="#" onclick="document.getElementById('upgradeModal').style.display='flex';return false" style="background:linear-gradient(135deg,#ffe57a,#c9920d);color:#141412;font-weight:700;font-size:13px;padding:9px 22px;border-radius:8px;text-decoration:none">Upgrade to Premium →</a>
-              </div>
-            </div><!-- /kalshi inner -->
-            </div><!-- /kalshiCardWrap -->
-
-            <!-- Kalshi locked placeholder (free plan) -->
-            <div id="kalshiLockedCard" style="display:none;background:var(--cream);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:20px;opacity:0.7">
-              <div style="display:flex;align-items:center;gap:12px">
-                <div style="width:36px;height:36px;border-radius:8px;background:#0a0a0a;border:1px solid #333;display:flex;align-items:center;justify-content:center;font-size:18px">🟡</div>
-                <div style="flex:1">
-                  <div style="font-size:15px;font-weight:700;color:var(--text)">Kalshi</div>
-                  <div style="font-size:12px;color:var(--muted)">Real-money prediction markets</div>
-                </div>
-                <span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid rgba(201,146,13,0.3);color:var(--gold)">PRO+</span>
-              </div>
             </div>
 
             <!-- Polymarket card -->
-            <div id="polyCardWrap" style="margin-bottom:20px">
-            <div style="background:var(--cream);border:1px solid var(--border);border-radius:12px;padding:24px">
+            <div style="background:var(--cream);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:20px">
               <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
                 <div style="width:36px;height:36px;border-radius:8px;background:#0a0a0a;border:1px solid #333;display:flex;align-items:center;justify-content:center;font-size:18px">🟣</div>
                 <div>
@@ -4636,23 +4607,9 @@ body.nav-open .sidebar-backdrop {
 
               <!-- Positions list -->
               <div id="polyPositions" style="margin-top:20px"></div>
-            </div><!-- /poly inner -->
-            </div><!-- /polyCardWrap -->
-
-            <!-- Polymarket locked placeholder (free plan) -->
-            <div id="polyLockedCard" style="display:none;background:var(--cream);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:20px;opacity:0.7">
-              <div style="display:flex;align-items:center;gap:12px">
-                <div style="width:36px;height:36px;border-radius:8px;background:#0a0a0a;border:1px solid #333;display:flex;align-items:center;justify-content:center;font-size:18px">🟣</div>
-                <div style="flex:1">
-                  <div style="font-size:15px;font-weight:700;color:var(--text)">Polymarket</div>
-                  <div style="font-size:12px;color:var(--muted)">Crypto prediction markets</div>
-                </div>
-                <span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid rgba(201,146,13,0.3);color:var(--gold)">PRO+</span>
-              </div>
             </div>
 
             <!-- Manifold card -->
-            <div id="manifoldCardWrap">
             <div style="background:var(--cream);border:1px solid var(--border);border-radius:12px;padding:24px">
               <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
                 <div style="width:36px;height:36px;border-radius:8px;background:#0a0a0a;border:1px solid #333;display:flex;align-items:center;justify-content:center;font-size:18px">🟢</div>
@@ -4693,19 +4650,6 @@ body.nav-open .sidebar-backdrop {
 
               <!-- Positions list -->
               <div id="manifoldPositions" style="margin-top:20px"></div>
-            </div><!-- /manifold inner -->
-            </div><!-- /manifoldCardWrap -->
-
-            <!-- Manifold locked placeholder (free plan) -->
-            <div id="manifoldLockedCard" style="display:none;background:var(--cream);border:1px solid var(--border);border-radius:12px;padding:24px;opacity:0.7">
-              <div style="display:flex;align-items:center;gap:12px">
-                <div style="width:36px;height:36px;border-radius:8px;background:#0a0a0a;border:1px solid #333;display:flex;align-items:center;justify-content:center;font-size:18px">🟢</div>
-                <div style="flex:1">
-                  <div style="font-size:15px;font-weight:700;color:var(--text)">Manifold Markets</div>
-                  <div style="font-size:12px;color:var(--muted)">Play-money prediction markets</div>
-                </div>
-                <span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid rgba(201,146,13,0.3);color:var(--gold)">PRO+</span>
-              </div>
             </div>
 
           </div>
@@ -10914,114 +10858,9 @@ let _kalshiConnected = false;
 let _manifoldUsername = '';
 let _polyWalletAddress = '';
 
-function applyPortfolioGates() {
-  const plan = window._creatorPlan || 'free';
-  const isFree     = plan === 'free';
-  const isPro      = plan === 'pro';
-  const isPremium  = plan === 'platinum';
-
-  // Banner
-  const banner = document.getElementById('portfolioPlanBanner');
-  if (banner) {
-    if (isPremium) {
-      banner.innerHTML = `<div style="display:flex;align-items:center;gap:10px;background:linear-gradient(135deg,rgba(255,229,122,0.1),rgba(201,146,13,0.06));border:1px solid rgba(255,229,122,0.25);border-radius:10px;padding:12px 18px">
-        <span style="font-size:16px">🔄</span>
-        <div>
-          <div style="font-size:13px;font-weight:700;color:#ffe57a">Auto-sync: ON</div>
-          <div style="font-size:11px;color:var(--muted)">Positions refresh hourly from all connected platforms</div>
-        </div>
-      </div>`;
-    } else if (isFree) {
-      banner.innerHTML = `<div style="background:linear-gradient(135deg,rgba(201,146,13,0.1),rgba(201,146,13,0.04));border:1px solid rgba(201,146,13,0.3);border-radius:10px;padding:16px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-        <div style="flex:1;min-width:200px">
-          <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:800;color:var(--gold);margin-bottom:3px">Connect Polymarket, Kalshi &amp; Manifold</div>
-          <div style="font-size:12px;color:var(--muted)">Upgrade to Pro to track all your external prediction positions in one place.</div>
-        </div>
-        <a href="#" onclick="document.getElementById('upgradeModal').style.display='flex';return false" style="background:var(--gold);color:#141412;font-weight:700;font-size:13px;padding:9px 20px;border-radius:8px;text-decoration:none;white-space:nowrap">Upgrade to Pro →</a>
-      </div>`;
-    } else {
-      banner.innerHTML = '';
-    }
-  }
-
-  // HFX section (free only)
-  const hfxSection = document.getElementById('portfolioHfxSection');
-  if (hfxSection) hfxSection.style.display = isFree ? 'block' : 'none';
-
-  // Platform card wrappers
-  const kalshiWrap    = document.getElementById('kalshiCardWrap');
-  const polyWrap      = document.getElementById('polyCardWrap');
-  const manifoldWrap  = document.getElementById('manifoldCardWrap');
-  const kalshiLocked  = document.getElementById('kalshiLockedCard');
-  const polyLocked    = document.getElementById('polyLockedCard');
-  const manifoldLocked= document.getElementById('manifoldLockedCard');
-  const kalshiOverlay = document.getElementById('kalshiPremiumOverlay');
-
-  if (isFree) {
-    if (kalshiWrap)     kalshiWrap.style.display    = 'none';
-    if (polyWrap)       polyWrap.style.display      = 'none';
-    if (manifoldWrap)   manifoldWrap.style.display  = 'none';
-    if (kalshiLocked)   kalshiLocked.style.display  = 'block';
-    if (polyLocked)     polyLocked.style.display    = 'block';
-    if (manifoldLocked) manifoldLocked.style.display= 'block';
-  } else if (isPro) {
-    if (kalshiWrap)     kalshiWrap.style.display    = 'block';
-    if (polyWrap)       polyWrap.style.display      = 'block';
-    if (manifoldWrap)   manifoldWrap.style.display  = 'block';
-    if (kalshiLocked)   kalshiLocked.style.display  = 'none';
-    if (polyLocked)     polyLocked.style.display    = 'none';
-    if (manifoldLocked) manifoldLocked.style.display= 'none';
-    // Lock Kalshi behind Premium overlay
-    if (kalshiOverlay)  kalshiOverlay.style.display = 'flex';
-  } else { // platinum
-    if (kalshiWrap)     kalshiWrap.style.display    = 'block';
-    if (polyWrap)       polyWrap.style.display      = 'block';
-    if (manifoldWrap)   manifoldWrap.style.display  = 'block';
-    if (kalshiLocked)   kalshiLocked.style.display  = 'none';
-    if (polyLocked)     polyLocked.style.display    = 'none';
-    if (manifoldLocked) manifoldLocked.style.display= 'none';
-    if (kalshiOverlay)  kalshiOverlay.style.display = 'none';
-  }
-}
-
 async function loadPortfolio() {
   if (_portfolioLoaded) return;
   _portfolioLoaded = true;
-  applyPortfolioGates();
-  const plan = window._creatorPlan || 'free';
-  const isFree = plan === 'free';
-
-  // Free plan: load HFX positions summary
-  if (isFree) {
-    const hfxEl = document.getElementById('portfolioHfxPositions');
-    try {
-      const token = localStorage.getItem('hf_token');
-      const r = await fetch('/api/user/wallets', { headers: { Authorization: 'Bearer ' + token } });
-      const walletData = r.ok ? await r.json() : {};
-      const userId = walletData.user_id;
-      if (userId) {
-        const posRes = await fetch(`/api/predictors/${userId}/portfolio`);
-        const posData = posRes.ok ? await posRes.json() : {};
-        const bets = posData.hyperflex_bets || [];
-        const settled = bets.filter(b => b.settled);
-        const wins = settled.filter(b => b.won).length;
-        const wr = settled.length > 0 ? Math.round(wins / settled.length * 100) : 0;
-        if (hfxEl) hfxEl.innerHTML = settled.length
-          ? `<div style="display:flex;gap:20px;flex-wrap:wrap">
-              <div><div style="font-family:var(--mono);font-size:24px;font-weight:700;color:var(--gold)">${wr}%</div><div style="font-size:11px;color:var(--muted)">win rate</div></div>
-              <div><div style="font-family:var(--mono);font-size:24px;font-weight:700;color:var(--text)">${settled.length}</div><div style="font-size:11px;color:var(--muted)">settled predictions</div></div>
-              <div><div style="font-family:var(--mono);font-size:24px;font-weight:700;color:var(--green)">${wins}</div><div style="font-size:11px;color:var(--muted)">correct calls</div></div>
-            </div>`
-          : `<div style="color:var(--muted)">No settled predictions yet — make your first call!</div>`;
-      } else if (hfxEl) {
-        hfxEl.innerHTML = '<div style="color:var(--muted)">No predictions yet.</div>';
-      }
-    } catch (e) {
-      if (hfxEl) hfxEl.innerHTML = '<div style="color:var(--muted)">Failed to load positions.</div>';
-    }
-    return;
-  }
-
   try {
     const token = localStorage.getItem('hf_token');
     const r = await fetch('/api/user/wallets', { headers: { Authorization: 'Bearer ' + token } });
@@ -11033,7 +10872,7 @@ async function loadPortfolio() {
     renderKalshiConnectState();
     renderManifoldConnectState();
     renderPolymarketConnectState();
-    if (_kalshiConnected && plan === 'platinum') loadKalshiPositions(false);
+    if (_kalshiConnected) loadKalshiPositions(false);
     if (_manifoldUsername) loadManifoldPositions(false);
     if (_polyWalletAddress) loadPolymarketPositions(false);
   } catch (e) {
