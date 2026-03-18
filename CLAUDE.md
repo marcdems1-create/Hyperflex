@@ -7,7 +7,20 @@
 
 ## What This Project Is
 
-**HYPERFLEX** is a B2B SaaS platform where creators set up branded prediction markets for their communities. Play-money only (Flex Points). AI-powered market generation via YouTube scanner. Free / Pro ($29) / Premium ($99) tiers.
+**HYPERFLEX** is the universal prediction market dashboard. One place to aggregate and track positions across Polymarket, Kalshi, and Manifold — share your best calls, compete on leaderboards, and prove your forecasting edge.
+
+**Primary hook:** Cross-platform portfolio tracker for serious prediction market players. Connect your Polymarket wallet, Kalshi API key, or Manifold username and see all positions, P&L, win rate, and calibration score in a single dashboard.
+
+**Retention layer:** Creators can launch branded community prediction markets (play-money Flex Points, AI-powered market generation via YouTube scanner). Communities drive engagement, streaks, and social loops.
+
+**Target user:** Active Polymarket/Kalshi/Manifold traders who want one place to track everything, flex their win rate, and discover sharp predictors to follow.
+
+**Business model:** Free during Early Access. Future tiers:
+- **Free** — HYPERFLEX community markets only, basic profile
+- **Pro ($29/mo)** — Polymarket + Manifold portfolio sync, cross-platform P&L, sharp score
+- **Premium ($99/mo)** — All three platforms + auto-sync + calibration score + priority features
+
+**DB plan values:** `'free'`, `'pro'`, `'platinum'` — display as Free / Pro / Premium in UI. Do NOT change DB value for Premium.
 
 **Live:** https://hyperflex.network
 **Railway:** auto-deploys from `git push origin main`
@@ -19,17 +32,18 @@
 
 | File | What it is |
 |------|-----------|
-| `public/index.html` | Creator marketing landing page (homepage) |
+| `public/index.html` | Landing page — "All Your Predictions. One Place." hero + Quick Preview |
+| `public/predictors.html` | Discover Predictors — ranked leaderboard, grid/list view, sharp scores |
+| `public/explore.html` | Global discover/explore page — activity feed, Following tab, community browser |
+| `public/community.html` | Community prediction market page at `/:slug` |
+| `public/member.html` | Member public profile at `/m/:userId` — stats, P&L, platform cards, trophy |
+| `public/creator-dashboard.html` | Creator dashboard — markets, portfolio, YouTube scanner, analytics, rewards |
 | `public/creator-signup.html` | Creator registration |
 | `public/creator-login.html` | Creator login |
-| `public/creator-dashboard.html` | Creator dashboard (markets, YouTube scanner, analytics, rewards) |
-| `public/community.html` | Member-facing page at `/:slug` |
 | `public/creator-terms.html` | Terms of Service |
 | `public/admin.html` | Internal ops dashboard at `/admin` — includes ✉️ Outreach tab |
-| `public/explore.html` | Global discover/explore page with Twitter-like activity feed |
 | `public/profile.html` | Creator public profile at `/u/:slug` |
 | `public/embed.html` | Embeddable widget at `/embed/:slug` (iframeable, themed) |
-| `public/member.html` | Member public profile at `/m/:userId` |
 | `public/win-card.html` | Shareable win card page at `/win-card.html?m=&u=` — includes acquisition CTA |
 | `public/templates.html` | Market template gallery at `/templates` — 12 niches, 72 markets, SEO-friendly |
 | `public/nominate.html` | "Nominate your creator" fan-facing page at `/nominate` |
@@ -40,52 +54,55 @@
 
 ---
 
-## Current State (last updated March 17, 2026 — session 11)
+## Platform Integrations (the aggregator core)
 
-- All features committed locally. Latest commit pending — needs push
+- **Polymarket**: `GET /api/polymarket/positions/:address` (public, no auth) — wallet address lookup, 5-min cache
+- **Kalshi**: `GET /api/kalshi/positions` (auth'd) — UUID API key, enriched with market details
+- **Manifold**: `GET /api/manifold/positions/:username` (public) — aggregates bets by contract, M$ labels
+- **Unified portfolio**: `GET /api/portfolio/:userId` — merges all platforms, P&L, win rate
+- **Auto-sync cron**: `syncAllUserPositions()` runs hourly — fetches all connected users' positions into `cached_positions`
+- **P&L analytics**: `GET /api/predictors/:userId/analytics` — platform breakdown, calibration chart, 30d timeline, sharp score
+- **Wallet/key storage**: `PUT/GET /api/user/wallets` — Polymarket address, Kalshi API key (masked in GET), Manifold username
+
+---
+
+## Current State (last updated March 18, 2026 — session 13)
+
 - **Stripe payments live** — Pro ($29/mo) + Premium ($99/mo) checkout + billing portal
   - Railway env vars needed: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRO_PRICE_ID`, `STRIPE_PLATINUM_PRICE_ID`
   - Webhook endpoint registered at: `https://hyperflex.network/stripe/webhook`
-  - Webhook events: `checkout.session.completed`, `customer.subscription.deleted`, `customer.subscription.paused`, `customer.subscription.updated`
-- **Admin dashboard** at `/admin` — password-gated, creator table, inline plan control
-  - Railway env var needed: `ADMIN_SECRET`
-- **OAuth**: Google fully working. X/Twitter works (name + username only — Twitter doesn't return email via API)
-- **Premium rebrand**: "Platinum" renamed to "Premium" in all UI. DB value stays `'platinum'` — do NOT change DB value.
+- **Admin dashboard** at `/admin` — password-gated, creator table, inline plan control (`ADMIN_SECRET` env var)
+- **OAuth**: Google fully working. X/Twitter works (name + username only)
+- **Premium rebrand**: "Platinum" → "Premium" in all UI. DB value stays `'platinum'`
 - **Watermark**: shown on Free + Pro, hidden on Premium only
-- **Video section**: added to landing page — replace `VIDEO_ID` in `public/index.html` with real YouTube video ID when ready
 - **creator_settings** is the canonical creator table (not `communities`)
 - Stripe webhook updates `creator_settings.plan` on checkout + cancellation
-- **Flex Points Gamification** (commit `43c70fd`):
-  - Streak multipliers in settlement: 3 wins → 1.5×, 5+ wins → 2× payout
-  - Streak badges on leaderboards: 🔥 (3+), ⚡ Streak Master (7+)
-  - Weekly Power Predictor panel on creator dashboard (Pro/Premium gated)
-  - Inner Circle panel on creator dashboard (Premium gated) — members with 2,000+ points
-- **Per-Community Points Economy** (commit `c55f856`) — ⚠️ REQUIRES Supabase migration first:
-  - `community_balances` table: per-user per-creator balance (centpoints: 100,000 = 1,000 pts)
-  - `creator_settings` new columns: `starting_balance`, `min_bet`, `max_bet`, `refill_enabled`, `refill_amount`, `refill_cadence`, `activity_gate`
-  - Balance helpers: `getCommunityBalance(userId, slug)`, `setCommunityBalance()`, `getCreatorSlugForMarket()`
-  - Settlement (cron + manual) credits `community_balances`, not `users.balance`
-  - `GET /api/user/community-balance/:slug` — auth'd endpoint for member balance
-  - `GET /api/community/:slug` — now includes `starting_balance`, `min_bet`, `max_bet`
-  - `PUT /api/creator/settings` — accepts all economy fields
-  - Economy Settings panel on creator dashboard (Settings tab)
-  - community.html: shows community balance, enforces min/max bet in UI
-  - **CENTPOINTS**: all balances/bets stored as 100× pts. Always divide by 100 for display.
-  - **Migration file**: `supabase_migration_community_economy.sql` — run in Supabase SQL editor
 
-## To deploy: `git push origin main` (Claude cannot push — no internet from VM)
+### Community Markets Engine
+- Per-community points economy (centpoints: 100 = 1 pt), streak multipliers, gamification
+- Multi-option markets (3–6 options), resolution disputes, community-gated resolution voting
+- Seasons/tournaments, Discord webhook integration, in-app notifications
+- AI YouTube scanner (free demo mode + Pro unlock), auto-scan per creator, auto-resolution
+- Market discovery: trending/hot/new badges, category filter pills, truth feed, carousel
+
+### Aggregator Portfolio
+- Portfolio tab in creator dashboard — connect Polymarket/Kalshi/Manifold
+- Quick Preview on landing page (wallet/username → instant stats card)
+- Member profiles show cross-platform stats, calibration charts, P&L timeline
+- Predictor leaderboard with sharp scores, follow system, Following feed on explore
+- Post-signup platform connect interstitial
+- Auto-sync cron for all connected users (hourly)
 
 ---
 
 ## Rules Claude Must Follow Every Session
 
-1. **Read this file + HYPERFLEX_Brief.md + TODO.md at session start** before touching anything
-2. **Update all three files at session end** — what was done, what's committed, what's next
-3. **Never push** — user pushes from their terminal or Claude Code
-4. **Always check git status** before assuming what's deployed vs local
-5. **Font/color system:** Syne (display) + Space Mono (mono), gold `#c9920d`, paper `#141412`
-6. **DB:** `creator_settings` is the main creator table (not `communities`)
-7. **Plan values in DB:** `'free'`, `'pro'`, `'platinum'` — display as Free / Pro / Premium in UI
+1. **Read this file at session start** before touching anything
+2. **Font/color system:** Syne (display) + Space Mono (mono), gold `#c9920d`, paper `#141412`
+3. **DB:** `creator_settings` is the main creator table (not `communities`)
+4. **Plan values in DB:** `'free'`, `'pro'`, `'platinum'` — display as Free / Pro / Premium in UI
+5. **Always check git status** before assuming what's deployed vs local
+6. **Aggregator-first mindset:** Portfolio tracker is the primary value prop. Community markets support retention. When building new features, ask: "Does this help a Polymarket trader?"
 
 ---
 
