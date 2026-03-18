@@ -466,6 +466,60 @@ function copyShareLink(btn) {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
+// GET /og/home.png  — homepage OG image (1200×630)
+// ════════════════════════════════════════════════════════════════════════════
+app.get('/og/home.png', async (req, res) => {
+  const sharp = getSharp();
+  if (!sharp) return res.redirect('/og-default.png');
+
+  try {
+    const W = 1200, H = 630;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">
+      <defs>
+        <style>
+          @import url('https://fonts.googleapis.com/css2?family=Syne:wght@800');
+        </style>
+      </defs>
+      <rect width="${W}" height="${H}" fill="#141412"/>
+      <!-- Grid pattern -->
+      <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+        <path d="M 48 0 L 0 0 0 48" fill="none" stroke="rgba(201,146,13,0.06)" stroke-width="1"/>
+      </pattern>
+      <rect width="${W}" height="${H}" fill="url(#grid)"/>
+      <!-- Gold bottom border -->
+      <rect x="0" y="${H - 4}" width="${W}" height="4" fill="#c9920d"/>
+      <!-- Top glow line -->
+      <rect x="300" y="0" width="600" height="2" fill="#c9920d" opacity="0.4" rx="1"/>
+      <!-- HYPERFLEX wordmark -->
+      <text x="${W/2}" y="165" text-anchor="middle" fill="#c9920d" font-family="'Syne',Arial,sans-serif" font-weight="800" font-size="72" letter-spacing="6">HYPERFLEX</text>
+      <!-- Headline -->
+      <text x="${W/2}" y="260" text-anchor="middle" fill="#f0ebe3" font-family="'Syne',Arial,sans-serif" font-weight="800" font-size="48" letter-spacing="-1">All Your Predictions.</text>
+      <text x="${W/2}" y="320" text-anchor="middle" fill="#f0ebe3" font-family="'Syne',Arial,sans-serif" font-weight="800" font-size="48" letter-spacing="-1">One Place.</text>
+      <!-- Platform pills -->
+      <rect x="270" y="370" width="140" height="36" rx="18" fill="rgba(99,102,241,0.2)" stroke="#6366f1" stroke-width="1.5"/>
+      <text x="340" y="394" text-anchor="middle" fill="#818cf8" font-family="monospace" font-weight="700" font-size="14">Polymarket</text>
+      <rect x="430" y="370" width="110" height="36" rx="18" fill="rgba(139,92,246,0.2)" stroke="#8b5cf6" stroke-width="1.5"/>
+      <text x="485" y="394" text-anchor="middle" fill="#a78bfa" font-family="monospace" font-weight="700" font-size="14">Kalshi</text>
+      <rect x="560" y="370" width="130" height="36" rx="18" fill="rgba(16,185,129,0.2)" stroke="#10b981" stroke-width="1.5"/>
+      <text x="625" y="394" text-anchor="middle" fill="#34d399" font-family="monospace" font-weight="700" font-size="14">Manifold</text>
+      <!-- Subtext -->
+      <text x="${W/2}" y="470" text-anchor="middle" fill="#7a7870" font-family="monospace" font-size="16" letter-spacing="0.5">Track positions  •  Compare odds  •  Share your best calls</text>
+      <!-- Early Access badge -->
+      <rect x="460" y="510" width="280" height="30" rx="15" fill="rgba(201,146,13,0.12)" stroke="rgba(201,146,13,0.35)" stroke-width="1"/>
+      <text x="600" y="531" text-anchor="middle" fill="#c9920d" font-family="monospace" font-weight="700" font-size="12" letter-spacing="1.5">FREE DURING EARLY ACCESS</text>
+    </svg>`;
+
+    const buf = await sharp(Buffer.from(svg)).png({ quality: 90 }).toBuffer();
+    res.set('Content-Type', 'image/png');
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.send(buf);
+  } catch (err) {
+    console.error('[og-home]', err);
+    res.redirect('/og-default.png');
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════
 // GET /og/:marketId.png  — dynamic OG share card image (1200×630)
 // Used as og:image on /share/:marketId and /win/:marketId/:userId pages
 // ════════════════════════════════════════════════════════════════════════════
