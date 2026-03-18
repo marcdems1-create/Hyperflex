@@ -131,7 +131,10 @@ nav { display: flex; align-items: center; justify-content: space-between; paddin
 <body>
 <nav>
   <a href="/" class="nav-logo">HYPERFLEX</a>
-  <a href="javascript:history.back()" class="nav-back">← Back</a>
+  <div style="display:flex;align-items:center;gap:10px">
+    <a id="creatorDashPill" href="/creator/dashboard" style="display:none;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:#c9920d;background:rgba(201,146,13,0.1);border:1px solid rgba(201,146,13,0.3);padding:6px 14px;border-radius:20px;text-decoration:none;transition:background 0.15s;min-height:44px;align-items:center" onmouseover="this.style.background='rgba(201,146,13,0.2)'" onmouseout="this.style.background='rgba(201,146,13,0.1)'">Dashboard →</a>
+    <a href="javascript:history.back()" class="nav-back">← Back</a>
+  </div>
 </nav>
 <div class="page" id="page">
   <div class="loading">Loading profile...</div>
@@ -345,7 +348,20 @@ async function load() {
   }
 }
 
-load().then(loadFollowStatus);
+load().then(loadFollowStatus).then(showCreatorDashPill);
+
+function showCreatorDashPill() {
+  const creatorToken = localStorage.getItem('hf_token');
+  if (!creatorToken) return;
+  try {
+    const payload = JSON.parse(atob(creatorToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    const currentUserId = payload.userId || payload.sub || payload.id;
+    if (currentUserId === window._profileUserId) {
+      const pill = document.getElementById('creatorDashPill');
+      if (pill) pill.style.display = 'inline-flex';
+    }
+  } catch {}
+}
 
 // ── P&L ANALYTICS ─────────────────────────────────────────────────────────────
 async function loadAnalytics(userId) {
