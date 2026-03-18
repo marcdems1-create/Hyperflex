@@ -10947,28 +10947,34 @@ async function loadKalshiPositions(forceRefresh) {
       const sideColor = p.side === 'YES' ? '#2d9b5f' : '#c0392b';
       const price = Math.round((p.current_price || 0) * 100);
       const endDate = p.end_date ? new Date(p.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
+      const posJson = JSON.stringify({ question: p.question, side: p.side, platform: 'kalshi', current_price: p.current_price, pnl_pct: p.pnl_pct || null, cash_value: p.cash_value, market_url: p.market_url }).replace(/'/g, '&#39;');
       return `
-        <a href="${p.market_url}" target="_blank" style="display:block;text-decoration:none;background:var(--ink);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:10px;transition:border-color 0.15s"
+        <div style="background:var(--ink);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:10px;transition:border-color 0.15s"
           onmouseover="this.style.borderColor='rgba(201,146,13,0.4)'" onmouseout="this.style.borderColor='var(--border)'">
-          <div style="display:flex;align-items:flex-start;gap:12px">
-            <div style="flex-shrink:0;margin-top:2px">
-              <span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;background:${p.side==='YES'?'rgba(45,155,95,0.15)':'rgba(192,57,43,0.15)'};color:${sideColor};border:1px solid ${sideColor}40">${p.side}</span>
-            </div>
-            <div style="flex:1;min-width:0">
-              <div style="font-size:13px;font-weight:600;color:var(--text);line-height:1.4;margin-bottom:8px">${escHtmlDash(p.question)}</div>
-              <div style="display:flex;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--muted)">
-                <span>${p.contracts} contract${p.contracts !== 1 ? 's' : ''}</span>
-                <span>@ ${price}¢</span>
-                <span>Value: $${(p.cash_value||0).toFixed(2)}</span>
-                <span>Exp: ${endDate}</span>
+          <a href="${p.market_url}" target="_blank" rel="noopener" style="display:block;text-decoration:none">
+            <div style="display:flex;align-items:flex-start;gap:12px">
+              <div style="flex-shrink:0;margin-top:2px">
+                <span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;background:${p.side==='YES'?'rgba(45,155,95,0.15)':'rgba(192,57,43,0.15)'};color:${sideColor};border:1px solid ${sideColor}40">${p.side}</span>
+              </div>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:13px;font-weight:600;color:var(--text);line-height:1.4;margin-bottom:8px">${escHtmlDash(p.question)}</div>
+                <div style="display:flex;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--muted)">
+                  <span>${p.contracts} contract${p.contracts !== 1 ? 's' : ''}</span>
+                  <span>@ ${price}¢</span>
+                  <span>Value: $${(p.cash_value||0).toFixed(2)}</span>
+                  <span>Exp: ${endDate}</span>
+                </div>
+              </div>
+              <div style="text-align:right;flex-shrink:0">
+                <div style="font-family:var(--mono);font-size:14px;font-weight:700;color:${pnlColor}">${pnl>=0?'+':''}$${(pnl/100).toFixed(2)}</div>
+                <div style="font-family:var(--mono);font-size:10px;color:var(--muted)">unrealized</div>
               </div>
             </div>
-            <div style="text-align:right;flex-shrink:0">
-              <div style="font-family:var(--mono);font-size:14px;font-weight:700;color:${pnlColor}">${pnl>=0?'+':''}$${(pnl/100).toFixed(2)}</div>
-              <div style="font-family:var(--mono);font-size:10px;color:var(--muted)">unrealized</div>
-            </div>
+          </a>
+          <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px">
+            <button data-pos='${posJson}' onclick="sharePositionToFeed(JSON.parse(this.getAttribute('data-pos')))" style="background:none;border:1px solid var(--gold);border-radius:6px;padding:4px 12px;font-size:11px;font-family:var(--mono);color:var(--gold);cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='rgba(201,146,13,0.1)'" onmouseout="this.style.background='none'">📢 Share to feed</button>
           </div>
-        </a>`;
+        </div>`;
     }).join('');
 
     const ts = new Date(data.fetched_at).toLocaleTimeString();
@@ -11077,29 +11083,35 @@ async function loadManifoldPositions(forceRefresh) {
       const sideColor = p.side === 'YES' ? '#2d9b5f' : '#c0392b';
       const pricePct = Math.round((p.current_price || 0) * 100);
       const endDate = p.end_date ? new Date(p.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
+      const posJson = JSON.stringify({ question: p.question, side: p.side, platform: 'manifold', current_price: p.current_price, pnl_pct: p.pnl_pct || null, cash_value: p.cash_value, market_url: p.market_url }).replace(/'/g, '&#39;');
       return `
-        <a href="${p.market_url}" target="_blank" style="display:block;text-decoration:none;background:var(--ink);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:10px;transition:border-color 0.15s"
+        <div style="background:var(--ink);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:10px;transition:border-color 0.15s"
           onmouseover="this.style.borderColor='rgba(201,146,13,0.4)'" onmouseout="this.style.borderColor='var(--border)'">
-          <div style="display:flex;align-items:flex-start;gap:12px">
-            <div style="flex-shrink:0;margin-top:2px">
-              <span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;background:${p.side==='YES'?'rgba(45,155,95,0.15)':'rgba(192,57,43,0.15)'};color:${sideColor};border:1px solid ${sideColor}40">${p.side}</span>
-            </div>
-            <div style="flex:1;min-width:0">
-              <div style="font-size:13px;font-weight:600;color:var(--text);line-height:1.4;margin-bottom:8px">${escHtmlDash(p.question)}</div>
-              <div style="display:flex;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--muted)">
-                <span>${p.shares} shares</span>
-                <span>@ ${pricePct}%</span>
-                <span>Value: M$${(p.cash_value||0).toFixed(0)}</span>
-                <span>Cost: M$${(p.cost_basis||0).toFixed(0)}</span>
-                <span>Exp: ${endDate}</span>
+          <a href="${p.market_url}" target="_blank" rel="noopener" style="display:block;text-decoration:none">
+            <div style="display:flex;align-items:flex-start;gap:12px">
+              <div style="flex-shrink:0;margin-top:2px">
+                <span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;background:${p.side==='YES'?'rgba(45,155,95,0.15)':'rgba(192,57,43,0.15)'};color:${sideColor};border:1px solid ${sideColor}40">${p.side}</span>
+              </div>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:13px;font-weight:600;color:var(--text);line-height:1.4;margin-bottom:8px">${escHtmlDash(p.question)}</div>
+                <div style="display:flex;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--muted)">
+                  <span>${p.shares} shares</span>
+                  <span>@ ${pricePct}%</span>
+                  <span>Value: M$${(p.cash_value||0).toFixed(0)}</span>
+                  <span>Cost: M$${(p.cost_basis||0).toFixed(0)}</span>
+                  <span>Exp: ${endDate}</span>
+                </div>
+              </div>
+              <div style="text-align:right;flex-shrink:0">
+                <div style="font-family:var(--mono);font-size:14px;font-weight:700;color:${pnlColor}">${pnlPct >= 0 ? '+' : ''}${pnlPct}%</div>
+                <div style="font-family:var(--mono);font-size:10px;color:var(--muted)">P&L</div>
               </div>
             </div>
-            <div style="text-align:right;flex-shrink:0">
-              <div style="font-family:var(--mono);font-size:14px;font-weight:700;color:${pnlColor}">${pnlPct >= 0 ? '+' : ''}${pnlPct}%</div>
-              <div style="font-family:var(--mono);font-size:10px;color:var(--muted)">P&L</div>
-            </div>
+          </a>
+          <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px">
+            <button data-pos='${posJson}' onclick="sharePositionToFeed(JSON.parse(this.getAttribute('data-pos')))" style="background:none;border:1px solid var(--gold);border-radius:6px;padding:4px 12px;font-size:11px;font-family:var(--mono);color:var(--gold);cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='rgba(201,146,13,0.1)'" onmouseout="this.style.background='none'">📢 Share to feed</button>
           </div>
-        </a>`;
+        </div>`;
     }).join('');
 
     const ts = new Date(data.fetched_at).toLocaleTimeString();
@@ -11107,6 +11119,34 @@ async function loadManifoldPositions(forceRefresh) {
   } catch (e) {
     console.error('[manifold positions]', e);
     el.innerHTML = '<div style="color:#c0392b;font-size:13px;padding:8px 0">Failed to load positions</div>';
+  }
+}
+
+async function sharePositionToFeed(p) {
+  try {
+    const token = localStorage.getItem('hf_token');
+    const r = await fetch('/api/activity/share-position', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        question:      p.question,
+        side:          p.side,
+        platform:      p.platform,
+        current_price: p.current_price,
+        pnl_pct:       p.pnl_pct,
+        cash_value:    p.cash_value,
+        market_url:    p.market_url,
+      })
+    });
+    if (r.ok) {
+      showToast('Shared to feed!', 'success');
+    } else {
+      const d = await r.json().catch(() => ({}));
+      showToast(d.error || 'Could not share', 'error');
+    }
+  } catch (e) {
+    console.error('[sharePositionToFeed]', e);
+    showToast('Failed to share', 'error');
   }
 }
 </script>
