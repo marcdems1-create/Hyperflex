@@ -298,9 +298,22 @@ async function load() {
         <div class="cta-sub">Join a prediction market community and put your knowledge to the test.</div>
         <a href="/explore" class="cta-link">Explore Communities →</a>
       </div>
+
+      <div id="inviteSection" style="display:none;margin-top:20px;background:#1a1916;border:1px solid #c9920d33;border-radius:12px;padding:20px">
+        <div style="font-size:11px;color:#c9920d;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">📣 Grow Your Following</div>
+        <div style="font-size:13px;color:#b0ab9f;margin-bottom:14px">Share your profile to build your audience:</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <input id="inviteUrlInput" readonly value="https://hyperflex.network/m/${userId}"
+            style="flex:1;background:#141412;border:1px solid #2a2a26;border-radius:6px;padding:8px 12px;font-family:monospace;font-size:12px;color:#f0ebe3;outline:none"/>
+          <button onclick="copyInviteUrl()" id="inviteCopyBtn" style="background:none;border:1px solid #c9920d;color:#c9920d;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700;white-space:nowrap;transition:background 0.15s" onmouseover="this.style.background='rgba(201,146,13,0.1)'" onmouseout="this.style.background='none'">Copy</button>
+        </div>
+        <button onclick="shareProfileOnX()" style="display:flex;align-items:center;gap:8px;background:none;border:1px solid #333;color:#ccc;padding:8px 16px;border-radius:20px;cursor:pointer;font-size:13px;transition:border-color 0.15s" onmouseover="this.style.borderColor='#c9920d';this.style.color='#c9920d'" onmouseout="this.style.borderColor='#333';this.style.color='#ccc'">🐦 Share on X</button>
+        <div id="inviteStats" style="margin-top:14px;font-size:12px;color:#555"></div>
+      </div>
     `;
     loadAnalytics(userId);
     loadTrophyCard(userId);
+    loadInviteSection(userId);
   } catch (err) {
     console.error(err);
     page.innerHTML = `<div class="error-state"><div class="error-icon">⚡</div><div class="error-msg">Failed to load profile</div><div class="error-sub">Please try again later.</div></div>`;
@@ -472,6 +485,47 @@ function shareTrophyOnX() {
   const b = window._trophyData;
   if (!b) return;
   const text = `My best prediction call:\n\n"${b.question}"\n\nCalled ${b.side} → ${b.multiplier}× payout 🏆\n\nhyperflex.network/m/${window._profileUserId}`;
+  window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(text), '_blank');
+}
+
+// ── INVITE / SHARE SECTION (owner only) ──────────────────────────────────────
+async function loadInviteSection(profileUserId) {
+  // Only show to the profile owner
+  const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token');
+  if (!token) return;
+  try {
+    // Decode JWT payload to get current user id (no signature verify needed client-side)
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    const currentUserId = payload.userId || payload.sub || payload.id;
+    if (currentUserId !== profileUserId) return;
+
+    const section = document.getElementById('inviteSection');
+    if (section) section.style.display = 'block';
+
+    // Load stats
+    const r = await fetch('/api/user/profile-share-stats', { headers: { Authorization: 'Bearer ' + token } });
+    if (r.ok) {
+      const d = await r.json();
+      const statsEl = document.getElementById('inviteStats');
+      if (statsEl && d.followers > 0) {
+        statsEl.textContent = `${d.followers} follower${d.followers !== 1 ? 's' : ''} · Share to grow your audience`;
+      }
+    }
+  } catch (e) { /* silent — token parse failed or fetch failed */ }
+}
+
+function copyInviteUrl() {
+  const input = document.getElementById('inviteUrlInput');
+  const btn = document.getElementById('inviteCopyBtn');
+  if (!input || !btn) return;
+  navigator.clipboard.writeText(input.value).then(() => {
+    btn.textContent = '✓ Copied!';
+    setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+  });
+}
+
+function shareProfileOnX() {
+  const text = `I'm tracking predictions across Polymarket, Kalshi & Manifold on HYPERFLEX — follow my calls: hyperflex.network/m/${window._profileUserId}`;
   window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(text), '_blank');
 }
 </script>
