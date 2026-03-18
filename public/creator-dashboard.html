@@ -4557,16 +4557,47 @@ body.nav-open .sidebar-backdrop {
               <div id="kalshiPositions" style="margin-top:20px"></div>
             </div>
 
-            <!-- Polymarket placeholder -->
-            <div style="background:var(--cream);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:20px;opacity:0.6">
-              <div style="display:flex;align-items:center;gap:12px">
+            <!-- Polymarket card -->
+            <div style="background:var(--cream);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:20px">
+              <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
                 <div style="width:36px;height:36px;border-radius:8px;background:#0a0a0a;border:1px solid #333;display:flex;align-items:center;justify-content:center;font-size:18px">🟣</div>
                 <div>
                   <div style="font-size:15px;font-weight:700;color:var(--text)">Polymarket</div>
-                  <div style="font-size:12px;color:var(--muted)">Crypto prediction markets — coming soon</div>
+                  <div style="font-size:12px;color:var(--muted)">Crypto prediction markets</div>
                 </div>
-                <div style="margin-left:auto;font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid var(--border);color:var(--muted)">COMING SOON</div>
+                <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+                  <span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid rgba(45,155,95,0.4);color:#2d9b5f;background:rgba(45,155,95,0.1)">LIVE</span>
+                  <div id="polyStatusBadge"></div>
+                </div>
               </div>
+
+              <!-- Connect form -->
+              <div id="polyConnectForm">
+                <div style="margin-bottom:12px">
+                  <input type="text" id="poly-wallet-input"
+                    placeholder="Your Polygon wallet address (0x...)"
+                    style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-family:var(--mono);font-size:13px;color:var(--text);outline:none;margin-bottom:6px"
+                    onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='var(--border)'"/>
+                  <div style="font-size:11px;color:var(--muted)">
+                    Find your address at
+                    <a href="https://polymarket.com" target="_blank" style="color:var(--gold)">polymarket.com</a>
+                    → your profile
+                  </div>
+                </div>
+                <button class="btn-primary" id="polyConnectBtn" onclick="connectPolymarket()" style="font-size:13px;padding:9px 20px">
+                  Connect Polymarket →
+                </button>
+              </div>
+
+              <!-- Disconnect row (shown when connected) -->
+              <div id="polyConnectedRow" style="display:none;align-items:center;gap:12px">
+                <div style="font-size:13px;color:var(--green);font-weight:600">✓ Wallet connected — <span id="polyWalletDisplay" style="color:var(--gold);font-family:var(--mono);font-size:12px"></span></div>
+                <button onclick="disconnectPolymarket()" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:11px;color:var(--muted);cursor:pointer;font-family:var(--mono)">Disconnect</button>
+                <button onclick="loadPolymarketPositions(true)" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:11px;color:var(--dim);cursor:pointer;font-family:var(--mono)">↺ Refresh</button>
+              </div>
+
+              <!-- Positions list -->
+              <div id="polyPositions" style="margin-top:20px"></div>
             </div>
 
             <!-- Manifold card -->
@@ -10815,6 +10846,7 @@ function shareCommunityPage(anchorEl) {
 let _portfolioLoaded = false;
 let _kalshiConnected = false;
 let _manifoldUsername = '';
+let _polyWalletAddress = '';
 
 async function loadPortfolio() {
   if (_portfolioLoaded) return;
@@ -10826,10 +10858,13 @@ async function loadPortfolio() {
     const data = await r.json();
     _kalshiConnected = data.kalshi_api_key_set;
     _manifoldUsername = data.manifold_username || '';
+    _polyWalletAddress = data.wallet_address || '';
     renderKalshiConnectState();
     renderManifoldConnectState();
+    renderPolymarketConnectState();
     if (_kalshiConnected) loadKalshiPositions(false);
     if (_manifoldUsername) loadManifoldPositions(false);
+    if (_polyWalletAddress) loadPolymarketPositions(false);
   } catch (e) {
     console.warn('[portfolio]', e);
   }
@@ -11118,6 +11153,129 @@ async function loadManifoldPositions(forceRefresh) {
     el.insertAdjacentHTML('beforeend', `<div style="font-family:var(--mono);font-size:10px;color:var(--muted);text-align:right;margin-top:4px">Fetched ${ts} · 5 min cache · M$ = play money</div>`);
   } catch (e) {
     console.error('[manifold positions]', e);
+    el.innerHTML = '<div style="color:#c0392b;font-size:13px;padding:8px 0">Failed to load positions</div>';
+  }
+}
+
+// ── POLYMARKET INTEGRATION ────────────────────────────────────────────────────
+
+function renderPolymarketConnectState() {
+  const form   = document.getElementById('polyConnectForm');
+  const row    = document.getElementById('polyConnectedRow');
+  const badge  = document.getElementById('polyStatusBadge');
+  const nameEl = document.getElementById('polyWalletDisplay');
+  if (_polyWalletAddress) {
+    if (form)   form.style.display  = 'none';
+    if (row)    row.style.display   = 'flex';
+    if (nameEl) nameEl.textContent  = _polyWalletAddress.slice(0, 8) + '…' + _polyWalletAddress.slice(-4);
+    if (badge)  badge.innerHTML = '<span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid rgba(45,155,95,0.4);color:#2d9b5f;background:rgba(45,155,95,0.1)">CONNECTED</span>';
+  } else {
+    if (form)   form.style.display  = 'block';
+    if (row)    row.style.display   = 'none';
+    if (badge)  badge.innerHTML = '<span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid var(--border);color:var(--muted)">NOT CONNECTED</span>';
+    const el = document.getElementById('polyPositions');
+    if (el) el.innerHTML = '';
+  }
+}
+
+async function connectPolymarket() {
+  const address = (document.getElementById('poly-wallet-input').value || '').trim();
+  if (!address) return showToast('Enter your Polygon wallet address', 'error');
+  if (!/^0x[a-fA-F0-9]{40}$/.test(address)) return showToast('Invalid wallet address format (must start with 0x)', 'error');
+  const btn = document.getElementById('polyConnectBtn');
+  btn.disabled = true; btn.textContent = 'Connecting…';
+  try {
+    const token = localStorage.getItem('hf_token');
+    const r = await fetch('/api/user/wallets', {
+      method: 'PUT',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ wallet_address: address })
+    });
+    const d = await r.json();
+    if (!r.ok) { showToast(d.error || 'Failed to connect', 'error'); btn.disabled = false; btn.textContent = 'Connect Polymarket →'; return; }
+    _polyWalletAddress = address;
+    renderPolymarketConnectState();
+    showToast('Polymarket connected!', 'success');
+    loadPolymarketPositions(false);
+  } catch (e) {
+    showToast('Connection failed', 'error');
+    btn.disabled = false; btn.textContent = 'Connect Polymarket →';
+  }
+}
+
+async function disconnectPolymarket() {
+  if (!confirm('Disconnect Polymarket? Your wallet address will be removed.')) return;
+  try {
+    const token = localStorage.getItem('hf_token');
+    await fetch('/api/user/wallets', {
+      method: 'PUT',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ wallet_address: '' })
+    });
+    _polyWalletAddress = '';
+    _portfolioLoaded = false;
+    renderPolymarketConnectState();
+    showToast('Polymarket disconnected', 'success');
+  } catch (e) {
+    showToast('Failed to disconnect', 'error');
+  }
+}
+
+async function loadPolymarketPositions(forceRefresh) {
+  const el = document.getElementById('polyPositions');
+  if (!el || !_polyWalletAddress) return;
+  el.innerHTML = '<div style="padding:16px 0;font-size:13px;color:var(--muted);font-family:var(--mono)">Loading positions…</div>';
+  try {
+    const token = localStorage.getItem('hf_token');
+    const r = await fetch(`/api/polymarket/positions/${encodeURIComponent(_polyWalletAddress)}`, {
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      el.innerHTML = `<div style="color:#c0392b;font-size:13px;padding:8px 0">${d.error || 'Failed to load positions'}</div>`;
+      return;
+    }
+    const data = await r.json();
+    const positions = data.positions || [];
+
+    if (!positions.length) {
+      el.innerHTML = '<div style="padding:20px 0;font-size:13px;color:var(--muted);text-align:center">No open positions found on Polymarket.</div>';
+      return;
+    }
+
+    el.innerHTML = positions.map(p => {
+      const pnlColor = (p.pnl || 0) >= 0 ? '#2d9b5f' : '#c0392b';
+      const sideColor = p.side === 'YES' ? '#2d9b5f' : '#c0392b';
+      const pricePct = Math.round((p.probability || 0) * 100);
+      const posJson = JSON.stringify({ question: p.question, side: p.side, platform: 'polymarket', probability: p.probability, pnl: p.pnl || null, shares: p.shares, market_url: p.market_url }).replace(/'/g, '&#39;');
+      return `
+        <div style="background:var(--ink);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:10px;transition:border-color 0.15s"
+          onmouseover="this.style.borderColor='rgba(201,146,13,0.4)'" onmouseout="this.style.borderColor='var(--border)'">
+          <a href="${p.market_url || '#'}" target="_blank" rel="noopener" style="display:block;text-decoration:none">
+            <div style="display:flex;align-items:flex-start;gap:12px">
+              <div style="flex-shrink:0;margin-top:2px">
+                <span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;background:${p.side==='YES'?'rgba(45,155,95,0.15)':'rgba(192,57,43,0.15)'};color:${sideColor};border:1px solid ${sideColor}40">${p.side || '—'}</span>
+              </div>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:13px;font-weight:600;color:var(--text);line-height:1.4;margin-bottom:8px">${escHtmlDash(p.question || p.market_title || 'Unknown market')}</div>
+                <div style="display:flex;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--muted)">
+                  <span>${(p.shares || 0).toFixed(2)} shares</span>
+                  <span>@ ${pricePct}%</span>
+                  ${p.pnl != null ? `<span style="color:${pnlColor};font-weight:700">${p.pnl >= 0 ? '+' : ''}$${(p.pnl).toFixed(2)} P&L</span>` : ''}
+                </div>
+              </div>
+            </div>
+          </a>
+          <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;justify-content:flex-end">
+            <button onclick='sharePositionToFeed(${posJson})' style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:11px;color:var(--muted);cursor:pointer;font-family:var(--mono);transition:all 0.15s" onmouseover="this.style.borderColor='var(--gold)';this.style.color='var(--gold)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">📢 Share to feed</button>
+          </div>
+        </div>`;
+    }).join('');
+
+    const ts = new Date(data.fetched_at || Date.now()).toLocaleTimeString();
+    el.insertAdjacentHTML('beforeend', `<div style="font-family:var(--mono);font-size:10px;color:var(--muted);text-align:right;margin-top:4px">Fetched ${ts} · 5 min cache</div>`);
+  } catch (e) {
+    console.error('[polymarket positions]', e);
     el.innerHTML = '<div style="color:#c0392b;font-size:13px;padding:8px 0">Failed to load positions</div>';
   }
 }
