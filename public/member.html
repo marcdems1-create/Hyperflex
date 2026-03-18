@@ -471,7 +471,7 @@ async function loadTrophyCard(userId) {
 function shareTrophyOnX() {
   const b = window._trophyData;
   if (!b) return;
-  const text = `My best prediction call: "${b.question}" — called ${b.side}, got ${b.multiplier}× payout 🏆\n\nhyperflex.network/m/${window._profileUserId}`;
+  const text = `My best prediction call:\n\n"${b.question}"\n\nCalled ${b.side} → ${b.multiplier}× payout 🏆\n\nhyperflex.network/m/${window._profileUserId}`;
   window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(text), '_blank');
 }
 </script>
