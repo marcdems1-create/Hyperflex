@@ -1434,45 +1434,108 @@ footer {
 </section>
 <script>
 async function runQuickPreview() {
-  const wallet = document.getElementById('qp-wallet').value.trim();
+  const wallet   = document.getElementById('qp-wallet').value.trim();
   const username = document.getElementById('qp-username').value.trim();
   const resultEl = document.getElementById('qp-result');
-  if (!wallet && !username) { resultEl.style.display='block'; resultEl.innerHTML='<p style="color:#c0392b;font-size:14px;margin:0;">Enter a wallet address or Manifold username.</p>'; return; }
-  resultEl.style.display='block';
-  resultEl.innerHTML='<p style="color:#7a7870;font-size:14px;margin:0;">Fetching positions…</p>';
+  const btn      = document.querySelector('[onclick="runQuickPreview()"]');
+
+  if (!wallet && !username) {
+    resultEl.style.display = 'block';
+    resultEl.innerHTML = '<p style="color:#c0392b;font-size:14px;margin:0;">Enter a Polymarket wallet address or Manifold username.</p>';
+    return;
+  }
+
+  // Loading state
+  resultEl.style.display = 'block';
+  btn.disabled = true;
+  btn.textContent = 'Fetching…';
+  resultEl.innerHTML = `
+    <div style="background:#0e0e0c;border:1px solid #2a2a26;border-radius:10px;padding:24px 22px;display:flex;align-items:center;gap:14px;">
+      <div style="width:18px;height:18px;border:2px solid #c9920d;border-top-color:transparent;border-radius:50%;animation:qp-spin .7s linear infinite;flex-shrink:0;"></div>
+      <span style="color:#7a7870;font-size:14px;">Looking up your positions on ${wallet ? 'Polymarket' : 'Manifold'}…</span>
+    </div>
+    <style>@keyframes qp-spin{to{transform:rotate(360deg)}}</style>`;
+
   try {
-    let data, platform;
+    let data, platform, platformSlug;
     if (wallet) {
       const r = await fetch(`/api/polymarket/positions/${encodeURIComponent(wallet)}`);
-      if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Could not fetch wallet'); }
-      data = await r.json(); platform = 'Polymarket';
+      if (!r.ok) { const e = await r.json().catch(()=>{}); throw new Error(e?.error || 'Could not fetch wallet — check the address and try again'); }
+      data = await r.json(); platform = 'Polymarket'; platformSlug = 'polymarket';
     } else {
       const r = await fetch(`/api/manifold/positions/${encodeURIComponent(username)}`);
-      if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'User not found'); }
-      data = await r.json(); platform = 'Manifold';
+      if (!r.ok) { const e = await r.json().catch(()=>{}); throw new Error(e?.error || 'Manifold user not found — check the username and try again'); }
+      data = await r.json(); platform = 'Manifold'; platformSlug = 'manifold';
     }
-    const positions = data.positions || [];
-    const totalPnl = positions.reduce((s, p) => s + (p.pnl || 0), 0);
-    const topMarket = positions[0]?.question || '—';
-    const pnlColor = totalPnl >= 0 ? '#2d9b5f' : '#c0392b';
-    const pnlStr = (totalPnl >= 0 ? '+' : '') + '$' + Math.abs(totalPnl).toFixed(2);
-    resultEl.innerHTML = `
-      <div style="background:#0e0e0c;border:1px solid #2a2a26;border-radius:10px;padding:20px 22px;margin-bottom:16px;">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-          <span style="background:#c9920d22;color:#c9920d;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;letter-spacing:.04em;">${platform}</span>
-          <span style="color:#7a7870;font-size:13px;">${positions.length} open position${positions.length !== 1 ? 's' : ''}</span>
+
+    const positions  = data.positions || [];
+    const count      = positions.length;
+    const totalPnl   = positions.reduce((s, p) => s + (p.pnl || 0), 0);
+    const pnlPos     = totalPnl >= 0;
+    const pnlColor   = pnlPos ? '#2d9b5f' : '#c0392b';
+    const pnlBg      = pnlPos ? '#2d9b5f18' : '#c0392b18';
+    const pnlBorder  = pnlPos ? '#2d9b5f44' : '#c0392b44';
+    const pnlStr     = (pnlPos ? '+' : '−') + '$' + Math.abs(totalPnl).toFixed(2);
+    const topMarket  = positions[0]?.question || null;
+    const signupUrl  = `/creator/signup?ref=preview&platform=${platformSlug}`;
+
+    if (count === 0) {
+      // No positions found
+      resultEl.innerHTML = `
+        <div style="background:#0e0e0c;border:1px solid #2a2a26;border-radius:10px;padding:22px;margin-bottom:12px;text-align:center;">
+          <div style="font-size:28px;margin-bottom:10px;">🔍</div>
+          <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:#ddd8cc;margin-bottom:6px;">No open positions found</div>
+          <div style="color:#7a7870;font-size:14px;">Either the address has no active positions or they've all resolved.</div>
         </div>
-        <div style="display:flex;gap:28px;flex-wrap:wrap;margin-bottom:14px;">
-          <div><div style="color:#7a7870;font-size:11px;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">Total P&amp;L</div><div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:${pnlColor};">${pnlStr}</div></div>
-          <div style="flex:1;min-width:0;"><div style="color:#7a7870;font-size:11px;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">Top position</div><div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:600;color:#ddd8cc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${topMarket}</div></div>
+        <div style="background:#c9920d18;border:1px solid #c9920d55;border-radius:10px;padding:20px 22px;">
+          <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:#ddd8cc;margin-bottom:6px;">You can still track future calls on HYPERFLEX</div>
+          <div style="color:#7a7870;font-size:13px;margin-bottom:16px;">Log predictions, build your track record, and see your calibration score — free.</div>
+          <a href="${signupUrl}" style="display:inline-block;background:#c9920d;color:#141412;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;padding:11px 22px;border-radius:8px;text-decoration:none;">Claim your free profile →</a>
+        </div>`;
+    } else {
+      // Positions found
+      const topMarketHtml = topMarket
+        ? `<div style="margin-top:14px;padding-top:14px;border-top:1px solid #2a2a26;">
+             <div style="color:#7a7870;font-size:11px;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">Top position</div>
+             <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:600;color:#ddd8cc;line-height:1.4;">${topMarket}</div>
+           </div>`
+        : '';
+      resultEl.innerHTML = `
+        <div style="background:#0e0e0c;border:1px solid #2a2a26;border-radius:10px;padding:22px;margin-bottom:12px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
+            <span style="background:#c9920d22;color:#c9920d;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;letter-spacing:.04em;">${platform}</span>
+            <span style="color:#7a7870;font-size:13px;">${count} open position${count !== 1 ? 's' : ''} found</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div style="background:#141412;border-radius:8px;padding:14px 16px;">
+              <div style="color:#7a7870;font-size:11px;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">Open Positions</div>
+              <div style="font-family:'Syne',sans-serif;font-size:26px;font-weight:800;color:#ddd8cc;">${count}</div>
+            </div>
+            <div style="background:${pnlBg};border:1px solid ${pnlBorder};border-radius:8px;padding:14px 16px;">
+              <div style="color:#7a7870;font-size:11px;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">Total P&amp;L</div>
+              <div style="font-family:'Syne',sans-serif;font-size:26px;font-weight:800;color:${pnlColor};">${pnlStr}</div>
+            </div>
+          </div>
+          ${topMarketHtml}
         </div>
-      </div>
-      <div style="background:#c9920d18;border:1px solid #c9920d44;border-radius:10px;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
-        <span style="color:#ddd8cc;font-size:14px;">Save your full portfolio + track Kalshi</span>
-        <a href="/creator/signup" style="background:#c9920d;color:#141412;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;padding:10px 20px;border-radius:8px;text-decoration:none;white-space:nowrap;">Get started free →</a>
-      </div>`;
+        <div style="background:#c9920d18;border:1px solid #c9920d55;border-radius:10px;padding:20px 22px;">
+          <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:#ddd8cc;margin-bottom:6px;">📊 ${count} open position${count !== 1 ? 's' : ''} found — save your full history, track Kalshi too, and see your calibration score</div>
+          <div style="color:#7a7870;font-size:13px;margin-bottom:16px;">Free during beta. Takes 30 seconds to set up.</div>
+          <a href="${signupUrl}" style="display:inline-block;background:#c9920d;color:#141412;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;padding:11px 22px;border-radius:8px;text-decoration:none;">Claim your free profile →</a>
+        </div>`;
+    }
   } catch(err) {
-    resultEl.innerHTML = `<p style="color:#c0392b;font-size:14px;margin:0;">${err.message}</p>`;
+    resultEl.innerHTML = `
+      <div style="background:#c0392b18;border:1px solid #c0392b44;border-radius:10px;padding:18px 20px;display:flex;gap:12px;align-items:flex-start;">
+        <span style="font-size:18px;flex-shrink:0;">⚠️</span>
+        <div>
+          <div style="color:#ddd8cc;font-size:14px;font-weight:600;margin-bottom:4px;">Could not fetch positions</div>
+          <div style="color:#7a7870;font-size:13px;">${err.message}</div>
+        </div>
+      </div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Show my stats →';
   }
 }
 document.getElementById('qp-wallet').addEventListener('keydown', e => { if (e.key === 'Enter') runQuickPreview(); });
