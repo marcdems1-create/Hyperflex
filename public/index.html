@@ -329,103 +329,6 @@ section { position: relative; z-index: 1; }
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
-/* ── PREDICTOR SHOWCASE ── */
-.pred-showcase {
-  padding: 100px 40px 60px;
-  max-width: 1120px;
-  margin: 0 auto;
-  text-align: center;
-}
-.pred-feat-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
-  text-align: left;
-}
-.pred-feat-card {
-  background: var(--cream);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 32px 28px;
-  transition: border-color 0.18s;
-}
-.pred-feat-card:hover { border-color: rgba(201,146,13,0.4); }
-.pred-feat-icon { font-size: 30px; margin-bottom: 16px; display: block; }
-.pred-feat-title {
-  font-family: var(--sans);
-  font-size: 18px;
-  font-weight: 800;
-  color: var(--text);
-  margin-bottom: 10px;
-  letter-spacing: -0.01em;
-}
-.pred-feat-desc {
-  font-size: 14px;
-  color: var(--dim);
-  line-height: 1.65;
-  margin-bottom: 20px;
-}
-.pred-feat-bullets {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.pred-feat-bullets li {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--gold);
-  padding-left: 18px;
-  position: relative;
-  line-height: 1.5;
-}
-.pred-feat-bullets li::before {
-  content: '✦';
-  position: absolute;
-  left: 0;
-  font-size: 9px;
-  top: 2px;
-  opacity: 0.7;
-}
-
-/* ── PREDICTOR TESTIMONIALS ── */
-.pred-testimonials {
-  padding: 0 40px 100px;
-  max-width: 1120px;
-  margin: 0 auto;
-}
-.pred-testi-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
-}
-.pred-testi-card {
-  background: var(--cream);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 28px 26px;
-  position: relative;
-}
-.pred-testi-card::before {
-  content: '"';
-  position: absolute;
-  top: 18px;
-  left: 22px;
-  font-size: 52px;
-  color: rgba(201,146,13,0.2);
-  font-family: Georgia, serif;
-  line-height: 1;
-}
-.pred-testi-quote {
-  font-size: 14px;
-  color: var(--text);
-  line-height: 1.7;
-  margin-bottom: 20px;
-  padding-top: 24px;
-}
-
 @media (max-width: 600px) {
   .stats-bar { gap: 0; }
   .stats-bar-item { padding: 14px 16px; }
@@ -459,12 +362,6 @@ section { position: relative; z-index: 1; }
 
   /* Quick Preview card: reduce padding on mobile */
   #qp-wallet, #qp-username { min-width: 0; width: 100%; }
-
-  /* Predictor showcase + testimonials: single column */
-  .pred-feat-grid, .pred-testi-grid { grid-template-columns: 1fr; gap: 12px; }
-  .pred-showcase { padding: 60px 16px 40px; }
-  .pred-testimonials { padding: 0 16px 60px; }
-  .pred-feat-card { padding: 24px 20px; }
 }
 
 /* ── MARQUEE ── */
@@ -1672,405 +1569,66 @@ document.getElementById('qp-wallet').addEventListener('keydown', e => { if (e.ke
 document.getElementById('qp-username').addEventListener('keydown', e => { if (e.key === 'Enter') runQuickPreview(); });
 </script>
 
-<!-- PREDICTOR SHOWCASE -->
-<section class="pred-showcase">
-  <div class="section-eyebrow">For prediction market traders</div>
-  <h2 class="section-title" style="margin-bottom:48px;">Your edge deserves a home base.</h2>
-  <div class="pred-feat-grid">
-    <div class="pred-feat-card">
-      <div class="pred-feat-icon">📊</div>
-      <div class="pred-feat-title">Track every position</div>
-      <p class="pred-feat-desc">Polymarket, Kalshi, and Manifold — all in one dashboard. P&amp;L auto-calculated, positions synced hourly, full history saved.</p>
-      <ul class="pred-feat-bullets">
-        <li>Live positions from all 3 platforms</li>
-        <li>Cumulative P&amp;L over 30 days</li>
-        <li>Auto-sync — no manual updates</li>
-      </ul>
+<!-- FEATURES SHOWCASE -->
+<section style="padding:80px 24px 60px;max-width:1000px;margin:0 auto">
+  <div style="text-align:center;margin-bottom:44px">
+    <div style="font-family:var(--mono);font-size:11px;color:var(--gold);letter-spacing:0.12em;text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:8px"><span style="display:inline-block;width:20px;height:1px;background:var(--gold)"></span>Why HYPERFLEX<span style="display:inline-block;width:20px;height:1px;background:var(--gold)"></span></div>
+    <h2 style="font-family:var(--sans);font-size:clamp(24px,4vw,36px);font-weight:800;color:var(--text);letter-spacing:-0.5px;margin:0">One dashboard for every prediction you make</h2>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;margin-bottom:64px">
+    <!-- Track -->
+    <div style="background:#191917;border:1px solid #2a2a26;border-radius:14px;padding:28px 24px">
+      <div style="font-size:28px;margin-bottom:16px">📊</div>
+      <h3 style="font-family:var(--sans);font-size:17px;font-weight:800;color:var(--text);margin:0 0 10px">Track every position</h3>
+      <p style="font-size:13px;color:var(--dim);line-height:1.6;margin:0">Polymarket, Kalshi, and Manifold in one unified dashboard. P&L auto-calculated across all platforms. No spreadsheets, no tab-switching.</p>
     </div>
-    <div class="pred-feat-card">
-      <div class="pred-feat-icon">🏆</div>
-      <div class="pred-feat-title">Prove your edge</div>
-      <p class="pred-feat-desc">Your calibration score, win rate, and sharp score — all calculated from real resolved markets. Share your public profile.</p>
-      <ul class="pred-feat-bullets">
-        <li>Calibration chart across all markets</li>
-        <li>Win rate + sharp score composite</li>
-        <li>Public profile at hyperflex.network/m/you</li>
-      </ul>
+    <!-- Prove -->
+    <div style="background:#191917;border:1px solid #2a2a26;border-radius:14px;padding:28px 24px">
+      <div style="font-size:28px;margin-bottom:16px">🏆</div>
+      <h3 style="font-family:var(--sans);font-size:17px;font-weight:800;color:var(--text);margin:0 0 10px">Prove your edge</h3>
+      <p style="font-size:13px;color:var(--dim);line-height:1.6;margin:0">Calibration score, win rate, and sharp score — all public on your profile. Show the world you're not just guessing. Leaderboards rank the best.</p>
     </div>
-    <div class="pred-feat-card">
-      <div class="pred-feat-icon">⚡</div>
-      <div class="pred-feat-title">Stay ahead</div>
-      <p class="pred-feat-desc">Follow the sharpest predictors, get a personalised feed of their calls, and get spotlighted when you hit the top of the leaderboard.</p>
-      <ul class="pred-feat-bullets">
-        <li>Following feed with live activity</li>
-        <li>Weekly Predictor Spotlight email</li>
-        <li>Trophy card for your best-ever call</li>
-      </ul>
+    <!-- Stay ahead -->
+    <div style="background:#191917;border:1px solid #2a2a26;border-radius:14px;padding:28px 24px">
+      <div style="font-size:28px;margin-bottom:16px">⚡</div>
+      <h3 style="font-family:var(--sans);font-size:17px;font-weight:800;color:var(--text);margin:0 0 10px">Stay ahead</h3>
+      <p style="font-size:13px;color:var(--dim);line-height:1.6;margin:0">Follow top predictors and see their calls in your feed. Weekly spotlight emails surface the sharpest minds. Never miss a signal.</p>
     </div>
   </div>
-</section>
 
-<!-- PREDICTOR TESTIMONIALS -->
-<section class="pred-testimonials">
-  <div class="pred-testi-grid">
-    <div class="pred-testi-card">
-      <p class="pred-testi-quote">"I've been on Polymarket for two years and never had a clean way to see my actual P&amp;L across everything. HYPERFLEX did it in 30 seconds — just pasted my wallet and it pulled my whole history."</p>
-      <div class="sp-author">
-        <div class="sp-avatar">DK</div>
+  <!-- Testimonials -->
+  <div style="text-align:center;margin-bottom:32px">
+    <div style="font-family:var(--mono);font-size:11px;color:var(--dim);letter-spacing:0.1em;text-transform:uppercase">What traders are saying</div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px">
+    <div style="background:#161614;border:1px solid #2a2a26;border-radius:12px;padding:24px">
+      <p style="font-size:13px;color:var(--text);line-height:1.65;margin:0 0 16px">"I had positions across Polymarket and Manifold with no way to see my total P&L. Connected both in 30 seconds — now I check one dashboard instead of three tabs."</p>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:32px;height:32px;border-radius:50%;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#818cf8">DK</div>
         <div>
-          <div class="sp-name">D. Kim</div>
-          <div class="sp-handle">Active Polymarket trader · Top 8% by volume</div>
+          <div style="font-size:12px;font-weight:600;color:var(--text)">Daniel K.</div>
+          <div style="font-size:11px;color:var(--dim)">Active Polymarket trader</div>
         </div>
       </div>
     </div>
-    <div class="pred-testi-card">
-      <p class="pred-testi-quote">"The calibration chart was humbling. Turns out I was overconfident on 70%+ markets. Actually seeing it plotted made me adjust, and my win rate went up within a month."</p>
-      <div class="sp-author">
-        <div class="sp-avatar">SR</div>
+    <div style="background:#161614;border:1px solid #2a2a26;border-radius:12px;padding:24px">
+      <p style="font-size:13px;color:var(--text);line-height:1.65;margin:0 0 16px">"The sharp score is addictive. I went from guessing to actually tracking my calibration. My win rate went from 52% to 68% in two months just by seeing the data."</p>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:32px;height:32px;border-radius:50%;background:rgba(201,146,13,0.15);border:1px solid rgba(201,146,13,0.3);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--gold)">SP</div>
         <div>
-          <div class="sp-name">S. Rajan</div>
-          <div class="sp-handle">Manifold + Kalshi · Politics &amp; Macro</div>
+          <div style="font-size:12px;font-weight:600;color:var(--text)">Sarah P.</div>
+          <div style="font-size:11px;color:var(--dim)">Kalshi + Manifold trader</div>
         </div>
       </div>
     </div>
-    <div class="pred-testi-card">
-      <p class="pred-testi-quote">"I follow three traders whose track records I trust — their calls show up in my feed the moment they bet. It's the closest thing to seeing inside a sharp predictor's head."</p>
-      <div class="sp-author">
-        <div class="sp-avatar">ML</div>
+    <div style="background:#161614;border:1px solid #2a2a26;border-radius:12px;padding:24px">
+      <p style="font-size:13px;color:var(--text);line-height:1.65;margin:0 0 16px">"Following the top predictors changed my whole approach. I see what the sharpest people are betting on before I make my own calls. The weekly spotlight email is gold."</p>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:32px;height:32px;border-radius:50%;background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.3);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#22c55e">MR</div>
         <div>
-          <div class="sp-name">M. Laurent</div>
-          <div class="sp-handle">Crypto &amp; Tech markets · Multi-platform</div>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- HOW IT WORKS -->
-<section class="how" id="how">
-  <div class="section-eyebrow">How it works</div>
-  <h2 class="section-title">Live markets in your content in under 5 minutes.</h2>
-  <div class="steps">
-    <div class="step">
-      <div class="step-num">01</div>
-      <span class="step-icon">🏗️</span>
-      <h3>Create your community</h3>
-      <p>Sign up, pick a URL slug, name your points currency (e.g. "Bucks", "Coins", "Credits"), and choose your brand color. Done in 60 seconds.</p>
-    </div>
-    <div class="step">
-      <div class="step-num">02</div>
-      <span class="step-icon">🤖</span>
-      <h3>Generate markets with AI</h3>
-      <p>Paste a YouTube or Twitch URL and the AI scans comments, chat, and transcript — then generates ready-to-publish prediction markets your audience already cares about.</p>
-    </div>
-    <div class="step">
-      <div class="step-num">03</div>
-      <span class="step-icon">📣</span>
-      <h3>Share and watch it grow</h3>
-      <p>Drop your community link in your bio, Discord, or newsletter. Your audience signs up, places predictions, climbs the leaderboard, and unlocks rewards you define.</p>
-    </div>
-  </div>
-</section>
-
-<!-- FEATURES -->
-<section class="features" id="features">
-  <div class="section-eyebrow">Features</div>
-  <h2 class="section-title">The prediction market built for creators.</h2>
-  <div class="features-grid">
-
-    <div class="feat-card">
-      <div class="feat-icon">🤖</div>
-      <h3>AI Market Generation</h3>
-      <p>Scan any YouTube or Twitch URL and let the AI write the markets. Pull from comments, transcripts, or live chat — or paste Reddit, Discord, or any community text.</p>
-      <ul class="feat-bullets">
-        <li class="feat-bullet">Scans YouTube comments, transcript &amp; live chat — all at once</li>
-        <li class="feat-bullet">Paste Twitch chat, Reddit threads, or Discord messages</li>
-        <li class="feat-bullet">One URL → ready-to-publish markets in seconds</li>
-        <li class="feat-bullet">Validates question quality before publishing</li>
-        <li class="feat-bullet">AI resolution suggestions with source data</li>
-      </ul>
-    </div>
-
-    <div class="feat-card">
-      <div class="feat-icon">💎</div>
-      <h3>Custom Flex Points</h3>
-      <p>Name your community currency anything. Define reward tiers that unlock perks when fans hit point thresholds — Discord roles, merch, shout-outs.</p>
-      <ul class="feat-bullets">
-        <li class="feat-bullet">Fully custom points name and branding</li>
-        <li class="feat-bullet">Live leaderboard with real-time balances</li>
-        <li class="feat-bullet">Creator-defined reward tiers with descriptions</li>
-        <li class="feat-bullet">Play-money only — no compliance risk</li>
-        <li class="feat-bullet">Members see locked/unlocked reward status</li>
-      </ul>
-    </div>
-
-    <div class="feat-card">
-      <div class="feat-icon">📊</div>
-      <h3>Creator Analytics</h3>
-      <p>Track what your community actually cares about. See trader counts, volume, top predictors, and a resolution queue with AI-powered outcome suggestions.</p>
-      <ul class="feat-bullets">
-        <li class="feat-bullet">Total traders and weekly activity stats</li>
-        <li class="feat-bullet">Per-market volume and live odds</li>
-        <li class="feat-bullet">Top traders leaderboard with balances</li>
-        <li class="feat-bullet">Resolution queue with AI verdict assist</li>
-        <li class="feat-bullet">Pulsing live indicators on active markets</li>
-      </ul>
-    </div>
-
-    <div class="feat-card">
-      <div class="feat-icon">📈</div>
-      <h3>Dynamic Live Odds</h3>
-      <p>Markets move in real time. Every trade shifts the odds — just like real prediction markets — so members have skin in the game and reason to keep watching.</p>
-      <ul class="feat-bullets">
-        <li class="feat-bullet">CPMM pricing — odds update after every trade</li>
-        <li class="feat-bullet">Yes/No price shown live on every market card</li>
-        <li class="feat-bullet">Early bettors rewarded for correct contrarian picks</li>
-        <li class="feat-bullet">More engaging than static polls — outcomes actually matter</li>
-        <li class="feat-bullet">Price history visible to members in real time</li>
-      </ul>
-    </div>
-
-    <div class="feat-card">
-      <div class="feat-icon">🔥</div>
-      <h3>Streak Gamification</h3>
-      <p>Keep members coming back with win streaks that multiply payouts. The longer the streak, the bigger the reward — turning casual predictors into daily habits.</p>
-      <ul class="feat-bullets">
-        <li class="feat-bullet">3-win streak → 1.5× payout multiplier</li>
-        <li class="feat-bullet">5+ win streak → 2× payout multiplier</li>
-        <li class="feat-bullet">Streak badges on leaderboard (🔥 and ⚡ Streak Master)</li>
-        <li class="feat-bullet">Weekly top-predictor spotlight panel</li>
-        <li class="feat-bullet">Drives daily check-ins and retention</li>
-      </ul>
-    </div>
-
-    <div class="feat-card">
-      <div class="feat-icon">🔗</div>
-      <h3>Embeds Anywhere</h3>
-      <p>One iframe. Drop live prediction markets directly into your Substack, personal site, link-in-bio, or newsletter. Your audience predicts without leaving your content.</p>
-      <ul class="feat-bullets">
-        <li class="feat-bullet">Works in Substack, Ghost, WordPress, Beehiiv, Linktree</li>
-        <li class="feat-bullet">Fully branded to your community colors</li>
-        <li class="feat-bullet">Live odds update in real time inside the embed</li>
-        <li class="feat-bullet">Links out to your community page — grows your audience</li>
-        <li class="feat-bullet">Every click drives back to your community — your content stays yours</li>
-      </ul>
-    </div>
-
-  </div>
-</section>
-
-<!-- DEMO WINDOW -->
-<section class="demo">
-  <div class="demo-window">
-    <div class="demo-bar">
-      <div class="demo-dots">
-        <div class="demo-dot r"></div>
-        <div class="demo-dot y"></div>
-        <div class="demo-dot g"></div>
-      </div>
-      <div class="demo-url-bar">hyperflex.network/<em>yourcommunity</em></div>
-    </div>
-    <div class="demo-markets">
-      <div class="demo-card">
-        <div class="demo-live"><div class="demo-live-dot"></div>🏀 Sports</div>
-        <div class="demo-q">Will Caitlin Clark win WNBA MVP this season?</div>
-        <div class="demo-bars">
-          <div class="demo-bar-row">
-            <div class="demo-bar-lbl y">YES</div>
-            <div class="demo-bar-track"><div class="demo-bar-fill y" style="width:71%"></div></div>
-            <div class="demo-bar-pct">71%</div>
-          </div>
-          <div class="demo-bar-row">
-            <div class="demo-bar-lbl n">NO</div>
-            <div class="demo-bar-track"><div class="demo-bar-fill n" style="width:29%"></div></div>
-            <div class="demo-bar-pct">29%</div>
-          </div>
-        </div>
-        <div class="demo-meta">💎 4,840 pts · 94 traders</div>
-      </div>
-      <div class="demo-card">
-        <div class="demo-live"><div class="demo-live-dot"></div>🎮 Gaming</div>
-        <div class="demo-q">Will GTA VI release before the end of 2026?</div>
-        <div class="demo-bars">
-          <div class="demo-bar-row">
-            <div class="demo-bar-lbl y">YES</div>
-            <div class="demo-bar-track"><div class="demo-bar-fill y" style="width:79%"></div></div>
-            <div class="demo-bar-pct">79%</div>
-          </div>
-          <div class="demo-bar-row">
-            <div class="demo-bar-lbl n">NO</div>
-            <div class="demo-bar-track"><div class="demo-bar-fill n" style="width:21%"></div></div>
-            <div class="demo-bar-pct">21%</div>
-          </div>
-        </div>
-        <div class="demo-meta">💎 16,800 pts · 312 traders</div>
-      </div>
-      <div class="demo-card">
-        <div class="demo-live"><div class="demo-live-dot"></div>🎤 Culture</div>
-        <div class="demo-q">Will Drake and Kendrick publicly squash their beef in 2026?</div>
-        <div class="demo-bars">
-          <div class="demo-bar-row">
-            <div class="demo-bar-lbl y">YES</div>
-            <div class="demo-bar-track"><div class="demo-bar-fill y" style="width:29%"></div></div>
-            <div class="demo-bar-pct">29%</div>
-          </div>
-          <div class="demo-bar-row">
-            <div class="demo-bar-lbl n">NO</div>
-            <div class="demo-bar-track"><div class="demo-bar-fill n" style="width:71%"></div></div>
-            <div class="demo-bar-pct">71%</div>
-          </div>
-        </div>
-        <div class="demo-meta">💎 3,120 pts · 58 traders</div>
-      </div>
-      <div class="demo-card">
-        <div class="demo-live"><div class="demo-live-dot"></div>🏛️ Politics</div>
-        <div class="demo-q">Will Elon Musk leave his government role before September 2026?</div>
-        <div class="demo-bars">
-          <div class="demo-bar-row">
-            <div class="demo-bar-lbl y">YES</div>
-            <div class="demo-bar-track"><div class="demo-bar-fill y" style="width:67%"></div></div>
-            <div class="demo-bar-pct">67%</div>
-          </div>
-          <div class="demo-bar-row">
-            <div class="demo-bar-lbl n">NO</div>
-            <div class="demo-bar-track"><div class="demo-bar-fill n" style="width:33%"></div></div>
-            <div class="demo-bar-pct">33%</div>
-          </div>
-        </div>
-        <div class="demo-meta">💎 6,100 pts · 127 traders</div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- VIDEO -->
-<!-- VIDEO SECTION — hidden until demo video is ready. Uncomment and replace VIDEO_ID to activate.
-<section class="video-section" id="demo-video">
-  <div class="section-eyebrow">See it in action</div>
-  <h2 class="section-title">Watch HYPERFLEX in action.</h2>
-  <p class="video-sub">See how creators build branded prediction markets, scan YouTube videos with AI, and turn their community into an interactive game — in minutes.</p>
-  <div class="video-frame-wrap">
-    <div class="video-frame">
-      <iframe
-        src="https://www.youtube.com/embed/VIDEO_ID?rel=0&modestbranding=1&color=white"
-        title="How to use HYPERFLEX"
-        frameborder="0"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-        allowfullscreen
-      ></iframe>
-    </div>
-    <div class="video-glow"></div>
-  </div>
-</section>
--->
-
-<!-- EMBED SECTION -->
-<section class="embed-section" id="embed">
-  <div class="embed-copy">
-    <div class="section-eyebrow">Works everywhere you already are</div>
-    <h2 class="section-title">Drop your markets<br>into any website</h2>
-    <p class="section-sub">One line of code. Your prediction markets live inside your Substack, personal site, link-in-bio, or newsletter — fully branded, always live.</p>
-    <ul class="embed-bullets">
-      <li>📝 Substack posts &amp; newsletters</li>
-      <li>🌐 Personal websites &amp; blogs</li>
-      <li>🔗 Bio link pages (Linktree, etc.)</li>
-      <li>📧 Email campaigns</li>
-    </ul>
-    <div class="embed-code-snippet">&lt;iframe src="https://hyperflex.network/embed/<em>your-slug</em>"<br>&nbsp;&nbsp;width="380" height="320" frameborder="0"&gt;&lt;/iframe&gt;</div>
-    <a href="/creator/signup" class="btn-primary" style="display:inline-block;margin-top:28px">Get your embed code →</a>
-  </div>
-  <div class="embed-preview">
-    <div class="ep-header">
-      <div class="ep-community">
-        <div class="ep-dot"></div>
-        <div>
-          <div class="ep-name">TechTalks</div>
-          <div class="ep-badge">PREDICTION MARKET</div>
-        </div>
-      </div>
-      <a class="ep-cta" href="#">Join →</a>
-    </div>
-    <div class="ep-markets">
-      <div class="ep-market">
-        <div class="ep-q">Will GPT-5 launch before June 2026?</div>
-        <div class="ep-bar"><div class="ep-fill" style="width:73%;background:#22c55e"></div></div>
-        <div class="ep-odds"><span style="color:#22c55e">YES 73%</span><span style="color:#ef4444">NO 27%</span></div>
-        <div class="ep-traders">218 traders</div>
-      </div>
-      <div class="ep-market">
-        <div class="ep-q">Will Apple release AR glasses in 2026?</div>
-        <div class="ep-bar"><div class="ep-fill" style="width:41%;background:#ef4444"></div></div>
-        <div class="ep-odds"><span style="color:#22c55e">YES 41%</span><span style="color:#ef4444">NO 59%</span></div>
-        <div class="ep-traders">94 traders</div>
-      </div>
-      <div class="ep-market">
-        <div class="ep-q">Will NVIDIA stock hit $200 again by Q3?</div>
-        <div class="ep-bar"><div class="ep-fill" style="width:58%;background:#22c55e"></div></div>
-        <div class="ep-odds"><span style="color:#22c55e">YES 58%</span><span style="color:#ef4444">NO 42%</span></div>
-        <div class="ep-traders">156 traders</div>
-      </div>
-    </div>
-    <div class="ep-footer">
-      <div class="ep-footer-logo">
-        <svg viewBox="0 0 32 32" fill="none" style="width:12px;height:12px">
-          <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="#c9920d" stroke-width="1.5" fill="rgba(201,146,13,0.1)"/>
-          <path d="M16 8L22 11.5V18.5L16 22L10 18.5V11.5L16 8Z" fill="#c9920d" opacity="0.6"/>
-        </svg>
-        <span class="ep-footer-logo-text">HYPERFLEX</span>
-      </div>
-      <div class="ep-footer-pts">Flex Points · play-money</div>
-    </div>
-  </div>
-</section>
-
-<!-- SOCIAL PROOF -->
-<section class="social-proof">
-  <div class="section-eyebrow">Creator results</div>
-  <h2 class="section-title">What happens when you make<br>your content interactive</h2>
-
-  <div class="sp-stat-row">
-    <div class="sp-stat-box">
-      <div class="sp-stat-num" id="sp-markets">—</div>
-      <div class="sp-stat-label">Live prediction markets<br>running right now</div>
-    </div>
-    <div class="sp-stat-box">
-      <div class="sp-stat-num" id="sp-predictions">—</div>
-      <div class="sp-stat-label">Predictions made<br>across all communities</div>
-    </div>
-    <div class="sp-stat-box">
-      <div class="sp-stat-num" id="sp-communities">—</div>
-      <div class="sp-stat-label">Creator communities<br>live on HYPERFLEX</div>
-    </div>
-  </div>
-
-  <div class="sp-grid">
-    <div class="sp-card">
-      <p class="sp-quote">I copied one line of embed code into my Substack footer. That's it. Readers see live markets, click to predict, and land in my community — already engaged. 31 new members in the first week, zero extra work on my end. The embed does the acquisition for you.</p>
-      <div class="sp-author">
-        <div class="sp-avatar">AK</div>
-        <div>
-          <div class="sp-name">Alex K.</div>
-          <div class="sp-handle">Tech · 22K newsletter subs</div>
-        </div>
-      </div>
-    </div>
-    <div class="sp-card">
-      <p class="sp-quote">I used to spend an hour coming up with poll questions. Now I paste my YouTube URL, the AI reads the video and writes 6 markets in 30 seconds. I pick the best ones, hit publish, and my audience is predicting before the video even hits 1K views. It turns passive viewers into participants.</p>
-      <div class="sp-author">
-        <div class="sp-avatar">JR</div>
-        <div>
-          <div class="sp-name">Jay R.</div>
-          <div class="sp-handle">Sports · 91K subscribers</div>
-        </div>
-      </div>
-    </div>
-    <div class="sp-card">
-      <p class="sp-quote">What surprised me was the retention. Members come back every day to check if they called it right, protect their streak, and climb the leaderboard. I'm not doing anything to make that happen — the points system and the competition between fans does it automatically. My community is more active now than it's ever been.</p>
-      <div class="sp-author">
-        <div class="sp-avatar">MR</div>
-        <div>
-          <div class="sp-name">Maya R.</div>
-          <div class="sp-handle">Finance · 38K followers</div>
+          <div style="font-size:12px;font-weight:600;color:var(--text)">Marcus R.</div>
+          <div style="font-size:11px;color:var(--dim)">Polymarket + community predictor</div>
         </div>
       </div>
     </div>
