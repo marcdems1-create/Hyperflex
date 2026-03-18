@@ -40,7 +40,7 @@
 
 ---
 
-## Current State (last updated March 17, 2026 — session 10)
+## Current State (last updated March 17, 2026 — session 11)
 
 - All features committed locally. Latest commit pending — needs push
 - **Stripe payments live** — Pro ($29/mo) + Premium ($99/mo) checkout + billing portal
@@ -392,6 +392,10 @@
 24. `supabase_migration_seasons.sql`
 25. `supabase_migration_blast.sql`
 26. `supabase_migration_dispute_votes.sql`
+27. `supabase_migration_kalshi.sql`
+28. `supabase_migration_shared_positions.sql`
+29. `supabase_migration_predictor_follows.sql`
+30. `supabase_migration_cached_positions.sql`
 - **Email notifications**: Opt-in via Railway env vars: `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
   - Fires after both manual resolve and cron settlement
   - No-op if SMTP_HOST is not set — safe to deploy without configuring
@@ -449,6 +453,25 @@
   - ⚠️ Add migration to the ordered list below
 
 - **⚠️ MUST DO BEFORE DEPLOY**: Also run `supabase_migration_autoscan_autoresolve.sql` (11th in the list)
+
+---
+
+## Session 11 (March 17, 2026)
+
+**Phase 2 + 3 complete (commits e33da8d → 2153f90):**
+- Follow system: predictor_follows table, toggle follow endpoint, follower count on member profiles + predictor cards
+- Following feed: 👥 Following tab on explore.html — activity from followed users (external bets + HFX bets)
+- Public portfolio API: `GET /api/predictors/:userId/portfolio` pulls cached_positions + HFX bets
+- Auto-sync cron: `syncAllUserPositions()` runs hourly — Polymarket/Kalshi/Manifold fetched for all connected users, stored in cached_positions table; portfolio tab reads from cache first
+- P&L analytics: `GET /api/predictors/:userId/analytics` — platform win/loss/PnL breakdown, calibration chart, cumulative 30d timeline, sharp score composite
+- member.html: analytics section with platform stat cards, calibration canvas chart, PnL line chart, sharp score badge
+- predictors.html: sharp score badge on predictor cards
+
+**New migrations to run:**
+29. `supabase_migration_predictor_follows.sql`
+30. `supabase_migration_cached_positions.sql`
+
+**Latest commit: `2153f90`**
 
 ---
 
