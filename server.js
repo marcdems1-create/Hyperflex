@@ -7661,6 +7661,32 @@ app.get('/api/predictors/:userId/analytics', async (req, res) => {
   });
 });
 
+// Best single HFX call for a user — highest-payout win
+app.get('/api/predictors/:userId/best-call', async (req, res) => {
+  const { userId } = req.params;
+  const { data } = await supabase
+    .from('positions')
+    .select('side, amount, potential_payout, created_at, markets(question, tenant_slug, id, outcome, resolved)')
+    .eq('user_id', userId)
+    .order('potential_payout', { ascending: false })
+    .limit(20);
+  const wins = (data || []).filter(p => p.markets?.resolved && p.markets?.outcome === p.side);
+  if (!wins.length) return res.json({ best: null });
+  const best = wins[0];
+  res.json({
+    best: {
+      question: best.markets.question,
+      side: best.side,
+      amount: best.amount,
+      payout: best.potential_payout,
+      multiplier: best.amount > 0 ? (best.potential_payout / best.amount).toFixed(1) : null,
+      community_slug: best.markets.tenant_slug,
+      market_id: best.markets.id,
+      date: best.created_at,
+    }
+  });
+});
+
 // GET /api/member/:userId — public member profile data
 app.get('/api/member/:userId', async (req, res) => {
   try {

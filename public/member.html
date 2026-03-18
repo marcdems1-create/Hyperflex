@@ -114,6 +114,7 @@ nav { display: flex; align-items: center; justify-content: space-between; paddin
 
 <script>
 const userId = location.pathname.split('/').pop();
+window._profileUserId = userId;
 const API = location.origin;
 
 function timeAgo(dateStr) {
@@ -270,6 +271,16 @@ async function load() {
         </div>
       </div>
 
+      <div id="trophyCard" style="display:none;background:linear-gradient(135deg,#1a1916,#2a2218);border:1px solid #c9920d44;border-radius:12px;padding:20px;margin:16px 0">
+        <div style="font-size:11px;color:#c9920d;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">🏆 Best Call</div>
+        <div id="trophyQuestion" style="font-size:16px;font-weight:600;margin-bottom:10px"></div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span id="trophySide" style="padding:3px 12px;border-radius:20px;font-weight:700;font-size:14px"></span>
+          <span id="trophyMultiplier" style="color:#c9920d;font-weight:700;font-size:18px"></span>
+          <button onclick="shareTrophyOnX()" style="margin-left:auto;background:transparent;border:1px solid #333;color:#ccc;padding:6px 14px;border-radius:20px;cursor:pointer;font-size:12px">🐦 Share</button>
+        </div>
+      </div>
+
       ${recent_wins.length ? `
       <div class="section">
         <div class="section-title">Recent Wins</div>
@@ -289,6 +300,7 @@ async function load() {
       </div>
     `;
     loadAnalytics(userId);
+    loadTrophyCard(userId);
   } catch (err) {
     console.error(err);
     page.innerHTML = `<div class="error-state"><div class="error-icon">⚡</div><div class="error-msg">Failed to load profile</div><div class="error-sub">Please try again later.</div></div>`;
@@ -437,6 +449,31 @@ async function toggleFollow() {
 }
 
 // loadFollowStatus() is called after load() resolves (button is injected by load())
+
+// ── TROPHY CARD ───────────────────────────────────────────────────────────────
+async function loadTrophyCard(userId) {
+  try {
+    const res = await fetch(`/api/predictors/${userId}/best-call`);
+    const data = await res.json();
+    if (!data.best) return;
+    const b = data.best;
+    document.getElementById('trophyCard').style.display = 'block';
+    document.getElementById('trophyQuestion').textContent = b.question;
+    const sideEl = document.getElementById('trophySide');
+    sideEl.textContent = b.side;
+    sideEl.style.background = b.side === 'YES' ? '#10b98122' : '#ef444422';
+    sideEl.style.color = b.side === 'YES' ? '#10b981' : '#ef4444';
+    document.getElementById('trophyMultiplier').textContent = b.multiplier ? `${b.multiplier}× payout` : '';
+    window._trophyData = b;
+  } catch (e) { console.warn('trophy', e); }
+}
+
+function shareTrophyOnX() {
+  const b = window._trophyData;
+  if (!b) return;
+  const text = `My best prediction call: "${b.question}" — called ${b.side}, got ${b.multiplier}× payout 🏆\n\nhyperflex.network/m/${window._profileUserId}`;
+  window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(text), '_blank');
+}
 </script>
 </body>
 </html>
