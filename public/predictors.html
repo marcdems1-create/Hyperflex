@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Discover Sharp Predictors — HYPERFLEX</title>
+<meta name="description" content="Find the sharpest prediction market traders on HYPERFLEX. Ranked by win rate, streak, and P&L across Polymarket, Kalshi, and Manifold."/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --ink: #0e0e0c;
+  --paper: #141412;
+  --cream: #1c1c19;
+  --card: #191917;
+  --text: #ddd8cc;
+  --gold: #c9920d;
+  --gold-lt: #e0a820;
+  --gold-bright: #f5c842;
+  --border: #2a2a26;
+  --dim: #7a7870;
+  --muted: #5a5854;
+  --green: #2d9b5f;
+  --red: #c0392b;
+  --sans: 'Syne', sans-serif;
+  --mono: 'Space Mono', monospace;
+  --radius: 10px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--paper); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--paper);
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(201,146,13,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(201,146,13,0.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* NAV */
+.nav {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 100;
+  padding: 0 40px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  background: rgba(20,20,18,0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.nav-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+}
+.nav-logo-mark {
+  width: 32px; height: 32px;
+  background: var(--gold);
+  border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono);
+  font-size: 13px; font-weight: 700;
+  color: var(--ink);
+}
+.nav-name {
+  font-family: var(--mono);
+  font-size: 13px; font-weight: 700;
+  color: var(--text);
+  letter-spacing: 1px;
+}
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+.nav-link {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--dim);
+  text-decoration: none;
+  letter-spacing: 0.5px;
+  transition: color 0.15s;
+}
+.nav-link:hover, .nav-link.active { color: var(--text); }
+.nav-actions { display: flex; align-items: center; gap: 12px; }
+.btn-nav {
+  font-family: var(--mono);
+  font-size: 11px; font-weight: 700;
+  padding: 8px 16px;
+  border-radius: 6px;
+  text-decoration: none;
+  letter-spacing: 0.5px;
+  transition: opacity 0.15s;
+}
+.btn-nav-ghost { color: var(--dim); border: 1px solid var(--border); background: transparent; }
+.btn-nav-ghost:hover { color: var(--text); }
+.btn-nav-primary { background: var(--gold); color: var(--ink); border: none; }
+.btn-nav-primary:hover { opacity: 0.88; }
+
+/* HERO */
+.hero {
+  position: relative;
+  z-index: 1;
+  padding: 120px 40px 60px;
+  max-width: 900px;
+  margin: 0 auto;
+  text-align: center;
+}
+.hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 20px;
+}
+.eyebrow-dot {
+  width: 6px; height: 6px;
+  background: var(--gold);
+  border-radius: 50%;
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+.hero h1 {
+  font-size: clamp(36px, 5vw, 64px);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  color: var(--text);
+  margin-bottom: 16px;
+}
+.hero h1 .accent { color: var(--gold); }
+.hero-sub {
+  font-size: clamp(14px, 1.8vw, 17px);
+  color: var(--dim);
+  line-height: 1.6;
+  max-width: 580px;
+  margin: 0 auto 36px;
+}
+
+/* CONTROLS */
+.controls {
+  position: relative;
+  z-index: 1;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 40px 24px;
+}
+.search-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.search-input {
+  flex: 1;
+  min-width: 200px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.15s;
+}
+.search-input::placeholder { color: var(--muted); }
+.search-input:focus { border-color: var(--gold); }
+
+.pills {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.pill {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 7px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.pill:hover { border-color: var(--dim); color: var(--text); }
+.pill.active {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: var(--ink);
+}
+
+.filter-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.filter-tab {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.filter-tab:hover { color: var(--text); border-color: var(--dim); }
+.filter-tab.active {
+  border-color: rgba(201,146,13,0.5);
+  color: var(--gold);
+  background: rgba(201,146,13,0.08);
+}
+
+/* GRID */
+.grid-wrap {
+  position: relative;
+  z-index: 1;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 40px 80px;
+}
+.predictor-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+.predictor-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  text-decoration: none;
+  display: block;
+  transition: border-color 0.18s, transform 0.18s;
+}
+.predictor-card:hover {
+  border-color: rgba(201,146,13,0.45);
+  transform: translateY(-2px);
+}
+.card-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.avatar {
+  width: 42px; height: 42px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(201,146,13,0.3), rgba(201,146,13,0.1));
+  border: 1px solid rgba(201,146,13,0.3);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono);
+  font-size: 16px; font-weight: 700;
+  color: var(--gold);
+  flex-shrink: 0;
+}
+.card-info { flex: 1; min-width: 0; }
+.card-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 5px;
+}
+.badges {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.badge {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+.badge-hfx { background: rgba(201,146,13,0.15); color: var(--gold); border: 1px solid rgba(201,146,13,0.3); }
+.badge-poly { background: rgba(100,160,255,0.12); color: #6aa0ff; border: 1px solid rgba(100,160,255,0.25); }
+.badge-streak { background: rgba(255,140,0,0.12); color: #ff8c00; border: 1px solid rgba(255,140,0,0.25); }
+.badge-sharp { background: rgba(45,155,95,0.12); color: #2d9b5f; border: 1px solid rgba(45,155,95,0.25); }
+
+.win-bar-wrap {
+  margin-bottom: 14px;
+}
+.win-bar-label {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  margin-bottom: 5px;
+}
+.win-bar-label span:last-child { color: var(--gold); font-weight: 700; }
+.win-bar {
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.win-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--gold), var(--gold-bright));
+  border-radius: 2px;
+  transition: width 0.5s ease;
+}
+
+.card-stats {
+  display: flex;
+  gap: 0;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.stat {
+  flex: 1;
+  text-align: center;
+}
+.stat + .stat {
+  border-left: 1px solid var(--border);
+}
+.stat-val {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+.stat-val.pos { color: var(--green); }
+.stat-val.neg { color: var(--red); }
+.stat-lbl {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* EMPTY / LOADING */
+.state-msg {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+/* RESPONSIVE */
+@media (max-width: 768px) {
+  .nav { padding: 0 20px; }
+  .nav-links { display: none; }
+  .hero { padding: 100px 20px 48px; }
+  .controls, .grid-wrap { padding-left: 20px; padding-right: 20px; }
+  .search-row { flex-direction: column; align-items: stretch; }
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <a href="/" class="nav-logo">
+    <div class="nav-logo-mark">HF</div>
+    <span class="nav-name">HYPERFLEX</span>
+  </a>
+  <div class="nav-links">
+    <a href="/predictors" class="nav-link active">Predictors</a>
+    <a href="/explore" class="nav-link">Live</a>
+    <a href="/templates" class="nav-link">Templates</a>
+  </div>
+  <div class="nav-actions">
+    <a href="/creator/login" class="btn-nav btn-nav-ghost">Log in</a>
+    <a href="/creator/signup" class="btn-nav btn-nav-primary">Get started →</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-eyebrow">
+    <span class="eyebrow-dot"></span>
+    Community leaderboard
+  </div>
+  <h1>Discover <span class="accent">Sharp Predictors</span></h1>
+  <p class="hero-sub">The top minds on HYPERFLEX, ranked by win rate, streak, and P&amp;L across prediction markets.</p>
+</section>
+
+<!-- CONTROLS -->
+<div class="controls">
+  <div class="search-row">
+    <input type="text" class="search-input" id="searchInput" placeholder="Search predictors..." oninput="onSearch()"/>
+    <div class="pills" id="sortPills">
+      <button class="pill active" data-sort="win_rate" onclick="setSort('win_rate')">Win Rate</button>
+      <button class="pill" data-sort="predictions" onclick="setSort('predictions')">Most Active</button>
+      <button class="pill" data-sort="streak" onclick="setSort('streak')">Hot Streak</button>
+      <button class="pill" data-sort="pnl" onclick="setSort('pnl')">Top P&amp;L</button>
+    </div>
+  </div>
+  <div class="filter-tabs" id="filterTabs">
+    <button class="filter-tab active" data-filter="all" onclick="setFilter('all')">All</button>
+    <button class="filter-tab" data-filter="poly" onclick="setFilter('poly')">Polymarket Connected</button>
+    <button class="filter-tab" data-filter="streak" onclick="setFilter('streak')">On a Streak</button>
+    <button class="filter-tab" data-filter="sharp" onclick="setFilter('sharp')">Sharp ≥70%</button>
+  </div>
+</div>
+
+<!-- GRID -->
+<div class="grid-wrap">
+  <div class="predictor-grid" id="predictorGrid">
+    <div class="state-msg">Loading predictors...</div>
+  </div>
+</div>
+
+<script>
+let allPredictors = [];
+let currentSort = 'win_rate';
+let currentFilter = 'all';
+let searchQuery = '';
+
+async function loadPredictors() {
+  try {
+    const res = await fetch(`/api/predictors?sort=${currentSort}&limit=100`);
+    if (!res.ok) throw new Error('Failed');
+    allPredictors = await res.json();
+    render();
+  } catch (e) {
+    document.getElementById('predictorGrid').innerHTML =
+      '<div class="state-msg">Could not load predictors. Try again later.</div>';
+  }
+}
+
+function setSort(sort) {
+  currentSort = sort;
+  document.querySelectorAll('#sortPills .pill').forEach(p => p.classList.toggle('active', p.dataset.sort === sort));
+  // Re-sort client-side
+  const sorted = [...allPredictors].sort((a, b) => {
+    if (sort === 'win_rate') return b.win_rate - a.win_rate;
+    if (sort === 'predictions') return b.total_predictions - a.total_predictions;
+    if (sort === 'streak') return b.streak - a.streak;
+    if (sort === 'pnl') return b.pnl_pts - a.pnl_pts;
+    return 0;
+  });
+  allPredictors = sorted;
+  render();
+}
+
+function setFilter(filter) {
+  currentFilter = filter;
+  document.querySelectorAll('#filterTabs .filter-tab').forEach(t => t.classList.toggle('active', t.dataset.filter === filter));
+  render();
+}
+
+function onSearch() {
+  searchQuery = document.getElementById('searchInput').value.trim().toLowerCase();
+  render();
+}
+
+function filtered() {
+  return allPredictors.filter(p => {
+    if (searchQuery && !p.display_name.toLowerCase().includes(searchQuery)) return false;
+    if (currentFilter === 'poly' && !p.polymarket_address) return false;
+    if (currentFilter === 'streak' && p.streak < 3) return false;
+    if (currentFilter === 'sharp' && p.win_rate < 70) return false;
+    return true;
+  });
+}
+
+function avatarInitial(name) {
+  return (name || '?').charAt(0).toUpperCase();
+}
+
+function pnlDisplay(pts) {
+  const abs = Math.abs(pts);
+  const sign = pts >= 0 ? '+' : '-';
+  return `${sign}${abs.toLocaleString()} pts`;
+}
+
+function renderCard(p) {
+  const badges = [];
+  badges.push('<span class="badge badge-hfx">HFX</span>');
+  if (p.polymarket_address) badges.push('<span class="badge badge-poly">POLY</span>');
+  if (p.streak >= 3) badges.push('<span class="badge badge-streak">🔥 STREAK</span>');
+  if (p.win_rate >= 70) badges.push('<span class="badge badge-sharp">SHARP</span>');
+
+  const pnlClass = p.pnl_pts >= 0 ? 'pos' : 'neg';
+  const winPct = Math.round(p.win_rate || 0);
+  const barWidth = Math.min(winPct, 100);
+
+  return `
+    <a href="/m/${p.user_id}" class="predictor-card">
+      <div class="card-top">
+        <div class="avatar">${avatarInitial(p.display_name)}</div>
+        <div class="card-info">
+          <div class="card-name">${escHtml(p.display_name || 'Anonymous')}</div>
+          <div class="badges">${badges.join('')}</div>
+        </div>
+      </div>
+      <div class="win-bar-wrap">
+        <div class="win-bar-label">
+          <span>Win Rate</span>
+          <span>${winPct}%</span>
+        </div>
+        <div class="win-bar">
+          <div class="win-bar-fill" style="width:${barWidth}%"></div>
+        </div>
+      </div>
+      <div class="card-stats">
+        <div class="stat">
+          <div class="stat-val">${p.streak || 0}</div>
+          <div class="stat-lbl">Streak</div>
+        </div>
+        <div class="stat">
+          <div class="stat-val">${p.total_predictions || 0}</div>
+          <div class="stat-lbl">Predictions</div>
+        </div>
+        <div class="stat">
+          <div class="stat-val ${pnlClass}">${pnlDisplay(p.pnl_pts || 0)}</div>
+          <div class="stat-lbl">P&amp;L</div>
+        </div>
+      </div>
+    </a>`;
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function render() {
+  const list = filtered();
+  const grid = document.getElementById('predictorGrid');
+  if (!list.length) {
+    grid.innerHTML = '<div class="state-msg">No predictors found.</div>';
+    return;
+  }
+  grid.innerHTML = list.map(renderCard).join('');
+}
+
+loadPredictors();
+</script>
+</body>
+</html>

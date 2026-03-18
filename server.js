@@ -6780,7 +6780,7 @@ const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
   'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u', 'win',
-  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share'
+  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors'
 ]);
 
 // GET /my — private member dashboard
@@ -7309,6 +7309,106 @@ app.get('/m/:userId', (req, res) => res.sendFile(path.join(__dirname, 'public', 
 
 // GET /nominate — nominate your creator page
 app.get('/nominate', (req, res) => res.sendFile(path.join(__dirname, 'public', 'nominate.html')));
+
+// GET /predictors — discover sharp predictors page
+app.get('/predictors', (req, res) => res.sendFile(path.join(__dirname, 'public', 'predictors.html')));
+
+// GET /api/predictors — top predictors leaderboard
+app.get('/api/predictors', async (req, res) => {
+  try {
+    const { sort = 'win_rate', q = '', limit = 100 } = req.query;
+    const lim = Math.min(parseInt(limit) || 100, 200);
+
+    // Aggregate settled positions per user
+    const { data: rows, error } = await supabase
+      .from('positions')
+      .select('user_id, amount, potential_payout, settled, won, created_at')
+      .eq('settled', true);
+
+    if (error) throw error;
+
+    // Group by user_id
+    const byUser = {};
+    for (const pos of rows || []) {
+      if (!byUser[pos.user_id]) byUser[pos.user_id] = { wins: 0, total: 0, pnl: 0, lastWon: false, streak: 0, streakArr: [] };
+      const u = byUser[pos.user_id];
+      u.total++;
+      if (pos.won) { u.wins++; u.pnl += (pos.potential_payout || 0) - (pos.amount || 0); }
+      else { u.pnl -= (pos.amount || 0); }
+      u.streakArr.push({ won: pos.won, ts: pos.created_at });
+    }
+
+    // Filter users with ≥3 settled predictions
+    const userIds = Object.keys(byUser).filter(uid => byUser[uid].total >= 3);
+    if (!userIds.length) return res.json([]);
+
+    // Calculate streaks (consecutive wins from most recent)
+    for (const uid of userIds) {
+      const u = byUser[uid];
+      u.streakArr.sort((a, b) => new Date(b.ts) - new Date(a.ts));
+      let streak = 0;
+      for (const p of u.streakArr) { if (p.won) streak++; else break; }
+      u.streak = streak;
+    }
+
+    // Fetch display names
+    const { data: userRows } = await supabase
+      .from('users')
+      .select('id, display_name')
+      .in('id', userIds);
+
+    const nameMap = {};
+    for (const u of userRows || []) nameMap[u.id] = u.display_name;
+
+    // Check polymarket connections (creator_settings table for linked addresses)
+    const { data: csRows } = await supabase
+      .from('creator_settings')
+      .select('user_id, polymarket_address')
+      .in('user_id', userIds)
+      .not('polymarket_address', 'is', null);
+
+    const polyMap = {};
+    for (const cs of csRows || []) polyMap[cs.user_id] = cs.polymarket_address;
+
+    // Build result
+    let result = userIds.map(uid => {
+      const u = byUser[uid];
+      const win_rate = u.total > 0 ? Math.round((u.wins / u.total) * 100) : 0;
+      const platforms = ['HFX'];
+      if (polyMap[uid]) platforms.push('POLY');
+      return {
+        user_id: uid,
+        display_name: nameMap[uid] || 'Anonymous',
+        win_rate,
+        total_predictions: u.total,
+        streak: u.streak,
+        pnl_pts: Math.round(u.pnl / 100), // centpoints → pts
+        polymarket_address: polyMap[uid] || null,
+        platforms
+      };
+    });
+
+    // Search filter
+    if (q) {
+      const ql = q.toLowerCase();
+      result = result.filter(r => r.display_name.toLowerCase().includes(ql));
+    }
+
+    // Sort
+    const sortFns = {
+      win_rate: (a, b) => b.win_rate - a.win_rate,
+      predictions: (a, b) => b.total_predictions - a.total_predictions,
+      streak: (a, b) => b.streak - a.streak,
+      pnl: (a, b) => b.pnl_pts - a.pnl_pts
+    };
+    result.sort(sortFns[sort] || sortFns.win_rate);
+
+    res.json(result.slice(0, lim));
+  } catch (err) {
+    console.error('[api/predictors]', err);
+    res.status(500).json({ error: 'Failed to load predictors' });
+  }
+});
 
 // GET /api/member/:userId — public member profile data
 app.get('/api/member/:userId', async (req, res) => {

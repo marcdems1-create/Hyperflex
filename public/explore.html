@@ -874,6 +874,13 @@ nav {
       <div id="following-list"></div>
     </div>
 
+    <!-- TOP PREDICTORS -->
+    <div class="sidebar-card" id="topPredictorsCard">
+      <div class="sidebar-title">TOP PREDICTORS</div>
+      <div id="top-predictors-list"><div class="loading" style="padding:12px 0;">Loading...</div></div>
+      <a href="/predictors" style="display:block;margin-top:12px;font-family:var(--mono);font-size:11px;color:var(--gold);text-decoration:none;font-weight:700;">See all →</a>
+    </div>
+
     <!-- NOMINATE CTA -->
     <a href="/nominate" style="display:block;background:linear-gradient(135deg,#1d1b13 0%,#191917 100%);border:1px solid rgba(201,146,13,0.3);border-radius:var(--radius);padding:16px 18px;text-decoration:none;transition:border-color 0.2s;" onmouseover="this.style.borderColor='rgba(201,146,13,0.7)'" onmouseout="this.style.borderColor='rgba(201,146,13,0.3)'">
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--gold);margin-bottom:6px">For Fans</div>
@@ -1636,6 +1643,32 @@ updateNavAuthState();
 // Initial loads
 loadActivityFeed();
 loadFeed();
+
+// TOP PREDICTORS sidebar
+(async function loadTopPredictors() {
+  try {
+    const res = await fetch('/api/predictors?sort=win_rate&limit=5');
+    if (!res.ok) throw new Error('Failed');
+    const list = await res.json();
+    const el = document.getElementById('top-predictors-list');
+    if (!list.length) { el.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:8px 0;">No data yet.</div>'; return; }
+    el.innerHTML = list.map((p, i) => {
+      const initial = (p.display_name || '?').charAt(0).toUpperCase();
+      const wr = Math.round(p.win_rate || 0);
+      return `<a href="/m/${p.user_id}" style="display:flex;align-items:center;gap:10px;padding:8px 0;text-decoration:none;border-bottom:1px solid var(--border);">
+        <div style="width:28px;height:28px;border-radius:50%;background:rgba(201,146,13,0.15);border:1px solid rgba(201,146,13,0.3);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gold);flex-shrink:0;">${initial}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.display_name || 'Anonymous'}</div>
+          <div style="font-size:10px;font-family:var(--mono);color:var(--muted);">${wr}% win rate</div>
+        </div>
+        <div style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gold);flex-shrink:0;">#${i+1}</div>
+      </a>`;
+    }).join('');
+  } catch(e) {
+    const el = document.getElementById('top-predictors-list');
+    if (el) el.innerHTML = '';
+  }
+})();
 
 // Auto-refresh: activity feed polls every 20s for new items (banner); explore every 30s
 activityPollInterval = setInterval(pollNewActivity, 20000);
