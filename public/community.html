@@ -768,6 +768,9 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
   white-space: nowrap;
 }
 .cat-pill.sports     { background: rgba(59,130,246,0.15);  color: #60a5fa; }
+.cat-pill.betting    { background: rgba(59,130,246,0.15);  color: #60a5fa; }
+.cat-pill.fantasy    { background: rgba(79,195,247,0.15);  color: #4fc3f7; }
+.cat-pill.dfs        { background: rgba(79,195,247,0.15);  color: #4fc3f7; }
 .cat-pill.crypto     { background: rgba(251,146,60,0.15);  color: #fb923c; }
 .cat-pill.politics   { background: rgba(167,139,250,0.15); color: #a78bfa; }
 .cat-pill.culture    { background: rgba(244,114,182,0.15); color: #f472b6; }
@@ -2602,7 +2605,8 @@ function buildFilterCounts() {
 }
 
 const CAT_PILL_COLORS = {
-  sports:'#60a5fa', crypto:'#fb923c', politics:'#a78bfa', culture:'#f472b6',
+  sports:'#60a5fa', betting:'#60a5fa', fantasy:'#4fc3f7', dfs:'#4fc3f7',
+  crypto:'#fb923c', politics:'#a78bfa', culture:'#f472b6',
   gaming:'#34d399', esports:'#34d399', finance:'#38bdf8', tech:'#818cf8',
   music:'#ec4899', news:'#9ca3af', entertainment:'#fb7185', other:'#7a7870'
 };
@@ -3014,7 +3018,9 @@ function updateTruthFeedSummary(sorted) {
 
 // Category → pill class mapping
 const CAT_CLASS = {
-  sports:'sports', sport:'sports', basketball:'sports', football:'sports', soccer:'sports', baseball:'sports', tennis:'sports', golf:'sports', mma:'sports', boxing:'sports', nfl:'sports', nba:'sports', mlb:'sports', nhl:'sports', wnba:'sports',
+  sports:'sports', sport:'sports', basketball:'sports', football:'sports', soccer:'sports', baseball:'sports', tennis:'sports', golf:'sports', mma:'sports', boxing:'sports', nfl:'sports', nba:'sports', mlb:'sports', nhl:'sports', wnba:'sports', ufc:'sports', f1:'sports', 'formula 1':'sports', 'premier league':'sports', 'march madness':'sports',
+  betting:'betting', 'sports betting':'betting', 'player props':'betting', props:'betting', spreads:'betting', totals:'betting', parlays:'betting',
+  fantasy:'fantasy', dfs:'fantasy', 'daily fantasy':'fantasy', 'fantasy football':'fantasy', 'fantasy basketball':'fantasy', fanduel:'fantasy', draftkings:'fantasy',
   crypto:'crypto', bitcoin:'crypto', ethereum:'crypto', web3:'crypto', defi:'crypto',
   politics:'politics', election:'politics', government:'politics',
   culture:'culture', entertainment:'culture', 'pop culture':'culture', music:'music', film:'culture', tv:'culture', celebrity:'culture',
