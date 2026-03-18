@@ -2590,6 +2590,84 @@ app.get('/api/creator/:slug/theme', async (req, res) => {
   });
 });
 
+// ── ODDS COMPARISON ───────────────────────────────
+app.get('/api/odds/search', async (req, res) => {
+  const q = (req.query.q || '').trim();
+  if (!q || q.length < 2) return res.json({ clusters: [] });
+
+  try {
+    // Search cached_positions for matching market titles across all platforms
+    const { data, error } = await supabase
+      .from('cached_positions')
+      .select('platform, external_id, market_title, side, probability, market_url')
+      .ilike('market_title', `%${q}%`)
+      .order('probability', { ascending: false })
+      .limit(100);
+
+    if (error) { console.error('[odds-search]', error); return res.json({ clusters: [] }); }
+    if (!data || !data.length) return res.json({ clusters: [] });
+
+    // Deduplicate: keep the most recent entry per platform+external_id
+    const seen = new Map();
+    data.forEach(row => {
+      const key = `${row.platform}:${row.external_id}`;
+      if (!seen.has(key)) seen.set(key, row);
+    });
+    const unique = [...seen.values()];
+
+    // Cluster by keyword overlap: extract significant words, group markets sharing 2+ keywords
+    function extractWords(title) {
+      return title.toLowerCase().replace(/[^a-z0-9 ]/g, '').split(/\s+/).filter(w => w.length > 3);
+    }
+
+    const clusters = [];
+    const assigned = new Set();
+
+    for (let i = 0; i < unique.length; i++) {
+      if (assigned.has(i)) continue;
+      const cluster = [unique[i]];
+      assigned.add(i);
+      const wordsA = extractWords(unique[i].market_title);
+
+      for (let j = i + 1; j < unique.length; j++) {
+        if (assigned.has(j)) continue;
+        const wordsB = extractWords(unique[j].market_title);
+        const overlap = wordsA.filter(w => wordsB.includes(w)).length;
+        if (overlap >= 2) {
+          cluster.push(unique[j]);
+          assigned.add(j);
+        }
+      }
+
+      // Pick the shortest title as the topic label
+      const topic = cluster.reduce((a, b) => a.market_title.length <= b.market_title.length ? a : b).market_title;
+
+      clusters.push({
+        topic,
+        markets: cluster.map(m => ({
+          platform: m.platform,
+          title: m.market_title,
+          probability: Math.round((m.probability || 0) * 100),
+          url: m.market_url || '#',
+          side: m.side || 'YES'
+        }))
+      });
+    }
+
+    // Sort clusters by number of platforms represented (more platforms = more useful comparison)
+    clusters.sort((a, b) => {
+      const platA = new Set(a.markets.map(m => m.platform)).size;
+      const platB = new Set(b.markets.map(m => m.platform)).size;
+      return platB - platA || b.markets.length - a.markets.length;
+    });
+
+    res.json({ clusters: clusters.slice(0, 20) });
+  } catch (err) {
+    console.error('[odds-search]', err);
+    res.json({ clusters: [] });
+  }
+});
+
 // ── TEMPLATES ─────────────────────────────────────
 
 const TEMPLATES = {
@@ -6804,7 +6882,7 @@ const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
   'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u', 'win',
-  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors'
+  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds'
 ]);
 
 // GET /my — private member dashboard
@@ -7336,6 +7414,7 @@ app.get('/nominate', (req, res) => res.sendFile(path.join(__dirname, 'public', '
 
 // GET /predictors — discover sharp predictors page
 app.get('/predictors', (req, res) => res.sendFile(path.join(__dirname, 'public', 'predictors.html')));
+app.get('/odds', (req, res) => res.sendFile(path.join(__dirname, 'public', 'odds.html')));
 
 // GET /api/predictors — top predictors leaderboard
 app.get('/api/predictors', async (req, res) => {

@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Compare Odds — HYPERFLEX</title>
+<meta name="description" content="Find the best prediction market odds across Polymarket, Kalshi, and Manifold. Side-by-side comparison in real time."/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --ink: #0e0e0c;
+  --paper: #141412;
+  --cream: #1c1c19;
+  --card: #191917;
+  --text: #ddd8cc;
+  --gold: #c9920d;
+  --gold-lt: #e0a820;
+  --border: #2a2a26;
+  --dim: #7a7870;
+  --muted: #5a5854;
+  --green: #22c55e;
+  --red: #ef4444;
+  --sans: 'Syne', sans-serif;
+  --mono: 'Space Mono', monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--paper);
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(201,146,13,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(201,146,13,0.03) 1px, transparent 1px);
+  background-size: 48px 48px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* NAV */
+.nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  padding: 0 40px; height: 60px;
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  background: rgba(20,20,18,0.92);
+  backdrop-filter: blur(14px);
+}
+.nav-logo { display: flex; align-items: center; gap: 8px; text-decoration: none; }
+.nav-logo-hex { width: 26px; height: 26px; }
+.nav-logo-name { font-weight: 800; font-size: 15px; letter-spacing: 0.08em; color: var(--text); }
+.nav-right { display: flex; align-items: center; gap: 10px; }
+.nav-link { font-family: var(--mono); font-size: 11px; color: var(--dim); text-decoration: none; padding: 8px 12px; transition: color 0.15s; }
+.nav-link:hover { color: var(--text); }
+.btn-nav { font-family: var(--sans); font-weight: 700; font-size: 12px; color: var(--ink); background: var(--gold); padding: 9px 18px; border-radius: 6px; text-decoration: none; transition: opacity 0.15s; }
+.btn-nav:hover { opacity: 0.88; }
+
+/* HERO */
+.hero {
+  position: relative; z-index: 1;
+  padding: 100px 24px 48px;
+  max-width: 720px; margin: 0 auto;
+  text-align: center;
+}
+.hero-eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase; color: var(--gold);
+  margin-bottom: 20px;
+}
+.hero h1 {
+  font-size: clamp(28px, 5vw, 44px); font-weight: 800;
+  line-height: 1.1; letter-spacing: -0.03em; color: var(--text);
+  margin-bottom: 12px;
+}
+.hero h1 .accent { color: var(--gold); }
+.hero-sub { font-size: 15px; color: var(--dim); line-height: 1.6; max-width: 520px; margin: 0 auto 32px; }
+
+/* SEARCH */
+.search-wrap {
+  max-width: 600px; margin: 0 auto 48px; position: relative; z-index: 1;
+}
+.search-input {
+  width: 100%; background: var(--card); border: 1.5px solid var(--border);
+  border-radius: 12px; padding: 16px 20px 16px 48px;
+  font-family: var(--mono); font-size: 15px; color: var(--text);
+  outline: none; transition: border-color 0.2s;
+}
+.search-input::placeholder { color: var(--muted); }
+.search-input:focus { border-color: var(--gold); }
+.search-icon {
+  position: absolute; left: 18px; top: 50%; transform: translateY(-50%);
+  font-size: 18px; pointer-events: none; opacity: 0.5;
+}
+
+/* RESULTS */
+.results { max-width: 900px; margin: 0 auto; padding: 0 24px 80px; position: relative; z-index: 1; }
+.result-count { font-family: var(--mono); font-size: 11px; color: var(--dim); margin-bottom: 20px; letter-spacing: 0.04em; }
+
+/* CLUSTER CARD */
+.cluster {
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  padding: 24px; margin-bottom: 16px; transition: border-color 0.15s;
+}
+.cluster:hover { border-color: rgba(201,146,13,0.3); }
+.cluster-topic {
+  font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 16px;
+  line-height: 1.4; word-break: break-word;
+}
+.cluster-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.platform-col {
+  background: var(--paper); border: 1px solid var(--border); border-radius: 10px;
+  padding: 16px; transition: border-color 0.15s, box-shadow 0.15s;
+}
+.platform-col.best { border-color: rgba(201,146,13,0.5); box-shadow: 0 0 16px rgba(201,146,13,0.08); }
+.platform-badge {
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  padding: 3px 8px; border-radius: 10px; letter-spacing: 0.05em;
+  display: inline-block; margin-bottom: 10px;
+}
+.platform-badge.polymarket { background: rgba(99,102,241,0.15); color: #818cf8; }
+.platform-badge.kalshi { background: rgba(139,92,246,0.15); color: #a78bfa; }
+.platform-badge.manifold { background: rgba(16,185,129,0.15); color: #34d399; }
+.platform-badge.hyperflex { background: rgba(201,146,13,0.15); color: var(--gold); }
+.col-title { font-size: 12px; color: var(--dim); line-height: 1.5; margin-bottom: 12px; min-height: 36px; }
+.col-prob {
+  font-family: var(--mono); font-size: 32px; font-weight: 700; color: var(--text);
+  line-height: 1; margin-bottom: 4px;
+}
+.platform-col.best .col-prob { color: var(--gold); }
+.col-side { font-family: var(--mono); font-size: 10px; color: var(--dim); margin-bottom: 12px; }
+.col-cta {
+  display: block; width: 100%; text-align: center;
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  padding: 8px; border-radius: 6px; text-decoration: none;
+  border: 1px solid var(--border); color: var(--dim);
+  transition: all 0.15s; min-height: 44px; display: flex; align-items: center; justify-content: center;
+}
+.col-cta:hover { border-color: var(--gold); color: var(--gold); }
+.platform-col.best .col-cta { background: var(--gold); color: var(--ink); border-color: var(--gold); }
+.platform-col.best .col-cta:hover { opacity: 0.88; }
+
+/* EMPTY */
+.empty-state {
+  text-align: center; padding: 60px 20px; color: var(--dim);
+}
+.empty-icon { font-size: 42px; margin-bottom: 14px; }
+.empty-title { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+.empty-sub { font-size: 13px; color: var(--dim); line-height: 1.6; max-width: 400px; margin: 0 auto 20px; }
+.empty-cta {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--gold); color: var(--ink); padding: 11px 22px;
+  border-radius: 8px; font-weight: 700; font-size: 13px;
+  text-decoration: none; transition: opacity 0.15s;
+}
+.empty-cta:hover { opacity: 0.88; }
+
+/* LOADING */
+.loading { text-align: center; padding: 40px; color: var(--dim); font-family: var(--mono); font-size: 13px; }
+
+/* RESPONSIVE */
+@media (max-width: 768px) {
+  .nav { padding: 0 16px; }
+  .hero { padding: 80px 16px 36px; }
+  .results { padding: 0 16px 60px; }
+  .cluster { padding: 18px; }
+  .cluster-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 480px) {
+  .search-input { font-size: 14px; padding: 14px 16px 14px 44px; }
+  .nav-link { display: none; }
+}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <a href="/" class="nav-logo">
+    <svg class="nav-logo-hex" viewBox="0 0 32 32" fill="none">
+      <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="#c9920d" stroke-width="1.5" fill="rgba(201,146,13,0.1)"/>
+      <path d="M16 8L22 11.5V18.5L16 22L10 18.5V11.5L16 8Z" fill="#c9920d" opacity="0.6"/>
+    </svg>
+    <span class="nav-logo-name">HYPERFLEX</span>
+  </a>
+  <div class="nav-right">
+    <a href="/explore" class="nav-link">Explore</a>
+    <a href="/predictors" class="nav-link">Predictors</a>
+    <a href="/creator/signup" class="btn-nav">Get started free</a>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="hero-eyebrow">Cross-platform comparison</div>
+  <h1>Find the <span class="accent">best odds</span> across every platform</h1>
+  <p class="hero-sub">Search any topic — Bitcoin, Trump, Fed, NFL — and see how odds compare across Polymarket, Kalshi, and Manifold side by side.</p>
+</section>
+
+<div class="search-wrap">
+  <span class="search-icon">🔍</span>
+  <input type="text" class="search-input" id="oddsSearch" placeholder="Search markets... Bitcoin, Trump, S&P 500..." autofocus
+    oninput="debounceSearch()" onkeydown="if(event.key==='Enter')searchOdds()"/>
+</div>
+
+<div class="results" id="results"></div>
+
+<script>
+let _searchTimeout = null;
+const PLATFORM_NAMES = { polymarket: 'Polymarket', kalshi: 'Kalshi', manifold: 'Manifold', hyperflex: 'HYPERFLEX' };
+
+function debounceSearch() {
+  clearTimeout(_searchTimeout);
+  _searchTimeout = setTimeout(searchOdds, 300);
+}
+
+async function searchOdds() {
+  const q = document.getElementById('oddsSearch').value.trim();
+  const el = document.getElementById('results');
+  if (!q || q.length < 2) { el.innerHTML = ''; return; }
+
+  el.innerHTML = '<div class="loading">Searching across platforms...</div>';
+
+  try {
+    const res = await fetch(`/api/odds/search?q=${encodeURIComponent(q)}`);
+    const data = await res.json();
+
+    if (!data.clusters || data.clusters.length === 0) {
+      el.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">🔍</div>
+          <div class="empty-title">No markets found for "${escHtml(q)}"</div>
+          <div class="empty-sub">Positions sync hourly from connected users. Connect your wallet to seed the database with your markets.</div>
+          <a href="/creator/signup" class="empty-cta">Get started free →</a>
+        </div>`;
+      return;
+    }
+
+    el.innerHTML = `<div class="result-count">${data.clusters.length} topic${data.clusters.length !== 1 ? 's' : ''} found</div>` +
+      data.clusters.map(cluster => renderCluster(cluster)).join('');
+  } catch (err) {
+    el.innerHTML = '<div class="loading">Error searching — try again.</div>';
+  }
+}
+
+function renderCluster(cluster) {
+  // Find the highest probability to mark as "best"
+  const maxProb = Math.max(...cluster.markets.map(m => m.probability));
+
+  const cols = cluster.markets.map(m => {
+    const isBest = m.probability === maxProb && cluster.markets.length > 1;
+    const platform = m.platform || 'hyperflex';
+    return `
+      <div class="platform-col${isBest ? ' best' : ''}">
+        <span class="platform-badge ${platform}">${PLATFORM_NAMES[platform] || platform}</span>
+        <div class="col-title">${escHtml(m.title)}</div>
+        <div class="col-prob">${m.probability}%</div>
+        <div class="col-side">${m.side} probability</div>
+        <a href="${escHtml(m.url)}" target="_blank" rel="noopener" class="col-cta">${isBest ? '★ Best odds — Trade →' : 'Trade →'}</a>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="cluster">
+      <div class="cluster-topic">${escHtml(cluster.topic)}</div>
+      <div class="cluster-grid">${cols}</div>
+    </div>`;
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Auto-search from URL param
+const urlQ = new URLSearchParams(location.search).get('q');
+if (urlQ) {
+  document.getElementById('oddsSearch').value = urlQ;
+  searchOdds();
+}
+</script>
+</body>
+</html>
