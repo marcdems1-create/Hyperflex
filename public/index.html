@@ -1294,30 +1294,30 @@ footer {
 /* ── RESPONSIVE ── */
 @media (max-width: 960px) {
   .nav-links { display: none; }
-  .nav { padding: 0 20px; }
+  .nav { padding: 0 16px; }
   .nav-actions { gap: 8px; }
-  .btn-nav-explore { padding: 7px 12px; font-size: 12px; }
-  .btn-nav-login { padding: 7px 12px; font-size: 12px; }
-  .btn-nav-cta { padding: 7px 14px; font-size: 12px; }
-}
-@media (max-width: 960px) {
+  .btn-nav-explore { padding: 10px 14px; font-size: 12px; min-height: 44px; display: inline-flex; align-items: center; }
+  .btn-nav-login { padding: 10px 14px; font-size: 12px; min-height: 44px; display: inline-flex; align-items: center; }
+  .btn-nav-cta { padding: 10px 16px; font-size: 12px; min-height: 44px; display: inline-flex; align-items: center; }
   .steps, .features-grid, .pricing-grid, .quote-grid { grid-template-columns: 1fr; }
   .demo-markets { grid-template-columns: 1fr; }
   .how, .features, .demo, .pricing, .quotes, .cta-wrap, .video-section { padding-left: 20px; padding-right: 20px; }
   .footer-top { flex-direction: column; }
   .cta-inner { padding: 48px 24px; }
 }
-@media (max-width: 480px) {
-  /* Very small — hide Sign in, keep Explore + Get started free */
-  .btn-nav-login { display: none; }
-}
 @media (max-width: 640px) {
   .hero { padding: 100px 20px 60px; }
   .hero-actions { flex-direction: column; width: 100%; }
-  .btn-primary, .btn-ghost { width: 100%; text-align: center; justify-content: center; }
+  .btn-primary, .btn-ghost { width: 100%; text-align: center; justify-content: center; min-height: 48px; }
   .hero-proof { flex-direction: column; gap: 12px; }
   .proof-sep { display: none; }
-  .footer-cols { gap: 28px; }
+  .footer-cols { grid-template-columns: 1fr; gap: 28px; }
+  .footer-legal { flex-wrap: wrap; gap: 12px; }
+  .footer-legal a { min-height: 44px; display: inline-flex; align-items: center; }
+  .nav-logo { min-height: 44px; display: flex; align-items: center; }
+}
+@media (max-width: 480px) {
+  .btn-nav-login { display: none; }
 }
 </style>
 </head>

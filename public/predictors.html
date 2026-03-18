@@ -393,11 +393,17 @@ body::before {
 
 /* RESPONSIVE */
 @media (max-width: 768px) {
-  .nav { padding: 0 20px; }
+  .nav { padding: 0 16px; }
   .nav-links { display: none; }
   .hero { padding: 100px 20px 48px; }
   .controls, .grid-wrap { padding-left: 20px; padding-right: 20px; }
   .search-row { flex-direction: column; align-items: stretch; }
+  /* Touch targets */
+  .btn-nav { min-height: 44px; display: inline-flex; align-items: center; padding: 10px 16px; }
+  .nav-logo { min-height: 44px; }
+  .search-input { min-height: 44px; }
+  .pill { min-height: 44px; display: inline-flex; align-items: center; }
+  .filter-tab { min-height: 44px; display: inline-flex; align-items: center; }
 }
 @media (max-width: 480px) {
   .hero { padding: 80px 16px 36px; }

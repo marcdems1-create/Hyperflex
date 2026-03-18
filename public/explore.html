@@ -227,6 +227,18 @@ nav {
   /* Sidebar cards (render below feed on mobile): full width, no side margins */
   .sidebar { width: 100%; min-width: 0; }
   .sidebar-card { margin-bottom: 12px; }
+
+  /* Auth modal → bottom sheet on mobile */
+  #memberAuthOverlay { align-items: flex-end !important; padding: 0 !important; }
+  #memberAuthOverlay > div { border-radius: 20px 20px 0 0 !important; max-width: 100% !important; max-height: 92vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+  /* Touch targets: 44px minimum */
+  #memberAuthOverlay button,
+  #memberAuthOverlay a { min-height: 44px; }
+  #memberAuthOverlay input { min-height: 44px; font-size: 16px !important; }
+  .nav-links a { min-height: 44px; padding: 10px 8px; display: inline-flex; align-items: center; }
+  .nav-cta { min-height: 44px; display: inline-flex; align-items: center; }
+  .tab { min-height: 44px; }
 }
 
 /* FEED */
