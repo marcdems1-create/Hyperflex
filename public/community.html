@@ -393,8 +393,10 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
   width: fit-content;
 }
 .carousel-badge.hot      { background: rgba(239,68,68,0.12);  color: #ef4444; }
+.carousel-badge.trending { background: rgba(96,165,250,0.12); color: #60a5fa; }
 .carousel-badge.upcoming { background: rgba(59,130,246,0.12); color: #60a5fa; }
 .carousel-badge.ending   { background: rgba(234,179,8,0.12);  color: #eab308; }
+.carousel-badge.new-mkt  { background: rgba(34,197,94,0.12);  color: #22c55e; }
 .carousel-question {
   font-size: 12px;
   font-weight: 600;
@@ -764,6 +766,21 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
   50%       { box-shadow: 0 0 0 4px rgba(255,140,0,0); }
 }
 .market-badge.hot { animation: hotPulse 2s ease-in-out infinite; }
+.market-badge.trending {
+  background: rgba(96,165,250,0.12);
+  border: 1px solid rgba(96,165,250,0.35);
+  color: #60a5fa;
+}
+.market-badge.new-market {
+  background: rgba(34,197,94,0.12);
+  border: 1px solid rgba(34,197,94,0.3);
+  color: #22c55e;
+}
+.market-badge .badge-count {
+  font-size: 8px;
+  opacity: 0.8;
+  margin-left: 2px;
+}
 
 /* Question */
 .market-question {
@@ -945,6 +962,50 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
 .outcome-banner.yes { background: rgba(34,197,94,0.1); color: #4ade80; }
 .outcome-banner.no  { background: rgba(239,68,68,0.1); color: #f87171; }
 
+/* ── CATEGORY FILTER ROW ── */
+.cat-filter-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.cat-filter-row::-webkit-scrollbar { display: none; }
+.cat-filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: transparent;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--dim);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+  letter-spacing: 0.04em;
+  text-transform: capitalize;
+}
+.cat-filter-pill:hover { border-color: rgba(201,146,13,0.4); color: var(--text); }
+.cat-filter-pill.active { border-color: var(--gold); color: var(--gold); background: rgba(201,146,13,0.1); }
+.cat-filter-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.cat-filter-count {
+  font-size: 9px;
+  opacity: 0.65;
+  font-family: var(--mono);
+}
+
 /* ── EMPTY STATE ── */
 .empty {
   padding: 56px 32px;
@@ -954,8 +1015,29 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
   background: var(--cream);
   border: 1px dashed var(--border);
   border-radius: 12px;
+  grid-column: 1 / -1;
 }
-.empty-icon { font-size: 36px; margin-bottom: 14px; }
+.empty-icon { font-size: 42px; margin-bottom: 14px; }
+.empty-title { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+.empty-sub { font-size: 13px; color: var(--dim); line-height: 1.5; margin-bottom: 20px; max-width: 320px; margin-left: auto; margin-right: auto; }
+.empty-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: all 0.15s;
+  cursor: pointer;
+  border: none;
+}
+.empty-cta-gold { background: var(--gold); color: #0e0e0c; }
+.empty-cta-gold:hover { opacity: 0.88; }
+.empty-cta-ghost { background: transparent; border: 1px solid var(--border); color: var(--text); }
+.empty-cta-ghost:hover { border-color: var(--gold); color: var(--gold); }
 
 /* ── LEADERBOARD ── */
 .leaderboard-wrap { margin-bottom: 40px; }
@@ -1813,6 +1895,9 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
       <button class="filter-tab"        id="ftMine"  onclick="setFilter('mine')" style="display:none">✓ My Bets <span class="filter-count" id="fcMine">0</span></button>
     </div>
 
+    <!-- Category filter pills -->
+    <div class="cat-filter-row" id="catFilterRow" style="display:none"></div>
+
     <!-- Truth feed context header (visible in truth mode) -->
     <div id="truthFeedHeader">
       <div class="truth-feed-title">🧭 TRUTH FEED — Most Contested First</div>
@@ -2457,11 +2542,48 @@ function buildFilterCounts() {
 
   if (active.length > 0) {
     document.getElementById('filterRow').style.display = 'flex';
-    // Show search bar once there are markets to search
     const sw = document.getElementById('marketSearchWrap');
     if (sw) sw.style.display = 'block';
   }
-  if (mine.length > 0)   document.getElementById('ftMine').style.display = 'flex';
+  if (mine.length > 0) document.getElementById('ftMine').style.display = 'flex';
+
+  // Build category filter pills
+  buildCategoryFilters(active);
+}
+
+const CAT_PILL_COLORS = {
+  sports:'#60a5fa', crypto:'#fb923c', politics:'#a78bfa', culture:'#f472b6',
+  gaming:'#34d399', esports:'#34d399', finance:'#38bdf8', tech:'#818cf8',
+  music:'#ec4899', news:'#9ca3af', entertainment:'#fb7185', other:'#7a7870'
+};
+
+function buildCategoryFilters(activeMarkets) {
+  const row = document.getElementById('catFilterRow');
+  if (!row) return;
+
+  // Count markets per category
+  const counts = {};
+  activeMarkets.forEach(m => {
+    const cat = (m.category || 'other').toLowerCase();
+    counts[cat] = (counts[cat] || 0) + 1;
+  });
+
+  const cats = Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .filter(([, count]) => count > 0);
+
+  if (cats.length < 2) { row.style.display = 'none'; return; }
+
+  row.style.display = 'flex';
+  row.innerHTML = cats.map(([cat, count]) => {
+    const color = CAT_PILL_COLORS[cat] || '#7a7870';
+    const active = activeCategoryFilter === cat ? ' active' : '';
+    return `<button class="cat-filter-pill${active}" onclick="filterByCategory('${cat}')">
+      <span class="cat-filter-dot" style="background:${color}"></span>
+      ${cat}
+      <span class="cat-filter-count">${count}</span>
+    </button>`;
+  }).join('');
 }
 
 let _marketSearchQuery = '';
@@ -2493,6 +2615,16 @@ function isClosingSoon(m) {
   const diff = new Date(m.expiry_date) - new Date();
   return diff > 0 && diff < 72 * 60 * 60 * 1000;
 }
+function isNewMarket(m) {
+  const created = new Date(m.created_at);
+  return (Date.now() - created) < 24 * 60 * 60 * 1000;
+}
+function isTrending(m) {
+  // Trending = 3+ traders AND market is < 3 days old (rapid uptake)
+  const traders = realTraders(m);
+  const ageHours = (Date.now() - new Date(m.created_at)) / (60 * 60 * 1000);
+  return traders >= 3 && ageHours < 72 && (traders / Math.max(ageHours, 1)) > 0.05;
+}
 
 // ── MARKET CAROUSEL ───────────────────────────────────────
 function buildCarousel(activeMarkets) {
@@ -2512,8 +2644,19 @@ function buildCarousel(activeMarkets) {
     .filter(m => (m.trader_count || 0) >= 2)
     .sort((a,b) => (b.trader_count || 0) - (a.trader_count || 0));
 
-  // Up & Coming = active, not hot, not ending soon (or newly created)
-  const usedIds = new Set([...ending, ...hot].map(m => m.id));
+  // Trending = gaining traction fast (3+ traders in < 72h)
+  const trendingMkts = [...activeMarkets]
+    .filter(m => isTrending(m) && !ending.some(e => e.id === m.id) && !hot.some(h => h.id === m.id))
+    .sort((a,b) => realTraders(b) - realTraders(a));
+
+  // New = created in last 24h, not yet hot/trending/ending
+  const usedForNew = new Set([...ending, ...hot, ...trendingMkts].map(m => m.id));
+  const newMkts = [...activeMarkets]
+    .filter(m => isNewMarket(m) && !usedForNew.has(m.id))
+    .sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+
+  // Up & Coming = active, not in any special category
+  const usedIds = new Set([...ending, ...hot, ...trendingMkts, ...newMkts].map(m => m.id));
   const upcoming = [...activeMarkets]
     .filter(m => !usedIds.has(m.id))
     .sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
@@ -2521,9 +2664,11 @@ function buildCarousel(activeMarkets) {
   // Build tagged list: interleave categories for visual variety
   const tagged = [];
   const cats = [
-    { key: 'hot',      label: '🔥 Hot Topic',    cls: 'hot',      items: hot },
-    { key: 'upcoming', label: '📅 Up & Coming',  cls: 'upcoming', items: upcoming },
-    { key: 'ending',   label: '⏰ Ending Soon',   cls: 'ending',   items: ending  }
+    { key: 'hot',       label: '🔥 Hot Topic',    cls: 'hot',      items: hot },
+    { key: 'trending',  label: '📈 Trending',     cls: 'trending', items: trendingMkts },
+    { key: 'new',       label: '🆕 Just Added',   cls: 'new-mkt',  items: newMkts },
+    { key: 'ending',    label: '⏰ Ending Soon',   cls: 'ending',   items: ending  },
+    { key: 'upcoming',  label: '📅 Up & Coming',  cls: 'upcoming', items: upcoming },
   ].filter(c => c.items.length);
 
   if (!cats.length) return;
@@ -2686,12 +2831,18 @@ function filterByCategory(cat) {
   // Toggle — clicking same category again clears the filter
   activeCategoryFilter = activeCategoryFilter === cat ? null : cat;
 
-  // Update pill borders to show active state
+  // Update pulse pills active state
   document.querySelectorAll('#communityPulsePills span[onclick]').forEach(el => {
     const elCat = el.getAttribute('onclick').match(/'([^']+)'/)?.[1];
     const isActive = elCat === activeCategoryFilter;
     el.style.borderColor  = isActive ? 'var(--gold)' : 'rgba(255,255,255,.1)';
     el.style.background   = isActive ? 'rgba(201,146,13,.15)' : 'rgba(255,255,255,.06)';
+  });
+
+  // Update category filter pills active state
+  document.querySelectorAll('#catFilterRow .cat-filter-pill').forEach(el => {
+    const elCat = el.getAttribute('onclick').match(/'([^']+)'/)?.[1];
+    el.classList.toggle('active', elCat === activeCategoryFilter);
   });
 
   // Scroll to markets grid
@@ -2737,15 +2888,27 @@ function renderFilteredMarkets() {
   const allToShow = [...filtered, ...expiredUnresolved.filter(eu => !filtered.find(f => f.id === eu.id))];
 
   if (allToShow.length === 0) {
+    const slug = community?.slug || '';
+    const isLoggedIn = !!currentUser;
     const msgs = {
-      hot:   { icon: '🔥', title: 'No hot markets yet', sub: 'Markets with 5+ traders will show here.' },
-      truth: { icon: '🧭', title: 'No active markets', sub: 'Publish markets to start the truth feed.' },
-      soon:  { icon: '⏰', title: 'Nothing closing soon', sub: 'Markets closing within 72 hours will show here.' },
-      mine:  { icon: '✓', title: 'No active bets', sub: 'Your open predictions will show here.' },
-      all:   { icon: '📊', title: 'No open markets', sub: 'Check back soon!' }
+      hot:   { icon: '🔥', title: 'No hot markets yet', sub: 'Markets heat up when 5+ people predict. Be the spark — make the first call on an open market.',
+               cta: isLoggedIn ? `<button class="empty-cta empty-cta-gold" onclick="setFilter('all')">Browse open markets</button>` : `<button class="empty-cta empty-cta-gold" onclick="openAuth()">Join to start predicting</button>` },
+      truth: { icon: '🧭', title: 'No active markets', sub: 'The Truth Feed ranks markets by how split the crowd is. More predictions = sharper signal.',
+               cta: isLoggedIn ? `<button class="empty-cta empty-cta-gold" onclick="setFilter('all')">See all markets</button>` : `<button class="empty-cta empty-cta-gold" onclick="openAuth()">Join and predict</button>` },
+      soon:  { icon: '⏰', title: 'Nothing closing soon', sub: 'Markets closing within 72 hours appear here. Last chance to lock in your prediction before resolution.',
+               cta: `<button class="empty-cta empty-cta-ghost" onclick="setFilter('all')">View all markets</button>` },
+      mine:  { icon: '🎯', title: 'You haven\'t predicted yet', sub: 'Your active bets will appear here. Jump in — pick a market and make your call.',
+               cta: `<button class="empty-cta empty-cta-gold" onclick="setFilter('all')">Browse markets to predict</button>` },
+      all:   { icon: '📊', title: 'No open markets yet', sub: 'This community\'s prediction markets haven\'t launched yet. Check back soon or explore other communities.',
+               cta: `<a href="/explore" class="empty-cta empty-cta-gold">Explore communities</a>` }
     };
     const m = msgs[currentFilter] || msgs.all;
-    grid.innerHTML = `<div class="empty"><div class="empty-icon">${m.icon}</div><strong>${m.title}</strong><br/><span style="font-size:12px;color:var(--dim);margin-top:6px;display:block">${m.sub}</span></div>`;
+    // If filtering by category and empty, show a category-specific message
+    if (activeCategoryFilter) {
+      grid.innerHTML = `<div class="empty"><div class="empty-icon">🏷️</div><div class="empty-title">No ${activeCategoryFilter} markets</div><div class="empty-sub">There are no active ${activeCategoryFilter} markets right now. Try a different category or browse all markets.</div><button class="empty-cta empty-cta-ghost" onclick="filterByCategory('${activeCategoryFilter}')">Clear filter</button>&nbsp;<button class="empty-cta empty-cta-gold" onclick="setFilter('all')">View all</button></div>`;
+    } else {
+      grid.innerHTML = `<div class="empty"><div class="empty-icon">${m.icon}</div><div class="empty-title">${m.title}</div><div class="empty-sub">${m.sub}</div>${m.cta}</div>`;
+    }
   } else {
     const sorted = [...filtered].sort(sortFn);
     // Featured card: most contested (or highest truth score) gets hero spot
@@ -2850,8 +3013,10 @@ function marketCardHTML(m, isResolved, featured) {
   } else {
     const sig = sentimentSignal(hasVotes ? yesPct : null);
     badgesHTML += `<span class="sentiment-badge ${sig.cls}">${sig.label}</span>`;
-    if (hot)  badgesHTML += `<span class="market-badge hot">🔥 Hot</span>`;
-    if (soon) badgesHTML += `<span class="market-badge soon">⚡ Soon</span>`;
+    if (hot)            badgesHTML += `<span class="market-badge hot">🔥 Hot<span class="badge-count">${traders}</span></span>`;
+    else if (isTrending(m)) badgesHTML += `<span class="market-badge trending">📈 Trending</span>`;
+    if (soon)           badgesHTML += `<span class="market-badge soon">⚡ Soon</span>`;
+    if (!hot && !isTrending(m) && isNewMarket(m)) badgesHTML += `<span class="market-badge new-market">🆕 New</span>`;
   }
   if (m.sponsor_name) badgesHTML += `<span class="market-badge" style="background:rgba(201,146,13,0.12);color:#c9920d;border-color:rgba(201,146,13,0.3)">✦ ${escHtml(m.sponsor_name)}</span>`;
 
