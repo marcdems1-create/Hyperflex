@@ -251,16 +251,30 @@ function requireAuth(req, res, next) {
   try {
     const payload = jwt.verify(token, JWT_SECRET);
     req.userId = payload.id;
-    req.user   = { id: payload.id };   // used by newer endpoints
+    req.user   = { id: payload.id };
     next();
   } catch (e) {
     return res.status(401).json({ error: 'Invalid token' });
   }
 }
 
+function optionalAuth(req, res, next) {
+  const auth = req.headers.authorization;
+  const token = auth && auth.startsWith('Bearer ') ? auth.slice(7) : null;
+  if (token) {
+    try {
+      const payload = jwt.verify(token, JWT_SECRET);
+      req.userId = payload.id;
+      req.user   = { id: payload.id };
+    } catch {}
+  }
+  next();
+}
+
 // ── EXTERNAL API CACHES ───────────────────────────
 const _kalshiCache = new Map();
 const _manifoldCache = new Map();
+const _predictorFollowCache = new Map();
 
 // ── MARKETS ───────────────────────────────────────
 
@@ -7412,6 +7426,114 @@ app.get('/api/predictors', async (req, res) => {
     console.error('[api/predictors]', err);
     res.status(500).json({ error: 'Failed to load predictors' });
   }
+});
+
+// Toggle follow a predictor
+app.post('/api/predictors/:userId/follow', requireAuth, async (req, res) => {
+  const followerId = req.user.id;
+  const followingId = req.params.userId;
+  if (followerId === followingId) return res.status(400).json({ error: 'Cannot follow yourself' });
+  const { data: existing } = await supabase
+    .from('predictor_follows')
+    .select('id')
+    .eq('follower_id', followerId)
+    .eq('following_id', followingId)
+    .maybeSingle();
+  if (existing) {
+    await supabase.from('predictor_follows').delete().eq('id', existing.id);
+    return res.json({ following: false });
+  } else {
+    await supabase.from('predictor_follows').insert({ follower_id: followerId, following_id: followingId });
+    return res.json({ following: true });
+  }
+});
+
+// Get follow status + count for a user
+app.get('/api/predictors/:userId/follow-status', optionalAuth, async (req, res) => {
+  const targetId = req.params.userId;
+  const { count } = await supabase.from('predictor_follows').select('id', { count: 'exact', head: true }).eq('following_id', targetId);
+  let isFollowing = false;
+  if (req.user) {
+    const { data } = await supabase.from('predictor_follows').select('id').eq('follower_id', req.user.id).eq('following_id', targetId).maybeSingle();
+    isFollowing = !!data;
+  }
+  res.json({ follower_count: count || 0, is_following: isFollowing });
+});
+
+// Following feed — activity from people you follow
+app.get('/api/feed/following', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const { data: follows } = await supabase.from('predictor_follows').select('following_id').eq('follower_id', userId);
+  if (!follows || follows.length === 0) return res.json({ items: [] });
+  const followingIds = follows.map(f => f.following_id);
+
+  // Fetch shared positions from followed users
+  const { data: positions } = await supabase
+    .from('shared_positions')
+    .select('*, users(display_name, username)')
+    .in('user_id', followingIds)
+    .order('created_at', { ascending: false })
+    .limit(50);
+
+  // Fetch recent Hyperflex bets from followed users
+  const { data: bets } = await supabase
+    .from('positions')
+    .select('*, markets(question, tenant_slug, id), users(display_name, username)')
+    .in('user_id', followingIds)
+    .order('created_at', { ascending: false })
+    .limit(50);
+
+  const items = [];
+  (positions || []).forEach(p => {
+    items.push({
+      type: 'external_bet',
+      id: `sp_${p.id}`,
+      user_id: p.user_id,
+      username: p.users?.username || p.users?.display_name || 'Predictor',
+      platform: p.platform,
+      market_title: p.market_title,
+      side: p.side,
+      amount: p.amount,
+      pnl: p.pnl,
+      market_url: p.market_url,
+      created_at: p.created_at
+    });
+  });
+  (bets || []).forEach(b => {
+    if (!b.markets) return;
+    items.push({
+      type: 'hyperflex_bet',
+      id: `hb_${b.id}`,
+      user_id: b.user_id,
+      username: b.users?.display_name || b.users?.username || 'Predictor',
+      market_title: b.markets?.question,
+      community_slug: b.markets?.tenant_slug,
+      market_id: b.markets?.id,
+      side: b.side,
+      amount: b.amount,
+      created_at: b.created_at
+    });
+  });
+  items.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  res.json({ items: items.slice(0, 60) });
+});
+
+// Public portfolio for any user
+app.get('/api/predictors/:userId/portfolio', async (req, res) => {
+  const { userId } = req.params;
+  const { data: shared } = await supabase
+    .from('shared_positions')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(30);
+  const { data: hfBets } = await supabase
+    .from('positions')
+    .select('*, markets(question, tenant_slug, id, resolved, outcome)')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(30);
+  res.json({ shared_positions: shared || [], hyperflex_bets: hfBets || [] });
 });
 
 // GET /api/member/:userId — public member profile data
