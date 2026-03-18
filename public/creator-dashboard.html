@@ -4569,16 +4569,47 @@ body.nav-open .sidebar-backdrop {
               </div>
             </div>
 
-            <!-- Manifold placeholder -->
-            <div style="background:var(--cream);border:1px solid var(--border);border-radius:12px;padding:24px;opacity:0.6">
-              <div style="display:flex;align-items:center;gap:12px">
+            <!-- Manifold card -->
+            <div style="background:var(--cream);border:1px solid var(--border);border-radius:12px;padding:24px">
+              <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
                 <div style="width:36px;height:36px;border-radius:8px;background:#0a0a0a;border:1px solid #333;display:flex;align-items:center;justify-content:center;font-size:18px">🟢</div>
                 <div>
-                  <div style="font-size:15px;font-weight:700;color:var(--text)">Manifold</div>
-                  <div style="font-size:12px;color:var(--muted)">Play-money prediction markets — coming soon</div>
+                  <div style="font-size:15px;font-weight:700;color:var(--text)">Manifold Markets</div>
+                  <div style="font-size:12px;color:var(--muted)">Play-money prediction markets</div>
                 </div>
-                <div style="margin-left:auto;font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid var(--border);color:var(--muted)">COMING SOON</div>
+                <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+                  <span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid rgba(45,155,95,0.4);color:#2d9b5f;background:rgba(45,155,95,0.1)">LIVE</span>
+                  <div id="manifoldStatusBadge"></div>
+                </div>
               </div>
+
+              <!-- Connect form -->
+              <div id="manifoldConnectForm">
+                <div style="margin-bottom:12px">
+                  <input type="text" id="manifold-username-input"
+                    placeholder="Your Manifold username"
+                    style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-family:var(--mono);font-size:13px;color:var(--text);outline:none;margin-bottom:6px"
+                    onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='var(--border)'"/>
+                  <div style="font-size:11px;color:var(--muted)">
+                    Find your username at
+                    <a href="https://manifold.markets" target="_blank" style="color:var(--gold)">manifold.markets</a>
+                    → your profile
+                  </div>
+                </div>
+                <button class="btn-primary" id="manifoldConnectBtn" onclick="saveManifoldUsername()" style="font-size:13px;padding:9px 20px">
+                  Connect Manifold →
+                </button>
+              </div>
+
+              <!-- Disconnect row (shown when connected) -->
+              <div id="manifoldConnectedRow" style="display:none;align-items:center;gap:12px">
+                <div style="font-size:13px;color:var(--green);font-weight:600">✓ Username connected — <span id="manifoldUsernameDisplay" style="color:var(--gold)"></span></div>
+                <button onclick="disconnectManifold()" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:11px;color:var(--muted);cursor:pointer;font-family:var(--mono)">Disconnect</button>
+                <button onclick="loadManifoldPositions(true)" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:11px;color:var(--dim);cursor:pointer;font-family:var(--mono)">↺ Refresh</button>
+              </div>
+
+              <!-- Positions list -->
+              <div id="manifoldPositions" style="margin-top:20px"></div>
             </div>
 
           </div>
@@ -10783,6 +10814,7 @@ function shareCommunityPage(anchorEl) {
 
 let _portfolioLoaded = false;
 let _kalshiConnected = false;
+let _manifoldUsername = '';
 
 async function loadPortfolio() {
   if (_portfolioLoaded) return;
@@ -10793,8 +10825,11 @@ async function loadPortfolio() {
     if (!r.ok) return;
     const data = await r.json();
     _kalshiConnected = data.kalshi_api_key_set;
+    _manifoldUsername = data.manifold_username || '';
     renderKalshiConnectState();
+    renderManifoldConnectState();
     if (_kalshiConnected) loadKalshiPositions(false);
+    if (_manifoldUsername) loadManifoldPositions(false);
   } catch (e) {
     console.warn('[portfolio]', e);
   }
@@ -10946,6 +10981,133 @@ async function loadKalshiPositions(forceRefresh) {
 
 function escHtmlDash(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function renderManifoldConnectState() {
+  const form  = document.getElementById('manifoldConnectForm');
+  const row   = document.getElementById('manifoldConnectedRow');
+  const badge = document.getElementById('manifoldStatusBadge');
+  const nameEl = document.getElementById('manifoldUsernameDisplay');
+  if (_manifoldUsername) {
+    if (form)   form.style.display  = 'none';
+    if (row)    row.style.display   = 'flex';
+    if (nameEl) nameEl.textContent  = _manifoldUsername;
+    if (badge)  badge.innerHTML = '<span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid rgba(45,155,95,0.4);color:#2d9b5f;background:rgba(45,155,95,0.1)">CONNECTED</span>';
+  } else {
+    if (form)   form.style.display  = 'block';
+    if (row)    row.style.display   = 'none';
+    if (badge)  badge.innerHTML = '<span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid var(--border);color:var(--muted)">NOT CONNECTED</span>';
+    const el = document.getElementById('manifoldPositions');
+    if (el) el.innerHTML = '';
+  }
+}
+
+async function saveManifoldUsername() {
+  const username = (document.getElementById('manifold-username-input').value || '').trim();
+  if (!username) return showToast('Enter your Manifold username', 'error');
+  if (!/^[a-zA-Z0-9_-]{1,50}$/.test(username)) return showToast('Invalid username format', 'error');
+  const btn = document.getElementById('manifoldConnectBtn');
+  btn.disabled = true; btn.textContent = 'Connecting…';
+  try {
+    const token = localStorage.getItem('hf_token');
+    const r = await fetch('/api/user/wallets', {
+      method: 'PUT',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ manifold_username: username })
+    });
+    const d = await r.json();
+    if (!r.ok) { showToast(d.error || 'Failed to connect', 'error'); btn.disabled = false; btn.textContent = 'Connect Manifold →'; return; }
+    _manifoldUsername = username;
+    renderManifoldConnectState();
+    showToast('Manifold connected!', 'success');
+    loadManifoldPositions(false);
+  } catch (e) {
+    showToast('Connection failed', 'error');
+    btn.disabled = false; btn.textContent = 'Connect Manifold →';
+  }
+}
+
+async function disconnectManifold() {
+  if (!confirm('Disconnect Manifold? Your username will be removed.')) return;
+  try {
+    const token = localStorage.getItem('hf_token');
+    await fetch('/api/user/wallets', {
+      method: 'PUT',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ manifold_username: '' })
+    });
+    _manifoldUsername = '';
+    _portfolioLoaded = false;
+    renderManifoldConnectState();
+    showToast('Manifold disconnected', 'success');
+  } catch (e) {
+    showToast('Failed to disconnect', 'error');
+  }
+}
+
+async function loadManifoldPositions(forceRefresh) {
+  const el = document.getElementById('manifoldPositions');
+  if (!el || !_manifoldUsername) return;
+  el.innerHTML = '<div style="padding:16px 0;font-size:13px;color:var(--muted);font-family:var(--mono)">Loading positions…</div>';
+  try {
+    const token = localStorage.getItem('hf_token');
+    const r = await fetch(`/api/manifold/positions/${encodeURIComponent(_manifoldUsername)}`, {
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    if (r.status === 404) {
+      el.innerHTML = '<div style="color:#c0392b;font-size:13px;padding:8px 0">Manifold user not found. Check your username.</div>';
+      return;
+    }
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      el.innerHTML = `<div style="color:#c0392b;font-size:13px;padding:8px 0">${d.error || 'Failed to load positions'}</div>`;
+      return;
+    }
+    const data = await r.json();
+    const positions = data.positions || [];
+
+    if (!positions.length) {
+      el.innerHTML = '<div style="padding:20px 0;font-size:13px;color:var(--muted);text-align:center">No open positions found on Manifold.</div>';
+      return;
+    }
+
+    el.innerHTML = positions.map(p => {
+      const pnlPct = p.pnl_pct || 0;
+      const pnlColor = pnlPct >= 0 ? '#2d9b5f' : '#c0392b';
+      const sideColor = p.side === 'YES' ? '#2d9b5f' : '#c0392b';
+      const pricePct = Math.round((p.current_price || 0) * 100);
+      const endDate = p.end_date ? new Date(p.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
+      return `
+        <a href="${p.market_url}" target="_blank" style="display:block;text-decoration:none;background:var(--ink);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:10px;transition:border-color 0.15s"
+          onmouseover="this.style.borderColor='rgba(201,146,13,0.4)'" onmouseout="this.style.borderColor='var(--border)'">
+          <div style="display:flex;align-items:flex-start;gap:12px">
+            <div style="flex-shrink:0;margin-top:2px">
+              <span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;background:${p.side==='YES'?'rgba(45,155,95,0.15)':'rgba(192,57,43,0.15)'};color:${sideColor};border:1px solid ${sideColor}40">${p.side}</span>
+            </div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13px;font-weight:600;color:var(--text);line-height:1.4;margin-bottom:8px">${escHtmlDash(p.question)}</div>
+              <div style="display:flex;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--muted)">
+                <span>${p.shares} shares</span>
+                <span>@ ${pricePct}%</span>
+                <span>Value: M$${(p.cash_value||0).toFixed(0)}</span>
+                <span>Cost: M$${(p.cost_basis||0).toFixed(0)}</span>
+                <span>Exp: ${endDate}</span>
+              </div>
+            </div>
+            <div style="text-align:right;flex-shrink:0">
+              <div style="font-family:var(--mono);font-size:14px;font-weight:700;color:${pnlColor}">${pnlPct >= 0 ? '+' : ''}${pnlPct}%</div>
+              <div style="font-family:var(--mono);font-size:10px;color:var(--muted)">P&L</div>
+            </div>
+          </div>
+        </a>`;
+    }).join('');
+
+    const ts = new Date(data.fetched_at).toLocaleTimeString();
+    el.insertAdjacentHTML('beforeend', `<div style="font-family:var(--mono);font-size:10px;color:var(--muted);text-align:right;margin-top:4px">Fetched ${ts} · 5 min cache · M$ = play money</div>`);
+  } catch (e) {
+    console.error('[manifold positions]', e);
+    el.innerHTML = '<div style="color:#c0392b;font-size:13px;padding:8px 0">Failed to load positions</div>';
+  }
 }
 </script>
 
