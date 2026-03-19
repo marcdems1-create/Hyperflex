@@ -1432,10 +1432,15 @@ if (localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token')
       if (n >= 1000) return (n/1000).toFixed(1).replace(/\.0$/,'') + 'K';
       return n.toLocaleString();
     }
-    document.getElementById('stat-markets').textContent     = fmt(d.live_markets || 0);
-    document.getElementById('stat-predictions').textContent = fmt(d.total_predictions || 0);
-    document.getElementById('stat-communities').textContent = fmt(d.communities || 0);
-    document.getElementById('stat-predictors').textContent  = fmt(d.predictors || 0);
+    const total = (d.live_markets||0) + (d.total_predictions||0) + (d.communities||0) + (d.predictors||0);
+    const statsBar = document.getElementById('stat-markets')?.closest('.stats-bar');
+    if (total === 0 && statsBar) { statsBar.style.display = 'none'; }
+    else {
+      document.getElementById('stat-markets').textContent     = fmt(d.live_markets || 0);
+      document.getElementById('stat-predictions').textContent = fmt(d.total_predictions || 0);
+      document.getElementById('stat-communities').textContent = fmt(d.communities || 0);
+      document.getElementById('stat-predictors').textContent  = fmt(d.predictors || 0);
+    }
     // Social proof section mirrors same data
     const spM = document.getElementById('sp-markets');
     const spP = document.getElementById('sp-predictions');
