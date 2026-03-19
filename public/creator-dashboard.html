@@ -2788,13 +2788,13 @@ body.nav-open .sidebar-backdrop {
 
   <!-- Sidebar -->
   <aside class="sidebar">
-    <div class="sidebar-logo">
+    <a href="/" style="text-decoration:none"><div class="sidebar-logo">
       <svg class="logo-hex" viewBox="0 0 28 28" fill="none">
         <path d="M14 2L24 8V20L14 26L4 20V8L14 2Z" stroke="#c9920d" stroke-width="1.5" fill="rgba(201,146,13,0.1)"/>
         <path d="M14 7L19 10V16L14 19L9 16V10L14 7Z" fill="#c9920d" opacity="0.6"/>
       </svg>
       <span class="logo-name">HYPERFLEX</span>
-    </div>
+    </div></a>
 
     <div class="sidebar-community">
       <div class="creator-avatar" id="sidebarAvatar">HF</div>
@@ -4669,6 +4669,10 @@ body.nav-open .sidebar-backdrop {
                 style="background:none;border:none;border-bottom:2px solid transparent;color:var(--dim);padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s;margin-bottom:-1px;display:flex;align-items:center;gap:7px">
                 <span style="width:7px;height:7px;border-radius:50%;background:#c9920d;flex-shrink:0"></span>HFX Community
               </button>
+              <button id="ptab-search" onclick="switchPortfolioTab('search')"
+                style="background:none;border:none;border-bottom:2px solid transparent;color:var(--dim);padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s;margin-bottom:-1px;display:flex;align-items:center;gap:7px">
+                🔍 Find Markets
+              </button>
             </div>
             <!-- ALL tab -->
             <div id="ptabContent-all">
@@ -4760,6 +4764,24 @@ body.nav-open .sidebar-backdrop {
               </div>
               <div id="hfxPositions">
                 <div style="padding:32px 0;text-align:center;font-family:var(--mono);font-size:11px;color:#4a4744;letter-spacing:.08em">LOADING…</div>
+              </div>
+            </div>
+            <!-- FIND MARKETS tab -->
+            <div id="ptabContent-search" style="display:none">
+              <div style="margin-bottom:20px">
+                <div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:6px">🔍 Find Markets</div>
+                <div style="font-size:12px;color:var(--dim);margin-bottom:16px">Search live prediction markets across Polymarket and Kalshi</div>
+                <input type="text" id="mktSearchInput" placeholder="Search markets… e.g. Bitcoin, Trump, NBA"
+                  style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:10px;padding:13px 16px;font-family:var(--mono);font-size:13px;color:var(--text);outline:none;box-sizing:border-box"
+                  onfocus="this.style.borderColor='rgba(201,146,13,0.5)'" onblur="this.style.borderColor='var(--border)'"
+                  oninput="debouncedMktSearch()"/>
+              </div>
+              <div id="mktSearchResults">
+                <div style="text-align:center;padding:48px 20px;color:var(--dim)">
+                  <div style="font-size:32px;margin-bottom:12px;opacity:0.4">🌐</div>
+                  <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">Search across platforms</div>
+                  <div style="font-size:13px">Type a keyword to find live markets on Polymarket and Kalshi.</div>
+                </div>
               </div>
             </div>
           </div><!-- /portfolioMain -->
@@ -5712,7 +5734,7 @@ function renderDashboard(data) {
   prefillBranding(creator);
 
   // ── Plan state ───────────────────────────────────────────
-  const plan = creator.plan || 'free';
+  const plan = 'platinum'; // BETA: force all users to platinum — revert when billing goes live
   window._creatorPlan = plan;  // expose for portfolio gates
 
   // Apply plan class to body for CSS-driven premium UI
@@ -11460,40 +11482,15 @@ async function loadManifoldPositions(forceRefresh) {
     }
 
     el.innerHTML = positions.map(p => {
-      const pnlPct = p.pnl_pct || 0;
-      const pnlColor = pnlPct >= 0 ? '#2d9b5f' : '#c0392b';
-      const sideColor = p.side === 'YES' ? '#2d9b5f' : '#c0392b';
-      const pricePct = Math.round((p.current_price || 0) * 100);
-      const endDate = p.end_date ? new Date(p.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
-      const posJson = JSON.stringify({ question: p.question, side: p.side, platform: 'manifold', current_price: p.current_price, pnl_pct: p.pnl_pct || null, cash_value: p.cash_value, market_url: p.market_url }).replace(/'/g, '&#39;');
-      return `
-        <div style="background:var(--ink);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:10px;transition:border-color 0.15s"
-          onmouseover="this.style.borderColor='rgba(201,146,13,0.4)'" onmouseout="this.style.borderColor='var(--border)'">
-          <a href="${p.market_url}" target="_blank" rel="noopener" style="display:block;text-decoration:none">
-            <div style="display:flex;align-items:flex-start;gap:12px">
-              <div style="flex-shrink:0;margin-top:2px">
-                <span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;background:${p.side==='YES'?'rgba(45,155,95,0.15)':'rgba(192,57,43,0.15)'};color:${sideColor};border:1px solid ${sideColor}40">${p.side}</span>
-              </div>
-              <div style="flex:1;min-width:0">
-                <div style="font-size:13px;font-weight:600;color:var(--text);line-height:1.4;margin-bottom:8px">${escHtmlDash(p.question)}</div>
-                <div style="display:flex;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--muted)">
-                  <span>${p.shares} shares</span>
-                  <span>@ ${pricePct}%</span>
-                  <span>Value: M$${(p.cash_value||0).toFixed(0)}</span>
-                  <span>Cost: M$${(p.cost_basis||0).toFixed(0)}</span>
-                  <span>Exp: ${endDate}</span>
-                </div>
-              </div>
-              <div style="text-align:right;flex-shrink:0">
-                <div style="font-family:var(--mono);font-size:14px;font-weight:700;color:${pnlColor}">${pnlPct >= 0 ? '+' : ''}${pnlPct}%</div>
-                <div style="font-family:var(--mono);font-size:10px;color:var(--muted)">P&L</div>
-              </div>
-            </div>
-          </a>
-          <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px">
-            <button data-pos='${posJson}' onclick="sharePositionToFeed(JSON.parse(this.getAttribute('data-pos')))" style="background:none;border:1px solid var(--gold);border-radius:6px;padding:4px 12px;font-size:11px;font-family:var(--mono);color:var(--gold);cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='rgba(201,146,13,0.1)'" onmouseout="this.style.background='none'">📢 Share to feed</button>
-          </div>
-        </div>`;
+      const endDate = p.end_date ? new Date(p.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+      return renderPositionCard({
+        question: p.question, side: p.side,
+        pct: Math.round((p.current_price || 0) * 100),
+        meta: (p.shares||0).toFixed(1)+' shares' + (endDate ? ' · Exp '+endDate : ''),
+        pnl: p.pnl_pct!=null ? p.pnl_pct : null, pnlIsPercent: true,
+        url: p.market_url||'#', accentColor:'#34d399',
+        posData:{question:p.question,side:p.side,platform:'manifold',current_price:p.current_price,pnl_pct:p.pnl_pct||null,cash_value:p.cash_value,market_url:p.market_url}
+      });
     }).join('');
 
     const ts = new Date(data.fetched_at).toLocaleTimeString();
@@ -11595,14 +11592,16 @@ async function loadPolymarketPositions(forceRefresh) {
       return;
     }
 
-    el.innerHTML = positions.map(p => renderPositionCard({
+    el.innerHTML = positions.map(p => {
+      const endDate = p.end_date ? new Date(p.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+      return renderPositionCard({
       question: p.question || p.market_title || 'Unknown market',
       side: p.side, pct: Math.round((p.current_price||0)*100),
-      meta: (p.shares||0).toFixed(2)+' shares',
-      pnl: p.pnl!=null?p.pnl:null, pnlLabel:'P&L',
+      meta: (p.shares||0).toFixed(2)+' shares' + (endDate ? ' · Exp '+endDate : ''),
+      pnl: p.pnl!=null?p.pnl:null,
       url: p.market_url||'#', accentColor:'#7c3aed',
       posData:{question:p.question,side:p.side,platform:'polymarket',probability:p.current_price,pnl:p.pnl||null,shares:p.shares,market_url:p.market_url}
-    })).join('');
+    });}).join('');
 
     const ts = new Date(data.fetched_at || Date.now()).toLocaleTimeString();
     el.insertAdjacentHTML('beforeend', `<div style="font-family:var(--mono);font-size:10px;color:var(--muted);text-align:right;margin-top:4px">Fetched ${ts} · 5 min cache</div>`);
@@ -11617,8 +11616,8 @@ async function loadPolymarketPositions(forceRefresh) {
 let _activePortfolioTab = 'all';
 function switchPortfolioTab(tab) {
   _activePortfolioTab = tab;
-  const tabs = ['all','poly','kalshi','manifold','hfx'];
-  const colors = {all:'var(--gold)',poly:'#a78bfa',kalshi:'#fbbf24',manifold:'#34d399',hfx:'var(--gold)'};
+  const tabs = ['all','poly','kalshi','manifold','hfx','search'];
+  const colors = {all:'var(--gold)',poly:'#a78bfa',kalshi:'#fbbf24',manifold:'#34d399',hfx:'var(--gold)',search:'var(--gold)'};
   tabs.forEach(t => {
     const btn = document.getElementById('ptab-'+t);
     const content = document.getElementById('ptabContent-'+t);
@@ -11659,7 +11658,7 @@ function renderPositionCard({question,side,pct,meta,pnl,pnlLabel,pnlIsPercent,ur
   const pnlStr=pnl==null?'':(pnl>=0?'+':'')+(pnlIsPercent?pnl.toFixed(1)+'%':'$'+Math.abs(pnl).toFixed(2));
   const probBar=Math.max(0,Math.min(100,pct||0));
   const posJson=JSON.stringify(posData||{}).replace(/'/g,"&#39;").replace(/"/g,"&quot;");
-  return `<div style="background:#0f0e0c;border:1px solid #2a2825;border-radius:12px;overflow:hidden;margin-bottom:8px;transition:border-color .15s,box-shadow .15s" onmouseover="this.style.borderColor='${accentColor}55';this.style.boxShadow='0 0 0 1px ${accentColor}22'" onmouseout="this.style.borderColor='#2a2825';this.style.boxShadow='none'"><div style="height:2px;background:${accentColor};opacity:0.5"></div><div style="padding:16px 18px"><div style="display:flex;align-items:flex-start;gap:12px"><span style="flex-shrink:0;margin-top:1px;font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 9px;border-radius:5px;background:${sideBg};color:${sideColor};border:1px solid ${sideBorder}">${side||'—'}</span><div style="flex:1;min-width:0"><a href="${url}" target="_blank" rel="noopener" style="text-decoration:none"><div style="font-size:13px;font-weight:600;color:#e8e4de;line-height:1.5;margin-bottom:10px">${escHtmlDash(question)}</div></a><div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span style="font-family:var(--mono);font-size:10px;color:#6b6560">Current odds</span><span style="font-family:var(--mono);font-size:11px;font-weight:700;color:${accentColor}">${pct!=null?pct+'%':'—'}</span></div><div style="height:4px;background:#1e1c19;border-radius:2px;overflow:hidden"><div style="height:100%;width:${probBar}%;background:${accentColor};border-radius:2px"></div></div></div><div style="font-family:var(--mono);font-size:11px;color:#6b6560">${meta||''}</div></div>${pnl!=null?`<div style="flex-shrink:0;text-align:right"><div style="font-family:var(--mono);font-size:15px;font-weight:800;color:${pnlColor}">${pnlStr}</div><div style="font-family:var(--mono);font-size:9px;color:#4a4744;margin-top:2px;text-transform:uppercase">${pnlLabel}</div></div>`:''}</div><div style="margin-top:12px;padding-top:10px;border-top:1px solid #1e1c19;display:flex;justify-content:flex-end"><button data-pos="${posJson}" onclick="sharePositionToFeed(JSON.parse(this.getAttribute('data-pos').replace(/&quot;/g,'\\"')))" style="background:none;border:1px solid #2a2825;border-radius:6px;padding:5px 14px;font-size:10px;color:#6b6560;cursor:pointer;font-family:var(--mono);transition:all .15s;letter-spacing:.04em" onmouseover="this.style.borderColor='${accentColor}';this.style.color='${accentColor}'" onmouseout="this.style.borderColor='#2a2825';this.style.color='#6b6560'">📢 SHARE TO FEED</button></div></div></div>`;
+  return `<div style="background:#0f0e0c;border:1px solid #2a2825;border-radius:12px;overflow:hidden;margin-bottom:8px;transition:border-color .15s,box-shadow .15s" onmouseover="this.style.borderColor='${accentColor}55';this.style.boxShadow='0 0 0 1px ${accentColor}22'" onmouseout="this.style.borderColor='#2a2825';this.style.boxShadow='none'"><div style="height:2px;background:${accentColor};opacity:0.5"></div><div style="padding:16px 18px"><div style="display:flex;align-items:flex-start;gap:12px"><span style="flex-shrink:0;margin-top:1px;font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 9px;border-radius:5px;background:${sideBg};color:${sideColor};border:1px solid ${sideBorder}">${side||'—'}</span><div style="flex:1;min-width:0"><a href="${url}" target="_blank" rel="noopener" style="text-decoration:none"><div style="font-size:13px;font-weight:600;color:#e8e4de;line-height:1.5;margin-bottom:10px">${escHtmlDash(question)}</div></a><div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span style="font-family:var(--mono);font-size:10px;color:#6b6560">Current odds</span><span style="font-family:var(--mono);font-size:11px;font-weight:700;color:${accentColor}">${pct!=null?pct+'%':'—'}</span></div><div style="height:4px;background:#1e1c19;border-radius:2px;overflow:hidden"><div style="height:100%;width:${probBar}%;background:${accentColor};border-radius:2px"></div></div></div><div style="font-family:var(--mono);font-size:11px;color:#6b6560">${meta||''}</div></div>${pnl!=null?`<div style="flex-shrink:0;text-align:right"><div style="font-family:var(--mono);font-size:15px;font-weight:800;color:${pnlColor}">${pnlStr}</div></div>`:''}</div><div style="margin-top:12px;padding-top:10px;border-top:1px solid #1e1c19;display:flex;justify-content:flex-end"><button data-pos="${posJson}" onclick="sharePositionToFeed(JSON.parse(this.getAttribute('data-pos').replace(/&quot;/g,'\\"')))" style="background:none;border:1px solid #2a2825;border-radius:6px;padding:5px 14px;font-size:10px;color:#6b6560;cursor:pointer;font-family:var(--mono);transition:all .15s;letter-spacing:.04em" onmouseover="this.style.borderColor='${accentColor}';this.style.color='${accentColor}'" onmouseout="this.style.borderColor='#2a2825';this.style.color='#6b6560'">📢 SHARE TO FEED</button></div></div></div>`;
 }
 let _hfxPositionsLoaded = false;
 async function loadHFXPositions(force) {
@@ -11701,6 +11700,56 @@ async function loadHFXPositions(force) {
     el.innerHTML = html;
     if (_activePortfolioTab === 'all') updateAllPositionsTab();
   } catch(e) { el.innerHTML = `<div style="padding:24px;text-align:center;color:#ef4444;font-family:var(--mono);font-size:12px">${e.message}</div>`; }
+}
+
+// ── FIND MARKETS SEARCH ──────────────────────────────────────────────────
+let _mktSearchTimer = null;
+function debouncedMktSearch() {
+  clearTimeout(_mktSearchTimer);
+  _mktSearchTimer = setTimeout(() => runMarketSearch(), 350);
+}
+async function runMarketSearch() {
+  const q = (document.getElementById('mktSearchInput')?.value || '').trim();
+  const el = document.getElementById('mktSearchResults');
+  if (!el) return;
+  if (q.length < 2) {
+    el.innerHTML = '<div style="text-align:center;padding:48px 20px;color:var(--dim)"><div style="font-size:32px;margin-bottom:12px;opacity:0.4">🌐</div><div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">Search across platforms</div><div style="font-size:13px">Type a keyword to find live markets on Polymarket and Kalshi.</div></div>';
+    return;
+  }
+  el.innerHTML = '<div style="padding:32px 0;text-align:center;font-family:var(--mono);font-size:11px;color:#4a4744;letter-spacing:.08em">SEARCHING…</div>';
+  try {
+    const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+    const r = await fetch(`/api/markets/search?q=${encodeURIComponent(q)}`, { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) { el.innerHTML = '<div style="padding:24px;text-align:center;color:#ef4444;font-size:13px">Search failed</div>'; return; }
+    const data = await r.json();
+    renderMarketSearchResults(data, el);
+  } catch(e) { el.innerHTML = `<div style="padding:24px;text-align:center;color:#ef4444;font-family:var(--mono);font-size:12px">${e.message}</div>`; }
+}
+function renderMarketSearchResults(data, el) {
+  const poly = data.polymarket || [];
+  const kalshi = data.kalshi || [];
+  if (!poly.length && !kalshi.length) {
+    el.innerHTML = '<div style="text-align:center;padding:48px 20px;color:var(--dim)"><div style="font-size:32px;margin-bottom:12px">🔍</div><div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">No markets found</div><div style="font-size:13px">Try a different keyword.</div></div>';
+    return;
+  }
+  const fmtDate = iso => iso ? new Date(iso).toLocaleDateString('en-US', { month:'short', day:'numeric' }) : '';
+  const renderCard = (m, platform) => {
+    const color = platform === 'polymarket' ? '#a78bfa' : '#fbbf24';
+    const label = platform === 'polymarket' ? '🟣 Polymarket' : '🟡 Kalshi';
+    const exp = fmtDate(m.close_date || m.end_date);
+    return `<a href="${m.url}" target="_blank" rel="noopener" style="display:block;text-decoration:none;background:#0f0e0c;border:1px solid #2a2825;border-radius:10px;padding:14px 16px;margin-bottom:6px;transition:border-color .15s" onmouseover="this.style.borderColor='${color}44'" onmouseout="this.style.borderColor='#2a2825'">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <span style="font-family:var(--mono);font-size:9px;padding:2px 8px;border-radius:8px;background:${color}15;color:${color};border:1px solid ${color}30">${label}</span>
+        ${exp ? `<span style="font-family:var(--mono);font-size:10px;color:#4a4744">Exp ${exp}</span>` : ''}
+      </div>
+      <div style="font-size:13px;font-weight:600;color:#e8e4de;line-height:1.5;margin-bottom:6px">${escHtmlDash(m.question || m.title)}</div>
+      <div style="font-family:var(--mono);font-size:12px;font-weight:700;color:${color}">${m.yes_pct != null ? m.yes_pct + '% YES' : ''}</div>
+    </a>`;
+  };
+  let html = '';
+  if (poly.length) html += `<div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:8px">🟣 Polymarket (${poly.length})</div>${poly.map(m => renderCard(m,'polymarket')).join('')}<div style="margin-bottom:20px"></div>`;
+  if (kalshi.length) html += `<div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:8px">🟡 Kalshi (${kalshi.length})</div>${kalshi.map(m => renderCard(m,'kalshi')).join('')}`;
+  el.innerHTML = html;
 }
 
 async function sharePositionToFeed(p) {

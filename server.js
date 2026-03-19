@@ -11826,7 +11826,7 @@ app.get('/api/polymarket/positions/:address', async (req, res) => {
       pnl_pct: parseFloat(p.percentPnl) || 0,
       market_url: p.slug ? `https://polymarket.com/event/${p.eventSlug || p.slug}` : `https://polymarket.com`,
       icon: p.icon || null,
-      end_date: p.endDate || null,
+      end_date: p.endDateIso || p.endDate || null,
       platform: 'polymarket'
     }));
     const data = { positions, address, fetched_at: new Date().toISOString() };
@@ -11896,6 +11896,52 @@ app.get('/api/manifold/positions/:username', async (req, res) => {
       if (fallback?.length) return res.json({ positions: fallback, fetched_at: fallback[0].updated_at, from_cache: true });
     } catch {}
     res.status(502).json({ error: 'Failed to fetch Manifold positions', detail: err.message });
+  }
+});
+
+// ── CROSS-PLATFORM MARKET SEARCH ────────────────────────────────────────────
+const _mktSearchCache = new Map();
+app.get('/api/markets/search', async (req, res) => {
+  const q = (req.query.q || '').trim().toLowerCase();
+  if (!q || q.length < 2) return res.status(400).json({ error: 'Query too short (min 2 chars)' });
+  const cacheKey = `mkt_${q}`;
+  const cached = _mktSearchCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < 3 * 60 * 1000) return res.json(cached.data);
+  try {
+    const [polyRes, kalshiRes] = await Promise.allSettled([
+      fetch(`https://gamma-api.polymarket.com/markets?closed=false&limit=20&search=${encodeURIComponent(q)}`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }),
+      fetch(`https://api.elections.kalshi.com/trade-api/v2/markets?limit=20&status=open&series_ticker=${encodeURIComponent(q.toUpperCase())}`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } })
+    ]);
+    let polyMarkets = [];
+    if (polyRes.status === 'fulfilled' && polyRes.value.ok) {
+      const raw = await polyRes.value.json();
+      polyMarkets = (Array.isArray(raw) ? raw : []).filter(m => !m.closed).map(m => ({
+        question: m.question || m.title || '',
+        yes_pct: m.outcomePrices ? Math.round(JSON.parse(m.outcomePrices)[0] * 100) : null,
+        close_date: m.endDate || m.endDateIso || null,
+        url: m.slug ? `https://polymarket.com/event/${m.eventSlug || m.slug}` : 'https://polymarket.com',
+        volume: m.volume || 0
+      })).slice(0, 15);
+    }
+    let kalshiMarkets = [];
+    if (kalshiRes.status === 'fulfilled' && kalshiRes.value.ok) {
+      const raw = await kalshiRes.value.json();
+      const mkts = raw.markets || [];
+      kalshiMarkets = mkts.filter(m => m.status === 'open' && (m.title || '').toLowerCase().includes(q)).map(m => ({
+        question: m.title || '',
+        yes_pct: m.yes_ask != null ? Math.round(m.yes_ask * 100) : (m.last_price != null ? Math.round(m.last_price * 100) : null),
+        close_date: m.close_time || m.expiration_time || null,
+        url: m.ticker ? `https://kalshi.com/markets/${m.event_ticker}/${m.ticker}` : 'https://kalshi.com',
+        volume: m.volume || 0
+      })).slice(0, 15);
+    }
+    const data = { polymarket: polyMarkets, kalshi: kalshiMarkets };
+    _mktSearchCache.set(cacheKey, { ts: Date.now(), data });
+    setTimeout(() => _mktSearchCache.delete(cacheKey), 3 * 60 * 1000);
+    res.json(data);
+  } catch (err) {
+    console.error('[market search]', err.message);
+    res.status(502).json({ error: 'Search failed', detail: err.message });
   }
 });
 
