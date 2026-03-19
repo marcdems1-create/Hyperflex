@@ -687,12 +687,22 @@ function render() {
   const list = filtered();
   const grid = document.getElementById('predictorGrid');
   if (!list.length) {
-    grid.innerHTML = `<div class="state-msg">
-      <div style="font-size:42px;margin-bottom:14px">🎯</div>
-      <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:8px">No predictors found</div>
-      <div style="font-size:13px;color:var(--muted);line-height:1.6;max-width:340px;margin:0 auto 20px">Be the first — connect your Polymarket wallet and start tracking your prediction history.</div>
-      <a href="/creator/signup" style="display:inline-flex;align-items:center;gap:6px;background:var(--gold);color:var(--ink);padding:11px 22px;border-radius:8px;font-family:var(--sans);font-weight:700;font-size:13px;text-decoration:none;transition:opacity 0.15s" onmouseover="this.style.opacity='0.88'" onmouseout="this.style.opacity='1'">Get started free →</a>
-    </div>`;
+    // Show demo cards so the page doesn't look dead
+    const demo = [
+      { display_name:'CryptoOracle', win_rate:74, total_predictions:142, streak:8, pnl_pts:1240, platforms:['HFX','POLY'] },
+      { display_name:'MacroMaven', win_rate:68, total_predictions:89, streak:5, pnl_pts:680, platforms:['HFX','POLY'] },
+      { display_name:'PoliticsGuru', win_rate:65, total_predictions:67, streak:3, pnl_pts:420, platforms:['HFX'] },
+      { display_name:'SportsEdge', win_rate:62, total_predictions:53, streak:4, pnl_pts:310, platforms:['HFX'] },
+      { display_name:'DataDriven', win_rate:61, total_predictions:48, streak:2, pnl_pts:180, platforms:['HFX'] },
+      { display_name:'TechSignals', win_rate:58, total_predictions:35, streak:1, pnl_pts:90, platforms:['HFX'] },
+    ];
+    grid.innerHTML = `<div style="text-align:center;margin-bottom:24px;padding:16px 20px;background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.2);border-radius:10px">
+      <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px">Connect your wallet to appear on the leaderboard</div>
+      <div style="font-size:13px;color:var(--dim);margin-bottom:12px">These are example profiles. Your real stats show up once you connect Polymarket, Kalshi, or Manifold.</div>
+      <a href="/creator/signup" style="display:inline-flex;align-items:center;gap:6px;background:var(--gold);color:var(--ink);padding:10px 20px;border-radius:8px;font-family:var(--sans);font-weight:700;font-size:13px;text-decoration:none">Get started free →</a>
+    </div>` + demo.map(p => renderCard(p)).join('');
+    // Blur demo cards slightly
+    grid.querySelectorAll('.predictor-card').forEach(c => { c.style.opacity = '0.7'; c.style.pointerEvents = 'none'; });
     return;
   }
   grid.innerHTML = list.map(renderCard).join('');

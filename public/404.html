@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Not Found — HYPERFLEX</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<style>
+:root { --ink:#0e0e0c; --paper:#141412; --text:#ddd8cc; --gold:#c9920d; --dim:#7a7870; --sans:'Syne',sans-serif; --mono:'Space Mono',monospace; }
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--paper); color:var(--text); font-family:var(--sans); min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:40px 24px; }
+.code { font-family:var(--mono); font-size:clamp(60px,15vw,120px); font-weight:700; color:rgba(201,146,13,0.15); line-height:1; margin-bottom:16px; }
+h1 { font-size:clamp(20px,4vw,28px); font-weight:800; color:var(--text); margin-bottom:10px; }
+p { font-size:15px; color:var(--dim); max-width:400px; line-height:1.6; margin-bottom:28px; }
+.actions { display:flex; gap:12px; flex-wrap:wrap; justify-content:center; }
+a { display:inline-flex; align-items:center; gap:6px; padding:11px 22px; border-radius:8px; font-weight:700; font-size:13px; text-decoration:none; transition:opacity .15s; }
+.btn-home { background:var(--gold); color:var(--ink); }
+.btn-home:hover { opacity:.88; }
+.btn-explore { background:transparent; border:1px solid rgba(201,146,13,0.3); color:var(--gold); }
+.btn-explore:hover { background:rgba(201,146,13,0.08); }
+</style>
+</head>
+<body>
+<div class="code">404</div>
+<h1>Page not found</h1>
+<p>The page you're looking for doesn't exist or has been moved. Let's get you back on track.</p>
+<div class="actions">
+  <a href="/" class="btn-home">Back to home</a>
+  <a href="/odds?q=Bitcoin" class="btn-explore">Search live odds</a>
+</div>
+</body>
+</html>

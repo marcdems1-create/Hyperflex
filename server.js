@@ -7534,15 +7534,15 @@ app.get('/api/predictors', async (req, res) => {
     const nameMap = {};
     for (const u of userRows || []) nameMap[u.id] = u.display_name;
 
-    // Check polymarket connections (creator_settings table for linked addresses)
+    // Check polymarket connections (users table)
     const { data: csRows } = await supabase
-      .from('creator_settings')
-      .select('user_id, polymarket_address')
-      .in('user_id', userIds)
+      .from('users')
+      .select('id, polymarket_address')
+      .in('id', userIds)
       .not('polymarket_address', 'is', null);
 
     const polyMap = {};
-    for (const cs of csRows || []) polyMap[cs.user_id] = cs.polymarket_address;
+    for (const cs of csRows || []) polyMap[cs.id] = cs.polymarket_address;
 
     // Build result
     let result = userIds.map(uid => {
@@ -12057,6 +12057,11 @@ app.get('/api/markets/search', async (req, res) => {
     console.error('[market search]', err.message);
     res.status(502).json({ error: 'Search failed', detail: err.message });
   }
+});
+
+// 404 catch-all — must be last route
+app.use((req, res) => {
+  res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
 });
 
 const PORT = process.env.PORT || 3000;
