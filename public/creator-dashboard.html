@@ -4623,145 +4623,81 @@ body.nav-open .sidebar-backdrop {
 
             <!-- Main portfolio content (hidden when welcome is shown) -->
             <div id="portfolioMain">
-
-            <!-- Early Access banner -->
-            <div style="background:linear-gradient(135deg,#c9920d22,#c9920d11);border:1px solid #c9920d44;border-radius:10px;padding:12px 16px;margin-bottom:20px;display:flex;align-items:center;gap:10px">
-              <span style="font-size:18px">🎁</span>
-              <div>
-                <div style="font-weight:700;color:#c9920d;font-size:13px">Early Access — All platform connections free during beta</div>
-                <div style="font-size:12px;color:#888;margin-top:2px">Connect Polymarket, Kalshi &amp; Manifold at no cost while we're in beta. Lock in your portfolio history now.</div>
-              </div>
+            <!-- Tab bar -->
+            <div style="display:flex;border-bottom:1px solid var(--border);margin-bottom:28px;overflow-x:auto">
+              <button id="ptab-all" onclick="switchPortfolioTab('all')" style="background:none;border:none;border-bottom:2px solid var(--gold);color:var(--text);padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;transition:all .15s;margin-bottom:-1px">All Positions</button>
+              <button id="ptab-poly" onclick="switchPortfolioTab('poly')" style="background:none;border:none;border-bottom:2px solid transparent;color:var(--dim);padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s;margin-bottom:-1px;display:flex;align-items:center;gap:7px"><span id="ptab-poly-dot" style="width:7px;height:7px;border-radius:50%;background:#444;flex-shrink:0"></span>Polymarket</button>
+              <button id="ptab-kalshi" onclick="switchPortfolioTab('kalshi')" style="background:none;border:none;border-bottom:2px solid transparent;color:var(--dim);padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s;margin-bottom:-1px;display:flex;align-items:center;gap:7px"><span id="ptab-kalshi-dot" style="width:7px;height:7px;border-radius:50%;background:#444;flex-shrink:0"></span>Kalshi</button>
+              <button id="ptab-manifold" onclick="switchPortfolioTab('manifold')" style="background:none;border:none;border-bottom:2px solid transparent;color:var(--dim);padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s;margin-bottom:-1px;display:flex;align-items:center;gap:7px"><span id="ptab-manifold-dot" style="width:7px;height:7px;border-radius:50%;background:#444;flex-shrink:0"></span>Manifold</button>
             </div>
-
-            <!-- Kalshi card -->
-            <div style="background:var(--cream);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:20px">
-              <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-                <div style="width:36px;height:36px;border-radius:8px;background:#0a0a0a;border:1px solid #333;display:flex;align-items:center;justify-content:center;font-size:18px">🟡</div>
-                <div>
-                  <div style="font-size:15px;font-weight:700;color:var(--text)">Kalshi</div>
-                  <div style="font-size:12px;color:var(--muted)">Real-money prediction markets</div>
-                </div>
-                <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
-                  <span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid rgba(45,155,95,0.4);color:#2d9b5f;background:rgba(45,155,95,0.1)">LIVE</span>
-                  <div id="kalshiStatusBadge"></div>
-                </div>
+            <!-- ALL -->
+            <div id="ptabContent-all"><div id="allPositionsContainer"><div style="text-align:center;padding:64px 20px;color:var(--dim)"><div style="font-size:40px;margin-bottom:16px;opacity:0.4">📊</div><div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:8px">No positions loaded yet</div><div style="font-size:13px">Connect platforms using the tabs above.</div></div></div></div>
+            <!-- POLYMARKET -->
+            <div id="ptabContent-poly" style="display:none">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+                <div style="display:flex;align-items:center;gap:12px">
+                  <div style="width:38px;height:38px;border-radius:10px;background:rgba(124,58,237,0.15);border:1px solid rgba(124,58,237,0.3);display:flex;align-items:center;justify-content:center;font-size:18px">🟣</div>
+                  <div><div style="font-size:16px;font-weight:800;color:var(--text)">Polymarket</div><div style="font-size:11px;color:var(--dim);font-family:var(--mono)">Crypto prediction markets</div></div>
+                </div><div id="polyStatusBadge"></div>
               </div>
-
-              <!-- Connect form -->
-              <div id="kalshiConnectForm">
-                <div style="margin-bottom:12px">
-                  <input type="password" id="kalshiApiKeyInput"
-                    placeholder="Kalshi API Key (UUID format)"
-                    style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-family:var(--mono);font-size:13px;color:var(--text);outline:none;margin-bottom:6px"
-                    onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='var(--border)'"/>
-                  <div style="font-size:11px;color:var(--muted)">
-                    Get your key at
-                    <a href="https://kalshi.com/profile/api" target="_blank" style="color:var(--gold)">kalshi.com/profile/api</a>
-                    → Settings → API Access
-                  </div>
-                </div>
-                <button class="btn-primary" id="kalshiConnectBtn" onclick="connectKalshi()" style="font-size:13px;padding:9px 20px">
-                  Connect Kalshi →
-                </button>
+              <div id="polyConnectForm" style="background:var(--cream);border:1px solid var(--border);border-radius:14px;padding:28px">
+                <div style="font-size:13px;color:var(--dim);margin-bottom:20px;line-height:1.6">Paste your Polygon wallet address to instantly import all open positions.</div>
+                <input type="text" id="poly-wallet-input" placeholder="0x... your wallet address" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:10px;padding:13px 16px;font-family:var(--mono);font-size:13px;color:var(--text);outline:none;margin-bottom:8px;box-sizing:border-box" onfocus="this.style.borderColor='rgba(124,58,237,0.6)'" onblur="this.style.borderColor='var(--border)'"/>
+                <div style="font-size:11px;color:var(--muted);margin-bottom:20px">Find at <a href="https://polymarket.com" target="_blank" style="color:#a78bfa">polymarket.com</a> → your profile</div>
+                <button id="polyConnectBtn" onclick="connectPolymarket()" style="background:rgba(124,58,237,0.9);color:#fff;border:none;border-radius:10px;padding:12px 24px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;min-height:44px">Connect Polymarket →</button>
               </div>
-
-              <!-- Disconnect row (shown when connected) -->
-              <div id="kalshiConnectedRow" style="display:none;align-items:center;gap:12px">
-                <div style="font-size:13px;color:var(--green);font-weight:600">✓ API key connected</div>
-                <button onclick="disconnectKalshi()" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:11px;color:var(--muted);cursor:pointer;font-family:var(--mono)">Disconnect</button>
-                <button onclick="loadKalshiPositions(true)" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:11px;color:var(--dim);cursor:pointer;font-family:var(--mono)">↺ Refresh</button>
-              </div>
-
-              <!-- Positions list -->
-              <div id="kalshiPositions" style="margin-top:20px"></div>
-            </div>
-
-            <!-- Polymarket card -->
-            <div style="background:var(--cream);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:20px">
-              <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-                <div style="width:36px;height:36px;border-radius:8px;background:#0a0a0a;border:1px solid #333;display:flex;align-items:center;justify-content:center;font-size:18px">🟣</div>
-                <div>
-                  <div style="font-size:15px;font-weight:700;color:var(--text)">Polymarket</div>
-                  <div style="font-size:12px;color:var(--muted)">Crypto prediction markets</div>
-                </div>
-                <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
-                  <span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid rgba(45,155,95,0.4);color:#2d9b5f;background:rgba(45,155,95,0.1)">LIVE</span>
-                  <div id="polyStatusBadge"></div>
-                </div>
-              </div>
-
-              <!-- Connect form -->
-              <div id="polyConnectForm">
-                <div style="margin-bottom:12px">
-                  <input type="text" id="poly-wallet-input"
-                    placeholder="Your Polygon wallet address (0x...)"
-                    style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-family:var(--mono);font-size:13px;color:var(--text);outline:none;margin-bottom:6px"
-                    onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='var(--border)'"/>
-                  <div style="font-size:11px;color:var(--muted)">
-                    Find your address at
-                    <a href="https://polymarket.com" target="_blank" style="color:var(--gold)">polymarket.com</a>
-                    → your profile
-                  </div>
-                </div>
-                <button class="btn-primary" id="polyConnectBtn" onclick="connectPolymarket()" style="font-size:13px;padding:9px 20px">
-                  Connect Polymarket →
-                </button>
-              </div>
-
-              <!-- Disconnect row (shown when connected) -->
-              <div id="polyConnectedRow" style="display:none;align-items:center;gap:12px">
-                <div style="font-size:13px;color:var(--green);font-weight:600">✓ Wallet connected — <span id="polyWalletDisplay" style="color:var(--gold);font-family:var(--mono);font-size:12px"></span></div>
+              <div id="polyConnectedRow" style="display:none;align-items:center;gap:10px;margin-bottom:16px;padding:12px 16px;background:rgba(124,58,237,0.06);border:1px solid rgba(124,58,237,0.2);border-radius:10px">
+                <span style="width:8px;height:8px;border-radius:50%;background:#a78bfa;flex-shrink:0;box-shadow:0 0 6px rgba(167,139,250,0.6)"></span>
+                <div style="font-size:13px;color:var(--text);font-weight:600;flex:1">Wallet: <span id="polyWalletDisplay" style="font-family:var(--mono);font-size:12px;color:#a78bfa"></span></div>
+                <button onclick="loadPolymarketPositions(true)" style="background:none;border:1px solid rgba(124,58,237,0.3);border-radius:6px;padding:5px 12px;font-size:11px;color:#a78bfa;cursor:pointer;font-family:var(--mono)">↺ Sync</button>
                 <button onclick="disconnectPolymarket()" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:11px;color:var(--muted);cursor:pointer;font-family:var(--mono)">Disconnect</button>
-                <button onclick="loadPolymarketPositions(true)" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:11px;color:var(--dim);cursor:pointer;font-family:var(--mono)">↺ Refresh</button>
               </div>
-
-              <!-- Positions list -->
-              <div id="polyPositions" style="margin-top:20px"></div>
+              <div id="polyPositions"></div>
             </div>
-
-            <!-- Manifold card -->
-            <div style="background:var(--cream);border:1px solid var(--border);border-radius:12px;padding:24px">
-              <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-                <div style="width:36px;height:36px;border-radius:8px;background:#0a0a0a;border:1px solid #333;display:flex;align-items:center;justify-content:center;font-size:18px">🟢</div>
-                <div>
-                  <div style="font-size:15px;font-weight:700;color:var(--text)">Manifold Markets</div>
-                  <div style="font-size:12px;color:var(--muted)">Play-money prediction markets</div>
-                </div>
-                <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
-                  <span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid rgba(45,155,95,0.4);color:#2d9b5f;background:rgba(45,155,95,0.1)">LIVE</span>
-                  <div id="manifoldStatusBadge"></div>
-                </div>
+            <!-- KALSHI -->
+            <div id="ptabContent-kalshi" style="display:none">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+                <div style="display:flex;align-items:center;gap:12px">
+                  <div style="width:38px;height:38px;border-radius:10px;background:rgba(217,119,6,0.15);border:1px solid rgba(217,119,6,0.3);display:flex;align-items:center;justify-content:center;font-size:18px">🟡</div>
+                  <div><div style="font-size:16px;font-weight:800;color:var(--text)">Kalshi</div><div style="font-size:11px;color:var(--dim);font-family:var(--mono)">Real-money prediction markets</div></div>
+                </div><div id="kalshiStatusBadge"></div>
               </div>
-
-              <!-- Connect form -->
-              <div id="manifoldConnectForm">
-                <div style="margin-bottom:12px">
-                  <input type="text" id="manifold-username-input"
-                    placeholder="Your Manifold username"
-                    style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-family:var(--mono);font-size:13px;color:var(--text);outline:none;margin-bottom:6px"
-                    onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='var(--border)'"/>
-                  <div style="font-size:11px;color:var(--muted)">
-                    Find your username at
-                    <a href="https://manifold.markets" target="_blank" style="color:var(--gold)">manifold.markets</a>
-                    → your profile
-                  </div>
-                </div>
-                <button class="btn-primary" id="manifoldConnectBtn" onclick="saveManifoldUsername()" style="font-size:13px;padding:9px 20px">
-                  Connect Manifold →
-                </button>
+              <div id="kalshiConnectForm" style="background:var(--cream);border:1px solid var(--border);border-radius:14px;padding:28px">
+                <div style="font-size:13px;color:var(--dim);margin-bottom:20px;line-height:1.6">Connect with your Kalshi API key to sync real-money contracts and track P&L.</div>
+                <input type="password" id="kalshiApiKeyInput" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:10px;padding:13px 16px;font-family:var(--mono);font-size:13px;color:var(--text);outline:none;margin-bottom:8px;box-sizing:border-box" onfocus="this.style.borderColor='rgba(217,119,6,0.6)'" onblur="this.style.borderColor='var(--border)'"/>
+                <div style="font-size:11px;color:var(--muted);margin-bottom:20px">Get at <a href="https://kalshi.com/profile/api" target="_blank" style="color:#fbbf24">kalshi.com/profile/api</a> → API Access</div>
+                <button id="kalshiConnectBtn" onclick="connectKalshi()" style="background:rgba(217,119,6,0.9);color:#fff;border:none;border-radius:10px;padding:12px 24px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;min-height:44px">Connect Kalshi →</button>
               </div>
-
-              <!-- Disconnect row (shown when connected) -->
-              <div id="manifoldConnectedRow" style="display:none;align-items:center;gap:12px">
-                <div style="font-size:13px;color:var(--green);font-weight:600">✓ Username connected — <span id="manifoldUsernameDisplay" style="color:var(--gold)"></span></div>
+              <div id="kalshiConnectedRow" style="display:none;align-items:center;gap:10px;margin-bottom:16px;padding:12px 16px;background:rgba(217,119,6,0.06);border:1px solid rgba(217,119,6,0.2);border-radius:10px">
+                <span style="width:8px;height:8px;border-radius:50%;background:#fbbf24;flex-shrink:0;box-shadow:0 0 6px rgba(251,191,36,0.6)"></span>
+                <div style="font-size:13px;color:var(--text);font-weight:600;flex:1">API key connected</div>
+                <button onclick="loadKalshiPositions(true)" style="background:none;border:1px solid rgba(217,119,6,0.3);border-radius:6px;padding:5px 12px;font-size:11px;color:#fbbf24;cursor:pointer;font-family:var(--mono)">↺ Sync</button>
+                <button onclick="disconnectKalshi()" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:11px;color:var(--muted);cursor:pointer;font-family:var(--mono)">Disconnect</button>
+              </div>
+              <div id="kalshiPositions"></div>
+            </div>
+            <!-- MANIFOLD -->
+            <div id="ptabContent-manifold" style="display:none">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+                <div style="display:flex;align-items:center;gap:12px">
+                  <div style="width:38px;height:38px;border-radius:10px;background:rgba(5,150,105,0.15);border:1px solid rgba(5,150,105,0.3);display:flex;align-items:center;justify-content:center;font-size:18px">🟢</div>
+                  <div><div style="font-size:16px;font-weight:800;color:var(--text)">Manifold</div><div style="font-size:11px;color:var(--dim);font-family:var(--mono)">Play-money prediction markets</div></div>
+                </div><div id="manifoldStatusBadge"></div>
+              </div>
+              <div id="manifoldConnectForm" style="background:var(--cream);border:1px solid var(--border);border-radius:14px;padding:28px">
+                <div style="font-size:13px;color:var(--dim);margin-bottom:20px;line-height:1.6">Enter your Manifold username to track play-money positions and calibration score.</div>
+                <input type="text" id="manifold-username-input" placeholder="your-username" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:10px;padding:13px 16px;font-family:var(--mono);font-size:13px;color:var(--text);outline:none;margin-bottom:8px;box-sizing:border-box" onfocus="this.style.borderColor='rgba(5,150,105,0.6)'" onblur="this.style.borderColor='var(--border)'"/>
+                <div style="font-size:11px;color:var(--muted);margin-bottom:20px">Find at <a href="https://manifold.markets" target="_blank" style="color:#34d399">manifold.markets</a> → your profile</div>
+                <button id="manifoldConnectBtn" onclick="saveManifoldUsername()" style="background:rgba(5,150,105,0.9);color:#fff;border:none;border-radius:10px;padding:12px 24px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;min-height:44px">Connect Manifold →</button>
+              </div>
+              <div id="manifoldConnectedRow" style="display:none;align-items:center;gap:10px;margin-bottom:16px;padding:12px 16px;background:rgba(5,150,105,0.06);border:1px solid rgba(5,150,105,0.2);border-radius:10px">
+                <span style="width:8px;height:8px;border-radius:50%;background:#34d399;flex-shrink:0;box-shadow:0 0 6px rgba(52,211,153,0.6)"></span>
+                <div style="font-size:13px;color:var(--text);font-weight:600;flex:1">@<span id="manifoldUsernameDisplay" style="color:#34d399"></span></div>
+                <button onclick="loadManifoldPositions(true)" style="background:none;border:1px solid rgba(5,150,105,0.3);border-radius:6px;padding:5px 12px;font-size:11px;color:#34d399;cursor:pointer;font-family:var(--mono)">↺ Sync</button>
                 <button onclick="disconnectManifold()" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:11px;color:var(--muted);cursor:pointer;font-family:var(--mono)">Disconnect</button>
-                <button onclick="loadManifoldPositions(true)" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:11px;color:var(--dim);cursor:pointer;font-family:var(--mono)">↺ Refresh</button>
               </div>
-
-              <!-- Positions list -->
-              <div id="manifoldPositions" style="margin-top:20px"></div>
+              <div id="manifoldPositions"></div>
             </div>
-
           </div><!-- /portfolioMain -->
           </div>
         </div>
@@ -11105,11 +11041,11 @@ function renderKalshiConnectState() {
   if (_kalshiConnected) {
     if (form)  form.style.display  = 'none';
     if (row)   row.style.display   = 'flex';
-    if (badge) badge.innerHTML = '<span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid rgba(45,155,95,0.4);color:#2d9b5f;background:rgba(45,155,95,0.1)">CONNECTED</span>';
+    // connected
   } else {
     if (form)  form.style.display  = 'block';
     if (row)   row.style.display   = 'none';
-    if (badge) badge.innerHTML = '<span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid var(--border);color:var(--muted)">NOT CONNECTED</span>';
+    // not connected
     document.getElementById('kalshiPositions').innerHTML = '';
   }
 }
@@ -11261,11 +11197,11 @@ function renderManifoldConnectState() {
     if (form)   form.style.display  = 'none';
     if (row)    row.style.display   = 'flex';
     if (nameEl) nameEl.textContent  = _manifoldUsername;
-    if (badge)  badge.innerHTML = '<span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid rgba(45,155,95,0.4);color:#2d9b5f;background:rgba(45,155,95,0.1)">CONNECTED</span>';
+    // connected
   } else {
     if (form)   form.style.display  = 'block';
     if (row)    row.style.display   = 'none';
-    if (badge)  badge.innerHTML = '<span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid var(--border);color:var(--muted)">NOT CONNECTED</span>';
+    // not connected
     const el = document.getElementById('manifoldPositions');
     if (el) el.innerHTML = '';
   }
@@ -11400,11 +11336,11 @@ function renderPolymarketConnectState() {
     if (form)   form.style.display  = 'none';
     if (row)    row.style.display   = 'flex';
     if (nameEl) nameEl.textContent  = _polyWalletAddress.slice(0, 8) + '…' + _polyWalletAddress.slice(-4);
-    if (badge)  badge.innerHTML = '<span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid rgba(45,155,95,0.4);color:#2d9b5f;background:rgba(45,155,95,0.1)">CONNECTED</span>';
+    // connected
   } else {
     if (form)   form.style.display  = 'block';
     if (row)    row.style.display   = 'none';
-    if (badge)  badge.innerHTML = '<span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid var(--border);color:var(--muted)">NOT CONNECTED</span>';
+    // not connected
     const el = document.getElementById('polyPositions');
     if (el) el.innerHTML = '';
   }
@@ -11479,34 +11415,14 @@ async function loadPolymarketPositions(forceRefresh) {
       return;
     }
 
-    el.innerHTML = positions.map(p => {
-      const pnlColor = (p.pnl || 0) >= 0 ? '#2d9b5f' : '#c0392b';
-      const sideColor = p.side === 'YES' ? '#2d9b5f' : '#c0392b';
-      const pricePct = Math.round((p.current_price || 0) * 100);
-      const posJson = JSON.stringify({ question: p.question, side: p.side, platform: 'polymarket', probability: p.probability, pnl: p.pnl || null, shares: p.shares, market_url: p.market_url }).replace(/'/g, '&#39;');
-      return `
-        <div style="background:var(--ink);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:10px;transition:border-color 0.15s"
-          onmouseover="this.style.borderColor='rgba(201,146,13,0.4)'" onmouseout="this.style.borderColor='var(--border)'">
-          <a href="${p.market_url || '#'}" target="_blank" rel="noopener" style="display:block;text-decoration:none">
-            <div style="display:flex;align-items:flex-start;gap:12px">
-              <div style="flex-shrink:0;margin-top:2px">
-                <span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;background:${p.side==='YES'?'rgba(45,155,95,0.15)':'rgba(192,57,43,0.15)'};color:${sideColor};border:1px solid ${sideColor}40">${p.side || '—'}</span>
-              </div>
-              <div style="flex:1;min-width:0">
-                <div style="font-size:13px;font-weight:600;color:var(--text);line-height:1.4;margin-bottom:8px">${escHtmlDash(p.question || p.market_title || 'Unknown market')}</div>
-                <div style="display:flex;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--muted)">
-                  <span>${(p.shares || 0).toFixed(2)} shares</span>
-                  <span>@ ${pricePct}%</span>
-                  ${p.pnl != null ? `<span style="color:${pnlColor};font-weight:700">${p.pnl >= 0 ? '+' : ''}$${(p.pnl).toFixed(2)} P&L</span>` : ''}
-                </div>
-              </div>
-            </div>
-          </a>
-          <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;justify-content:flex-end">
-            <button onclick='sharePositionToFeed(${posJson})' style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:11px;color:var(--muted);cursor:pointer;font-family:var(--mono);transition:all 0.15s" onmouseover="this.style.borderColor='var(--gold)';this.style.color='var(--gold)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">📢 Share to feed</button>
-          </div>
-        </div>`;
-    }).join('');
+    el.innerHTML = positions.map(p => renderPositionCard({
+      question: p.question || p.market_title || 'Unknown market',
+      side: p.side, pct: Math.round((p.current_price||0)*100),
+      meta: (p.shares||0).toFixed(2)+' shares',
+      pnl: p.pnl!=null?p.pnl:null, pnlLabel:'P&L',
+      url: p.market_url||'#', accentColor:'#7c3aed',
+      posData:{question:p.question,side:p.side,platform:'polymarket',probability:p.current_price,pnl:p.pnl||null,shares:p.shares,market_url:p.market_url}
+    })).join('');
 
     const ts = new Date(data.fetched_at || Date.now()).toLocaleTimeString();
     el.insertAdjacentHTML('beforeend', `<div style="font-family:var(--mono);font-size:10px;color:var(--muted);text-align:right;margin-top:4px">Fetched ${ts} · 5 min cache</div>`);
@@ -11516,6 +11432,52 @@ async function loadPolymarketPositions(forceRefresh) {
   }
 }
 
+
+// ── PORTFOLIO TAB SWITCHER ──────────────────────────────────────────────────
+let _activePortfolioTab = 'all';
+function switchPortfolioTab(tab) {
+  _activePortfolioTab = tab;
+  const tabs = ['all','poly','kalshi','manifold'];
+  const colors = {all:'var(--gold)',poly:'#a78bfa',kalshi:'#fbbf24',manifold:'#34d399'};
+  tabs.forEach(t => {
+    const btn = document.getElementById('ptab-'+t);
+    const content = document.getElementById('ptabContent-'+t);
+    if (btn) { btn.style.borderBottom = t===tab ? '2px solid '+colors[t] : '2px solid transparent'; btn.style.color = t===tab ? 'var(--text)' : 'var(--dim)'; btn.style.fontWeight = t===tab ? '700' : '600'; }
+    if (content) content.style.display = t===tab ? 'block' : 'none';
+  });
+  if (tab === 'all') updateAllPositionsTab();
+}
+function updatePortfolioTabDots() {
+  const pd=document.getElementById('ptab-poly-dot'),kd=document.getElementById('ptab-kalshi-dot'),md=document.getElementById('ptab-manifold-dot');
+  if(pd) pd.style.background=_polyWalletAddress?'#a78bfa':'#333';
+  if(kd) kd.style.background=_kalshiConnected?'#fbbf24':'#333';
+  if(md) md.style.background=_manifoldUsername?'#34d399':'#333';
+}
+function updateAllPositionsTab() {
+  const c=document.getElementById('allPositionsContainer');
+  if(!c) return;
+  const pe=_polyWalletAddress?document.getElementById('polyPositions'):null;
+  const ke=_kalshiConnected?document.getElementById('kalshiPositions'):null;
+  const me=_manifoldUsername?document.getElementById('manifoldPositions'):null;
+  const sections=[];
+  if(pe&&pe.innerHTML.trim()&&!pe.innerHTML.includes('LOADING')) sections.push({label:'🟣 Polymarket',el:pe});
+  if(ke&&ke.innerHTML.trim()&&!ke.innerHTML.includes('LOADING')) sections.push({label:'🟡 Kalshi',el:ke});
+  if(me&&me.innerHTML.trim()&&!me.innerHTML.includes('LOADING')) sections.push({label:'🟢 Manifold',el:me});
+  if(!sections.length){c.innerHTML='<div style="text-align:center;padding:48px 20px;color:var(--dim)"><div style="font-size:32px;margin-bottom:12px">📊</div><div style="font-size:14px;color:var(--text);font-weight:600;margin-bottom:6px">Switch to a platform tab to load positions</div></div>';return;}
+  c.innerHTML=sections.map(s=>'<div style="margin-bottom:20px"><div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:10px">'+s.label+'</div>'+s.el.innerHTML+'</div>').join('');
+}
+// ── POSITION CARD RENDERER ──────────────────────────────────────────────────
+function renderPositionCard({question,side,pct,meta,pnl,pnlLabel,pnlIsPercent,url,accentColor,posData}){
+  const isYes=side==='YES';
+  const sideColor=isYes?'#22c55e':'#f87171';
+  const sideBg=isYes?'rgba(34,197,94,0.12)':'rgba(248,113,113,0.12)';
+  const sideBorder=isYes?'rgba(34,197,94,0.3)':'rgba(248,113,113,0.3)';
+  const pnlColor=pnl==null?'':(pnl>=0?'#22c55e':'#f87171');
+  const pnlStr=pnl==null?'':(pnl>=0?'+':'')+(pnlIsPercent?pnl.toFixed(1)+'%':'$'+Math.abs(pnl).toFixed(2));
+  const probBar=Math.max(0,Math.min(100,pct||0));
+  const posJson=JSON.stringify(posData||{}).replace(/'/g,"&#39;").replace(/"/g,"&quot;");
+  return `<div style="background:#0f0e0c;border:1px solid #2a2825;border-radius:12px;overflow:hidden;margin-bottom:8px;transition:border-color .15s,box-shadow .15s" onmouseover="this.style.borderColor='${accentColor}55';this.style.boxShadow='0 0 0 1px ${accentColor}22'" onmouseout="this.style.borderColor='#2a2825';this.style.boxShadow='none'"><div style="height:2px;background:${accentColor};opacity:0.5"></div><div style="padding:16px 18px"><div style="display:flex;align-items:flex-start;gap:12px"><span style="flex-shrink:0;margin-top:1px;font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 9px;border-radius:5px;background:${sideBg};color:${sideColor};border:1px solid ${sideBorder}">${side||'—'}</span><div style="flex:1;min-width:0"><a href="${url}" target="_blank" rel="noopener" style="text-decoration:none"><div style="font-size:13px;font-weight:600;color:#e8e4de;line-height:1.5;margin-bottom:10px">${escHtmlDash(question)}</div></a><div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span style="font-family:var(--mono);font-size:10px;color:#6b6560">Current odds</span><span style="font-family:var(--mono);font-size:11px;font-weight:700;color:${accentColor}">${pct!=null?pct+'%':'—'}</span></div><div style="height:4px;background:#1e1c19;border-radius:2px;overflow:hidden"><div style="height:100%;width:${probBar}%;background:${accentColor};border-radius:2px"></div></div></div><div style="font-family:var(--mono);font-size:11px;color:#6b6560">${meta||''}</div></div>${pnl!=null?`<div style="flex-shrink:0;text-align:right"><div style="font-family:var(--mono);font-size:15px;font-weight:800;color:${pnlColor}">${pnlStr}</div><div style="font-family:var(--mono);font-size:9px;color:#4a4744;margin-top:2px;text-transform:uppercase">${pnlLabel}</div></div>`:''}</div><div style="margin-top:12px;padding-top:10px;border-top:1px solid #1e1c19;display:flex;justify-content:flex-end"><button data-pos="${posJson}" onclick="sharePositionToFeed(JSON.parse(this.getAttribute('data-pos').replace(/&quot;/g,'\\"')))" style="background:none;border:1px solid #2a2825;border-radius:6px;padding:5px 14px;font-size:10px;color:#6b6560;cursor:pointer;font-family:var(--mono);transition:all .15s;letter-spacing:.04em" onmouseover="this.style.borderColor='${accentColor}';this.style.color='${accentColor}'" onmouseout="this.style.borderColor='#2a2825';this.style.color='#6b6560'">📢 SHARE TO FEED</button></div></div></div>`;
+}
 async function sharePositionToFeed(p) {
   try {
     const token = localStorage.getItem('hf_token');
