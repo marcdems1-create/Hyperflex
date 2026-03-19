@@ -3139,7 +3139,7 @@ body.nav-open .sidebar-backdrop {
         </div>
         <div class="section">
           <div style="margin-bottom:14px">
-            <input type="search" id="mktSearchInput" placeholder="🔍 Search your markets…" oninput="onDashMarketSearch(this.value)" style="width:100%;box-sizing:border-box;padding:10px 14px;border-radius:10px;border:1.5px solid #2a2a27;background:#1c1c19;color:#e8e3d5;font-size:14px;font-family:inherit;outline:none" />
+            <input type="search" id="dashMktSearchInput" placeholder="🔍 Search your markets…" oninput="onDashMarketSearch(this.value)" style="width:100%;box-sizing:border-box;padding:10px 14px;border-radius:10px;border:1.5px solid #2a2a27;background:#1c1c19;color:#e8e3d5;font-size:14px;font-family:inherit;outline:none" />
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:10px;flex-wrap:wrap">
             <div class="mkt-filter-pills">
@@ -4774,7 +4774,7 @@ body.nav-open .sidebar-backdrop {
                 <input type="text" id="mktSearchInput" placeholder="Search markets… e.g. Bitcoin, Trump, NBA"
                   style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:10px;padding:13px 16px;font-family:var(--mono);font-size:13px;color:var(--text);outline:none;box-sizing:border-box"
                   onfocus="this.style.borderColor='rgba(201,146,13,0.5)'" onblur="this.style.borderColor='var(--border)'"
-                  oninput="debouncedMktSearch()"/>
+                  oninput="debouncedMktSearch()" onkeydown="if(event.key==='Enter')runMarketSearch()"/>
               </div>
               <div id="mktSearchResults">
                 <div style="text-align:center;padding:48px 20px;color:var(--dim)">
