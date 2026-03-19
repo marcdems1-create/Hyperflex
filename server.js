@@ -6521,6 +6521,19 @@ app.get('/creator/dashboard', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'creator-dashboard.html'));
 });
 
+// Smart dashboard router — checks auth tokens in localStorage, routes to the right dashboard
+app.get('/dashboard', (req, res) => {
+  res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>HYPERFLEX</title></head><body><script>
+    if (localStorage.getItem('hf_creator_token') || localStorage.getItem('hf_token')) {
+      location.replace('/creator/dashboard');
+    } else if (localStorage.getItem('hf_member_token')) {
+      location.replace('/my');
+    } else {
+      location.replace('/creator/login');
+    }
+  </script></body></html>`);
+});
+
 // ════════════════════════════════════════════════════════════
 // 9b. PRO WAITLIST
 // POST /api/creator/waitlist
