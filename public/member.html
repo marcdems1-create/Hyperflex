@@ -131,6 +131,12 @@ nav { display: flex; align-items: center; justify-content: space-between; paddin
 @media (max-width: 768px) {
   body { overflow-x: hidden; }
   input, textarea, select { font-size: 16px !important; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  #analyticsSection > div:nth-child(2) { grid-template-columns: 1fr !important; }
+  .nav-logo { min-height: 44px; display: inline-flex; align-items: center; }
+  .nav-back { min-height: 44px; display: inline-flex; align-items: center; }
+  .share-btn { min-height: 44px; }
+  .community-chip { min-height: 44px; }
 }
 </style>
 </head>

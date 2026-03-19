@@ -679,19 +679,21 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
 .markets-grid .market-card.featured {
   grid-column: 1 / -1;
 }
-/* ── Tablet (601–768px): keep 2-col but reduce padding ── */
+/* ── Tablet + Mobile (≤768px): single column, reduce padding ── */
 @media (max-width: 768px) {
   .content { padding-left: 16px; padding-right: 16px; }
   .header  { padding: 0 16px; }
   .hero-body { padding-left: 16px; padding-right: 16px; }
   .market-card-inner { padding: 14px 14px 12px; }
   .market-card.featured .odds-pct { font-size: 28px; }
-}
-
-/* ── Mobile (≤600px): single column ── */
-@media (max-width: 600px) {
   .markets-grid { grid-template-columns: 1fr; }
   .markets-grid .market-card.featured { grid-column: 1; }
+  #resolvedGrid { grid-template-columns: 1fr !important; }
+  .rewards-grid { grid-template-columns: 1fr !important; }
+}
+
+/* ── Small phones (≤600px) ── */
+@media (max-width: 600px) {
   .market-card.featured .odds-pct { font-size: 26px; }
 }
 

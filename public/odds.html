@@ -122,6 +122,7 @@ body::before {
   line-height: 1.4; word-break: break-word;
 }
 .cluster-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.cluster-grid-2col { grid-template-columns: 1fr 1fr; }
 .platform-col {
   background: var(--paper); border: 1px solid var(--border); border-radius: 10px;
   padding: 16px; transition: border-color 0.15s, box-shadow 0.15s;
@@ -259,15 +260,30 @@ body::before {
 /* RESPONSIVE */
 @media (max-width: 768px) {
   .nav { padding: 0 16px; }
+  .nav-link { display: none; }
   .hero { padding: 80px 16px 36px; }
   .results { padding: 0 16px 60px; }
   .cluster { padding: 18px; }
   .cluster-grid { grid-template-columns: 1fr; }
+  .cluster-grid-2col { grid-template-columns: 1fr; }
   .topic-section { padding: 0 16px; }
+  .topic-cards { grid-template-columns: 1fr; }
+  .odds-layout { padding: 0 16px 60px; }
+  .search-wrap { margin: 0 16px 32px; }
+  /* Touch targets */
+  .btn-nav { min-height: 44px; display: inline-flex; align-items: center; }
+  .topic-chip { min-height: 44px; display: inline-flex; align-items: center; }
+  .topic-card { min-height: 44px; }
+  .odds-tab { min-height: 44px; }
+  .col-cta { min-height: 44px; }
 }
 @media (max-width: 480px) {
-  .search-input { font-size: 14px; padding: 14px 16px 14px 44px; }
-  .nav-link { display: none; }
+  .search-input { font-size: 16px; padding: 14px 16px 14px 44px; }
+  .hero h1 { font-size: 24px; }
+  .hero-sub { font-size: 13px; }
+  .cluster { padding: 14px; }
+  .platform-col { padding: 12px; }
+  .col-prob { font-size: 24px; }
 }
 </style>
 </head>
@@ -539,14 +555,14 @@ function renderSearchResults(data) {
   // Sportsbooks section (full width, above prediction markets)
   if (sports.length) {
     gridHtml += `<div style="margin-bottom:24px"><div style="font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#4ade80;margin-bottom:12px">🏆 SPORTSBOOKS — DRAFTKINGS · FANDUEL · BETMGM · BET365 (${sports.length})</div>`;
-    gridHtml += `<div class="cluster-grid" style="grid-template-columns:repeat(auto-fill, minmax(320px, 1fr))">`;
+    gridHtml += `<div class="cluster-grid" style="grid-template-columns:repeat(auto-fill, minmax(min(320px, 100%), 1fr))">`;
     gridHtml += sports.map(g => renderSportCard(g)).join('');
     gridHtml += '</div></div>';
   }
 
   // Prediction markets two-column layout
   if (poly.length || kalshi.length) {
-    gridHtml += '<div class="cluster-grid" style="grid-template-columns:1fr 1fr">';
+    gridHtml += '<div class="cluster-grid cluster-grid-2col">';
     gridHtml += '<div>';
     if (poly.length) {
       gridHtml += `<div style="font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#a78bfa;margin-bottom:10px">🟣 POLYMARKET (${poly.length})</div>`;

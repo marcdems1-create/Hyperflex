@@ -1339,10 +1339,18 @@ footer {
 .testimonial-card::before { content: '\201C'; position: absolute; top: -8px; left: 16px; font-size: 72px; font-family: 'Syne', sans-serif; font-weight: 800; color: rgba(201,146,13,0.09); line-height: 1; pointer-events: none; user-select: none; }
 .testimonial-card:hover { border-color: rgba(201,146,13,0.22); box-shadow: 0 6px 28px rgba(0,0,0,0.4); }
 .testimonial-quote { font-size: 13px; color: #ccc8bc; line-height: 1.7; margin: 0 0 18px; position: relative; z-index: 1; }
+/* ── Quick Preview result grid ── */
+.qp-result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
 /* ── READABILITY & MOBILE POLISH ── */
 @media (max-width: 768px) {
   body { overflow-x: hidden; }
   input, textarea, select { font-size: 16px !important; }
+  .qp-result-grid { grid-template-columns: 1fr; }
+  .battles-section { padding: 60px 16px; }
+  .battles-grid { grid-template-columns: 1fr; }
+  .trending-section { padding: 60px 16px; }
+  .trending-grid { grid-template-columns: 1fr; }
 }
 </style>
 </head>
@@ -1570,7 +1578,7 @@ async function runQuickPreview() {
             <span style="background:#c9920d22;color:#c9920d;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;letter-spacing:.04em;">${platform}</span>
             <span style="color:#7a7870;font-size:13px;">${count} open position${count !== 1 ? 's' : ''} found</span>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="qp-result-grid">
             <div style="background:#141412;border-radius:8px;padding:14px 16px;">
               <div style="color:#7a7870;font-size:11px;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">Open Positions</div>
               <div style="font-family:'Syne',sans-serif;font-size:26px;font-weight:800;color:#ddd8cc;">${count}</div>

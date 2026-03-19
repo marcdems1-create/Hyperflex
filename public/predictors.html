@@ -406,6 +406,8 @@ body::before {
   .hero { padding: 100px 20px 48px; }
   .controls, .grid-wrap { padding-left: 20px; padding-right: 20px; }
   .search-row { flex-direction: column; align-items: stretch; }
+  /* Single column grid on tablets and phones */
+  .predictor-grid { grid-template-columns: 1fr; }
   /* Touch targets */
   .btn-nav { min-height: 44px; display: inline-flex; align-items: center; padding: 10px 16px; }
   .nav-logo { min-height: 44px; }
@@ -417,8 +419,8 @@ body::before {
   .hero { padding: 80px 16px 36px; }
   .controls, .grid-wrap { padding-left: 12px; padding-right: 12px; }
 
-  /* Cards: single column */
-  .predictor-grid { grid-template-columns: 1fr; gap: 10px; }
+  /* Cards: tighten spacing */
+  .predictor-grid { gap: 10px; }
   .predictor-card { padding: 16px; }
 
   /* Sort pills: horizontal scroll, no wrap */
