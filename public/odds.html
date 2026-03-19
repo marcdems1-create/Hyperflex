@@ -209,6 +209,40 @@ body::before {
 /* LOADING */
 .loading { text-align: center; padding: 40px; color: var(--dim); font-family: var(--mono); font-size: 13px; }
 
+/* TOPIC CARDS */
+.topic-section {
+  max-width: 900px; margin: 0 auto 40px; padding: 0 24px;
+  position: relative; z-index: 1;
+}
+.topic-section-label {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase;
+  margin-bottom: 14px;
+}
+.topic-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+@media (max-width: 700px) { .topic-cards { grid-template-columns: 1fr; } }
+.topic-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 12px; padding: 18px 20px; cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.topic-card:hover { border-color: rgba(201,146,13,0.4); box-shadow: 0 0 20px rgba(201,146,13,0.06); }
+.topic-card-header {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
+}
+.topic-card-icon { font-size: 22px; }
+.topic-card-name { font-weight: 700; font-size: 14px; color: var(--text); }
+.topic-card-desc { font-size: 11px; color: var(--dim); margin-top: 2px; }
+.topic-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.topic-chip {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  padding: 5px 10px; border-radius: 20px;
+  border: 1px solid var(--border); color: var(--dim);
+  background: var(--paper); cursor: pointer;
+  transition: all 0.15s; white-space: nowrap;
+}
+.topic-chip:hover { border-color: var(--gold); color: var(--gold); }
+
 /* RESPONSIVE */
 @media (max-width: 768px) {
   .nav { padding: 0 16px; }
@@ -216,6 +250,7 @@ body::before {
   .results { padding: 0 16px 60px; }
   .cluster { padding: 18px; }
   .cluster-grid { grid-template-columns: 1fr; }
+  .topic-section { padding: 0 16px; }
 }
 @media (max-width: 480px) {
   .search-input { font-size: 14px; padding: 14px 16px 14px 44px; }
@@ -250,6 +285,71 @@ body::before {
   <span class="search-icon">🔍</span>
   <input type="text" class="search-input" id="oddsSearch" placeholder="Search markets... Bitcoin, Trump, S&P 500..." autofocus
     oninput="debounceSearch()" onkeydown="if(event.key==='Enter')searchOdds()"/>
+</div>
+
+<!-- Topic quick-access cards -->
+<div class="topic-section" id="topicSection">
+  <div class="topic-section-label">Popular topics</div>
+  <div class="topic-cards">
+
+    <!-- SPORTS -->
+    <div class="topic-card" onclick="quickSearch('NFL')">
+      <div class="topic-card-header">
+        <span class="topic-card-icon">🏈</span>
+        <div>
+          <div class="topic-card-name">Sports</div>
+          <div class="topic-card-desc">NFL, NBA, UFC, fantasy, props</div>
+        </div>
+      </div>
+      <div class="topic-chips">
+        <span class="topic-chip" onclick="event.stopPropagation();quickSearch('NFL')">NFL</span>
+        <span class="topic-chip" onclick="event.stopPropagation();quickSearch('NBA')">NBA</span>
+        <span class="topic-chip" onclick="event.stopPropagation();quickSearch('fantasy football')">Fantasy</span>
+        <span class="topic-chip" onclick="event.stopPropagation();quickSearch('UFC')">UFC</span>
+        <span class="topic-chip" onclick="event.stopPropagation();quickSearch('March Madness')">March Madness</span>
+        <span class="topic-chip" onclick="event.stopPropagation();quickSearch('Super Bowl')">Super Bowl</span>
+      </div>
+    </div>
+
+    <!-- CRYPTO -->
+    <div class="topic-card" onclick="quickSearch('Bitcoin')">
+      <div class="topic-card-header">
+        <span class="topic-card-icon">₿</span>
+        <div>
+          <div class="topic-card-name">Crypto</div>
+          <div class="topic-card-desc">BTC, ETH, altcoins, Fed rate</div>
+        </div>
+      </div>
+      <div class="topic-chips">
+        <span class="topic-chip" onclick="event.stopPropagation();quickSearch('Bitcoin')">Bitcoin</span>
+        <span class="topic-chip" onclick="event.stopPropagation();quickSearch('Ethereum')">Ethereum</span>
+        <span class="topic-chip" onclick="event.stopPropagation();quickSearch('100k')">$100K BTC</span>
+        <span class="topic-chip" onclick="event.stopPropagation();quickSearch('Fed rate')">Fed Rate</span>
+        <span class="topic-chip" onclick="event.stopPropagation();quickSearch('S&P 500')">S&amp;P 500</span>
+        <span class="topic-chip" onclick="event.stopPropagation();quickSearch('crypto ETF')">Crypto ETF</span>
+      </div>
+    </div>
+
+    <!-- POLITICS -->
+    <div class="topic-card" onclick="quickSearch('Trump')">
+      <div class="topic-card-header">
+        <span class="topic-card-icon">🏛️</span>
+        <div>
+          <div class="topic-card-name">Politics</div>
+          <div class="topic-card-desc">Elections, policy, world events</div>
+        </div>
+      </div>
+      <div class="topic-chips">
+        <span class="topic-chip" onclick="event.stopPropagation();quickSearch('Trump')">Trump</span>
+        <span class="topic-chip" onclick="event.stopPropagation();quickSearch('election')">Election</span>
+        <span class="topic-chip" onclick="event.stopPropagation();quickSearch('recession')">Recession</span>
+        <span class="topic-chip" onclick="event.stopPropagation();quickSearch('tariff')">Tariffs</span>
+        <span class="topic-chip" onclick="event.stopPropagation();quickSearch('Ukraine')">Ukraine</span>
+        <span class="topic-chip" onclick="event.stopPropagation();quickSearch('AI regulation')">AI Regulation</span>
+      </div>
+    </div>
+
+  </div>
 </div>
 
 <!-- Filter tabs -->
@@ -290,7 +390,13 @@ function setOddsFilter(f) {
 async function searchOdds() {
   const q = document.getElementById('oddsSearch').value.trim();
   const el = document.getElementById('results');
-  if (!q || q.length < 2) { el.innerHTML = ''; document.getElementById('oddsTabs').style.display = 'none'; return; }
+  if (!q || q.length < 2) {
+    el.innerHTML = '';
+    document.getElementById('oddsTabs').style.display = 'none';
+    document.getElementById('topicSection').style.display = 'block';
+    return;
+  }
+  document.getElementById('topicSection').style.display = 'none';
 
   el.innerHTML = '<div class="loading">Searching across platforms...</div>';
 
@@ -399,10 +505,18 @@ async function loadSmartMoney() {
   } catch (e) { /* silent */ }
 }
 
+// Quick search from topic card chips
+function quickSearch(term) {
+  document.getElementById('oddsSearch').value = term;
+  document.getElementById('topicSection').style.display = 'none';
+  searchOdds();
+}
+
 // Auto-search from URL param + load smart money
 const urlQ = new URLSearchParams(location.search).get('q');
 if (urlQ) {
   document.getElementById('oddsSearch').value = urlQ;
+  document.getElementById('topicSection').style.display = 'none';
   searchOdds();
 }
 loadSmartMoney();
