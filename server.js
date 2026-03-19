@@ -9357,7 +9357,7 @@ app.get('/:slug', async (req, res, next) => {
 function requireAdmin(req, res, next) {
   const secret = process.env.ADMIN_SECRET;
   if (!secret) return res.status(503).json({ error: 'Admin not configured (set ADMIN_SECRET)' });
-  const provided = (req.headers.authorization || '').replace('Bearer ', '').trim();
+  const provided = req.query.secret || (req.headers.authorization || '').replace('Bearer ', '').trim() || (req.body && req.body.secret) || '';
   if (provided !== secret) return res.status(403).json({ error: 'Forbidden' });
   next();
 }
