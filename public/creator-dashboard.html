@@ -472,28 +472,6 @@ body.plan-premium .main {
   color: #141412;
 }
 .view-toggle-btn:hover:not(.active) { color: var(--text); }
-.community-url-pill {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--paper);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 6px 12px;
-  cursor: pointer;
-  transition: border-color .15s, background .15s;
-  max-width: 260px;
-}
-.community-url-pill:hover { border-color: var(--gold); background: var(--cream); }
-.community-url-text {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--dim);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.community-url-copy { font-size: 13px; flex-shrink: 0; }
 .btn-primary {
   font-family: var(--sans);
   font-weight: 700;
@@ -2638,7 +2616,6 @@ body.nav-open .sidebar-backdrop {
   .main { margin-left: 0; }
   .topbar { padding: 12px 18px; gap: 10px; }
   .topbar-title { font-size: 17px; }
-  .community-url-pill { display: none; }
   .content { padding: 22px; }
 
   /* Stats 2×2 */
@@ -2897,10 +2874,6 @@ body.nav-open .sidebar-backdrop {
       </button>
       <div class="topbar-title" id="topbarTitle">Overview</div>
       <div class="topbar-actions">
-        <div class="community-url-pill" onclick="copyLink()" title="Click to copy">
-          <span class="community-url-text" id="topbarCommunityUrl">hyperflex.network/…</span>
-          <span class="community-url-copy">📋</span>
-        </div>
         <div class="notif-wrap">
           <button class="notif-bell" onclick="toggleNotifDropdown(event)" title="Notifications">
             🔔 <span class="notif-badge" id="notifBadge" style="display:none">0</span>
@@ -2915,11 +2888,10 @@ body.nav-open .sidebar-backdrop {
         </div>
         <div class="view-toggle" title="Switch views">
           <span class="view-toggle-btn active">🛠 Creator</span>
-          <a href="#" id="toggleToMemberBtn" class="view-toggle-btn" onclick="goToMemberView(event)">👤 Member Dashboard</a>
+          <a href="#" id="toggleToMemberBtn" class="view-toggle-btn" onclick="goToMemberView(event)">👤 Member</a>
         </div>
-        <a id="viewCommunityBtn" href="#" target="_blank" class="btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:5px;font-size:13px">👁 <span class="scanner-label">View Community</span></a>
-        <a id="viewProfileBtn" href="#" target="_blank" class="btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:5px;font-size:13px">👤 <span class="scanner-label">Profile</span></a>
-        <button class="btn-secondary" onclick="shareCommunityPage(this)" style="font-size:13px;display:inline-flex;align-items:center;gap:5px">↗ <span class="scanner-label">Share</span></button>
+        <a href="/explore" class="btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:5px;font-size:13px">⚡ <span class="scanner-label">Explore</span></a>
+        <a id="viewCommunityBtn" href="#" target="_blank" class="btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:5px;font-size:13px">👁 <span class="scanner-label">Community</span></a>
         <button class="btn-secondary" id="aiScannerTopbarBtn" onclick="openYoutubeModal()">🤖<span class="scanner-label"> AI Scanner</span></button>
         <button class="btn-primary" onclick="openCreateModal()">+ New Market</button>
       </div>
