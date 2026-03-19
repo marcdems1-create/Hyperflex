@@ -221,8 +221,10 @@
   <div class="nav-links">
     <a href="/">Home</a>
     <a href="/explore">Explore</a>
-    <a href="/creator/login">Log in</a>
-    <a class="nav-cta" href="/creator/signup">Start free →</a>
+    <a href="/odds">Odds</a>
+    <a id="navDashLink" href="/creator/dashboard" style="display:none;color:#c9920d">Dashboard</a>
+    <a href="/creator/login" id="navLoginLink">Log in</a>
+    <a class="nav-cta" href="/creator/signup" id="navSignupLink">Start free →</a>
   </div>
 </nav>
 
@@ -288,6 +290,12 @@
 </footer>
 
 <script>
+// Show Dashboard link if logged in
+if (localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token')) {
+  const dl = document.getElementById('navDashLink'); if (dl) dl.style.display = '';
+  const ll = document.getElementById('navLoginLink'); if (ll) ll.style.display = 'none';
+  const sl = document.getElementById('navSignupLink'); if (sl) sl.style.display = 'none';
+}
 // Fetch templates from API then render
 const NICHE_LABELS = {
   sports: 'Sports & Betting', crypto: 'Crypto', podcast: 'Podcast', finance: 'Finance',

@@ -258,6 +258,7 @@
   <a href="/" class="nav-logo">HYPERFLEX</a>
   <div class="nav-actions">
     <a href="/explore" class="btn btn-ghost">Explore</a>
+    <a id="navDashLink" href="/creator/dashboard" class="btn btn-ghost" style="display:none;color:#c9920d;border-color:rgba(201,146,13,0.3)">Dashboard</a>
     <a id="navJoinBtn" href="#join" class="btn btn-gold">Join Community →</a>
   </div>
 </nav>
@@ -354,6 +355,10 @@
 </div>
 
 <script>
+// Show Dashboard link if logged in
+if (localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token')) {
+  const dl = document.getElementById('navDashLink'); if (dl) dl.style.display = '';
+}
 const slug = location.pathname.replace(/^\/u\//, '').replace(/\/$/, '');
 if (!slug) location.href = '/explore';
 

@@ -271,7 +271,8 @@ body::before {
   <div class="nav-right">
     <a href="/explore" class="nav-link">Explore</a>
     <a href="/predictors" class="nav-link">Predictors</a>
-    <a href="/creator/signup" class="btn-nav">Get started free</a>
+    <a id="navDashLink" href="/creator/dashboard" class="nav-link" style="display:none;color:#c9920d">Dashboard</a>
+    <a href="/creator/signup" class="btn-nav" id="navSignupLink">Get started free</a>
   </div>
 </nav>
 
@@ -370,6 +371,11 @@ body::before {
 </div>
 
 <script>
+// Show Dashboard link if logged in
+if (localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token')) {
+  const dl = document.getElementById('navDashLink'); if (dl) dl.style.display = '';
+  const sl = document.getElementById('navSignupLink'); if (sl) sl.style.display = 'none';
+}
 let _searchTimeout = null;
 let _oddsFilter = 'all';
 
@@ -455,17 +461,22 @@ function renderSearchResults(data) {
     const color = platform === 'polymarket' ? '#a78bfa' : '#fbbf24';
     const label = platform === 'polymarket' ? '🟣 Polymarket' : '🟡 Kalshi';
     const exp = fmtDate(m.close_date || m.end_date);
+    const yesPct = m.yes_pct != null ? m.yes_pct : null;
+    const noPct = yesPct != null ? (100 - yesPct) : null;
     const bestBadge = isBest ? '<span style="font-family:var(--mono);font-size:9px;padding:2px 8px;border-radius:8px;background:rgba(201,146,13,0.15);color:var(--gold);border:1px solid rgba(201,146,13,0.3);font-weight:700">★ BEST ODDS</span>' : '';
-    return `<a href="${escHtml(m.url)}" target="_blank" rel="noopener" class="platform-col" style="text-decoration:none;display:block;transition:border-color .15s" onmouseover="this.style.borderColor='${color}44'" onmouseout="this.style.borderColor='var(--border)'">
+    return `<div class="platform-col${isBest ? ' best' : ''}" style="transition:border-color .15s" onmouseover="this.style.borderColor='${color}44'" onmouseout="this.style.borderColor='${isBest ? 'rgba(201,146,13,0.5)' : 'var(--border)'}'" >
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
         <span class="platform-badge ${platform}">${label}</span>
         ${exp ? `<span style="font-family:var(--mono);font-size:10px;color:var(--dim)">Exp ${exp}</span>` : ''}
         ${bestBadge}
       </div>
       <div class="col-title">${escHtml(m.question || m.title)}</div>
-      <div class="col-prob" style="color:${color}">${m.yes_pct != null ? m.yes_pct + '%' : '—'}</div>
-      <div class="col-side">YES probability</div>
-    </a>`;
+      <div style="display:flex;gap:12px;margin-bottom:8px">
+        <div><div class="col-prob" style="color:#22c55e">${yesPct != null ? yesPct + '%' : '—'}</div><div class="col-side">YES</div></div>
+        <div><div class="col-prob" style="color:#ef4444">${noPct != null ? noPct + '%' : '—'}</div><div class="col-side">NO</div></div>
+      </div>
+      <a href="${escHtml(m.url)}" target="_blank" rel="noopener" class="col-cta">${isBest ? '★ Best odds — Bet →' : 'Bet →'}</a>
+    </div>`;
   };
 
   let gridHtml = '<div class="cluster-grid" style="grid-template-columns:1fr 1fr">';

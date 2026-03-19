@@ -459,11 +459,13 @@ body::before {
   <div class="nav-links">
     <a href="/predictors" class="nav-link active">Predictors</a>
     <a href="/explore" class="nav-link">Live</a>
+    <a href="/odds" class="nav-link">Odds</a>
     <a href="/templates" class="nav-link">Templates</a>
   </div>
   <div class="nav-actions">
-    <a href="/creator/login" class="btn-nav btn-nav-ghost">Log in</a>
-    <a href="/creator/signup" class="btn-nav btn-nav-primary">Get started →</a>
+    <a id="navDashLink" href="/creator/dashboard" class="btn-nav btn-nav-ghost" style="display:none;color:#c9920d;border-color:rgba(201,146,13,0.3)">Dashboard</a>
+    <a href="/creator/login" class="btn-nav btn-nav-ghost" id="navLoginLink">Log in</a>
+    <a href="/creator/signup" class="btn-nav btn-nav-primary" id="navSignupLink">Get started →</a>
   </div>
 </nav>
 
@@ -504,6 +506,12 @@ body::before {
 </div>
 
 <script>
+// Show Dashboard link if logged in
+if (localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token')) {
+  const dl = document.getElementById('navDashLink'); if (dl) dl.style.display = '';
+  const ll = document.getElementById('navLoginLink'); if (ll) ll.style.display = 'none';
+  const sl = document.getElementById('navSignupLink'); if (sl) sl.style.display = 'none';
+}
 let allPredictors = [];
 let currentSort = 'win_rate';
 let currentFilter = 'all';
