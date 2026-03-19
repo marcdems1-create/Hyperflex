@@ -11996,12 +11996,39 @@ app.get('/api/markets/search', async (req, res) => {
       const tid = setTimeout(() => ctrl.abort(), ms);
       return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(tid));
     };
-    // Build search keywords — split multi-word queries for fuzzy matching
+    // Build search keywords with synonym expansion for better matching
+    const synonyms = {
+      gold: ['gold', 'xau', 'gold price', 'precious metal'],
+      bitcoin: ['bitcoin', 'btc', 'crypto'],
+      ethereum: ['ethereum', 'eth', 'ether'],
+      trump: ['trump', 'donald trump', 'president trump'],
+      biden: ['biden', 'joe biden'],
+      oil: ['oil', 'crude', 'wti', 'brent'],
+      stocks: ['stocks', 'stock market', 's&p', 'sp500', 'nasdaq', 'dow'],
+      election: ['election', 'vote', 'presidential', 'midterm'],
+      fed: ['fed', 'federal reserve', 'interest rate', 'rate cut'],
+      ai: ['ai', 'artificial intelligence', 'openai', 'chatgpt'],
+      war: ['war', 'conflict', 'invasion', 'military'],
+      china: ['china', 'chinese', 'xi jinping', 'beijing'],
+      russia: ['russia', 'russian', 'putin', 'ukraine'],
+    };
     const qWords = q.split(/\s+/).filter(w => w.length >= 2);
+    // Expand query with synonyms
+    const expandedTerms = new Set([q, ...qWords]);
+    for (const [key, syns] of Object.entries(synonyms)) {
+      if (q.includes(key) || qWords.some(w => w === key)) {
+        syns.forEach(s => expandedTerms.add(s));
+      }
+    }
     const matchesQuery = (text) => {
       const t = (text || '').toLowerCase();
-      // Match if ALL words appear in the text, OR the full query appears
-      return t.includes(q) || qWords.every(w => t.includes(w));
+      // Match if full query appears, or ALL query words appear, or any synonym matches
+      if (t.includes(q)) return true;
+      if (qWords.length > 1 && qWords.every(w => t.includes(w))) return true;
+      for (const term of expandedTerms) {
+        if (term.length >= 3 && t.includes(term)) return true;
+      }
+      return false;
     };
 
     // --- Sportsbook odds via The Odds API ---
@@ -12029,8 +12056,8 @@ app.get('/api/markets/search', async (req, res) => {
     const [polyRes, kalshiRes, ...oddsResults] = await Promise.allSettled([
       // Polymarket — use their search param (works well for crypto/politics)
       fetchWithTimeout(`https://gamma-api.polymarket.com/markets?closed=false&limit=40&search=${encodeURIComponent(q)}&order=volume&ascending=false`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }),
-      // Kalshi — search their events endpoint with cursor-based text search
-      fetchWithTimeout(`https://api.elections.kalshi.com/trade-api/v2/events?limit=100&status=open&with_nested_markets=true`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }),
+      // Kalshi — no text search API, fetch max events and filter locally
+      fetchWithTimeout(`https://api.elections.kalshi.com/trade-api/v2/events?limit=200&status=open&with_nested_markets=true`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }),
       // The Odds API — fetch odds for matched sports (or top sports if no match)
       ...(ODDS_API_KEY ? (matchedSports.size > 0
         ? [...matchedSports].slice(0, 2).map(sport =>
