@@ -390,6 +390,7 @@ body::before {
 // Show Dashboard link if logged in
 if (localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token')) {
   const dl = document.getElementById('navDashLink'); if (dl) dl.style.display = '';
+  const ll = document.getElementById('navLoginLink'); if (ll) ll.style.display = 'none';
   const sl = document.getElementById('navSignupLink'); if (sl) sl.style.display = 'none';
 }
 let _searchTimeout = null;

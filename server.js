@@ -11991,9 +11991,14 @@ app.get('/api/markets/search', async (req, res) => {
   const cached = _mktSearchCache.get(cacheKey);
   if (cached && Date.now() - cached.ts < 3 * 60 * 1000) return res.json(cached.data);
   try {
+    const fetchWithTimeout = (url, opts, ms = 8000) => {
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), ms);
+      return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(tid));
+    };
     const [polyRes, kalshiRes] = await Promise.allSettled([
-      fetch(`https://gamma-api.polymarket.com/markets?closed=false&limit=20&search=${encodeURIComponent(q)}`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }),
-      fetch(`https://api.elections.kalshi.com/trade-api/v2/markets?limit=20&status=open&series_ticker=${encodeURIComponent(q.toUpperCase())}`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } })
+      fetchWithTimeout(`https://gamma-api.polymarket.com/markets?closed=false&limit=20&search=${encodeURIComponent(q)}`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }),
+      fetchWithTimeout(`https://api.elections.kalshi.com/trade-api/v2/markets?limit=20&status=open&series_ticker=${encodeURIComponent(q.toUpperCase())}`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } })
     ]);
     let polyMarkets = [];
     if (polyRes.status === 'fulfilled' && polyRes.value.ok) {
@@ -12018,37 +12023,41 @@ app.get('/api/markets/search', async (req, res) => {
         volume: m.volume || 0
       })).slice(0, 15);
     }
-    // Smart money: find cached_positions from sharp users matching this query
+    // Smart money: find cached_positions from sharp users (non-blocking, 3s timeout)
     let smart_money = null;
     try {
-      const { data: matchPos } = await supabase
-        .from('cached_positions')
-        .select('user_id, side')
-        .ilike('market_title', `%${q}%`);
-      if (matchPos?.length) {
+      const smTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000));
+      const smQuery = (async () => {
+        const { data: matchPos } = await supabase
+          .from('cached_positions')
+          .select('user_id, side')
+          .ilike('market_title', `%${q}%`)
+          .limit(200);
+        if (!matchPos?.length) return null;
         const userIds = [...new Set(matchPos.map(p => p.user_id))];
-        // Compute quick win rates from HFX positions table
         const { data: settled } = await supabase
           .from('positions')
           .select('user_id, won')
           .in('user_id', userIds)
-          .not('won', 'is', null);
+          .not('won', 'is', null)
+          .limit(1000);
         const stats = {};
         (settled || []).forEach(p => {
           if (!stats[p.user_id]) stats[p.user_id] = { w: 0, t: 0 };
           stats[p.user_id].t++;
           if (p.won) stats[p.user_id].w++;
         });
-        // Sharp = 10+ settled, 65%+ win rate
         const sharpIds = new Set(Object.entries(stats)
           .filter(([, s]) => s.t >= 10 && (s.w / s.t) >= 0.65)
           .map(([id]) => id));
         const sharpPos = matchPos.filter(p => sharpIds.has(p.user_id));
         if (sharpPos.length) {
           const yesCount = sharpPos.filter(p => p.side === 'YES').length;
-          smart_money = { yes_pct: Math.round((yesCount / sharpPos.length) * 100), count: sharpPos.length };
+          return { yes_pct: Math.round((yesCount / sharpPos.length) * 100), count: sharpPos.length };
         }
-      }
+        return null;
+      })();
+      smart_money = await Promise.race([smQuery, smTimeout]).catch(() => null);
     } catch (e) { console.warn('[smart-money]', e.message); }
 
     const data = { polymarket: polyMarkets, kalshi: kalshiMarkets, smart_money };
