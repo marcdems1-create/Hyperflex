@@ -11810,6 +11810,7 @@ app.get('/api/polymarket/positions/:address', async (req, res) => {
     const upstream = await fetch(`https://data-api.polymarket.com/positions?user=${address}&limit=50&sortBy=CURRENT&winning=false`, {
       headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
     });
+    if (upstream.status === 400) return res.status(400).json({ error: 'Polymarket rejected this address. Double-check your wallet address on polymarket.com' });
     if (!upstream.ok) throw new Error('Polymarket API ' + upstream.status);
     const raw = await upstream.json();
     const positions = (Array.isArray(raw) ? raw : []).map(p => ({
@@ -11841,7 +11842,11 @@ app.get('/api/manifold/positions/:username', async (req, res) => {
   if (cached && Date.now() - cached.ts < 5 * 60 * 1000) return res.json(cached.data);
   try {
     const betsRes = await fetch(`https://api.manifold.markets/v0/bets?username=${encodeURIComponent(username)}&limit=200`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } });
-    if (betsRes.status === 404) return res.status(404).json({ error: 'Manifold user not found' });
+    if (betsRes.status === 404 || betsRes.status === 400) {
+      const body = await betsRes.json().catch(() => ({}));
+      if ((body.message || '').toLowerCase().includes('no user found') || betsRes.status === 404)
+        return res.status(404).json({ error: 'Manifold user not found. Check your username at manifold.markets' });
+    }
     if (!betsRes.ok) throw new Error('Manifold bets API ' + betsRes.status);
     const bets = await betsRes.json();
     const contractMap = {};

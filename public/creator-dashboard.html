@@ -11276,8 +11276,12 @@ async function saveManifoldUsername() {
   if (!username) return showToast('Enter your Manifold username', 'error');
   if (!/^[a-zA-Z0-9_-]{1,50}$/.test(username)) return showToast('Invalid username format', 'error');
   const btn = document.getElementById('manifoldConnectBtn');
-  btn.disabled = true; btn.textContent = 'Connecting…';
+  btn.disabled = true; btn.textContent = 'Verifying…';
   try {
+    // Verify username exists on Manifold first
+    const check = await fetch(`/api/manifold/positions/${encodeURIComponent(username)}`);
+    if (check.status === 404) { showToast('Username not found on Manifold. Check your username at manifold.markets', 'error'); btn.disabled = false; btn.textContent = 'Connect Manifold →'; return; }
+    btn.textContent = 'Connecting…';
     const token = localStorage.getItem('hf_token');
     const r = await fetch('/api/user/wallets', {
       method: 'PUT',
@@ -11411,8 +11415,12 @@ async function connectPolymarket() {
   if (!address) return showToast('Enter your Polygon wallet address', 'error');
   if (!/^0x[a-fA-F0-9]{40}$/.test(address)) return showToast('Invalid wallet address format (must start with 0x)', 'error');
   const btn = document.getElementById('polyConnectBtn');
-  btn.disabled = true; btn.textContent = 'Connecting…';
+  btn.disabled = true; btn.textContent = 'Verifying…';
   try {
+    // Verify address works on Polymarket first
+    const check = await fetch(`/api/polymarket/positions/${encodeURIComponent(address)}`);
+    if (check.status === 400) { showToast('Polymarket rejected this address. Double-check your wallet address on polymarket.com', 'error'); btn.disabled = false; btn.textContent = 'Connect Polymarket →'; return; }
+    btn.textContent = 'Connecting…';
     const token = localStorage.getItem('hf_token');
     const r = await fetch('/api/user/wallets', {
       method: 'PUT',
