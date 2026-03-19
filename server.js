@@ -11818,12 +11818,14 @@ app.get('/api/polymarket/positions/:address', async (req, res) => {
       question: p.title || p.question || 'Unknown market',
       side: p.outcome || 'YES',
       shares: parseFloat(p.size) || 0,
-      current_price: parseFloat(p.currentPrice) || 0,
+      current_price: parseFloat(p.curPrice) || 0,
       cash_value: parseFloat(p.currentValue) || 0,
       cost_basis: parseFloat(p.initialValue) || 0,
       pnl: parseFloat(p.cashPnl) || 0,
       pnl_pct: parseFloat(p.percentPnl) || 0,
-      market_url: `https://polymarket.com/event/${p.conditionId}`,
+      market_url: p.slug ? `https://polymarket.com/event/${p.eventSlug || p.slug}` : `https://polymarket.com`,
+      icon: p.icon || null,
+      end_date: p.endDate || null,
       platform: 'polymarket'
     }));
     const data = { positions, address, fetched_at: new Date().toISOString() };

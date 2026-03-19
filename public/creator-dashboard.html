@@ -11482,7 +11482,7 @@ async function loadPolymarketPositions(forceRefresh) {
     el.innerHTML = positions.map(p => {
       const pnlColor = (p.pnl || 0) >= 0 ? '#2d9b5f' : '#c0392b';
       const sideColor = p.side === 'YES' ? '#2d9b5f' : '#c0392b';
-      const pricePct = Math.round((p.probability || 0) * 100);
+      const pricePct = Math.round((p.current_price || 0) * 100);
       const posJson = JSON.stringify({ question: p.question, side: p.side, platform: 'polymarket', probability: p.probability, pnl: p.pnl || null, shares: p.shares, market_url: p.market_url }).replace(/'/g, '&#39;');
       return `
         <div style="background:var(--ink);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:10px;transition:border-color 0.15s"
