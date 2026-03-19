@@ -12054,8 +12054,8 @@ app.get('/api/markets/search', async (req, res) => {
     }
 
     const [polyRes, kalshiRes, ...oddsResults] = await Promise.allSettled([
-      // Polymarket — use their search param (works well for crypto/politics)
-      fetchWithTimeout(`https://gamma-api.polymarket.com/markets?closed=false&limit=40&search=${encodeURIComponent(q)}&order=volume&ascending=false`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }),
+      // Polymarket — use EVENTS endpoint (markets endpoint search is broken, returns random results)
+      fetchWithTimeout(`https://gamma-api.polymarket.com/events?closed=false&limit=50&order=liquidity&ascending=false`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }),
       // Kalshi — no text search API, fetch max events and filter locally
       fetchWithTimeout(`https://api.elections.kalshi.com/trade-api/v2/events?limit=200&status=open&with_nested_markets=true`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }),
       // The Odds API — fetch odds for matched sports (or top sports if no match)
@@ -12067,21 +12067,34 @@ app.get('/api/markets/search', async (req, res) => {
       ) : [])
     ]);
 
-    // --- Parse Polymarket ---
+    // --- Parse Polymarket (events endpoint returns events with nested markets) ---
     let polyMarkets = [];
     if (polyRes.status === 'fulfilled' && polyRes.value.ok) {
       const raw = await polyRes.value.json();
-      polyMarkets = (Array.isArray(raw) ? raw : [])
-        .filter(m => !m.closed && matchesQuery(m.question || m.title || ''))
-        .map(m => ({
-          question: m.question || m.title || '',
-          yes_pct: m.outcomePrices ? Math.round(JSON.parse(m.outcomePrices)[0] * 100) : null,
-          close_date: m.endDate || m.endDateIso || null,
-          url: m.slug ? `https://polymarket.com/event/${m.eventSlug || m.slug}` : 'https://polymarket.com',
-          volume: parseFloat(m.volume) || 0
-        }))
-        .sort((a, b) => b.volume - a.volume)
-        .slice(0, 15);
+      const events = Array.isArray(raw) ? raw : [];
+      for (const evt of events) {
+        const evtTitle = evt.title || '';
+        const evtSlug = evt.slug || '';
+        const evtDesc = evt.description || '';
+        const evtMatch = matchesQuery(evtTitle) || matchesQuery(evtDesc);
+        const nestedMarkets = evt.markets || [];
+        for (const m of nestedMarkets) {
+          if (m.closed) continue;
+          const mTitle = m.question || m.groupItemTitle || m.title || evtTitle;
+          if (!evtMatch && !matchesQuery(mTitle)) continue;
+          let yesPct = null;
+          try { if (m.outcomePrices) yesPct = Math.round(JSON.parse(m.outcomePrices)[0] * 100); } catch {}
+          polyMarkets.push({
+            question: mTitle,
+            yes_pct: yesPct,
+            close_date: m.endDate || m.endDateIso || evt.endDate || null,
+            url: evtSlug ? `https://polymarket.com/event/${evtSlug}` : 'https://polymarket.com',
+            volume: parseFloat(m.volume || m.volumeNum) || 0
+          });
+        }
+      }
+      polyMarkets.sort((a, b) => b.volume - a.volume);
+      polyMarkets = polyMarkets.slice(0, 15);
     }
 
     // --- Parse Kalshi ---
