@@ -182,7 +182,14 @@ app.use(async (req, res, next) => {
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY
+  process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY,
+  { db: { schema: 'public' }, global: { fetch: (...args) => {
+    // Add 15s timeout to all Supabase fetches to prevent infinite hangs
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const [url, opts = {}] = args;
+    return fetch(url, { ...opts, signal: controller.signal }).finally(() => clearTimeout(timeoutId));
+  }}}
 );
 
 const anthropic = new Anthropic({
