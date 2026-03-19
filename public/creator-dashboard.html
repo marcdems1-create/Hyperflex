@@ -417,6 +417,15 @@ body.plan-premium .main {
   letter-spacing: -0.01em;
 }
 .topbar-actions { display: flex; gap: 10px; align-items: center; }
+.btn-explore {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--mono); font-size: 12px; font-weight: 700;
+  padding: 8px 16px; border-radius: 8px;
+  background: rgba(201,146,13,0.12); border: 1px solid rgba(201,146,13,0.4);
+  color: var(--gold); cursor: pointer; transition: all 0.15s;
+  letter-spacing: 0.03em; white-space: nowrap;
+}
+.btn-explore:hover { background: rgba(201,146,13,0.22); border-color: var(--gold); }
 
 /* ── Notification bell ── */
 .notif-wrap { position:relative;flex-shrink:0 }
@@ -2646,10 +2655,9 @@ body.nav-open .sidebar-backdrop {
   .topbar { padding: 10px 14px; gap: 8px; }
   .topbar-title { font-size: 15px; letter-spacing: 0; }
 
-  /* Topbar: hamburger + title + scanner icon + new market */
+  /* Topbar: hamburger + title + actions */
   .topbar-actions .btn-secondary { display: none; }
-  #aiScannerTopbarBtn { display: inline-flex; align-items: center; padding: 9px 11px; }
-  #aiScannerTopbarBtn .scanner-label { display: none; }
+  .topbar-actions .btn-explore { display: none; }
   .topbar-actions .btn-primary { font-size: 13px; padding: 9px 14px; white-space: nowrap; }
 
   /* Stats */
@@ -2852,6 +2860,11 @@ body.nav-open .sidebar-backdrop {
       </div>
     </nav>
 
+      <div class="nav-section-label" style="margin-top:8px">Account</div>
+      <a class="nav-item" onclick="showTab('account')">
+        <span class="nav-icon">👤</span><span class="nav-label">My Account</span>
+      </a>
+
     <div class="sidebar-footer">
       <button class="btn-upgrade" onclick="showUpgrade()">⚡ Upgrade to Pro</button>
       <div id="trial-btn-wrap" style="display:none;margin-bottom:8px;">
@@ -2886,13 +2899,8 @@ body.nav-open .sidebar-backdrop {
             <div class="notif-list" id="notifList"><div class="notif-empty">All caught up ✓</div></div>
           </div>
         </div>
-        <div class="view-toggle" title="Switch views">
-          <span class="view-toggle-btn active">🛠 Creator</span>
-          <a href="#" id="toggleToMemberBtn" class="view-toggle-btn" onclick="goToMemberView(event)">👤 Member</a>
-        </div>
-        <a href="/explore" class="btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:5px;font-size:13px">⚡ <span class="scanner-label">Explore</span></a>
-        <a id="viewCommunityBtn" href="#" target="_blank" class="btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:5px;font-size:13px">👁 <span class="scanner-label">Community</span></a>
-        <button class="btn-secondary" id="aiScannerTopbarBtn" onclick="openYoutubeModal()">🤖<span class="scanner-label"> AI Scanner</span></button>
+        <a href="/explore" class="btn-explore" style="text-decoration:none">⚡ Explore</a>
+        <a id="viewCommunityBtn" href="#" target="_blank" class="btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:5px;font-size:13px">👁 Community</a>
         <button class="btn-primary" onclick="openCreateModal()">+ New Market</button>
       </div>
     </div>
@@ -3130,7 +3138,10 @@ body.nav-open .sidebar-backdrop {
               <button class="mkt-pill" onclick="filterMarkets('expired')" id="mktPillExpired">Expired <span class="mkt-pill-count" id="mktCountExpired">0</span></button>
               <button class="mkt-pill" onclick="filterMarkets('archived')" id="mktPillArchived">Archived <span class="mkt-pill-count" id="mktCountArchived">0</span></button>
             </div>
-            <button class="btn-primary" id="newMarketBtn" onclick="openCreateModal()" style="font-size:13px">+ New Market</button>
+            <div style="display:flex;gap:8px;align-items:center">
+              <button class="btn-secondary" onclick="openYoutubeModal()" style="font-size:13px;display:inline-flex;align-items:center;gap:5px">🤖 AI Scanner</button>
+              <button class="btn-primary" id="newMarketBtn" onclick="openCreateModal()" style="font-size:13px">+ New Market</button>
+            </div>
           </div>
           <div class="markets-table">
             <div class="table-header">
@@ -4753,6 +4764,55 @@ body.nav-open .sidebar-backdrop {
         </div>
       </div><!-- /tab-portfolio -->
 
+      <!-- ACCOUNT TAB -->
+      <div id="tab-account" style="display:none">
+        <div class="section">
+          <div class="markets-table" style="padding:28px;max-width:560px">
+            <h2 style="font-size:18px;font-weight:800;margin-bottom:6px">My Account</h2>
+            <p style="font-size:13px;color:var(--dim);margin-bottom:28px">Switch between your creator and member views, and access your public profiles.</p>
+
+            <!-- Creator / Member toggle -->
+            <div style="margin-bottom:24px">
+              <div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:10px">Current View</div>
+              <div style="display:flex;gap:10px;flex-wrap:wrap">
+                <span style="display:inline-flex;align-items:center;gap:7px;background:rgba(201,146,13,0.12);border:1px solid rgba(201,146,13,0.4);color:var(--gold);padding:10px 18px;border-radius:8px;font-weight:700;font-size:13px">🛠 Creator Dashboard <span style="font-size:10px;opacity:0.7">(current)</span></span>
+                <a href="#" id="accountMemberDashBtn" onclick="goToMemberView(event)" style="display:inline-flex;align-items:center;gap:7px;background:var(--paper);border:1px solid var(--border);color:var(--text);padding:10px 18px;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;transition:all .15s" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">👤 Member Dashboard →</a>
+              </div>
+            </div>
+
+            <!-- Profile links -->
+            <div style="margin-bottom:24px">
+              <div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:10px">Public Profiles</div>
+              <div style="display:flex;flex-direction:column;gap:10px">
+                <a id="accountCommunityLink" href="#" target="_blank" style="display:flex;align-items:center;justify-content:space-between;background:var(--paper);border:1px solid var(--border);padding:12px 16px;border-radius:10px;text-decoration:none;transition:border-color .15s" onmouseover="this.style.borderColor='rgba(201,146,13,0.4)'" onmouseout="this.style.borderColor='var(--border)'">
+                  <div>
+                    <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px">👁 Community Page</div>
+                    <div style="font-size:11px;color:var(--dim);font-family:var(--mono)" id="accountCommunityUrl">hyperflex.network/…</div>
+                  </div>
+                  <span style="color:var(--dim);font-size:16px">↗</span>
+                </a>
+                <a id="accountProfileLink" href="#" target="_blank" style="display:flex;align-items:center;justify-content:space-between;background:var(--paper);border:1px solid var(--border);padding:12px 16px;border-radius:10px;text-decoration:none;transition:border-color .15s" onmouseover="this.style.borderColor='rgba(201,146,13,0.4)'" onmouseout="this.style.borderColor='var(--border)'">
+                  <div>
+                    <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px">👤 Creator Profile</div>
+                    <div style="font-size:11px;color:var(--dim);font-family:var(--mono)" id="accountProfileUrl">hyperflex.network/u/…</div>
+                  </div>
+                  <span style="color:var(--dim);font-size:16px">↗</span>
+                </a>
+              </div>
+            </div>
+
+            <!-- Plan -->
+            <div>
+              <div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:10px">Plan</div>
+              <div style="display:flex;align-items:center;gap:12px">
+                <div class="plan-pill free" id="accountPlanPill" onclick="handlePlanPillClick()" style="cursor:pointer">Free</div>
+                <button onclick="handlePlanPillClick()" style="background:var(--gold);color:var(--ink);border:none;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">⚡ Upgrade to Pro</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div><!-- /tab-account -->
+
       <!-- Settings tab: add Delete Account section -->
     </div><!-- /content -->
   </main>
@@ -6354,7 +6414,7 @@ function ensureMoreExpanded(tab) {
 // Tab switching
 function showTab(tab) {
   ensureMoreExpanded(tab);
-  ['overview','markets','resolve','members','leaderboard','share','rewards','seasons','settings','analytics','economy','branding','flexbot','ideas','portfolio'].forEach(t => {
+  ['overview','markets','resolve','members','leaderboard','share','rewards','seasons','settings','analytics','economy','branding','flexbot','ideas','portfolio','account'].forEach(t => {
     const el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === tab ? 'block' : 'none';
   });
@@ -6362,7 +6422,7 @@ function showTab(tab) {
   document.querySelectorAll('.nav-item').forEach(n => {
     if (n.getAttribute('onclick') && n.getAttribute('onclick').includes(`'${tab}'`)) n.classList.add('active');
   });
-  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Members', portfolio:'My Portfolio' };
+  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Members', portfolio:'My Portfolio', account:'My Account' };
   document.getElementById('topbarTitle').textContent = titles[tab] || tab;
   if (tab === 'analytics' && !analyticsLoaded) loadAnalytics();
   if (tab === 'members') loadMembers();
@@ -6375,6 +6435,7 @@ function showTab(tab) {
   }
   if (tab === 'resolve') loadDisputes();
   if (tab === 'portfolio') loadPortfolio();
+  if (tab === 'account') populateAccountTab();
   if (tab === 'seasons' && !seasonsLoaded) loadSeasons();
   if (tab === 'markets') {
     const sec = document.getElementById('suggestionsSection');
@@ -9032,6 +9093,28 @@ function timeAgo(ts) {
 function escHtml(s) {
   if (!s) return '';
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function populateAccountTab() {
+  const slug = user?.slug || creatorData?.creator?.slug;
+  if (!slug) return;
+  const communityUrl = 'hyperflex.network/' + slug;
+  const profileUrl = 'hyperflex.network/u/' + slug;
+  const el1 = document.getElementById('accountCommunityUrl');
+  const el2 = document.getElementById('accountProfileUrl');
+  const link1 = document.getElementById('accountCommunityLink');
+  const link2 = document.getElementById('accountProfileLink');
+  if (el1) el1.textContent = communityUrl;
+  if (el2) el2.textContent = profileUrl;
+  if (link1) link1.href = 'https://' + communityUrl;
+  if (link2) link2.href = 'https://' + profileUrl;
+  // Sync plan pill
+  const plan = creatorData?.creator?.plan || 'free';
+  const pill = document.getElementById('accountPlanPill');
+  if (pill) {
+    pill.className = 'plan-pill ' + plan;
+    pill.textContent = plan === 'platinum' ? 'Premium' : plan.charAt(0).toUpperCase() + plan.slice(1);
+  }
 }
 
 function goToMemberView(e) {
