@@ -212,6 +212,11 @@
       .grid { grid-template-columns: 1fr; padding: 0 16px; }
       footer { padding: 24px 20px; flex-direction: column; align-items: flex-start; }
     }
+    /* ── READABILITY & MOBILE POLISH ── */
+    @media (max-width: 768px) {
+      body { overflow-x: hidden; }
+      input, textarea, select { font-size: 16px !important; }
+    }
   </style>
 </head>
 <body>

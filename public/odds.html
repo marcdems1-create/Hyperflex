@@ -71,7 +71,7 @@ body::before {
 }
 .hero-eyebrow {
   display: inline-flex; align-items: center; gap: 8px;
-  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
   letter-spacing: 1.2px; text-transform: uppercase; color: var(--gold);
   margin-bottom: 20px;
 }
@@ -121,7 +121,7 @@ body::before {
 }
 .platform-col.best { border-color: rgba(201,146,13,0.5); box-shadow: 0 0 16px rgba(201,146,13,0.08); }
 .platform-badge {
-  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
   padding: 3px 8px; border-radius: 10px; letter-spacing: 0.05em;
   display: inline-block; margin-bottom: 10px;
 }
@@ -135,7 +135,7 @@ body::before {
   line-height: 1; margin-bottom: 4px;
 }
 .platform-col.best .col-prob { color: var(--gold); }
-.col-side { font-family: var(--mono); font-size: 10px; color: var(--dim); margin-bottom: 12px; }
+.col-side { font-family: var(--mono); font-size: 11px; color: var(--dim); margin-bottom: 12px; }
 .col-cta {
   display: block; width: 100%; text-align: center;
   font-family: var(--mono); font-size: 11px; font-weight: 700;
@@ -164,7 +164,7 @@ body::before {
 .arb-badge {
   display: inline-flex; align-items: center; gap: 5px;
   background: rgba(201,146,13,0.12); border: 1px solid rgba(201,146,13,0.4);
-  color: var(--gold); font-family: var(--mono); font-size: 10px; font-weight: 700;
+  color: var(--gold); font-family: var(--mono); font-size: 11px; font-weight: 700;
   padding: 4px 10px; border-radius: 20px; letter-spacing: 0.04em;
   animation: arbPulse 2s ease-in-out infinite;
 }
@@ -196,7 +196,7 @@ body::before {
 
 /* SMART MONEY SIDEBAR */
 .sm-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
-.sm-title { font-family: var(--mono); font-size: 10px; font-weight: 700; color: var(--gold); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 14px; }
+.sm-title { font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--gold); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 14px; }
 .sm-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
 .sm-row:last-child { border-bottom: none; }
 .sm-question { font-size: 12px; color: var(--text); flex: 1; min-width: 0; line-height: 1.4; }
@@ -215,7 +215,7 @@ body::before {
   position: relative; z-index: 1;
 }
 .topic-section-label {
-  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
   color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase;
   margin-bottom: 14px;
 }
@@ -235,13 +235,19 @@ body::before {
 .topic-card-desc { font-size: 11px; color: var(--dim); margin-top: 2px; }
 .topic-chips { display: flex; flex-wrap: wrap; gap: 7px; }
 .topic-chip {
-  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
   padding: 5px 10px; border-radius: 20px;
   border: 1px solid var(--border); color: var(--dim);
   background: var(--paper); cursor: pointer;
   transition: all 0.15s; white-space: nowrap;
 }
 .topic-chip:hover { border-color: var(--gold); color: var(--gold); }
+
+/* ── READABILITY & MOBILE POLISH ── */
+@media (max-width: 768px) {
+  body { overflow-x: hidden; }
+  input, textarea, select { font-size: 16px !important; }
+}
 
 /* RESPONSIVE */
 @media (max-width: 768px) {
@@ -466,7 +472,7 @@ function renderSearchResults(data) {
     const exp = fmtDate(m.close_date || m.end_date);
     const yesPct = m.yes_pct != null ? m.yes_pct : null;
     const noPct = yesPct != null ? (100 - yesPct) : null;
-    const bestBadge = isBest ? '<span style="font-family:var(--mono);font-size:9px;padding:2px 8px;border-radius:8px;background:rgba(201,146,13,0.15);color:var(--gold);border:1px solid rgba(201,146,13,0.3);font-weight:700">★ BEST ODDS</span>' : '';
+    const bestBadge = isBest ? '<span style="font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:8px;background:rgba(201,146,13,0.15);color:var(--gold);border:1px solid rgba(201,146,13,0.3);font-weight:700">★ BEST ODDS</span>' : '';
     return `<div class="platform-col${isBest ? ' best' : ''}" style="transition:border-color .15s" onmouseover="this.style.borderColor='${color}44'" onmouseout="this.style.borderColor='${isBest ? 'rgba(201,146,13,0.5)' : 'var(--border)'}'" >
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
         <span class="platform-badge ${platform}">${label}</span>

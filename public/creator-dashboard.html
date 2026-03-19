@@ -431,7 +431,7 @@ body.plan-premium .main {
 .notif-wrap { position:relative;flex-shrink:0 }
 .notif-bell { background:transparent;border:1px solid var(--border);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:15px;line-height:1;transition:border-color .15s,background .15s;display:flex;align-items:center;gap:5px }
 .notif-bell:hover { border-color:var(--gold);background:rgba(201,146,13,0.07) }
-.notif-badge { background:var(--gold);color:#141412;font-family:var(--mono);font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;min-width:14px;text-align:center }
+.notif-badge { background:var(--gold);color:#141412;font-family:var(--mono);font-size:10px;font-weight:700;padding:1px 5px;border-radius:10px;min-width:14px;text-align:center }
 .notif-dropdown { display:none;position:absolute;right:0;top:calc(100% + 6px);width:320px;max-width:92vw;background:#1c1b19;border:1px solid rgba(255,255,255,0.1);border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.5);z-index:9999;overflow:hidden }
 .notif-dropdown.show { display:block }
 .notif-dropdown-header { display:flex;align-items:center;justify-content:space-between;padding:12px 16px 10px;border-bottom:1px solid rgba(255,255,255,0.07) }
@@ -1458,7 +1458,7 @@ body.plan-premium .main {
 .resonance-score.high  { background: rgba(74,222,128,0.2); color: #16a34a; }
 .resonance-score.mid   { background: rgba(201,146,13,0.2); color: var(--gold); }
 .resonance-score.low   { background: rgba(120,113,108,0.15); color: var(--dim); }
-.resonance-score.none  { background: transparent; color: var(--border); font-size:9px; }
+.resonance-score.none  { background: transparent; color: var(--border); font-size:10px; }
 
 /* Stats row */
 .stats-row {
@@ -2657,6 +2657,8 @@ body.nav-open .sidebar-backdrop {
 
 /* ── Phone ≤600px ── */
 @media (max-width: 600px) {
+  body { overflow-x: hidden; }
+  input, textarea, select { font-size: 16px !important; }
   .content { padding: 14px; }
   .topbar { padding: 10px 14px; gap: 8px; }
   .topbar-title { font-size: 15px; letter-spacing: 0; }
@@ -2851,14 +2853,14 @@ body.nav-open .sidebar-backdrop {
         </a>
         <a class="nav-item" id="ideasNavItem" onclick="showTab('ideas')" style="display:none">
           <span class="nav-icon">💡</span><span class="nav-label">Market Ideas</span>
-          <span class="nav-badge" style="background:var(--gold);color:#000;font-size:9px;padding:1px 5px">AI</span>
+          <span class="nav-badge" style="background:var(--gold);color:#000;font-size:10px;padding:1px 5px">AI</span>
         </a>
         <a class="nav-item" onclick="showTab('share')">
           <span class="nav-icon">📣</span><span class="nav-label">Share & Grow</span>
         </a>
         <a class="nav-item" id="flexbotNavItem" onclick="showTab('flexbot')" style="display:none">
           <span class="nav-icon">🤖</span><span class="nav-label">FLEX BOT</span>
-          <span class="nav-badge" style="background:var(--gold);color:#fff;font-size:9px;padding:1px 5px">AI</span>
+          <span class="nav-badge" style="background:var(--gold);color:#fff;font-size:10px;padding:1px 5px">AI</span>
         </a>
         <a class="nav-item" onclick="showTab('settings')">
           <span class="nav-icon">⚙️</span><span class="nav-label">Settings</span>
@@ -4602,7 +4604,7 @@ body.nav-open .sidebar-backdrop {
                       <div style="width:40px;height:40px;border-radius:10px;background:rgba(99,102,241,0.12);display:flex;align-items:center;justify-content:center;font-size:20px">🟣</div>
                       <div>
                         <div style="font-weight:700;font-size:15px;color:var(--text)">Polymarket</div>
-                        <span style="font-family:var(--mono);font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:rgba(45,155,95,0.1);color:#2d9b5f;border:1px solid rgba(45,155,95,0.3)">LIVE</span>
+                        <span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:rgba(45,155,95,0.1);color:#2d9b5f;border:1px solid rgba(45,155,95,0.3)">LIVE</span>
                       </div>
                     </div>
                     <p style="font-size:13px;color:var(--dim);line-height:1.5;margin-bottom:16px">Paste your wallet address to import all open positions and P&L instantly.</p>
@@ -4615,7 +4617,7 @@ body.nav-open .sidebar-backdrop {
                       <div style="width:40px;height:40px;border-radius:10px;background:rgba(139,92,246,0.12);display:flex;align-items:center;justify-content:center;font-size:20px">🟡</div>
                       <div>
                         <div style="font-weight:700;font-size:15px;color:var(--text)">Kalshi</div>
-                        <span style="font-family:var(--mono);font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:rgba(45,155,95,0.1);color:#2d9b5f;border:1px solid rgba(45,155,95,0.3)">LIVE</span>
+                        <span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:rgba(45,155,95,0.1);color:#2d9b5f;border:1px solid rgba(45,155,95,0.3)">LIVE</span>
                       </div>
                     </div>
                     <p style="font-size:13px;color:var(--dim);line-height:1.5;margin-bottom:16px">Connect with your API key to sync real-money contracts and track P&L.</p>
@@ -4628,7 +4630,7 @@ body.nav-open .sidebar-backdrop {
                       <div style="width:40px;height:40px;border-radius:10px;background:rgba(16,185,129,0.12);display:flex;align-items:center;justify-content:center;font-size:20px">🟢</div>
                       <div>
                         <div style="font-weight:700;font-size:15px;color:var(--text)">Manifold</div>
-                        <span style="font-family:var(--mono);font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:rgba(45,155,95,0.1);color:#2d9b5f;border:1px solid rgba(45,155,95,0.3)">LIVE</span>
+                        <span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:rgba(45,155,95,0.1);color:#2d9b5f;border:1px solid rgba(45,155,95,0.3)">LIVE</span>
                       </div>
                     </div>
                     <p style="font-size:13px;color:var(--dim);line-height:1.5;margin-bottom:16px">Enter your username to track play-money positions and calibration score.</p>
@@ -8702,7 +8704,7 @@ function renderSuggestedRewards() {
     const pts = r10(startBal * s.mult);
     const alreadyExists = creatorRewards.some(r => r.title === `${s.icon} ${s.title}`);
     return `<div class="referral-preset-card${alreadyExists ? '' : ''}" style="${alreadyExists ? 'opacity:.5;pointer-events:none' : 'cursor:pointer'}" onclick="${alreadyExists ? '' : `quickAddReward(${pts}, '${s.icon} ${s.title}', '${s.desc.replace(/'/g,"\\'")}')` }">
-      <div class="rpc-name">${s.icon} ${s.title}${alreadyExists ? ' <span style="font-size:9px;color:var(--dim)">(added)</span>' : ''}</div>
+      <div class="rpc-name">${s.icon} ${s.title}${alreadyExists ? ' <span style="font-size:10px;color:var(--dim)">(added)</span>' : ''}</div>
       <div class="rpc-vals">${pts.toLocaleString()} pts milestone</div>
       <div class="rpc-desc">${s.desc}</div>
     </div>`;
@@ -11680,7 +11682,7 @@ async function loadHFXPositions(force) {
     const renderRow = b => {
       const mkt = b.markets || {};
       const sideColor = b.side === 'YES' ? '#22c55e' : '#ef4444';
-      let badge = !b.settled ? '<span style="font-family:var(--mono);font-size:9px;padding:2px 7px;border-radius:10px;background:rgba(201,146,13,0.12);color:var(--gold);border:1px solid rgba(201,146,13,0.3)">OPEN</span>' : b.won ? '<span style="font-family:var(--mono);font-size:9px;padding:2px 7px;border-radius:10px;background:rgba(34,197,94,0.1);color:#22c55e;border:1px solid rgba(34,197,94,0.3)">WON</span>' : '<span style="font-family:var(--mono);font-size:9px;padding:2px 7px;border-radius:10px;background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.3)">LOST</span>';
+      let badge = !b.settled ? '<span style="font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:10px;background:rgba(201,146,13,0.12);color:var(--gold);border:1px solid rgba(201,146,13,0.3)">OPEN</span>' : b.won ? '<span style="font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:10px;background:rgba(34,197,94,0.1);color:#22c55e;border:1px solid rgba(34,197,94,0.3)">WON</span>' : '<span style="font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:10px;background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.3)">LOST</span>';
       const pnl = b.settled ? (b.won ? (b.potential_payout - b.amount) / 100 : -b.amount / 100) : null;
       const pnlStr = pnl !== null ? (pnl >= 0 ? `+${pnl.toFixed(1)} pts` : `${pnl.toFixed(1)} pts`) : '';
       return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.04)" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background=''">
@@ -11753,10 +11755,10 @@ function renderMarketSearchResults(data, el) {
     const color = platform === 'polymarket' ? '#a78bfa' : '#fbbf24';
     const label = platform === 'polymarket' ? '🟣 Polymarket' : '🟡 Kalshi';
     const exp = fmtDate(m.close_date || m.end_date);
-    const bestBadge = isBest ? '<span style="font-family:var(--mono);font-size:9px;padding:2px 8px;border-radius:8px;background:rgba(201,146,13,0.15);color:#c9920d;border:1px solid rgba(201,146,13,0.3);font-weight:700">★ BEST ODDS</span>' : '';
+    const bestBadge = isBest ? '<span style="font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:8px;background:rgba(201,146,13,0.15);color:#c9920d;border:1px solid rgba(201,146,13,0.3);font-weight:700">★ BEST ODDS</span>' : '';
     return `<a href="${m.url}" target="_blank" rel="noopener" style="display:block;text-decoration:none;background:#0f0e0c;border:1px solid #2a2825;border-radius:10px;padding:14px 16px;margin-bottom:6px;transition:border-color .15s" onmouseover="this.style.borderColor='${color}44'" onmouseout="this.style.borderColor='#2a2825'">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-        <span style="font-family:var(--mono);font-size:9px;padding:2px 8px;border-radius:8px;background:${color}15;color:${color};border:1px solid ${color}30">${label}</span>
+        <span style="font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:8px;background:${color}15;color:${color};border:1px solid ${color}30">${label}</span>
         ${exp ? `<span style="font-family:var(--mono);font-size:10px;color:#4a4744">Exp ${exp}</span>` : ''}
         ${bestBadge}
       </div>
