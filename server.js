@@ -230,17 +230,29 @@ app.post('/register', async (req, res) => {
 
 // Login
 app.post('/login', async (req, res) => {
-  const { email, password } = req.body;
-  const { data: user, error } = await supabase
-    .from('users')
-    .select('*')
-    .eq('email', email)
-    .single();
-  if (error || !user) return res.status(400).json({ error: 'User not found' });
-  const valid = await bcrypt.compare(password, user.password_hash);
-  if (!valid) return res.status(400).json({ error: 'Invalid password' });
-  const token = jwt.sign({ id: user.id }, JWT_SECRET);
-  res.json({ token, user: { id: user.id, email: user.email, display_name: user.display_name, balance: user.balance } });
+  const timer = setTimeout(() => {
+    if (!res.headersSent) res.status(504).json({ error: 'Login timed out — please try again' });
+  }, 12000);
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) { clearTimeout(timer); return res.status(400).json({ error: 'Missing email or password' }); }
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('id, email, display_name, password_hash, balance')
+      .eq('email', email.toLowerCase())
+      .maybeSingle();
+    if (error) { console.error('[login] DB error:', error.message); clearTimeout(timer); return res.status(500).json({ error: 'Database error' }); }
+    if (!user) { clearTimeout(timer); return res.status(400).json({ error: 'User not found' }); }
+    const valid = await bcrypt.compare(password, user.password_hash);
+    if (!valid) { clearTimeout(timer); return res.status(400).json({ error: 'Invalid password' }); }
+    const token = jwt.sign({ id: user.id }, JWT_SECRET);
+    clearTimeout(timer);
+    if (!res.headersSent) res.json({ token, user: { id: user.id, email: user.email, display_name: user.display_name, balance: user.balance } });
+  } catch (err) {
+    clearTimeout(timer);
+    console.error('[login] error:', err.message);
+    if (!res.headersSent) res.status(500).json({ error: 'Login failed' });
+  }
 });
 
 // Auth middleware for protected routes
@@ -3217,47 +3229,57 @@ app.post('/api/creator/signup', async (req, res) => {
 // Body: { email, password }
 // ════════════════════════════════════════════════════════════
 app.post('/api/creator/login', async (req, res) => {
+  // Hard timeout to prevent infinite hangs
+  const timer = setTimeout(() => {
+    if (!res.headersSent) res.status(504).json({ error: 'Login timed out — please try again' });
+  }, 12000);
   try {
     const { email, password } = req.body;
     if (!email || !password) {
+      clearTimeout(timer);
       return res.status(400).json({ error: 'Missing email or password' });
     }
 
-    const { data: user } = await supabase
+    const { data: user, error: userErr } = await supabase
       .from('users')
-      .select('*')
+      .select('id, email, display_name, password_hash, is_creator')
       .eq('email', email.toLowerCase())
       .eq('is_creator', true)
       .maybeSingle();
 
-    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+    if (userErr) { console.error('[login] DB error:', userErr.message); clearTimeout(timer); return res.status(500).json({ error: 'Database error' }); }
+    if (!user) { clearTimeout(timer); return res.status(401).json({ error: 'Invalid credentials' }); }
 
     const valid = await bcrypt.compare(password, user.password_hash);
-    if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
+    if (!valid) { clearTimeout(timer); return res.status(401).json({ error: 'Invalid credentials' }); }
 
     const { data: settings } = await supabase
       .from('creator_settings')
-      .select('*')
+      .select('slug, custom_points_name, primary_color')
       .eq('creator_id', user.id)
       .maybeSingle();
 
     const token = makeToken({ id: user.id, email: user.email, slug: settings?.slug });
 
-    res.json({
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        display_name: user.display_name,
-        slug: settings?.slug,
-        custom_points_name: settings?.custom_points_name,
-        primary_color: settings?.primary_color
-      }
-    });
+    clearTimeout(timer);
+    if (!res.headersSent) {
+      res.json({
+        token,
+        user: {
+          id: user.id,
+          email: user.email,
+          display_name: user.display_name,
+          slug: settings?.slug,
+          custom_points_name: settings?.custom_points_name,
+          primary_color: settings?.primary_color
+        }
+      });
+    }
 
   } catch (err) {
+    clearTimeout(timer);
     console.error('creator login error:', err);
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
