@@ -370,11 +370,7 @@ body::before {
 </div>
 
 <!-- Filter tabs -->
-<div class="odds-tabs" id="oddsTabs" style="display:none">
-  <button class="odds-tab active" onclick="setOddsFilter('all')">All Results</button>
-  <button class="odds-tab" onclick="setOddsFilter('arbitrage')">⚡ Arbitrage</button>
-  <button class="odds-tab" onclick="setOddsFilter('multi')">Multi-Platform</button>
-</div>
+<!-- Filter tabs removed — arb detection is inline in results -->
 
 <div class="odds-layout">
   <div class="results" id="results"></div>
@@ -413,7 +409,7 @@ async function searchOdds() {
   const el = document.getElementById('results');
   if (!q || q.length < 2) {
     el.innerHTML = '';
-    document.getElementById('oddsTabs').style.display = 'none';
+    // tabs removed
     document.getElementById('topicSection').style.display = 'block';
     return;
   }
@@ -428,12 +424,12 @@ async function searchOdds() {
     _lastSearchData = data;
 
     if (!poly.length && !kalshi.length) {
-      document.getElementById('oddsTabs').style.display = 'none';
+      // tabs removed
       el.innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">No markets found for "${escHtml(q)}"</div><div class="empty-sub">Try a different keyword. We search live markets on Polymarket and Kalshi in real time.</div><a href="/creator/signup" class="empty-cta">Get started free →</a></div>`;
       return;
     }
 
-    document.getElementById('oddsTabs').style.display = 'flex';
+    // tabs removed
     renderSearchResults(data);
   } catch (err) {
     el.innerHTML = '<div class="loading">Error searching — try again.</div>';

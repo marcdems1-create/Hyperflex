@@ -11997,31 +11997,46 @@ app.get('/api/markets/search', async (req, res) => {
       return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(tid));
     };
     const [polyRes, kalshiRes] = await Promise.allSettled([
-      fetchWithTimeout(`https://gamma-api.polymarket.com/markets?closed=false&limit=20&search=${encodeURIComponent(q)}`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }),
-      fetchWithTimeout(`https://api.elections.kalshi.com/trade-api/v2/markets?limit=20&status=open&series_ticker=${encodeURIComponent(q.toUpperCase())}`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } })
+      fetchWithTimeout(`https://gamma-api.polymarket.com/markets?closed=false&limit=30&search=${encodeURIComponent(q)}&order=volume&ascending=false`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }),
+      fetchWithTimeout(`https://api.elections.kalshi.com/trade-api/v2/events?limit=50&status=open&with_nested_markets=true`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } })
     ]);
     let polyMarkets = [];
     if (polyRes.status === 'fulfilled' && polyRes.value.ok) {
       const raw = await polyRes.value.json();
-      polyMarkets = (Array.isArray(raw) ? raw : []).filter(m => !m.closed).map(m => ({
-        question: m.question || m.title || '',
-        yes_pct: m.outcomePrices ? Math.round(JSON.parse(m.outcomePrices)[0] * 100) : null,
-        close_date: m.endDate || m.endDateIso || null,
-        url: m.slug ? `https://polymarket.com/event/${m.eventSlug || m.slug}` : 'https://polymarket.com',
-        volume: m.volume || 0
-      })).slice(0, 15);
+      // Filter client-side: only keep markets whose question actually contains the search term
+      polyMarkets = (Array.isArray(raw) ? raw : [])
+        .filter(m => !m.closed && (m.question || m.title || '').toLowerCase().includes(q))
+        .map(m => ({
+          question: m.question || m.title || '',
+          yes_pct: m.outcomePrices ? Math.round(JSON.parse(m.outcomePrices)[0] * 100) : null,
+          close_date: m.endDate || m.endDateIso || null,
+          url: m.slug ? `https://polymarket.com/event/${m.eventSlug || m.slug}` : 'https://polymarket.com',
+          volume: parseFloat(m.volume) || 0
+        }))
+        .sort((a, b) => b.volume - a.volume)
+        .slice(0, 15);
     }
     let kalshiMarkets = [];
     if (kalshiRes.status === 'fulfilled' && kalshiRes.value.ok) {
       const raw = await kalshiRes.value.json();
-      const mkts = raw.markets || [];
-      kalshiMarkets = mkts.filter(m => m.status === 'open' && (m.title || '').toLowerCase().includes(q)).map(m => ({
-        question: m.title || '',
-        yes_pct: m.yes_ask != null ? Math.round(m.yes_ask * 100) : (m.last_price != null ? Math.round(m.last_price * 100) : null),
-        close_date: m.close_time || m.expiration_time || null,
-        url: m.ticker ? `https://kalshi.com/markets/${m.event_ticker}/${m.ticker}` : 'https://kalshi.com',
-        volume: m.volume || 0
-      })).slice(0, 15);
+      // Kalshi has no text search — fetch events and filter by title
+      const events = raw.events || [];
+      for (const evt of events) {
+        if (!(evt.title || '').toLowerCase().includes(q)) continue;
+        const mkts = evt.markets || [];
+        for (const m of mkts) {
+          if (m.status !== 'open') continue;
+          kalshiMarkets.push({
+            question: m.title || evt.title || '',
+            yes_pct: m.yes_ask != null ? Math.round(m.yes_ask * 100) : (m.last_price != null ? Math.round(m.last_price * 100) : null),
+            close_date: m.close_time || m.expiration_time || null,
+            url: m.ticker ? `https://kalshi.com/markets/${m.event_ticker || ''}/${m.ticker}` : 'https://kalshi.com',
+            volume: m.volume || 0
+          });
+          if (kalshiMarkets.length >= 15) break;
+        }
+        if (kalshiMarkets.length >= 15) break;
+      }
     }
     // Smart money: find cached_positions from sharp users (non-blocking, 3s timeout)
     let smart_money = null;
