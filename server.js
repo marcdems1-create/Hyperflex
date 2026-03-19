@@ -11996,16 +11996,56 @@ app.get('/api/markets/search', async (req, res) => {
       const tid = setTimeout(() => ctrl.abort(), ms);
       return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(tid));
     };
-    const [polyRes, kalshiRes] = await Promise.allSettled([
-      fetchWithTimeout(`https://gamma-api.polymarket.com/markets?closed=false&limit=30&search=${encodeURIComponent(q)}&order=volume&ascending=false`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }),
-      fetchWithTimeout(`https://api.elections.kalshi.com/trade-api/v2/events?limit=50&status=open&with_nested_markets=true`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } })
+    // Build search keywords — split multi-word queries for fuzzy matching
+    const qWords = q.split(/\s+/).filter(w => w.length >= 2);
+    const matchesQuery = (text) => {
+      const t = (text || '').toLowerCase();
+      // Match if ALL words appear in the text, OR the full query appears
+      return t.includes(q) || qWords.every(w => t.includes(w));
+    };
+
+    // --- Sportsbook odds via The Odds API ---
+    const ODDS_API_KEY = process.env.ODDS_API_KEY;
+    // Map common search terms to sport keys
+    const sportKeyMap = {
+      nba: 'basketball_nba', basketball: 'basketball_nba',
+      nfl: 'americanfootball_nfl', football: 'americanfootball_nfl',
+      mlb: 'baseball_mlb', baseball: 'baseball_mlb',
+      nhl: 'icehockey_nhl', hockey: 'icehockey_nhl',
+      mma: 'mma_mixed_martial_arts', ufc: 'mma_mixed_martial_arts',
+      soccer: 'soccer_epl', premier: 'soccer_epl', epl: 'soccer_epl',
+      tennis: 'tennis_atp_french_open',
+      boxing: 'boxing_boxing',
+      cricket: 'cricket_ipl',
+      golf: 'golf_masters_tournament',
+      f1: 'motorsport_formula_one', formula: 'motorsport_formula_one',
+    };
+    // Find matching sport keys from query
+    const matchedSports = new Set();
+    for (const [keyword, sportKey] of Object.entries(sportKeyMap)) {
+      if (q.includes(keyword)) matchedSports.add(sportKey);
+    }
+
+    const [polyRes, kalshiRes, ...oddsResults] = await Promise.allSettled([
+      // Polymarket — use their search param (works well for crypto/politics)
+      fetchWithTimeout(`https://gamma-api.polymarket.com/markets?closed=false&limit=40&search=${encodeURIComponent(q)}&order=volume&ascending=false`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }),
+      // Kalshi — search their events endpoint with cursor-based text search
+      fetchWithTimeout(`https://api.elections.kalshi.com/trade-api/v2/events?limit=100&status=open&with_nested_markets=true`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }),
+      // The Odds API — fetch odds for matched sports (or top sports if no match)
+      ...(ODDS_API_KEY ? (matchedSports.size > 0
+        ? [...matchedSports].slice(0, 2).map(sport =>
+            fetchWithTimeout(`https://api.the-odds-api.com/v4/sports/${sport}/odds/?apiKey=${ODDS_API_KEY}&regions=us&markets=h2h&oddsFormat=decimal&dateFormat=iso`, { headers: { Accept: 'application/json' } })
+          )
+        : [fetchWithTimeout(`https://api.the-odds-api.com/v4/sports/?apiKey=${ODDS_API_KEY}`, { headers: { Accept: 'application/json' } })]
+      ) : [])
     ]);
+
+    // --- Parse Polymarket ---
     let polyMarkets = [];
     if (polyRes.status === 'fulfilled' && polyRes.value.ok) {
       const raw = await polyRes.value.json();
-      // Filter client-side: only keep markets whose question actually contains the search term
       polyMarkets = (Array.isArray(raw) ? raw : [])
-        .filter(m => !m.closed && (m.question || m.title || '').toLowerCase().includes(q))
+        .filter(m => !m.closed && matchesQuery(m.question || m.title || ''))
         .map(m => ({
           question: m.question || m.title || '',
           yes_pct: m.outcomePrices ? Math.round(JSON.parse(m.outcomePrices)[0] * 100) : null,
@@ -12016,13 +12056,15 @@ app.get('/api/markets/search', async (req, res) => {
         .sort((a, b) => b.volume - a.volume)
         .slice(0, 15);
     }
+
+    // --- Parse Kalshi ---
     let kalshiMarkets = [];
     if (kalshiRes.status === 'fulfilled' && kalshiRes.value.ok) {
       const raw = await kalshiRes.value.json();
-      // Kalshi has no text search — fetch events and filter by title
       const events = raw.events || [];
       for (const evt of events) {
-        if (!(evt.title || '').toLowerCase().includes(q)) continue;
+        // Check event title AND category against query
+        if (!matchesQuery(evt.title) && !matchesQuery(evt.category)) continue;
         const mkts = evt.markets || [];
         for (const m of mkts) {
           if (m.status !== 'open') continue;
@@ -12038,7 +12080,118 @@ app.get('/api/markets/search', async (req, res) => {
         if (kalshiMarkets.length >= 15) break;
       }
     }
-    // Smart money: find cached_positions from sharp users (non-blocking, 3s timeout)
+
+    // --- Parse Sportsbook odds ---
+    let sportsbooks = [];
+    if (ODDS_API_KEY) {
+      if (matchedSports.size > 0) {
+        // We fetched odds for specific sports — parse game lines
+        for (const oddsRes of oddsResults) {
+          if (oddsRes.status !== 'fulfilled' || !oddsRes.value.ok) continue;
+          const games = await oddsRes.value.json();
+          for (const game of (Array.isArray(games) ? games : [])) {
+            // Filter by team names matching query
+            const teams = `${game.home_team} ${game.away_team}`.toLowerCase();
+            const title = `${game.away_team} vs ${game.home_team}`;
+            if (!matchesQuery(teams) && !matchesQuery(title) && !matchesQuery(game.sport_title || '')) {
+              // If sport matched but teams don't match query, still include (user searched "nba")
+              if (!qWords.some(w => Object.keys(sportKeyMap).includes(w))) continue;
+            }
+            // Get best odds from each bookmaker
+            const books = {};
+            for (const bm of (game.bookmakers || [])) {
+              const h2h = (bm.markets || []).find(m => m.key === 'h2h');
+              if (!h2h) continue;
+              const outcomes = h2h.outcomes || [];
+              const homeOdds = outcomes.find(o => o.name === game.home_team);
+              const awayOdds = outcomes.find(o => o.name === game.away_team);
+              books[bm.title] = {
+                bookmaker: bm.title,
+                home_odds: homeOdds ? homeOdds.price : null,
+                away_odds: awayOdds ? awayOdds.price : null,
+              };
+            }
+            // Pick top 4 bookmakers to show (DraftKings, FanDuel, BetMGM, Bet365 preferred)
+            const preferred = ['DraftKings', 'FanDuel', 'BetMGM', 'Bet365'];
+            const sortedBooks = Object.values(books).sort((a, b) => {
+              const ai = preferred.indexOf(a.bookmaker); const bi = preferred.indexOf(b.bookmaker);
+              return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+            }).slice(0, 4);
+            if (sortedBooks.length === 0) continue;
+            // Convert decimal odds to implied probability for best odds
+            const bestHome = Math.min(...sortedBooks.map(b => b.home_odds).filter(Boolean));
+            const bestAway = Math.min(...sortedBooks.map(b => b.away_odds).filter(Boolean));
+            sportsbooks.push({
+              question: title,
+              sport: game.sport_title || '',
+              home_team: game.home_team,
+              away_team: game.away_team,
+              commence_time: game.commence_time || null,
+              home_win_pct: bestHome ? Math.round((1 / bestHome) * 100) : null,
+              away_win_pct: bestAway ? Math.round((1 / bestAway) * 100) : null,
+              bookmakers: sortedBooks,
+            });
+            if (sportsbooks.length >= 15) break;
+          }
+        }
+      } else {
+        // No sport matched — we fetched the sports list. Check if query matches any sport title
+        if (oddsResults.length > 0 && oddsResults[0].status === 'fulfilled' && oddsResults[0].value.ok) {
+          const sports = await oddsResults[0].value.json();
+          const matchedSportKeys = (Array.isArray(sports) ? sports : [])
+            .filter(s => s.active && matchesQuery(s.title || s.group || ''))
+            .map(s => s.key)
+            .slice(0, 2);
+          // If we found matching sports, do a follow-up fetch (non-blocking, best-effort)
+          if (matchedSportKeys.length > 0) {
+            try {
+              const followUp = await Promise.allSettled(matchedSportKeys.map(sport =>
+                fetchWithTimeout(`https://api.the-odds-api.com/v4/sports/${sport}/odds/?apiKey=${ODDS_API_KEY}&regions=us&markets=h2h&oddsFormat=decimal&dateFormat=iso`, { headers: { Accept: 'application/json' } })
+              ));
+              for (const oddsRes of followUp) {
+                if (oddsRes.status !== 'fulfilled' || !oddsRes.value.ok) continue;
+                const games = await oddsRes.value.json();
+                for (const game of (Array.isArray(games) ? games : [])) {
+                  const title = `${game.away_team} vs ${game.home_team}`;
+                  const books = {};
+                  for (const bm of (game.bookmakers || [])) {
+                    const h2h = (bm.markets || []).find(m => m.key === 'h2h');
+                    if (!h2h) continue;
+                    const outcomes = h2h.outcomes || [];
+                    books[bm.title] = {
+                      bookmaker: bm.title,
+                      home_odds: (outcomes.find(o => o.name === game.home_team) || {}).price || null,
+                      away_odds: (outcomes.find(o => o.name === game.away_team) || {}).price || null,
+                    };
+                  }
+                  const preferred = ['DraftKings', 'FanDuel', 'BetMGM', 'Bet365'];
+                  const sortedBooks = Object.values(books).sort((a, b) => {
+                    const ai = preferred.indexOf(a.bookmaker); const bi = preferred.indexOf(b.bookmaker);
+                    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+                  }).slice(0, 4);
+                  if (sortedBooks.length === 0) continue;
+                  const bestHome = Math.min(...sortedBooks.map(b => b.home_odds).filter(Boolean));
+                  const bestAway = Math.min(...sortedBooks.map(b => b.away_odds).filter(Boolean));
+                  sportsbooks.push({
+                    question: title,
+                    sport: game.sport_title || '',
+                    home_team: game.home_team,
+                    away_team: game.away_team,
+                    commence_time: game.commence_time || null,
+                    home_win_pct: bestHome ? Math.round((1 / bestHome) * 100) : null,
+                    away_win_pct: bestAway ? Math.round((1 / bestAway) * 100) : null,
+                    bookmakers: sortedBooks,
+                  });
+                  if (sportsbooks.length >= 10) break;
+                }
+              }
+            } catch (e) { console.warn('[odds-api follow-up]', e.message); }
+          }
+        }
+      }
+    }
+
+    // Smart money (non-blocking, 3s timeout)
     let smart_money = null;
     try {
       const smTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000));
@@ -12075,7 +12228,7 @@ app.get('/api/markets/search', async (req, res) => {
       smart_money = await Promise.race([smQuery, smTimeout]).catch(() => null);
     } catch (e) { console.warn('[smart-money]', e.message); }
 
-    const data = { polymarket: polyMarkets, kalshi: kalshiMarkets, smart_money };
+    const data = { polymarket: polyMarkets, kalshi: kalshiMarkets, sportsbooks, smart_money };
     _mktSearchCache.set(cacheKey, { ts: Date.now(), data });
     setTimeout(() => _mktSearchCache.delete(cacheKey), 3 * 60 * 1000);
     res.json(data);

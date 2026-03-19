@@ -11715,7 +11715,7 @@ async function runMarketSearch() {
   const el = document.getElementById('mktSearchResults');
   if (!el) return;
   if (q.length < 2) {
-    el.innerHTML = '<div style="text-align:center;padding:48px 20px;color:var(--dim)"><div style="font-size:32px;margin-bottom:12px;opacity:0.4">🌐</div><div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">Search across platforms</div><div style="font-size:13px">Type a keyword to find live markets on Polymarket and Kalshi.</div></div>';
+    el.innerHTML = '<div style="text-align:center;padding:48px 20px;color:var(--dim)"><div style="font-size:32px;margin-bottom:12px;opacity:0.4">🌐</div><div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">Search across platforms</div><div style="font-size:13px">Type a keyword to find live odds on Polymarket, Kalshi, DraftKings, FanDuel, and more.</div></div>';
     return;
   }
   el.innerHTML = '<div style="padding:32px 0;text-align:center;font-family:var(--mono);font-size:11px;color:#4a4744;letter-spacing:.08em">SEARCHING…</div>';
@@ -11730,9 +11730,10 @@ async function runMarketSearch() {
 function renderMarketSearchResults(data, el) {
   const poly = data.polymarket || [];
   const kalshi = data.kalshi || [];
+  const sports = data.sportsbooks || [];
   const smartMoney = data.smart_money;
-  if (!poly.length && !kalshi.length) {
-    el.innerHTML = '<div style="text-align:center;padding:48px 20px;color:var(--dim)"><div style="font-size:32px;margin-bottom:12px">🔍</div><div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">No markets found</div><div style="font-size:13px">Try a different keyword.</div></div>';
+  if (!poly.length && !kalshi.length && !sports.length) {
+    el.innerHTML = '<div style="text-align:center;padding:48px 20px;color:var(--dim)"><div style="font-size:32px;margin-bottom:12px">🔍</div><div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">No markets found</div><div style="font-size:13px">Try a different keyword — we search Polymarket, Kalshi, and sportsbooks.</div></div>';
     return;
   }
   // Arbitrage detection
@@ -11756,6 +11757,8 @@ function renderMarketSearchResults(data, el) {
     smartHtml = `<div style="background:rgba(124,58,237,0.08);border:1px solid rgba(124,58,237,0.2);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-family:var(--mono);font-size:12px;color:#a78bfa;display:flex;align-items:center;gap:8px"><span>🧠</span><span>Sharp money: <strong style="color:#e8e4de">${smartMoney.yes_pct}% YES</strong> (${smartMoney.count} trader${smartMoney.count !== 1 ? 's' : ''})</span></div>`;
   }
   const fmtDate = iso => iso ? new Date(iso).toLocaleDateString('en-US', { month:'short', day:'numeric' }) : '';
+  const fmtTime = iso => iso ? new Date(iso).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) : '';
+  const decToAmerican = (dec) => { if (!dec) return '—'; if (dec >= 2.0) return '+' + Math.round((dec - 1) * 100); return '-' + Math.round(100 / (dec - 1)); };
   const renderCard = (m, platform, isBest) => {
     const color = platform === 'polymarket' ? '#a78bfa' : '#fbbf24';
     const label = platform === 'polymarket' ? '🟣 Polymarket' : '🟡 Kalshi';
@@ -11771,7 +11774,26 @@ function renderMarketSearchResults(data, el) {
       <div style="font-family:var(--mono);font-size:12px;font-weight:700;color:${color}">${m.yes_pct != null ? m.yes_pct + '% YES' : ''}</div>
     </a>`;
   };
+  const renderSportCard = (game) => {
+    const kickoff = fmtTime(game.commence_time);
+    let booksHtml = game.bookmakers.map(b => `<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.04)"><span style="font-size:11px;color:var(--dim);font-weight:600;min-width:80px">${escHtmlDash(b.bookmaker)}</span><span style="font-family:var(--mono);font-size:12px;color:#22c55e;min-width:50px;text-align:center">${decToAmerican(b.home_odds)}</span><span style="font-family:var(--mono);font-size:12px;color:#ef4444;min-width:50px;text-align:center">${decToAmerican(b.away_odds)}</span></div>`).join('');
+    return `<div style="background:#0f0e0c;border:1px solid rgba(34,197,94,0.2);border-radius:10px;padding:14px 16px;margin-bottom:6px;transition:border-color .15s" onmouseover="this.style.borderColor='rgba(34,197,94,0.5)'" onmouseout="this.style.borderColor='rgba(34,197,94,0.2)'">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <span style="font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:8px;background:rgba(34,197,94,0.15);color:#4ade80;border:1px solid rgba(34,197,94,0.3)">🏆 Sportsbooks</span>
+        ${game.sport ? `<span style="font-family:var(--mono);font-size:10px;color:#4a4744">${escHtmlDash(game.sport)}</span>` : ''}
+        ${kickoff ? `<span style="font-family:var(--mono);font-size:10px;color:#4a4744">· ${kickoff}</span>` : ''}
+      </div>
+      <div style="font-size:13px;font-weight:600;color:#e8e4de;line-height:1.5;margin-bottom:8px">${escHtmlDash(game.question)}</div>
+      <div style="display:flex;gap:16px;margin-bottom:10px">
+        <div><span style="font-family:var(--mono);font-size:16px;font-weight:900;color:#22c55e">${game.home_win_pct != null ? game.home_win_pct + '%' : '—'}</span> <span style="font-size:11px;color:var(--dim)">${escHtmlDash(game.home_team)}</span></div>
+        <div><span style="font-family:var(--mono);font-size:16px;font-weight:900;color:#ef4444">${game.away_win_pct != null ? game.away_win_pct + '%' : '—'}</span> <span style="font-size:11px;color:var(--dim)">${escHtmlDash(game.away_team)}</span></div>
+      </div>
+      ${booksHtml}
+    </div>`;
+  };
   let html = arbHtml + smartHtml;
+  // Sportsbooks first
+  if (sports.length) html += `<div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#4ade80;margin-bottom:8px">🏆 SPORTSBOOKS (${sports.length})</div>${sports.map(g => renderSportCard(g)).join('')}<div style="margin-bottom:20px"></div>`;
   if (poly.length) html += `<div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:8px">🟣 Polymarket (${poly.length})</div>${poly.map((m,i) => renderCard(m,'polymarket',i===0&&bestPlatform==='polymarket')).join('')}<div style="margin-bottom:20px"></div>`;
   if (kalshi.length) html += `<div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:8px">🟡 Kalshi (${kalshi.length})</div>${kalshi.map((m,i) => renderCard(m,'kalshi',i===0&&bestPlatform==='kalshi')).join('')}`;
   el.innerHTML = html;
