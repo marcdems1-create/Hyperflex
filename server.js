@@ -7493,13 +7493,15 @@ app.get('/api/predictors', async (req, res) => {
     const { sort = 'win_rate', q = '', limit = 100 } = req.query;
     const lim = Math.min(parseInt(limit) || 100, 200);
 
-    // Aggregate settled positions per user
+    // Aggregate settled positions per user (limit to 5000 for perf)
     const { data: rows, error } = await supabase
       .from('positions')
       .select('user_id, amount, potential_payout, settled, won, created_at')
-      .eq('settled', true);
+      .eq('settled', true)
+      .limit(5000);
 
     if (error) throw error;
+    if (!rows || !rows.length) return res.json([]);
 
     // Group by user_id
     const byUser = {};
