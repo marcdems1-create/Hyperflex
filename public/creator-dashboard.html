@@ -4647,32 +4647,55 @@ body.nav-open .sidebar-backdrop {
 
             <!-- Main portfolio content (hidden when welcome is shown) -->
             <div id="portfolioMain">
-            <!-- Tab bar -->
-            <div style="display:flex;border-bottom:1px solid var(--border);margin-bottom:28px;overflow-x:auto">
-              <button id="ptab-all" onclick="switchPortfolioTab('all')" style="background:none;border:none;border-bottom:2px solid var(--gold);color:var(--text);padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;transition:all .15s;margin-bottom:-1px">All Positions</button>
-              <button id="ptab-poly" onclick="switchPortfolioTab('poly')" style="background:none;border:none;border-bottom:2px solid transparent;color:var(--dim);padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s;margin-bottom:-1px;display:flex;align-items:center;gap:7px"><span id="ptab-poly-dot" style="width:7px;height:7px;border-radius:50%;background:#444;flex-shrink:0"></span>Polymarket</button>
-              <button id="ptab-kalshi" onclick="switchPortfolioTab('kalshi')" style="background:none;border:none;border-bottom:2px solid transparent;color:var(--dim);padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s;margin-bottom:-1px;display:flex;align-items:center;gap:7px"><span id="ptab-kalshi-dot" style="width:7px;height:7px;border-radius:50%;background:#444;flex-shrink:0"></span>Kalshi</button>
-              <button id="ptab-manifold" onclick="switchPortfolioTab('manifold')" style="background:none;border:none;border-bottom:2px solid transparent;color:var(--dim);padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s;margin-bottom:-1px;display:flex;align-items:center;gap:7px"><span id="ptab-manifold-dot" style="width:7px;height:7px;border-radius:50%;background:#444;flex-shrink:0"></span>Manifold</button>
-              <button id="ptab-hfx" onclick="switchPortfolioTab('hfx')" style="background:none;border:none;border-bottom:2px solid transparent;color:var(--dim);padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s;margin-bottom:-1px;display:flex;align-items:center;gap:7px"><span id="ptab-hfx-dot" style="width:7px;height:7px;border-radius:50%;background:#c9920d;flex-shrink:0"></span>HFX Community</button>
+            <!-- Platform tab bar -->
+            <div style="display:flex;border-bottom:1px solid var(--border);margin-bottom:28px;gap:0;overflow-x:auto">
+              <button id="ptab-all" onclick="switchPortfolioTab('all')"
+                style="background:none;border:none;border-bottom:2px solid var(--gold);color:var(--text);padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;transition:all .15s;margin-bottom:-1px">
+                All Positions
+              </button>
+              <button id="ptab-poly" onclick="switchPortfolioTab('poly')"
+                style="background:none;border:none;border-bottom:2px solid transparent;color:var(--dim);padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s;margin-bottom:-1px;display:flex;align-items:center;gap:7px">
+                <span id="ptab-poly-dot" style="width:7px;height:7px;border-radius:50%;background:#444;flex-shrink:0"></span>Polymarket
+              </button>
+              <button id="ptab-kalshi" onclick="switchPortfolioTab('kalshi')"
+                style="background:none;border:none;border-bottom:2px solid transparent;color:var(--dim);padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s;margin-bottom:-1px;display:flex;align-items:center;gap:7px">
+                <span id="ptab-kalshi-dot" style="width:7px;height:7px;border-radius:50%;background:#444;flex-shrink:0"></span>Kalshi
+              </button>
+              <button id="ptab-manifold" onclick="switchPortfolioTab('manifold')"
+                style="background:none;border:none;border-bottom:2px solid transparent;color:var(--dim);padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s;margin-bottom:-1px;display:flex;align-items:center;gap:7px">
+                <span id="ptab-manifold-dot" style="width:7px;height:7px;border-radius:50%;background:#444;flex-shrink:0"></span>Manifold
+              </button>
+              <button id="ptab-hfx" onclick="switchPortfolioTab('hfx')"
+                style="background:none;border:none;border-bottom:2px solid transparent;color:var(--dim);padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s;margin-bottom:-1px;display:flex;align-items:center;gap:7px">
+                <span style="width:7px;height:7px;border-radius:50%;background:#c9920d;flex-shrink:0"></span>HFX Community
+              </button>
             </div>
-            <!-- ALL -->
-            <div id="ptabContent-all"><div id="allPositionsContainer"><div style="text-align:center;padding:64px 20px;color:var(--dim)"><div style="font-size:40px;margin-bottom:16px;opacity:0.4">📊</div><div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:8px">No positions loaded yet</div><div style="font-size:13px">Connect platforms using the tabs above.</div></div></div></div>
+            <!-- ALL tab -->
+            <div id="ptabContent-all">
+              <div id="allPositionsContainer">
+                <div style="text-align:center;padding:64px 20px;color:var(--dim)">
+                  <div style="font-size:40px;margin-bottom:16px;opacity:0.4">📊</div>
+                  <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:8px">No positions loaded yet</div>
+                  <div style="font-size:13px;line-height:1.6">Connect a platform using the tabs above,<br>then come back here to see everything in one place.</div>
+                </div>
+              </div>
+            </div>
             <!-- POLYMARKET -->
             <div id="ptabContent-poly" style="display:none">
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
                 <div style="display:flex;align-items:center;gap:12px">
-                  <div style="width:38px;height:38px;border-radius:10px;background:rgba(124,58,237,0.15);border:1px solid rgba(124,58,237,0.3);display:flex;align-items:center;justify-content:center;font-size:18px">🟣</div>
+                  <div style="width:38px;height:38px;border-radius:10px;background:rgba(124,58,237,0.15);border:1px solid rgba(124,58,237,0.3);display:flex;align-items:center;justify-content:center;font-size:20px">🟣</div>
                   <div><div style="font-size:16px;font-weight:800;color:var(--text)">Polymarket</div><div style="font-size:11px;color:var(--dim);font-family:var(--mono)">Crypto prediction markets</div></div>
                 </div><div id="polyStatusBadge"></div>
               </div>
               <div id="polyConnectForm" style="background:var(--cream);border:1px solid var(--border);border-radius:14px;padding:28px">
-                <div style="font-size:13px;color:var(--dim);margin-bottom:20px;line-height:1.6">Paste your Polygon wallet address to instantly import all open positions.</div>
+                <div style="font-size:13px;color:var(--dim);margin-bottom:16px;line-height:1.6">Paste your Polygon wallet address to import all open positions and P&L instantly.</div>
                 <input type="text" id="poly-wallet-input" placeholder="0x... your wallet address" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:10px;padding:13px 16px;font-family:var(--mono);font-size:13px;color:var(--text);outline:none;margin-bottom:8px;box-sizing:border-box" onfocus="this.style.borderColor='rgba(124,58,237,0.6)'" onblur="this.style.borderColor='var(--border)'"/>
-                <div style="font-size:11px;color:var(--muted);margin-bottom:20px">Find at <a href="https://polymarket.com" target="_blank" style="color:#a78bfa">polymarket.com</a> → your profile</div>
+                <div style="font-size:11px;color:var(--dim);margin-bottom:20px">Find at <a href="https://polymarket.com" target="_blank" style="color:#a78bfa">polymarket.com</a> → your profile → copy address</div>
                 <button id="polyConnectBtn" onclick="connectPolymarket()" style="background:rgba(124,58,237,0.9);color:#fff;border:none;border-radius:10px;padding:12px 24px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;min-height:44px">Connect Polymarket →</button>
               </div>
               <div id="polyConnectedRow" style="display:none;align-items:center;gap:10px;margin-bottom:16px;padding:12px 16px;background:rgba(124,58,237,0.06);border:1px solid rgba(124,58,237,0.2);border-radius:10px">
-                <span style="width:8px;height:8px;border-radius:50%;background:#a78bfa;flex-shrink:0;box-shadow:0 0 6px rgba(167,139,250,0.6)"></span>
+                <span style="width:8px;height:8px;border-radius:50%;background:#a78bfa;flex-shrink:0"></span>
                 <div style="font-size:13px;color:var(--text);font-weight:600;flex:1">Wallet: <span id="polyWalletDisplay" style="font-family:var(--mono);font-size:12px;color:#a78bfa"></span></div>
                 <button onclick="loadPolymarketPositions(true)" style="background:none;border:1px solid rgba(124,58,237,0.3);border-radius:6px;padding:5px 12px;font-size:11px;color:#a78bfa;cursor:pointer;font-family:var(--mono)">↺ Sync</button>
                 <button onclick="disconnectPolymarket()" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:11px;color:var(--muted);cursor:pointer;font-family:var(--mono)">Disconnect</button>
@@ -4683,18 +4706,18 @@ body.nav-open .sidebar-backdrop {
             <div id="ptabContent-kalshi" style="display:none">
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
                 <div style="display:flex;align-items:center;gap:12px">
-                  <div style="width:38px;height:38px;border-radius:10px;background:rgba(217,119,6,0.15);border:1px solid rgba(217,119,6,0.3);display:flex;align-items:center;justify-content:center;font-size:18px">🟡</div>
+                  <div style="width:38px;height:38px;border-radius:10px;background:rgba(217,119,6,0.15);border:1px solid rgba(217,119,6,0.3);display:flex;align-items:center;justify-content:center;font-size:20px">🟡</div>
                   <div><div style="font-size:16px;font-weight:800;color:var(--text)">Kalshi</div><div style="font-size:11px;color:var(--dim);font-family:var(--mono)">Real-money prediction markets</div></div>
                 </div><div id="kalshiStatusBadge"></div>
               </div>
               <div id="kalshiConnectForm" style="background:var(--cream);border:1px solid var(--border);border-radius:14px;padding:28px">
-                <div style="font-size:13px;color:var(--dim);margin-bottom:20px;line-height:1.6">Connect with your Kalshi API key to sync real-money contracts and track P&L.</div>
+                <div style="font-size:13px;color:var(--dim);margin-bottom:16px;line-height:1.6">Connect with your Kalshi API key to sync real-money contracts and track P&L.</div>
                 <input type="password" id="kalshiApiKeyInput" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:10px;padding:13px 16px;font-family:var(--mono);font-size:13px;color:var(--text);outline:none;margin-bottom:8px;box-sizing:border-box" onfocus="this.style.borderColor='rgba(217,119,6,0.6)'" onblur="this.style.borderColor='var(--border)'"/>
-                <div style="font-size:11px;color:var(--muted);margin-bottom:20px">Get at <a href="https://kalshi.com/profile/api" target="_blank" style="color:#fbbf24">kalshi.com/profile/api</a> → API Access</div>
+                <div style="font-size:11px;color:var(--dim);margin-bottom:20px">Get at <a href="https://kalshi.com/profile/api" target="_blank" style="color:#fbbf24">kalshi.com/profile/api</a> → Settings → API Access</div>
                 <button id="kalshiConnectBtn" onclick="connectKalshi()" style="background:rgba(217,119,6,0.9);color:#fff;border:none;border-radius:10px;padding:12px 24px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;min-height:44px">Connect Kalshi →</button>
               </div>
               <div id="kalshiConnectedRow" style="display:none;align-items:center;gap:10px;margin-bottom:16px;padding:12px 16px;background:rgba(217,119,6,0.06);border:1px solid rgba(217,119,6,0.2);border-radius:10px">
-                <span style="width:8px;height:8px;border-radius:50%;background:#fbbf24;flex-shrink:0;box-shadow:0 0 6px rgba(251,191,36,0.6)"></span>
+                <span style="width:8px;height:8px;border-radius:50%;background:#fbbf24;flex-shrink:0"></span>
                 <div style="font-size:13px;color:var(--text);font-weight:600;flex:1">API key connected</div>
                 <button onclick="loadKalshiPositions(true)" style="background:none;border:1px solid rgba(217,119,6,0.3);border-radius:6px;padding:5px 12px;font-size:11px;color:#fbbf24;cursor:pointer;font-family:var(--mono)">↺ Sync</button>
                 <button onclick="disconnectKalshi()" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:11px;color:var(--muted);cursor:pointer;font-family:var(--mono)">Disconnect</button>
@@ -4705,18 +4728,18 @@ body.nav-open .sidebar-backdrop {
             <div id="ptabContent-manifold" style="display:none">
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
                 <div style="display:flex;align-items:center;gap:12px">
-                  <div style="width:38px;height:38px;border-radius:10px;background:rgba(5,150,105,0.15);border:1px solid rgba(5,150,105,0.3);display:flex;align-items:center;justify-content:center;font-size:18px">🟢</div>
+                  <div style="width:38px;height:38px;border-radius:10px;background:rgba(5,150,105,0.15);border:1px solid rgba(5,150,105,0.3);display:flex;align-items:center;justify-content:center;font-size:20px">🟢</div>
                   <div><div style="font-size:16px;font-weight:800;color:var(--text)">Manifold</div><div style="font-size:11px;color:var(--dim);font-family:var(--mono)">Play-money prediction markets</div></div>
                 </div><div id="manifoldStatusBadge"></div>
               </div>
               <div id="manifoldConnectForm" style="background:var(--cream);border:1px solid var(--border);border-radius:14px;padding:28px">
-                <div style="font-size:13px;color:var(--dim);margin-bottom:20px;line-height:1.6">Enter your Manifold username to track play-money positions and calibration score.</div>
+                <div style="font-size:13px;color:var(--dim);margin-bottom:16px;line-height:1.6">Enter your Manifold username to track play-money positions and calibration score.</div>
                 <input type="text" id="manifold-username-input" placeholder="your-username" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:10px;padding:13px 16px;font-family:var(--mono);font-size:13px;color:var(--text);outline:none;margin-bottom:8px;box-sizing:border-box" onfocus="this.style.borderColor='rgba(5,150,105,0.6)'" onblur="this.style.borderColor='var(--border)'"/>
-                <div style="font-size:11px;color:var(--muted);margin-bottom:20px">Find at <a href="https://manifold.markets" target="_blank" style="color:#34d399">manifold.markets</a> → your profile</div>
+                <div style="font-size:11px;color:var(--dim);margin-bottom:20px">Find at <a href="https://manifold.markets" target="_blank" style="color:#34d399">manifold.markets</a> → your profile</div>
                 <button id="manifoldConnectBtn" onclick="saveManifoldUsername()" style="background:rgba(5,150,105,0.9);color:#fff;border:none;border-radius:10px;padding:12px 24px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;min-height:44px">Connect Manifold →</button>
               </div>
               <div id="manifoldConnectedRow" style="display:none;align-items:center;gap:10px;margin-bottom:16px;padding:12px 16px;background:rgba(5,150,105,0.06);border:1px solid rgba(5,150,105,0.2);border-radius:10px">
-                <span style="width:8px;height:8px;border-radius:50%;background:#34d399;flex-shrink:0;box-shadow:0 0 6px rgba(52,211,153,0.6)"></span>
+                <span style="width:8px;height:8px;border-radius:50%;background:#34d399;flex-shrink:0"></span>
                 <div style="font-size:13px;color:var(--text);font-weight:600;flex:1">@<span id="manifoldUsernameDisplay" style="color:#34d399"></span></div>
                 <button onclick="loadManifoldPositions(true)" style="background:none;border:1px solid rgba(5,150,105,0.3);border-radius:6px;padding:5px 12px;font-size:11px;color:#34d399;cursor:pointer;font-family:var(--mono)">↺ Sync</button>
                 <button onclick="disconnectManifold()" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:11px;color:var(--muted);cursor:pointer;font-family:var(--mono)">Disconnect</button>
@@ -11177,10 +11200,12 @@ async function loadPortfolio() {
     renderKalshiConnectState();
     renderManifoldConnectState();
     renderPolymarketConnectState();
-    if (_kalshiConnected) loadKalshiPositions(false);
-    if (_manifoldUsername) loadManifoldPositions(false);
-    if (_polyWalletAddress) loadPolymarketPositions(false);
-    loadHFXPositions(false);
+    const fetches = [];
+    if (_kalshiConnected) fetches.push(loadKalshiPositions(false));
+    if (_manifoldUsername) fetches.push(loadManifoldPositions(false));
+    if (_polyWalletAddress) fetches.push(loadPolymarketPositions(false));
+    fetches.push(loadHFXPositions(false));
+    Promise.allSettled(fetches).then(() => { if (_activePortfolioTab === 'all') updateAllPositionsTab(); });
   } catch (e) {
     console.warn('[portfolio]', e);
   }
@@ -11200,6 +11225,7 @@ function renderKalshiConnectState() {
     // not connected
     document.getElementById('kalshiPositions').innerHTML = '';
   }
+  updatePortfolioTabDots();
 }
 
 async function connectKalshi() {
@@ -11357,6 +11383,7 @@ function renderManifoldConnectState() {
     const el = document.getElementById('manifoldPositions');
     if (el) el.innerHTML = '';
   }
+  updatePortfolioTabDots();
 }
 
 async function saveManifoldUsername() {
@@ -11496,6 +11523,7 @@ function renderPolymarketConnectState() {
     const el = document.getElementById('polyPositions');
     if (el) el.innerHTML = '';
   }
+  updatePortfolioTabDots();
 }
 
 async function connectPolymarket() {
@@ -11618,7 +11646,7 @@ function updateAllPositionsTab() {
   if(me&&me.innerHTML.trim()&&!me.innerHTML.includes('LOADING')) sections.push({label:'🟢 Manifold',el:me});
   const he=document.getElementById('hfxPositions');
   if(he&&he.innerHTML.trim()&&!he.innerHTML.includes('LOADING')&&!he.innerHTML.includes('No predictions')) sections.push({label:'⚡ HFX Community',el:he});
-  if(!sections.length){c.innerHTML='<div style="text-align:center;padding:48px 20px;color:var(--dim)"><div style="font-size:32px;margin-bottom:12px">📊</div><div style="font-size:14px;color:var(--text);font-weight:600;margin-bottom:6px">Switch to a platform tab to load positions</div></div>';return;}
+  if(!sections.length){c.innerHTML='<div style="text-align:center;padding:48px 20px;color:var(--dim)"><div style="font-size:32px;margin-bottom:12px">🌐</div><div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px">Connect a platform to get started</div><div style="font-size:13px">Use the tabs above to connect Polymarket, Kalshi, or Manifold.</div></div>';return;}
   c.innerHTML=sections.map(s=>'<div style="margin-bottom:20px"><div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:10px">'+s.label+'</div>'+s.el.innerHTML+'</div>').join('');
 }
 // ── POSITION CARD RENDERER ──────────────────────────────────────────────────
