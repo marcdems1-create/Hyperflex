@@ -1319,6 +1319,26 @@ footer {
 @media (max-width: 480px) {
   .btn-nav-login { display: none; }
 }
+/* ── FEATURE CARDS ── */
+.feat-card {
+  background: linear-gradient(145deg, #1f1e19 0%, #191917 100%);
+  border: 1px solid #353530;
+  border-radius: 14px;
+  padding: 28px 24px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.03);
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+}
+.feat-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(201,146,13,0.38);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.55), 0 0 0 1px rgba(201,146,13,0.06), inset 0 1px 0 rgba(255,255,255,0.04);
+}
+.feat-card-icon { font-size: 30px; margin-bottom: 18px; display: inline-block; filter: drop-shadow(0 2px 8px rgba(201,146,13,0.2)); }
+/* ── TESTIMONIAL CARDS ── */
+.testimonial-card { background: linear-gradient(160deg, #1a1918 0%, #161614 100%); border: 1px solid #2e2e2a; border-radius: 12px; padding: 26px 24px 22px; position: relative; overflow: hidden; transition: border-color 0.2s, box-shadow 0.2s; }
+.testimonial-card::before { content: '\201C'; position: absolute; top: -8px; left: 16px; font-size: 72px; font-family: 'Syne', sans-serif; font-weight: 800; color: rgba(201,146,13,0.09); line-height: 1; pointer-events: none; user-select: none; }
+.testimonial-card:hover { border-color: rgba(201,146,13,0.22); box-shadow: 0 6px 28px rgba(0,0,0,0.4); }
+.testimonial-quote { font-size: 13px; color: #ccc8bc; line-height: 1.7; margin: 0 0 18px; position: relative; z-index: 1; }
 </style>
 </head>
 <body>
@@ -1579,20 +1599,20 @@ document.getElementById('qp-username').addEventListener('keydown', e => { if (e.
 
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;margin-bottom:64px">
     <!-- Track -->
-    <div style="background:#191917;border:1px solid #2a2a26;border-radius:14px;padding:28px 24px">
-      <div style="font-size:28px;margin-bottom:16px">📊</div>
+    <div class="feat-card">
+      <div class="feat-card-icon">📊</div>
       <h3 style="font-family:var(--sans);font-size:17px;font-weight:800;color:var(--text);margin:0 0 10px">Track every position</h3>
       <p style="font-size:13px;color:var(--dim);line-height:1.6;margin:0">Polymarket, Kalshi, and Manifold in one unified dashboard. P&L auto-calculated across all platforms. No spreadsheets, no tab-switching.</p>
     </div>
     <!-- Prove -->
-    <div style="background:#191917;border:1px solid #2a2a26;border-radius:14px;padding:28px 24px">
-      <div style="font-size:28px;margin-bottom:16px">🏆</div>
+    <div class="feat-card">
+      <div class="feat-card-icon">🏆</div>
       <h3 style="font-family:var(--sans);font-size:17px;font-weight:800;color:var(--text);margin:0 0 10px">Prove your edge</h3>
       <p style="font-size:13px;color:var(--dim);line-height:1.6;margin:0">Calibration score, win rate, and sharp score — all public on your profile. Show the world you're not just guessing. Leaderboards rank the best.</p>
     </div>
     <!-- Stay ahead -->
-    <div style="background:#191917;border:1px solid #2a2a26;border-radius:14px;padding:28px 24px">
-      <div style="font-size:28px;margin-bottom:16px">⚡</div>
+    <div class="feat-card">
+      <div class="feat-card-icon">⚡</div>
       <h3 style="font-family:var(--sans);font-size:17px;font-weight:800;color:var(--text);margin:0 0 10px">Stay ahead</h3>
       <p style="font-size:13px;color:var(--dim);line-height:1.6;margin:0">Follow top predictors and see their calls in your feed. Weekly spotlight emails surface the sharpest minds. Never miss a signal.</p>
     </div>
@@ -1603,8 +1623,8 @@ document.getElementById('qp-username').addEventListener('keydown', e => { if (e.
     <div style="font-family:var(--mono);font-size:11px;color:var(--dim);letter-spacing:0.1em;text-transform:uppercase">What traders are saying</div>
   </div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px">
-    <div style="background:#161614;border:1px solid #2a2a26;border-radius:12px;padding:24px">
-      <p style="font-size:13px;color:var(--text);line-height:1.65;margin:0 0 16px">"I had positions across Polymarket and Manifold with no way to see my total P&L. Connected both in 30 seconds — now I check one dashboard instead of three tabs."</p>
+    <div class="testimonial-card">
+      <p class="testimonial-quote">"I had positions across Polymarket and Manifold with no way to see my total P&L. Connected both in 30 seconds — now I check one dashboard instead of three tabs."</p>
       <div style="display:flex;align-items:center;gap:10px">
         <div style="width:32px;height:32px;border-radius:50%;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#818cf8">DK</div>
         <div>
@@ -1613,8 +1633,8 @@ document.getElementById('qp-username').addEventListener('keydown', e => { if (e.
         </div>
       </div>
     </div>
-    <div style="background:#161614;border:1px solid #2a2a26;border-radius:12px;padding:24px">
-      <p style="font-size:13px;color:var(--text);line-height:1.65;margin:0 0 16px">"The sharp score is addictive. I went from guessing to actually tracking my calibration. My win rate went from 52% to 68% in two months just by seeing the data."</p>
+    <div class="testimonial-card">
+      <p class="testimonial-quote">"The sharp score is addictive. I went from guessing to actually tracking my calibration. My win rate went from 52% to 68% in two months just by seeing the data."</p>
       <div style="display:flex;align-items:center;gap:10px">
         <div style="width:32px;height:32px;border-radius:50%;background:rgba(201,146,13,0.15);border:1px solid rgba(201,146,13,0.3);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--gold)">SP</div>
         <div>
@@ -1623,8 +1643,8 @@ document.getElementById('qp-username').addEventListener('keydown', e => { if (e.
         </div>
       </div>
     </div>
-    <div style="background:#161614;border:1px solid #2a2a26;border-radius:12px;padding:24px">
-      <p style="font-size:13px;color:var(--text);line-height:1.65;margin:0 0 16px">"Following the top predictors changed my whole approach. I see what the sharpest people are betting on before I make my own calls. The weekly spotlight email is gold."</p>
+    <div class="testimonial-card">
+      <p class="testimonial-quote">"Following the top predictors changed my whole approach. I see what the sharpest people are betting on before I make my own calls. The weekly spotlight email is gold."</p>
       <div style="display:flex;align-items:center;gap:10px">
         <div style="width:32px;height:32px;border-radius:50%;background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.3);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#22c55e">MR</div>
         <div>

@@ -320,7 +320,7 @@ nav {
   display: grid;
   grid-template-columns: 40px 1fr;
   gap: 12px;
-  transition: background 0.12s;
+  transition: background 0.12s, border-color 0.12s;
   cursor: pointer;
   text-decoration: none;
   color: inherit;
@@ -328,7 +328,7 @@ nav {
 .activity-card:first-child { border-radius: var(--radius) var(--radius) 0 0; }
 .activity-card:last-child { border-bottom: 1px solid var(--border); border-radius: 0 0 var(--radius) var(--radius); }
 .activity-card:only-child { border-bottom: 1px solid var(--border); border-radius: var(--radius); }
-.activity-card:hover { background: rgba(255,255,255,0.022); }
+.activity-card:hover { background: rgba(255,255,255,0.03); border-color: var(--border-hover); }
 .ac-avatar {
   width: 40px; height: 40px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
@@ -425,6 +425,7 @@ nav {
   border-radius: var(--radius);
   padding: 18px 20px;
   margin-bottom: 16px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.35);
 }
 .sidebar-title {
   font-family: 'Syne', sans-serif;
@@ -446,7 +447,8 @@ nav {
   transition: all 0.15s;
 }
 .community-row:last-child { border-bottom: none; }
-.community-row:hover { opacity: 0.75; }
+.community-row:hover { opacity: 1; color: var(--text); }
+.community-row:hover .community-name { color: #d4a83a; }
 .community-dot {
   width: 8px;
   height: 8px;

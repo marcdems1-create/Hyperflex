@@ -1477,7 +1477,13 @@ body.plan-premium .main {
   position: relative;
   transition: transform 0.15s;
 }
-.stat-card:hover { transform: translateY(-1px); }
+.stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 20px rgba(201,146,13,0.06), inset 0 1px 0 rgba(255,255,255,0.03); }
+/* Form field primitives */
+.form-label { display:block; font-family:var(--mono); font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); margin-bottom:6px; }
+.form-input { display:block; width:100%; box-sizing:border-box; background:var(--paper); border:1px solid var(--border); border-radius:8px; color:var(--text); font-family:var(--sans); font-size:13px; padding:10px 14px; outline:none; transition:border-color .15s; }
+.form-input:focus { border-color:rgba(201,146,13,0.5); }
+textarea.form-input { resize:vertical; min-height:80px; }
+input[type="date"].form-input { color-scheme:dark; }
 .stat-card-icon {
   font-size: 18px;
   margin-bottom: 14px;
@@ -2817,7 +2823,7 @@ body.nav-open .sidebar-backdrop {
         <span class="nav-icon">🎯</span><span class="nav-label">Markets</span>
       </a>
       <a class="nav-item" onclick="showTab('members')">
-        <span class="nav-icon">👥</span><span class="nav-label">Members</span>
+        <span class="nav-icon">👥</span><span class="nav-label">Followers</span>
       </a>
       <a class="nav-item" onclick="showTab('leaderboard')">
         <span class="nav-icon">🏆</span><span class="nav-label">Leaderboard</span>
@@ -3930,6 +3936,24 @@ body.nav-open .sidebar-backdrop {
             </div>
           </div>
 
+          <div id="platformAnalyticsSection" style="display:none;margin-bottom:20px">
+            <div class="section" style="margin-bottom:0">
+              <div class="section-header">
+                <div>
+                  <div class="section-title">🌐 My Prediction Analytics</div>
+                  <div class="section-subtitle">Your personal track record across all connected platforms</div>
+                </div>
+                <button class="btn-secondary" onclick="loadPlatformAnalytics(true)" style="font-size:13px">↺ Refresh</button>
+              </div>
+              <div class="markets-table" style="padding:20px 24px">
+                <div id="platformAnalyticsGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:20px"></div>
+                <div id="platformAnalyticsEmpty" style="display:none;padding:16px;text-align:center;color:var(--dim);font-size:13px;font-family:var(--mono)">
+                  Connect Polymarket, Kalshi, or Manifold in the Portfolio tab to see your cross-platform stats.
+                </div>
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
 
@@ -4629,6 +4653,7 @@ body.nav-open .sidebar-backdrop {
               <button id="ptab-poly" onclick="switchPortfolioTab('poly')" style="background:none;border:none;border-bottom:2px solid transparent;color:var(--dim);padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s;margin-bottom:-1px;display:flex;align-items:center;gap:7px"><span id="ptab-poly-dot" style="width:7px;height:7px;border-radius:50%;background:#444;flex-shrink:0"></span>Polymarket</button>
               <button id="ptab-kalshi" onclick="switchPortfolioTab('kalshi')" style="background:none;border:none;border-bottom:2px solid transparent;color:var(--dim);padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s;margin-bottom:-1px;display:flex;align-items:center;gap:7px"><span id="ptab-kalshi-dot" style="width:7px;height:7px;border-radius:50%;background:#444;flex-shrink:0"></span>Kalshi</button>
               <button id="ptab-manifold" onclick="switchPortfolioTab('manifold')" style="background:none;border:none;border-bottom:2px solid transparent;color:var(--dim);padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s;margin-bottom:-1px;display:flex;align-items:center;gap:7px"><span id="ptab-manifold-dot" style="width:7px;height:7px;border-radius:50%;background:#444;flex-shrink:0"></span>Manifold</button>
+              <button id="ptab-hfx" onclick="switchPortfolioTab('hfx')" style="background:none;border:none;border-bottom:2px solid transparent;color:var(--dim);padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s;margin-bottom:-1px;display:flex;align-items:center;gap:7px"><span id="ptab-hfx-dot" style="width:7px;height:7px;border-radius:50%;background:#c9920d;flex-shrink:0"></span>HFX Community</button>
             </div>
             <!-- ALL -->
             <div id="ptabContent-all"><div id="allPositionsContainer"><div style="text-align:center;padding:64px 20px;color:var(--dim)"><div style="font-size:40px;margin-bottom:16px;opacity:0.4">📊</div><div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:8px">No positions loaded yet</div><div style="font-size:13px">Connect platforms using the tabs above.</div></div></div></div>
@@ -4698,6 +4723,22 @@ body.nav-open .sidebar-backdrop {
               </div>
               <div id="manifoldPositions"></div>
             </div>
+            <!-- HFX COMMUNITY tab -->
+            <div id="ptabContent-hfx" style="display:none">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+                <div style="display:flex;align-items:center;gap:12px">
+                  <div style="width:38px;height:38px;border-radius:10px;background:rgba(201,146,13,0.15);border:1px solid rgba(201,146,13,0.3);display:flex;align-items:center;justify-content:center;font-size:18px">⚡</div>
+                  <div>
+                    <div style="font-size:16px;font-weight:800;color:var(--text)">HFX Community Markets</div>
+                    <div style="font-size:11px;color:var(--dim);font-family:var(--mono)">Your prediction history on HYPERFLEX</div>
+                  </div>
+                </div>
+                <button onclick="loadHFXPositions(true)" style="background:none;border:1px solid rgba(201,146,13,0.3);border-radius:6px;padding:5px 12px;font-size:11px;color:var(--gold);cursor:pointer;font-family:var(--mono)">↺ Refresh</button>
+              </div>
+              <div id="hfxPositions">
+                <div style="padding:32px 0;text-align:center;font-family:var(--mono);font-size:11px;color:#4a4744;letter-spacing:.08em">LOADING…</div>
+              </div>
+            </div>
           </div><!-- /portfolioMain -->
           </div>
         </div>
@@ -4746,6 +4787,18 @@ body.nav-open .sidebar-backdrop {
               <div style="display:flex;align-items:center;gap:12px">
                 <div class="plan-pill free" id="accountPlanPill" onclick="handlePlanPillClick()" style="cursor:pointer">Free</div>
                 <button onclick="handlePlanPillClick()" style="background:var(--gold);color:var(--ink);border:none;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">⚡ Upgrade to Pro</button>
+              </div>
+            </div>
+
+            <!-- Change Password -->
+            <div style="margin-top:28px">
+              <div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:12px">Change Password</div>
+              <div style="display:flex;flex-direction:column;gap:10px">
+                <input type="password" id="acCurrent" class="form-input" placeholder="Current password" autocomplete="current-password" />
+                <input type="password" id="acNew" class="form-input" placeholder="New password" autocomplete="new-password" />
+                <input type="password" id="acConfirm" class="form-input" placeholder="Confirm new password" autocomplete="new-password" />
+                <div id="acError" style="font-size:12px;color:#ef4444;display:none;font-family:var(--mono)"></div>
+                <button class="btn-primary" onclick="submitAccountChangePassword()" style="width:fit-content">Update Password</button>
               </div>
             </div>
           </div>
@@ -6126,7 +6179,7 @@ function sortMembers(mode) {
 
 function renderMembersTable() {
   const tbody = document.getElementById('membersTableBody');
-  document.getElementById('memberCountLabel').textContent = _membersFiltered.length + ' member' + (_membersFiltered.length !== 1 ? 's' : '');
+  document.getElementById('memberCountLabel').textContent = _membersFiltered.length + ' follower' + (_membersFiltered.length !== 1 ? 's' : '');
 
   if (!_membersFiltered.length) {
     tbody.innerHTML = '<tr><td colspan="7" style="padding:32px;text-align:center;font-family:var(--mono);font-size:12px;color:var(--dim)">No members found</td></tr>';
@@ -6142,6 +6195,8 @@ function renderMembersTable() {
   };
 
   tbody.innerHTML = _membersFiltered.map(m => {
+    const creatorId = creatorData?.creator?.id;
+    const isCreator = creatorId && (m.user_id === creatorId || m.id === creatorId);
     const balPts    = Math.floor(m.balance / 100).toLocaleString();
     const winRateTxt = m.win_rate !== null ? m.win_rate + '%' : '—';
     const winColor   = m.win_rate !== null ? (m.win_rate >= 60 ? '#22c55e' : m.win_rate >= 40 ? 'var(--text)' : '#ef4444') : 'var(--dim)';
@@ -6149,7 +6204,10 @@ function renderMembersTable() {
 
     return `<tr style="border-bottom:1px solid var(--border);transition:background .1s" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background=''">
       <td style="padding:12px 20px">
-        <div style="font-size:13px;font-weight:700;color:var(--text)">${escHtml(m.display_name)}</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:13px;font-weight:700;color:var(--text)">${escHtml(m.display_name)}</span>
+          ${isCreator ? '<span title="Creator" style="font-size:12px;line-height:1">⭐</span>' : ''}
+        </div>
         ${m.email ? `<div style="font-size:10px;font-family:var(--mono);color:var(--dim)">${m.email}</div>` : ''}
       </td>
       <td style="text-align:right;padding:12px;font-family:var(--mono);font-size:12px;color:var(--gold)">${balPts} <span style="font-size:10px;color:var(--dim)">${_membersPtsName}</span></td>
@@ -6361,7 +6419,7 @@ function showTab(tab) {
   document.querySelectorAll('.nav-item').forEach(n => {
     if (n.getAttribute('onclick') && n.getAttribute('onclick').includes(`'${tab}'`)) n.classList.add('active');
   });
-  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Members', portfolio:'My Portfolio', account:'My Account' };
+  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Followers', portfolio:'My Portfolio', account:'My Account' };
   document.getElementById('topbarTitle').textContent = titles[tab] || tab;
   if (tab === 'analytics' && !analyticsLoaded) loadAnalytics();
   if (tab === 'members') loadMembers();
@@ -6373,6 +6431,32 @@ function showTab(tab) {
     if (kitSection) kitSection.style.display = (plan === 'pro' || plan === 'platinum') ? '' : 'none';
   }
   if (tab === 'resolve') loadDisputes();
+  // Re-render markets from cache so tab is never stuck on "Loading…"
+  if (tab === 'markets') {
+    if (communityMarkets && communityMarkets.length >= 0) {
+      updateMarketCounts();
+      filterMarkets(currentMarketFilter);
+    }
+  }
+  // Re-render overview from cached creatorData
+  if (tab === 'overview' && creatorData) {
+    const { stats, markets, leaderboard, creator } = creatorData;
+    const cm = communityMarkets || markets || [];
+    renderMarketRows(cm.filter(m => !m.archived).slice(0, 5), 'overviewMarketsList');
+    renderLeaderboard(leaderboard || [], 'overviewLeaderboard', 5, creator.custom_points_name, true);
+    setStatValue('statTraders', stats.total_traders || 0);
+    setStatValue('statLive', stats.live_markets || 0);
+    setStatValue('statVolume', stats.total_volume || 0, true);
+    setStatValue('statWeekly', stats.weekly_trades || 0);
+  }
+  // Sync resolve list from cached resolveQueue
+  if (tab === 'resolve') {
+    const flEl = document.getElementById('fullResolveList');
+    if (flEl && resolveQueue) {
+      if (resolveQueue.length > 0) renderResolveList(resolveQueue, 'fullResolveList');
+      else flEl.innerHTML = '<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">All caught up!</div><div class="empty-desc">No markets need resolution right now.</div></div>';
+    }
+  }
   if (tab === 'portfolio') loadPortfolio();
   if (tab === 'account') populateAccountTab();
   if (tab === 'seasons' && !seasonsLoaded) loadSeasons();
@@ -7531,6 +7615,30 @@ async function submitCreatorChangePassword() {
   } catch { errEl.textContent = 'Network error — try again'; errEl.style.display = 'block'; }
 }
 
+async function submitAccountChangePassword() {
+  const current = document.getElementById('acCurrent').value;
+  const newPw   = document.getElementById('acNew').value;
+  const confirm = document.getElementById('acConfirm').value;
+  const errEl   = document.getElementById('acError');
+  errEl.style.display = 'none';
+  if (!current || !newPw || !confirm) { errEl.textContent = 'All fields required'; errEl.style.display = 'block'; return; }
+  if (newPw.length < 8) { errEl.textContent = 'Min 8 characters'; errEl.style.display = 'block'; return; }
+  if (newPw !== confirm) { errEl.textContent = 'Passwords do not match'; errEl.style.display = 'block'; return; }
+  try {
+    const r = await fetch('/api/user/change-password', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getToken() },
+      body: JSON.stringify({ current_password: current, new_password: newPw })
+    });
+    const data = await r.json();
+    if (!r.ok) { errEl.textContent = data.error || 'Failed'; errEl.style.display = 'block'; return; }
+    document.getElementById('acCurrent').value = '';
+    document.getElementById('acNew').value = '';
+    document.getElementById('acConfirm').value = '';
+    showToast('Password updated ✓', 'success');
+  } catch { errEl.textContent = 'Network error'; errEl.style.display = 'block'; }
+}
+
 // ── ACCOUNT DELETION ──────────────────────────────────────
 function openDeleteAccountModal() {
   document.getElementById('deleteConfirmInput').value = '';
@@ -8322,6 +8430,7 @@ async function loadAnalytics() {
       renderAudienceIntelligence(data, ptsName);
     }
 
+    loadPlatformAnalytics(false);
     analyticsLoaded = true;
   } catch (err) {
     console.error('analytics load error:', err);
@@ -8330,6 +8439,48 @@ async function loadAnalytics() {
     if (loadingEl) loadingEl.style.display = 'none';
     if (errorEl)   errorEl.style.display = '';
   }
+}
+
+let _platformAnalyticsLoaded = false;
+async function loadPlatformAnalytics(force) {
+  if (_platformAnalyticsLoaded && !force) return;
+  _platformAnalyticsLoaded = true;
+  const section = document.getElementById('platformAnalyticsSection');
+  const grid = document.getElementById('platformAnalyticsGrid');
+  const empty = document.getElementById('platformAnalyticsEmpty');
+  if (!section || !grid) return;
+  const userId = creatorData?.creator?.id;
+  if (!userId) return;
+  try {
+    const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+    const r = await fetch(`/api/predictors/${userId}/analytics`, { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) return;
+    const data = await r.json();
+    const platforms = data.platforms || {};
+    const meta = {
+      hyperflex: { label:'⚡ HFX Community', color:'#c9920d', bg:'rgba(201,146,13,0.08)', border:'rgba(201,146,13,0.25)' },
+      polymarket: { label:'🟣 Polymarket', color:'#a78bfa', bg:'rgba(167,139,250,0.08)', border:'rgba(167,139,250,0.25)' },
+      kalshi:     { label:'🟡 Kalshi', color:'#fbbf24', bg:'rgba(251,191,36,0.08)', border:'rgba(251,191,36,0.25)' },
+      manifold:   { label:'🟢 Manifold', color:'#34d399', bg:'rgba(52,211,153,0.08)', border:'rgba(52,211,153,0.25)' },
+    };
+    const cards = Object.entries(platforms).filter(([,v]) => v.total > 0).map(([platform, v]) => {
+      const m = meta[platform] || meta.hyperflex;
+      const winRate = v.total > 0 ? Math.round((v.wins / v.total) * 100) : 0;
+      const pnl = Number(v.pnl) || 0;
+      const unit = platform === 'hyperflex' ? 'pts' : platform === 'manifold' ? 'M$' : '$';
+      return `<div style="background:${m.bg};border:1px solid ${m.border};border-radius:12px;padding:16px 18px">
+        <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:${m.color};letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px">${m.label}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div><div style="font-size:10px;color:var(--dim);margin-bottom:3px">TOTAL TRADES</div><div style="font-size:22px;font-weight:900;color:var(--text);font-family:var(--mono)">${v.total}</div></div>
+          <div><div style="font-size:10px;color:var(--dim);margin-bottom:3px">WIN RATE</div><div style="font-size:22px;font-weight:900;font-family:var(--mono);color:${winRate>=60?'#22c55e':winRate>=40?'var(--text)':'#ef4444'}">${winRate}%</div></div>
+          <div style="grid-column:1/-1;border-top:1px solid rgba(255,255,255,0.06);padding-top:8px;margin-top:4px"><div style="font-size:10px;color:var(--dim);margin-bottom:2px">P&L</div><div style="font-size:16px;font-weight:700;font-family:var(--mono);color:${pnl>=0?'#22c55e':'#ef4444'}">${pnl>=0?'+':''}${pnl.toFixed(1)} ${unit}</div></div>
+        </div>
+      </div>`;
+    });
+    section.style.display = 'block';
+    if (!cards.length) { grid.innerHTML = ''; if (empty) empty.style.display = 'block'; }
+    else { grid.innerHTML = cards.join(''); if (empty) empty.style.display = 'none'; }
+  } catch(e) { console.warn('[platform analytics]', e); }
 }
 
 // ── AUDIENCE INTELLIGENCE ─────────────────────────────────
@@ -11029,6 +11180,7 @@ async function loadPortfolio() {
     if (_kalshiConnected) loadKalshiPositions(false);
     if (_manifoldUsername) loadManifoldPositions(false);
     if (_polyWalletAddress) loadPolymarketPositions(false);
+    loadHFXPositions(false);
   } catch (e) {
     console.warn('[portfolio]', e);
   }
@@ -11437,8 +11589,8 @@ async function loadPolymarketPositions(forceRefresh) {
 let _activePortfolioTab = 'all';
 function switchPortfolioTab(tab) {
   _activePortfolioTab = tab;
-  const tabs = ['all','poly','kalshi','manifold'];
-  const colors = {all:'var(--gold)',poly:'#a78bfa',kalshi:'#fbbf24',manifold:'#34d399'};
+  const tabs = ['all','poly','kalshi','manifold','hfx'];
+  const colors = {all:'var(--gold)',poly:'#a78bfa',kalshi:'#fbbf24',manifold:'#34d399',hfx:'var(--gold)'};
   tabs.forEach(t => {
     const btn = document.getElementById('ptab-'+t);
     const content = document.getElementById('ptabContent-'+t);
@@ -11446,6 +11598,7 @@ function switchPortfolioTab(tab) {
     if (content) content.style.display = t===tab ? 'block' : 'none';
   });
   if (tab === 'all') updateAllPositionsTab();
+  if (tab === 'hfx') loadHFXPositions(false);
 }
 function updatePortfolioTabDots() {
   const pd=document.getElementById('ptab-poly-dot'),kd=document.getElementById('ptab-kalshi-dot'),md=document.getElementById('ptab-manifold-dot');
@@ -11463,6 +11616,8 @@ function updateAllPositionsTab() {
   if(pe&&pe.innerHTML.trim()&&!pe.innerHTML.includes('LOADING')) sections.push({label:'🟣 Polymarket',el:pe});
   if(ke&&ke.innerHTML.trim()&&!ke.innerHTML.includes('LOADING')) sections.push({label:'🟡 Kalshi',el:ke});
   if(me&&me.innerHTML.trim()&&!me.innerHTML.includes('LOADING')) sections.push({label:'🟢 Manifold',el:me});
+  const he=document.getElementById('hfxPositions');
+  if(he&&he.innerHTML.trim()&&!he.innerHTML.includes('LOADING')&&!he.innerHTML.includes('No predictions')) sections.push({label:'⚡ HFX Community',el:he});
   if(!sections.length){c.innerHTML='<div style="text-align:center;padding:48px 20px;color:var(--dim)"><div style="font-size:32px;margin-bottom:12px">📊</div><div style="font-size:14px;color:var(--text);font-weight:600;margin-bottom:6px">Switch to a platform tab to load positions</div></div>';return;}
   c.innerHTML=sections.map(s=>'<div style="margin-bottom:20px"><div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:10px">'+s.label+'</div>'+s.el.innerHTML+'</div>').join('');
 }
@@ -11478,6 +11633,48 @@ function renderPositionCard({question,side,pct,meta,pnl,pnlLabel,pnlIsPercent,ur
   const posJson=JSON.stringify(posData||{}).replace(/'/g,"&#39;").replace(/"/g,"&quot;");
   return `<div style="background:#0f0e0c;border:1px solid #2a2825;border-radius:12px;overflow:hidden;margin-bottom:8px;transition:border-color .15s,box-shadow .15s" onmouseover="this.style.borderColor='${accentColor}55';this.style.boxShadow='0 0 0 1px ${accentColor}22'" onmouseout="this.style.borderColor='#2a2825';this.style.boxShadow='none'"><div style="height:2px;background:${accentColor};opacity:0.5"></div><div style="padding:16px 18px"><div style="display:flex;align-items:flex-start;gap:12px"><span style="flex-shrink:0;margin-top:1px;font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 9px;border-radius:5px;background:${sideBg};color:${sideColor};border:1px solid ${sideBorder}">${side||'—'}</span><div style="flex:1;min-width:0"><a href="${url}" target="_blank" rel="noopener" style="text-decoration:none"><div style="font-size:13px;font-weight:600;color:#e8e4de;line-height:1.5;margin-bottom:10px">${escHtmlDash(question)}</div></a><div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span style="font-family:var(--mono);font-size:10px;color:#6b6560">Current odds</span><span style="font-family:var(--mono);font-size:11px;font-weight:700;color:${accentColor}">${pct!=null?pct+'%':'—'}</span></div><div style="height:4px;background:#1e1c19;border-radius:2px;overflow:hidden"><div style="height:100%;width:${probBar}%;background:${accentColor};border-radius:2px"></div></div></div><div style="font-family:var(--mono);font-size:11px;color:#6b6560">${meta||''}</div></div>${pnl!=null?`<div style="flex-shrink:0;text-align:right"><div style="font-family:var(--mono);font-size:15px;font-weight:800;color:${pnlColor}">${pnlStr}</div><div style="font-family:var(--mono);font-size:9px;color:#4a4744;margin-top:2px;text-transform:uppercase">${pnlLabel}</div></div>`:''}</div><div style="margin-top:12px;padding-top:10px;border-top:1px solid #1e1c19;display:flex;justify-content:flex-end"><button data-pos="${posJson}" onclick="sharePositionToFeed(JSON.parse(this.getAttribute('data-pos').replace(/&quot;/g,'\\"')))" style="background:none;border:1px solid #2a2825;border-radius:6px;padding:5px 14px;font-size:10px;color:#6b6560;cursor:pointer;font-family:var(--mono);transition:all .15s;letter-spacing:.04em" onmouseover="this.style.borderColor='${accentColor}';this.style.color='${accentColor}'" onmouseout="this.style.borderColor='#2a2825';this.style.color='#6b6560'">📢 SHARE TO FEED</button></div></div></div>`;
 }
+let _hfxPositionsLoaded = false;
+async function loadHFXPositions(force) {
+  if (_hfxPositionsLoaded && !force) return;
+  _hfxPositionsLoaded = true;
+  const el = document.getElementById('hfxPositions');
+  if (!el) return;
+  el.innerHTML = '<div style="padding:32px 0;text-align:center;font-family:var(--mono);font-size:11px;color:#4a4744;letter-spacing:.08em">LOADING POSITIONS…</div>';
+  const userId = creatorData?.creator?.id;
+  if (!userId) { el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--dim);font-size:13px">Dashboard not loaded.</div>'; return; }
+  try {
+    const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+    const r = await fetch(`/api/predictors/${userId}/portfolio`, { headers: { Authorization: 'Bearer ' + token } });
+    const data = await r.json();
+    const bets = data.hyperflex_bets || [];
+    if (!bets.length) {
+      el.innerHTML = '<div style="text-align:center;padding:48px 20px;color:var(--dim)"><div style="font-size:40px;margin-bottom:12px;opacity:0.4">🎯</div><div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:8px">No predictions yet</div><div style="font-size:13px">Your community market trades will appear here once you start betting.</div></div>';
+      return;
+    }
+    const fmtPts = cp => (cp / 100).toLocaleString(undefined, { maximumFractionDigits: 1 });
+    const fmtDate = iso => new Date(iso).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'2-digit' });
+    const open = bets.filter(b => !b.settled);
+    const settled = bets.filter(b => b.settled);
+    const renderRow = b => {
+      const mkt = b.markets || {};
+      const sideColor = b.side === 'YES' ? '#22c55e' : '#ef4444';
+      let badge = !b.settled ? '<span style="font-family:var(--mono);font-size:9px;padding:2px 7px;border-radius:10px;background:rgba(201,146,13,0.12);color:var(--gold);border:1px solid rgba(201,146,13,0.3)">OPEN</span>' : b.won ? '<span style="font-family:var(--mono);font-size:9px;padding:2px 7px;border-radius:10px;background:rgba(34,197,94,0.1);color:#22c55e;border:1px solid rgba(34,197,94,0.3)">WON</span>' : '<span style="font-family:var(--mono);font-size:9px;padding:2px 7px;border-radius:10px;background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.3)">LOST</span>';
+      const pnl = b.settled ? (b.won ? (b.potential_payout - b.amount) / 100 : -b.amount / 100) : null;
+      const pnlStr = pnl !== null ? (pnl >= 0 ? `+${pnl.toFixed(1)} pts` : `${pnl.toFixed(1)} pts`) : '';
+      return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.04)" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background=''">
+        <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:${sideColor};min-width:32px">${b.side}</span>
+        <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${mkt.question || 'Unknown'}</div><div style="font-size:11px;color:var(--dim);margin-top:2px;font-family:var(--mono)">${fmtDate(b.created_at)} · ${fmtPts(b.amount)} pts</div></div>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">${pnlStr ? `<span style="font-family:var(--mono);font-size:12px;font-weight:700;color:${pnl>=0?'#22c55e':'#ef4444'}">${pnlStr}</span>` : ''}${badge}</div>
+      </div>`;
+    };
+    let html = '';
+    if (open.length) html += `<div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);padding:0 16px 8px">Open (${open.length})</div><div style="background:var(--cream);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:20px">${open.map(renderRow).join('')}</div>`;
+    if (settled.length) html += `<div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);padding:0 16px 8px">Settled (${settled.length})</div><div style="background:var(--cream);border:1px solid var(--border);border-radius:12px;overflow:hidden">${settled.map(renderRow).join('')}</div>`;
+    el.innerHTML = html;
+    if (_activePortfolioTab === 'all') updateAllPositionsTab();
+  } catch(e) { el.innerHTML = `<div style="padding:24px;text-align:center;color:#ef4444;font-family:var(--mono);font-size:12px">${e.message}</div>`; }
+}
+
 async function sharePositionToFeed(p) {
   try {
     const token = localStorage.getItem('hf_token');
