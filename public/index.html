@@ -1354,15 +1354,15 @@ footer {
   </a>
   <div class="nav-links">
     <a href="/predictors" class="nav-link">Predictors</a>
-    <a href="/explore" class="nav-link" style="color:var(--gold);">🔴 Live</a>
+    <a href="/explore" class="nav-link">Explore</a>
     <a href="/odds" class="nav-link">Odds</a>
     <a href="/templates" class="nav-link">Templates</a>
     <a href="#pricing" class="nav-link">Pricing</a>
   </div>
   <div class="nav-actions">
-    <a href="/explore" class="btn-nav-explore">Explore</a>
-    <a href="/creator/login" class="btn-nav-login">Sign in</a>
-    <a href="/creator/signup" class="btn-nav-cta">Get started free</a>
+    <a id="navDashLink" href="/creator/dashboard" class="btn-nav-login" style="display:none;color:#c9920d">Dashboard</a>
+    <a href="/creator/login" class="btn-nav-login" id="navLoginLink">Sign in</a>
+    <a href="/creator/signup" class="btn-nav-cta" id="navSignupLink">Get started free</a>
   </div>
 </nav>
 
@@ -1413,6 +1413,12 @@ footer {
   </div>
 </div>
 <script>
+// Nav auth state
+if (localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token')) {
+  const dl = document.getElementById('navDashLink'); if (dl) dl.style.display = '';
+  const ll = document.getElementById('navLoginLink'); if (ll) ll.style.display = 'none';
+  const sl = document.getElementById('navSignupLink'); if (sl) sl.style.display = 'none';
+}
 (async function loadStats() {
   try {
     const d = await fetch('/api/stats').then(r => r.json());
@@ -1739,7 +1745,7 @@ document.getElementById('qp-username').addEventListener('keydown', e => { if (e.
         </svg>
         <span class="footer-logo-name">HYPERFLEX</span>
       </a>
-      <p class="footer-tagline">Prediction markets for creator communities. Play-money, AI-powered, no code required.</p>
+      <p class="footer-tagline">Cross-platform prediction market dashboard. Polymarket, Kalshi, and Manifold in one place.</p>
     </div>
     <div class="footer-cols">
       <div class="footer-col">
