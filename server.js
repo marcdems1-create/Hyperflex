@@ -274,6 +274,7 @@ function optionalAuth(req, res, next) {
 // ── EXTERNAL API CACHES ───────────────────────────
 const _kalshiCache = new Map();
 const _manifoldCache = new Map();
+const _polyCache = new Map();
 const _predictorFollowCache = new Map();
 
 // ── MARKETS ───────────────────────────────────────
@@ -8265,8 +8266,8 @@ async function syncAllUserPositions() {
   try {
     const { data: users } = await supabase
       .from('users')
-      .select('id, wallet_address, kalshi_api_key, kalshi_username')
-      .or('wallet_address.not.is.null,kalshi_api_key.not.is.null,kalshi_username.not.is.null');
+      .select('id, polymarket_address, kalshi_api_key, kalshi_username, manifold_username')
+      .or('polymarket_address.not.is.null,kalshi_api_key.not.is.null,kalshi_username.not.is.null,manifold_username.not.is.null');
     if (!users || users.length === 0) return;
     console.log(`[auto-sync] Syncing ${users.length} users`);
     for (const user of users) {
@@ -8282,12 +8283,12 @@ async function syncUserPositions(user) {
   const upserts = [];
 
   // Polymarket
-  if (user.wallet_address) {
+  if (user.polymarket_address) {
     try {
-      const cacheKey = `poly_${user.wallet_address}`;
-      let positions = _polyCache?.get(cacheKey);
+      const cacheKey = `poly_${user.polymarket_address}`;
+      let positions = _polyCache.get(cacheKey);
       if (!positions) {
-        const res = await fetch(`https://data-api.polymarket.com/positions?user=${user.wallet_address}&limit=50&sortBy=CURRENT&winning=false`);
+        const res = await fetch(`https://data-api.polymarket.com/positions?user=${user.polymarket_address}&limit=50&sortBy=CURRENT&winning=false`);
         positions = await res.json();
         if (_polyCache) {
           _polyCache.set(cacheKey, positions);
@@ -8304,8 +8305,8 @@ async function syncUserPositions(user) {
           side: p.outcome || 'YES',
           shares: parseFloat(p.size) || 0,
           pnl: parseFloat(p.cashPnl) || 0,
-          probability: parseFloat(p.currentPrice) || 0,
-          market_url: `https://polymarket.com/event/${p.conditionId}`,
+          probability: parseFloat(p.curPrice) || 0,
+          market_url: p.slug ? `https://polymarket.com/event/${p.eventSlug || p.slug}` : `https://polymarket.com`,
           updated_at: new Date().toISOString()
         });
       });
@@ -11838,17 +11839,25 @@ app.get('/api/polymarket/positions/:address', async (req, res) => {
 });
 
 app.get('/api/manifold/positions/:username', async (req, res) => {
-  const username = req.params.username.trim();
+  let username = req.params.username.trim();
   if (!username || !/^[a-zA-Z0-9_-]{1,50}$/.test(username)) return res.status(400).json({ error: 'Invalid username' });
-  const cached = _manifoldCache.get(username);
+  const cached = _manifoldCache.get(username.toLowerCase());
   if (cached && Date.now() - cached.ts < 5 * 60 * 1000) return res.json(cached.data);
   try {
-    const betsRes = await fetch(`https://api.manifold.markets/v0/bets?username=${encodeURIComponent(username)}&limit=200`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } });
-    if (betsRes.status === 404 || betsRes.status === 400) {
-      const body = await betsRes.json().catch(() => ({}));
-      if ((body.message || '').toLowerCase().includes('no user found') || betsRes.status === 404)
-        return res.status(404).json({ error: 'Manifold user not found. Check your username at manifold.markets' });
+    // Resolve canonical username — Manifold user API is case-sensitive, try variants
+    let resolvedUsername = null;
+    const variants = [username];
+    const lower = username.toLowerCase();
+    const pascal = username.replace(/(?:^|[-_])(\w)/g, (_, c) => c.toUpperCase());
+    if (pascal !== username) variants.push(pascal);
+    if (lower !== username && lower !== pascal) variants.push(lower);
+    for (const v of variants) {
+      const ur = await fetch(`https://api.manifold.markets/v0/user/${encodeURIComponent(v)}`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } });
+      if (ur.ok) { const ud = await ur.json(); resolvedUsername = ud.username || v; break; }
     }
+    if (!resolvedUsername) return res.status(404).json({ error: 'Manifold user not found. Check your exact username (case-sensitive) at manifold.markets/profile' });
+    username = resolvedUsername;
+    const betsRes = await fetch(`https://api.manifold.markets/v0/bets?username=${encodeURIComponent(username)}&limit=200`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } });
     if (!betsRes.ok) throw new Error('Manifold bets API ' + betsRes.status);
     const bets = await betsRes.json();
     const contractMap = {};
@@ -11859,7 +11868,7 @@ app.get('/api/manifold/positions/:username', async (req, res) => {
       contractMap[b.contractId].amount += (b.amount || 0);
     }
     const openContracts = Object.values(contractMap).filter(c => c.shares > 0.01);
-    if (!openContracts.length) { const data = { positions: [], fetched_at: new Date().toISOString() }; _manifoldCache.set(username, { ts: Date.now(), data }); return res.json(data); }
+    if (!openContracts.length) { const data = { positions: [], fetched_at: new Date().toISOString() }; _manifoldCache.set(username.toLowerCase(), { ts: Date.now(), data }); return res.json(data); }
     const enriched = await Promise.all(openContracts.slice(0, 20).map(async c => {
       try {
         const mr = await fetch(`https://api.manifold.markets/v0/market/${c.contractId}`, { headers: { Accept: 'application/json' } });
@@ -11873,7 +11882,7 @@ app.get('/api/manifold/positions/:username', async (req, res) => {
     }));
     const positions = enriched.filter(Boolean);
     const data = { positions, username, fetched_at: new Date().toISOString() };
-    _manifoldCache.set(username, { ts: Date.now(), data });
+    _manifoldCache.set(username.toLowerCase(), { ts: Date.now(), data });
     res.json(data);
   } catch (err) {
     console.error('[manifold proxy]', err.message);
