@@ -7603,6 +7603,47 @@ app.get('/api/predictors/:userId/follow-status', optionalAuth, async (req, res) 
   res.json({ follower_count: count || 0, is_following: isFollowing });
 });
 
+// Toggle copy trade subscription
+app.post('/api/predictors/:userId/copy-trade', requireAuth, async (req, res) => {
+  const subscriberId = req.user.id;
+  const targetId = req.params.userId;
+  if (subscriberId === targetId) return res.status(400).json({ error: 'Cannot copy-trade yourself' });
+  try {
+    const { data: existing } = await supabase
+      .from('copy_trade_subscriptions')
+      .select('id')
+      .eq('subscriber_id', subscriberId)
+      .eq('target_user_id', targetId)
+      .maybeSingle();
+    if (existing) {
+      await supabase.from('copy_trade_subscriptions').delete().eq('id', existing.id);
+      return res.json({ subscribed: false });
+    } else {
+      await supabase.from('copy_trade_subscriptions').insert({ subscriber_id: subscriberId, target_user_id: targetId });
+      return res.json({ subscribed: true });
+    }
+  } catch (err) {
+    console.error('[copy-trade toggle]', err.message);
+    res.status(500).json({ error: 'Failed to update copy trade subscription' });
+  }
+});
+
+// Get copy trade status
+app.get('/api/predictors/:userId/copy-status', optionalAuth, async (req, res) => {
+  const targetId = req.params.userId;
+  try {
+    const { count } = await supabase.from('copy_trade_subscriptions').select('id', { count: 'exact', head: true }).eq('target_user_id', targetId);
+    let isSubscribed = false;
+    if (req.user) {
+      const { data } = await supabase.from('copy_trade_subscriptions').select('id').eq('subscriber_id', req.user.id).eq('target_user_id', targetId).maybeSingle();
+      isSubscribed = !!data;
+    }
+    res.json({ subscriber_count: count || 0, is_subscribed: isSubscribed });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed' });
+  }
+});
+
 // Following feed — activity from people you follow
 app.get('/api/feed/following', requireAuth, async (req, res) => {
   const userId = req.user.id;
@@ -8373,9 +8414,36 @@ async function syncUserPositions(user) {
   }
 
   if (upserts.length > 0) {
+    // Snapshot old positions for copy-trade diff
+    const { data: oldPositions } = await supabase
+      .from('cached_positions')
+      .select('external_id, platform')
+      .eq('user_id', user.id);
+    const oldIds = new Set((oldPositions || []).map(p => `${p.platform}:${p.external_id}`));
+
     await supabase.from('cached_positions').delete().eq('user_id', user.id);
     await supabase.from('cached_positions').insert(upserts);
     console.log(`[auto-sync] Synced ${upserts.length} positions for user ${user.id}`);
+
+    // Copy trade notifications for new positions
+    const newPositions = upserts.filter(u => !oldIds.has(`${u.platform}:${u.external_id}`));
+    if (newPositions.length > 0) {
+      try {
+        const { data: subs } = await supabase
+          .from('copy_trade_subscriptions')
+          .select('subscriber_id')
+          .eq('target_user_id', user.id);
+        if (subs?.length) {
+          const { data: userData } = await supabase.from('users').select('display_name').eq('id', user.id).maybeSingle();
+          const name = userData?.display_name || 'A trader you follow';
+          for (const pos of newPositions.slice(0, 5)) {
+            for (const sub of subs) {
+              pushNotification(sub.subscriber_id, 'copy_trade', `${name} entered a new position`, `${pos.side} on "${pos.market_title}" (${pos.platform})`);
+            }
+          }
+        }
+      } catch (e) { console.warn('[copy-trade notify]', e.message); }
+    }
   }
 }
 
@@ -11935,7 +12003,40 @@ app.get('/api/markets/search', async (req, res) => {
         volume: m.volume || 0
       })).slice(0, 15);
     }
-    const data = { polymarket: polyMarkets, kalshi: kalshiMarkets };
+    // Smart money: find cached_positions from sharp users matching this query
+    let smart_money = null;
+    try {
+      const { data: matchPos } = await supabase
+        .from('cached_positions')
+        .select('user_id, side')
+        .ilike('market_title', `%${q}%`);
+      if (matchPos?.length) {
+        const userIds = [...new Set(matchPos.map(p => p.user_id))];
+        // Compute quick win rates from HFX positions table
+        const { data: settled } = await supabase
+          .from('positions')
+          .select('user_id, won')
+          .in('user_id', userIds)
+          .not('won', 'is', null);
+        const stats = {};
+        (settled || []).forEach(p => {
+          if (!stats[p.user_id]) stats[p.user_id] = { w: 0, t: 0 };
+          stats[p.user_id].t++;
+          if (p.won) stats[p.user_id].w++;
+        });
+        // Sharp = 10+ settled, 65%+ win rate
+        const sharpIds = new Set(Object.entries(stats)
+          .filter(([, s]) => s.t >= 10 && (s.w / s.t) >= 0.65)
+          .map(([id]) => id));
+        const sharpPos = matchPos.filter(p => sharpIds.has(p.user_id));
+        if (sharpPos.length) {
+          const yesCount = sharpPos.filter(p => p.side === 'YES').length;
+          smart_money = { yes_pct: Math.round((yesCount / sharpPos.length) * 100), count: sharpPos.length };
+        }
+      }
+    } catch (e) { console.warn('[smart-money]', e.message); }
+
+    const data = { polymarket: polyMarkets, kalshi: kalshiMarkets, smart_money };
     _mktSearchCache.set(cacheKey, { ts: Date.now(), data });
     setTimeout(() => _mktSearchCache.delete(cacheKey), 3 * 60 * 1000);
     res.json(data);

@@ -581,7 +581,10 @@ function renderCard(p) {
 
   return `
     <div class="predictor-card" style="position:relative">
-      <button id="follow-btn-${uid}" onclick="toggleFollowCard('${uid}',this)" style="position:absolute;top:14px;right:14px;background:none;border:1px solid var(--gold);border-radius:20px;padding:4px 12px;font-size:10px;font-family:var(--mono);font-weight:700;color:var(--gold);cursor:pointer;transition:background 0.15s;z-index:1" onmouseover="this.style.background='rgba(201,146,13,0.12)'" onmouseout="if(!this.dataset.following)this.style.background='none'">Follow</button>
+      <div style="position:absolute;top:14px;right:14px;display:flex;gap:6px;z-index:1">
+        <button id="copy-btn-${uid}" onclick="toggleCopyTradeCard('${uid}',this)" style="background:none;border:1px solid rgba(124,58,237,0.4);border-radius:20px;padding:4px 12px;font-size:10px;font-family:var(--mono);font-weight:700;color:#a78bfa;cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='rgba(124,58,237,0.12)'" onmouseout="if(!this.dataset.subscribed)this.style.background='none'">🔔 Copy</button>
+        <button id="follow-btn-${uid}" onclick="toggleFollowCard('${uid}',this)" style="background:none;border:1px solid var(--gold);border-radius:20px;padding:4px 12px;font-size:10px;font-family:var(--mono);font-weight:700;color:var(--gold);cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='rgba(201,146,13,0.12)'" onmouseout="if(!this.dataset.following)this.style.background='none'">Follow</button>
+      </div>
       <a href="/m/${uid}" style="text-decoration:none;display:block">
         <div class="card-top">
           <div class="avatar">${avatarInitial(p.display_name)}</div>
@@ -633,6 +636,27 @@ async function toggleFollowCard(userId, btn) {
     btn.dataset.following = d.following ? '1' : '';
   } catch (e) {
     console.warn('[follow-card]', e);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function toggleCopyTradeCard(userId, btn) {
+  const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token');
+  if (!token) { alert('Sign in to copy trades'); return; }
+  btn.disabled = true;
+  try {
+    const r = await fetch(`/api/predictors/${userId}/copy-trade`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    if (!r.ok) throw new Error('Failed');
+    const d = await r.json();
+    btn.textContent = d.subscribed ? '🔔 Copying' : '🔔 Copy';
+    btn.style.background = d.subscribed ? 'rgba(124,58,237,0.15)' : 'none';
+    btn.dataset.subscribed = d.subscribed ? '1' : '';
+  } catch (e) {
+    console.warn('[copy-trade-card]', e);
   } finally {
     btn.disabled = false;
   }

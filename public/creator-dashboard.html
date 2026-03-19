@@ -11728,27 +11728,50 @@ async function runMarketSearch() {
 function renderMarketSearchResults(data, el) {
   const poly = data.polymarket || [];
   const kalshi = data.kalshi || [];
+  const smartMoney = data.smart_money;
   if (!poly.length && !kalshi.length) {
     el.innerHTML = '<div style="text-align:center;padding:48px 20px;color:var(--dim)"><div style="font-size:32px;margin-bottom:12px">🔍</div><div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">No markets found</div><div style="font-size:13px">Try a different keyword.</div></div>';
     return;
   }
+  // Arbitrage detection
+  const polyTop = poly[0], kalshiTop = kalshi[0];
+  let arbHtml = '';
+  if (polyTop?.yes_pct != null && kalshiTop?.yes_pct != null) {
+    const spread = Math.abs(polyTop.yes_pct - kalshiTop.yes_pct);
+    if (spread >= 3) {
+      arbHtml = `<div style="background:rgba(201,146,13,0.12);border:1px solid rgba(201,146,13,0.3);border-radius:10px;padding:10px 16px;margin-bottom:14px;display:flex;align-items:center;gap:10px"><span style="font-family:var(--mono);font-size:12px;font-weight:800;color:#c9920d;padding:3px 10px;border-radius:6px;background:rgba(201,146,13,0.2);border:1px solid rgba(201,146,13,0.4)">⚡ ARB +${spread}pt</span><span style="font-size:12px;color:var(--dim)">Price spread detected between Polymarket (${polyTop.yes_pct}%) and Kalshi (${kalshiTop.yes_pct}%)</span></div>`;
+    }
+  }
+  // Best entry detection
+  let bestPlatform = null;
+  if (polyTop?.yes_pct != null && kalshiTop?.yes_pct != null) {
+    bestPlatform = polyTop.yes_pct >= kalshiTop.yes_pct ? 'polymarket' : 'kalshi';
+  } else if (polyTop?.yes_pct != null) bestPlatform = 'polymarket';
+  else if (kalshiTop?.yes_pct != null) bestPlatform = 'kalshi';
+  // Smart money bar
+  let smartHtml = '';
+  if (smartMoney && smartMoney.count > 0) {
+    smartHtml = `<div style="background:rgba(124,58,237,0.08);border:1px solid rgba(124,58,237,0.2);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-family:var(--mono);font-size:12px;color:#a78bfa;display:flex;align-items:center;gap:8px"><span>🧠</span><span>Sharp money: <strong style="color:#e8e4de">${smartMoney.yes_pct}% YES</strong> (${smartMoney.count} trader${smartMoney.count !== 1 ? 's' : ''})</span></div>`;
+  }
   const fmtDate = iso => iso ? new Date(iso).toLocaleDateString('en-US', { month:'short', day:'numeric' }) : '';
-  const renderCard = (m, platform) => {
+  const renderCard = (m, platform, isBest) => {
     const color = platform === 'polymarket' ? '#a78bfa' : '#fbbf24';
     const label = platform === 'polymarket' ? '🟣 Polymarket' : '🟡 Kalshi';
     const exp = fmtDate(m.close_date || m.end_date);
+    const bestBadge = isBest ? '<span style="font-family:var(--mono);font-size:9px;padding:2px 8px;border-radius:8px;background:rgba(201,146,13,0.15);color:#c9920d;border:1px solid rgba(201,146,13,0.3);font-weight:700">★ BEST ODDS</span>' : '';
     return `<a href="${m.url}" target="_blank" rel="noopener" style="display:block;text-decoration:none;background:#0f0e0c;border:1px solid #2a2825;border-radius:10px;padding:14px 16px;margin-bottom:6px;transition:border-color .15s" onmouseover="this.style.borderColor='${color}44'" onmouseout="this.style.borderColor='#2a2825'">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
         <span style="font-family:var(--mono);font-size:9px;padding:2px 8px;border-radius:8px;background:${color}15;color:${color};border:1px solid ${color}30">${label}</span>
         ${exp ? `<span style="font-family:var(--mono);font-size:10px;color:#4a4744">Exp ${exp}</span>` : ''}
+        ${bestBadge}
       </div>
       <div style="font-size:13px;font-weight:600;color:#e8e4de;line-height:1.5;margin-bottom:6px">${escHtmlDash(m.question || m.title)}</div>
       <div style="font-family:var(--mono);font-size:12px;font-weight:700;color:${color}">${m.yes_pct != null ? m.yes_pct + '% YES' : ''}</div>
     </a>`;
   };
-  let html = '';
-  if (poly.length) html += `<div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:8px">🟣 Polymarket (${poly.length})</div>${poly.map(m => renderCard(m,'polymarket')).join('')}<div style="margin-bottom:20px"></div>`;
-  if (kalshi.length) html += `<div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:8px">🟡 Kalshi (${kalshi.length})</div>${kalshi.map(m => renderCard(m,'kalshi')).join('')}`;
+  let html = arbHtml + smartHtml;
+  if (poly.length) html += `<div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:8px">🟣 Polymarket (${poly.length})</div>${poly.map((m,i) => renderCard(m,'polymarket',i===0&&bestPlatform==='polymarket')).join('')}<div style="margin-bottom:20px"></div>`;
+  if (kalshi.length) html += `<div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:8px">🟡 Kalshi (${kalshi.length})</div>${kalshi.map((m,i) => renderCard(m,'kalshi',i===0&&bestPlatform==='kalshi')).join('')}`;
   el.innerHTML = html;
 }
 

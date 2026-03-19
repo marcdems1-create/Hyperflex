@@ -258,7 +258,10 @@ async function load() {
             <span id="sharpBadge" style="display:none;font-size:11px;font-weight:700;padding:4px 10px;border-radius:100px;letter-spacing:0.3px;background:rgba(201,146,13,0.15);color:var(--gold);border:1px solid rgba(201,146,13,0.35)"></span>
           </div>
           <button id="shareBtn" class="share-btn" onclick="shareProfile()">📋 Copy profile link</button>
-          <button id="followBtn" onclick="toggleFollow()" style="background:none;border:1px solid var(--gold);border-radius:20px;padding:6px 18px;font-size:12px;font-family:var(--mono);font-weight:700;color:var(--gold);cursor:pointer;transition:all 0.15s;margin-top:6px" onmouseover="this.style.background='rgba(201,146,13,0.12)'" onmouseout="this.style.background='none'">Follow</button>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+            <button id="followBtn" onclick="toggleFollow()" style="background:none;border:1px solid var(--gold);border-radius:20px;padding:6px 18px;font-size:12px;font-family:var(--mono);font-weight:700;color:var(--gold);cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(201,146,13,0.12)'" onmouseout="this.style.background='none'">Follow</button>
+            <button id="copyTradeBtn" onclick="toggleCopyTrade()" style="background:none;border:1px solid rgba(124,58,237,0.4);border-radius:20px;padding:6px 18px;font-size:12px;font-family:var(--mono);font-weight:700;color:#a78bfa;cursor:pointer;transition:all 0.15s" onmouseover="this.style.background='rgba(124,58,237,0.12)'" onmouseout="if(!this.dataset.subscribed)this.style.background='none'">🔔 Copy Trades</button>
+          </div>
           <span id="followerCount" style="font-size:12px;color:var(--muted);font-family:var(--mono);margin-top:2px"></span>
         </div>
       </div>
@@ -472,6 +475,17 @@ async function loadFollowStatus() {
     if (countEl && d.follower_count > 0) {
       countEl.textContent = `${d.follower_count} follower${d.follower_count !== 1 ? 's' : ''}`;
     }
+    // Also load copy trade status
+    const cr = await fetch(`${API}/api/predictors/${userId}/copy-status`, { headers });
+    if (cr.ok) {
+      const cd = await cr.json();
+      const copyBtn = document.getElementById('copyTradeBtn');
+      if (copyBtn && cd.is_subscribed) {
+        copyBtn.textContent = '🔔 Copying';
+        copyBtn.style.background = 'rgba(124,58,237,0.15)';
+        copyBtn.dataset.subscribed = '1';
+      }
+    }
   } catch (e) {
     console.warn('[follow-status]', e);
   }
@@ -498,6 +512,30 @@ async function toggleFollow() {
     await loadFollowStatus();
   } catch (e) {
     console.warn('[toggle-follow]', e);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function toggleCopyTrade() {
+  const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token');
+  if (!token) { alert('Sign in to copy trades'); return; }
+  const btn = document.getElementById('copyTradeBtn');
+  if (btn) btn.disabled = true;
+  try {
+    const r = await fetch(`${API}/api/predictors/${userId}/copy-trade`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    if (!r.ok) throw new Error('Failed');
+    const d = await r.json();
+    if (btn) {
+      btn.textContent = d.subscribed ? '🔔 Copying' : '🔔 Copy Trades';
+      btn.style.background = d.subscribed ? 'rgba(124,58,237,0.15)' : 'none';
+      btn.dataset.subscribed = d.subscribed ? '1' : '';
+    }
+  } catch (e) {
+    console.warn('[toggle-copy-trade]', e);
   } finally {
     if (btn) btn.disabled = false;
   }
