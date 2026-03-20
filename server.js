@@ -190,44 +190,52 @@ const supabase = createClient(
   { db: { schema: 'public' } }
 );
 
-// Diagnostic endpoint — check DB connectivity
+// Diagnostic endpoint — fast, non-blocking
 app.get('/api/health', async (req, res) => {
   const checks = {
-    supabase_url: process.env.SUPABASE_URL,
-    key_type: process.env.SUPABASE_SERVICE_KEY ? 'service' : process.env.SUPABASE_SERVICE_ROLE_KEY ? 'service_role' : process.env.SUPABASE_KEY ? 'generic' : 'anon',
-    key_prefix: _supaKey?.slice(0, 30) + '...'
+    status: 'ok',
+    supabase_url: process.env.SUPABASE_URL?.slice(0, 40),
+    key_type: process.env.SUPABASE_SERVICE_KEY ? 'service' : 'other',
+    timestamp: new Date().toISOString()
   };
-  // Test 1: Supabase JS client
+  // Quick 5s test — Supabase JS client
   try {
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), 5000);
     const start = Date.now();
-    const { data, error } = await supabase.from('users').select('id').limit(1);
-    checks.js_client_ms = Date.now() - start;
-    checks.js_client_ok = !error;
-    checks.js_client_error = error?.message || null;
-  } catch (e) { checks.js_client_ok = false; checks.js_client_error = e.message; }
-  // Test 2: Direct REST API fetch (bypass Supabase JS client entirely)
+    const { data, error } = await Promise.race([
+      supabase.from('creator_settings').select('id').limit(1),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout_5s')), 5000))
+    ]);
+    clearTimeout(t);
+    checks.db_ms = Date.now() - start;
+    checks.db_ok = !error;
+    if (error) checks.db_error = error.message;
+  } catch (e) { checks.db_ok = false; checks.db_error = e.message; }
+  // Quick 5s test — external fetch (proves outbound HTTPS works)
   try {
-    const start = Date.now();
-    const controller = new AbortController();
-    const tid = setTimeout(() => controller.abort(), 30000);
-    const r = await fetch(`${process.env.SUPABASE_URL}/rest/v1/users?select=id&limit=1`, {
-      headers: { apikey: _supaKey, Authorization: `Bearer ${_supaKey}`, 'Content-Type': 'application/json' },
-      signal: controller.signal
+    const ac2 = new AbortController();
+    const t2 = setTimeout(() => ac2.abort(), 5000);
+    const start2 = Date.now();
+    const r = await fetch('https://httpbin.org/get', { signal: ac2.signal });
+    clearTimeout(t2);
+    checks.external_ms = Date.now() - start2;
+    checks.external_ok = r.ok;
+  } catch (e) { checks.external_ok = false; checks.external_error = e.message; }
+  // Quick 5s test — direct Supabase REST
+  try {
+    const ac3 = new AbortController();
+    const t3 = setTimeout(() => ac3.abort(), 5000);
+    const start3 = Date.now();
+    const r = await fetch(`${process.env.SUPABASE_URL}/rest/v1/creator_settings?select=id&limit=1`, {
+      headers: { apikey: _supaKey, Authorization: `Bearer ${_supaKey}` },
+      signal: ac3.signal
     });
-    clearTimeout(tid);
-    const body = await r.text();
-    checks.rest_ms = Date.now() - start;
-    checks.rest_status = r.status;
+    clearTimeout(t3);
+    checks.rest_ms = Date.now() - start3;
     checks.rest_ok = r.ok;
-    checks.rest_body_preview = body.slice(0, 200);
+    checks.rest_status = r.status;
   } catch (e) { checks.rest_ok = false; checks.rest_error = e.message; }
-  // Test 3: DNS check
-  try {
-    const url = new URL(process.env.SUPABASE_URL);
-    const addrs = await dns.resolve4(url.hostname);
-    checks.dns_ok = true;
-    checks.dns_ip = addrs[0];
-  } catch (e) { checks.dns_ok = false; checks.dns_error = e.message; }
   res.json(checks);
 });
 
