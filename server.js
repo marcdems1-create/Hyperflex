@@ -1,9 +1,20 @@
 require('dotenv').config();
 
-// CRITICAL: Force IPv4-first DNS resolution — fixes Railway + Supabase/Cloudflare connectivity
-// Node.js 18+ undici tries IPv6 first which hangs on some Cloudflare endpoints
+// CRITICAL: Force IPv4 for ALL connections — Railway IPv6 to Supabase/Cloudflare hangs
 const { setDefaultResultOrder } = require('dns');
 setDefaultResultOrder('ipv4first');
+// Force undici (Node 18+ built-in fetch) to try both IPv4/IPv6 with fast failover
+try {
+  const undici = require('undici');
+  if (undici.setGlobalDispatcher && undici.Agent) {
+    undici.setGlobalDispatcher(new undici.Agent({
+      connect: { autoSelectFamily: true, autoSelectFamilyAttemptTimeout: 2000 }
+    }));
+    console.log('[boot] undici Agent set with autoSelectFamily');
+  }
+} catch (e) {
+  console.log('[boot] undici not available as module, relying on dns.setDefaultResultOrder');
+}
 
 const express = require('express');
 const cors = require('cors');
@@ -189,11 +200,18 @@ app.use(async (req, res, next) => {
 const _supaKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY;
 console.log('[boot] Supabase URL:', process.env.SUPABASE_URL?.slice(0, 30) + '...');
 console.log('[boot] Supabase key type:', process.env.SUPABASE_SERVICE_KEY ? 'SERVICE_KEY' : process.env.SUPABASE_SERVICE_ROLE_KEY ? 'SERVICE_ROLE_KEY' : process.env.SUPABASE_KEY ? 'KEY' : process.env.SUPABASE_ANON_KEY ? 'ANON_KEY' : 'NONE');
-console.log('[boot] Key prefix:', _supaKey?.slice(0, 20) + '...');
+
+// Use node-fetch instead of built-in fetch — undici (built-in) hangs on Railway→Supabase
+let _nodeFetch;
+try { _nodeFetch = require('node-fetch'); console.log('[boot] Using node-fetch for Supabase client'); }
+catch { _nodeFetch = null; console.log('[boot] node-fetch not available, using global fetch'); }
+
 const supabase = createClient(
   process.env.SUPABASE_URL,
   _supaKey,
-  { db: { schema: 'public' } }
+  _nodeFetch
+    ? { db: { schema: 'public' }, global: { fetch: _nodeFetch } }
+    : { db: { schema: 'public' } }
 );
 
 // Diagnostic endpoint — fast, non-blocking
@@ -228,20 +246,19 @@ app.get('/api/health', async (req, res) => {
     checks.external_ms = Date.now() - start2;
     checks.external_ok = r.ok;
   } catch (e) { checks.external_ok = false; checks.external_error = e.message; }
-  // Quick 5s test — direct Supabase REST
+  // Quick 5s test — direct Supabase REST via node-fetch (bypasses undici)
   try {
-    const ac3 = new AbortController();
-    const t3 = setTimeout(() => ac3.abort(), 5000);
+    const fetcher = _nodeFetch || fetch;
     const start3 = Date.now();
-    const r = await fetch(`${process.env.SUPABASE_URL}/rest/v1/creator_settings?select=id&limit=1`, {
-      headers: { apikey: _supaKey, Authorization: `Bearer ${_supaKey}` },
-      signal: ac3.signal
+    const rPromise = fetcher(`${process.env.SUPABASE_URL}/rest/v1/creator_settings?select=id&limit=1`, {
+      headers: { apikey: _supaKey, Authorization: `Bearer ${_supaKey}` }
     });
-    clearTimeout(t3);
+    const r = await Promise.race([rPromise, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout_5s')), 5000))]);
     checks.rest_ms = Date.now() - start3;
     checks.rest_ok = r.ok;
     checks.rest_status = r.status;
-  } catch (e) { checks.rest_ok = false; checks.rest_error = e.message; }
+    checks.fetch_type = _nodeFetch ? 'node-fetch' : 'undici';
+  } catch (e) { checks.rest_ok = false; checks.rest_error = e.message; checks.fetch_type = _nodeFetch ? 'node-fetch' : 'undici'; }
   res.json(checks);
 });
 
