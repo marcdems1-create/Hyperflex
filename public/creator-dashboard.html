@@ -4688,6 +4688,27 @@ body.nav-open .sidebar-backdrop {
                 🔍 Find Markets
               </button>
             </div>
+            <!-- Portfolio Summary Bar -->
+            <div id="portfolioSummaryBar" style="display:none;background:var(--cream);border:1px solid var(--border);border-radius:12px;padding:16px 24px;margin-bottom:20px">
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:16px">
+                <div>
+                  <div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:4px">TOTAL VALUE</div>
+                  <div id="psSummaryValue" style="font-family:var(--mono);font-size:24px;font-weight:900;color:var(--text)">—</div>
+                </div>
+                <div>
+                  <div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:4px">TOTAL P&L</div>
+                  <div id="psSummaryPnl" style="font-family:var(--mono);font-size:24px;font-weight:900;color:var(--dim)">—</div>
+                </div>
+                <div>
+                  <div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:4px">OPEN POSITIONS</div>
+                  <div id="psSummaryCount" style="font-family:var(--mono);font-size:24px;font-weight:900;color:var(--text)">—</div>
+                </div>
+                <div>
+                  <div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:4px">PLATFORMS</div>
+                  <div id="psSummaryPlatforms" style="font-family:var(--mono);font-size:24px;font-weight:900;color:var(--text)">—</div>
+                </div>
+              </div>
+            </div>
             <!-- ALL tab -->
             <div id="ptabContent-all">
               <div id="allPositionsContainer">
@@ -11270,7 +11291,7 @@ async function loadPortfolio() {
     if (_manifoldUsername) fetches.push(loadManifoldPositions(false));
     if (_polyWalletAddress) fetches.push(loadPolymarketPositions(false));
     fetches.push(loadHFXPositions(false));
-    Promise.allSettled(fetches).then(() => { if (_activePortfolioTab === 'all') updateAllPositionsTab(); });
+    Promise.allSettled(fetches).then(() => { if (_activePortfolioTab === 'all') updateAllPositionsTab(); updatePortfolioSummary(); });
   } catch (e) {
     console.warn('[portfolio]', e);
   }
@@ -11629,6 +11650,8 @@ async function loadPolymarketPositions(forceRefresh) {
     }
     const data = await r.json();
     const positions = data.positions || [];
+    window._polyPositionsData = positions;
+    setTimeout(updatePortfolioSummary, 100);
 
     if (!positions.length) {
       el.innerHTML = '<div style="padding:20px 0;font-size:13px;color:var(--muted);text-align:center">No open positions found on Polymarket.</div>';
@@ -11676,6 +11699,48 @@ function updatePortfolioTabDots() {
   if(kd) kd.style.background=_kalshiConnected?'#fbbf24':'#333';
   if(md) md.style.background=_manifoldUsername?'#34d399':'#333';
 }
+function updatePortfolioSummary() {
+  const bar = document.getElementById('portfolioSummaryBar');
+  if (!bar) return;
+  const valEl = document.getElementById('psSummaryValue');
+  const pnlEl = document.getElementById('psSummaryPnl');
+  const cntEl = document.getElementById('psSummaryCount');
+  const platEl = document.getElementById('psSummaryPlatforms');
+  // Collect all position data from rendered cards
+  let totalValue = 0, totalPnl = 0, openCount = 0, platforms = new Set();
+  // Polymarket
+  if (_polyWalletAddress && window._polyPositionsData) {
+    platforms.add('Polymarket');
+    const positions = window._polyPositionsData || [];
+    positions.forEach(p => {
+      const shares = p.shares || 0;
+      const price = p.curPrice || p.probability || 0;
+      totalValue += shares * price;
+      if (p.pnl != null) totalPnl += p.pnl;
+      openCount++;
+    });
+  }
+  // Kalshi
+  if (_kalshiConnected && window._kalshiPositionsData) {
+    platforms.add('Kalshi');
+    const positions = window._kalshiPositionsData || [];
+    positions.forEach(p => {
+      if (p.pnl != null) totalPnl += p.pnl;
+      openCount++;
+    });
+  }
+  if (openCount === 0 && !_polyWalletAddress && !_kalshiConnected) { bar.style.display = 'none'; return; }
+  bar.style.display = 'block';
+  if (valEl) valEl.textContent = '$' + totalValue.toFixed(2);
+  if (pnlEl) {
+    const sign = totalPnl >= 0 ? '+' : '';
+    pnlEl.textContent = sign + '$' + Math.abs(totalPnl).toFixed(2);
+    pnlEl.style.color = totalPnl >= 0 ? '#22c55e' : '#ef4444';
+  }
+  if (cntEl) cntEl.textContent = openCount.toString();
+  if (platEl) platEl.textContent = platforms.size.toString();
+}
+
 function updateAllPositionsTab() {
   const c=document.getElementById('allPositionsContainer');
   if(!c) return;
