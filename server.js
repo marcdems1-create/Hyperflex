@@ -201,69 +201,75 @@ const _supaKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVIC
 console.log('[boot] Supabase URL:', process.env.SUPABASE_URL?.slice(0, 30) + '...');
 console.log('[boot] Supabase key type:', process.env.SUPABASE_SERVICE_KEY ? 'SERVICE_KEY' : process.env.SUPABASE_SERVICE_ROLE_KEY ? 'SERVICE_ROLE_KEY' : process.env.SUPABASE_KEY ? 'KEY' : process.env.SUPABASE_ANON_KEY ? 'ANON_KEY' : 'NONE');
 
-// Force IPv4 at TCP socket level — Railway IPv6 to Supabase/Cloudflare hangs
-const https = require('https');
-const http = require('http');
-const _ipv4Agent = new https.Agent({ family: 4, keepAlive: true });
-const _ipv4AgentHttp = new http.Agent({ family: 4, keepAlive: true });
+// ── DATABASE CONNECTION ──────────────────────────────────────────────────────
+// Primary: direct Postgres via pg Pool (bypasses Cloudflare entirely)
+// Fallback: Supabase JS client via REST API (may fail on Railway due to IPv6)
+const { Pool } = require('pg');
 const _nodeFetch = require('node-fetch');
-// Wrap node-fetch to always use IPv4 agent
-const _ipv4Fetch = (url, opts = {}) => {
-  const isHttps = String(url).startsWith('https');
-  return _nodeFetch(url, { ...opts, agent: isHttps ? _ipv4Agent : _ipv4AgentHttp });
-};
-console.log('[boot] Using node-fetch + IPv4 agent for all Supabase requests');
 
+// Direct Postgres pool — this is the reliable connection
+const pool = process.env.DATABASE_URL
+  ? new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false },
+      max: 10,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+    })
+  : null;
+if (pool) {
+  console.log('[boot] Postgres pool created via DATABASE_URL (direct connection)');
+  pool.on('error', (err) => console.error('[pg pool error]', err.message));
+} else {
+  console.log('[boot] No DATABASE_URL — falling back to Supabase REST client only');
+}
+
+// Supabase JS client — used as fallback and for complex queries
+// Use node-fetch to avoid undici issues
 const supabase = createClient(
   process.env.SUPABASE_URL,
   _supaKey,
-  { db: { schema: 'public' }, global: { fetch: _ipv4Fetch } }
+  { db: { schema: 'public' }, global: { fetch: _nodeFetch } }
 );
+
+// Helper: run a query via direct Postgres (fast, reliable) with Supabase fallback
+async function dbQuery(text, params = []) {
+  if (!pool) throw new Error('No database pool');
+  const result = await pool.query(text, params);
+  return result.rows;
+}
 
 // Diagnostic endpoint — fast, non-blocking
 app.get('/api/health', async (req, res) => {
   const checks = {
     status: 'ok',
-    supabase_url: process.env.SUPABASE_URL?.slice(0, 40),
-    key_type: process.env.SUPABASE_SERVICE_KEY ? 'service' : 'other',
+    has_pool: !!pool,
     timestamp: new Date().toISOString()
   };
-  // Quick 5s test — Supabase JS client
+  // Test 1: Direct Postgres pool (the fix)
+  if (pool) {
+    try {
+      const start = Date.now();
+      const r = await Promise.race([
+        pool.query('SELECT count(*) as c FROM users'),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('pg_timeout_5s')), 5000))
+      ]);
+      checks.pg_ms = Date.now() - start;
+      checks.pg_ok = true;
+      checks.pg_users = parseInt(r.rows[0]?.c || 0);
+    } catch (e) { checks.pg_ok = false; checks.pg_error = e.message; }
+  }
+  // Test 2: Supabase JS client (likely still broken)
   try {
-    const ac = new AbortController();
-    const t = setTimeout(() => ac.abort(), 5000);
     const start = Date.now();
     const { data, error } = await Promise.race([
       supabase.from('creator_settings').select('id').limit(1),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout_5s')), 5000))
+      new Promise((_, rej) => setTimeout(() => rej(new Error('supabase_timeout_5s')), 5000))
     ]);
-    clearTimeout(t);
-    checks.db_ms = Date.now() - start;
-    checks.db_ok = !error;
-    if (error) checks.db_error = error.message;
-  } catch (e) { checks.db_ok = false; checks.db_error = e.message; }
-  // Quick 5s test — external fetch (proves outbound HTTPS works)
-  try {
-    const ac2 = new AbortController();
-    const t2 = setTimeout(() => ac2.abort(), 5000);
-    const start2 = Date.now();
-    const r = await fetch('https://httpbin.org/get', { signal: ac2.signal });
-    clearTimeout(t2);
-    checks.external_ms = Date.now() - start2;
-    checks.external_ok = r.ok;
-  } catch (e) { checks.external_ok = false; checks.external_error = e.message; }
-  // Quick 5s test — direct Supabase REST via node-fetch + IPv4 agent
-  try {
-    const start3 = Date.now();
-    const rPromise = _ipv4Fetch(`${process.env.SUPABASE_URL}/rest/v1/creator_settings?select=id&limit=1`, {
-      headers: { apikey: _supaKey, Authorization: `Bearer ${_supaKey}` }
-    });
-    const r = await Promise.race([rPromise, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout_5s')), 5000))]);
-    checks.rest_ms = Date.now() - start3;
-    checks.rest_ok = r.ok;
-    checks.rest_status = r.status;
-    checks.fetch_type = 'node-fetch+ipv4';
-  } catch (e) { checks.rest_ok = false; checks.rest_error = e.message; checks.fetch_type = 'node-fetch+ipv4'; }
+    checks.supabase_ms = Date.now() - start;
+    checks.supabase_ok = !error;
+    if (error) checks.supabase_error = error.message;
+  } catch (e) { checks.supabase_ok = false; checks.supabase_error = e.message; }
   res.json(checks);
 });
 
@@ -3322,24 +3328,44 @@ app.post('/api/creator/login', async (req, res) => {
       return res.status(400).json({ error: 'Missing email or password' });
     }
 
-    const { data: user, error: userErr } = await supabase
-      .from('users')
-      .select('id, email, display_name, password_hash, is_creator')
-      .eq('email', email.toLowerCase())
-      .eq('is_creator', true)
-      .maybeSingle();
+    // Use direct Postgres if available (bypasses Cloudflare), fall back to Supabase client
+    let user, settings;
+    if (pool) {
+      const users = await dbQuery(
+        'SELECT id, email, display_name, password_hash, is_creator FROM users WHERE email = $1 AND is_creator = true LIMIT 1',
+        [email.toLowerCase()]
+      );
+      user = users[0] || null;
+    } else {
+      const { data, error: userErr } = await supabase
+        .from('users')
+        .select('id, email, display_name, password_hash, is_creator')
+        .eq('email', email.toLowerCase())
+        .eq('is_creator', true)
+        .maybeSingle();
+      if (userErr) { console.error('[login] DB error:', userErr.message); clearTimeout(timer); return res.status(500).json({ error: 'Database error' }); }
+      user = data;
+    }
 
-    if (userErr) { console.error('[login] DB error:', userErr.message); clearTimeout(timer); return res.status(500).json({ error: 'Database error' }); }
     if (!user) { clearTimeout(timer); return res.status(401).json({ error: 'Invalid credentials' }); }
 
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) { clearTimeout(timer); return res.status(401).json({ error: 'Invalid credentials' }); }
 
-    const { data: settings } = await supabase
-      .from('creator_settings')
-      .select('slug, custom_points_name, primary_color')
-      .eq('creator_id', user.id)
-      .maybeSingle();
+    if (pool) {
+      const settingsRows = await dbQuery(
+        'SELECT slug, custom_points_name, primary_color FROM creator_settings WHERE creator_id = $1 LIMIT 1',
+        [user.id]
+      );
+      settings = settingsRows[0] || null;
+    } else {
+      const { data } = await supabase
+        .from('creator_settings')
+        .select('slug, custom_points_name, primary_color')
+        .eq('creator_id', user.id)
+        .maybeSingle();
+      settings = data;
+    }
 
     const token = makeToken({ id: user.id, email: user.email, slug: settings?.slug });
 
@@ -3448,30 +3474,31 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
   try {
     const creatorId = req.creator.id;
 
-    // Get creator settings
-    const { data: settings, error: settingsErr } = await supabase
-      .from('creator_settings')
-      .select('*')
-      .eq('creator_id', creatorId)
-      .single();
-
-    if (settingsErr || !settings) {
-      return res.status(404).json({ error: 'Creator not found' });
+    // Get creator settings — use direct Postgres if available
+    let settings, markets, creatorUser;
+    if (pool) {
+      const sRows = await dbQuery('SELECT * FROM creator_settings WHERE creator_id = $1 LIMIT 1', [creatorId]);
+      settings = sRows[0] || null;
+      if (!settings) return res.status(404).json({ error: 'Creator not found' });
+      markets = await dbQuery(
+        'SELECT * FROM markets WHERE creator_id = $1 OR tenant_slug = $2 ORDER BY created_at DESC',
+        [creatorId, settings.slug]
+      );
+      const uRows = await dbQuery('SELECT display_name, email FROM users WHERE id = $1 LIMIT 1', [creatorId]);
+      creatorUser = uRows[0] || null;
+    } else {
+      const { data: s, error: settingsErr } = await supabase
+        .from('creator_settings').select('*').eq('creator_id', creatorId).single();
+      if (settingsErr || !s) return res.status(404).json({ error: 'Creator not found' });
+      settings = s;
+      const { data: m } = await supabase.from('markets').select('*')
+        .or(`creator_id.eq.${creatorId},tenant_slug.eq.${settings.slug}`)
+        .order('created_at', { ascending: false });
+      markets = m;
+      const { data: u } = await supabase.from('users').select('display_name, email')
+        .eq('id', creatorId).maybeSingle();
+      creatorUser = u;
     }
-
-    // Get creator's markets — match by creator_id OR tenant_slug to catch all creation paths
-    const { data: markets } = await supabase
-      .from('markets')
-      .select('*')
-      .or(`creator_id.eq.${creatorId},tenant_slug.eq.${settings.slug}`)
-      .order('created_at', { ascending: false });
-
-    // Get creator's display name from users
-    const { data: creatorUser } = await supabase
-      .from('users')
-      .select('display_name, email')
-      .eq('id', creatorId)
-      .maybeSingle();
 
     // Build stats
     const liveMarkets = (markets || []).filter(m => !m.resolved && new Date(m.expiry_date) >= new Date());
@@ -3483,21 +3510,19 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
     let weeklyTrades = 0;
 
     if (marketIds.length > 0) {
-      const { data: traderRows } = await supabase
-        .from('positions')
-        .select('user_id')
-        .in('market_id', marketIds);
-
-      totalTraders = new Set((traderRows || []).map(r => r.user_id)).size;
-
-      const oneWeekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
-      const { count: weekCount } = await supabase
-        .from('positions')
-        .select('id', { count: 'exact', head: true })
-        .in('market_id', marketIds)
-        .gte('created_at', oneWeekAgo);
-
-      weeklyTrades = weekCount || 0;
+      if (pool) {
+        const traderRows = await dbQuery('SELECT DISTINCT user_id FROM positions WHERE market_id = ANY($1)', [marketIds]);
+        totalTraders = traderRows.length;
+        const oneWeekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+        const weekRows = await dbQuery('SELECT count(*) as c FROM positions WHERE market_id = ANY($1) AND created_at >= $2', [marketIds, oneWeekAgo]);
+        weeklyTrades = parseInt(weekRows[0]?.c || 0);
+      } else {
+        const { data: traderRows } = await supabase.from('positions').select('user_id').in('market_id', marketIds);
+        totalTraders = new Set((traderRows || []).map(r => r.user_id)).size;
+        const oneWeekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+        const { count: weekCount } = await supabase.from('positions').select('id', { count: 'exact', head: true }).in('market_id', marketIds).gte('created_at', oneWeekAgo);
+        weeklyTrades = weekCount || 0;
+      }
     }
 
     const plan = settings.plan || 'free';
