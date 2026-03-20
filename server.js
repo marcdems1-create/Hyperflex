@@ -1821,14 +1821,13 @@ function getStreakMultiplier(streak) {
 // Returns { userId: streakCount } map.
 async function getStreakMap(userIds, marketIds) {
   if (!userIds || userIds.length === 0) return {};
-  const { data: allPos } = await supabase
-    .from('positions')
-    .select('user_id, won, created_at')
-    .in('user_id', userIds)
-    .in('market_id', marketIds)
-    .eq('settled', true)
-    .order('created_at', { ascending: false })
-    .limit(500);
+  let allPos;
+  if (pool) {
+    allPos = await dbQuery('SELECT user_id, won, created_at FROM positions WHERE user_id = ANY($1) AND market_id = ANY($2) AND settled = true ORDER BY created_at DESC LIMIT 500', [userIds, marketIds]);
+  } else {
+    const { data } = await supabase.from('positions').select('user_id, won, created_at').in('user_id', userIds).in('market_id', marketIds).eq('settled', true).order('created_at', { ascending: false }).limit(500);
+    allPos = data;
+  }
 
   // Group by user (already sorted desc by created_at)
   const possByUser = {};
