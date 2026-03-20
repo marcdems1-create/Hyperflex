@@ -1298,7 +1298,8 @@ footer {
   .nav-actions { gap: 8px; }
   .btn-nav-explore { padding: 10px 14px; font-size: 12px; min-height: 44px; display: inline-flex; align-items: center; }
   .btn-nav-login { padding: 10px 14px; font-size: 12px; min-height: 44px; display: inline-flex; align-items: center; }
-  .btn-nav-cta { padding: 10px 16px; font-size: 12px; min-height: 44px; display: inline-flex; align-items: center; }
+  .btn-nav-cta { display: none; } /* Hide "Get started free" on mobile — Sign in is sufficient */
+  .btn-nav-login { background: var(--gold); color: var(--ink); border-radius: 8px; padding: 10px 16px; font-size: 12px; font-weight: 700; min-height: 44px; display: inline-flex; align-items: center; text-decoration: none; }
   .steps, .features-grid, .pricing-grid, .quote-grid { grid-template-columns: 1fr; }
   .demo-markets { grid-template-columns: 1fr; }
   .how, .features, .demo, .pricing, .quotes, .cta-wrap, .video-section { padding-left: 20px; padding-right: 20px; }
@@ -1376,6 +1377,7 @@ footer {
     <a id="navDashLink" href="/dashboard" class="btn-nav-login" style="display:none;color:#c9920d">Dashboard</a>
     <a href="/creator/login" class="btn-nav-login" id="navLoginLink">Sign in</a>
     <a href="/creator/signup" class="btn-nav-cta" id="navSignupLink">Get started free</a>
+    <!-- Unified login handles both member + creator -->
   </div>
 </nav>
 

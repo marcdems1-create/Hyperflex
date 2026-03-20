@@ -7057,23 +7057,33 @@ app.get('/auth/callback', async (req, res) => {
     if (!email) return res.redirect('/creator/login?error=no_email_returned');
 
     // ── Find or create user in our DB ─────────────────────────
-    let { data: dbUser } = await supabase.from('users').select('*').eq('email', email).maybeSingle();
-    if (!dbUser) {
-      const { data: inserted, error: insertErr } = await supabase
-        .from('users')
-        .insert({ email, display_name: displayName, password_hash: '', is_creator: true, balance: 100000 })
-        .select()
-        .single();
-      if (insertErr) throw new Error(insertErr.message);
-      dbUser = inserted;
+    let dbUser;
+    if (pool) {
+      const rows = await dbQuery('SELECT * FROM users WHERE email = $1 LIMIT 1', [email]);
+      dbUser = rows[0] || null;
+      if (!dbUser) {
+        const inserted = await dbQuery('INSERT INTO users (email, display_name, password_hash, is_creator, balance) VALUES ($1, $2, $3, true, $4) RETURNING *', [email, displayName, '', 100000]);
+        dbUser = inserted[0];
+      }
+    } else {
+      const { data } = await supabase.from('users').select('*').eq('email', email).maybeSingle();
+      dbUser = data;
+      if (!dbUser) {
+        const { data: inserted, error: insertErr } = await supabase.from('users').insert({ email, display_name: displayName, password_hash: '', is_creator: true, balance: 100000 }).select().single();
+        if (insertErr) throw new Error(insertErr.message);
+        dbUser = inserted;
+      }
     }
 
     // ── Existing creator → go to dashboard ───────────────────
-    const { data: settings } = await supabase
-      .from('creator_settings')
-      .select('slug')
-      .eq('creator_id', dbUser.id)
-      .maybeSingle();
+    let settings;
+    if (pool) {
+      const rows = await dbQuery('SELECT slug FROM creator_settings WHERE creator_id = $1 LIMIT 1', [dbUser.id]);
+      settings = rows[0] || null;
+    } else {
+      const { data } = await supabase.from('creator_settings').select('slug').eq('creator_id', dbUser.id).maybeSingle();
+      settings = data;
+    }
 
     if (settings?.slug) {
       const token = makeToken({ id: dbUser.id, email: dbUser.email, slug: settings.slug });
