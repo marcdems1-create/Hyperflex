@@ -240,6 +240,30 @@ async function dbQuery(text, params = []) {
 }
 
 // Diagnostic endpoint — fast, non-blocking
+// Debug: test external API connectivity
+app.get('/api/debug-fetch', async (req, res) => {
+  const results = {};
+  const testFetch = async (name, url) => {
+    const start = Date.now();
+    try {
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), 8000);
+      const r = await fetch(url, { signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } });
+      clearTimeout(tid);
+      const ms = Date.now() - start;
+      results[name] = { ok: r.ok, status: r.status, ms };
+    } catch (e) {
+      results[name] = { ok: false, error: e.message, ms: Date.now() - start };
+    }
+  };
+  await Promise.allSettled([
+    testFetch('polymarket', 'https://gamma-api.polymarket.com/markets?closed=false&limit=1'),
+    testFetch('kalshi', 'https://api.elections.kalshi.com/trade-api/v2/events?limit=1'),
+    testFetch('httpbin', 'https://httpbin.org/get'),
+  ]);
+  res.json(results);
+});
+
 app.get('/api/health', async (req, res) => {
   const checks = {
     status: 'ok',
@@ -8657,7 +8681,7 @@ app.get('/api/activity', async (req, res) => {
           kalshiCount++;
         }
       }
-    } catch (e) { console.warn('[trending external]', e.message); }
+    } catch (e) { console.warn('[trending external]', e.message, e.stack?.split('\n')[1]); }
 
     // Collapse market_created bursts: same creator within 5 minutes → one card
     const BURST_WINDOW_MS = 5 * 60 * 1000;
