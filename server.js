@@ -379,9 +379,9 @@ function createSupabaseProxy() {
     in(col, arr) { this._wheres.push({ col, op: 'IN', val: arr }); return this; }
 
     not(col, op, val) {
-      if (op === 'is' && val === null) { this._notFilters.push({ col, clause: `"${col}" IS NOT NULL` }); }
-      else if (op === 'in') { this._notFilters.push({ col, clause: `"${col}" != ALL($)`, val }); }
-      else { this._notFilters.push({ col, clause: `NOT ("${col}" ${op} $)`, val }); }
+      if (op === 'is' && val === null) { this._notFilters.push({ col, clause: `${col} IS NOT NULL` }); }
+      else if (op === 'in') { this._notFilters.push({ col, clause: `${col} != ALL($)`, val }); }
+      else { this._notFilters.push({ col, clause: `NOT (${col} ${op} $)`, val }); }
       return this;
     }
 
@@ -392,7 +392,7 @@ function createSupabaseProxy() {
 
     order(col, opts) {
       const dir = opts?.ascending === false ? 'DESC' : 'ASC';
-      this._orderBy.push(`"${col}" ${dir}`);
+      this._orderBy.push(`${col} ${dir}`);
       return this;
     }
 
@@ -441,12 +441,12 @@ function createSupabaseProxy() {
       for (const w of this._wheres) {
         if (w.op === 'IN') {
           params.push(w.val);
-          clauses.push(`"${w.col}" = ANY($${params.length})`);
+          clauses.push(`${w.col} = ANY($${params.length})`);
         } else if (w.op === 'IS') {
-          clauses.push(`"${w.col}" IS ${w.val === null ? 'NULL' : w.val}`);
+          clauses.push(`${w.col} IS ${w.val === null ? 'NULL' : w.val}`);
         } else {
           params.push(w.val);
-          clauses.push(`"${w.col}" ${w.op} $${params.length}`);
+          clauses.push(`${w.col} ${w.op} $${params.length}`);
         }
       }
       for (const nf of this._notFilters) {
@@ -464,7 +464,7 @@ function createSupabaseProxy() {
           if (m) {
             params.push(m[3]);
             const op = m[2] === 'eq' ? '=' : m[2] === 'neq' ? '!=' : m[2] === 'gt' ? '>' : m[2] === 'gte' ? '>=' : m[2] === 'lt' ? '<' : m[2] === 'lte' ? '<=' : m[2] === 'ilike' ? 'ILIKE' : '=';
-            return `"${m[1]}" ${op} $${params.length}`;
+            return `${m[1]} ${op} $${params.length}`;
           }
           return 'TRUE';
         });
@@ -479,7 +479,7 @@ function createSupabaseProxy() {
       const order = this._orderBy.length ? `ORDER BY ${this._orderBy.join(', ')}` : '';
       const limit = this._limitVal != null ? `LIMIT ${this._limitVal}` : '';
       const offset = this._offsetVal != null ? `OFFSET ${this._offsetVal}` : '';
-      const sql = `SELECT ${cols} FROM "${this._table}" ${where} ${order} ${limit} ${offset}`.trim();
+      const sql = `SELECT ${cols} FROM ${this._table} ${where} ${order} ${limit} ${offset}`.trim();
       const rows = await dbQuery(sql, params);
       if (this._countOnly && this._headOnly) {
         return { data: null, error: null, count: rows[0]?.count || 0 };
@@ -502,7 +502,7 @@ function createSupabaseProxy() {
       return this._columns.split(',').map(c => {
         c = c.trim();
         if (c === '*') return '*';
-        return `"${c}"`;
+        return c;
       }).join(', ');
     }
 
@@ -513,9 +513,9 @@ function createSupabaseProxy() {
       const allRows = this._insertData.map(row => {
         return cols.map(c => { params.push(row[c] !== undefined ? row[c] : null); return `$${params.length}`; });
       });
-      const colStr = cols.map(c => `"${c}"`).join(', ');
+      const colStr = cols.map(c => c).join(', ');
       const valStr = allRows.map(r => `(${r.join(', ')})`).join(', ');
-      const sql = `INSERT INTO "${this._table}" (${colStr}) VALUES ${valStr} RETURNING *`;
+      const sql = `INSERT INTO ${this._table} (${colStr}) VALUES ${valStr} RETURNING *`;
       try {
         const rows = await dbQuery(sql, params);
         return { data: this._insertData.length === 1 ? rows[0] : rows, error: null };
@@ -527,9 +527,9 @@ function createSupabaseProxy() {
     async _execUpdate(params) {
       if (!this._updateData) return { data: null, error: new Error('No data') };
       const cols = Object.keys(this._updateData);
-      const sets = cols.map(c => { params.push(this._updateData[c]); return `"${c}" = $${params.length}`; });
+      const sets = cols.map(c => { params.push(this._updateData[c]); return `${c} = $${params.length}`; });
       const where = this._buildWhere(params);
-      const sql = `UPDATE "${this._table}" SET ${sets.join(', ')} ${where}`;
+      const sql = `UPDATE ${this._table} SET ${sets.join(', ')} ${where}`;
       try {
         await dbQuery(sql, params);
         return { data: null, error: null };
@@ -540,7 +540,7 @@ function createSupabaseProxy() {
 
     async _execDelete(params) {
       const where = this._buildWhere(params);
-      const sql = `DELETE FROM "${this._table}" ${where}`;
+      const sql = `DELETE FROM ${this._table} ${where}`;
       try {
         await dbQuery(sql, params);
         return { data: null, error: null };
@@ -556,14 +556,14 @@ function createSupabaseProxy() {
       const allRows = this._upsertData.map(row => {
         return cols.map(c => { params.push(row[c] !== undefined ? row[c] : null); return `$${params.length}`; });
       });
-      const colStr = cols.map(c => `"${c}"`).join(', ');
+      const colStr = cols.map(c => c).join(', ');
       const valStr = allRows.map(r => `(${r.join(', ')})`).join(', ');
-      const conflict = this._onConflict ? `"${this._onConflict}"` : cols[0] ? `"${cols[0]}"` : '"id"';
+      const conflict = this._onConflict ? this._onConflict : cols[0] ? cols[0] : 'id';
       const updateCols = cols.filter(c => c !== (this._onConflict || cols[0]));
-      const updateStr = updateCols.map(c => `"${c}" = EXCLUDED."${c}"`).join(', ');
+      const updateStr = updateCols.map(c => `${c} = EXCLUDED.${c}`).join(', ');
       const sql = updateStr
-        ? `INSERT INTO "${this._table}" (${colStr}) VALUES ${valStr} ON CONFLICT (${conflict}) DO UPDATE SET ${updateStr} RETURNING *`
-        : `INSERT INTO "${this._table}" (${colStr}) VALUES ${valStr} ON CONFLICT (${conflict}) DO NOTHING RETURNING *`;
+        ? `INSERT INTO ${this._table} (${colStr}) VALUES ${valStr} ON CONFLICT (${conflict}) DO UPDATE SET ${updateStr} RETURNING *`
+        : `INSERT INTO ${this._table} (${colStr}) VALUES ${valStr} ON CONFLICT (${conflict}) DO NOTHING RETURNING *`;
       try {
         const rows = await dbQuery(sql, params);
         return { data: rows, error: null };
@@ -9852,15 +9852,16 @@ app.get('/api/activity', async (req, res) => {
         const tid = setTimeout(() => ctrl.abort(), ms);
         return fetch(url, { signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }).finally(() => clearTimeout(tid));
       };
-      const [polyTrending, polyCrypto, polyPolitics, kalshiTrending] = await Promise.allSettled([
+      const [polyTrending, polyCrypto, polyPolitics] = await Promise.allSettled([
         fetchExt('https://gamma-api.polymarket.com/markets?closed=false&limit=10&order=volume&ascending=false'),
         fetchExt('https://gamma-api.polymarket.com/markets?closed=false&limit=8&order=volume&ascending=false&search=bitcoin'),
         fetchExt('https://gamma-api.polymarket.com/markets?closed=false&limit=8&order=volume&ascending=false&search=trump'),
-        fetchExt('https://api.elections.kalshi.com/trade-api/v2/events?limit=15&with_nested_markets=true'),
       ]);
       if (polyTrending.status === 'fulfilled' && polyTrending.value.ok) {
         const raw = await polyTrending.value.json();
-        (Array.isArray(raw) ? raw : []).filter(m => (parseFloat(m.volume) || 0) >= 5000).slice(0, 6).forEach((m, i) => {
+        const filteredPoly = (Array.isArray(raw) ? raw : []).filter(m => (parseFloat(m.volume) || 0) >= 5000);
+        filteredPoly.sort(() => Math.random() - 0.5);
+        filteredPoly.slice(0, 6).forEach((m, i) => {
           const vol = parseFloat(m.volume) || 0;
           let yesPct = null;
           try {
@@ -9904,7 +9905,9 @@ app.get('/api/activity', async (req, res) => {
         if (feedResult.status !== 'fulfilled' || !feedResult.value.ok) return;
         try {
           const raw = await feedResult.value.json();
-          (Array.isArray(raw) ? raw : []).filter(m => !seenPolyIds.has(`tpoly_${m.id}`)).slice(0, max).forEach((m, i) => {
+          const extraFiltered = (Array.isArray(raw) ? raw : []).filter(m => !seenPolyIds.has(`tpoly_${m.id}`));
+          extraFiltered.sort(() => Math.random() - 0.5);
+          extraFiltered.slice(0, max).forEach((m, i) => {
             const vol = parseFloat(m.volume) || 0;
             let yesPct = null;
             try { const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices; if (Array.isArray(prices) && prices[0] != null) yesPct = Math.round(prices[0] * 100); } catch {}
