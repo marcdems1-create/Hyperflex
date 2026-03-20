@@ -8631,7 +8631,11 @@ app.get('/api/activity', async (req, res) => {
         const raw = await polyTrending.value.json();
         (Array.isArray(raw) ? raw : []).filter(m => (parseFloat(m.volume) || 0) >= 100000).slice(0, 6).forEach((m, i) => {
           const vol = parseFloat(m.volume) || 0;
-          const yesPct = m.outcomePrices ? Math.round(JSON.parse(m.outcomePrices)[0] * 100) : null;
+          let yesPct = null;
+          try {
+            const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
+            if (Array.isArray(prices) && prices[0] != null) yesPct = Math.round(prices[0] * 100);
+          } catch {}
           activities.push({
             type: 'trending_external',
             id: `tpoly_${m.id || i}`,
