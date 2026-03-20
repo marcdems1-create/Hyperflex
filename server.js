@@ -274,15 +274,14 @@ if (pool) {
   console.log('[boot] No DATABASE_URL — falling back to Supabase REST client only');
 }
 
-// Supabase JS client — used as fallback and for complex queries
-// Use node-fetch to avoid undici issues
-const supabase = createClient(
+// Supabase JS client — used as fallback for complex queries + storage
+const _realSupabase = createClient(
   process.env.SUPABASE_URL,
   _supaKey,
   { db: { schema: 'public' }, global: { fetch: _nodeFetch } }
 );
 
-// Helper: run a query via direct Postgres (fast, reliable) with Supabase fallback
+// Helper: run a query via direct Postgres
 async function dbQuery(text, params = []) {
   if (!pool) throw new Error('No database pool');
   const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error(`dbQuery timeout (10s): ${text.slice(0, 60)}`)), 10000));
@@ -290,6 +289,294 @@ async function dbQuery(text, params = []) {
   const result = await Promise.race([query, timeout]);
   return result.rows;
 }
+
+// ── SUPABASE PROXY ──────────────────────────────────────────────────────────
+// Intercepts all supabase.from() calls and translates them to direct SQL via pool.
+// This avoids migrating 200+ individual calls while the REST API is unreachable.
+function createSupabaseProxy() {
+  if (!pool) return _realSupabase; // no pool = use real supabase
+
+  const handler = {
+    get(target, prop) {
+      if (prop === 'from') {
+        return (table) => new QueryBuilder(table);
+      }
+      if (prop === 'storage') return _realSupabase.storage;
+      if (prop === 'auth') return _realSupabase.auth;
+      if (prop === 'rpc') return _realSupabase.rpc?.bind(_realSupabase);
+      return target[prop];
+    }
+  };
+
+  class QueryBuilder {
+    constructor(table) {
+      this._table = table;
+      this._op = 'select';
+      this._columns = '*';
+      this._wheres = [];
+      this._params = [];
+      this._orderBy = [];
+      this._limitVal = null;
+      this._offsetVal = null;
+      this._single = false;
+      this._maybeSingle = false;
+      this._countOnly = false;
+      this._headOnly = false;
+      this._insertData = null;
+      this._updateData = null;
+      this._upsertData = null;
+      this._onConflict = null;
+      this._returning = false;
+      this._deleteOp = false;
+      this._orClause = null;
+      this._notFilters = [];
+    }
+
+    select(columns, opts) {
+      this._op = 'select';
+      if (opts && opts.count === 'exact' && opts.head) {
+        this._countOnly = true;
+        this._headOnly = true;
+      }
+      if (columns && columns !== '*') this._columns = columns;
+      return this;
+    }
+
+    insert(data) {
+      this._op = 'insert';
+      this._insertData = Array.isArray(data) ? data : [data];
+      return this;
+    }
+
+    update(data) {
+      this._op = 'update';
+      this._updateData = data;
+      return this;
+    }
+
+    upsert(data, opts) {
+      this._op = 'upsert';
+      this._upsertData = Array.isArray(data) ? data : [data];
+      this._onConflict = opts?.onConflict || null;
+      return this;
+    }
+
+    delete() {
+      this._op = 'delete';
+      this._deleteOp = true;
+      return this;
+    }
+
+    eq(col, val) { this._wheres.push({ col, op: '=', val }); return this; }
+    neq(col, val) { this._wheres.push({ col, op: '!=', val }); return this; }
+    gt(col, val) { this._wheres.push({ col, op: '>', val }); return this; }
+    gte(col, val) { this._wheres.push({ col, op: '>=', val }); return this; }
+    lt(col, val) { this._wheres.push({ col, op: '<', val }); return this; }
+    lte(col, val) { this._wheres.push({ col, op: '<=', val }); return this; }
+    like(col, val) { this._wheres.push({ col, op: 'LIKE', val }); return this; }
+    ilike(col, val) { this._wheres.push({ col, op: 'ILIKE', val }); return this; }
+    is(col, val) { this._wheres.push({ col, op: 'IS', val: val === null ? null : val }); return this; }
+    in(col, arr) { this._wheres.push({ col, op: 'IN', val: arr }); return this; }
+
+    not(col, op, val) {
+      if (op === 'is' && val === null) { this._notFilters.push({ col, clause: `"${col}" IS NOT NULL` }); }
+      else if (op === 'in') { this._notFilters.push({ col, clause: `"${col}" != ALL($)`, val }); }
+      else { this._notFilters.push({ col, clause: `NOT ("${col}" ${op} $)`, val }); }
+      return this;
+    }
+
+    or(clause) {
+      this._orClause = clause;
+      return this;
+    }
+
+    order(col, opts) {
+      const dir = opts?.ascending === false ? 'DESC' : 'ASC';
+      this._orderBy.push(`"${col}" ${dir}`);
+      return this;
+    }
+
+    limit(n) { this._limitVal = n; return this; }
+    range(from, to) { this._offsetVal = from; this._limitVal = to - from + 1; return this; }
+
+    single() { this._single = true; this._limitVal = 1; return this; }
+    maybeSingle() { this._maybeSingle = true; this._limitVal = 1; return this; }
+
+    // Terminal — executes the query
+    async then(resolve, reject) {
+      try {
+        const result = await this._execute();
+        resolve(result);
+      } catch (e) {
+        if (reject) reject(e);
+        else resolve({ data: null, error: e, count: null });
+      }
+    }
+
+    async _execute() {
+      try {
+        const params = [];
+        const pIdx = () => `$${params.length}`;
+
+        if (this._op === 'select' || this._op === 'select') {
+          return await this._execSelect(params);
+        } else if (this._op === 'insert') {
+          return await this._execInsert(params);
+        } else if (this._op === 'update') {
+          return await this._execUpdate(params);
+        } else if (this._op === 'delete') {
+          return await this._execDelete(params);
+        } else if (this._op === 'upsert') {
+          return await this._execUpsert(params);
+        }
+        return { data: null, error: new Error('Unknown op: ' + this._op) };
+      } catch (e) {
+        console.error(`[supabase-proxy] ${this._op} ${this._table} error:`, e.message);
+        return { data: null, error: e, count: null };
+      }
+    }
+
+    _buildWhere(params) {
+      const clauses = [];
+      for (const w of this._wheres) {
+        if (w.op === 'IN') {
+          params.push(w.val);
+          clauses.push(`"${w.col}" = ANY($${params.length})`);
+        } else if (w.op === 'IS') {
+          clauses.push(`"${w.col}" IS ${w.val === null ? 'NULL' : w.val}`);
+        } else {
+          params.push(w.val);
+          clauses.push(`"${w.col}" ${w.op} $${params.length}`);
+        }
+      }
+      for (const nf of this._notFilters) {
+        if (nf.val !== undefined) {
+          params.push(nf.val);
+          clauses.push(nf.clause.replace('$', `$${params.length}`));
+        } else {
+          clauses.push(nf.clause);
+        }
+      }
+      if (this._orClause) {
+        // Parse simple or clauses like "tenant_slug.eq.foo,creator_id.eq.bar"
+        const parts = this._orClause.split(',').map(p => {
+          const m = p.match(/^(\w+)\.(\w+)\.(.+)$/);
+          if (m) {
+            params.push(m[3]);
+            const op = m[2] === 'eq' ? '=' : m[2] === 'neq' ? '!=' : m[2] === 'gt' ? '>' : m[2] === 'gte' ? '>=' : m[2] === 'lt' ? '<' : m[2] === 'lte' ? '<=' : m[2] === 'ilike' ? 'ILIKE' : '=';
+            return `"${m[1]}" ${op} $${params.length}`;
+          }
+          return 'TRUE';
+        });
+        clauses.push(`(${parts.join(' OR ')})`);
+      }
+      return clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+    }
+
+    async _execSelect(params) {
+      const cols = this._countOnly ? 'count(*)::int as count' : this._parseColumns();
+      const where = this._buildWhere(params);
+      const order = this._orderBy.length ? `ORDER BY ${this._orderBy.join(', ')}` : '';
+      const limit = this._limitVal != null ? `LIMIT ${this._limitVal}` : '';
+      const offset = this._offsetVal != null ? `OFFSET ${this._offsetVal}` : '';
+      const sql = `SELECT ${cols} FROM "${this._table}" ${where} ${order} ${limit} ${offset}`.trim();
+      const rows = await dbQuery(sql, params);
+      if (this._countOnly && this._headOnly) {
+        return { data: null, error: null, count: rows[0]?.count || 0 };
+      }
+      if (this._single) {
+        if (!rows.length) return { data: null, error: { code: 'PGRST116', message: 'Row not found' } };
+        return { data: rows[0], error: null };
+      }
+      if (this._maybeSingle) {
+        return { data: rows[0] || null, error: null };
+      }
+      return { data: rows, error: null };
+    }
+
+    _parseColumns() {
+      if (!this._columns || this._columns === '*') return '*';
+      // Handle joined columns like "*, markets(*)" — just use * for now
+      if (this._columns.includes('(')) return '*';
+      // Clean up column list: "id, email, display_name" → "id", "email", "display_name"
+      return this._columns.split(',').map(c => {
+        c = c.trim();
+        if (c === '*') return '*';
+        return `"${c}"`;
+      }).join(', ');
+    }
+
+    async _execInsert(params) {
+      if (!this._insertData?.length) return { data: null, error: new Error('No data') };
+      const first = this._insertData[0];
+      const cols = Object.keys(first);
+      const allRows = this._insertData.map(row => {
+        return cols.map(c => { params.push(row[c] !== undefined ? row[c] : null); return `$${params.length}`; });
+      });
+      const colStr = cols.map(c => `"${c}"`).join(', ');
+      const valStr = allRows.map(r => `(${r.join(', ')})`).join(', ');
+      const sql = `INSERT INTO "${this._table}" (${colStr}) VALUES ${valStr} RETURNING *`;
+      try {
+        const rows = await dbQuery(sql, params);
+        return { data: this._insertData.length === 1 ? rows[0] : rows, error: null };
+      } catch (e) {
+        return { data: null, error: e };
+      }
+    }
+
+    async _execUpdate(params) {
+      if (!this._updateData) return { data: null, error: new Error('No data') };
+      const cols = Object.keys(this._updateData);
+      const sets = cols.map(c => { params.push(this._updateData[c]); return `"${c}" = $${params.length}`; });
+      const where = this._buildWhere(params);
+      const sql = `UPDATE "${this._table}" SET ${sets.join(', ')} ${where}`;
+      try {
+        await dbQuery(sql, params);
+        return { data: null, error: null };
+      } catch (e) {
+        return { data: null, error: e };
+      }
+    }
+
+    async _execDelete(params) {
+      const where = this._buildWhere(params);
+      const sql = `DELETE FROM "${this._table}" ${where}`;
+      try {
+        await dbQuery(sql, params);
+        return { data: null, error: null };
+      } catch (e) {
+        return { data: null, error: e };
+      }
+    }
+
+    async _execUpsert(params) {
+      if (!this._upsertData?.length) return { data: null, error: new Error('No data') };
+      const first = this._upsertData[0];
+      const cols = Object.keys(first);
+      const allRows = this._upsertData.map(row => {
+        return cols.map(c => { params.push(row[c] !== undefined ? row[c] : null); return `$${params.length}`; });
+      });
+      const colStr = cols.map(c => `"${c}"`).join(', ');
+      const valStr = allRows.map(r => `(${r.join(', ')})`).join(', ');
+      const conflict = this._onConflict ? `"${this._onConflict}"` : cols[0] ? `"${cols[0]}"` : '"id"';
+      const updateCols = cols.filter(c => c !== (this._onConflict || cols[0]));
+      const updateStr = updateCols.map(c => `"${c}" = EXCLUDED."${c}"`).join(', ');
+      const sql = updateStr
+        ? `INSERT INTO "${this._table}" (${colStr}) VALUES ${valStr} ON CONFLICT (${conflict}) DO UPDATE SET ${updateStr} RETURNING *`
+        : `INSERT INTO "${this._table}" (${colStr}) VALUES ${valStr} ON CONFLICT (${conflict}) DO NOTHING RETURNING *`;
+      try {
+        const rows = await dbQuery(sql, params);
+        return { data: rows, error: null };
+      } catch (e) {
+        return { data: null, error: e };
+      }
+    }
+  }
+
+  return new Proxy(_realSupabase, handler);
+}
+
+const supabase = createSupabaseProxy();
 
 // Diagnostic endpoint — fast, non-blocking
 // Debug: test external API connectivity
@@ -470,22 +757,26 @@ const _predictorFollowCache = new Map();
 
 // Get all open markets
 app.get('/markets', async (req, res) => {
-  const { data, error } = await supabase
-    .from('markets')
-    .select('*')
-    .eq('resolved', false)
-    .order('expiry_date', { ascending: true });
+  let data, error;
+  if (pool) {
+    const _rows = await dbQuery('SELECT * FROM markets WHERE resolved = $1 ORDER BY expiry_date ASC', [false]);
+    data = _rows;
+  } else {
+    const { data, error } = await supabase .from('markets') .select('*') .eq('resolved', false) .order('expiry_date', { ascending: true });
+  }
   if (error) return res.status(400).json({ error: error.message });
   res.json(data);
 });
 
 // Get single market
 app.get('/markets/:id', async (req, res) => {
-  const { data, error } = await supabase
-    .from('markets')
-    .select('*')
-    .eq('id', req.params.id)
-    .single();
+  let data, error;
+  if (pool) {
+    const _rows = await dbQuery('SELECT * FROM markets WHERE id = $1 LIMIT 1', [req.params.id]);
+    data = _rows[0] || null;
+  } else {
+    const { data, error } = await supabase .from('markets') .select('*') .eq('id', req.params.id) .single();
+  }
   if (error) return res.status(400).json({ error: error.message });
   res.json(data);
 });
@@ -497,11 +788,13 @@ app.get('/markets/:id', async (req, res) => {
 // ════════════════════════════════════════════════════════════
 app.get('/share/:marketId', async (req, res) => {
   try {
-    const { data: market } = await supabase
-      .from('markets')
-      .select('*')
-      .eq('id', req.params.marketId)
-      .maybeSingle();
+    let market;
+    if (pool) {
+      const _rows = await dbQuery('SELECT * FROM markets WHERE id = $1 LIMIT 1', [req.params.marketId]);
+      market = _rows[0] || null;
+    } else {
+      const { data: market } = await supabase .from('markets') .select('*') .eq('id', req.params.marketId) .maybeSingle();
+    }
 
     if (!market) return res.status(404).send('<!DOCTYPE html><html><body style="font-family:monospace;padding:40px;color:#fff;background:#141412"><h2>Market not found</h2><a href="/" style="color:#c9920d">← HYPERFLEX</a></body></html>');
 
@@ -859,17 +1152,20 @@ app.post('/markets', async (req, res) => {
     try {
       const payload = jwt.verify(token, JWT_SECRET);
       // Try creator_id first (new schema), fall back to user_id (old schema)
-      let { data: settings } = await supabase
-        .from('creator_settings')
-        .select('slug')
-        .eq('creator_id', payload.id)
-        .maybeSingle();
+      let settings;
+      if (pool) {
+        const _rows = await dbQuery('SELECT slug FROM creator_settings WHERE creator_id = $1 LIMIT 1', [payload.id]);
+        settings = _rows[0] || null;
+      } else {
+        let { data: settings } = await supabase .from('creator_settings') .select('slug') .eq('creator_id', payload.id) .maybeSingle();
+      }
       if (!settings) {
-        ({ data: settings } = await supabase
-          .from('creator_settings')
-          .select('slug')
-          .eq('user_id', payload.id)
-          .maybeSingle());
+        if (pool) {
+          const _rows = await dbQuery(`SELECT slug FROM creator_settings WHERE user_id = $1 LIMIT 1`, [payload.id]);
+          settings = _rows[0] || null;
+        } else {
+          ({ data: settings } = await supabase .from('creator_settings') .select('slug') .eq('user_id', payload.id) .maybeSingle());
+        }
       }
       if (settings?.slug) {
         // Populate tenant_slug if the caller didn't provide it
@@ -882,22 +1178,25 @@ app.post('/markets', async (req, res) => {
 
   // ── Plan-based market limit ───────────────────────────────────────────────
   if (row.tenant_slug) {
-    const { data: cs } = await supabase
-      .from('creator_settings')
-      .select('plan, plan_trial_expires_at')
-      .eq('slug', row.tenant_slug)
-      .maybeSingle();
+    let cs;
+    if (pool) {
+      const _rows = await dbQuery('SELECT plan, plan_trial_expires_at FROM creator_settings WHERE slug = $1 LIMIT 1', [row.tenant_slug]);
+      cs = _rows[0] || null;
+    } else {
+      const { data: cs } = await supabase .from('creator_settings') .select('plan, plan_trial_expires_at') .eq('slug', row.tenant_slug) .maybeSingle();
+    }
     if (cs) {
       const effectivePlan = (cs.plan_trial_expires_at && new Date(cs.plan_trial_expires_at) > new Date())
         ? 'pro' : cs.plan;
       const FREE_MARKET_LIMIT = 5;
       if (effectivePlan === 'free') {
-        const { count } = await supabase
-          .from('markets')
-          .select('id', { count: 'exact', head: true })
-          .eq('tenant_slug', row.tenant_slug)
-          .eq('resolved', false)
-          .eq('archived', false);
+        let count;
+        if (pool) {
+          const _rows = await dbQuery('SELECT count(*) as count FROM markets WHERE tenant_slug = $1 AND resolved = $2 AND archived = $3', [row.tenant_slug, false, false]);
+          count = parseInt(_rows[0]?.count || 0);
+        } else {
+          const { count } = await supabase .from('markets') .select('id', { count: 'exact', head: true }) .eq('tenant_slug', row.tenant_slug) .eq('resolved', false) .eq('archived', false);
+        }
         if ((count || 0) >= FREE_MARKET_LIMIT) {
           return res.status(403).json({
             error: 'Free plan limit reached',
@@ -942,11 +1241,16 @@ app.post('/markets', async (req, res) => {
     }
   }
 
-  const { data, error } = await supabase
-    .from('markets')
-    .insert([row])
-    .select()
-    .single();
+  let data, error;
+  if (pool) {
+    const _insData = Array.isArray([row]) ? ([row])[0] : ([row]);
+    const _cols = Object.keys(_insData); const _vals = Object.values(_insData);
+    const _phs = _cols.map((_, i) => `$${i + 1}`).join(', ');
+    const _rows = await dbQuery(`INSERT INTO markets (${_cols.join(', ')}) VALUES (${_phs}) RETURNING *`, _vals);
+    data = _rows[0] || null;
+  } else {
+    const { data, error } = await supabase .from('markets') .insert([row]) .select() .single();
+  }
   if (error) {
     console.error('POST /markets insert error:', JSON.stringify({ message: error.message, code: error.code, details: error.details, hint: error.hint, row }));
     if (error.code === '23505') {
@@ -985,22 +1289,25 @@ app.post('/api/creator/markets/bulk', requireCreator, async (req, res) => {
     }
 
     // Get creator slug + category
-    const { data: creator } = await supabase
-      .from('creator_settings')
-      .select('slug, community_category, plan')
-      .eq('creator_id', req.creator.id)
-      .single();
+    let creator;
+    if (pool) {
+      const _rows = await dbQuery('SELECT slug, community_category, plan FROM creator_settings WHERE creator_id = $1 LIMIT 1', [req.creator.id]);
+      creator = _rows[0] || null;
+    } else {
+      const { data: creator } = await supabase .from('creator_settings') .select('slug, community_category, plan') .eq('creator_id', req.creator.id) .single();
+    }
 
     if (!creator) return res.status(404).json({ error: 'Creator not found' });
 
     // Enforce free plan market limit on bulk create
     if (creator.plan === 'free') {
-      const { count: activeCount } = await supabase
-        .from('markets')
-        .select('id', { count: 'exact', head: true })
-        .eq('creator_id', req.creator.id)
-        .eq('resolved', false)
-        .eq('archived', false);
+      let activeCount;
+      if (pool) {
+        const _rows = await dbQuery('SELECT count(*) as count FROM markets WHERE creator_id = $1 AND resolved = $2 AND archived = $3', [req.creator.id, false, false]);
+        activeCount = parseInt(_rows[0]?.count || 0);
+      } else {
+        const { count: activeCount } = await supabase .from('markets') .select('id', { count: 'exact', head: true }) .eq('creator_id', req.creator.id) .eq('resolved', false) .eq('archived', false);
+      }
       const FREE_MARKET_LIMIT = 5;
       if ((activeCount || 0) >= FREE_MARKET_LIMIT) {
         return res.status(403).json({
@@ -1050,10 +1357,16 @@ app.post('/api/creator/markets/bulk', requireCreator, async (req, res) => {
       return res.status(400).json({ error: 'No valid markets to create', skipped });
     }
 
-    const { data: inserted, error } = await supabase
-      .from('markets')
-      .insert(rows)
-      .select('id, question, category');
+    let inserted, error;
+    if (pool) {
+      const _insData = Array.isArray(rows) ? (rows)[0] : (rows);
+      const _cols = Object.keys(_insData); const _vals = Object.values(_insData);
+      const _phs = _cols.map((_, i) => `$${i + 1}`).join(', ');
+      const _rows = await dbQuery(`INSERT INTO markets (${_cols.join(', ')}) VALUES (${_phs}) RETURNING id, question, category`, _vals);
+      inserted = _rows;
+    } else {
+      const { data: inserted, error } = await supabase .from('markets') .insert(rows) .select('id, question, category');
+    }
 
     if (error) {
       if (error.code === '23505') {
@@ -1070,7 +1383,16 @@ app.post('/api/creator/markets/bulk', requireCreator, async (req, res) => {
               d = rows[0] || null;
             } catch (e) { e = e; }
           } else {
-            const { data: d, error: e } = await supabase.from('markets').insert([r]).select('id, question, category').single();
+            let d, e;
+            if (pool) {
+              const _insData = Array.isArray([r]) ? ([r])[0] : ([r]);
+              const _cols = Object.keys(_insData); const _vals = Object.values(_insData);
+              const _phs = _cols.map((_, i) => `$${i + 1}`).join(', ');
+              const _rows = await dbQuery(`INSERT INTO markets (${_cols.join(', ')}) VALUES (${_phs}) RETURNING id, question, category`, _vals);
+              d = _rows[0] || null;
+            } else {
+              const { data: d, error: e } = await supabase.from('markets').insert([r]).select('id, question, category').single();
+            }
             d = d; e = e;
           }
           if (e && e.code === '23505') { skipped.push({ question: r.question, reason: 'Duplicate question already exists' }); }
@@ -1108,19 +1430,23 @@ app.post('/trade', requireAuth, async (req, res) => {
   const user_id = req.userId;
 
   // Validate user exists
-  const { data: user, error: userError } = await supabase
-    .from('users')
-    .select('id')
-    .eq('id', user_id)
-    .single();
+  let user, userError;
+  if (pool) {
+    const _rows = await dbQuery('SELECT id FROM users WHERE id = $1 LIMIT 1', [user_id]);
+    user = _rows[0] || null;
+  } else {
+    const { data: user, error: userError } = await supabase .from('users') .select('id') .eq('id', user_id) .single();
+  }
   if (userError || !user) return res.status(400).json({ error: 'User not found' });
 
   // Get market
-  const { data: market, error: marketError } = await supabase
-    .from('markets')
-    .select('*')
-    .eq('id', market_id)
-    .single();
+  let market, marketError;
+  if (pool) {
+    const _rows = await dbQuery('SELECT * FROM markets WHERE id = $1 LIMIT 1', [market_id]);
+    market = _rows[0] || null;
+  } else {
+    const { data: market, error: marketError } = await supabase .from('markets') .select('*') .eq('id', market_id) .single();
+  }
   if (marketError || !market) return res.status(400).json({ error: 'Market not found' });
   if (market.resolved) return res.status(400).json({ error: 'Market already resolved' });
 
@@ -1130,11 +1456,13 @@ app.post('/trade', requireAuth, async (req, res) => {
   // Get creator economy settings (min/max bet)
   let minBet = 1000, maxBet = null;
   if (creatorSlug) {
-    const { data: econSettings } = await supabase
-      .from('creator_settings')
-      .select('min_bet, max_bet')
-      .eq('slug', creatorSlug)
-      .maybeSingle();
+    let econSettings;
+    if (pool) {
+      const _rows = await dbQuery('SELECT min_bet, max_bet FROM creator_settings WHERE slug = $1 LIMIT 1', [creatorSlug]);
+      econSettings = _rows[0] || null;
+    } else {
+      const { data: econSettings } = await supabase .from('creator_settings') .select('min_bet, max_bet') .eq('slug', creatorSlug) .maybeSingle();
+    }
     if (econSettings) {
       minBet = econSettings.min_bet ?? 1000;
       maxBet = econSettings.max_bet ?? null;
@@ -1176,19 +1504,27 @@ app.post('/trade', requireAuth, async (req, res) => {
     }));
 
     // Check trader count
-    const { count: priorPositionsM } = await supabase
-      .from('positions')
-      .select('id', { count: 'exact', head: true })
-      .eq('market_id', market_id)
-      .eq('user_id', user_id);
+    let priorPositionsM;
+    if (pool) {
+      const _rows = await dbQuery('SELECT count(*) as count FROM positions WHERE market_id = $1 AND user_id = $2', [market_id, user_id]);
+      priorPositionsM = parseInt(_rows[0]?.count || 0);
+    } else {
+      const { count: priorPositionsM } = await supabase .from('positions') .select('id', { count: 'exact', head: true }) .eq('market_id', market_id) .eq('user_id', user_id);
+    }
     const isNewTraderM = (priorPositionsM || 0) === 0;
 
     if (creatorSlug) await setCommunityBalance(user_id, creatorSlug, communityBalance - amount);
 
-    const { data: position, error: posError } = await supabase
-      .from('positions')
-      .insert([{ user_id, market_id, side, amount, potential_payout }])
-      .select().single();
+    let position, posError;
+    if (pool) {
+      const _insData = Array.isArray([{ user_id, market_id, side, amount, potential_payout }]) ? ([{ user_id, market_id, side, amount, potential_payout }])[0] : ([{ user_id, market_id, side, amount, potential_payout }]);
+      const _cols = Object.keys(_insData); const _vals = Object.values(_insData);
+      const _phs = _cols.map((_, i) => `$${i + 1}`).join(', ');
+      const _rows = await dbQuery(`INSERT INTO positions (${_cols.join(', ')}) VALUES (${_phs}) RETURNING *`, _vals);
+      position = _rows[0] || null;
+    } else {
+      const { data: position, error: posError } = await supabase .from('positions') .insert([{ user_id, market_id, side, amount, potential_payout }]) .select().single();
+    }
     if (posError) return res.status(400).json({ error: posError.message });
 
     marketUpdate = { options: finalOpts, volume: (market.volume || 0) + amount };
@@ -1230,11 +1566,13 @@ app.post('/trade', requireAuth, async (req, res) => {
   const newNoPrice  = newNoPool  / newTotal;
 
   // Check if this user has traded on this market before (determines trader_count increment)
-  const { count: priorPositions } = await supabase
-    .from('positions')
-    .select('id', { count: 'exact', head: true })
-    .eq('market_id', market_id)
-    .eq('user_id', user_id);
+  let priorPositions;
+  if (pool) {
+    const _rows = await dbQuery('SELECT count(*) as count FROM positions WHERE market_id = $1 AND user_id = $2', [market_id, user_id]);
+    priorPositions = parseInt(_rows[0]?.count || 0);
+  } else {
+    const { count: priorPositions } = await supabase .from('positions') .select('id', { count: 'exact', head: true }) .eq('market_id', market_id) .eq('user_id', user_id);
+  }
   const isNewTrader = (priorPositions || 0) === 0;
 
   // Deduct from community balance
@@ -1243,11 +1581,16 @@ app.post('/trade', requireAuth, async (req, res) => {
   }
 
   // Record position
-  const { data: position, error: posError } = await supabase
-    .from('positions')
-    .insert([{ user_id, market_id, side, amount, potential_payout }])
-    .select()
-    .single();
+  let position, posError;
+  if (pool) {
+    const _insData = Array.isArray([{ user_id, market_id, side, amount, potential_payout }]) ? ([{ user_id, market_id, side, amount, potential_payout }])[0] : ([{ user_id, market_id, side, amount, potential_payout }]);
+    const _cols = Object.keys(_insData); const _vals = Object.values(_insData);
+    const _phs = _cols.map((_, i) => `$${i + 1}`).join(', ');
+    const _rows = await dbQuery(`INSERT INTO positions (${_cols.join(', ')}) VALUES (${_phs}) RETURNING *`, _vals);
+    position = _rows[0] || null;
+  } else {
+    const { data: position, error: posError } = await supabase .from('positions') .insert([{ user_id, market_id, side, amount, potential_payout }]) .select() .single();
+  }
   if (posError) return res.status(400).json({ error: posError.message });
 
   // Update pools, prices, volume, trader_count, and vote counts in one call
@@ -1521,12 +1864,13 @@ app.get('/api/user/referral-stats/:slug', async (req, res) => {
     const { slug } = req.params;
 
     // All referrals this user has made in this community
-    const { data: referrals } = await supabase
-      .from('referral_history')
-      .select('referrer_reward, created_at')
-      .eq('referrer_id', userId)
-      .eq('creator_slug', slug)
-      .order('created_at', { ascending: false });
+    let referrals;
+    if (pool) {
+      const _rows = await dbQuery('SELECT referrer_reward, created_at FROM referral_history WHERE referrer_id = $1 AND creator_slug = $2 ORDER BY created_at DESC', [userId, slug]);
+      referrals = _rows;
+    } else {
+      const { data: referrals } = await supabase .from('referral_history') .select('referrer_reward, created_at') .eq('referrer_id', userId) .eq('creator_slug', slug) .order('created_at', { ascending: false });
+    }
 
     const total        = (referrals || []).length;
     const totalEarned  = (referrals || []).reduce((s, r) => s + (r.referrer_reward || 0), 0);
@@ -1825,41 +2169,52 @@ async function fetchCurrentPrice(commodity) {
 // on first access using the creator's configured starting_balance.
 async function getCommunityBalance(userId, creatorSlug) {
   // Try to get existing row
-  const { data: existing } = await supabase
-    .from('community_balances')
-    .select('balance')
-    .eq('user_id', userId)
-    .eq('creator_slug', creatorSlug)
-    .maybeSingle();
+  let existing;
+  if (pool) {
+    const _rows = await dbQuery('SELECT balance FROM community_balances WHERE user_id = $1 AND creator_slug = $2 LIMIT 1', [userId, creatorSlug]);
+    existing = _rows[0] || null;
+  } else {
+    const { data: existing } = await supabase .from('community_balances') .select('balance') .eq('user_id', userId) .eq('creator_slug', creatorSlug) .maybeSingle();
+  }
 
   if (existing) return existing.balance;
 
   // First time in this community — look up creator's starting balance
-  const { data: settings } = await supabase
-    .from('creator_settings')
-    .select('starting_balance')
-    .eq('slug', creatorSlug)
-    .maybeSingle();
+  let settings;
+  if (pool) {
+    const _rows = await dbQuery('SELECT starting_balance FROM creator_settings WHERE slug = $1 LIMIT 1', [creatorSlug]);
+    settings = _rows[0] || null;
+  } else {
+    const { data: settings } = await supabase .from('creator_settings') .select('starting_balance') .eq('slug', creatorSlug) .maybeSingle();
+  }
 
   const startingBalance = settings?.starting_balance ?? 100000; // default 1,000 pts
 
   // Create the row
-  const { data: created } = await supabase
-    .from('community_balances')
-    .insert([{ user_id: userId, creator_slug: creatorSlug, balance: startingBalance }])
-    .select('balance')
-    .single();
+  let created;
+  if (pool) {
+    const _insData = Array.isArray([{ user_id: userId, creator_slug: creatorSlug, balance: startingBalance }]) ? ([{ user_id: userId, creator_slug: creatorSlug, balance: startingBalance }])[0] : ([{ user_id: userId, creator_slug: creatorSlug, balance: startingBalance }]);
+    const _cols = Object.keys(_insData); const _vals = Object.values(_insData);
+    const _phs = _cols.map((_, i) => `$${i + 1}`).join(', ');
+    const _rows = await dbQuery(`INSERT INTO community_balances (${_cols.join(', ')}) VALUES (${_phs}) RETURNING balance`, _vals);
+    created = _rows[0] || null;
+  } else {
+    const { data: created } = await supabase .from('community_balances') .insert([{ user_id: userId, creator_slug: creatorSlug, balance: startingBalance }]) .select('balance') .single();
+  }
 
   return created?.balance ?? startingBalance;
 }
 
 async function setCommunityBalance(userId, creatorSlug, newBalance) {
-  await supabase
-    .from('community_balances')
-    .upsert(
-      { user_id: userId, creator_slug: creatorSlug, balance: newBalance, updated_at: new Date().toISOString() },
-      { onConflict: 'user_id,creator_slug' }
-    );
+  if (pool) {
+    const _obj = { user_id: userId, creator_slug: creatorSlug, balance: newBalance, updated_at: new Date().toISOString() };
+    const _cols = Object.keys(_obj); const _vals = Object.values(_obj);
+    const _phs = _cols.map((_, i) => `$${i + 1}`).join(', ');
+    const _upd = _cols.filter(c => !["user_id","creator_slug"].includes(c)).map(c => `${c} = EXCLUDED.${c}`).join(', ');
+    await dbQuery(`INSERT INTO community_balances (${_cols.join(', ')}) VALUES (${_phs}) ON CONFLICT (user_id,creator_slug) DO UPDATE SET ${_upd}`, _vals);
+  } else {
+    await supabase .from('community_balances') .upsert( { user_id: userId, creator_slug: creatorSlug, balance: newBalance, updated_at: new Date().toISOString() }, { onConflict: 'user_id,creator_slug' } );
+  }
   // Fire-and-forget: log any newly crossed reward thresholds
   maybeLogRewardUnlocks(userId, creatorSlug, newBalance)
     .catch(e => console.error('[reward_unlock]', e.message));
@@ -1871,27 +2226,33 @@ async function maybeLogRewardUnlocks(userId, creatorSlug, newBalance) {
   const pointBalance = Math.floor(newBalance / 100);
 
   // Fetch creator_id for this slug
-  const { data: cs } = await supabase
-    .from('creator_settings')
-    .select('creator_id')
-    .eq('slug', creatorSlug)
-    .maybeSingle();
+  let cs;
+  if (pool) {
+    const _rows = await dbQuery('SELECT creator_id FROM creator_settings WHERE slug = $1 LIMIT 1', [creatorSlug]);
+    cs = _rows[0] || null;
+  } else {
+    const { data: cs } = await supabase .from('creator_settings') .select('creator_id') .eq('slug', creatorSlug) .maybeSingle();
+  }
   if (!cs?.creator_id) return;
 
   // All rewards at or below current point balance
-  const { data: rewards } = await supabase
-    .from('creator_rewards')
-    .select('id, title, threshold')
-    .eq('creator_id', cs.creator_id)
-    .lte('threshold', pointBalance);
+  let rewards;
+  if (pool) {
+    const _rows = await dbQuery('SELECT id, title, threshold FROM creator_rewards WHERE creator_id = $1 AND threshold <= $2', [cs.creator_id, pointBalance]);
+    rewards = _rows;
+  } else {
+    const { data: rewards } = await supabase .from('creator_rewards') .select('id, title, threshold') .eq('creator_id', cs.creator_id) .lte('threshold', pointBalance);
+  }
   if (!rewards?.length) return;
 
   // Already-logged unlocks for this user in this community
-  const { data: existing } = await supabase
-    .from('reward_unlocks')
-    .select('reward_id')
-    .eq('user_id', userId)
-    .eq('creator_slug', creatorSlug);
+  let existing;
+  if (pool) {
+    const _rows = await dbQuery('SELECT reward_id FROM reward_unlocks WHERE user_id = $1 AND creator_slug = $2', [userId, creatorSlug]);
+    existing = _rows;
+  } else {
+    const { data: existing } = await supabase .from('reward_unlocks') .select('reward_id') .eq('user_id', userId) .eq('creator_slug', creatorSlug);
+  }
   const alreadyUnlocked = new Set((existing || []).map(r => r.reward_id));
 
   const toInsert = rewards
@@ -1920,11 +2281,13 @@ async function maybeLogRewardUnlocks(userId, creatorSlug, newBalance) {
 async function getCreatorSlugForMarket(market) {
   if (market.tenant_slug) return market.tenant_slug;
   if (market.creator_id) {
-    const { data: s } = await supabase
-      .from('creator_settings')
-      .select('slug')
-      .eq('creator_id', market.creator_id)
-      .maybeSingle();
+    let s;
+    if (pool) {
+      const _rows = await dbQuery('SELECT slug FROM creator_settings WHERE creator_id = $1 LIMIT 1', [market.creator_id]);
+      s = _rows[0] || null;
+    } else {
+      const { data: s } = await supabase .from('creator_settings') .select('slug') .eq('creator_id', market.creator_id) .maybeSingle();
+    }
     return s?.slug || null;
   }
   return null;
@@ -1992,11 +2355,13 @@ async function settleMarkets() {
   // settlement check — silent in production
   const now = new Date().toISOString();
 
-  const { data: markets } = await supabase
-    .from('markets')
-    .select('*')
-    .eq('resolved', false)
-    .lt('expiry_date', now);
+  let markets;
+  if (pool) {
+    const _rows = await dbQuery('SELECT * FROM markets WHERE resolved = $1 AND expiry_date < $2', [false, now]);
+    markets = _rows;
+  } else {
+    const { data: markets } = await supabase .from('markets') .select('*') .eq('resolved', false) .lt('expiry_date', now);
+  }
 
   if (!markets || markets.length === 0) return;
 
@@ -2012,24 +2377,36 @@ async function settleMarkets() {
       : settlement_price <= market.target_price;
 
     // Resolve market
-    await supabase
-      .from('markets')
-      .update({ resolved: true, settlement_price, outcome })
-      .eq('id', market.id);
+    if (pool) {
+      const _upd = { resolved: true, settlement_price, outcome };
+      const _cols = Object.keys(_upd); const _vals = Object.values(_upd);
+      const _set = _cols.map((c, i) => `${c} = $${i + 1}`).join(', ');
+      const _where = [market.id];
+      await dbQuery(`UPDATE markets SET ${_set} WHERE id = $${_vals.length + 1}`, [..._vals, ..._where]);
+    } else {
+      await supabase .from('markets') .update({ resolved: true, settlement_price, outcome }) .eq('id', market.id);
+    }
 
     // Settle positions
-    const { data: positions } = await supabase
-      .from('positions')
-      .select('*')
-      .eq('market_id', market.id)
-      .eq('settled', false);
+    let positions;
+    if (pool) {
+      const _rows = await dbQuery('SELECT * FROM positions WHERE market_id = $1 AND settled = $2', [market.id, false]);
+      positions = _rows;
+    } else {
+      const { data: positions } = await supabase .from('positions') .select('*') .eq('market_id', market.id) .eq('settled', false);
+    }
 
     for (const position of positions) {
       const won = (position.side === 'YES') === outcome;
-      await supabase
-        .from('positions')
-        .update({ settled: true, won })
-        .eq('id', position.id);
+      if (pool) {
+        const _upd = { settled: true, won };
+        const _cols = Object.keys(_upd); const _vals = Object.values(_upd);
+        const _set = _cols.map((c, i) => `${c} = $${i + 1}`).join(', ');
+        const _where = [position.id];
+        await dbQuery(`UPDATE positions SET ${_set} WHERE id = $${_vals.length + 1}`, [..._vals, ..._where]);
+      } else {
+        await supabase .from('positions') .update({ settled: true, won }) .eq('id', position.id);
+      }
 
       if (won) {
         // Apply streak multiplier (based on streak BEFORE this settlement)
@@ -2114,12 +2491,13 @@ async function processPendingEmails() {
   if (!transport) return; // SMTP not configured — skip silently
 
   try {
-    const { data: due } = await supabase
-      .from('pending_emails')
-      .select('*')
-      .eq('sent', false)
-      .lte('send_after', new Date().toISOString())
-      .limit(50);
+    let due;
+    if (pool) {
+      const _rows = await dbQuery('SELECT * FROM pending_emails WHERE sent = $1 AND send_after <= $2 LIMIT 50', [false, new Date().toISOString()]);
+      due = _rows;
+    } else {
+      const { data: due } = await supabase .from('pending_emails') .select('*') .eq('sent', false) .lte('send_after', new Date().toISOString()) .limit(50);
+    }
 
     if (!due?.length) return;
 
@@ -2132,10 +2510,15 @@ async function processPendingEmails() {
           subject: email.subject,
           html: email.html,
         });
-        await supabase
-          .from('pending_emails')
-          .update({ sent: true, sent_at: new Date().toISOString() })
-          .eq('id', email.id);
+        if (pool) {
+          const _upd = { sent: true, sent_at: new Date().toISOString() };
+          const _cols = Object.keys(_upd); const _vals = Object.values(_upd);
+          const _set = _cols.map((c, i) => `${c} = $${i + 1}`).join(', ');
+          const _where = [email.id];
+          await dbQuery(`UPDATE pending_emails SET ${_set} WHERE id = $${_vals.length + 1}`, [..._vals, ..._where]);
+        } else {
+          await supabase .from('pending_emails') .update({ sent: true, sent_at: new Date().toISOString() }) .eq('id', email.id);
+        }
         console.log(`[email-queue] sent "${email.subject}" to ${email.to_email}`);
       } catch (err) {
         console.error(`[email-queue] failed to send to ${email.to_email}:`, err.message);
@@ -2188,28 +2571,36 @@ async function processWeeklyRefills(targetSlug = null) {
 
     try {
       // ── 1. All market IDs for this community ──────────────────────────────
-      const { data: allMarkets } = await supabase
-        .from('markets')
-        .select('id')
-        .or(`creator_slug.eq.${slug},tenant_slug.eq.${slug}`);
+      let allMarkets;
+      if (pool) {
+        const _rows = await dbQuery('SELECT id FROM markets WHERE (creator_slug = $1 OR tenant_slug = $2)', [slug, slug]);
+        allMarkets = _rows;
+      } else {
+        const { data: allMarkets } = await supabase .from('markets') .select('id') .or(`creator_slug.eq.${slug},tenant_slug.eq.${slug}`);
+      }
       const allMarketIds = (allMarkets || []).map(m => m.id);
 
       // ── 2. Markets published THIS week (for gate scaling) ────────────────
-      const { count: marketsThisWeek } = await supabase
-        .from('markets')
-        .select('id', { count: 'exact', head: true })
-        .or(`creator_slug.eq.${slug},tenant_slug.eq.${slug}`)
-        .gte('created_at', weekStartISO);
+      let marketsThisWeek;
+      if (pool) {
+        const _rows = await dbQuery('SELECT count(*) as count FROM markets WHERE created_at >= $1', [weekStartISO]);
+        marketsThisWeek = parseInt(_rows[0]?.count || 0);
+      } else {
+        const { count: marketsThisWeek } = await supabase .from('markets') .select('id', { count: 'exact', head: true }) .or(`creator_slug.eq.${slug},tenant_slug.eq.${slug}`) .gte('created_at', weekStartISO);
+      }
 
       // Effective gate = min(configured, floor(0.5 × marketsPublishedThisWeek))
       // Protects users from being gated out when the creator publishes fewer markets
       const effectiveGate = Math.min(configGate, Math.floor(0.5 * (marketsThisWeek || 0)));
 
       // ── 3. All community members ──────────────────────────────────────────
-      const { data: balanceRows } = await supabase
-        .from('community_balances')
-        .select('user_id, balance')
-        .eq('creator_slug', slug);
+      let balanceRows;
+      if (pool) {
+        const _rows = await dbQuery('SELECT user_id, balance FROM community_balances WHERE creator_slug = $1', [slug]);
+        balanceRows = _rows;
+      } else {
+        const { data: balanceRows } = await supabase .from('community_balances') .select('user_id, balance') .eq('creator_slug', slug);
+      }
 
       if (!balanceRows || balanceRows.length === 0) continue;
       const userIds = balanceRows.map(r => r.user_id);
@@ -2217,30 +2608,36 @@ async function processWeeklyRefills(targetSlug = null) {
       // ── 4. Bets this week per user ────────────────────────────────────────
       let betCountMap = {};
       if (allMarketIds.length > 0) {
-        const { data: weekPositions } = await supabase
-          .from('positions')
-          .select('user_id')
-          .in('market_id', allMarketIds)
-          .gte('created_at', weekStartISO);
+        let weekPositions;
+        if (pool) {
+          const _rows = await dbQuery('SELECT user_id FROM positions WHERE market_id = ANY($1) AND created_at >= $2', [allMarketIds, weekStartISO]);
+          weekPositions = _rows;
+        } else {
+          const { data: weekPositions } = await supabase .from('positions') .select('user_id') .in('market_id', allMarketIds) .gte('created_at', weekStartISO);
+        }
         (weekPositions || []).forEach(p => {
           betCountMap[p.user_id] = (betCountMap[p.user_id] || 0) + 1;
         });
       }
 
       // ── 5. Already-refilled this week ────────────────────────────────────
-      const { data: alreadyRefilled } = await supabase
-        .from('refill_history')
-        .select('user_id')
-        .eq('creator_slug', slug)
-        .eq('week_start', weekStartDate)
-        .in('user_id', userIds);
+      let alreadyRefilled;
+      if (pool) {
+        const _rows = await dbQuery('SELECT user_id FROM refill_history WHERE creator_slug = $1 AND week_start = $2 AND user_id = ANY($3)', [slug, weekStartDate, userIds]);
+        alreadyRefilled = _rows;
+      } else {
+        const { data: alreadyRefilled } = await supabase .from('refill_history') .select('user_id') .eq('creator_slug', slug) .eq('week_start', weekStartDate) .in('user_id', userIds);
+      }
       const alreadyRefilledSet = new Set((alreadyRefilled || []).map(r => r.user_id));
 
       // ── 6. User registration dates (new-user grace period) ───────────────
-      const { data: userRows } = await supabase
-        .from('users')
-        .select('id, created_at')
-        .in('id', userIds);
+      let userRows;
+      if (pool) {
+        const _rows = await dbQuery('SELECT id, created_at FROM users WHERE id = ANY($1)', [userIds]);
+        userRows = _rows;
+      } else {
+        const { data: userRows } = await supabase .from('users') .select('id, created_at') .in('id', userIds);
+      }
       const userCreatedMap = {};
       (userRows || []).forEach(u => { userCreatedMap[u.id] = u.created_at; });
       const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString();
@@ -2258,9 +2655,14 @@ async function processWeeklyRefills(targetSlug = null) {
 
         if (qualifies) {
           await setCommunityBalance(userId, slug, row.balance + refillAmount);
-          await supabase
-            .from('refill_history')
-            .insert({ user_id: userId, creator_slug: slug, amount: refillAmount, week_start: weekStartDate });
+          if (pool) {
+            const _insData = Array.isArray({ user_id: userId, creator_slug: slug, amount: refillAmount, week_start: weekStartDate }) ? ({ user_id: userId, creator_slug: slug, amount: refillAmount, week_start: weekStartDate })[0] : ({ user_id: userId, creator_slug: slug, amount: refillAmount, week_start: weekStartDate });
+            const _cols = Object.keys(_insData); const _vals = Object.values(_insData);
+            const _phs = _cols.map((_, i) => `$${i + 1}`).join(', ');
+            await dbQuery(`INSERT INTO refill_history (${_cols.join(', ')}) VALUES (${_phs})`, _vals);
+          } else {
+            await supabase .from('refill_history') .insert({ user_id: userId, creator_slug: slug, amount: refillAmount, week_start: weekStartDate });
+          }
           refillCount++;
         }
       }
@@ -2287,11 +2689,13 @@ cron.schedule('0 0 * * 1', () => {
 // Useful for testing; safe to call multiple times (idempotent per week)
 app.post('/api/creator/trigger-refill', requireCreator, async (req, res) => {
   try {
-    const { data: settings } = await supabase
-      .from('creator_settings')
-      .select('slug, refill_enabled')
-      .eq('creator_id', req.creator.id)
-      .maybeSingle();
+    let settings;
+    if (pool) {
+      const _rows = await dbQuery('SELECT slug, refill_enabled FROM creator_settings WHERE creator_id = $1 LIMIT 1', [req.creator.id]);
+      settings = _rows[0] || null;
+    } else {
+      const { data: settings } = await supabase .from('creator_settings') .select('slug, refill_enabled') .eq('creator_id', req.creator.id) .maybeSingle();
+    }
     if (!settings) return res.status(404).json({ error: 'Creator settings not found' });
     if (!settings.refill_enabled) return res.status(400).json({ error: 'Refill is not enabled for your community. Enable it in Economy Settings first.' });
 
@@ -2352,11 +2756,13 @@ async function scanAndCreateMarkets() {
       if (!m || typeof m.question !== 'string') continue;
 
       // Skip duplicates by question
-      const { data: existing } = await supabase
-        .from('markets')
-        .select('id')
-        .eq('question', m.question)
-        .maybeSingle();
+      let existing;
+      if (pool) {
+        const _rows = await dbQuery('SELECT id FROM markets WHERE question = $1 LIMIT 1', [m.question]);
+        existing = _rows[0] || null;
+      } else {
+        const { data: existing } = await supabase .from('markets') .select('id') .eq('question', m.question) .maybeSingle();
+      }
       if (existing) continue;
 
       const category = (m.category || '').toString();
@@ -2391,7 +2797,16 @@ async function scanAndCreateMarkets() {
           inserted = rows;
         } catch (e) { error = e; }
       } else {
-        const { data: d, error: e } = await supabase.from('markets').insert([insertRow]).select();
+        let d, e;
+        if (pool) {
+          const _insData = Array.isArray([insertRow]) ? ([insertRow])[0] : ([insertRow]);
+          const _cols = Object.keys(_insData); const _vals = Object.values(_insData);
+          const _phs = _cols.map((_, i) => `$${i + 1}`).join(', ');
+          const _rows = await dbQuery(`INSERT INTO markets (${_cols.join(', ')}) VALUES (${_phs}) RETURNING *`, _vals);
+          d = _rows;
+        } else {
+          const { data: d, error: e } = await supabase.from('markets').insert([insertRow]).select();
+        }
         inserted = d; error = e;
       }
       if (error) {
@@ -2690,7 +3105,14 @@ async function runNewsIntelligenceScanner(targetSlug = null) {
             await dbQuery(`INSERT INTO markets (${_cols.join(', ')}) VALUES (${_phs})`, _vals);
           } catch (e) { error = e; }
         } else {
-          ({ error } = await supabase.from('markets').insert([insertRow]));
+          if (pool) {
+            const _insData = Array.isArray([insertRow]) ? ([insertRow])[0] : ([insertRow]);
+            const _cols = Object.keys(_insData); const _vals = Object.values(_insData);
+            const _phs = _cols.map((_, i) => `$${i + 1}`).join(', ');
+            await dbQuery(`INSERT INTO markets (${_cols.join(', ')}) VALUES (${_phs})`, _vals);
+          } else {
+            ({ error } = await supabase.from('markets').insert([insertRow]));
+          }
         }
 
         if (error) {
@@ -2793,9 +3215,15 @@ app.put('/api/creator/news-feed-settings', requireCreator, async (req, res) => {
         await dbQuery(`UPDATE creator_settings SET ${_set} WHERE creator_id = $${_vals.length + 1}`, [..._vals, req.creator.id]);
       } catch (e) { error = e; }
     } else {
-      ({ error } = await supabase.from('creator_settings')
-        .update(updates)
-        .eq('creator_id', req.creator.id));
+      if (pool) {
+        const _upd = updates;
+        const _cols = Object.keys(_upd); const _vals = Object.values(_upd);
+        const _set = _cols.map((c, i) => `${c} = $${i + 1}`).join(', ');
+        const _where = [req.creator.id];
+        await dbQuery(`UPDATE creator_settings SET ${_set} WHERE creator_id = $${_vals.length + 1}`, [..._vals, ..._where]);
+      } else {
+        ({ error } = await supabase.from('creator_settings') .update(updates) .eq('creator_id', req.creator.id));
+      }
     }
     if (error) return res.status(500).json({ error: error.message });
     res.json({ ok: true, ...updates });
@@ -2933,41 +3361,56 @@ app.post('/api/creator/resolve/:marketId', requireAuth, async (req, res) => {
   if (typeof outcome !== 'boolean') return res.status(400).json({ error: 'outcome (boolean) required' });
 
   // Verify this market belongs to the authenticated creator
-  const { data: settings } = await supabase
-    .from('creator_settings')
-    .select('slug')
-    .eq('user_id', req.userId)
-    .maybeSingle();
+  let settings;
+  if (pool) {
+    const _rows = await dbQuery('SELECT slug FROM creator_settings WHERE user_id = $1 LIMIT 1', [req.userId]);
+    settings = _rows[0] || null;
+  } else {
+    const { data: settings } = await supabase .from('creator_settings') .select('slug') .eq('user_id', req.userId) .maybeSingle();
+  }
   if (!settings) return res.status(403).json({ error: 'Not a creator account' });
 
-  const { data: market, error: marketErr } = await supabase
-    .from('markets')
-    .select('*')
-    .eq('id', marketId)
-    .eq('creator_slug', settings.slug)
-    .maybeSingle();
+  let market, marketErr;
+  if (pool) {
+    const _rows = await dbQuery('SELECT * FROM markets WHERE id = $1 AND creator_slug = $2 LIMIT 1', [marketId, settings.slug]);
+    market = _rows[0] || null;
+  } else {
+    const { data: market, error: marketErr } = await supabase .from('markets') .select('*') .eq('id', marketId) .eq('creator_slug', settings.slug) .maybeSingle();
+  }
   if (marketErr || !market) return res.status(404).json({ error: 'Market not found or not yours' });
   if (market.resolved) return res.status(400).json({ error: 'Market already resolved' });
 
   // Resolve the market
-  await supabase
-    .from('markets')
-    .update({ resolved: true, outcome, settlement_price: null })
-    .eq('id', marketId);
+  if (pool) {
+    const _upd = { resolved: true, outcome, settlement_price: null };
+    const _cols = Object.keys(_upd); const _vals = Object.values(_upd);
+    const _set = _cols.map((c, i) => `${c} = $${i + 1}`).join(', ');
+    const _where = [marketId];
+    await dbQuery(`UPDATE markets SET ${_set} WHERE id = $${_vals.length + 1}`, [..._vals, ..._where]);
+  } else {
+    await supabase .from('markets') .update({ resolved: true, outcome, settlement_price: null }) .eq('id', marketId);
+  }
 
   // Settle all positions
-  const { data: positions } = await supabase
-    .from('positions')
-    .select('*')
-    .eq('market_id', marketId)
-    .eq('settled', false);
+  let positions;
+  if (pool) {
+    const _rows = await dbQuery('SELECT * FROM positions WHERE market_id = $1 AND settled = $2', [marketId, false]);
+    positions = _rows;
+  } else {
+    const { data: positions } = await supabase .from('positions') .select('*') .eq('market_id', marketId) .eq('settled', false);
+  }
 
   for (const position of (positions || [])) {
     const won = (position.side === 'YES') === outcome;
-    await supabase
-      .from('positions')
-      .update({ settled: true, won })
-      .eq('id', position.id);
+    if (pool) {
+      const _upd = { settled: true, won };
+      const _cols = Object.keys(_upd); const _vals = Object.values(_upd);
+      const _set = _cols.map((c, i) => `${c} = $${i + 1}`).join(', ');
+      const _where = [position.id];
+      await dbQuery(`UPDATE positions SET ${_set} WHERE id = $${_vals.length + 1}`, [..._vals, ..._where]);
+    } else {
+      await supabase .from('positions') .update({ settled: true, won }) .eq('id', position.id);
+    }
 
     if (won) {
       // Apply streak multiplier based on streak BEFORE this settlement
@@ -3010,11 +3453,13 @@ app.post('/api/creator/resolve/:marketId', requireAuth, async (req, res) => {
 // GET /api/creator/:slug/theme — public, returns theme config for a creator subdomain
 app.get('/api/creator/:slug/theme', async (req, res) => {
   const { slug } = req.params;
-  const { data, error } = await supabase
-    .from('creator_settings')
-    .select('display_name, custom_points_name, theme_type')
-    .eq('slug', slug)
-    .maybeSingle();
+  let data, error;
+  if (pool) {
+    const _rows = await dbQuery('SELECT display_name, custom_points_name, theme_type FROM creator_settings WHERE slug = $1 LIMIT 1', [slug]);
+    data = _rows[0] || null;
+  } else {
+    const { data, error } = await supabase .from('creator_settings') .select('display_name, custom_points_name, theme_type') .eq('slug', slug) .maybeSingle();
+  }
   if (error || !data) return res.status(404).json({ error: 'Creator not found' });
   res.json({
     display_name: data.display_name,
@@ -3030,12 +3475,13 @@ app.get('/api/odds/search', async (req, res) => {
 
   try {
     // Search cached_positions for matching market titles across all platforms
-    const { data, error } = await supabase
-      .from('cached_positions')
-      .select('platform, external_id, market_title, side, probability, market_url')
-      .ilike('market_title', `%${q}%`)
-      .order('probability', { ascending: false })
-      .limit(100);
+    let data, error;
+    if (pool) {
+      const _rows = await dbQuery('SELECT platform, external_id, market_title, side, probability, market_url FROM cached_positions WHERE market_title ILIKE $1 ORDER BY probability DESC LIMIT 100', [`%${q}%`]);
+      data = _rows;
+    } else {
+      const { data, error } = await supabase .from('cached_positions') .select('platform, external_id, market_title, side, probability, market_url') .ilike('market_title', `%${q}%`) .order('probability', { ascending: false }) .limit(100);
+    }
 
     if (error) { console.error('[odds-search]', error); return res.json({ clusters: [] }); }
     if (!data || !data.length) return res.json({ clusters: [] });
@@ -3115,11 +3561,13 @@ app.get('/api/odds/search', async (req, res) => {
 // ── SMART MONEY ───────────────────────────────────
 app.get('/api/smart-money', async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('cached_positions')
-      .select('market_title, side, platform')
-      .order('updated_at', { ascending: false })
-      .limit(500);
+    let data, error;
+    if (pool) {
+      const _rows = await dbQuery('SELECT market_title, side, platform FROM cached_positions ORDER BY updated_at DESC LIMIT 500', []);
+      data = _rows;
+    } else {
+      const { data, error } = await supabase .from('cached_positions') .select('market_title, side, platform') .order('updated_at', { ascending: false }) .limit(500);
+    }
 
     if (error || !data || !data.length) return res.json({ markets: [] });
 
@@ -3420,11 +3868,13 @@ app.get('/api/creator/check-slug', async (req, res) => {
       return res.json({ available: false, reason: 'Reserved slug' });
     }
 
-    const { data } = await supabase
-      .from('creator_settings')
-      .select('slug')
-      .eq('slug', slug)
-      .maybeSingle();
+    let data;
+    if (pool) {
+      const _rows = await dbQuery('SELECT slug FROM creator_settings WHERE slug = $1 LIMIT 1', [slug]);
+      data = _rows[0] || null;
+    } else {
+      const { data } = await supabase .from('creator_settings') .select('slug') .eq('slug', slug) .maybeSingle();
+    }
 
     res.json({ available: !data });
   } catch (err) {
@@ -3557,10 +4007,16 @@ app.post('/api/creator/signup', async (req, res) => {
           }
         } catch (e) { marketsErr = e; }
       } else {
-        const { data: d, error: e } = await supabase
-          .from('markets')
-          .insert(marketsToInsert)
-          .select('id, question, category');
+        let d, e;
+        if (pool) {
+          const _insData = Array.isArray(marketsToInsert) ? (marketsToInsert)[0] : (marketsToInsert);
+          const _cols = Object.keys(_insData); const _vals = Object.values(_insData);
+          const _phs = _cols.map((_, i) => `$${i + 1}`).join(', ');
+          const _rows = await dbQuery(`INSERT INTO markets (${_cols.join(', ')}) VALUES (${_phs}) RETURNING id, question, category`, _vals);
+          d = _rows;
+        } else {
+          const { data: d, error: e } = await supabase .from('markets') .insert(marketsToInsert) .select('id, question, category');
+        }
         insertedMkts = d;
         marketsErr = e;
       }
@@ -3768,10 +4224,13 @@ app.get('/api/creator/leaderboard', requireCreator, async (req, res) => {
     const period = req.query.period || 'all_time'; // all_time | monthly | weekly
 
     // Get this creator's market IDs
-    const { data: markets } = await supabase
-      .from('markets')
-      .select('id')
-      .eq('creator_id', creatorId);
+    let markets;
+    if (pool) {
+      const _rows = await dbQuery('SELECT id FROM markets WHERE creator_id = $1', [creatorId]);
+      markets = _rows;
+    } else {
+      const { data: markets } = await supabase .from('markets') .select('id') .eq('creator_id', creatorId);
+    }
 
     if (!markets || markets.length === 0) return res.json({ leaderboard: [] });
     const marketIds = markets.map(m => m.id);
@@ -3806,10 +4265,13 @@ app.get('/api/creator/leaderboard', requireCreator, async (req, res) => {
     });
 
     const userIds = Object.keys(userMap);
-    const { data: users } = await supabase
-      .from('users')
-      .select('id, display_name, balance')
-      .in('id', userIds);
+    let users;
+    if (pool) {
+      const _rows = await dbQuery('SELECT id, display_name, balance FROM users WHERE id = ANY($1)', [userIds]);
+      users = _rows;
+    } else {
+      const { data: users } = await supabase .from('users') .select('id, display_name, balance') .in('id', userIds);
+    }
 
     const leaderboard = (users || [])
       .map(u => ({
@@ -3864,12 +4326,21 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
         .from('creator_settings').select('*').eq('creator_id', creatorId).single();
       if (settingsErr || !s) return res.status(404).json({ error: 'Creator not found' });
       settings = s;
-      const { data: m } = await supabase.from('markets').select('*')
-        .or(`creator_id.eq.${creatorId},tenant_slug.eq.${settings.slug}`)
-        .order('created_at', { ascending: false });
+      let m;
+      if (pool) {
+        const _rows = await dbQuery('SELECT * FROM markets WHERE (creator_id = $1 OR tenant_slug = $2) ORDER BY created_at DESC', [creatorId, settings.slug]);
+        m = _rows;
+      } else {
+        const { data: m } = await supabase.from('markets').select('*') .or(`creator_id.eq.${creatorId},tenant_slug.eq.${settings.slug}`) .order('created_at', { ascending: false });
+      }
       markets = m;
-      const { data: u } = await supabase.from('users').select('display_name, email')
-        .eq('id', creatorId).maybeSingle();
+      let u;
+      if (pool) {
+        const _rows = await dbQuery('SELECT display_name, email FROM users WHERE id = $1 LIMIT 1', [creatorId]);
+        u = _rows[0] || null;
+      } else {
+        const { data: u } = await supabase.from('users').select('display_name, email') .eq('id', creatorId).maybeSingle();
+      }
       creatorUser = u;
     }
 
@@ -4091,22 +4562,26 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
 // ════════════════════════════════════════════════════════════
 app.get('/api/creator/members', requireCreator, async (req, res) => {
   try {
-    const { data: settings } = await supabase
-      .from('creator_settings')
-      .select('slug, plan, custom_points_name')
-      .eq('creator_id', req.creator.id)
-      .single();
+    let settings;
+    if (pool) {
+      const _rows = await dbQuery('SELECT slug, plan, custom_points_name FROM creator_settings WHERE creator_id = $1 LIMIT 1', [req.creator.id]);
+      settings = _rows[0] || null;
+    } else {
+      const { data: settings } = await supabase .from('creator_settings') .select('slug, plan, custom_points_name') .eq('creator_id', req.creator.id) .single();
+    }
     const slug    = settings?.slug;
     const plan    = settings?.plan || 'free';
     const ptsName = settings?.custom_points_name || 'Flex Points';
     if (!slug) return res.status(404).json({ error: 'Creator not found' });
 
     // All members + their balances
-    const { data: balances } = await supabase
-      .from('community_balances')
-      .select('user_id, balance, created_at')
-      .eq('creator_slug', slug)
-      .order('created_at', { ascending: false });
+    let balances;
+    if (pool) {
+      const _rows = await dbQuery('SELECT user_id, balance, created_at FROM community_balances WHERE creator_slug = $1 ORDER BY created_at DESC', [slug]);
+      balances = _rows;
+    } else {
+      const { data: balances } = await supabase .from('community_balances') .select('user_id, balance, created_at') .eq('creator_slug', slug) .order('created_at', { ascending: false });
+    }
 
     if (!balances?.length) return res.json({ members: [], summary: { total: 0, active: 0, total_predictions: 0, engagement_rate: 0 }, pts_name: ptsName, plan });
 
@@ -4134,7 +4609,13 @@ app.get('/api/creator/members', requireCreator, async (req, res) => {
       ]);
       usersData = usersRes.data || [];
       positionsData = positionsRes.data || [];
-      const { data: mr } = await supabase.from('markets').select('id').eq('tenant_slug', slug);
+      let mr;
+      if (pool) {
+        const _rows = await dbQuery('SELECT id FROM markets WHERE tenant_slug = $1', [slug]);
+        mr = _rows;
+      } else {
+        const { data: mr } = await supabase.from('markets').select('id').eq('tenant_slug', slug);
+      }
       mktRows = mr || [];
     }
     const communityMarketIds = new Set((mktRows || []).map(m => m.id));
@@ -4213,7 +4694,13 @@ app.get('/api/creator/analytics', requireCreator, async (req, res) => {
     } else {
       const { data: s } = await supabase.from('creator_settings').select('slug, plan, starting_balance').eq('creator_id', creatorId).single();
       settings = s;
-      const { data: m } = await supabase.from('markets').select('id, question, trader_count, volume, resolved, archived, created_at, yes_price').eq('creator_id', creatorId).order('created_at', { ascending: false });
+      let m;
+      if (pool) {
+        const _rows = await dbQuery('SELECT id, question, trader_count, volume, resolved, archived, created_at, yes_price FROM markets WHERE creator_id = $1 ORDER BY created_at DESC', [creatorId]);
+        m = _rows;
+      } else {
+        const { data: m } = await supabase.from('markets').select('id, question, trader_count, volume, resolved, archived, created_at, yes_price').eq('creator_id', creatorId).order('created_at', { ascending: false });
+      }
       allMarketsRaw = m;
     }
     const slug = settings?.slug;
@@ -4382,10 +4869,13 @@ app.get('/api/creator/analytics', requireCreator, async (req, res) => {
     let memberGrowth   = []; // daily new members for last 14 days
     if (slug && balanceStats.member_count > 0 && marketIds.length > 0) {
       // Unique bettors ever
-      const { data: allBettors } = await supabase
-        .from('positions')
-        .select('user_id')
-        .in('market_id', marketIds);
+      let allBettors;
+      if (pool) {
+        const _rows = await dbQuery('SELECT user_id FROM positions WHERE market_id = ANY($1)', [marketIds]);
+        allBettors = _rows;
+      } else {
+        const { data: allBettors } = await supabase .from('positions') .select('user_id') .in('market_id', marketIds);
+      }
       const uniqueBettors = new Set((allBettors || []).map(p => p.user_id)).size;
       activeMembers  = uniqueBettors;
       engagementRate = balanceStats.member_count > 0
@@ -4395,28 +4885,34 @@ app.get('/api/creator/analytics', requireCreator, async (req, res) => {
 
     // New members last 7 days (community_balances created_at)
     if (slug) {
-      const { count: newCount } = await supabase
-        .from('community_balances')
-        .select('user_id', { count: 'exact', head: true })
-        .eq('creator_slug', slug)
-        .gte('created_at', sevenDaysAgo.toISOString());
+      let newCount;
+      if (pool) {
+        const _rows = await dbQuery('SELECT count(*) as count FROM community_balances WHERE creator_slug = $1 AND created_at >= $2', [slug, sevenDaysAgo.toISOString()]);
+        newCount = parseInt(_rows[0]?.count || 0);
+      } else {
+        const { count: newCount } = await supabase .from('community_balances') .select('user_id', { count: 'exact', head: true }) .eq('creator_slug', slug) .gte('created_at', sevenDaysAgo.toISOString());
+      }
       newMembers7d = newCount || 0;
 
       // Embed attribution — total members who joined via embedded widget
-      const { count: embedCount } = await supabase
-        .from('community_balances')
-        .select('user_id', { count: 'exact', head: true })
-        .eq('creator_slug', slug)
-        .eq('join_source', 'embed');
+      let embedCount;
+      if (pool) {
+        const _rows = await dbQuery('SELECT count(*) as count FROM community_balances WHERE creator_slug = $1 AND join_source = $2', [slug, 'embed']);
+        embedCount = parseInt(_rows[0]?.count || 0);
+      } else {
+        const { count: embedCount } = await supabase .from('community_balances') .select('user_id', { count: 'exact', head: true }) .eq('creator_slug', slug) .eq('join_source', 'embed');
+      }
       balanceStats.embed_joins = embedCount || 0;
 
       // Daily new member growth — last 14 days
       const fourteenDaysAgoStr = fourteenDaysAgo.toISOString();
-      const { data: growthRows } = await supabase
-        .from('community_balances')
-        .select('created_at')
-        .eq('creator_slug', slug)
-        .gte('created_at', fourteenDaysAgoStr);
+      let growthRows;
+      if (pool) {
+        const _rows = await dbQuery('SELECT created_at FROM community_balances WHERE creator_slug = $1 AND created_at >= $2', [slug, fourteenDaysAgoStr]);
+        growthRows = _rows;
+      } else {
+        const { data: growthRows } = await supabase .from('community_balances') .select('created_at') .eq('creator_slug', slug) .gte('created_at', fourteenDaysAgoStr);
+      }
       const growthBuckets = {};
       for (let i = 0; i < 14; i++) {
         const d = new Date(); d.setDate(d.getDate() - (13 - i));
@@ -4433,10 +4929,13 @@ app.get('/api/creator/analytics', requireCreator, async (req, res) => {
     // Real bet volume and count per category — tells creator what topics their audience actually cares about
     let categoryBreakdown = [];
     if (marketIds.length > 0) {
-      const { data: catPositions } = await supabase
-        .from('positions')
-        .select('market_id, amount')
-        .in('market_id', marketIds);
+      let catPositions;
+      if (pool) {
+        const _rows = await dbQuery('SELECT market_id, amount FROM positions WHERE market_id = ANY($1)', [marketIds]);
+        catPositions = _rows;
+      } else {
+        const { data: catPositions } = await supabase .from('positions') .select('market_id, amount') .in('market_id', marketIds);
+      }
 
       const catMap = Object.fromEntries(allMarkets.map(m => [m.id, (m.category || 'other').toLowerCase()]));
       const catStats = {};
@@ -4521,11 +5020,13 @@ app.get('/api/creator/sponsor-kit', requireCreator, async (req, res) => {
     const creatorId = req.creator.id;
 
     // Plan gate — Pro/Premium only
-    const { data: settings } = await supabase
-      .from('creator_settings')
-      .select('slug, plan, display_name, custom_points_name')
-      .eq('creator_id', creatorId)
-      .single();
+    let settings;
+    if (pool) {
+      const _rows = await dbQuery('SELECT slug, plan, display_name, custom_points_name FROM creator_settings WHERE creator_id = $1 LIMIT 1', [creatorId]);
+      settings = _rows[0] || null;
+    } else {
+      const { data: settings } = await supabase .from('creator_settings') .select('slug, plan, display_name, custom_points_name') .eq('creator_id', creatorId) .single();
+    }
     if (!settings) return res.status(404).json({ error: 'Creator not found' });
 
     const plan = settings.plan || 'free';
@@ -4754,9 +5255,11 @@ app.post('/api/creator/upload-asset', requireCreator, async (req, res) => {
     const ext = mime.split('/')[1].replace('jpeg', 'jpg');
     const path = `${creatorId}/${type}.${ext}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from('community-assets')
-      .upload(path, buffer, { contentType: mime, upsert: true });
+    if (!pool) {
+      if (!pool) {
+        const { error: uploadError } = await supabase.storage .from('community-assets') .upload(path, buffer, { contentType: mime, upsert: true });
+      }
+    }
 
     if (uploadError) {
       console.error('Supabase storage upload error:', uploadError);
@@ -4786,11 +5289,13 @@ app.post('/api/creator/market-ideas', requireCreator, async (req, res) => {
     const creatorId = req.creator.id;
 
     // Single query — fetch everything needed at once
-    const { data: row } = await supabase
-      .from('creator_settings')
-      .select('plan, community_description, display_name, custom_points_name, community_category')
-      .eq('creator_id', creatorId)
-      .single();
+    let row;
+    if (pool) {
+      const _rows = await dbQuery('SELECT plan, community_description, display_name, custom_points_name, community_category FROM creator_settings WHERE creator_id = $1 LIMIT 1', [creatorId]);
+      row = _rows[0] || null;
+    } else {
+      const { data: row } = await supabase .from('creator_settings') .select('plan, community_description, display_name, custom_points_name, community_category') .eq('creator_id', creatorId) .single();
+    }
 
     const plan = row?.plan || 'free';
     if (plan === 'free') return res.status(403).json({ error: 'Market Ideas requires Pro or Premium' });
@@ -4901,19 +5406,30 @@ app.put('/api/creator/settings', requireCreator, async (req, res) => {
     if (community_category !== undefined) updates.community_category = community_category || 'other';
     if (banner_position   !== undefined) updates.banner_position    = banner_position    || '50% 50%';
 
-    const { error } = await supabase
-      .from('creator_settings')
-      .update(updates)
-      .eq('creator_id', req.creator.id);
+    let error;
+    if (pool) {
+      const _upd = updates;
+      const _cols = Object.keys(_upd); const _vals = Object.values(_upd);
+      const _set = _cols.map((c, i) => `${c} = $${i + 1}`).join(', ');
+      const _where = [req.creator.id];
+      await dbQuery(`UPDATE creator_settings SET ${_set} WHERE creator_id = $${_vals.length + 1}`, [..._vals, ..._where]);
+    } else {
+      const { error } = await supabase .from('creator_settings') .update(updates) .eq('creator_id', req.creator.id);
+    }
 
     if (error) throw error;
 
     // Also update users table display name
     if (display_name) {
-      await supabase
-        .from('users')
-        .update({ display_name })
-        .eq('id', req.creator.id);
+      if (pool) {
+        const _upd = { display_name };
+        const _cols = Object.keys(_upd); const _vals = Object.values(_upd);
+        const _set = _cols.map((c, i) => `${c} = $${i + 1}`).join(', ');
+        const _where = [req.creator.id];
+        await dbQuery(`UPDATE users SET ${_set} WHERE id = $${_vals.length + 1}`, [..._vals, ..._where]);
+      } else {
+        await supabase .from('users') .update({ display_name }) .eq('id', req.creator.id);
+      }
     }
 
     res.json({ ok: true });
@@ -4940,22 +5456,26 @@ app.put('/api/creator/settings/slug', requireCreator, async (req, res) => {
     if (RESERVED.includes(new_slug)) return res.status(400).json({ error: 'That slug is reserved' });
 
     // Get current slug
-    const { data: current } = await supabase
-      .from('creator_settings')
-      .select('slug')
-      .eq('creator_id', req.creator.id)
-      .single();
+    let current;
+    if (pool) {
+      const _rows = await dbQuery('SELECT slug FROM creator_settings WHERE creator_id = $1 LIMIT 1', [req.creator.id]);
+      current = _rows[0] || null;
+    } else {
+      const { data: current } = await supabase .from('creator_settings') .select('slug') .eq('creator_id', req.creator.id) .single();
+    }
     if (!current) return res.status(404).json({ error: 'Creator not found' });
     const old_slug = current.slug;
 
     if (old_slug === new_slug) return res.json({ ok: true, slug: new_slug });
 
     // Check availability
-    const { data: taken } = await supabase
-      .from('creator_settings')
-      .select('slug')
-      .eq('slug', new_slug)
-      .maybeSingle();
+    let taken;
+    if (pool) {
+      const _rows = await dbQuery('SELECT slug FROM creator_settings WHERE slug = $1 LIMIT 1', [new_slug]);
+      taken = _rows[0] || null;
+    } else {
+      const { data: taken } = await supabase .from('creator_settings') .select('slug') .eq('slug', new_slug) .maybeSingle();
+    }
     if (taken) return res.status(409).json({ error: 'Slug already taken — try a different one' });
 
     // Cascade updates
@@ -5100,18 +5620,22 @@ Return ONLY valid JSON:
 
 app.get('/api/creator/:slug/rewards', async (req, res) => {
   try {
-    const { data: settings } = await supabase
-      .from('creator_settings')
-      .select('creator_id')
-      .eq('slug', req.params.slug)
-      .maybeSingle();
+    let settings;
+    if (pool) {
+      const _rows = await dbQuery('SELECT creator_id FROM creator_settings WHERE slug = $1 LIMIT 1', [req.params.slug]);
+      settings = _rows[0] || null;
+    } else {
+      const { data: settings } = await supabase .from('creator_settings') .select('creator_id') .eq('slug', req.params.slug) .maybeSingle();
+    }
     if (!settings) return res.status(404).json({ error: 'Community not found' });
 
-    const { data: rewards, error } = await supabase
-      .from('creator_rewards')
-      .select('id, threshold, title, description')
-      .eq('creator_id', settings.creator_id)
-      .order('threshold', { ascending: true });
+    let rewards, error;
+    if (pool) {
+      const _rows = await dbQuery('SELECT id, threshold, title, description FROM creator_rewards WHERE creator_id = $1 ORDER BY threshold ASC', [settings.creator_id]);
+      rewards = _rows;
+    } else {
+      const { data: rewards, error } = await supabase .from('creator_rewards') .select('id, threshold, title, description') .eq('creator_id', settings.creator_id) .order('threshold', { ascending: true });
+    }
     if (error) throw error;
     res.json({ rewards: rewards || [] });
   } catch (err) {
@@ -5124,11 +5648,16 @@ app.post('/api/creator/rewards', requireCreator, async (req, res) => {
     const { threshold, title, description } = req.body;
     if (!threshold || !title) return res.status(400).json({ error: 'threshold and title are required' });
 
-    const { data, error } = await supabase
-      .from('creator_rewards')
-      .insert([{ creator_id: req.creator.id, threshold: Number(threshold), title, description: description || '' }])
-      .select()
-      .single();
+    let data, error;
+    if (pool) {
+      const _insData = Array.isArray([{ creator_id: req.creator.id, threshold: Number(threshold), title, description: description || '' }]) ? ([{ creator_id: req.creator.id, threshold: Number(threshold), title, description: description || '' }])[0] : ([{ creator_id: req.creator.id, threshold: Number(threshold), title, description: description || '' }]);
+      const _cols = Object.keys(_insData); const _vals = Object.values(_insData);
+      const _phs = _cols.map((_, i) => `$${i + 1}`).join(', ');
+      const _rows = await dbQuery(`INSERT INTO creator_rewards (${_cols.join(', ')}) VALUES (${_phs}) RETURNING *`, _vals);
+      data = _rows[0] || null;
+    } else {
+      const { data, error } = await supabase .from('creator_rewards') .insert([{ creator_id: req.creator.id, threshold: Number(threshold), title, description: description || '' }]) .select() .single();
+    }
     if (error) throw error;
     res.json({ ok: true, reward: data });
   } catch (err) {
@@ -5145,11 +5674,16 @@ app.put('/api/creator/rewards/:id', requireCreator, async (req, res) => {
     if (title !== undefined) updates.title = title;
     if (description !== undefined) updates.description = description;
 
-    const { error } = await supabase
-      .from('creator_rewards')
-      .update(updates)
-      .eq('id', req.params.id)
-      .eq('creator_id', req.creator.id);
+    let error;
+    if (pool) {
+      const _upd = updates;
+      const _cols = Object.keys(_upd); const _vals = Object.values(_upd);
+      const _set = _cols.map((c, i) => `${c} = $${i + 1}`).join(', ');
+      const _where = [req.params.id, req.creator.id];
+      await dbQuery(`UPDATE creator_rewards SET ${_set} WHERE id = $${_vals.length + 1} AND creator_id = $${_vals.length + 2}`, [..._vals, ..._where]);
+    } else {
+      const { error } = await supabase .from('creator_rewards') .update(updates) .eq('id', req.params.id) .eq('creator_id', req.creator.id);
+    }
     if (error) throw error;
     res.json({ ok: true });
   } catch (err) {
@@ -5159,11 +5693,12 @@ app.put('/api/creator/rewards/:id', requireCreator, async (req, res) => {
 
 app.delete('/api/creator/rewards/:id', requireCreator, async (req, res) => {
   try {
-    const { error } = await supabase
-      .from('creator_rewards')
-      .delete()
-      .eq('id', req.params.id)
-      .eq('creator_id', req.creator.id);
+    let error;
+    if (pool) {
+      await dbQuery('DELETE FROM creator_rewards WHERE id = $1 AND creator_id = $2', [req.params.id, req.creator.id]);
+    } else {
+      const { error } = await supabase .from('creator_rewards') .delete() .eq('id', req.params.id) .eq('creator_id', req.creator.id);
+    }
     if (error) throw error;
     res.json({ ok: true });
   } catch (err) {
@@ -5212,12 +5747,13 @@ app.post('/api/creator/member/reward', requireCreator, async (req, res) => {
 // ════════════════════════════════════════════════════════════
 app.post('/api/creator/markets/:id/suggest-resolution', requireCreator, async (req, res) => {
   try {
-    const { data: market } = await supabase
-      .from('markets')
-      .select('*')
-      .eq('id', req.params.id)
-      .eq('creator_id', req.creator.id)
-      .maybeSingle();
+    let market;
+    if (pool) {
+      const _rows = await dbQuery('SELECT * FROM markets WHERE id = $1 AND creator_id = $2 LIMIT 1', [req.params.id, req.creator.id]);
+      market = _rows[0] || null;
+    } else {
+      const { data: market } = await supabase .from('markets') .select('*') .eq('id', req.params.id) .eq('creator_id', req.creator.id) .maybeSingle();
+    }
 
     if (!market) return res.status(404).json({ error: 'Market not found or not yours' });
     if (market.resolved) return res.status(409).json({ error: 'Market already resolved' });
@@ -5330,11 +5866,13 @@ app.post('/api/markets/:id/dispute', requireAuth, async (req, res) => {
     const { id } = req.params;
     const { reason, requested_outcome } = req.body;
 
-    const { data: market } = await supabase
-      .from('markets')
-      .select('id, question, resolved, resolved_at, tenant_slug, outcome, expiry_date, trader_count')
-      .eq('id', id)
-      .maybeSingle();
+    let market;
+    if (pool) {
+      const _rows = await dbQuery('SELECT id, question, resolved, resolved_at, tenant_slug, outcome, expiry_date, trader_count FROM markets WHERE id = $1 LIMIT 1', [id]);
+      market = _rows[0] || null;
+    } else {
+      const { data: market } = await supabase .from('markets') .select('id, question, resolved, resolved_at, tenant_slug, outcome, expiry_date, trader_count') .eq('id', id) .maybeSingle();
+    }
     if (!market) return res.status(404).json({ error: 'Market not found' });
 
     const now = Date.now();
@@ -5367,14 +5905,14 @@ app.post('/api/markets/:id/dispute', requireAuth, async (req, res) => {
         await dbQuery('INSERT INTO market_disputes (market_id, user_id, creator_slug, reason, dispute_type, requested_outcome) VALUES ($1, $2, $3, $4, $5, $6)', [id, req.user.id, market.tenant_slug, insertReason, disputeType, disputeType === 'resolution_vote' ? requested_outcome : null]);
       } catch (e) { error = e; }
     } else {
-      ({ error } = await supabase.from('market_disputes').insert([{
-        market_id:         id,
-        user_id:           req.user.id,
-        creator_slug:      market.tenant_slug,
-        reason:            insertReason,
-        dispute_type:      disputeType,
-        requested_outcome: disputeType === 'resolution_vote' ? requested_outcome : null,
-      }]));
+      if (pool) {
+        const _insData = Array.isArray([{ market_id:         id, user_id:           req.user.id, creator_slug:      market.tenant_slug, reason:            insertReason, dispute_type:      disputeType, requested_outcome: disputeType === 'resolution_vote' ? requested_outcome : null, }]) ? ([{ market_id:         id, user_id:           req.user.id, creator_slug:      market.tenant_slug, reason:            insertReason, dispute_type:      disputeType, requested_outcome: disputeType === 'resolution_vote' ? requested_outcome : null, }])[0] : ([{ market_id:         id, user_id:           req.user.id, creator_slug:      market.tenant_slug, reason:            insertReason, dispute_type:      disputeType, requested_outcome: disputeType === 'resolution_vote' ? requested_outcome : null, }]);
+        const _cols = Object.keys(_insData); const _vals = Object.values(_insData);
+        const _phs = _cols.map((_, i) => `$${i + 1}`).join(', ');
+        await dbQuery(`INSERT INTO market_disputes (${_cols.join(', ')}) VALUES (${_phs})`, _vals);
+      } else {
+        ({ error } = await supabase.from('market_disputes').insert([{ market_id:         id, user_id:           req.user.id, creator_slug:      market.tenant_slug, reason:            insertReason, dispute_type:      disputeType, requested_outcome: disputeType === 'resolution_vote' ? requested_outcome : null, }]));
+      }
     }
     if (error) {
       if (error.code === '23505' || error.message?.includes('23505')) return res.status(409).json({ error: 'You already voted on this market' });
@@ -5411,9 +5949,13 @@ app.post('/api/markets/:id/dispute', requireAuth, async (req, res) => {
             }).catch(() => {});
           } else {
             // Check if this vote just unlocked resolution — notify creator
-            const { count: voteCount } = await supabase
-              .from('market_disputes').select('id', { count: 'exact', head: true })
-              .eq('market_id', id).eq('dispute_type', 'resolution_vote');
+            let voteCount;
+            if (pool) {
+              const _rows = await dbQuery('SELECT count(*) as count FROM market_disputes WHERE market_id = $1 AND dispute_type = $2', [id, 'resolution_vote']);
+              voteCount = parseInt(_rows[0]?.count || 0);
+            } else {
+              const { count: voteCount } = await supabase .from('market_disputes').select('id', { count: 'exact', head: true }) .eq('market_id', id).eq('dispute_type', 'resolution_vote');
+            }
             const threshold = Math.max(3, Math.ceil((market.trader_count || 0) * 0.30));
             if (voteCount >= threshold) {
               transporter.sendMail({
@@ -5429,9 +5971,13 @@ app.post('/api/markets/:id/dispute', requireAuth, async (req, res) => {
     }
 
     // Return updated vote counts for UI
-    const { count: voteCount } = await supabase
-      .from('market_disputes').select('id', { count: 'exact', head: true })
-      .eq('market_id', id).eq('dispute_type', 'resolution_vote');
+    let voteCount;
+    if (pool) {
+      const _rows = await dbQuery('SELECT count(*) as count FROM market_disputes WHERE market_id = $1 AND dispute_type = $2', [id, 'resolution_vote']);
+      voteCount = parseInt(_rows[0]?.count || 0);
+    } else {
+      const { count: voteCount } = await supabase .from('market_disputes').select('id', { count: 'exact', head: true }) .eq('market_id', id).eq('dispute_type', 'resolution_vote');
+    }
     const threshold = Math.max(3, Math.ceil((market.trader_count || 0) * 0.30));
 
     res.json({ ok: true, vote_count: voteCount || 1, threshold, unlocked: (voteCount || 1) >= threshold });
@@ -5444,18 +5990,31 @@ app.post('/api/markets/:id/dispute', requireAuth, async (req, res) => {
 app.get('/api/market/:id/votes', async (req, res) => {
   try {
     const { id } = req.params;
-    const { data: market } = await supabase
-      .from('markets').select('trader_count, resolved, expiry_date').eq('id', id).maybeSingle();
+    let market;
+    if (pool) {
+      const _rows = await dbQuery('SELECT trader_count, resolved, expiry_date FROM markets WHERE id = $1 LIMIT 1', [id]);
+      market = _rows[0] || null;
+    } else {
+      const { data: market } = await supabase .from('markets').select('trader_count, resolved, expiry_date').eq('id', id).maybeSingle();
+    }
     if (!market) return res.status(404).json({ error: 'Market not found' });
 
-    const { count: voteCount } = await supabase
-      .from('market_disputes').select('id', { count: 'exact', head: true })
-      .eq('market_id', id).eq('dispute_type', 'resolution_vote');
+    let voteCount;
+    if (pool) {
+      const _rows = await dbQuery('SELECT count(*) as count FROM market_disputes WHERE market_id = $1 AND dispute_type = $2', [id, 'resolution_vote']);
+      voteCount = parseInt(_rows[0]?.count || 0);
+    } else {
+      const { count: voteCount } = await supabase .from('market_disputes').select('id', { count: 'exact', head: true }) .eq('market_id', id).eq('dispute_type', 'resolution_vote');
+    }
 
     // Yes/No breakdown
-    const { data: votes } = await supabase
-      .from('market_disputes').select('requested_outcome')
-      .eq('market_id', id).eq('dispute_type', 'resolution_vote');
+    let votes;
+    if (pool) {
+      const _rows = await dbQuery('SELECT requested_outcome FROM market_disputes WHERE market_id = $1 AND dispute_type = $2', [id, 'resolution_vote']);
+      votes = _rows;
+    } else {
+      const { data: votes } = await supabase .from('market_disputes').select('requested_outcome') .eq('market_id', id).eq('dispute_type', 'resolution_vote');
+    }
     const yesVotes = (votes || []).filter(v => v.requested_outcome === 'YES').length;
     const noVotes  = (votes || []).filter(v => v.requested_outcome === 'NO').length;
 
@@ -5512,12 +6071,13 @@ app.post('/api/creator/disputes/:id/review', requireCreator, async (req, res) =>
     const { decision } = req.body; // 'upheld' or 'overturned'
     if (!['upheld', 'overturned'].includes(decision)) return res.status(400).json({ error: 'decision must be upheld or overturned' });
 
-    const { data: dispute } = await supabase
-      .from('market_disputes')
-      .select('id, market_id, creator_slug')
-      .eq('id', req.params.id)
-      .eq('creator_slug', req.creator.slug)
-      .maybeSingle();
+    let dispute;
+    if (pool) {
+      const _rows = await dbQuery('SELECT id, market_id, creator_slug FROM market_disputes WHERE id = $1 AND creator_slug = $2 LIMIT 1', [req.params.id, req.creator.slug]);
+      dispute = _rows[0] || null;
+    } else {
+      const { data: dispute } = await supabase .from('market_disputes') .select('id, market_id, creator_slug') .eq('id', req.params.id) .eq('creator_slug', req.creator.slug) .maybeSingle();
+    }
     if (!dispute) return res.status(404).json({ error: 'Dispute not found' });
 
     if (pool) {
@@ -5541,12 +6101,13 @@ app.post('/markets/:id/resolve', requireCreator, async (req, res) => {
     const { outcome, attestation_text, resolution_note } = req.body;
 
     // Verify market belongs to this creator
-    const { data: market } = await supabase
-      .from('markets')
-      .select('*')
-      .eq('id', id)
-      .eq('creator_id', req.creator.id)
-      .maybeSingle();
+    let market;
+    if (pool) {
+      const _rows = await dbQuery('SELECT * FROM markets WHERE id = $1 AND creator_id = $2 LIMIT 1', [id, req.creator.id]);
+      market = _rows[0] || null;
+    } else {
+      const { data: market } = await supabase .from('markets') .select('*') .eq('id', id) .eq('creator_id', req.creator.id) .maybeSingle();
+    }
 
     if (!market) return res.status(404).json({ error: 'Market not found or not yours' });
     if (market.resolved) return res.status(409).json({ error: 'Market already resolved' });
@@ -5561,9 +6122,13 @@ app.post('/markets/:id/resolve', requireCreator, async (req, res) => {
     // ── Gate: community vote threshold (skip for markets with < 3 traders) ──
     const traderCount = market.trader_count || 0;
     if (traderCount >= 3) {
-      const { count: voteCount } = await supabase
-        .from('market_disputes').select('id', { count: 'exact', head: true })
-        .eq('market_id', id).eq('dispute_type', 'resolution_vote');
+      let voteCount;
+      if (pool) {
+        const _rows = await dbQuery('SELECT count(*) as count FROM market_disputes WHERE market_id = $1 AND dispute_type = $2', [id, 'resolution_vote']);
+        voteCount = parseInt(_rows[0]?.count || 0);
+      } else {
+        const { count: voteCount } = await supabase .from('market_disputes').select('id', { count: 'exact', head: true }) .eq('market_id', id).eq('dispute_type', 'resolution_vote');
+      }
       const threshold = Math.max(3, Math.ceil(traderCount * 0.30));
       if ((voteCount || 0) < threshold) {
         return res.status(403).json({
@@ -5597,18 +6162,27 @@ app.post('/markets/:id/resolve', requireCreator, async (req, res) => {
     if (attestation_text) resolveUpdate.attestation_text = attestation_text;
     if (resolution_note)  resolveUpdate.resolution_note  = resolution_note.trim().slice(0, 500);
 
-    const { error: resolveErr } = await supabase
-      .from('markets')
-      .update(resolveUpdate)
-      .eq('id', id);
+    let resolveErr;
+    if (pool) {
+      const _upd = resolveUpdate;
+      const _cols = Object.keys(_upd); const _vals = Object.values(_upd);
+      const _set = _cols.map((c, i) => `${c} = $${i + 1}`).join(', ');
+      const _where = [id];
+      await dbQuery(`UPDATE markets SET ${_set} WHERE id = $${_vals.length + 1}`, [..._vals, ..._where]);
+    } else {
+      const { error: resolveErr } = await supabase .from('markets') .update(resolveUpdate) .eq('id', id);
+    }
 
     if (resolveErr) throw resolveErr;
 
     // Pay out winners — get all positions for this market
-    const { data: positions } = await supabase
-      .from('positions')
-      .select('*')
-      .eq('market_id', id);
+    let positions;
+    if (pool) {
+      const _rows = await dbQuery('SELECT * FROM positions WHERE market_id = $1', [id]);
+      positions = _rows;
+    } else {
+      const { data: positions } = await supabase .from('positions') .select('*') .eq('market_id', id);
+    }
 
     if (positions && positions.length > 0) {
       const payouts = [];
@@ -5662,11 +6236,13 @@ app.post('/markets/:id/resolve', requireCreator, async (req, res) => {
     res.json({ ok: true, outcome, positions_settled: positions?.length || 0 });
 
     // Send resolution emails + push in-app notifications (fire-and-forget, non-blocking)
-    const { data: settings } = await supabase
-      .from('creator_settings')
-      .select('slug')
-      .eq('creator_id', req.creator.id)
-      .maybeSingle();
+    let settings;
+    if (pool) {
+      const _rows = await dbQuery('SELECT slug FROM creator_settings WHERE creator_id = $1 LIMIT 1', [req.creator.id]);
+      settings = _rows[0] || null;
+    } else {
+      const { data: settings } = await supabase .from('creator_settings') .select('slug') .eq('creator_id', req.creator.id) .maybeSingle();
+    }
     sendResolutionEmails(market, outcome, settings?.slug, resolveUpdate.resolution_note || null);
 
     // In-app notifications for each bettor
@@ -6629,13 +7205,31 @@ async function getChallengeProgress(settings) {
     } else {
       if (metric === 'bets') {
         const weekStart = getWeekStart();
-        const { count } = await supabase.from('positions').select('id', { count: 'exact', head: true }).eq('tenant_slug', slug).gte('created_at', weekStart);
+        let count;
+        if (pool) {
+          const _rows = await dbQuery('SELECT count(*) as count FROM positions WHERE tenant_slug = $1 AND created_at >= $2', [slug, weekStart]);
+          count = parseInt(_rows[0]?.count || 0);
+        } else {
+          const { count } = await supabase.from('positions').select('id', { count: 'exact', head: true }).eq('tenant_slug', slug).gte('created_at', weekStart);
+        }
         current = count || 0;
       } else if (metric === 'members') {
-        const { count } = await supabase.from('community_balances').select('id', { count: 'exact', head: true }).eq('creator_slug', slug);
+        let count;
+        if (pool) {
+          const _rows = await dbQuery('SELECT count(*) as count FROM community_balances WHERE creator_slug = $1', [slug]);
+          count = parseInt(_rows[0]?.count || 0);
+        } else {
+          const { count } = await supabase.from('community_balances').select('id', { count: 'exact', head: true }).eq('creator_slug', slug);
+        }
         current = count || 0;
       } else if (metric === 'volume') {
-        const { data: mkts } = await supabase.from('markets').select('volume').or(`tenant_slug.eq.${slug},creator_id.eq.${settings.creator_id}`).eq('is_public', true);
+        let mkts;
+        if (pool) {
+          const _rows = await dbQuery('SELECT volume FROM markets WHERE is_public = $1 AND (tenant_slug = $2 OR creator_id = $3)', [true, slug, settings.creator_id]);
+          mkts = _rows;
+        } else {
+          const { data: mkts } = await supabase.from('markets').select('volume').or(`tenant_slug.eq.${slug},creator_id.eq.${settings.creator_id}`).eq('is_public', true);
+        }
         current = Math.round((mkts || []).reduce((s, m) => s + (m.volume || 0), 0) / 100);
       }
     }
@@ -6990,10 +7584,16 @@ app.post('/api/community/:slug/suggest', async (req, res) => {
         suggestion = rows[0];
       } catch (e) { error = e; }
     } else {
-      const { data: d, error: e } = await supabase.from('market_suggestions').insert({
-        creator_slug: slug, user_id: userId, user_name,
-        question: question.trim(), context: context?.trim() || null, status: 'pending'
-      }).select().single();
+      let d, e;
+      if (pool) {
+        const _insData = Array.isArray({ creator_slug: slug, user_id: userId, user_name, question: question.trim(), context: context?.trim() || null, status: 'pending' }) ? ({ creator_slug: slug, user_id: userId, user_name, question: question.trim(), context: context?.trim() || null, status: 'pending' })[0] : ({ creator_slug: slug, user_id: userId, user_name, question: question.trim(), context: context?.trim() || null, status: 'pending' });
+        const _cols = Object.keys(_insData); const _vals = Object.values(_insData);
+        const _phs = _cols.map((_, i) => `$${i + 1}`).join(', ');
+        const _rows = await dbQuery(`INSERT INTO market_suggestions (${_cols.join(', ')}) VALUES (${_phs}) RETURNING *`, _vals);
+        d = _rows[0] || null;
+      } else {
+        const { data: d, error: e } = await supabase.from('market_suggestions').insert({ creator_slug: slug, user_id: userId, user_name, question: question.trim(), context: context?.trim() || null, status: 'pending' }).select().single();
+      }
       suggestion = d; error = e;
     }
     if (error) throw error;
@@ -7130,9 +7730,16 @@ app.post('/api/creator/announcements', requireCreator, async (req, res) => {
         data = rows[0];
       } catch (e) { error = e; }
     } else {
-      const { data: d, error: e } = await supabase.from('creator_announcements')
-        .insert({ creator_slug: settings.slug, title: title.trim().slice(0,200), body: (body||'').trim().slice(0,1000), pinned: !!pinned })
-        .select().single();
+      let d, e;
+      if (pool) {
+        const _insData = Array.isArray({ creator_slug: settings.slug, title: title.trim().slice(0,200), body: (body||'').trim().slice(0,1000), pinned: !!pinned }) ? ({ creator_slug: settings.slug, title: title.trim().slice(0,200), body: (body||'').trim().slice(0,1000), pinned: !!pinned })[0] : ({ creator_slug: settings.slug, title: title.trim().slice(0,200), body: (body||'').trim().slice(0,1000), pinned: !!pinned });
+        const _cols = Object.keys(_insData); const _vals = Object.values(_insData);
+        const _phs = _cols.map((_, i) => `$${i + 1}`).join(', ');
+        const _rows = await dbQuery(`INSERT INTO creator_announcements (${_cols.join(', ')}) VALUES (${_phs}) RETURNING *`, _vals);
+        d = _rows[0] || null;
+      } else {
+        const { data: d, error: e } = await supabase.from('creator_announcements') .insert({ creator_slug: settings.slug, title: title.trim().slice(0,200), body: (body||'').trim().slice(0,1000), pinned: !!pinned }) .select().single();
+      }
       data = d; error = e;
     }
     if (error) throw error;
@@ -7224,9 +7831,16 @@ app.post('/api/community/:slug/markets/:marketId/comments', async (req, res) => 
         data = rows[0];
       } catch (e) { error = e; }
     } else {
-      const { data: d, error: e } = await supabase.from('market_comments')
-        .insert({ market_id: req.params.marketId, creator_slug: req.params.slug, user_id: userId, user_name, body: body.trim() })
-        .select().single();
+      let d, e;
+      if (pool) {
+        const _insData = Array.isArray({ market_id: req.params.marketId, creator_slug: req.params.slug, user_id: userId, user_name, body: body.trim() }) ? ({ market_id: req.params.marketId, creator_slug: req.params.slug, user_id: userId, user_name, body: body.trim() })[0] : ({ market_id: req.params.marketId, creator_slug: req.params.slug, user_id: userId, user_name, body: body.trim() });
+        const _cols = Object.keys(_insData); const _vals = Object.values(_insData);
+        const _phs = _cols.map((_, i) => `$${i + 1}`).join(', ');
+        const _rows = await dbQuery(`INSERT INTO market_comments (${_cols.join(', ')}) VALUES (${_phs}) RETURNING *`, _vals);
+        d = _rows[0] || null;
+      } else {
+        const { data: d, error: e } = await supabase.from('market_comments') .insert({ market_id: req.params.marketId, creator_slug: req.params.slug, user_id: userId, user_name, body: body.trim() }) .select().single();
+      }
       data = d; error = e;
     }
     if (error) throw error;
@@ -7246,12 +7860,13 @@ app.put('/markets/:id', requireCreator, async (req, res) => {
     const { question, expiry_date, resolution_source, category, is_public, sponsor_name } = req.body;
 
     // Verify ownership; also fetch current is_public so we can detect publish transition
-    const { data: market } = await supabase
-      .from('markets')
-      .select('id, creator_id, is_public, tenant_slug, question')
-      .eq('id', id)
-      .eq('creator_id', req.creator.id)
-      .maybeSingle();
+    let market;
+    if (pool) {
+      const _rows = await dbQuery('SELECT id, creator_id, is_public, tenant_slug, question FROM markets WHERE id = $1 AND creator_id = $2 LIMIT 1', [id, req.creator.id]);
+      market = _rows[0] || null;
+    } else {
+      const { data: market } = await supabase .from('markets') .select('id, creator_id, is_public, tenant_slug, question') .eq('id', id) .eq('creator_id', req.creator.id) .maybeSingle();
+    }
 
     if (!market) return res.status(404).json({ error: 'Market not found or not yours' });
 
@@ -7263,12 +7878,17 @@ app.put('/markets/:id', requireCreator, async (req, res) => {
     if (is_public !== undefined) updates.is_public = is_public;
     if (sponsor_name !== undefined) updates.sponsor_name = sponsor_name || null;
 
-    const { data, error } = await supabase
-      .from('markets')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single();
+    let data, error;
+    if (pool) {
+      const _upd = updates;
+      const _cols = Object.keys(_upd); const _vals = Object.values(_upd);
+      const _set = _cols.map((c, i) => `${c} = $${i + 1}`).join(', ');
+      const _where = [id];
+      const _rows = await dbQuery(`UPDATE markets SET ${_set} WHERE id = $${_vals.length + 1} RETURNING *`, [..._vals, ..._where]);
+      data = _rows[0] || null;
+    } else {
+      const { data, error } = await supabase .from('markets') .update(updates) .eq('id', id) .select() .single();
+    }
 
     if (error) throw error;
 
@@ -7292,19 +7912,26 @@ app.delete('/markets/:id', requireCreator, async (req, res) => {
     const { id } = req.params;
 
     // Verify ownership
-    const { data: market } = await supabase
-      .from('markets')
-      .select('id, creator_id')
-      .eq('id', id)
-      .eq('creator_id', req.creator.id)
-      .maybeSingle();
+    let market;
+    if (pool) {
+      const _rows = await dbQuery('SELECT id, creator_id FROM markets WHERE id = $1 AND creator_id = $2 LIMIT 1', [id, req.creator.id]);
+      market = _rows[0] || null;
+    } else {
+      const { data: market } = await supabase .from('markets') .select('id, creator_id') .eq('id', id) .eq('creator_id', req.creator.id) .maybeSingle();
+    }
 
     if (!market) return res.status(404).json({ error: 'Market not found or not yours' });
 
-    const { error } = await supabase
-      .from('markets')
-      .update({ archived: true, is_public: false })
-      .eq('id', id);
+    let error;
+    if (pool) {
+      const _upd = { archived: true, is_public: false };
+      const _cols = Object.keys(_upd); const _vals = Object.values(_upd);
+      const _set = _cols.map((c, i) => `${c} = $${i + 1}`).join(', ');
+      const _where = [id];
+      await dbQuery(`UPDATE markets SET ${_set} WHERE id = $${_vals.length + 1}`, [..._vals, ..._where]);
+    } else {
+      const { error } = await supabase .from('markets') .update({ archived: true, is_public: false }) .eq('id', id);
+    }
 
     if (error) throw error;
     res.json({ ok: true });
@@ -7371,9 +7998,16 @@ app.post('/api/creator/waitlist', requireCreator, async (req, res) => {
 
     const creator_id = req.creator.id;
 
-    const { error } = await supabase
-      .from('pro_waitlist')
-      .upsert({ email: email.toLowerCase().trim(), creator_id }, { onConflict: 'email' });
+    let error;
+    if (pool) {
+      const _obj = { email: email.toLowerCase().trim(), creator_id };
+      const _cols = Object.keys(_obj); const _vals = Object.values(_obj);
+      const _phs = _cols.map((_, i) => `$${i + 1}`).join(', ');
+      const _upd = _cols.filter(c => !["email"].includes(c)).map(c => `${c} = EXCLUDED.${c}`).join(', ');
+      await dbQuery(`INSERT INTO pro_waitlist (${_cols.join(', ')}) VALUES (${_phs}) ON CONFLICT (email) DO UPDATE SET ${_upd}`, _vals);
+    } else {
+      const { error } = await supabase .from('pro_waitlist') .upsert({ email: email.toLowerCase().trim(), creator_id }, { onConflict: 'email' });
+    }
 
     if (error) throw error;
 
@@ -7600,10 +8234,25 @@ app.get('/auth/callback', async (req, res) => {
         dbUser = inserted[0];
       }
     } else {
-      const { data } = await supabase.from('users').select('*').eq('email', email).maybeSingle();
+      let data;
+      if (pool) {
+        const _rows = await dbQuery('SELECT * FROM users WHERE email = $1 LIMIT 1', [email]);
+        data = _rows[0] || null;
+      } else {
+        const { data } = await supabase.from('users').select('*').eq('email', email).maybeSingle();
+      }
       dbUser = data;
       if (!dbUser) {
-        const { data: d, error: e } = await supabase.from('users').insert({ email, display_name: displayName, password_hash: '', is_creator: true, balance: 100000 }).select().single();
+        let d, e;
+        if (pool) {
+          const _insData = Array.isArray({ email, display_name: displayName, password_hash: '', is_creator: true, balance: 100000 }) ? ({ email, display_name: displayName, password_hash: '', is_creator: true, balance: 100000 })[0] : ({ email, display_name: displayName, password_hash: '', is_creator: true, balance: 100000 });
+          const _cols = Object.keys(_insData); const _vals = Object.values(_insData);
+          const _phs = _cols.map((_, i) => `$${i + 1}`).join(', ');
+          const _rows = await dbQuery(`INSERT INTO users (${_cols.join(', ')}) VALUES (${_phs}) RETURNING *`, _vals);
+          d = _rows[0] || null;
+        } else {
+          const { data: d, error: e } = await supabase.from('users').insert({ email, display_name: displayName, password_hash: '', is_creator: true, balance: 100000 }).select().single();
+        }
         if (e) throw new Error(e.message);
         dbUser = d;
       }
@@ -7675,16 +8324,14 @@ app.post('/api/creator/oauth-complete', async (req, res) => {
         await dbQuery('INSERT INTO creator_settings (creator_id, slug, display_name, custom_points_name, primary_color, is_active, plan, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)', [payload.id, slug, display_name, 'Flex Points', '#c9920d', true, 'free', new Date().toISOString()]);
       } catch (e) { insErr = e; }
     } else {
-      ({ error: insErr } = await supabase.from('creator_settings').insert({
-        creator_id:          payload.id,
-        slug,
-        display_name,
-        custom_points_name:  'Flex Points',
-        primary_color:       '#c9920d',
-        is_active:           true,
-        plan:                'free',
-        created_at:          new Date().toISOString()
-      }));
+      if (pool) {
+        const _insData = Array.isArray({ creator_id:          payload.id, slug, display_name, custom_points_name:  'Flex Points', primary_color:       '#c9920d', is_active:           true, plan:                'free', created_at:          new Date().toISOString() }) ? ({ creator_id:          payload.id, slug, display_name, custom_points_name:  'Flex Points', primary_color:       '#c9920d', is_active:           true, plan:                'free', created_at:          new Date().toISOString() })[0] : ({ creator_id:          payload.id, slug, display_name, custom_points_name:  'Flex Points', primary_color:       '#c9920d', is_active:           true, plan:                'free', created_at:          new Date().toISOString() });
+        const _cols = Object.keys(_insData); const _vals = Object.values(_insData);
+        const _phs = _cols.map((_, i) => `$${i + 1}`).join(', ');
+        await dbQuery(`INSERT INTO creator_settings (${_cols.join(', ')}) VALUES (${_phs})`, _vals);
+      } else {
+        ({ error: insErr } = await supabase.from('creator_settings').insert({ creator_id:          payload.id, slug, display_name, custom_points_name:  'Flex Points', primary_color:       '#c9920d', is_active:           true, plan:                'free', created_at:          new Date().toISOString() }));
+      }
     }
     if (insErr) return res.status(500).json({ error: insErr.message });
 
@@ -7845,11 +8492,13 @@ app.get('/ref/:slug', async (req, res) => {
   const { slug } = req.params;
   if (RESERVED_SLUGS.has(slug)) return res.redirect('/creator/signup');
   // Verify the referring creator exists
-  const { data: cs } = await supabase
-    .from('creator_settings')
-    .select('slug, display_name')
-    .eq('slug', slug)
-    .maybeSingle();
+  let cs;
+  if (pool) {
+    const _rows = await dbQuery('SELECT slug, display_name FROM creator_settings WHERE slug = $1 LIMIT 1', [slug]);
+    cs = _rows[0] || null;
+  } else {
+    const { data: cs } = await supabase .from('creator_settings') .select('slug, display_name') .eq('slug', slug) .maybeSingle();
+  }
   if (!cs) return res.redirect('/creator/signup');
   // Redirect to signup with referral attribution
   res.redirect(`/creator/signup?ref=${encodeURIComponent(slug)}`);
@@ -7858,10 +8507,13 @@ app.get('/ref/:slug', async (req, res) => {
 // GET /api/creator/referral-stats — how many creators this creator has referred
 app.get('/api/creator/referral-stats', requireCreator, async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('creator_referrals')
-      .select('id, accepted, accepted_at')
-      .eq('referrer_slug', req.creator.slug);
+    let data, error;
+    if (pool) {
+      const _rows = await dbQuery('SELECT id, accepted, accepted_at FROM creator_referrals WHERE referrer_slug = $1', [req.creator.slug]);
+      data = _rows;
+    } else {
+      const { data, error } = await supabase .from('creator_referrals') .select('id, accepted, accepted_at') .eq('referrer_slug', req.creator.slug);
+    }
     if (error) throw error;
     const rows = data || [];
     const accepted = rows.filter(r => r.accepted);
@@ -7889,11 +8541,13 @@ app.get('/embed/:slug', async (req, res) => {
 app.get('/widget/:slug', async (req, res) => {
   try {
     const { slug } = req.params;
-    const { data: cs } = await supabase
-      .from('creator_settings')
-      .select('display_name, primary_color, custom_points_name')
-      .eq('slug', slug)
-      .maybeSingle();
+    let cs;
+    if (pool) {
+      const _rows = await dbQuery('SELECT display_name, primary_color, custom_points_name FROM creator_settings WHERE slug = $1 LIMIT 1', [slug]);
+      cs = _rows[0] || null;
+    } else {
+      const { data: cs } = await supabase .from('creator_settings') .select('display_name, primary_color, custom_points_name') .eq('slug', slug) .maybeSingle();
+    }
     if (!cs) return res.status(404).send('Community not found');
 
     const communityName = cs.display_name || slug;
@@ -7904,14 +8558,13 @@ app.get('/widget/:slug', async (req, res) => {
     const ogImage       = `https://hyperflex.network/og-image.png`;
 
     // Fetch top 3 markets for fallback description
-    const { data: markets } = await supabase
-      .from('markets')
-      .select('id, question, yes_price, no_price')
-      .eq('tenant_slug', slug)
-      .eq('resolved', false)
-      .neq('is_public', false)
-      .order('trader_count', { ascending: false })
-      .limit(3);
+    let markets;
+    if (pool) {
+      const _rows = await dbQuery('SELECT id, question, yes_price, no_price FROM markets WHERE tenant_slug = $1 AND resolved = $2 AND is_public != $3 ORDER BY trader_count DESC LIMIT 3', [slug, false, false]);
+      markets = _rows;
+    } else {
+      const { data: markets } = await supabase .from('markets') .select('id, question, yes_price, no_price') .eq('tenant_slug', slug) .eq('resolved', false) .neq('is_public', false) .order('trader_count', { ascending: false }) .limit(3);
+    }
 
     const mktCount   = markets?.length || 0;
     const topQ       = markets?.[0]?.question;
@@ -8285,18 +8938,23 @@ async function maybeFireMilestoneEmail(slug) {
 
   try {
     // Count current members
-    const { count } = await supabase
-      .from('community_balances')
-      .select('user_id', { count: 'exact', head: true })
-      .eq('creator_slug', slug);
+    let count;
+    if (pool) {
+      const _rows = await dbQuery('SELECT count(*) as count FROM community_balances WHERE creator_slug = $1', [slug]);
+      count = parseInt(_rows[0]?.count || 0);
+    } else {
+      const { count } = await supabase .from('community_balances') .select('user_id', { count: 'exact', head: true }) .eq('creator_slug', slug);
+    }
     if (!count) return;
 
     // Get creator info + last notified milestone
-    const { data: creator } = await supabase
-      .from('creator_settings')
-      .select('id, email, display_name, primary_color, last_milestone_notified, email_unsubscribed, email_unsubscribe_token')
-      .eq('slug', slug)
-      .maybeSingle();
+    let creator;
+    if (pool) {
+      const _rows = await dbQuery('SELECT id, email, display_name, primary_color, last_milestone_notified, email_unsubscribed, email_unsubscribe_token FROM creator_settings WHERE slug = $1 LIMIT 1', [slug]);
+      creator = _rows[0] || null;
+    } else {
+      const { data: creator } = await supabase .from('creator_settings') .select('id, email, display_name, primary_color, last_milestone_notified, email_unsubscribed, email_unsubscribe_token') .eq('slug', slug) .maybeSingle();
+    }
     if (!creator?.email || creator.email_unsubscribed) return;
 
     const lastNotified = creator.last_milestone_notified || 0;
@@ -8306,10 +8964,15 @@ async function maybeFireMilestoneEmail(slug) {
     if (!milestone) return;
 
     // Mark as notified immediately to prevent duplicate sends from concurrent requests
-    await supabase
-      .from('creator_settings')
-      .update({ last_milestone_notified: milestone })
-      .eq('slug', slug);
+    if (pool) {
+      const _upd = { last_milestone_notified: milestone };
+      const _cols = Object.keys(_upd); const _vals = Object.values(_upd);
+      const _set = _cols.map((c, i) => `${c} = $${i + 1}`).join(', ');
+      const _where = [slug];
+      await dbQuery(`UPDATE creator_settings SET ${_set} WHERE slug = $${_vals.length + 1}`, [..._vals, ..._where]);
+    } else {
+      await supabase .from('creator_settings') .update({ last_milestone_notified: milestone }) .eq('slug', slug);
+    }
 
     const accent = creator.primary_color || '#c9920d';
     const communityName = creator.display_name || slug;
@@ -8808,12 +9471,12 @@ app.get('/api/predictors/:userId/analytics', async (req, res) => {
 // Best single HFX call for a user — highest-payout win
 app.get('/api/predictors/:userId/best-call', async (req, res) => {
   const { userId } = req.params;
-  const { data } = await supabase
-    .from('positions')
-    .select('side, amount, potential_payout, created_at, markets(question, tenant_slug, id, outcome, resolved)')
-    .eq('user_id', userId)
-    .order('potential_payout', { ascending: false })
-    .limit(20);
+  let data;
+  if (pool) {
+    data = await dbQuery(`SELECT positions.*, row_to_json(markets.*) as markets FROM positions LEFT JOIN markets ON positions.user_id = markets.id WHERE user_id = $1 ORDER BY potential_payout DESC LIMIT 20`, [userId]).catch(() => []);
+  } else {
+    const { data } = await supabase .from('positions') .select('side, amount, potential_payout, created_at, markets(question, tenant_slug, id, outcome, resolved)') .eq('user_id', userId) .order('potential_payout', { ascending: false }) .limit(20);
+  }
   const wins = (data || []).filter(p => p.markets?.resolved && p.markets?.outcome === p.side);
   if (!wins.length) return res.json({ best: null });
   const best = wins[0];
@@ -9408,10 +10071,13 @@ app.post('/api/activity/share-position', requireAuth, async (req, res) => {
 async function syncAllUserPositions() {
   console.log('[auto-sync] Starting position sync for all connected users');
   try {
-    const { data: users } = await supabase
-      .from('users')
-      .select('id, polymarket_address, kalshi_api_key, kalshi_username, manifold_username')
-      .or('polymarket_address.not.is.null,kalshi_api_key.not.is.null,kalshi_username.not.is.null,manifold_username.not.is.null');
+    let users;
+    if (pool) {
+      const _rows = await dbQuery('SELECT id, polymarket_address, kalshi_api_key, kalshi_username, manifold_username FROM users WHERE (polymarket_address IS NOT NULL OR kalshi_api_key IS NOT NULL OR kalshi_username IS NOT NULL OR manifold_username IS NOT NULL)', []);
+      users = _rows;
+    } else {
+      const { data: users } = await supabase .from('users') .select('id, polymarket_address, kalshi_api_key, kalshi_username, manifold_username') .or('polymarket_address.not.is.null,kalshi_api_key.not.is.null,kalshi_username.not.is.null,manifold_username.not.is.null');
+    }
     if (!users || users.length === 0) return;
     console.log(`[auto-sync] Syncing ${users.length} users`);
     for (const user of users) {
@@ -9535,8 +10201,19 @@ async function syncUserPositions(user) {
         await dbQuery(`INSERT INTO cached_positions (${_cols.join(', ')}) VALUES (${_phs})`, _vals);
       }
     } else {
-      await supabase.from('cached_positions').delete().eq('user_id', user.id);
-      await supabase.from('cached_positions').insert(upserts);
+      if (pool) {
+        await dbQuery('DELETE FROM cached_positions WHERE user_id = $1', [user.id]);
+      } else {
+        await supabase.from('cached_positions').delete().eq('user_id', user.id);
+      }
+      if (pool) {
+        const _insData = Array.isArray(upserts) ? (upserts)[0] : (upserts);
+        const _cols = Object.keys(_insData); const _vals = Object.values(_insData);
+        const _phs = _cols.map((_, i) => `$${i + 1}`).join(', ');
+        await dbQuery(`INSERT INTO cached_positions (${_cols.join(', ')}) VALUES (${_phs})`, _vals);
+      } else {
+        await supabase.from('cached_positions').insert(upserts);
+      }
     }
     console.log(`[auto-sync] Synced ${upserts.length} positions for user ${user.id}`);
 
@@ -9544,10 +10221,13 @@ async function syncUserPositions(user) {
     const newPositions = upserts.filter(u => !oldIds.has(`${u.platform}:${u.external_id}`));
     if (newPositions.length > 0) {
       try {
-        const { data: subs } = await supabase
-          .from('copy_trade_subscriptions')
-          .select('subscriber_id')
-          .eq('target_user_id', user.id);
+        let subs;
+        if (pool) {
+          const _rows = await dbQuery('SELECT subscriber_id FROM copy_trade_subscriptions WHERE target_user_id = $1', [user.id]);
+          subs = _rows;
+        } else {
+          const { data: subs } = await supabase .from('copy_trade_subscriptions') .select('subscriber_id') .eq('target_user_id', user.id);
+        }
         if (subs?.length) {
           let userData;
           if (pool) {
@@ -9575,9 +10255,13 @@ async function sendWeeklyDigests() {
   if (!transporter) { console.log('[digest] SMTP not configured — skipping'); return; }
 
   console.log('[digest] Starting weekly member digests');
-  const { data: creators } = await supabase
-    .from('creator_settings')
-    .select('slug, display_name, primary_color, custom_points_name');
+  let creators;
+  if (pool) {
+    const _rows = await dbQuery('SELECT slug, display_name, primary_color, custom_points_name FROM creator_settings', []);
+    creators = _rows;
+  } else {
+    const { data: creators } = await supabase .from('creator_settings') .select('slug, display_name, primary_color, custom_points_name');
+  }
 
   if (!creators?.length) return;
 
@@ -9590,22 +10274,24 @@ async function sendWeeklyDigests() {
       const communityUrl = `https://hyperflex.network/${slug}`;
 
       // Fetch top 3 hot markets
-      const { data: markets } = await supabase
-        .from('markets')
-        .select('id, question, yes_price, no_price, yes_votes, no_votes, trader_count')
-        .eq('tenant_slug', slug)
-        .eq('resolved', false)
-        .eq('archived', false)
-        .order('trader_count', { ascending: false })
-        .limit(3);
+      let markets;
+      if (pool) {
+        const _rows = await dbQuery('SELECT id, question, yes_price, no_price, yes_votes, no_votes, trader_count FROM markets WHERE tenant_slug = $1 AND resolved = $2 AND archived = $3 ORDER BY trader_count DESC LIMIT 3', [slug, false, false]);
+        markets = _rows;
+      } else {
+        const { data: markets } = await supabase .from('markets') .select('id, question, yes_price, no_price, yes_votes, no_votes, trader_count') .eq('tenant_slug', slug) .eq('resolved', false) .eq('archived', false) .order('trader_count', { ascending: false }) .limit(3);
+      }
 
       if (!markets?.length) continue;
 
       // Fetch community members
-      const { data: members } = await supabase
-        .from('community_members')
-        .select('user_id')
-        .eq('creator_slug', slug);
+      let members;
+      if (pool) {
+        const _rows = await dbQuery('SELECT user_id FROM community_members WHERE creator_slug = $1', [slug]);
+        members = _rows;
+      } else {
+        const { data: members } = await supabase .from('community_members') .select('user_id') .eq('creator_slug', slug);
+      }
 
       if (!members?.length) continue;
 
@@ -9630,9 +10316,13 @@ async function sendWeeklyDigests() {
       const mktIds = (allMktIds || []).map(m => m.id);
       let leaderRows = [];
       if (mktIds.length) {
-        const { data: posData } = await supabase
-          .from('positions').select('user_id, potential_payout, won')
-          .in('market_id', mktIds).eq('settled', true);
+        let posData;
+        if (pool) {
+          const _rows = await dbQuery('SELECT user_id, potential_payout, won FROM positions WHERE market_id = ANY($1) AND settled = $2', [mktIds, true]);
+          posData = _rows;
+        } else {
+          const { data: posData } = await supabase .from('positions').select('user_id, potential_payout, won') .in('market_id', mktIds).eq('settled', true);
+        }
         const lmap = {};
         for (const p of (posData || [])) {
           if (!lmap[p.user_id]) lmap[p.user_id] = { wins: 0, total_payout: 0 };
@@ -9726,11 +10416,12 @@ async function sendPredictorSpotlightEmail() {
     const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
 
     // 1. Top 3 predictors by win rate this week (among settled positions)
-    const { data: weeklyPositions } = await supabase
-      .from('positions')
-      .select('user_id, won, markets(resolved_at)')
-      .eq('settled', true)
-      .gte('created_at', weekAgo);
+    let weeklyPositions;
+    if (pool) {
+      weeklyPositions = await dbQuery(`SELECT positions.*, row_to_json(markets.*) as markets FROM positions LEFT JOIN markets ON positions.user_id = markets.id WHERE settled = $1 AND created_at >= $2`, [true, weekAgo]).catch(() => []);
+    } else {
+      const { data: weeklyPositions } = await supabase .from('positions') .select('user_id, won, markets(resolved_at)') .eq('settled', true) .gte('created_at', weekAgo);
+    }
 
     const statsMap = {};
     for (const p of (weeklyPositions || [])) {
@@ -9768,14 +10459,13 @@ async function sendPredictorSpotlightEmail() {
     }).join('');
 
     // 2. 3 hottest markets right now across all communities
-    const { data: hotMarkets } = await supabase
-      .from('markets')
-      .select('id, question, yes_price, trader_count, tenant_slug')
-      .eq('resolved', false)
-      .eq('archived', false)
-      .eq('is_public', true)
-      .order('trader_count', { ascending: false })
-      .limit(3);
+    let hotMarkets;
+    if (pool) {
+      const _rows = await dbQuery('SELECT id, question, yes_price, trader_count, tenant_slug FROM markets WHERE resolved = $1 AND archived = $2 AND is_public = $3 ORDER BY trader_count DESC LIMIT 3', [false, false, true]);
+      hotMarkets = _rows;
+    } else {
+      const { data: hotMarkets } = await supabase .from('markets') .select('id, question, yes_price, trader_count, tenant_slug') .eq('resolved', false) .eq('archived', false) .eq('is_public', true) .order('trader_count', { ascending: false }) .limit(3);
+    }
 
     const hotMarketsHtml = (hotMarkets || []).map(m => {
       const yesPct = Math.round((m.yes_price || 0.5) * 100);
@@ -9820,17 +10510,23 @@ async function sendPredictorSpotlightEmail() {
 </table></body></html>`;
 
     // 3. Send to every user who has ever placed a bet
-    const { data: bettors } = await supabase
-      .from('positions')
-      .select('user_id')
-      .limit(5000);
+    let bettors;
+    if (pool) {
+      const _rows = await dbQuery('SELECT user_id FROM positions LIMIT 5000', []);
+      bettors = _rows;
+    } else {
+      const { data: bettors } = await supabase .from('positions') .select('user_id') .limit(5000);
+    }
     const bettor_ids = [...new Set((bettors || []).map(p => p.user_id))];
     if (!bettor_ids.length) return;
 
-    const { data: allUsers } = await supabase
-      .from('users')
-      .select('id, email, email_unsubscribed')
-      .in('id', bettor_ids);
+    let allUsers;
+    if (pool) {
+      const _rows = await dbQuery('SELECT id, email, email_unsubscribed FROM users WHERE id = ANY($1)', [bettor_ids]);
+      allUsers = _rows;
+    } else {
+      const { data: allUsers } = await supabase .from('users') .select('id, email, email_unsubscribed') .in('id', bettor_ids);
+    }
 
     const eligible = (allUsers || []).filter(u => u.email && !u.email_unsubscribed);
     const fromAddress = process.env.SMTP_FROM || 'HYPERFLEX <noreply@hyperflex.network>';
@@ -9870,12 +10566,13 @@ async function sendStreakWarningEmails() {
   try {
     // 1. Find users who placed at least one settled position (ever)
     //    We'll compute their streak from settled positions, sorted desc
-    const { data: allSettled } = await supabase
-      .from('positions')
-      .select('user_id, won, created_at')
-      .eq('settled', true)
-      .order('created_at', { ascending: false })
-      .limit(10000);
+    let allSettled;
+    if (pool) {
+      const _rows = await dbQuery('SELECT user_id, won, created_at FROM positions WHERE settled = $1 ORDER BY created_at DESC LIMIT 10000', [true]);
+      allSettled = _rows;
+    } else {
+      const { data: allSettled } = await supabase .from('positions') .select('user_id, won, created_at') .eq('settled', true) .order('created_at', { ascending: false }) .limit(10000);
+    }
 
     if (!allSettled?.length) return;
 
@@ -9898,10 +10595,13 @@ async function sendStreakWarningEmails() {
 
     // 2. Find users who placed a bet in the last 24 hours (active today — skip them)
     const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const { data: recentBets } = await supabase
-      .from('positions')
-      .select('user_id')
-      .gte('created_at', since24h);
+    let recentBets;
+    if (pool) {
+      const _rows = await dbQuery('SELECT user_id FROM positions WHERE created_at >= $1', [since24h]);
+      recentBets = _rows;
+    } else {
+      const { data: recentBets } = await supabase .from('positions') .select('user_id') .gte('created_at', since24h);
+    }
     const activeToday = new Set((recentBets || []).map(p => p.user_id));
 
     // Only email users who are NOT active today
@@ -9910,10 +10610,13 @@ async function sendStreakWarningEmails() {
 
     // 3. Fetch user emails + display names
     const userIds = inactiveStreakers.map(u => u.userId);
-    const { data: users } = await supabase
-      .from('users')
-      .select('id, email, display_name, email_unsubscribed')
-      .in('id', userIds);
+    let users;
+    if (pool) {
+      const _rows = await dbQuery('SELECT id, email, display_name, email_unsubscribed FROM users WHERE id = ANY($1)', [userIds]);
+      users = _rows;
+    } else {
+      const { data: users } = await supabase .from('users') .select('id, email, display_name, email_unsubscribed') .in('id', userIds);
+    }
     if (!users?.length) return;
 
     const userMap = {};
@@ -9921,10 +10624,13 @@ async function sendStreakWarningEmails() {
 
     // 4. For each inactive streaking user, find their communities + open markets
     //    community_balances gives us which communities they belong to
-    const { data: memberships } = await supabase
-      .from('community_balances')
-      .select('user_id, creator_slug')
-      .in('user_id', userIds);
+    let memberships;
+    if (pool) {
+      const _rows = await dbQuery('SELECT user_id, creator_slug FROM community_balances WHERE user_id = ANY($1)', [userIds]);
+      memberships = _rows;
+    } else {
+      const { data: memberships } = await supabase .from('community_balances') .select('user_id, creator_slug') .in('user_id', userIds);
+    }
 
     // Group creator slugs per user
     const userSlugs = {};
@@ -9935,15 +10641,13 @@ async function sendStreakWarningEmails() {
 
     // Fetch open markets per creator slug (batch by unique slugs)
     const allSlugs = [...new Set(Object.values(userSlugs).flat())];
-    const { data: openMarkets } = await supabase
-      .from('markets')
-      .select('id, question, tenant_slug, yes_price, trader_count')
-      .in('tenant_slug', allSlugs)
-      .eq('resolved', false)
-      .eq('archived', false)
-      .neq('is_public', false)
-      .order('trader_count', { ascending: false })
-      .limit(200);
+    let openMarkets;
+    if (pool) {
+      const _rows = await dbQuery('SELECT id, question, tenant_slug, yes_price, trader_count FROM markets WHERE tenant_slug = ANY($1) AND resolved = $2 AND archived = $3 AND is_public != $4 ORDER BY trader_count DESC LIMIT 200', [allSlugs, false, false, false]);
+      openMarkets = _rows;
+    } else {
+      const { data: openMarkets } = await supabase .from('markets') .select('id, question, tenant_slug, yes_price, trader_count') .in('tenant_slug', allSlugs) .eq('resolved', false) .eq('archived', false) .neq('is_public', false) .order('trader_count', { ascending: false }) .limit(200);
+    }
 
     // Map: slug → markets[]
     const marketsBySlug = {};
@@ -9953,10 +10657,13 @@ async function sendStreakWarningEmails() {
     }
 
     // Fetch creator settings for community name + color
-    const { data: creatorSettings } = await supabase
-      .from('creator_settings')
-      .select('slug, display_name, primary_color, custom_points_name')
-      .in('slug', allSlugs);
+    let creatorSettings;
+    if (pool) {
+      const _rows = await dbQuery('SELECT slug, display_name, primary_color, custom_points_name FROM creator_settings WHERE slug = ANY($1)', [allSlugs]);
+      creatorSettings = _rows;
+    } else {
+      const { data: creatorSettings } = await supabase .from('creator_settings') .select('slug, display_name, primary_color, custom_points_name') .in('slug', allSlugs);
+    }
     const settingsBySlug = {};
     for (const c of (creatorSettings || [])) settingsBySlug[c.slug] = c;
 
@@ -10069,16 +10776,13 @@ async function sendDeadMarketNudges() {
     const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
     // Find open markets older than 7 days with fewer than 3 traders
-    const { data: deadMarkets } = await supabase
-      .from('markets')
-      .select('id, question, tenant_slug, trader_count, created_at')
-      .eq('resolved', false)
-      .eq('archived', false)
-      .neq('is_public', false)
-      .lt('created_at', cutoff)
-      .lt('trader_count', 3)
-      .order('trader_count', { ascending: true })
-      .limit(500);
+    let deadMarkets;
+    if (pool) {
+      const _rows = await dbQuery('SELECT id, question, tenant_slug, trader_count, created_at FROM markets WHERE resolved = $1 AND archived = $2 AND is_public != $3 AND created_at < $4 AND trader_count < $5 ORDER BY trader_count ASC LIMIT 500', [false, false, false, cutoff, 3]);
+      deadMarkets = _rows;
+    } else {
+      const { data: deadMarkets } = await supabase .from('markets') .select('id, question, tenant_slug, trader_count, created_at') .eq('resolved', false) .eq('archived', false) .neq('is_public', false) .lt('created_at', cutoff) .lt('trader_count', 3) .order('trader_count', { ascending: true }) .limit(500);
+    }
 
     if (!deadMarkets?.length) { console.log('[dead-market] No dead markets found'); return; }
 
@@ -10090,10 +10794,13 @@ async function sendDeadMarketNudges() {
     }
 
     const slugs = Object.keys(bySlug);
-    const { data: creators } = await supabase
-      .from('creator_settings')
-      .select('id, slug, email, display_name, primary_color, email_unsubscribed, email_unsubscribe_token')
-      .in('slug', slugs);
+    let creators;
+    if (pool) {
+      const _rows = await dbQuery('SELECT id, slug, email, display_name, primary_color, email_unsubscribed, email_unsubscribe_token FROM creator_settings WHERE slug = ANY($1)', [slugs]);
+      creators = _rows;
+    } else {
+      const { data: creators } = await supabase .from('creator_settings') .select('id, slug, email, display_name, primary_color, email_unsubscribed, email_unsubscribe_token') .in('slug', slugs);
+    }
 
     let sent = 0;
     for (const creator of (creators || [])) {
@@ -10180,12 +10887,13 @@ async function sendMemberWinBackEmails() {
 
     // Find users who have placed at least one bet but none in last 14 days
     // Strategy: get all users with positions, find those whose most recent is 14-60 days ago
-    const { data: recentPos } = await supabase
-      .from('positions')
-      .select('user_id, created_at')
-      .gte('created_at', cutoff60d)
-      .order('created_at', { ascending: false })
-      .limit(5000);
+    let recentPos;
+    if (pool) {
+      const _rows = await dbQuery('SELECT user_id, created_at FROM positions WHERE created_at >= $1 ORDER BY created_at DESC LIMIT 5000', [cutoff60d]);
+      recentPos = _rows;
+    } else {
+      const { data: recentPos } = await supabase .from('positions') .select('user_id, created_at') .gte('created_at', cutoff60d) .order('created_at', { ascending: false }) .limit(5000);
+    }
 
     if (!recentPos?.length) return;
 
@@ -10203,18 +10911,24 @@ async function sendMemberWinBackEmails() {
     if (!inactiveUserIds.length) { console.log('[winback] No inactive users found'); return; }
 
     // Fetch user info + unsubscribe status
-    const { data: users } = await supabase
-      .from('users')
-      .select('id, email, display_name, email_unsubscribed')
-      .in('id', inactiveUserIds);
+    let users;
+    if (pool) {
+      const _rows = await dbQuery('SELECT id, email, display_name, email_unsubscribed FROM users WHERE id = ANY($1)', [inactiveUserIds]);
+      users = _rows;
+    } else {
+      const { data: users } = await supabase .from('users') .select('id, email, display_name, email_unsubscribed') .in('id', inactiveUserIds);
+    }
 
     if (!users?.length) return;
 
     // For each user, find their communities + hottest open market
-    const { data: memberships } = await supabase
-      .from('community_balances')
-      .select('user_id, creator_slug')
-      .in('user_id', inactiveUserIds);
+    let memberships;
+    if (pool) {
+      const _rows = await dbQuery('SELECT user_id, creator_slug FROM community_balances WHERE user_id = ANY($1)', [inactiveUserIds]);
+      memberships = _rows;
+    } else {
+      const { data: memberships } = await supabase .from('community_balances') .select('user_id, creator_slug') .in('user_id', inactiveUserIds);
+    }
 
     const userSlugs = {};
     for (const m of (memberships || [])) {
@@ -10223,15 +10937,13 @@ async function sendMemberWinBackEmails() {
     }
 
     const allSlugs = [...new Set(Object.values(userSlugs).flat())];
-    const { data: openMarkets } = await supabase
-      .from('markets')
-      .select('id, question, tenant_slug, yes_price, trader_count')
-      .in('tenant_slug', allSlugs)
-      .eq('resolved', false)
-      .eq('archived', false)
-      .neq('is_public', false)
-      .order('trader_count', { ascending: false })
-      .limit(300);
+    let openMarkets;
+    if (pool) {
+      const _rows = await dbQuery('SELECT id, question, tenant_slug, yes_price, trader_count FROM markets WHERE tenant_slug = ANY($1) AND resolved = $2 AND archived = $3 AND is_public != $4 ORDER BY trader_count DESC LIMIT 300', [allSlugs, false, false, false]);
+      openMarkets = _rows;
+    } else {
+      const { data: openMarkets } = await supabase .from('markets') .select('id, question, tenant_slug, yes_price, trader_count') .in('tenant_slug', allSlugs) .eq('resolved', false) .eq('archived', false) .neq('is_public', false) .order('trader_count', { ascending: false }) .limit(300);
+    }
 
     const marketsBySlug = {};
     for (const m of (openMarkets || [])) {
@@ -10239,10 +10951,13 @@ async function sendMemberWinBackEmails() {
       marketsBySlug[m.tenant_slug].push(m);
     }
 
-    const { data: creators } = await supabase
-      .from('creator_settings')
-      .select('slug, display_name, primary_color, custom_points_name')
-      .in('slug', allSlugs);
+    let creators;
+    if (pool) {
+      const _rows = await dbQuery('SELECT slug, display_name, primary_color, custom_points_name FROM creator_settings WHERE slug = ANY($1)', [allSlugs]);
+      creators = _rows;
+    } else {
+      const { data: creators } = await supabase .from('creator_settings') .select('slug, display_name, primary_color, custom_points_name') .in('slug', allSlugs);
+    }
     const creatorMap = {};
     for (const c of (creators || [])) creatorMap[c.slug] = c;
 
@@ -10614,10 +11329,15 @@ app.post('/api/admin/set-plan', requireAdmin, async (req, res) => {
     if (!slug || !['free','pro','platinum'].includes(plan)) {
       return res.status(400).json({ error: 'slug and valid plan required' });
     }
-    const { error } = await supabase
-      .from('creator_settings')
-      .update({ plan, plan_trial_expires_at: null }) // clear any trial when plan is set manually
-      .eq('slug', slug);
+    let error;
+    if (pool) {
+      const _upd = { plan, plan_trial_expires_at: null };
+      const _cols = Object.keys(_upd); const _vals = Object.values(_upd);
+      const _set = _cols.map((c, i) => `${c} = $${i + 1}`).join(', ');
+      await dbQuery(`UPDATE creator_settings SET ${_set}`, _vals);
+    } else {
+      const { error } = await supabase .from('creator_settings') .update({ plan, plan_trial_expires_at: null }) // clear any trial when plan is set manually .eq('slug', slug);
+    }
     if (error) throw error;
     console.log(`[admin] set ${slug} → ${plan}`);
     res.json({ ok: true });
@@ -10630,33 +11350,46 @@ app.post('/api/admin/set-plan', requireAdmin, async (req, res) => {
 // GET /api/admin/users — all non-creator members with activity stats
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   try {
-    const { data: allUsers } = await supabase
-      .from('users')
-      .select('id, email, display_name, created_at')
-      .order('created_at', { ascending: false });
+    let allUsers;
+    if (pool) {
+      const _rows = await dbQuery('SELECT id, email, display_name, created_at FROM users ORDER BY created_at DESC', []);
+      allUsers = _rows;
+    } else {
+      const { data: allUsers } = await supabase .from('users') .select('id, email, display_name, created_at') .order('created_at', { ascending: false });
+    }
 
     if (!allUsers?.length) return res.json([]);
 
     // Which users are creators?
-    const { data: creatorSettings } = await supabase
-      .from('creator_settings')
-      .select('creator_id');
+    let creatorSettings;
+    if (pool) {
+      const _rows = await dbQuery('SELECT creator_id FROM creator_settings', []);
+      creatorSettings = _rows;
+    } else {
+      const { data: creatorSettings } = await supabase .from('creator_settings') .select('creator_id');
+    }
     const creatorIdSet = new Set((creatorSettings || []).map(s => s.creator_id));
 
     // Trade counts per user
     const allUserIds = allUsers.map(u => u.id);
-    const { data: positions } = await supabase
-      .from('positions')
-      .select('user_id')
-      .in('user_id', allUserIds);
+    let positions;
+    if (pool) {
+      const _rows = await dbQuery('SELECT user_id FROM positions WHERE user_id = ANY($1)', [allUserIds]);
+      positions = _rows;
+    } else {
+      const { data: positions } = await supabase .from('positions') .select('user_id') .in('user_id', allUserIds);
+    }
     const tradeMap = {};
     (positions || []).forEach(p => { tradeMap[p.user_id] = (tradeMap[p.user_id] || 0) + 1; });
 
     // Community balance totals per user
-    const { data: balances } = await supabase
-      .from('community_balances')
-      .select('user_id, balance')
-      .in('user_id', allUserIds);
+    let balances;
+    if (pool) {
+      const _rows = await dbQuery('SELECT user_id, balance FROM community_balances WHERE user_id = ANY($1)', [allUserIds]);
+      balances = _rows;
+    } else {
+      const { data: balances } = await supabase .from('community_balances') .select('user_id, balance') .in('user_id', allUserIds);
+    }
     const balMap = {};
     (balances || []).forEach(b => { balMap[b.user_id] = (balMap[b.user_id] || 0) + (b.balance || 0); });
 
@@ -10735,11 +11468,13 @@ app.get('/api/admin/platform-stats', requireAdmin, async (req, res) => {
 
 app.get('/api/admin/invites', requireAdmin, async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('creator_invites')
-      .select('*')
-      .order('sent_at', { ascending: false })
-      .limit(200);
+    let data, error;
+    if (pool) {
+      const _rows = await dbQuery('SELECT * FROM creator_invites ORDER BY sent_at DESC LIMIT 200', []);
+      data = _rows;
+    } else {
+      const { data, error } = await supabase .from('creator_invites') .select('*') .order('sent_at', { ascending: false }) .limit(200);
+    }
     if (error) throw error;
     res.json({ invites: data || [] });
   } catch (err) {
@@ -10753,11 +11488,16 @@ app.post('/api/admin/invite', requireAdmin, async (req, res) => {
     if (!name || !email) return res.status(400).json({ error: 'name and email required' });
 
     // Save to DB
-    const { data: invite, error } = await supabase
-      .from('creator_invites')
-      .insert([{ name, email, channel_url: channel_url || null, note: note || null }])
-      .select()
-      .single();
+    let invite, error;
+    if (pool) {
+      const _insData = Array.isArray([{ name, email, channel_url: channel_url || null, note: note || null }]) ? ([{ name, email, channel_url: channel_url || null, note: note || null }])[0] : ([{ name, email, channel_url: channel_url || null, note: note || null }]);
+      const _cols = Object.keys(_insData); const _vals = Object.values(_insData);
+      const _phs = _cols.map((_, i) => `$${i + 1}`).join(', ');
+      const _rows = await dbQuery(`INSERT INTO creator_invites (${_cols.join(', ')}) VALUES (${_phs}) RETURNING *`, _vals);
+      invite = _rows[0] || null;
+    } else {
+      const { data: invite, error } = await supabase .from('creator_invites') .insert([{ name, email, channel_url: channel_url || null, note: note || null }]) .select() .single();
+    }
     if (error) throw error;
 
     // Send email if SMTP configured
@@ -10805,11 +11545,13 @@ app.post('/api/admin/invite', requireAdmin, async (req, res) => {
 app.delete('/api/creator/account', requireCreator, async (req, res) => {
   try {
     const creatorId = req.creator.id;
-    const { data: settings } = await supabase
-      .from('creator_settings')
-      .select('slug')
-      .eq('creator_id', creatorId)
-      .single();
+    let settings;
+    if (pool) {
+      const _rows = await dbQuery('SELECT slug FROM creator_settings WHERE creator_id = $1 LIMIT 1', [creatorId]);
+      settings = _rows[0] || null;
+    } else {
+      const { data: settings } = await supabase .from('creator_settings') .select('slug') .eq('creator_id', creatorId) .single();
+    }
     const slug = settings?.slug;
 
     // Delete in dependency order
@@ -10882,11 +11624,13 @@ app.delete('/api/admin/user/:id', requireAdmin, async (req, res) => {
     const userId = req.params.id;
 
     // Check if creator
-    const { data: settings } = await supabase
-      .from('creator_settings')
-      .select('slug')
-      .eq('creator_id', userId)
-      .maybeSingle();
+    let settings;
+    if (pool) {
+      const _rows = await dbQuery('SELECT slug FROM creator_settings WHERE creator_id = $1 LIMIT 1', [userId]);
+      settings = _rows[0] || null;
+    } else {
+      const { data: settings } = await supabase .from('creator_settings') .select('slug') .eq('creator_id', userId) .maybeSingle();
+    }
     const slug = settings?.slug;
 
     if (slug) {
@@ -10971,19 +11715,23 @@ app.delete('/api/admin/user/:id', requireAdmin, async (req, res) => {
 app.get('/api/admin/lookup-slug/:slug', requireAdmin, async (req, res) => {
   try {
     const slug = req.params.slug;
-    const { data: cs } = await supabase
-      .from('creator_settings')
-      .select('creator_id, slug, display_name, plan, created_at')
-      .eq('slug', slug)
-      .maybeSingle();
+    let cs;
+    if (pool) {
+      const _rows = await dbQuery('SELECT creator_id, slug, display_name, plan, created_at FROM creator_settings WHERE slug = $1 LIMIT 1', [slug]);
+      cs = _rows[0] || null;
+    } else {
+      const { data: cs } = await supabase .from('creator_settings') .select('creator_id, slug, display_name, plan, created_at') .eq('slug', slug) .maybeSingle();
+    }
     if (!cs) return res.json({ found: false });
 
     // Try to get user email
-    const { data: user } = await supabase
-      .from('users')
-      .select('id, email, display_name as user_name')
-      .eq('id', cs.creator_id)
-      .maybeSingle();
+    let user;
+    if (pool) {
+      const _rows = await dbQuery('SELECT id, email, display_name as user_name FROM users WHERE id = $1 LIMIT 1', [cs.creator_id]);
+      user = _rows[0] || null;
+    } else {
+      const { data: user } = await supabase .from('users') .select('id, email, display_name as user_name') .eq('id', cs.creator_id) .maybeSingle();
+    }
 
     res.json({ found: true, creator: { ...cs, email: user?.email || null, user_name: user?.user_name || null } });
   } catch (err) {
@@ -10996,11 +11744,13 @@ app.delete('/api/admin/creator-by-slug/:slug', requireAdmin, async (req, res) =>
   try {
     const slug = req.params.slug;
 
-    const { data: cs } = await supabase
-      .from('creator_settings')
-      .select('creator_id')
-      .eq('slug', slug)
-      .maybeSingle();
+    let cs;
+    if (pool) {
+      const _rows = await dbQuery('SELECT creator_id FROM creator_settings WHERE slug = $1 LIMIT 1', [slug]);
+      cs = _rows[0] || null;
+    } else {
+      const { data: cs } = await supabase .from('creator_settings') .select('creator_id') .eq('slug', slug) .maybeSingle();
+    }
 
     if (!cs) return res.status(404).json({ error: 'No creator found with that slug' });
     const userId = cs.creator_id;
@@ -11083,32 +11833,42 @@ app.delete('/api/admin/creator-by-slug/:slug', requireAdmin, async (req, res) =>
 // POST /api/creator/start-trial — self-serve 7-day Pro trial (one-time, free plan only)
 app.post('/api/creator/start-trial', requireCreator, async (req, res) => {
   try {
-    const { data: cs } = await supabase
-      .from('creator_settings')
-      .select('slug, plan, plan_trial_expires_at')
-      .eq('creator_id', req.creator.id)
-      .maybeSingle();
+    let cs;
+    if (pool) {
+      const _rows = await dbQuery('SELECT slug, plan, plan_trial_expires_at FROM creator_settings WHERE creator_id = $1 LIMIT 1', [req.creator.id]);
+      cs = _rows[0] || null;
+    } else {
+      const { data: cs } = await supabase .from('creator_settings') .select('slug, plan, plan_trial_expires_at') .eq('creator_id', req.creator.id) .maybeSingle();
+    }
 
     if (!cs) return res.status(404).json({ error: 'Creator not found' });
     if (cs.plan !== 'free') return res.status(400).json({ error: 'Trial only available on free plan' });
     if (cs.plan_trial_expires_at) return res.status(400).json({ error: 'Trial already used' });
 
     const expiresAt = new Date(Date.now() + 7 * 86400000).toISOString();
-    const { error } = await supabase
-      .from('creator_settings')
-      .update({ plan: 'pro', plan_trial_expires_at: expiresAt })
-      .eq('creator_id', req.creator.id);
+    let error;
+    if (pool) {
+      const _upd = { plan: 'pro', plan_trial_expires_at: expiresAt };
+      const _cols = Object.keys(_upd); const _vals = Object.values(_upd);
+      const _set = _cols.map((c, i) => `${c} = $${i + 1}`).join(', ');
+      const _where = [req.creator.id];
+      await dbQuery(`UPDATE creator_settings SET ${_set} WHERE creator_id = $${_vals.length + 1}`, [..._vals, ..._where]);
+    } else {
+      const { error } = await supabase .from('creator_settings') .update({ plan: 'pro', plan_trial_expires_at: expiresAt }) .eq('creator_id', req.creator.id);
+    }
 
     if (error) throw error;
 
     console.log(`[trial] ${cs.slug} started 7-day Pro trial, expires ${expiresAt}`);
 
     // Send trial start email
-    const { data: user } = await supabase
-      .from('users')
-      .select('email, display_name')
-      .eq('id', req.creator.id)
-      .maybeSingle();
+    let user;
+    if (pool) {
+      const _rows = await dbQuery('SELECT email, display_name FROM users WHERE id = $1 LIMIT 1', [req.creator.id]);
+      user = _rows[0] || null;
+    } else {
+      const { data: user } = await supabase .from('users') .select('email, display_name') .eq('id', req.creator.id) .maybeSingle();
+    }
 
     if (user?.email) {
       const transport = createMailTransport();
@@ -11156,10 +11916,16 @@ app.post('/api/admin/gift-trial', requireAdmin, async (req, res) => {
     if (!slug) return res.status(400).json({ error: 'slug required' });
     const n = Math.min(Math.max(parseInt(days) || 30, 1), 365);
     const expiresAt = new Date(Date.now() + n * 86400000).toISOString();
-    const { error } = await supabase
-      .from('creator_settings')
-      .update({ plan: 'platinum', plan_trial_expires_at: expiresAt })
-      .eq('slug', slug);
+    let error;
+    if (pool) {
+      const _upd = { plan: 'platinum', plan_trial_expires_at: expiresAt };
+      const _cols = Object.keys(_upd); const _vals = Object.values(_upd);
+      const _set = _cols.map((c, i) => `${c} = $${i + 1}`).join(', ');
+      const _where = [slug];
+      await dbQuery(`UPDATE creator_settings SET ${_set} WHERE slug = $${_vals.length + 1}`, [..._vals, ..._where]);
+    } else {
+      const { error } = await supabase .from('creator_settings') .update({ plan: 'platinum', plan_trial_expires_at: expiresAt }) .eq('slug', slug);
+    }
     if (error) throw error;
     console.log(`[admin] gifted ${n}d Premium trial to ${slug}, expires ${expiresAt}`);
     res.json({ ok: true, expires_at: expiresAt });
@@ -11177,27 +11943,37 @@ app.post('/api/admin/transfer-creator', requireAdmin, async (req, res) => {
     if (!slug || !new_email) return res.status(400).json({ error: 'slug and new_email required' });
 
     // Find the new owner by email
-    const { data: newUser } = await supabase
-      .from('users')
-      .select('id, email, display_name')
-      .eq('email', new_email.toLowerCase().trim())
-      .maybeSingle();
+    let newUser;
+    if (pool) {
+      const _rows = await dbQuery('SELECT id, email, display_name FROM users WHERE email = $1 LIMIT 1', [new_email.toLowerCase().trim()]);
+      newUser = _rows[0] || null;
+    } else {
+      const { data: newUser } = await supabase .from('users') .select('id, email, display_name') .eq('email', new_email.toLowerCase().trim()) .maybeSingle();
+    }
     if (!newUser) return res.status(404).json({ error: `No user found with email: ${new_email}` });
 
     // Get current creator settings
-    const { data: cs } = await supabase
-      .from('creator_settings')
-      .select('creator_id, slug, display_name')
-      .eq('slug', slug)
-      .maybeSingle();
+    let cs;
+    if (pool) {
+      const _rows = await dbQuery('SELECT creator_id, slug, display_name FROM creator_settings WHERE slug = $1 LIMIT 1', [slug]);
+      cs = _rows[0] || null;
+    } else {
+      const { data: cs } = await supabase .from('creator_settings') .select('creator_id, slug, display_name') .eq('slug', slug) .maybeSingle();
+    }
     if (!cs) return res.status(404).json({ error: `No creator found with slug: ${slug}` });
     if (cs.creator_id === newUser.id) return res.status(400).json({ error: 'That user already owns this account' });
 
     // Update creator_settings and markets to new owner
-    const { error: csErr } = await supabase
-      .from('creator_settings')
-      .update({ creator_id: newUser.id })
-      .eq('slug', slug);
+    let csErr;
+    if (pool) {
+      const _upd = { creator_id: newUser.id };
+      const _cols = Object.keys(_upd); const _vals = Object.values(_upd);
+      const _set = _cols.map((c, i) => `${c} = $${i + 1}`).join(', ');
+      const _where = [slug];
+      await dbQuery(`UPDATE creator_settings SET ${_set} WHERE slug = $${_vals.length + 1}`, [..._vals, ..._where]);
+    } else {
+      const { error: csErr } = await supabase .from('creator_settings') .update({ creator_id: newUser.id }) .eq('slug', slug);
+    }
     if (csErr) throw csErr;
 
     // Reassign markets to new owner
@@ -11226,11 +12002,13 @@ app.post('/api/creator/flexbot', requireCreator, async (req, res) => {
     }
 
     // Plan check
-    const { data: settings } = await supabase
-      .from('creator_settings')
-      .select('plan, slug, display_name, starting_balance, min_bet, max_bet, refill_enabled, refill_amount')
-      .eq('creator_id', req.creator.id)
-      .single();
+    let settings;
+    if (pool) {
+      const _rows = await dbQuery('SELECT plan, slug, display_name, starting_balance, min_bet, max_bet, refill_enabled, refill_amount FROM creator_settings WHERE creator_id = $1 LIMIT 1', [req.creator.id]);
+      settings = _rows[0] || null;
+    } else {
+      const { data: settings } = await supabase .from('creator_settings') .select('plan, slug, display_name, starting_balance, min_bet, max_bet, refill_enabled, refill_amount') .eq('creator_id', req.creator.id) .single();
+    }
 
     if (!settings || settings.plan !== 'platinum') {
       return res.status(403).json({ error: 'FLEX BOT is available on Premium plans only.' });
@@ -11282,11 +12060,13 @@ Keep responses concise, practical, and specific to prediction markets. Use bulle
 // Saves the domain and issues a TXT-record verification token.
 app.post('/api/creator/custom-domain/set', requireCreator, async (req, res) => {
   try {
-    const { data: creator } = await supabase
-      .from('creator_settings')
-      .select('plan, slug')
-      .eq('creator_id', req.creator.id)
-      .single();
+    let creator;
+    if (pool) {
+      const _rows = await dbQuery('SELECT plan, slug FROM creator_settings WHERE creator_id = $1 LIMIT 1', [req.creator.id]);
+      creator = _rows[0] || null;
+    } else {
+      const { data: creator } = await supabase .from('creator_settings') .select('plan, slug') .eq('creator_id', req.creator.id) .single();
+    }
 
     if (creator.plan !== 'platinum') {
       return res.status(403).json({ error: 'Custom domains require the Premium plan.' });
@@ -11298,12 +12078,13 @@ app.post('/api/creator/custom-domain/set', requireCreator, async (req, res) => {
     }
 
     // Ensure no other creator already claimed this domain
-    const { data: existing } = await supabase
-      .from('creator_settings')
-      .select('slug')
-      .eq('custom_domain', domain)
-      .neq('creator_id', req.creator.id)
-      .maybeSingle();
+    let existing;
+    if (pool) {
+      const _rows = await dbQuery('SELECT slug FROM creator_settings WHERE custom_domain = $1 AND creator_id != $2 LIMIT 1', [domain, req.creator.id]);
+      existing = _rows[0] || null;
+    } else {
+      const { data: existing } = await supabase .from('creator_settings') .select('slug') .eq('custom_domain', domain) .neq('creator_id', req.creator.id) .maybeSingle();
+    }
     if (existing) {
       return res.status(409).json({ error: 'This domain is already connected to another community.' });
     }
@@ -11333,11 +12114,13 @@ app.post('/api/creator/custom-domain/set', requireCreator, async (req, res) => {
 // Checks DNS CNAME and TXT records then marks domain as verified.
 app.post('/api/creator/custom-domain/verify', requireCreator, async (req, res) => {
   try {
-    const { data: creator } = await supabase
-      .from('creator_settings')
-      .select('plan, custom_domain, custom_domain_token, slug')
-      .eq('creator_id', req.creator.id)
-      .single();
+    let creator;
+    if (pool) {
+      const _rows = await dbQuery('SELECT plan, custom_domain, custom_domain_token, slug FROM creator_settings WHERE creator_id = $1 LIMIT 1', [req.creator.id]);
+      creator = _rows[0] || null;
+    } else {
+      const { data: creator } = await supabase .from('creator_settings') .select('plan, custom_domain, custom_domain_token, slug') .eq('creator_id', req.creator.id) .single();
+    }
 
     if (creator.plan !== 'platinum') {
       return res.status(403).json({ error: 'Custom domains require the Premium plan.' });
@@ -11426,12 +12209,13 @@ app.delete('/api/creator/custom-domain/remove', requireCreator, async (req, res)
 app.get('/api/custom-domain/resolve', async (req, res) => {
   const host = (req.headers.host || '').toLowerCase().replace(/:\d+$/, '');
   try {
-    const { data: creator } = await supabase
-      .from('creator_settings')
-      .select('slug')
-      .eq('custom_domain', host)
-      .eq('custom_domain_verified', true)
-      .maybeSingle();
+    let creator;
+    if (pool) {
+      const _rows = await dbQuery('SELECT slug FROM creator_settings WHERE custom_domain = $1 AND custom_domain_verified = $2 LIMIT 1', [host, true]);
+      creator = _rows[0] || null;
+    } else {
+      const { data: creator } = await supabase .from('creator_settings') .select('slug') .eq('custom_domain', host) .eq('custom_domain_verified', true) .maybeSingle();
+    }
     if (!creator) return res.status(404).json({ error: 'No verified domain' });
     res.json({ slug: creator.slug });
   } catch (err) {
@@ -11443,11 +12227,13 @@ app.get('/api/custom-domain/resolve', async (req, res) => {
 // Returns current custom domain state for the logged-in creator.
 app.get('/api/creator/custom-domain/status', requireCreator, async (req, res) => {
   try {
-    const { data: creator, error } = await supabase
-      .from('creator_settings')
-      .select('custom_domain, custom_domain_verified, custom_domain_token, custom_domain_verified_at')
-      .eq('creator_id', req.creator.id)
-      .single();
+    let creator, error;
+    if (pool) {
+      const _rows = await dbQuery('SELECT custom_domain, custom_domain_verified, custom_domain_token, custom_domain_verified_at FROM creator_settings WHERE creator_id = $1 LIMIT 1', [req.creator.id]);
+      creator = _rows[0] || null;
+    } else {
+      const { data: creator, error } = await supabase .from('creator_settings') .select('custom_domain, custom_domain_verified, custom_domain_token, custom_domain_verified_at') .eq('creator_id', req.creator.id) .single();
+    }
     if (error) throw error;
     res.json(creator);
   } catch (err) {
@@ -11471,27 +12257,35 @@ app.get('/api/creator/custom-domain/status', requireCreator, async (req, res) =>
 async function maybeAcceptReferral(creatorSlug) {
   try {
     // Only flip if they have exactly 1 public market (i.e. this is their first)
-    const { count } = await supabase
-      .from('markets')
-      .select('id', { count: 'exact', head: true })
-      .eq('tenant_slug', creatorSlug)
-      .eq('is_public', true)
-      .eq('archived', false);
+    let count;
+    if (pool) {
+      const _rows = await dbQuery('SELECT count(*) as count FROM markets WHERE tenant_slug = $1 AND is_public = $2 AND archived = $3', [creatorSlug, true, false]);
+      count = parseInt(_rows[0]?.count || 0);
+    } else {
+      const { count } = await supabase .from('markets') .select('id', { count: 'exact', head: true }) .eq('tenant_slug', creatorSlug) .eq('is_public', true) .eq('archived', false);
+    }
 
     if (count !== 1) return; // not their first market, skip
 
-    const { data: ref } = await supabase
-      .from('creator_referrals')
-      .select('id, accepted')
-      .eq('new_creator_slug', creatorSlug)
-      .maybeSingle();
+    let ref;
+    if (pool) {
+      const _rows = await dbQuery('SELECT id, accepted FROM creator_referrals WHERE new_creator_slug = $1 LIMIT 1', [creatorSlug]);
+      ref = _rows[0] || null;
+    } else {
+      const { data: ref } = await supabase .from('creator_referrals') .select('id, accepted') .eq('new_creator_slug', creatorSlug) .maybeSingle();
+    }
 
     if (!ref || ref.accepted) return; // no referral or already accepted
 
-    await supabase
-      .from('creator_referrals')
-      .update({ accepted: true, accepted_at: new Date().toISOString() })
-      .eq('id', ref.id);
+    if (pool) {
+      const _upd = { accepted: true, accepted_at: new Date().toISOString() };
+      const _cols = Object.keys(_upd); const _vals = Object.values(_upd);
+      const _set = _cols.map((c, i) => `${c} = $${i + 1}`).join(', ');
+      const _where = [ref.id];
+      await dbQuery(`UPDATE creator_referrals SET ${_set} WHERE id = $${_vals.length + 1}`, [..._vals, ..._where]);
+    } else {
+      await supabase .from('creator_referrals') .update({ accepted: true, accepted_at: new Date().toISOString() }) .eq('id', ref.id);
+    }
 
     console.log(`[referral] Accepted referral for ${creatorSlug} (ref id ${ref.id})`);
   } catch (err) {
@@ -11508,20 +12302,24 @@ async function maybeFireSignupDropoffEmail(slug, email) {
 
   try {
     // Check if they've published anything yet
-    const { count } = await supabase
-      .from('markets')
-      .select('id', { count: 'exact', head: true })
-      .eq('tenant_slug', slug)
-      .eq('is_public', true);
+    let count;
+    if (pool) {
+      const _rows = await dbQuery('SELECT count(*) as count FROM markets WHERE tenant_slug = $1 AND is_public = $2', [slug, true]);
+      count = parseInt(_rows[0]?.count || 0);
+    } else {
+      const { count } = await supabase .from('markets') .select('id', { count: 'exact', head: true }) .eq('tenant_slug', slug) .eq('is_public', true);
+    }
 
     if (count > 0) return; // already active — no nudge needed
 
     // Check they haven't unsubscribed
-    const { data: creator } = await supabase
-      .from('creator_settings')
-      .select('id, display_name, primary_color, email_unsubscribed, email_unsubscribe_token')
-      .eq('slug', slug)
-      .maybeSingle();
+    let creator;
+    if (pool) {
+      const _rows = await dbQuery('SELECT id, display_name, primary_color, email_unsubscribed, email_unsubscribe_token FROM creator_settings WHERE slug = $1 LIMIT 1', [slug]);
+      creator = _rows[0] || null;
+    } else {
+      const { data: creator } = await supabase .from('creator_settings') .select('id, display_name, primary_color, email_unsubscribed, email_unsubscribe_token') .eq('slug', slug) .maybeSingle();
+    }
 
     if (!creator || creator.email_unsubscribed) return;
 
@@ -11730,25 +12528,32 @@ async function sendNewMarketNotifications(market, creatorSlug) {
     if (!transporter) return;
 
     // Get creator display info
-    const { data: settings } = await supabase
-      .from('creator_settings')
-      .select('display_name, primary_color')
-      .eq('slug', creatorSlug)
-      .maybeSingle();
+    let settings;
+    if (pool) {
+      const _rows = await dbQuery('SELECT display_name, primary_color FROM creator_settings WHERE slug = $1 LIMIT 1', [creatorSlug]);
+      settings = _rows[0] || null;
+    } else {
+      const { data: settings } = await supabase .from('creator_settings') .select('display_name, primary_color') .eq('slug', creatorSlug) .maybeSingle();
+    }
 
     // Get all followers via community_balances
-    const { data: followers } = await supabase
-      .from('community_balances')
-      .select('user_id')
-      .eq('creator_slug', creatorSlug);
+    let followers;
+    if (pool) {
+      const _rows = await dbQuery('SELECT user_id FROM community_balances WHERE creator_slug = $1', [creatorSlug]);
+      followers = _rows;
+    } else {
+      const { data: followers } = await supabase .from('community_balances') .select('user_id') .eq('creator_slug', creatorSlug);
+    }
     if (!followers?.length) return;
 
     const userIds = [...new Set(followers.map(f => f.user_id))];
-    const { data: users } = await supabase
-      .from('users')
-      .select('email, display_name')
-      .in('id', userIds)
-      .not('email', 'is', null);
+    let users;
+    if (pool) {
+      const _rows = await dbQuery('SELECT email, display_name FROM users WHERE id = ANY($1) AND email IS NOT NULL', [userIds]);
+      users = _rows;
+    } else {
+      const { data: users } = await supabase .from('users') .select('email, display_name') .in('id', userIds) .not('email', 'is', null);
+    }
     if (!users?.length) return;
 
     const communityName = settings?.display_name || creatorSlug;
@@ -11831,11 +12636,13 @@ async function sendNewMarketNotifications(market, creatorSlug) {
 async function sendDiscordWebhook(market, creatorSlug) {
   if (!creatorSlug || !market?.question) return;
   try {
-    const { data: settings } = await supabase
-      .from('creator_settings')
-      .select('discord_webhook_url, display_name, primary_color')
-      .eq('slug', creatorSlug)
-      .maybeSingle();
+    let settings;
+    if (pool) {
+      const _rows = await dbQuery('SELECT discord_webhook_url, display_name, primary_color FROM creator_settings WHERE slug = $1 LIMIT 1', [creatorSlug]);
+      settings = _rows[0] || null;
+    } else {
+      const { data: settings } = await supabase .from('creator_settings') .select('discord_webhook_url, display_name, primary_color') .eq('slug', creatorSlug) .maybeSingle();
+    }
     if (!settings?.discord_webhook_url) return;
 
     const communityUrl = `${process.env.SITE_URL || 'https://hyperflex.network'}/${creatorSlug}`;
@@ -11889,10 +12696,16 @@ app.put('/api/creator/discord-webhook', requireCreator, async (req, res) => {
     if (discord_webhook_url && !discord_webhook_url.startsWith('https://discord.com/api/webhooks/') && !discord_webhook_url.startsWith('https://discordapp.com/api/webhooks/')) {
       return res.status(400).json({ error: 'Must be a valid Discord webhook URL (https://discord.com/api/webhooks/…)' });
     }
-    const { error } = await supabase
-      .from('creator_settings')
-      .update({ discord_webhook_url: discord_webhook_url || null })
-      .eq('creator_id', req.creator.id);
+    let error;
+    if (pool) {
+      const _upd = { discord_webhook_url: discord_webhook_url || null };
+      const _cols = Object.keys(_upd); const _vals = Object.values(_upd);
+      const _set = _cols.map((c, i) => `${c} = $${i + 1}`).join(', ');
+      const _where = [req.creator.id];
+      await dbQuery(`UPDATE creator_settings SET ${_set} WHERE creator_id = $${_vals.length + 1}`, [..._vals, ..._where]);
+    } else {
+      const { error } = await supabase .from('creator_settings') .update({ discord_webhook_url: discord_webhook_url || null }) .eq('creator_id', req.creator.id);
+    }
     if (error) throw error;
     res.json({ ok: true });
   } catch (err) {
@@ -12026,12 +12839,13 @@ app.post('/api/creator/markets/:marketId/blast', requireCreator, async (req, res
     const slug = req.creator.slug;
 
     // Verify market belongs to this creator and is public
-    const { data: market } = await supabase
-      .from('markets')
-      .select('id, question, category, expiry_date, yes_price, yes_votes, no_votes, trader_count, resolved, archived, blasted_at')
-      .eq('id', marketId)
-      .eq('tenant_slug', slug)
-      .maybeSingle();
+    let market;
+    if (pool) {
+      const _rows = await dbQuery('SELECT id, question, category, expiry_date, yes_price, yes_votes, no_votes, trader_count, resolved, archived, blasted_at FROM markets WHERE id = $1 AND tenant_slug = $2 LIMIT 1', [marketId, slug]);
+      market = _rows[0] || null;
+    } else {
+      const { data: market } = await supabase .from('markets') .select('id, question, category, expiry_date, yes_price, yes_votes, no_votes, trader_count, resolved, archived, blasted_at') .eq('id', marketId) .eq('tenant_slug', slug) .maybeSingle();
+    }
 
     if (!market) return res.status(404).json({ error: 'Market not found' });
     if (market.resolved)  return res.status(400).json({ error: 'Market is already resolved' });
@@ -12042,10 +12856,13 @@ app.post('/api/creator/markets/:marketId/blast', requireCreator, async (req, res
     }
 
     // Get creator branding
-    const { data: creator } = await supabase
-      .from('creator_settings')
-      .select('display_name, primary_color, custom_points_name, email_unsubscribed')
-      .eq('slug', slug).single();
+    let creator;
+    if (pool) {
+      const _rows = await dbQuery('SELECT display_name, primary_color, custom_points_name, email_unsubscribed FROM creator_settings WHERE slug = $1 LIMIT 1', [slug]);
+      creator = _rows[0] || null;
+    } else {
+      const { data: creator } = await supabase .from('creator_settings') .select('display_name, primary_color, custom_points_name, email_unsubscribed') .eq('slug', slug).single();
+    }
     if (!creator) return res.status(404).json({ error: 'Creator not found' });
 
     const communityName = creator.display_name || slug;
@@ -12060,18 +12877,24 @@ app.post('/api/creator/markets/:marketId/blast', requireCreator, async (req, res
       : null;
 
     // Get community members with emails
-    const { data: members } = await supabase
-      .from('community_balances')
-      .select('user_id')
-      .eq('creator_slug', slug);
+    let members;
+    if (pool) {
+      const _rows = await dbQuery('SELECT user_id FROM community_balances WHERE creator_slug = $1', [slug]);
+      members = _rows;
+    } else {
+      const { data: members } = await supabase .from('community_balances') .select('user_id') .eq('creator_slug', slug);
+    }
 
     if (!members?.length) return res.json({ ok: true, sent: 0, message: 'No members to email yet' });
 
     const userIds = members.map(m => m.user_id);
-    const { data: users } = await supabase
-      .from('users')
-      .select('id, email, display_name, email_unsubscribed')
-      .in('id', userIds);
+    let users;
+    if (pool) {
+      const _rows = await dbQuery('SELECT id, email, display_name, email_unsubscribed FROM users WHERE id = ANY($1)', [userIds]);
+      users = _rows;
+    } else {
+      const { data: users } = await supabase .from('users') .select('id, email, display_name, email_unsubscribed') .in('id', userIds);
+    }
 
     const eligible = (users || []).filter(u => u.email && !u.email_unsubscribed);
     if (!eligible.length) return res.json({ ok: true, sent: 0, message: 'No eligible subscribers' });
@@ -12158,29 +12981,37 @@ async function sendResolutionEmails(market, outcome, creatorSlug, resolutionNote
     if (!transporter) return; // SMTP not configured — skip silently
 
     // Fetch all distinct users who had positions on this market
-    const { data: positions } = await supabase
-      .from('positions')
-      .select('user_id')
-      .eq('market_id', market.id);
+    let positions;
+    if (pool) {
+      const _rows = await dbQuery('SELECT user_id FROM positions WHERE market_id = $1', [market.id]);
+      positions = _rows;
+    } else {
+      const { data: positions } = await supabase .from('positions') .select('user_id') .eq('market_id', market.id);
+    }
 
     if (!positions || positions.length === 0) return;
 
     const uniqueUserIds = [...new Set(positions.map(p => p.user_id))];
 
     // Fetch their emails + names from users table
-    const { data: users } = await supabase
-      .from('users')
-      .select('id, email, name')
-      .in('id', uniqueUserIds);
+    let users;
+    if (pool) {
+      const _rows = await dbQuery('SELECT id, email, name FROM users WHERE id = ANY($1)', [uniqueUserIds]);
+      users = _rows;
+    } else {
+      const { data: users } = await supabase .from('users') .select('id, email, name') .in('id', uniqueUserIds);
+    }
 
     if (!users || users.length === 0) return;
 
     // Fetch creator display name for the email header
-    const { data: creator } = await supabase
-      .from('creator_settings')
-      .select('community_name')
-      .eq('slug', creatorSlug)
-      .maybeSingle();
+    let creator;
+    if (pool) {
+      const _rows = await dbQuery('SELECT community_name FROM creator_settings WHERE slug = $1 LIMIT 1', [creatorSlug]);
+      creator = _rows[0] || null;
+    } else {
+      const { data: creator } = await supabase .from('creator_settings') .select('community_name') .eq('slug', creatorSlug) .maybeSingle();
+    }
 
     const communityName = creator?.community_name || creatorSlug;
     const communityUrl  = `https://hyperflex.network/${creatorSlug}`;
@@ -12528,11 +13359,13 @@ app.put('/api/user/change-password', requireAuth, async (req, res) => {
     }
 
     // Fetch current hash
-    const { data: user, error: fetchErr } = await supabase
-      .from('users')
-      .select('password_hash')
-      .eq('id', req.user.id)
-      .single();
+    let user, fetchErr;
+    if (pool) {
+      const _rows = await dbQuery('SELECT password_hash FROM users WHERE id = $1 LIMIT 1', [req.user.id]);
+      user = _rows[0] || null;
+    } else {
+      const { data: user, error: fetchErr } = await supabase .from('users') .select('password_hash') .eq('id', req.user.id) .single();
+    }
     if (fetchErr || !user) return res.status(404).json({ error: 'User not found' });
 
     // Verify current password
@@ -12541,10 +13374,16 @@ app.put('/api/user/change-password', requireAuth, async (req, res) => {
 
     // Hash and save new password
     const new_hash = await bcrypt.hash(new_password, 12);
-    const { error: updateErr } = await supabase
-      .from('users')
-      .update({ password_hash: new_hash })
-      .eq('id', req.user.id);
+    let updateErr;
+    if (pool) {
+      const _upd = { password_hash: new_hash };
+      const _cols = Object.keys(_upd); const _vals = Object.values(_upd);
+      const _set = _cols.map((c, i) => `${c} = $${i + 1}`).join(', ');
+      const _where = [req.user.id];
+      await dbQuery(`UPDATE users SET ${_set} WHERE id = $${_vals.length + 1}`, [..._vals, ..._where]);
+    } else {
+      const { error: updateErr } = await supabase .from('users') .update({ password_hash: new_hash }) .eq('id', req.user.id);
+    }
     if (updateErr) return res.status(500).json({ error: updateErr.message });
 
     res.json({ ok: true });
@@ -12559,11 +13398,13 @@ app.put('/api/user/change-password', requireAuth, async (req, res) => {
 // ════════════════════════════════════════════════════════════
 app.get('/api/creator/youtube-scan-settings', requireCreator, async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('creator_settings')
-      .select('youtube_channel_id, auto_scan_enabled, auto_scan_cadence, auto_scan_last_run')
-      .eq('creator_id', req.creator.id)
-      .maybeSingle();
+    let data, error;
+    if (pool) {
+      const _rows = await dbQuery('SELECT youtube_channel_id, auto_scan_enabled, auto_scan_cadence, auto_scan_last_run FROM creator_settings WHERE creator_id = $1 LIMIT 1', [req.creator.id]);
+      data = _rows[0] || null;
+    } else {
+      const { data, error } = await supabase .from('creator_settings') .select('youtube_channel_id, auto_scan_enabled, auto_scan_cadence, auto_scan_last_run') .eq('creator_id', req.creator.id) .maybeSingle();
+    }
     if (error) return res.status(500).json({ error: error.message });
     res.json({
       youtube_channel_id: data?.youtube_channel_id || '',
@@ -12717,12 +13558,13 @@ async function autoResolveExpiredMarkets() {
   try {
     const now = new Date().toISOString();
     // Find expired unresolved markets with a resolution source
-    const { data: markets } = await supabase
-      .from('markets')
-      .select('id, question, tenant_slug, resolution_source, resolution_sources, expiry_date, yes_price, yes_votes, no_votes')
-      .eq('resolved', false)
-      .lt('expiry_date', now)
-      .not('resolution_source', 'is', null);
+    let markets;
+    if (pool) {
+      const _rows = await dbQuery('SELECT id, question, tenant_slug, resolution_source, resolution_sources, expiry_date, yes_price, yes_votes, no_votes FROM markets WHERE resolved = $1 AND expiry_date < $2 AND resolution_source IS NOT NULL', [false, now]);
+      markets = _rows;
+    } else {
+      const { data: markets } = await supabase .from('markets') .select('id, question, tenant_slug, resolution_source, resolution_sources, expiry_date, yes_price, yes_votes, no_votes') .eq('resolved', false) .lt('expiry_date', now) .not('resolution_source', 'is', null);
+    }
 
     if (!markets || !markets.length) return;
 
@@ -12781,19 +13623,23 @@ async function autoResolveExpiredMarkets() {
         if (!resolution?.outcome || !['YES', 'NO', 'UNCERTAIN'].includes(resolution.outcome)) continue;
 
         // Get creator info for notification
-        const { data: creatorSettings } = await supabase
-          .from('creator_settings')
-          .select('creator_id, display_name')
-          .eq('slug', market.tenant_slug)
-          .maybeSingle();
+        let creatorSettings;
+        if (pool) {
+          const _rows = await dbQuery('SELECT creator_id, display_name FROM creator_settings WHERE slug = $1 LIMIT 1', [market.tenant_slug]);
+          creatorSettings = _rows[0] || null;
+        } else {
+          const { data: creatorSettings } = await supabase .from('creator_settings') .select('creator_id, display_name') .eq('slug', market.tenant_slug) .maybeSingle();
+        }
 
         let creatorEmail = null;
         if (creatorSettings?.creator_id) {
-          const { data: creatorUser } = await supabase
-            .from('users')
-            .select('email')
-            .eq('id', creatorSettings.creator_id)
-            .maybeSingle();
+          let creatorUser;
+          if (pool) {
+            const _rows = await dbQuery('SELECT email FROM users WHERE id = $1 LIMIT 1', [creatorSettings.creator_id]);
+            creatorUser = _rows[0] || null;
+          } else {
+            const { data: creatorUser } = await supabase .from('users') .select('email') .eq('id', creatorSettings.creator_id) .maybeSingle();
+          }
           creatorEmail = creatorUser?.email;
         }
 
@@ -12804,11 +13650,13 @@ async function autoResolveExpiredMarkets() {
           const losingSide  = outcome === 'YES' ? 'NO' : 'YES';
 
           // Settle positions (same logic as manual settle)
-          const { data: positions } = await supabase
-            .from('positions')
-            .select('*')
-            .eq('market_id', market.id)
-            .eq('settled', false);
+          let positions;
+          if (pool) {
+            const _rows = await dbQuery('SELECT * FROM positions WHERE market_id = $1 AND settled = $2', [market.id, false]);
+            positions = _rows;
+          } else {
+            const { data: positions } = await supabase .from('positions') .select('*') .eq('market_id', market.id) .eq('settled', false);
+          }
 
           if (positions && positions.length) {
             for (const pos of positions) {
@@ -12909,12 +13757,12 @@ cron.schedule('0 * * * *', syncAllUserPositions);
 app.get('/api/profile/:slug/wall', async (req, res) => {
   try {
     const { slug } = req.params;
-    const { data, error } = await supabase
-      .from('creator_wall')
-      .select('id, content, created_at, user_id, users(display_name)')
-      .eq('creator_slug', slug)
-      .order('created_at', { ascending: false })
-      .limit(40);
+    let data, error;
+    if (pool) {
+      data = await dbQuery(`SELECT creator_wall.*, row_to_json(users.*) as users FROM creator_wall LEFT JOIN users ON creator_wall.user_id = users.id WHERE creator_slug = $1 ORDER BY created_at DESC LIMIT 40`, [slug]).catch(() => []);
+    } else {
+      const { data, error } = await supabase .from('creator_wall') .select('id, content, created_at, user_id, users(display_name)') .eq('creator_slug', slug) .order('created_at', { ascending: false }) .limit(40);
+    }
     if (error) throw error;
     const posts = (data || []).map(p => ({
       id: p.id,
@@ -12939,18 +13787,25 @@ app.post('/api/profile/:slug/wall', requireAuth, async (req, res) => {
     if (!content) return res.status(400).json({ error: 'Content required' });
 
     // Verify creator exists
-    const { data: creator } = await supabase
-      .from('creator_settings')
-      .select('slug')
-      .eq('slug', slug)
-      .single();
+    let creator;
+    if (pool) {
+      const _rows = await dbQuery('SELECT slug FROM creator_settings WHERE slug = $1 LIMIT 1', [slug]);
+      creator = _rows[0] || null;
+    } else {
+      const { data: creator } = await supabase .from('creator_settings') .select('slug') .eq('slug', slug) .single();
+    }
     if (!creator) return res.status(404).json({ error: 'Community not found' });
 
-    const { data: post, error } = await supabase
-      .from('creator_wall')
-      .insert({ creator_slug: slug, user_id: userId, content })
-      .select('id, content, created_at, user_id')
-      .single();
+    let post, error;
+    if (pool) {
+      const _insData = Array.isArray({ creator_slug: slug, user_id: userId, content }) ? ({ creator_slug: slug, user_id: userId, content })[0] : ({ creator_slug: slug, user_id: userId, content });
+      const _cols = Object.keys(_insData); const _vals = Object.values(_insData);
+      const _phs = _cols.map((_, i) => `$${i + 1}`).join(', ');
+      const _rows = await dbQuery(`INSERT INTO creator_wall (${_cols.join(', ')}) VALUES (${_phs}) RETURNING id, content, created_at, user_id`, _vals);
+      post = _rows[0] || null;
+    } else {
+      const { data: post, error } = await supabase .from('creator_wall') .insert({ creator_slug: slug, user_id: userId, content }) .select('id, content, created_at, user_id') .single();
+    }
     if (error) throw error;
 
     // Get display name for response
@@ -12975,23 +13830,25 @@ app.get('/api/profile/:slug/comments', async (req, res) => {
     const { slug } = req.params;
 
     // Get all market IDs for this creator
-    const { data: markets } = await supabase
-      .from('markets')
-      .select('id, question')
-      .eq('creator_slug', slug)
-      .eq('is_public', true);
+    let markets;
+    if (pool) {
+      const _rows = await dbQuery('SELECT id, question FROM markets WHERE creator_slug = $1 AND is_public = $2', [slug, true]);
+      markets = _rows;
+    } else {
+      const { data: markets } = await supabase .from('markets') .select('id, question') .eq('creator_slug', slug) .eq('is_public', true);
+    }
     if (!markets || !markets.length) return res.json({ comments: [] });
 
     const marketIds = markets.map(m => m.id);
     const marketMap = Object.fromEntries(markets.map(m => [m.id, m.question]));
 
     // Fetch recent comments across all those markets
-    const { data: comments, error } = await supabase
-      .from('market_comments')
-      .select('id, market_id, content, created_at, user_id, users(display_name)')
-      .in('market_id', marketIds)
-      .order('created_at', { ascending: false })
-      .limit(40);
+    let comments, error;
+    if (pool) {
+      comments = await dbQuery(`SELECT market_comments.*, row_to_json(users.*) as users FROM market_comments LEFT JOIN users ON market_comments.user_id = users.id WHERE market_id = ANY($1) ORDER BY created_at DESC LIMIT 40`, [marketIds]).catch(() => []);
+    } else {
+      const { data: comments, error } = await supabase .from('market_comments') .select('id, market_id, content, created_at, user_id, users(display_name)') .in('market_id', marketIds) .order('created_at', { ascending: false }) .limit(40);
+    }
     if (error) throw error;
 
     const result = (comments || []).map(c => ({
@@ -13016,8 +13873,13 @@ app.get('/api/profile/:slug/comments', async (req, res) => {
 app.post('/api/creator/seasons', requireCreator, async (req, res) => {
   try {
     const creatorSlug = req.creator.slug;
-    const { data: settings } = await supabase
-      .from('creator_settings').select('plan').eq('slug', creatorSlug).single();
+    let settings;
+    if (pool) {
+      const _rows = await dbQuery('SELECT plan FROM creator_settings WHERE slug = $1 LIMIT 1', [creatorSlug]);
+      settings = _rows[0] || null;
+    } else {
+      const { data: settings } = await supabase .from('creator_settings').select('plan').eq('slug', creatorSlug).single();
+    }
     const plan = settings?.plan || 'free';
     if (plan === 'free') {
       return res.status(403).json({ error: 'Seasons require Pro or Premium. Upgrade to run tournaments.' });
@@ -13027,27 +13889,29 @@ app.post('/api/creator/seasons', requireCreator, async (req, res) => {
     if (!name || !name.trim()) return res.status(400).json({ error: 'Season name is required' });
 
     // Create the season
-    const { data: season, error: sErr } = await supabase
-      .from('seasons')
-      .insert({
-        creator_slug: creatorSlug,
-        name: name.trim().slice(0, 80),
-        description: (description || '').trim().slice(0, 300) || null,
-        ends_at: ends_at || null,
-        prize_description: (prize_description || '').trim().slice(0, 200) || null,
-        status: 'active',
-      })
-      .select()
-      .single();
+    let season, sErr;
+    if (pool) {
+      const _insData = Array.isArray({ creator_slug: creatorSlug, name: name.trim().slice(0, 80), description: (description || '').trim().slice(0, 300) || null, ends_at: ends_at || null, prize_description: (prize_description || '').trim().slice(0, 200) || null, status: 'active', }) ? ({ creator_slug: creatorSlug, name: name.trim().slice(0, 80), description: (description || '').trim().slice(0, 300) || null, ends_at: ends_at || null, prize_description: (prize_description || '').trim().slice(0, 200) || null, status: 'active', })[0] : ({ creator_slug: creatorSlug, name: name.trim().slice(0, 80), description: (description || '').trim().slice(0, 300) || null, ends_at: ends_at || null, prize_description: (prize_description || '').trim().slice(0, 200) || null, status: 'active', });
+      const _cols = Object.keys(_insData); const _vals = Object.values(_insData);
+      const _phs = _cols.map((_, i) => `$${i + 1}`).join(', ');
+      const _rows = await dbQuery(`INSERT INTO seasons (${_cols.join(', ')}) VALUES (${_phs}) RETURNING *`, _vals);
+      season = _rows[0] || null;
+    } else {
+      const { data: season, error: sErr } = await supabase .from('seasons') .insert({ creator_slug: creatorSlug, name: name.trim().slice(0, 80), description: (description || '').trim().slice(0, 300) || null, ends_at: ends_at || null, prize_description: (prize_description || '').trim().slice(0, 200) || null, status: 'active', }) .select() .single();
+    }
     if (sErr) throw sErr;
 
     // Optionally assign existing markets to this season
     if (Array.isArray(market_ids) && market_ids.length) {
-      await supabase
-        .from('markets')
-        .update({ season_id: season.id })
-        .in('id', market_ids)
-        .eq('creator_slug', creatorSlug);
+      if (pool) {
+        const _upd = { season_id: season.id };
+        const _cols = Object.keys(_upd); const _vals = Object.values(_upd);
+        const _set = _cols.map((c, i) => `${c} = $${i + 1}`).join(', ');
+        const _where = [market_ids, creatorSlug];
+        await dbQuery(`UPDATE markets SET ${_set} WHERE id = ANY($${_vals.length + 1}) AND creator_slug = $${_vals.length + 2}`, [..._vals, ..._where]);
+      } else {
+        await supabase .from('markets') .update({ season_id: season.id }) .in('id', market_ids) .eq('creator_slug', creatorSlug);
+      }
     }
 
     res.json({ season });
@@ -13061,21 +13925,26 @@ app.post('/api/creator/seasons', requireCreator, async (req, res) => {
 app.get('/api/creator/seasons', requireCreator, async (req, res) => {
   try {
     const creatorSlug = req.creator.slug;
-    const { data: seasons, error } = await supabase
-      .from('seasons')
-      .select('*')
-      .eq('creator_slug', creatorSlug)
-      .order('created_at', { ascending: false });
+    let seasons, error;
+    if (pool) {
+      const _rows = await dbQuery('SELECT * FROM seasons WHERE creator_slug = $1 ORDER BY created_at DESC', [creatorSlug]);
+      seasons = _rows;
+    } else {
+      const { data: seasons, error } = await supabase .from('seasons') .select('*') .eq('creator_slug', creatorSlug) .order('created_at', { ascending: false });
+    }
     if (error) throw error;
 
     // Attach market count to each season
     const ids = (seasons || []).map(s => s.id);
     let marketCounts = {};
     if (ids.length) {
-      const { data: mkts } = await supabase
-        .from('markets')
-        .select('season_id')
-        .in('season_id', ids);
+      let mkts;
+      if (pool) {
+        const _rows = await dbQuery('SELECT season_id FROM markets WHERE season_id = ANY($1)', [ids]);
+        mkts = _rows;
+      } else {
+        const { data: mkts } = await supabase .from('markets') .select('season_id') .in('season_id', ids);
+      }
       (mkts || []).forEach(m => { marketCounts[m.season_id] = (marketCounts[m.season_id] || 0) + 1; });
     }
 
@@ -13098,8 +13967,13 @@ app.put('/api/creator/seasons/:id', requireCreator, async (req, res) => {
     const { name, description, ends_at, prize_description, status } = req.body;
 
     // Ownership check
-    const { data: existing } = await supabase
-      .from('seasons').select('id, creator_slug').eq('id', id).single();
+    let existing;
+    if (pool) {
+      const _rows = await dbQuery('SELECT id, creator_slug FROM seasons WHERE id = $1 LIMIT 1', [id]);
+      existing = _rows[0] || null;
+    } else {
+      const { data: existing } = await supabase .from('seasons').select('id, creator_slug').eq('id', id).single();
+    }
     if (!existing || existing.creator_slug !== creatorSlug)
       return res.status(404).json({ error: 'Season not found' });
 
@@ -13110,8 +13984,17 @@ app.put('/api/creator/seasons/:id', requireCreator, async (req, res) => {
     if (prize_description !== undefined) update.prize_description = prize_description.trim().slice(0, 200) || null;
     if (status !== undefined && ['active','ended','draft'].includes(status)) update.status = status;
 
-    const { data: season, error } = await supabase
-      .from('seasons').update(update).eq('id', id).select().single();
+    let season, error;
+    if (pool) {
+      const _upd = update;
+      const _cols = Object.keys(_upd); const _vals = Object.values(_upd);
+      const _set = _cols.map((c, i) => `${c} = $${i + 1}`).join(', ');
+      const _where = [id];
+      const _rows = await dbQuery(`UPDATE seasons SET ${_set} WHERE id = $${_vals.length + 1} RETURNING *`, [..._vals, ..._where]);
+      season = _rows[0] || null;
+    } else {
+      const { data: season, error } = await supabase .from('seasons').update(update).eq('id', id).select().single();
+    }
     if (error) throw error;
 
     // If ending a season, unlink all its markets so they go back to being independent
@@ -13131,8 +14014,13 @@ app.post('/api/creator/seasons/:id/markets', requireCreator, async (req, res) =>
     const { id } = req.params;
     const { add = [], remove = [] } = req.body;
 
-    const { data: season } = await supabase
-      .from('seasons').select('id, creator_slug').eq('id', id).single();
+    let season;
+    if (pool) {
+      const _rows = await dbQuery('SELECT id, creator_slug FROM seasons WHERE id = $1 LIMIT 1', [id]);
+      season = _rows[0] || null;
+    } else {
+      const { data: season } = await supabase .from('seasons').select('id, creator_slug').eq('id', id).single();
+    }
     if (!season || season.creator_slug !== creatorSlug)
       return res.status(404).json({ error: 'Season not found' });
 
@@ -13164,13 +14052,13 @@ app.post('/api/creator/seasons/:id/markets', requireCreator, async (req, res) =>
 app.get('/api/community/:slug/seasons', async (req, res) => {
   try {
     const { slug } = req.params;
-    const { data: seasons, error } = await supabase
-      .from('seasons')
-      .select('id, name, description, status, starts_at, ends_at, prize_description, created_at')
-      .eq('creator_slug', slug)
-      .neq('status', 'draft')
-      .order('created_at', { ascending: false })
-      .limit(10);
+    let seasons, error;
+    if (pool) {
+      const _rows = await dbQuery('SELECT id, name, description, status, starts_at, ends_at, prize_description, created_at FROM seasons WHERE creator_slug = $1 AND status != $2 ORDER BY created_at DESC LIMIT 10', [slug, 'draft']);
+      seasons = _rows;
+    } else {
+      const { data: seasons, error } = await supabase .from('seasons') .select('id, name, description, status, starts_at, ends_at, prize_description, created_at') .eq('creator_slug', slug) .neq('status', 'draft') .order('created_at', { ascending: false }) .limit(10);
+    }
     if (error) throw error;
 
     // Market counts
@@ -13200,31 +14088,35 @@ app.get('/api/community/:slug/seasons/:seasonId', async (req, res) => {
     const { slug, seasonId } = req.params;
 
     // Season meta
-    const { data: season, error: sErr } = await supabase
-      .from('seasons')
-      .select('*')
-      .eq('id', seasonId)
-      .eq('creator_slug', slug)
-      .single();
+    let season, sErr;
+    if (pool) {
+      const _rows = await dbQuery('SELECT * FROM seasons WHERE id = $1 AND creator_slug = $2 LIMIT 1', [seasonId, slug]);
+      season = _rows[0] || null;
+    } else {
+      const { data: season, error: sErr } = await supabase .from('seasons') .select('*') .eq('id', seasonId) .eq('creator_slug', slug) .single();
+    }
     if (sErr || !season) return res.status(404).json({ error: 'Season not found' });
 
     // Season markets
-    const { data: markets } = await supabase
-      .from('markets')
-      .select('id, question, category, resolved, outcome, yes_price, no_price, trader_count, expiry_date')
-      .eq('season_id', seasonId)
-      .order('created_at', { ascending: true });
+    let markets;
+    if (pool) {
+      const _rows = await dbQuery('SELECT id, question, category, resolved, outcome, yes_price, no_price, trader_count, expiry_date FROM markets WHERE season_id = $1 ORDER BY created_at ASC', [seasonId]);
+      markets = _rows;
+    } else {
+      const { data: markets } = await supabase .from('markets') .select('id, question, category, resolved, outcome, yes_price, no_price, trader_count, expiry_date') .eq('season_id', seasonId) .order('created_at', { ascending: true });
+    }
 
     const marketIds = (markets || []).map(m => m.id);
 
     // Leaderboard — sum settled positions across all season markets
     let leaderboard = [];
     if (marketIds.length) {
-      const { data: positions } = await supabase
-        .from('positions')
-        .select('user_id, amount, potential_payout, settled, won, users(display_name)')
-        .in('market_id', marketIds)
-        .eq('settled', true);
+      let positions;
+      if (pool) {
+        positions = await dbQuery(`SELECT positions.*, row_to_json(users.*) as users FROM positions LEFT JOIN users ON positions.user_id = users.id WHERE market_id = ANY($1) AND settled = $2`, [marketIds, true]).catch(() => []);
+      } else {
+        const { data: positions } = await supabase .from('positions') .select('user_id, amount, potential_payout, settled, won, users(display_name)') .in('market_id', marketIds) .eq('settled', true);
+      }
 
       const totals = {};
       (positions || []).forEach(p => {
@@ -13332,7 +14224,15 @@ app.put('/api/user/wallets', requireAuth, async (req, res) => {
         await dbQuery(`UPDATE users SET ${setClauses.join(', ')} WHERE id = $1`, [req.userId, ...Object.values(updates)]);
       } catch (e) { error = e; }
     } else {
-      ({ error } = await supabase.from('users').update(updates).eq('id', req.userId));
+      if (pool) {
+        const _upd = updates;
+        const _cols = Object.keys(_upd); const _vals = Object.values(_upd);
+        const _set = _cols.map((c, i) => `${c} = $${i + 1}`).join(', ');
+        const _where = [req.userId];
+        await dbQuery(`UPDATE users SET ${_set} WHERE id = $${_vals.length + 1}`, [..._vals, ..._where]);
+      } else {
+        ({ error } = await supabase.from('users').update(updates).eq('id', req.userId));
+      }
     }
     if (error) throw error;
     res.json({ ok: true });
@@ -13411,12 +14311,13 @@ app.get('/api/kalshi/positions', requireAuth, async (req, res) => {
     console.error('[kalshi proxy]', err.message);
     // Fallback: return cached_positions from DB if fresh (within 30 min)
     try {
-      const { data: fallback } = await supabase
-        .from('cached_positions')
-        .select('*')
-        .eq('user_id', req.userId)
-        .eq('platform', 'kalshi')
-        .gte('updated_at', new Date(Date.now() - 30 * 60 * 1000).toISOString());
+      let fallback;
+      if (pool) {
+        const _rows = await dbQuery('SELECT * FROM cached_positions WHERE user_id = $1 AND platform = $2 AND updated_at >= $3', [req.userId, 'kalshi', new Date(Date.now() - 30 * 60 * 1000).toISOString()]);
+        fallback = _rows;
+      } else {
+        const { data: fallback } = await supabase .from('cached_positions') .select('*') .eq('user_id', req.userId) .eq('platform', 'kalshi') .gte('updated_at', new Date(Date.now() - 30 * 60 * 1000).toISOString());
+      }
       if (fallback?.length) return res.json({ positions: fallback, fetched_at: fallback[0].updated_at, from_cache: true });
     } catch {}
     res.status(502).json({ error: 'Failed to fetch Kalshi positions', detail: err.message });
@@ -13510,11 +14411,13 @@ app.get('/api/manifold/positions/:username', async (req, res) => {
     console.error('[manifold proxy]', err.message);
     // Fallback: return cached_positions from DB if fresh (within 30 min)
     try {
-      const { data: fallback } = await supabase
-        .from('cached_positions')
-        .select('*')
-        .eq('platform', 'manifold')
-        .gte('updated_at', new Date(Date.now() - 30 * 60 * 1000).toISOString());
+      let fallback;
+      if (pool) {
+        const _rows = await dbQuery('SELECT * FROM cached_positions WHERE platform = $1 AND updated_at >= $2', ['manifold', new Date(Date.now() - 30 * 60 * 1000).toISOString()]);
+        fallback = _rows;
+      } else {
+        const { data: fallback } = await supabase .from('cached_positions') .select('*') .eq('platform', 'manifold') .gte('updated_at', new Date(Date.now() - 30 * 60 * 1000).toISOString());
+      }
       if (fallback?.length) return res.json({ positions: fallback, fetched_at: fallback[0].updated_at, from_cache: true });
     } catch {}
     res.status(502).json({ error: 'Failed to fetch Manifold positions', detail: err.message });
@@ -13775,19 +14678,22 @@ app.get('/api/markets/search', async (req, res) => {
     try {
       const smTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000));
       const smQuery = (async () => {
-        const { data: matchPos } = await supabase
-          .from('cached_positions')
-          .select('user_id, side')
-          .ilike('market_title', `%${q}%`)
-          .limit(200);
+        let matchPos;
+        if (pool) {
+          const _rows = await dbQuery('SELECT user_id, side FROM cached_positions WHERE market_title ILIKE $1 LIMIT 200', [`%${q}%`]);
+          matchPos = _rows;
+        } else {
+          const { data: matchPos } = await supabase .from('cached_positions') .select('user_id, side') .ilike('market_title', `%${q}%`) .limit(200);
+        }
         if (!matchPos?.length) return null;
         const userIds = [...new Set(matchPos.map(p => p.user_id))];
-        const { data: settled } = await supabase
-          .from('positions')
-          .select('user_id, won')
-          .in('user_id', userIds)
-          .not('won', 'is', null)
-          .limit(1000);
+        let settled;
+        if (pool) {
+          const _rows = await dbQuery('SELECT user_id, won FROM positions WHERE user_id = ANY($1) AND won IS NOT NULL LIMIT 1000', [userIds]);
+          settled = _rows;
+        } else {
+          const { data: settled } = await supabase .from('positions') .select('user_id, won') .in('user_id', userIds) .not('won', 'is', null) .limit(1000);
+        }
         const stats = {};
         (settled || []).forEach(p => {
           if (!stats[p.user_id]) stats[p.user_id] = { w: 0, t: 0 };
