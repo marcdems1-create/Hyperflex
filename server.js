@@ -11871,12 +11871,15 @@ app.get('/api/user/profile-share-stats', requireAuth, async (req, res) => {
 // GET /api/user/wallets — return connected wallet/platform info for authed user
 app.get('/api/user/wallets', requireAuth, async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('users')
-      .select('polymarket_address, kalshi_api_key, kalshi_username, manifold_username')
-      .eq('id', req.userId)
-      .maybeSingle();
-    if (error) throw error;
+    let data;
+    if (pool) {
+      const rows = await dbQuery('SELECT polymarket_address, kalshi_api_key, kalshi_username, manifold_username FROM users WHERE id = $1 LIMIT 1', [req.userId]);
+      data = rows[0] || null;
+    } else {
+      const { data: d, error } = await supabase.from('users').select('polymarket_address, kalshi_api_key, kalshi_username, manifold_username').eq('id', req.userId).maybeSingle();
+      if (error) throw error;
+      data = d;
+    }
     res.json({
       polymarket_address: data?.polymarket_address || null,
       kalshi_api_key_set: !!(data?.kalshi_api_key),
@@ -11920,8 +11923,13 @@ app.put('/api/user/wallets', requireAuth, async (req, res) => {
 
     if (!Object.keys(updates).length) return res.status(400).json({ error: 'Nothing to update' });
 
-    const { error } = await supabase.from('users').update(updates).eq('id', req.userId);
-    if (error) throw error;
+    if (pool) {
+      const setClauses = Object.keys(updates).map((k, i) => `${k} = $${i + 2}`);
+      await dbQuery(`UPDATE users SET ${setClauses.join(', ')} WHERE id = $1`, [req.userId, ...Object.values(updates)]);
+    } else {
+      const { error } = await supabase.from('users').update(updates).eq('id', req.userId);
+      if (error) throw error;
+    }
     res.json({ ok: true });
   } catch (err) {
     console.error('[wallets PUT]', err.message);
@@ -11932,11 +11940,14 @@ app.put('/api/user/wallets', requireAuth, async (req, res) => {
 // GET /api/kalshi/positions — proxy Kalshi API using stored user API key
 app.get('/api/kalshi/positions', requireAuth, async (req, res) => {
   try {
-    const { data: user } = await supabase
-      .from('users')
-      .select('kalshi_api_key')
-      .eq('id', req.userId)
-      .maybeSingle();
+    let user;
+    if (pool) {
+      const rows = await dbQuery('SELECT kalshi_api_key FROM users WHERE id = $1 LIMIT 1', [req.userId]);
+      user = rows[0] || null;
+    } else {
+      const { data } = await supabase.from('users').select('kalshi_api_key').eq('id', req.userId).maybeSingle();
+      user = data;
+    }
     if (!user?.kalshi_api_key) return res.status(400).json({ error: 'No Kalshi API key connected' });
 
     const apiKey = user.kalshi_api_key;
