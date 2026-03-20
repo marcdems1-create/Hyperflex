@@ -3944,19 +3944,25 @@ body.nav-open .sidebar-backdrop {
             </div>
           </div>
 
-          <div id="platformAnalyticsSection" style="display:none;margin-bottom:20px">
+          <div id="platformAnalyticsSection" style="margin-bottom:20px">
             <div class="section" style="margin-bottom:0">
               <div class="section-header">
                 <div>
                   <div class="section-title">🌐 My Prediction Analytics</div>
-                  <div class="section-subtitle">Your personal track record across all connected platforms</div>
+                  <div class="section-subtitle">Your personal track record across connected platforms</div>
                 </div>
-                <button class="btn-secondary" onclick="loadPlatformAnalytics(true)" style="font-size:13px">↺ Refresh</button>
+                <div style="display:flex;align-items:center;gap:12px">
+                  <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--dim)">
+                    <input type="checkbox" id="paToggleHFX" checked onchange="loadPlatformAnalytics(true)" style="accent-color:var(--gold)"/>
+                    HFX Community
+                  </label>
+                  <button class="btn-secondary" onclick="loadPlatformAnalytics(true)" style="font-size:13px">↺ Refresh</button>
+                </div>
               </div>
               <div class="markets-table" style="padding:20px 24px">
                 <div id="platformAnalyticsGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:20px"></div>
                 <div id="platformAnalyticsEmpty" style="display:none;padding:16px;text-align:center;color:var(--dim);font-size:13px;font-family:var(--mono)">
-                  Connect Polymarket, Kalshi, or Manifold in the Portfolio tab to see your cross-platform stats.
+                  Connect Polymarket or Kalshi in the Portfolio tab to see your cross-platform stats.
                 </div>
               </div>
             </div>
@@ -8503,32 +8509,55 @@ async function loadAnalytics() {
 }
 
 let _platformAnalyticsLoaded = false;
+let _platformAnalyticsData = null;
 async function loadPlatformAnalytics(force) {
-  if (_platformAnalyticsLoaded && !force) return;
-  _platformAnalyticsLoaded = true;
   const section = document.getElementById('platformAnalyticsSection');
   const grid = document.getElementById('platformAnalyticsGrid');
   const empty = document.getElementById('platformAnalyticsEmpty');
   if (!section || !grid) return;
   const userId = creatorData?.creator?.id;
   if (!userId) return;
-  try {
-    const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
-    const r = await fetch(`/api/predictors/${userId}/analytics`, { headers: { Authorization: 'Bearer ' + token } });
-    if (!r.ok) return;
-    const data = await r.json();
-    const platforms = data.platforms || {};
-    const meta = {
-      hyperflex: { label:'⚡ HFX Community', color:'#c9920d', bg:'rgba(201,146,13,0.08)', border:'rgba(201,146,13,0.25)' },
-      polymarket: { label:'🟣 Polymarket', color:'#a78bfa', bg:'rgba(167,139,250,0.08)', border:'rgba(167,139,250,0.25)' },
-      kalshi:     { label:'🟡 Kalshi', color:'#fbbf24', bg:'rgba(251,191,36,0.08)', border:'rgba(251,191,36,0.25)' },
-      manifold:   { label:'🟢 Manifold', color:'#34d399', bg:'rgba(52,211,153,0.08)', border:'rgba(52,211,153,0.25)' },
-    };
-    const cards = Object.entries(platforms).filter(([,v]) => v.total > 0).map(([platform, v]) => {
+
+  // Fetch data if not cached or forced
+  if (!_platformAnalyticsData || (force && !_platformAnalyticsLoaded)) {
+    _platformAnalyticsLoaded = true;
+    try {
+      const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+      const r = await fetch(`/api/predictors/${userId}/analytics`, { headers: { Authorization: 'Bearer ' + token } });
+      if (!r.ok) { if (empty) { empty.style.display = 'block'; empty.textContent = 'Could not load analytics.'; } return; }
+      _platformAnalyticsData = await r.json();
+    } catch(e) { console.warn('[platform analytics]', e); return; }
+  } else if (force) {
+    // Re-fetch on force refresh
+    try {
+      const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+      const r = await fetch(`/api/predictors/${userId}/analytics`, { headers: { Authorization: 'Bearer ' + token } });
+      if (r.ok) _platformAnalyticsData = await r.json();
+    } catch(e) { /* use cached */ }
+  }
+
+  const data = _platformAnalyticsData;
+  if (!data) return;
+  const platforms = data.platforms || {};
+  const showHFX = document.getElementById('paToggleHFX')?.checked ?? true;
+
+  const meta = {
+    hyperflex: { label:'⚡ HFX Community', color:'#c9920d', bg:'rgba(201,146,13,0.08)', border:'rgba(201,146,13,0.25)' },
+    polymarket: { label:'🟣 Polymarket', color:'#a78bfa', bg:'rgba(167,139,250,0.08)', border:'rgba(167,139,250,0.25)' },
+    kalshi:     { label:'🟡 Kalshi', color:'#fbbf24', bg:'rgba(251,191,36,0.08)', border:'rgba(251,191,36,0.25)' },
+  };
+  const cards = Object.entries(platforms)
+    .filter(([platform, v]) => {
+      if (v.total <= 0) return false;
+      if (platform === 'hyperflex' && !showHFX) return false;
+      if (platform === 'manifold') return false; // removed manifold
+      return true;
+    })
+    .map(([platform, v]) => {
       const m = meta[platform] || meta.hyperflex;
       const winRate = v.total > 0 ? Math.round((v.wins / v.total) * 100) : 0;
       const pnl = Number(v.pnl) || 0;
-      const unit = platform === 'hyperflex' ? 'pts' : platform === 'manifold' ? 'M$' : '$';
+      const unit = platform === 'hyperflex' ? 'pts' : '$';
       return `<div style="background:${m.bg};border:1px solid ${m.border};border-radius:12px;padding:16px 18px">
         <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:${m.color};letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px">${m.label}</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
@@ -8538,10 +8567,8 @@ async function loadPlatformAnalytics(force) {
         </div>
       </div>`;
     });
-    section.style.display = 'block';
-    if (!cards.length) { grid.innerHTML = ''; if (empty) empty.style.display = 'block'; }
-    else { grid.innerHTML = cards.join(''); if (empty) empty.style.display = 'none'; }
-  } catch(e) { console.warn('[platform analytics]', e); }
+  if (!cards.length) { grid.innerHTML = ''; if (empty) { empty.style.display = 'block'; empty.textContent = showHFX ? 'Connect Polymarket or Kalshi in the Portfolio tab to see your cross-platform stats.' : 'No external platform data yet. Connect Polymarket or Kalshi in Portfolio.'; } }
+  else { grid.innerHTML = cards.join(''); if (empty) empty.style.display = 'none'; }
 }
 
 // ── AUDIENCE INTELLIGENCE ─────────────────────────────────
