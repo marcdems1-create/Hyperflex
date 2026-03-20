@@ -2811,7 +2811,7 @@ body.nav-open .sidebar-backdrop {
         <div class="community-url" id="sidebarCommunityUrl"></div>
         <button class="sidebar-copy-btn" onclick="copyLink()" title="Copy link">📋</button>
       </div>
-      <div class="plan-pill free" id="sidebarPlanPill" onclick="handlePlanPillClick()" title="View plans">Free</div>
+      <div class="plan-pill platinum" id="sidebarPlanPill" onclick="handlePlanPillClick()" title="View plans">✦ Premium</div>
     </div>
 
     <nav class="sidebar-nav">
@@ -2878,7 +2878,7 @@ body.nav-open .sidebar-backdrop {
     </nav>
 
     <div class="sidebar-footer">
-      <button class="btn-upgrade" onclick="showUpgrade()">⚡ Upgrade to Pro</button>
+      <button class="btn-upgrade" onclick="showUpgrade()" style="display:none">⚡ Upgrade to Pro</button><!-- BETA: hidden during free premium -->
       <div id="trial-btn-wrap" style="display:none;margin-bottom:8px;">
         <button onclick="startTrial()" style="width:100%;background:rgba(201,146,13,0.12);border:1px solid rgba(201,146,13,0.35);color:#c9920d;padding:10px;border-radius:8px;font-size:12px;font-family:'Space Mono',monospace;cursor:pointer;font-weight:700;transition:all 0.2s;">
           🎁 Try Pro free for 7 days

@@ -3615,9 +3615,9 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
       }
     }
 
-    const plan = settings.plan || 'free';
-    const isPro = plan === 'pro' || plan === 'platinum';
-    const isPremium = plan === 'platinum';
+    const plan = 'platinum'; // BETA: all users get Premium — revert to `settings.plan || 'free'` when billing goes live
+    const isPro = true;
+    const isPremium = true;
 
     // Get community leaderboard — distinct traders by current balance, with streak badges
     let leaderboard = [];
@@ -3730,7 +3730,7 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
         slug: settings.slug,
         custom_points_name: settings.custom_points_name,
         primary_color: settings.primary_color,
-        plan: settings.plan || 'free',
+        plan: 'platinum', // BETA: override — revert to `settings.plan || 'free'`
         // Economy fields
         starting_balance: settings.starting_balance ?? 100000,
         min_bet: settings.min_bet ?? 1000,
