@@ -8675,7 +8675,7 @@ app.get('/api/activity', async (req, res) => {
           const kalshiItem = {
             type: 'trending_external',
             id: `tkalshi_${topMkt.ticker || kalshiCount}`,
-            ts: topMkt.open_time || evt.mutuality_date || new Date().toISOString(),
+            ts: new Date().toISOString(), // Use current time so trending items sort to top
             platform: 'kalshi',
             question: topMkt.title || evt.title || '',
             yes_pct: yesPct,
