@@ -8636,12 +8636,21 @@ app.get('/api/activity', async (req, res) => {
             const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
             if (Array.isArray(prices) && prices[0] != null) yesPct = Math.round(prices[0] * 100);
           } catch {}
+          // Auto-categorize based on question text
+          const qLower = (m.question || m.title || '').toLowerCase();
+          const category = /\bnba\b|nfl|mlb|nhl|ufc|mma|premier league|soccer|football|basketball|baseball|hockey|tennis|boxing|f1|formula|cricket|golf|champion|playoff|super bowl|world cup|olympics|spread:|o\/u |moneyline|game \d|vs\.|match|cavaliers|lakers|celtics|warriors|hawks|bulls|nets|knicks|mavericks|bucks|heat|suns|spurs|nuggets|clippers|rockets|grizzlies|pacers|wizards|kings|hornets|pistons|magic|raptors|76ers|blazers|timberwolves|pelicans|thunder|jazz|pride|crimson|bengals|chiefs|eagles|cowboys|saints|ravens|bills|dolphins|steelers|patriots|broncos|chargers|raiders|49ers|seahawks|packers|bears|vikings|lions|falcons|panthers|buccaneers|commanders|jaguars|texans|colts|titans|cardinals|rams|giants|jets|browns/.test(qLower) ? 'sports'
+            : /bitcoin|btc|ethereum|eth|solana|sol|crypto|defi|nft|blockchain|token|altcoin|web3|binance|coinbase|stablecoin|memecoin|doge|xrp|polygon|avalanche/.test(qLower) ? 'crypto'
+            : /fed\b|interest rate|inflation|recession|gdp|stock|s&p|nasdaq|dow|bond|treasury|economy|bank|fiscal|monetary|earnings|ipo|market cap|etf|index|oil\b|gold\b|commodity|forex|tariff/.test(qLower) ? 'finance'
+            : /trump|biden|democrat|republican|congress|senate|election|vote|president|governor|political|policy|legislation|supreme court|pope|government|ceasefire|war\b|military|sanction|nato|ukraine|russia|china|iran/.test(qLower) ? 'politics'
+            : /movie|film|oscar|grammy|emmy|tv show|music|album|spotify|youtube|tiktok|celebrity|concert|festival|box office|streaming|netflix|disney|ai\b|tech|apple|google|tesla|spacex|elon|mars/.test(qLower) ? 'entertainment'
+            : 'other';
           activities.push({
             type: 'trending_external',
             id: `tpoly_${m.id || i}`,
             ts: m.updatedAt || m.createdAt || new Date().toISOString(),
             platform: 'polymarket',
             question: m.question || m.title || '',
+            category,
             yes_pct: yesPct,
             volume: vol,
             volume_display: vol >= 1000000 ? '$' + (vol / 1000000).toFixed(1) + 'M' : vol >= 1000 ? '$' + (vol / 1000).toFixed(0) + 'K' : '$' + vol.toFixed(0),
@@ -8672,12 +8681,20 @@ app.get('/api/activity', async (req, res) => {
             : topMkt.last_price != null ? Math.round(topMkt.last_price * 100)
             : null;
           const vol = topMkt.volume || topMkt.open_interest || 0;
+          const kqLower = (topMkt.title || evt.title || '').toLowerCase();
+          const kCategory = /\bnba\b|nfl|mlb|nhl|ufc|mma|soccer|football|basketball|baseball|hockey|tennis|boxing|cricket|golf|spread|moneyline/.test(kqLower) ? 'sports'
+            : /bitcoin|btc|ethereum|crypto|defi|blockchain|token|solana/.test(kqLower) ? 'crypto'
+            : /fed\b|interest rate|inflation|recession|stock|s&p|oil\b|gold\b|tariff|economy/.test(kqLower) ? 'finance'
+            : /trump|biden|election|congress|senate|president|pope|government|war\b|military|ceasefire/.test(kqLower) ? 'politics'
+            : /movie|oscar|music|youtube|netflix|ai\b|tech|tesla|spacex|elon|mars/.test(kqLower) ? 'entertainment'
+            : 'other';
           const kalshiItem = {
             type: 'trending_external',
             id: `tkalshi_${topMkt.ticker || kalshiCount}`,
-            ts: new Date().toISOString(), // Use current time so trending items sort to top
+            ts: new Date().toISOString(),
             platform: 'kalshi',
             question: topMkt.title || evt.title || '',
+            category: kCategory,
             yes_pct: yesPct,
             volume: vol,
             volume_display: vol >= 1000 ? (vol / 1000).toFixed(0) + 'K contracts' : vol + ' contracts',

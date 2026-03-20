@@ -1431,6 +1431,9 @@ const _filterKeywords = {
 
 function matchesFilter(item, filter) {
   if (filter === 'all') return true;
+  // Server-side category match (for trending_external items)
+  if (item.category && item.category === filter) return true;
+  // Client-side keyword match (for community items)
   const keywords = _filterKeywords[filter] || [];
   const text = ((item.question || '') + ' ' + (item.market_question || '') + ' ' + (item.community_name || '')).toLowerCase();
   return keywords.some(kw => text.includes(kw));
