@@ -4205,23 +4205,21 @@ app.get('/api/creator/analytics', requireCreator, async (req, res) => {
     const creatorId = req.creator.id;
 
     // Get creator slug
-    const { data: settings } = await supabase
-      .from('creator_settings')
-      .select('slug, plan, starting_balance')
-      .eq('creator_id', creatorId)
-      .single();
+    let settings, allMarketsRaw;
+    if (pool) {
+      const sRows = await dbQuery('SELECT slug, plan, starting_balance FROM creator_settings WHERE creator_id = $1 LIMIT 1', [creatorId]);
+      settings = sRows[0] || null;
+      allMarketsRaw = await dbQuery('SELECT id, question, trader_count, volume, resolved, archived, created_at, yes_price FROM markets WHERE creator_id = $1 ORDER BY created_at DESC', [creatorId]);
+    } else {
+      const { data: s } = await supabase.from('creator_settings').select('slug, plan, starting_balance').eq('creator_id', creatorId).single();
+      settings = s;
+      const { data: m } = await supabase.from('markets').select('id, question, trader_count, volume, resolved, archived, created_at, yes_price').eq('creator_id', creatorId).order('created_at', { ascending: false });
+      allMarketsRaw = m;
+    }
     const slug = settings?.slug;
-    const plan = settings?.plan || 'free';
+    const plan = 'platinum'; // BETA override
 
-    // Get all markets for this creator
-    const { data: markets, error: marketsErr } = await supabase
-      .from('markets')
-      .select('id, question, trader_count, volume, resolved, archived, created_at, yes_price')
-      .eq('creator_id', creatorId)
-      .order('created_at', { ascending: false });
-    if (marketsErr) console.error('[analytics] markets query error:', marketsErr.message, marketsErr.details);
-
-    const allMarkets = markets || [];
+    const allMarkets = allMarketsRaw || [];
     const activeMarkets   = allMarkets.filter(m => !m.resolved && !m.archived);
     const resolvedMarkets = allMarkets.filter(m => m.resolved);
     const archivedMarkets = allMarkets.filter(m => m.archived && !m.resolved);
@@ -4254,12 +4252,13 @@ app.get('/api/creator/analytics', requireCreator, async (req, res) => {
     let tradesPrior7d = 0;
 
     if (marketIds.length > 0) {
-      const { data: positions } = await supabase
-        .from('positions')
-        .select('created_at, user_id, amount')
-        .in('market_id', marketIds)
-        .gte('created_at', thirtyDaysAgo.toISOString());
-
+      let positions;
+      if (pool) {
+        positions = await dbQuery('SELECT created_at, user_id, amount FROM positions WHERE market_id = ANY($1) AND created_at >= $2', [marketIds, thirtyDaysAgo.toISOString()]);
+      } else {
+        const { data } = await supabase.from('positions').select('created_at, user_id, amount').in('market_id', marketIds).gte('created_at', thirtyDaysAgo.toISOString());
+        positions = data;
+      }
       const allPos = positions || [];
 
       // Bucket by day
@@ -4297,10 +4296,13 @@ app.get('/api/creator/analytics', requireCreator, async (req, res) => {
     // Top markets by comment count
     let topMarketsByComments = [];
     if (marketIds.length > 0) {
-      const { data: comments } = await supabase
-        .from('market_comments')
-        .select('market_id')
-        .in('market_id', marketIds);
+      let comments;
+      if (pool) {
+        comments = await dbQuery('SELECT market_id FROM market_comments WHERE market_id = ANY($1)', [marketIds]);
+      } else {
+        const { data } = await supabase.from('market_comments').select('market_id').in('market_id', marketIds);
+        comments = data;
+      }
       if (comments && comments.length) {
         const counts = {};
         comments.forEach(c => { counts[c.market_id] = (counts[c.market_id] || 0) + 1; });
@@ -4315,10 +4317,13 @@ app.get('/api/creator/analytics', requireCreator, async (req, res) => {
     // Community balance stats
     let balanceStats = { total_in_circulation: 0, avg_balance: 0, member_count: 0 };
     if (slug) {
-      const { data: balances } = await supabase
-        .from('community_balances')
-        .select('balance')
-        .eq('creator_slug', slug);
+      let balances;
+      if (pool) {
+        balances = await dbQuery('SELECT balance FROM community_balances WHERE creator_slug = $1', [slug]);
+      } else {
+        const { data } = await supabase.from('community_balances').select('balance').eq('creator_slug', slug);
+        balances = data;
+      }
       if (balances && balances.length > 0) {
         const total = balances.reduce((s, b) => s + (b.balance || 0), 0);
         balanceStats = {
@@ -4332,10 +4337,13 @@ app.get('/api/creator/analytics', requireCreator, async (req, res) => {
     // Refill stats
     let refillStats = { total_refills: 0, total_pts_distributed: 0 };
     if (slug) {
-      const { data: refills } = await supabase
-        .from('refill_history')
-        .select('amount')
-        .eq('creator_slug', slug);
+      let refills;
+      if (pool) {
+        refills = await dbQuery('SELECT amount FROM refill_history WHERE creator_slug = $1', [slug]).catch(() => []);
+      } else {
+        const { data } = await supabase.from('refill_history').select('amount').eq('creator_slug', slug);
+        refills = data;
+      }
       if (refills && refills.length > 0) {
         refillStats = {
           total_refills: refills.length,
@@ -4348,10 +4356,13 @@ app.get('/api/creator/analytics', requireCreator, async (req, res) => {
     let referralStats = { total_referrals: 0, total_pts_distributed: 0, this_week: 0 };
     if (slug) {
       const weekStart = getWeekStart();
-      const { data: referrals } = await supabase
-        .from('referral_history')
-        .select('referrer_reward, welcome_bonus, created_at')
-        .eq('creator_slug', slug);
+      let referrals;
+      if (pool) {
+        referrals = await dbQuery('SELECT referrer_reward, welcome_bonus, created_at FROM referral_history WHERE creator_slug = $1', [slug]).catch(() => []);
+      } else {
+        const { data } = await supabase.from('referral_history').select('referrer_reward, welcome_bonus, created_at').eq('creator_slug', slug);
+        referrals = data;
+      }
       if (referrals && referrals.length > 0) {
         const totalPts = referrals.reduce((s, r) => s + (r.referrer_reward || 0) + (r.welcome_bonus || 0), 0);
         const thisWeek = referrals.filter(r => r.created_at >= weekStart).length;
