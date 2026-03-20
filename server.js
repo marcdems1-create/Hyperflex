@@ -9376,21 +9376,15 @@ app.get('/api/predictors/:userId/portfolio', async (req, res) => {
 app.get('/api/predictors/:userId/analytics', async (req, res) => {
   const { userId } = req.params;
 
-  const [hfRes, cachedRes] = await Promise.all([
-    supabase
-      .from('positions')
-      .select('side, amount, potential_payout, won, settled, created_at, markets(question, resolved_at, outcome)')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(500),
-    supabase
-      .from('cached_positions')
-      .select('*')
-      .eq('user_id', userId),
-  ]);
-
-  const hfBets = hfRes.data || [];
-  const cachedPositions = cachedRes.data || [];
+  let hfBets = [], cachedPositions = [];
+  try {
+    const hfRes = await supabase.from('positions').select('side, amount, potential_payout, won, settled, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(500);
+    hfBets = hfRes.data || [];
+  } catch (e) { console.warn('[predictor analytics] positions:', e.message); }
+  try {
+    const cachedRes = await supabase.from('cached_positions').select('*').eq('user_id', userId);
+    cachedPositions = cachedRes.data || [];
+  } catch (e) { console.warn('[predictor analytics] cached_positions:', e.message); }
 
   // ── Platform breakdown ──────────────────────────────────────────────────────
   const platforms = { hyperflex: { wins: 0, losses: 0, total: 0, pnl: 0 } };
@@ -9418,7 +9412,6 @@ app.get('/api/predictors/:userId/analytics', async (req, res) => {
     total: 0,
   }));
   for (const p of hfSettled) {
-    if (!p.markets) continue;
     // Use side as proxy for predicted probability
     const prob = p.side === 'YES' ? 70 : 30; // simplified; refine if you store odds
     const idx = Math.min(Math.floor(prob / 10) - 1, 8);
