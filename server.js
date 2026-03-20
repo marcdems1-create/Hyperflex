@@ -8594,14 +8594,16 @@ app.get('/api/activity', async (req, res) => {
 
     // ── Trending external markets (Polymarket + Kalshi top volume) ──
     try {
-      const fetchWithTimeout = (url, opts, ms = 5000) => {
+      const https = require('https');
+      const ipv4Agent = new https.Agent({ family: 4 });
+      const fetchExt = (url, ms = 8000) => {
         const ctrl = new AbortController();
         const tid = setTimeout(() => ctrl.abort(), ms);
-        return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(tid));
+        return _nodeFetch(url, { agent: ipv4Agent, signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }).finally(() => clearTimeout(tid));
       };
       const [polyTrending, kalshiTrending] = await Promise.allSettled([
-        fetchWithTimeout('https://gamma-api.polymarket.com/markets?closed=false&limit=8&order=volume&ascending=false', { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }),
-        fetchWithTimeout('https://api.elections.kalshi.com/trade-api/v2/events?limit=8&with_nested_markets=true', { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }),
+        fetchExt('https://gamma-api.polymarket.com/markets?closed=false&limit=12&order=volume&ascending=false'),
+        fetchExt('https://api.elections.kalshi.com/trade-api/v2/events?limit=10&with_nested_markets=true'),
       ]);
       if (polyTrending.status === 'fulfilled' && polyTrending.value.ok) {
         const raw = await polyTrending.value.json();
