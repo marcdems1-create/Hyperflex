@@ -8601,7 +8601,7 @@ app.get('/api/activity', async (req, res) => {
       };
       const [polyTrending, kalshiTrending] = await Promise.allSettled([
         fetchWithTimeout('https://gamma-api.polymarket.com/markets?closed=false&limit=8&order=volume&ascending=false', { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }),
-        fetchWithTimeout('https://api.elections.kalshi.com/trade-api/v2/events?limit=8&status=open&with_nested_markets=true', { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }),
+        fetchWithTimeout('https://api.elections.kalshi.com/trade-api/v2/events?limit=8&with_nested_markets=true', { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }),
       ]);
       if (polyTrending.status === 'fulfilled' && polyTrending.value.ok) {
         const raw = await polyTrending.value.json();
@@ -8621,6 +8621,11 @@ app.get('/api/activity', async (req, res) => {
             end_date: m.endDate || null,
           });
         });
+      }
+      if (kalshiTrending.status === 'rejected') {
+        console.warn('[kalshi trending] rejected:', kalshiTrending.reason?.message || kalshiTrending.reason);
+      } else if (kalshiTrending.status === 'fulfilled' && !kalshiTrending.value.ok) {
+        console.warn('[kalshi trending] HTTP', kalshiTrending.value.status);
       }
       if (kalshiTrending.status === 'fulfilled' && kalshiTrending.value.ok) {
         const raw = await kalshiTrending.value.json();
