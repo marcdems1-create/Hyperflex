@@ -8383,21 +8383,22 @@ app.get('/api/activity', async (req, res) => {
       const commentsLimit = since ? 25 : 20;
       const rewardLimit = since ? 20 : 15;
       const sharedLimit = since ? 20 : 15;
+      const safeQuery = (sql, params) => dbQuery(sql, params).catch(e => { console.warn('[activity query]', e.message?.slice(0,80)); return []; });
       const [betsRows, resRows, newMktRows, winsRows, creatorsRows, commentsRows, rewardRows, sharedRows] = await Promise.all([
-        dbQuery(`SELECT p.id, p.user_id, p.side, p.amount, p.created_at, p.market_id,
+        safeQuery(`SELECT p.id, p.user_id, p.side, p.amount, p.created_at, p.market_id,
           m.id as m_id, m.question as m_question, m.tenant_slug as m_tenant_slug, m.yes_price as m_yes_price, m.no_price as m_no_price, m.yes_votes as m_yes_votes, m.no_votes as m_no_votes, m.trader_count as m_trader_count
           FROM positions p LEFT JOIN markets m ON p.market_id = m.id ORDER BY p.created_at DESC LIMIT $1`, [betsLimit]),
-        dbQuery("SELECT id, question, tenant_slug, resolved_at, outcome, resolution_note, trader_count FROM markets WHERE resolved = true AND resolved_at IS NOT NULL ORDER BY resolved_at DESC LIMIT 15"),
-        dbQuery("SELECT id, question, tenant_slug, created_at, yes_price, no_price, yes_votes, no_votes, category FROM markets WHERE resolved = false AND (is_public IS NULL OR is_public != false) ORDER BY created_at DESC LIMIT 15"),
-        dbQuery(`SELECT p.id, p.user_id, p.side, p.amount, p.potential_payout, p.created_at, p.market_id,
+        safeQuery("SELECT id, question, tenant_slug, resolved_at, outcome, resolution_note, trader_count FROM markets WHERE resolved = true AND resolved_at IS NOT NULL ORDER BY resolved_at DESC LIMIT 15"),
+        safeQuery("SELECT id, question, tenant_slug, created_at, yes_price, no_price, yes_votes, no_votes, category FROM markets WHERE resolved = false AND (is_public IS NULL OR is_public != false) ORDER BY created_at DESC LIMIT 15"),
+        safeQuery(`SELECT p.id, p.user_id, p.side, p.amount, p.potential_payout, p.created_at, p.market_id,
           m.id as m_id, m.question as m_question, m.tenant_slug as m_tenant_slug, m.resolved_at as m_resolved_at, m.outcome as m_outcome, m.trader_count as m_trader_count
           FROM positions p LEFT JOIN markets m ON p.market_id = m.id WHERE p.settled = true AND p.won = true AND m.id IS NOT NULL ORDER BY p.created_at DESC LIMIT 20`),
-        dbQuery("SELECT slug, display_name, primary_color, custom_points_name, logo_url FROM creator_settings"),
-        dbQuery(`SELECT c.id, c.user_id, c.user_name, c.body, c.created_at, c.market_id, c.creator_slug,
+        safeQuery("SELECT slug, display_name, primary_color, custom_points_name, logo_url FROM creator_settings"),
+        safeQuery(`SELECT c.id, c.user_id, c.user_name, c.body, c.created_at, c.market_id, c.creator_slug,
           m.id as m_id, m.question as m_question, m.tenant_slug as m_tenant_slug
           FROM market_comments c LEFT JOIN markets m ON c.market_id = m.id ORDER BY c.created_at DESC LIMIT $1`, [commentsLimit]),
-        dbQuery("SELECT id, user_id, creator_slug, reward_title, reward_threshold, unlocked_at FROM reward_unlocks ORDER BY unlocked_at DESC LIMIT " + rewardLimit),
-        dbQuery("SELECT id, user_id, question, side, platform, current_price, pnl_pct, cash_value, market_url, created_at FROM shared_positions ORDER BY created_at DESC LIMIT " + sharedLimit),
+        safeQuery("SELECT id, user_id, creator_slug, reward_title, reward_threshold, unlocked_at FROM reward_unlocks ORDER BY unlocked_at DESC LIMIT " + rewardLimit),
+        safeQuery("SELECT id, user_id, question, side, platform, current_price, pnl_pct, cash_value, market_url, created_at FROM shared_positions ORDER BY created_at DESC LIMIT " + sharedLimit),
       ]);
       // Reshape joined rows to match Supabase nested format
       betsData = betsRows.map(r => ({ id: r.id, user_id: r.user_id, side: r.side, amount: r.amount, created_at: r.created_at, market_id: r.market_id, markets: r.m_id ? { id: r.m_id, question: r.m_question, tenant_slug: r.m_tenant_slug, yes_price: r.m_yes_price, no_price: r.m_no_price, yes_votes: r.m_yes_votes, no_votes: r.m_no_votes, trader_count: r.m_trader_count } : null }));
@@ -8699,7 +8700,7 @@ app.get('/api/activity', async (req, res) => {
     res.json({ activities: result, communities });
   } catch (err) {
     console.error('[activity feed]', err);
-    res.status(500).json({ error: 'Failed to load activity feed' });
+    res.status(500).json({ error: 'Failed to load activity feed', detail: err.message });
   }
 });
 
