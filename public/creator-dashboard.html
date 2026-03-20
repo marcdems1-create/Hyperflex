@@ -4663,9 +4663,9 @@ body.nav-open .sidebar-backdrop {
                 style="background:none;border:none;border-bottom:2px solid transparent;color:var(--dim);padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s;margin-bottom:-1px;display:flex;align-items:center;gap:7px">
                 <span id="ptab-kalshi-dot" style="width:7px;height:7px;border-radius:50%;background:#444;flex-shrink:0"></span>Kalshi
               </button>
-              <button id="ptab-manifold" onclick="switchPortfolioTab('manifold')"
-                style="background:none;border:none;border-bottom:2px solid transparent;color:var(--dim);padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s;margin-bottom:-1px;display:flex;align-items:center;gap:7px">
-                <span id="ptab-manifold-dot" style="width:7px;height:7px;border-radius:50%;background:#444;flex-shrink:0"></span>Manifold
+              <!-- Manifold hidden — play money, not useful for real traders -->
+              <button id="ptab-manifold" onclick="switchPortfolioTab('manifold')" style="display:none">
+                <span id="ptab-manifold-dot"></span>Manifold
               </button>
               <button id="ptab-hfx" onclick="switchPortfolioTab('hfx')"
                 style="background:none;border:none;border-bottom:2px solid transparent;color:var(--dim);padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s;margin-bottom:-1px;display:flex;align-items:center;gap:7px">
@@ -4679,10 +4679,14 @@ body.nav-open .sidebar-backdrop {
             <!-- ALL tab -->
             <div id="ptabContent-all">
               <div id="allPositionsContainer">
-                <div style="text-align:center;padding:64px 20px;color:var(--dim)">
+                <div style="text-align:center;padding:48px 20px;color:var(--dim)">
                   <div style="font-size:40px;margin-bottom:16px;opacity:0.4">📊</div>
-                  <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:8px">No positions loaded yet</div>
-                  <div style="font-size:13px;line-height:1.6">Connect a platform using the tabs above,<br>then come back here to see everything in one place.</div>
+                  <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:8px">Connect your accounts</div>
+                  <div style="font-size:13px;line-height:1.6;margin-bottom:24px">Track all your prediction market positions in one place.</div>
+                  <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+                    <button onclick="switchPortfolioTab('poly')" style="background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.3);color:#a78bfa;border-radius:10px;padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:8px">🟣 Connect Polymarket</button>
+                    <button onclick="switchPortfolioTab('kalshi')" style="background:rgba(217,119,6,0.12);border:1px solid rgba(217,119,6,0.3);color:#fbbf24;border-radius:10px;padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:8px">🟡 Connect Kalshi</button>
+                  </div>
                 </div>
               </div>
             </div>
