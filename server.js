@@ -285,7 +285,9 @@ const supabase = createClient(
 // Helper: run a query via direct Postgres (fast, reliable) with Supabase fallback
 async function dbQuery(text, params = []) {
   if (!pool) throw new Error('No database pool');
-  const result = await pool.query(text, params);
+  const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error(`dbQuery timeout (10s): ${text.slice(0, 60)}`)), 10000));
+  const query = pool.query(text, params);
+  const result = await Promise.race([query, timeout]);
   return result.rows;
 }
 
@@ -3835,6 +3837,13 @@ app.get('/api/creator/leaderboard', requireCreator, async (req, res) => {
 // Auth: Bearer token required
 // ════════════════════════════════════════════════════════════
 app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
+  // Hard 15s timeout — dashboard MUST respond
+  const dashTimeout = setTimeout(() => {
+    if (!res.headersSent) {
+      console.error('[dashboard] TIMEOUT after 15s for user', req.creator.id);
+      res.status(504).json({ error: 'Dashboard timeout', detail: 'Query took too long' });
+    }
+  }, 15000);
   try {
     const creatorId = req.creator.id;
 
@@ -4060,18 +4069,17 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
       leaderboard,
       power_predictor,
       inner_circle,
-      rewards: await supabase
-        .from('creator_rewards')
-        .select('id, threshold, title, description')
-        .eq('creator_id', creatorId)
-        .order('threshold', { ascending: true })
-        .then(r => r.data || []),
-      challenge_progress: await getChallengeProgress(settings)
+      rewards: pool
+        ? await dbQuery('SELECT id, threshold, title, description FROM creator_rewards WHERE creator_id = $1 ORDER BY threshold ASC', [creatorId]).catch(() => [])
+        : await supabase.from('creator_rewards').select('id, threshold, title, description').eq('creator_id', creatorId).order('threshold', { ascending: true }).then(r => r.data || []),
+      challenge_progress: await getChallengeProgress(settings).catch(() => null)
     });
 
+    clearTimeout(dashTimeout);
   } catch (err) {
+    clearTimeout(dashTimeout);
     console.error('dashboard error:', err);
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
@@ -6595,28 +6603,30 @@ async function getChallengeProgress(settings) {
   let current = 0;
 
   try {
-    if (metric === 'bets') {
-      // Trades placed since challenge started (approximated by week start Mon)
-      const weekStart = getWeekStart();
-      const { count } = await supabase
-        .from('positions')
-        .select('id', { count: 'exact', head: true })
-        .eq('tenant_slug', slug)
-        .gte('created_at', weekStart);
-      current = count || 0;
-    } else if (metric === 'members') {
-      const { count } = await supabase
-        .from('community_balances')
-        .select('id', { count: 'exact', head: true })
-        .eq('creator_slug', slug);
-      current = count || 0;
-    } else if (metric === 'volume') {
-      const { data: mkts } = await supabase
-        .from('markets')
-        .select('volume')
-        .or(`tenant_slug.eq.${slug},creator_id.eq.${settings.creator_id}`)
-        .eq('is_public', true);
-      current = Math.round((mkts || []).reduce((s, m) => s + (m.volume || 0), 0) / 100);
+    if (pool) {
+      if (metric === 'bets') {
+        const weekStart = getWeekStart();
+        const rows = await dbQuery('SELECT count(*) as c FROM positions WHERE tenant_slug = $1 AND created_at >= $2', [slug, weekStart]);
+        current = parseInt(rows[0]?.c || 0);
+      } else if (metric === 'members') {
+        const rows = await dbQuery('SELECT count(*) as c FROM community_balances WHERE creator_slug = $1', [slug]);
+        current = parseInt(rows[0]?.c || 0);
+      } else if (metric === 'volume') {
+        const rows = await dbQuery('SELECT volume FROM markets WHERE (tenant_slug = $1 OR creator_id = $2) AND is_public = true', [slug, settings.creator_id]);
+        current = Math.round(rows.reduce((s, m) => s + (m.volume || 0), 0) / 100);
+      }
+    } else {
+      if (metric === 'bets') {
+        const weekStart = getWeekStart();
+        const { count } = await supabase.from('positions').select('id', { count: 'exact', head: true }).eq('tenant_slug', slug).gte('created_at', weekStart);
+        current = count || 0;
+      } else if (metric === 'members') {
+        const { count } = await supabase.from('community_balances').select('id', { count: 'exact', head: true }).eq('creator_slug', slug);
+        current = count || 0;
+      } else if (metric === 'volume') {
+        const { data: mkts } = await supabase.from('markets').select('volume').or(`tenant_slug.eq.${slug},creator_id.eq.${settings.creator_id}`).eq('is_public', true);
+        current = Math.round((mkts || []).reduce((s, m) => s + (m.volume || 0), 0) / 100);
+      }
     }
   } catch {}
 
