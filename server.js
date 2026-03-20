@@ -8594,12 +8594,10 @@ app.get('/api/activity', async (req, res) => {
 
     // ── Trending external markets (Polymarket + Kalshi top volume) ──
     try {
-      const https = require('https');
-      const ipv4Agent = new https.Agent({ family: 4 });
-      const fetchExt = (url, ms = 8000) => {
+      const fetchExt = (url, ms = 10000) => {
         const ctrl = new AbortController();
         const tid = setTimeout(() => ctrl.abort(), ms);
-        return _nodeFetch(url, { agent: ipv4Agent, signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }).finally(() => clearTimeout(tid));
+        return fetch(url, { signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }).finally(() => clearTimeout(tid));
       };
       const [polyTrending, kalshiTrending] = await Promise.allSettled([
         fetchExt('https://gamma-api.polymarket.com/markets?closed=false&limit=12&order=volume&ascending=false'),
