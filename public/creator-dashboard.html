@@ -5507,11 +5507,17 @@ async function init() {
 
 function renderDashboard(data) {
   const { creator, stats, markets, leaderboard } = data;
-  if (data.challenge_progress) renderChallengeStatus(data.challenge_progress);
 
+  // ── Sidebar + globals FIRST (before anything that can throw) ──
   window.communityName = creator.display_name || '';
   window._pointsName   = creator.custom_points_name || 'Flex Points';
   window._creatorSlug  = creator.slug || '';
+
+  try { document.getElementById('sidebarCommunityName').textContent = creator.display_name || 'My Community'; } catch(e) {}
+  try { document.getElementById('sidebarCommunityUrl').textContent = 'hyperflex.network/' + (creator.slug || ''); } catch(e) {}
+  try { document.getElementById('topbarCommunityUrl').textContent = 'hyperflex.network/' + (creator.slug || ''); } catch(e) {}
+
+  if (data.challenge_progress) try { renderChallengeStatus(data.challenge_progress); } catch(e) {}
 
   // ── Community URL bar ────────────────────────────────────
   if (creator.slug) {
@@ -5590,10 +5596,7 @@ function renderDashboard(data) {
     setTimeout(() => openWizard(creator.slug, creator.display_name || ''), 400);
   }
 
-  // Sidebar
-  document.getElementById('sidebarCommunityName').textContent = creator.display_name;
-  document.getElementById('sidebarCommunityUrl').textContent = 'hyperflex.network/' + creator.slug;
-  document.getElementById('topbarCommunityUrl').textContent = 'hyperflex.network/' + creator.slug;
+  // Sidebar links (name already set at top of renderDashboard)
   const vcBtn = document.getElementById('viewCommunityBtn');
   if (vcBtn) vcBtn.href = 'https://hyperflex.network/' + creator.slug;
   const vpBtn = document.getElementById('viewProfileBtn');
