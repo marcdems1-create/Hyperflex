@@ -1284,6 +1284,42 @@ function activityCard(a) {
     </a>`;
   }
 
+  if (a.type === 'trending_external') {
+    const platform = (a.platform || 'polymarket').toLowerCase();
+    const platformMeta = {
+      polymarket: { label: 'Polymarket', color: '#a78bfa', bg: 'rgba(124,58,237,0.12)', border: 'rgba(124,58,237,0.3)', emoji: '🟣' },
+      kalshi:     { label: 'Kalshi',     color: '#fbbf24', bg: 'rgba(217,119,6,0.12)', border: 'rgba(217,119,6,0.3)', emoji: '🟡' },
+    };
+    const pm = platformMeta[platform] || platformMeta.polymarket;
+    const yesPct = a.yes_pct;
+    const noPct = yesPct != null ? 100 - yesPct : null;
+    const dest = a.url || '/odds';
+    const fmtDate = a.end_date ? new Date(a.end_date).toLocaleDateString('en-US', { month:'short', day:'numeric' }) : '';
+    return `<div class="activity-card" style="cursor:pointer;border-left:3px solid ${pm.color}" onclick="window.open('${dest}','_blank')">
+      <div class="ac-avatar" style="background:${pm.bg};border:1px solid ${pm.border};font-size:16px;display:flex;align-items:center;justify-content:center">📈</div>
+      <div class="ac-body">
+        <div class="ac-header">
+          <span style="font-weight:700;color:${pm.color}">${pm.label}</span>
+          <span class="ac-action">trending market</span>
+          <span class="ac-time">${a.volume_display || ''} vol</span>
+        </div>
+        <div class="ac-market-card" style="cursor:pointer">
+          <div class="ac-market-inner">
+            <span class="ac-community-pill" style="background:${pm.bg};color:${pm.color};border:1px solid ${pm.border}">${pm.emoji} ${pm.label}</span>
+            ${fmtDate ? `<span style="font-size:10px;color:var(--dim);font-family:var(--mono);margin-left:6px">Exp ${fmtDate}</span>` : ''}
+            <div class="ac-question">${escHtml(a.question || '')}</div>
+            ${yesPct != null ? `<div class="ac-odds-bar"><div class="ac-odds-fill" style="width:${yesPct}%;background:#22c55e"></div></div>
+            <div class="ac-odds-labels"><span style="color:#22c55e;font-weight:600">YES ${yesPct}%</span><span style="color:#ef4444;font-weight:600">NO ${noPct}%</span></div>` : ''}
+          </div>
+        </div>
+        <div class="ac-footer">
+          <span style="font-family:var(--mono);font-size:11px;color:var(--dim)">${a.volume_display || ''}</span>
+          <a href="${escHtml(dest)}" target="_blank" rel="noopener" style="margin-left:auto;font-size:11px;color:${pm.color};font-family:var(--mono);text-decoration:none;font-weight:700">View on ${pm.label} →</a>
+        </div>
+      </div>
+    </div>`;
+  }
+
   if (a.type === 'external_bet') {
     const isYes = (a.side || 'YES') === 'YES';
     const conf = a.current_price ? Math.round(a.current_price * 100) : null;

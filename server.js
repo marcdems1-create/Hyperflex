@@ -8592,6 +8592,62 @@ app.get('/api/activity', async (req, res) => {
       });
     }
 
+    // ── Trending external markets (Polymarket + Kalshi top volume) ──
+    try {
+      const fetchWithTimeout = (url, opts, ms = 5000) => {
+        const ctrl = new AbortController();
+        const tid = setTimeout(() => ctrl.abort(), ms);
+        return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(tid));
+      };
+      const [polyTrending, kalshiTrending] = await Promise.allSettled([
+        fetchWithTimeout('https://gamma-api.polymarket.com/markets?closed=false&limit=8&order=volume&ascending=false', { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }),
+        fetchWithTimeout('https://api.elections.kalshi.com/trade-api/v2/events?limit=8&status=open&with_nested_markets=true', { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }),
+      ]);
+      if (polyTrending.status === 'fulfilled' && polyTrending.value.ok) {
+        const raw = await polyTrending.value.json();
+        (Array.isArray(raw) ? raw : []).slice(0, 6).forEach((m, i) => {
+          const vol = parseFloat(m.volume) || 0;
+          const yesPct = m.outcomePrices ? Math.round(JSON.parse(m.outcomePrices)[0] * 100) : null;
+          activities.push({
+            type: 'trending_external',
+            id: `tpoly_${m.id || i}`,
+            ts: m.updatedAt || m.createdAt || new Date().toISOString(),
+            platform: 'polymarket',
+            question: m.question || m.title || '',
+            yes_pct: yesPct,
+            volume: vol,
+            volume_display: vol >= 1000000 ? '$' + (vol / 1000000).toFixed(1) + 'M' : vol >= 1000 ? '$' + (vol / 1000).toFixed(0) + 'K' : '$' + vol.toFixed(0),
+            url: m.slug ? `https://polymarket.com/event/${m.eventSlug || m.slug}` : 'https://polymarket.com',
+            end_date: m.endDate || null,
+          });
+        });
+      }
+      if (kalshiTrending.status === 'fulfilled' && kalshiTrending.value.ok) {
+        const raw = await kalshiTrending.value.json();
+        const events = raw.events || [];
+        let kalshiCount = 0;
+        for (const evt of events) {
+          if (kalshiCount >= 4) break;
+          const topMkt = (evt.markets || []).find(m => m.status === 'open');
+          if (!topMkt) continue;
+          const yesPct = topMkt.yes_ask != null ? Math.round(topMkt.yes_ask * 100) : (topMkt.last_price != null ? Math.round(topMkt.last_price * 100) : null);
+          activities.push({
+            type: 'trending_external',
+            id: `tkalshi_${topMkt.ticker || kalshiCount}`,
+            ts: topMkt.open_time || new Date().toISOString(),
+            platform: 'kalshi',
+            question: topMkt.title || evt.title || '',
+            yes_pct: yesPct,
+            volume: topMkt.volume || 0,
+            volume_display: (topMkt.volume || 0) >= 1000 ? (topMkt.volume / 1000).toFixed(0) + 'K contracts' : (topMkt.volume || 0) + ' contracts',
+            url: topMkt.ticker ? `https://kalshi.com/markets/${topMkt.event_ticker || ''}/${topMkt.ticker}` : 'https://kalshi.com',
+            end_date: topMkt.close_time || null,
+          });
+          kalshiCount++;
+        }
+      }
+    } catch (e) { console.warn('[trending external]', e.message); }
+
     // Collapse market_created bursts: same creator within 5 minutes → one card
     const BURST_WINDOW_MS = 5 * 60 * 1000;
     const mktEvents   = activities.filter(a => a.type === 'market_created');
