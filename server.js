@@ -8378,7 +8378,6 @@ app.get('/api/activity', async (req, res) => {
     const since = req.query.since; // ISO cursor for polling
 
     let betsData, resolutionsData, newMarketsData, winsData, creatorsData, commentsData, rewardUnlocksData, sharedPositionsData;
-    console.log('[activity] pool available:', !!pool);
     if (pool) {
       const betsLimit = since ? 25 : limit;
       const commentsLimit = since ? 25 : 20;
@@ -8411,61 +8410,9 @@ app.get('/api/activity', async (req, res) => {
       rewardUnlocksData = rewardRows;
       sharedPositionsData = sharedRows;
     } else {
-      const [betsRes, resolutionsRes, newMarketsRes, winsRes, creatorsRes, commentsRes, rewardUnlocksRes, sharedPositionsRes] = await Promise.all([
-        supabase
-          .from('positions')
-          .select('id, user_id, side, amount, created_at, market_id, markets(id, question, tenant_slug, yes_price, no_price, yes_votes, no_votes, trader_count)')
-          .order('created_at', { ascending: false })
-          .limit(since ? 25 : limit),
-        supabase
-          .from('markets')
-          .select('id, question, tenant_slug, resolved_at, outcome, resolution_note, trader_count')
-          .eq('resolved', true)
-          .not('resolved_at', 'is', null)
-          .order('resolved_at', { ascending: false })
-          .limit(15),
-        supabase
-          .from('markets')
-          .select('id, question, tenant_slug, created_at, yes_price, no_price, yes_votes, no_votes, category')
-          .eq('resolved', false)
-          .neq('is_public', false)
-          .order('created_at', { ascending: false })
-          .limit(15),
-        supabase
-          .from('positions')
-          .select('id, user_id, side, amount, potential_payout, created_at, market_id, markets(id, question, tenant_slug, resolved_at, outcome, trader_count)')
-          .eq('settled', true)
-          .eq('won', true)
-          .not('markets', 'is', null)
-          .order('created_at', { ascending: false })
-          .limit(20),
-        supabase
-          .from('creator_settings')
-          .select('slug, display_name, primary_color, custom_points_name, logo_url'),
-        supabase
-          .from('market_comments')
-          .select('id, user_id, user_name, body, created_at, market_id, creator_slug, markets(id, question, tenant_slug)')
-          .order('created_at', { ascending: false })
-          .limit(since ? 25 : 20),
-        supabase
-          .from('reward_unlocks')
-          .select('id, user_id, creator_slug, reward_title, reward_threshold, unlocked_at')
-          .order('unlocked_at', { ascending: false })
-          .limit(since ? 20 : 15),
-        supabase
-          .from('shared_positions')
-          .select('id, user_id, question, side, platform, current_price, pnl_pct, cash_value, market_url, created_at')
-          .order('created_at', { ascending: false })
-          .limit(since ? 20 : 15),
-      ]);
-      betsData = (betsRes||{}).data || [];
-      resolutionsData = (resolutionsRes||{}).data || [];
-      newMarketsData = (newMarketsRes||{}).data || [];
-      winsData = (winsRes||{}).data || [];
-      creatorsData = (creatorsRes||{}).data || [];
-      commentsData = (commentsRes||{}).data || [];
-      rewardUnlocksData = (rewardUnlocksRes||{}).data || [];
-      sharedPositionsData = (sharedPositionsRes||{}).data || [];
+      // Supabase REST is broken on Railway — return empty data instead of hanging
+      betsData = []; resolutionsData = []; newMarketsData = []; winsData = [];
+      creatorsData = []; commentsData = []; rewardUnlocksData = []; sharedPositionsData = [];
     }
 
     const communities = {};
