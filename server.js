@@ -187,13 +187,7 @@ console.log('[boot] Key prefix:', _supaKey?.slice(0, 20) + '...');
 const supabase = createClient(
   process.env.SUPABASE_URL,
   _supaKey,
-  { db: { schema: 'public' }, global: { fetch: (...args) => {
-    // Add 45s timeout to all Supabase fetches (Railway<>Supabase can be slow)
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 45000);
-    const [url, opts = {}] = args;
-    return fetch(url, { ...opts, signal: controller.signal }).finally(() => clearTimeout(timeoutId));
-  }}}
+  { db: { schema: 'public' } }
 );
 
 // Diagnostic endpoint — check DB connectivity
