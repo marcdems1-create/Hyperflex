@@ -843,13 +843,14 @@ nav {
 <div class="explore-search-wrap" id="exploreSearchWrap">
   <input type="search" id="exploreSearchInput" placeholder="🔍 Search markets, communities…" oninput="onExploreSearch(this.value)" style="width:100%;box-sizing:border-box;padding:11px 16px;border-radius:12px;border:1.5px solid #2a2a27;background:#1c1c19;color:#e8e3d5;font-size:14px;font-family:inherit;outline:none;max-width:680px;display:block;margin:0 auto;" />
 </div>
-<div class="tabs-wrap" id="tabs-wrap">
-  <div class="tabs">
-    <button class="tab active" onclick="switchTab('activity')">⚡ Activity</button>
-    <button class="tab" onclick="switchTab('discover')">🔍 Discover</button>
-    <button class="tab" onclick="switchTab('predictors')">👥 Predictors</button>
-    <button class="tab" onclick="window.location.href='/odds'" style="display:flex;align-items:center;gap:5px">📊 Odds</button>
-  </div>
+<!-- Category filter pills -->
+<div style="display:flex;justify-content:center;gap:8px;padding:8px 16px 16px;flex-wrap:wrap;max-width:680px;margin:0 auto">
+  <button class="feed-filter active" onclick="setFeedFilter('all')" data-filter="all" style="background:rgba(201,146,13,0.15);color:#c9920d;border:1px solid rgba(201,146,13,0.3);border-radius:20px;padding:7px 16px;font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer;transition:all .15s">All</button>
+  <button class="feed-filter" onclick="setFeedFilter('finance')" data-filter="finance" style="background:transparent;color:var(--dim);border:1px solid var(--border);border-radius:20px;padding:7px 16px;font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">💰 Finance</button>
+  <button class="feed-filter" onclick="setFeedFilter('crypto')" data-filter="crypto" style="background:transparent;color:var(--dim);border:1px solid var(--border);border-radius:20px;padding:7px 16px;font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">₿ Crypto</button>
+  <button class="feed-filter" onclick="setFeedFilter('sports')" data-filter="sports" style="background:transparent;color:var(--dim);border:1px solid var(--border);border-radius:20px;padding:7px 16px;font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">🏆 Sports</button>
+  <button class="feed-filter" onclick="setFeedFilter('politics')" data-filter="politics" style="background:transparent;color:var(--dim);border:1px solid var(--border);border-radius:20px;padding:7px 16px;font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">🏛 Politics</button>
+  <button class="feed-filter" onclick="setFeedFilter('entertainment')" data-filter="entertainment" style="background:transparent;color:var(--dim);border:1px solid var(--border);border-radius:20px;padding:7px 16px;font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">🎬 Entertainment</button>
 </div>
 
 <div class="explore-layout">
@@ -861,6 +862,16 @@ nav {
         <strong>Run a finance community?</strong> Give your audience a prediction market with leaderboards, streaks, and bragging rights. Free to start — takes 2 minutes.
       </div>
       <a href="/creator/signup" class="cta-btn">Set up your community →</a>
+    </div>
+
+    <!-- Page tabs -->
+    <div class="tabs-wrap" id="tabs-wrap" style="margin-bottom:0">
+      <div class="tabs">
+        <button class="tab active" onclick="switchTab('activity')">⚡ Activity</button>
+        <button class="tab" onclick="switchTab('discover')">🔍 Discover</button>
+        <button class="tab" onclick="switchTab('predictors')">👥 Predictors</button>
+        <button class="tab" onclick="window.location.href='/odds'" style="display:flex;align-items:center;gap:5px">📊 Odds</button>
+      </div>
     </div>
 
     <div class="refresh-bar">
@@ -1406,6 +1417,39 @@ async function loadActivityFeed(append) {
     console.error('Activity feed error:', err);
   }
   _activityLoading = false;
+}
+
+// ── Feed category filter ─────────────────────────────────────
+let _activeFeedFilter = 'all';
+const _filterKeywords = {
+  finance: ['finance','fed','interest rate','inflation','recession','gdp','stock','s&p','nasdaq','dow','bond','treasury','economy','bank','fiscal','monetary','earnings','ipo','market cap','etf','index','oil','gold','commodity','forex'],
+  crypto: ['crypto','bitcoin','btc','ethereum','eth','solana','sol','defi','nft','blockchain','token','altcoin','web3','binance','coinbase','stablecoin','memecoin','doge','xrp','ada','matic','polygon','avalanche','layer 2'],
+  sports: ['nba','nfl','mlb','nhl','ufc','mma','premier league','soccer','football','basketball','baseball','hockey','tennis','boxing','f1','formula','cricket','golf','champion','playoff','super bowl','world series','world cup','olympics','draft','trade deadline','mvp','game','match','tournament','spread','moneyline','betting'],
+  politics: ['trump','biden','democrat','republican','congress','senate','election','vote','president','governor','political','policy','legislation','supreme court','law','regulation','tariff','sanction','nato','ukraine','russia','china','iran','war','military','ceasefire','diplomacy','pope','government'],
+  entertainment: ['movie','film','oscar','grammy','emmy','tv','show','music','album','spotify','youtube','tiktok','celebrity','concert','festival','box office','streaming','netflix','disney','ai','tech','apple','google','tesla','spacex','elon','mars'],
+};
+
+function matchesFilter(item, filter) {
+  if (filter === 'all') return true;
+  const keywords = _filterKeywords[filter] || [];
+  const text = ((item.question || '') + ' ' + (item.market_question || '') + ' ' + (item.community_name || '')).toLowerCase();
+  return keywords.some(kw => text.includes(kw));
+}
+
+function setFeedFilter(filter) {
+  _activeFeedFilter = filter;
+  document.querySelectorAll('.feed-filter').forEach(btn => {
+    const isActive = btn.getAttribute('data-filter') === filter;
+    btn.classList.toggle('active', isActive);
+    btn.style.background = isActive ? 'rgba(201,146,13,0.15)' : 'transparent';
+    btn.style.color = isActive ? '#c9920d' : 'var(--dim)';
+    btn.style.borderColor = isActive ? 'rgba(201,146,13,0.3)' : 'var(--border)';
+  });
+  // Re-render with filter
+  if (activityData.length) {
+    const filtered = activityData.filter(a => matchesFilter(a, filter));
+    renderActivityFeed(filtered);
+  }
 }
 
 // Infinite scroll
