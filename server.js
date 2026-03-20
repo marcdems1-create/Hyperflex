@@ -8623,9 +8623,11 @@ app.get('/api/activity', async (req, res) => {
         const tid = setTimeout(() => ctrl.abort(), ms);
         return fetch(url, { signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }).finally(() => clearTimeout(tid));
       };
-      const [polyTrending, kalshiTrending] = await Promise.allSettled([
-        fetchExt('https://gamma-api.polymarket.com/markets?closed=false&limit=12&order=volume&ascending=false'),
-        fetchExt('https://api.elections.kalshi.com/trade-api/v2/events?limit=10&with_nested_markets=true'),
+      const [polyTrending, polyCrypto, polyPolitics, kalshiTrending] = await Promise.allSettled([
+        fetchExt('https://gamma-api.polymarket.com/markets?closed=false&limit=10&order=volume&ascending=false'),
+        fetchExt('https://gamma-api.polymarket.com/markets?closed=false&limit=6&order=volume&ascending=false&search=bitcoin+ethereum+crypto+solana'),
+        fetchExt('https://gamma-api.polymarket.com/markets?closed=false&limit=6&order=volume&ascending=false&search=trump+election+congress+president'),
+        fetchExt('https://api.elections.kalshi.com/trade-api/v2/events?limit=15&with_nested_markets=true'),
       ]);
       if (polyTrending.status === 'fulfilled' && polyTrending.value.ok) {
         const raw = await polyTrending.value.json();
@@ -8659,6 +8661,38 @@ app.get('/api/activity', async (req, res) => {
           });
         });
       }
+      // Process crypto + politics category-specific Polymarket feeds
+      const seenPolyIds = new Set(activities.filter(a => a.id?.startsWith('tpoly_')).map(a => a.id));
+      const processPolyFeed = (feedResult, maxItems) => {
+        if (feedResult.status !== 'fulfilled' || !feedResult.value.ok) return;
+        try {
+          const raw2 = JSON.parse(feedResult.value._bodyText || '[]');
+          // node-fetch may not have _bodyText, need to handle async
+        } catch {}
+      };
+      // Helper to add poly items from extra feeds (deduped)
+      const addPolyItems = async (feedResult, max) => {
+        if (feedResult.status !== 'fulfilled' || !feedResult.value.ok) return;
+        try {
+          const raw = await feedResult.value.json();
+          (Array.isArray(raw) ? raw : []).filter(m => !seenPolyIds.has(`tpoly_${m.id}`)).slice(0, max).forEach((m, i) => {
+            const vol = parseFloat(m.volume) || 0;
+            let yesPct = null;
+            try { const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices; if (Array.isArray(prices) && prices[0] != null) yesPct = Math.round(prices[0] * 100); } catch {}
+            const qLower = (m.question || m.title || '').toLowerCase();
+            const category = /bitcoin|btc|ethereum|eth|solana|sol|crypto|defi|blockchain|token|altcoin|web3/.test(qLower) ? 'crypto'
+              : /fed\b|interest rate|inflation|recession|stock|s&p|oil\b|gold\b|tariff|economy|treasury/.test(qLower) ? 'finance'
+              : /trump|biden|election|congress|senate|president|pope|government|war\b|military/.test(qLower) ? 'politics'
+              : /nba|nfl|mlb|ufc|spread|moneyline|vs\./.test(qLower) ? 'sports'
+              : 'other';
+            const id = `tpoly_${m.id || ('extra' + i)}`;
+            seenPolyIds.add(id);
+            activities.push({ type: 'trending_external', id, ts: new Date().toISOString(), platform: 'polymarket', question: m.question || m.title || '', category, yes_pct: yesPct, volume: vol, volume_display: vol >= 1000000 ? '$' + (vol/1000000).toFixed(1) + 'M' : vol >= 1000 ? '$' + (vol/1000).toFixed(0) + 'K' : '$' + vol.toFixed(0), url: m.slug ? `https://polymarket.com/event/${m.eventSlug || m.slug}` : 'https://polymarket.com', end_date: m.endDate || null });
+          });
+        } catch (e) { console.warn('[poly extra feed]', e.message); }
+      };
+      await Promise.allSettled([addPolyItems(polyCrypto, 4), addPolyItems(polyPolitics, 4)]);
+
       if (kalshiTrending.status === 'rejected') {
         console.warn('[kalshi trending] rejected:', kalshiTrending.reason?.message || kalshiTrending.reason);
       } else if (kalshiTrending.status === 'fulfilled' && !kalshiTrending.value.ok) {
