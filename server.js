@@ -198,22 +198,42 @@ const supabase = createClient(
 
 // Diagnostic endpoint — check DB connectivity
 app.get('/api/health', async (req, res) => {
-  const checks = { supabase_url: !!process.env.SUPABASE_URL, key_type: process.env.SUPABASE_SERVICE_KEY ? 'service' : process.env.SUPABASE_SERVICE_ROLE_KEY ? 'service_role' : process.env.SUPABASE_KEY ? 'generic' : 'anon' };
+  const checks = {
+    supabase_url: process.env.SUPABASE_URL,
+    key_type: process.env.SUPABASE_SERVICE_KEY ? 'service' : process.env.SUPABASE_SERVICE_ROLE_KEY ? 'service_role' : process.env.SUPABASE_KEY ? 'generic' : 'anon',
+    key_prefix: _supaKey?.slice(0, 30) + '...'
+  };
+  // Test 1: Supabase JS client
   try {
     const start = Date.now();
     const { data, error } = await supabase.from('users').select('id').limit(1);
-    checks.users_query_ms = Date.now() - start;
-    checks.users_ok = !error;
-    checks.users_error = error?.message || null;
-    checks.users_count = data?.length ?? 0;
-  } catch (e) { checks.users_ok = false; checks.users_error = e.message; }
+    checks.js_client_ms = Date.now() - start;
+    checks.js_client_ok = !error;
+    checks.js_client_error = error?.message || null;
+  } catch (e) { checks.js_client_ok = false; checks.js_client_error = e.message; }
+  // Test 2: Direct REST API fetch (bypass Supabase JS client entirely)
   try {
     const start = Date.now();
-    const { data, error } = await supabase.from('creator_settings').select('id').limit(1);
-    checks.settings_query_ms = Date.now() - start;
-    checks.settings_ok = !error;
-    checks.settings_error = error?.message || null;
-  } catch (e) { checks.settings_ok = false; checks.settings_error = e.message; }
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 10000);
+    const r = await fetch(`${process.env.SUPABASE_URL}/rest/v1/users?select=id&limit=1`, {
+      headers: { apikey: _supaKey, Authorization: `Bearer ${_supaKey}`, 'Content-Type': 'application/json' },
+      signal: controller.signal
+    });
+    clearTimeout(tid);
+    const body = await r.text();
+    checks.rest_ms = Date.now() - start;
+    checks.rest_status = r.status;
+    checks.rest_ok = r.ok;
+    checks.rest_body_preview = body.slice(0, 200);
+  } catch (e) { checks.rest_ok = false; checks.rest_error = e.message; }
+  // Test 3: DNS check
+  try {
+    const url = new URL(process.env.SUPABASE_URL);
+    const addrs = await dns.resolve4(url.hostname);
+    checks.dns_ok = true;
+    checks.dns_ip = addrs[0];
+  } catch (e) { checks.dns_ok = false; checks.dns_error = e.message; }
   res.json(checks);
 });
 
