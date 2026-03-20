@@ -1,4 +1,10 @@
 require('dotenv').config();
+
+// CRITICAL: Force IPv4-first DNS resolution — fixes Railway + Supabase/Cloudflare connectivity
+// Node.js 18+ undici tries IPv6 first which hangs on some Cloudflare endpoints
+const { setDefaultResultOrder } = require('dns');
+setDefaultResultOrder('ipv4first');
+
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
