@@ -8628,20 +8628,26 @@ app.get('/api/activity', async (req, res) => {
         let kalshiCount = 0;
         for (const evt of events) {
           if (kalshiCount >= 4) break;
-          const topMkt = (evt.markets || []).find(m => m.status === 'open');
+          // Kalshi uses 'active' not 'open' for market status
+          const topMkt = (evt.markets || []).find(m => m.status === 'active' || m.status === 'open');
           if (!topMkt) continue;
-          const yesPct = topMkt.yes_ask != null ? Math.round(topMkt.yes_ask * 100) : (topMkt.last_price != null ? Math.round(topMkt.last_price * 100) : null);
+          // Kalshi fields: yes_ask, yes_bid, last_price — any could be null
+          const yesPct = topMkt.yes_ask != null ? Math.round(topMkt.yes_ask * 100)
+            : topMkt.yes_bid != null ? Math.round(topMkt.yes_bid * 100)
+            : topMkt.last_price != null ? Math.round(topMkt.last_price * 100)
+            : null;
+          const vol = topMkt.volume || topMkt.open_interest || 0;
           activities.push({
             type: 'trending_external',
             id: `tkalshi_${topMkt.ticker || kalshiCount}`,
-            ts: topMkt.open_time || new Date().toISOString(),
+            ts: topMkt.open_time || evt.mutuality_date || new Date().toISOString(),
             platform: 'kalshi',
             question: topMkt.title || evt.title || '',
             yes_pct: yesPct,
-            volume: topMkt.volume || 0,
-            volume_display: (topMkt.volume || 0) >= 1000 ? (topMkt.volume / 1000).toFixed(0) + 'K contracts' : (topMkt.volume || 0) + ' contracts',
-            url: topMkt.ticker ? `https://kalshi.com/markets/${topMkt.event_ticker || ''}/${topMkt.ticker}` : 'https://kalshi.com',
-            end_date: topMkt.close_time || null,
+            volume: vol,
+            volume_display: vol >= 1000 ? (vol / 1000).toFixed(0) + 'K contracts' : vol + ' contracts',
+            url: topMkt.ticker ? `https://kalshi.com/markets/${topMkt.event_ticker || evt.ticker || ''}/${topMkt.ticker}` : 'https://kalshi.com',
+            end_date: topMkt.close_time || topMkt.expiration_time || null,
           });
           kalshiCount++;
         }
