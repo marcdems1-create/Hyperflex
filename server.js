@@ -8629,7 +8629,7 @@ app.get('/api/activity', async (req, res) => {
       ]);
       if (polyTrending.status === 'fulfilled' && polyTrending.value.ok) {
         const raw = await polyTrending.value.json();
-        (Array.isArray(raw) ? raw : []).filter(m => (parseFloat(m.volume) || 0) >= 100000).slice(0, 6).forEach((m, i) => {
+        (Array.isArray(raw) ? raw : []).filter(m => (parseFloat(m.volume) || 0) >= 5000).slice(0, 6).forEach((m, i) => {
           const vol = parseFloat(m.volume) || 0;
           let yesPct = null;
           try {
