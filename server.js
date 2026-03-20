@@ -8378,6 +8378,7 @@ app.get('/api/activity', async (req, res) => {
     const since = req.query.since; // ISO cursor for polling
 
     let betsData, resolutionsData, newMarketsData, winsData, creatorsData, commentsData, rewardUnlocksData, sharedPositionsData;
+    console.log('[activity] pool available:', !!pool);
     if (pool) {
       const betsLimit = since ? 25 : limit;
       const commentsLimit = since ? 25 : 20;
@@ -8457,14 +8458,14 @@ app.get('/api/activity', async (req, res) => {
           .order('created_at', { ascending: false })
           .limit(since ? 20 : 15),
       ]);
-      betsData = betsRes.data || [];
-      resolutionsData = resolutionsRes.data || [];
-      newMarketsData = newMarketsRes.data || [];
-      winsData = winsRes.data || [];
-      creatorsData = creatorsRes.data || [];
-      commentsData = commentsRes.data || [];
-      rewardUnlocksData = rewardUnlocksRes.data || [];
-      sharedPositionsData = sharedPositionsRes.data || [];
+      betsData = (betsRes||{}).data || [];
+      resolutionsData = (resolutionsRes||{}).data || [];
+      newMarketsData = (newMarketsRes||{}).data || [];
+      winsData = (winsRes||{}).data || [];
+      creatorsData = (creatorsRes||{}).data || [];
+      commentsData = (commentsRes||{}).data || [];
+      rewardUnlocksData = (rewardUnlocksRes||{}).data || [];
+      sharedPositionsData = (sharedPositionsRes||{}).data || [];
     }
 
     const communities = {};
