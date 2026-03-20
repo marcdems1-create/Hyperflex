@@ -201,17 +201,23 @@ const _supaKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVIC
 console.log('[boot] Supabase URL:', process.env.SUPABASE_URL?.slice(0, 30) + '...');
 console.log('[boot] Supabase key type:', process.env.SUPABASE_SERVICE_KEY ? 'SERVICE_KEY' : process.env.SUPABASE_SERVICE_ROLE_KEY ? 'SERVICE_ROLE_KEY' : process.env.SUPABASE_KEY ? 'KEY' : process.env.SUPABASE_ANON_KEY ? 'ANON_KEY' : 'NONE');
 
-// Use node-fetch instead of built-in fetch — undici (built-in) hangs on Railway→Supabase
-let _nodeFetch;
-try { _nodeFetch = require('node-fetch'); console.log('[boot] Using node-fetch for Supabase client'); }
-catch { _nodeFetch = null; console.log('[boot] node-fetch not available, using global fetch'); }
+// Force IPv4 at TCP socket level — Railway IPv6 to Supabase/Cloudflare hangs
+const https = require('https');
+const http = require('http');
+const _ipv4Agent = new https.Agent({ family: 4, keepAlive: true });
+const _ipv4AgentHttp = new http.Agent({ family: 4, keepAlive: true });
+const _nodeFetch = require('node-fetch');
+// Wrap node-fetch to always use IPv4 agent
+const _ipv4Fetch = (url, opts = {}) => {
+  const isHttps = String(url).startsWith('https');
+  return _nodeFetch(url, { ...opts, agent: isHttps ? _ipv4Agent : _ipv4AgentHttp });
+};
+console.log('[boot] Using node-fetch + IPv4 agent for all Supabase requests');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   _supaKey,
-  _nodeFetch
-    ? { db: { schema: 'public' }, global: { fetch: _nodeFetch } }
-    : { db: { schema: 'public' } }
+  { db: { schema: 'public' }, global: { fetch: _ipv4Fetch } }
 );
 
 // Diagnostic endpoint — fast, non-blocking
@@ -246,19 +252,18 @@ app.get('/api/health', async (req, res) => {
     checks.external_ms = Date.now() - start2;
     checks.external_ok = r.ok;
   } catch (e) { checks.external_ok = false; checks.external_error = e.message; }
-  // Quick 5s test — direct Supabase REST via node-fetch (bypasses undici)
+  // Quick 5s test — direct Supabase REST via node-fetch + IPv4 agent
   try {
-    const fetcher = _nodeFetch || fetch;
     const start3 = Date.now();
-    const rPromise = fetcher(`${process.env.SUPABASE_URL}/rest/v1/creator_settings?select=id&limit=1`, {
+    const rPromise = _ipv4Fetch(`${process.env.SUPABASE_URL}/rest/v1/creator_settings?select=id&limit=1`, {
       headers: { apikey: _supaKey, Authorization: `Bearer ${_supaKey}` }
     });
     const r = await Promise.race([rPromise, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout_5s')), 5000))]);
     checks.rest_ms = Date.now() - start3;
     checks.rest_ok = r.ok;
     checks.rest_status = r.status;
-    checks.fetch_type = _nodeFetch ? 'node-fetch' : 'undici';
-  } catch (e) { checks.rest_ok = false; checks.rest_error = e.message; checks.fetch_type = _nodeFetch ? 'node-fetch' : 'undici'; }
+    checks.fetch_type = 'node-fetch+ipv4';
+  } catch (e) { checks.rest_ok = false; checks.rest_error = e.message; checks.fetch_type = 'node-fetch+ipv4'; }
   res.json(checks);
 });
 
