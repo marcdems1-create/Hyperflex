@@ -127,6 +127,19 @@ body::before {
   transition: all 0.2s;
 }
 .btn-nav-cta:hover { background: var(--gold-bright); }
+.btn-nav-signin-mobile {
+  display: none; /* hidden on desktop */
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--gold);
+  padding: 9px 20px;
+  border-radius: 6px;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+.btn-nav-signin-mobile:hover { background: var(--gold-bright); }
 .btn-nav-explore {
   font-family: var(--sans);
   font-weight: 700;
@@ -1352,6 +1365,9 @@ footer {
   .battles-grid { grid-template-columns: 1fr; }
   .trending-section { padding: 60px 16px; }
   .trending-grid { grid-template-columns: 1fr; }
+  /* Mobile: hide "Get started free", show "Sign in" linking to /creator/login */
+  .btn-nav-cta { display: none !important; }
+  .btn-nav-signin-mobile { display: inline-flex !important; align-items: center; min-height: 44px; }
 }
 </style>
 </head>
@@ -1377,6 +1393,7 @@ footer {
     <a id="navDashLink" href="/dashboard" class="btn-nav-login" style="display:none;color:#c9920d">Dashboard</a>
     <a href="/creator/login" class="btn-nav-login" id="navLoginLink">Sign in</a>
     <a href="/creator/signup" class="btn-nav-cta" id="navSignupLink">Get started free</a>
+    <a href="/creator/login" class="btn-nav-signin-mobile" id="navSigninMobile">Sign in</a>
     <!-- Unified login handles both member + creator -->
   </div>
 </nav>

@@ -9924,54 +9924,6 @@ app.get('/api/activity', async (req, res) => {
         } catch (e) { console.warn('[poly extra feed]', e.message); }
       };
       await Promise.allSettled([addPolyItems(polyCrypto, 4), addPolyItems(polyPolitics, 4)]);
-
-      if (kalshiTrending.status === 'rejected') {
-        console.warn('[kalshi trending] rejected:', kalshiTrending.reason?.message || kalshiTrending.reason);
-      } else if (kalshiTrending.status === 'fulfilled' && !kalshiTrending.value.ok) {
-        console.warn('[kalshi trending] HTTP', kalshiTrending.value.status);
-      }
-      console.log('[kalshi trending] status:', kalshiTrending.status, kalshiTrending.status === 'rejected' ? kalshiTrending.reason?.message : '', kalshiTrending.status === 'fulfilled' ? 'HTTP ' + kalshiTrending.value?.status : '');
-      if (kalshiTrending.status === 'fulfilled' && kalshiTrending.value.ok) {
-        const raw = await kalshiTrending.value.json();
-        const events = raw.events || [];
-        console.log('[kalshi trending] got', events.length, 'events');
-        let kalshiCount = 0;
-        for (const evt of events) {
-          if (kalshiCount >= 4) break;
-          // Kalshi uses 'active' not 'open' for market status
-          const topMkt = (evt.markets || []).find(m => m.status === 'active' || m.status === 'open');
-          if (!topMkt) continue;
-          // Kalshi fields: yes_ask, yes_bid, last_price — any could be null
-          const yesPct = topMkt.yes_ask != null ? Math.round(topMkt.yes_ask * 100)
-            : topMkt.yes_bid != null ? Math.round(topMkt.yes_bid * 100)
-            : topMkt.last_price != null ? Math.round(topMkt.last_price * 100)
-            : null;
-          const vol = topMkt.volume || topMkt.open_interest || 0;
-          const kqLower = (topMkt.title || evt.title || '').toLowerCase();
-          const kCategory = /\bnba\b|nfl|mlb|nhl|ufc|mma|soccer|football|basketball|baseball|hockey|tennis|boxing|cricket|golf|spread|moneyline/.test(kqLower) ? 'sports'
-            : /bitcoin|btc|ethereum|crypto|defi|blockchain|token|solana/.test(kqLower) ? 'crypto'
-            : /fed\b|interest rate|inflation|recession|stock|s&p|oil\b|gold\b|tariff|economy/.test(kqLower) ? 'finance'
-            : /trump|biden|election|congress|senate|president|pope|government|war\b|military|ceasefire/.test(kqLower) ? 'politics'
-            : /movie|oscar|music|youtube|netflix|ai\b|tech|tesla|spacex|elon|mars/.test(kqLower) ? 'entertainment'
-            : 'other';
-          const kalshiItem = {
-            type: 'trending_external',
-            id: `tkalshi_${topMkt.ticker || kalshiCount}`,
-            ts: new Date().toISOString(),
-            platform: 'kalshi',
-            question: topMkt.title || evt.title || '',
-            category: kCategory,
-            yes_pct: yesPct,
-            volume: vol,
-            volume_display: vol >= 1000 ? (vol / 1000).toFixed(0) + 'K contracts' : vol + ' contracts',
-            url: `https://kalshi.com/markets/${(topMkt.event_ticker || topMkt.ticker || '').replace(/-\d+$/, '').toLowerCase()}`,
-            end_date: topMkt.close_time || topMkt.expiration_time || null,
-          };
-          activities.push(kalshiItem);
-          kalshiCount++;
-          console.log('[kalshi trending] added:', kalshiItem.question?.slice(0,40), 'yes:', yesPct);
-        }
-      }
     } catch (e) { console.warn('[trending external]', e.message, e.stack?.split('\n')[1]); }
 
     // Collapse market_created bursts: same creator within 5 minutes → one card

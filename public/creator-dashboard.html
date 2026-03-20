@@ -2599,7 +2599,7 @@ body.nav-open .hamburger span:nth-child(3) { transform: translateY(-7px) rotate(
   position: fixed;
   inset: 0;
   background: rgba(0,0,0,0.65);
-  z-index: 149;
+  z-index: 999;
   opacity: 0;
   pointer-events: none;
   transition: opacity .28s;
@@ -2621,9 +2621,14 @@ body.nav-open .sidebar-backdrop {
 
   /* Sidebar becomes slide-over drawer */
   .sidebar {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: 260px;
     transform: translateX(-100%);
     transition: transform .28s cubic-bezier(.4,0,.2,1);
-    z-index: 150;
+    z-index: 1000;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
   body.nav-open .sidebar { transform: translateX(0); }
   body.nav-open { overflow: hidden; }
@@ -8361,8 +8366,9 @@ async function loadAnalytics() {
 
     const plan = data.plan || 'free';
 
-    // Gate check
-    if (plan === 'free') {
+    // Gate check — free users see upgrade gate; pro + platinum (beta override) pass through
+    const hasPaidPlan = plan === 'pro' || plan === 'platinum';
+    if (!hasPaidPlan) {
       document.getElementById('analyticsGate').style.display = '';
       document.getElementById('analyticsContent').style.display = 'none';
       return;
