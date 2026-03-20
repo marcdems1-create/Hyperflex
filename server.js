@@ -180,9 +180,13 @@ app.use(async (req, res, next) => {
   next();
 });
 
+const _supaKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY;
+console.log('[boot] Supabase URL:', process.env.SUPABASE_URL?.slice(0, 30) + '...');
+console.log('[boot] Supabase key type:', process.env.SUPABASE_SERVICE_KEY ? 'SERVICE_KEY' : process.env.SUPABASE_SERVICE_ROLE_KEY ? 'SERVICE_ROLE_KEY' : process.env.SUPABASE_KEY ? 'KEY' : process.env.SUPABASE_ANON_KEY ? 'ANON_KEY' : 'NONE');
+console.log('[boot] Key prefix:', _supaKey?.slice(0, 20) + '...');
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY,
+  _supaKey,
   { db: { schema: 'public' }, global: { fetch: (...args) => {
     // Add 15s timeout to all Supabase fetches to prevent infinite hangs
     const controller = new AbortController();
@@ -191,6 +195,27 @@ const supabase = createClient(
     return fetch(url, { ...opts, signal: controller.signal }).finally(() => clearTimeout(timeoutId));
   }}}
 );
+
+// Diagnostic endpoint — check DB connectivity
+app.get('/api/health', async (req, res) => {
+  const checks = { supabase_url: !!process.env.SUPABASE_URL, key_type: process.env.SUPABASE_SERVICE_KEY ? 'service' : process.env.SUPABASE_SERVICE_ROLE_KEY ? 'service_role' : process.env.SUPABASE_KEY ? 'generic' : 'anon' };
+  try {
+    const start = Date.now();
+    const { data, error } = await supabase.from('users').select('id').limit(1);
+    checks.users_query_ms = Date.now() - start;
+    checks.users_ok = !error;
+    checks.users_error = error?.message || null;
+    checks.users_count = data?.length ?? 0;
+  } catch (e) { checks.users_ok = false; checks.users_error = e.message; }
+  try {
+    const start = Date.now();
+    const { data, error } = await supabase.from('creator_settings').select('id').limit(1);
+    checks.settings_query_ms = Date.now() - start;
+    checks.settings_ok = !error;
+    checks.settings_error = error?.message || null;
+  } catch (e) { checks.settings_ok = false; checks.settings_error = e.message; }
+  res.json(checks);
+});
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
