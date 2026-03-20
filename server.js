@@ -4885,41 +4885,49 @@ app.get('/api/creator/analytics', requireCreator, async (req, res) => {
 
     // New members last 7 days (community_balances created_at)
     if (slug) {
-      let newCount;
-      if (pool) {
-        const _rows = await dbQuery('SELECT count(*) as count FROM community_balances WHERE creator_slug = $1 AND created_at >= $2', [slug, sevenDaysAgo.toISOString()]);
-        newCount = parseInt(_rows[0]?.count || 0);
-      } else {
-        const { count: newCount } = await supabase .from('community_balances') .select('user_id', { count: 'exact', head: true }) .eq('creator_slug', slug) .gte('created_at', sevenDaysAgo.toISOString());
-      }
+      let newCount = 0;
+      try {
+        if (pool) {
+          const _rows = await dbQuery('SELECT count(*) as count FROM community_balances WHERE creator_slug = $1 AND created_at >= $2', [slug, sevenDaysAgo.toISOString()]);
+          newCount = parseInt(_rows[0]?.count || 0);
+        } else {
+          const { count } = await supabase.from('community_balances').select('user_id', { count: 'exact', head: true }).eq('creator_slug', slug).gte('created_at', sevenDaysAgo.toISOString());
+          newCount = count || 0;
+        }
+      } catch (e) { /* created_at column may not exist */ }
       newMembers7d = newCount || 0;
 
-      // Embed attribution — total members who joined via embedded widget
-      let embedCount;
-      if (pool) {
-        const _rows = await dbQuery('SELECT count(*) as count FROM community_balances WHERE creator_slug = $1 AND join_source = $2', [slug, 'embed']);
-        embedCount = parseInt(_rows[0]?.count || 0);
-      } else {
-        const { count: embedCount } = await supabase .from('community_balances') .select('user_id', { count: 'exact', head: true }) .eq('creator_slug', slug) .eq('join_source', 'embed');
-      }
+      // Embed attribution
+      let embedCount = 0;
+      try {
+        if (pool) {
+          const _rows = await dbQuery('SELECT count(*) as count FROM community_balances WHERE creator_slug = $1 AND join_source = $2', [slug, 'embed']);
+          embedCount = parseInt(_rows[0]?.count || 0);
+        } else {
+          const { count } = await supabase.from('community_balances').select('user_id', { count: 'exact', head: true }).eq('creator_slug', slug).eq('join_source', 'embed');
+          embedCount = count || 0;
+        }
+      } catch (e) { /* join_source column may not exist */ }
       balanceStats.embed_joins = embedCount || 0;
 
       // Daily new member growth — last 14 days
       const fourteenDaysAgoStr = fourteenDaysAgo.toISOString();
-      let growthRows;
-      if (pool) {
-        const _rows = await dbQuery('SELECT created_at FROM community_balances WHERE creator_slug = $1 AND created_at >= $2', [slug, fourteenDaysAgoStr]);
-        growthRows = _rows;
-      } else {
-        const { data: growthRows } = await supabase .from('community_balances') .select('created_at') .eq('creator_slug', slug) .gte('created_at', fourteenDaysAgoStr);
-      }
+      let growthRows = [];
+      try {
+        if (pool) {
+          growthRows = await dbQuery('SELECT created_at FROM community_balances WHERE creator_slug = $1 AND created_at >= $2', [slug, fourteenDaysAgoStr]);
+        } else {
+          const { data } = await supabase.from('community_balances').select('created_at').eq('creator_slug', slug).gte('created_at', fourteenDaysAgoStr);
+          growthRows = data || [];
+        }
+      } catch (e) { /* created_at may not exist */ }
       const growthBuckets = {};
       for (let i = 0; i < 14; i++) {
         const d = new Date(); d.setDate(d.getDate() - (13 - i));
         growthBuckets[d.toISOString().slice(0, 10)] = 0;
       }
       (growthRows || []).forEach(r => {
-        const k = r.created_at.slice(0, 10);
+        const k = (typeof r.created_at === 'string' ? r.created_at : new Date(r.created_at).toISOString()).slice(0, 10);
         if (k in growthBuckets) growthBuckets[k]++;
       });
       memberGrowth = Object.entries(growthBuckets).map(([date, count]) => ({ date, count }));
