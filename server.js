@@ -188,9 +188,9 @@ const supabase = createClient(
   process.env.SUPABASE_URL,
   _supaKey,
   { db: { schema: 'public' }, global: { fetch: (...args) => {
-    // Add 15s timeout to all Supabase fetches to prevent infinite hangs
+    // Add 45s timeout to all Supabase fetches (Railway<>Supabase can be slow)
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
     const [url, opts = {}] = args;
     return fetch(url, { ...opts, signal: controller.signal }).finally(() => clearTimeout(timeoutId));
   }}}
@@ -215,7 +215,7 @@ app.get('/api/health', async (req, res) => {
   try {
     const start = Date.now();
     const controller = new AbortController();
-    const tid = setTimeout(() => controller.abort(), 10000);
+    const tid = setTimeout(() => controller.abort(), 30000);
     const r = await fetch(`${process.env.SUPABASE_URL}/rest/v1/users?select=id&limit=1`, {
       headers: { apikey: _supaKey, Authorization: `Bearer ${_supaKey}`, 'Content-Type': 'application/json' },
       signal: controller.signal
