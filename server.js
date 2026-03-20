@@ -3535,10 +3535,13 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
     let inner_circle = null;      // Premium: members with 2,000+ Flex Points (balance ≥ 200,000)
 
     if (marketIds.length > 0) {
-      const { data: positions } = await supabase
-        .from('positions')
-        .select('user_id')
-        .in('market_id', marketIds);
+      let positions = [];
+      if (pool) {
+        positions = await dbQuery('SELECT user_id FROM positions WHERE market_id = ANY($1)', [marketIds]);
+      } else {
+        const { data } = await supabase.from('positions').select('user_id').in('market_id', marketIds);
+        positions = data || [];
+      }
 
       if (positions && positions.length > 0) {
         const userIds = [...new Set(positions.map(p => p.user_id))];
@@ -3548,32 +3551,37 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
         positions.forEach(p => { tradeCountMap[p.user_id] = (tradeCountMap[p.user_id] || 0) + 1; });
 
         // Batch-compute streaks for all traders in this community
-        const streakMap = await getStreakMap(userIds, marketIds);
+        let streakMap = {};
+        try { streakMap = await getStreakMap(userIds, marketIds); } catch(e) { console.warn('[dashboard streaks]', e.message); }
 
-        const { data: traders } = await supabase
-          .from('users')
-          .select('id, display_name, balance')
-          .in('id', userIds);
+        let traders = [];
+        if (pool) {
+          traders = await dbQuery('SELECT id, display_name, balance FROM users WHERE id = ANY($1)', [userIds]);
+        } else {
+          const { data } = await supabase.from('users').select('id, display_name, balance').in('id', userIds);
+          traders = data || [];
+        }
 
         // Fetch community balances for this creator's community
-        const { data: communityBalRows } = await supabase
-          .from('community_balances')
-          .select('user_id, balance')
-          .eq('creator_slug', settings.slug)
-          .in('user_id', userIds);
+        let communityBalRows = [];
+        if (pool) {
+          communityBalRows = await dbQuery('SELECT user_id, balance FROM community_balances WHERE creator_slug = $1 AND user_id = ANY($2)', [settings.slug, userIds]);
+        } else {
+          const { data } = await supabase.from('community_balances').select('user_id, balance').eq('creator_slug', settings.slug).in('user_id', userIds);
+          communityBalRows = data || [];
+        }
 
         const communityBalMap = {};
         (communityBalRows || []).forEach(r => { communityBalMap[r.user_id] = r.balance; });
 
         leaderboard = (traders || [])
           .map(u => {
-            // Prefer community balance; fall back to starting_balance if not yet set
             const commBal = communityBalMap[u.id] ?? (settings.starting_balance ?? 100000);
             return {
               user_id: u.id,
               display_name: u.display_name || 'Anonymous',
               balance: commBal,
-              pnl: commBal,   // frontend uses pnl field for display
+              pnl: commBal,
               trade_count: tradeCountMap[u.id] || 0,
               streak: streakMap[u.id] || 0
             };
@@ -3583,42 +3591,28 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
 
         // ── Power Predictor (Pro/Premium): top 3 members by wins in the last 7 days ──
         if (isPro) {
-          const oneWeekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
-          const { data: weeklyWins } = await supabase
-            .from('positions')
-            .select('user_id, won')
-            .in('market_id', marketIds)
-            .eq('settled', true)
-            .eq('won', true)
-            .gte('created_at', oneWeekAgo);
-
-          if (weeklyWins && weeklyWins.length > 0) {
-            const winCountMap = {};
-            weeklyWins.forEach(p => { winCountMap[p.user_id] = (winCountMap[p.user_id] || 0) + 1; });
-
-            // Get display names for top 3 by win count
-            const topIds = Object.entries(winCountMap)
-              .sort((a, b) => b[1] - a[1])
-              .slice(0, 3)
-              .map(([uid]) => uid);
-
-            const { data: topUsers } = await supabase
-              .from('users')
-              .select('id, display_name')
-              .in('id', topIds);
-
-            power_predictor = topIds.map((uid, rank) => {
-              const u = (topUsers || []).find(u => u.id === uid);
-              return {
-                rank: rank + 1,
-                user_id: uid,
-                display_name: u?.display_name || 'Anonymous',
-                wins_this_week: winCountMap[uid]
-              };
-            });
-          } else {
-            power_predictor = [];
-          }
+          try {
+            const oneWeekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+            let weeklyWins = [];
+            if (pool) {
+              weeklyWins = await dbQuery('SELECT user_id, won FROM positions WHERE market_id = ANY($1) AND settled = true AND won = true AND created_at >= $2', [marketIds, oneWeekAgo]);
+            } else {
+              const { data } = await supabase.from('positions').select('user_id, won').in('market_id', marketIds).eq('settled', true).eq('won', true).gte('created_at', oneWeekAgo);
+              weeklyWins = data || [];
+            }
+            if (weeklyWins.length > 0) {
+              const winCountMap = {};
+              weeklyWins.forEach(p => { winCountMap[p.user_id] = (winCountMap[p.user_id] || 0) + 1; });
+              const topIds = Object.entries(winCountMap).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([uid]) => uid);
+              let topUsers = [];
+              if (pool) { topUsers = await dbQuery('SELECT id, display_name FROM users WHERE id = ANY($1)', [topIds]); }
+              else { const { data } = await supabase.from('users').select('id, display_name').in('id', topIds); topUsers = data || []; }
+              power_predictor = topIds.map((uid, rank) => {
+                const u = (topUsers || []).find(u => u.id === uid);
+                return { rank: rank + 1, user_id: uid, display_name: u?.display_name || 'Anonymous', wins_this_week: winCountMap[uid] };
+              });
+            } else { power_predictor = []; }
+          } catch(e) { console.warn('[dashboard power_predictor]', e.message); power_predictor = []; }
         }
 
         // ── Inner Circle (Premium): members with 2,000+ Flex Points (community balance ≥ 200,000 centpoints) ──
