@@ -3642,7 +3642,10 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
 
         // Batch-compute streaks for all traders in this community
         let streakMap = {};
-        try { streakMap = await getStreakMap(userIds, marketIds); } catch(e) { console.warn('[dashboard streaks]', e.message); }
+        try {
+          const streakTimeout = new Promise((_, rej) => setTimeout(() => rej(new Error('streak_timeout')), 5000));
+          streakMap = await Promise.race([getStreakMap(userIds, marketIds), streakTimeout]);
+        } catch(e) { console.warn('[dashboard streaks]', e.message); streakMap = {}; }
 
         let traders = [];
         if (pool) {
