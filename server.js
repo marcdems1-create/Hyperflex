@@ -626,7 +626,7 @@ app.get('/api/health', async (req, res) => {
   try {
     const start = Date.now();
     const { data, error } = await Promise.race([
-      supabase.from('creator_settings').select('id').limit(1),
+      supabase.from('creator_settings').select('slug').limit(1),
       new Promise((_, rej) => setTimeout(() => rej(new Error('supabase_timeout_5s')), 5000))
     ]);
     checks.supabase_ms = Date.now() - start;
