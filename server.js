@@ -1173,13 +1173,19 @@ app.get('/api/notifications', async (req, res) => {
   try {
     const userId = getUserIdFromReq(req);
     if (!userId) return res.status(401).json({ error: 'Auth required' });
-    const { data, error } = await supabase
-      .from('notifications')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(30);
-    if (error) throw error;
+    let data;
+    if (pool) {
+      data = await dbQuery('SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 30', [userId]);
+    } else {
+      const { data: d, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(30);
+      if (error) throw error;
+      data = d;
+    }
     res.json({ notifications: data || [] });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1191,10 +1197,18 @@ app.post('/api/notifications/read', async (req, res) => {
     const userId = getUserIdFromReq(req);
     if (!userId) return res.status(401).json({ error: 'Auth required' });
     const { id } = req.body; // if id provided, mark single; else mark all
-    const query = supabase.from('notifications').update({ read: true }).eq('user_id', userId);
-    if (id) query.eq('id', id);
-    const { error } = await query;
-    if (error) throw error;
+    if (pool) {
+      if (id) {
+        await dbQuery('UPDATE notifications SET read = true WHERE user_id = $1 AND id = $2', [userId, id]);
+      } else {
+        await dbQuery('UPDATE notifications SET read = true WHERE user_id = $1', [userId]);
+      }
+    } else {
+      const query = supabase.from('notifications').update({ read: true }).eq('user_id', userId);
+      if (id) query.eq('id', id);
+      const { error } = await query;
+      if (error) throw error;
+    }
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1204,10 +1218,17 @@ app.post('/api/notifications/read', async (req, res) => {
 // Helper: push a notification to a user
 async function pushNotification(userId, type, title, body, marketId = null, communitySlug = null) {
   try {
-    await supabase.from('notifications').insert([{
-      user_id: userId, type, title, body: body || null,
-      market_id: marketId || null, community_slug: communitySlug || null,
-    }]);
+    if (pool) {
+      await dbQuery(
+        'INSERT INTO notifications (user_id, type, title, body, market_id, community_slug) VALUES ($1, $2, $3, $4, $5, $6)',
+        [userId, type, title, body || null, marketId || null, communitySlug || null]
+      );
+    } else {
+      await supabase.from('notifications').insert([{
+        user_id: userId, type, title, body: body || null,
+        market_id: marketId || null, community_slug: communitySlug || null,
+      }]);
+    }
   } catch (err) {
     // non-blocking — swallow errors
   }
@@ -1224,11 +1245,14 @@ app.get('/api/user/community-balance/:slug', async (req, res) => {
     const balance = await getCommunityBalance(userId, slug);
 
     // Also return economy settings for this community so the frontend can enforce min/max
-    const { data: settings } = await supabase
-      .from('creator_settings')
-      .select('min_bet, max_bet, starting_balance, custom_points_name')
-      .eq('slug', slug)
-      .maybeSingle();
+    let settings;
+    if (pool) {
+      const rows = await dbQuery('SELECT min_bet, max_bet, starting_balance, custom_points_name FROM creator_settings WHERE slug = $1 LIMIT 1', [slug]);
+      settings = rows[0] || null;
+    } else {
+      const { data } = await supabase.from('creator_settings').select('min_bet, max_bet, starting_balance, custom_points_name').eq('slug', slug).maybeSingle();
+      settings = data;
+    }
 
     res.json({
       balance,
@@ -1263,28 +1287,36 @@ app.post('/api/referral/claim', async (req, res) => {
     if (ref_user_id === currentUserId) return res.status(400).json({ error: 'Cannot refer yourself' });
 
     // Already claimed for this community?
-    const { data: existingRef } = await supabase
-      .from('referral_history')
-      .select('id')
-      .eq('referred_id', currentUserId)
-      .eq('creator_slug', creator_slug)
-      .maybeSingle();
+    let existingRef;
+    if (pool) {
+      const rows = await dbQuery('SELECT id FROM referral_history WHERE referred_id = $1 AND creator_slug = $2 LIMIT 1', [currentUserId, creator_slug]);
+      existingRef = rows[0] || null;
+    } else {
+      const { data } = await supabase.from('referral_history').select('id').eq('referred_id', currentUserId).eq('creator_slug', creator_slug).maybeSingle();
+      existingRef = data;
+    }
     if (existingRef) return res.status(409).json({ error: 'Referral already claimed for this community' });
 
     // Verify referrer exists
-    const { data: referrer } = await supabase
-      .from('users')
-      .select('id')
-      .eq('id', ref_user_id)
-      .maybeSingle();
+    let referrer;
+    if (pool) {
+      const rows = await dbQuery('SELECT id FROM users WHERE id = $1 LIMIT 1', [ref_user_id]);
+      referrer = rows[0] || null;
+    } else {
+      const { data } = await supabase.from('users').select('id').eq('id', ref_user_id).maybeSingle();
+      referrer = data;
+    }
     if (!referrer) return res.status(400).json({ error: 'Referrer not found' });
 
     // Get creator's referral settings
-    const { data: settings } = await supabase
-      .from('creator_settings')
-      .select('referral_reward, welcome_bonus')
-      .eq('slug', creator_slug)
-      .maybeSingle();
+    let settings;
+    if (pool) {
+      const rows = await dbQuery('SELECT referral_reward, welcome_bonus FROM creator_settings WHERE slug = $1 LIMIT 1', [creator_slug]);
+      settings = rows[0] || null;
+    } else {
+      const { data } = await supabase.from('creator_settings').select('referral_reward, welcome_bonus').eq('slug', creator_slug).maybeSingle();
+      settings = data;
+    }
     if (!settings) return res.status(404).json({ error: 'Community not found' });
 
     const referralReward = settings.referral_reward ?? 10000; // 100 pts default
@@ -1292,12 +1324,14 @@ app.post('/api/referral/claim', async (req, res) => {
 
     // Check referrer's weekly cap
     const weekStart = getWeekStart().toISOString();
-    const { count: weeklyCount } = await supabase
-      .from('referral_history')
-      .select('id', { count: 'exact', head: true })
-      .eq('referrer_id', ref_user_id)
-      .eq('creator_slug', creator_slug)
-      .gte('created_at', weekStart);
+    let weeklyCount;
+    if (pool) {
+      const rows = await dbQuery('SELECT count(*) as count FROM referral_history WHERE referrer_id = $1 AND creator_slug = $2 AND created_at >= $3', [ref_user_id, creator_slug, weekStart]);
+      weeklyCount = parseInt(rows[0]?.count || 0);
+    } else {
+      const r = await supabase.from('referral_history').select('id', { count: 'exact', head: true }).eq('referrer_id', ref_user_id).eq('creator_slug', creator_slug).gte('created_at', weekStart);
+      weeklyCount = r.count || 0;
+    }
 
     const capExceeded = (weeklyCount || 0) >= REFERRAL_WEEKLY_CAP;
 
@@ -1312,9 +1346,13 @@ app.post('/api/referral/claim', async (req, res) => {
     }
 
     // Record the referral
-    await supabase
-      .from('referral_history')
-      .insert({
+    if (pool) {
+      await dbQuery(
+        'INSERT INTO referral_history (referrer_id, referred_id, creator_slug, referrer_reward, welcome_bonus, cap_exceeded) VALUES ($1, $2, $3, $4, $5, $6)',
+        [ref_user_id, currentUserId, creator_slug, capExceeded ? 0 : referralReward, welcomeBonus, capExceeded]
+      );
+    } else {
+      await supabase.from('referral_history').insert({
         referrer_id:     ref_user_id,
         referred_id:     currentUserId,
         creator_slug,
@@ -1322,6 +1360,7 @@ app.post('/api/referral/claim', async (req, res) => {
         welcome_bonus:   welcomeBonus,
         cap_exceeded:    capExceeded
       });
+    }
 
     console.log(`[referral] ${creator_slug}: ${ref_user_id} → ${currentUserId} (welcome=${welcomeBonus/100}pts, reward=${capExceeded ? 0 : referralReward/100}pts, cap_exceeded=${capExceeded})`);
 
@@ -1372,15 +1411,31 @@ app.get('/api/user/my-positions/:slug', async (req, res) => {
     if (!userId) return res.status(401).json({ error: 'Invalid token' });
     const { slug } = req.params;
     // Get all market IDs for this community
-    const { data: creator } = await supabase.from('creator_settings').select('creator_id').eq('slug', slug).maybeSingle();
+    let creator;
+    if (pool) {
+      const rows = await dbQuery('SELECT creator_id FROM creator_settings WHERE slug = $1 LIMIT 1', [slug]);
+      creator = rows[0] || null;
+    } else {
+      const { data } = await supabase.from('creator_settings').select('creator_id').eq('slug', slug).maybeSingle();
+      creator = data;
+    }
     if (!creator) return res.json([]);
-    const { data: mktRows } = await supabase.from('markets').select('id').eq('creator_id', creator.creator_id).eq('resolved', false);
+    let mktRows;
+    if (pool) {
+      mktRows = await dbQuery('SELECT id FROM markets WHERE creator_id = $1 AND resolved = false', [creator.creator_id]);
+    } else {
+      const { data } = await supabase.from('markets').select('id').eq('creator_id', creator.creator_id).eq('resolved', false);
+      mktRows = data;
+    }
     if (!mktRows || mktRows.length === 0) return res.json([]);
     const marketIds = mktRows.map(m => m.id);
-    const { data: positions } = await supabase.from('positions')
-      .select('market_id, side, amount, potential_payout, settled')
-      .eq('user_id', userId)
-      .in('market_id', marketIds);
+    let positions;
+    if (pool) {
+      positions = await dbQuery('SELECT market_id, side, amount, potential_payout, settled FROM positions WHERE user_id = $1 AND market_id = ANY($2)', [userId, marketIds]);
+    } else {
+      const { data } = await supabase.from('positions').select('market_id, side, amount, potential_payout, settled').eq('user_id', userId).in('market_id', marketIds);
+      positions = data;
+    }
     res.json(positions || []);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1390,11 +1445,15 @@ app.get('/api/user/my-positions/:slug', async (req, res) => {
 // Get user positions
 app.get('/positions/:user_id', requireAuth, async (req, res) => {
   if (req.userId !== req.params.user_id) return res.status(403).json({ error: 'Forbidden' });
-  const { data, error } = await supabase
-    .from('positions')
-    .select('*, markets(*)')
-    .eq('user_id', req.params.user_id);
-  if (error) return res.status(400).json({ error: error.message });
+  let data;
+  if (pool) {
+    const posRows = await dbQuery('SELECT p.*, row_to_json(m.*) as markets FROM positions p LEFT JOIN markets m ON p.market_id = m.id WHERE p.user_id = $1', [req.params.user_id]);
+    data = posRows;
+  } else {
+    const { data: d, error } = await supabase.from('positions').select('*, markets(*)').eq('user_id', req.params.user_id);
+    if (error) return res.status(400).json({ error: error.message });
+    data = d;
+  }
   res.json(data);
 });
 
@@ -1412,22 +1471,27 @@ app.get('/api/leaderboard', async (req, res) => {
     let leaderboardMarketIds = null;
 
     if (communitySlug) {
-      // tenant_slug is the correct column — creator_slug does not exist on markets table
-      const { data: tenantMarkets } = await supabase
-        .from('markets')
-        .select('id')
-        .eq('tenant_slug', communitySlug);
+      let tenantMarkets;
+      if (pool) {
+        tenantMarkets = await dbQuery('SELECT id FROM markets WHERE tenant_slug = $1', [communitySlug]);
+      } else {
+        const { data } = await supabase.from('markets').select('id').eq('tenant_slug', communitySlug);
+        tenantMarkets = data;
+      }
       leaderboardMarketIds = (tenantMarkets || []).map((m) => m.id);
       if (leaderboardMarketIds.length === 0) return res.json([]);
     }
 
     // ── Settled positions (primary ranking: PnL) ──
     let settledPositions = [];
-    {
-      let q = supabase
-        .from('positions')
-        .select('user_id, amount, potential_payout, settled, won, market_id')
-        .eq('settled', true);
+    if (pool) {
+      let sql = 'SELECT user_id, amount, potential_payout, settled, won, market_id FROM positions WHERE settled = true';
+      const params = [];
+      if (leaderboardMarketIds) { params.push(leaderboardMarketIds); sql += ` AND market_id = ANY($${params.length})`; }
+      if (weekStart) { params.push(weekStart); sql += ` AND created_at >= $${params.length}`; }
+      settledPositions = await dbQuery(sql, params);
+    } else {
+      let q = supabase.from('positions').select('user_id, amount, potential_payout, settled, won, market_id').eq('settled', true);
       if (leaderboardMarketIds) q = q.in('market_id', leaderboardMarketIds);
       if (weekStart) q = q.gte('created_at', weekStart);
       const { data: pos } = await q;
@@ -1437,13 +1501,21 @@ app.get('/api/leaderboard', async (req, res) => {
     // ── Fallback: all positions (for "most active" when nothing is settled yet) ──
     let allPositions = [];
     if (settledPositions.length === 0) {
-      let q = supabase
-        .from('positions')
-        .select('user_id, amount, market_id')
-      if (leaderboardMarketIds) q = q.in('market_id', leaderboardMarketIds);
-      if (weekStart) q = q.gte('created_at', weekStart);
-      const { data: pos } = await q;
-      allPositions = pos || [];
+      if (pool) {
+        let sql = 'SELECT user_id, amount, market_id FROM positions';
+        const params = [];
+        const clauses = [];
+        if (leaderboardMarketIds) { params.push(leaderboardMarketIds); clauses.push(`market_id = ANY($${params.length})`); }
+        if (weekStart) { params.push(weekStart); clauses.push(`created_at >= $${params.length}`); }
+        if (clauses.length) sql += ' WHERE ' + clauses.join(' AND ');
+        allPositions = await dbQuery(sql, params);
+      } else {
+        let q = supabase.from('positions').select('user_id, amount, market_id');
+        if (leaderboardMarketIds) q = q.in('market_id', leaderboardMarketIds);
+        if (weekStart) q = q.gte('created_at', weekStart);
+        const { data: pos } = await q;
+        allPositions = pos || [];
+      }
     }
 
     const positions = settledPositions.length > 0 ? settledPositions : allPositions;
@@ -1452,10 +1524,13 @@ app.get('/api/leaderboard', async (req, res) => {
     if (!positions || positions.length === 0) return res.json([]);
 
     const userIds = [...new Set(positions.map((p) => p.user_id))];
-    const { data: users } = await supabase
-      .from('users')
-      .select('id, display_name, email')
-      .in('id', userIds);
+    let users;
+    if (pool) {
+      users = await dbQuery('SELECT id, display_name, email FROM users WHERE id = ANY($1)', [userIds]);
+    } else {
+      const { data } = await supabase.from('users').select('id, display_name, email').in('id', userIds);
+      users = data;
+    }
 
     const userMap = new Map((users || []).map((u) => [u.id, u]));
     const agg = new Map();
@@ -2511,20 +2586,30 @@ app.put('/api/creator/news-feed-settings', requireCreator, async (req, res) => {
 app.get('/api/discover', async (req, res) => {
   try {
     // All active communities
-    const { data: communities } = await supabase
-      .from('creator_settings')
-      .select('slug, display_name, logo_url, banner_url, primary_color, community_description, plan, starting_balance, custom_points_name')
-      .eq('is_active', true)
-      .order('created_at', { ascending: false });
+    let communities;
+    if (pool) {
+      communities = await dbQuery("SELECT slug, display_name, logo_url, banner_url, primary_color, community_description, plan, starting_balance, custom_points_name FROM creator_settings WHERE is_active = true ORDER BY created_at DESC");
+    } else {
+      const { data } = await supabase
+        .from('creator_settings')
+        .select('slug, display_name, logo_url, banner_url, primary_color, community_description, plan, starting_balance, custom_points_name')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+      communities = data;
+    }
 
     if (!communities || !communities.length) return res.json({ communities: [], trending: [], stats: {} });
 
     const slugs = communities.map(c => c.slug);
 
     // Member counts per community
-    const { data: balanceRows } = await supabase
-      .from('community_balances')
-      .select('creator_slug, user_id');
+    let balanceRows;
+    if (pool) {
+      balanceRows = await dbQuery("SELECT creator_slug, user_id FROM community_balances");
+    } else {
+      const { data } = await supabase.from('community_balances').select('creator_slug, user_id');
+      balanceRows = data;
+    }
 
     const memberCounts = {};
     (balanceRows || []).forEach(r => {
@@ -2532,12 +2617,18 @@ app.get('/api/discover', async (req, res) => {
     });
 
     // Active market counts + top markets per community
-    const { data: allMarkets } = await supabase
-      .from('markets')
-      .select('id, question, category, yes_price, no_price, yes_votes, no_votes, trader_count, resolved, tenant_slug, creator_id, created_at')
-      .neq('is_public', false)
-      .eq('resolved', false)
-      .order('trader_count', { ascending: false });
+    let allMarkets;
+    if (pool) {
+      allMarkets = await dbQuery("SELECT id, question, category, yes_price, no_price, yes_votes, no_votes, trader_count, resolved, tenant_slug, creator_id, created_at FROM markets WHERE (is_public IS NULL OR is_public != false) AND resolved = false ORDER BY trader_count DESC");
+    } else {
+      const { data } = await supabase
+        .from('markets')
+        .select('id, question, category, yes_price, no_price, yes_votes, no_votes, trader_count, resolved, tenant_slug, creator_id, created_at')
+        .neq('is_public', false)
+        .eq('resolved', false)
+        .order('trader_count', { ascending: false });
+      allMarkets = data;
+    }
 
     const marketsBySlug = {};
     (allMarkets || []).forEach(m => {
@@ -6186,52 +6277,85 @@ app.get('/api/community/:slug', async (req, res) => {
   try {
     const { slug } = req.params;
 
-    const { data: settings } = await supabase
-      .from('creator_settings')
-      .select('*')
-      .eq('slug', slug)
-      .eq('is_active', true)
-      .maybeSingle();
+    let settings;
+    if (pool) {
+      const settingsRows = await dbQuery("SELECT * FROM creator_settings WHERE slug = $1 AND is_active = true LIMIT 1", [slug]);
+      settings = settingsRows[0] || null;
+    } else {
+      const { data } = await supabase
+        .from('creator_settings')
+        .select('*')
+        .eq('slug', slug)
+        .eq('is_active', true)
+        .maybeSingle();
+      settings = data;
+    }
 
     if (!settings) return res.status(404).json({ error: 'Community not found' });
 
-    // Match on any of the three fields that market-creation routes populate.
-    // Use select('*') so missing columns from pending migrations never break the query.
-    const { data: rawMarkets, error: marketsErr } = await supabase
-      .from('markets')
-      .select('*')
-      .or(`tenant_slug.eq.${slug},creator_id.eq.${settings.creator_id}`)
-      .neq('is_public', false)   // include true AND null (legacy markets without is_public set)
-      .order('created_at', { ascending: false });
-    if (marketsErr) console.error('[community markets query]', marketsErr.message);
+    let rawMarkets;
+    if (pool) {
+      rawMarkets = await dbQuery(
+        "SELECT * FROM markets WHERE (tenant_slug = $1 OR creator_id = $2) AND (is_public IS NULL OR is_public != false) ORDER BY created_at DESC",
+        [slug, settings.creator_id]
+      );
+    } else {
+      const { data, error: marketsErr } = await supabase
+        .from('markets')
+        .select('*')
+        .or(`tenant_slug.eq.${slug},creator_id.eq.${settings.creator_id}`)
+        .neq('is_public', false)
+        .order('created_at', { ascending: false });
+      if (marketsErr) console.error('[community markets query]', marketsErr.message);
+      rawMarkets = data;
+    }
 
-    // Real unique member count — distinct users who have a community_balances row for this slug
-    const { count: memberCount } = await supabase
-      .from('community_balances')
-      .select('user_id', { count: 'exact', head: true })
-      .eq('creator_slug', slug);
+    let memberCount;
+    if (pool) {
+      const mcRows = await dbQuery("SELECT count(DISTINCT user_id) as count FROM community_balances WHERE creator_slug = $1", [slug]);
+      memberCount = parseInt(mcRows[0]?.count || 0);
+    } else {
+      const { count } = await supabase
+        .from('community_balances')
+        .select('user_id', { count: 'exact', head: true })
+        .eq('creator_slug', slug);
+      memberCount = count;
+    }
 
     // Recent activity feed — last 20 real bets across this community's markets
     const marketIds = (rawMarkets || []).map(m => m.id);
     let recentActivity = [];
     if (marketIds.length > 0) {
-      const { data: recentPositions } = await supabase
-        .from('positions')
-        .select('user_id, market_id, side, amount, created_at')
-        .in('market_id', marketIds)
-        .order('created_at', { ascending: false })
-        .limit(20);
+      let recentPositions;
+      if (pool) {
+        recentPositions = await dbQuery(
+          "SELECT user_id, market_id, side, amount, created_at FROM positions WHERE market_id = ANY($1) ORDER BY created_at DESC LIMIT 20",
+          [marketIds]
+        );
+      } else {
+        const { data } = await supabase
+          .from('positions')
+          .select('user_id, market_id, side, amount, created_at')
+          .in('market_id', marketIds)
+          .order('created_at', { ascending: false })
+          .limit(20);
+        recentPositions = data;
+      }
 
       if (recentPositions && recentPositions.length > 0) {
-        // Fetch display names for unique users (anonymise if null)
         const uniqueUserIds = [...new Set(recentPositions.map(p => p.user_id))];
-        const { data: userRows } = await supabase
-          .from('users')
-          .select('id, display_name')
-          .in('id', uniqueUserIds);
+        let userRows;
+        if (pool) {
+          userRows = await dbQuery('SELECT id, display_name FROM users WHERE id = ANY($1)', [uniqueUserIds]);
+        } else {
+          const { data } = await supabase
+            .from('users')
+            .select('id, display_name')
+            .in('id', uniqueUserIds);
+          userRows = data;
+        }
         const userMap = Object.fromEntries((userRows || []).map(u => [u.id, u.display_name || 'Someone']));
 
-        // Build market question lookup
         const mktMap = Object.fromEntries((rawMarkets || []).map(m => [m.id, m.question]));
 
         recentActivity = recentPositions.map(p => ({
@@ -6284,30 +6408,36 @@ app.get('/api/community/:slug', async (req, res) => {
       member_count: memberCount || 0,
       markets: markets || [],
       recent_activity: recentActivity,
-      rewards: await supabase
-        .from('creator_rewards')
-        .select('id, threshold, title, description')
-        .eq('creator_id', settings.creator_id)
-        .order('threshold', { ascending: true })
-        .then(r => r.data || []),
+      rewards: pool
+        ? await dbQuery('SELECT id, threshold, title, description FROM creator_rewards WHERE creator_id = $1 ORDER BY threshold ASC', [settings.creator_id])
+        : await supabase
+            .from('creator_rewards')
+            .select('id, threshold, title, description')
+            .eq('creator_id', settings.creator_id)
+            .order('threshold', { ascending: true })
+            .then(r => r.data || []),
       challenge_progress: await getChallengeProgress(settings),
-      announcements: await supabase.from('creator_announcements')
-        .select('id, title, body, pinned, created_at')
-        .eq('creator_slug', slug)
-        .order('pinned', { ascending: false })
-        .order('created_at', { ascending: false })
-        .limit(20)
-        .then(r => {
-          const rows = r.data || [];
-          // Deduplicate by title — keep the first occurrence (most recent)
-          const seen = new Set();
-          return rows.filter(a => {
-            const key = a.title.trim().toLowerCase();
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-          }).slice(0, 5);
-        })
+      announcements: await (async () => {
+        let rows;
+        if (pool) {
+          rows = await dbQuery('SELECT id, title, body, pinned, created_at FROM creator_announcements WHERE creator_slug = $1 ORDER BY pinned DESC, created_at DESC LIMIT 20', [slug]);
+        } else {
+          const r = await supabase.from('creator_announcements')
+            .select('id, title, body, pinned, created_at')
+            .eq('creator_slug', slug)
+            .order('pinned', { ascending: false })
+            .order('created_at', { ascending: false })
+            .limit(20);
+          rows = r.data || [];
+        }
+        const seen = new Set();
+        return rows.filter(a => {
+          const key = a.title.trim().toLowerCase();
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        }).slice(0, 5);
+      })()
     });
 
   } catch (err) {
@@ -6327,18 +6457,22 @@ app.post('/api/community/:slug/follow-social', requireAuth, async (req, res) => 
     const { slug } = req.params;
     const userId = req.user.id;
 
-    const { data: existing } = await supabase
-      .from('creator_follows')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('creator_slug', slug)
-      .maybeSingle();
+    let existing;
+    if (pool) {
+      const rows = await dbQuery('SELECT id FROM creator_follows WHERE user_id = $1 AND creator_slug = $2 LIMIT 1', [userId, slug]);
+      existing = rows[0] || null;
+    } else {
+      const { data } = await supabase.from('creator_follows').select('id').eq('user_id', userId).eq('creator_slug', slug).maybeSingle();
+      existing = data;
+    }
 
     if (existing) {
-      await supabase.from('creator_follows').delete().eq('id', existing.id);
+      if (pool) { await dbQuery('DELETE FROM creator_follows WHERE id = $1', [existing.id]); }
+      else { await supabase.from('creator_follows').delete().eq('id', existing.id); }
       res.json({ following: false });
     } else {
-      await supabase.from('creator_follows').insert([{ user_id: userId, creator_slug: slug }]);
+      if (pool) { await dbQuery('INSERT INTO creator_follows (user_id, creator_slug) VALUES ($1, $2)', [userId, slug]); }
+      else { await supabase.from('creator_follows').insert([{ user_id: userId, creator_slug: slug }]); }
       res.json({ following: true });
     }
   } catch (err) {
@@ -6348,12 +6482,14 @@ app.post('/api/community/:slug/follow-social', requireAuth, async (req, res) => 
 
 app.get('/api/user/following', requireAuth, async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('creator_follows')
-      .select('creator_slug, followed_at')
-      .eq('user_id', req.user.id)
-      .order('followed_at', { ascending: false });
-    if (error) throw error;
+    let data;
+    if (pool) {
+      data = await dbQuery('SELECT creator_slug, followed_at FROM creator_follows WHERE user_id = $1 ORDER BY followed_at DESC', [req.user.id]);
+    } else {
+      const { data: d, error } = await supabase.from('creator_follows').select('creator_slug, followed_at').eq('user_id', req.user.id).order('followed_at', { ascending: false });
+      if (error) throw error;
+      data = d;
+    }
     res.json({ following: (data || []).map(r => r.creator_slug) });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -6991,40 +7127,49 @@ app.get('/api/search', async (req, res) => {
     if (token) {
       try {
         const payload = jwt.verify(token, JWT_SECRET);
-        const { data: myBals } = await supabase
-          .from('community_balances')
-          .select('creator_slug')
-          .eq('user_id', payload.id);
+        let myBals;
+        if (pool) {
+          myBals = await dbQuery('SELECT creator_slug FROM community_balances WHERE user_id = $1', [payload.id]);
+        } else {
+          const { data } = await supabase.from('community_balances').select('creator_slug').eq('user_id', payload.id);
+          myBals = data;
+        }
         (myBals || []).forEach(b => mySlugSet.add(b.creator_slug));
       } catch {}
     }
 
     // Run community + user search in parallel
-    const [settingsRes, usersRes] = await Promise.all([
-      supabase
-        .from('creator_settings')
-        .select('slug, display_name, logo_url, primary_color, custom_points_name')
-        .or(`slug.ilike.%${q}%,display_name.ilike.%${q}%`)
-        .limit(12),
-      supabase
-        .from('users')
-        .select('id, display_name')
-        .ilike('display_name', `%${q}%`)
-        .limit(12),
-    ]);
+    let settingsData, usersSearchData;
+    if (pool) {
+      const qPat = `%${q}%`;
+      [settingsData, usersSearchData] = await Promise.all([
+        dbQuery("SELECT slug, display_name, logo_url, primary_color, custom_points_name FROM creator_settings WHERE slug ILIKE $1 OR display_name ILIKE $1 LIMIT 12", [qPat]),
+        dbQuery("SELECT id, display_name FROM users WHERE display_name ILIKE $1 LIMIT 12", [qPat]),
+      ]);
+    } else {
+      const [settingsRes, usersRes] = await Promise.all([
+        supabase.from('creator_settings').select('slug, display_name, logo_url, primary_color, custom_points_name').or(`slug.ilike.%${q}%,display_name.ilike.%${q}%`).limit(12),
+        supabase.from('users').select('id, display_name').ilike('display_name', `%${q}%`).limit(12),
+      ]);
+      settingsData = settingsRes.data || [];
+      usersSearchData = usersRes.data || [];
+    }
 
     // Enrich communities with member count
-    const slugs = (settingsRes.data || []).map(s => s.slug);
+    const slugs = (settingsData || []).map(s => s.slug);
     let memberCounts = {};
     if (slugs.length) {
-      const { data: balRows } = await supabase
-        .from('community_balances')
-        .select('creator_slug')
-        .in('creator_slug', slugs);
+      let balRows;
+      if (pool) {
+        balRows = await dbQuery('SELECT creator_slug FROM community_balances WHERE creator_slug = ANY($1)', [slugs]);
+      } else {
+        const { data } = await supabase.from('community_balances').select('creator_slug').in('creator_slug', slugs);
+        balRows = data;
+      }
       (balRows || []).forEach(b => { memberCounts[b.creator_slug] = (memberCounts[b.creator_slug] || 0) + 1; });
     }
 
-    const communities = (settingsRes.data || []).map(s => ({
+    const communities = (settingsData || []).map(s => ({
       slug:               s.slug,
       display_name:       s.display_name || s.slug,
       logo_url:           s.logo_url || null,
@@ -7035,20 +7180,23 @@ app.get('/api/search', async (req, res) => {
     }));
 
     // Enrich users with their community slugs for "in common" calc
-    const userIds = (usersRes.data || []).map(u => u.id);
+    const userIds = (usersSearchData || []).map(u => u.id);
     let userCommunityMap = {};
     if (userIds.length) {
-      const { data: ubals } = await supabase
-        .from('community_balances')
-        .select('user_id, creator_slug')
-        .in('user_id', userIds);
+      let ubals;
+      if (pool) {
+        ubals = await dbQuery('SELECT user_id, creator_slug FROM community_balances WHERE user_id = ANY($1)', [userIds]);
+      } else {
+        const { data } = await supabase.from('community_balances').select('user_id, creator_slug').in('user_id', userIds);
+        ubals = data;
+      }
       (ubals || []).forEach(b => {
         if (!userCommunityMap[b.user_id]) userCommunityMap[b.user_id] = [];
         userCommunityMap[b.user_id].push(b.creator_slug);
       });
     }
 
-    const users = (usersRes.data || []).map(u => {
+    const users = (usersSearchData || []).map(u => {
       const theirSlugs = userCommunityMap[u.id] || [];
       const common = theirSlugs.filter(s => mySlugSet.has(s));
       return {
@@ -7235,21 +7383,23 @@ app.get('/widget/:slug', async (req, res) => {
 app.get('/api/embed/:slug', async (req, res) => {
   try {
     const { slug } = req.params;
-    const { data: cs } = await supabase
-      .from('creator_settings')
-      .select('creator_id, display_name, primary_color, custom_points_name, logo_url, min_bet, max_bet')
-      .eq('slug', slug)
-      .maybeSingle();
+    let cs;
+    if (pool) {
+      const rows = await dbQuery('SELECT creator_id, display_name, primary_color, custom_points_name, logo_url, min_bet, max_bet FROM creator_settings WHERE slug = $1 LIMIT 1', [slug]);
+      cs = rows[0] || null;
+    } else {
+      const { data } = await supabase.from('creator_settings').select('creator_id, display_name, primary_color, custom_points_name, logo_url, min_bet, max_bet').eq('slug', slug).maybeSingle();
+      cs = data;
+    }
     if (!cs) return res.status(404).json({ error: 'Community not found' });
 
-    const { data: markets } = await supabase
-      .from('markets')
-      .select('id, question, yes_price, no_price, yes_votes, no_votes, trader_count, expiry_date, category')
-      .eq('tenant_slug', slug)
-      .eq('resolved', false)
-      .neq('is_public', false)
-      .order('trader_count', { ascending: false })
-      .limit(3);
+    let markets;
+    if (pool) {
+      markets = await dbQuery("SELECT id, question, yes_price, no_price, yes_votes, no_votes, trader_count, expiry_date, category FROM markets WHERE tenant_slug = $1 AND resolved = false AND (is_public IS NULL OR is_public != false) ORDER BY trader_count DESC LIMIT 3", [slug]);
+    } else {
+      const { data } = await supabase.from('markets').select('id, question, yes_price, no_price, yes_votes, no_votes, trader_count, expiry_date, category').eq('tenant_slug', slug).eq('resolved', false).neq('is_public', false).order('trader_count', { ascending: false }).limit(3);
+      markets = data;
+    }
 
     res.setHeader('X-Frame-Options', 'ALLOWALL');
     res.setHeader('Content-Security-Policy', "frame-ancestors *");
@@ -7290,30 +7440,38 @@ app.get('/api/user/dashboard', requireAuth, async (req, res) => {
     const userId = req.user.id;
 
     // Parallel: user profile, all community balances, all positions, creator check
-    const [userRes, balancesRes, positionsRes, creatorRes] = await Promise.all([
-      supabase.from('users')
-        .select('id, display_name, email, created_at')
-        .eq('id', userId)
-        .maybeSingle(),
-      supabase.from('community_balances')
-        .select('creator_slug, balance')
-        .eq('user_id', userId),
-      supabase.from('positions')
-        .select('id, side, amount, potential_payout, won, settled, created_at, market_id, markets(id, question, tenant_slug, resolved, resolved_at, expiry_date, yes_price, no_price, yes_votes, no_votes)')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(200),
-      supabase.from('creator_settings')
-        .select('slug')
-        .eq('creator_id', userId)
-        .maybeSingle(),
-    ]);
+    let user, balances, positions, creatorData;
+    if (pool) {
+      const [userRows, balRows, posRows, creatorRows] = await Promise.all([
+        dbQuery('SELECT id, display_name, email, created_at FROM users WHERE id = $1 LIMIT 1', [userId]),
+        dbQuery('SELECT creator_slug, balance FROM community_balances WHERE user_id = $1', [userId]),
+        dbQuery(`SELECT p.id, p.side, p.amount, p.potential_payout, p.won, p.settled, p.created_at, p.market_id,
+          m.id as m_id, m.question as m_question, m.tenant_slug as m_tenant_slug, m.resolved as m_resolved, m.resolved_at as m_resolved_at, m.expiry_date as m_expiry_date, m.yes_price as m_yes_price, m.no_price as m_no_price, m.yes_votes as m_yes_votes, m.no_votes as m_no_votes
+          FROM positions p LEFT JOIN markets m ON p.market_id = m.id WHERE p.user_id = $1 ORDER BY p.created_at DESC LIMIT 200`, [userId]),
+        dbQuery('SELECT slug FROM creator_settings WHERE creator_id = $1 LIMIT 1', [userId]),
+      ]);
+      user = userRows[0] || null;
+      balances = balRows;
+      positions = posRows.map(r => ({ id: r.id, side: r.side, amount: r.amount, potential_payout: r.potential_payout, won: r.won, settled: r.settled, created_at: r.created_at, market_id: r.market_id, markets: r.m_id ? { id: r.m_id, question: r.m_question, tenant_slug: r.m_tenant_slug, resolved: r.m_resolved, resolved_at: r.m_resolved_at, expiry_date: r.m_expiry_date, yes_price: r.m_yes_price, no_price: r.m_no_price, yes_votes: r.m_yes_votes, no_votes: r.m_no_votes } : null }));
+      creatorData = creatorRows[0] || null;
+    } else {
+      const [userRes, balancesRes, positionsRes, creatorRes] = await Promise.all([
+        supabase.from('users').select('id, display_name, email, created_at').eq('id', userId).maybeSingle(),
+        supabase.from('community_balances').select('creator_slug, balance').eq('user_id', userId),
+        supabase.from('positions')
+          .select('id, side, amount, potential_payout, won, settled, created_at, market_id, markets(id, question, tenant_slug, resolved, resolved_at, expiry_date, yes_price, no_price, yes_votes, no_votes)')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(200),
+        supabase.from('creator_settings').select('slug').eq('creator_id', userId).maybeSingle(),
+      ]);
+      user = userRes.data;
+      balances = balancesRes.data || [];
+      positions = positionsRes.data || [];
+      creatorData = creatorRes.data;
+    }
 
-    const user = userRes.data;
     if (!user) return res.status(404).json({ error: 'User not found' });
-
-    const balances = balancesRes.data || [];
-    const positions = positionsRes.data || [];
 
     // Get all community slugs (from balances + positions)
     const balanceSlugs = balances.map(b => b.creator_slug);
@@ -7321,11 +7479,17 @@ app.get('/api/user/dashboard', requireAuth, async (req, res) => {
     const allSlugs = [...new Set([...balanceSlugs, ...positionSlugs])];
 
     // Fetch community info for all slugs
-    const { data: communityRows } = allSlugs.length
-      ? await supabase.from('creator_settings')
-          .select('slug, display_name, primary_color, logo_url, custom_points_name, is_active')
-          .in('slug', allSlugs.slice(0, 30))
-      : { data: [] };
+    let communityRows;
+    if (allSlugs.length) {
+      if (pool) {
+        communityRows = await dbQuery('SELECT slug, display_name, primary_color, logo_url, custom_points_name, is_active FROM creator_settings WHERE slug = ANY($1)', [allSlugs.slice(0, 30)]);
+      } else {
+        const { data } = await supabase.from('creator_settings').select('slug, display_name, primary_color, logo_url, custom_points_name, is_active').in('slug', allSlugs.slice(0, 30));
+        communityRows = data;
+      }
+    } else {
+      communityRows = [];
+    }
 
     const communityMap = {};
     for (const c of (communityRows || [])) communityMap[c.slug] = c;
@@ -7335,11 +7499,15 @@ app.get('/api/user/dashboard', requireAuth, async (req, res) => {
       balances.map(async b => {
         const c = communityMap[b.creator_slug] || { slug: b.creator_slug, display_name: b.creator_slug, primary_color: '#c9920d' };
         // Get rank: count users with higher balance in same community
-        const { count } = await supabase.from('community_balances')
-          .select('*', { count: 'exact', head: true })
-          .eq('creator_slug', b.creator_slug)
-          .gt('balance', b.balance);
-        const rank = (count || 0) + 1;
+        let rankCount;
+        if (pool) {
+          const rcRows = await dbQuery('SELECT count(*) as count FROM community_balances WHERE creator_slug = $1 AND balance > $2', [b.creator_slug, b.balance]);
+          rankCount = parseInt(rcRows[0]?.count || 0);
+        } else {
+          const { count } = await supabase.from('community_balances').select('*', { count: 'exact', head: true }).eq('creator_slug', b.creator_slug).gt('balance', b.balance);
+          rankCount = count || 0;
+        }
+        const rank = rankCount + 1;
         // Count open positions in this community
         const openCount = positions.filter(p =>
           p.markets?.tenant_slug === b.creator_slug && !p.settled
@@ -7417,8 +7585,8 @@ app.get('/api/user/dashboard', requireAuth, async (req, res) => {
         display_name: user.display_name || 'Anonymous',
         email:        user.email,
         member_since: user.created_at,
-        is_creator:   !!creatorRes.data,
-        creator_slug: creatorRes.data?.slug || null,
+        is_creator:   !!creatorData,
+        creator_slug: creatorData?.slug || null,
       },
       stats: {
         total_predictions: positions.length,
@@ -7451,29 +7619,41 @@ app.post('/api/community/:slug/follow', requireAuth, async (req, res) => {
     const userId = req.user.id;
     const join_source = req.body?.join_source || 'direct';
 
-    const { data: settings } = await supabase
-      .from('creator_settings')
-      .select('starting_balance, custom_points_name, display_name')
-      .eq('slug', slug)
-      .maybeSingle();
+    let settings;
+    if (pool) {
+      const sRows = await dbQuery('SELECT starting_balance, custom_points_name, display_name FROM creator_settings WHERE slug = $1 LIMIT 1', [slug]);
+      settings = sRows[0] || null;
+    } else {
+      const { data } = await supabase.from('creator_settings').select('starting_balance, custom_points_name, display_name').eq('slug', slug).maybeSingle();
+      settings = data;
+    }
     if (!settings) return res.status(404).json({ error: 'Community not found' });
 
     const startingBalance = settings.starting_balance ?? 100000;
 
     // Idempotent upsert — won't overwrite existing balance
-    const { error: upsertErr, data: upserted } = await supabase
-      .from('community_balances')
-      .upsert({ user_id: userId, creator_slug: slug, balance: startingBalance, join_source },
-               { onConflict: 'user_id,creator_slug', ignoreDuplicates: true })
-      .select('balance');
+    if (pool) {
+      await dbQuery(
+        'INSERT INTO community_balances (user_id, creator_slug, balance, join_source) VALUES ($1, $2, $3, $4) ON CONFLICT (user_id, creator_slug) DO NOTHING',
+        [userId, slug, startingBalance, join_source]
+      );
+    } else {
+      await supabase
+        .from('community_balances')
+        .upsert({ user_id: userId, creator_slug: slug, balance: startingBalance, join_source },
+                 { onConflict: 'user_id,creator_slug', ignoreDuplicates: true })
+        .select('balance');
+    }
 
     // Return current balance (may be higher than starting if they already had one)
-    const { data: row } = await supabase
-      .from('community_balances')
-      .select('balance')
-      .eq('user_id', userId)
-      .eq('creator_slug', slug)
-      .maybeSingle();
+    let row;
+    if (pool) {
+      const rRows = await dbQuery('SELECT balance FROM community_balances WHERE user_id = $1 AND creator_slug = $2 LIMIT 1', [userId, slug]);
+      row = rRows[0] || null;
+    } else {
+      const { data } = await supabase.from('community_balances').select('balance').eq('user_id', userId).eq('creator_slug', slug).maybeSingle();
+      row = data;
+    }
 
     res.json({ balance: row?.balance ?? startingBalance, starting_balance: startingBalance });
 
@@ -7488,11 +7668,12 @@ app.post('/api/community/:slug/follow', requireAuth, async (req, res) => {
 app.delete('/api/user/community/:slug', requireAuth, async (req, res) => {
   try {
     const { slug } = req.params;
-    const { error } = await supabase.from('community_balances')
-      .delete()
-      .eq('user_id', req.user.id)
-      .eq('creator_slug', slug);
-    if (error) return res.status(500).json({ error: error.message });
+    if (pool) {
+      await dbQuery('DELETE FROM community_balances WHERE user_id = $1 AND creator_slug = $2', [req.user.id, slug]);
+    } else {
+      const { error } = await supabase.from('community_balances').delete().eq('user_id', req.user.id).eq('creator_slug', slug);
+      if (error) return res.status(500).json({ error: error.message });
+    }
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -7617,13 +7798,19 @@ app.get('/api/predictors', async (req, res) => {
     const lim = Math.min(parseInt(limit) || 100, 200);
 
     // Aggregate settled positions per user (limit to 5000 for perf)
-    const { data: rows, error } = await supabase
-      .from('positions')
-      .select('user_id, amount, potential_payout, settled, won, created_at')
-      .eq('settled', true)
-      .limit(5000);
+    let rows;
+    if (pool) {
+      rows = await dbQuery('SELECT user_id, amount, potential_payout, settled, won, created_at FROM positions WHERE settled = true LIMIT 5000');
+    } else {
+      const { data, error } = await supabase
+        .from('positions')
+        .select('user_id, amount, potential_payout, settled, won, created_at')
+        .eq('settled', true)
+        .limit(5000);
+      if (error) throw error;
+      rows = data;
+    }
 
-    if (error) throw error;
     if (!rows || !rows.length) return res.json([]);
 
     // Group by user_id
@@ -7651,20 +7838,25 @@ app.get('/api/predictors', async (req, res) => {
     }
 
     // Fetch display names
-    const { data: userRows } = await supabase
-      .from('users')
-      .select('id, display_name')
-      .in('id', userIds);
+    let userRows;
+    if (pool) {
+      userRows = await dbQuery('SELECT id, display_name FROM users WHERE id = ANY($1)', [userIds]);
+    } else {
+      const { data } = await supabase.from('users').select('id, display_name').in('id', userIds);
+      userRows = data;
+    }
 
     const nameMap = {};
     for (const u of userRows || []) nameMap[u.id] = u.display_name;
 
     // Check polymarket connections (users table)
-    const { data: csRows } = await supabase
-      .from('users')
-      .select('id, polymarket_address')
-      .in('id', userIds)
-      .not('polymarket_address', 'is', null);
+    let csRows;
+    if (pool) {
+      csRows = await dbQuery('SELECT id, polymarket_address FROM users WHERE id = ANY($1) AND polymarket_address IS NOT NULL', [userIds]);
+    } else {
+      const { data } = await supabase.from('users').select('id, polymarket_address').in('id', userIds).not('polymarket_address', 'is', null);
+      csRows = data;
+    }
 
     const polyMap = {};
     for (const cs of csRows || []) polyMap[cs.id] = cs.polymarket_address;
@@ -7714,17 +7906,21 @@ app.post('/api/predictors/:userId/follow', requireAuth, async (req, res) => {
   const followerId = req.user.id;
   const followingId = req.params.userId;
   if (followerId === followingId) return res.status(400).json({ error: 'Cannot follow yourself' });
-  const { data: existing } = await supabase
-    .from('predictor_follows')
-    .select('id')
-    .eq('follower_id', followerId)
-    .eq('following_id', followingId)
-    .maybeSingle();
+  let existing;
+  if (pool) {
+    const rows = await dbQuery('SELECT id FROM predictor_follows WHERE follower_id = $1 AND following_id = $2 LIMIT 1', [followerId, followingId]);
+    existing = rows[0] || null;
+  } else {
+    const { data } = await supabase.from('predictor_follows').select('id').eq('follower_id', followerId).eq('following_id', followingId).maybeSingle();
+    existing = data;
+  }
   if (existing) {
-    await supabase.from('predictor_follows').delete().eq('id', existing.id);
+    if (pool) { await dbQuery('DELETE FROM predictor_follows WHERE id = $1', [existing.id]); }
+    else { await supabase.from('predictor_follows').delete().eq('id', existing.id); }
     return res.json({ following: false });
   } else {
-    await supabase.from('predictor_follows').insert({ follower_id: followerId, following_id: followingId });
+    if (pool) { await dbQuery('INSERT INTO predictor_follows (follower_id, following_id) VALUES ($1, $2)', [followerId, followingId]); }
+    else { await supabase.from('predictor_follows').insert({ follower_id: followerId, following_id: followingId }); }
     return res.json({ following: true });
   }
 });
@@ -7732,11 +7928,23 @@ app.post('/api/predictors/:userId/follow', requireAuth, async (req, res) => {
 // Get follow status + count for a user
 app.get('/api/predictors/:userId/follow-status', optionalAuth, async (req, res) => {
   const targetId = req.params.userId;
-  const { count } = await supabase.from('predictor_follows').select('id', { count: 'exact', head: true }).eq('following_id', targetId);
+  let count;
+  if (pool) {
+    const rows = await dbQuery('SELECT count(*) as count FROM predictor_follows WHERE following_id = $1', [targetId]);
+    count = parseInt(rows[0]?.count || 0);
+  } else {
+    const r = await supabase.from('predictor_follows').select('id', { count: 'exact', head: true }).eq('following_id', targetId);
+    count = r.count || 0;
+  }
   let isFollowing = false;
   if (req.user) {
-    const { data } = await supabase.from('predictor_follows').select('id').eq('follower_id', req.user.id).eq('following_id', targetId).maybeSingle();
-    isFollowing = !!data;
+    if (pool) {
+      const rows = await dbQuery('SELECT id FROM predictor_follows WHERE follower_id = $1 AND following_id = $2 LIMIT 1', [req.user.id, targetId]);
+      isFollowing = !!rows[0];
+    } else {
+      const { data } = await supabase.from('predictor_follows').select('id').eq('follower_id', req.user.id).eq('following_id', targetId).maybeSingle();
+      isFollowing = !!data;
+    }
   }
   res.json({ follower_count: count || 0, is_following: isFollowing });
 });
@@ -7747,17 +7955,21 @@ app.post('/api/predictors/:userId/copy-trade', requireAuth, async (req, res) => 
   const targetId = req.params.userId;
   if (subscriberId === targetId) return res.status(400).json({ error: 'Cannot copy-trade yourself' });
   try {
-    const { data: existing } = await supabase
-      .from('copy_trade_subscriptions')
-      .select('id')
-      .eq('subscriber_id', subscriberId)
-      .eq('target_user_id', targetId)
-      .maybeSingle();
+    let existing;
+    if (pool) {
+      const rows = await dbQuery('SELECT id FROM copy_trade_subscriptions WHERE subscriber_id = $1 AND target_user_id = $2 LIMIT 1', [subscriberId, targetId]);
+      existing = rows[0] || null;
+    } else {
+      const { data } = await supabase.from('copy_trade_subscriptions').select('id').eq('subscriber_id', subscriberId).eq('target_user_id', targetId).maybeSingle();
+      existing = data;
+    }
     if (existing) {
-      await supabase.from('copy_trade_subscriptions').delete().eq('id', existing.id);
+      if (pool) { await dbQuery('DELETE FROM copy_trade_subscriptions WHERE id = $1', [existing.id]); }
+      else { await supabase.from('copy_trade_subscriptions').delete().eq('id', existing.id); }
       return res.json({ subscribed: false });
     } else {
-      await supabase.from('copy_trade_subscriptions').insert({ subscriber_id: subscriberId, target_user_id: targetId });
+      if (pool) { await dbQuery('INSERT INTO copy_trade_subscriptions (subscriber_id, target_user_id) VALUES ($1, $2)', [subscriberId, targetId]); }
+      else { await supabase.from('copy_trade_subscriptions').insert({ subscriber_id: subscriberId, target_user_id: targetId }); }
       return res.json({ subscribed: true });
     }
   } catch (err) {
@@ -7770,11 +7982,23 @@ app.post('/api/predictors/:userId/copy-trade', requireAuth, async (req, res) => 
 app.get('/api/predictors/:userId/copy-status', optionalAuth, async (req, res) => {
   const targetId = req.params.userId;
   try {
-    const { count } = await supabase.from('copy_trade_subscriptions').select('id', { count: 'exact', head: true }).eq('target_user_id', targetId);
+    let count;
+    if (pool) {
+      const rows = await dbQuery('SELECT count(*) as count FROM copy_trade_subscriptions WHERE target_user_id = $1', [targetId]);
+      count = parseInt(rows[0]?.count || 0);
+    } else {
+      const r = await supabase.from('copy_trade_subscriptions').select('id', { count: 'exact', head: true }).eq('target_user_id', targetId);
+      count = r.count || 0;
+    }
     let isSubscribed = false;
     if (req.user) {
-      const { data } = await supabase.from('copy_trade_subscriptions').select('id').eq('subscriber_id', req.user.id).eq('target_user_id', targetId).maybeSingle();
-      isSubscribed = !!data;
+      if (pool) {
+        const rows = await dbQuery('SELECT id FROM copy_trade_subscriptions WHERE subscriber_id = $1 AND target_user_id = $2 LIMIT 1', [req.user.id, targetId]);
+        isSubscribed = !!rows[0];
+      } else {
+        const { data } = await supabase.from('copy_trade_subscriptions').select('id').eq('subscriber_id', req.user.id).eq('target_user_id', targetId).maybeSingle();
+        isSubscribed = !!data;
+      }
     }
     res.json({ subscriber_count: count || 0, is_subscribed: isSubscribed });
   } catch (err) {
@@ -7785,7 +8009,13 @@ app.get('/api/predictors/:userId/copy-status', optionalAuth, async (req, res) =>
 // Following feed — activity from people you follow
 app.get('/api/feed/following', requireAuth, async (req, res) => {
   const userId = req.user.id;
-  const { data: follows } = await supabase.from('predictor_follows').select('following_id').eq('follower_id', userId);
+  let follows;
+  if (pool) {
+    follows = await dbQuery('SELECT following_id FROM predictor_follows WHERE follower_id = $1', [userId]);
+  } else {
+    const { data } = await supabase.from('predictor_follows').select('following_id').eq('follower_id', userId);
+    follows = data;
+  }
   if (!follows || follows.length === 0) return res.json({ items: [] });
   const followingIds = follows.map(f => f.following_id);
 
@@ -8013,18 +8243,32 @@ app.get('/api/predictors/:userId/best-call', async (req, res) => {
 app.get('/api/member/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
-    const [userRes, positionsRes] = await Promise.all([
-      supabase.from('users').select('id, display_name, created_at').eq('id', userId).maybeSingle(),
-      supabase.from('positions')
-        .select('id, side, amount, potential_payout, won, settled, created_at, market_id, markets(id, question, tenant_slug, resolved_at, outcome)')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(300),
-    ]);
+    let userData, positionsData;
+    if (pool) {
+      const [userRows, posRows] = await Promise.all([
+        dbQuery('SELECT id, display_name, created_at FROM users WHERE id = $1 LIMIT 1', [userId]),
+        dbQuery(`SELECT p.id, p.side, p.amount, p.potential_payout, p.won, p.settled, p.created_at, p.market_id,
+          m.id as m_id, m.question as m_question, m.tenant_slug as m_tenant_slug, m.resolved_at as m_resolved_at, m.outcome as m_outcome
+          FROM positions p LEFT JOIN markets m ON p.market_id = m.id WHERE p.user_id = $1 ORDER BY p.created_at DESC LIMIT 300`, [userId]),
+      ]);
+      userData = userRows[0] || null;
+      positionsData = posRows.map(r => ({ id: r.id, side: r.side, amount: r.amount, potential_payout: r.potential_payout, won: r.won, settled: r.settled, created_at: r.created_at, market_id: r.market_id, markets: r.m_id ? { id: r.m_id, question: r.m_question, tenant_slug: r.m_tenant_slug, resolved_at: r.m_resolved_at, outcome: r.m_outcome } : null }));
+    } else {
+      const [userRes, positionsRes] = await Promise.all([
+        supabase.from('users').select('id, display_name, created_at').eq('id', userId).maybeSingle(),
+        supabase.from('positions')
+          .select('id, side, amount, potential_payout, won, settled, created_at, market_id, markets(id, question, tenant_slug, resolved_at, outcome)')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(300),
+      ]);
+      userData = userRes.data;
+      positionsData = positionsRes.data || [];
+    }
 
-    if (!userRes.data) return res.status(404).json({ error: 'User not found' });
+    if (!userData) return res.status(404).json({ error: 'User not found' });
 
-    const positions = positionsRes.data || [];
+    const positions = positionsData || [];
     const settled   = positions.filter(p => p.settled);
     const wins      = settled.filter(p => p.won);
     const winRate   = settled.length > 0 ? Math.round((wins.length / settled.length) * 100) : 0;
@@ -8041,9 +8285,17 @@ app.get('/api/member/:userId', async (req, res) => {
 
     // Communities active in
     const slugs = [...new Set(positions.map(p => p.markets?.tenant_slug).filter(Boolean))];
-    const { data: communitySettings } = slugs.length
-      ? await supabase.from('creator_settings').select('slug, display_name, primary_color, custom_points_name').in('slug', slugs.slice(0, 15))
-      : { data: [] };
+    let communitySettings;
+    if (slugs.length) {
+      if (pool) {
+        communitySettings = await dbQuery('SELECT slug, display_name, primary_color, custom_points_name FROM creator_settings WHERE slug = ANY($1)', [slugs.slice(0, 15)]);
+      } else {
+        const { data } = await supabase.from('creator_settings').select('slug, display_name, primary_color, custom_points_name').in('slug', slugs.slice(0, 15));
+        communitySettings = data;
+      }
+    } else {
+      communitySettings = [];
+    }
     const communityMap = {};
     for (const c of (communitySettings || [])) communityMap[c.slug] = c;
 
@@ -8065,9 +8317,9 @@ app.get('/api/member/:userId', async (req, res) => {
 
     res.json({
       user: {
-        id:           userRes.data.id,
-        display_name: userRes.data.display_name || 'Anonymous',
-        member_since: userRes.data.created_at,
+        id:           userData.id,
+        display_name: userData.display_name || 'Anonymous',
+        member_since: userData.created_at,
       },
       stats: {
         total_predictions:  positions.length,
@@ -8125,77 +8377,115 @@ app.get('/api/activity', async (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 40, 100);
     const since = req.query.since; // ISO cursor for polling
 
-    const [betsRes, resolutionsRes, newMarketsRes, winsRes, creatorsRes, commentsRes, rewardUnlocksRes, sharedPositionsRes] = await Promise.all([
-      supabase
-        .from('positions')
-        .select('id, user_id, side, amount, created_at, market_id, markets(id, question, tenant_slug, yes_price, no_price, yes_votes, no_votes, trader_count)')
-        .order('created_at', { ascending: false })
-        .limit(since ? 25 : limit),
-
-      supabase
-        .from('markets')
-        .select('id, question, tenant_slug, resolved_at, outcome, resolution_note, trader_count')
-        .eq('resolved', true)
-        .not('resolved_at', 'is', null)
-        .order('resolved_at', { ascending: false })
-        .limit(15),
-
-      supabase
-        .from('markets')
-        .select('id, question, tenant_slug, created_at, yes_price, no_price, yes_votes, no_votes, category')
-        .eq('resolved', false)
-        .neq('is_public', false)
-        .order('created_at', { ascending: false })
-        .limit(15),
-
-      // Recent wins: settled positions where user predicted correctly
-      supabase
-        .from('positions')
-        .select('id, user_id, side, amount, potential_payout, created_at, market_id, markets(id, question, tenant_slug, resolved_at, outcome, trader_count)')
-        .eq('settled', true)
-        .eq('won', true)
-        .not('markets', 'is', null)
-        .order('created_at', { ascending: false })
-        .limit(20),
-
-      supabase
-        .from('creator_settings')
-        .select('slug, display_name, primary_color, custom_points_name, logo_url'),
-
-      // Recent comments
-      supabase
-        .from('market_comments')
-        .select('id, user_id, user_name, body, created_at, market_id, creator_slug, markets(id, question, tenant_slug)')
-        .order('created_at', { ascending: false })
-        .limit(since ? 25 : 20),
-
-      // Recent reward unlocks
-      supabase
-        .from('reward_unlocks')
-        .select('id, user_id, creator_slug, reward_title, reward_threshold, unlocked_at')
-        .order('unlocked_at', { ascending: false })
-        .limit(since ? 20 : 15),
-
-      // Shared external positions (Kalshi, Manifold, Polymarket)
-      supabase
-        .from('shared_positions')
-        .select('id, user_id, question, side, platform, current_price, pnl_pct, cash_value, market_url, created_at')
-        .order('created_at', { ascending: false })
-        .limit(since ? 20 : 15),
-    ]);
+    let betsData, resolutionsData, newMarketsData, winsData, creatorsData, commentsData, rewardUnlocksData, sharedPositionsData;
+    if (pool) {
+      const betsLimit = since ? 25 : limit;
+      const commentsLimit = since ? 25 : 20;
+      const rewardLimit = since ? 20 : 15;
+      const sharedLimit = since ? 20 : 15;
+      const [betsRows, resRows, newMktRows, winsRows, creatorsRows, commentsRows, rewardRows, sharedRows] = await Promise.all([
+        dbQuery(`SELECT p.id, p.user_id, p.side, p.amount, p.created_at, p.market_id,
+          m.id as m_id, m.question as m_question, m.tenant_slug as m_tenant_slug, m.yes_price as m_yes_price, m.no_price as m_no_price, m.yes_votes as m_yes_votes, m.no_votes as m_no_votes, m.trader_count as m_trader_count
+          FROM positions p LEFT JOIN markets m ON p.market_id = m.id ORDER BY p.created_at DESC LIMIT $1`, [betsLimit]),
+        dbQuery("SELECT id, question, tenant_slug, resolved_at, outcome, resolution_note, trader_count FROM markets WHERE resolved = true AND resolved_at IS NOT NULL ORDER BY resolved_at DESC LIMIT 15"),
+        dbQuery("SELECT id, question, tenant_slug, created_at, yes_price, no_price, yes_votes, no_votes, category FROM markets WHERE resolved = false AND (is_public IS NULL OR is_public != false) ORDER BY created_at DESC LIMIT 15"),
+        dbQuery(`SELECT p.id, p.user_id, p.side, p.amount, p.potential_payout, p.created_at, p.market_id,
+          m.id as m_id, m.question as m_question, m.tenant_slug as m_tenant_slug, m.resolved_at as m_resolved_at, m.outcome as m_outcome, m.trader_count as m_trader_count
+          FROM positions p LEFT JOIN markets m ON p.market_id = m.id WHERE p.settled = true AND p.won = true AND m.id IS NOT NULL ORDER BY p.created_at DESC LIMIT 20`),
+        dbQuery("SELECT slug, display_name, primary_color, custom_points_name, logo_url FROM creator_settings"),
+        dbQuery(`SELECT c.id, c.user_id, c.user_name, c.body, c.created_at, c.market_id, c.creator_slug,
+          m.id as m_id, m.question as m_question, m.tenant_slug as m_tenant_slug
+          FROM market_comments c LEFT JOIN markets m ON c.market_id = m.id ORDER BY c.created_at DESC LIMIT $1`, [commentsLimit]),
+        dbQuery("SELECT id, user_id, creator_slug, reward_title, reward_threshold, unlocked_at FROM reward_unlocks ORDER BY unlocked_at DESC LIMIT " + rewardLimit),
+        dbQuery("SELECT id, user_id, question, side, platform, current_price, pnl_pct, cash_value, market_url, created_at FROM shared_positions ORDER BY created_at DESC LIMIT " + sharedLimit),
+      ]);
+      // Reshape joined rows to match Supabase nested format
+      betsData = betsRows.map(r => ({ id: r.id, user_id: r.user_id, side: r.side, amount: r.amount, created_at: r.created_at, market_id: r.market_id, markets: r.m_id ? { id: r.m_id, question: r.m_question, tenant_slug: r.m_tenant_slug, yes_price: r.m_yes_price, no_price: r.m_no_price, yes_votes: r.m_yes_votes, no_votes: r.m_no_votes, trader_count: r.m_trader_count } : null }));
+      resolutionsData = resRows;
+      newMarketsData = newMktRows;
+      winsData = winsRows.map(r => ({ id: r.id, user_id: r.user_id, side: r.side, amount: r.amount, potential_payout: r.potential_payout, created_at: r.created_at, market_id: r.market_id, markets: r.m_id ? { id: r.m_id, question: r.m_question, tenant_slug: r.m_tenant_slug, resolved_at: r.m_resolved_at, outcome: r.m_outcome, trader_count: r.m_trader_count } : null }));
+      creatorsData = creatorsRows;
+      commentsData = commentsRows.map(r => ({ id: r.id, user_id: r.user_id, user_name: r.user_name, body: r.body, created_at: r.created_at, market_id: r.market_id, creator_slug: r.creator_slug, markets: r.m_id ? { id: r.m_id, question: r.m_question, tenant_slug: r.m_tenant_slug } : null }));
+      rewardUnlocksData = rewardRows;
+      sharedPositionsData = sharedRows;
+    } else {
+      const [betsRes, resolutionsRes, newMarketsRes, winsRes, creatorsRes, commentsRes, rewardUnlocksRes, sharedPositionsRes] = await Promise.all([
+        supabase
+          .from('positions')
+          .select('id, user_id, side, amount, created_at, market_id, markets(id, question, tenant_slug, yes_price, no_price, yes_votes, no_votes, trader_count)')
+          .order('created_at', { ascending: false })
+          .limit(since ? 25 : limit),
+        supabase
+          .from('markets')
+          .select('id, question, tenant_slug, resolved_at, outcome, resolution_note, trader_count')
+          .eq('resolved', true)
+          .not('resolved_at', 'is', null)
+          .order('resolved_at', { ascending: false })
+          .limit(15),
+        supabase
+          .from('markets')
+          .select('id, question, tenant_slug, created_at, yes_price, no_price, yes_votes, no_votes, category')
+          .eq('resolved', false)
+          .neq('is_public', false)
+          .order('created_at', { ascending: false })
+          .limit(15),
+        supabase
+          .from('positions')
+          .select('id, user_id, side, amount, potential_payout, created_at, market_id, markets(id, question, tenant_slug, resolved_at, outcome, trader_count)')
+          .eq('settled', true)
+          .eq('won', true)
+          .not('markets', 'is', null)
+          .order('created_at', { ascending: false })
+          .limit(20),
+        supabase
+          .from('creator_settings')
+          .select('slug, display_name, primary_color, custom_points_name, logo_url'),
+        supabase
+          .from('market_comments')
+          .select('id, user_id, user_name, body, created_at, market_id, creator_slug, markets(id, question, tenant_slug)')
+          .order('created_at', { ascending: false })
+          .limit(since ? 25 : 20),
+        supabase
+          .from('reward_unlocks')
+          .select('id, user_id, creator_slug, reward_title, reward_threshold, unlocked_at')
+          .order('unlocked_at', { ascending: false })
+          .limit(since ? 20 : 15),
+        supabase
+          .from('shared_positions')
+          .select('id, user_id, question, side, platform, current_price, pnl_pct, cash_value, market_url, created_at')
+          .order('created_at', { ascending: false })
+          .limit(since ? 20 : 15),
+      ]);
+      betsData = betsRes.data || [];
+      resolutionsData = resolutionsRes.data || [];
+      newMarketsData = newMarketsRes.data || [];
+      winsData = winsRes.data || [];
+      creatorsData = creatorsRes.data || [];
+      commentsData = commentsRes.data || [];
+      rewardUnlocksData = rewardUnlocksRes.data || [];
+      sharedPositionsData = sharedPositionsRes.data || [];
+    }
 
     const communities = {};
-    for (const c of (creatorsRes.data || [])) communities[c.slug] = c;
+    for (const c of (creatorsData || [])) communities[c.slug] = c;
 
     // Enrich bets + wins + reward unlocks with user display names
-    const rawBets    = (betsRes.data    || []).filter(b => b.markets?.tenant_slug);
-    const rawWins    = (winsRes.data    || []).filter(w => w.markets?.tenant_slug && w.markets?.resolved_at);
-    const rawUnlocks = (rewardUnlocksRes.data || []).filter(u => u.creator_slug);
-    const rawShared  = (sharedPositionsRes.data || []);
+    const rawBets    = (betsData    || []).filter(b => b.markets?.tenant_slug);
+    const rawWins    = (winsData    || []).filter(w => w.markets?.tenant_slug && w.markets?.resolved_at);
+    const rawUnlocks = (rewardUnlocksData || []).filter(u => u.creator_slug);
+    const rawShared  = (sharedPositionsData || []);
     const allUserIds = [...new Set([...rawBets.map(b => b.user_id), ...rawWins.map(w => w.user_id), ...rawUnlocks.map(u => u.user_id), ...rawShared.map(s => s.user_id)])];
-    const { data: usersData } = allUserIds.length
-      ? await supabase.from('users').select('id, display_name').in('id', allUserIds)
-      : { data: [] };
+    let usersData;
+    if (allUserIds.length) {
+      if (pool) {
+        usersData = await dbQuery('SELECT id, display_name FROM users WHERE id = ANY($1)', [allUserIds]);
+      } else {
+        const { data } = await supabase.from('users').select('id, display_name').in('id', allUserIds);
+        usersData = data;
+      }
+    } else {
+      usersData = [];
+    }
     const userMap = {};
     for (const u of (usersData || [])) userMap[u.id] = u.display_name;
 
@@ -8421,7 +8711,7 @@ app.post('/api/activity/share-position', requireAuth, async (req, res) => {
     const validPlatforms = ['kalshi', 'manifold', 'polymarket'];
     if (!validPlatforms.includes(platform.toLowerCase())) return res.status(400).json({ error: 'Invalid platform' });
 
-    const { error } = await supabase.from('shared_positions').insert({
+    const insertData = {
       user_id:       req.userId,
       question:      String(question).slice(0, 500),
       side:          (side || '').toUpperCase(),
@@ -8430,8 +8720,16 @@ app.post('/api/activity/share-position', requireAuth, async (req, res) => {
       pnl_pct:       pnl_pct      != null ? parseInt(pnl_pct)         : null,
       cash_value:    cash_value   != null ? parseFloat(cash_value)    : null,
       market_url:    market_url   ? String(market_url).slice(0, 1000) : null,
-    });
-    if (error) throw error;
+    };
+    if (pool) {
+      await dbQuery(
+        'INSERT INTO shared_positions (user_id, question, side, platform, current_price, pnl_pct, cash_value, market_url) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+        [insertData.user_id, insertData.question, insertData.side, insertData.platform, insertData.current_price, insertData.pnl_pct, insertData.cash_value, insertData.market_url]
+      );
+    } else {
+      const { error } = await supabase.from('shared_positions').insert(insertData);
+      if (error) throw error;
+    }
     res.json({ ok: true });
   } catch (err) {
     console.error('[share-position]', err.message);
@@ -10951,19 +11249,34 @@ app.get('/api/stats', async (req, res) => {
     if (_statsCache && now - _statsCacheAt < 5 * 60 * 1000) {
       return res.json(_statsCache);
     }
-    const [marketsRes, positionsRes, creatorsRes, predictorRowsRes] = await Promise.all([
-      supabase.from('markets').select('id', { count: 'exact', head: true }).eq('resolved', false).neq('is_public', false),
-      supabase.from('positions').select('id', { count: 'exact', head: true }),
-      supabase.from('creator_settings').select('creator_id', { count: 'exact', head: true }),
-      supabase.from('positions').select('user_id').not('user_id', 'is', null),
-    ]);
-    const predictorCount = new Set((predictorRowsRes.data || []).map(r => r.user_id)).size;
-    _statsCache = {
-      live_markets:      marketsRes.count   || 0,
-      total_predictions: positionsRes.count || 0,
-      communities:       creatorsRes.count  || 0,
-      predictors:        predictorCount,
-    };
+    if (pool) {
+      const [marketsRows, positionsRows, creatorsRows, predictorRows] = await Promise.all([
+        dbQuery("SELECT count(*) as count FROM markets WHERE resolved = false AND (is_public IS NULL OR is_public != false)"),
+        dbQuery("SELECT count(*) as count FROM positions"),
+        dbQuery("SELECT count(*) as count FROM creator_settings"),
+        dbQuery("SELECT DISTINCT user_id FROM positions WHERE user_id IS NOT NULL"),
+      ]);
+      _statsCache = {
+        live_markets:      parseInt(marketsRows[0]?.count || 0),
+        total_predictions: parseInt(positionsRows[0]?.count || 0),
+        communities:       parseInt(creatorsRows[0]?.count || 0),
+        predictors:        predictorRows.length,
+      };
+    } else {
+      const [marketsRes, positionsRes, creatorsRes, predictorRowsRes] = await Promise.all([
+        supabase.from('markets').select('id', { count: 'exact', head: true }).eq('resolved', false).neq('is_public', false),
+        supabase.from('positions').select('id', { count: 'exact', head: true }),
+        supabase.from('creator_settings').select('creator_id', { count: 'exact', head: true }),
+        supabase.from('positions').select('user_id').not('user_id', 'is', null),
+      ]);
+      const predictorCount = new Set((predictorRowsRes.data || []).map(r => r.user_id)).size;
+      _statsCache = {
+        live_markets:      marketsRes.count   || 0,
+        total_predictions: positionsRes.count || 0,
+        communities:       creatorsRes.count  || 0,
+        predictors:        predictorCount,
+      };
+    }
     _statsCacheAt = now;
     res.json(_statsCache);
   } catch (err) {
@@ -10974,71 +11287,61 @@ app.get('/api/stats', async (req, res) => {
 // ─── EXPLORE FEED ────────────────────────────────────────────────────────────
 app.get('/api/explore', async (req, res) => {
   try {
-    // Run all queries in parallel; each returns {data, error} — never throws
-    const [tradesRes, hotRes, newMarketsRes, announcementsRes, allMarketsRes, allCreatorsRes, totalPositionsRes, totalMarketsRes, settledPositionsRes] = await Promise.all([
-
-      // Recent trades
-      supabase
-        .from('positions')
-        .select('id, user_id, side, amount, created_at, market_id, markets(question, tenant_slug, yes_price, no_price, yes_votes, no_votes)')
-        .order('created_at', { ascending: false })
-        .limit(20),
-
-      // Hottest markets by trader_count
-      supabase
-        .from('markets')
-        .select('id, question, tenant_slug, yes_price, no_price, yes_votes, no_votes, trader_count, yes_pool, no_pool, created_at')
-        .eq('resolved', false)
-        .eq('archived', false)
-        .order('trader_count', { ascending: false })
-        .limit(10),
-
-      // Newest markets
-      supabase
-        .from('markets')
-        .select('id, question, tenant_slug, yes_price, no_price, yes_votes, no_votes, trader_count, created_at')
-        .eq('resolved', false)
-        .eq('archived', false)
-        .order('created_at', { ascending: false })
-        .limit(10),
-
-      // Recent announcements
-      supabase
-        .from('creator_announcements')
-        .select('id, creator_slug, title, body, pinned, created_at')
-        .order('created_at', { ascending: false })
-        .limit(10),
-
-      // All active markets for community stats (trader_count, newest market per slug)
-      supabase
-        .from('markets')
-        .select('tenant_slug, trader_count, created_at')
-        .eq('resolved', false)
-        .eq('archived', false),
-
-      // All creator_settings for enrichment + community list
-      supabase
-        .from('creator_settings')
-        .select('slug, display_name, custom_points_name, primary_color, created_at'),
-
-      // Platform stats: total positions count
-      supabase.from('positions').select('id', { count: 'exact', head: true }),
-
-      // Platform stats: total live markets count
-      supabase.from('markets').select('id', { count: 'exact', head: true }).eq('resolved', false).eq('archived', false),
-
-      // Global top predictors: settled positions for accuracy leaderboard
-      supabase.from('positions').select('user_id, amount, potential_payout, won').eq('settled', true).limit(5000),
-    ]);
-
-    if (hotRes.error)         console.warn('[explore] hot markets error:', hotRes.error.message);
-    if (newMarketsRes.error)  console.warn('[explore] new markets error:', newMarketsRes.error.message);
-    if (tradesRes.error)      console.warn('[explore] trades error:', tradesRes.error.message);
-    if (announcementsRes.error) console.warn('[explore] announcements error:', announcementsRes.error.message);
+    // Run all queries in parallel
+    let tradesData, hotData, newMarketsData, announcementsData, allMarketsData, allCreatorsData, totalPositionsCount, totalMarketsCount, settledPositionsData;
+    if (pool) {
+      const [tradesRows, hotRows, newMktRows, annRows, allMktRows, allCreatorRows, totalPosRows, totalMktRows, settledRows] = await Promise.all([
+        dbQuery(`SELECT p.id, p.user_id, p.side, p.amount, p.created_at, p.market_id,
+          m.question as m_question, m.tenant_slug as m_tenant_slug, m.yes_price as m_yes_price, m.no_price as m_no_price, m.yes_votes as m_yes_votes, m.no_votes as m_no_votes
+          FROM positions p LEFT JOIN markets m ON p.market_id = m.id ORDER BY p.created_at DESC LIMIT 20`),
+        dbQuery("SELECT id, question, tenant_slug, yes_price, no_price, yes_votes, no_votes, trader_count, yes_pool, no_pool, created_at FROM markets WHERE resolved = false AND archived = false ORDER BY trader_count DESC LIMIT 10"),
+        dbQuery("SELECT id, question, tenant_slug, yes_price, no_price, yes_votes, no_votes, trader_count, created_at FROM markets WHERE resolved = false AND archived = false ORDER BY created_at DESC LIMIT 10"),
+        dbQuery("SELECT id, creator_slug, title, body, pinned, created_at FROM creator_announcements ORDER BY created_at DESC LIMIT 10"),
+        dbQuery("SELECT tenant_slug, trader_count, created_at FROM markets WHERE resolved = false AND archived = false"),
+        dbQuery("SELECT slug, display_name, custom_points_name, primary_color, created_at FROM creator_settings"),
+        dbQuery("SELECT count(*) as count FROM positions"),
+        dbQuery("SELECT count(*) as count FROM markets WHERE resolved = false AND archived = false"),
+        dbQuery("SELECT user_id, amount, potential_payout, won FROM positions WHERE settled = true LIMIT 5000"),
+      ]);
+      tradesData = tradesRows.map(r => ({ id: r.id, user_id: r.user_id, side: r.side, amount: r.amount, created_at: r.created_at, market_id: r.market_id, markets: { question: r.m_question, tenant_slug: r.m_tenant_slug, yes_price: r.m_yes_price, no_price: r.m_no_price, yes_votes: r.m_yes_votes, no_votes: r.m_no_votes } }));
+      hotData = hotRows;
+      newMarketsData = newMktRows;
+      announcementsData = annRows;
+      allMarketsData = allMktRows;
+      allCreatorsData = allCreatorRows;
+      totalPositionsCount = parseInt(totalPosRows[0]?.count || 0);
+      totalMarketsCount = parseInt(totalMktRows[0]?.count || 0);
+      settledPositionsData = settledRows;
+    } else {
+      const [tradesRes, hotRes, newMarketsRes, announcementsRes, allMarketsRes, allCreatorsRes, totalPositionsRes, totalMarketsRes, settledPositionsRes] = await Promise.all([
+        supabase.from('positions').select('id, user_id, side, amount, created_at, market_id, markets(question, tenant_slug, yes_price, no_price, yes_votes, no_votes)').order('created_at', { ascending: false }).limit(20),
+        supabase.from('markets').select('id, question, tenant_slug, yes_price, no_price, yes_votes, no_votes, trader_count, yes_pool, no_pool, created_at').eq('resolved', false).eq('archived', false).order('trader_count', { ascending: false }).limit(10),
+        supabase.from('markets').select('id, question, tenant_slug, yes_price, no_price, yes_votes, no_votes, trader_count, created_at').eq('resolved', false).eq('archived', false).order('created_at', { ascending: false }).limit(10),
+        supabase.from('creator_announcements').select('id, creator_slug, title, body, pinned, created_at').order('created_at', { ascending: false }).limit(10),
+        supabase.from('markets').select('tenant_slug, trader_count, created_at').eq('resolved', false).eq('archived', false),
+        supabase.from('creator_settings').select('slug, display_name, custom_points_name, primary_color, created_at'),
+        supabase.from('positions').select('id', { count: 'exact', head: true }),
+        supabase.from('markets').select('id', { count: 'exact', head: true }).eq('resolved', false).eq('archived', false),
+        supabase.from('positions').select('user_id, amount, potential_payout, won').eq('settled', true).limit(5000),
+      ]);
+      if (hotRes.error)         console.warn('[explore] hot markets error:', hotRes.error.message);
+      if (newMarketsRes.error)  console.warn('[explore] new markets error:', newMarketsRes.error.message);
+      if (tradesRes.error)      console.warn('[explore] trades error:', tradesRes.error.message);
+      if (announcementsRes.error) console.warn('[explore] announcements error:', announcementsRes.error.message);
+      tradesData = tradesRes.data || [];
+      hotData = hotRes.data || [];
+      newMarketsData = newMarketsRes.data || [];
+      announcementsData = announcementsRes.data || [];
+      allMarketsData = allMarketsRes.data || [];
+      allCreatorsData = allCreatorsRes.data || [];
+      totalPositionsCount = totalPositionsRes.count || 0;
+      totalMarketsCount = totalMarketsRes.count || 0;
+      settledPositionsData = settledPositionsRes.data || [];
+    }
 
     // ── Build community stats from all active markets ──
     const statsMap = {}; // slug → { trader_count, market_count, newest_market_at }
-    for (const m of (allMarketsRes.data || [])) {
+    for (const m of (allMarketsData || [])) {
       const slug = m.tenant_slug;
       if (!slug) continue;
       if (!statsMap[slug]) statsMap[slug] = { total_traders: 0, market_count: 0, newest_market_at: null };
@@ -11052,7 +11355,7 @@ app.get('/api/explore', async (req, res) => {
 
     // Build community map with stats merged in
     const communityMap = {};
-    for (const c of (allCreatorsRes.data || [])) {
+    for (const c of (allCreatorsData || [])) {
       communityMap[c.slug] = {
         ...c,
         ...(statsMap[c.slug] || { total_traders: 0, market_count: 0, newest_market_at: c.created_at }),
@@ -11079,7 +11382,7 @@ app.get('/api/explore', async (req, res) => {
       .slice(0, 5);
 
     // ── Normalize positions ──
-    const rawTrades = (tradesRes.data || []).map(p => ({
+    const rawTrades = (tradesData || []).map(p => ({
       id:           p.id,
       side:         p.side,
       amount:       p.amount,
@@ -11096,23 +11399,29 @@ app.get('/api/explore', async (req, res) => {
     const tradeUserIds = [...new Set(rawTrades.map(t => t.user_id).filter(Boolean))];
     let userMap = {};
     if (tradeUserIds.length) {
-      const { data: tradeUsers } = await supabase.from('users').select('id, display_name').in('id', tradeUserIds);
+      let tradeUsers;
+      if (pool) {
+        tradeUsers = await dbQuery('SELECT id, display_name FROM users WHERE id = ANY($1)', [tradeUserIds]);
+      } else {
+        const { data } = await supabase.from('users').select('id, display_name').in('id', tradeUserIds);
+        tradeUsers = data;
+      }
       (tradeUsers || []).forEach(u => { userMap[u.id] = u.display_name || 'Anonymous'; });
     }
     const trades = rawTrades.map(t => ({ ...t, user: userMap[t.user_id] || 'Anonymous' }));
 
     const normalizeMarket = m => ({ ...m, creator_slug: m.tenant_slug || '' });
-    const hotMarkets    = (hotRes.data || []).map(normalizeMarket);
-    const newestMarkets = (newMarketsRes.data || []).map(normalizeMarket);
+    const hotMarkets    = (hotData || []).map(normalizeMarket);
+    const newestMarkets = (newMarketsData || []).map(normalizeMarket);
 
     // ── Platform stats ──
-    const totalTrades      = totalPositionsRes.count || 0;
-    const totalLiveMarkets = totalMarketsRes.count   || 0;
+    const totalTrades      = totalPositionsCount || 0;
+    const totalLiveMarkets = totalMarketsCount   || 0;
     const totalCommunities = Object.keys(communityMap).length;
     const platform_stats   = { total_trades: totalTrades, total_live_markets: totalLiveMarkets, total_communities: totalCommunities };
 
     // ── Global top predictors (accuracy-ranked) ──
-    const settledPos = settledPositionsRes.data || [];
+    const settledPos = settledPositionsData || [];
     const predMap = {};
     for (const p of settledPos) {
       if (!predMap[p.user_id]) predMap[p.user_id] = { wins: 0, total: 0, pnl: 0 };
@@ -11132,7 +11441,13 @@ app.get('/api/explore', async (req, res) => {
     // Enrich predictor display names
     const predUserIds = qualifiedPredictors.map(p => p.user_id);
     if (predUserIds.length) {
-      const { data: predUsers } = await supabase.from('users').select('id, display_name').in('id', predUserIds);
+      let predUsers;
+      if (pool) {
+        predUsers = await dbQuery('SELECT id, display_name FROM users WHERE id = ANY($1)', [predUserIds]);
+      } else {
+        const { data } = await supabase.from('users').select('id, display_name').in('id', predUserIds);
+        predUsers = data;
+      }
       const predUserMap = {};
       (predUsers || []).forEach(u => { predUserMap[u.id] = u.display_name || 'Anonymous'; });
       qualifiedPredictors.forEach(p => { p.display_name = predUserMap[p.user_id] || 'Anonymous'; });
@@ -11142,7 +11457,7 @@ app.get('/api/explore', async (req, res) => {
       trades,
       hot:           hotMarkets,
       newest:        newestMarkets,
-      announcements: announcementsRes.data || [],
+      announcements: announcementsData || [],
       communities:   communityMap,
       community_sections: { mostActive, upAndComing, ghostTown },
       platform_stats,
@@ -11165,8 +11480,12 @@ app.put('/api/user/display-name', requireAuth, async (req, res) => {
     const { display_name } = req.body;
     if (!display_name || !display_name.trim()) return res.status(400).json({ error: 'display_name required' });
     const name = display_name.trim().slice(0, 40);
-    const { error } = await supabase.from('users').update({ display_name: name }).eq('id', req.user.id);
-    if (error) return res.status(500).json({ error: error.message });
+    if (pool) {
+      await dbQuery('UPDATE users SET display_name = $1 WHERE id = $2', [name, req.user.id]);
+    } else {
+      const { error } = await supabase.from('users').update({ display_name: name }).eq('id', req.user.id);
+      if (error) return res.status(500).json({ error: error.message });
+    }
     res.json({ ok: true, display_name: name });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -11856,10 +12175,14 @@ app.get('/api/community/:slug/seasons/:seasonId', async (req, res) => {
 // GET /api/user/profile-share-stats — follower count for the authed user's profile
 app.get('/api/user/profile-share-stats', requireAuth, async (req, res) => {
   try {
-    const { count } = await supabase
-      .from('predictor_follows')
-      .select('id', { count: 'exact', head: true })
-      .eq('following_id', req.userId);
+    let count;
+    if (pool) {
+      const rows = await dbQuery('SELECT count(*) as count FROM predictor_follows WHERE following_id = $1', [req.userId]);
+      count = parseInt(rows[0]?.count || 0);
+    } else {
+      const r = await supabase.from('predictor_follows').select('id', { count: 'exact', head: true }).eq('following_id', req.userId);
+      count = r.count || 0;
+    }
     res.json({ followers: count || 0, profile_views: 0 });
   } catch (e) {
     res.json({ followers: 0, profile_views: 0 });
