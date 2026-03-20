@@ -9742,12 +9742,14 @@ app.get('/:slug', async (req, res, next) => {
 
   try {
     // Fetch community data for meta tags
-    const { data: settings } = await supabase
-      .from('creator_settings')
-      .select('display_name, community_description, custom_points_name, slug')
-      .eq('slug', slug)
-      .eq('is_active', true)
-      .maybeSingle();
+    let settings;
+    if (pool) {
+      const rows = await dbQuery('SELECT display_name, community_description, custom_points_name, slug FROM creator_settings WHERE slug = $1 AND is_active = true LIMIT 1', [slug]);
+      settings = rows[0] || null;
+    } else {
+      const { data } = await supabase.from('creator_settings').select('display_name, community_description, custom_points_name, slug').eq('slug', slug).eq('is_active', true).maybeSingle();
+      settings = data;
+    }
 
     const APP_URL = process.env.APP_URL || 'https://hyperflex.network';
 

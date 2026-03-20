@@ -1378,17 +1378,45 @@ function renderActivityFeed(activities) {
   if (activities[0]?.ts) activityLatestTs = activities[0].ts;
 }
 
-async function loadActivityFeed() {
+let _activityPage = 0;
+let _activityLoading = false;
+let _activityDone = false;
+
+async function loadActivityFeed(append) {
+  if (_activityLoading || (_activityDone && append)) return;
+  _activityLoading = true;
   try {
-    const r = await fetch('/api/activity?limit=40');
-    if (!r.ok) return;
+    const limit = 40;
+    const r = await fetch(`/api/activity?limit=${limit}&page=${_activityPage}`);
+    if (!r.ok) { _activityLoading = false; return; }
     const data = await r.json();
-    activityData = data.activities || [];
-    renderActivityFeed(activityData);
+    const items = data.activities || [];
+    if (!append) {
+      activityData = items;
+      renderActivityFeed(activityData);
+    } else {
+      activityData = activityData.concat(items);
+      const el = document.getElementById('activity-feed');
+      const wrap = el?.querySelector('.activity-feed-wrap');
+      if (wrap) wrap.insertAdjacentHTML('beforeend', items.map(activityCard).join(''));
+    }
+    if (items.length < limit) _activityDone = true;
+    _activityPage++;
   } catch (err) {
     console.error('Activity feed error:', err);
   }
+  _activityLoading = false;
 }
+
+// Infinite scroll
+window.addEventListener('scroll', () => {
+  if (_activityDone || _activityLoading) return;
+  const tab = document.getElementById('tab-activity');
+  if (!tab || tab.style.display === 'none') return;
+  if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 400) {
+    loadActivityFeed(true);
+  }
+});
 
 async function pollNewActivity() {
   if (!activityLatestTs) return;
