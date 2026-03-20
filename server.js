@@ -348,12 +348,15 @@ app.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) { clearTimeout(timer); return res.status(400).json({ error: 'Missing email or password' }); }
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('id, email, display_name, password_hash, balance')
-      .eq('email', email.toLowerCase())
-      .maybeSingle();
-    if (error) { console.error('[login] DB error:', error.message); clearTimeout(timer); return res.status(500).json({ error: 'Database error' }); }
+    let user;
+    if (pool) {
+      const rows = await dbQuery('SELECT id, email, display_name, password_hash, balance FROM users WHERE email = $1 LIMIT 1', [email.toLowerCase()]);
+      user = rows[0] || null;
+    } else {
+      const { data, error } = await supabase.from('users').select('id, email, display_name, password_hash, balance').eq('email', email.toLowerCase()).maybeSingle();
+      if (error) { console.error('[login] DB error:', error.message); clearTimeout(timer); return res.status(500).json({ error: 'Database error' }); }
+      user = data;
+    }
     if (!user) { clearTimeout(timer); return res.status(400).json({ error: 'User not found' }); }
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) { clearTimeout(timer); return res.status(400).json({ error: 'Invalid password' }); }
@@ -3250,21 +3253,27 @@ app.post('/api/creator/signup', async (req, res) => {
     }
 
     // Check slug not taken
-    const { data: existing } = await supabase
-      .from('creator_settings')
-      .select('slug')
-      .eq('slug', slug)
-      .maybeSingle();
+    let existing;
+    if (pool) {
+      const rows = await dbQuery('SELECT slug FROM creator_settings WHERE slug = $1 LIMIT 1', [slug]);
+      existing = rows[0] || null;
+    } else {
+      const { data } = await supabase.from('creator_settings').select('slug').eq('slug', slug).maybeSingle();
+      existing = data;
+    }
     if (existing) {
       return res.status(409).json({ error: 'Slug already taken' });
     }
 
     // Check email not taken
-    const { data: existingUser } = await supabase
-      .from('users')
-      .select('id')
-      .eq('email', email.toLowerCase())
-      .maybeSingle();
+    let existingUser;
+    if (pool) {
+      const rows = await dbQuery('SELECT id FROM users WHERE email = $1 LIMIT 1', [email.toLowerCase()]);
+      existingUser = rows[0] || null;
+    } else {
+      const { data } = await supabase.from('users').select('id').eq('email', email.toLowerCase()).maybeSingle();
+      existingUser = data;
+    }
     if (existingUser) {
       return res.status(409).json({ error: 'Email already registered' });
     }
@@ -3273,39 +3282,34 @@ app.post('/api/creator/signup', async (req, res) => {
     const password_hash = await bcrypt.hash(password, 12);
 
     // Create user
-    const { data: newUser, error: userErr } = await supabase
-      .from('users')
-      .insert({
-        email: email.toLowerCase(),
-        password_hash,
-        display_name,
-        is_creator: true,
-        tenant_slug: slug,
-        balance: 1000 * 100 // $1,000 starting balance in cents
-      })
-      .select()
-      .single();
-
-    if (userErr) throw userErr;
+    let newUser;
+    if (pool) {
+      const rows = await dbQuery(
+        'INSERT INTO users (email, password_hash, display_name, is_creator, tenant_slug, balance) VALUES ($1, $2, $3, true, $4, $5) RETURNING *',
+        [email.toLowerCase(), password_hash, display_name, slug, 1000 * 100]
+      );
+      newUser = rows[0];
+    } else {
+      const { data, error: userErr } = await supabase.from('users').insert({ email: email.toLowerCase(), password_hash, display_name, is_creator: true, tenant_slug: slug, balance: 1000 * 100 }).select().single();
+      if (userErr) throw userErr;
+      newUser = data;
+    }
 
     // Create creator settings
-    const { error: settingsErr } = await supabase
-      .from('creator_settings')
-      .insert({
-        creator_id: newUser.id,
-        slug,
-        display_name,
-        custom_points_name,
-        primary_color,
-        community_description,
-        is_active: true,
-        plan: 'free',
-        created_at: new Date().toISOString()
-      });
-
-    if (settingsErr) {
-      // Roll back the created user so we don't leave an orphaned record
-      await supabase.from('users').delete().eq('id', newUser.id);
+    try {
+      if (pool) {
+        await dbQuery(
+          'INSERT INTO creator_settings (creator_id, slug, display_name, custom_points_name, primary_color, community_description, is_active, plan, created_at) VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8)',
+          [newUser.id, slug, display_name, custom_points_name, primary_color, community_description, 'free', new Date().toISOString()]
+        );
+      } else {
+        const { error: settingsErr } = await supabase.from('creator_settings').insert({ creator_id: newUser.id, slug, display_name, custom_points_name, primary_color, community_description, is_active: true, plan: 'free', created_at: new Date().toISOString() });
+        if (settingsErr) throw settingsErr;
+      }
+    } catch (settingsErr) {
+      // Roll back
+      if (pool) { await dbQuery('DELETE FROM users WHERE id = $1', [newUser.id]); }
+      else { await supabase.from('users').delete().eq('id', newUser.id); }
       throw settingsErr;
     }
 
@@ -8625,8 +8629,8 @@ app.get('/api/activity', async (req, res) => {
       };
       const [polyTrending, polyCrypto, polyPolitics, kalshiTrending] = await Promise.allSettled([
         fetchExt('https://gamma-api.polymarket.com/markets?closed=false&limit=10&order=volume&ascending=false'),
-        fetchExt('https://gamma-api.polymarket.com/markets?closed=false&limit=6&order=volume&ascending=false&search=bitcoin+ethereum+crypto+solana'),
-        fetchExt('https://gamma-api.polymarket.com/markets?closed=false&limit=6&order=volume&ascending=false&search=trump+election+congress+president'),
+        fetchExt('https://gamma-api.polymarket.com/markets?closed=false&limit=8&order=volume&ascending=false&search=bitcoin'),
+        fetchExt('https://gamma-api.polymarket.com/markets?closed=false&limit=8&order=volume&ascending=false&search=trump'),
         fetchExt('https://api.elections.kalshi.com/trade-api/v2/events?limit=15&with_nested_markets=true'),
       ]);
       if (polyTrending.status === 'fulfilled' && polyTrending.value.ok) {
