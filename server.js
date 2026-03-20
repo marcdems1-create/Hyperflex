@@ -8424,7 +8424,7 @@ app.get('/api/activity', async (req, res) => {
           m.id as m_id, m.question as m_question, m.tenant_slug as m_tenant_slug
           FROM market_comments c LEFT JOIN markets m ON c.market_id = m.id ORDER BY c.created_at DESC LIMIT $1`, [commentsLimit]),
         safeQuery("SELECT id, user_id, creator_slug, reward_title, reward_threshold, unlocked_at FROM reward_unlocks ORDER BY unlocked_at DESC LIMIT " + rewardLimit),
-        safeQuery("SELECT id, user_id, question, side, platform, current_price, pnl_pct, cash_value, market_url, created_at FROM shared_positions ORDER BY created_at DESC LIMIT " + sharedLimit),
+        safeQuery("SELECT id, user_id, question, side, platform, current_price, cash_value, market_url, created_at FROM shared_positions ORDER BY created_at DESC LIMIT " + sharedLimit),
       ]);
       // Reshape joined rows to match Supabase nested format
       betsData = betsRows.map(r => ({ id: r.id, user_id: r.user_id, side: r.side, amount: r.amount, created_at: r.created_at, market_id: r.market_id, markets: r.m_id ? { id: r.m_id, question: r.m_question, tenant_slug: r.m_tenant_slug, yes_price: r.m_yes_price, no_price: r.m_no_price, yes_votes: r.m_yes_votes, no_votes: r.m_no_votes, trader_count: r.m_trader_count } : null }));
