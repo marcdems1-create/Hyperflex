@@ -8681,7 +8681,7 @@ app.get('/api/activity', async (req, res) => {
             yes_pct: yesPct,
             volume: vol,
             volume_display: vol >= 1000 ? (vol / 1000).toFixed(0) + 'K contracts' : vol + ' contracts',
-            url: `https://kalshi.com/markets/${topMkt.event_ticker || evt.ticker || ''}`,
+            url: `https://kalshi.com/markets/${(topMkt.event_ticker || evt.ticker || '').toLowerCase()}`,
             end_date: topMkt.close_time || topMkt.expiration_time || null,
           };
           activities.push(kalshiItem);
@@ -12621,7 +12621,7 @@ app.get('/api/markets/search', async (req, res) => {
             question: m.title || evt.title || '',
             yes_pct: m.yes_ask != null ? Math.round(m.yes_ask * 100) : (m.last_price != null ? Math.round(m.last_price * 100) : null),
             close_date: m.close_time || m.expiration_time || null,
-            url: m.ticker ? `https://kalshi.com/markets/${m.event_ticker || ''}/${m.ticker}` : 'https://kalshi.com',
+            url: m.ticker ? `https://kalshi.com/markets/${(m.event_ticker || '').toLowerCase()}` : 'https://kalshi.com',
             volume: m.volume || 0
           });
           if (kalshiMarkets.length >= 15) break;
