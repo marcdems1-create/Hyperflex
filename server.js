@@ -8465,7 +8465,7 @@ app.get('/api/activity', async (req, res) => {
       });
     }
 
-    for (const m of (resolutionsRes.data || [])) {
+    for (const m of (resolutionsData || [])) {
       const slug = m.tenant_slug;
       if (!slug) continue;
       activities.push({
@@ -8483,7 +8483,7 @@ app.get('/api/activity', async (req, res) => {
       });
     }
 
-    for (const m of (newMarketsRes.data || [])) {
+    for (const m of (newMarketsData || [])) {
       const slug = m.tenant_slug;
       if (!slug) continue;
       activities.push({
@@ -8535,7 +8535,7 @@ app.get('/api/activity', async (req, res) => {
     activities.push(...Object.values(winsByMarket));
 
     // Comment events
-    for (const c of (commentsRes.data || [])) {
+    for (const c of (commentsData || [])) {
       const mkt  = c.markets;
       const cSlug = c.creator_slug || mkt?.tenant_slug;
       if (!cSlug || !mkt?.question) continue;
