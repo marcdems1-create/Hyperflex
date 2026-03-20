@@ -4757,7 +4757,7 @@ app.get('/api/creator/analytics', requireCreator, async (req, res) => {
         buckets[key] = 0;
       }
       allPos.forEach(p => {
-        const key = p.created_at.slice(0, 10);
+        const key = (typeof p.created_at === 'string' ? p.created_at : new Date(p.created_at).toISOString()).slice(0, 10);
         if (key in buckets) buckets[key]++;
       });
       dailyTrades = Object.entries(buckets).map(([date, count]) => ({ date, count }));
