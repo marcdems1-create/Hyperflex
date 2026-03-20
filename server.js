@@ -8655,9 +8655,11 @@ app.get('/api/activity', async (req, res) => {
       } else if (kalshiTrending.status === 'fulfilled' && !kalshiTrending.value.ok) {
         console.warn('[kalshi trending] HTTP', kalshiTrending.value.status);
       }
+      console.log('[kalshi trending] status:', kalshiTrending.status, kalshiTrending.status === 'rejected' ? kalshiTrending.reason?.message : '', kalshiTrending.status === 'fulfilled' ? 'HTTP ' + kalshiTrending.value?.status : '');
       if (kalshiTrending.status === 'fulfilled' && kalshiTrending.value.ok) {
         const raw = await kalshiTrending.value.json();
         const events = raw.events || [];
+        console.log('[kalshi trending] got', events.length, 'events');
         let kalshiCount = 0;
         for (const evt of events) {
           if (kalshiCount >= 4) break;
@@ -8670,7 +8672,7 @@ app.get('/api/activity', async (req, res) => {
             : topMkt.last_price != null ? Math.round(topMkt.last_price * 100)
             : null;
           const vol = topMkt.volume || topMkt.open_interest || 0;
-          activities.push({
+          const kalshiItem = {
             type: 'trending_external',
             id: `tkalshi_${topMkt.ticker || kalshiCount}`,
             ts: topMkt.open_time || evt.mutuality_date || new Date().toISOString(),
@@ -8679,10 +8681,12 @@ app.get('/api/activity', async (req, res) => {
             yes_pct: yesPct,
             volume: vol,
             volume_display: vol >= 1000 ? (vol / 1000).toFixed(0) + 'K contracts' : vol + ' contracts',
-            url: topMkt.ticker ? `https://kalshi.com/markets/${topMkt.event_ticker || evt.ticker || ''}/${topMkt.ticker}` : 'https://kalshi.com',
+            url: `https://kalshi.com/markets/${topMkt.event_ticker || evt.ticker || ''}`,
             end_date: topMkt.close_time || topMkt.expiration_time || null,
-          });
+          };
+          activities.push(kalshiItem);
           kalshiCount++;
+          console.log('[kalshi trending] added:', kalshiItem.question?.slice(0,40), 'yes:', yesPct);
         }
       }
     } catch (e) { console.warn('[trending external]', e.message, e.stack?.split('\n')[1]); }
