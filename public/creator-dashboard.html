@@ -12642,18 +12642,8 @@ async function connectBrowserWallet() {
     localStorage.setItem('hf_wallet_address', address);
     updateWalletUI();
     fetchWalletBalance(provider, address);
-    // Only save as polymarket_address if user doesn't already have one set
-    const token = localStorage.getItem('hf_token');
-    if (token && !_polyWalletAddress) {
-      fetch('/api/user/wallets', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-        body: JSON.stringify({ polymarket_address: address })
-      }).catch(() => {});
-      _polyWalletAddress = address;
-      renderPolymarketConnectState();
-      loadPolymarketPositions(true);
-    }
+    // Browser wallet is for SIGNING trades only — never overwrite polymarket_address
+    // Users must manually enter their Polymarket deposit address in the Polymarket tab
     showToast('Wallet connected: ' + address.slice(0,6) + '...' + address.slice(-4), 'success');
   } catch (e) {
     showToast('Wallet connection failed: ' + (e.message || 'User rejected'), 'error');
