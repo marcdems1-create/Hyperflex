@@ -10528,6 +10528,39 @@ app.get('/api/activity', async (req, res) => {
       ? deduped.filter(a => new Date(a.ts) > new Date(since))
       : deduped.slice(0, limit);
 
+    // Enrich trending_external items with sparkline data from market_snapshots
+    try {
+      const trendingItems = result.filter(a => a.type === 'trending_external');
+      if (trendingItems.length && pool) {
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        // Extract market_id candidates from trending items (use question as lookup key since we snapshot by conditionId/slug)
+        const sparklineRows = await dbQuery(
+          `SELECT market_id, yes_price, snapshot_at FROM market_snapshots WHERE snapshot_at >= $1 ORDER BY snapshot_at ASC`,
+          [sevenDaysAgo]
+        ).catch(() => []);
+        // Build a map of market_id -> last 7 data points
+        const sparkMap = {};
+        for (const r of sparklineRows) {
+          if (!sparkMap[r.market_id]) sparkMap[r.market_id] = [];
+          sparkMap[r.market_id].push({ yes_price: r.yes_price != null ? parseFloat(r.yes_price) : null, snapshot_at: r.snapshot_at });
+        }
+        // Trim each to last 7 points
+        for (const key of Object.keys(sparkMap)) {
+          sparkMap[key] = sparkMap[key].slice(-7);
+        }
+        // Attach sparklines to trending items (best effort: match by question substring in market_id keys)
+        for (const item of trendingItems) {
+          // Try direct market_id match first, then question-based fuzzy
+          for (const [mid, points] of Object.entries(sparkMap)) {
+            if (points.length >= 2) {
+              item.sparkline = points.map(p => p.yes_price);
+              break;
+            }
+          }
+        }
+      }
+    } catch (sparkErr) { console.warn('[activity sparklines]', sparkErr.message?.slice(0, 80)); }
+
     res.json({ activities: result, communities });
   } catch (err) {
     console.error('[activity feed]', err);
@@ -15852,6 +15885,178 @@ app.delete('/api/bets/:id', requireAuth, async (req, res) => {
 
 // GET /api-docs — public API documentation page
 app.get('/api-docs', (req, res) => res.sendFile(path.join(__dirname, 'public', 'api-docs.html')));
+
+// ── MARKET SNAPSHOTS — Historical Polymarket Price Tracking ─────────────────
+
+// Snapshot cache for market-history endpoint (30 min)
+const _marketHistoryCache = {};
+
+async function snapshotPolymarketPrices() {
+  console.log('[snapshot] Starting Polymarket price snapshot...');
+  try {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 15000);
+    const res = await fetch('https://gamma-api.polymarket.com/markets?closed=false&limit=200&order=volume&ascending=false', {
+      signal: ctrl.signal,
+      headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+    });
+    clearTimeout(tid);
+    if (!res.ok) { console.warn('[snapshot] Gamma API returned', res.status); return; }
+    const markets = await res.json();
+    if (!Array.isArray(markets) || !markets.length) { console.warn('[snapshot] No markets returned'); return; }
+
+    const rows = [];
+    for (const m of markets) {
+      let yesPrice = null;
+      try {
+        const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
+        if (Array.isArray(prices) && prices[0] != null) yesPrice = parseFloat(prices[0]);
+      } catch {}
+      const marketId = m.conditionId || m.slug || m.id || '';
+      if (!marketId) continue;
+      rows.push({
+        market_id: String(marketId),
+        question: (m.question || m.title || '').slice(0, 500),
+        yes_price: yesPrice,
+        volume: parseFloat(m.volume) || 0,
+      });
+    }
+
+    if (!rows.length) { console.warn('[snapshot] No valid rows to insert'); return; }
+
+    if (pool) {
+      // Batch insert with a single multi-row INSERT
+      const values = [];
+      const params = [];
+      rows.forEach((r, i) => {
+        const offset = i * 4;
+        values.push(`($${offset+1}, $${offset+2}, $${offset+3}, $${offset+4})`);
+        params.push(r.market_id, r.question, r.yes_price, r.volume);
+      });
+      await dbQuery(
+        `INSERT INTO market_snapshots (market_id, question, yes_price, volume) VALUES ${values.join(', ')}`,
+        params
+      ).catch(e => {
+        // Table might not exist yet — log and move on
+        console.warn('[snapshot] Insert failed (table may not exist):', e.message?.slice(0, 120));
+      });
+    } else {
+      const { error } = await supabase.from('market_snapshots').insert(rows);
+      if (error) console.warn('[snapshot] Supabase insert error:', error.message?.slice(0, 120));
+    }
+
+    console.log(`[snapshot] Saved ${rows.length} market snapshots`);
+  } catch (err) {
+    console.error('[snapshot] Fatal:', err.message);
+  }
+}
+
+// Run every 6 hours
+cron.schedule('0 */6 * * *', snapshotPolymarketPrices);
+
+// Seed initial data 30 seconds after boot
+setTimeout(snapshotPolymarketPrices, 30000);
+
+// GET /api/market-history/:marketId — 30 days of price history
+app.get('/api/market-history/:marketId', async (req, res) => {
+  try {
+    const marketId = req.params.marketId;
+    if (!marketId) return res.status(400).json({ error: 'marketId required' });
+
+    // Check cache (30 min)
+    const cacheKey = marketId;
+    const cached = _marketHistoryCache[cacheKey];
+    if (cached && Date.now() - cached._ts < 30 * 60 * 1000) {
+      return res.json(cached.data);
+    }
+
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    let rows;
+    if (pool) {
+      rows = await dbQuery(
+        `SELECT yes_price, volume, snapshot_at, question FROM market_snapshots WHERE market_id = $1 AND snapshot_at >= $2 ORDER BY snapshot_at ASC`,
+        [marketId, thirtyDaysAgo]
+      ).catch(() => []);
+    } else {
+      const { data, error } = await supabase.from('market_snapshots')
+        .select('yes_price, volume, snapshot_at, question')
+        .eq('market_id', marketId)
+        .gte('snapshot_at', thirtyDaysAgo)
+        .order('snapshot_at', { ascending: true });
+      if (error) throw error;
+      rows = data || [];
+    }
+
+    const question = rows.length ? rows[rows.length - 1].question : null;
+    const history = rows.map(r => ({
+      yes_price: r.yes_price != null ? parseFloat(r.yes_price) : null,
+      volume: r.volume != null ? parseFloat(r.volume) : null,
+      snapshot_at: r.snapshot_at,
+    }));
+
+    const result = { market_id: marketId, question, history };
+    _marketHistoryCache[cacheKey] = { _ts: Date.now(), data: result };
+    res.json(result);
+  } catch (err) {
+    console.error('[market-history]', err.message);
+    res.status(500).json({ error: 'Failed to load market history', detail: err.message });
+  }
+});
+
+// GET /api/market-news?q=QUERY — Google News RSS proxy (top 5 headlines, 1h cache)
+const _marketNewsCache = {};
+app.get('/api/market-news', async (req, res) => {
+  try {
+    const q = (req.query.q || '').trim();
+    if (!q) return res.status(400).json({ error: 'q parameter required' });
+
+    const cacheKey = q.toLowerCase().slice(0, 100);
+    const cached = _marketNewsCache[cacheKey];
+    if (cached && Date.now() - cached._ts < 60 * 60 * 1000) {
+      return res.json(cached.data);
+    }
+
+    const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=en-US&gl=US&ceid=US:en`;
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 8000);
+    const rssRes = await fetch(rssUrl, {
+      signal: ctrl.signal,
+      headers: { 'User-Agent': 'Hyperflex/1.0' }
+    });
+    clearTimeout(tid);
+
+    if (!rssRes.ok) {
+      return res.json({ query: q, headlines: [] });
+    }
+
+    const xml = await rssRes.text();
+    // Parse RSS items with regex (no XML library needed)
+    const items = [];
+    const itemRegex = /<item>([\s\S]*?)<\/item>/g;
+    let match;
+    while ((match = itemRegex.exec(xml)) !== null && items.length < 5) {
+      const block = match[1];
+      const titleMatch = block.match(/<title><!\[CDATA\[(.*?)\]\]>|<title>(.*?)<\/title>/);
+      const linkMatch = block.match(/<link>(.*?)<\/link>|<link><!\[CDATA\[(.*?)\]\]>/);
+      const pubDateMatch = block.match(/<pubDate>(.*?)<\/pubDate>/);
+      const sourceMatch = block.match(/<source[^>]*>(.*?)<\/source>/);
+      const title = (titleMatch ? (titleMatch[1] || titleMatch[2]) : '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
+      const link = linkMatch ? (linkMatch[1] || linkMatch[2]) : '';
+      const pubDate = pubDateMatch ? pubDateMatch[1] : '';
+      const source = sourceMatch ? sourceMatch[1].replace(/&amp;/g, '&') : '';
+      if (title && link) {
+        items.push({ title, link, pubDate, source });
+      }
+    }
+
+    const result = { query: q, headlines: items };
+    _marketNewsCache[cacheKey] = { _ts: Date.now(), data: result };
+    res.json(result);
+  } catch (err) {
+    console.error('[market-news]', err.message);
+    res.json({ query: req.query.q || '', headlines: [] });
+  }
+});
 
 // 404 catch-all — must be last route
 app.use((req, res) => {

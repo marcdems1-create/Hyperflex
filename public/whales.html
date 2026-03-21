@@ -135,6 +135,36 @@ td { padding: 12px; font-size: 13px; vertical-align: middle; }
 .ct-close { position: absolute; top: 12px; right: 16px; background: none; border: none; color: var(--muted); font-size: 20px; cursor: pointer; }
 .ct-close:hover { color: var(--text); }
 
+/* MARKET DETAIL MODAL */
+.md-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 1000; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 40px 16px; }
+.md-overlay.open { display: flex; }
+.md-modal { background: var(--card); border: 1px solid var(--border); border-radius: 16px; max-width: 680px; width: 100%; position: relative; padding: 28px; }
+.md-close { position: absolute; top: 14px; right: 16px; background: none; border: none; color: var(--muted); font-size: 24px; cursor: pointer; }
+.md-close:hover { color: var(--text); }
+.md-question { font-size: 18px; font-weight: 700; line-height: 1.4; color: var(--text); margin-bottom: 16px; padding-right: 32px; }
+.md-prices { display: flex; gap: 24px; margin-bottom: 24px; }
+.md-price-block { text-align: center; }
+.md-price-big { font-family: var(--mono); font-size: 36px; font-weight: 700; line-height: 1; }
+.md-price-label { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 4px; }
+.md-chart-wrap { margin-bottom: 20px; }
+.md-chart-label { font-family: var(--mono); font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
+.md-chart-canvas { width: 100%; height: 200px; display: block; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); }
+.md-vol-canvas { width: 100%; height: 60px; display: block; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); margin-top: 8px; }
+.md-chart-tooltip { position: absolute; background: #0e0e0c; border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font-family: var(--mono); font-size: 11px; color: var(--text); pointer-events: none; display: none; z-index: 10; white-space: nowrap; }
+.md-links { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+.md-link { font-family: var(--mono); font-size: 12px; font-weight: 700; padding: 8px 16px; border-radius: 8px; text-decoration: none; transition: all 0.15s; border: 1px solid var(--border); color: var(--muted); cursor: pointer; }
+.md-link:hover { border-color: var(--gold); color: var(--gold); text-decoration: none; }
+.md-link-primary { background: var(--gold); color: #1a1a17; border-color: var(--gold); }
+.md-link-primary:hover { opacity: 0.88; color: #1a1a17; }
+.md-news { margin-top: 20px; }
+.md-news-title { font-family: var(--mono); font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
+.md-news-item { display: block; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.04); text-decoration: none; transition: color 0.15s; }
+.md-news-item:hover { text-decoration: none; }
+.md-news-headline { font-size: 13px; color: var(--text); line-height: 1.4; }
+.md-news-item:hover .md-news-headline { color: var(--gold); }
+.md-news-meta { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-top: 3px; }
+.md-no-data { text-align: center; padding: 32px 16px; color: var(--muted); font-family: var(--mono); font-size: 12px; }
+
 /* LOADING */
 .loading-state { text-align: center; padding: 60px 24px; }
 .loading-state .spinner { display: inline-block; width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--gold); border-radius: 50%; animation: spin 0.8s linear infinite; }
@@ -518,7 +548,7 @@ function renderTable() {
     return '<tr class="' + hl + '">' +
       '<td>' + rankBadge(p.trader_rank) + '</td>' +
       '<td><a href="' + profileUrl + '" style="text-decoration:none"><div class="trader-name">' + (p.trader || 'Unknown') + '</div></a><div class="trader-pnl">PnL: ' + fmtPnl(p.trader_pnl) + '</div></td>' +
-      '<td style="max-width:280px">' + truncate(p.market, 60) + '</td>' +
+      '<td style="max-width:280px"><span style="cursor:pointer;border-bottom:1px dashed rgba(201,146,13,0.3);transition:color .15s" onmouseover="this.style.color=\'var(--gold)\'" onmouseout="this.style.color=\'var(--text)\'" onclick="event.stopPropagation();openMarketDetail(\'' + escAttr(p.market || '') + '\',' + Math.round((p.current_price || 0) * 100) + ',\'' + escAttr(p.market_url || '') + '\',\'\')">' + truncate(p.market, 60) + '</span></td>' +
       '<td>' + sideBadge(p.side) + '</td>' +
       '<td class="size-cell">' + fmtFull$(p.size) + '</td>' +
       '<td><div class="price-bar-wrap"><div class="price-bar"><div class="price-bar-fill" style="width:' + pricePct + '%"></div></div><span class="price-pct">' + pricePct + '%</span></div></td>' +
@@ -543,7 +573,7 @@ function renderMobileCards() {
         '<div class="whale-card-trader">' + rankBadge(p.trader_rank) + ' <span class="trader-name">' + (p.trader || 'Unknown') + '</span></div>' +
         '<div class="whale-card-size">' + fmt$(p.size) + '</div>' +
       '</div>' +
-      '<div class="whale-card-market">' + truncate(p.market, 80) + '</div>' +
+      '<div class="whale-card-market" style="cursor:pointer" onclick="openMarketDetail(\'' + escAttr(p.market || '') + '\',' + Math.round((p.current_price || 0) * 100) + ',\'' + escAttr(p.market_url || '') + '\',\'\')">' + truncate(p.market, 80) + '</div>' +
       '<div class="whale-card-meta">' +
         sideBadge(p.side) +
         '<div class="price-bar-wrap"><div class="price-bar"><div class="price-bar-fill" style="width:' + pricePct + '%"></div></div><span class="price-pct">' + pricePct + '%</span></div>' +
@@ -586,6 +616,224 @@ function refreshData() {
 
 // Init
 loadData();
+
+// ── MARKET DETAIL MODAL ──
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function openMarketDetail(question, yesPct, url, marketId) {
+  const overlay = document.getElementById('mdOverlay');
+  document.getElementById('mdQuestion').textContent = question || '';
+  const noPct = yesPct != null ? 100 - yesPct : null;
+  document.getElementById('mdYesPrice').textContent = yesPct != null ? yesPct + '%' : '--';
+  document.getElementById('mdYesPrice').style.color = '#22c55e';
+  document.getElementById('mdNoPrice').textContent = noPct != null ? noPct + '%' : '--';
+  document.getElementById('mdNoPrice').style.color = '#ef4444';
+  document.getElementById('mdTradeLink').href = url || 'https://polymarket.com';
+  document.getElementById('mdChartArea').innerHTML = '<div class="md-no-data">Loading price history...</div>';
+  document.getElementById('mdNewsArea').innerHTML = '';
+  overlay.classList.add('open');
+
+  // Use question as search key for market-history (since whale data has no conditionId)
+  // Fetch all recent snapshots and try to match by question text
+  const searchId = marketId || '';
+  if (searchId) {
+    fetch('/api/market-history/' + encodeURIComponent(searchId))
+      .then(r => r.json())
+      .then(data => {
+        if (data.history && data.history.length >= 2) {
+          document.getElementById('mdChartArea').innerHTML =
+            '<div class="md-chart-label">Price History (30d)</div>' +
+            '<div style="position:relative"><canvas id="mdPriceCanvas" class="md-chart-canvas"></canvas><div class="md-chart-tooltip" id="mdTooltip"></div></div>' +
+            '<div class="md-chart-label" style="margin-top:12px">Volume</div>' +
+            '<canvas id="mdVolCanvas" class="md-vol-canvas"></canvas>';
+          drawPriceChart('mdPriceCanvas', data.history);
+          drawVolumeChart('mdVolCanvas', data.history);
+        } else {
+          document.getElementById('mdChartArea').innerHTML = '<div class="md-no-data">No price history yet. Data appears after snapshot cycles.</div>';
+        }
+      })
+      .catch(() => {
+        document.getElementById('mdChartArea').innerHTML = '<div class="md-no-data">Could not load price history.</div>';
+      });
+  } else {
+    document.getElementById('mdChartArea').innerHTML = '<div class="md-no-data">No price history available for this market.</div>';
+  }
+
+  // Fetch related news
+  if (question) {
+    const keywords = question.replace(/[?!.,;:'"]/g, '').split(/\s+/).filter(w => w.length > 3).slice(0, 5).join(' ');
+    if (keywords) {
+      document.getElementById('mdNewsArea').innerHTML = '<div class="md-news"><div class="md-news-title">Related News</div><div style="font-size:12px;color:var(--muted)">Loading...</div></div>';
+      fetch('/api/market-news?q=' + encodeURIComponent(keywords))
+        .then(r => r.json())
+        .then(data => {
+          if (data.headlines && data.headlines.length) {
+            const items = data.headlines.slice(0, 3).map(h =>
+              '<a class="md-news-item" href="' + escHtml(h.link) + '" target="_blank" rel="noopener">' +
+              '<div class="md-news-headline">' + escHtml(h.title) + '</div>' +
+              '<div class="md-news-meta">' + (h.source ? escHtml(h.source) + ' . ' : '') + (h.pubDate ? new Date(h.pubDate).toLocaleDateString('en-US', {month:'short',day:'numeric'}) : '') + '</div>' +
+              '</a>'
+            ).join('');
+            document.getElementById('mdNewsArea').innerHTML = '<div class="md-news"><div class="md-news-title">Related News</div>' + items + '</div>';
+          } else {
+            document.getElementById('mdNewsArea').innerHTML = '';
+          }
+        })
+        .catch(() => { document.getElementById('mdNewsArea').innerHTML = ''; });
+    }
+  }
+}
+
+function closeMarketDetail() {
+  document.getElementById('mdOverlay').classList.remove('open');
+}
+
+function drawPriceChart(canvasId, history) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width * (window.devicePixelRatio || 1);
+  canvas.height = 200 * (window.devicePixelRatio || 1);
+  canvas.style.width = rect.width + 'px';
+  canvas.style.height = '200px';
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  ctx.scale(dpr, dpr);
+  const w = rect.width, h = 200;
+  const pad = { top: 20, right: 16, bottom: 30, left: 48 };
+  const cw = w - pad.left - pad.right;
+  const ch = h - pad.top - pad.bottom;
+
+  const prices = history.map(p => p.yes_price != null ? p.yes_price : null).filter(p => p !== null);
+  if (prices.length < 2) return;
+
+  const minY = 0, maxY = 1;
+
+  // Grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.top + (ch * i / 4);
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(w - pad.right, y); ctx.stroke();
+    ctx.fillStyle = '#7a7870';
+    ctx.font = '10px "Space Mono", monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(Math.round((1 - i / 4) * 100) + '%', pad.left - 6, y + 4);
+  }
+
+  // X labels
+  const times = history.map(p => new Date(p.snapshot_at));
+  ctx.fillStyle = '#7a7870';
+  ctx.font = '10px "Space Mono", monospace';
+  ctx.textAlign = 'center';
+  const labelCount = Math.min(5, history.length);
+  for (let i = 0; i < labelCount; i++) {
+    const idx = Math.floor(i * (history.length - 1) / (labelCount - 1));
+    const x = pad.left + (idx / (history.length - 1)) * cw;
+    ctx.fillText(times[idx].toLocaleDateString('en-US', {month:'short',day:'numeric'}), x, h - 6);
+  }
+
+  // Line
+  ctx.strokeStyle = '#22c55e';
+  ctx.lineWidth = 2;
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  let started = false;
+  const points = [];
+  for (let i = 0; i < history.length; i++) {
+    const p = history[i].yes_price;
+    if (p == null) continue;
+    const x = pad.left + (i / (history.length - 1)) * cw;
+    const y = pad.top + ch - (p - minY) / (maxY - minY) * ch;
+    points.push({ x, y, i });
+    if (!started) { ctx.moveTo(x, y); started = true; }
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // Fill
+  if (points.length >= 2) {
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+    ctx.lineTo(points[points.length-1].x, pad.top + ch);
+    ctx.lineTo(points[0].x, pad.top + ch);
+    ctx.closePath();
+    const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
+    grad.addColorStop(0, 'rgba(34,197,94,0.15)');
+    grad.addColorStop(1, 'rgba(34,197,94,0)');
+    ctx.fillStyle = grad;
+    ctx.fill();
+  }
+
+  // Tooltip
+  const tooltip = document.getElementById('mdTooltip');
+  canvas.onmousemove = function(e) {
+    const bounds = canvas.getBoundingClientRect();
+    const mx = e.clientX - bounds.left;
+    let closest = null, minDist = Infinity;
+    for (const pt of points) {
+      const d = Math.abs(pt.x - mx);
+      if (d < minDist) { minDist = d; closest = pt; }
+    }
+    if (closest && minDist < 30) {
+      const h2 = history[closest.i];
+      const pct = h2.yes_price != null ? Math.round(h2.yes_price * 100) + '%' : '--';
+      const date = new Date(h2.snapshot_at).toLocaleDateString('en-US', {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+      tooltip.style.display = 'block';
+      tooltip.style.left = (closest.x + 10) + 'px';
+      tooltip.style.top = (closest.y - 10) + 'px';
+      tooltip.innerHTML = '<strong style="color:#22c55e">' + pct + '</strong><br>' + date;
+    } else {
+      tooltip.style.display = 'none';
+    }
+  };
+  canvas.onmouseleave = function() { tooltip.style.display = 'none'; };
+}
+
+function drawVolumeChart(canvasId, history) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * (window.devicePixelRatio || 1);
+  canvas.height = 60 * (window.devicePixelRatio || 1);
+  canvas.style.width = rect.width + 'px';
+  canvas.style.height = '60px';
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  ctx.scale(dpr, dpr);
+  const w = rect.width, h = 60;
+  const pad = { top: 6, right: 16, bottom: 6, left: 48 };
+  const cw = w - pad.left - pad.right;
+  const ch = h - pad.top - pad.bottom;
+  const volumes = history.map(p => p.volume || 0);
+  const maxVol = Math.max(...volumes, 1);
+  const barW = Math.max(2, cw / volumes.length - 1);
+  for (let i = 0; i < volumes.length; i++) {
+    const x = pad.left + (i / volumes.length) * cw;
+    const barH = (volumes[i] / maxVol) * ch;
+    ctx.fillStyle = 'rgba(201,146,13,0.4)';
+    ctx.fillRect(x, pad.top + ch - barH, barW, barH);
+  }
+}
 </script>
+
+<!-- Market Detail Modal -->
+<div class="md-overlay" id="mdOverlay" onclick="if(event.target===this)closeMarketDetail()">
+  <div class="md-modal" id="mdModal">
+    <button class="md-close" onclick="closeMarketDetail()">&times;</button>
+    <div class="md-question" id="mdQuestion"></div>
+    <div class="md-prices">
+      <div class="md-price-block"><div class="md-price-big" id="mdYesPrice">--</div><div class="md-price-label">YES</div></div>
+      <div class="md-price-block"><div class="md-price-big" id="mdNoPrice">--</div><div class="md-price-label">NO</div></div>
+    </div>
+    <div id="mdChartArea"></div>
+    <div id="mdNewsArea"></div>
+    <div class="md-links">
+      <a id="mdTradeLink" href="https://polymarket.com" target="_blank" rel="noopener" class="md-link md-link-primary">Trade on Polymarket &rarr;</a>
+      <button class="md-link" onclick="alert('Price alerts coming soon! Stay tuned.')">Set price alert &#x1F514;</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

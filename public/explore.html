@@ -1343,6 +1343,19 @@ function activityCard(a) {
         </div>
         <div class="ac-footer">
           <span style="font-family:var(--mono);font-size:11px;color:var(--dim)">${a.volume_display || ''}</span>
+          ${a.sparkline && a.sparkline.length >= 2 ? (() => {
+            const pts = a.sparkline;
+            const mn = Math.min(...pts.filter(v=>v!=null));
+            const mx = Math.max(...pts.filter(v=>v!=null));
+            const rng = mx - mn || 0.01;
+            const coords = pts.map((v,i) => {
+              const x = Math.round(i / (pts.length - 1) * 60);
+              const y = Math.round(20 - ((v - mn) / rng) * 18);
+              return x + ',' + y;
+            }).join(' ');
+            const clr = pts[pts.length-1] >= pts[0] ? '#22c55e' : '#ef4444';
+            return '<svg width="60" height="20" viewBox="0 0 60 20" style="margin-left:8px;vertical-align:middle"><polyline points="' + coords + '" fill="none" stroke="' + clr + '" stroke-width="1.5"/></svg>';
+          })() : ''}
           <a href="${escHtml(dest)}" target="_blank" rel="noopener" style="margin-left:auto;font-size:11px;color:${pm.color};font-family:var(--mono);text-decoration:none;font-weight:700">View on ${pm.label} →</a>
         </div>
       </div>
