@@ -2798,6 +2798,8 @@ body.nav-open .sidebar-backdrop {
   input, textarea, select { font-size: 16px !important; }
   #portfolioSummaryBar > div > div { grid-template-columns: repeat(2, 1fr) !important; gap: 16px !important; }
   #portfolioSummaryBar [style*="font-size:28px"] { font-size: 22px !important; }
+  #perfBestWorstCalls > div { grid-template-columns: 1fr !important; }
+  .perf-whale-bars { grid-template-columns: 1fr !important; }
 }
 @media (max-width: 480px) {
   #portfolioSummaryBar > div > div { grid-template-columns: 1fr 1fr !important; }
@@ -2839,7 +2841,7 @@ body.nav-open .sidebar-backdrop {
         <span class="nav-icon">📈</span><span class="nav-label">Performance</span>
       </a>
       <a class="nav-item" onclick="showTab('logbets')">
-        <span class="nav-icon">📝</span><span class="nav-label">Log Bets</span>
+        <span class="nav-icon">📝</span><span class="nav-label">Place Bet</span>
       </a>
       <a class="nav-item" onclick="showTab('findmarkets')">
         <span class="nav-icon">🔍</span><span class="nav-label">Find Markets</span>
@@ -4934,6 +4936,64 @@ body.nav-open .sidebar-backdrop {
                 </div>
               </div>
             </div>
+            <!-- ═══ CATEGORY BREAKDOWN ═══ -->
+            <div id="perfCategoryBreakdown" style="display:none;margin-bottom:20px">
+              <div style="background:#0f0e0c;border:1px solid #2a2825;border-radius:14px;overflow:hidden">
+                <div style="padding:18px 24px 14px;border-bottom:1px solid #2a2825">
+                  <div style="font-family:var(--sans);font-size:15px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px">
+                    <span style="font-size:16px">🏷</span> Category Breakdown
+                  </div>
+                </div>
+                <div id="perfCategoryBars" style="padding:18px 24px 20px"></div>
+              </div>
+            </div>
+
+            <!-- ═══ BEST & WORST CALLS ═══ -->
+            <div id="perfBestWorstCalls" style="display:none;margin-bottom:20px">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+                <!-- Best Calls -->
+                <div style="background:#0f0e0c;border:1px solid #2a2825;border-radius:14px;overflow:hidden">
+                  <div style="padding:16px 20px 12px;border-bottom:1px solid #2a2825">
+                    <div style="font-family:var(--sans);font-size:14px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px">
+                      <span>&#x1F3C6;</span> Best Calls
+                    </div>
+                  </div>
+                  <div id="perfBestCallsList" style="padding:12px 16px"></div>
+                </div>
+                <!-- Worst Calls -->
+                <div style="background:#0f0e0c;border:1px solid #2a2825;border-radius:14px;overflow:hidden">
+                  <div style="padding:16px 20px 12px;border-bottom:1px solid #2a2825">
+                    <div style="font-family:var(--sans);font-size:14px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px">
+                      <span>&#x1F4C9;</span> Worst Calls
+                    </div>
+                  </div>
+                  <div id="perfWorstCallsList" style="padding:12px 16px"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ═══ HOW YOU COMPARE TO WHALES ═══ -->
+            <div id="perfWhaleCompare" style="display:none;margin-bottom:20px">
+              <div style="background:#0f0e0c;border:1px solid #2a2825;border-radius:14px;overflow:hidden">
+                <div style="padding:18px 24px 14px;border-bottom:1px solid #2a2825">
+                  <div style="font-family:var(--sans);font-size:15px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px">
+                    <span style="font-size:16px">&#x1F4CA;</span> How You Compare to the Top 50 Traders
+                  </div>
+                </div>
+                <div id="perfWhaleCompareContent" style="padding:18px 24px 20px"></div>
+              </div>
+            </div>
+
+            <!-- ═══ POSITION SIZING CONTEXT ═══ -->
+            <div id="perfPositionSizing" style="display:none;margin-bottom:20px">
+              <div style="background:#0f0e0c;border:1px solid #2a2825;border-radius:14px;padding:18px 24px">
+                <div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--text);margin-bottom:10px;display:flex;align-items:center;gap:8px">
+                  <span style="font-size:14px">&#x1F4B0;</span> Position Sizing
+                </div>
+                <div id="perfPositionSizingContent" style="font-family:var(--mono);font-size:12px;color:var(--dim);line-height:1.8"></div>
+              </div>
+            </div>
+
             <!-- Empty state when no wallet connected -->
             <div id="performanceEmpty" style="display:none;text-align:center;padding:48px 20px;color:var(--dim)">
               <div style="font-size:40px;margin-bottom:16px;opacity:0.4">📈</div>
@@ -4945,7 +5005,7 @@ body.nav-open .sidebar-backdrop {
         </div>
       </div><!-- /tab-performance -->
 
-      <!-- ═══════════════════════════════════ LOG BETS TAB ════════════════════════════ -->
+      <!-- ═══════════════════════════════════ PLACE BET TAB ════════════════════════════ -->
       <div id="tab-logbets" style="display:none">
         <div class="section">
           <div style="max-width:860px">
@@ -4960,7 +5020,7 @@ body.nav-open .sidebar-backdrop {
             <div id="betPlatformPills" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px"></div>
             <!-- Add Bet Form -->
             <div style="background:var(--cream);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:20px">
-              <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:16px">Log a Bet</div>
+              <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:16px">Place a Bet</div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
                 <div><label style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;display:block;margin-bottom:4px">Platform</label>
                   <select id="betPlatform" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--sans);font-size:13px;padding:10px 14px;outline:none">
@@ -4980,7 +5040,7 @@ body.nav-open .sidebar-backdrop {
                   <input type="text" id="betNotes" placeholder="Sharp line move..." style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:10px 14px;outline:none;box-sizing:border-box"/></div>
               </div>
               <div id="betError" style="color:#ef4444;font-family:var(--mono);font-size:12px;margin-top:8px;display:none"></div>
-              <button id="betSubmitBtn" onclick="submitBet()" style="margin-top:16px;background:var(--gold);color:var(--ink);border:none;border-radius:10px;padding:12px 24px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer">Log Bet →</button>
+              <button id="betSubmitBtn" onclick="submitBet()" style="margin-top:16px;background:var(--gold);color:var(--ink);border:none;border-radius:10px;padding:12px 24px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer">Place Bet →</button>
             </div>
             <!-- Bet filter tabs -->
             <div style="display:flex;gap:8px;margin-bottom:16px">
@@ -6695,7 +6755,7 @@ function showTab(tab) {
   document.querySelectorAll('.nav-item').forEach(n => {
     if (n.getAttribute('onclick') && n.getAttribute('onclick').includes(`'${tab}'`)) n.classList.add('active');
   });
-  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Followers', portfolio:'My Positions', account:'My Account', performance:'Performance', logbets:'Log Bets', findmarkets:'Find Markets' };
+  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Followers', portfolio:'My Positions', account:'My Account', performance:'Performance', logbets:'Place Bet', findmarkets:'Find Markets' };
   document.getElementById('topbarTitle').textContent = titles[tab] || tab;
   if (tab === 'analytics' && !analyticsLoaded) loadAnalytics();
   if (tab === 'members') loadMembers();
@@ -11507,6 +11567,10 @@ async function loadPerformanceTab() {
   const chartEl = document.getElementById('portfolioPnlChart');
   const bestEl = document.getElementById('bestCallsSection');
   const perfPlatform = document.getElementById('perfPlatformAnalyticsSection');
+  const catBreakdown = document.getElementById('perfCategoryBreakdown');
+  const bestWorst = document.getElementById('perfBestWorstCalls');
+  const whaleCompare = document.getElementById('perfWhaleCompare');
+  const posSizing = document.getElementById('perfPositionSizing');
   if (!hasAny) {
     if (emptyEl) emptyEl.style.display = 'block';
     if (shareBar) shareBar.style.display = 'none';
@@ -11514,6 +11578,10 @@ async function loadPerformanceTab() {
     if (chartEl) chartEl.style.display = 'none';
     if (bestEl) bestEl.style.display = 'none';
     if (perfPlatform) perfPlatform.style.display = 'none';
+    if (catBreakdown) catBreakdown.style.display = 'none';
+    if (bestWorst) bestWorst.style.display = 'none';
+    if (whaleCompare) whaleCompare.style.display = 'none';
+    if (posSizing) posSizing.style.display = 'none';
     return;
   }
   if (emptyEl) emptyEl.style.display = 'none';
@@ -11524,6 +11592,11 @@ async function loadPerformanceTab() {
   renderBestCallsInPerformance();
   // Populate the performance platform analytics grid
   loadPerfPlatformAnalytics();
+  // New performance sections
+  renderCategoryBreakdown();
+  renderBestWorstCalls();
+  renderPositionSizing();
+  loadWhaleComparison();
 }
 
 async function loadPerfPlatformAnalytics() {
@@ -11577,6 +11650,213 @@ function renderBestCallsInPerformance() {
   } catch (e) {
     console.warn('[bestCalls]', e);
   }
+}
+
+// ── CATEGORY BREAKDOWN ──────────────────────────────────────────────────────
+function categorizePosition(question) {
+  const q = (question || '').toLowerCase();
+  const cats = {
+    crypto: ['bitcoin','btc','eth','ethereum','solana','crypto','defi','nft','token','blockchain','dogecoin','xrp','binance','coinbase','altcoin','memecoin'],
+    sports: ['nba','nfl','nhl','mlb','ufc','soccer','football','baseball','basketball','hockey','tennis','golf','boxing','f1','championship','playoffs','super bowl','world series','world cup','premier league','vs','game','cup','win on','match'],
+    politics: ['trump','election','president','congress','senate','iran','regime','biden','democrat','republican','governor','primary','vote','political','legislation','impeach','ceasefire','war ','military','sanction','nato','ukraine','russia','china','taiwan'],
+    commodities: ['gold','silver','oil','crude','wti','gas','copper','platinum','natural gas','commodity']
+  };
+  for (const [cat, keywords] of Object.entries(cats)) {
+    for (const kw of keywords) { if (q.includes(kw)) return cat; }
+  }
+  return 'other';
+}
+
+function renderCategoryBreakdown() {
+  const container = document.getElementById('perfCategoryBreakdown');
+  const barsEl = document.getElementById('perfCategoryBars');
+  if (!container || !barsEl) return;
+  const positions = getAllPositionsFlat();
+  if (positions.length === 0) { container.style.display = 'none'; return; }
+
+  const catColors = { crypto: '#e0a820', sports: '#3b82f6', politics: '#a855f7', commodities: '#d4a017', other: '#6b7280' };
+  const catIcons = { crypto: '\u20BF', sports: '\u26BD', politics: '\u2696', commodities: '\u2B50', other: '\u2022' };
+  const catMap = {};
+  positions.forEach(p => {
+    const cat = categorizePosition(p.question || p.title || '');
+    if (!catMap[cat]) catMap[cat] = { count: 0, capital: 0, resolved: 0, wins: 0 };
+    catMap[cat].count++;
+    const cost = p.cost_basis || (p.shares || 0) * 0.5;
+    catMap[cat].capital += cost;
+    if (p._isResolved) { catMap[cat].resolved++; if (p._won) catMap[cat].wins++; }
+  });
+
+  const totalCap = Object.values(catMap).reduce((s, c) => s + c.capital, 0) || 1;
+  const sorted = Object.entries(catMap).sort((a, b) => b[1].capital - a[1].capital);
+
+  barsEl.innerHTML = sorted.map(([cat, d]) => {
+    const pct = Math.round(d.capital / totalCap * 100);
+    const wr = d.resolved > 0 ? Math.round(d.wins / d.resolved * 100) + '% win rate' : 'no resolved';
+    const color = catColors[cat] || '#6b7280';
+    const icon = catIcons[cat] || '\u2022';
+    return '<div style="margin-bottom:14px">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">' +
+        '<div style="display:flex;align-items:center;gap:8px">' +
+          '<span style="font-size:14px;width:20px;text-align:center">' + icon + '</span>' +
+          '<span style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--text);text-transform:capitalize">' + cat + '</span>' +
+          '<span style="font-family:var(--mono);font-size:10px;color:var(--dim)">' + d.count + ' positions \u00B7 $' + d.capital.toFixed(2) + '</span>' +
+        '</div>' +
+        '<span style="font-family:var(--mono);font-size:10px;color:var(--dim)">' + wr + '</span>' +
+      '</div>' +
+      '<div style="width:100%;height:8px;background:#1c1c19;border-radius:4px;overflow:hidden">' +
+        '<div style="width:' + Math.max(pct, 2) + '%;height:100%;background:' + color + ';border-radius:4px;transition:width .4s"></div>' +
+      '</div>' +
+      '<div style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:3px;text-align:right">' + pct + '%</div>' +
+    '</div>';
+  }).join('');
+  container.style.display = 'block';
+}
+
+// ── BEST & WORST CALLS (enhanced) ────────────────────────────────────────────
+function renderBestWorstCalls() {
+  const container = document.getElementById('perfBestWorstCalls');
+  const bestList = document.getElementById('perfBestCallsList');
+  const worstList = document.getElementById('perfWorstCallsList');
+  if (!container || !bestList || !worstList) return;
+
+  const positions = getAllPositionsFlat();
+  const resolved = positions.filter(p => p._isResolved);
+
+  if (resolved.length === 0) {
+    container.style.display = 'block';
+    const emptyMsg = '<div style="padding:16px;text-align:center;color:var(--dim);font-size:12px;font-family:var(--mono);line-height:1.6">No resolved positions yet \u2014 your best calls will show here once markets settle.</div>';
+    bestList.innerHTML = emptyMsg;
+    worstList.innerHTML = emptyMsg;
+    return;
+  }
+
+  const withPnl = resolved.filter(p => p.pnl != null);
+  const best = [...withPnl].sort((a, b) => (b.pnl || 0) - (a.pnl || 0)).slice(0, 3);
+  const worst = [...withPnl].sort((a, b) => (a.pnl || 0) - (b.pnl || 0)).slice(0, 3);
+
+  function renderCallCard(p) {
+    const q = (p.question || p.title || 'Unknown').length > 50 ? (p.question || p.title || '').slice(0, 47) + '...' : (p.question || p.title || 'Unknown');
+    const sign = (p.pnl || 0) >= 0 ? '+' : '';
+    const pnlColor = (p.pnl || 0) >= 0 ? '#22c55e' : '#ef4444';
+    const sideBg = (p.side || '').toUpperCase() === 'YES' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)';
+    const sideColor = (p.side || '').toUpperCase() === 'YES' ? '#22c55e' : '#ef4444';
+    const platform = p._platform || 'unknown';
+    return '<div style="padding:10px 12px;border-bottom:1px solid #2a2825;display:flex;align-items:center;gap:10px">' +
+      '<div style="flex:1;min-width:0">' +
+        '<div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + q + '</div>' +
+        '<div style="display:flex;align-items:center;gap:6px;margin-top:4px">' +
+          '<span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;background:' + sideBg + ';color:' + sideColor + '">' + (p.side || '?').toUpperCase() + '</span>' +
+          '<span style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:capitalize">' + platform + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<div style="font-family:var(--mono);font-size:14px;font-weight:900;color:' + pnlColor + ';white-space:nowrap">' + sign + '$' + Math.abs(p.pnl || 0).toFixed(2) + '</div>' +
+    '</div>';
+  }
+
+  bestList.innerHTML = best.length > 0 ? best.map(renderCallCard).join('') : '<div style="padding:16px;text-align:center;color:var(--dim);font-size:12px;font-family:var(--mono)">No winning calls yet</div>';
+  worstList.innerHTML = worst.length > 0 ? worst.map(renderCallCard).join('') : '<div style="padding:16px;text-align:center;color:var(--dim);font-size:12px;font-family:var(--mono)">No losses yet</div>';
+  container.style.display = 'block';
+}
+
+// ── WHALE COMPARISON ────────────────────────────────────────────────────────
+async function loadWhaleComparison() {
+  const container = document.getElementById('perfWhaleCompare');
+  const content = document.getElementById('perfWhaleCompareContent');
+  if (!container || !content) return;
+
+  const positions = getAllPositionsFlat();
+  if (positions.length === 0) { container.style.display = 'none'; return; }
+
+  // Build user category breakdown
+  const userCatMap = { crypto: 0, sports: 0, politics: 0, commodities: 0, other: 0 };
+  positions.forEach(p => {
+    const cat = categorizePosition(p.question || p.title || '');
+    const cost = p.cost_basis || (p.shares || 0) * 0.5;
+    userCatMap[cat] += cost;
+  });
+  const userTotal = Object.values(userCatMap).reduce((s, v) => s + v, 0) || 1;
+
+  try {
+    const r = await fetch('/api/whale-flow');
+    if (!r.ok) { container.style.display = 'none'; return; }
+    const data = await r.json();
+    const whaleBreakdown = {};
+    (data.category_breakdown || []).forEach(c => { whaleBreakdown[c.category] = c.pct; });
+
+    const catColors = { crypto: '#e0a820', sports: '#3b82f6', politics: '#a855f7', commodities: '#d4a017', other: '#6b7280' };
+    const allCats = ['sports', 'crypto', 'politics', 'commodities', 'other'];
+
+    // Find biggest mismatch
+    let maxDiff = 0, mismatchCat = '', mismatchMsg = '';
+    allCats.forEach(cat => {
+      const userPct = Math.round((userCatMap[cat] / userTotal) * 100);
+      const whalePct = whaleBreakdown[cat] || 0;
+      const diff = Math.abs(userPct - whalePct);
+      if (diff > maxDiff && userPct > 5) { maxDiff = diff; mismatchCat = cat; }
+    });
+    if (maxDiff > 15 && mismatchCat) {
+      const userPct = Math.round((userCatMap[mismatchCat] / userTotal) * 100);
+      const whalePct = whaleBreakdown[mismatchCat] || 0;
+      if (userPct > whalePct) {
+        mismatchMsg = 'You\'re heavily in ' + mismatchCat + ' (' + userPct + '%) while whales are at ' + whalePct + '%.';
+      } else {
+        mismatchMsg = 'Whales are ' + whalePct + '% in ' + mismatchCat + ' \u2014 you\'re only at ' + userPct + '%.';
+      }
+    }
+
+    let html = '<div class="perf-whale-bars" style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:16px">';
+    allCats.forEach(cat => {
+      const userPct = Math.round((userCatMap[cat] / userTotal) * 100);
+      const whalePct = whaleBreakdown[cat] || 0;
+      const color = catColors[cat] || '#6b7280';
+      html += '<div style="background:#141412;border:1px solid #2a2825;border-radius:10px;padding:14px">' +
+        '<div style="font-family:var(--sans);font-size:12px;font-weight:700;color:var(--text);text-transform:capitalize;margin-bottom:10px">' + cat + '</div>' +
+        '<div style="margin-bottom:6px">' +
+          '<div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--dim);margin-bottom:3px"><span>Whales</span><span>' + whalePct + '%</span></div>' +
+          '<div style="width:100%;height:6px;background:#1c1c19;border-radius:3px;overflow:hidden"><div style="width:' + Math.max(whalePct, 1) + '%;height:100%;background:' + color + ';opacity:0.5;border-radius:3px"></div></div>' +
+        '</div>' +
+        '<div>' +
+          '<div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--text);margin-bottom:3px"><span>You</span><span>' + userPct + '%</span></div>' +
+          '<div style="width:100%;height:6px;background:#1c1c19;border-radius:3px;overflow:hidden"><div style="width:' + Math.max(userPct, 1) + '%;height:100%;background:' + color + ';border-radius:3px"></div></div>' +
+        '</div>' +
+      '</div>';
+    });
+    html += '</div>';
+
+    if (mismatchMsg) {
+      html += '<div style="background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.25);border-radius:10px;padding:12px 16px;font-family:var(--mono);font-size:12px;color:var(--gold);line-height:1.5">\u26A0 ' + mismatchMsg + '</div>';
+    }
+
+    content.innerHTML = html;
+    container.style.display = 'block';
+  } catch (e) {
+    console.warn('[whaleCompare]', e);
+    container.style.display = 'none';
+  }
+}
+
+// ── POSITION SIZING CONTEXT ─────────────────────────────────────────────────
+function renderPositionSizing() {
+  const container = document.getElementById('perfPositionSizing');
+  const content = document.getElementById('perfPositionSizingContent');
+  if (!container || !content) return;
+
+  const positions = getAllPositionsFlat();
+  if (positions.length === 0) { container.style.display = 'none'; return; }
+
+  let totalCost = 0;
+  positions.forEach(p => {
+    totalCost += p.cost_basis || (p.shares || 0) * 0.5;
+  });
+  const avgPos = totalCost / positions.length;
+
+  content.innerHTML =
+    '<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">' +
+      '<span style="color:var(--text)">Your avg position:</span> ' +
+      '<span style="font-size:16px;font-weight:900;color:var(--text)">$' + avgPos.toFixed(2) + '</span>' +
+    '</div>' +
+    '<div style="color:var(--dim)">Top 50 avg: <span style="color:var(--text);font-weight:700">$71K</span> <span style="opacity:0.6">(from whale watch)</span></div>';
+  container.style.display = 'block';
 }
 
 function renderKalshiConnectState() {
@@ -12036,7 +12316,7 @@ async function submitBet() {
     document.getElementById('betNotes').value = '';
     loadBets(); loadBetStats();
   } catch(e) { errEl.textContent = e.message; errEl.style.display = 'block'; }
-  finally { btn.disabled = false; btn.textContent = 'Log Bet →'; }
+  finally { btn.disabled = false; btn.textContent = 'Place Bet →'; }
 }
 
 async function loadBets() {
@@ -12240,9 +12520,11 @@ function updatePortfolioSummary() {
   bar.style.display = 'block';
   if (shareBar) shareBar.style.display = positions.length > 0 ? 'block' : 'none';
 
-  // Total Value
+  // Total Value (include USDC wallet balance if available)
+  const usdcBal = window._walletBalanceUSDC || 0;
+  const totalWithUsdc = stats.totalValue + usdcBal;
   const valEl = document.getElementById('psSummaryValue');
-  if (valEl) valEl.textContent = '$' + stats.totalValue.toFixed(2);
+  if (valEl) valEl.textContent = '$' + totalWithUsdc.toFixed(2);
 
   // Total P&L
   const pnlEl = document.getElementById('psSummaryPnl');
@@ -12624,9 +12906,16 @@ function updateWalletUI() {
   if (!bar) return;
   if (window._connectedWallet) {
     const addr = window._connectedWallet;
-    const balStr = window._walletBalanceUSDC != null ? ' · <span style="color:var(--gold);font-weight:700">$' + window._walletBalanceUSDC.toFixed(2) + ' USDC</span>' : '';
-    const maticStr = window._walletBalanceMATIC != null ? ' · ' + window._walletBalanceMATIC.toFixed(4) + ' POL' : '';
-    status.innerHTML = '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#22c55e;margin-right:6px"></span><span style="color:#22c55e">' + addr.slice(0,6) + '...' + addr.slice(-4) + '</span>' + balStr + '<span style="color:var(--dim)">' + maticStr + '</span>';
+    const addrHtml = '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#22c55e;margin-right:6px"></span><span style="color:#22c55e">' + addr.slice(0,6) + '...' + addr.slice(-4) + '</span>';
+    let balHtml = '';
+    if (window._walletBalanceUSDC != null) {
+      balHtml = '<span style="font-family:var(--mono);font-size:20px;font-weight:900;color:#22c55e;margin-left:12px;letter-spacing:-0.02em">$' + window._walletBalanceUSDC.toFixed(2) + ' <span style="font-size:12px;font-weight:700;opacity:0.7">USDC</span></span>';
+    } else if (window._connectedWallet && window._walletProvider) {
+      balHtml = '<span style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-left:10px">Balance: loading...</span>';
+      fetchWalletBalance(window._walletProvider, window._connectedWallet);
+    }
+    const maticHtml = window._walletBalanceMATIC != null ? '<span style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-left:8px">' + window._walletBalanceMATIC.toFixed(4) + ' POL</span>' : '';
+    status.innerHTML = addrHtml + balHtml + maticHtml;
     actions.innerHTML = '<button onclick="fetchWalletBalance(window._walletProvider, window._connectedWallet)" style="background:none;border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-family:var(--mono);font-size:11px;color:var(--dim);cursor:pointer;min-height:44px;margin-right:6px" title="Refresh balance">↺</button><button onclick="disconnectBrowserWallet()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-family:var(--mono);font-size:11px;color:var(--dim);cursor:pointer;min-height:44px" onmouseover="this.style.borderColor=\'var(--gold)\';this.style.color=\'var(--gold)\'" onmouseout="this.style.borderColor=\'var(--border)\';this.style.color=\'var(--dim)\'">Disconnect</button>';
   } else {
     status.textContent = 'Not connected';
