@@ -1001,7 +1001,7 @@ function applyExploreSearch() {
   if (activeTab === 'activity') {
     if (!q) { renderActivityFeed(activityData); return; }
     const filtered = activityData.filter(a => {
-      const text = ((a.question||'') + ' ' + (a.community_name||a.community_slug||'') + ' ' + (a.username||'')).toLowerCase();
+      const text = ((a.question||'') + ' ' + (a.market_question||'') + ' ' + (a.community_name||a.community_slug||'') + ' ' + (a.username||'') + ' ' + (a.trader_name||'') + ' ' + (a.user||'')).toLowerCase();
       return text.includes(q);
     });
     renderActivityFeed(filtered);
@@ -1346,6 +1346,41 @@ function activityCard(a) {
         </div>
       </div>
     </div>`;
+  }
+
+  if (a.type === 'whale_trade') {
+    const actionVerb = { opened: 'just opened', closed: 'just closed', increased: 'increased position on', decreased: 'decreased position on' }[a.action] || a.action;
+    const sizeStr = a.size_display || '$' + (a.size || 0).toLocaleString();
+    const pricePct = a.price ? Math.round(a.price * 100) + '%' : '';
+    const sideColor = (a.side || '').toUpperCase() === 'YES' ? '#22c55e' : (a.side || '').toUpperCase() === 'NO' ? '#ef4444' : '#c9920d';
+    const sizeChange = (a.action === 'increased' || a.action === 'decreased') && a.old_size_display && a.new_size_display
+      ? ` from ${a.old_size_display} → ${a.new_size_display}`
+      : '';
+    const dest = a.url || 'https://polymarket.com';
+    const isExt = dest.startsWith('http');
+    return `<a class="activity-card" href="${escHtml(dest)}" ${isExt ? 'target="_blank" rel="noopener"' : ''} style="border-left:3px solid #c9920d">
+      <div class="ac-avatar" style="background:rgba(201,146,13,0.15);border:1px solid rgba(201,146,13,0.3);font-size:22px;display:flex;align-items:center;justify-content:center">🐋</div>
+      <div class="ac-body">
+        <div class="ac-header">
+          <span class="ac-actor" style="color:#c9920d">${escHtml(a.trader_name || 'Whale')}</span>
+          <span class="ac-action">${actionVerb}</span>
+          <span class="ac-time">${timeAgo(a.ts)}</span>
+        </div>
+        <div class="ac-market-card">
+          <div class="ac-market-inner">
+            <span class="ac-community-pill" style="background:rgba(99,102,241,0.12);color:#818cf8;border:1px solid rgba(99,102,241,0.3)">Polymarket</span>
+            <div class="ac-question">${escHtml(a.question || '')}</div>
+            ${pricePct ? `<div class="ac-odds-bar"><div class="ac-odds-fill" style="width:${Math.round(a.price * 100)}%;background:${sideColor}"></div></div>` : ''}
+          </div>
+        </div>
+        <div class="ac-footer">
+          <span class="ac-tag" style="background:${sideColor}22;color:${sideColor};font-weight:700">${escHtml((a.side || '').toUpperCase())}</span>
+          <span class="ac-stat" style="font-weight:700">${sizeStr}${sizeChange}</span>
+          ${pricePct ? `<span class="ac-stat">at ${pricePct}</span>` : ''}
+          <span class="ac-stat" style="color:var(--dim)">Rank #${a.trader_rank || '?'} · ${a.trader_pnl >= 0 ? '+' : ''}$${Math.round(a.trader_pnl || 0).toLocaleString()} PnL</span>
+        </div>
+      </div>
+    </a>`;
   }
 
   if (a.type === 'external_bet') {

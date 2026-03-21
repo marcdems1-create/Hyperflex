@@ -10271,6 +10271,11 @@ app.get('/api/activity', async (req, res) => {
       });
     }
 
+    // ── Whale trade stream events ──
+    for (const wt of _whaleTradeStream) {
+      activities.push(wt);
+    }
+
     // ── Trending external markets (Polymarket + Kalshi top volume) ──
     try {
       const fetchExt = (url, ms = 10000) => {
@@ -15165,6 +15170,41 @@ app.get('/api/markets/search', async (req, res) => {
 // WHALE WATCH — track top 50 Polymarket traders' positions
 // ════════════════════════════════════════════════════════════
 let _whaleWatchCache = null;
+let _whalePositionSnapshot = new Map(); // wallet → positions array
+let _whaleTradeStream = []; // max 100 items, newest first
+
+function diffWhalePositions(oldPositions, newPositions, trader) {
+  const changes = [];
+  const oldMap = new Map((oldPositions || []).map(p => [p.title || p.market, p]));
+  const newMap = new Map((newPositions || []).map(p => [p.title || p.market, p]));
+
+  // New positions (opened)
+  for (const [title, p] of newMap) {
+    if (!oldMap.has(title) && (parseFloat(p.size) || 0) >= 1000) {
+      changes.push({ type: 'opened', trader, position: p });
+    }
+  }
+
+  // Removed positions (closed)
+  for (const [title, p] of oldMap) {
+    if (!newMap.has(title) && (parseFloat(p.size) || 0) >= 1000) {
+      changes.push({ type: 'closed', trader, position: p });
+    }
+  }
+
+  // Size changes > 20%
+  for (const [title, newP] of newMap) {
+    const oldP = oldMap.get(title);
+    if (oldP) {
+      const oldSize = parseFloat(oldP.size) || 0;
+      const newSize = parseFloat(newP.size) || 0;
+      if (oldSize > 0 && Math.abs(newSize - oldSize) / oldSize > 0.2 && newSize >= 1000) {
+        changes.push({ type: newSize > oldSize ? 'increased' : 'decreased', trader, position: newP, oldSize, newSize });
+      }
+    }
+  }
+  return changes;
+}
 
 async function fetchWhalePositions() {
   const fetch = _nodeFetch;
@@ -15227,6 +15267,98 @@ async function fetchWhalePositions() {
     // Delay between batches (except after last batch)
     if (i + BATCH_SIZE < traders.length) {
       await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
+    }
+  }
+
+  // ── Whale trade stream: diff positions vs previous snapshot ──
+  const isFirstSnapshot = _whalePositionSnapshot.size === 0;
+  const newSnapshot = new Map();
+  // Group allPositions by proxyWallet for snapshot
+  for (const pos of allPositions) {
+    if (!pos.proxyWallet) continue;
+    if (!newSnapshot.has(pos.proxyWallet)) newSnapshot.set(pos.proxyWallet, []);
+    newSnapshot.get(pos.proxyWallet).push(pos);
+  }
+
+  if (!isFirstSnapshot) {
+    const now = new Date().toISOString();
+    // Diff each trader's positions
+    const allWallets = new Set([..._whalePositionSnapshot.keys(), ...newSnapshot.keys()]);
+    for (const wallet of allWallets) {
+      const oldPos = _whalePositionSnapshot.get(wallet) || [];
+      const newPos = newSnapshot.get(wallet) || [];
+      const traderInfo = oldPos[0] || newPos[0];
+      if (!traderInfo) continue;
+      const traderMeta = { name: traderInfo.trader, rank: traderInfo.trader_rank, pnl: traderInfo.trader_pnl };
+      const changes = diffWhalePositions(oldPos, newPos, traderMeta);
+      for (const change of changes) {
+        const p = change.position;
+        const sizeVal = parseFloat(p.size) || 0;
+        _whaleTradeStream.unshift({
+          type: 'whale_trade',
+          id: `wt_${wallet.slice(0,8)}_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
+          action: change.type, // 'opened' | 'closed' | 'increased' | 'decreased'
+          trader_name: change.trader.name,
+          trader_rank: change.trader.rank,
+          trader_pnl: change.trader.pnl,
+          question: p.market || p.position || 'Unknown',
+          side: p.side || 'Unknown',
+          size: sizeVal,
+          size_display: sizeVal >= 1000000 ? '$' + (sizeVal / 1000000).toFixed(1) + 'M' : sizeVal >= 1000 ? '$' + (sizeVal / 1000).toFixed(0) + 'K' : '$' + sizeVal.toFixed(0),
+          old_size: change.oldSize || null,
+          old_size_display: change.oldSize ? (change.oldSize >= 1000000 ? '$' + (change.oldSize / 1000000).toFixed(1) + 'M' : change.oldSize >= 1000 ? '$' + (change.oldSize / 1000).toFixed(0) + 'K' : '$' + change.oldSize.toFixed(0)) : null,
+          new_size: change.newSize || null,
+          new_size_display: change.newSize ? (change.newSize >= 1000000 ? '$' + (change.newSize / 1000000).toFixed(1) + 'M' : change.newSize >= 1000 ? '$' + (change.newSize / 1000).toFixed(0) + 'K' : '$' + change.newSize.toFixed(0)) : null,
+          price: p.current_price || 0,
+          url: p.market_url || 'https://polymarket.com',
+          ts: now,
+        });
+      }
+    }
+    // Cap at 100 items
+    if (_whaleTradeStream.length > 100) _whaleTradeStream.length = 100;
+    console.log(`[whale-stream] Detected ${_whaleTradeStream.length > 0 ? _whaleTradeStream.filter(e => e.ts === now).length : 0} new whale trade events`);
+  } else {
+    console.log('[whale-stream] First snapshot stored — no diffs generated');
+  }
+
+  // Update snapshot
+  _whalePositionSnapshot = newSnapshot;
+
+  // ── Optional email alerts: whale opens > $100K on a market a HYPERFLEX user holds ──
+  if (!isFirstSnapshot && pool) {
+    const bigOpens = _whaleTradeStream.filter(e => e.action === 'opened' && e.size >= 100000 && e.ts === new Date().toISOString().slice(0, 10));
+    if (bigOpens.length > 0) {
+      // Fire-and-forget: check if any HFX users have matching markets in their portfolio
+      (async () => {
+        try {
+          for (const evt of bigOpens.slice(0, 5)) { // cap to avoid spam
+            const matchQ = '%' + (evt.question || '').slice(0, 40) + '%';
+            const users = await dbQuery(
+              "SELECT DISTINCT u.id, u.email, u.display_name FROM cached_positions cp JOIN users u ON cp.user_id = u.id WHERE cp.market_title ILIKE $1 AND u.email IS NOT NULL AND (u.email_unsubscribed IS NULL OR u.email_unsubscribed = false) LIMIT 10",
+              [matchQ]
+            ).catch(() => []);
+            if (users.length > 0) {
+              const transporter = createMailTransport();
+              if (!transporter) continue;
+              for (const user of users) {
+                transporter.sendMail({
+                  from: process.env.SMTP_FROM || 'HYPERFLEX <alerts@hyperflex.network>',
+                  to: user.email,
+                  subject: `Whale alert: #${evt.trader_rank} trader just put ${evt.size_display} on your market`,
+                  html: `<div style="font-family:system-ui;max-width:520px;margin:0 auto;padding:20px">
+                    <h2 style="color:#c9920d">Whale Alert</h2>
+                    <p><strong>${(evt.trader_name || '').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</strong> (ranked #${evt.trader_rank}, ${evt.trader_pnl >= 0 ? '+' : ''}$${Math.round(evt.trader_pnl).toLocaleString()} PnL) just opened a <strong>${evt.size_display}</strong> ${(evt.side || '').replace(/</g,'&lt;').replace(/>/g,'&gt;')} position on:</p>
+                    <p style="font-size:16px;font-weight:600">${(evt.question || '').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>
+                    <p>This market is in your portfolio. <a href="https://hyperflex.network/explore" style="color:#c9920d">View activity →</a></p>
+                    <p style="color:#888;font-size:12px">— HYPERFLEX</p>
+                  </div>`
+                }).catch(() => {});
+              }
+            }
+          }
+        } catch (e) { console.warn('[whale-alert-email]', e.message); }
+      })();
     }
   }
 
