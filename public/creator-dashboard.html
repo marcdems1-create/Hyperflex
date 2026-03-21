@@ -11714,7 +11714,7 @@ function updatePortfolioSummary() {
     const positions = window._polyPositionsData || [];
     positions.forEach(p => {
       const shares = p.shares || 0;
-      const price = p.curPrice || p.probability || 0;
+      const price = p.current_price || p.curPrice || p.probability || 0;
       totalValue += shares * price;
       if (p.pnl != null) totalPnl += p.pnl;
       openCount++;
