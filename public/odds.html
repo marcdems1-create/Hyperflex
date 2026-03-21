@@ -214,6 +214,37 @@ body::before {
 
 .empty-cta:hover { opacity: 0.88; }
 
+/* AI ANALYSIS */
+.ai-analysis-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 12px; font-weight: 700;
+  padding: 10px 20px; border-radius: 8px;
+  border: 1px solid rgba(201,146,13,0.4); background: rgba(201,146,13,0.08);
+  color: var(--gold); cursor: pointer; transition: all 0.15s; margin-bottom: 16px;
+}
+.ai-analysis-btn:hover { background: rgba(201,146,13,0.18); border-color: var(--gold); }
+.ai-analysis-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.ai-analysis-card {
+  background: var(--ink); border: 1px solid var(--border);
+  border-top: 3px solid var(--gold); border-radius: 12px;
+  padding: 20px 24px; margin-bottom: 20px;
+}
+.ai-analysis-card .ai-label {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  color: var(--gold); text-transform: uppercase; letter-spacing: 0.1em;
+  margin-bottom: 12px; display: flex; align-items: center; gap: 6px;
+}
+.ai-analysis-card .ai-text {
+  font-family: var(--mono); font-size: 12px; color: var(--text);
+  line-height: 1.7; white-space: pre-wrap; word-break: break-word;
+}
+.ai-spinner {
+  display: inline-block; width: 14px; height: 14px;
+  border: 2px solid var(--border); border-top-color: var(--gold);
+  border-radius: 50%; animation: aiSpin 0.6s linear infinite;
+}
+@keyframes aiSpin { to { transform: rotate(360deg); } }
+
 /* LOADING */
 .loading { text-align: center; padding: 40px; color: var(--dim); font-family: var(--mono); font-size: 13px; }
 
@@ -589,7 +620,10 @@ function renderSearchResults(data) {
     gridHtml += '</div></div>';
   }
 
-  el.innerHTML = arbHtml + smartHtml + countLine + gridHtml;
+  // AI Analysis button
+  const aiBtn = '<div id="aiAnalysisArea"><button class="ai-analysis-btn" id="aiAnalysisBtn" onclick="runAiAnalysis()">&#x1F916; AI Analysis</button><div id="aiAnalysisResult"></div></div>';
+
+  el.innerHTML = arbHtml + smartHtml + countLine + aiBtn + gridHtml;
 }
 
 function renderResults(clusters) { if (_lastSearchData) renderSearchResults(_lastSearchData); }
@@ -638,6 +672,64 @@ if (urlQ) {
   searchOdds();
 }
 loadSmartMoney();
+
+// ── AI MARKET ANALYSIS ──
+async function runAiAnalysis() {
+  const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+  if (!token) {
+    if (confirm('Sign in to use AI Analysis.\n\nGo to sign in page?')) {
+      window.location.href = '/creator/login';
+    }
+    return;
+  }
+  if (!_lastSearchData) return;
+
+  const btn = document.getElementById('aiAnalysisBtn');
+  const resultEl = document.getElementById('aiAnalysisResult');
+  if (!btn || !resultEl) return;
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="ai-spinner"></span> Analyzing...';
+  resultEl.innerHTML = '';
+
+  // Collect top 3 markets from search results
+  const poly = _lastSearchData.polymarket || [];
+  const kalshi = _lastSearchData.kalshi || [];
+  const markets = [];
+  for (const m of poly.slice(0, 2)) {
+    markets.push({ question: m.question || m.title, yes_pct: m.yes_pct, volume: m.volume ? '$' + Number(m.volume).toLocaleString() : 'N/A', platform: 'Polymarket' });
+  }
+  for (const m of kalshi.slice(0, 1)) {
+    markets.push({ question: m.question || m.title, yes_pct: m.yes_pct, volume: m.volume ? '$' + Number(m.volume).toLocaleString() : 'N/A', platform: 'Kalshi' });
+  }
+  if (markets.length === 0 && poly.length > 0) {
+    markets.push({ question: poly[0].question || poly[0].title, yes_pct: poly[0].yes_pct, volume: 'N/A', platform: 'Polymarket' });
+  }
+
+  if (markets.length === 0) {
+    btn.disabled = false;
+    btn.innerHTML = '&#x1F916; AI Analysis';
+    resultEl.innerHTML = '<div style="font-size:12px;color:var(--dim);padding:8px 0">No markets to analyze.</div>';
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/ai/market-analysis', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ markets })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Analysis failed');
+
+    resultEl.innerHTML = '<div class="ai-analysis-card"><div class="ai-label">&#x1F916; AI Market Analysis</div><div class="ai-text">' + escHtml(data.analysis) + '</div></div>';
+  } catch (err) {
+    resultEl.innerHTML = '<div style="font-size:12px;color:var(--red);padding:8px 0">' + escHtml(err.message) + '</div>';
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '&#x1F916; AI Analysis';
+  }
+}
 </script>
 </body>
 </html>

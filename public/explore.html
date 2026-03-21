@@ -1358,18 +1358,23 @@ function activityCard(a) {
       : '';
     const dest = a.url || 'https://polymarket.com';
     const isExt = dest.startsWith('http');
-    return `<a class="activity-card" href="${escHtml(dest)}" ${isExt ? 'target="_blank" rel="noopener"' : ''} style="border-left:3px solid #c9920d">
-      <div class="ac-avatar" style="background:rgba(201,146,13,0.15);border:1px solid rgba(201,146,13,0.3);font-size:22px;display:flex;align-items:center;justify-content:center">🐋</div>
+    const _ctTrader = escHtml(a.trader_name || 'Whale');
+    const _ctQuestion = escHtml(a.question || '');
+    const _ctSide = escHtml(a.side || '');
+    const _ctSize = a.size || 0;
+    const _ctUrl = escHtml(dest);
+    return `<div class="activity-card" style="border-left:3px solid #c9920d;cursor:pointer" onclick="if(event.target.closest('.whale-copy-btn'))return;window.open('${_ctUrl}','_blank')">
+      <div class="ac-avatar" style="background:rgba(201,146,13,0.15);border:1px solid rgba(201,146,13,0.3);font-size:22px;display:flex;align-items:center;justify-content:center">&#x1F40B;</div>
       <div class="ac-body">
         <div class="ac-header">
-          <span class="ac-actor" style="color:#c9920d">${escHtml(a.trader_name || 'Whale')}</span>
+          <span class="ac-actor" style="color:#c9920d">${_ctTrader}</span>
           <span class="ac-action">${actionVerb}</span>
           <span class="ac-time">${timeAgo(a.ts)}</span>
         </div>
         <div class="ac-market-card">
           <div class="ac-market-inner">
             <span class="ac-community-pill" style="background:rgba(99,102,241,0.12);color:#818cf8;border:1px solid rgba(99,102,241,0.3)">Polymarket</span>
-            <div class="ac-question">${escHtml(a.question || '')}</div>
+            <div class="ac-question">${_ctQuestion}</div>
             ${pricePct ? `<div class="ac-odds-bar"><div class="ac-odds-fill" style="width:${Math.round(a.price * 100)}%;background:${sideColor}"></div></div>` : ''}
           </div>
         </div>
@@ -1378,9 +1383,10 @@ function activityCard(a) {
           <span class="ac-stat" style="font-weight:700">${sizeStr}${sizeChange}</span>
           ${pricePct ? `<span class="ac-stat">at ${pricePct}</span>` : ''}
           <span class="ac-stat" style="color:var(--dim)">Rank #${a.trader_rank || '?'} · ${a.trader_pnl >= 0 ? '+' : ''}$${Math.round(a.trader_pnl || 0).toLocaleString()} PnL</span>
+          <button class="whale-copy-btn" onclick="event.stopPropagation();openWhaleCopyTrade('${_ctTrader.replace(/'/g,"\\'")}','${_ctQuestion.replace(/'/g,"\\'")}','${_ctSide}',${_ctSize},'${_ctUrl}','')" style="margin-left:auto;font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:6px;border:1px solid rgba(201,146,13,0.4);background:rgba(201,146,13,0.1);color:#c9920d;cursor:pointer;white-space:nowrap;transition:all .15s">Copy Trade</button>
         </div>
       </div>
-    </a>`;
+    </div>`;
   }
 
   if (a.type === 'external_bet') {
@@ -2120,6 +2126,70 @@ function _escH(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').
 // Auto-refresh: activity feed polls every 20s for new items (banner); explore every 30s
 activityPollInterval = setInterval(pollNewActivity, 20000);
 refreshInterval = setInterval(loadFeed, 30000);
+
+// ── WHALE COPY TRADE MODAL (explore page) ──
+function openWhaleCopyTrade(trader, market, side, size, marketUrl, proxyWallet) {
+  const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+  if (!token) {
+    // Show a simple login prompt
+    if (confirm('Sign in to copy trades and set up alerts.\n\nGo to sign in page?')) {
+      window.location.href = '/creator/login';
+    }
+    return;
+  }
+  window._exploreCopyCtx = { trader, market, side, size, marketUrl, proxyWallet };
+  const modal = document.getElementById('exploreCopyModal');
+  if (!modal) return;
+  document.getElementById('ect-trader').textContent = trader;
+  document.getElementById('ect-market').textContent = market;
+  const sUpper = (side || '').toUpperCase();
+  document.getElementById('ect-side').innerHTML = '<span style="color:' + (sUpper === 'YES' ? '#22c55e' : sUpper === 'NO' ? '#ef4444' : '#c9920d') + ';font-weight:700">' + _escH(side) + '</span>';
+  const fmtSize = size >= 1e6 ? '$' + (size/1e6).toFixed(2) + 'M' : size >= 1e3 ? '$' + (size/1e3).toFixed(1) + 'K' : '$' + (size||0).toFixed(0);
+  document.getElementById('ect-size').textContent = fmtSize;
+  document.getElementById('ect-amount').value = '';
+  document.getElementById('ect-alert').checked = false;
+  document.getElementById('ect-cta').href = marketUrl || 'https://polymarket.com';
+  modal.style.display = 'flex';
+}
+function closeExploreCopy() {
+  const modal = document.getElementById('exploreCopyModal');
+  if (modal) modal.style.display = 'none';
+  window._exploreCopyCtx = null;
+}
+async function handleExploreCopyCta() {
+  const ctx = window._exploreCopyCtx;
+  if (!ctx) return;
+  if (document.getElementById('ect-alert').checked && ctx.proxyWallet) {
+    const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+    try {
+      await fetch('/api/whale-alerts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ trader_wallet: ctx.proxyWallet, trader_name: ctx.trader })
+      });
+    } catch(e) {}
+  }
+  closeExploreCopy();
+}
 </script>
+
+<!-- EXPLORE COPY TRADE MODAL -->
+<div id="exploreCopyModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center" onclick="if(event.target===this)closeExploreCopy()">
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:28px;max-width:440px;width:90%;position:relative">
+    <button onclick="closeExploreCopy()" style="position:absolute;top:12px;right:16px;background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer">&times;</button>
+    <h3 style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;margin-bottom:4px">Copy this trade?</h3>
+    <div style="font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);margin-bottom:20px">This will open Polymarket with the trade pre-selected</div>
+    <div style="margin-bottom:12px"><div style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Trader</div><div id="ect-trader" style="font-family:'Space Mono',monospace;font-size:13px;color:var(--text)">--</div></div>
+    <div style="margin-bottom:12px"><div style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Market</div><div id="ect-market" style="font-family:'Space Mono',monospace;font-size:13px;color:var(--text)">--</div></div>
+    <div style="margin-bottom:12px"><div style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Side</div><div id="ect-side" style="font-family:'Space Mono',monospace;font-size:13px">--</div></div>
+    <div style="margin-bottom:12px"><div style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Their position size</div><div id="ect-size" style="font-family:'Space Mono',monospace;font-size:13px;color:var(--text)">--</div></div>
+    <div style="margin-bottom:16px"><div style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Your amount ($)</div><input type="number" id="ect-amount" placeholder="100" min="1" step="1" style="width:100%;background:var(--paper);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-family:'Space Mono',monospace;font-size:14px;color:var(--text);outline:none"/></div>
+    <a id="ect-cta" href="#" target="_blank" rel="noopener" onclick="handleExploreCopyCta()" style="display:block;width:100%;padding:12px;border:none;border-radius:8px;background:#c9920d;color:#0f0f0d;font-family:'Syne',sans-serif;font-size:14px;font-weight:700;cursor:pointer;text-align:center;text-decoration:none;transition:opacity .15s">Open on Polymarket &rarr;</a>
+    <label style="display:flex;align-items:center;gap:10px;margin-top:16px;padding:12px;background:rgba(201,146,13,0.06);border-radius:8px;cursor:pointer">
+      <input type="checkbox" id="ect-alert" style="width:18px;height:18px;accent-color:#c9920d"/>
+      <span style="font-family:'Space Mono',monospace;font-size:12px;color:var(--muted)">&#x1F514; Alert me when this trader makes new moves</span>
+    </label>
+  </div>
+</div>
 </body>
 </html>

@@ -41,6 +41,19 @@ const app = express();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'hyperflex-dev-secret-change-in-prod';
 
+// ── Telegram Bot (optional — no-op if TELEGRAM_BOT_TOKEN not set) ──
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+
+function sendTelegramAlert(chatId, message) {
+  if (!TELEGRAM_BOT_TOKEN || !chatId) return;
+  const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+  _nodeFetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'HTML' })
+  }).catch(err => console.warn('[telegram]', err.message));
+}
+
 app.use(cors());
 
 // ── Stripe webhook needs raw body — must be registered BEFORE express.json() ──
@@ -8471,7 +8484,7 @@ const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
   'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u', 'win',
-  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales'
+  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs'
 ]);
 
 // GET /my — private member dashboard
@@ -14685,6 +14698,24 @@ app.put('/api/user/wallets', requireAuth, async (req, res) => {
   }
 });
 
+// POST /api/telegram/connect — save Telegram chat ID for whale alerts
+app.post('/api/telegram/connect', requireAuth, async (req, res) => {
+  try {
+    const chatId = (req.body.telegram_chat_id || '').toString().trim();
+    if (!chatId) return res.status(400).json({ error: 'telegram_chat_id is required' });
+    if (pool) {
+      await dbQuery('UPDATE users SET telegram_chat_id = $1 WHERE id = $2', [chatId, req.userId]);
+    } else {
+      const { error } = await supabase.from('users').update({ telegram_chat_id: chatId }).eq('id', req.userId);
+      if (error) throw error;
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[telegram connect]', err.message);
+    res.status(500).json({ error: 'Failed to save Telegram chat ID' });
+  }
+});
+
 // GET /api/kalshi/positions — proxy Kalshi API using stored user API key
 app.get('/api/kalshi/positions', requireAuth, async (req, res) => {
   try {
@@ -15317,7 +15348,44 @@ async function fetchWhalePositions() {
     }
     // Cap at 100 items
     if (_whaleTradeStream.length > 100) _whaleTradeStream.length = 100;
-    console.log(`[whale-stream] Detected ${_whaleTradeStream.length > 0 ? _whaleTradeStream.filter(e => e.ts === now).length : 0} new whale trade events`);
+    const _newEvtCount = _whaleTradeStream.filter(e => e.ts === now).length;
+    console.log(`[whale-stream] Detected ${_newEvtCount} new whale trade events`);
+
+    // ── Whale alert notifications: notify subscribed users of trader moves ──
+    if (_newEvtCount > 0) {
+      (async () => {
+        try {
+          const _newEvts = _whaleTradeStream.filter(e => e.ts === now);
+          const _changedWallets = new Set();
+          for (const evt of _newEvts) {
+            for (const [w, positions] of newSnapshot.entries()) {
+              if (positions.some(p => p.trader === evt.trader_name)) { _changedWallets.add(w); break; }
+            }
+          }
+          if (_changedWallets.size === 0) return;
+          const _wArr = [..._changedWallets];
+          let _alertRows = [];
+          if (pool) {
+            const ph = _wArr.map((_, i) => `$${i + 1}`).join(',');
+            _alertRows = await dbQuery(`SELECT user_id, trader_wallet, trader_name FROM whale_alerts WHERE trader_wallet IN (${ph})`, _wArr).catch(() => []);
+          } else {
+            const { data: _ad } = await supabase.from('whale_alerts').select('user_id, trader_wallet, trader_name').in('trader_wallet', _wArr);
+            _alertRows = _ad || [];
+          }
+          if (!_alertRows.length) return;
+          for (const al of _alertRows) {
+            const wPos = newSnapshot.get(al.trader_wallet) || [];
+            const tNames = new Set(wPos.map(p => p.trader));
+            const matched = _newEvts.filter(e => tNames.has(e.trader_name));
+            for (const evt of matched.slice(0, 3)) {
+              const tName = al.trader_name || evt.trader_name || 'A whale';
+              const verb = { opened: 'just opened', closed: 'just closed', increased: 'increased', decreased: 'decreased' }[evt.action] || evt.action;
+              pushNotification(al.user_id, 'whale_alert', `\uD83D\uDC0B ${tName} ${verb} ${evt.size_display} on ${(evt.question || '').substring(0, 60)}`, `${(evt.side || '').toUpperCase()} position on "${evt.question}"`);
+            }
+          }
+        } catch (e) { console.warn('[whale-alert-notify]', e.message); }
+      })();
+    }
   } else {
     console.log('[whale-stream] First snapshot stored — no diffs generated');
   }
@@ -15362,6 +15430,39 @@ async function fetchWhalePositions() {
     }
   }
 
+  // ── Optional Telegram alerts: whale moves > $50K → notify users who subscribed to that trader ──
+  if (!isFirstSnapshot && TELEGRAM_BOT_TOKEN && pool) {
+    const bigMoves = _whaleTradeStream.filter(e => e.size >= 50000 && e.ts === now);
+    if (bigMoves.length > 0) {
+      (async () => {
+        try {
+          // Build wallet→traderName map from newSnapshot for lookup
+          const walletToName = new Map();
+          for (const [w, positions] of newSnapshot) {
+            if (positions[0]) walletToName.set(w, positions[0].trader);
+          }
+          for (const evt of bigMoves.slice(0, 10)) {
+            // Find the wallet for this trader
+            let traderWallet = null;
+            for (const [w, name] of walletToName) {
+              if (name === evt.trader_name) { traderWallet = w; break; }
+            }
+            if (!traderWallet) continue;
+            const tgUsers = await dbQuery(
+              "SELECT DISTINCT u.telegram_chat_id FROM whale_alerts wa JOIN users u ON wa.user_id = u.id WHERE wa.trader_wallet = $1 AND u.telegram_chat_id IS NOT NULL LIMIT 50",
+              [traderWallet]
+            ).catch(() => []);
+            for (const u of tgUsers) {
+              const priceDisplay = evt.price ? (evt.price * 100).toFixed(0) + '%' : '?';
+              const msg = `\u{1F40B} Whale Alert: ${evt.trader_name || 'Unknown'} just ${evt.action || 'moved'} ${evt.size_display} ${evt.side} on ${evt.question}\nPrice: ${priceDisplay}\n\nView: https://hyperflex.network/whales`;
+              sendTelegramAlert(u.telegram_chat_id, msg);
+            }
+          }
+        } catch (e) { console.warn('[whale-alert-telegram]', e.message); }
+      })();
+    }
+  }
+
   // Sort by size DESC
   allPositions.sort((a, b) => b.size - a.size);
 
@@ -15393,6 +15494,111 @@ app.get('/api/whale-watch', async (req, res) => {
 
 // GET /whales — whale watch page
 app.get('/whales', (req, res) => res.sendFile(path.join(__dirname, 'public', 'whales.html')));
+
+// ── WHALE ALERTS — subscribe/unsubscribe to trader moves ──────────────────
+app.post('/api/whale-alerts', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const { trader_wallet, trader_name } = req.body;
+  if (!trader_wallet) return res.status(400).json({ error: 'trader_wallet required' });
+  try {
+    if (pool) {
+      await dbQuery(
+        'INSERT INTO whale_alerts (user_id, trader_wallet, trader_name) VALUES ($1, $2, $3) ON CONFLICT (user_id, trader_wallet) DO NOTHING',
+        [userId, trader_wallet, trader_name || null]
+      );
+    } else {
+      await supabase.from('whale_alerts').upsert(
+        { user_id: userId, trader_wallet, trader_name: trader_name || null },
+        { onConflict: 'user_id,trader_wallet' }
+      );
+    }
+    res.json({ subscribed: true });
+  } catch (err) {
+    console.error('[whale-alerts] subscribe error:', err.message);
+    res.status(500).json({ error: 'Failed to subscribe' });
+  }
+});
+
+app.delete('/api/whale-alerts/:trader_wallet', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const { trader_wallet } = req.params;
+  try {
+    if (pool) {
+      await dbQuery('DELETE FROM whale_alerts WHERE user_id = $1 AND trader_wallet = $2', [userId, trader_wallet]);
+    } else {
+      await supabase.from('whale_alerts').delete().eq('user_id', userId).eq('trader_wallet', trader_wallet);
+    }
+    res.json({ subscribed: false });
+  } catch (err) {
+    console.error('[whale-alerts] unsubscribe error:', err.message);
+    res.status(500).json({ error: 'Failed to unsubscribe' });
+  }
+});
+
+app.get('/api/whale-alerts', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  try {
+    let alerts;
+    if (pool) {
+      alerts = await dbQuery('SELECT trader_wallet, trader_name, created_at FROM whale_alerts WHERE user_id = $1 ORDER BY created_at DESC', [userId]);
+    } else {
+      const { data } = await supabase.from('whale_alerts').select('trader_wallet, trader_name, created_at').eq('user_id', userId).order('created_at', { ascending: false });
+      alerts = data || [];
+    }
+    res.json({ alerts });
+  } catch (err) {
+    console.error('[whale-alerts] list error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch alerts' });
+  }
+});
+
+// ── AI MARKET ANALYSIS ────────────────────────────────────────────────────
+const _aiAnalysisRateLimit = new Map(); // userId -> { count, resetAt }
+
+app.post('/api/ai/market-analysis', requireAuth, async (req, res) => {
+  const userId = req.user.id;
+  const { markets } = req.body;
+  if (!markets || !Array.isArray(markets) || markets.length === 0) {
+    return res.status(400).json({ error: 'markets array required' });
+  }
+
+  // Rate limit: 10 per user per day
+  const now = Date.now();
+  let rl = _aiAnalysisRateLimit.get(userId);
+  if (!rl || now > rl.resetAt) {
+    rl = { count: 0, resetAt: now + 24 * 60 * 60 * 1000 };
+  }
+  if (rl.count >= 10) {
+    return res.status(429).json({ error: 'Rate limit reached (10 analyses per day). Try again tomorrow.' });
+  }
+  rl.count++;
+  _aiAnalysisRateLimit.set(userId, rl);
+
+  try {
+    const top3 = markets.slice(0, 3);
+    const marketSummary = top3.map((m, i) => {
+      return `${i + 1}. "${m.question}" — YES ${m.yes_pct}% — Volume: ${m.volume || 'N/A'} — Platform: ${m.platform || 'Unknown'}`;
+    }).join('\n');
+
+    const resp = await anthropic.messages.create({
+      model: 'claude-3-haiku-20240307',
+      max_tokens: 600,
+      messages: [{
+        role: 'user',
+        content: `You are a prediction market analyst. Analyze these markets and give a brief, actionable take on each. Focus on: Is the price fair? What factors could move it? Any edge?\n\nMarkets:\n${marketSummary}\n\nKeep your analysis concise but insightful. Use bullet points for each market.`
+      }]
+    });
+
+    const analysis = resp.content[0]?.text?.trim() || 'Unable to generate analysis.';
+    res.json({ analysis });
+  } catch (err) {
+    console.error('[ai-analysis]', err.message);
+    res.status(500).json({ error: 'AI analysis failed' });
+  }
+});
+
+// GET /api-docs — public API documentation page
+app.get('/api-docs', (req, res) => res.sendFile(path.join(__dirname, 'public', 'api-docs.html')));
 
 // 404 catch-all — must be last route
 app.use((req, res) => {

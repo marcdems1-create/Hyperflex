@@ -110,6 +110,31 @@ td { padding: 12px; font-size: 13px; vertical-align: middle; }
 /* VIEW LINK */
 .view-link { font-family: var(--mono); font-size: 11px; color: var(--gold); white-space: nowrap; }
 
+/* COPY TRADE BUTTON */
+.copy-trade-btn { font-family: var(--mono); font-size: 10px; font-weight: 700; padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(201,146,13,0.4); background: rgba(201,146,13,0.1); color: var(--gold); cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+.copy-trade-btn:hover { background: rgba(201,146,13,0.25); border-color: var(--gold); }
+
+/* COPY TRADE MODAL */
+.ct-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center; }
+.ct-overlay.open { display: flex; }
+.ct-modal { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 28px; max-width: 440px; width: 90%; max-height: 90vh; overflow-y: auto; }
+.ct-modal h3 { font-family: var(--sans); font-size: 18px; font-weight: 800; margin-bottom: 4px; }
+.ct-modal-sub { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-bottom: 20px; }
+.ct-field { margin-bottom: 16px; }
+.ct-field label { font-family: var(--mono); font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 6px; }
+.ct-field .ct-value { font-family: var(--mono); font-size: 13px; color: var(--text); }
+.ct-side-yes { color: var(--green); font-weight: 700; }
+.ct-side-no { color: var(--red); font-weight: 700; }
+.ct-input { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; font-family: var(--mono); font-size: 14px; color: var(--text); outline: none; }
+.ct-input:focus { border-color: var(--gold); }
+.ct-cta { display: block; width: 100%; padding: 12px; border: none; border-radius: 8px; background: var(--gold); color: #1a1a17; font-family: var(--sans); font-size: 14px; font-weight: 700; cursor: pointer; text-align: center; text-decoration: none; transition: opacity 0.15s; margin-top: 8px; }
+.ct-cta:hover { opacity: 0.88; }
+.ct-alert-toggle { display: flex; align-items: center; gap: 10px; margin-top: 16px; padding: 12px; background: rgba(201,146,13,0.06); border-radius: 8px; cursor: pointer; }
+.ct-alert-toggle input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--gold); }
+.ct-alert-toggle span { font-family: var(--mono); font-size: 12px; color: var(--text-soft); }
+.ct-close { position: absolute; top: 12px; right: 16px; background: none; border: none; color: var(--muted); font-size: 20px; cursor: pointer; }
+.ct-close:hover { color: var(--text); }
+
 /* LOADING */
 .loading-state { text-align: center; padding: 60px 24px; }
 .loading-state .spinner { display: inline-block; width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--gold); border-radius: 50%; animation: spin 0.8s linear infinite; }
@@ -218,6 +243,7 @@ td { padding: 12px; font-size: 13px; vertical-align: middle; }
         <th onclick="sortBy('size')">Size ($) <span class="sort-arrow" id="sort-size"></span></th>
         <th onclick="sortBy('current_price')">Price <span class="sort-arrow" id="sort-current_price"></span></th>
         <th>Link</th>
+        <th>Copy</th>
       </tr>
     </thead>
     <tbody id="whaleTableBody"></tbody>
@@ -227,12 +253,99 @@ td { padding: 12px; font-size: 13px; vertical-align: middle; }
 <!-- MOBILE CARDS -->
 <div class="mobile-cards" id="mobileCards"></div>
 
+<!-- COPY TRADE MODAL -->
+<div class="ct-overlay" id="ctOverlay" onclick="if(event.target===this)closeCopyTrade()">
+  <div class="ct-modal" style="position:relative">
+    <button class="ct-close" onclick="closeCopyTrade()">&times;</button>
+    <h3>Copy this trade?</h3>
+    <div class="ct-modal-sub">This will open Polymarket with the trade pre-selected</div>
+    <div class="ct-field"><label>Trader</label><div class="ct-value" id="ctTrader">--</div></div>
+    <div class="ct-field"><label>Market</label><div class="ct-value" id="ctMarket">--</div></div>
+    <div class="ct-field">
+      <label>Side</label><div class="ct-value" id="ctSide">--</div>
+    </div>
+    <div class="ct-field">
+      <label>Their position size</label><div class="ct-value" id="ctSize">--</div>
+    </div>
+    <div class="ct-field">
+      <label>Your amount ($)</label>
+      <input type="number" class="ct-input" id="ctAmount" placeholder="100" min="1" step="1"/>
+    </div>
+    <a id="ctCta" href="#" target="_blank" rel="noopener" class="ct-cta">Open on Polymarket &rarr;</a>
+    <label class="ct-alert-toggle">
+      <input type="checkbox" id="ctAlertToggle"/>
+      <span>&#x1F514; Alert me when this trader makes new moves</span>
+    </label>
+  </div>
+</div>
+
+<!-- LOGIN PROMPT MODAL -->
+<div class="ct-overlay" id="loginOverlay" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="ct-modal" style="position:relative;text-align:center">
+    <button class="ct-close" onclick="document.getElementById('loginOverlay').classList.remove('open')">&times;</button>
+    <div style="font-size:40px;margin-bottom:12px">&#x1F512;</div>
+    <h3>Sign in to copy trades</h3>
+    <div class="ct-modal-sub" style="margin-bottom:20px">Create a free account to copy whale trades and set up alerts.</div>
+    <a href="/creator/login" class="ct-cta" style="display:inline-block;width:auto;padding:12px 32px;margin-bottom:8px">Sign in &rarr;</a>
+    <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:8px">Don't have an account? <a href="/creator/signup" style="color:var(--gold)">Get started free</a></div>
+  </div>
+</div>
+
 <script>
 let _whaleData = null;
 let _filtered = [];
 let _sortField = 'size';
 let _sortDir = -1; // -1 = desc
 let _minSize = 0;
+let _ctPending = null; // current copy-trade context
+
+function escAttr(s) { return String(s).replace(/'/g, '\\x27').replace(/"/g, '&quot;').replace(/\\/g, '\\\\'); }
+
+function getToken() { return localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || null; }
+
+function openCopyTrade(trader, market, side, size, marketUrl, proxyWallet) {
+  if (!getToken()) {
+    document.getElementById('loginOverlay').classList.add('open');
+    return;
+  }
+  _ctPending = { trader, market, side, size, marketUrl, proxyWallet };
+  document.getElementById('ctTrader').textContent = trader;
+  document.getElementById('ctMarket').textContent = market;
+  const sideUpper = (side || '').toUpperCase();
+  const sideEl = document.getElementById('ctSide');
+  sideEl.innerHTML = '<span class="' + (sideUpper === 'YES' ? 'ct-side-yes' : sideUpper === 'NO' ? 'ct-side-no' : '') + '">' + (side || 'Unknown') + '</span>';
+  document.getElementById('ctSize').textContent = fmtFull$(size);
+  document.getElementById('ctAmount').value = '';
+  document.getElementById('ctAlertToggle').checked = false;
+
+  // Set CTA link
+  const ctaEl = document.getElementById('ctCta');
+  ctaEl.href = marketUrl || 'https://polymarket.com';
+  ctaEl.onclick = function() { handleCopyTradeCta(); };
+
+  document.getElementById('ctOverlay').classList.add('open');
+}
+
+function closeCopyTrade() {
+  document.getElementById('ctOverlay').classList.remove('open');
+  _ctPending = null;
+}
+
+async function handleCopyTradeCta() {
+  if (!_ctPending) return;
+  const alertToggle = document.getElementById('ctAlertToggle');
+  if (alertToggle.checked && _ctPending.proxyWallet) {
+    try {
+      const token = getToken();
+      await fetch('/api/whale-alerts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ trader_wallet: _ctPending.proxyWallet, trader_name: _ctPending.trader })
+      });
+    } catch (e) { console.warn('Failed to subscribe to whale alerts:', e); }
+  }
+  closeCopyTrade();
+}
 
 function fmt$(n) {
   if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
@@ -382,7 +495,7 @@ function renderTable() {
   const tbody = document.getElementById('whaleTableBody');
   if (!tbody) return;
   if (_filtered.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--muted);font-family:var(--mono);font-size:13px">No positions match the current filter.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--muted);font-family:var(--mono);font-size:13px">No positions match the current filter.</td></tr>';
     return;
   }
   tbody.innerHTML = _filtered.map(p => {
@@ -397,6 +510,7 @@ function renderTable() {
       '<td class="size-cell">' + fmtFull$(p.size) + '</td>' +
       '<td><div class="price-bar-wrap"><div class="price-bar"><div class="price-bar-fill" style="width:' + pricePct + '%"></div></div><span class="price-pct">' + pricePct + '%</span></div></td>' +
       '<td><a href="' + p.market_url + '" target="_blank" rel="noopener" class="view-link">View \u2192</a></td>' +
+      '<td><button class="copy-trade-btn" onclick="openCopyTrade(\'' + escAttr(p.trader) + '\',\'' + escAttr(p.market) + '\',\'' + escAttr(p.side) + '\',' + p.size + ',\'' + escAttr(p.market_url) + '\',\'' + escAttr(p.proxyWallet || '') + '\')">Copy Trade</button></td>' +
       '</tr>';
   }).join('');
 }
@@ -421,6 +535,7 @@ function renderMobileCards() {
         sideBadge(p.side) +
         '<div class="price-bar-wrap"><div class="price-bar"><div class="price-bar-fill" style="width:' + pricePct + '%"></div></div><span class="price-pct">' + pricePct + '%</span></div>' +
         '<a href="' + p.market_url + '" target="_blank" rel="noopener" class="view-link">View \u2192</a>' +
+        '<button class="copy-trade-btn" onclick="openCopyTrade(\'' + escAttr(p.trader) + '\',\'' + escAttr(p.market) + '\',\'' + escAttr(p.side) + '\',' + p.size + ',\'' + escAttr(p.market_url) + '\',\'' + escAttr(p.proxyWallet || '') + '\')">Copy Trade</button>' +
       '</div>' +
     '</div>';
   }).join('');
