@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>Whale Watch — HYPERFLEX</title>
+<meta name="description" content="Track what the top 50 Polymarket traders are betting right now. Real-time whale positions, sizes, and market sentiment."/>
+<meta property="og:title" content="Whale Watch — HYPERFLEX"/>
+<meta property="og:description" content="What the top Polymarket traders are betting right now."/>
+<meta property="og:url" content="https://hyperflex.network/whales"/>
+<meta property="og:type" content="website"/>
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Whale Watch — HYPERFLEX"/>
+<meta name="twitter:description" content="Track the top 50 Polymarket traders' positions in real-time."/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --bg: #141412;
+  --card: #1a1a17;
+  --border: #2a2a24;
+  --text: #e8e4d9;
+  --text-soft: #9a9a8e;
+  --muted: #6a6a5e;
+  --gold: #c9920d;
+  --gold-dim: rgba(201,146,13,0.15);
+  --green: #22c55e;
+  --red: #ef4444;
+  --sans: 'Syne', sans-serif;
+  --mono: 'Space Mono', monospace;
+  --radius: 10px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+a { color: var(--gold); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* NAV */
+.topbar { display: flex; align-items: center; justify-content: space-between; padding: 16px 32px; border-bottom: 1px solid var(--border); background: var(--bg); position: sticky; top: 0; z-index: 100; }
+.topbar-logo { font-family: var(--sans); font-weight: 800; font-size: 18px; letter-spacing: 2px; color: var(--text); text-decoration: none; }
+.topbar-logo span { color: var(--gold); }
+.nav-links { display: flex; gap: 20px; align-items: center; }
+.nav-link { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--text-soft); text-decoration: none; transition: color 0.2s; }
+.nav-link:hover, .nav-link.active { color: var(--text); text-decoration: none; }
+
+/* HERO */
+.hero { text-align: center; padding: 48px 24px 32px; }
+.hero-icon { font-size: 56px; margin-bottom: 12px; }
+.hero h1 { font-family: var(--sans); font-size: 36px; font-weight: 800; margin-bottom: 8px; }
+.hero h1 span { color: var(--gold); }
+.hero-sub { font-family: var(--mono); font-size: 13px; color: var(--text-soft); margin-bottom: 6px; }
+.hero-capital { font-family: var(--mono); font-size: 14px; color: var(--gold); font-weight: 700; margin-bottom: 12px; }
+.hero-meta { display: flex; align-items: center; justify-content: center; gap: 16px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.refresh-btn { background: var(--gold-dim); color: var(--gold); border: 1px solid rgba(201,146,13,0.3); border-radius: 6px; padding: 6px 14px; font-family: var(--mono); font-size: 11px; font-weight: 700; cursor: pointer; transition: all 0.2s; }
+.refresh-btn:hover { background: rgba(201,146,13,0.25); }
+.refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* SUMMARY STATS */
+.stats-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; max-width: 900px; margin: 0 auto 28px; padding: 0 24px; }
+.stat-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; text-align: center; }
+.stat-label { font-family: var(--mono); font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+.stat-value { font-family: var(--sans); font-size: 22px; font-weight: 800; color: var(--text); }
+.stat-value.gold { color: var(--gold); }
+
+/* FILTERS */
+.filters { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 24px; padding: 0 24px; flex-wrap: wrap; }
+.filter-pill { font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border); background: transparent; color: var(--text-soft); cursor: pointer; transition: all 0.2s; }
+.filter-pill:hover { border-color: var(--gold); color: var(--text); }
+.filter-pill.active { background: var(--gold-dim); border-color: var(--gold); color: var(--gold); }
+
+/* TABLE */
+.table-wrap { max-width: 1200px; margin: 0 auto; padding: 0 24px 60px; overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+thead th { font-family: var(--mono); font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); cursor: pointer; user-select: none; white-space: nowrap; }
+thead th:hover { color: var(--text-soft); }
+thead th .sort-arrow { margin-left: 4px; font-size: 9px; }
+tbody tr { border-bottom: 1px solid rgba(42,42,36,0.5); transition: background 0.15s; }
+tbody tr:hover { background: rgba(201,146,13,0.04); }
+tbody tr.highlight-100k { border-left: 3px solid var(--gold); }
+tbody tr.highlight-50k { background: rgba(201,146,13,0.03); }
+td { padding: 12px; font-size: 13px; vertical-align: middle; }
+
+/* RANK BADGE */
+.rank-badge { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; font-family: var(--mono); font-size: 11px; font-weight: 700; }
+.rank-gold { background: linear-gradient(135deg, #ffd700, #b8860b); color: #1a1a17; }
+.rank-silver { background: linear-gradient(135deg, #c0c0c0, #808080); color: #1a1a17; }
+.rank-bronze { background: linear-gradient(135deg, #cd7f32, #8b4513); color: #1a1a17; }
+.rank-default { background: var(--border); color: var(--text-soft); }
+
+/* TRADER CELL */
+.trader-name { font-family: var(--sans); font-weight: 700; font-size: 13px; }
+.trader-pnl { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+/* SIDE BADGE */
+.side-badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-family: var(--mono); font-size: 11px; font-weight: 700; }
+.side-yes { background: rgba(34,197,94,0.15); color: var(--green); }
+.side-no { background: rgba(239,68,68,0.15); color: var(--red); }
+.side-other { background: var(--gold-dim); color: var(--gold); }
+
+/* SIZE */
+.size-cell { font-family: var(--mono); font-weight: 700; font-size: 15px; }
+
+/* PRICE BAR */
+.price-bar-wrap { display: flex; align-items: center; gap: 8px; }
+.price-bar { width: 60px; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+.price-bar-fill { height: 100%; border-radius: 3px; background: var(--gold); }
+.price-pct { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--text-soft); min-width: 36px; }
+
+/* VIEW LINK */
+.view-link { font-family: var(--mono); font-size: 11px; color: var(--gold); white-space: nowrap; }
+
+/* LOADING */
+.loading-state { text-align: center; padding: 60px 24px; }
+.loading-state .spinner { display: inline-block; width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--gold); border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-state p { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 16px; }
+
+/* MOBILE CARDS */
+.mobile-cards { display: none; }
+.whale-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
+.whale-card.highlight-100k { border-left: 3px solid var(--gold); }
+.whale-card.highlight-50k { border-color: rgba(201,146,13,0.3); }
+.whale-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.whale-card-trader { display: flex; align-items: center; gap: 8px; }
+.whale-card-size { font-family: var(--mono); font-weight: 700; font-size: 18px; color: var(--gold); }
+.whale-card-market { font-size: 13px; color: var(--text); margin-bottom: 8px; line-height: 1.4; }
+.whale-card-meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+@media (max-width: 768px) {
+  .topbar { padding: 12px 16px; }
+  .nav-links { gap: 12px; }
+  .nav-link { font-size: 11px; }
+  .hero h1 { font-size: 26px; }
+  .stats-bar { grid-template-columns: repeat(2, 1fr); padding: 0 16px; }
+  .table-wrap table { display: none; }
+  .mobile-cards { display: block; padding: 0 16px 40px; max-width: 700px; margin: 0 auto; }
+  .stat-value { font-size: 18px; }
+}
+@media (max-width: 480px) {
+  .nav-links { gap: 8px; }
+  .hero { padding: 32px 16px 24px; }
+  .hero-icon { font-size: 40px; }
+  .hero h1 { font-size: 22px; }
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="topbar">
+  <a href="/" class="topbar-logo">HYPER<span>FLEX</span></a>
+  <div class="nav-links">
+    <a href="/predictors" class="nav-link">Predictors</a>
+    <a href="/explore" class="nav-link">Explore</a>
+    <a href="/odds" class="nav-link">Odds</a>
+    <a href="/whales" class="nav-link active">Whales</a>
+    <a href="/templates" class="nav-link">Templates</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-icon">&#x1F40B;</div>
+  <h1>Whale <span>Watch</span></h1>
+  <div class="hero-sub">What the top Polymarket traders are betting right now</div>
+  <div class="hero-capital" id="heroCapital">Loading...</div>
+  <div class="hero-meta">
+    <span id="updatedAt">--</span>
+    <button class="refresh-btn" id="refreshBtn" onclick="refreshData()">&#x21BB; Refresh</button>
+  </div>
+</section>
+
+<!-- SUMMARY STATS -->
+<div class="stats-bar">
+  <div class="stat-card">
+    <div class="stat-label">Total Capital Tracked</div>
+    <div class="stat-value gold" id="statCapital">--</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Largest Position</div>
+    <div class="stat-value" id="statLargest">--</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Most Popular Market</div>
+    <div class="stat-value" id="statPopular" style="font-size:13px;line-height:1.3">--</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">YES / NO Ratio</div>
+    <div class="stat-value" id="statRatio">--</div>
+  </div>
+</div>
+
+<!-- FILTERS -->
+<div class="filters">
+  <button class="filter-pill active" data-min="0" onclick="setFilter(this, 0)">All</button>
+  <button class="filter-pill" data-min="10000" onclick="setFilter(this, 10000)">$10K+</button>
+  <button class="filter-pill" data-min="50000" onclick="setFilter(this, 50000)">$50K+</button>
+  <button class="filter-pill" data-min="100000" onclick="setFilter(this, 100000)">$100K+</button>
+</div>
+
+<!-- LOADING -->
+<div class="loading-state" id="loadingState">
+  <div class="spinner"></div>
+  <p>Fetching positions from top 50 traders...</p>
+  <p style="margin-top:4px;font-size:11px;color:var(--muted)">(This may take a moment on first load)</p>
+</div>
+
+<!-- TABLE -->
+<div class="table-wrap" id="tableWrap" style="display:none">
+  <table>
+    <thead>
+      <tr>
+        <th onclick="sortBy('trader_rank')">Rank <span class="sort-arrow" id="sort-trader_rank"></span></th>
+        <th onclick="sortBy('trader')">Trader <span class="sort-arrow" id="sort-trader"></span></th>
+        <th onclick="sortBy('market')">Market <span class="sort-arrow" id="sort-market"></span></th>
+        <th onclick="sortBy('side')">Side <span class="sort-arrow" id="sort-side"></span></th>
+        <th onclick="sortBy('size')">Size ($) <span class="sort-arrow" id="sort-size"></span></th>
+        <th onclick="sortBy('current_price')">Price <span class="sort-arrow" id="sort-current_price"></span></th>
+        <th>Link</th>
+      </tr>
+    </thead>
+    <tbody id="whaleTableBody"></tbody>
+  </table>
+</div>
+
+<!-- MOBILE CARDS -->
+<div class="mobile-cards" id="mobileCards"></div>
+
+<script>
+let _whaleData = null;
+let _filtered = [];
+let _sortField = 'size';
+let _sortDir = -1; // -1 = desc
+let _minSize = 0;
+
+function fmt$(n) {
+  if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
+  if (n >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
+  return '$' + n.toFixed(0);
+}
+function fmtFull$(n) {
+  return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function fmtPnl(n) {
+  const s = n >= 0 ? '+' : '';
+  return s + fmt$(n);
+}
+function timeAgo(iso) {
+  const d = new Date(iso);
+  const now = new Date();
+  const mins = Math.floor((now - d) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return mins + 'm ago';
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return hrs + 'h ago';
+  return d.toLocaleDateString();
+}
+
+function rankBadge(rank) {
+  let cls = 'rank-default';
+  if (rank === 1) cls = 'rank-gold';
+  else if (rank === 2) cls = 'rank-silver';
+  else if (rank === 3) cls = 'rank-bronze';
+  return '<span class="rank-badge ' + cls + '">#' + rank + '</span>';
+}
+
+function sideBadge(side) {
+  const s = (side || '').toUpperCase();
+  let cls = 'side-other';
+  if (s === 'YES' || s === 'Y') cls = 'side-yes';
+  else if (s === 'NO' || s === 'N') cls = 'side-no';
+  return '<span class="side-badge ' + cls + '">' + (side || 'Unknown') + '</span>';
+}
+
+function highlightClass(size) {
+  if (size >= 100000) return 'highlight-100k';
+  if (size >= 50000) return 'highlight-50k';
+  return '';
+}
+
+function truncate(str, len) {
+  if (!str) return '';
+  return str.length > len ? str.substring(0, len) + '...' : str;
+}
+
+function renderStats() {
+  if (!_whaleData) return;
+  const positions = _whaleData.whales || [];
+
+  // Total capital
+  const totalCap = positions.reduce((s, p) => s + p.size, 0);
+  document.getElementById('statCapital').textContent = fmt$(totalCap);
+  document.getElementById('heroCapital').textContent = 'Tracking ' + fmt$(totalCap) + ' in positions across the top ' + _whaleData.total_whales + ' traders';
+
+  // Largest position
+  const largest = positions.length ? positions.reduce((a, b) => a.size > b.size ? a : b) : null;
+  document.getElementById('statLargest').textContent = largest ? fmtFull$(largest.size) : '--';
+
+  // Most popular market
+  const marketCounts = {};
+  positions.forEach(p => { marketCounts[p.market] = (marketCounts[p.market] || 0) + 1; });
+  const popular = Object.entries(marketCounts).sort((a, b) => b[1] - a[1])[0];
+  const popEl = document.getElementById('statPopular');
+  if (popular) {
+    popEl.textContent = truncate(popular[0], 40) + ' (' + popular[1] + ' whales)';
+  }
+
+  // YES/NO ratio
+  let yes = 0, no = 0;
+  positions.forEach(p => {
+    const s = (p.side || '').toUpperCase();
+    if (s === 'YES' || s === 'Y') yes++;
+    else if (s === 'NO' || s === 'N') no++;
+  });
+  const total = yes + no || 1;
+  document.getElementById('statRatio').innerHTML =
+    '<span style="color:var(--green)">' + Math.round(yes / total * 100) + '% YES</span>' +
+    ' <span style="color:var(--muted)">/</span> ' +
+    '<span style="color:var(--red)">' + Math.round(no / total * 100) + '% NO</span>';
+
+  // Updated time
+  document.getElementById('updatedAt').textContent = 'Updated ' + timeAgo(_whaleData.updated_at);
+}
+
+function applyFilters() {
+  _filtered = (_whaleData ? _whaleData.whales : []).filter(p => p.size >= _minSize);
+  applySorting();
+}
+
+function applySorting() {
+  _filtered.sort((a, b) => {
+    let va = a[_sortField], vb = b[_sortField];
+    if (typeof va === 'string') va = va.toLowerCase();
+    if (typeof vb === 'string') vb = vb.toLowerCase();
+    if (va < vb) return -1 * _sortDir;
+    if (va > vb) return 1 * _sortDir;
+    return 0;
+  });
+  renderTable();
+  renderMobileCards();
+  updateSortArrows();
+}
+
+function setFilter(el, min) {
+  _minSize = min;
+  document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  applyFilters();
+}
+
+function sortBy(field) {
+  if (_sortField === field) {
+    _sortDir *= -1;
+  } else {
+    _sortField = field;
+    _sortDir = field === 'size' || field === 'current_price' || field === 'trader_rank' ? -1 : 1;
+    if (field === 'trader_rank') _sortDir = 1;
+  }
+  applySorting();
+}
+
+function updateSortArrows() {
+  document.querySelectorAll('.sort-arrow').forEach(el => el.textContent = '');
+  const arrow = document.getElementById('sort-' + _sortField);
+  if (arrow) arrow.textContent = _sortDir === 1 ? '\u25B2' : '\u25BC';
+}
+
+function renderTable() {
+  const tbody = document.getElementById('whaleTableBody');
+  if (!tbody) return;
+  if (_filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--muted);font-family:var(--mono);font-size:13px">No positions match the current filter.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = _filtered.map(p => {
+    const hl = highlightClass(p.size);
+    const pricePct = Math.round(p.current_price * 100);
+    const profileUrl = '/p/' + (p.proxyWallet || '');
+    return '<tr class="' + hl + '">' +
+      '<td>' + rankBadge(p.trader_rank) + '</td>' +
+      '<td><a href="' + profileUrl + '" style="text-decoration:none"><div class="trader-name">' + (p.trader || 'Unknown') + '</div></a><div class="trader-pnl">PnL: ' + fmtPnl(p.trader_pnl) + '</div></td>' +
+      '<td style="max-width:280px">' + truncate(p.market, 60) + '</td>' +
+      '<td>' + sideBadge(p.side) + '</td>' +
+      '<td class="size-cell">' + fmtFull$(p.size) + '</td>' +
+      '<td><div class="price-bar-wrap"><div class="price-bar"><div class="price-bar-fill" style="width:' + pricePct + '%"></div></div><span class="price-pct">' + pricePct + '%</span></div></td>' +
+      '<td><a href="' + p.market_url + '" target="_blank" rel="noopener" class="view-link">View \u2192</a></td>' +
+      '</tr>';
+  }).join('');
+}
+
+function renderMobileCards() {
+  const container = document.getElementById('mobileCards');
+  if (!container) return;
+  if (_filtered.length === 0) {
+    container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-family:var(--mono);font-size:13px">No positions match the current filter.</div>';
+    return;
+  }
+  container.innerHTML = _filtered.map(p => {
+    const hl = highlightClass(p.size);
+    const pricePct = Math.round(p.current_price * 100);
+    return '<div class="whale-card ' + hl + '">' +
+      '<div class="whale-card-header">' +
+        '<div class="whale-card-trader">' + rankBadge(p.trader_rank) + ' <span class="trader-name">' + (p.trader || 'Unknown') + '</span></div>' +
+        '<div class="whale-card-size">' + fmt$(p.size) + '</div>' +
+      '</div>' +
+      '<div class="whale-card-market">' + truncate(p.market, 80) + '</div>' +
+      '<div class="whale-card-meta">' +
+        sideBadge(p.side) +
+        '<div class="price-bar-wrap"><div class="price-bar"><div class="price-bar-fill" style="width:' + pricePct + '%"></div></div><span class="price-pct">' + pricePct + '%</span></div>' +
+        '<a href="' + p.market_url + '" target="_blank" rel="noopener" class="view-link">View \u2192</a>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+async function loadData() {
+  try {
+    document.getElementById('loadingState').style.display = '';
+    document.getElementById('tableWrap').style.display = 'none';
+    document.getElementById('refreshBtn').disabled = true;
+
+    const res = await fetch('/api/whale-watch');
+    if (!res.ok) throw new Error('API returned ' + res.status);
+    _whaleData = await res.json();
+
+    renderStats();
+    applyFilters();
+
+    document.getElementById('loadingState').style.display = 'none';
+    document.getElementById('tableWrap').style.display = '';
+  } catch (err) {
+    console.error('[whale-watch]', err);
+    document.getElementById('loadingState').innerHTML =
+      '<p style="color:var(--red);font-family:var(--mono);font-size:13px">Failed to load whale data. Try refreshing.</p>' +
+      '<button class="refresh-btn" onclick="loadData()" style="margin-top:12px">Try again</button>';
+  } finally {
+    document.getElementById('refreshBtn').disabled = false;
+  }
+}
+
+function refreshData() {
+  // Bust cache by adding a query param the server ignores
+  loadData();
+}
+
+// Init
+loadData();
+</script>
+</body>
+</html>

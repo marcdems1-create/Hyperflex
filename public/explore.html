@@ -758,6 +758,7 @@ nav {
     <a href="/predictors">Predictors</a>
     <a href="/explore" style="color:var(--text-soft)">Explore</a>
     <a href="/odds">Odds</a>
+    <a href="/whales">Whales</a>
     <a href="/templates">Templates</a>
     <!-- logged-in state -->
     <a href="/dashboard" id="navDashboardLink" style="display:none;color:var(--gold)">Dashboard</a>
@@ -947,6 +948,14 @@ nav {
       <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Latest moves from top-performing traders</div>
       <div id="sharpMoneyList"><div class="loading" style="padding:8px 0;">Loading...</div></div>
       <a href="/predictors" style="display:block;margin-top:12px;font-family:'Space Mono',monospace;font-size:11px;color:var(--gold);text-decoration:none;font-weight:700;">See all &#8594;</a>
+    </div>
+
+    <!-- WHALE WATCH -->
+    <div class="sidebar-card" id="whaleWatchCard">
+      <div class="sidebar-title">&#x1F40B; WHALE WATCH</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Biggest positions from top Polymarket traders</div>
+      <div id="whaleWatchList"><div class="loading" style="padding:8px 0;">Loading...</div></div>
+      <a href="/whales" style="display:block;margin-top:12px;font-family:'Space Mono',monospace;font-size:11px;color:var(--gold);text-decoration:none;font-weight:700;">See all whales &#8594;</a>
     </div>
 
     <!-- NOMINATE CTA -->
@@ -1985,6 +1994,38 @@ async function loadFollowingFeed() {
       </div>`;
     }).join('');
   } catch(e) { /* silent */ }
+})();
+
+// WHALE WATCH sidebar
+(async function loadWhaleWatchSidebar() {
+  try {
+    const res = await fetch('/api/whale-watch');
+    const data = await res.json();
+    const list = document.getElementById('whaleWatchList');
+    if (!list) return;
+    const whales = (data.whales || []).slice(0, 3);
+    if (!whales.length) {
+      list.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:8px 0">No whale positions found</div>';
+      return;
+    }
+    list.innerHTML = whales.map(w => {
+      const question = (w.market || '').length > 50 ? w.market.substring(0, 47) + '...' : w.market;
+      const size = w.size >= 1e6 ? '$' + (w.size/1e6).toFixed(1) + 'M' : w.size >= 1e3 ? '$' + (w.size/1e3).toFixed(0) + 'K' : '$' + w.size.toFixed(0);
+      const sideColor = (w.side||'').toUpperCase() === 'YES' ? '#2d9b5f' : (w.side||'').toUpperCase() === 'NO' ? '#c0392b' : '#c9920d';
+      const sideBg = (w.side||'').toUpperCase() === 'YES' ? 'rgba(45,155,95,0.12)' : (w.side||'').toUpperCase() === 'NO' ? 'rgba(192,57,43,0.12)' : 'rgba(201,146,13,0.12)';
+      return `<div style="padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+          <span style="font-size:12px;font-weight:700;color:var(--gold);font-family:'Space Mono',monospace">${_escH(w.trader)}</span>
+          <span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;background:${sideBg};color:${sideColor}">${_escH(w.side)}</span>
+          <span style="font-size:11px;font-weight:700;color:var(--text);margin-left:auto;font-family:'Space Mono',monospace">${size}</span>
+        </div>
+        <div style="font-size:11px;color:var(--text-soft);line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_escH(question)}</div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    const el = document.getElementById('whaleWatchList');
+    if (el) el.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:8px 0">Whale data unavailable</div>';
+  }
 })();
 
 function _sharpTimeAgo(ts) {

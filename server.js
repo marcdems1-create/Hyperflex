@@ -8471,7 +8471,7 @@ const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
   'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u', 'win',
-  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p'
+  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales'
 ]);
 
 // GET /my — private member dashboard
@@ -15103,6 +15103,107 @@ app.get('/api/markets/search', async (req, res) => {
     res.status(502).json({ error: 'Search failed', detail: err.message });
   }
 });
+
+// ════════════════════════════════════════════════════════════
+// WHALE WATCH — track top 50 Polymarket traders' positions
+// ════════════════════════════════════════════════════════════
+let _whaleWatchCache = null;
+
+async function fetchWhalePositions() {
+  const fetch = _nodeFetch;
+
+  // 1. Fetch top 50 traders from Polymarket leaderboard
+  const lbRes = await fetch('https://data-api.polymarket.com/v1/leaderboard?limit=50&window=all');
+  if (!lbRes.ok) throw new Error(`Leaderboard API returned ${lbRes.status}`);
+  const leaderboard = await lbRes.json();
+
+  const traders = (leaderboard || []).slice(0, 50).map((t, i) => ({
+    rank: i + 1,
+    userName: t.userName || t.username || `trader_${i + 1}`,
+    proxyWallet: t.proxyWallet || t.proxy_wallet || '',
+    pnl: parseFloat(t.pnl || t.profit || 0),
+    vol: parseFloat(t.vol || t.volume || 0)
+  })).filter(t => t.proxyWallet);
+
+  // 2. Fetch positions with concurrency limit (batches of 10, 500ms delay)
+  const BATCH_SIZE = 10;
+  const BATCH_DELAY = 500;
+  const allPositions = [];
+
+  for (let i = 0; i < traders.length; i += BATCH_SIZE) {
+    const batch = traders.slice(i, i + BATCH_SIZE);
+    const results = await Promise.allSettled(
+      batch.map(async (trader) => {
+        try {
+          const posRes = await fetch(`https://data-api.polymarket.com/positions?user=${trader.proxyWallet}`);
+          if (!posRes.ok) return [];
+          const positions = await posRes.json();
+          return (positions || [])
+            .filter(p => parseFloat(p.size || 0) > 1000)
+            .map(p => ({
+              trader: trader.userName,
+              trader_pnl: trader.pnl,
+              trader_rank: trader.rank,
+              proxyWallet: trader.proxyWallet,
+              position: p.title || p.market || 'Unknown',
+              market: p.title || p.market || 'Unknown',
+              side: p.outcome || p.side || 'Unknown',
+              size: parseFloat(p.size || 0),
+              current_price: parseFloat(p.curPrice || p.cur_price || 0),
+              market_url: p.slug ? `https://polymarket.com/event/${p.slug}` : (p.market_slug ? `https://polymarket.com/event/${p.market_slug}` : 'https://polymarket.com'),
+              pnl: parseFloat(p.pnl || 0),
+              fetched_at: new Date().toISOString()
+            }));
+        } catch (err) {
+          console.warn(`[whale-watch] Failed to fetch positions for ${trader.userName}:`, err.message);
+          return [];
+        }
+      })
+    );
+
+    for (const r of results) {
+      if (r.status === 'fulfilled' && Array.isArray(r.value)) {
+        allPositions.push(...r.value);
+      }
+    }
+
+    // Delay between batches (except after last batch)
+    if (i + BATCH_SIZE < traders.length) {
+      await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
+    }
+  }
+
+  // Sort by size DESC
+  allPositions.sort((a, b) => b.size - a.size);
+
+  return {
+    whales: allPositions,
+    total_whales: traders.length,
+    total_positions: allPositions.length,
+    updated_at: new Date().toISOString()
+  };
+}
+
+app.get('/api/whale-watch', async (req, res) => {
+  try {
+    // Check cache (10 minute TTL)
+    if (_whaleWatchCache && (Date.now() - _whaleWatchCache.ts < 10 * 60 * 1000)) {
+      return res.json(_whaleWatchCache.data);
+    }
+
+    const data = await fetchWhalePositions();
+    _whaleWatchCache = { ts: Date.now(), data };
+    res.json(data);
+  } catch (err) {
+    console.error('[whale-watch]', err.message);
+    // If we have stale cache, return it on error
+    if (_whaleWatchCache) return res.json(_whaleWatchCache.data);
+    res.status(502).json({ error: 'Failed to fetch whale data', detail: err.message });
+  }
+});
+
+// GET /whales — whale watch page
+app.get('/whales', (req, res) => res.sendFile(path.join(__dirname, 'public', 'whales.html')));
 
 // 404 catch-all — must be last route
 app.use((req, res) => {
