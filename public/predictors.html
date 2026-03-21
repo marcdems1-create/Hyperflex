@@ -4,16 +4,16 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Prediction Market Leaderboard — Top Traders Ranked by Sharp Score | HYPERFLEX</title>
-<meta name="description" content="Global prediction market leaderboard. Top traders ranked by verified track record across Polymarket, Kalshi & Manifold. Win rate, P&L, sharp scores."/>
-<meta name="keywords" content="polymarket leaderboard, prediction market rankings, kalshi traders, manifold leaderboard, sharp score, prediction market portfolio"/>
+<meta name="description" content="Global prediction market leaderboard. Top traders ranked by verified track record across Polymarket &amp; Kalshi. Win rate, P&amp;L, sharp scores."/>
+<meta name="keywords" content="polymarket leaderboard, prediction market rankings, kalshi traders, sharp score, prediction market portfolio"/>
 <meta property="og:title" content="Prediction Market Leaderboard — Top Traders Ranked | HYPERFLEX"/>
-<meta property="og:description" content="Global prediction market leaderboard. Top traders ranked by verified track record across Polymarket, Kalshi & Manifold."/>
+<meta property="og:description" content="Global prediction market leaderboard. Top traders ranked by verified track record across Polymarket &amp; Kalshi."/>
 <meta property="og:url" content="https://hyperflex.network/predictors"/>
 <meta property="og:image" content="https://hyperflex.network/og-predictors.png"/>
 <meta property="og:type" content="website"/>
 <meta name="twitter:card" content="summary_large_image"/>
 <meta name="twitter:title" content="Prediction Market Leaderboard — Top Traders Ranked | HYPERFLEX"/>
-<meta name="twitter:description" content="Global prediction market leaderboard. Top traders ranked by verified track record across Polymarket, Kalshi & Manifold."/>
+<meta name="twitter:description" content="Global prediction market leaderboard. Top traders ranked by verified track record across Polymarket &amp; Kalshi."/>
 <meta name="twitter:image" content="https://hyperflex.network/og-predictors.png"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
@@ -430,11 +430,12 @@ body::before {
     <span class="nav-name">HYPERFLEX</span>
   </a>
   <div class="nav-links">
-    <a href="/predictors" class="nav-link active">Leaderboard</a>
+    <a href="/predictors" class="nav-link active">Predictors</a>
     <a href="/explore" class="nav-link">Explore</a>
     <a href="/odds" class="nav-link">Odds</a>
     <a href="/whales" class="nav-link">Whales</a>
     <a href="/templates" class="nav-link">Templates</a>
+    <a href="/api-docs" class="nav-link">API</a>
   </div>
   <div class="nav-actions">
     <a id="navDashLink" href="/dashboard" class="btn-nav btn-nav-ghost" style="display:none;color:#c9920d;border-color:rgba(201,146,13,0.3)">Dashboard</a>
@@ -568,7 +569,7 @@ function renderLeaderboard() {
     body.innerHTML = `<tr><td colspan="8">
       <div style="text-align:center;margin:0 0 24px;padding:16px 20px;background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.2);border-radius:10px">
         <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px">Connect your wallet to appear on the leaderboard</div>
-        <div style="font-size:13px;color:var(--dim);margin-bottom:12px">These are example rankings. Your real stats show up once you connect Polymarket, Kalshi, or Manifold.</div>
+        <div style="font-size:13px;color:var(--dim);margin-bottom:12px">These are example rankings. Your real stats show up once you connect Polymarket or Kalshi.</div>
         <a href="/creator/signup" style="display:inline-flex;align-items:center;gap:6px;background:var(--gold);color:var(--ink);padding:10px 20px;border-radius:8px;font-family:var(--sans);font-weight:700;font-size:13px;text-decoration:none">Get started free &#8594;</a>
       </div>
     </td></tr>` + demo.map(r => renderRow(r, true)).join('');

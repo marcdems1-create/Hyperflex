@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Explore — HYPERFLEX</title>
-<meta name="description" content="Discover prediction markets and follow top predictors across Polymarket, Kalshi, and Manifold."/>
+<meta name="description" content="Discover prediction markets and follow top predictors across Polymarket and Kalshi."/>
 <meta property="og:title" content="Explore Prediction Markets — HYPERFLEX"/>
 <meta property="og:description" content="Live activity feed, trending markets, and top predictors across platforms."/>
 <meta property="og:url" content="https://hyperflex.network/explore"/>
@@ -784,6 +784,7 @@ nav {
     <a href="/odds">Odds</a>
     <a href="/whales">Whales</a>
     <a href="/templates">Templates</a>
+    <a href="/api-docs">API</a>
     <!-- logged-in state -->
     <a href="/dashboard" id="navDashboardLink" style="display:none;color:var(--gold)">Dashboard</a>
     <button id="navSignOutBtn" onclick="memberSignOut()" style="display:none;background:none;border:1px solid rgba(255,255,255,.15);color:#aaa8a0;font-size:13px;padding:6px 14px;border-radius:6px;cursor:pointer;font-family:inherit">Sign out</button>
@@ -846,7 +847,7 @@ nav {
 <div class="hero">
   <div class="live-badge">Live across all communities</div>
   <h1>What the crowd is<br><span>betting on right now</span></h1>
-  <p>Real-time predictions from top Polymarket, Kalshi &amp; Manifold traders.</p>
+  <p>Real-time predictions from top Polymarket &amp; Kalshi traders.</p>
   <div class="stats-ticker" id="statsTicker">
     <div class="stat-pill">
       <div class="stat-pill-value" id="statTotalTrades">—</div>
@@ -881,12 +882,12 @@ nav {
 <div class="explore-layout">
   <div class="main-col">
 
-    <!-- CREATOR CTA STRIP -->
+    <!-- WALLET CONNECT CTA STRIP -->
     <div class="creator-cta-strip" id="creatorCta">
       <div class="cta-text">
-        <strong>Run a finance community?</strong> Give your audience a prediction market with leaderboards, streaks, and bragging rights. Free to start — takes 2 minutes.
+        <strong>Connect your Polymarket wallet</strong> — Track your positions, prove your record, and see your sharp score. Free to start.
       </div>
-      <a href="/creator/signup" class="cta-btn">Set up your community →</a>
+      <a href="/creator/signup" class="cta-btn">Connect your wallet →</a>
     </div>
 
     <!-- Page tabs -->
@@ -1402,7 +1403,7 @@ function activityCard(a) {
     const dest = a.market_url || '/explore';
     const isExt = dest.startsWith('http');
     const pnlBadge = a.pnl_pct ? `<span style="font-size:11px;font-family:var(--mono);font-weight:700;color:${a.pnl_pct > 0 ? '#22c55e' : '#ef4444'}">${a.pnl_pct > 0 ? '+' : ''}${a.pnl_pct}%</span>` : '';
-    const cashBadge = a.cash_value ? `<span class="ac-stat">${platform === 'manifold' ? 'M$' : '$'}${parseFloat(a.cash_value).toFixed(2)}</span>` : '';
+    const cashBadge = a.cash_value ? `<span class="ac-stat">$${parseFloat(a.cash_value).toFixed(2)}</span>` : '';
     const tweetText = encodeURIComponent(`${a.user} went ${a.side} on "${a.question}" at ${conf !== null ? conf + '%' : '?'} on ${pm.label} — tracked on HYPERFLEX\nhttps://hyperflex.network`);
     return `<div class="activity-card" style="cursor:default">
       <div class="ac-avatar" style="background:${pm.bg};border:1px solid ${pm.border};font-size:18px;display:flex;align-items:center;justify-content:center">${pm.emoji}</div>
@@ -1894,14 +1895,14 @@ async function submitMemberAuth() {
       const r1 = await fetch('/register', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ display_name: name, email, password: pw }) });
       const d1 = await r1.json();
       if (!r1.ok) throw new Error(d1.error || 'Registration failed.');
-      const r2 = await fetch('/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email, password: pw }) });
+      const r2 = await fetch('/api/creator/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email, password: pw }) });
       data = await r2.json();
       if (!r2.ok) throw new Error(data.error || 'Login failed.');
     } else {
       const email = document.getElementById('maLoginEmail').value.trim();
       const pw    = document.getElementById('maLoginPassword').value;
       if (!email || !pw) throw new Error('Email and password required.');
-      const r = await fetch('/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email, password: pw }) });
+      const r = await fetch('/api/creator/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email, password: pw }) });
       data = await r.json();
       if (!r.ok) throw new Error(data.error || 'Invalid credentials.');
     }
@@ -1911,7 +1912,7 @@ async function submitMemberAuth() {
     closeMemberAuth();
     updateNavAuthState();
     // Redirect to dashboard
-    window.location.href = '/my';
+    window.location.href = '/creator/dashboard';
   } catch (err) {
     errEl.textContent = err.message;
     errEl.style.display = 'block';
@@ -1956,7 +1957,7 @@ async function loadFollowingFeed() {
     el.innerHTML = header + data.items.map(item => {
       if (item.type === 'external_bet') {
         const platformColor = item.platform === 'polymarket' ? '#6366f1' : item.platform === 'kalshi' ? '#8b5cf6' : '#10b981';
-        const platformName  = item.platform === 'polymarket' ? 'Polymarket' : item.platform === 'kalshi' ? 'Kalshi' : 'Manifold';
+        const platformName  = item.platform === 'polymarket' ? 'Polymarket' : item.platform === 'kalshi' ? 'Kalshi' : item.platform;
         const pnlHtml = item.pnl !== null && item.pnl !== undefined
           ? `<span style="color:${item.pnl >= 0 ? '#10b981' : '#ef4444'};font-weight:700">${item.pnl >= 0 ? '+' : ''}${item.pnl.toFixed(2)}</span>` : '';
         return `<div class="activity-card" style="border-left:3px solid ${platformColor}">

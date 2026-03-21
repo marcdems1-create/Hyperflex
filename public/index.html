@@ -3,19 +3,19 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>HYPERFLEX — All Your Predictions. One Place.</title>
-<meta name="description" content="Track your Polymarket, Kalshi &amp; Manifold positions in one dashboard. Compare odds, share your best calls, compete on leaderboards. Free during Early Access."/>
+<title>HYPERFLEX — Prediction Market Intelligence</title>
+<meta name="description" content="Prediction market intelligence. Track Polymarket &amp; Kalshi positions, compare odds, watch whale moves, and prove your edge. Free during Early Access."/>
 <!-- Open Graph -->
 <meta property="og:type" content="website"/>
 <meta property="og:url" content="https://hyperflex.network/"/>
-<meta property="og:title" content="HYPERFLEX — All Your Predictions. One Place."/>
-<meta property="og:description" content="Track your Polymarket, Kalshi &amp; Manifold positions in one dashboard. Free during Early Access."/>
+<meta property="og:title" content="HYPERFLEX — Prediction Market Intelligence"/>
+<meta property="og:description" content="Prediction market intelligence. Track positions, compare odds, watch whales. Free during Early Access."/>
 <meta property="og:image" content="https://hyperflex.network/og-home.png"/>
 <meta property="og:site_name" content="HYPERFLEX"/>
 <!-- Twitter / X -->
 <meta name="twitter:card" content="summary_large_image"/>
-<meta name="twitter:title" content="HYPERFLEX — All Your Predictions. One Place."/>
-<meta name="twitter:description" content="Track your Polymarket, Kalshi &amp; Manifold positions in one dashboard. Free during Early Access."/>
+<meta name="twitter:title" content="HYPERFLEX — Prediction Market Intelligence"/>
+<meta name="twitter:description" content="Prediction market intelligence. Track positions, compare odds, watch whales. Free during Early Access."/>
 <meta name="twitter:image" content="https://hyperflex.network/og-home.png"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
@@ -374,7 +374,7 @@ section { position: relative; z-index: 1; }
   .features { padding: 60px 16px; }
 
   /* Quick Preview card: reduce padding on mobile */
-  #qp-wallet, #qp-username { min-width: 0; width: 100%; }
+  #qp-wallet { min-width: 0; width: 100%; }
 }
 
 /* ── MARQUEE ── */
@@ -1410,8 +1410,8 @@ footer {
     <span class="eyebrow-dot"></span>
     Prediction market dashboard · Early access
   </div>
-  <h1>All your predictions.<br/><span class="accent">One place.</span></h1>
-  <p class="hero-sub">Track Polymarket, Kalshi, and Manifold positions in one unified portfolio. Share your best calls. Or launch your own branded prediction market for your community — in 5 minutes.</p>
+  <h1>Prediction market<br/><span class="accent">intelligence.</span></h1>
+  <p class="hero-sub">Watch whale moves, compare odds across Polymarket and Kalshi, track your portfolio, and prove your forecasting edge — all in one place.</p>
   <div class="hero-actions">
     <a href="/creator/signup" class="btn-primary">Get started free →</a>
     <a href="/odds?q=Bitcoin" class="btn-ghost">View live odds →</a>
@@ -1516,10 +1516,9 @@ if (localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token')
 <section style="padding:60px 24px;max-width:720px;margin:0 auto;">
   <div style="background:#191917;border:1px solid #2a2a26;border-radius:14px;padding:40px 36px;">
     <h2 style="font-family:'Syne',sans-serif;font-size:24px;font-weight:800;color:#ddd8cc;margin:0 0 8px;">See your prediction stats in 10 seconds</h2>
-    <p style="color:#7a7870;font-size:15px;margin:0 0 28px;">No account needed — paste your Polymarket wallet or Manifold username</p>
+    <p style="color:#7a7870;font-size:15px;margin:0 0 28px;">No account needed — paste your Polymarket wallet address</p>
     <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
-      <input id="qp-wallet" type="text" placeholder="0x... Polymarket wallet" style="flex:1;min-width:180px;background:#1a1916;border:1px solid #444;border-radius:8px;padding:12px 14px;color:#f0ebe3;font-family:'Space Mono',monospace;font-size:13px;outline:none;" onfocus="this.style.borderColor='#c9920d'" onblur="this.style.borderColor='#444'"/>
-      <input id="qp-username" type="text" placeholder="Manifold username" style="flex:1;min-width:140px;background:#1a1916;border:1px solid #444;border-radius:8px;padding:12px 14px;color:#f0ebe3;font-family:'Space Mono',monospace;font-size:13px;outline:none;" onfocus="this.style.borderColor='#c9920d'" onblur="this.style.borderColor='#444'"/>
+      <input id="qp-wallet" type="text" placeholder="0x... Polymarket wallet" style="flex:1;min-width:220px;background:#1a1916;border:1px solid #444;border-radius:8px;padding:12px 14px;color:#f0ebe3;font-family:'Space Mono',monospace;font-size:13px;outline:none;" onfocus="this.style.borderColor='#c9920d'" onblur="this.style.borderColor='#444'"/>
       <button onclick="runQuickPreview()" style="background:#c9920d;color:#141412;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;padding:12px 22px;border:none;border-radius:8px;cursor:pointer;white-space:nowrap;">Show my stats →</button>
     </div>
     <div id="qp-result" style="display:none;"></div>
@@ -1528,13 +1527,12 @@ if (localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token')
 <script>
 async function runQuickPreview() {
   const wallet   = document.getElementById('qp-wallet').value.trim();
-  const username = document.getElementById('qp-username').value.trim();
   const resultEl = document.getElementById('qp-result');
   const btn      = document.querySelector('[onclick="runQuickPreview()"]');
 
-  if (!wallet && !username) {
+  if (!wallet) {
     resultEl.style.display = 'block';
-    resultEl.innerHTML = '<p style="color:#c0392b;font-size:14px;margin:0;">Enter a Polymarket wallet address or Manifold username.</p>';
+    resultEl.innerHTML = '<p style="color:#c0392b;font-size:14px;margin:0;">Enter a Polymarket wallet address.</p>';
     return;
   }
 
@@ -1545,21 +1543,15 @@ async function runQuickPreview() {
   resultEl.innerHTML = `
     <div style="background:#0e0e0c;border:1px solid #2a2a26;border-radius:10px;padding:24px 22px;display:flex;align-items:center;gap:14px;">
       <div style="width:18px;height:18px;border:2px solid #c9920d;border-top-color:transparent;border-radius:50%;animation:qp-spin .7s linear infinite;flex-shrink:0;"></div>
-      <span style="color:#7a7870;font-size:14px;">Looking up your positions on ${wallet ? 'Polymarket' : 'Manifold'}…</span>
+      <span style="color:#7a7870;font-size:14px;">Looking up your positions on Polymarket…</span>
     </div>
     <style>@keyframes qp-spin{to{transform:rotate(360deg)}}</style>`;
 
   try {
     let data, platform, platformSlug;
-    if (wallet) {
-      const r = await fetch(`/api/polymarket/positions/${encodeURIComponent(wallet)}`);
-      if (!r.ok) { const e = await r.json().catch(()=>{}); throw new Error(e?.error || 'Could not fetch wallet — check the address and try again'); }
-      data = await r.json(); platform = 'Polymarket'; platformSlug = 'polymarket';
-    } else {
-      const r = await fetch(`/api/manifold/positions/${encodeURIComponent(username)}`);
-      if (!r.ok) { const e = await r.json().catch(()=>{}); throw new Error(e?.error || 'Manifold user not found — check the username and try again'); }
-      data = await r.json(); platform = 'Manifold'; platformSlug = 'manifold';
-    }
+    const r = await fetch(`/api/polymarket/positions/${encodeURIComponent(wallet)}`);
+    if (!r.ok) { const e = await r.json().catch(()=>{}); throw new Error(e?.error || 'Could not fetch wallet — check the address and try again'); }
+    data = await r.json(); platform = 'Polymarket'; platformSlug = 'polymarket';
 
     const positions  = data.positions || [];
     const count      = positions.length;
@@ -1632,7 +1624,6 @@ async function runQuickPreview() {
   }
 }
 document.getElementById('qp-wallet').addEventListener('keydown', e => { if (e.key === 'Enter') runQuickPreview(); });
-document.getElementById('qp-username').addEventListener('keydown', e => { if (e.key === 'Enter') runQuickPreview(); });
 </script>
 
 <!-- FEATURES SHOWCASE -->
@@ -1647,7 +1638,7 @@ document.getElementById('qp-username').addEventListener('keydown', e => { if (e.
     <a href="/creator/signup" class="feat-card" style="text-decoration:none;cursor:pointer">
       <div class="feat-card-icon">📊</div>
       <h3 style="font-family:var(--sans);font-size:17px;font-weight:800;color:var(--text);margin:0 0 10px">Track every position</h3>
-      <p style="font-size:13px;color:var(--dim);line-height:1.6;margin:0">Polymarket and Kalshi in one unified dashboard. P&L auto-calculated across all platforms. No spreadsheets, no tab-switching.</p>
+      <p style="font-size:13px;color:var(--dim);line-height:1.6;margin:0">Polymarket and Kalshi positions in one unified dashboard. P&amp;L auto-calculated, win rate tracked, portfolio synced. No spreadsheets.</p>
       <div style="margin-top:16px;font-family:var(--mono);font-size:12px;color:var(--gold);font-weight:700">Connect your wallet →</div>
     </a>
     <!-- Prove -->
@@ -1661,7 +1652,7 @@ document.getElementById('qp-username').addEventListener('keydown', e => { if (e.
     <a href="/odds" class="feat-card" style="text-decoration:none;cursor:pointer">
       <div class="feat-card-icon">⚡</div>
       <h3 style="font-family:var(--sans);font-size:17px;font-weight:800;color:var(--text);margin:0 0 10px">Stay ahead</h3>
-      <p style="font-size:13px;color:var(--dim);line-height:1.6;margin:0">Compare odds across Polymarket, Kalshi, and sportsbooks. Follow top predictors and see their calls in your feed. Never miss a signal.</p>
+      <p style="font-size:13px;color:var(--dim);line-height:1.6;margin:0">Compare odds across Polymarket and Kalshi. Track whale moves, follow top predictors, and see their calls in your feed. Never miss a signal.</p>
       <div style="margin-top:16px;font-family:var(--mono);font-size:12px;color:var(--gold);font-weight:700">Search live odds →</div>
     </a>
   </div>
@@ -1672,7 +1663,7 @@ document.getElementById('qp-username').addEventListener('keydown', e => { if (e.
   </div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px">
     <div class="testimonial-card">
-      <p class="testimonial-quote">"I had positions across Polymarket and Manifold with no way to see my total P&L. Connected both in 30 seconds — now I check one dashboard instead of three tabs."</p>
+      <p class="testimonial-quote">"I had positions across Polymarket and Kalshi with no way to see my total P&amp;L. Connected both in 30 seconds — now I check one dashboard instead of three tabs."</p>
       <div style="display:flex;align-items:center;gap:10px">
         <div style="width:32px;height:32px;border-radius:50%;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#818cf8">DK</div>
         <div>
@@ -1687,7 +1678,7 @@ document.getElementById('qp-username').addEventListener('keydown', e => { if (e.
         <div style="width:32px;height:32px;border-radius:50%;background:rgba(201,146,13,0.15);border:1px solid rgba(201,146,13,0.3);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--gold)">SP</div>
         <div>
           <div style="font-size:12px;font-weight:600;color:var(--text)">Sarah P.</div>
-          <div style="font-size:11px;color:var(--dim)">Kalshi + Manifold trader</div>
+          <div style="font-size:11px;color:var(--dim)">Kalshi + Polymarket trader</div>
         </div>
       </div>
     </div>
@@ -1787,7 +1778,7 @@ document.getElementById('qp-username').addEventListener('keydown', e => { if (e.
         </svg>
         <span class="footer-logo-name">HYPERFLEX</span>
       </a>
-      <p class="footer-tagline">Cross-platform prediction market dashboard. Polymarket, Kalshi, and Manifold in one place.</p>
+      <p class="footer-tagline">Prediction market intelligence. Whale watching, odds comparison, portfolio tracking.</p>
     </div>
     <div class="footer-cols">
       <div class="footer-col">

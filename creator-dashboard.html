@@ -889,6 +889,25 @@ body {
             <button class="btn-primary" onclick="saveSettings()" style="margin-top:8px">Save Changes</button>
           </div>
         </div>
+
+        <!-- Telegram Alerts -->
+        <div class="section" style="margin-top:20px">
+          <div class="markets-table" style="padding:28px">
+            <h3 style="margin:0 0 12px;font-family:var(--display);font-size:16px;color:var(--gold)">Telegram Alerts</h3>
+            <p style="color:var(--dim);font-size:13px;margin:0 0 16px;line-height:1.5">
+              Get whale trade alerts pushed to your Telegram.<br>
+              <strong style="color:var(--text)">1.</strong> Message <span style="font-family:var(--mono);color:var(--gold)">@HyperFlexBot</span> on Telegram.<br>
+              <strong style="color:var(--text)">2.</strong> It will reply with your Chat ID.<br>
+              <strong style="color:var(--text)">3.</strong> Paste it here.
+            </p>
+            <div class="field">
+              <label>Telegram Chat ID</label>
+              <input type="text" id="telegramChatId" placeholder="e.g. 123456789" style="font-family:var(--mono)"/>
+            </div>
+            <button class="btn-primary" onclick="saveTelegramChatId()" style="margin-top:8px">Connect Telegram</button>
+            <div id="telegramStatus" style="font-size:12px;margin-top:8px;color:var(--dim)"></div>
+          </div>
+        </div>
       </div>
 
     </div><!-- /content -->
@@ -1227,6 +1246,31 @@ async function saveSettings() {
     else showToast(data.error || 'Failed to save.', 'error');
   } catch {
     showToast('Network error.', 'error');
+  }
+}
+
+async function saveTelegramChatId() {
+  const chatId = document.getElementById('telegramChatId').value.trim();
+  const statusEl = document.getElementById('telegramStatus');
+  if (!chatId) { statusEl.textContent = 'Please enter a Chat ID.'; statusEl.style.color = '#e74c3c'; return; }
+  try {
+    const r = await fetch(API + '/api/telegram/connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ telegram_chat_id: chatId })
+    });
+    const data = await r.json();
+    if (data.ok) {
+      statusEl.textContent = 'Connected! You will receive whale alerts on Telegram.';
+      statusEl.style.color = '#27ae60';
+      showToast('Telegram connected ✓', 'success');
+    } else {
+      statusEl.textContent = data.error || 'Failed to connect.';
+      statusEl.style.color = '#e74c3c';
+    }
+  } catch {
+    statusEl.textContent = 'Network error.';
+    statusEl.style.color = '#e74c3c';
   }
 }
 
