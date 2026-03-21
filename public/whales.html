@@ -321,10 +321,15 @@ function renderStats() {
     else if (s === 'NO' || s === 'N') no++;
   });
   const total = yes + no || 1;
+  const yesPct = Math.round(yes / total * 100);
+  const noPct = Math.round(no / total * 100);
   document.getElementById('statRatio').innerHTML =
-    '<span style="color:var(--green)">' + Math.round(yes / total * 100) + '% YES</span>' +
-    ' <span style="color:var(--muted)">/</span> ' +
-    '<span style="color:var(--red)">' + Math.round(no / total * 100) + '% NO</span>';
+    `<a href="/odds?q=polymarket" style="text-decoration:none;cursor:pointer">` +
+    `<span style="color:var(--green)">${yesPct}% YES</span>` +
+    ` <span style="color:var(--muted)">/</span> ` +
+    `<span style="color:var(--red)">${noPct}% NO</span>` +
+    `<div style="margin-top:6px;height:6px;border-radius:3px;background:var(--red);overflow:hidden"><div style="height:100%;width:${yesPct}%;background:var(--green);border-radius:3px"></div></div>` +
+    `</a>`;
 
   // Updated time
   document.getElementById('updatedAt').textContent = 'Updated ' + timeAgo(_whaleData.updated_at);

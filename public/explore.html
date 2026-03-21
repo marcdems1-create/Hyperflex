@@ -1319,9 +1319,9 @@ function activityCard(a) {
       <div class="ac-avatar" style="background:${pm.bg};border:1px solid ${pm.border};font-size:16px;display:flex;align-items:center;justify-content:center">📈</div>
       <div class="ac-body">
         <div class="ac-header">
-          <span style="font-weight:700;color:${pm.color}">${pm.label}</span>
-          <span class="ac-action">trending market</span>
-          <span class="ac-time">Trending now</span>
+          <span style="font-weight:700;color:${pm.color}">${a.whale_trader ? '🐋 ' + escHtml(a.whale_trader) : pm.label}</span>
+          <span class="ac-action">${a.whale_trader ? 'whale position · #' + (a.whale_rank || '') : 'trending market'}</span>
+          <span class="ac-time">${a.volume_display || 'Trending now'}</span>
         </div>
         <div class="ac-market-card" style="cursor:pointer">
           <div class="ac-market-inner">

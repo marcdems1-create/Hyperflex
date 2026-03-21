@@ -10278,13 +10278,70 @@ app.get('/api/activity', async (req, res) => {
         const tid = setTimeout(() => ctrl.abort(), ms);
         return fetch(url, { signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }).finally(() => clearTimeout(tid));
       };
-      const [polyTrending, polyCrypto, polyPolitics] = await Promise.allSettled([
-        fetchExt('https://gamma-api.polymarket.com/markets?closed=false&limit=10&order=volume&ascending=false'),
+      // Use whale data for trending — much higher quality than random Gamma API results
+      const [whaleRes, polyCrypto, polyPolitics] = await Promise.allSettled([
+        fetchExt('https://data-api.polymarket.com/v1/leaderboard?limit=20&window=all'),
         fetchExt('https://gamma-api.polymarket.com/markets?closed=false&limit=8&order=volume&ascending=false&search=bitcoin'),
         fetchExt('https://gamma-api.polymarket.com/markets?closed=false&limit=8&order=volume&ascending=false&search=trump'),
       ]);
-      if (polyTrending.status === 'fulfilled' && polyTrending.value.ok) {
-        const raw = await polyTrending.value.json();
+      // Pull whale positions for the feed
+      if (whaleRes.status === 'fulfilled' && whaleRes.value.ok) {
+        try {
+          const whaleTraders = await whaleRes.value.json();
+          // Fetch top 5 traders' positions
+          const top5 = (Array.isArray(whaleTraders) ? whaleTraders : []).slice(0, 5);
+          const posResults = await Promise.allSettled(top5.map(t =>
+            fetchExt(`https://data-api.polymarket.com/positions?user=${t.proxyWallet}`, 8000)
+          ));
+          const whalePositions = [];
+          for (let i = 0; i < posResults.length; i++) {
+            if (posResults[i].status !== 'fulfilled' || !posResults[i].value.ok) continue;
+            const positions = await posResults[i].value.json();
+            const trader = top5[i];
+            (Array.isArray(positions) ? positions : [])
+              .filter(p => (parseFloat(p.size) || 0) >= 10000)
+              .slice(0, 3)
+              .forEach(p => whalePositions.push({ ...p, _trader: trader.userName || 'Whale #' + (i+1), _traderPnl: trader.pnl || 0, _traderRank: trader.rank || (i+1) }));
+          }
+          // Dedupe by market title and shuffle
+          const seen = new Set();
+          const uniqueWhale = whalePositions.filter(p => {
+            const key = (p.title || p.market || '').toLowerCase();
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+          uniqueWhale.sort(() => Math.random() - 0.5);
+          uniqueWhale.slice(0, 6).forEach((p, i) => {
+            const question = p.title || p.market || 'Unknown market';
+            const vol = parseFloat(p.size) || 0;
+            const side = p.outcome || p.side || '';
+            const price = parseFloat(p.curPrice) || 0;
+            const yesPct = side.toUpperCase() === 'YES' ? Math.round(price * 100) : (side.toUpperCase() === 'NO' ? Math.round((1 - price) * 100) : Math.round(price * 100));
+            const qLower = question.toLowerCase();
+            const category = /nba|nfl|mlb|nhl|ufc|vs\.|spread|game|hockey|basketball|football|soccer/.test(qLower) ? 'sports'
+              : /bitcoin|btc|ethereum|eth|crypto|solana|defi|token/.test(qLower) ? 'crypto'
+              : /fed\b|interest|inflation|stock|s&p|oil|gold|economy|tariff/.test(qLower) ? 'finance'
+              : /trump|biden|election|president|congress|senate|vance|pope|war\b|military/.test(qLower) ? 'politics'
+              : /movie|oscar|grammy|music|ai\b|tech|apple|google|tesla/.test(qLower) ? 'entertainment'
+              : 'other';
+            activities.push({
+              type: 'trending_external', id: `twhale_${i}`, ts: new Date().toISOString(),
+              platform: 'polymarket', question,
+              category, yes_pct: yesPct, volume: vol,
+              volume_display: vol >= 1000000 ? '$' + (vol/1000000).toFixed(1) + 'M' : vol >= 1000 ? '$' + (vol/1000).toFixed(0) + 'K' : '$' + vol.toFixed(0),
+              url: p.marketUrl || 'https://polymarket.com',
+              end_date: p.endDate || null,
+              whale_trader: p._trader, whale_rank: p._traderRank,
+            });
+          });
+        } catch (e) { console.warn('[whale trending]', e.message); }
+      }
+      // Fallback: if no whale data, use Gamma API
+      if (!activities.some(a => a.id?.startsWith('twhale_'))) {
+        const polyFallback = await fetchExt('https://gamma-api.polymarket.com/markets?closed=false&limit=10&order=volume&ascending=false').catch(() => null);
+        if (polyFallback?.ok) {
+        const raw = await polyFallback.json();
         const filteredPoly = (Array.isArray(raw) ? raw : []).filter(m => (parseFloat(m.volume) || 0) >= 5000);
         filteredPoly.sort(() => Math.random() - 0.5);
         filteredPoly.slice(0, 6).forEach((m, i) => {
@@ -10316,7 +10373,7 @@ app.get('/api/activity', async (req, res) => {
             end_date: m.endDate || null,
           });
         });
-      }
+      }} // close fallback forEach + if(polyFallback)
       // Process crypto + politics category-specific Polymarket feeds
       const seenPolyIds = new Set(activities.filter(a => a.id?.startsWith('tpoly_')).map(a => a.id));
       const processPolyFeed = (feedResult, maxItems) => {
