@@ -312,7 +312,15 @@ body::before {
 <section class="hero">
   <div class="hero-eyebrow">Cross-platform comparison</div>
   <h1>Find the <span class="accent">best odds</span> across every platform</h1>
-  <p class="hero-sub">Search any topic — Bitcoin, Trump, Fed, NFL — and see how odds compare across Polymarket, Kalshi, and Manifold side by side.</p>
+  <p class="hero-sub">Search any topic and see how odds compare across Polymarket, Kalshi, and sportsbooks.</p>
+  <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:12px">
+    <button onclick="document.getElementById('oddsSearch').value='Bitcoin';searchOdds()" style="background:rgba(201,146,13,0.1);border:1px solid rgba(201,146,13,0.3);color:var(--gold);border-radius:20px;padding:6px 14px;font-family:var(--mono);font-size:11px;cursor:pointer">Bitcoin</button>
+    <button onclick="document.getElementById('oddsSearch').value='Trump';searchOdds()" style="background:rgba(201,146,13,0.1);border:1px solid rgba(201,146,13,0.3);color:var(--gold);border-radius:20px;padding:6px 14px;font-family:var(--mono);font-size:11px;cursor:pointer">Trump</button>
+    <button onclick="document.getElementById('oddsSearch').value='NBA';searchOdds()" style="background:rgba(201,146,13,0.1);border:1px solid rgba(201,146,13,0.3);color:var(--gold);border-radius:20px;padding:6px 14px;font-family:var(--mono);font-size:11px;cursor:pointer">NBA</button>
+    <button onclick="document.getElementById('oddsSearch').value='UFC';searchOdds()" style="background:rgba(201,146,13,0.1);border:1px solid rgba(201,146,13,0.3);color:var(--gold);border-radius:20px;padding:6px 14px;font-family:var(--mono);font-size:11px;cursor:pointer">UFC</button>
+    <button onclick="document.getElementById('oddsSearch').value='Pope';searchOdds()" style="background:rgba(201,146,13,0.1);border:1px solid rgba(201,146,13,0.3);color:var(--gold);border-radius:20px;padding:6px 14px;font-family:var(--mono);font-size:11px;cursor:pointer">Pope</button>
+    <button onclick="document.getElementById('oddsSearch').value='Fed rates';searchOdds()" style="background:rgba(201,146,13,0.1);border:1px solid rgba(201,146,13,0.3);color:var(--gold);border-radius:20px;padding:6px 14px;font-family:var(--mono);font-size:11px;cursor:pointer">Fed</button>
+  </div>
 </section>
 
 <div class="search-wrap">
