@@ -12525,17 +12525,14 @@ async function connectBrowserWallet() {
     localStorage.setItem('hf_wallet_address', address);
     updateWalletUI();
     fetchWalletBalance(provider, address);
-    // Save wallet to user profile
+    // Only save as polymarket_address if user doesn't already have one set
     const token = localStorage.getItem('hf_token');
-    if (token) {
+    if (token && !_polyWalletAddress) {
       fetch('/api/user/wallets', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
         body: JSON.stringify({ polymarket_address: address })
       }).catch(() => {});
-    }
-    // If polymarket address not set, set it and reload positions
-    if (!_polyWalletAddress) {
       _polyWalletAddress = address;
       renderPolymarketConnectState();
       loadPolymarketPositions(true);
