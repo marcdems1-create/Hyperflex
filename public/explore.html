@@ -941,12 +941,12 @@ nav {
       <a href="/predictors" style="display:block;margin-top:12px;font-family:var(--mono);font-size:11px;color:var(--gold);text-decoration:none;font-weight:700;">See all →</a>
     </div>
 
-    <!-- SMART MONEY -->
-    <div class="sidebar-card" id="smartMoneyCardExplore" style="display:none">
-      <div class="sidebar-title">🧠 SMART MONEY</div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:12px">How sharp predictors are positioned</div>
-      <div id="smartMoneyListExplore"></div>
-      <a href="/odds" style="display:block;margin-top:12px;font-family:'Space Mono',monospace;font-size:11px;color:var(--gold);text-decoration:none;font-weight:700;">Compare odds →</a>
+    <!-- SHARP MONEY FEED -->
+    <div class="sidebar-card" id="sharpMoneyCard">
+      <div class="sidebar-title">&#129504; SHARP MONEY</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Latest moves from top-performing traders</div>
+      <div id="sharpMoneyList"><div class="loading" style="padding:8px 0;">Loading...</div></div>
+      <a href="/predictors" style="display:block;margin-top:12px;font-family:'Space Mono',monospace;font-size:11px;color:var(--gold);text-decoration:none;font-weight:700;">See all &#8594;</a>
     </div>
 
     <!-- NOMINATE CTA -->
@@ -1956,26 +1956,48 @@ async function loadFollowingFeed() {
   }
 })();
 
-// SMART MONEY sidebar
-(async function loadSmartMoneyExplore() {
+// SHARP MONEY FEED sidebar
+(async function loadSharpMoneyFeed() {
   try {
-    const res = await fetch('/api/smart-money');
+    const res = await fetch('/api/sharp-money-feed?limit=5');
     const data = await res.json();
-    if (!data.markets || !data.markets.length) return;
-    const card = document.getElementById('smartMoneyCardExplore');
-    const list = document.getElementById('smartMoneyListExplore');
-    if (!card || !list) return;
-    list.innerHTML = data.markets.slice(0, 5).map(m => {
-      const color = m.yes_pct >= 60 ? '#22c55e' : m.yes_pct <= 40 ? '#ef4444' : '#c9920d';
-      return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
-        <div style="flex:1;min-width:0;font-size:11px;color:var(--text);line-height:1.4;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${m.title}</div>
-        <div style="width:40px;height:5px;border-radius:3px;background:rgba(239,68,68,0.2);overflow:hidden;flex-shrink:0"><div style="height:100%;width:${m.yes_pct}%;background:#22c55e;border-radius:3px"></div></div>
-        <div style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:${color};width:30px;text-align:right;flex-shrink:0">${m.yes_pct}%</div>
+    const list = document.getElementById('sharpMoneyList');
+    if (!list) return;
+    if (!data || !data.length) {
+      list.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:8px 0">No sharp moves in the last 24h</div>';
+      return;
+    }
+    list.innerHTML = data.map(item => {
+      const sideColor = item.side === 'YES' ? '#2d9b5f' : '#c0392b';
+      const sideBg = item.side === 'YES' ? 'rgba(45,155,95,0.12)' : 'rgba(192,57,43,0.12)';
+      const question = (item.question || '').length > 60 ? item.question.substring(0, 57) + '...' : item.question;
+      const timeAgo = _sharpTimeAgo(item.timestamp);
+      const profileUrl = `/p/${encodeURIComponent(item.trader_name)}`;
+      const platformBadge = item.platform ? `<span style="font-family:'Space Mono',monospace;font-size:8px;font-weight:700;padding:1px 4px;border-radius:3px;background:rgba(100,160,255,0.1);color:#6aa0ff;margin-left:4px">${item.platform.toUpperCase()}</span>` : '';
+      return `<div style="padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+          <a href="${profileUrl}" style="font-size:12px;font-weight:700;color:var(--gold);text-decoration:none;font-family:'Space Mono',monospace">${_escH(item.trader_name)}</a>
+          <span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;background:${sideBg};color:${sideColor}">${item.side}</span>
+          ${platformBadge}
+        </div>
+        <div style="font-size:11px;color:var(--text);line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_escH(question)}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">${timeAgo}</div>
       </div>`;
     }).join('');
-    card.style.display = 'block';
   } catch(e) { /* silent */ }
 })();
+
+function _sharpTimeAgo(ts) {
+  if (!ts) return '';
+  const diff = Date.now() - new Date(ts).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return mins + 'm ago';
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return hrs + 'h ago';
+  return Math.floor(hrs / 24) + 'd ago';
+}
+function _escH(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 // Auto-refresh: activity feed polls every 20s for new items (banner); explore every 30s
 activityPollInterval = setInterval(pollNewActivity, 20000);

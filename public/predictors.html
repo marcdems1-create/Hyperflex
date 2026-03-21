@@ -3,17 +3,17 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Polymarket Portfolio Tracker — Track All Your Prediction Market Positions | HYPERFLEX</title>
-<meta name="description" content="Track your Polymarket, Kalshi, and Manifold positions in one dashboard. See your win rate, P&L, and calibration score. Free during beta."/>
-<meta name="keywords" content="polymarket portfolio, kalshi tracker, manifold markets, prediction market dashboard, prediction market portfolio"/>
-<meta property="og:title" content="Polymarket Portfolio Tracker — Track All Your Prediction Market Positions | HYPERFLEX"/>
-<meta property="og:description" content="Track your Polymarket, Kalshi, and Manifold positions in one dashboard. See your win rate, P&L, and calibration score. Free during beta."/>
+<title>Prediction Market Leaderboard — Top Traders Ranked by Sharp Score | HYPERFLEX</title>
+<meta name="description" content="Global prediction market leaderboard. Top traders ranked by verified track record across Polymarket, Kalshi & Manifold. Win rate, P&L, sharp scores."/>
+<meta name="keywords" content="polymarket leaderboard, prediction market rankings, kalshi traders, manifold leaderboard, sharp score, prediction market portfolio"/>
+<meta property="og:title" content="Prediction Market Leaderboard — Top Traders Ranked | HYPERFLEX"/>
+<meta property="og:description" content="Global prediction market leaderboard. Top traders ranked by verified track record across Polymarket, Kalshi & Manifold."/>
 <meta property="og:url" content="https://hyperflex.network/predictors"/>
 <meta property="og:image" content="https://hyperflex.network/og-predictors.png"/>
 <meta property="og:type" content="website"/>
 <meta name="twitter:card" content="summary_large_image"/>
-<meta name="twitter:title" content="Polymarket Portfolio Tracker — Track All Your Prediction Market Positions | HYPERFLEX"/>
-<meta name="twitter:description" content="Track your Polymarket, Kalshi, and Manifold positions in one dashboard. See your win rate, P&L, and calibration score. Free during beta."/>
+<meta name="twitter:title" content="Prediction Market Leaderboard — Top Traders Ranked | HYPERFLEX"/>
+<meta name="twitter:description" content="Global prediction market leaderboard. Top traders ranked by verified track record across Polymarket, Kalshi & Manifold."/>
 <meta name="twitter:image" content="https://hyperflex.network/og-predictors.png"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
@@ -129,263 +129,225 @@ body::before {
 .hero {
   position: relative;
   z-index: 1;
-  padding: 120px 40px 60px;
+  padding: 120px 40px 40px;
   max-width: 900px;
   margin: 0 auto;
   text-align: center;
 }
-.hero-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  color: var(--gold);
-  margin-bottom: 20px;
-}
-.eyebrow-dot {
-  width: 6px; height: 6px;
-  background: var(--gold);
-  border-radius: 50%;
-  animation: pulse 2s ease-in-out infinite;
-}
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
-}
 .hero h1 {
-  font-size: clamp(36px, 5vw, 64px);
+  font-size: clamp(30px, 4vw, 48px);
   font-weight: 800;
-  line-height: 1.1;
+  line-height: 1.15;
   letter-spacing: -0.03em;
   color: var(--text);
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 .hero h1 .accent { color: var(--gold); }
 .hero-sub {
-  font-size: clamp(14px, 1.8vw, 17px);
+  font-size: clamp(13px, 1.6vw, 15px);
   color: var(--dim);
   line-height: 1.6;
-  max-width: 580px;
-  margin: 0 auto 36px;
+  max-width: 540px;
+  margin: 0 auto;
+  font-family: var(--mono);
 }
 
-/* CONTROLS */
-.controls {
+/* TIME FILTER TABS */
+.time-tabs {
   position: relative;
   z-index: 1;
   max-width: 1100px;
-  margin: 0 auto;
-  padding: 0 40px 24px;
-}
-.search-row {
+  margin: 32px auto 0;
+  padding: 0 40px;
   display: flex;
-  gap: 12px;
-  align-items: center;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
 }
-.search-input {
-  flex: 1;
-  min-width: 200px;
-  background: var(--card);
-  border: 1px solid var(--border);
+.time-tab {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 8px 20px;
   border-radius: 8px;
-  padding: 10px 16px;
-  font-family: var(--mono);
-  font-size: 13px;
-  color: var(--text);
-  outline: none;
-  transition: border-color 0.15s;
-}
-.search-input::placeholder { color: var(--muted); }
-.search-input:focus { border-color: var(--gold); }
-
-.pills {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.pill {
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 700;
-  padding: 7px 14px;
-  border-radius: 20px;
   border: 1px solid var(--border);
   background: transparent;
   color: var(--dim);
   cursor: pointer;
   transition: all 0.15s;
-  white-space: nowrap;
+  letter-spacing: 0.5px;
 }
-.pill:hover { border-color: var(--dim); color: var(--text); }
-.pill.active {
-  background: var(--gold);
-  border-color: var(--gold);
-  color: var(--ink);
-}
-
-.filter-tabs {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 12px;
-}
-.filter-tab {
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 700;
-  padding: 6px 14px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--dim);
-  cursor: pointer;
-  transition: all 0.15s;
-  white-space: nowrap;
-}
-.filter-tab:hover { color: var(--text); border-color: var(--dim); }
-.filter-tab.active {
+.time-tab:hover { color: var(--text); border-color: var(--dim); }
+.time-tab.active {
+  background: rgba(201,146,13,0.12);
   border-color: rgba(201,146,13,0.5);
   color: var(--gold);
-  background: rgba(201,146,13,0.08);
 }
 
-/* GRID */
-.grid-wrap {
+/* LEADERBOARD TABLE */
+.lb-wrap {
   position: relative;
   z-index: 1;
   max-width: 1100px;
-  margin: 0 auto;
+  margin: 24px auto 0;
   padding: 0 40px 80px;
 }
-.predictor-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 16px;
+.lb-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
 }
-.predictor-card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 20px;
-  text-decoration: none;
-  display: block;
-  transition: border-color 0.18s, transform 0.18s, box-shadow 0.18s;
-  box-shadow: 0 2px 14px rgba(0,0,0,0.38), inset 0 1px 0 rgba(255,255,255,0.025);
+.lb-table thead th {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--muted);
+  text-align: left;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
 }
-.predictor-card:hover {
-  border-color: rgba(201,146,13,0.5);
-  transform: translateY(-3px);
-  box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(201,146,13,0.08);
+.lb-table thead th:first-child { width: 50px; text-align: center; }
+.lb-table tbody tr {
+  transition: background 0.12s;
+  cursor: pointer;
 }
-.card-top {
+.lb-table tbody tr:hover { background: rgba(201,146,13,0.04); }
+.lb-table tbody td {
+  padding: 14px 14px;
+  border-bottom: 1px solid rgba(42,42,38,0.5);
+  vertical-align: middle;
+  font-size: 13px;
+}
+.lb-table tbody td:first-child { text-align: center; }
+
+/* Rank badges */
+.rank-num {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--dim);
+}
+.rank-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  font-size: 14px;
+}
+.rank-gold { background: linear-gradient(135deg, #f5c842, #c9920d); color: #1a1400; font-weight: 800; }
+.rank-silver { background: linear-gradient(135deg, #c0c0c0, #8a8a8a); color: #1a1a1a; font-weight: 800; }
+.rank-bronze { background: linear-gradient(135deg, #cd7f32, #a0622e); color: #1a1400; font-weight: 800; }
+
+/* Trader cell */
+.trader-cell {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 14px;
+  text-decoration: none;
+  color: inherit;
 }
-.avatar {
-  width: 42px; height: 42px;
+.trader-avatar {
+  width: 36px; height: 36px;
   border-radius: 50%;
   background: linear-gradient(135deg, rgba(201,146,13,0.3), rgba(201,146,13,0.1));
   border: 1px solid rgba(201,146,13,0.3);
   display: flex; align-items: center; justify-content: center;
   font-family: var(--mono);
-  font-size: 16px; font-weight: 700;
+  font-size: 14px; font-weight: 700;
   color: var(--gold);
   flex-shrink: 0;
 }
-.card-info { flex: 1; min-width: 0; }
-.card-name {
-  font-size: 14px;
+.trader-name {
   font-weight: 700;
   color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  margin-bottom: 5px;
+  font-size: 14px;
 }
-.badges {
+.trader-cell:hover .trader-name { color: var(--gold); }
+
+/* Win rate donut */
+.wr-cell {
   display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
-.badge {
+.donut-mini {
+  width: 28px; height: 28px;
+  flex-shrink: 0;
+}
+.donut-mini circle { fill: none; stroke-width: 3.5; }
+.donut-bg { stroke: var(--border); }
+.donut-fill { stroke: var(--green); stroke-linecap: round; transition: stroke-dashoffset 0.5s ease; }
+.wr-val {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* P&L */
+.pnl-pos { color: var(--green); font-family: var(--mono); font-weight: 700; font-size: 13px; }
+.pnl-neg { color: var(--red); font-family: var(--mono); font-weight: 700; font-size: 13px; }
+
+/* Sharp score badge */
+.sharp-badge {
+  display: inline-block;
   font-family: var(--mono);
   font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 12px;
+  letter-spacing: 0.5px;
+}
+.sharp-elite { background: rgba(201,146,13,0.15); color: var(--gold-bright); border: 1px solid rgba(201,146,13,0.4); }
+.sharp-high { background: rgba(45,155,95,0.12); color: var(--green); border: 1px solid rgba(45,155,95,0.3); }
+.sharp-mid { background: rgba(100,160,255,0.1); color: #6aa0ff; border: 1px solid rgba(100,160,255,0.25); }
+.sharp-low { background: rgba(90,88,84,0.15); color: var(--dim); border: 1px solid var(--border); }
+
+/* Trades */
+.trades-val { font-family: var(--mono); font-size: 13px; color: var(--text); }
+
+/* Platform icons */
+.platform-icons {
+  display: flex;
+  gap: 4px;
+}
+.platform-icon {
+  font-family: var(--mono);
+  font-size: 9px;
   font-weight: 700;
   padding: 2px 6px;
   border-radius: 4px;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
 }
-.badge-hfx { background: rgba(201,146,13,0.15); color: var(--gold); border: 1px solid rgba(201,146,13,0.3); }
-.badge-poly { background: rgba(100,160,255,0.12); color: #6aa0ff; border: 1px solid rgba(100,160,255,0.25); }
-.badge-streak { background: rgba(255,140,0,0.12); color: #ff8c00; border: 1px solid rgba(255,140,0,0.25); }
-.badge-sharp { background: rgba(45,155,95,0.12); color: #2d9b5f; border: 1px solid rgba(45,155,95,0.25); }
+.pi-hfx { background: rgba(201,146,13,0.15); color: var(--gold); }
+.pi-poly { background: rgba(100,160,255,0.12); color: #6aa0ff; }
+.pi-kalshi { background: rgba(255,140,0,0.12); color: #ff8c00; }
+.pi-manifold { background: rgba(130,80,230,0.12); color: #a78bfa; }
 
-.win-bar-wrap {
-  margin-bottom: 14px;
-}
-.win-bar-label {
-  display: flex;
-  justify-content: space-between;
+/* Follow button */
+.follow-btn {
   font-family: var(--mono);
-  font-size: 11px;
-  color: var(--muted);
-  margin-bottom: 5px;
-}
-.win-bar-label span:last-child { color: var(--gold); font-weight: 700; }
-.win-bar {
-  height: 4px;
-  background: var(--border);
-  border-radius: 2px;
-  overflow: hidden;
-}
-.win-bar-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--gold), var(--gold-bright));
-  border-radius: 2px;
-  transition: width 0.5s ease;
-}
-
-.card-stats {
-  display: flex;
-  gap: 0;
-  border-top: 1px solid var(--border);
-  padding-top: 12px;
-}
-.stat {
-  flex: 1;
-  text-align: center;
-}
-.stat + .stat {
-  border-left: 1px solid var(--border);
-}
-.stat-val {
-  font-family: var(--mono);
-  font-size: 14px;
+  font-size: 10px;
   font-weight: 700;
-  color: var(--text);
-  margin-bottom: 2px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--gold);
+  background: transparent;
+  color: var(--gold);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
 }
-.stat-val.pos { color: var(--green); }
-.stat-val.neg { color: var(--red); }
-.stat-lbl {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+.follow-btn:hover { background: rgba(201,146,13,0.12); }
+.follow-btn.following {
+  background: rgba(201,146,13,0.15);
+  color: var(--gold-bright);
 }
 
-/* EMPTY / LOADING */
+/* Loading / empty */
 .state-msg {
-  grid-column: 1 / -1;
   text-align: center;
   padding: 60px 20px;
   color: var(--muted);
@@ -393,66 +355,66 @@ body::before {
   font-size: 13px;
 }
 
-/* ── READABILITY & MOBILE POLISH ── */
+/* MOBILE RESPONSIVE */
 @media (max-width: 768px) {
   body { overflow-x: hidden; }
   input, textarea, select { font-size: 16px !important; }
-}
-
-/* RESPONSIVE */
-@media (max-width: 768px) {
   .nav { padding: 0 16px; }
   .nav-links { display: none; }
-  .hero { padding: 100px 20px 48px; }
-  .controls, .grid-wrap { padding-left: 20px; padding-right: 20px; }
-  .search-row { flex-direction: column; align-items: stretch; }
-  /* Single column grid on tablets and phones */
-  .predictor-grid { grid-template-columns: 1fr; }
-  /* Touch targets */
+  .hero { padding: 100px 20px 32px; }
+  .time-tabs { padding: 0 20px; }
+  .lb-wrap { padding: 0 12px 60px; }
+  .lb-table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .lb-table thead { display: none; }
+  .lb-table tbody { display: block; }
+  .lb-table tbody tr {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    padding: 16px 12px;
+    border-bottom: 1px solid var(--border);
+    align-items: center;
+  }
+  .lb-table tbody td {
+    border-bottom: none;
+    padding: 0;
+    font-size: 12px;
+  }
+  .lb-table tbody td:first-child { width: 30px; }
+  .lb-table tbody td.td-trader { flex: 1; min-width: 120px; }
+  .lb-table tbody td.td-follow { margin-left: auto; }
+  .lb-table tbody td.td-wr,
+  .lb-table tbody td.td-pnl,
+  .lb-table tbody td.td-sharp,
+  .lb-table tbody td.td-trades,
+  .lb-table tbody td.td-platforms { display: none; }
+  /* Show key stats inline on mobile */
+  .mobile-stats {
+    display: flex;
+    gap: 12px;
+    width: 100%;
+    padding-top: 6px;
+  }
+  .mobile-stat {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--dim);
+  }
+  .mobile-stat strong { color: var(--text); }
   .btn-nav { min-height: 44px; display: inline-flex; align-items: center; padding: 10px 16px; }
   .nav-logo { min-height: 44px; }
-  .search-input { min-height: 44px; }
-  .pill { min-height: 44px; display: inline-flex; align-items: center; }
-  .filter-tab { min-height: 44px; display: inline-flex; align-items: center; }
+  .time-tab { min-height: 44px; display: inline-flex; align-items: center; }
+  .follow-btn { min-height: 44px; display: inline-flex; align-items: center; }
+}
+@media (min-width: 769px) {
+  .mobile-stats { display: none; }
 }
 @media (max-width: 480px) {
-  .hero { padding: 80px 16px 36px; }
-  .controls, .grid-wrap { padding-left: 12px; padding-right: 12px; }
-
-  /* Cards: tighten spacing */
-  .predictor-grid { gap: 10px; }
-  .predictor-card { padding: 16px; }
-
-  /* Sort pills: horizontal scroll, no wrap */
-  .pills {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    padding-bottom: 4px;
-  }
-  .pills::-webkit-scrollbar { display: none; }
-  .pill { flex-shrink: 0; }
-
-  /* Filter tabs: horizontal scroll, no wrap */
-  .filter-tabs {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    padding-bottom: 4px;
-  }
-  .filter-tabs::-webkit-scrollbar { display: none; }
-  .filter-tab { flex-shrink: 0; }
-
-  /* Search input: full width */
-  .search-input { width: 100%; min-width: 0; font-size: 16px; } /* 16px prevents iOS zoom */
-
-  /* Card stat buttons: min 44px touch targets */
-  .card-stats { gap: 0; }
-  .card-stat { padding: 10px 8px; min-height: 44px; }
+  .hero { padding: 80px 16px 24px; }
+  .hero h1 { font-size: 26px; }
+  .time-tabs { padding: 0 12px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .time-tabs::-webkit-scrollbar { display: none; }
+  .time-tab { flex-shrink: 0; }
 }
 </style>
 </head>
@@ -468,7 +430,7 @@ body::before {
     <span class="nav-name">HYPERFLEX</span>
   </a>
   <div class="nav-links">
-    <a href="/predictors" class="nav-link active">Predictors</a>
+    <a href="/predictors" class="nav-link active">Leaderboard</a>
     <a href="/explore" class="nav-link">Explore</a>
     <a href="/odds" class="nav-link">Odds</a>
     <a href="/templates" class="nav-link">Templates</a>
@@ -482,38 +444,36 @@ body::before {
 
 <!-- HERO -->
 <section class="hero">
-  <div class="hero-eyebrow">
-    <span class="eyebrow-dot"></span>
-    Community leaderboard
-  </div>
-  <h1>Discover <span class="accent">Sharp Predictors</span></h1>
-  <p class="hero-sub">The top minds on HYPERFLEX, ranked by win rate, streak, and P&amp;L across prediction markets.</p>
+  <h1>&#127942; Prediction Market <span class="accent">Leaderboard</span></h1>
+  <p class="hero-sub">Ranked by verified track record across Polymarket &amp; Kalshi</p>
 </section>
 
-<!-- CONTROLS -->
-<div class="controls">
-  <div class="search-row">
-    <input type="text" class="search-input" id="searchInput" placeholder="Search predictors..." oninput="onSearch()"/>
-    <div class="pills" id="sortPills">
-      <button class="pill active" data-sort="win_rate" onclick="setSort('win_rate')">Win Rate</button>
-      <button class="pill" data-sort="predictions" onclick="setSort('predictions')">Most Active</button>
-      <button class="pill" data-sort="streak" onclick="setSort('streak')">Hot Streak</button>
-      <button class="pill" data-sort="pnl" onclick="setSort('pnl')">Top P&amp;L</button>
-    </div>
-  </div>
-  <div class="filter-tabs" id="filterTabs">
-    <button class="filter-tab active" data-filter="all" onclick="setFilter('all')">All</button>
-    <button class="filter-tab" data-filter="poly" onclick="setFilter('poly')">Polymarket Connected</button>
-    <button class="filter-tab" data-filter="streak" onclick="setFilter('streak')">On a Streak</button>
-    <button class="filter-tab" data-filter="sharp" onclick="setFilter('sharp')">Sharp ≥70%</button>
-  </div>
+<!-- TIME FILTER TABS -->
+<div class="time-tabs" id="timeTabs">
+  <button class="time-tab" data-period="7d" onclick="setPeriod('7d')">7D</button>
+  <button class="time-tab active" data-period="30d" onclick="setPeriod('30d')">30D</button>
+  <button class="time-tab" data-period="all" onclick="setPeriod('all')">All Time</button>
 </div>
 
-<!-- GRID -->
-<div class="grid-wrap">
-  <div class="predictor-grid" id="predictorGrid">
-    <div class="state-msg">Loading predictors...</div>
-  </div>
+<!-- LEADERBOARD -->
+<div class="lb-wrap">
+  <table class="lb-table" id="lbTable">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Trader</th>
+        <th>Win Rate</th>
+        <th>P&amp;L</th>
+        <th>Sharp Score</th>
+        <th>Trades</th>
+        <th>Platforms</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="lbBody">
+      <tr><td colspan="8"><div class="state-msg">Loading leaderboard...</div></td></tr>
+    </tbody>
+  </table>
 </div>
 
 <script>
@@ -523,123 +483,138 @@ if (localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token')
   const ll = document.getElementById('navLoginLink'); if (ll) ll.style.display = 'none';
   const sl = document.getElementById('navSignupLink'); if (sl) sl.style.display = 'none';
 }
-let allPredictors = [];
-let currentSort = 'win_rate';
-let currentFilter = 'all';
-let searchQuery = '';
 
-async function loadPredictors() {
+let currentPeriod = '30d';
+let lbData = [];
+
+function setPeriod(period) {
+  currentPeriod = period;
+  document.querySelectorAll('#timeTabs .time-tab').forEach(t =>
+    t.classList.toggle('active', t.dataset.period === period)
+  );
+  loadLeaderboard();
+}
+
+async function loadLeaderboard() {
+  const body = document.getElementById('lbBody');
+  body.innerHTML = '<tr><td colspan="8"><div class="state-msg">Loading leaderboard...</div></td></tr>';
   try {
-    const res = await fetch(`/api/predictors?sort=${currentSort}&limit=100`);
+    const res = await fetch(`/api/leaderboard?period=${currentPeriod}`);
     if (!res.ok) throw new Error('Failed');
-    allPredictors = await res.json();
-    render();
+    lbData = await res.json();
+    renderLeaderboard();
   } catch (e) {
-    document.getElementById('predictorGrid').innerHTML =
-      '<div class="state-msg">Could not load predictors. Try again later.</div>';
+    body.innerHTML = '<tr><td colspan="8"><div class="state-msg">Could not load leaderboard. Try again later.</div></td></tr>';
   }
 }
 
-function setSort(sort) {
-  currentSort = sort;
-  document.querySelectorAll('#sortPills .pill').forEach(p => p.classList.toggle('active', p.dataset.sort === sort));
-  // Re-sort client-side
-  const sorted = [...allPredictors].sort((a, b) => {
-    if (sort === 'win_rate') return b.win_rate - a.win_rate;
-    if (sort === 'predictions') return b.total_predictions - a.total_predictions;
-    if (sort === 'streak') return b.streak - a.streak;
-    if (sort === 'pnl') return b.pnl_pts - a.pnl_pts;
-    return 0;
-  });
-  allPredictors = sorted;
-  render();
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-function setFilter(filter) {
-  currentFilter = filter;
-  document.querySelectorAll('#filterTabs .filter-tab').forEach(t => t.classList.toggle('active', t.dataset.filter === filter));
-  render();
+function rankBadge(rank) {
+  if (rank === 1) return '<span class="rank-badge rank-gold">1</span>';
+  if (rank === 2) return '<span class="rank-badge rank-silver">2</span>';
+  if (rank === 3) return '<span class="rank-badge rank-bronze">3</span>';
+  return `<span class="rank-num">${rank}</span>`;
 }
 
-function onSearch() {
-  searchQuery = document.getElementById('searchInput').value.trim().toLowerCase();
-  render();
+function donutSvg(pct) {
+  const r = 10;
+  const c = 2 * Math.PI * r;
+  const offset = c - (pct / 100) * c;
+  return `<svg class="donut-mini" viewBox="0 0 28 28">
+    <circle class="donut-bg" cx="14" cy="14" r="${r}"/>
+    <circle class="donut-fill" cx="14" cy="14" r="${r}"
+      stroke-dasharray="${c}" stroke-dashoffset="${offset}"
+      transform="rotate(-90 14 14)"/>
+  </svg>`;
 }
 
-function filtered() {
-  return allPredictors.filter(p => {
-    if (searchQuery && !p.display_name.toLowerCase().includes(searchQuery)) return false;
-    if (currentFilter === 'poly' && !p.polymarket_address) return false;
-    if (currentFilter === 'streak' && p.streak < 3) return false;
-    if (currentFilter === 'sharp' && p.win_rate < 70) return false;
-    return true;
-  });
+function sharpBadgeHtml(score) {
+  let cls = 'sharp-low';
+  if (score >= 85) cls = 'sharp-elite';
+  else if (score >= 70) cls = 'sharp-high';
+  else if (score >= 50) cls = 'sharp-mid';
+  return `<span class="sharp-badge ${cls}">${score}</span>`;
 }
 
-function avatarInitial(name) {
-  return (name || '?').charAt(0).toUpperCase();
+function platformIcons(platforms) {
+  const map = {
+    HFX: 'pi-hfx',
+    POLY: 'pi-poly',
+    KALSHI: 'pi-kalshi',
+    MANIFOLD: 'pi-manifold'
+  };
+  return platforms.map(p => {
+    const cls = map[p] || 'pi-hfx';
+    return `<span class="platform-icon ${cls}">${p}</span>`;
+  }).join('');
 }
 
-function pnlDisplay(pts) {
-  const abs = Math.abs(pts);
-  const sign = pts >= 0 ? '+' : '-';
-  return `${sign}${abs.toLocaleString()} pts`;
-}
-
-function renderCard(p) {
-  const badges = [];
-  badges.push('<span class="badge badge-hfx">HFX</span>');
-  if (p.polymarket_address) badges.push('<span class="badge badge-poly">POLY</span>');
-  if (p.streak >= 3) badges.push('<span class="badge badge-streak">🔥 STREAK</span>');
-  if (p.win_rate >= 70) badges.push('<span class="badge badge-sharp">SHARP</span>');
-
-  const pnlClass = p.pnl_pts >= 0 ? 'pos' : 'neg';
-  const winPct = Math.round(p.win_rate || 0);
-  const barWidth = Math.min(winPct, 100);
-  const uid = escHtml(p.user_id);
-
-  return `
-    <div class="predictor-card" style="position:relative">
-      <div style="position:absolute;top:14px;right:14px;display:flex;gap:6px;z-index:1">
-        <button id="copy-btn-${uid}" onclick="toggleCopyTradeCard('${uid}',this)" style="background:none;border:1px solid rgba(124,58,237,0.4);border-radius:20px;padding:4px 12px;font-size:10px;font-family:var(--mono);font-weight:700;color:#a78bfa;cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='rgba(124,58,237,0.12)'" onmouseout="if(!this.dataset.subscribed)this.style.background='none'">🔔 Copy</button>
-        <button id="follow-btn-${uid}" onclick="toggleFollowCard('${uid}',this)" style="background:none;border:1px solid var(--gold);border-radius:20px;padding:4px 12px;font-size:10px;font-family:var(--mono);font-weight:700;color:var(--gold);cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='rgba(201,146,13,0.12)'" onmouseout="if(!this.dataset.following)this.style.background='none'">Follow</button>
+function renderLeaderboard() {
+  const body = document.getElementById('lbBody');
+  if (!lbData.length) {
+    // Demo data
+    const demo = [
+      { rank:1, user_id:'demo1', display_name:'CryptoOracle', win_rate:78, total_pnl:2420, sharp_score:92, trade_count:156, platforms:['HFX','POLY'] },
+      { rank:2, user_id:'demo2', display_name:'MacroMaven', win_rate:72, total_pnl:1680, sharp_score:87, trade_count:89, platforms:['HFX','POLY','KALSHI'] },
+      { rank:3, user_id:'demo3', display_name:'PoliticsGuru', win_rate:69, total_pnl:920, sharp_score:81, trade_count:67, platforms:['HFX'] },
+      { rank:4, user_id:'demo4', display_name:'SportsEdge', win_rate:65, total_pnl:510, sharp_score:74, trade_count:53, platforms:['HFX','MANIFOLD'] },
+      { rank:5, user_id:'demo5', display_name:'DataDriven', win_rate:63, total_pnl:280, sharp_score:68, trade_count:48, platforms:['HFX'] },
+      { rank:6, user_id:'demo6', display_name:'TechSignals', win_rate:60, total_pnl:140, sharp_score:61, trade_count:35, platforms:['HFX'] },
+    ];
+    body.innerHTML = `<tr><td colspan="8">
+      <div style="text-align:center;margin:0 0 24px;padding:16px 20px;background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.2);border-radius:10px">
+        <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px">Connect your wallet to appear on the leaderboard</div>
+        <div style="font-size:13px;color:var(--dim);margin-bottom:12px">These are example rankings. Your real stats show up once you connect Polymarket, Kalshi, or Manifold.</div>
+        <a href="/creator/signup" style="display:inline-flex;align-items:center;gap:6px;background:var(--gold);color:var(--ink);padding:10px 20px;border-radius:8px;font-family:var(--sans);font-weight:700;font-size:13px;text-decoration:none">Get started free &#8594;</a>
       </div>
-      <a href="/m/${uid}" style="text-decoration:none;display:block">
-        <div class="card-top">
-          <div class="avatar">${avatarInitial(p.display_name)}</div>
-          <div class="card-info">
-            <div class="card-name">${escHtml(p.display_name || 'Anonymous')}</div>
-            <div class="badges">${badges.join('')}</div>
-          </div>
-        </div>
-        <div class="win-bar-wrap">
-          <div class="win-bar-label">
-            <span>Win Rate</span>
-            <span>${winPct}%</span>
-          </div>
-          <div class="win-bar">
-            <div class="win-bar-fill" style="width:${barWidth}%"></div>
-          </div>
-        </div>
-        <div class="card-stats">
-          <div class="stat">
-            <div class="stat-val">${p.streak || 0}</div>
-            <div class="stat-lbl">Streak</div>
-          </div>
-          <div class="stat">
-            <div class="stat-val">${p.total_predictions || 0}</div>
-            <div class="stat-lbl">Predictions</div>
-          </div>
-          <div class="stat">
-            <div class="stat-val ${pnlClass}">${pnlDisplay(p.pnl_pts || 0)}</div>
-            <div class="stat-lbl">P&amp;L</div>
-          </div>
-        </div>
-      </a>
-    </div>`;
+    </td></tr>` + demo.map(r => renderRow(r, true)).join('');
+    body.querySelectorAll('tr.demo-row').forEach(r => { r.style.opacity = '0.6'; r.style.pointerEvents = 'none'; });
+    return;
+  }
+  body.innerHTML = lbData.map(r => renderRow(r, false)).join('');
 }
 
-async function toggleFollowCard(userId, btn) {
+function renderRow(r, isDemo) {
+  const initial = (r.display_name || '?').charAt(0).toUpperCase();
+  const pnlClass = r.total_pnl >= 0 ? 'pnl-pos' : 'pnl-neg';
+  const pnlSign = r.total_pnl >= 0 ? '+' : '';
+  const profileUrl = `/p/${escHtml(r.display_name || r.user_id)}`;
+  const uid = escHtml(r.user_id);
+
+  return `<tr class="${isDemo ? 'demo-row' : ''}" onclick="${isDemo ? '' : `window.location='/p/${escHtml(r.display_name || r.user_id)}'`}">
+    <td>${rankBadge(r.rank)}</td>
+    <td class="td-trader">
+      <a href="${profileUrl}" class="trader-cell" onclick="event.stopPropagation()">
+        <div class="trader-avatar">${initial}</div>
+        <span class="trader-name">${escHtml(r.display_name)}</span>
+      </a>
+      <div class="mobile-stats">
+        <span class="mobile-stat"><strong>${r.win_rate}%</strong> WR</span>
+        <span class="mobile-stat ${pnlClass}">${pnlSign}${r.total_pnl.toLocaleString()} pts</span>
+        <span class="mobile-stat">Sharp <strong>${r.sharp_score}</strong></span>
+      </div>
+    </td>
+    <td class="td-wr">
+      <div class="wr-cell">
+        ${donutSvg(r.win_rate)}
+        <span class="wr-val" style="color:${r.win_rate >= 65 ? 'var(--green)' : 'var(--text)'}">${r.win_rate}%</span>
+      </div>
+    </td>
+    <td class="td-pnl"><span class="${pnlClass}">${pnlSign}${r.total_pnl.toLocaleString()} pts</span></td>
+    <td class="td-sharp">${sharpBadgeHtml(r.sharp_score)}</td>
+    <td class="td-trades"><span class="trades-val">${r.trade_count}</span></td>
+    <td class="td-platforms"><div class="platform-icons">${platformIcons(r.platforms)}</div></td>
+    <td class="td-follow">
+      <button class="follow-btn" id="follow-${uid}" onclick="event.stopPropagation();toggleFollow('${uid}',this)"
+        ${isDemo ? 'disabled' : ''}>Follow</button>
+    </td>
+  </tr>`;
+}
+
+async function toggleFollow(userId, btn) {
   const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token');
   if (!token) { alert('Sign in to follow predictors'); return; }
   btn.disabled = true;
@@ -651,66 +626,15 @@ async function toggleFollowCard(userId, btn) {
     if (!r.ok) throw new Error('Failed');
     const d = await r.json();
     btn.textContent = d.following ? 'Following' : 'Follow';
-    btn.style.background = d.following ? 'rgba(201,146,13,0.15)' : 'none';
-    btn.dataset.following = d.following ? '1' : '';
+    btn.classList.toggle('following', d.following);
   } catch (e) {
-    console.warn('[follow-card]', e);
+    console.warn('[follow]', e);
   } finally {
     btn.disabled = false;
   }
 }
 
-async function toggleCopyTradeCard(userId, btn) {
-  const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token');
-  if (!token) { alert('Sign in to copy trades'); return; }
-  btn.disabled = true;
-  try {
-    const r = await fetch(`/api/predictors/${userId}/copy-trade`, {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + token }
-    });
-    if (!r.ok) throw new Error('Failed');
-    const d = await r.json();
-    btn.textContent = d.subscribed ? '🔔 Copying' : '🔔 Copy';
-    btn.style.background = d.subscribed ? 'rgba(124,58,237,0.15)' : 'none';
-    btn.dataset.subscribed = d.subscribed ? '1' : '';
-  } catch (e) {
-    console.warn('[copy-trade-card]', e);
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-function render() {
-  const list = filtered();
-  const grid = document.getElementById('predictorGrid');
-  if (!list.length) {
-    // Show demo cards so the page doesn't look dead
-    const demo = [
-      { display_name:'CryptoOracle', win_rate:74, total_predictions:142, streak:8, pnl_pts:1240, platforms:['HFX','POLY'] },
-      { display_name:'MacroMaven', win_rate:68, total_predictions:89, streak:5, pnl_pts:680, platforms:['HFX','POLY'] },
-      { display_name:'PoliticsGuru', win_rate:65, total_predictions:67, streak:3, pnl_pts:420, platforms:['HFX'] },
-      { display_name:'SportsEdge', win_rate:62, total_predictions:53, streak:4, pnl_pts:310, platforms:['HFX'] },
-      { display_name:'DataDriven', win_rate:61, total_predictions:48, streak:2, pnl_pts:180, platforms:['HFX'] },
-      { display_name:'TechSignals', win_rate:58, total_predictions:35, streak:1, pnl_pts:90, platforms:['HFX'] },
-    ];
-    grid.innerHTML = `<div style="text-align:center;margin-bottom:24px;padding:16px 20px;background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.2);border-radius:10px">
-      <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px">Connect your wallet to appear on the leaderboard</div>
-      <div style="font-size:13px;color:var(--dim);margin-bottom:12px">These are example profiles. Your real stats show up once you connect Polymarket, Kalshi, or Manifold.</div>
-      <a href="/creator/signup" style="display:inline-flex;align-items:center;gap:6px;background:var(--gold);color:var(--ink);padding:10px 20px;border-radius:8px;font-family:var(--sans);font-weight:700;font-size:13px;text-decoration:none">Get started free →</a>
-    </div>` + demo.map(p => renderCard(p)).join('');
-    // Blur demo cards slightly
-    grid.querySelectorAll('.predictor-card').forEach(c => { c.style.opacity = '0.7'; c.style.pointerEvents = 'none'; });
-    return;
-  }
-  grid.innerHTML = list.map(renderCard).join('');
-}
-
-loadPredictors();
+loadLeaderboard();
 </script>
 </body>
 </html>
