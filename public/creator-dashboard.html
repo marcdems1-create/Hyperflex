@@ -2800,6 +2800,7 @@ body.nav-open .sidebar-backdrop {
 }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.9.0/dist/ethers.umd.min.js"></script>
 </head>
 <body>
 <div class="layout">
@@ -4607,6 +4608,20 @@ body.nav-open .sidebar-backdrop {
       <div id="tab-portfolio">
         <div class="section">
           <div style="max-width:860px">
+
+            <!-- Browser Wallet Connect Bar -->
+            <div id="walletConnectBar" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;padding:14px 20px;background:var(--cream);border:1px solid var(--border);border-radius:12px">
+              <div style="display:flex;align-items:center;gap:10px">
+                <span style="font-size:16px">&#x1F4B0;</span>
+                <div>
+                  <div style="font-size:13px;font-weight:700;color:var(--text)">Browser Wallet</div>
+                  <div id="walletConnectStatus" style="font-family:var(--mono);font-size:11px;color:var(--dim)">Not connected</div>
+                </div>
+              </div>
+              <div id="walletConnectActions">
+                <button id="walletConnectBtn" onclick="connectBrowserWallet()" style="background:var(--gold);color:#141412;border:none;border-radius:8px;padding:9px 18px;font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;min-height:44px" onmouseover="this.style.opacity='0.88'" onmouseout="this.style.opacity='1'">&#x1F517; Connect Wallet</button>
+              </div>
+            </div>
 
             <!-- Welcome state (shown when nothing connected) -->
             <div id="portfolioWelcome" style="display:none">
@@ -12298,7 +12313,10 @@ function renderPositionCard({question,side,pct,meta,pnl,pnlLabel,pnlIsPercent,ur
   const pnlStr=pnl==null?'':(pnl>=0?'+':'')+(pnlIsPercent?pnl.toFixed(1)+'%':'$'+Math.abs(pnl).toFixed(2));
   const probBar=Math.max(0,Math.min(100,pct||0));
   const posJson=JSON.stringify(posData||{}).replace(/'/g,"&#39;").replace(/"/g,"&quot;");
-  return `<div style="background:#0f0e0c;border:1px solid #2a2825;border-radius:12px;overflow:hidden;margin-bottom:8px;transition:border-color .15s,box-shadow .15s" onmouseover="this.style.borderColor='${accentColor}55';this.style.boxShadow='0 0 0 1px ${accentColor}22'" onmouseout="this.style.borderColor='#2a2825';this.style.boxShadow='none'"><div style="height:2px;background:${accentColor};opacity:0.5"></div><div style="padding:16px 18px"><div style="display:flex;align-items:flex-start;gap:12px"><span style="flex-shrink:0;margin-top:1px;font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 9px;border-radius:5px;background:${sideBg};color:${sideColor};border:1px solid ${sideBorder}">${side||'—'}</span><div style="flex:1;min-width:0"><a href="${url}" target="_blank" rel="noopener" style="text-decoration:none"><div style="font-size:13px;font-weight:600;color:#e8e4de;line-height:1.5;margin-bottom:10px">${escHtmlDash(question)}</div></a><div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span style="font-family:var(--mono);font-size:10px;color:#6b6560">Current odds</span><span style="font-family:var(--mono);font-size:11px;font-weight:700;color:${accentColor}">${pct!=null?pct+'%':'—'}</span></div><div style="height:4px;background:#1e1c19;border-radius:2px;overflow:hidden"><div style="height:100%;width:${probBar}%;background:${accentColor};border-radius:2px"></div></div></div><div style="font-family:var(--mono);font-size:11px;color:#6b6560">${meta||''}</div></div>${pnl!=null?`<div style="flex-shrink:0;text-align:right"><div style="font-family:var(--mono);font-size:15px;font-weight:800;color:${pnlColor}">${pnlStr}</div></div>`:''}</div><div style="margin-top:12px;padding-top:10px;border-top:1px solid #1e1c19;display:flex;justify-content:flex-end"><button data-pos="${posJson}" onclick="sharePositionToFeed(JSON.parse(this.getAttribute('data-pos').replace(/&quot;/g,'\\"')))" style="background:none;border:1px solid #2a2825;border-radius:6px;padding:5px 14px;font-size:10px;color:#6b6560;cursor:pointer;font-family:var(--mono);transition:all .15s;letter-spacing:.04em" onmouseover="this.style.borderColor='${accentColor}';this.style.color='${accentColor}'" onmouseout="this.style.borderColor='#2a2825';this.style.color='#6b6560'">📢 SHARE TO FEED</button></div></div></div>`;
+  const walletConnected=!!window._connectedWallet;
+  const isPoly=(posData&&posData.platform==='polymarket');
+  const tradeActionsHtml=isPoly?`<div class="poly-trade-actions" style="display:${walletConnected?'flex':'none'};gap:6px;margin-left:auto"><button data-pos="${posJson}" onclick="openTradeModal(JSON.parse(this.getAttribute('data-pos').replace(/&quot;/g,'\\&quot;')),'buy')" style="background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:6px;padding:5px 12px;font-size:10px;color:#22c55e;cursor:pointer;font-family:var(--mono);transition:all .15s;letter-spacing:.04em;min-height:32px" onmouseover="this.style.background='rgba(34,197,94,0.2)'" onmouseout="this.style.background='rgba(34,197,94,0.1)'">Buy More &rarr;</button><button data-pos="${posJson}" onclick="openTradeModal(JSON.parse(this.getAttribute('data-pos').replace(/&quot;/g,'\\&quot;')),'sell')" style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.3);border-radius:6px;padding:5px 12px;font-size:10px;color:#f87171;cursor:pointer;font-family:var(--mono);transition:all .15s;letter-spacing:.04em;min-height:32px" onmouseover="this.style.background='rgba(248,113,113,0.2)'" onmouseout="this.style.background='rgba(248,113,113,0.1)'">Sell &rarr;</button><button data-pos="${posJson}" onclick="closePositionAll(JSON.parse(this.getAttribute('data-pos').replace(/&quot;/g,'\\&quot;')))" style="background:none;border:1px solid #2a2825;border-radius:6px;padding:5px 12px;font-size:10px;color:#6b6560;cursor:pointer;font-family:var(--mono);transition:all .15s;letter-spacing:.04em;min-height:32px" onmouseover="this.style.borderColor='#f87171';this.style.color='#f87171'" onmouseout="this.style.borderColor='#2a2825';this.style.color='#6b6560'">Close All</button></div>`:'';
+  return `<div style="background:#0f0e0c;border:1px solid #2a2825;border-radius:12px;overflow:hidden;margin-bottom:8px;transition:border-color .15s,box-shadow .15s" onmouseover="this.style.borderColor='${accentColor}55';this.style.boxShadow='0 0 0 1px ${accentColor}22'" onmouseout="this.style.borderColor='#2a2825';this.style.boxShadow='none'"><div style="height:2px;background:${accentColor};opacity:0.5"></div><div style="padding:16px 18px"><div style="display:flex;align-items:flex-start;gap:12px"><span style="flex-shrink:0;margin-top:1px;font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 9px;border-radius:5px;background:${sideBg};color:${sideColor};border:1px solid ${sideBorder}">${side||'—'}</span><div style="flex:1;min-width:0"><a href="${url}" target="_blank" rel="noopener" style="text-decoration:none"><div style="font-size:13px;font-weight:600;color:#e8e4de;line-height:1.5;margin-bottom:10px">${escHtmlDash(question)}</div></a><div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span style="font-family:var(--mono);font-size:10px;color:#6b6560">Current odds</span><span style="font-family:var(--mono);font-size:11px;font-weight:700;color:${accentColor}">${pct!=null?pct+'%':'—'}</span></div><div style="height:4px;background:#1e1c19;border-radius:2px;overflow:hidden"><div style="height:100%;width:${probBar}%;background:${accentColor};border-radius:2px"></div></div></div><div style="font-family:var(--mono);font-size:11px;color:#6b6560">${meta||''}</div></div>${pnl!=null?`<div style="flex-shrink:0;text-align:right"><div style="font-family:var(--mono);font-size:15px;font-weight:800;color:${pnlColor}">${pnlStr}</div></div>`:''}</div><div style="margin-top:12px;padding-top:10px;border-top:1px solid #1e1c19;display:flex;align-items:center;gap:6px;flex-wrap:wrap"><button data-pos="${posJson}" onclick="sharePositionToFeed(JSON.parse(this.getAttribute('data-pos').replace(/&quot;/g,'\\"')))" style="background:none;border:1px solid #2a2825;border-radius:6px;padding:5px 14px;font-size:10px;color:#6b6560;cursor:pointer;font-family:var(--mono);transition:all .15s;letter-spacing:.04em" onmouseover="this.style.borderColor='${accentColor}';this.style.color='${accentColor}'" onmouseout="this.style.borderColor='#2a2825';this.style.color='#6b6560'">SHARE TO FEED</button>${tradeActionsHtml}</div></div></div>`;
 }
 let _hfxPositionsLoaded = false;
 async function loadHFXPositions(force) {
@@ -12464,7 +12482,372 @@ async function sharePositionToFeed(p) {
     showToast('Failed to share', 'error');
   }
 }
+
+// ── BROWSER WALLET CONNECTION (MetaMask / Coinbase Wallet) ──────────────────
+window._connectedWallet = localStorage.getItem('hf_wallet_address') || null;
+window._walletSigner = null;
+
+function updateWalletUI() {
+  const bar = document.getElementById('walletConnectBar');
+  const status = document.getElementById('walletConnectStatus');
+  const actions = document.getElementById('walletConnectActions');
+  if (!bar) return;
+  if (window._connectedWallet) {
+    const addr = window._connectedWallet;
+    status.innerHTML = '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#22c55e;margin-right:6px"></span><span style="color:#22c55e">' + addr.slice(0,6) + '...' + addr.slice(-4) + '</span>';
+    actions.innerHTML = '<button onclick="disconnectBrowserWallet()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-family:var(--mono);font-size:11px;color:var(--dim);cursor:pointer;min-height:44px" onmouseover="this.style.borderColor=\'var(--gold)\';this.style.color=\'var(--gold)\'" onmouseout="this.style.borderColor=\'var(--border)\';this.style.color=\'var(--dim)\'">Disconnect</button>';
+  } else {
+    status.textContent = 'Not connected';
+    actions.innerHTML = '<button id="walletConnectBtn" onclick="connectBrowserWallet()" style="background:var(--gold);color:#141412;border:none;border-radius:8px;padding:9px 18px;font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;min-height:44px" onmouseover="this.style.opacity=\'0.88\'" onmouseout="this.style.opacity=\'1\'">&#x1F517; Connect Wallet</button>';
+  }
+  // Show/hide trade buttons on position cards
+  document.querySelectorAll('.poly-trade-actions').forEach(el => {
+    el.style.display = window._connectedWallet ? 'flex' : 'none';
+  });
+}
+
+async function connectBrowserWallet() {
+  if (typeof window.ethereum === 'undefined') {
+    showToast('Install MetaMask or Coinbase Wallet to trade', 'error');
+    return;
+  }
+  const btn = document.getElementById('walletConnectBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Connecting...'; }
+  try {
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const signer = await provider.getSigner();
+    const address = await signer.getAddress();
+    window._connectedWallet = address;
+    window._walletSigner = signer;
+    localStorage.setItem('hf_wallet_address', address);
+    updateWalletUI();
+    // Save wallet to user profile
+    const token = localStorage.getItem('hf_token');
+    if (token) {
+      fetch('/api/user/wallets', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ polymarket_address: address })
+      }).catch(() => {});
+    }
+    // If polymarket address not set, set it and reload positions
+    if (!_polyWalletAddress) {
+      _polyWalletAddress = address;
+      renderPolymarketConnectState();
+      loadPolymarketPositions(true);
+    }
+    showToast('Wallet connected: ' + address.slice(0,6) + '...' + address.slice(-4), 'success');
+  } catch (e) {
+    showToast('Wallet connection failed: ' + (e.message || 'User rejected'), 'error');
+    if (btn) { btn.disabled = false; btn.innerHTML = '&#x1F517; Connect Wallet'; }
+  }
+}
+
+function disconnectBrowserWallet() {
+  window._connectedWallet = null;
+  window._walletSigner = null;
+  localStorage.removeItem('hf_wallet_address');
+  updateWalletUI();
+  showToast('Wallet disconnected', 'success');
+}
+
+// Restore wallet UI on page load
+if (window._connectedWallet) {
+  setTimeout(updateWalletUI, 500);
+}
+
+// Listen for account changes
+if (typeof window.ethereum !== 'undefined') {
+  window.ethereum.on && window.ethereum.on('accountsChanged', function(accounts) {
+    if (accounts.length === 0) {
+      disconnectBrowserWallet();
+    } else if (accounts[0] !== window._connectedWallet) {
+      window._connectedWallet = accounts[0];
+      localStorage.setItem('hf_wallet_address', accounts[0]);
+      updateWalletUI();
+      showToast('Wallet switched to ' + accounts[0].slice(0,6) + '...' + accounts[0].slice(-4), 'success');
+    }
+  });
+}
+
+// ── TRADE MODAL ─────────────────────────────────────────────────────────────
+let _tradeModalData = null;
+
+function openTradeModal(posDataJson, mode) {
+  const pos = typeof posDataJson === 'string' ? JSON.parse(posDataJson) : posDataJson;
+  _tradeModalData = { ...pos, mode: mode || 'buy' };
+  const modal = document.getElementById('tradeModal');
+  if (!modal) return;
+
+  document.getElementById('tradeModalQuestion').textContent = pos.question || 'Unknown market';
+  document.getElementById('tradeModalSide').textContent = pos.side || '—';
+  document.getElementById('tradeModalSide').style.color = pos.side === 'YES' ? '#22c55e' : '#f87171';
+  document.getElementById('tradeModalShares').textContent = (pos.shares || 0).toFixed(2) + ' shares';
+  const price = pos.probability || pos.current_price || 0;
+  document.getElementById('tradeModalPrice').textContent = (price * 100).toFixed(1) + '\u00A2';
+
+  // Set mode
+  setTradeMode(mode || 'buy');
+  document.getElementById('tradeAmount').value = '';
+  document.getElementById('tradeEstimate').textContent = '—';
+  document.getElementById('tradeModalError').style.display = 'none';
+  document.getElementById('tradeConfirmBtn').disabled = false;
+  document.getElementById('tradeConfirmBtn').textContent = 'Confirm Trade';
+
+  // Fetch orderbook
+  loadOrderbook(pos);
+
+  modal.style.display = 'flex';
+}
+
+function closeTradeModal() {
+  const modal = document.getElementById('tradeModal');
+  if (modal) modal.style.display = 'none';
+  _tradeModalData = null;
+}
+
+function setTradeMode(mode) {
+  _tradeModalData.mode = mode;
+  const buyBtn = document.getElementById('tradeBuyBtn');
+  const sellBtn = document.getElementById('tradeSellBtn');
+  if (buyBtn) {
+    buyBtn.style.background = mode === 'buy' ? '#22c55e' : 'transparent';
+    buyBtn.style.color = mode === 'buy' ? '#fff' : '#22c55e';
+    buyBtn.style.border = mode === 'buy' ? '1px solid #22c55e' : '1px solid #2a2825';
+  }
+  if (sellBtn) {
+    sellBtn.style.background = mode === 'sell' ? '#f87171' : 'transparent';
+    sellBtn.style.color = mode === 'sell' ? '#fff' : '#f87171';
+    sellBtn.style.border = mode === 'sell' ? '1px solid #f87171' : '1px solid #2a2825';
+  }
+  updateTradeEstimate();
+}
+
+async function loadOrderbook(pos) {
+  const el = document.getElementById('tradeOrderbookInfo');
+  if (!el) return;
+  el.innerHTML = '<span style="color:var(--dim);font-family:var(--mono);font-size:11px">Loading orderbook...</span>';
+  try {
+    const tokenId = pos.id || pos.conditionId || '';
+    if (!tokenId) { el.innerHTML = '<span style="color:var(--dim);font-size:11px">No token ID</span>'; return; }
+    const r = await fetch('/api/polymarket/orderbook/' + encodeURIComponent(tokenId));
+    const data = await r.json();
+    if (data.error) { el.innerHTML = '<span style="color:#f87171;font-size:11px">' + data.error + '</span>'; return; }
+    _tradeModalData._orderbook = data;
+    const bestBid = data.best_bid ? (data.best_bid * 100).toFixed(1) + '\u00A2' : '—';
+    const bestAsk = data.best_ask ? (data.best_ask * 100).toFixed(1) + '\u00A2' : '—';
+    el.innerHTML = '<div style="display:flex;gap:20px;font-family:var(--mono);font-size:11px"><div><span style="color:var(--dim)">Best Bid:</span> <span style="color:#22c55e;font-weight:700">' + bestBid + '</span></div><div><span style="color:var(--dim)">Best Ask:</span> <span style="color:#f87171;font-weight:700">' + bestAsk + '</span></div><div><span style="color:var(--dim)">Spread:</span> <span style="color:var(--gold);font-weight:700">' + (data.spread != null ? (data.spread * 100).toFixed(1) + '\u00A2' : '—') + '</span></div></div>';
+    updateTradeEstimate();
+  } catch (e) {
+    el.innerHTML = '<span style="color:#f87171;font-size:11px">Failed to load orderbook</span>';
+  }
+}
+
+function updateTradeEstimate() {
+  const el = document.getElementById('tradeEstimate');
+  if (!el || !_tradeModalData) return;
+  const amount = parseFloat(document.getElementById('tradeAmount')?.value) || 0;
+  if (!amount) { el.textContent = '—'; return; }
+  const ob = _tradeModalData._orderbook;
+  const mode = _tradeModalData.mode;
+  if (mode === 'buy') {
+    const price = ob?.best_ask || (_tradeModalData.probability || _tradeModalData.current_price || 0.5);
+    const shares = price > 0 ? (amount / price).toFixed(2) : '0';
+    el.innerHTML = '<span style="color:#22c55e;font-weight:700">~' + shares + ' shares</span> at ' + (price * 100).toFixed(1) + '\u00A2 each<br><span style="font-size:10px;color:var(--dim)">Cost: $' + amount.toFixed(2) + '</span>';
+  } else {
+    const price = ob?.best_bid || (_tradeModalData.probability || _tradeModalData.current_price || 0.5);
+    const proceeds = (amount * price).toFixed(2);
+    el.innerHTML = '<span style="color:#f87171;font-weight:700">~$' + proceeds + ' proceeds</span> at ' + (price * 100).toFixed(1) + '\u00A2 each<br><span style="font-size:10px;color:var(--dim)">Selling ' + amount + ' shares</span>';
+  }
+}
+
+async function confirmTrade() {
+  if (!window._connectedWallet || !window._walletSigner) {
+    showToast('Connect your wallet first', 'error');
+    return;
+  }
+  if (!_tradeModalData) return;
+
+  const errEl = document.getElementById('tradeModalError');
+  const btn = document.getElementById('tradeConfirmBtn');
+  errEl.style.display = 'none';
+  const amount = parseFloat(document.getElementById('tradeAmount')?.value) || 0;
+  if (!amount || amount <= 0) {
+    errEl.textContent = 'Enter a valid amount';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Signing order...';
+
+  try {
+    const tokenId = _tradeModalData.id || _tradeModalData.conditionId || '';
+    const side = _tradeModalData.mode === 'buy' ? 'BUY' : 'SELL';
+    const ob = _tradeModalData._orderbook || {};
+    const price = side === 'BUY' ? (ob.best_ask || 0.5) : (ob.best_bid || 0.5);
+
+    // Build EIP-712 typed data for Polymarket CLOB order
+    const domain = {
+      name: 'Polymarket CTF Exchange',
+      version: '1',
+      chainId: 137
+    };
+    const types = {
+      Order: [
+        { name: 'salt', type: 'uint256' },
+        { name: 'maker', type: 'address' },
+        { name: 'signer', type: 'address' },
+        { name: 'taker', type: 'address' },
+        { name: 'tokenId', type: 'uint256' },
+        { name: 'makerAmount', type: 'uint256' },
+        { name: 'takerAmount', type: 'uint256' },
+        { name: 'expiration', type: 'uint256' },
+        { name: 'nonce', type: 'uint256' },
+        { name: 'feeRateBps', type: 'uint256' },
+        { name: 'side', type: 'uint8' },
+        { name: 'signatureType', type: 'uint8' }
+      ]
+    };
+
+    const salt = BigInt(Math.floor(Math.random() * 2**128)).toString();
+    const makerAmount = side === 'BUY'
+      ? Math.floor(amount * 1e6).toString()
+      : Math.floor(amount * 1e6).toString();
+    const takerAmount = side === 'BUY'
+      ? Math.floor(amount / price * 1e6).toString()
+      : Math.floor(amount * price * 1e6).toString();
+
+    const orderData = {
+      salt: salt,
+      maker: window._connectedWallet,
+      signer: window._connectedWallet,
+      taker: '0x0000000000000000000000000000000000000000',
+      tokenId: tokenId,
+      makerAmount: makerAmount,
+      takerAmount: takerAmount,
+      expiration: '0',
+      nonce: '0',
+      feeRateBps: '0',
+      side: side === 'BUY' ? 0 : 1,
+      signatureType: 0
+    };
+
+    btn.textContent = 'Sign in wallet...';
+
+    // Request wallet signature (MetaMask popup)
+    const signature = await window._walletSigner.signTypedData(domain, types, orderData);
+
+    btn.textContent = 'Submitting order...';
+
+    // Submit signed order to server proxy
+    const token = localStorage.getItem('hf_token');
+    const r = await fetch('/api/polymarket/order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({
+        signed_order: { ...orderData, signature },
+        market_id: _tradeModalData.id || tokenId,
+        side: side,
+        amount: amount
+      })
+    });
+
+    const data = await r.json();
+    if (!r.ok) {
+      errEl.textContent = data.error || 'Order failed';
+      errEl.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Confirm Trade';
+      return;
+    }
+
+    showToast((side === 'BUY' ? 'Buy' : 'Sell') + ' order submitted!', 'success');
+    closeTradeModal();
+
+    // Refresh positions
+    setTimeout(() => loadPolymarketPositions(true), 2000);
+
+  } catch (e) {
+    if (e.code === 'ACTION_REJECTED' || e.code === 4001) {
+      errEl.textContent = 'Transaction rejected in wallet';
+    } else {
+      errEl.textContent = 'Trade failed: ' + (e.shortMessage || e.message || 'Unknown error');
+    }
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Confirm Trade';
+  }
+}
+
+function closePositionAll(posDataJson) {
+  const pos = typeof posDataJson === 'string' ? JSON.parse(posDataJson) : posDataJson;
+  if (!window._connectedWallet) { showToast('Connect your wallet first', 'error'); return; }
+  if (!confirm('Close entire position? This will sell all ' + (pos.shares || 0).toFixed(2) + ' shares at market price.')) return;
+  openTradeModal(pos, 'sell');
+  // Pre-fill amount with total shares
+  const amountInput = document.getElementById('tradeAmount');
+  if (amountInput && pos.shares) {
+    amountInput.value = pos.shares.toFixed(2);
+    updateTradeEstimate();
+  }
+}
 </script>
+
+<!-- Trade Modal -->
+<div id="tradeModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:center;justify-content:center;backdrop-filter:blur(4px)" onclick="if(event.target===this)closeTradeModal()">
+  <div style="background:var(--cream);border:1px solid var(--border);border-radius:16px;width:95%;max-width:480px;overflow:hidden;box-shadow:0 24px 48px rgba(0,0,0,0.4)">
+    <div style="height:2px;background:linear-gradient(90deg,#7c3aed,var(--gold),#7c3aed)"></div>
+    <div style="padding:28px">
+      <!-- Header -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+        <div style="font-size:16px;font-weight:800;color:var(--text)">Trade Position</div>
+        <button onclick="closeTradeModal()" style="background:none;border:none;font-size:20px;color:var(--dim);cursor:pointer;padding:4px">&times;</button>
+      </div>
+      <!-- Market question -->
+      <div id="tradeModalQuestion" style="font-size:14px;font-weight:600;color:var(--text);line-height:1.5;margin-bottom:16px;padding:12px 14px;background:rgba(124,58,237,0.06);border:1px solid rgba(124,58,237,0.15);border-radius:10px">—</div>
+      <!-- Current position info -->
+      <div style="display:flex;gap:16px;margin-bottom:20px">
+        <div style="flex:1;background:var(--ink);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
+          <div style="font-family:var(--mono);font-size:9px;color:var(--dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px">Side</div>
+          <div id="tradeModalSide" style="font-family:var(--mono);font-size:14px;font-weight:700">—</div>
+        </div>
+        <div style="flex:1;background:var(--ink);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
+          <div style="font-family:var(--mono);font-size:9px;color:var(--dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px">Shares</div>
+          <div id="tradeModalShares" style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--text)">—</div>
+        </div>
+        <div style="flex:1;background:var(--ink);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
+          <div style="font-family:var(--mono);font-size:9px;color:var(--dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px">Price</div>
+          <div id="tradeModalPrice" style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--gold)">—</div>
+        </div>
+      </div>
+      <!-- Orderbook info -->
+      <div id="tradeOrderbookInfo" style="margin-bottom:16px;padding:10px 14px;background:rgba(201,146,13,0.04);border:1px solid rgba(201,146,13,0.12);border-radius:8px">
+        <span style="color:var(--dim);font-family:var(--mono);font-size:11px">Loading orderbook...</span>
+      </div>
+      <!-- BUY / SELL toggle -->
+      <div style="display:flex;gap:8px;margin-bottom:16px">
+        <button id="tradeBuyBtn" onclick="setTradeMode('buy')" style="flex:1;background:#22c55e;color:#fff;border:1px solid #22c55e;border-radius:8px;padding:10px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;min-height:44px">BUY</button>
+        <button id="tradeSellBtn" onclick="setTradeMode('sell')" style="flex:1;background:transparent;color:#f87171;border:1px solid #2a2825;border-radius:8px;padding:10px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;min-height:44px">SELL</button>
+      </div>
+      <!-- Amount input -->
+      <div style="margin-bottom:12px">
+        <label style="font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.08em;text-transform:uppercase;display:block;margin-bottom:6px">Amount (shares for sell, $ for buy)</label>
+        <input id="tradeAmount" type="number" step="0.01" min="0" placeholder="0.00" oninput="updateTradeEstimate()" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:10px;padding:13px 16px;font-family:var(--mono);font-size:15px;font-weight:700;color:var(--text);outline:none;box-sizing:border-box" onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='var(--border)'"/>
+      </div>
+      <!-- Estimated cost/proceeds -->
+      <div style="margin-bottom:20px;padding:12px 14px;background:var(--ink);border:1px solid var(--border);border-radius:8px">
+        <div style="font-family:var(--mono);font-size:9px;color:var(--dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px">Estimate</div>
+        <div id="tradeEstimate" style="font-family:var(--mono);font-size:13px;color:var(--text);line-height:1.6">—</div>
+      </div>
+      <!-- Error -->
+      <div id="tradeModalError" style="display:none;color:#f87171;font-size:12px;font-family:var(--mono);padding:8px 12px;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);border-radius:8px;margin-bottom:12px"></div>
+      <!-- Confirm button -->
+      <button id="tradeConfirmBtn" onclick="confirmTrade()" style="width:100%;background:var(--gold);color:#141412;border:none;border-radius:10px;padding:14px;font-family:var(--sans);font-size:14px;font-weight:800;cursor:pointer;min-height:48px;transition:opacity .15s" onmouseover="this.style.opacity='0.88'" onmouseout="this.style.opacity='1'">Confirm Trade</button>
+      <div style="text-align:center;margin-top:10px;font-family:var(--mono);font-size:10px;color:var(--dim)">Order signed in your wallet. We never see your keys.</div>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>

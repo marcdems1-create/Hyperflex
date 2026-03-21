@@ -14914,6 +14914,95 @@ app.get('/api/polymarket/positions/:address', async (req, res) => {
   }
 });
 
+// ── POLYMARKET ORDERBOOK PROXY (10s cache) ────────────────────────────────
+const _orderbookCache = new Map();
+app.get('/api/polymarket/orderbook/:tokenId', async (req, res) => {
+  const tokenId = req.params.tokenId.trim();
+  if (!tokenId) return res.status(400).json({ error: 'Token ID required' });
+
+  const cacheKey = `ob_${tokenId}`;
+  const cached = _orderbookCache.get(cacheKey);
+  if (cached && Date.now() - cached._ts < 10000) return res.json(cached.data);
+
+  try {
+    const upstream = await fetch(`https://clob.polymarket.com/book?token_id=${encodeURIComponent(tokenId)}`, {
+      headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+    });
+    if (!upstream.ok) throw new Error('CLOB API ' + upstream.status);
+    const raw = await upstream.json();
+
+    // Parse best bid/ask from orderbook
+    const bids = raw.bids || [];
+    const asks = raw.asks || [];
+    const bestBid = bids.length > 0 ? parseFloat(bids[0].price) : null;
+    const bestAsk = asks.length > 0 ? parseFloat(asks[0].price) : null;
+    const spread = (bestBid != null && bestAsk != null) ? bestAsk - bestBid : null;
+
+    const data = {
+      token_id: tokenId,
+      best_bid: bestBid,
+      best_ask: bestAsk,
+      spread: spread,
+      bid_depth: bids.length,
+      ask_depth: asks.length,
+      fetched_at: new Date().toISOString()
+    };
+
+    _orderbookCache.set(cacheKey, { _ts: Date.now(), data });
+    res.json(data);
+  } catch (err) {
+    console.error('[polymarket orderbook]', err.message);
+    res.status(502).json({ error: 'Failed to fetch orderbook', detail: err.message });
+  }
+});
+
+// ── POLYMARKET ORDER PROXY (submits signed order to CLOB) ──────────────────
+app.post('/api/polymarket/order', requireAuth, async (req, res) => {
+  const { signed_order, market_id, side, amount } = req.body;
+  if (!signed_order || !signed_order.signature) {
+    return res.status(400).json({ error: 'Signed order with signature required' });
+  }
+  if (!market_id) {
+    return res.status(400).json({ error: 'Market ID required' });
+  }
+
+  try {
+    // Forward the signed order to Polymarket CLOB
+    const upstream = await fetch('https://clob.polymarket.com/order', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'User-Agent': 'Hyperflex/1.0'
+      },
+      body: JSON.stringify(signed_order)
+    });
+
+    const data = await upstream.json().catch(() => ({}));
+
+    if (!upstream.ok) {
+      console.error('[polymarket order]', upstream.status, data);
+      return res.status(upstream.status >= 400 && upstream.status < 500 ? upstream.status : 502).json({
+        error: data.error || data.message || 'Order rejected by Polymarket',
+        detail: data
+      });
+    }
+
+    console.log(`[polymarket order] user=${req.userId} side=${side} amount=${amount} market=${market_id} status=ok`);
+    res.json({
+      success: true,
+      order_id: data.orderID || data.order_id || data.id || null,
+      market_id,
+      side,
+      amount,
+      ...data
+    });
+  } catch (err) {
+    console.error('[polymarket order]', err.message);
+    res.status(502).json({ error: 'Failed to submit order to Polymarket', detail: err.message });
+  }
+});
+
 app.get('/api/manifold/positions/:username', async (req, res) => {
   let username = req.params.username.trim();
   if (!username || !/^[a-zA-Z0-9_-]{1,50}$/.test(username)) return res.status(400).json({ error: 'Invalid username' });
