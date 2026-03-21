@@ -9056,31 +9056,26 @@ app.get('/api/trader-profile/:username', async (req, res) => {
     const username = req.params.username.trim();
     if (!username) return res.status(400).json({ error: 'Username required' });
 
-    // Look up user by display_name (case-insensitive) or username field
+    // Look up user by display_name (case-insensitive)
     let user;
-    if (pool) {
-      const rows = await dbQuery(
-        `SELECT id, display_name, username, email, created_at, polymarket_address, kalshi_api_key, kalshi_username, manifold_username
-         FROM users
-         WHERE LOWER(REPLACE(display_name, ' ', '')) = LOWER($1)
-            OR LOWER(username) = LOWER($1)
-            OR LOWER(display_name) = LOWER($1)
-         LIMIT 1`,
-        [username]
-      );
-      user = rows[0] || null;
-    } else {
-      // Try username field first, then display_name
-      let { data } = await supabase.from('users')
-        .select('id, display_name, username, email, created_at, polymarket_address, kalshi_api_key, kalshi_username, manifold_username')
-        .ilike('username', username).limit(1).maybeSingle();
-      if (!data) {
-        const { data: d2 } = await supabase.from('users')
-          .select('id, display_name, username, email, created_at, polymarket_address, kalshi_api_key, kalshi_username, manifold_username')
-          .ilike('display_name', username).limit(1).maybeSingle();
-        data = d2;
+    try {
+      if (pool) {
+        // Try exact match first, then case-insensitive, then without spaces
+        let rows = await dbQuery('SELECT * FROM users WHERE LOWER(display_name) = LOWER($1) LIMIT 1', [username]);
+        if (!rows.length) rows = await dbQuery('SELECT * FROM users WHERE LOWER(REPLACE(display_name, \' \', \'\')) = LOWER(REPLACE($1, \' \', \'\')) LIMIT 1', [username]);
+        if (!rows.length) rows = await dbQuery('SELECT * FROM users WHERE LOWER(tenant_slug) = LOWER($1) LIMIT 1', [username]);
+        user = rows[0] || null;
+      } else {
+        let { data } = await supabase.from('users').select('*').ilike('display_name', username).limit(1).maybeSingle();
+        if (!data) {
+          const { data: d2 } = await supabase.from('users').select('*').ilike('tenant_slug', username).limit(1).maybeSingle();
+          data = d2;
+        }
+        user = data;
       }
-      user = data;
+    } catch (e) {
+      console.error('[trader-profile] user lookup:', e.message);
+      return res.status(500).json({ error: 'User lookup failed', detail: e.message });
     }
     if (!user) return res.status(404).json({ error: 'User not found' });
 
@@ -9269,7 +9264,7 @@ app.get('/api/trader-profile/:username', async (req, res) => {
     });
   } catch (err) {
     console.error('[trader-profile]', err.message);
-    res.status(500).json({ error: 'Failed to load trader profile' });
+    res.status(500).json({ error: 'Failed to load trader profile', detail: err.message });
   }
 });
 
