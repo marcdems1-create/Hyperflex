@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Trader Profile — HYPERFLEX</title>
+
+  <!-- OG Meta Tags -->
+  <meta property="og:type" content="profile">
+  <meta property="og:title" content="Trader Profile — HYPERFLEX">
+  <meta property="og:description" content="Verified prediction market track record on HYPERFLEX. See win rate, P&L, and best calls across Polymarket, Kalshi & more.">
+  <meta property="og:image" content="https://hyperflex.network/og-default.png">
+  <meta property="og:url" content="https://hyperflex.network">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Trader Profile — HYPERFLEX">
+  <meta name="twitter:description" content="Verified prediction market track record on HYPERFLEX.">
+  <meta name="twitter:image" content="https://hyperflex.network/og-default.png">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --ink: #0e0e0c;
+      --paper: #141412;
+      --surface: #1a1a17;
+      --surface2: #222220;
+      --border: #2a2a27;
+      --border2: #333330;
+      --text: #ddd8cc;
+      --text-muted: #8a8778;
+      --gold: #c9920d;
+      --gold-dim: rgba(201, 146, 13, 0.15);
+      --green: #22c55e;
+      --green-dim: rgba(34, 197, 94, 0.12);
+      --red: #ef4444;
+      --red-dim: rgba(239, 68, 68, 0.12);
+      --blue: #6366f1;
+      --font-display: 'Syne', sans-serif;
+      --font-mono: 'Space Mono', monospace;
+    }
+
+    html { background: var(--ink); }
+    body {
+      font-family: var(--font-mono);
+      background: var(--ink);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    a { color: var(--gold); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Loading ─────────────────────────────────────────────── */
+    #loading {
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh; flex-direction: column; gap: 16px;
+    }
+    #loading .spinner {
+      width: 40px; height: 40px; border: 3px solid var(--border);
+      border-top-color: var(--gold); border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #error-state {
+      display: none; text-align: center; padding: 80px 24px;
+    }
+    #error-state h2 { font-family: var(--font-display); font-size: 24px; margin-bottom: 12px; }
+    #error-state p { color: var(--text-muted); margin-bottom: 24px; }
+
+    #profile-content { display: none; }
+
+    /* ── Container ───────────────────────────────────────────── */
+    .container { max-width: 720px; margin: 0 auto; padding: 0 20px; }
+
+    /* ── Topbar ──────────────────────────────────────────────── */
+    .topbar {
+      background: var(--paper); border-bottom: 1px solid var(--border);
+      padding: 14px 20px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .topbar-logo {
+      font-family: var(--font-display); font-weight: 800;
+      font-size: 16px; color: var(--gold); letter-spacing: 2px;
+    }
+    .topbar-link {
+      font-size: 13px; color: var(--text-muted);
+      min-height: 44px; display: flex; align-items: center;
+    }
+    .topbar-link:hover { color: var(--gold); }
+
+    /* ── Hero ────────────────────────────────────────────────── */
+    .hero {
+      background: var(--paper); border-bottom: 1px solid var(--border);
+      padding: 40px 0 32px;
+    }
+    .hero-inner {
+      display: flex; flex-direction: column; align-items: center; text-align: center;
+    }
+    .avatar {
+      width: 88px; height: 88px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--gold), #e8a813);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-display); font-weight: 800;
+      font-size: 32px; color: var(--ink); margin-bottom: 16px;
+      box-shadow: 0 0 0 3px var(--paper), 0 0 0 5px var(--gold-dim);
+    }
+    .display-name {
+      font-family: var(--font-display); font-size: 28px;
+      font-weight: 700; color: var(--text); margin-bottom: 4px;
+    }
+    .username-text {
+      font-size: 14px; color: var(--text-muted); margin-bottom: 12px;
+    }
+    .verified-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--gold-dim); border: 1px solid rgba(201, 146, 13, 0.3);
+      border-radius: 20px; padding: 5px 14px; font-size: 12px;
+      color: var(--gold); font-weight: 600; margin-bottom: 12px;
+    }
+    .verified-badge svg { width: 14px; height: 14px; }
+    .hero-meta {
+      display: flex; align-items: center; gap: 16px;
+      font-size: 13px; color: var(--text-muted); margin-bottom: 16px;
+    }
+    .hero-actions { display: flex; align-items: center; gap: 12px; }
+    .btn-follow {
+      background: var(--gold); color: var(--ink); border: none;
+      border-radius: 8px; padding: 10px 28px; font-family: var(--font-display);
+      font-weight: 700; font-size: 14px; cursor: pointer;
+      min-height: 44px; transition: opacity 0.15s;
+    }
+    .btn-follow:hover { opacity: 0.85; }
+    .btn-follow.following {
+      background: transparent; color: var(--gold);
+      border: 1px solid var(--gold);
+    }
+    .follower-count { font-size: 13px; color: var(--text-muted); }
+    .follower-count strong { color: var(--text); }
+
+    /* ── Stats Bar ───────────────────────────────────────────── */
+    .stats-bar {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 1px; background: var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .stat-cell {
+      background: var(--paper); padding: 24px 12px;
+      display: flex; flex-direction: column; align-items: center;
+      text-align: center;
+    }
+    .stat-label {
+      font-size: 11px; color: var(--text-muted); text-transform: uppercase;
+      letter-spacing: 1px; margin-bottom: 10px;
+    }
+    .stat-value {
+      font-family: var(--font-display); font-size: 28px;
+      font-weight: 800; line-height: 1;
+    }
+    .stat-sub { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+
+    /* Donut ring for win rate */
+    .donut-ring {
+      width: 72px; height: 72px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 8px; position: relative;
+    }
+    .donut-ring .donut-value {
+      font-family: var(--font-display); font-size: 20px;
+      font-weight: 800; color: var(--text); position: relative; z-index: 1;
+    }
+
+    /* Sharp score badge */
+    .sharp-badge {
+      display: inline-block; padding: 4px 12px; border-radius: 6px;
+      font-family: var(--font-mono); font-size: 13px; font-weight: 700;
+      margin-top: 6px;
+    }
+    .sharp-high { background: var(--green-dim); color: var(--green); }
+    .sharp-mid { background: var(--gold-dim); color: var(--gold); }
+    .sharp-low { background: var(--red-dim); color: var(--red); }
+
+    .pnl-positive { color: var(--green); }
+    .pnl-negative { color: var(--red); }
+
+    /* ── Sections ────────────────────────────────────────────── */
+    .section {
+      padding: 28px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .section-title {
+      font-family: var(--font-display); font-size: 16px;
+      font-weight: 700; margin-bottom: 16px; color: var(--text);
+      text-transform: uppercase; letter-spacing: 1px;
+    }
+
+    /* ── Performance Chart ───────────────────────────────────── */
+    .chart-container {
+      display: flex; align-items: flex-end; gap: 3px;
+      height: 120px; padding: 8px 0;
+    }
+    .chart-bar {
+      flex: 1; min-width: 0; border-radius: 2px 2px 0 0;
+      position: relative; transition: opacity 0.15s;
+    }
+    .chart-bar:hover { opacity: 0.7; }
+    .chart-bar.positive { background: var(--green); }
+    .chart-bar.negative { background: var(--red); }
+    .chart-bar.zero { background: var(--border); min-height: 2px; }
+    .chart-labels {
+      display: flex; justify-content: space-between;
+      font-size: 11px; color: var(--text-muted); margin-top: 6px;
+    }
+
+    /* ── Platform Badges ────────────────────────────────────── */
+    .platform-badges { display: flex; flex-wrap: wrap; gap: 10px; }
+    .platform-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 10px 16px; font-size: 13px;
+      min-height: 44px;
+    }
+    .platform-dot {
+      width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+    }
+    .platform-dot.polymarket { background: #8b5cf6; }
+    .platform-dot.kalshi { background: #eab308; }
+    .platform-dot.manifold { background: #6366f1; }
+    .platform-dot.hyperflex { background: var(--gold); }
+    .platform-name { font-weight: 700; text-transform: capitalize; }
+    .platform-count { color: var(--text-muted); font-size: 12px; }
+
+    /* ── Best Calls ─────────────────────────────────────────── */
+    .best-call {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 16px; margin-bottom: 10px;
+    }
+    .best-call:first-child {
+      border-color: var(--gold);
+      box-shadow: 0 0 0 1px var(--gold-dim);
+    }
+    .best-call:first-child::before {
+      content: '#1 BEST CALL';
+      display: inline-block; font-size: 10px; font-weight: 700;
+      color: var(--gold); background: var(--gold-dim);
+      padding: 2px 8px; border-radius: 4px; margin-bottom: 10px;
+      letter-spacing: 1px;
+    }
+    .bc-question {
+      font-size: 14px; font-weight: 600; color: var(--text);
+      margin-bottom: 8px; line-height: 1.4;
+    }
+    .bc-meta {
+      display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
+      font-size: 12px; color: var(--text-muted);
+    }
+    .bc-side {
+      display: inline-block; padding: 2px 8px; border-radius: 4px;
+      font-size: 11px; font-weight: 700;
+    }
+    .bc-side.yes { background: var(--green-dim); color: var(--green); }
+    .bc-side.no { background: var(--red-dim); color: var(--red); }
+    .bc-pnl { font-weight: 700; }
+
+    /* ── Recent Activity ────────────────────────────────────── */
+    .activity-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 0; border-bottom: 1px solid var(--border);
+    }
+    .activity-item:last-child { border-bottom: none; }
+    .activity-badge {
+      font-size: 10px; font-weight: 700; padding: 3px 8px;
+      border-radius: 4px; letter-spacing: 0.5px; flex-shrink: 0;
+      min-width: 44px; text-align: center;
+    }
+    .badge-won { background: var(--green-dim); color: var(--green); }
+    .badge-lost { background: var(--red-dim); color: var(--red); }
+    .badge-open { background: var(--gold-dim); color: var(--gold); }
+    .activity-question {
+      flex: 1; font-size: 13px; color: var(--text);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .activity-side { font-size: 12px; color: var(--text-muted); flex-shrink: 0; }
+    .activity-time { font-size: 11px; color: var(--text-muted); flex-shrink: 0; }
+
+    /* ── Share Bar ───────────────────────────────────────────── */
+    .share-bar {
+      background: var(--surface); border-top: 1px solid var(--border);
+      padding: 16px 0;
+    }
+    .share-bar-inner {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    }
+    .btn-share-x {
+      background: #000; color: #fff; border: 1px solid #333;
+      border-radius: 8px; padding: 10px 20px; font-family: var(--font-mono);
+      font-size: 13px; font-weight: 700; cursor: pointer;
+      min-height: 44px; display: inline-flex; align-items: center; gap: 8px;
+      transition: background 0.15s;
+    }
+    .btn-share-x:hover { background: #1a1a1a; }
+    .btn-copy-link {
+      background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px 20px; font-family: var(--font-mono);
+      font-size: 13px; cursor: pointer; min-height: 44px;
+      display: inline-flex; align-items: center; gap: 6px;
+      transition: border-color 0.15s;
+    }
+    .btn-copy-link:hover { border-color: var(--gold); }
+
+    /* ── CTA ─────────────────────────────────────────────────── */
+    .cta-section {
+      background: linear-gradient(135deg, var(--surface), var(--paper));
+      border: 1px solid var(--border); border-radius: 14px;
+      padding: 32px 24px; text-align: center; margin: 32px 0;
+    }
+    .cta-section h3 {
+      font-family: var(--font-display); font-size: 20px;
+      font-weight: 700; margin-bottom: 10px;
+    }
+    .cta-section p {
+      color: var(--text-muted); font-size: 14px; margin-bottom: 20px;
+    }
+    .btn-cta {
+      background: var(--gold); color: var(--ink); border: none;
+      border-radius: 8px; padding: 14px 32px; font-family: var(--font-display);
+      font-weight: 700; font-size: 15px; cursor: pointer;
+      min-height: 44px; display: inline-flex; align-items: center;
+      transition: opacity 0.15s; text-decoration: none;
+    }
+    .btn-cta:hover { opacity: 0.85; text-decoration: none; }
+
+    /* ── Responsive ──────────────────────────────────────────── */
+    @media (max-width: 768px) {
+      .stats-bar { grid-template-columns: repeat(2, 1fr); }
+      .stat-value { font-size: 22px; }
+      .donut-ring { width: 60px; height: 60px; }
+      .donut-ring .donut-value { font-size: 16px; }
+      .display-name { font-size: 22px; }
+      .avatar { width: 72px; height: 72px; font-size: 26px; }
+      .hero { padding: 28px 0 24px; }
+      .activity-question { max-width: 160px; }
+    }
+
+    @media (max-width: 480px) {
+      .container { padding: 0 14px; }
+      .share-bar { position: sticky; bottom: 0; z-index: 100; }
+      .share-bar-inner { justify-content: center; }
+      .chart-container { height: 80px; }
+      .bc-meta { font-size: 11px; }
+    }
+
+    /* ── No data states ──────────────────────────────────────── */
+    .empty-state {
+      text-align: center; padding: 24px; color: var(--text-muted);
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Loading -->
+  <div id="loading">
+    <div class="spinner"></div>
+    <span style="color: var(--text-muted); font-size: 13px;">Loading profile...</span>
+  </div>
+
+  <!-- Error -->
+  <div id="error-state">
+    <h2>Trader not found</h2>
+    <p>This profile doesn't exist or hasn't been set up yet.</p>
+    <a href="/" class="btn-cta">Go to HYPERFLEX</a>
+  </div>
+
+  <!-- Profile Content -->
+  <div id="profile-content">
+
+    <!-- Topbar -->
+    <div class="topbar">
+      <a href="/" class="topbar-logo">HYPERFLEX</a>
+      <a href="/predictors" class="topbar-link">Discover Predictors</a>
+    </div>
+
+    <!-- Hero -->
+    <div class="hero">
+      <div class="container hero-inner">
+        <div class="avatar" id="avatar-initials">--</div>
+        <div class="display-name" id="display-name">---</div>
+        <div class="username-text" id="username-text">@---</div>
+        <div class="verified-badge">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+          Verified on HYPERFLEX
+        </div>
+        <div class="hero-meta">
+          <span id="member-since">Member since ---</span>
+          <span>&middot;</span>
+          <span class="follower-count" id="follower-count"><strong>0</strong> followers</span>
+        </div>
+        <div class="hero-actions" id="hero-actions" style="display:none;">
+          <button class="btn-follow" id="btn-follow" onclick="toggleFollow()">Follow</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats Bar -->
+    <div class="stats-bar">
+      <div class="stat-cell">
+        <div class="stat-label">Win Rate</div>
+        <div class="donut-ring" id="donut-ring">
+          <span class="donut-value" id="win-rate-value">--</span>
+        </div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-label">Total P&L</div>
+        <div class="stat-value" id="total-pnl">--</div>
+        <div class="stat-sub" id="pnl-sub">across all platforms</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-label">Sharp Score</div>
+        <div class="stat-value" id="sharp-score-value">--</div>
+        <div id="sharp-badge-container"></div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-label">Total Trades</div>
+        <div class="stat-value" id="total-trades">--</div>
+      </div>
+    </div>
+
+    <!-- Performance Chart -->
+    <div class="container">
+      <div class="section">
+        <div class="section-title">30-Day P&L</div>
+        <div class="chart-container" id="pnl-chart"></div>
+        <div class="chart-labels">
+          <span id="chart-start">---</span>
+          <span id="chart-end">---</span>
+        </div>
+      </div>
+
+      <!-- Platform Badges -->
+      <div class="section">
+        <div class="section-title">Platforms</div>
+        <div class="platform-badges" id="platform-badges"></div>
+      </div>
+
+      <!-- Best Calls -->
+      <div class="section">
+        <div class="section-title">Best Calls</div>
+        <div id="best-calls"></div>
+      </div>
+
+      <!-- Recent Activity -->
+      <div class="section">
+        <div class="section-title">Recent Activity</div>
+        <div id="recent-activity"></div>
+      </div>
+    </div>
+
+    <!-- Share Bar -->
+    <div class="share-bar">
+      <div class="container share-bar-inner">
+        <button class="btn-share-x" id="btn-share-x" onclick="shareOnX()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+          Share on X
+        </button>
+        <button class="btn-copy-link" id="btn-copy-link" onclick="copyLink()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+          Copy link
+        </button>
+      </div>
+    </div>
+
+    <!-- CTA -->
+    <div class="container">
+      <div class="cta-section">
+        <h3>Track your own prediction market performance</h3>
+        <p>Connect Polymarket, Kalshi & Manifold. See your win rate, P&L, and sharp score in one place.</p>
+        <a href="/creator/signup" class="btn-cta">Get started free</a>
+      </div>
+    </div>
+
+  </div><!-- /profile-content -->
+
+<script>
+(function() {
+  // Extract username from URL
+  const pathParts = window.location.pathname.split('/');
+  const username = pathParts[2] || '';
+  if (!username) return showError();
+
+  let _profileData = null;
+  let _isFollowing = false;
+  let _currentUser = null;
+
+  // Check logged-in user
+  try {
+    const token = localStorage.getItem('hf_token');
+    if (token) {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      _currentUser = { id: payload.userId || payload.id || payload.sub };
+    }
+  } catch (e) {}
+
+  // Fetch profile
+  fetch('/api/trader-profile/' + encodeURIComponent(username))
+    .then(r => {
+      if (!r.ok) throw new Error('Not found');
+      return r.json();
+    })
+    .then(data => {
+      _profileData = data;
+      render(data);
+      updateOGMeta(data);
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('profile-content').style.display = 'block';
+    })
+    .catch(() => showError());
+
+  function showError() {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('error-state').style.display = 'block';
+  }
+
+  function render(d) {
+    // Initials
+    const initials = (d.display_name || '??').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+    document.getElementById('avatar-initials').textContent = initials;
+    document.getElementById('display-name').textContent = d.display_name;
+    document.getElementById('username-text').textContent = '@' + d.username;
+    document.getElementById('member-since').textContent = 'Member since ' + new Date(d.member_since).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    document.getElementById('follower-count').innerHTML = '<strong>' + (d.follower_count || 0) + '</strong> followers';
+
+    // OG meta update
+    document.title = d.display_name + ' — HYPERFLEX Trader Profile';
+
+    // Show follow button for logged-in users (not self)
+    if (_currentUser && _currentUser.id !== d.user_id) {
+      document.getElementById('hero-actions').style.display = 'flex';
+    }
+
+    // Win rate donut
+    const wr = d.win_rate || 0;
+    document.getElementById('win-rate-value').textContent = wr + '%';
+    const ring = document.getElementById('donut-ring');
+    const wrColor = wr >= 60 ? 'var(--green)' : wr >= 45 ? 'var(--gold)' : 'var(--red)';
+    ring.style.background = `conic-gradient(${wrColor} 0% ${wr}%, var(--border) ${wr}% 100%)`;
+    // Inner circle cut-out
+    ring.style.webkitMask = 'radial-gradient(circle at center, transparent 55%, black 56%)';
+    ring.style.mask = 'radial-gradient(circle at center, transparent 55%, black 56%)';
+
+    // Total P&L
+    const pnlEl = document.getElementById('total-pnl');
+    const pnl = d.total_pnl || 0;
+    pnlEl.textContent = (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    pnlEl.className = 'stat-value ' + (pnl >= 0 ? 'pnl-positive' : 'pnl-negative');
+
+    // Sharp score
+    const ss = d.sharp_score || 0;
+    document.getElementById('sharp-score-value').textContent = ss;
+    const ssCon = document.getElementById('sharp-badge-container');
+    const ssClass = ss >= 70 ? 'sharp-high' : ss >= 40 ? 'sharp-mid' : 'sharp-low';
+    const ssLabel = ss >= 70 ? 'Sharp' : ss >= 40 ? 'Average' : 'Developing';
+    ssCon.innerHTML = '<span class="sharp-badge ' + ssClass + '">' + ssLabel + '</span>';
+
+    // Total trades
+    document.getElementById('total-trades').textContent = (d.total_trades || 0).toLocaleString();
+
+    // P&L chart
+    renderChart(d.pnl_chart || []);
+
+    // Platform badges
+    renderPlatforms(d);
+
+    // Best calls
+    renderBestCalls(d.best_calls || []);
+
+    // Recent activity
+    renderActivity(d.recent_activity || []);
+  }
+
+  function renderChart(chart) {
+    const container = document.getElementById('pnl-chart');
+    if (!chart.length) {
+      container.innerHTML = '<div class="empty-state">No chart data yet</div>';
+      return;
+    }
+    const maxAbs = Math.max(1, ...chart.map(c => Math.abs(c.daily)));
+    let html = '';
+    for (const c of chart) {
+      const pct = Math.max(2, (Math.abs(c.daily) / maxAbs) * 100);
+      const cls = c.daily > 0 ? 'positive' : c.daily < 0 ? 'negative' : 'zero';
+      html += '<div class="chart-bar ' + cls + '" style="height:' + pct + '%" title="' + c.date + ': $' + c.daily.toFixed(2) + '"></div>';
+    }
+    container.innerHTML = html;
+    if (chart.length > 0) {
+      document.getElementById('chart-start').textContent = formatShortDate(chart[0].date);
+      document.getElementById('chart-end').textContent = formatShortDate(chart[chart.length - 1].date);
+    }
+  }
+
+  function renderPlatforms(d) {
+    const con = document.getElementById('platform-badges');
+    const allPlatforms = ['hyperflex', ...(d.platforms_connected || [])];
+    const stats = d.platform_stats || {};
+    let html = '';
+
+    // Always show HFX
+    html += platformBadgeHTML('hyperflex', d.total_trades - Object.values(stats).reduce((s, p) => s + (p.count || 0), 0));
+    for (const pl of (d.platforms_connected || [])) {
+      html += platformBadgeHTML(pl, stats[pl]?.count || 0);
+    }
+    con.innerHTML = html;
+  }
+
+  function platformBadgeHTML(platform, count) {
+    const names = { polymarket: 'Polymarket', kalshi: 'Kalshi', manifold: 'Manifold', hyperflex: 'HYPERFLEX' };
+    return '<div class="platform-badge"><span class="platform-dot ' + platform + '"></span><span class="platform-name">' +
+      (names[platform] || platform) + '</span><span class="platform-count">' + (count || 0) + ' positions</span></div>';
+  }
+
+  function renderBestCalls(calls) {
+    const con = document.getElementById('best-calls');
+    if (!calls.length) {
+      con.innerHTML = '<div class="empty-state">No resolved wins yet</div>';
+      return;
+    }
+    let html = '';
+    for (const c of calls) {
+      const sideClass = (c.side || 'YES').toLowerCase();
+      const pnlStr = '+$' + Math.abs(c.pnl || 0).toFixed(2);
+      html += '<div class="best-call">' +
+        '<div class="bc-question">' + escHtml(c.question) + '</div>' +
+        '<div class="bc-meta">' +
+          '<span class="bc-side ' + sideClass + '">' + (c.side || 'YES') + '</span>' +
+          (c.entry_price != null ? '<span>$' + c.entry_price.toFixed(2) + ' &rarr; $' + (c.payout || 0).toFixed(2) + '</span>' : '') +
+          '<span class="bc-pnl pnl-positive">' + pnlStr + '</span>' +
+          '<span class="platform-dot ' + c.platform + '" style="width:8px;height:8px;display:inline-block;border-radius:50%;margin-left:4px;"></span>' +
+        '</div></div>';
+    }
+    con.innerHTML = html;
+  }
+
+  function renderActivity(items) {
+    const con = document.getElementById('recent-activity');
+    if (!items.length) {
+      con.innerHTML = '<div class="empty-state">No activity yet</div>';
+      return;
+    }
+    let html = '';
+    for (const a of items) {
+      const badgeClass = a.status === 'WON' ? 'badge-won' : a.status === 'LOST' ? 'badge-lost' : 'badge-open';
+      html += '<div class="activity-item">' +
+        '<span class="activity-badge ' + badgeClass + '">' + a.status + '</span>' +
+        '<span class="activity-question" title="' + escHtml(a.question) + '">' + escHtml(a.question) + '</span>' +
+        '<span class="activity-side">' + (a.side || '') + '</span>' +
+        '<span class="activity-time">' + timeAgo(a.created_at) + '</span>' +
+      '</div>';
+    }
+    con.innerHTML = html;
+  }
+
+  function updateOGMeta(d) {
+    setMeta('og:title', d.display_name + ' — Prediction Market Track Record');
+    setMeta('og:description', d.win_rate + '% win rate, ' + (d.total_pnl >= 0 ? '+' : '') + '$' + d.total_pnl.toFixed(2) + ' P&L across ' + d.total_trades + ' trades on HYPERFLEX.');
+    setMeta('og:url', 'https://hyperflex.network/p/' + d.username);
+    setMeta('twitter:title', d.display_name + ' — Prediction Market Track Record');
+    setMeta('twitter:description', d.win_rate + '% win rate across ' + d.total_trades + ' trades.');
+  }
+  function setMeta(prop, content) {
+    let el = document.querySelector('meta[property="' + prop + '"]') || document.querySelector('meta[name="' + prop + '"]');
+    if (el) el.setAttribute('content', content);
+  }
+
+  // Share on X
+  window.shareOnX = function() {
+    if (!_profileData) return;
+    const d = _profileData;
+    const pnlStr = (d.total_pnl >= 0 ? '+' : '') + '$' + Math.abs(d.total_pnl).toFixed(2);
+    const text = 'Check out @' + d.username + "'s prediction market track record \u2014 " +
+      d.win_rate + '% win rate, ' + pnlStr + ' P\u0026L across ' + d.total_trades +
+      ' trades.\n\nSee yours \u2192 hyperflex.network';
+    window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(text) + '&url=' + encodeURIComponent('https://hyperflex.network/p/' + d.username), '_blank');
+  };
+
+  // Copy link
+  window.copyLink = function() {
+    const url = 'https://hyperflex.network/p/' + (_profileData?.username || username);
+    navigator.clipboard.writeText(url).then(() => {
+      const btn = document.getElementById('btn-copy-link');
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copy link'; }, 1500);
+    });
+  };
+
+  // Follow toggle
+  window.toggleFollow = function() {
+    if (!_currentUser || !_profileData) return;
+    const btn = document.getElementById('btn-follow');
+    _isFollowing = !_isFollowing;
+    btn.textContent = _isFollowing ? 'Following' : 'Follow';
+    btn.classList.toggle('following', _isFollowing);
+
+    fetch('/api/predictor-follow/' + _profileData.user_id, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + localStorage.getItem('hf_token'),
+      },
+    }).catch(() => {});
+  };
+
+  // Helpers
+  function escHtml(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function formatShortDate(d) {
+    if (!d) return '';
+    const dt = new Date(d);
+    return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+  function timeAgo(ts) {
+    if (!ts) return '';
+    const diff = Date.now() - new Date(ts).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'now';
+    if (mins < 60) return mins + 'm';
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return hrs + 'h';
+    const days = Math.floor(hrs / 24);
+    if (days < 30) return days + 'd';
+    return Math.floor(days / 30) + 'mo';
+  }
+})();
+</script>
+</body>
+</html>

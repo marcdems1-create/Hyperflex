@@ -8471,7 +8471,7 @@ const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
   'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u', 'win',
-  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds'
+  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p'
 ]);
 
 // GET /my — private member dashboard
@@ -9047,6 +9047,232 @@ app.get('/u/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'p
 // GET /m/:userId — public member profile page
 app.get('/m/:userId', (req, res) => res.sendFile(path.join(__dirname, 'public', 'member.html')));
 
+// GET /p/:username — public verified trader profile page
+app.get('/p/:username', (req, res) => res.sendFile(path.join(__dirname, 'public', 'profile-trader.html')));
+
+// GET /api/trader-profile/:username — trader profile data (public)
+app.get('/api/trader-profile/:username', async (req, res) => {
+  try {
+    const username = req.params.username.trim();
+    if (!username) return res.status(400).json({ error: 'Username required' });
+
+    // Look up user by display_name (case-insensitive) or username field
+    let user;
+    if (pool) {
+      const rows = await dbQuery(
+        `SELECT id, display_name, username, email, created_at, polymarket_address, kalshi_api_key, kalshi_username, manifold_username
+         FROM users
+         WHERE LOWER(REPLACE(display_name, ' ', '')) = LOWER($1)
+            OR LOWER(username) = LOWER($1)
+            OR LOWER(display_name) = LOWER($1)
+         LIMIT 1`,
+        [username]
+      );
+      user = rows[0] || null;
+    } else {
+      // Try username field first, then display_name
+      let { data } = await supabase.from('users')
+        .select('id, display_name, username, email, created_at, polymarket_address, kalshi_api_key, kalshi_username, manifold_username')
+        .ilike('username', username).limit(1).maybeSingle();
+      if (!data) {
+        const { data: d2 } = await supabase.from('users')
+          .select('id, display_name, username, email, created_at, polymarket_address, kalshi_api_key, kalshi_username, manifold_username')
+          .ilike('display_name', username).limit(1).maybeSingle();
+        data = d2;
+      }
+      user = data;
+    }
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const userId = user.id;
+    const displayName = user.display_name || user.username || (user.email ? user.email.split('@')[0] : 'Trader');
+    const memberSince = user.created_at;
+
+    // Platforms connected
+    const platforms = [];
+    if (user.polymarket_address) platforms.push('polymarket');
+    if (user.kalshi_api_key || user.kalshi_username) platforms.push('kalshi');
+    if (user.manifold_username) platforms.push('manifold');
+
+    // Fetch HFX positions (with market data for best calls)
+    let hfBets = [];
+    try {
+      if (pool) {
+        hfBets = await dbQuery(
+          `SELECT p.side, p.amount, p.potential_payout, p.won, p.settled, p.created_at,
+                  m.question, m.outcome, m.resolved, m.tenant_slug, m.id as market_id
+           FROM positions p
+           LEFT JOIN markets m ON p.market_id = m.id
+           WHERE p.user_id = $1
+           ORDER BY p.created_at DESC
+           LIMIT 500`,
+          [userId]
+        );
+      } else {
+        const { data: d } = await supabase.from('positions')
+          .select('side, amount, potential_payout, won, settled, created_at, markets(question, outcome, resolved, tenant_slug, id)')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(500);
+        hfBets = (d || []).map(p => ({
+          ...p,
+          question: p.markets?.question,
+          outcome: p.markets?.outcome,
+          resolved: p.markets?.resolved,
+          tenant_slug: p.markets?.tenant_slug,
+          market_id: p.markets?.id,
+        }));
+      }
+    } catch (e) { console.warn('[trader-profile] positions:', e.message); }
+
+    // Fetch cached external positions
+    let cachedPositions = [];
+    try {
+      if (pool) {
+        cachedPositions = await dbQuery('SELECT * FROM cached_positions WHERE user_id = $1', [userId]);
+      } else {
+        const { data: cp } = await supabase.from('cached_positions').select('*').eq('user_id', userId);
+        cachedPositions = cp || [];
+      }
+    } catch (e) { console.warn('[trader-profile] cached_positions:', e.message); }
+
+    // ── Calculate stats ──────────────────────────────────────────────────────
+    const hfSettled = hfBets.filter(p => p.settled);
+    const hfWins = hfSettled.filter(p => p.won).length;
+    const hfPnl = hfSettled.reduce((s, p) => s + (p.won ? (p.potential_payout - p.amount) : -p.amount), 0) / 100;
+
+    // External platform stats
+    let extWins = 0, extTotal = 0, extPnl = 0;
+    const platformStats = {};
+    for (const cp of cachedPositions) {
+      const pl = cp.platform;
+      if (!platformStats[pl]) platformStats[pl] = { count: 0, pnl: 0 };
+      platformStats[pl].count++;
+      platformStats[pl].pnl += Number(cp.pnl) || 0;
+      extTotal++;
+      extPnl += Number(cp.pnl) || 0;
+      if ((Number(cp.pnl) || 0) > 0) extWins++;
+    }
+
+    const totalSettled = hfSettled.length + extTotal;
+    const totalWins = hfWins + extWins;
+    const winRate = totalSettled > 0 ? Math.round((totalWins / totalSettled) * 100) : 0;
+    const totalPnl = Math.round((hfPnl + extPnl) * 100) / 100;
+    const totalTrades = hfBets.length + cachedPositions.length;
+
+    // Sharp score (same formula as analytics endpoint)
+    const sharpScore = Math.min(99, Math.max(0, Math.round(winRate * 0.6 + Math.max(0, 100 - Math.abs(50 - winRate)) * 0.4)));
+
+    // ── Best calls (top 5 by PnL, resolved wins only) ───────────────────────
+    const resolvedWins = hfBets
+      .filter(p => p.resolved && p.outcome === p.side)
+      .map(p => ({
+        question: p.question || 'Unknown market',
+        side: p.side,
+        entry_price: p.amount / 100,
+        payout: p.potential_payout / 100,
+        pnl: (p.potential_payout - p.amount) / 100,
+        platform: 'hyperflex',
+        community: p.tenant_slug,
+      }))
+      .sort((a, b) => b.pnl - a.pnl)
+      .slice(0, 5);
+
+    // Also include profitable external positions as best calls
+    const extBest = cachedPositions
+      .filter(cp => (Number(cp.pnl) || 0) > 0)
+      .map(cp => ({
+        question: cp.market_title || 'External position',
+        side: cp.side || 'YES',
+        entry_price: null,
+        payout: null,
+        pnl: Number(cp.pnl) || 0,
+        platform: cp.platform,
+        market_url: cp.market_url,
+      }))
+      .sort((a, b) => b.pnl - a.pnl)
+      .slice(0, 5);
+
+    const bestCalls = [...resolvedWins, ...extBest].sort((a, b) => b.pnl - a.pnl).slice(0, 5);
+
+    // ── Recent activity (last 10) ───────────────────────────────────────────
+    const recentHfx = hfBets.slice(0, 10).map(p => ({
+      question: p.question || 'HFX market',
+      side: p.side,
+      amount: p.amount / 100,
+      pnl: p.settled ? ((p.won ? (p.potential_payout - p.amount) : -p.amount) / 100) : null,
+      status: !p.settled ? 'OPEN' : (p.won ? 'WON' : 'LOST'),
+      platform: 'hyperflex',
+      created_at: p.created_at,
+    }));
+    const recentExt = cachedPositions
+      .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
+      .slice(0, 10)
+      .map(cp => ({
+        question: cp.market_title || 'External position',
+        side: cp.side || 'YES',
+        amount: Number(cp.shares) || 0,
+        pnl: Number(cp.pnl) || 0,
+        status: (Number(cp.pnl) || 0) > 0 ? 'WON' : (Number(cp.pnl) || 0) < 0 ? 'LOST' : 'OPEN',
+        platform: cp.platform,
+        created_at: cp.updated_at,
+      }));
+    const recentActivity = [...recentHfx, ...recentExt]
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .slice(0, 10);
+
+    // ── 30-day P&L chart data ───────────────────────────────────────────────
+    const now = Date.now();
+    const dailyPnl = {};
+    for (let i = 0; i < 30; i++) {
+      const d = new Date(now - i * 86400000).toISOString().slice(0, 10);
+      dailyPnl[d] = 0;
+    }
+    for (const p of hfSettled) {
+      const d = (p.created_at || '').slice(0, 10);
+      if (d in dailyPnl) dailyPnl[d] += (p.won ? (p.potential_payout - p.amount) : -p.amount) / 100;
+    }
+    const sortedDays = Object.keys(dailyPnl).sort();
+    let cumPnl = 0;
+    const pnlChart = sortedDays.map(date => {
+      cumPnl += dailyPnl[date];
+      return { date, daily: Math.round(dailyPnl[date] * 100) / 100, cumulative: Math.round(cumPnl * 100) / 100 };
+    });
+
+    // ── Follower count ──────────────────────────────────────────────────────
+    let followerCount = 0;
+    try {
+      if (pool) {
+        const rows = await dbQuery('SELECT COUNT(*)::int as count FROM predictor_follows WHERE followed_id = $1', [userId]);
+        followerCount = rows[0]?.count || 0;
+      } else {
+        const { count } = await supabase.from('predictor_follows').select('id', { count: 'exact', head: true }).eq('followed_id', userId);
+        followerCount = count || 0;
+      }
+    } catch (e) { /* predictor_follows may not exist yet */ }
+
+    res.json({
+      user_id: userId,
+      display_name: displayName,
+      username: user.username || displayName.replace(/\s+/g, '').toLowerCase(),
+      member_since: memberSince,
+      follower_count: followerCount,
+      win_rate: winRate,
+      total_pnl: totalPnl,
+      sharp_score: sharpScore,
+      total_trades: totalTrades,
+      platforms_connected: platforms,
+      platform_stats: platformStats,
+      best_calls: bestCalls,
+      recent_activity: recentActivity,
+      pnl_chart: pnlChart,
+    });
+  } catch (err) {
+    console.error('[trader-profile]', err.message);
+    res.status(500).json({ error: 'Failed to load trader profile' });
+  }
+});
+
 // GET /nominate — nominate your creator page
 app.get('/nominate', (req, res) => res.sendFile(path.join(__dirname, 'public', 'nominate.html')));
 
@@ -9161,6 +9387,210 @@ app.get('/api/predictors', async (req, res) => {
   } catch (err) {
     console.error('[api/predictors]', err);
     res.status(500).json({ error: 'Failed to load predictors' });
+  }
+});
+
+// ── LEADERBOARD API ────────────────────────────────
+// GET /api/leaderboard?period=30d — ranked by sharp score, cached 5 min
+const _leaderboardCache = {};
+app.get('/api/leaderboard', async (req, res) => {
+  try {
+    const period = (req.query.period || '30d').toLowerCase();
+    const validPeriods = ['7d', '30d', 'all'];
+    const p = validPeriods.includes(period) ? period : '30d';
+    const cacheKey = `lb_${p}`;
+    if (_leaderboardCache[cacheKey] && Date.now() - _leaderboardCache[cacheKey].ts < 5 * 60 * 1000) {
+      return res.json(_leaderboardCache[cacheKey].data);
+    }
+
+    let dateFilter = null;
+    if (p === '7d') dateFilter = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    else if (p === '30d') dateFilter = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    let rows;
+    if (pool) {
+      if (dateFilter) {
+        rows = await dbQuery('SELECT user_id, amount, potential_payout, won, created_at FROM positions WHERE settled = true AND created_at >= $1 LIMIT 10000', [dateFilter]);
+      } else {
+        rows = await dbQuery('SELECT user_id, amount, potential_payout, won, created_at FROM positions WHERE settled = true LIMIT 10000');
+      }
+    } else {
+      let q = supabase.from('positions').select('user_id, amount, potential_payout, won, created_at').eq('settled', true);
+      if (dateFilter) q = q.gte('created_at', dateFilter);
+      const { data, error } = await q.limit(10000);
+      if (error) throw error;
+      rows = data;
+    }
+    if (!rows || !rows.length) { _leaderboardCache[cacheKey] = { ts: Date.now(), data: [] }; return res.json([]); }
+
+    let cachedRows = [];
+    try {
+      if (pool) {
+        if (dateFilter) {
+          cachedRows = await dbQuery('SELECT user_id, platform, side, pnl, created_at FROM cached_positions WHERE created_at >= $1 LIMIT 10000', [dateFilter]);
+        } else {
+          cachedRows = await dbQuery('SELECT user_id, platform, side, pnl, created_at FROM cached_positions LIMIT 10000');
+        }
+      } else {
+        let q2 = supabase.from('cached_positions').select('user_id, platform, side, pnl, created_at');
+        if (dateFilter) q2 = q2.gte('created_at', dateFilter);
+        const { data: d2 } = await q2.limit(10000);
+        cachedRows = d2 || [];
+      }
+    } catch(e) { /* cached_positions may not exist yet */ }
+
+    const byUser = {};
+    for (const pos of rows) {
+      if (!byUser[pos.user_id]) byUser[pos.user_id] = { wins: 0, total: 0, pnl: 0, platforms: new Set(['HFX']) };
+      const u = byUser[pos.user_id];
+      u.total++;
+      if (pos.won) { u.wins++; u.pnl += (pos.potential_payout || 0) - (pos.amount || 0); }
+      else { u.pnl -= (pos.amount || 0); }
+    }
+
+    for (const cp of cachedRows) {
+      if (!byUser[cp.user_id]) byUser[cp.user_id] = { wins: 0, total: 0, pnl: 0, platforms: new Set() };
+      const u = byUser[cp.user_id];
+      u.total++;
+      if (cp.pnl > 0) u.wins++;
+      u.pnl += (cp.pnl || 0);
+      if (cp.platform) u.platforms.add(cp.platform.toUpperCase());
+    }
+
+    const userIds = Object.keys(byUser).filter(uid => byUser[uid].total >= 3);
+    if (!userIds.length) { _leaderboardCache[cacheKey] = { ts: Date.now(), data: [] }; return res.json([]); }
+
+    let userRows;
+    if (pool) {
+      userRows = await dbQuery('SELECT id, display_name, polymarket_address, kalshi_api_key, manifold_username FROM users WHERE id = ANY($1)', [userIds]);
+    } else {
+      const { data } = await supabase.from('users').select('id, display_name, polymarket_address, kalshi_api_key, manifold_username').in('id', userIds);
+      userRows = data;
+    }
+    const userMap = {};
+    for (const u of userRows || []) userMap[u.id] = u;
+
+    let result = userIds.map(uid => {
+      const u = byUser[uid];
+      const info = userMap[uid] || {};
+      const winRate = u.total > 0 ? (u.wins / u.total) * 100 : 0;
+      const totalPnl = u.pnl / 100;
+      const platforms = [...u.platforms];
+      if (info.polymarket_address && !platforms.includes('POLY')) platforms.push('POLY');
+      if (info.kalshi_api_key && !platforms.includes('KALSHI')) platforms.push('KALSHI');
+      if (info.manifold_username && !platforms.includes('MANIFOLD')) platforms.push('MANIFOLD');
+
+      const sharpScore = Math.min(100, Math.round(
+        winRate * 0.8 +
+        Math.min(20, u.total * 0.5) +
+        (totalPnl > 0 ? 15 : 0) +
+        (platforms.length > 1 ? 5 : 0)
+      ));
+
+      return {
+        user_id: uid,
+        display_name: info.display_name || 'Anonymous',
+        win_rate: Math.round(winRate),
+        total_pnl: Math.round(totalPnl),
+        sharp_score: sharpScore,
+        trade_count: u.total,
+        platforms
+      };
+    });
+
+    result.sort((a, b) => b.sharp_score - a.sharp_score);
+    result = result.slice(0, 50);
+    result.forEach((r, i) => { r.rank = i + 1; });
+
+    _leaderboardCache[cacheKey] = { ts: Date.now(), data: result };
+    res.json(result);
+  } catch (err) {
+    console.error('[api/leaderboard]', err);
+    res.status(500).json({ error: 'Failed to load leaderboard' });
+  }
+});
+
+// ── SHARP MONEY FEED ────────────────────────────────
+// GET /api/sharp-money-feed?limit=5 — recent positions from sharp traders, cached 3 min
+const _sharpMoneyFeedCache = { ts: 0, data: [] };
+app.get('/api/sharp-money-feed', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 5, 20);
+    if (_sharpMoneyFeedCache.ts && Date.now() - _sharpMoneyFeedCache.ts < 3 * 60 * 1000) {
+      return res.json(_sharpMoneyFeedCache.data.slice(0, limit));
+    }
+
+    let posRows;
+    if (pool) {
+      posRows = await dbQuery('SELECT user_id, won FROM positions WHERE settled = true LIMIT 10000');
+    } else {
+      const { data, error } = await supabase.from('positions').select('user_id, won').eq('settled', true).limit(10000);
+      if (error) throw error;
+      posRows = data;
+    }
+
+    const byUser = {};
+    for (const pos of posRows || []) {
+      if (!byUser[pos.user_id]) byUser[pos.user_id] = { wins: 0, total: 0 };
+      byUser[pos.user_id].total++;
+      if (pos.won) byUser[pos.user_id].wins++;
+    }
+
+    const sharpUserIds = Object.keys(byUser).filter(uid => {
+      const u = byUser[uid];
+      return u.total >= 10 && (u.wins / u.total) >= 0.65;
+    });
+
+    if (!sharpUserIds.length) { _sharpMoneyFeedCache.ts = Date.now(); _sharpMoneyFeedCache.data = []; return res.json([]); }
+
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    let recentPositions = [];
+    try {
+      if (pool) {
+        recentPositions = await dbQuery(
+          'SELECT user_id, side, market_title, platform, created_at FROM cached_positions WHERE user_id = ANY($1) AND created_at >= $2 ORDER BY created_at DESC LIMIT 20',
+          [sharpUserIds, cutoff]
+        );
+      } else {
+        const { data: d } = await supabase
+          .from('cached_positions')
+          .select('user_id, side, market_title, platform, created_at')
+          .in('user_id', sharpUserIds)
+          .gte('created_at', cutoff)
+          .order('created_at', { ascending: false })
+          .limit(20);
+        recentPositions = d || [];
+      }
+    } catch(e) { /* cached_positions may not exist */ }
+
+    if (!recentPositions.length) { _sharpMoneyFeedCache.ts = Date.now(); _sharpMoneyFeedCache.data = []; return res.json([]); }
+
+    const uids = [...new Set(recentPositions.map(p => p.user_id))];
+    let nameRows;
+    if (pool) {
+      nameRows = await dbQuery('SELECT id, display_name FROM users WHERE id = ANY($1)', [uids]);
+    } else {
+      const { data } = await supabase.from('users').select('id, display_name').in('id', uids);
+      nameRows = data;
+    }
+    const nameMap = {};
+    for (const u of nameRows || []) nameMap[u.id] = u.display_name;
+
+    const result = recentPositions.map(p => ({
+      trader_name: nameMap[p.user_id] || 'Anonymous',
+      trader_id: p.user_id,
+      side: (p.side || 'YES').toUpperCase(),
+      question: p.market_title || 'Unknown market',
+      platform: p.platform || 'unknown',
+      timestamp: p.created_at
+    }));
+
+    _sharpMoneyFeedCache.ts = Date.now();
+    _sharpMoneyFeedCache.data = result;
+    res.json(result.slice(0, limit));
+  } catch (err) {
+    console.error('[api/sharp-money-feed]', err);
+    res.json([]);
   }
 });
 
