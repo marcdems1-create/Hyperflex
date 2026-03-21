@@ -11461,7 +11461,11 @@ async function loadPortfolio() {
     const data = await r.json();
     _kalshiConnected = data.kalshi_api_key_set;
     _manifoldUsername = data.manifold_username || '';
-    _polyWalletAddress = data.polymarket_address || '';
+    // Only update _polyWalletAddress from DB if not already set in-session
+    // (user may have manually entered their Polymarket address in the Polymarket tab)
+    if (!_polyWalletAddress) {
+      _polyWalletAddress = data.polymarket_address || '';
+    }
 
     // Show welcome state if nothing connected, otherwise show main
     const hasAny = _kalshiConnected || _manifoldUsername || _polyWalletAddress;
