@@ -455,6 +455,30 @@ nav {
 .community-row:last-child { border-bottom: none; }
 .community-row:hover { opacity: 1; color: var(--text); }
 .community-row:hover .community-name { color: #d4a83a; }
+.sidebar-footer-link {
+  display: block;
+  margin-top: 12px;
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  color: var(--gold);
+  text-decoration: none;
+  font-weight: 700;
+}
+.sidebar-footer-link:hover { text-decoration: underline; }
+.sidebar-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 6px;
+  border-bottom: 1px solid var(--border);
+  text-decoration: none;
+  color: inherit;
+  transition: background 0.15s;
+  border-radius: 4px;
+  margin: 0 -6px;
+}
+.sidebar-row:last-child { border-bottom: none; }
+.sidebar-row:hover { background: rgba(201,146,13,0.06); }
 .community-dot {
   width: 8px;
   height: 8px;
@@ -869,9 +893,9 @@ nav {
     <div class="tabs-wrap" id="tabs-wrap" style="margin-bottom:0">
       <div class="tabs">
         <button class="tab active" onclick="switchTab('activity')">⚡ Activity</button>
-        <button class="tab" onclick="switchTab('discover')">🔍 Discover</button>
         <button class="tab" onclick="switchTab('predictors')">👥 Predictors</button>
         <button class="tab" onclick="window.location.href='/odds'" style="display:flex;align-items:center;gap:5px">📊 Odds</button>
+        <button class="tab" onclick="window.location.href='/whales'" style="display:flex;align-items:center;gap:5px">&#x1F40B; Whales</button>
       </div>
     </div>
 
@@ -921,50 +945,34 @@ nav {
   </div>
 
   <div class="sidebar">
-    <div class="sidebar-card">
-      <div class="sidebar-title">COMMUNITIES</div>
-      <div id="communities-list"><div class="loading" style="padding:16px 0;">Loading...</div></div>
+    <!-- BIGGEST TRADES (24H) -->
+    <div class="sidebar-card" id="biggestTradesCard">
+      <div class="sidebar-title">&#x1F40B; BIGGEST TRADES (24H)</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Top whale positions by size</div>
+      <div id="biggestTradesList"><div class="loading" style="padding:8px 0;">Loading whale data...</div></div>
+      <a href="/whales" class="sidebar-footer-link">See all whales &#8594;</a>
     </div>
-    <div class="sidebar-card">
-      <div class="sidebar-title">LATEST ANNOUNCEMENTS</div>
-      <div id="announcements-list"><div class="loading" style="padding:16px 0;">Loading...</div></div>
+
+    <!-- BEST P&L -->
+    <div class="sidebar-card" id="bestPnlCard">
+      <div class="sidebar-title">&#x1F4B0; BEST P&amp;L</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Top traders by total profit</div>
+      <div id="bestPnlList"><div class="loading" style="padding:8px 0;">Loading...</div></div>
+      <a href="/predictors" class="sidebar-footer-link">See full leaderboard &#8594;</a>
     </div>
-    <!-- FOLLOWING -->
+
+    <!-- MOST ACTIVE MARKETS -->
+    <div class="sidebar-card" id="activeMarketsCard">
+      <div class="sidebar-title">&#x1F525; MOST ACTIVE MARKETS</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Markets with the most whale activity</div>
+      <div id="activeMarketsList"><div class="loading" style="padding:8px 0;">Loading...</div></div>
+    </div>
+
+    <!-- FOLLOWING (kept, shown when logged in) -->
     <div class="sidebar-card" id="followingCard" style="display:none">
       <div class="sidebar-title">FOLLOWING</div>
       <div id="following-list"></div>
     </div>
-
-    <!-- TOP PREDICTORS -->
-    <div class="sidebar-card" id="topPredictorsCard">
-      <div class="sidebar-title">TOP PREDICTORS</div>
-      <div id="top-predictors-list"><div class="loading" style="padding:12px 0;">Loading...</div></div>
-      <a href="/predictors" style="display:block;margin-top:12px;font-family:var(--mono);font-size:11px;color:var(--gold);text-decoration:none;font-weight:700;">See all →</a>
-    </div>
-
-    <!-- SHARP MONEY FEED -->
-    <div class="sidebar-card" id="sharpMoneyCard">
-      <div class="sidebar-title">&#129504; SHARP MONEY</div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Latest moves from top-performing traders</div>
-      <div id="sharpMoneyList"><div class="loading" style="padding:8px 0;">Loading...</div></div>
-      <a href="/predictors" style="display:block;margin-top:12px;font-family:'Space Mono',monospace;font-size:11px;color:var(--gold);text-decoration:none;font-weight:700;">See all &#8594;</a>
-    </div>
-
-    <!-- WHALE WATCH -->
-    <div class="sidebar-card" id="whaleWatchCard">
-      <div class="sidebar-title">&#x1F40B; WHALE WATCH</div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Biggest positions from top Polymarket traders</div>
-      <div id="whaleWatchList"><div class="loading" style="padding:8px 0;">Loading...</div></div>
-      <a href="/whales" style="display:block;margin-top:12px;font-family:'Space Mono',monospace;font-size:11px;color:var(--gold);text-decoration:none;font-weight:700;">See all whales &#8594;</a>
-    </div>
-
-    <!-- NOMINATE CTA -->
-    <a href="/nominate" style="display:block;background:linear-gradient(135deg,#1d1b13 0%,#191917 100%);border:1px solid rgba(201,146,13,0.3);border-radius:var(--radius);padding:16px 18px;text-decoration:none;transition:border-color 0.2s;" onmouseover="this.style.borderColor='rgba(201,146,13,0.7)'" onmouseout="this.style.borderColor='rgba(201,146,13,0.3)'">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--gold);margin-bottom:6px">For Fans</div>
-      <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px">Nominate your creator</div>
-      <div style="font-size:12px;color:var(--muted);line-height:1.4;margin-bottom:10px">Tell us which creator should have a prediction market. We'll reach out.</div>
-      <div style="font-size:12px;color:var(--gold);font-weight:600">Nominate them →</div>
-    </a>
   </div>
 </div>
 
@@ -1321,7 +1329,7 @@ function activityCard(a) {
         <div class="ac-header">
           <span style="font-weight:700;color:${pm.color}">${a.whale_trader ? '🐋 ' + escHtml(a.whale_trader) : pm.label}</span>
           <span class="ac-action">${a.whale_trader ? 'whale position · #' + (a.whale_rank || '') : 'trending market'}</span>
-          <span class="ac-time">${a.volume_display || 'Trending now'}</span>
+          <span class="ac-time">${a.volume_display ? a.volume_display + ' · ' + timeAgo(a.ts) : timeAgo(a.ts)}</span>
         </div>
         <div class="ac-market-card" style="cursor:pointer">
           <div class="ac-market-inner">
@@ -1575,9 +1583,11 @@ function renderMarkets(markets, communities, containerId) {
 }
 
 function renderCommunities(communities) {
+  const el = document.getElementById('communities-list');
+  if (!el) return;
   const slugs = Object.keys(communities);
   if (!slugs.length) {
-    document.getElementById('communities-list').innerHTML = '<div class="empty" style="padding:8px 0;">No communities yet.</div>';
+    el.innerHTML = '<div class="empty" style="padding:8px 0;">No communities yet.</div>';
     return;
   }
   const sorted = slugs.sort((a, b) => (communities[b].total_traders || 0) - (communities[a].total_traders || 0));
@@ -1592,7 +1602,7 @@ function renderCommunities(communities) {
         <div class="community-markets" style="font-size:11px;color:#666">${traders > 0 ? traders.toLocaleString() + ' trades' : markets + ' mkts'}</div>
       </a>`;
   }).join('');
-  document.getElementById('communities-list').innerHTML = html;
+  if (el) el.innerHTML = html;
 }
 
 function renderCommunitySections(sections, communities, topPredictors) {
@@ -1656,8 +1666,10 @@ function renderCommunitySections(sections, communities, topPredictors) {
 }
 
 function renderAnnouncements(announcements, communities) {
+  var _annEl = document.getElementById('announcements-list');
+  if (!_annEl) return;
   if (!announcements.length) {
-    document.getElementById('announcements-list').innerHTML = '<div class="empty" style="padding:8px 0;">No announcements.</div>';
+    _annEl.innerHTML = '<div class="empty" style="padding:8px 0;">No announcements.</div>';
     return;
   }
   const html = announcements.slice(0, 5).map(a => {
@@ -1670,7 +1682,7 @@ function renderAnnouncements(announcements, communities) {
         <div class="announcement-time">${timeAgo(a.created_at)}</div>
       </div>`;
   }).join('');
-  document.getElementById('announcements-list').innerHTML = html;
+  _annEl.innerHTML = html;
 }
 
 function renderStatsTicker(stats) {
@@ -1939,94 +1951,124 @@ async function loadFollowingFeed() {
   }
 }
 
-// TOP PREDICTORS sidebar
-(async function loadTopPredictors() {
-  try {
-    const res = await fetch('/api/predictors?sort=win_rate&limit=5');
-    if (!res.ok) throw new Error('Failed');
-    const list = await res.json();
-    const el = document.getElementById('top-predictors-list');
-    if (!list.length) { el.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:8px 0;">No data yet.</div>'; return; }
-    el.innerHTML = list.map((p, i) => {
-      const initial = (p.display_name || '?').charAt(0).toUpperCase();
-      const wr = Math.round(p.win_rate || 0);
-      return `<a href="/m/${p.user_id}" style="display:flex;align-items:center;gap:10px;padding:8px 0;text-decoration:none;border-bottom:1px solid var(--border);">
-        <div style="width:28px;height:28px;border-radius:50%;background:rgba(201,146,13,0.15);border:1px solid rgba(201,146,13,0.3);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gold);flex-shrink:0;">${initial}</div>
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.display_name || 'Anonymous'}</div>
-          <div style="font-size:10px;font-family:var(--mono);color:var(--muted);">${wr}% win rate</div>
-        </div>
-        <div style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gold);flex-shrink:0;">#${i+1}</div>
-      </a>`;
-    }).join('');
-  } catch(e) {
-    const el = document.getElementById('top-predictors-list');
-    if (el) el.innerHTML = '';
-  }
-})();
-
-// SHARP MONEY FEED sidebar
-(async function loadSharpMoneyFeed() {
-  try {
-    const res = await fetch('/api/sharp-money-feed?limit=5');
-    const data = await res.json();
-    const list = document.getElementById('sharpMoneyList');
-    if (!list) return;
-    if (!data || !data.length) {
-      list.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:8px 0">No sharp moves in the last 24h</div>';
-      return;
-    }
-    list.innerHTML = data.map(item => {
-      const sideColor = item.side === 'YES' ? '#2d9b5f' : '#c0392b';
-      const sideBg = item.side === 'YES' ? 'rgba(45,155,95,0.12)' : 'rgba(192,57,43,0.12)';
-      const question = (item.question || '').length > 60 ? item.question.substring(0, 57) + '...' : item.question;
-      const timeAgo = _sharpTimeAgo(item.timestamp);
-      const profileUrl = `/p/${encodeURIComponent(item.trader_name)}`;
-      const platformBadge = item.platform ? `<span style="font-family:'Space Mono',monospace;font-size:8px;font-weight:700;padding:1px 4px;border-radius:3px;background:rgba(100,160,255,0.1);color:#6aa0ff;margin-left:4px">${item.platform.toUpperCase()}</span>` : '';
-      return `<div style="padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-          <a href="${profileUrl}" style="font-size:12px;font-weight:700;color:var(--gold);text-decoration:none;font-family:'Space Mono',monospace">${_escH(item.trader_name)}</a>
-          <span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;background:${sideBg};color:${sideColor}">${item.side}</span>
-          ${platformBadge}
-        </div>
-        <div style="font-size:11px;color:var(--text);line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_escH(question)}</div>
-        <div style="font-size:10px;color:var(--muted);margin-top:2px">${timeAgo}</div>
-      </div>`;
-    }).join('');
-  } catch(e) { /* silent */ }
-})();
-
-// WHALE WATCH sidebar
-(async function loadWhaleWatchSidebar() {
+// WHALE-POWERED SIDEBAR — single fetch, populates all 3 sections
+(async function loadSidebar() {
   try {
     const res = await fetch('/api/whale-watch');
+    if (!res.ok) throw new Error('Failed to fetch whale data');
     const data = await res.json();
-    const list = document.getElementById('whaleWatchList');
-    if (!list) return;
-    const whales = (data.whales || []).slice(0, 3);
-    if (!whales.length) {
-      list.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:8px 0">No whale positions found</div>';
-      return;
+    const whales = data.whales || [];
+
+    // --- 1. BIGGEST TRADES (24H): top 5 by size ---
+    const biggestEl = document.getElementById('biggestTradesList');
+    if (biggestEl) {
+      const top5 = whales.slice(0, 5);
+      if (!top5.length) {
+        biggestEl.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:8px 0">No whale trades found</div>';
+      } else {
+        biggestEl.innerHTML = top5.map(w => {
+          const question = (w.market || '').length > 48 ? w.market.substring(0, 45) + '...' : (w.market || '');
+          const size = w.size >= 1e6 ? '$' + (w.size/1e6).toFixed(1) + 'M' : w.size >= 1e3 ? '$' + (w.size/1e3).toFixed(0) + 'K' : '$' + (w.size||0).toFixed(0);
+          const side = (w.side||'').toUpperCase();
+          const sideColor = side === 'YES' ? '#22c55e' : side === 'NO' ? '#ef4444' : 'var(--gold)';
+          const sideBg = side === 'YES' ? 'rgba(34,197,94,0.12)' : side === 'NO' ? 'rgba(239,68,68,0.12)' : 'rgba(201,146,13,0.12)';
+          const link = w.polymarket_url || w.market_url || '#';
+          return '<a href="' + _escH(link) + '" target="_blank" rel="noopener" class="sidebar-row">' +
+            '<div style="flex:1;min-width:0">' +
+              '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">' +
+                '<span style="font-size:12px;font-weight:700;color:var(--gold);font-family:\'Space Mono\',monospace">' + _escH(w.trader || 'Unknown') + '</span>' +
+                '<span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px;background:' + sideBg + ';color:' + sideColor + ';letter-spacing:0.3px">' + _escH(side) + '</span>' +
+              '</div>' +
+              '<div style="font-size:11px;color:var(--text-soft);line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + _escH(question) + '</div>' +
+            '</div>' +
+            '<div style="font-family:\'Space Mono\',monospace;font-size:12px;font-weight:700;color:var(--text);flex-shrink:0;padding-top:2px">' + size + '</div>' +
+          '</a>';
+        }).join('');
+      }
     }
-    list.innerHTML = whales.map(w => {
-      const question = (w.market || '').length > 50 ? w.market.substring(0, 47) + '...' : w.market;
-      const size = w.size >= 1e6 ? '$' + (w.size/1e6).toFixed(1) + 'M' : w.size >= 1e3 ? '$' + (w.size/1e3).toFixed(0) + 'K' : '$' + w.size.toFixed(0);
-      const sideColor = (w.side||'').toUpperCase() === 'YES' ? '#2d9b5f' : (w.side||'').toUpperCase() === 'NO' ? '#c0392b' : '#c9920d';
-      const sideBg = (w.side||'').toUpperCase() === 'YES' ? 'rgba(45,155,95,0.12)' : (w.side||'').toUpperCase() === 'NO' ? 'rgba(192,57,43,0.12)' : 'rgba(201,146,13,0.12)';
-      return `<div style="padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-          <span style="font-size:12px;font-weight:700;color:var(--gold);font-family:'Space Mono',monospace">${_escH(w.trader)}</span>
-          <span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;background:${sideBg};color:${sideColor}">${_escH(w.side)}</span>
-          <span style="font-size:11px;font-weight:700;color:var(--text);margin-left:auto;font-family:'Space Mono',monospace">${size}</span>
-        </div>
-        <div style="font-size:11px;color:var(--text-soft);line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_escH(question)}</div>
-      </div>`;
-    }).join('');
+
+    // --- 2. BEST P&L: aggregate by trader, rank by total PnL ---
+    const pnlEl = document.getElementById('bestPnlList');
+    if (pnlEl) {
+      const traderMap = {};
+      whales.forEach(w => {
+        const name = w.trader || 'Unknown';
+        if (!traderMap[name]) traderMap[name] = { pnl: 0, volume: 0 };
+        traderMap[name].pnl += (w.pnl || w.profit || 0);
+        traderMap[name].volume += (w.size || 0);
+      });
+      const ranked = Object.entries(traderMap)
+        .map(([name, d]) => ({ name, pnl: d.pnl, volume: d.volume }))
+        .sort((a, b) => b.pnl - a.pnl)
+        .slice(0, 5);
+      if (!ranked.length || ranked.every(r => r.pnl === 0)) {
+        pnlEl.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:8px 0">No P&amp;L data available</div>';
+      } else {
+        pnlEl.innerHTML = ranked.map((t, i) => {
+          const pnlStr = t.pnl >= 0 ? '+$' + _fmtNum(t.pnl) : '-$' + _fmtNum(Math.abs(t.pnl));
+          const pnlColor = t.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+          const volStr = '$' + _fmtNum(t.volume);
+          const badges = ['#c9920d','#a8a8a8','#cd7f32','var(--muted)','var(--muted)'];
+          return '<div class="sidebar-row">' +
+            '<div style="width:22px;height:22px;border-radius:50%;background:' + badges[i] + '22;border:1px solid ' + badges[i] + '44;display:flex;align-items:center;justify-content:center;font-family:\'Space Mono\',monospace;font-size:10px;font-weight:700;color:' + badges[i] + ';flex-shrink:0">' + (i+1) + '</div>' +
+            '<div style="flex:1;min-width:0">' +
+              '<div style="font-size:12px;font-weight:700;color:var(--gold);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:\'Space Mono\',monospace">' + _escH(t.name) + '</div>' +
+              '<div style="font-size:10px;color:var(--muted);margin-top:1px">Vol: ' + volStr + '</div>' +
+            '</div>' +
+            '<div style="font-family:\'Space Mono\',monospace;font-size:12px;font-weight:700;color:' + pnlColor + ';flex-shrink:0">' + pnlStr + '</div>' +
+          '</div>';
+        }).join('');
+      }
+    }
+
+    // --- 3. MOST ACTIVE MARKETS: count whales per market ---
+    const mktsEl = document.getElementById('activeMarketsList');
+    if (mktsEl) {
+      const marketMap = {};
+      whales.forEach(w => {
+        const key = w.market || 'Unknown';
+        if (!marketMap[key]) marketMap[key] = { question: key, count: 0, yesCount: 0, totalCount: 0, url: w.polymarket_url || w.market_url || '#' };
+        marketMap[key].count++;
+        marketMap[key].totalCount++;
+        if ((w.side||'').toUpperCase() === 'YES') marketMap[key].yesCount++;
+      });
+      const topMarkets = Object.values(marketMap).sort((a, b) => b.count - a.count).slice(0, 5);
+      if (!topMarkets.length) {
+        mktsEl.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:8px 0">No market data available</div>';
+      } else {
+        mktsEl.innerHTML = topMarkets.map(m => {
+          const question = m.question.length > 52 ? m.question.substring(0, 49) + '...' : m.question;
+          const yesPct = m.totalCount > 0 ? Math.round((m.yesCount / m.totalCount) * 100) : null;
+          const yesBadge = yesPct !== null ? '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:rgba(34,197,94,0.12);color:#22c55e">' + yesPct + '% YES</span>' : '';
+          return '<a href="' + _escH(m.url) + '" target="_blank" rel="noopener" class="sidebar-row">' +
+            '<div style="flex:1;min-width:0">' +
+              '<div style="font-size:11px;color:var(--text);line-height:1.4;margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + _escH(question) + '</div>' +
+              '<div style="display:flex;align-items:center;gap:6px">' +
+                '<span style="font-size:10px;font-weight:700;color:var(--gold);font-family:\'Space Mono\',monospace">' + m.count + ' whale' + (m.count !== 1 ? 's' : '') + '</span>' +
+                yesBadge +
+              '</div>' +
+            '</div>' +
+          '</a>';
+        }).join('');
+      }
+    }
   } catch(e) {
-    const el = document.getElementById('whaleWatchList');
-    if (el) el.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:8px 0">Whale data unavailable</div>';
+    console.error('Sidebar whale data error:', e);
+    var fallback = '<div style="font-size:11px;color:var(--muted);padding:8px 0">Data unavailable</div>';
+    var el1 = document.getElementById('biggestTradesList');
+    var el2 = document.getElementById('bestPnlList');
+    var el3 = document.getElementById('activeMarketsList');
+    if (el1) el1.innerHTML = fallback;
+    if (el2) el2.innerHTML = fallback;
+    if (el3) el3.innerHTML = fallback;
   }
 })();
+
+function _fmtNum(n) {
+  if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n/1e3).toFixed(0) + 'K';
+  return Math.round(n).toLocaleString();
+}
 
 function _sharpTimeAgo(ts) {
   if (!ts) return '';
