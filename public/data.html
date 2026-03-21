@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>Market Intelligence — HYPERFLEX</title>
+<meta name="description" content="Premium market intelligence dashboard. Real-time whale flow, market movers, and cross-platform arbitrage data."/>
+<meta property="og:title" content="Market Intelligence — HYPERFLEX"/>
+<meta property="og:description" content="Real-time data from $228M+ in tracked whale positions."/>
+<meta property="og:url" content="https://hyperflex.network/data"/>
+<meta property="og:type" content="website"/>
+<link rel="icon" href="/hyperflex-logo.png"/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --bg: #0f0f0d;
+  --card: #161614;
+  --card-hover: #1c1c19;
+  --border: #262622;
+  --text: #e2ddd4;
+  --text-soft: #b0ab9f;
+  --muted: #70706a;
+  --gold: #c9920d;
+  --gold-dim: rgba(201,146,13,0.15);
+  --green: #22c55e;
+  --green-dim: rgba(34,197,94,0.12);
+  --red: #ef4444;
+  --red-dim: rgba(239,68,68,0.12);
+  --blue: #60a5fa;
+  --purple: #a78bfa;
+  --orange: #f59e0b;
+  --sans: 'Syne', sans-serif;
+  --mono: 'Space Mono', monospace;
+  --radius: 12px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; -webkit-font-smoothing: antialiased; }
+a { color: var(--gold); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* NAV */
+.topbar { display: flex; align-items: center; justify-content: space-between; padding: 16px 32px; border-bottom: 1px solid var(--border); background: rgba(15,15,13,0.92); backdrop-filter: blur(12px); position: sticky; top: 0; z-index: 100; }
+.topbar-logo { font-family: var(--sans); font-weight: 800; font-size: 18px; letter-spacing: 2px; color: var(--text); text-decoration: none; }
+.topbar-logo span { color: var(--gold); }
+.nav-links { display: flex; gap: 20px; align-items: center; }
+.nav-link { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--text-soft); text-decoration: none; transition: color 0.2s; }
+.nav-link:hover, .nav-link.active { color: var(--text); text-decoration: none; }
+
+/* HERO */
+.hero { text-align: center; padding: 56px 24px 40px; border-bottom: 1px solid var(--border); }
+.hero-icon { font-size: 48px; margin-bottom: 12px; }
+.hero h1 { font-family: var(--sans); font-size: 40px; font-weight: 800; margin-bottom: 8px; }
+.hero h1 span { color: var(--gold); }
+.hero-sub { font-family: var(--mono); font-size: 13px; color: var(--text-soft); max-width: 500px; margin: 0 auto; }
+
+/* CONTAINER */
+.container { max-width: 1200px; margin: 0 auto; padding: 32px 24px 80px; }
+
+/* SECTION */
+.section { margin-bottom: 40px; }
+.section-title { font-family: var(--sans); font-size: 22px; font-weight: 800; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
+.section-title span { color: var(--gold); }
+.section-badge { font-family: var(--mono); font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 12px; background: var(--gold-dim); color: var(--gold); border: 1px solid rgba(201,146,13,0.25); }
+
+/* CARD */
+.data-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; }
+.data-card-title { font-family: var(--mono); font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+
+/* GRID */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+
+/* BARS */
+.bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.bar-label { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--text-soft); width: 72px; flex-shrink: 0; text-transform: capitalize; }
+.bar-track { flex: 1; height: 28px; background: rgba(42,42,36,0.5); border-radius: 6px; overflow: hidden; position: relative; }
+.bar-fill { height: 100%; border-radius: 6px; transition: width 0.6s ease; display: flex; align-items: center; padding-left: 10px; }
+.bar-fill span { font-family: var(--mono); font-size: 11px; font-weight: 700; color: #fff; white-space: nowrap; }
+.bar-pct { font-family: var(--mono); font-size: 11px; color: var(--muted); width: 48px; text-align: right; flex-shrink: 0; }
+
+/* CONCENTRATION */
+.conc-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid rgba(42,42,36,0.4); }
+.conc-row:last-child { border-bottom: none; }
+.conc-row.gold { border: 1px solid rgba(201,146,13,0.4); border-radius: 8px; padding: 12px; margin-bottom: 4px; background: rgba(201,146,13,0.03); }
+.conc-stats { font-family: var(--mono); font-size: 12px; color: var(--gold); font-weight: 700; white-space: nowrap; flex-shrink: 0; min-width: 130px; }
+.conc-question { font-size: 13px; color: var(--text); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.4; }
+.conc-consensus { font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 6px; flex-shrink: 0; }
+.conc-consensus.high { background: var(--green-dim); color: var(--green); }
+.conc-consensus.low { background: rgba(255,255,255,0.05); color: var(--muted); }
+
+/* SENTIMENT */
+.sentiment-gauge { text-align: center; padding: 24px 0; }
+.sentiment-label { font-family: var(--mono); font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+.sentiment-value { font-family: var(--sans); font-size: 36px; font-weight: 800; margin-bottom: 16px; }
+.sentiment-bar { height: 16px; border-radius: 8px; background: var(--red); overflow: hidden; max-width: 400px; margin: 0 auto; }
+.sentiment-bar-fill { height: 100%; background: var(--green); border-radius: 8px; transition: width 0.6s ease; }
+.sentiment-meta { display: flex; justify-content: space-between; max-width: 400px; margin: 8px auto 0; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+
+/* MOVERS */
+.mover-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid rgba(42,42,36,0.4); }
+.mover-row:last-child { border-bottom: none; }
+.mover-question { font-size: 13px; color: var(--text); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mover-price { font-family: var(--mono); font-size: 12px; color: var(--text-soft); flex-shrink: 0; min-width: 48px; text-align: center; }
+.mover-change { font-family: var(--mono); font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 6px; flex-shrink: 0; }
+.mover-change.up { background: var(--green-dim); color: var(--green); }
+.mover-change.down { background: var(--red-dim); color: var(--red); }
+
+/* SPARKLINE */
+.sparkline { width: 60px; height: 24px; flex-shrink: 0; }
+
+/* ARBIT ROW */
+.arb-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid rgba(42,42,36,0.4); }
+.arb-row:last-child { border-bottom: none; }
+.arb-row.opportunity { background: rgba(201,146,13,0.04); border: 1px solid rgba(201,146,13,0.2); border-radius: 8px; padding: 12px; margin-bottom: 4px; }
+.arb-question { font-size: 13px; color: var(--text); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.arb-prices { display: flex; gap: 8px; flex-shrink: 0; align-items: center; }
+.arb-platform { font-family: var(--mono); font-size: 10px; padding: 3px 8px; border-radius: 4px; }
+.arb-platform.poly { background: rgba(96,165,250,0.12); color: var(--blue); }
+.arb-platform.kalshi { background: rgba(167,139,250,0.12); color: var(--purple); }
+.arb-spread { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--gold); flex-shrink: 0; }
+
+/* FOOTER CTA */
+.footer-cta { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; margin-top: 48px; padding-top: 32px; border-top: 1px solid var(--border); }
+.footer-cta a { font-family: var(--mono); font-size: 13px; font-weight: 700; padding: 12px 28px; border-radius: 8px; transition: all 0.15s; }
+.cta-primary { background: var(--gold); color: #0f0f0d !important; text-decoration: none !important; }
+.cta-primary:hover { opacity: 0.88; }
+.cta-secondary { background: transparent; border: 1px solid var(--border); color: var(--text-soft) !important; text-decoration: none !important; }
+.cta-secondary:hover { border-color: var(--gold); color: var(--gold) !important; }
+
+/* LOADING */
+.loading-placeholder { font-family: var(--mono); font-size: 11px; color: var(--muted); padding: 12px 0; }
+
+@media (max-width: 768px) {
+  .topbar { padding: 12px 16px; }
+  .nav-links { gap: 12px; }
+  .nav-link { font-size: 11px; }
+  .hero h1 { font-size: 28px; }
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .conc-stats { min-width: 100px; font-size: 10px; }
+  .bar-label { width: 56px; font-size: 10px; }
+}
+@media (max-width: 480px) {
+  .nav-links { gap: 8px; }
+  .hero { padding: 36px 16px 28px; }
+  .hero h1 { font-size: 24px; }
+  .sentiment-value { font-size: 28px; }
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="topbar">
+  <a href="/" class="topbar-logo">HYPER<span>FLEX</span></a>
+  <div class="nav-links">
+    <a href="/predictors" class="nav-link">Predictors</a>
+    <a href="/explore" class="nav-link">Explore</a>
+    <a href="/odds" class="nav-link">Odds</a>
+    <a href="/whales" class="nav-link">Whales</a>
+    <a href="/data" class="nav-link active">Data</a>
+    <a href="/templates" class="nav-link">Templates</a>
+    <a href="/api-docs" class="nav-link">API</a>
+    <a id="navDashLink" href="/dashboard" class="nav-link" style="display:none;color:#c9920d">Dashboard</a>
+  </div>
+</nav>
+<script>
+if (localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token')) {
+  var dl = document.getElementById('navDashLink'); if (dl) dl.style.display = '';
+}
+</script>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-icon">&#x1F4CA;</div>
+  <h1>Market <span>Intelligence</span></h1>
+  <div class="hero-sub">Real-time data from $228M+ in tracked whale positions</div>
+</section>
+
+<div class="container">
+
+  <!-- SECTION 1: WHALE FLOW -->
+  <div class="section" id="whaleFlowSection">
+    <div class="section-title">Whale <span>Flow</span> <span class="section-badge">LIVE</span></div>
+
+    <div class="grid-2">
+      <!-- Category Heat Map -->
+      <div class="data-card">
+        <div class="data-card-title">Capital by Category</div>
+        <div id="dataCategoryBars"><div class="loading-placeholder">Loading whale flow...</div></div>
+      </div>
+
+      <!-- Sentiment Gauge -->
+      <div class="data-card">
+        <div class="data-card-title">Smart Money Sentiment</div>
+        <div class="sentiment-gauge">
+          <div class="sentiment-label">Overall Direction</div>
+          <div class="sentiment-value" id="dataSentValue">--</div>
+          <div class="sentiment-bar"><div class="sentiment-bar-fill" id="dataSentBar" style="width:50%"></div></div>
+          <div class="sentiment-meta"><span id="dataSentYes">-- YES</span><span id="dataSentNo">-- NO</span></div>
+          <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:12px" id="dataSentPositions"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Concentration Index -->
+    <div class="data-card" style="margin-top:16px">
+      <div class="data-card-title">Whale Concentration &mdash; Top 10 Markets</div>
+      <div id="dataConcentration"><div class="loading-placeholder">Loading concentration data...</div></div>
+    </div>
+  </div>
+
+  <!-- SECTION 2: MARKET MOVERS -->
+  <div class="section" id="marketMoversSection">
+    <div class="section-title">Market <span>Movers</span> <span class="section-badge">24H</span></div>
+    <div class="data-card">
+      <div class="data-card-title">Biggest Price Moves in Last 24 Hours</div>
+      <div id="dataMovers"><div class="loading-placeholder">Loading market movers...</div></div>
+    </div>
+  </div>
+
+  <!-- SECTION 3: CROSS-PLATFORM COMPARISON -->
+  <div class="section" id="crossPlatformSection">
+    <div class="section-title">Cross-Platform <span>Comparison</span></div>
+    <div class="data-card">
+      <div class="data-card-title">Polymarket vs Kalshi &mdash; Arbitrage Opportunities</div>
+      <div id="dataArbitrage"><div class="loading-placeholder">Loading cross-platform data...</div></div>
+    </div>
+  </div>
+
+  <!-- FOOTER CTA -->
+  <div class="footer-cta">
+    <a href="/api-docs" class="cta-primary">Get API access</a>
+    <a href="/creator/signup" class="cta-secondary">Set up alerts</a>
+  </div>
+
+</div>
+
+<script>
+function _esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function fmtCap(n) {
+  if (n >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return '$' + (n / 1e3).toFixed(0) + 'K';
+  return '$' + Math.round(n);
+}
+
+// ── Load Whale Flow data ──
+(async function loadWhaleFlow() {
+  try {
+    const res = await fetch('/api/whale-flow');
+    if (!res.ok) throw new Error('API error ' + res.status);
+    const data = await res.json();
+
+    // Category bars
+    const catColors = { sports: '#60a5fa', politics: '#a78bfa', crypto: '#f59e0b', other: '#6b7280' };
+    const barsEl = document.getElementById('dataCategoryBars');
+    const cats = data.category_breakdown || [];
+    if (cats.length) {
+      barsEl.innerHTML = cats.map(c => {
+        return '<div class="bar-row">' +
+          '<div class="bar-label">' + _esc(c.category) + '</div>' +
+          '<div class="bar-track"><div class="bar-fill" style="width:' + Math.max(c.pct, 2) + '%;background:' + (catColors[c.category] || '#6b7280') + '"><span>' + fmtCap(c.capital) + '</span></div></div>' +
+          '<div class="bar-pct">' + c.pct + '%</div>' +
+        '</div>';
+      }).join('');
+    } else {
+      barsEl.innerHTML = '<div class="loading-placeholder">No category data available</div>';
+    }
+
+    // Sentiment
+    const s = data.sentiment || {};
+    const yesPct = s.yes_pct || 50;
+    const noPct = s.no_pct || 50;
+    const bullish = yesPct >= 50;
+    document.getElementById('dataSentValue').innerHTML = '<span style="color:' + (bullish ? 'var(--green)' : 'var(--red)') + '">' + (bullish ? yesPct + '% Bullish' : noPct + '% Bearish') + '</span>';
+    document.getElementById('dataSentBar').style.width = yesPct + '%';
+    document.getElementById('dataSentYes').textContent = yesPct + '% YES';
+    document.getElementById('dataSentNo').textContent = noPct + '% NO';
+    document.getElementById('dataSentPositions').textContent = (s.total_positions || 0).toLocaleString() + ' total positions tracked';
+
+    // Concentration
+    const concEl = document.getElementById('dataConcentration');
+    const conc = data.concentration || [];
+    if (conc.length) {
+      concEl.innerHTML = conc.map(m => {
+        const isHigh = m.consensus_pct >= 65;
+        const isGold = m.whale_count >= 10;
+        const q = (m.market || '').length > 65 ? m.market.substring(0, 62) + '...' : (m.market || '');
+        return '<div class="conc-row' + (isGold ? ' gold' : '') + '">' +
+          '<div class="conc-stats">' + m.whale_count + ' whales &middot; ' + fmtCap(m.total_capital) + '</div>' +
+          '<div class="conc-question">' + _esc(q) + '</div>' +
+          '<div class="conc-consensus ' + (isHigh ? 'high' : 'low') + '">' + m.consensus_pct + '% ' + m.consensus_side + '</div>' +
+        '</div>';
+      }).join('');
+    } else {
+      concEl.innerHTML = '<div class="loading-placeholder">No concentration data available</div>';
+    }
+  } catch(e) {
+    console.error('Whale flow error:', e);
+    document.getElementById('dataCategoryBars').innerHTML = '<div class="loading-placeholder">Failed to load whale flow data</div>';
+  }
+})();
+
+// ── Load Market Movers ──
+(async function loadMarketMovers() {
+  try {
+    const res = await fetch('/api/market-movers');
+    if (!res.ok) throw new Error('API error ' + res.status);
+    const data = await res.json();
+    const movers = data.movers || [];
+    const el = document.getElementById('dataMovers');
+    if (!movers.length) {
+      el.innerHTML = '<div class="loading-placeholder">No price moves detected in last 24h. Data appears after snapshot cycles.</div>';
+      return;
+    }
+    el.innerHTML = movers.map(m => {
+      const q = (m.question || '').length > 60 ? m.question.substring(0, 57) + '...' : (m.question || '');
+      const isUp = m.change_pct >= 0;
+      const changeStr = (isUp ? '+' : '') + m.change_pct.toFixed(1) + '%';
+      return '<div class="mover-row">' +
+        '<div class="mover-question">' + _esc(q) + '</div>' +
+        '<div class="mover-price">' + (m.current_price || 0) + '%</div>' +
+        '<canvas class="sparkline" data-mid="' + _esc(m.market_id || '') + '" width="60" height="24"></canvas>' +
+        '<div class="mover-change ' + (isUp ? 'up' : 'down') + '">' + changeStr + '</div>' +
+      '</div>';
+    }).join('');
+
+    // Load sparklines for each mover (fire and forget)
+    document.querySelectorAll('.sparkline[data-mid]').forEach(canvas => {
+      const mid = canvas.getAttribute('data-mid');
+      if (!mid) return;
+      fetch('/api/market-history/' + encodeURIComponent(mid))
+        .then(r => r.json())
+        .then(d => {
+          if (!d.history || d.history.length < 2) return;
+          const ctx = canvas.getContext('2d');
+          const pts = d.history.map(h => h.yes_price != null ? h.yes_price : 0.5);
+          const min = Math.min(...pts);
+          const max = Math.max(...pts);
+          const range = max - min || 0.01;
+          const w = canvas.width;
+          const h = canvas.height;
+          ctx.clearRect(0, 0, w, h);
+          const isUp = pts[pts.length - 1] >= pts[0];
+          ctx.strokeStyle = isUp ? '#22c55e' : '#ef4444';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          pts.forEach((p, i) => {
+            const x = (i / (pts.length - 1)) * w;
+            const y = h - ((p - min) / range) * (h - 4) - 2;
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          });
+          ctx.stroke();
+        })
+        .catch(() => {});
+    });
+  } catch(e) {
+    console.error('Market movers error:', e);
+    document.getElementById('dataMovers').innerHTML = '<div class="loading-placeholder">Failed to load market movers</div>';
+  }
+})();
+
+// ── Load Cross-Platform Comparison ──
+(async function loadCrossPlatform() {
+  try {
+    // Fetch odds data which contains both Polymarket and Kalshi markets
+    const res = await fetch('/api/markets/search?q=&limit=100');
+    if (!res.ok) throw new Error('API error');
+    const data = await res.json();
+    const results = data.results || data.markets || [];
+
+    // Group by normalized question to find cross-platform matches
+    const normalized = {};
+    results.forEach(m => {
+      const key = (m.title || m.question || '').toLowerCase().replace(/[^a-z0-9 ]/g, '').trim().substring(0, 50);
+      if (!key) return;
+      if (!normalized[key]) normalized[key] = [];
+      normalized[key].push(m);
+    });
+
+    // Find pairs with different platforms
+    const pairs = [];
+    Object.values(normalized).forEach(group => {
+      const platforms = new Set(group.map(m => (m.platform || '').toLowerCase()));
+      if (platforms.size >= 2) {
+        const poly = group.find(m => (m.platform || '').toLowerCase() === 'polymarket');
+        const kalshi = group.find(m => (m.platform || '').toLowerCase() === 'kalshi');
+        if (poly && kalshi) {
+          const polyPrice = Math.round((poly.probability || poly.yes_price || 0.5) * 100);
+          const kalshiPrice = Math.round((kalshi.probability || kalshi.yes_price || 0.5) * 100);
+          const spread = Math.abs(polyPrice - kalshiPrice);
+          pairs.push({
+            question: poly.title || poly.question || 'Unknown',
+            polyPrice,
+            kalshiPrice,
+            spread,
+            isArb: spread > 3
+          });
+        }
+      }
+    });
+
+    pairs.sort((a, b) => b.spread - a.spread);
+    const el = document.getElementById('dataArbitrage');
+
+    if (!pairs.length) {
+      el.innerHTML = '<div style="text-align:center;padding:32px 16px">' +
+        '<div style="font-size:32px;margin-bottom:12px">&#x1F50D;</div>' +
+        '<div style="font-family:var(--mono);font-size:12px;color:var(--muted);line-height:1.6">Cross-platform arbitrage data is updated as markets are indexed across both Polymarket and Kalshi.<br>Check back soon for price comparison opportunities.</div>' +
+      '</div>';
+      return;
+    }
+
+    el.innerHTML = pairs.slice(0, 10).map(p => {
+      const q = p.question.length > 55 ? p.question.substring(0, 52) + '...' : p.question;
+      return '<div class="arb-row' + (p.isArb ? ' opportunity' : '') + '">' +
+        '<div class="arb-question">' + _esc(q) + '</div>' +
+        '<div class="arb-prices">' +
+          '<span class="arb-platform poly">Poly ' + p.polyPrice + '%</span>' +
+          '<span class="arb-platform kalshi">Kalshi ' + p.kalshiPrice + '%</span>' +
+        '</div>' +
+        '<div class="arb-spread">' + (p.isArb ? '&#x26A0; ' : '') + p.spread + '% spread</div>' +
+      '</div>';
+    }).join('');
+  } catch(e) {
+    console.error('Cross-platform error:', e);
+    document.getElementById('dataArbitrage').innerHTML = '<div style="text-align:center;padding:32px 16px">' +
+      '<div style="font-size:32px;margin-bottom:12px">&#x1F50D;</div>' +
+      '<div style="font-family:var(--mono);font-size:12px;color:var(--muted);line-height:1.6">Cross-platform comparison data will appear as markets are indexed across platforms.</div>' +
+    '</div>';
+  }
+})();
+</script>
+
+</body>
+</html>

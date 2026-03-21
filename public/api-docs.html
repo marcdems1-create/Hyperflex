@@ -92,6 +92,7 @@ body { background: var(--paper); color: var(--text); font-family: var(--sans); l
     <a href="/explore" class="nav-link">Explore</a>
     <a href="/odds" class="nav-link">Odds</a>
     <a href="/whales" class="nav-link">Whales</a>
+    <a href="/data" class="nav-link">Data</a>
     <a href="/templates" class="nav-link">Templates</a>
     <a href="/api-docs" class="nav-link active">API</a>
   </div>
@@ -237,9 +238,80 @@ body { background: var(--paper); color: var(--text); font-family: var(--sans); l
     </div>
   </div>
 
+  <!-- Endpoint 6: Whale Flow -->
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method">GET</span>
+      <span class="endpoint-url">/api/whale-flow</span>
+    </div>
+    <div class="endpoint-desc">
+      Whale flow index with category breakdown, concentration analysis, and smart money sentiment. Aggregated from top 50 Polymarket trader positions. Cached for 10 minutes.
+    </div>
+    <div class="code-block">
+      <div class="code-label">Example Response</div>
+      <div class="code-content"><span class="hl-bracket">{</span>
+  <span class="hl-key">"category_breakdown"</span>: <span class="hl-bracket">[</span>
+    <span class="hl-bracket">{</span>
+      <span class="hl-key">"category"</span>: <span class="hl-str">"sports"</span>,
+      <span class="hl-key">"capital"</span>: <span class="hl-num">134831583</span>,
+      <span class="hl-key">"positions"</span>: <span class="hl-num">89</span>,
+      <span class="hl-key">"pct"</span>: <span class="hl-num">59</span>
+    <span class="hl-bracket">}</span>
+  <span class="hl-bracket">]</span>,
+  <span class="hl-key">"concentration"</span>: <span class="hl-bracket">[</span>
+    <span class="hl-bracket">{</span>
+      <span class="hl-key">"market"</span>: <span class="hl-str">"Trail Blazers vs. Timberwolves"</span>,
+      <span class="hl-key">"whale_count"</span>: <span class="hl-num">17</span>,
+      <span class="hl-key">"total_capital"</span>: <span class="hl-num">1450629</span>,
+      <span class="hl-key">"consensus_side"</span>: <span class="hl-str">"YES"</span>,
+      <span class="hl-key">"consensus_pct"</span>: <span class="hl-num">82</span>
+    <span class="hl-bracket">}</span>
+  <span class="hl-bracket">]</span>,
+  <span class="hl-key">"sentiment"</span>: <span class="hl-bracket">{</span>
+    <span class="hl-key">"yes_pct"</span>: <span class="hl-num">61</span>,
+    <span class="hl-key">"no_pct"</span>: <span class="hl-num">39</span>,
+    <span class="hl-key">"total_positions"</span>: <span class="hl-num">234</span>
+  <span class="hl-bracket">}</span>,
+  <span class="hl-key">"largest_moves"</span>: <span class="hl-bracket">[]</span>,
+  <span class="hl-key">"updated_at"</span>: <span class="hl-str">"2026-03-20T14:30:00.000Z"</span>
+<span class="hl-bracket">}</span></div>
+    </div>
+  </div>
+
+  <!-- Endpoint 7: Market Movers -->
+  <div class="endpoint">
+    <div class="endpoint-header">
+      <span class="method">GET</span>
+      <span class="endpoint-url">/api/market-movers</span>
+    </div>
+    <div class="endpoint-desc">
+      Top 10 markets with the biggest price changes in the last 24 hours. Sorted by absolute price change. Cached for 15 minutes.
+    </div>
+    <div class="code-block">
+      <div class="code-label">Example Response</div>
+      <div class="code-content"><span class="hl-bracket">{</span>
+  <span class="hl-key">"movers"</span>: <span class="hl-bracket">[</span>
+    <span class="hl-bracket">{</span>
+      <span class="hl-key">"market_id"</span>: <span class="hl-str">"0x1234...abcd"</span>,
+      <span class="hl-key">"question"</span>: <span class="hl-str">"Will Bitcoin hit $100K by June 2026?"</span>,
+      <span class="hl-key">"current_price"</span>: <span class="hl-num">72</span>,
+      <span class="hl-key">"change_pct"</span>: <span class="hl-num">15.3</span>
+    <span class="hl-bracket">}</span>,
+    <span class="hl-bracket">{</span>
+      <span class="hl-key">"market_id"</span>: <span class="hl-str">"0x5678...efgh"</span>,
+      <span class="hl-key">"question"</span>: <span class="hl-str">"Trump wins 2028 Republican primary?"</span>,
+      <span class="hl-key">"current_price"</span>: <span class="hl-num">45</span>,
+      <span class="hl-key">"change_pct"</span>: <span class="hl-num">-8.2</span>
+    <span class="hl-bracket">}</span>
+  <span class="hl-bracket">]</span>,
+  <span class="hl-key">"updated_at"</span>: <span class="hl-str">"2026-03-20T14:30:00.000Z"</span>
+<span class="hl-bracket">}</span></div>
+    </div>
+  </div>
+
   <div class="api-footer">
     <p>Questions? Reach out at <a href="mailto:team@hyperflex.network">team@hyperflex.network</a></p>
-    <p style="margin-top:8px"><a href="/">Back to HYPERFLEX</a></p>
+    <p style="margin-top:8px"><a href="/">Back to HYPERFLEX</a> &middot; <a href="/data">Data Dashboard</a></p>
   </div>
 
 </div>

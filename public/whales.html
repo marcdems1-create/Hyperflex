@@ -198,6 +198,44 @@ td { padding: 12px; font-size: 13px; vertical-align: middle; }
   .hero-icon { font-size: 40px; }
   .hero h1 { font-size: 22px; }
 }
+
+/* WHALE FLOW INDEX */
+.whale-flow { max-width: 1100px; margin: 0 auto 28px; padding: 0 24px; }
+.whale-flow-title { font-family: var(--sans); font-size: 20px; font-weight: 800; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+.whale-flow-title span { color: var(--gold); }
+.wf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.wf-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
+.wf-card-title { font-family: var(--mono); font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 14px; }
+
+/* Category heat map bars */
+.wf-bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.wf-bar-label { font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--text-soft); width: 64px; flex-shrink: 0; text-transform: capitalize; }
+.wf-bar-track { flex: 1; height: 24px; background: rgba(42,42,36,0.5); border-radius: 4px; overflow: hidden; position: relative; }
+.wf-bar-fill { height: 100%; border-radius: 4px; transition: width 0.6s ease; display: flex; align-items: center; padding-left: 8px; }
+.wf-bar-fill span { font-family: var(--mono); font-size: 10px; font-weight: 700; color: #fff; white-space: nowrap; }
+.wf-bar-meta { font-family: var(--mono); font-size: 10px; color: var(--muted); width: 72px; text-align: right; flex-shrink: 0; }
+
+/* Concentration rows */
+.wf-conc-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid rgba(42,42,36,0.4); }
+.wf-conc-row:last-child { border-bottom: none; }
+.wf-conc-row.gold-border { border: 1px solid rgba(201,146,13,0.4); border-radius: 8px; padding: 10px; margin-bottom: 4px; background: rgba(201,146,13,0.03); }
+.wf-conc-stats { font-family: var(--mono); font-size: 11px; color: var(--gold); font-weight: 700; white-space: nowrap; flex-shrink: 0; min-width: 110px; }
+.wf-conc-question { font-size: 12px; color: var(--text); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.4; }
+.wf-conc-consensus { font-family: var(--mono); font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px; flex-shrink: 0; }
+.wf-conc-consensus.high { background: rgba(34,197,94,0.15); color: var(--green); }
+.wf-conc-consensus.low { background: rgba(239,68,68,0.1); color: var(--muted); }
+
+/* Sentiment gauge */
+.wf-sentiment { text-align: center; padding: 20px 0; }
+.wf-sentiment-label { font-family: var(--mono); font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+.wf-sentiment-value { font-family: var(--sans); font-size: 28px; font-weight: 800; margin-bottom: 12px; }
+.wf-sentiment-bar { height: 12px; border-radius: 6px; background: var(--red); overflow: hidden; max-width: 300px; margin: 0 auto; }
+.wf-sentiment-bar-fill { height: 100%; background: var(--green); border-radius: 6px; transition: width 0.6s ease; }
+
+@media (max-width: 768px) {
+  .wf-grid { grid-template-columns: 1fr; }
+  .wf-conc-stats { min-width: 90px; font-size: 10px; }
+}
 </style>
 </head>
 <body>
@@ -210,6 +248,7 @@ td { padding: 12px; font-size: 13px; vertical-align: middle; }
     <a href="/explore" class="nav-link">Explore</a>
     <a href="/odds" class="nav-link">Odds</a>
     <a href="/whales" class="nav-link active">Whales</a>
+    <a href="/data" class="nav-link">Data</a>
     <a href="/templates" class="nav-link">Templates</a>
     <a href="/api-docs" class="nav-link">API</a>
     <a id="navDashLink" href="/dashboard" class="nav-link" style="display:none;color:#c9920d">Dashboard</a>
@@ -256,6 +295,37 @@ if (localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token')
     <div class="stat-value" id="statRatio">--</div>
   </div>
 </div>
+
+<!-- WHALE FLOW INDEX -->
+<section class="whale-flow" id="whaleFlowSection" style="display:none">
+  <div class="whale-flow-title">Whale <span>Flow</span></div>
+  <div class="wf-grid">
+    <!-- Category Heat Map -->
+    <div class="wf-card">
+      <div class="wf-card-title">Capital by Category</div>
+      <div id="wfCategoryBars">
+        <div style="font-size:11px;color:var(--muted)">Loading...</div>
+      </div>
+    </div>
+    <!-- Sentiment Gauge -->
+    <div class="wf-card">
+      <div class="wf-card-title">Smart Money Sentiment</div>
+      <div class="wf-sentiment" id="wfSentiment">
+        <div class="wf-sentiment-label">Overall Direction</div>
+        <div class="wf-sentiment-value" id="wfSentimentValue">--</div>
+        <div class="wf-sentiment-bar"><div class="wf-sentiment-bar-fill" id="wfSentimentBar" style="width:50%"></div></div>
+        <div style="display:flex;justify-content:space-between;max-width:300px;margin:6px auto 0;font-family:var(--mono);font-size:10px;color:var(--muted)"><span id="wfSentYes">-- YES</span><span id="wfSentNo">-- NO</span></div>
+      </div>
+    </div>
+  </div>
+  <!-- Whale Concentration (full width below) -->
+  <div class="wf-card" style="margin-top:16px">
+    <div class="wf-card-title">Whale Concentration &mdash; Top Markets</div>
+    <div id="wfConcentration">
+      <div style="font-size:11px;color:var(--muted)">Loading...</div>
+    </div>
+  </div>
+</section>
 
 <!-- FILTERS -->
 <div class="filters">
@@ -584,6 +654,85 @@ function renderMobileCards() {
   }).join('');
 }
 
+function renderWhaleFlow() {
+  if (!_whaleData) return;
+  const positions = _whaleData.whales || [];
+  if (!positions.length) return;
+
+  document.getElementById('whaleFlowSection').style.display = '';
+
+  // Category classification
+  const catKeywords = {
+    sports: ['nba','nfl','nhl','mlb','ufc','mma','soccer','football','baseball','basketball','hockey','tennis','golf','boxing','f1','formula','league','championship','playoffs','super bowl','world series','world cup','match','game','vs','trail blazers','timberwolves','lakers','celtics','warriors','nets','bucks','heat','suns','76ers','knicks','bulls','cavaliers','nuggets','thunder','rockets','mavericks','grizzlies','clippers','pacers','hawks','dodgers','yankees','mets','braves','astros','padres','cubs','red sox','phillies','rangers','chiefs','eagles','cowboys','49ers','bills','ravens','bengals','lions'],
+    politics: ['trump','biden','president','election','congress','senate','house','democrat','republican','gop','governor','mayor','primary','vote','poll','political','legislation','cabinet','supreme court'],
+    crypto: ['bitcoin','btc','ethereum','eth','solana','sol','crypto','defi','nft','token','blockchain','dogecoin','doge','xrp','ripple','binance','coinbase','altcoin','halving','web3']
+  };
+  function categorize(q) {
+    const ql = (q || '').toLowerCase();
+    for (const [cat, kws] of Object.entries(catKeywords)) {
+      for (const kw of kws) { if (ql.includes(kw)) return cat; }
+    }
+    return 'other';
+  }
+  const catColors = { sports: '#60a5fa', politics: '#a78bfa', crypto: '#f59e0b', other: '#6b7280' };
+  const catData = { sports: { cap: 0, n: 0 }, politics: { cap: 0, n: 0 }, crypto: { cap: 0, n: 0 }, other: { cap: 0, n: 0 } };
+  positions.forEach(p => { const c = categorize(p.market); catData[c].cap += (p.size || 0); catData[c].n++; });
+  const totalCap = Object.values(catData).reduce((s, d) => s + d.cap, 0) || 1;
+
+  // Render category bars
+  const barsEl = document.getElementById('wfCategoryBars');
+  const sorted = Object.entries(catData).sort((a, b) => b[1].cap - a[1].cap);
+  barsEl.innerHTML = sorted.map(([cat, d]) => {
+    const pct = Math.round(d.cap / totalCap * 100);
+    const capStr = d.cap >= 1e6 ? '$' + (d.cap / 1e6).toFixed(1) + 'M' : d.cap >= 1e3 ? '$' + (d.cap / 1e3).toFixed(0) + 'K' : '$' + Math.round(d.cap);
+    return '<div class="wf-bar-row">' +
+      '<div class="wf-bar-label">' + cat + '</div>' +
+      '<div class="wf-bar-track"><div class="wf-bar-fill" style="width:' + Math.max(pct, 2) + '%;background:' + catColors[cat] + '"><span>' + capStr + '</span></div></div>' +
+      '<div class="wf-bar-meta">' + pct + '%</div>' +
+    '</div>';
+  }).join('');
+
+  // Sentiment gauge
+  let yesC = 0, noC = 0;
+  positions.forEach(p => { const s = (p.side || '').toUpperCase(); if (s === 'YES' || s === 'Y') yesC++; else if (s === 'NO' || s === 'N') noC++; });
+  const sentTotal = yesC + noC || 1;
+  const yesPct = Math.round(yesC / sentTotal * 100);
+  const noPct = 100 - yesPct;
+  const bullish = yesPct >= 50;
+  document.getElementById('wfSentimentValue').innerHTML = '<span style="color:' + (bullish ? 'var(--green)' : 'var(--red)') + '">' + (bullish ? yesPct + '% Bullish' : noPct + '% Bearish') + '</span>';
+  document.getElementById('wfSentimentBar').style.width = yesPct + '%';
+  document.getElementById('wfSentYes').textContent = yesPct + '% YES';
+  document.getElementById('wfSentNo').textContent = noPct + '% NO';
+
+  // Whale concentration
+  const mktMap = {};
+  positions.forEach(p => {
+    const key = p.market || 'Unknown';
+    if (!mktMap[key]) mktMap[key] = { q: key, wc: 0, cap: 0, yc: 0, nc: 0, url: p.market_url || '' };
+    mktMap[key].wc++;
+    mktMap[key].cap += (p.size || 0);
+    const s = (p.side || '').toUpperCase();
+    if (s === 'YES' || s === 'Y') mktMap[key].yc++;
+    else if (s === 'NO' || s === 'N') mktMap[key].nc++;
+  });
+  const top5 = Object.values(mktMap).sort((a, b) => b.wc - a.wc).slice(0, 5);
+  const concEl = document.getElementById('wfConcentration');
+  concEl.innerHTML = top5.map(m => {
+    const total = m.yc + m.nc || 1;
+    const conPct = Math.max(Math.round(m.yc / total * 100), Math.round(m.nc / total * 100));
+    const conSide = m.yc >= m.nc ? 'YES' : 'NO';
+    const isHigh = conPct >= 65;
+    const capStr = m.cap >= 1e6 ? '$' + (m.cap / 1e6).toFixed(1) + 'M' : m.cap >= 1e3 ? '$' + (m.cap / 1e3).toFixed(0) + 'K' : '$' + Math.round(m.cap);
+    const goldBorder = m.wc >= 10 ? ' gold-border' : '';
+    const question = m.q.length > 60 ? m.q.substring(0, 57) + '...' : m.q;
+    return '<div class="wf-conc-row' + goldBorder + '">' +
+      '<div class="wf-conc-stats">' + m.wc + ' whales &middot; ' + capStr + '</div>' +
+      '<div class="wf-conc-question">' + question + '</div>' +
+      '<div class="wf-conc-consensus ' + (isHigh ? 'high' : 'low') + '">' + conPct + '% ' + conSide + '</div>' +
+    '</div>';
+  }).join('');
+}
+
 async function loadData() {
   try {
     document.getElementById('loadingState').style.display = '';
@@ -595,6 +744,7 @@ async function loadData() {
     _whaleData = await res.json();
 
     renderStats();
+    renderWhaleFlow();
     applyFilters();
 
     document.getElementById('loadingState').style.display = 'none';
