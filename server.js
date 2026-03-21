@@ -8469,7 +8469,7 @@ const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
   'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u', 'win',
-  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs'
+  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data'
 ]);
 
 // GET /my — private member dashboard
@@ -15662,6 +15662,356 @@ app.get('/api/whale-watch', async (req, res) => {
 
 // GET /whales — whale watch page
 app.get('/whales', (req, res) => res.sendFile(path.join(__dirname, 'public', 'whales.html')));
+
+// GET /data — premium data dashboard
+app.get('/data', (req, res) => res.sendFile(path.join(__dirname, 'public', 'data.html')));
+
+// ── WHALE FLOW INDEX — aggregated whale insights ──────────────────────────
+let _whaleFlowCache = null;
+
+app.get('/api/whale-flow', async (req, res) => {
+  try {
+    // Check cache (10 min TTL — same as whale watch)
+    if (_whaleFlowCache && (Date.now() - _whaleFlowCache.ts < 10 * 60 * 1000)) {
+      return res.json(_whaleFlowCache.data);
+    }
+
+    // Get whale data from existing cache or fetch
+    let whaleData;
+    if (_whaleWatchCache && _whaleWatchCache.data) {
+      whaleData = _whaleWatchCache.data;
+    } else {
+      // Trigger a fresh fetch if no cache
+      whaleData = await fetchWhalePositions();
+      _whaleWatchCache = { ts: Date.now(), data: whaleData };
+    }
+
+    const positions = whaleData.whales || [];
+
+    // ── Category breakdown ──
+    const categoryKeywords = {
+      sports: ['nba','nfl','nhl','mlb','ufc','mma','soccer','football','baseball','basketball','hockey','tennis','golf','boxing','f1','formula','grand prix','league','championship','playoffs','super bowl','world series','world cup','premier league','champions league','match','game','vs','trail blazers','timberwolves','lakers','celtics','warriors','nets','bucks','heat','suns','76ers','knicks','bulls','cavaliers','nuggets','thunder','rockets','mavericks','grizzlies','clippers','pacers','hawks','wizards','pistons','kings','magic','hornets','raptors','spurs','pelicans','jazz','blazers','wolves','patriots','chiefs','eagles','cowboys','49ers','bills','ravens','bengals','lions','dolphins','jets','packers','steelers','chargers','broncos','raiders','bears','saints','buccaneers','rams','seahawks','vikings','commanders','colts','texans','titans','jaguars','cardinals','giants','falcons','panthers','browns','yankees','dodgers','mets','braves','astros','phillies','padres','cubs','red sox','orioles','rangers','marlins','twins','guardians','mariners','rays','blue jays','tigers','brewers','reds','royals','athletics','angels','white sox','nationals','rockies','pirates','diamondbacks','liverpool','arsenal','manchester','chelsea','real madrid','barcelona','bayern','dortmund','juventus','inter milan','ac milan','psg','atletico','tottenham','leicester','everton','west ham','newcastle','aston villa','wolves','brighton','bournemouth','brentford','crystal palace','fulham','nottingham','burnley','sheffield','luton','ucf','ucla','stanford','duke','kentucky','gonzaga','villanova','purdue','houston','baylor','kansas','iowa','michigan','ohio state','penn state','alabama','georgia','clemson','florida','lsu','texas','oklahoma','oregon','usc','auburn','tennessee','ole miss','missouri','hofstra','drake','davidson'],
+      politics: ['trump','biden','president','election','congress','senate','house','democrat','republican','gop','governor','mayor','primary','vote','poll','political','legislation','cabinet','supreme court','scotus','roe','immigration','border','impeach','party','nominee','inaug','iran','regime','ceasefire','war ','military','sanction','nato','ukraine','russia','china','taiwan','north korea','nuclear','missile','invasion','annexation','coup','dictator','authoritarian','netanyahu','israel','palestine','gaza','hamas','hezbollah','putin','zelensky','xi jinping','pope','vatican','rahm emanuel','vance','desantis','newsom','haley'],
+      crypto: ['bitcoin','btc','ethereum','eth','solana','sol','crypto','defi','nft','token','blockchain','dogecoin','doge','xrp','ripple','binance','coinbase','altcoin','memecoin','halving','mining','staking','airdrop','web3','dao']
+    };
+
+    function categorize(question) {
+      const q = (question || '').toLowerCase();
+      for (const [cat, keywords] of Object.entries(categoryKeywords)) {
+        for (const kw of keywords) {
+          if (q.includes(kw)) return cat;
+        }
+      }
+      return 'other';
+    }
+
+    const catMap = { sports: { capital: 0, positions: 0 }, politics: { capital: 0, positions: 0 }, crypto: { capital: 0, positions: 0 }, other: { capital: 0, positions: 0 } };
+    positions.forEach(p => {
+      const cat = categorize(p.market);
+      catMap[cat].capital += (p.size || 0);
+      catMap[cat].positions++;
+    });
+    const totalCapital = Object.values(catMap).reduce((s, c) => s + c.capital, 0) || 1;
+    const category_breakdown = Object.entries(catMap)
+      .map(([category, d]) => ({ category, capital: Math.round(d.capital), positions: d.positions, pct: Math.round(d.capital / totalCapital * 100) }))
+      .sort((a, b) => b.capital - a.capital);
+
+    // ── Concentration — top markets by whale count ──
+    const mktMap = {};
+    positions.forEach(p => {
+      const key = p.market || 'Unknown';
+      if (!mktMap[key]) mktMap[key] = { market: key, whale_count: 0, total_capital: 0, yes_count: 0, no_count: 0, url: p.market_url || '' };
+      mktMap[key].whale_count++;
+      mktMap[key].total_capital += (p.size || 0);
+      const side = (p.side || '').toUpperCase();
+      if (side === 'YES' || side === 'Y') mktMap[key].yes_count++;
+      else if (side === 'NO' || side === 'N') mktMap[key].no_count++;
+    });
+    const concentration = Object.values(mktMap)
+      .sort((a, b) => b.whale_count - a.whale_count)
+      .slice(0, 10)
+      .map(m => {
+        const total = m.yes_count + m.no_count || 1;
+        const yesPct = Math.round(m.yes_count / total * 100);
+        const noPct = 100 - yesPct;
+        const consensus_side = yesPct >= noPct ? 'YES' : 'NO';
+        const consensus_pct = Math.max(yesPct, noPct);
+        return { market: m.market, whale_count: m.whale_count, total_capital: Math.round(m.total_capital), consensus_side, consensus_pct, url: m.url };
+      });
+
+    // ── Sentiment — overall YES/NO split ──
+    let yesCount = 0, noCount = 0;
+    positions.forEach(p => {
+      const s = (p.side || '').toUpperCase();
+      if (s === 'YES' || s === 'Y') yesCount++;
+      else if (s === 'NO' || s === 'N') noCount++;
+    });
+    const sentTotal = yesCount + noCount || 1;
+    const sentiment = { yes_pct: Math.round(yesCount / sentTotal * 100), no_pct: Math.round(noCount / sentTotal * 100), total_positions: positions.length };
+
+    // ── Largest moves (from whale trade stream) ──
+    const largest_moves = (_whaleTradeStream || []).slice(0, 10).map(e => ({
+      trader: e.trader_name, action: e.action, question: e.question, side: e.side, size: e.size, size_display: e.size_display, ts: e.ts
+    }));
+
+    const result = { category_breakdown, concentration, sentiment, largest_moves, updated_at: whaleData.updated_at || new Date().toISOString() };
+    _whaleFlowCache = { ts: Date.now(), data: result };
+    res.json(result);
+  } catch (err) {
+    console.error('[whale-flow]', err.message);
+    if (_whaleFlowCache) return res.json(_whaleFlowCache.data);
+    res.status(502).json({ error: 'Failed to compute whale flow', detail: err.message });
+  }
+});
+
+// ── MARKET MOVERS — biggest price changes in last 24h ─────────────────────
+let _marketMoversCache = null;
+
+app.get('/api/market-movers', async (req, res) => {
+  try {
+    // Check cache (15 min TTL)
+    if (_marketMoversCache && (Date.now() - _marketMoversCache.ts < 15 * 60 * 1000)) {
+      return res.json(_marketMoversCache.data);
+    }
+
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    let rows;
+    if (pool) {
+      rows = await dbQuery(
+        `SELECT market_id, question, yes_price, snapshot_at
+         FROM market_snapshots
+         WHERE snapshot_at >= $1
+         ORDER BY market_id, snapshot_at ASC`,
+        [twentyFourHoursAgo]
+      ).catch(() => []);
+    } else {
+      const { data, error } = await supabase.from('market_snapshots')
+        .select('market_id, question, yes_price, snapshot_at')
+        .gte('snapshot_at', twentyFourHoursAgo)
+        .order('snapshot_at', { ascending: true });
+      if (error) throw error;
+      rows = data || [];
+    }
+
+    // Group by market_id, find earliest and latest snapshot
+    const marketMap = {};
+    for (const r of rows) {
+      if (!r.market_id) continue;
+      if (!marketMap[r.market_id]) marketMap[r.market_id] = { question: r.question, first: r, last: r };
+      marketMap[r.market_id].last = r;
+      marketMap[r.market_id].question = r.question || marketMap[r.market_id].question;
+    }
+
+    const movers = Object.entries(marketMap)
+      .map(([market_id, d]) => {
+        const firstPrice = parseFloat(d.first.yes_price) || 0;
+        const lastPrice = parseFloat(d.last.yes_price) || 0;
+        const change = lastPrice - firstPrice;
+        const change_pct = firstPrice > 0 ? Math.round(change / firstPrice * 10000) / 100 : 0;
+        return { market_id, question: d.question || 'Unknown', current_price: Math.round(lastPrice * 100), change_pct, abs_change: Math.abs(change_pct) };
+      })
+      .filter(m => m.abs_change > 0)
+      .sort((a, b) => b.abs_change - a.abs_change)
+      .slice(0, 10)
+      .map(({ abs_change, ...rest }) => rest);
+
+    const result = { movers, updated_at: new Date().toISOString() };
+    _marketMoversCache = { ts: Date.now(), data: result };
+    res.json(result);
+  } catch (err) {
+    console.error('[market-movers]', err.message);
+    if (_marketMoversCache) return res.json(_marketMoversCache.data);
+    res.status(502).json({ error: 'Failed to compute market movers', detail: err.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// CONTENT STREAM — auto-generated insight cards from whale data
+// ══════════════════════════════════════════════════════════════════════════
+let _contentStreamCache = null;
+
+function generateContentStream() {
+  const insights = [];
+  const now = new Date().toISOString();
+
+  // Get whale data from existing cache
+  const whaleData = _whaleWatchCache && _whaleWatchCache.data ? _whaleWatchCache.data : null;
+  const flowData = _whaleFlowCache && _whaleFlowCache.data ? _whaleFlowCache.data : null;
+  const moversData = _marketMoversCache && _marketMoversCache.data ? _marketMoversCache.data : null;
+
+  if (!whaleData) return insights;
+
+  const positions = whaleData.whales || [];
+  const totalWhales = whaleData.total_whales || 0;
+
+  // Helper: format capital
+  function fmtCap(n) {
+    if (n >= 1000000) return '$' + (n / 1000000).toFixed(1) + 'M';
+    if (n >= 1000) return '$' + Math.round(n / 1000) + 'K';
+    return '$' + Math.round(n);
+  }
+
+  // ── a) whale_cluster — markets with 5+ whales ──
+  const mktMap = {};
+  positions.forEach(p => {
+    const key = p.market || 'Unknown';
+    if (!mktMap[key]) mktMap[key] = { market: key, whale_count: 0, total_capital: 0, yes_count: 0, no_count: 0, url: p.market_url || '' };
+    mktMap[key].whale_count++;
+    mktMap[key].total_capital += (p.size || 0);
+    const side = (p.side || '').toUpperCase();
+    if (side === 'YES' || side === 'Y') mktMap[key].yes_count++;
+    else if (side === 'NO' || side === 'N') mktMap[key].no_count++;
+  });
+
+  const clusters = Object.values(mktMap)
+    .filter(m => m.whale_count >= 5)
+    .sort((a, b) => b.whale_count - a.whale_count);
+
+  for (const c of clusters.slice(0, 3)) {
+    const total = c.yes_count + c.no_count || 1;
+    const majorSide = c.yes_count >= c.no_count ? 'YES' : 'NO';
+    const majorPct = Math.round(Math.max(c.yes_count, c.no_count) / total * 100);
+    const capDisplay = fmtCap(c.total_capital);
+    const shortMarket = (c.market || '').length > 50 ? c.market.substring(0, 47) + '...' : c.market;
+    insights.push({
+      type: 'whale_cluster',
+      headline: `${c.whale_count} whales piled into ${shortMarket}`,
+      body: `${capDisplay} combined \u00b7 ${majorPct}% consensus on ${majorSide}`,
+      stat: `${c.whale_count} whales`,
+      icon: '\uD83D\uDC0B',
+      timestamp: now,
+      cta_label: 'See Whales \u2192',
+      cta_url: '/whales',
+      share_text: `\uD83D\uDC0B ${c.whale_count} top Polymarket traders just put ${capDisplay} on ${shortMarket}. What do they know? hyperflex.network/whales`,
+      _sort_score: c.whale_count * 1000 + c.total_capital / 1000
+    });
+  }
+
+  // ── b) category_flow — top category by whale capital ──
+  if (flowData && flowData.category_breakdown) {
+    const topCat = flowData.category_breakdown[0];
+    if (topCat && topCat.capital > 0) {
+      const catName = topCat.category.charAt(0).toUpperCase() + topCat.category.slice(1);
+      const capDisplay = fmtCap(topCat.capital);
+      insights.push({
+        type: 'category_flow',
+        headline: `Smart money is pouring into ${catName.toLowerCase()}`,
+        body: `${capDisplay} deployed across ${topCat.positions} positions`,
+        stat: capDisplay,
+        icon: '\uD83D\uDCCA',
+        timestamp: now,
+        cta_label: 'See Flow \u2192',
+        cta_url: '/data',
+        share_text: `\uD83D\uDCCA ${capDisplay} in smart money is betting on ${catName.toLowerCase()} right now on Polymarket. See the flow \u2192 hyperflex.network/data`,
+        _sort_score: topCat.capital / 1000
+      });
+    }
+  }
+
+  // ── c) top_trader — highlight the week's top performer ──
+  // Build per-trader PnL from positions
+  const traderPnl = {};
+  positions.forEach(p => {
+    const name = p.trader || 'Unknown';
+    if (!traderPnl[name]) traderPnl[name] = { name, pnl: 0, rank: p.trader_rank || 999, positions: 0, topMarket: '' };
+    traderPnl[name].pnl = p.trader_pnl || traderPnl[name].pnl;
+    traderPnl[name].positions++;
+    if (!traderPnl[name].topMarket) traderPnl[name].topMarket = p.market || '';
+  });
+  const topTraders = Object.values(traderPnl).sort((a, b) => b.pnl - a.pnl);
+  if (topTraders.length > 0) {
+    const t = topTraders[0];
+    const pnlDisplay = t.pnl >= 1000000 ? '$' + (t.pnl / 1000000).toFixed(1) + 'M' : t.pnl >= 1000 ? '$' + Math.round(t.pnl / 1000) + 'K' : '$' + Math.round(t.pnl);
+    const pnlSign = t.pnl >= 0 ? '+' : '';
+    // Guess a category from their top market
+    const topMktLower = (t.topMarket || '').toLowerCase();
+    let catHint = 'bets';
+    if (/nba|nfl|nhl|mlb|ufc|soccer|football|baseball|basketball/i.test(topMktLower)) catHint = 'sports bets';
+    else if (/bitcoin|btc|eth|crypto|solana/i.test(topMktLower)) catHint = 'crypto bets';
+    else if (/trump|biden|election|president/i.test(topMktLower)) catHint = 'political bets';
+    insights.push({
+      type: 'top_trader',
+      headline: `This trader made ${pnlSign}${pnlDisplay} overall`,
+      body: `${t.name} leads the leaderboard with massive ${catHint}`,
+      stat: `${pnlSign}${pnlDisplay}`,
+      icon: '\uD83D\uDCB0',
+      timestamp: now,
+      cta_label: 'See Profile \u2192',
+      cta_url: '/whales',
+      share_text: `\uD83D\uDCB0 The #1 Polymarket trader has made ${pnlSign}${pnlDisplay}. See their portfolio \u2192 hyperflex.network/whales`,
+      _sort_score: Math.abs(t.pnl) / 1000
+    });
+  }
+
+  // ── d) market_mover — biggest price change ──
+  if (moversData && moversData.movers && moversData.movers.length > 0) {
+    const topMover = moversData.movers[0];
+    const changePts = Math.abs(topMover.change_pct).toFixed(0);
+    const direction = topMover.change_pct > 0 ? 'surged' : 'dropped';
+    const sign = topMover.change_pct > 0 ? '+' : '-';
+    const shortQ = (topMover.question || '').length > 50 ? topMover.question.substring(0, 47) + '...' : topMover.question;
+    // Count whales in this market
+    const whalesInMarket = mktMap[topMover.question] ? mktMap[topMover.question].whale_count : 0;
+    const whaleNote = whalesInMarket > 0 ? `${whalesInMarket} whale${whalesInMarket > 1 ? 's' : ''} active in this market` : 'Major price movement detected';
+    insights.push({
+      type: 'market_mover',
+      headline: `${shortQ} ${direction} ${sign}${changePts}%`,
+      body: whaleNote,
+      stat: `${sign}${changePts}pts`,
+      icon: '\uD83D\uDE80',
+      timestamp: now,
+      cta_label: 'See Odds \u2192',
+      cta_url: '/odds',
+      share_text: `\uD83D\uDE80 ${shortQ} just ${direction} ${sign}${changePts}% on Polymarket. Track the move \u2192 hyperflex.network/odds`,
+      _sort_score: Math.abs(topMover.change_pct) * 100
+    });
+  }
+
+  // ── e) total_tracked — platform stat ──
+  const totalCapital = positions.reduce((s, p) => s + (p.size || 0), 0);
+  const totalCapDisplay = fmtCap(totalCapital);
+  insights.push({
+    type: 'total_tracked',
+    headline: `Now tracking ${totalCapDisplay} in whale positions`,
+    body: `Across the top ${totalWhales} Polymarket traders in real-time`,
+    stat: totalCapDisplay,
+    icon: '\uD83D\uDCE1',
+    timestamp: now,
+    cta_label: 'See All Data \u2192',
+    cta_url: '/data',
+    share_text: `\uD83D\uDCE1 HYPERFLEX is now tracking ${totalCapDisplay} across the top ${totalWhales} Polymarket whale traders in real-time. hyperflex.network/whales`,
+    _sort_score: totalCapital / 100000
+  });
+
+  // Sort by interest score, pick the best
+  insights.sort((a, b) => (b._sort_score || 0) - (a._sort_score || 0));
+
+  // Remove internal sort score
+  return insights.map(({ _sort_score, ...rest }) => rest);
+}
+
+app.get('/api/content-stream', (req, res) => {
+  try {
+    // Check cache (15 minute TTL)
+    if (_contentStreamCache && (Date.now() - _contentStreamCache.ts < 15 * 60 * 1000)) {
+      const limit = Math.min(parseInt(req.query.limit) || 10, 20);
+      return res.json({ insights: _contentStreamCache.data.slice(0, limit), updated_at: _contentStreamCache.updated_at });
+    }
+
+    const insights = generateContentStream();
+    _contentStreamCache = { ts: Date.now(), data: insights, updated_at: new Date().toISOString() };
+
+    const limit = Math.min(parseInt(req.query.limit) || 10, 20);
+    res.json({ insights: insights.slice(0, limit), updated_at: _contentStreamCache.updated_at });
+  } catch (err) {
+    console.error('[content-stream]', err.message);
+    if (_contentStreamCache) {
+      const limit = Math.min(parseInt(req.query.limit) || 10, 20);
+      return res.json({ insights: _contentStreamCache.data.slice(0, limit), updated_at: _contentStreamCache.updated_at });
+    }
+    res.status(502).json({ error: 'Failed to generate content stream', detail: err.message });
+  }
+});
 
 // ── WHALE ALERTS — subscribe/unsubscribe to trader moves ──────────────────
 app.post('/api/whale-alerts', requireAuth, async (req, res) => {

@@ -1368,7 +1368,84 @@ footer {
   /* Mobile: hide "Get started free", show "Sign in" linking to /creator/login */
   .btn-nav-cta { display: none !important; }
   .btn-nav-signin-mobile { display: inline-flex !important; align-items: center; min-height: 44px; }
+  .insight-hero-grid { grid-template-columns: 1fr !important; }
+  .insight-hero-card { min-height: auto !important; }
 }
+
+/* ── INSIGHT HERO CARDS ── */
+.insight-hero-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+.insight-hero-card {
+  background: #0f0e0c;
+  border: 1px solid #2a2a26;
+  border-top: 3px solid var(--gold);
+  border-radius: 10px;
+  padding: 24px 20px 20px;
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.insight-hero-card:hover {
+  border-color: rgba(201,146,13,0.35);
+  box-shadow: 0 6px 28px rgba(0,0,0,0.4);
+}
+.insight-hero-icon { font-size: 28px; margin-bottom: 6px; }
+.insight-hero-stat {
+  font-family: var(--sans);
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--gold-lt);
+  margin-bottom: 8px;
+  letter-spacing: -0.3px;
+}
+.insight-hero-headline {
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 6px;
+  line-height: 1.4;
+}
+.insight-hero-body {
+  font-size: 12px;
+  color: var(--dim);
+  line-height: 1.5;
+  margin-bottom: auto;
+}
+.insight-hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+.insight-hero-cta {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--gold);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.insight-hero-cta:hover { color: var(--gold-bright); }
+.insight-share-btn {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-decoration: none;
+}
+.insight-share-btn:hover { color: var(--text); border-color: var(--dim); }
 </style>
 </head>
 <body>
@@ -1387,7 +1464,7 @@ footer {
     <a href="/explore" class="nav-link">Explore</a>
     <a href="/odds" class="nav-link">Odds</a>
     <a href="/whales" class="nav-link">Whales</a>
-    <a href="/templates" class="nav-link">Templates</a>
+    <a href="/data" class="nav-link">Data</a>
     <a href="/api-docs" class="nav-link">API</a>
     <a href="#pricing" class="nav-link">Pricing</a>
   </div>
@@ -1624,6 +1701,46 @@ async function runQuickPreview() {
   }
 }
 document.getElementById('qp-wallet').addEventListener('keydown', e => { if (e.key === 'Enter') runQuickPreview(); });
+</script>
+
+<!-- LIVE INSIGHT HERO CARDS -->
+<section id="insight-hero-section" style="padding:60px 24px 0;max-width:1000px;margin:0 auto;display:none">
+  <div style="text-align:center;margin-bottom:24px">
+    <div style="font-family:var(--mono);font-size:11px;color:var(--gold);letter-spacing:0.12em;text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:8px">
+      <span style="display:inline-block;width:20px;height:1px;background:var(--gold)"></span>
+      Live whale intelligence
+      <span style="display:inline-block;width:20px;height:1px;background:var(--gold)"></span>
+    </div>
+    <p style="font-size:13px;color:var(--dim);margin:0">Auto-generated from real-time Polymarket whale data</p>
+  </div>
+  <div class="insight-hero-grid" id="insight-hero-grid"></div>
+</section>
+<script>
+(function loadInsightHero() {
+  fetch('/api/content-stream?limit=3').then(r => r.json()).then(data => {
+    const insights = data.insights || [];
+    if (!insights.length) return;
+    const grid = document.getElementById('insight-hero-grid');
+    const section = document.getElementById('insight-hero-section');
+    grid.innerHTML = insights.map(ins => {
+      const shareUrl = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(ins.share_text || '');
+      return `<div class="insight-hero-card">
+        <div class="insight-hero-icon">${ins.icon || ''}</div>
+        <div class="insight-hero-stat">${escH(ins.stat || '')}</div>
+        <div class="insight-hero-headline">${escH(ins.headline || '')}</div>
+        <div class="insight-hero-body">${escH(ins.body || '')}</div>
+        <div class="insight-hero-actions">
+          <a href="${ins.cta_url || '/whales'}" class="insight-hero-cta">${escH(ins.cta_label || 'Learn more →')}</a>
+          <a href="${shareUrl}" target="_blank" rel="noopener" class="insight-share-btn">Share on X</a>
+        </div>
+      </div>`;
+    }).join('');
+    section.style.display = 'block';
+  }).catch(() => {});
+  function escH(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+  // Auto-refresh every 5 minutes
+  setInterval(loadInsightHero, 5 * 60 * 1000);
+})();
 </script>
 
 <!-- FEATURES SHOWCASE -->

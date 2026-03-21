@@ -767,6 +767,28 @@ nav {
   input, textarea, select { font-size: 16px !important; }
   .nav-links { display: none; }
 }
+@keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.4} }
+.explore-insight-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #0f0e0c;
+  border: 1px solid #2a2a26;
+  border-left: 3px solid var(--gold);
+  border-radius: 8px;
+  padding: 12px 14px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.explore-insight-card:hover { border-color: rgba(201,146,13,0.4); box-shadow: 0 2px 12px rgba(0,0,0,0.3); }
+.explore-insight-icon { font-size: 22px; flex-shrink: 0; }
+.explore-insight-info { flex: 1; min-width: 0; }
+.explore-insight-headline { font-size: 13px; font-weight: 700; color: var(--text-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.explore-insight-body { font-size: 11px; color: #7a7870; margin-top: 2px; }
+.explore-insight-stat { font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 800; color: var(--gold); flex-shrink: 0; white-space: nowrap; }
+.explore-insight-share { font-family: 'Space Mono', monospace; font-size: 9px; color: #7a7870; background: transparent; border: 1px solid #2a2a26; border-radius: 4px; padding: 3px 6px; cursor: pointer; flex-shrink: 0; text-decoration: none; transition: all 0.15s; }
+.explore-insight-share:hover { color: var(--text-soft); border-color: #7a7870; }
 </style>
 </head>
 <body>
@@ -783,6 +805,7 @@ nav {
     <a href="/explore" style="color:var(--text-soft)">Explore</a>
     <a href="/odds">Odds</a>
     <a href="/whales">Whales</a>
+    <a href="/data">Data</a>
     <a href="/templates">Templates</a>
     <a href="/api-docs">API</a>
     <!-- logged-in state -->
@@ -910,6 +933,15 @@ nav {
       ↑ <span id="newActivityCount">0</span> new activities — click to refresh
     </div>
 
+    <!-- LIVE INSIGHTS -->
+    <div id="explore-insights" style="display:none;margin-bottom:16px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gold);margin-bottom:12px;font-family:'Space Mono',monospace;display:flex;align-items:center;gap:8px">
+        <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#2d9b5f;animation:pulse-dot 2s infinite"></span>
+        Live Insights
+      </div>
+      <div id="explore-insights-cards" style="display:flex;flex-direction:column;gap:8px"></div>
+    </div>
+
     <!-- ACTIVITY FEED TAB -->
     <div class="feed-section active" id="tab-activity">
       <div id="activity-feed"><div class="loading">Loading activity...</div></div>
@@ -969,6 +1001,14 @@ nav {
       <div id="activeMarketsList"><div class="loading" style="padding:8px 0;">Loading...</div></div>
     </div>
 
+    <!-- MARKET MOVERS -->
+    <div class="sidebar-card" id="marketMoversCard">
+      <div class="sidebar-title">&#x1F4CA; MARKET MOVERS</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Biggest price changes in last 24h</div>
+      <div id="marketMoversList"><div class="loading" style="padding:8px 0;">Loading movers...</div></div>
+      <a href="/odds" class="sidebar-footer-link">See all &#8594;</a>
+    </div>
+
     <!-- FOLLOWING (kept, shown when logged in) -->
     <div class="sidebar-card" id="followingCard" style="display:none">
       <div class="sidebar-title">FOLLOWING</div>
@@ -988,6 +1028,31 @@ let activityPollInterval = null;
 let _exploreFollowing = [];
 let _exploreSearchQuery = '';
 let _exploreSearchTimer = null;
+
+// ── LIVE INSIGHTS LOADER ──
+function loadExploreInsights() {
+  fetch('/api/content-stream?limit=2').then(r => r.json()).then(data => {
+    const insights = data.insights || [];
+    if (!insights.length) return;
+    const container = document.getElementById('explore-insights-cards');
+    const section = document.getElementById('explore-insights');
+    function escH(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+    container.innerHTML = insights.map(ins => {
+      const shareUrl = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(ins.share_text || '');
+      return `<a href="${ins.cta_url || '/whales'}" class="explore-insight-card">
+        <div class="explore-insight-icon">${ins.icon || ''}</div>
+        <div class="explore-insight-info">
+          <div class="explore-insight-headline">${escH(ins.headline || '')}</div>
+          <div class="explore-insight-body">${escH(ins.body || '')}</div>
+        </div>
+        <div class="explore-insight-stat">${escH(ins.stat || '')}</div>
+        <a href="${shareUrl}" target="_blank" rel="noopener" class="explore-insight-share" onclick="event.stopPropagation()">Share on X</a>
+      </a>`;
+    }).join('');
+    section.style.display = 'block';
+  }).catch(() => {});
+}
+loadExploreInsights();
 
 function onExploreSearch(val) {
   clearTimeout(_exploreSearchTimer);
@@ -2116,6 +2181,40 @@ async function loadFollowingFeed() {
     if (el1) el1.innerHTML = fallback;
     if (el2) el2.innerHTML = fallback;
     if (el3) el3.innerHTML = fallback;
+  }
+})();
+
+// ── MARKET MOVERS SIDEBAR ──
+(async function loadMarketMovers() {
+  try {
+    const res = await fetch('/api/market-movers');
+    if (!res.ok) throw new Error('Failed to fetch movers');
+    const data = await res.json();
+    const movers = data.movers || [];
+    const el = document.getElementById('marketMoversList');
+    if (!el) return;
+    if (!movers.length) {
+      el.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:8px 0">No price moves detected yet</div>';
+      return;
+    }
+    el.innerHTML = movers.slice(0, 5).map(m => {
+      const question = (m.question || '').length > 48 ? m.question.substring(0, 45) + '...' : (m.question || '');
+      const isUp = m.change_pct >= 0;
+      const changeStr = (isUp ? '+' : '') + m.change_pct.toFixed(1) + '%';
+      const changeColor = isUp ? 'var(--green)' : 'var(--red)';
+      const changeBg = isUp ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)';
+      return '<div class="sidebar-row">' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-size:11px;color:var(--text);line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + _escH(question) + '</div>' +
+          '<div style="font-size:10px;color:var(--muted);margin-top:2px">Price: ' + (m.current_price || 0) + '%</div>' +
+        '</div>' +
+        '<div style="font-family:\'Space Mono\',monospace;font-size:12px;font-weight:700;padding:2px 8px;border-radius:4px;background:' + changeBg + ';color:' + changeColor + ';flex-shrink:0">' + changeStr + '</div>' +
+      '</div>';
+    }).join('');
+  } catch(e) {
+    console.error('Market movers error:', e);
+    var el = document.getElementById('marketMoversList');
+    if (el) el.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:8px 0">Data unavailable</div>';
   }
 })();
 
