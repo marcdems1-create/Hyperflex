@@ -295,7 +295,11 @@ function renderStats() {
 
   // Largest position
   const largest = positions.length ? positions.reduce((a, b) => a.size > b.size ? a : b) : null;
-  document.getElementById('statLargest').textContent = largest ? fmtFull$(largest.size) : '--';
+  const largestEl = document.getElementById('statLargest');
+  if (largest) {
+    const url = largest.market_url || '#';
+    largestEl.innerHTML = `<a href="${url}" target="_blank" rel="noopener" style="color:var(--gold);text-decoration:none">${fmtFull$(largest.size)}</a><div style="font-size:10px;color:var(--dim);margin-top:4px">${truncate(largest.trader || '', 15)} → ${truncate(largest.market || '', 25)}</div>`;
+  }
 
   // Most popular market
   const marketCounts = {};
@@ -303,7 +307,10 @@ function renderStats() {
   const popular = Object.entries(marketCounts).sort((a, b) => b[1] - a[1])[0];
   const popEl = document.getElementById('statPopular');
   if (popular) {
-    popEl.textContent = truncate(popular[0], 40) + ' (' + popular[1] + ' whales)';
+    // Find the URL of the most popular market
+    const popPosition = positions.find(p => p.market === popular[0]);
+    const popUrl = popPosition?.market_url || `/odds?q=${encodeURIComponent(popular[0])}`;
+    popEl.innerHTML = `<a href="${popUrl}" target="_blank" rel="noopener" style="color:var(--text);text-decoration:none;border-bottom:1px dashed rgba(201,146,13,0.4);transition:color .15s" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='var(--text)'">${truncate(popular[0], 40)}</a> <span style="color:var(--dim);font-size:11px">(${popular[1]} whales)</span>`;
   }
 
   // YES/NO ratio
