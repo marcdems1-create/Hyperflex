@@ -4692,6 +4692,10 @@ body.nav-open .sidebar-backdrop {
                 style="background:none;border:none;border-bottom:2px solid transparent;color:var(--dim);padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s;margin-bottom:-1px;display:flex;align-items:center;gap:7px">
                 🔍 Find Markets
               </button>
+              <button id="ptab-bets" onclick="switchPortfolioTab('bets')"
+                style="background:none;border:none;border-bottom:2px solid transparent;color:var(--dim);padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s;margin-bottom:-1px;display:flex;align-items:center;gap:7px">
+                📝 Log Bets
+              </button>
             </div>
             <!-- Share My Record Button -->
             <div id="portfolioShareBar" style="display:none;margin-bottom:16px">
@@ -4896,6 +4900,50 @@ body.nav-open .sidebar-backdrop {
                   <div style="font-size:13px">Type a keyword to find live markets on Polymarket and Kalshi.</div>
                 </div>
               </div>
+            </div>
+            <!-- LOG BETS tab -->
+            <div id="ptabContent-bets" style="display:none">
+              <!-- Stats row -->
+              <div id="betStatsRow" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:20px">
+                <div style="background:var(--cream);border:1px solid var(--border);border-radius:10px;padding:14px 16px"><div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">WAGERED</div><div id="betStatWagered" style="font-family:var(--mono);font-size:20px;font-weight:900;color:var(--text)">$0</div></div>
+                <div style="background:var(--cream);border:1px solid var(--border);border-radius:10px;padding:14px 16px"><div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">P&L</div><div id="betStatPnl" style="font-family:var(--mono);font-size:20px;font-weight:900;color:var(--dim)">$0</div></div>
+                <div style="background:var(--cream);border:1px solid var(--border);border-radius:10px;padding:14px 16px"><div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">WIN RATE</div><div id="betStatWinRate" style="font-family:var(--mono);font-size:20px;font-weight:900;color:var(--text)">—</div></div>
+                <div style="background:var(--cream);border:1px solid var(--border);border-radius:10px;padding:14px 16px"><div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">ROI</div><div id="betStatRoi" style="font-family:var(--mono);font-size:20px;font-weight:900;color:var(--dim)">—</div></div>
+              </div>
+              <!-- Platform breakdown -->
+              <div id="betPlatformPills" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px"></div>
+              <!-- Add Bet Form -->
+              <div style="background:var(--cream);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:20px">
+                <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:16px">Log a Bet</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                  <div><label style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;display:block;margin-bottom:4px">Platform</label>
+                    <select id="betPlatform" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--sans);font-size:13px;padding:10px 14px;outline:none">
+                      <option value="draftkings">DraftKings</option><option value="fanduel">FanDuel</option><option value="betmgm">BetMGM</option><option value="bet365">Bet365</option><option value="bovada">Bovada</option><option value="polymarket">Polymarket</option><option value="kalshi">Kalshi</option><option value="other">Other</option>
+                    </select></div>
+                  <div><label style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;display:block;margin-bottom:4px">Side / Pick</label>
+                    <input type="text" id="betSide" placeholder="Lakers, Over 215.5, YES" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:10px 14px;outline:none;box-sizing:border-box"/></div>
+                  <div style="grid-column:1/-1"><label style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;display:block;margin-bottom:4px">Event / Question</label>
+                    <input type="text" id="betQuestion" placeholder="Lakers -3.5 vs Celtics" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:10px 14px;outline:none;box-sizing:border-box"/></div>
+                  <div><label style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;display:block;margin-bottom:4px">Amount ($)</label>
+                    <input type="number" id="betAmount" placeholder="100" min="0" step="0.01" oninput="autoCalcPayout()" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:13px;padding:10px 14px;outline:none;box-sizing:border-box"/></div>
+                  <div><label style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;display:block;margin-bottom:4px">Odds</label>
+                    <input type="text" id="betOdds" placeholder="-110, +250" oninput="autoCalcPayout()" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:13px;padding:10px 14px;outline:none;box-sizing:border-box"/></div>
+                  <div><label style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;display:block;margin-bottom:4px">Potential Payout ($)</label>
+                    <input type="number" id="betPayout" placeholder="190.91" min="0" step="0.01" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:13px;padding:10px 14px;outline:none;box-sizing:border-box"/></div>
+                  <div><label style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;display:block;margin-bottom:4px">Notes (optional)</label>
+                    <input type="text" id="betNotes" placeholder="Sharp line move..." style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:10px 14px;outline:none;box-sizing:border-box"/></div>
+                </div>
+                <div id="betError" style="color:#ef4444;font-family:var(--mono);font-size:12px;margin-top:8px;display:none"></div>
+                <button id="betSubmitBtn" onclick="submitBet()" style="margin-top:16px;background:var(--gold);color:var(--ink);border:none;border-radius:10px;padding:12px 24px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer">Log Bet →</button>
+              </div>
+              <!-- Bet filter tabs -->
+              <div style="display:flex;gap:8px;margin-bottom:16px">
+                <button onclick="filterBets('all')" id="betFilterAll" style="background:var(--gold);color:var(--ink);border:none;border-radius:6px;padding:6px 14px;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer">All</button>
+                <button onclick="filterBets('open')" id="betFilterOpen" style="background:transparent;color:var(--dim);border:1px solid var(--border);border-radius:6px;padding:6px 14px;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer">Open</button>
+                <button onclick="filterBets('settled')" id="betFilterSettled" style="background:transparent;color:var(--dim);border:1px solid var(--border);border-radius:6px;padding:6px 14px;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer">Settled</button>
+              </div>
+              <!-- Bet list -->
+              <div id="betList"><div style="text-align:center;padding:40px 20px;color:var(--dim)"><div style="font-size:32px;margin-bottom:12px">📝</div><div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">No bets logged yet</div><div style="font-size:13px">Use the form above to start tracking your bets across any platform.</div></div></div>
             </div>
           </div><!-- /portfolioMain -->
           </div>
@@ -11760,8 +11808,8 @@ async function loadPolymarketPositions(forceRefresh) {
 let _activePortfolioTab = 'all';
 function switchPortfolioTab(tab) {
   _activePortfolioTab = tab;
-  const tabs = ['all','poly','kalshi','manifold','hfx','search'];
-  const colors = {all:'var(--gold)',poly:'#a78bfa',kalshi:'#fbbf24',manifold:'#34d399',hfx:'var(--gold)',search:'var(--gold)'};
+  const tabs = ['all','poly','kalshi','manifold','hfx','search','bets'];
+  const colors = {all:'var(--gold)',poly:'#a78bfa',kalshi:'#fbbf24',manifold:'#34d399',hfx:'var(--gold)',search:'var(--gold)',bets:'#22c55e'};
   tabs.forEach(t => {
     const btn = document.getElementById('ptab-'+t);
     const content = document.getElementById('ptabContent-'+t);
@@ -11770,7 +11818,169 @@ function switchPortfolioTab(tab) {
   });
   if (tab === 'all') updateAllPositionsTab();
   if (tab === 'hfx') loadHFXPositions(false);
+  if (tab === 'bets') { loadBets(); loadBetStats(); }
 }
+
+// ── MANUAL BET TRACKER ──────────────────────────────────────────────────────
+const PLATFORM_COLORS = {draftkings:'#00694b',fanduel:'#1493ff',betmgm:'#c9920d',bet365:'#ffd700',bovada:'#cc0000',polymarket:'#7c3aed',kalshi:'#d97706',other:'#6b7280'};
+let _betsFilter = 'all';
+let _betsData = [];
+
+function autoCalcPayout() {
+  const amount = parseFloat(document.getElementById('betAmount')?.value) || 0;
+  const oddsStr = (document.getElementById('betOdds')?.value || '').trim();
+  if (!amount || !oddsStr) return;
+  const odds = parseFloat(oddsStr);
+  if (isNaN(odds)) return;
+  let payout = 0;
+  if (odds > 0) payout = amount + (amount * odds / 100);
+  else if (odds < 0) payout = amount + (amount * 100 / Math.abs(odds));
+  else return;
+  const el = document.getElementById('betPayout');
+  if (el) el.value = payout.toFixed(2);
+}
+
+async function submitBet() {
+  const errEl = document.getElementById('betError');
+  errEl.style.display = 'none';
+  const body = {
+    platform: document.getElementById('betPlatform').value,
+    question: document.getElementById('betQuestion').value.trim(),
+    side: document.getElementById('betSide').value.trim(),
+    amount: parseFloat(document.getElementById('betAmount').value) || 0,
+    odds: document.getElementById('betOdds').value.trim() || null,
+    potential_payout: parseFloat(document.getElementById('betPayout').value) || null,
+    notes: document.getElementById('betNotes').value.trim() || null,
+  };
+  if (!body.question || !body.side || !body.amount) {
+    errEl.textContent = 'Question, side, and amount are required';
+    errEl.style.display = 'block'; return;
+  }
+  const btn = document.getElementById('betSubmitBtn');
+  btn.disabled = true; btn.textContent = 'Logging...';
+  try {
+    const token = getToken();
+    const r = await fetch('/api/bets', { method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+token}, body:JSON.stringify(body) });
+    const d = await r.json();
+    if (!r.ok) { errEl.textContent = d.error || 'Failed'; errEl.style.display = 'block'; return; }
+    showToast('Bet logged ✓', 'success');
+    document.getElementById('betQuestion').value = '';
+    document.getElementById('betSide').value = '';
+    document.getElementById('betAmount').value = '';
+    document.getElementById('betOdds').value = '';
+    document.getElementById('betPayout').value = '';
+    document.getElementById('betNotes').value = '';
+    loadBets(); loadBetStats();
+  } catch(e) { errEl.textContent = e.message; errEl.style.display = 'block'; }
+  finally { btn.disabled = false; btn.textContent = 'Log Bet →'; }
+}
+
+async function loadBets() {
+  const el = document.getElementById('betList');
+  if (!el) return;
+  try {
+    const token = getToken();
+    const r = await fetch('/api/bets?limit=50', { headers:{Authorization:'Bearer '+token} });
+    const d = await r.json();
+    _betsData = Array.isArray(d) ? d : (d.data || d.bets || []);
+    renderBets();
+  } catch(e) { el.innerHTML = '<div style="color:#ef4444;padding:16px;font-size:13px">'+e.message+'</div>'; }
+}
+
+function filterBets(f) {
+  _betsFilter = f;
+  ['all','open','settled'].forEach(t => {
+    const btn = document.getElementById('betFilter'+t.charAt(0).toUpperCase()+t.slice(1));
+    if (btn) { btn.style.background = t===f?'var(--gold)':'transparent'; btn.style.color = t===f?'var(--ink)':'var(--dim)'; btn.style.border = t===f?'none':'1px solid var(--border)'; }
+  });
+  renderBets();
+}
+
+function renderBets() {
+  const el = document.getElementById('betList');
+  if (!el) return;
+  let bets = _betsData;
+  if (_betsFilter === 'open') bets = bets.filter(b => b.status === 'open');
+  if (_betsFilter === 'settled') bets = bets.filter(b => b.status !== 'open');
+  if (!bets.length) { el.innerHTML = '<div style="text-align:center;padding:32px;color:var(--dim);font-size:13px">'+ (_betsFilter==='open'?'No open bets':_betsFilter==='settled'?'No settled bets':'No bets logged yet') +'</div>'; return; }
+  const ta = (iso) => { if(!iso) return ''; const s=Math.floor((Date.now()-new Date(iso))/1000); if(s<60) return 'just now'; if(s<3600) return Math.floor(s/60)+'m ago'; if(s<86400) return Math.floor(s/3600)+'h ago'; return Math.floor(s/86400)+'d ago'; };
+  el.innerHTML = bets.map(b => {
+    const pc = PLATFORM_COLORS[b.platform] || '#6b7280';
+    const pName = (b.platform||'other').replace(/^./, c=>c.toUpperCase());
+    const statusBadge = b.status==='open'?'<span style="font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:8px;background:rgba(201,146,13,0.12);color:var(--gold);border:1px solid rgba(201,146,13,0.3)">OPEN</span>'
+      :b.status==='won'?'<span style="font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:8px;background:rgba(34,197,94,0.1);color:#22c55e;border:1px solid rgba(34,197,94,0.3)">WON</span>'
+      :b.status==='lost'?'<span style="font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:8px;background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.3)">LOST</span>'
+      :'<span style="font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:8px;background:rgba(107,114,128,0.1);color:#9ca3af;border:1px solid rgba(107,114,128,0.3)">'+b.status.toUpperCase()+'</span>';
+    const pnlStr = b.pnl!=null ? (b.pnl>=0?'+':'')+'$'+Math.abs(b.pnl).toFixed(2) : '';
+    const pnlColor = b.pnl!=null ? (b.pnl>=0?'#22c55e':'#ef4444') : 'var(--dim)';
+    const actions = b.status==='open' ? `<div style="display:flex;gap:6px;margin-top:8px">
+      <button onclick="settleBet('${b.id}','won')" style="background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);color:#22c55e;border-radius:6px;padding:5px 12px;font-size:11px;cursor:pointer;font-family:var(--mono)">Won ✓</button>
+      <button onclick="settleBet('${b.id}','lost')" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#ef4444;border-radius:6px;padding:5px 12px;font-size:11px;cursor:pointer;font-family:var(--mono)">Lost ✗</button>
+      <button onclick="settleBet('${b.id}','push')" style="background:transparent;border:1px solid var(--border);color:var(--dim);border-radius:6px;padding:5px 12px;font-size:11px;cursor:pointer;font-family:var(--mono)">Push</button>
+      <button onclick="deleteBet('${b.id}')" style="background:transparent;border:none;color:var(--dim);font-size:11px;cursor:pointer;margin-left:auto;font-family:var(--mono)">🗑</button>
+    </div>` : `<div style="display:flex;align-items:center;gap:8px;margin-top:6px"><span style="font-family:var(--mono);font-size:14px;font-weight:700;color:${pnlColor}">${pnlStr}</span></div>`;
+    return `<div style="background:#0f0e0c;border:1px solid #2a2825;border-left:3px solid ${pc};border-radius:10px;padding:14px 16px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <span style="font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:6px;background:${pc}22;color:${pc};border:1px solid ${pc}44">${pName}</span>
+        <span style="font-family:var(--mono);font-size:10px;color:var(--dim)">${b.odds||''}</span>
+        ${statusBadge}
+        <span style="margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--dim)">${ta(b.created_at)}</span>
+      </div>
+      <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px">${escHtmlDash(b.question)}</div>
+      <div style="display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:12px;color:var(--dim)">
+        <span style="color:var(--text);font-weight:700">${b.side}</span>
+        <span>$${parseFloat(b.amount||0).toFixed(2)} wagered</span>
+        ${b.potential_payout ? '<span>→ $'+parseFloat(b.potential_payout).toFixed(2)+' payout</span>' : ''}
+      </div>
+      ${b.notes ? '<div style="font-size:11px;color:var(--dim);margin-top:6px;font-style:italic">'+escHtmlDash(b.notes)+'</div>' : ''}
+      ${actions}
+    </div>`;
+  }).join('');
+}
+
+async function settleBet(id, status) {
+  try {
+    const token = getToken();
+    await fetch('/api/bets/'+id, { method:'PUT', headers:{'Content-Type':'application/json','Authorization':'Bearer '+token}, body:JSON.stringify({status}) });
+    showToast('Bet marked '+status, 'success');
+    loadBets(); loadBetStats();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function deleteBet(id) {
+  if (!confirm('Delete this bet?')) return;
+  try {
+    const token = getToken();
+    await fetch('/api/bets/'+id, { method:'DELETE', headers:{Authorization:'Bearer '+token} });
+    loadBets(); loadBetStats();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function loadBetStats() {
+  try {
+    const token = getToken();
+    const r = await fetch('/api/bets/stats', { headers:{Authorization:'Bearer '+token} });
+    const d = await r.json();
+    document.getElementById('betStatWagered').textContent = '$'+(d.total_wagered||0).toLocaleString(undefined,{maximumFractionDigits:2});
+    const pnl = d.total_pnl||0;
+    const pnlEl = document.getElementById('betStatPnl');
+    pnlEl.textContent = (pnl>=0?'+':'')+' $'+Math.abs(pnl).toFixed(2);
+    pnlEl.style.color = pnl>=0?'#22c55e':'#ef4444';
+    document.getElementById('betStatWinRate').textContent = d.win_rate!=null?d.win_rate+'%':'—';
+    const roiEl = document.getElementById('betStatRoi');
+    roiEl.textContent = d.roi_pct!=null?(d.roi_pct>=0?'+':'')+d.roi_pct+'%':'—';
+    roiEl.style.color = (d.roi_pct||0)>=0?'#22c55e':'#ef4444';
+    // Platform pills
+    const pillsEl = document.getElementById('betPlatformPills');
+    if (pillsEl && d.by_platform) {
+      pillsEl.innerHTML = Object.entries(d.by_platform).map(([p,s]) => {
+        const pc = PLATFORM_COLORS[p]||'#6b7280';
+        return `<span style="font-family:var(--mono);font-size:10px;padding:4px 10px;border-radius:20px;background:${pc}18;color:${pc};border:1px solid ${pc}33">${p} · ${s.total} bets · ${s.pnl>=0?'+':''}$${Math.abs(s.pnl||0).toFixed(0)}</span>`;
+      }).join('');
+    }
+  } catch(e) { /* stats may fail if table doesn't exist */ }
+}
+
 function updatePortfolioTabDots() {
   const pd=document.getElementById('ptab-poly-dot'),kd=document.getElementById('ptab-kalshi-dot'),md=document.getElementById('ptab-manifold-dot');
   if(pd) pd.style.background=_polyWalletAddress?'#a78bfa':'#333';

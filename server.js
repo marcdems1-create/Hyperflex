@@ -9129,6 +9129,17 @@ app.get('/api/trader-profile/:username', async (req, res) => {
       }
     } catch (e) { console.warn('[trader-profile] cached_positions:', e.message); }
 
+    // Fetch manual bets
+    let manualBets = [];
+    try {
+      if (pool) {
+        manualBets = await dbQuery('SELECT * FROM manual_bets WHERE user_id = $1 ORDER BY created_at DESC', [userId]);
+      } else {
+        const { data: mb } = await supabase.from('manual_bets').select('*').eq('user_id', userId).order('created_at', { ascending: false });
+        manualBets = mb || [];
+      }
+    } catch (e) { /* manual_bets table may not exist yet */ }
+
     // ── Calculate stats ──────────────────────────────────────────────────────
     const hfSettled = hfBets.filter(p => p.settled);
     const hfWins = hfSettled.filter(p => p.won).length;
@@ -9147,11 +9158,25 @@ app.get('/api/trader-profile/:username', async (req, res) => {
       if ((Number(cp.pnl) || 0) > 0) extWins++;
     }
 
-    const totalSettled = hfSettled.length + extTotal;
-    const totalWins = hfWins + extWins;
+    // Manual bet stats
+    let mbWins = 0, mbSettled = 0, mbPnl = 0;
+    for (const mb of manualBets) {
+      if (['won', 'lost', 'push', 'void'].includes(mb.status)) {
+        mbSettled++;
+        mbPnl += parseFloat(mb.pnl) || 0;
+        if (mb.status === 'won') mbWins++;
+      }
+      const pl = mb.platform;
+      if (!platformStats[pl]) platformStats[pl] = { count: 0, pnl: 0 };
+      platformStats[pl].count++;
+      if (['won', 'lost', 'push', 'void'].includes(mb.status)) platformStats[pl].pnl += parseFloat(mb.pnl) || 0;
+    }
+
+    const totalSettled = hfSettled.length + extTotal + mbSettled;
+    const totalWins = hfWins + extWins + mbWins;
     const winRate = totalSettled > 0 ? Math.round((totalWins / totalSettled) * 100) : 0;
-    const totalPnl = Math.round((hfPnl + extPnl) * 100) / 100;
-    const totalTrades = hfBets.length + cachedPositions.length;
+    const totalPnl = Math.round((hfPnl + extPnl + mbPnl) * 100) / 100;
+    const totalTrades = hfBets.length + cachedPositions.length + manualBets.length;
 
     // Sharp score (same formula as analytics endpoint)
     const sharpScore = Math.min(99, Math.max(0, Math.round(winRate * 0.6 + Math.max(0, 100 - Math.abs(50 - winRate)) * 0.4)));
@@ -9210,7 +9235,16 @@ app.get('/api/trader-profile/:username', async (req, res) => {
         platform: cp.platform,
         created_at: cp.updated_at,
       }));
-    const recentActivity = [...recentHfx, ...recentExt]
+    const recentManual = manualBets.slice(0, 10).map(mb => ({
+      question: mb.question,
+      side: mb.side,
+      amount: parseFloat(mb.amount) || 0,
+      pnl: mb.status !== 'open' ? (parseFloat(mb.pnl) || 0) : null,
+      status: mb.status.toUpperCase(),
+      platform: mb.platform,
+      created_at: mb.created_at,
+    }));
+    const recentActivity = [...recentHfx, ...recentExt, ...recentManual]
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
       .slice(0, 10);
 
@@ -9432,6 +9466,23 @@ app.get('/api/leaderboard', async (req, res) => {
       }
     } catch(e) { /* cached_positions may not exist yet */ }
 
+    // Fetch manual bets (settled only)
+    let manualBetRows = [];
+    try {
+      if (pool) {
+        if (dateFilter) {
+          manualBetRows = await dbQuery("SELECT user_id, platform, status, pnl, amount, created_at FROM manual_bets WHERE status IN ('won','lost','push','void') AND created_at >= $1 LIMIT 10000", [dateFilter]);
+        } else {
+          manualBetRows = await dbQuery("SELECT user_id, platform, status, pnl, amount, created_at FROM manual_bets WHERE status IN ('won','lost','push','void') LIMIT 10000");
+        }
+      } else {
+        let q3 = supabase.from('manual_bets').select('user_id, platform, status, pnl, amount, created_at').in('status', ['won','lost','push','void']);
+        if (dateFilter) q3 = q3.gte('created_at', dateFilter);
+        const { data: d3 } = await q3.limit(10000);
+        manualBetRows = d3 || [];
+      }
+    } catch(e) { /* manual_bets may not exist yet */ }
+
     const byUser = {};
     for (const pos of rows) {
       if (!byUser[pos.user_id]) byUser[pos.user_id] = { wins: 0, total: 0, pnl: 0, platforms: new Set(['HFX']) };
@@ -9448,6 +9499,16 @@ app.get('/api/leaderboard', async (req, res) => {
       if (cp.pnl > 0) u.wins++;
       u.pnl += (cp.pnl || 0);
       if (cp.platform) u.platforms.add(cp.platform.toUpperCase());
+    }
+
+    // Include manual bets in leaderboard
+    for (const mb of manualBetRows) {
+      if (!byUser[mb.user_id]) byUser[mb.user_id] = { wins: 0, total: 0, pnl: 0, platforms: new Set() };
+      const u = byUser[mb.user_id];
+      u.total++;
+      if (mb.status === 'won') u.wins++;
+      u.pnl += ((parseFloat(mb.pnl) || 0) * 100); // convert to centpoints to match HFX scale
+      if (mb.platform) u.platforms.add(mb.platform.toUpperCase());
     }
 
     const userIds = Object.keys(byUser).filter(uid => byUser[uid].total >= 3);
@@ -15579,6 +15640,213 @@ app.post('/api/ai/market-analysis', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[ai-analysis]', err.message);
     res.status(500).json({ error: 'AI analysis failed' });
+  }
+});
+
+// ── MANUAL BETS API ────────────────────────────────────────────────────────
+// Universal bet tracker — log bets from ANY platform
+
+// POST /api/bets — create a manual bet
+app.post('/api/bets', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { platform, question, side, amount, odds, potential_payout, notes } = req.body;
+    if (!question || !side || amount === undefined || amount === null) {
+      return res.status(400).json({ error: 'question, side, and amount are required' });
+    }
+    const validPlatforms = ['draftkings', 'fanduel', 'betmgm', 'bet365', 'bovada', 'polymarket', 'kalshi', 'other'];
+    const plat = validPlatforms.includes((platform || '').toLowerCase()) ? platform.toLowerCase() : 'other';
+    const amt = parseFloat(amount) || 0;
+    const pp = potential_payout !== undefined && potential_payout !== null ? parseFloat(potential_payout) : null;
+
+    let bet;
+    if (pool) {
+      const rows = await dbQuery(
+        `INSERT INTO manual_bets (user_id, platform, question, side, amount, odds, potential_payout, notes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING *`,
+        [userId, plat, question.trim(), side.trim(), amt, odds || null, pp, notes || null]
+      );
+      bet = rows[0];
+    } else {
+      const { data, error } = await supabase.from('manual_bets').insert({
+        user_id: userId, platform: plat, question: question.trim(), side: side.trim(),
+        amount: amt, odds: odds || null, potential_payout: pp, notes: notes || null
+      }).select('*').single();
+      if (error) throw error;
+      bet = data;
+    }
+    res.json(bet);
+  } catch (err) {
+    console.error('[POST /api/bets]', err.message);
+    res.status(500).json({ error: 'Failed to create bet', detail: err.message });
+  }
+});
+
+// GET /api/bets — list user's manual bets
+app.get('/api/bets', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const status = req.query.status || null;
+    const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+
+    let bets;
+    if (pool) {
+      let sql = 'SELECT * FROM manual_bets WHERE user_id = $1';
+      const params = [userId];
+      if (status) {
+        sql += ' AND status = $2';
+        params.push(status);
+      }
+      sql += ' ORDER BY created_at DESC LIMIT ' + limit;
+      bets = await dbQuery(sql, params);
+    } else {
+      let q = supabase.from('manual_bets').select('*').eq('user_id', userId);
+      if (status) q = q.eq('status', status);
+      q = q.order('created_at', { ascending: false }).limit(limit);
+      const { data, error } = await q;
+      if (error) throw error;
+      bets = data || [];
+    }
+    res.json(bets);
+  } catch (err) {
+    console.error('[GET /api/bets]', err.message);
+    res.status(500).json({ error: 'Failed to load bets', detail: err.message });
+  }
+});
+
+// GET /api/bets/stats — aggregate bet stats
+app.get('/api/bets/stats', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    let bets;
+    if (pool) {
+      bets = await dbQuery('SELECT * FROM manual_bets WHERE user_id = $1', [userId]);
+    } else {
+      const { data, error } = await supabase.from('manual_bets').select('*').eq('user_id', userId);
+      if (error) throw error;
+      bets = data || [];
+    }
+
+    const total_bets = bets.length;
+    const open_bets = bets.filter(b => b.status === 'open').length;
+    const wins = bets.filter(b => b.status === 'won').length;
+    const losses = bets.filter(b => b.status === 'lost').length;
+    const pushes = bets.filter(b => b.status === 'push').length;
+    const settled = bets.filter(b => ['won', 'lost', 'push', 'void'].includes(b.status));
+    const win_rate = settled.length > 0 ? Math.round((wins / settled.length) * 100) : 0;
+    const total_pnl = settled.reduce((s, b) => s + (parseFloat(b.pnl) || 0), 0);
+    const total_wagered = bets.reduce((s, b) => s + (parseFloat(b.amount) || 0), 0);
+    const roi_pct = total_wagered > 0 ? Math.round((total_pnl / total_wagered) * 10000) / 100 : 0;
+
+    // Breakdown by platform
+    const by_platform = {};
+    for (const b of bets) {
+      if (!by_platform[b.platform]) by_platform[b.platform] = { total: 0, wins: 0, losses: 0, pnl: 0, wagered: 0 };
+      const p = by_platform[b.platform];
+      p.total++;
+      p.wagered += parseFloat(b.amount) || 0;
+      if (b.status === 'won') { p.wins++; p.pnl += parseFloat(b.pnl) || 0; }
+      else if (b.status === 'lost') { p.losses++; p.pnl += parseFloat(b.pnl) || 0; }
+      else if (['push', 'void'].includes(b.status)) { p.pnl += parseFloat(b.pnl) || 0; }
+    }
+
+    res.json({ total_bets, open_bets, wins, losses, pushes, win_rate, total_pnl: Math.round(total_pnl * 100) / 100, total_wagered: Math.round(total_wagered * 100) / 100, roi_pct, by_platform });
+  } catch (err) {
+    console.error('[GET /api/bets/stats]', err.message);
+    res.status(500).json({ error: 'Failed to load bet stats', detail: err.message });
+  }
+});
+
+// PUT /api/bets/:id — update/settle a bet
+app.put('/api/bets/:id', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const betId = req.params.id;
+    const { status, pnl, question, side, amount, odds, potential_payout, notes } = req.body;
+
+    // Fetch existing bet
+    let existing;
+    if (pool) {
+      const rows = await dbQuery('SELECT * FROM manual_bets WHERE id = $1 AND user_id = $2', [betId, userId]);
+      existing = rows[0];
+    } else {
+      const { data } = await supabase.from('manual_bets').select('*').eq('id', betId).eq('user_id', userId).single();
+      existing = data;
+    }
+    if (!existing) return res.status(404).json({ error: 'Bet not found' });
+
+    const updates = {};
+    if (status) {
+      const validStatuses = ['open', 'won', 'lost', 'push', 'void'];
+      if (!validStatuses.includes(status)) return res.status(400).json({ error: 'Invalid status' });
+      updates.status = status;
+      updates.outcome = status;
+      if (['won', 'lost', 'push', 'void'].includes(status)) {
+        updates.settled_at = new Date().toISOString();
+        // Auto-calculate PnL if not provided
+        if (pnl !== undefined && pnl !== null) {
+          updates.pnl = parseFloat(pnl);
+        } else if (status === 'won') {
+          const pp = parseFloat(existing.potential_payout) || 0;
+          const amt = parseFloat(existing.amount) || 0;
+          updates.pnl = pp > 0 ? pp - amt : amt; // If no payout set, assume even money
+        } else if (status === 'lost') {
+          updates.pnl = -(parseFloat(existing.amount) || 0);
+        } else {
+          updates.pnl = 0; // push/void
+        }
+      }
+      if (status === 'open') {
+        updates.settled_at = null;
+        updates.pnl = null;
+        updates.outcome = null;
+      }
+    }
+    if (question !== undefined) updates.question = question;
+    if (side !== undefined) updates.side = side;
+    if (amount !== undefined) updates.amount = parseFloat(amount);
+    if (odds !== undefined) updates.odds = odds;
+    if (potential_payout !== undefined) updates.potential_payout = parseFloat(potential_payout);
+    if (notes !== undefined) updates.notes = notes;
+
+    let bet;
+    if (pool) {
+      const setClauses = Object.keys(updates).map((k, i) => `${k} = $${i + 3}`);
+      const vals = Object.values(updates);
+      const rows = await dbQuery(
+        `UPDATE manual_bets SET ${setClauses.join(', ')} WHERE id = $1 AND user_id = $2 RETURNING *`,
+        [betId, userId, ...vals]
+      );
+      bet = rows[0];
+    } else {
+      const { data, error } = await supabase.from('manual_bets').update(updates).eq('id', betId).eq('user_id', userId).select('*').single();
+      if (error) throw error;
+      bet = data;
+    }
+    res.json(bet);
+  } catch (err) {
+    console.error('[PUT /api/bets/:id]', err.message);
+    res.status(500).json({ error: 'Failed to update bet', detail: err.message });
+  }
+});
+
+// DELETE /api/bets/:id — delete a bet
+app.delete('/api/bets/:id', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const betId = req.params.id;
+    if (pool) {
+      const rows = await dbQuery('DELETE FROM manual_bets WHERE id = $1 AND user_id = $2 RETURNING id', [betId, userId]);
+      if (!rows.length) return res.status(404).json({ error: 'Bet not found' });
+    } else {
+      const { error } = await supabase.from('manual_bets').delete().eq('id', betId).eq('user_id', userId);
+      if (error) throw error;
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[DELETE /api/bets/:id]', err.message);
+    res.status(500).json({ error: 'Failed to delete bet', detail: err.message });
   }
 });
 
