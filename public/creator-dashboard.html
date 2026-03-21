@@ -12494,8 +12494,10 @@ function updateWalletUI() {
   if (!bar) return;
   if (window._connectedWallet) {
     const addr = window._connectedWallet;
-    status.innerHTML = '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#22c55e;margin-right:6px"></span><span style="color:#22c55e">' + addr.slice(0,6) + '...' + addr.slice(-4) + '</span>';
-    actions.innerHTML = '<button onclick="disconnectBrowserWallet()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-family:var(--mono);font-size:11px;color:var(--dim);cursor:pointer;min-height:44px" onmouseover="this.style.borderColor=\'var(--gold)\';this.style.color=\'var(--gold)\'" onmouseout="this.style.borderColor=\'var(--border)\';this.style.color=\'var(--dim)\'">Disconnect</button>';
+    const balStr = window._walletBalanceUSDC != null ? ' · <span style="color:var(--gold);font-weight:700">$' + window._walletBalanceUSDC.toFixed(2) + ' USDC</span>' : '';
+    const maticStr = window._walletBalanceMATIC != null ? ' · ' + window._walletBalanceMATIC.toFixed(4) + ' POL' : '';
+    status.innerHTML = '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#22c55e;margin-right:6px"></span><span style="color:#22c55e">' + addr.slice(0,6) + '...' + addr.slice(-4) + '</span>' + balStr + '<span style="color:var(--dim)">' + maticStr + '</span>';
+    actions.innerHTML = '<button onclick="fetchWalletBalance(window._walletProvider, window._connectedWallet)" style="background:none;border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-family:var(--mono);font-size:11px;color:var(--dim);cursor:pointer;min-height:44px;margin-right:6px" title="Refresh balance">↺</button><button onclick="disconnectBrowserWallet()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-family:var(--mono);font-size:11px;color:var(--dim);cursor:pointer;min-height:44px" onmouseover="this.style.borderColor=\'var(--gold)\';this.style.color=\'var(--gold)\'" onmouseout="this.style.borderColor=\'var(--border)\';this.style.color=\'var(--dim)\'">Disconnect</button>';
   } else {
     status.textContent = 'Not connected';
     actions.innerHTML = '<button id="walletConnectBtn" onclick="connectBrowserWallet()" style="background:var(--gold);color:#141412;border:none;border-radius:8px;padding:9px 18px;font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;min-height:44px" onmouseover="this.style.opacity=\'0.88\'" onmouseout="this.style.opacity=\'1\'">&#x1F517; Connect Wallet</button>';
@@ -12519,8 +12521,10 @@ async function connectBrowserWallet() {
     const address = await signer.getAddress();
     window._connectedWallet = address;
     window._walletSigner = signer;
+    window._walletProvider = provider;
     localStorage.setItem('hf_wallet_address', address);
     updateWalletUI();
+    fetchWalletBalance(provider, address);
     // Save wallet to user profile
     const token = localStorage.getItem('hf_token');
     if (token) {
@@ -12546,9 +12550,38 @@ async function connectBrowserWallet() {
 function disconnectBrowserWallet() {
   window._connectedWallet = null;
   window._walletSigner = null;
+  window._walletProvider = null;
+  window._walletBalanceUSDC = null;
+  window._walletBalanceMATIC = null;
   localStorage.removeItem('hf_wallet_address');
   updateWalletUI();
   showToast('Wallet disconnected', 'success');
+}
+
+async function fetchWalletBalance(provider, address) {
+  if (!provider || !address) return;
+  try {
+    // MATIC/POL native balance
+    const maticBal = await provider.getBalance(address);
+    window._walletBalanceMATIC = parseFloat(ethers.formatEther(maticBal));
+
+    // USDC balance (Polygon USDC contract: 0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359)
+    const USDC_ADDRESS = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
+    const USDC_ABI = ['function balanceOf(address) view returns (uint256)'];
+    const usdcContract = new ethers.Contract(USDC_ADDRESS, USDC_ABI, provider);
+    const usdcBal = await usdcContract.balanceOf(address);
+    window._walletBalanceUSDC = parseFloat(ethers.formatUnits(usdcBal, 6)); // USDC has 6 decimals
+
+    updateWalletUI();
+  } catch (e) {
+    console.warn('[wallet balance]', e.message);
+    // Try just native balance if USDC fails
+    try {
+      const maticBal = await provider.getBalance(address);
+      window._walletBalanceMATIC = parseFloat(ethers.formatEther(maticBal));
+      updateWalletUI();
+    } catch (e2) { console.warn('[wallet native balance]', e2.message); }
+  }
 }
 
 // Restore wallet UI on page load
