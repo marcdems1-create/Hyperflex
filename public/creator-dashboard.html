@@ -2792,6 +2792,11 @@ body.nav-open .sidebar-backdrop {
 @media (max-width: 768px) {
   body { overflow-x: hidden; }
   input, textarea, select { font-size: 16px !important; }
+  #portfolioSummaryBar > div > div { grid-template-columns: repeat(2, 1fr) !important; gap: 16px !important; }
+  #portfolioSummaryBar [style*="font-size:28px"] { font-size: 22px !important; }
+}
+@media (max-width: 480px) {
+  #portfolioSummaryBar > div > div { grid-template-columns: 1fr 1fr !important; }
 }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -4688,31 +4693,100 @@ body.nav-open .sidebar-backdrop {
                 🔍 Find Markets
               </button>
             </div>
-            <!-- Portfolio Summary Bar -->
-            <div id="portfolioSummaryBar" style="display:none;background:var(--cream);border:1px solid var(--border);border-radius:12px;padding:16px 24px;margin-bottom:20px">
-              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:16px">
-                <div>
-                  <div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:4px">TOTAL VALUE</div>
-                  <div id="psSummaryValue" style="font-family:var(--mono);font-size:24px;font-weight:900;color:var(--text)">—</div>
-                </div>
-                <div>
-                  <div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:4px">TOTAL P&L</div>
-                  <div id="psSummaryPnl" style="font-family:var(--mono);font-size:24px;font-weight:900;color:var(--dim)">—</div>
-                </div>
-                <div>
-                  <div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:4px">OPEN POSITIONS</div>
-                  <div id="psSummaryCount" style="font-family:var(--mono);font-size:24px;font-weight:900;color:var(--text)">—</div>
-                </div>
-                <div>
-                  <div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:4px">PLATFORMS</div>
-                  <div id="psSummaryPlatforms" style="font-family:var(--mono);font-size:24px;font-weight:900;color:var(--text)">—</div>
+            <!-- Share My Record Button -->
+            <div id="portfolioShareBar" style="display:none;margin-bottom:16px">
+              <button id="shareRecordBtn" onclick="shareRecordOnX()" style="background:linear-gradient(135deg,rgba(201,146,13,0.15),rgba(201,146,13,0.06));border:1px solid rgba(201,146,13,0.35);border-radius:12px;padding:14px 24px;font-family:var(--sans);font-size:14px;font-weight:700;color:var(--gold);cursor:pointer;display:flex;align-items:center;gap:10px;transition:all .2s;width:100%" onmouseover="this.style.background='linear-gradient(135deg,rgba(201,146,13,0.25),rgba(201,146,13,0.12))';this.style.borderColor='var(--gold)'" onmouseout="this.style.background='linear-gradient(135deg,rgba(201,146,13,0.15),rgba(201,146,13,0.06))';this.style.borderColor='rgba(201,146,13,0.35)'">
+                <span style="font-size:18px">📢</span> Share My Record on X <span style="margin-left:auto;opacity:0.6">→</span>
+              </button>
+            </div>
+            <!-- Premium Portfolio Summary Bar -->
+            <div id="portfolioSummaryBar" style="display:none;background:#0f0e0c;border:1px solid #2a2825;border-radius:14px;overflow:hidden;margin-bottom:20px">
+              <div style="height:2px;background:linear-gradient(90deg,transparent,var(--gold),transparent)"></div>
+              <div style="padding:24px 28px">
+                <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:20px;align-items:center">
+                  <!-- Total Value -->
+                  <div>
+                    <div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752;margin-bottom:6px">PORTFOLIO VALUE</div>
+                    <div id="psSummaryValue" style="font-family:var(--mono);font-size:28px;font-weight:900;color:#f5f0e8;letter-spacing:-0.02em">—</div>
+                  </div>
+                  <!-- Total P&L -->
+                  <div>
+                    <div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752;margin-bottom:6px">TOTAL P&L</div>
+                    <div id="psSummaryPnl" style="font-family:var(--mono);font-size:28px;font-weight:900;color:#5a5752;letter-spacing:-0.02em">—</div>
+                    <div id="psSummaryPnlPct" style="font-family:var(--mono);font-size:11px;font-weight:700;color:#5a5752;margin-top:2px"></div>
+                  </div>
+                  <!-- Win Rate Ring -->
+                  <div style="text-align:center">
+                    <div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752;margin-bottom:8px">WIN RATE</div>
+                    <div id="psWinRateRing" style="width:56px;height:56px;border-radius:50%;background:conic-gradient(#333 0%,#333 100%);display:flex;align-items:center;justify-content:center;margin:0 auto">
+                      <div style="width:40px;height:40px;border-radius:50%;background:#0f0e0c;display:flex;align-items:center;justify-content:center">
+                        <span id="psWinRateVal" style="font-family:var(--mono);font-size:13px;font-weight:900;color:#5a5752">—</span>
+                      </div>
+                    </div>
+                  </div>
+                  <!-- Sharp Score -->
+                  <div style="text-align:center">
+                    <div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752;margin-bottom:8px">SHARP SCORE</div>
+                    <div id="psSharpBadge" style="display:inline-flex;align-items:center;justify-content:center;min-width:48px;padding:8px 14px;border-radius:10px;background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.2)">
+                      <span id="psSharpVal" style="font-family:var(--mono);font-size:20px;font-weight:900;color:var(--gold)">—</span>
+                    </div>
+                  </div>
+                  <!-- ROI -->
+                  <div style="text-align:right">
+                    <div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752;margin-bottom:6px">ROI</div>
+                    <div id="psSummaryROI" style="font-family:var(--mono);font-size:28px;font-weight:900;color:#5a5752;letter-spacing:-0.02em">—</div>
+                  </div>
                 </div>
               </div>
             </div>
-            <!-- ALL tab -->
+            <!-- P&L Over Time Chart -->
+            <div id="portfolioPnlChart" style="display:none;background:#0f0e0c;border:1px solid #2a2825;border-radius:14px;overflow:hidden;margin-bottom:20px">
+              <div style="padding:20px 24px 8px">
+                <div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#5a5752">P&L OVER TIME — LAST 30 DAYS</div>
+              </div>
+              <div id="pnlChartBars" style="display:flex;align-items:flex-end;gap:3px;height:80px;padding:8px 24px 20px"></div>
+            </div>
+            <!-- ALL tab — Premium Performance Dashboard -->
             <div id="ptabContent-all">
               <div id="allPositionsContainer">
-                <div style="text-align:center;padding:48px 20px;color:var(--dim)">
+                <!-- Best Calls Section -->
+                <div id="bestCallsSection" style="display:none;margin-bottom:20px">
+                  <div onclick="togglePortfolioSection('bestCalls')" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:12px 16px;background:#0f0e0c;border:1px solid #2a2825;border-radius:12px 12px 0 0;user-select:none" onmouseover="this.style.borderColor='rgba(201,146,13,0.3)'" onmouseout="this.style.borderColor='#2a2825'">
+                    <div style="display:flex;align-items:center;gap:10px">
+                      <span style="font-size:16px">🏆</span>
+                      <span style="font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">BEST CALLS</span>
+                      <span id="bestCallsCount" style="font-family:var(--mono);font-size:10px;color:#5a5752"></span>
+                    </div>
+                    <span id="bestCallsChevron" style="color:#5a5752;font-size:12px;transition:transform .2s">▼</span>
+                  </div>
+                  <div id="bestCallsContent" style="border:1px solid #2a2825;border-top:none;border-radius:0 0 12px 12px;overflow:hidden"></div>
+                </div>
+                <!-- Open Positions Section -->
+                <div id="openPositionsSection" style="display:none;margin-bottom:20px">
+                  <div onclick="togglePortfolioSection('openPositions')" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:12px 16px;background:#0f0e0c;border:1px solid #2a2825;border-radius:12px 12px 0 0;user-select:none" onmouseover="this.style.borderColor='rgba(201,146,13,0.3)'" onmouseout="this.style.borderColor='#2a2825'">
+                    <div style="display:flex;align-items:center;gap:10px">
+                      <span style="font-size:16px">📊</span>
+                      <span style="font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text)">OPEN POSITIONS</span>
+                      <span id="openPositionsCount" style="font-family:var(--mono);font-size:10px;color:#5a5752"></span>
+                    </div>
+                    <span id="openPositionsChevron" style="color:#5a5752;font-size:12px;transition:transform .2s">▼</span>
+                  </div>
+                  <div id="openPositionsContent" style="border:1px solid #2a2825;border-top:none;border-radius:0 0 12px 12px;overflow:hidden"></div>
+                </div>
+                <!-- Closed Positions Section -->
+                <div id="closedPositionsSection" style="display:none;margin-bottom:20px">
+                  <div onclick="togglePortfolioSection('closedPositions')" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:12px 16px;background:#0f0e0c;border:1px solid #2a2825;border-radius:12px 12px 0 0;user-select:none" onmouseover="this.style.borderColor='rgba(201,146,13,0.3)'" onmouseout="this.style.borderColor='#2a2825'">
+                    <div style="display:flex;align-items:center;gap:10px">
+                      <span style="font-size:16px">📉</span>
+                      <span style="font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text)">CLOSED POSITIONS</span>
+                      <span id="closedPositionsCount" style="font-family:var(--mono);font-size:10px;color:#5a5752"></span>
+                    </div>
+                    <span id="closedPositionsChevron" style="color:#5a5752;font-size:12px;transition:transform .2s">▼</span>
+                  </div>
+                  <div id="closedPositionsContent" style="border:1px solid #2a2825;border-top:none;border-radius:0 0 12px 12px;overflow:hidden"></div>
+                </div>
+                <!-- Empty state (no platforms connected) -->
+                <div id="allPositionsEmpty" style="text-align:center;padding:48px 20px;color:var(--dim)">
                   <div style="font-size:40px;margin-bottom:16px;opacity:0.4">📊</div>
                   <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:8px">Connect your accounts</div>
                   <div style="font-size:13px;line-height:1.6;margin-bottom:24px">Track all your prediction market positions in one place.</div>
@@ -11376,6 +11450,8 @@ async function loadKalshiPositions(forceRefresh) {
     }
     const data = await r.json();
     const positions = data.positions || [];
+    window._kalshiPositionsData = positions;
+    setTimeout(updatePortfolioSummary, 100);
 
     // Update stats bar
     const statsEl = document.getElementById('portfolioStats');
@@ -11539,6 +11615,8 @@ async function loadManifoldPositions(forceRefresh) {
     }
     const data = await r.json();
     const positions = data.positions || [];
+    window._manifoldPositionsData = positions;
+    setTimeout(updatePortfolioSummary, 100);
 
     if (!positions.length) {
       el.innerHTML = '<div style="padding:20px 0;font-size:13px;color:var(--muted);text-align:center">No open positions found on Manifold.</div>';
@@ -11699,62 +11777,306 @@ function updatePortfolioTabDots() {
   if(kd) kd.style.background=_kalshiConnected?'#fbbf24':'#333';
   if(md) md.style.background=_manifoldUsername?'#34d399':'#333';
 }
+function classifyPosition(p) {
+  // Determine if a position is resolved (closed) or open
+  const price = p.current_price || p.curPrice || p.probability || 0;
+  const endDate = p.end_date ? new Date(p.end_date) : null;
+  const isExpired = endDate && endDate < new Date();
+  const priceNearTerminal = price <= 0.03 || price >= 0.97;
+  const isResolved = p.resolved || p.settled || (isExpired && priceNearTerminal);
+  let won = false;
+  if (isResolved) {
+    if (p.won != null) won = p.won;
+    else if (p.pnl != null) won = p.pnl > 0;
+    else if (priceNearTerminal) {
+      won = (p.side === 'YES' && price >= 0.97) || (p.side === 'NO' && price <= 0.03);
+    }
+  }
+  return { isResolved, won };
+}
+
+function getAllPositionsFlat() {
+  // Gather all positions from all platforms into a unified array
+  const all = [];
+  if (_polyWalletAddress && window._polyPositionsData) {
+    (window._polyPositionsData || []).forEach(p => {
+      const cls = classifyPosition(p);
+      all.push({ ...p, _platform: 'polymarket', _accentColor: '#7c3aed', _isResolved: cls.isResolved, _won: cls.won });
+    });
+  }
+  if (_kalshiConnected && window._kalshiPositionsData) {
+    (window._kalshiPositionsData || []).forEach(p => {
+      const cls = classifyPosition(p);
+      all.push({ ...p, _platform: 'kalshi', _accentColor: '#d97706', _isResolved: cls.isResolved, _won: cls.won });
+    });
+  }
+  if (_manifoldUsername && window._manifoldPositionsData) {
+    (window._manifoldPositionsData || []).forEach(p => {
+      const cls = classifyPosition(p);
+      all.push({ ...p, _platform: 'manifold', _accentColor: '#34d399', _isResolved: cls.isResolved, _won: cls.won });
+    });
+  }
+  return all;
+}
+
+function computePortfolioStats(positions) {
+  let totalValue = 0, totalPnl = 0, totalCost = 0, openCount = 0, resolvedCount = 0, wins = 0;
+  positions.forEach(p => {
+    const shares = p.shares || 0;
+    const price = p.current_price || p.curPrice || p.probability || 0;
+    totalValue += shares * price;
+    if (p.pnl != null) totalPnl += p.pnl;
+    if (p._isResolved) {
+      resolvedCount++;
+      if (p._won) wins++;
+      // Estimate cost for resolved
+      if (p.cost_basis != null) totalCost += p.cost_basis;
+      else if (p.pnl != null) totalCost += Math.max(0, (shares * price) - p.pnl);
+      else totalCost += shares * 0.5; // fallback
+    } else {
+      openCount++;
+      totalCost += shares * 0.5; // rough cost estimate for open
+    }
+  });
+  const winRate = resolvedCount > 0 ? Math.round((wins / resolvedCount) * 100) : 0;
+  const roi = totalCost > 0 ? ((totalPnl / totalCost) * 100) : 0;
+  const sharpScore = Math.min(100, Math.round(winRate * 1.2 + (totalPnl > 0 ? 20 : 0)));
+  return { totalValue, totalPnl, totalCost, openCount, resolvedCount, wins, winRate, roi, sharpScore, total: positions.length };
+}
+
 function updatePortfolioSummary() {
   const bar = document.getElementById('portfolioSummaryBar');
+  const shareBar = document.getElementById('portfolioShareBar');
+  const chartEl = document.getElementById('portfolioPnlChart');
   if (!bar) return;
-  const valEl = document.getElementById('psSummaryValue');
-  const pnlEl = document.getElementById('psSummaryPnl');
-  const cntEl = document.getElementById('psSummaryCount');
-  const platEl = document.getElementById('psSummaryPlatforms');
-  // Collect all position data from rendered cards
-  let totalValue = 0, totalPnl = 0, openCount = 0, platforms = new Set();
-  // Polymarket
-  if (_polyWalletAddress && window._polyPositionsData) {
-    platforms.add('Polymarket');
-    const positions = window._polyPositionsData || [];
-    positions.forEach(p => {
-      const shares = p.shares || 0;
-      const price = p.current_price || p.curPrice || p.probability || 0;
-      totalValue += shares * price;
-      if (p.pnl != null) totalPnl += p.pnl;
-      openCount++;
-    });
+
+  const positions = getAllPositionsFlat();
+  const hasAnyPlatform = _polyWalletAddress || _kalshiConnected || _manifoldUsername;
+
+  if (positions.length === 0 && !hasAnyPlatform) {
+    bar.style.display = 'none';
+    if (shareBar) shareBar.style.display = 'none';
+    if (chartEl) chartEl.style.display = 'none';
+    return;
   }
-  // Kalshi
-  if (_kalshiConnected && window._kalshiPositionsData) {
-    platforms.add('Kalshi');
-    const positions = window._kalshiPositionsData || [];
-    positions.forEach(p => {
-      if (p.pnl != null) totalPnl += p.pnl;
-      openCount++;
-    });
-  }
-  if (openCount === 0 && !_polyWalletAddress && !_kalshiConnected) { bar.style.display = 'none'; return; }
+
+  const stats = computePortfolioStats(positions);
+  window._portfolioStats = stats; // for share button
+
   bar.style.display = 'block';
-  if (valEl) valEl.textContent = '$' + totalValue.toFixed(2);
+  if (shareBar) shareBar.style.display = positions.length > 0 ? 'block' : 'none';
+
+  // Total Value
+  const valEl = document.getElementById('psSummaryValue');
+  if (valEl) valEl.textContent = '$' + stats.totalValue.toFixed(2);
+
+  // Total P&L
+  const pnlEl = document.getElementById('psSummaryPnl');
+  const pnlPctEl = document.getElementById('psSummaryPnlPct');
   if (pnlEl) {
-    const sign = totalPnl >= 0 ? '+' : '';
-    pnlEl.textContent = sign + '$' + Math.abs(totalPnl).toFixed(2);
-    pnlEl.style.color = totalPnl >= 0 ? '#22c55e' : '#ef4444';
+    const sign = stats.totalPnl >= 0 ? '+' : '';
+    pnlEl.textContent = sign + '$' + Math.abs(stats.totalPnl).toFixed(2);
+    pnlEl.style.color = stats.totalPnl >= 0 ? '#22c55e' : '#ef4444';
   }
-  if (cntEl) cntEl.textContent = openCount.toString();
-  if (platEl) platEl.textContent = platforms.size.toString();
+  if (pnlPctEl && stats.totalCost > 0) {
+    const pnlPct = (stats.totalPnl / stats.totalCost) * 100;
+    const sign = pnlPct >= 0 ? '+' : '';
+    pnlPctEl.textContent = sign + pnlPct.toFixed(1) + '%';
+    pnlPctEl.style.color = pnlPct >= 0 ? '#22c55e' : '#ef4444';
+  }
+
+  // Win Rate Ring
+  const ringEl = document.getElementById('psWinRateRing');
+  const wrVal = document.getElementById('psWinRateVal');
+  if (ringEl) {
+    const wr = stats.winRate;
+    ringEl.style.background = `conic-gradient(#22c55e ${wr}%, #333 0)`;
+  }
+  if (wrVal) {
+    wrVal.textContent = stats.winRate + '%';
+    wrVal.style.color = stats.resolvedCount > 0 ? '#e8e4de' : '#5a5752';
+  }
+
+  // Sharp Score
+  const sharpVal = document.getElementById('psSharpVal');
+  const sharpBadge = document.getElementById('psSharpBadge');
+  if (sharpVal) sharpVal.textContent = stats.sharpScore;
+  if (sharpBadge) {
+    const s = stats.sharpScore;
+    if (s >= 70) { sharpBadge.style.background = 'rgba(34,197,94,0.12)'; sharpBadge.style.borderColor = 'rgba(34,197,94,0.3)'; sharpVal.style.color = '#22c55e'; }
+    else if (s >= 40) { sharpBadge.style.background = 'rgba(201,146,13,0.08)'; sharpBadge.style.borderColor = 'rgba(201,146,13,0.2)'; sharpVal.style.color = 'var(--gold)'; }
+    else { sharpBadge.style.background = 'rgba(239,68,68,0.08)'; sharpBadge.style.borderColor = 'rgba(239,68,68,0.2)'; sharpVal.style.color = '#ef4444'; }
+  }
+
+  // ROI
+  const roiEl = document.getElementById('psSummaryROI');
+  if (roiEl) {
+    const sign = stats.roi >= 0 ? '+' : '';
+    roiEl.textContent = sign + stats.roi.toFixed(1) + '%';
+    roiEl.style.color = stats.roi >= 0 ? '#22c55e' : '#ef4444';
+  }
+
+  // P&L Over Time Chart
+  renderPnlChart(positions);
+}
+
+function renderPnlChart(positions) {
+  const chartEl = document.getElementById('portfolioPnlChart');
+  const barsEl = document.getElementById('pnlChartBars');
+  if (!chartEl || !barsEl) return;
+
+  // Build daily P&L from resolved positions
+  const resolved = positions.filter(p => p._isResolved && p.pnl != null);
+  if (resolved.length < 2) { chartEl.style.display = 'none'; return; }
+  chartEl.style.display = 'block';
+
+  // Group by date
+  const dailyPnl = {};
+  const now = new Date();
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(now); d.setDate(d.getDate() - i);
+    dailyPnl[d.toISOString().slice(0, 10)] = 0;
+  }
+  resolved.forEach(p => {
+    const date = (p.end_date || p.resolved_at || p.created_at || '').slice(0, 10);
+    if (date && dailyPnl[date] !== undefined) dailyPnl[date] += p.pnl;
+  });
+
+  // Cumulative
+  const dates = Object.keys(dailyPnl).sort();
+  let cumulative = 0;
+  const cumulativeArr = dates.map(d => { cumulative += dailyPnl[d]; return { date: d, val: cumulative }; });
+  const maxAbs = Math.max(1, ...cumulativeArr.map(c => Math.abs(c.val)));
+
+  barsEl.innerHTML = cumulativeArr.map(c => {
+    const pct = Math.max(4, Math.abs(c.val) / maxAbs * 100);
+    const color = c.val >= 0 ? 'rgba(34,197,94,0.5)' : 'rgba(239,68,68,0.5)';
+    const hoverColor = c.val >= 0 ? '#22c55e' : '#ef4444';
+    const sign = c.val >= 0 ? '+' : '';
+    return `<div class="activity-bar" style="height:${pct}%;background:${color}" data-tip="${c.date.slice(5)}: ${sign}$${Math.abs(c.val).toFixed(2)}" onmouseover="this.style.background='${hoverColor}'" onmouseout="this.style.background='${color}'"></div>`;
+  }).join('');
+}
+
+function renderResolvedCard(p) {
+  const question = p.question || p.market_title || 'Unknown market';
+  const pnl = p.pnl || 0;
+  const pnlColor = pnl >= 0 ? '#22c55e' : '#ef4444';
+  const pnlStr = (pnl >= 0 ? '+' : '') + '$' + Math.abs(pnl).toFixed(2);
+  const badge = p._won
+    ? '<span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 10px;border-radius:6px;background:rgba(34,197,94,0.12);color:#22c55e;border:1px solid rgba(34,197,94,0.3)">WON</span>'
+    : '<span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 10px;border-radius:6px;background:rgba(239,68,68,0.12);color:#ef4444;border:1px solid rgba(239,68,68,0.3)">LOST</span>';
+  const sideColor = p.side === 'YES' ? '#22c55e' : '#f87171';
+  const sideBg = p.side === 'YES' ? 'rgba(34,197,94,0.08)' : 'rgba(248,113,113,0.08)';
+  const url = p.market_url || '#';
+  return `<div style="display:flex;align-items:center;gap:14px;padding:14px 18px;border-bottom:1px solid #1a1917;transition:background .15s" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background=''">
+    <span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 8px;border-radius:5px;background:${sideBg};color:${sideColor};flex-shrink:0">${p.side || '—'}</span>
+    <div style="flex:1;min-width:0"><a href="${url}" target="_blank" rel="noopener" style="text-decoration:none;color:#e8e4de;font-size:13px;font-weight:600;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtmlDash(question)}</a><div style="font-family:var(--mono);font-size:10px;color:#5a5752;margin-top:3px">${(p.shares||0).toFixed(2)} shares · ${p._platform||''}</div></div>
+    <div style="flex-shrink:0;display:flex;align-items:center;gap:10px">
+      <span style="font-family:var(--mono);font-size:14px;font-weight:800;color:${pnlColor}">${pnlStr}</span>
+      ${badge}
+    </div>
+  </div>`;
+}
+
+function togglePortfolioSection(section) {
+  const content = document.getElementById(section + 'Content');
+  const chevron = document.getElementById(section + 'Chevron');
+  if (!content) return;
+  const isHidden = content.style.display === 'none';
+  content.style.display = isHidden ? 'block' : 'none';
+  if (chevron) chevron.style.transform = isHidden ? 'rotate(0deg)' : 'rotate(-90deg)';
+}
+
+function shareRecordOnX() {
+  const stats = window._portfolioStats || {};
+  const winRate = stats.winRate || 0;
+  const pnl = stats.totalPnl || 0;
+  const total = stats.total || 0;
+  const pnlStr = (pnl >= 0 ? '+' : '-') + '$' + Math.abs(pnl).toFixed(2);
+  const text = encodeURIComponent(
+    `My prediction market track record on @HyperFlexApp:\n🎯 Win Rate: ${winRate}%\n💰 Total P&L: ${pnlStr}\n📊 ${total} positions tracked\n\nTrack yours free → hyperflex.network`
+  );
+  window.open(`https://twitter.com/intent/tweet?text=${text}`, '_blank');
 }
 
 function updateAllPositionsTab() {
-  const c=document.getElementById('allPositionsContainer');
-  if(!c) return;
-  const pe=_polyWalletAddress?document.getElementById('polyPositions'):null;
-  const ke=_kalshiConnected?document.getElementById('kalshiPositions'):null;
-  const me=_manifoldUsername?document.getElementById('manifoldPositions'):null;
-  const sections=[];
-  if(pe&&pe.innerHTML.trim()&&!pe.innerHTML.includes('LOADING')) sections.push({label:'🟣 Polymarket',el:pe});
-  if(ke&&ke.innerHTML.trim()&&!ke.innerHTML.includes('LOADING')) sections.push({label:'🟡 Kalshi',el:ke});
-  if(me&&me.innerHTML.trim()&&!me.innerHTML.includes('LOADING')) sections.push({label:'🟢 Manifold',el:me});
-  const he=document.getElementById('hfxPositions');
-  if(he&&he.innerHTML.trim()&&!he.innerHTML.includes('LOADING')&&!he.innerHTML.includes('No predictions')) sections.push({label:'⚡ HFX Community',el:he});
-  if(!sections.length){c.innerHTML='<div style="text-align:center;padding:48px 20px;color:var(--dim)"><div style="font-size:32px;margin-bottom:12px">🌐</div><div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px">Connect a platform to get started</div><div style="font-size:13px">Use the tabs above to connect Polymarket, Kalshi, or Manifold.</div></div>';return;}
-  c.innerHTML=sections.map(s=>'<div style="margin-bottom:20px"><div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:10px">'+s.label+'</div>'+s.el.innerHTML+'</div>').join('');
+  const positions = getAllPositionsFlat();
+  const hasAnyPlatform = _polyWalletAddress || _kalshiConnected || _manifoldUsername;
+
+  const emptyEl = document.getElementById('allPositionsEmpty');
+  const bestSec = document.getElementById('bestCallsSection');
+  const openSec = document.getElementById('openPositionsSection');
+  const closedSec = document.getElementById('closedPositionsSection');
+
+  // Also gather HFX positions if available
+  // (HFX positions are handled separately in their own tab, so we just check external platforms here)
+
+  if (positions.length === 0 && !hasAnyPlatform) {
+    if (emptyEl) emptyEl.style.display = 'block';
+    if (bestSec) bestSec.style.display = 'none';
+    if (openSec) openSec.style.display = 'none';
+    if (closedSec) closedSec.style.display = 'none';
+    return;
+  }
+
+  if (emptyEl) emptyEl.style.display = positions.length > 0 ? 'none' : 'block';
+
+  const open = positions.filter(p => !p._isResolved);
+  const resolved = positions.filter(p => p._isResolved);
+  const bestCalls = [...resolved].filter(p => p._won && p.pnl != null && p.pnl > 0).sort((a, b) => (b.pnl || 0) - (a.pnl || 0)).slice(0, 3);
+
+  // Best Calls
+  if (bestSec) {
+    if (bestCalls.length > 0) {
+      bestSec.style.display = 'block';
+      const countEl = document.getElementById('bestCallsCount');
+      if (countEl) countEl.textContent = 'Top ' + bestCalls.length;
+      const contentEl = document.getElementById('bestCallsContent');
+      if (contentEl) contentEl.innerHTML = bestCalls.map(p => renderResolvedCard(p)).join('');
+    } else {
+      bestSec.style.display = 'none';
+    }
+  }
+
+  // Open Positions
+  if (openSec) {
+    if (open.length > 0) {
+      openSec.style.display = 'block';
+      const countEl = document.getElementById('openPositionsCount');
+      if (countEl) countEl.textContent = open.length + ' active';
+      const contentEl = document.getElementById('openPositionsContent');
+      if (contentEl) {
+        contentEl.innerHTML = open.map(p => {
+          const endDate = p.end_date ? new Date(p.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+          return renderPositionCard({
+            question: p.question || p.market_title || 'Unknown market',
+            side: p.side,
+            pct: Math.round((p.current_price || p.curPrice || p.probability || 0) * 100),
+            meta: (p.shares || 0).toFixed(2) + ' shares' + (endDate ? ' · Exp ' + endDate : '') + ' · ' + (p._platform || ''),
+            pnl: p.pnl != null ? p.pnl : null,
+            url: p.market_url || '#',
+            accentColor: p._accentColor || 'var(--gold)',
+            posData: { question: p.question, side: p.side, platform: p._platform, current_price: p.current_price || p.probability, pnl: p.pnl, shares: p.shares, market_url: p.market_url }
+          });
+        }).join('');
+      }
+    } else {
+      openSec.style.display = 'none';
+    }
+  }
+
+  // Closed Positions
+  if (closedSec) {
+    if (resolved.length > 0) {
+      closedSec.style.display = 'block';
+      const countEl = document.getElementById('closedPositionsCount');
+      if (countEl) countEl.textContent = resolved.length + ' resolved';
+      const contentEl = document.getElementById('closedPositionsContent');
+      if (contentEl) contentEl.innerHTML = resolved.map(p => renderResolvedCard(p)).join('');
+    } else {
+      closedSec.style.display = 'none';
+    }
+  }
 }
 // ── POSITION CARD RENDERER ──────────────────────────────────────────────────
 function renderPositionCard({question,side,pct,meta,pnl,pnlLabel,pnlIsPercent,url,accentColor,posData}){
