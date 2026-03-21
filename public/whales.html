@@ -218,6 +218,10 @@ if (localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token')
     <div class="stat-value" id="statPopular" style="font-size:13px;line-height:1.3">--</div>
   </div>
   <div class="stat-card">
+    <div class="stat-label">Avg Position Size</div>
+    <div class="stat-value gold" id="statAvgSize">--</div>
+  </div>
+  <div class="stat-card">
     <div class="stat-label">YES / NO Ratio</div>
     <div class="stat-value" id="statRatio">--</div>
   </div>
@@ -410,7 +414,9 @@ function renderStats() {
 
   // Total capital
   const totalCap = positions.reduce((s, p) => s + p.size, 0);
+  const avgSize = positions.length ? totalCap / positions.length : 0;
   document.getElementById('statCapital').textContent = fmt$(totalCap);
+  document.getElementById('statAvgSize').textContent = fmt$(avgSize);
   document.getElementById('heroCapital').textContent = 'Tracking ' + fmt$(totalCap) + ' in positions across the top ' + _whaleData.total_whales + ' traders';
 
   // Largest position
