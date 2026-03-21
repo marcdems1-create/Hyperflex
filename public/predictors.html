@@ -582,6 +582,11 @@ function renderLeaderboard() {
 
 function renderRow(r, isDemo) {
   const initial = (r.display_name || '?').charAt(0).toUpperCase();
+  r.total_pnl = r.total_pnl || 0;
+  r.win_rate = r.win_rate || 0;
+  r.sharp_score = r.sharp_score || Math.min(100, Math.round((r.win_rate || 0) * 0.8 + Math.min(20, (r.total_trades || 0) * 0.5) + (r.total_pnl > 0 ? 15 : 0)));
+  r.trade_count = r.trade_count || r.total_trades || 0;
+  r.platforms = r.platforms || ['HFX'];
   const pnlClass = r.total_pnl >= 0 ? 'pnl-pos' : 'pnl-neg';
   const pnlSign = r.total_pnl >= 0 ? '+' : '';
   const profileUrl = `/p/${escHtml(r.display_name || r.user_id)}`;
