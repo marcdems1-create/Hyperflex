@@ -2780,6 +2780,10 @@ body.nav-open .sidebar-backdrop {
     align-items: flex-start !important;
   }
 
+  /* Performance tab: responsive summary grid */
+  #tab-performance [style*="grid-template-columns:repeat(5"] { grid-template-columns: repeat(2,1fr) !important; gap: 12px !important; }
+  #tab-performance .section > div > div { padding: 16px !important; }
+
   /* Stats row: ensure 2-col on 480px */
   .stats-row { grid-template-columns: 1fr 1fr !important; }
   .stat-value { font-size: 20px; }
@@ -2827,19 +2831,28 @@ body.nav-open .sidebar-backdrop {
     </div>
 
     <nav class="sidebar-nav">
-      <div class="nav-section-label">Portfolio</div>
+      <div class="nav-section-label">Trading</div>
       <a class="nav-item active" onclick="showTab('portfolio')">
-        <span class="nav-icon">🌐</span><span class="nav-label">My Portfolio</span>
+        <span class="nav-icon">🌐</span><span class="nav-label">My Positions</span>
       </a>
-      <a class="nav-item" onclick="showTab('analytics')">
-        <span class="nav-icon">📈</span><span class="nav-label">Analytics</span>
+      <a class="nav-item" onclick="showTab('performance')">
+        <span class="nav-icon">📈</span><span class="nav-label">Performance</span>
       </a>
+      <a class="nav-item" onclick="showTab('logbets')">
+        <span class="nav-icon">📝</span><span class="nav-label">Log Bets</span>
+      </a>
+      <a class="nav-item" onclick="showTab('findmarkets')">
+        <span class="nav-icon">🔍</span><span class="nav-label">Find Markets</span>
+      </a>
+      <div class="nav-section-label">Community</div>
       <a class="nav-item" onclick="showTab('overview')">
         <span class="nav-icon">📊</span><span class="nav-label">Overview</span>
       </a>
-      <div class="nav-section-label">Community</div>
       <a class="nav-item" onclick="showTab('markets')">
         <span class="nav-icon">🎯</span><span class="nav-label">Markets</span>
+      </a>
+      <a class="nav-item" onclick="showTab('analytics')">
+        <span class="nav-icon">📉</span><span class="nav-label">Analytics</span>
       </a>
       <a class="nav-item" onclick="showTab('members')">
         <span class="nav-icon">👥</span><span class="nav-label">Followers</span>
@@ -4703,83 +4716,10 @@ body.nav-open .sidebar-backdrop {
                 style="background:none;border:none;border-bottom:2px solid transparent;color:var(--dim);padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s;margin-bottom:-1px;display:flex;align-items:center;gap:7px">
                 <span style="width:7px;height:7px;border-radius:50%;background:#c9920d;flex-shrink:0"></span>HFX Community
               </button>
-              <button id="ptab-search" onclick="switchPortfolioTab('search')"
-                style="background:none;border:none;border-bottom:2px solid transparent;color:var(--dim);padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s;margin-bottom:-1px;display:flex;align-items:center;gap:7px">
-                🔍 Find Markets
-              </button>
-              <button id="ptab-bets" onclick="switchPortfolioTab('bets')"
-                style="background:none;border:none;border-bottom:2px solid transparent;color:var(--dim);padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s;margin-bottom:-1px;display:flex;align-items:center;gap:7px">
-                📝 Log Bets
-              </button>
             </div>
-            <!-- Share My Record Button -->
-            <div id="portfolioShareBar" style="display:none;margin-bottom:16px">
-              <button id="shareRecordBtn" onclick="shareRecordOnX()" style="background:linear-gradient(135deg,rgba(201,146,13,0.15),rgba(201,146,13,0.06));border:1px solid rgba(201,146,13,0.35);border-radius:12px;padding:14px 24px;font-family:var(--sans);font-size:14px;font-weight:700;color:var(--gold);cursor:pointer;display:flex;align-items:center;gap:10px;transition:all .2s;width:100%" onmouseover="this.style.background='linear-gradient(135deg,rgba(201,146,13,0.25),rgba(201,146,13,0.12))';this.style.borderColor='var(--gold)'" onmouseout="this.style.background='linear-gradient(135deg,rgba(201,146,13,0.15),rgba(201,146,13,0.06))';this.style.borderColor='rgba(201,146,13,0.35)'">
-                <span style="font-size:18px">📢</span> Share My Record on X <span style="margin-left:auto;opacity:0.6">→</span>
-              </button>
-            </div>
-            <!-- Premium Portfolio Summary Bar -->
-            <div id="portfolioSummaryBar" style="display:none;background:#0f0e0c;border:1px solid #2a2825;border-radius:14px;overflow:hidden;margin-bottom:20px">
-              <div style="height:2px;background:linear-gradient(90deg,transparent,var(--gold),transparent)"></div>
-              <div style="padding:24px 28px">
-                <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:20px;align-items:center">
-                  <!-- Total Value -->
-                  <div>
-                    <div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752;margin-bottom:6px">PORTFOLIO VALUE</div>
-                    <div id="psSummaryValue" style="font-family:var(--mono);font-size:28px;font-weight:900;color:#f5f0e8;letter-spacing:-0.02em">—</div>
-                  </div>
-                  <!-- Total P&L -->
-                  <div>
-                    <div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752;margin-bottom:6px">TOTAL P&L</div>
-                    <div id="psSummaryPnl" style="font-family:var(--mono);font-size:28px;font-weight:900;color:#5a5752;letter-spacing:-0.02em">—</div>
-                    <div id="psSummaryPnlPct" style="font-family:var(--mono);font-size:11px;font-weight:700;color:#5a5752;margin-top:2px"></div>
-                  </div>
-                  <!-- Win Rate Ring -->
-                  <div style="text-align:center">
-                    <div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752;margin-bottom:8px">WIN RATE</div>
-                    <div id="psWinRateRing" style="width:56px;height:56px;border-radius:50%;background:conic-gradient(#333 0%,#333 100%);display:flex;align-items:center;justify-content:center;margin:0 auto">
-                      <div style="width:40px;height:40px;border-radius:50%;background:#0f0e0c;display:flex;align-items:center;justify-content:center">
-                        <span id="psWinRateVal" style="font-family:var(--mono);font-size:13px;font-weight:900;color:#5a5752">—</span>
-                      </div>
-                    </div>
-                  </div>
-                  <!-- Sharp Score -->
-                  <div style="text-align:center">
-                    <div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752;margin-bottom:8px">SHARP SCORE</div>
-                    <div id="psSharpBadge" style="display:inline-flex;align-items:center;justify-content:center;min-width:48px;padding:8px 14px;border-radius:10px;background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.2)">
-                      <span id="psSharpVal" style="font-family:var(--mono);font-size:20px;font-weight:900;color:var(--gold)">—</span>
-                    </div>
-                  </div>
-                  <!-- ROI -->
-                  <div style="text-align:right">
-                    <div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752;margin-bottom:6px">ROI</div>
-                    <div id="psSummaryROI" style="font-family:var(--mono);font-size:28px;font-weight:900;color:#5a5752;letter-spacing:-0.02em">—</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <!-- P&L Over Time Chart -->
-            <div id="portfolioPnlChart" style="display:none;background:#0f0e0c;border:1px solid #2a2825;border-radius:14px;overflow:hidden;margin-bottom:20px">
-              <div style="padding:20px 24px 8px">
-                <div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#5a5752">P&L OVER TIME — LAST 30 DAYS</div>
-              </div>
-              <div id="pnlChartBars" style="display:flex;align-items:flex-end;gap:3px;height:80px;padding:8px 24px 20px"></div>
-            </div>
-            <!-- ALL tab — Premium Performance Dashboard -->
+            <!-- ALL tab — Positions only -->
             <div id="ptabContent-all">
               <div id="allPositionsContainer">
-                <!-- Best Calls Section -->
-                <div id="bestCallsSection" style="display:none;margin-bottom:20px">
-                  <div onclick="togglePortfolioSection('bestCalls')" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:12px 16px;background:#0f0e0c;border:1px solid #2a2825;border-radius:12px 12px 0 0;user-select:none" onmouseover="this.style.borderColor='rgba(201,146,13,0.3)'" onmouseout="this.style.borderColor='#2a2825'">
-                    <div style="display:flex;align-items:center;gap:10px">
-                      <span style="font-size:16px">🏆</span>
-                      <span style="font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">BEST CALLS</span>
-                      <span id="bestCallsCount" style="font-family:var(--mono);font-size:10px;color:#5a5752"></span>
-                    </div>
-                    <span id="bestCallsChevron" style="color:#5a5752;font-size:12px;transition:transform .2s">▼</span>
-                  </div>
-                  <div id="bestCallsContent" style="border:1px solid #2a2825;border-top:none;border-radius:0 0 12px 12px;overflow:hidden"></div>
-                </div>
                 <!-- Open Positions Section -->
                 <div id="openPositionsSection" style="display:none;margin-bottom:20px">
                   <div onclick="togglePortfolioSection('openPositions')" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:12px 16px;background:#0f0e0c;border:1px solid #2a2825;border-radius:12px 12px 0 0;user-select:none" onmouseover="this.style.borderColor='rgba(201,146,13,0.3)'" onmouseout="this.style.borderColor='#2a2825'">
@@ -4898,72 +4838,180 @@ body.nav-open .sidebar-backdrop {
                 <div style="padding:32px 0;text-align:center;font-family:var(--mono);font-size:11px;color:#4a4744;letter-spacing:.08em">LOADING…</div>
               </div>
             </div>
-            <!-- FIND MARKETS tab -->
-            <div id="ptabContent-search" style="display:none">
-              <div style="margin-bottom:20px">
-                <div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:6px">🔍 Find Markets</div>
-                <div style="font-size:12px;color:var(--dim);margin-bottom:16px">Search live prediction markets across Polymarket and Kalshi</div>
-                <input type="text" id="mktSearchInput" placeholder="Search markets… e.g. Bitcoin, Trump, NBA"
-                  style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:10px;padding:13px 16px;font-family:var(--mono);font-size:13px;color:var(--text);outline:none;box-sizing:border-box"
-                  onfocus="this.style.borderColor='rgba(201,146,13,0.5)'" onblur="this.style.borderColor='var(--border)'"
-                  oninput="debouncedMktSearch()" onkeydown="if(event.key==='Enter')runMarketSearch()"/>
-              </div>
-              <div id="mktSearchResults">
-                <div style="text-align:center;padding:48px 20px;color:var(--dim)">
-                  <div style="font-size:32px;margin-bottom:12px;opacity:0.4">🌐</div>
-                  <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">Search across platforms</div>
-                  <div style="font-size:13px">Type a keyword to find live markets on Polymarket and Kalshi.</div>
-                </div>
-              </div>
-            </div>
-            <!-- LOG BETS tab -->
-            <div id="ptabContent-bets" style="display:none">
-              <!-- Stats row -->
-              <div id="betStatsRow" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:20px">
-                <div style="background:var(--cream);border:1px solid var(--border);border-radius:10px;padding:14px 16px"><div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">WAGERED</div><div id="betStatWagered" style="font-family:var(--mono);font-size:20px;font-weight:900;color:var(--text)">$0</div></div>
-                <div style="background:var(--cream);border:1px solid var(--border);border-radius:10px;padding:14px 16px"><div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">P&L</div><div id="betStatPnl" style="font-family:var(--mono);font-size:20px;font-weight:900;color:var(--dim)">$0</div></div>
-                <div style="background:var(--cream);border:1px solid var(--border);border-radius:10px;padding:14px 16px"><div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">WIN RATE</div><div id="betStatWinRate" style="font-family:var(--mono);font-size:20px;font-weight:900;color:var(--text)">—</div></div>
-                <div style="background:var(--cream);border:1px solid var(--border);border-radius:10px;padding:14px 16px"><div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">ROI</div><div id="betStatRoi" style="font-family:var(--mono);font-size:20px;font-weight:900;color:var(--dim)">—</div></div>
-              </div>
-              <!-- Platform breakdown -->
-              <div id="betPlatformPills" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px"></div>
-              <!-- Add Bet Form -->
-              <div style="background:var(--cream);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:20px">
-                <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:16px">Log a Bet</div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-                  <div><label style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;display:block;margin-bottom:4px">Platform</label>
-                    <select id="betPlatform" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--sans);font-size:13px;padding:10px 14px;outline:none">
-                      <option value="draftkings">DraftKings</option><option value="fanduel">FanDuel</option><option value="betmgm">BetMGM</option><option value="bet365">Bet365</option><option value="bovada">Bovada</option><option value="polymarket">Polymarket</option><option value="kalshi">Kalshi</option><option value="other">Other</option>
-                    </select></div>
-                  <div><label style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;display:block;margin-bottom:4px">Side / Pick</label>
-                    <input type="text" id="betSide" placeholder="Lakers, Over 215.5, YES" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:10px 14px;outline:none;box-sizing:border-box"/></div>
-                  <div style="grid-column:1/-1"><label style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;display:block;margin-bottom:4px">Event / Question</label>
-                    <input type="text" id="betQuestion" placeholder="Lakers -3.5 vs Celtics" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:10px 14px;outline:none;box-sizing:border-box"/></div>
-                  <div><label style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;display:block;margin-bottom:4px">Amount ($)</label>
-                    <input type="number" id="betAmount" placeholder="100" min="0" step="0.01" oninput="autoCalcPayout()" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:13px;padding:10px 14px;outline:none;box-sizing:border-box"/></div>
-                  <div><label style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;display:block;margin-bottom:4px">Odds</label>
-                    <input type="text" id="betOdds" placeholder="-110, +250" oninput="autoCalcPayout()" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:13px;padding:10px 14px;outline:none;box-sizing:border-box"/></div>
-                  <div><label style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;display:block;margin-bottom:4px">Potential Payout ($)</label>
-                    <input type="number" id="betPayout" placeholder="190.91" min="0" step="0.01" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:13px;padding:10px 14px;outline:none;box-sizing:border-box"/></div>
-                  <div><label style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;display:block;margin-bottom:4px">Notes (optional)</label>
-                    <input type="text" id="betNotes" placeholder="Sharp line move..." style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:10px 14px;outline:none;box-sizing:border-box"/></div>
-                </div>
-                <div id="betError" style="color:#ef4444;font-family:var(--mono);font-size:12px;margin-top:8px;display:none"></div>
-                <button id="betSubmitBtn" onclick="submitBet()" style="margin-top:16px;background:var(--gold);color:var(--ink);border:none;border-radius:10px;padding:12px 24px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer">Log Bet →</button>
-              </div>
-              <!-- Bet filter tabs -->
-              <div style="display:flex;gap:8px;margin-bottom:16px">
-                <button onclick="filterBets('all')" id="betFilterAll" style="background:var(--gold);color:var(--ink);border:none;border-radius:6px;padding:6px 14px;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer">All</button>
-                <button onclick="filterBets('open')" id="betFilterOpen" style="background:transparent;color:var(--dim);border:1px solid var(--border);border-radius:6px;padding:6px 14px;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer">Open</button>
-                <button onclick="filterBets('settled')" id="betFilterSettled" style="background:transparent;color:var(--dim);border:1px solid var(--border);border-radius:6px;padding:6px 14px;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer">Settled</button>
-              </div>
-              <!-- Bet list -->
-              <div id="betList"><div style="text-align:center;padding:40px 20px;color:var(--dim)"><div style="font-size:32px;margin-bottom:12px">📝</div><div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">No bets logged yet</div><div style="font-size:13px">Use the form above to start tracking your bets across any platform.</div></div></div>
-            </div>
           </div><!-- /portfolioMain -->
           </div>
         </div>
       </div><!-- /tab-portfolio -->
+
+      <!-- ═══════════════════════════════════ PERFORMANCE TAB ════════════════════════════ -->
+      <div id="tab-performance" style="display:none">
+        <div class="section">
+          <div style="max-width:860px">
+            <!-- Share My Record Button -->
+            <div id="portfolioShareBar" style="display:none;margin-bottom:16px">
+              <button id="shareRecordBtn" onclick="shareRecordOnX()" style="background:linear-gradient(135deg,rgba(201,146,13,0.15),rgba(201,146,13,0.06));border:1px solid rgba(201,146,13,0.35);border-radius:12px;padding:14px 24px;font-family:var(--sans);font-size:14px;font-weight:700;color:var(--gold);cursor:pointer;display:flex;align-items:center;gap:10px;transition:all .2s;width:100%" onmouseover="this.style.background='linear-gradient(135deg,rgba(201,146,13,0.25),rgba(201,146,13,0.12))';this.style.borderColor='var(--gold)'" onmouseout="this.style.background='linear-gradient(135deg,rgba(201,146,13,0.15),rgba(201,146,13,0.06))';this.style.borderColor='rgba(201,146,13,0.35)'">
+                <span style="font-size:18px">📢</span> Share My Record on X <span style="margin-left:auto;opacity:0.6">→</span>
+              </button>
+            </div>
+            <!-- Premium Portfolio Summary Bar -->
+            <div id="portfolioSummaryBar" style="display:none;background:#0f0e0c;border:1px solid #2a2825;border-radius:14px;overflow:hidden;margin-bottom:20px">
+              <div style="height:2px;background:linear-gradient(90deg,transparent,var(--gold),transparent)"></div>
+              <div style="padding:24px 28px">
+                <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:20px;align-items:center">
+                  <!-- Total Value -->
+                  <div>
+                    <div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752;margin-bottom:6px">PORTFOLIO VALUE</div>
+                    <div id="psSummaryValue" style="font-family:var(--mono);font-size:28px;font-weight:900;color:#f5f0e8;letter-spacing:-0.02em">—</div>
+                  </div>
+                  <!-- Total P&L -->
+                  <div>
+                    <div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752;margin-bottom:6px">TOTAL P&L</div>
+                    <div id="psSummaryPnl" style="font-family:var(--mono);font-size:28px;font-weight:900;color:#5a5752;letter-spacing:-0.02em">—</div>
+                    <div id="psSummaryPnlPct" style="font-family:var(--mono);font-size:11px;font-weight:700;color:#5a5752;margin-top:2px"></div>
+                  </div>
+                  <!-- Win Rate Ring -->
+                  <div style="text-align:center">
+                    <div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752;margin-bottom:8px">WIN RATE</div>
+                    <div id="psWinRateRing" style="width:56px;height:56px;border-radius:50%;background:conic-gradient(#333 0%,#333 100%);display:flex;align-items:center;justify-content:center;margin:0 auto">
+                      <div style="width:40px;height:40px;border-radius:50%;background:#0f0e0c;display:flex;align-items:center;justify-content:center">
+                        <span id="psWinRateVal" style="font-family:var(--mono);font-size:13px;font-weight:900;color:#5a5752">—</span>
+                      </div>
+                    </div>
+                  </div>
+                  <!-- Sharp Score -->
+                  <div style="text-align:center">
+                    <div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752;margin-bottom:8px">SHARP SCORE</div>
+                    <div id="psSharpBadge" style="display:inline-flex;align-items:center;justify-content:center;min-width:48px;padding:8px 14px;border-radius:10px;background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.2)">
+                      <span id="psSharpVal" style="font-family:var(--mono);font-size:20px;font-weight:900;color:var(--gold)">—</span>
+                    </div>
+                  </div>
+                  <!-- ROI -->
+                  <div style="text-align:right">
+                    <div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752;margin-bottom:6px">ROI</div>
+                    <div id="psSummaryROI" style="font-family:var(--mono);font-size:28px;font-weight:900;color:#5a5752;letter-spacing:-0.02em">—</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- P&L Over Time Chart -->
+            <div id="portfolioPnlChart" style="display:none;background:#0f0e0c;border:1px solid #2a2825;border-radius:14px;overflow:hidden;margin-bottom:20px">
+              <div style="padding:20px 24px 8px">
+                <div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#5a5752">P&L OVER TIME — LAST 30 DAYS</div>
+              </div>
+              <div id="pnlChartBars" style="display:flex;align-items:flex-end;gap:3px;height:80px;padding:8px 24px 20px"></div>
+            </div>
+            <!-- Best Calls Section -->
+            <div id="bestCallsSection" style="display:none;margin-bottom:20px">
+              <div onclick="togglePortfolioSection('bestCalls')" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:12px 16px;background:#0f0e0c;border:1px solid #2a2825;border-radius:12px 12px 0 0;user-select:none" onmouseover="this.style.borderColor='rgba(201,146,13,0.3)'" onmouseout="this.style.borderColor='#2a2825'">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <span style="font-size:16px">🏆</span>
+                  <span style="font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">BEST CALLS</span>
+                  <span id="bestCallsCount" style="font-family:var(--mono);font-size:10px;color:#5a5752"></span>
+                </div>
+                <span id="bestCallsChevron" style="color:#5a5752;font-size:12px;transition:transform .2s">▼</span>
+              </div>
+              <div id="bestCallsContent" style="border:1px solid #2a2825;border-top:none;border-radius:0 0 12px 12px;overflow:hidden"></div>
+            </div>
+            <!-- My Prediction Analytics (platform breakdown) -->
+            <div id="perfPlatformAnalyticsSection" style="margin-bottom:20px">
+              <div style="background:var(--cream);border:1px solid var(--border);border-radius:14px;overflow:hidden">
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)">
+                  <div>
+                    <div style="font-size:14px;font-weight:700;color:var(--text)">🌐 My Prediction Analytics</div>
+                    <div style="font-size:11px;color:var(--dim);margin-top:2px">Your personal track record across connected platforms</div>
+                  </div>
+                  <button class="btn-secondary" onclick="loadPlatformAnalytics(true)" style="font-size:12px">↺ Refresh</button>
+                </div>
+                <div style="padding:16px 20px">
+                  <div id="perfPlatformGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px"></div>
+                  <div id="perfPlatformEmpty" style="display:none;padding:16px;text-align:center;color:var(--dim);font-size:13px;font-family:var(--mono)">
+                    Connect Polymarket or Kalshi in the My Positions tab to see your cross-platform stats.
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- Empty state when no wallet connected -->
+            <div id="performanceEmpty" style="display:none;text-align:center;padding:48px 20px;color:var(--dim)">
+              <div style="font-size:40px;margin-bottom:16px;opacity:0.4">📈</div>
+              <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:8px">Connect your wallet to see stats</div>
+              <div style="font-size:13px;line-height:1.6;margin-bottom:24px">Link your Polymarket, Kalshi, or Manifold account to track your personal trading performance.</div>
+              <button onclick="showTab('portfolio')" style="background:var(--gold);color:#141412;border:none;border-radius:10px;padding:12px 24px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;min-height:44px">Go to My Positions →</button>
+            </div>
+          </div>
+        </div>
+      </div><!-- /tab-performance -->
+
+      <!-- ═══════════════════════════════════ LOG BETS TAB ════════════════════════════ -->
+      <div id="tab-logbets" style="display:none">
+        <div class="section">
+          <div style="max-width:860px">
+            <!-- Stats row -->
+            <div id="betStatsRow" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:20px">
+              <div style="background:var(--cream);border:1px solid var(--border);border-radius:10px;padding:14px 16px"><div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">WAGERED</div><div id="betStatWagered" style="font-family:var(--mono);font-size:20px;font-weight:900;color:var(--text)">$0</div></div>
+              <div style="background:var(--cream);border:1px solid var(--border);border-radius:10px;padding:14px 16px"><div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">P&L</div><div id="betStatPnl" style="font-family:var(--mono);font-size:20px;font-weight:900;color:var(--dim)">$0</div></div>
+              <div style="background:var(--cream);border:1px solid var(--border);border-radius:10px;padding:14px 16px"><div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">WIN RATE</div><div id="betStatWinRate" style="font-family:var(--mono);font-size:20px;font-weight:900;color:var(--text)">—</div></div>
+              <div style="background:var(--cream);border:1px solid var(--border);border-radius:10px;padding:14px 16px"><div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">ROI</div><div id="betStatRoi" style="font-family:var(--mono);font-size:20px;font-weight:900;color:var(--dim)">—</div></div>
+            </div>
+            <!-- Platform breakdown -->
+            <div id="betPlatformPills" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px"></div>
+            <!-- Add Bet Form -->
+            <div style="background:var(--cream);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:20px">
+              <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:16px">Log a Bet</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <div><label style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;display:block;margin-bottom:4px">Platform</label>
+                  <select id="betPlatform" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--sans);font-size:13px;padding:10px 14px;outline:none">
+                    <option value="draftkings">DraftKings</option><option value="fanduel">FanDuel</option><option value="betmgm">BetMGM</option><option value="bet365">Bet365</option><option value="bovada">Bovada</option><option value="polymarket">Polymarket</option><option value="kalshi">Kalshi</option><option value="other">Other</option>
+                  </select></div>
+                <div><label style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;display:block;margin-bottom:4px">Side / Pick</label>
+                  <input type="text" id="betSide" placeholder="Lakers, Over 215.5, YES" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:10px 14px;outline:none;box-sizing:border-box"/></div>
+                <div style="grid-column:1/-1"><label style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;display:block;margin-bottom:4px">Event / Question</label>
+                  <input type="text" id="betQuestion" placeholder="Lakers -3.5 vs Celtics" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:10px 14px;outline:none;box-sizing:border-box"/></div>
+                <div><label style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;display:block;margin-bottom:4px">Amount ($)</label>
+                  <input type="number" id="betAmount" placeholder="100" min="0" step="0.01" oninput="autoCalcPayout()" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:13px;padding:10px 14px;outline:none;box-sizing:border-box"/></div>
+                <div><label style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;display:block;margin-bottom:4px">Odds</label>
+                  <input type="text" id="betOdds" placeholder="-110, +250" oninput="autoCalcPayout()" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:13px;padding:10px 14px;outline:none;box-sizing:border-box"/></div>
+                <div><label style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;display:block;margin-bottom:4px">Potential Payout ($)</label>
+                  <input type="number" id="betPayout" placeholder="190.91" min="0" step="0.01" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:13px;padding:10px 14px;outline:none;box-sizing:border-box"/></div>
+                <div><label style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;display:block;margin-bottom:4px">Notes (optional)</label>
+                  <input type="text" id="betNotes" placeholder="Sharp line move..." style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:10px 14px;outline:none;box-sizing:border-box"/></div>
+              </div>
+              <div id="betError" style="color:#ef4444;font-family:var(--mono);font-size:12px;margin-top:8px;display:none"></div>
+              <button id="betSubmitBtn" onclick="submitBet()" style="margin-top:16px;background:var(--gold);color:var(--ink);border:none;border-radius:10px;padding:12px 24px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer">Log Bet →</button>
+            </div>
+            <!-- Bet filter tabs -->
+            <div style="display:flex;gap:8px;margin-bottom:16px">
+              <button onclick="filterBets('all')" id="betFilterAll" style="background:var(--gold);color:var(--ink);border:none;border-radius:6px;padding:6px 14px;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer">All</button>
+              <button onclick="filterBets('open')" id="betFilterOpen" style="background:transparent;color:var(--dim);border:1px solid var(--border);border-radius:6px;padding:6px 14px;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer">Open</button>
+              <button onclick="filterBets('settled')" id="betFilterSettled" style="background:transparent;color:var(--dim);border:1px solid var(--border);border-radius:6px;padding:6px 14px;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer">Settled</button>
+            </div>
+            <!-- Bet list -->
+            <div id="betList"><div style="text-align:center;padding:40px 20px;color:var(--dim)"><div style="font-size:32px;margin-bottom:12px">📝</div><div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">No bets logged yet</div><div style="font-size:13px">Use the form above to start tracking your bets across any platform.</div></div></div>
+          </div>
+        </div>
+      </div><!-- /tab-logbets -->
+
+      <!-- ═══════════════════════════════════ FIND MARKETS TAB ════════════════════════════ -->
+      <div id="tab-findmarkets" style="display:none">
+        <div class="section">
+          <div style="max-width:860px">
+            <div style="margin-bottom:20px">
+              <div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:6px">🔍 Find Markets</div>
+              <div style="font-size:12px;color:var(--dim);margin-bottom:16px">Search live prediction markets across Polymarket and Kalshi</div>
+              <input type="text" id="mktSearchInput" placeholder="Search markets… e.g. Bitcoin, Trump, NBA"
+                style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:10px;padding:13px 16px;font-family:var(--mono);font-size:13px;color:var(--text);outline:none;box-sizing:border-box"
+                onfocus="this.style.borderColor='rgba(201,146,13,0.5)'" onblur="this.style.borderColor='var(--border)'"
+                oninput="debouncedMktSearch()" onkeydown="if(event.key==='Enter')runMarketSearch()"/>
+            </div>
+            <div id="mktSearchResults">
+              <div style="text-align:center;padding:48px 20px;color:var(--dim)">
+                <div style="font-size:32px;margin-bottom:12px;opacity:0.4">🌐</div>
+                <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">Search across platforms</div>
+                <div style="font-size:13px">Type a keyword to find live markets on Polymarket and Kalshi.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div><!-- /tab-findmarkets -->
 
       <!-- ACCOUNT TAB -->
       <div id="tab-account" style="display:none">
@@ -6635,7 +6683,7 @@ function ensureMoreExpanded(tab) {
 // Tab switching
 function showTab(tab) {
   ensureMoreExpanded(tab);
-  ['overview','markets','resolve','members','leaderboard','share','rewards','seasons','settings','analytics','economy','branding','flexbot','ideas','portfolio','account'].forEach(t => {
+  ['overview','markets','resolve','members','leaderboard','share','rewards','seasons','settings','analytics','economy','branding','flexbot','ideas','portfolio','account','performance','logbets','findmarkets'].forEach(t => {
     const el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === tab ? 'block' : 'none';
   });
@@ -6643,7 +6691,7 @@ function showTab(tab) {
   document.querySelectorAll('.nav-item').forEach(n => {
     if (n.getAttribute('onclick') && n.getAttribute('onclick').includes(`'${tab}'`)) n.classList.add('active');
   });
-  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Followers', portfolio:'My Portfolio', account:'My Account' };
+  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Followers', portfolio:'My Positions', account:'My Account', performance:'Performance', logbets:'Log Bets', findmarkets:'Find Markets' };
   document.getElementById('topbarTitle').textContent = titles[tab] || tab;
   if (tab === 'analytics' && !analyticsLoaded) loadAnalytics();
   if (tab === 'members') loadMembers();
@@ -6682,6 +6730,8 @@ function showTab(tab) {
     }
   }
   if (tab === 'portfolio') loadPortfolio();
+  if (tab === 'performance') loadPerformanceTab();
+  if (tab === 'logbets') { loadBets(); loadBetStats(); }
   if (tab === 'account') populateAccountTab();
   if (tab === 'seasons' && !seasonsLoaded) loadSeasons();
   if (tab === 'markets') {
@@ -10668,7 +10718,7 @@ init().then(() => {
     history.replaceState({}, '', '/creator/dashboard');
     showTab(_tabParam);
   } else {
-    // Default to portfolio tab (aggregator-first)
+    // Default to My Positions (aggregator-first)
     showTab('portfolio');
   }
 });
@@ -11434,6 +11484,93 @@ async function loadPortfolio() {
   }
 }
 
+// ── PERFORMANCE TAB ─────────────────────────────────────────────────────────
+let _performanceLoaded = false;
+async function loadPerformanceTab() {
+  // Ensure portfolio data is loaded first (for stats)
+  if (!_portfolioLoaded) {
+    await loadPortfolio();
+  }
+  // Show/hide empty state vs content
+  const hasAny = _polyWalletAddress || _kalshiConnected || _manifoldUsername;
+  const emptyEl = document.getElementById('performanceEmpty');
+  const shareBar = document.getElementById('portfolioShareBar');
+  const summaryBar = document.getElementById('portfolioSummaryBar');
+  const chartEl = document.getElementById('portfolioPnlChart');
+  const bestEl = document.getElementById('bestCallsSection');
+  const perfPlatform = document.getElementById('perfPlatformAnalyticsSection');
+  if (!hasAny) {
+    if (emptyEl) emptyEl.style.display = 'block';
+    if (shareBar) shareBar.style.display = 'none';
+    if (summaryBar) summaryBar.style.display = 'none';
+    if (chartEl) chartEl.style.display = 'none';
+    if (bestEl) bestEl.style.display = 'none';
+    if (perfPlatform) perfPlatform.style.display = 'none';
+    return;
+  }
+  if (emptyEl) emptyEl.style.display = 'none';
+  if (perfPlatform) perfPlatform.style.display = 'block';
+  // Re-compute stats from loaded positions
+  updatePortfolioSummary();
+  // Populate best calls
+  renderBestCallsInPerformance();
+  // Populate the performance platform analytics grid
+  loadPerfPlatformAnalytics();
+}
+
+async function loadPerfPlatformAnalytics() {
+  const grid = document.getElementById('perfPlatformGrid');
+  const empty = document.getElementById('perfPlatformEmpty');
+  if (!grid) return;
+  try {
+    const token = localStorage.getItem('hf_token');
+    const userId = localStorage.getItem('hf_user_id');
+    if (!userId || !token) return;
+    const r = await fetch('/api/predictors/' + userId + '/analytics', { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) { if (empty) empty.style.display = 'block'; return; }
+    const data = await r.json();
+    if (!data.platforms || data.platforms.length === 0) { if (empty) empty.style.display = 'block'; return; }
+    if (empty) empty.style.display = 'none';
+    const platformColors = { polymarket: '#a78bfa', kalshi: '#fbbf24', manifold: '#34d399', hfx: '#c9920d' };
+    grid.innerHTML = data.platforms.map(p => {
+      const c = platformColors[p.platform] || '#888';
+      const sign = p.pnl >= 0 ? '+' : '';
+      return '<div style="background:var(--ink);border:1px solid var(--border);border-radius:12px;padding:16px;border-top:2px solid ' + c + '">' +
+        '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:10px;text-transform:capitalize">' + p.platform + '</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
+          '<div><div style="font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em">WINS</div><div style="font-family:var(--mono);font-size:16px;font-weight:900;color:#22c55e">' + (p.wins || 0) + '</div></div>' +
+          '<div><div style="font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em">LOSSES</div><div style="font-family:var(--mono);font-size:16px;font-weight:900;color:#ef4444">' + (p.losses || 0) + '</div></div>' +
+          '<div><div style="font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em">P&L</div><div style="font-family:var(--mono);font-size:14px;font-weight:900;color:' + (p.pnl >= 0 ? '#22c55e' : '#ef4444') + '">' + sign + '$' + Math.abs(p.pnl || 0).toFixed(2) + '</div></div>' +
+          '<div><div style="font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em">WIN RATE</div><div style="font-family:var(--mono);font-size:14px;font-weight:900;color:var(--text)">' + (p.win_rate || 0) + '%</div></div>' +
+        '</div></div>';
+    }).join('');
+  } catch (e) {
+    console.warn('[perfPlatformAnalytics]', e);
+    if (empty) empty.style.display = 'block';
+  }
+}
+
+function renderBestCallsInPerformance() {
+  const bestSec = document.getElementById('bestCallsSection');
+  if (!bestSec) return;
+  try {
+    const positions = getAllPositionsFlat();
+    const resolved = positions.filter(p => p._isResolved);
+    const bestCalls = [...resolved].filter(p => p._won && p.pnl != null && p.pnl > 0).sort((a, b) => (b.pnl || 0) - (a.pnl || 0)).slice(0, 3);
+    if (bestCalls.length > 0) {
+      bestSec.style.display = 'block';
+      const countEl = document.getElementById('bestCallsCount');
+      if (countEl) countEl.textContent = 'Top ' + bestCalls.length;
+      const contentEl = document.getElementById('bestCallsContent');
+      if (contentEl) contentEl.innerHTML = bestCalls.map(p => renderResolvedCard(p)).join('');
+    } else {
+      bestSec.style.display = 'none';
+    }
+  } catch (e) {
+    console.warn('[bestCalls]', e);
+  }
+}
+
 function renderKalshiConnectState() {
   const form = document.getElementById('kalshiConnectForm');
   const row  = document.getElementById('kalshiConnectedRow');
@@ -11823,8 +11960,8 @@ async function loadPolymarketPositions(forceRefresh) {
 let _activePortfolioTab = 'all';
 function switchPortfolioTab(tab) {
   _activePortfolioTab = tab;
-  const tabs = ['all','poly','kalshi','manifold','hfx','search','bets'];
-  const colors = {all:'var(--gold)',poly:'#a78bfa',kalshi:'#fbbf24',manifold:'#34d399',hfx:'var(--gold)',search:'var(--gold)',bets:'#22c55e'};
+  const tabs = ['all','poly','kalshi','manifold','hfx'];
+  const colors = {all:'var(--gold)',poly:'#a78bfa',kalshi:'#fbbf24',manifold:'#34d399',hfx:'var(--gold)'};
   tabs.forEach(t => {
     const btn = document.getElementById('ptab-'+t);
     const content = document.getElementById('ptabContent-'+t);
@@ -11833,7 +11970,6 @@ function switchPortfolioTab(tab) {
   });
   if (tab === 'all') updateAllPositionsTab();
   if (tab === 'hfx') loadHFXPositions(false);
-  if (tab === 'bets') { loadBets(); loadBetStats(); }
 }
 
 // ── MANUAL BET TRACKER ──────────────────────────────────────────────────────
@@ -12229,16 +12365,11 @@ function updateAllPositionsTab() {
   const hasAnyPlatform = _polyWalletAddress || _kalshiConnected || _manifoldUsername;
 
   const emptyEl = document.getElementById('allPositionsEmpty');
-  const bestSec = document.getElementById('bestCallsSection');
   const openSec = document.getElementById('openPositionsSection');
   const closedSec = document.getElementById('closedPositionsSection');
 
-  // Also gather HFX positions if available
-  // (HFX positions are handled separately in their own tab, so we just check external platforms here)
-
   if (positions.length === 0 && !hasAnyPlatform) {
     if (emptyEl) emptyEl.style.display = 'block';
-    if (bestSec) bestSec.style.display = 'none';
     if (openSec) openSec.style.display = 'none';
     if (closedSec) closedSec.style.display = 'none';
     return;
@@ -12248,20 +12379,6 @@ function updateAllPositionsTab() {
 
   const open = positions.filter(p => !p._isResolved);
   const resolved = positions.filter(p => p._isResolved);
-  const bestCalls = [...resolved].filter(p => p._won && p.pnl != null && p.pnl > 0).sort((a, b) => (b.pnl || 0) - (a.pnl || 0)).slice(0, 3);
-
-  // Best Calls
-  if (bestSec) {
-    if (bestCalls.length > 0) {
-      bestSec.style.display = 'block';
-      const countEl = document.getElementById('bestCallsCount');
-      if (countEl) countEl.textContent = 'Top ' + bestCalls.length;
-      const contentEl = document.getElementById('bestCallsContent');
-      if (contentEl) contentEl.innerHTML = bestCalls.map(p => renderResolvedCard(p)).join('');
-    } else {
-      bestSec.style.display = 'none';
-    }
-  }
 
   // Open Positions
   if (openSec) {
