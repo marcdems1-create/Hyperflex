@@ -3,13 +3,22 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Explore — HYPERFLEX</title>
-<meta name="description" content="Discover prediction markets and follow top predictors across Polymarket and Kalshi."/>
-<meta property="og:title" content="Explore Prediction Markets — HYPERFLEX"/>
-<meta property="og:description" content="Live activity feed, trending markets, and top predictors across platforms."/>
-<meta property="og:url" content="https://hyperflex.network/explore"/>
+<title>Explore — Live Prediction Market Activity | HYPERFLEX</title>
+<meta name="description" content="Live prediction market activity, whale trades, and news impact across all platforms."/>
+<link rel="canonical" href="https://hyperflex.network/explore"/>
+<!-- Open Graph -->
 <meta property="og:type" content="website"/>
-<meta name="twitter:card" content="summary"/>
+<meta property="og:url" content="https://hyperflex.network/explore"/>
+<meta property="og:title" content="Explore — HYPERFLEX"/>
+<meta property="og:description" content="Live prediction market activity, whale trades, and news impact across all platforms."/>
+<meta property="og:image" content="https://hyperflex.network/og-default.png"/>
+<meta property="og:site_name" content="HYPERFLEX"/>
+<!-- Twitter / X -->
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:site" content="@HyperFlexApp"/>
+<meta name="twitter:title" content="Explore — HYPERFLEX"/>
+<meta name="twitter:description" content="Live prediction market activity, whale trades, and news impact across all platforms."/>
+<meta name="twitter:image" content="https://hyperflex.network/og-default.png"/>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -2010,8 +2019,18 @@ function renderAnnouncements(announcements, communities) {
 }
 
 function renderStatsTicker(stats) {
-  if (!stats) return;
-  const fmt = n => n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K' : n.toLocaleString();
+  if (!stats) {
+    // Fallback: try loading from public /api/stats endpoint
+    fetch('/api/stats').then(r => r.ok ? r.json() : null).then(d => {
+      if (!d) return;
+      const fmt = n => n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K' : (n || 0).toLocaleString();
+      document.getElementById('statTotalTrades').textContent  = fmt(d.total_predictions || d.total_trades || 0);
+      document.getElementById('statLiveMarkets').textContent  = fmt(d.live_markets || d.total_live_markets || 0);
+      document.getElementById('statCommunities').textContent  = fmt(d.communities || d.total_communities || 0);
+    }).catch(() => {});
+    return;
+  }
+  const fmt = n => n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K' : (n || 0).toLocaleString();
   document.getElementById('statTotalTrades').textContent  = fmt(stats.total_trades);
   document.getElementById('statLiveMarkets').textContent  = fmt(stats.total_live_markets);
   document.getElementById('statCommunities').textContent  = fmt(stats.total_communities);

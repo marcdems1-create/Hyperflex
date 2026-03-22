@@ -2926,36 +2926,36 @@ body.nav-open .sidebar-backdrop {
     </div>
 
     <nav class="sidebar-nav">
-      <div class="nav-section-label">Trading</div>
-      <a class="nav-item active" onclick="showTab('portfolio')">
+      <div class="nav-section-label" id="navSectionTrading" data-nav-section="trading">Trading</div>
+      <a class="nav-item" data-nav-section="trading" onclick="showTab('portfolio')">
         <span class="nav-icon">🌐</span><span class="nav-label">My Positions</span>
       </a>
-      <a class="nav-item" onclick="showTab('performance')">
+      <a class="nav-item" data-nav-section="trading" onclick="showTab('performance')">
         <span class="nav-icon">📈</span><span class="nav-label">Performance</span>
       </a>
-      <a class="nav-item" onclick="showTab('quicktrade')">
+      <a class="nav-item" data-nav-section="trading" onclick="showTab('quicktrade')">
         <span class="nav-icon">⚡</span><span class="nav-label">Quick Trade</span>
       </a>
-      <a class="nav-item" onclick="showTab('findmarkets')">
+      <a class="nav-item" data-nav-section="trading" onclick="showTab('findmarkets')">
         <span class="nav-icon">🔍</span><span class="nav-label">Find Markets</span>
       </a>
-      <div class="nav-section-label">Community</div>
-      <a class="nav-item" onclick="showTab('overview')">
+      <div class="nav-section-label" id="navSectionCommunity" data-nav-section="community">Community</div>
+      <a class="nav-item" data-nav-section="community" onclick="showTab('overview')">
         <span class="nav-icon">📊</span><span class="nav-label">Overview</span>
       </a>
-      <a class="nav-item" onclick="showTab('markets')">
+      <a class="nav-item" data-nav-section="community" onclick="showTab('markets')">
         <span class="nav-icon">🎯</span><span class="nav-label">Markets</span>
       </a>
-      <a class="nav-item" onclick="showTab('analytics')">
+      <a class="nav-item" data-nav-section="community" onclick="showTab('analytics')">
         <span class="nav-icon">📉</span><span class="nav-label">Analytics</span>
       </a>
-      <a class="nav-item" onclick="showTab('members')">
+      <a class="nav-item" data-nav-section="community" onclick="showTab('members')">
         <span class="nav-icon">🔗</span><span class="nav-label">Social</span>
       </a>
-      <a class="nav-item" href="/predictors" style="text-decoration:none">
+      <a class="nav-item" data-nav-section="community" id="leaderboardNavItem" href="/predictors" style="text-decoration:none">
         <span class="nav-icon">🏆</span><span class="nav-label">Leaderboard</span>
       </a>
-      <a class="nav-item" onclick="showTab('resolve')" id="resolveNavItem">
+      <a class="nav-item" data-nav-section="community" onclick="showTab('resolve')" id="resolveNavItem">
         <span class="nav-icon">⚖️</span><span class="nav-label">Resolve</span>
         <span class="nav-badge" id="resolveBadge" style="display:none">0</span>
       </a>
@@ -4804,7 +4804,7 @@ body.nav-open .sidebar-backdrop {
       </div>
 
       <!-- PORTFOLIO TAB -->
-      <div id="tab-portfolio">
+      <div id="tab-portfolio" style="display:none">
         <div class="section">
           <div style="max-width:860px">
 
@@ -6014,6 +6014,7 @@ async function init() {
     }
     renderDashboard(data);
     loadNotifications();
+    setDefaultTab();
   } catch (e) {
     showToast('Could not load dashboard. Check your connection.', 'error');
   }
@@ -6353,6 +6354,113 @@ function renderDashboard(data) {
   // Pre-fill waitlist email with creator's account email (kept for fallback)
   if (creator.email && document.getElementById('waitlistEmail')) {
     document.getElementById('waitlistEmail').value = creator.email;
+  }
+
+  // ── Smart Sidebar: adapt based on user type ──────────────────────────────
+  adaptSidebar(data);
+}
+
+// ── SMART SIDEBAR ─────────────────────────────────────────────────────────────
+// Adapts sidebar layout based on whether user is a trader, creator, both, or neither.
+function adaptSidebar(data) {
+  const isTrader = !!(window._polyWalletAddress || window._hlWalletAddress || window._connectedWallet);
+  const isCreator = !!(data && data.markets && data.markets.length > 0);
+
+  const tradingLabel = document.getElementById('navSectionTrading');
+  const communityLabel = document.getElementById('navSectionCommunity');
+  const tradingItems = document.querySelectorAll('[data-nav-section="trading"]:not(.nav-section-label)');
+  const communityItems = document.querySelectorAll('[data-nav-section="community"]:not(.nav-section-label)');
+  const moreSection = document.getElementById('navMoreSection');
+  const moreToggle = document.getElementById('navMoreToggle');
+
+  // Helper: move items into More section
+  function moveToMore(items, label) {
+    if (!moreSection) return;
+    // Insert a sub-label inside More
+    const subLabel = document.createElement('div');
+    subLabel.className = 'nav-section-label';
+    subLabel.style.paddingLeft = '30px';
+    subLabel.style.fontSize = '10px';
+    subLabel.textContent = label.textContent;
+    moreSection.insertBefore(subLabel, moreSection.firstChild);
+    items.forEach(item => {
+      item.style.paddingLeft = '30px';
+      item.style.fontSize = '12px';
+      moreSection.insertBefore(item, subLabel.nextSibling);
+    });
+    // Hide original label
+    label.style.display = 'none';
+  }
+
+  // Helper: show CTA item in a section
+  function addCTA(afterLabel, text, action) {
+    const cta = document.createElement('a');
+    cta.className = 'nav-item';
+    cta.style.color = 'var(--gold)';
+    cta.style.fontWeight = '700';
+    cta.style.fontSize = '12px';
+    cta.innerHTML = '<span class="nav-icon" style="font-size:13px">→</span><span class="nav-label">' + text + '</span>';
+    cta.onclick = action;
+    cta.setAttribute('data-nav-section', afterLabel.getAttribute('data-nav-section'));
+    afterLabel.parentNode.insertBefore(cta, afterLabel.nextSibling);
+  }
+
+  // Hide Resolve nav item if 0 markets need resolution
+  const resolveNav = document.getElementById('resolveNavItem');
+  if (resolveNav && resolveQueue && resolveQueue.length === 0) {
+    resolveNav.style.display = 'none';
+  } else if (resolveNav) {
+    resolveNav.style.display = '';
+  }
+
+  // Leaderboard: point traders to /predictors (external), hide internal play-money one for creators without trading
+  const lbNav = document.getElementById('leaderboardNavItem');
+  if (lbNav) {
+    if (isTrader) {
+      lbNav.href = '/predictors';
+      lbNav.style.display = '';
+    } else if (isCreator && !isTrader) {
+      // Internal play-money leaderboard is in the overview tab already, hide redundant nav item
+      lbNav.style.display = 'none';
+    }
+  }
+
+  if (isTrader && !isCreator) {
+    // Trader-only: TRADING stays prominent, COMMUNITY moves into More
+    moveToMore([...communityItems], communityLabel);
+  } else if (isCreator && !isTrader) {
+    // Creator-only: COMMUNITY stays prominent, TRADING moves into More
+    moveToMore([...tradingItems], tradingLabel);
+    // Add connect wallet CTA in trading section
+    if (tradingLabel) {
+      addCTA(tradingLabel, 'Connect wallet to trade', function() { showTab('portfolio'); });
+    }
+  } else if (!isCreator && !isTrader) {
+    // Neither: show both with CTAs
+    if (tradingLabel) {
+      addCTA(tradingLabel, 'Connect wallet', function() { showTab('portfolio'); });
+    }
+    if (communityLabel) {
+      addCTA(communityLabel, 'Create markets', function() { openCreateModal(); });
+    }
+  }
+  // If both: keep both visible as-is (default layout)
+}
+
+// ── Default tab based on user type ────────────────────────────────────────────
+let _defaultTabSet = false;
+function setDefaultTab() {
+  if (_defaultTabSet) return;
+  _defaultTabSet = true;
+  const isTrader = !!(window._polyWalletAddress || window._hlWalletAddress || window._connectedWallet);
+  const isCreator = !!(creatorData && creatorData.markets && creatorData.markets.length > 0);
+  if (isTrader && !isCreator) {
+    showTab('portfolio');
+  } else if (isCreator) {
+    showTab('overview');
+  } else {
+    // New user — show overview by default
+    showTab('overview');
   }
 }
 
@@ -6797,7 +6905,9 @@ async function loadFollowingList() {
   var el = document.getElementById('socialFollowingList');
   if (!el) return;
   try {
-    var r = await fetch(API + '/api/predictor-follows/following', { headers: { 'Authorization': 'Bearer ' + token } });
+    var _followToken = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+    if (!_followToken) { el.innerHTML = '<div style="padding:20px;text-align:center;font-family:var(--mono);font-size:12px;color:var(--dim)">Sign in to see your following list</div>'; return; }
+    var r = await fetch(API + '/api/predictor-follows/following', { headers: { 'Authorization': 'Bearer ' + _followToken } });
     if (!r.ok) throw new Error('Failed');
     var data = await r.json();
     var list = data.following || data || [];
@@ -6837,9 +6947,10 @@ async function socialUnfollow(userId, btnEl) {
   btnEl.disabled = true;
   btnEl.textContent = '...';
   try {
+    var _unfToken = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
     var r = await fetch(API + '/api/predictor-follows/' + userId, {
       method: 'DELETE',
-      headers: { 'Authorization': 'Bearer ' + token }
+      headers: { 'Authorization': 'Bearer ' + _unfToken }
     });
     if (r.ok) {
       var row = btnEl.closest('.social-follow-row');
@@ -6864,7 +6975,9 @@ async function loadFollowersList() {
   var el = document.getElementById('socialFollowersList');
   if (!el) return;
   try {
-    var r = await fetch(API + '/api/predictor-follows/followers', { headers: { 'Authorization': 'Bearer ' + token } });
+    var _followersToken = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+    if (!_followersToken) return;
+    var r = await fetch(API + '/api/predictor-follows/followers', { headers: { 'Authorization': 'Bearer ' + _followersToken } });
     if (!r.ok) throw new Error('Failed');
     var data = await r.json();
     var list = data.followers || data || [];
@@ -9925,7 +10038,14 @@ async function startTrial() {
 
 function signOut() {
   localStorage.removeItem('hf_token');
+  localStorage.removeItem('hf_creator_token');
   localStorage.removeItem('hf_user');
+  localStorage.removeItem('hf_wallet_address');
+  localStorage.removeItem('hf_hl_wallet');
+  localStorage.removeItem('hf_member_token');
+  localStorage.removeItem('poly_api_key');
+  localStorage.removeItem('poly_api_secret');
+  localStorage.removeItem('poly_api_passphrase');
   window.location.href = '/';
 }
 
@@ -10917,7 +11037,7 @@ function closeSidebar() {
 // ── CUSTOM DOMAIN ──────────────────────────────────────────────
 async function loadCdStatus() {
   try {
-    const token = localStorage.getItem('creator_token');
+    const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
     const r = await fetch('/api/creator/custom-domain/status', { headers: { Authorization: 'Bearer ' + token } });
     if (!r.ok) return;
     const d = await r.json();
@@ -10969,7 +11089,7 @@ async function saveCdDomain() {
   if (!domain) { fb.innerHTML = '<span style="color:#ef4444">Please enter a domain.</span>'; return; }
   fb.innerHTML = '<span style="color:var(--dim)">Saving…</span>';
   try {
-    const token = localStorage.getItem('creator_token');
+    const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
     const r = await fetch('/api/creator/custom-domain/set', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
@@ -10988,7 +11108,7 @@ async function verifyCdDomain() {
   const fb = document.getElementById('cdFeedback');
   fb.innerHTML = '<span style="color:var(--dim)">Checking DNS… this may take a moment.</span>';
   try {
-    const token = localStorage.getItem('creator_token');
+    const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
     const r = await fetch('/api/creator/custom-domain/verify', {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + token }
@@ -11011,7 +11131,7 @@ async function removeCdDomain() {
   const fb = document.getElementById('cdFeedback');
   fb.innerHTML = '<span style="color:var(--dim)">Removing…</span>';
   try {
-    const token = localStorage.getItem('creator_token');
+    const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
     const r = await fetch('/api/creator/custom-domain/remove', {
       method: 'DELETE',
       headers: { Authorization: 'Bearer ' + token }

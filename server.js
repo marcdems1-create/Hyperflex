@@ -47,7 +47,8 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 function sendTelegramAlert(chatId, message) {
   if (!TELEGRAM_BOT_TOKEN || !chatId) return;
   const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
-  _nodeFetch(url, {
+  // _nodeFetch is declared later in the file — safe because this function is only called at runtime, not at import time
+  fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'HTML' })
@@ -326,10 +327,17 @@ function requireApiTier(req, res, next) {
   }
 
   // Check if request comes from our own frontend (same-origin)
+  // Only allow exact domain match — not substrings like "evil-hyperflex.network"
   const referer = req.headers.referer || req.headers.origin || '';
-  if (referer.includes('hyperflex.network') || referer.includes('localhost')) {
-    return next(); // Our own pages can access
-  }
+  try {
+    if (referer) {
+      const refUrl = new URL(referer);
+      const host = refUrl.hostname;
+      if (host === 'hyperflex.network' || host === 'www.hyperflex.network' || host === 'localhost' || host === '127.0.0.1') {
+        return next(); // Our own pages can access
+      }
+    }
+  } catch (e) { /* malformed referer — fall through to 403 */ }
 
   // External API access without key — blocked
   return res.status(403).json({
@@ -1025,6 +1033,57 @@ function copyShareLink(btn) {
     console.error('share page error:', err);
     res.status(500).send('<!DOCTYPE html><html><body style="font-family:monospace;padding:40px;color:#fff;background:#141412"><h2>Error loading share page</h2></body></html>');
   }
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// GET /og-default.png — branded OG image (1200×630) for social sharing
+// SVG → sharp PNG if available, else serve raw SVG with image/png fallback
+// ════════════════════════════════════════════════════════════════════════════
+app.get('/og-default.png', async (req, res) => {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1a1a17"/>
+      <stop offset="100%" stop-color="#141412"/>
+    </linearGradient>
+    <linearGradient id="gold-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#e0a820"/>
+      <stop offset="100%" stop-color="#c9920d"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <!-- Subtle grid -->
+  <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+    <path d="M 48 0 L 0 0 0 48" fill="none" stroke="rgba(201,146,13,0.06)" stroke-width="1"/>
+  </pattern>
+  <rect width="1200" height="630" fill="url(#grid)"/>
+  <!-- Top accent line -->
+  <rect x="0" y="0" width="1200" height="3" fill="url(#gold-grad)"/>
+  <!-- HYPERFLEX wordmark -->
+  <text x="600" y="270" text-anchor="middle" font-family="system-ui,-apple-system,Helvetica,Arial,sans-serif" font-weight="800" font-size="72" letter-spacing="8" fill="#c9920d">HYPERFLEX</text>
+  <!-- Subtitle -->
+  <text x="600" y="340" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-weight="400" font-size="24" fill="#7a7870">Prediction market intelligence.</text>
+  <!-- Bottom stats line -->
+  <text x="600" y="420" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-weight="700" font-size="16" letter-spacing="1" fill="rgba(201,146,13,0.5)">WHALE TRACKING  ·  AI SIGNALS  ·  LEADERBOARDS  ·  CROSS-PLATFORM DATA</text>
+  <!-- Bottom accent line -->
+  <rect x="0" y="627" width="1200" height="3" fill="url(#gold-grad)"/>
+  <!-- Domain -->
+  <text x="600" y="575" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-weight="700" font-size="14" letter-spacing="2" fill="#5a5854">hyperflex.network</text>
+</svg>`;
+
+  const sharp = getSharp();
+  if (sharp) {
+    try {
+      const png = await sharp(Buffer.from(svg)).png({ quality: 90 }).toBuffer();
+      res.set({ 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' });
+      return res.send(png);
+    } catch (e) {
+      console.error('og-default sharp error:', e.message);
+    }
+  }
+  // Fallback: serve SVG directly
+  res.set({ 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' });
+  res.send(svg);
 });
 
 // GET /og/home.png — redirect to static pre-rendered OG image
@@ -2009,30 +2068,33 @@ app.get('/positions/:user_id', requireAuth, async (req, res) => {
   res.json(data);
 });
 
-// Leaderboard: top 20 by PnL (settled) or by trades placed (fallback when no markets resolved yet).
-// Accepts ?slug= (community page) or falls back to subdomain for custom domain routing.
-app.get('/api/leaderboard', async (req, res) => {
+// Community leaderboard: top 20 by PnL (settled) or by trades placed.
+// Requires ?slug= (community page) or subdomain for custom domain routing.
+// Global leaderboard (no slug) is handled by the later /api/leaderboard route.
+app.get('/api/community-leaderboard', async (req, res) => {
   try {
     const period = req.query.period; // 'week' | undefined (all-time)
     // Accept slug param from community page; fall back to subdomain for custom domains
     const communitySlug = req.query.slug || req.tenant?.subdomain || null;
+
+    if (!communitySlug) {
+      return res.status(400).json({ error: 'slug parameter required for community leaderboard' });
+    }
 
     // For weekly: only positions settled this week (Mon 00:00 UTC)
     const weekStart = period === 'week' ? getWeekStart() : null;
 
     let leaderboardMarketIds = null;
 
-    if (communitySlug) {
-      let tenantMarkets;
-      if (pool) {
-        tenantMarkets = await dbQuery('SELECT id FROM markets WHERE tenant_slug = $1', [communitySlug]);
-      } else {
-        const { data } = await supabase.from('markets').select('id').eq('tenant_slug', communitySlug);
-        tenantMarkets = data;
-      }
-      leaderboardMarketIds = (tenantMarkets || []).map((m) => m.id);
-      if (leaderboardMarketIds.length === 0) return res.json([]);
+    let tenantMarkets;
+    if (pool) {
+      tenantMarkets = await dbQuery('SELECT id FROM markets WHERE tenant_slug = $1', [communitySlug]);
+    } else {
+      const { data } = await supabase.from('markets').select('id').eq('tenant_slug', communitySlug);
+      tenantMarkets = data;
     }
+    leaderboardMarketIds = (tenantMarkets || []).map((m) => m.id);
+    if (leaderboardMarketIds.length === 0) return res.json([]);
 
     // ── Settled positions (primary ranking: PnL) ──
     let settledPositions = [];
@@ -2137,10 +2199,11 @@ app.get('/api/leaderboard', async (req, res) => {
     const top20 = rows.slice(0, 20).map((r, i) => ({ rank: i + 1, ...r }));
     res.json(top20);
   } catch (err) {
-    console.error('leaderboard error:', err.message);
+    console.error('community-leaderboard error:', err.message);
     res.status(500).json({ error: 'Leaderboard failed' });
   }
 });
+
 
 // ── PRICES (60s cache, backend-only; frontend uses GET /api/prices) ─────────
 let pricesCache = { data: null, ts: 0 };
@@ -2425,14 +2488,15 @@ async function getStreakMap(userIds, marketIds) {
 
 async function settleMarkets() {
   // settlement check — silent in production
+  try {
   const now = new Date().toISOString();
 
   let markets;
   if (pool) {
-    const _rows = await dbQuery('SELECT * FROM markets WHERE resolved = $1 AND expiry_date < $2', [false, now]);
-    markets = _rows;
+    markets = await dbQuery('SELECT * FROM markets WHERE resolved = $1 AND expiry_date < $2', [false, now]);
   } else {
-    const { data: markets } = await supabase .from('markets') .select('*') .eq('resolved', false) .lt('expiry_date', now);
+    const { data } = await supabase .from('markets') .select('*') .eq('resolved', false) .lt('expiry_date', now);
+    markets = data;
   }
 
   if (!markets || markets.length === 0) return;
@@ -2462,10 +2526,10 @@ async function settleMarkets() {
     // Settle positions
     let positions;
     if (pool) {
-      const _rows = await dbQuery('SELECT * FROM positions WHERE market_id = $1 AND settled = $2', [market.id, false]);
-      positions = _rows;
+      positions = await dbQuery('SELECT * FROM positions WHERE market_id = $1 AND settled = $2', [market.id, false]);
     } else {
-      const { data: positions } = await supabase .from('positions') .select('*') .eq('market_id', market.id) .eq('settled', false);
+      const { data } = await supabase .from('positions') .select('*') .eq('market_id', market.id) .eq('settled', false);
+      positions = data;
     }
 
     for (const position of positions) {
@@ -2519,10 +2583,13 @@ async function settleMarkets() {
     const creatorSlug = await getCreatorSlugForMarket(market);
     sendResolutionEmails(market, outcome ? 'YES' : 'NO', creatorSlug, null);
   }
+  } catch (err) {
+    console.error('[settle] Error:', err.message);
+  }
 }
 
-// Run settlement every hour
-cron.schedule('0 * * * *', settleMarkets);
+// Run settlement every hour — wrapped to prevent unhandled rejections
+cron.schedule('0 * * * *', () => { settleMarkets().catch(err => console.error('[settle] Cron error:', err.message)); });
 
 // ── TRIAL EXPIRY ────────────────────────────────────────
 // Every hour: downgrade any creators whose gifted trial has expired
@@ -2754,7 +2821,7 @@ async function processWeeklyRefills(targetSlug = null) {
 // Run every Monday at midnight UTC
 cron.schedule('0 0 * * 1', () => {
   console.log('[refill] Weekly cron triggered');
-  processWeeklyRefills();
+  processWeeklyRefills().catch(err => console.error('[refill] Cron error:', err.message));
 });
 
 // POST /api/creator/trigger-refill — manually trigger a refill run for the creator's community
@@ -2895,8 +2962,8 @@ async function scanAndCreateMarkets() {
   }
 }
 
-// Run Claude scanner every 6 hours
-cron.schedule('0 */6 * * *', scanAndCreateMarkets);
+// Run Claude scanner every 6 hours — wrapped to prevent unhandled rejections
+cron.schedule('0 */6 * * *', () => { scanAndCreateMarkets().catch(err => console.error('[scanner] Cron error:', err.message)); });
 
 // Manual trigger endpoint (legacy)
 app.post('/api/scan-markets', requireAdmin, async (req, res) => {
@@ -9640,6 +9707,14 @@ async function fetchHFXCommunityLeaderboard(p) {
 
 app.get('/api/leaderboard', async (req, res) => {
   try {
+    // If ?slug= is present, serve the community-specific leaderboard
+    const communitySlug = req.query.slug || req.tenant?.subdomain || null;
+    if (communitySlug) {
+      const qs = new URLSearchParams(req.query).toString();
+      return res.redirect(307, `/api/community-leaderboard?${qs}`);
+    }
+
+    // Global Polymarket leaderboard
     const period = (req.query.period || '30d').toLowerCase();
     const validPeriods = ['7d', '30d', 'all'];
     const p = validPeriods.includes(period) ? period : '30d';
@@ -11041,7 +11116,7 @@ async function sendWeeklyDigests() {
   }
 }
 // Every Monday at 9am UTC
-cron.schedule('0 9 * * 1', () => { console.log('[digest] Weekly digest cron triggered'); sendWeeklyDigests(); });
+cron.schedule('0 9 * * 1', () => { console.log('[digest] Weekly digest cron triggered'); sendWeeklyDigests().catch(err => console.error('[digest] Cron error:', err.message)); });
 
 // ── PREDICTOR SPOTLIGHT EMAIL ─────────────────────────────────────────────────
 // Every Monday 8am UTC — top predictors this week + hottest markets → all bettors
@@ -11187,7 +11262,7 @@ async function sendPredictorSpotlightEmail() {
     console.error('[spotlight] Error:', err.message);
   }
 }
-cron.schedule('0 8 * * 1', () => { console.log('[spotlight] Predictor spotlight cron triggered'); sendPredictorSpotlightEmail(); });
+cron.schedule('0 8 * * 1', () => { console.log('[spotlight] Predictor spotlight cron triggered'); sendPredictorSpotlightEmail().catch(err => console.error('[spotlight] Cron error:', err.message)); });
 
 // ─── STREAK WARNING EMAILS ─────────────────────────────────────────────────────
 // Daily at 6pm UTC — sends "Your X-win streak ends tonight" to users who:
@@ -11398,7 +11473,7 @@ async function sendStreakWarningEmails() {
   }
 }
 // Every day at 6pm UTC
-cron.schedule('0 18 * * *', () => { console.log('[streak-warn] Streak warning cron triggered'); sendStreakWarningEmails(); });
+cron.schedule('0 18 * * *', () => { console.log('[streak-warn] Streak warning cron triggered'); sendStreakWarningEmails().catch(err => console.error('[streak-warn] Cron error:', err.message)); });
 
 // ─── DEAD MARKET NUDGE EMAILS ─────────────────────────────────────────────────
 // Weekly on Wednesday at 10am UTC.
@@ -11509,7 +11584,7 @@ async function sendDeadMarketNudges() {
   }
 }
 // Every Wednesday at 10am UTC
-cron.schedule('0 10 * * 3', () => { console.log('[dead-market] Dead market nudge cron triggered'); sendDeadMarketNudges(); });
+cron.schedule('0 10 * * 3', () => { console.log('[dead-market] Dead market nudge cron triggered'); sendDeadMarketNudges().catch(err => console.error('[dead-market] Cron error:', err.message)); });
 
 // ─── MEMBER WIN-BACK EMAILS ────────────────────────────────────────────────────
 // Fridays at 11am UTC — re-engage members who placed at least one bet ever but
@@ -11673,7 +11748,7 @@ async function sendMemberWinBackEmails() {
   }
 }
 // Every Friday at 11am UTC
-cron.schedule('0 11 * * 5', () => { console.log('[winback] Win-back cron triggered'); sendMemberWinBackEmails(); });
+cron.schedule('0 11 * * 5', () => { console.log('[winback] Win-back cron triggered'); sendMemberWinBackEmails().catch(err => console.error('[winback] Cron error:', err.message)); });
 
 // GET /api/win-card/:marketId/:userId — public win card data
 app.get('/api/win-card/:marketId/:userId', async (req, res) => {
@@ -14184,8 +14259,8 @@ async function scanCreatorYouTubeChannels() {
   }
 }
 
-// Run creator YouTube auto-scan daily at 8am UTC
-cron.schedule('0 8 * * *', scanCreatorYouTubeChannels);
+// Run creator YouTube auto-scan daily at 8am UTC — wrapped to prevent unhandled rejections
+cron.schedule('0 8 * * *', () => { scanCreatorYouTubeChannels().catch(err => console.error('[yt-scan] Cron error:', err.message)); });
 
 // ════════════════════════════════════════════════════════════
 // FEATURE 4 — autoResolveExpiredMarkets()
@@ -14383,11 +14458,11 @@ async function autoResolveExpiredMarkets() {
   }
 }
 
-// Run auto-resolve check every 30 minutes
-cron.schedule('*/30 * * * *', autoResolveExpiredMarkets);
+// Run auto-resolve check every 30 minutes — wrapped to prevent unhandled rejections
+cron.schedule('*/30 * * * *', () => { autoResolveExpiredMarkets().catch(err => console.error('[auto-resolve] Cron error:', err.message)); });
 
-// Auto-sync platform positions — every hour
-cron.schedule('0 * * * *', syncAllUserPositions);
+// Auto-sync platform positions — every hour — wrapped to prevent unhandled rejections
+cron.schedule('0 * * * *', () => { syncAllUserPositions().catch(err => console.error('[auto-sync] Cron error:', err.message)); });
 
 // ── PROFILE PAGE: WALL + AGGREGATED COMMENTS ─────────────────────────────────
 
@@ -16873,8 +16948,8 @@ async function snapshotPolymarketPrices() {
   }
 }
 
-// Run every 6 hours
-cron.schedule('0 */6 * * *', snapshotPolymarketPrices);
+// Run every 6 hours — wrapped to prevent unhandled rejections
+cron.schedule('0 */6 * * *', () => { snapshotPolymarketPrices().catch(err => console.error('[snapshot] Cron error:', err.message)); });
 
 // Seed initial data 30 seconds after boot
 setTimeout(snapshotPolymarketPrices, 30000);
@@ -18147,7 +18222,7 @@ app.get('/api/signals', async (req, res) => {
     try {
       if (_whaleIndexCache && _whaleIndexCache.data) {
         const wiData = _whaleIndexCache.data;
-        const markets = wiData.markets || wiData.positions || [];
+        const markets = wiData.picks || wiData.markets || wiData.positions || [];
         for (const m of markets) {
           const whaleCount = m.whale_count || m.whales || 0;
           if (whaleCount >= 5) {
@@ -19083,7 +19158,7 @@ function _escHtmlStr(s) {
 }
 
 // Daily briefing email cron — 8am UTC daily
-cron.schedule('0 8 * * *', () => { console.log('[daily-briefing-email] Cron triggered'); sendDailyBriefingEmail(); });
+cron.schedule('0 8 * * *', () => { console.log('[daily-briefing-email] Cron triggered'); sendDailyBriefingEmail().catch(err => console.error('[daily-briefing-email] Cron error:', err.message)); });
 
 // ════════════════════════════════════════════════════════════
 // ACCURACY TRACKING — the core product
@@ -19119,65 +19194,18 @@ app.post('/api/accuracy/log', async (req, res) => {
 let _accuracyStatsCache = null;
 
 function generateSeedAccuracyStats() {
-  // Generate realistic seed data so the page looks alive before real predictions
-  const sources = ['whale_consensus', 'momentum', 'divergence', 'crystal_ball', 'leverage', 'expiry'];
-  const sourceAccuracy = { whale_consensus: 81, momentum: 70, divergence: 76, crystal_ball: 65, leverage: 72, expiry: 68 };
-  const sourceTotals = { whale_consensus: 312, momentum: 198, divergence: 156, crystal_ball: 181, leverage: 89, expiry: 67 };
-  const by_source = {};
-  let totalAll = 0, correctAll = 0, totalConf = 0;
-  for (const s of sources) {
-    const total = sourceTotals[s];
-    const acc = sourceAccuracy[s];
-    const correct = Math.round(total * acc / 100);
-    by_source[s] = { total, correct, accuracy: acc };
-    totalAll += total;
-    correctAll += correct;
-    totalConf += total * (55 + Math.round(Math.random() * 25));
-  }
-  const overallAcc = Math.round(correctAll / totalAll * 100);
-
-  // Timeline — 30 days of data with realistic variance
-  const timeline = [];
-  const now = new Date();
-  for (let i = 29; i >= 0; i--) {
-    const d = new Date(now);
-    d.setDate(d.getDate() - i);
-    const predictions = 8 + Math.floor(Math.random() * 12);
-    const baseAcc = 72 + (Math.random() * 16 - 8);
-    const correct = Math.min(predictions, Math.max(Math.round(predictions * baseAcc / 100), 1));
-    timeline.push({
-      date: d.toISOString().slice(0, 10),
-      predictions,
-      correct,
-      accuracy: Math.round(correct / predictions * 100)
-    });
-  }
-
-  // Simulated P&L
-  let totalPnl = 0;
-  for (let i = 0; i < totalAll; i++) {
-    if (Math.random() < overallAcc / 100) {
-      totalPnl += 15 + Math.random() * 35;
-    } else {
-      totalPnl -= 40 + Math.random() * 60;
-    }
-  }
-
+  // Return clean empty state — no fake data displayed to users
   return {
-    overall: { total: totalAll, correct: correctAll, incorrect: totalAll - correctAll, accuracy: overallAcc, avg_confidence: Math.round(totalConf / totalAll) },
-    by_source,
-    by_confidence: {
-      '90+': { total: 45, correct: 41, accuracy: 91 },
-      '70-89': { total: 234, correct: 182, accuracy: 78 },
-      '50-69': { total: 389, correct: 267, accuracy: 69 },
-      '<50': { total: 179, correct: 137, accuracy: 77 }
-    },
-    recent_30d: { total: timeline.reduce((s, d) => s + d.predictions, 0), correct: timeline.reduce((s, d) => s + d.correct, 0), accuracy: Math.round(timeline.reduce((s, d) => s + d.correct, 0) / timeline.reduce((s, d) => s + d.predictions, 0) * 100) },
-    streak: { current: 7, best: 23 },
-    timeline,
-    simulated_pnl: Math.round(totalPnl),
-    seed_data: true,
-    updated_at: new Date().toISOString()
+    overall: { total: 0, correct: 0, incorrect: 0, accuracy: 0, avg_confidence: 0 },
+    by_source: {},
+    by_confidence: {},
+    recent_30d: { total: 0, correct: 0, accuracy: 0 },
+    streak: { current: 0, best: 0 },
+    timeline: [],
+    simulated_pnl: 0,
+    seed_data: false,
+    updated_at: new Date().toISOString(),
+    note: 'No predictions tracked yet. Crystal Ball predictions will appear here as they are generated and graded.'
   };
 }
 
@@ -19304,57 +19332,9 @@ app.get('/api/accuracy/recent', async (req, res) => {
       console.warn('[accuracy/recent] table may not exist:', e.message);
     }
 
-    // If empty, generate seed recent predictions
+    // If empty, return clean empty state — no fake data
     if (!rows || rows.length === 0) {
-      const seedRecent = [];
-      const sources = ['whale_consensus', 'momentum', 'divergence', 'crystal_ball', 'leverage'];
-      const outcomes = ['correct', 'correct', 'correct', 'incorrect', 'correct', 'pending', 'correct', 'correct', 'incorrect', 'correct'];
-      const questions = [
-        'Will Bitcoin reach $100K before April 2026?',
-        'Trump wins Republican primary in Iowa?',
-        'Fed cuts rates by 25bp in March?',
-        'Tesla stock above $300 by end of Q1?',
-        'Ukraine ceasefire before April?',
-        'Apple announces AI product at WWDC?',
-        'S&P 500 hits new ATH this week?',
-        'Ethereum merge to PoS successful?',
-        'Gold breaks $2,200 this month?',
-        'TikTok ban upheld by Supreme Court?',
-        'SpaceX Starship orbital flight success?',
-        'Disney+ reaches 200M subscribers?',
-        'OpenAI valued above $100B?',
-        'NATO adds new member in 2026?',
-        'Oil price above $85 by April?',
-        'Meta stock beats Q1 earnings?',
-        'US unemployment below 4% in March?',
-        'Nvidia revenue above $30B Q1?',
-        'Argentina inflation below 100% annual?',
-        'Super Bowl LVIII viewership record?'
-      ];
-      for (let i = 0; i < Math.min(limit, 20); i++) {
-        const hrs = i * 3 + Math.floor(Math.random() * 3);
-        const detected = new Date(Date.now() - hrs * 3600000);
-        const conf = 55 + Math.floor(Math.random() * 35);
-        const price = (0.3 + Math.random() * 0.4).toFixed(4);
-        const outcome = outcomes[i % outcomes.length];
-        const resPrice = outcome === 'correct' ? (parseFloat(price) + 0.1 + Math.random() * 0.2).toFixed(4) : outcome === 'incorrect' ? (parseFloat(price) - 0.1 - Math.random() * 0.15).toFixed(4) : null;
-        const pnl = outcome === 'correct' ? Math.round(100 * (parseFloat(resPrice) - parseFloat(price)) / parseFloat(price)) : outcome === 'incorrect' ? -Math.round(100 * parseFloat(price)) : null;
-        seedRecent.push({
-          id: crypto.randomUUID(),
-          source: sources[i % sources.length],
-          market_question: questions[i],
-          predicted_side: Math.random() > 0.4 ? 'YES' : 'NO',
-          predicted_confidence: conf,
-          market_price_at_prediction: price,
-          detected_at: detected.toISOString(),
-          resolved: outcome !== 'pending',
-          outcome,
-          market_price_at_resolution: resPrice,
-          pnl_if_followed: pnl,
-          seed_data: true
-        });
-      }
-      return res.json({ predictions: seedRecent, seed_data: true });
+      return res.json({ predictions: [], seed_data: false, note: 'No predictions tracked yet. Crystal Ball predictions will appear here as they are generated and graded.' });
     }
 
     res.json({ predictions: rows, seed_data: false });
@@ -19402,12 +19382,9 @@ async function gradeExpiredPredictions() {
         if (match) currentPrice = match.current_price || null;
       }
 
-      // If no current price found, use a probabilistic resolution based on entry price + direction
+      // If no current price found, skip grading — don't use random data
       if (currentPrice === null) {
-        const entryPrice = parseFloat(pred.market_price_at_prediction) || 0.5;
-        // Simulate slight mean reversion + random walk
-        currentPrice = entryPrice + (Math.random() * 0.3 - 0.15);
-        currentPrice = Math.max(0.01, Math.min(0.99, currentPrice));
+        continue;
       }
 
       let outcome = 'expired';
@@ -19460,7 +19437,7 @@ async function gradeExpiredPredictions() {
   }
 }
 
-cron.schedule('*/30 * * * *', () => { console.log('[accuracy/grade] Cron triggered'); gradeExpiredPredictions(); });
+cron.schedule('*/30 * * * *', () => { console.log('[accuracy/grade] Cron triggered'); gradeExpiredPredictions().catch(err => console.error('[accuracy/grade] Cron error:', err.message)); });
 
 // GET /accuracy — Accuracy tracking page
 app.get('/accuracy', (req, res) => res.sendFile(path.join(__dirname, 'public', 'accuracy.html')));
