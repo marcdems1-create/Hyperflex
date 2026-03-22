@@ -18326,7 +18326,7 @@ app.get('/api/backtest/:address', async (req, res) => {
     }
 
     const display_name = positions[0].trader || address;
-    const ALLOCATION_PER_POSITION = 100; // $100 per position
+    // Use REAL position sizes — no fake $100 allocation
 
     // Try to get historical prices from market_snapshots
     const cutoffDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
@@ -18382,19 +18382,14 @@ app.get('/api/backtest/:address', async (req, res) => {
           }
         }
       }
-      // If no historical snapshot, estimate entry from current price with variance
+      // If no historical snapshot, use current price as entry (conservative — shows 0 P&L rather than fake data)
       if (entryPrice === null) {
-        // Use a simulated entry price: assume they entered at a price reflecting uncertainty
-        const side = (p.side || '').toUpperCase();
-        if (side === 'YES' || side === 'Y') {
-          entryPrice = Math.max(0.05, currentPrice - (0.05 + Math.random() * 0.15));
-        } else {
-          entryPrice = Math.min(0.95, currentPrice + (0.05 + Math.random() * 0.15));
-        }
+        entryPrice = currentPrice;
       }
 
-      // Calculate shares bought with $100
-      const shares = entryPrice > 0 ? ALLOCATION_PER_POSITION / entryPrice : 0;
+      // Use REAL position size from whale data
+      const realSize = parseFloat(p.size || 0);
+      const shares = realSize; // actual shares held
       const side = (p.side || '').toUpperCase();
       let posCurrentValue;
       if (side === 'YES' || side === 'Y') {
@@ -18404,10 +18399,13 @@ app.get('/api/backtest/:address', async (req, res) => {
         posCurrentValue = shares * (1 - currentPrice);
       }
 
-      const posPnl = posCurrentValue - ALLOCATION_PER_POSITION;
-      const posRoi = ALLOCATION_PER_POSITION > 0 ? (posPnl / ALLOCATION_PER_POSITION) * 100 : 0;
+      // Use real P&L from whale data if available, otherwise calculate from price change
+      const realPnl = parseFloat(p.pnl || 0);
+      const posInvested = realSize * entryPrice;
+      const posPnl = realPnl !== 0 ? realPnl : (posCurrentValue - posInvested);
+      const posRoi = posInvested > 0 ? (posPnl / posInvested) * 100 : 0;
 
-      total_invested += ALLOCATION_PER_POSITION;
+      total_invested += posInvested;
       current_value += posCurrentValue;
 
       backtestPositions.push({
