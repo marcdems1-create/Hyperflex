@@ -15584,7 +15584,7 @@ async function fetchWhalePositions() {
               side: p.outcome || p.side || 'Unknown',
               size: parseFloat(p.size || 0),
               current_price: parseFloat(p.curPrice || p.cur_price || 0),
-              market_url: p.slug ? `https://polymarket.com/event/${p.slug}` : (p.market_slug ? `https://polymarket.com/event/${p.market_slug}` : 'https://polymarket.com'),
+              market_url: p.eventSlug ? `https://polymarket.com/event/${p.eventSlug}` : (p.slug ? `https://polymarket.com/event/${p.slug}` : 'https://polymarket.com'),
               pnl: parseFloat(p.pnl || 0),
               fetched_at: new Date().toISOString()
             }));
