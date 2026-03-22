@@ -16248,6 +16248,17 @@ app.get('/api/screener', async (req, res) => {
         daysUntilExpiry = Math.max(0, Math.round((endDate - Date.now()) / (1000 * 60 * 60 * 24)));
       }
 
+      // Build correct Polymarket URL — sports use /sports/, others use /event/
+      let marketUrl = 'https://polymarket.com';
+      const eventSlug = m.eventSlug || slug;
+      if (eventSlug) {
+        if (m.groupSlug && category === 'sports') {
+          marketUrl = `https://polymarket.com/sports/${m.groupSlug}/${eventSlug}`;
+        } else {
+          marketUrl = `https://polymarket.com/event/${eventSlug}`;
+        }
+      }
+
       markets.push({
         market_id: marketId,
         question,
@@ -16259,8 +16270,8 @@ app.get('/api/screener', async (req, res) => {
         price_change_24h: priceChanges[marketId] || null,
         days_until_expiry: daysUntilExpiry,
         end_date: (m.endDate || m.end_date_iso) ? new Date(m.endDate || m.end_date_iso).toISOString() : null,
-        url: slug ? `https://polymarket.com/event/${slug}` : 'https://polymarket.com',
-        slug
+        url: marketUrl,
+        slug: eventSlug
       });
     }
 

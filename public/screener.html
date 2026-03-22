@@ -364,7 +364,7 @@ function renderTable() {
       '<td class="vol-val">' + fmtVol(m.volume) + '</td>' +
       '<td class="change-val ' + changeClass + '">' + changeStr + '</td>' +
       '<td class="expiry-val">' + expiryStr + '</td>' +
-      '<td><a href="' + (m.url && m.url.startsWith('https://polymarket.com') ? m.url : (m.slug ? 'https://polymarket.com/event/' + m.slug : 'https://polymarket.com')) + '" target="_blank" rel="noopener" class="trade-link" onclick="event.stopPropagation()">View on Polymarket \u2192</a></td>' +
+      '<td><a href="' + safeUrl + '" target="_blank" rel="noopener" class="trade-link" onclick="event.stopPropagation()">View on Polymarket \u2192</a></td>' +
     '</tr>';
   }).join('');
 }
