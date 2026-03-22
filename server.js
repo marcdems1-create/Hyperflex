@@ -9879,25 +9879,46 @@ app.get('/api/sharp-money-feed', async (req, res) => {
 
 // Toggle follow a predictor
 app.post('/api/predictors/:userId/follow', requireAuth, async (req, res) => {
-  const followerId = req.user.id;
-  const followingId = req.params.userId;
-  if (followerId === followingId) return res.status(400).json({ error: 'Cannot follow yourself' });
-  let existing;
-  if (pool) {
-    const rows = await dbQuery('SELECT id FROM predictor_follows WHERE follower_id = $1 AND following_id = $2 LIMIT 1', [followerId, followingId]);
-    existing = rows[0] || null;
-  } else {
-    const { data } = await supabase.from('predictor_follows').select('id').eq('follower_id', followerId).eq('following_id', followingId).maybeSingle();
-    existing = data;
+  try {
+    const followerId = req.user.id;
+    const followingId = req.params.userId;
+    if (followerId === followingId) return res.status(400).json({ error: 'Cannot follow yourself' });
+    let existing;
+    if (pool) {
+      const rows = await dbQuery('SELECT id FROM predictor_follows WHERE follower_id = $1 AND following_id = $2 LIMIT 1', [followerId, followingId]);
+      existing = rows[0] || null;
+    } else {
+      const { data } = await supabase.from('predictor_follows').select('id').eq('follower_id', followerId).eq('following_id', followingId).maybeSingle();
+      existing = data;
+    }
+    if (existing) {
+      if (pool) { await dbQuery('DELETE FROM predictor_follows WHERE id = $1', [existing.id]); }
+      else { await supabase.from('predictor_follows').delete().eq('id', existing.id); }
+      return res.json({ following: false });
+    } else {
+      if (pool) { await dbQuery('INSERT INTO predictor_follows (follower_id, following_id) VALUES ($1, $2)', [followerId, followingId]); }
+      else { await supabase.from('predictor_follows').insert({ follower_id: followerId, following_id: followingId }); }
+      return res.json({ following: true });
+    }
+  } catch (e) {
+    console.error('[follow]', e.message);
+    res.status(500).json({ error: 'Follow failed' });
   }
-  if (existing) {
-    if (pool) { await dbQuery('DELETE FROM predictor_follows WHERE id = $1', [existing.id]); }
-    else { await supabase.from('predictor_follows').delete().eq('id', existing.id); }
-    return res.json({ following: false });
-  } else {
-    if (pool) { await dbQuery('INSERT INTO predictor_follows (follower_id, following_id) VALUES ($1, $2)', [followerId, followingId]); }
-    else { await supabase.from('predictor_follows').insert({ follower_id: followerId, following_id: followingId }); }
-    return res.json({ following: true });
+});
+
+// List all predictor follows for the current user
+app.get('/api/predictors/following/list', requireAuth, async (req, res) => {
+  try {
+    let rows;
+    if (pool) {
+      rows = await dbQuery('SELECT following_id FROM predictor_follows WHERE follower_id = $1', [req.user.id]);
+    } else {
+      const { data } = await supabase.from('predictor_follows').select('following_id').eq('follower_id', req.user.id);
+      rows = data || [];
+    }
+    res.json({ following: rows.map(r => r.following_id) });
+  } catch (e) {
+    res.json({ following: [] });
   }
 });
 

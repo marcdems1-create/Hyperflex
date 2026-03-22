@@ -520,20 +520,39 @@ function showStickyBar(){
   setTimeout(function(){bar.classList.add('visible')},800);
 }
 
+var _followedSet=new Set();
+
+async function loadFollowStates(){
+  var token=localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token')||localStorage.getItem('hf_member_token');
+  if(!token)return;
+  try{
+    var r=await fetch('/api/predictors/following/list',{headers:{Authorization:'Bearer '+token}});
+    if(!r.ok)return;
+    var d=await r.json();
+    (d.following||[]).forEach(function(f){_followedSet.add(f)});
+    _followedSet.forEach(function(uid){
+      var btn=document.getElementById('follow-'+uid);
+      if(btn){btn.textContent='Following';btn.classList.add('following')}
+    });
+  }catch(e){}
+}
+
 async function toggleFollow(userId,btn){
-  var token=localStorage.getItem('hf_token')||localStorage.getItem('hf_member_token');
+  var token=localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token')||localStorage.getItem('hf_member_token');
   if(!token){alert('Sign in to follow predictors');return}
   btn.disabled=true;
   try{
     var r=await fetch('/api/predictors/'+userId+'/follow',{method:'POST',headers:{Authorization:'Bearer '+token}});
-    if(!r.ok)throw new Error('Failed');
+    if(!r.ok){var err=await r.json().catch(function(){return{}});throw new Error(err.error||'Failed')}
     var d=await r.json();
     btn.textContent=d.following?'Following':'Follow';
     btn.classList.toggle('following',d.following);
+    if(d.following)_followedSet.add(userId);else _followedSet.delete(userId);
   }catch(e){console.warn('[follow]',e)}finally{btn.disabled=false}
 }
 
 loadLeaderboard();
+loadFollowStates();
 </script>
 </body>
 </html>
