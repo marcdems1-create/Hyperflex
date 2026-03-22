@@ -425,10 +425,8 @@ function renderSignals() {
     const changeHtml = s.change_pct ? '<span>Move: <span class="val" style="color:' + (s.change_pct > 0 ? 'var(--green)' : 'var(--red)') + '">' + (s.change_pct > 0 ? '+' : '') + s.change_pct.toFixed(1) + '%</span></span>' : '';
     const diffHtml = s.price_diff ? '<span>Gap: <span class="val" style="color:var(--purple)">' + (s.price_diff * 100).toFixed(1) + '%</span></span>' : '';
 
-    const tradingEnabled = !!(typeof localStorage !== 'undefined' && localStorage.getItem('poly_api_key'));
-    const tradeBtn = tradingEnabled
-      ? '<button class="signal-trade-btn primary" onclick="window.open(\'' + escHtml(s.url) + '\',\'_blank\')">Execute Trade &rarr;</button>'
-      : '<a href="' + escHtml(s.url) + '" target="_blank" class="signal-trade-btn primary" style="text-decoration:none;display:inline-block;text-align:center">View on Polymarket &rarr;</a>';
+    const safeUrl = s.url && s.url.startsWith('https://polymarket.com') ? s.url : (s.slug ? 'https://polymarket.com/event/' + s.slug : 'https://polymarket.com');
+    const tradeBtn = '<a href="' + escHtml(safeUrl) + '" target="_blank" class="signal-trade-btn primary" style="text-decoration:none;display:inline-block;text-align:center">View on Polymarket &rarr;</a>';
 
     return '<div class="signal-card type-' + s.type + '">' +
       '<div class="signal-top">' +

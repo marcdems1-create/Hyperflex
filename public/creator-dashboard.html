@@ -12857,9 +12857,10 @@ let _qtSearchTimer = null;
 
 function qtTradeBtn(url, label, color) {
   if (!url) return '';
-  const clob = typeof isClobTradingEnabled === 'function' && isClobTradingEnabled();
-  const btnLabel = clob ? 'Execute Trade' : label;
-  const bg = clob ? 'var(--gold)' : color;
+  const safeUrl = url.startsWith('https://polymarket.com') ? url : 'https://polymarket.com';
+  url = safeUrl;
+  const btnLabel = 'View on Polymarket \u2192';
+  const bg = color || '#c9920d';
   const fg = (bg === 'var(--gold)' || color === '#c9920d') ? '#141412' : '#fff';
   if (clob) {
     return `<button onclick="openTradeModal({marketUrl:'${url.replace(/'/g,"\\'")}'},'buy')" style="background:${bg};color:${fg};border:none;border-radius:8px;padding:10px 18px;font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer;min-height:44px;white-space:nowrap">${btnLabel}</button>`;
@@ -12887,7 +12888,7 @@ async function loadCrystalBallPick() {
     const conf = top.confidence || top.confidence_score || 0;
     const confPct = Math.round(conf * (conf <= 1 ? 100 : 1));
     const confColor = confPct >= 80 ? '#22c55e' : confPct >= 60 ? '#c9920d' : '#ef4444';
-    const url = top.market_url || top.url || top.polymarket_url || '';
+    const url = top.market_url || (top.market && top.market.url) || top.url || top.polymarket_url || '';
     card.innerHTML = `
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
         <div style="width:56px;height:56px;border-radius:50%;border:3px solid ${confColor};display:flex;align-items:center;justify-content:center;flex-shrink:0">
@@ -12900,7 +12901,7 @@ async function loadCrystalBallPick() {
       </div>
       <div style="font-size:17px;font-weight:700;color:var(--text);margin-bottom:8px;line-height:1.4">${escHtmlDash(top.prediction || top.question || top.title || '')}</div>
       <div style="font-size:13px;color:var(--dim);margin-bottom:16px;line-height:1.5">${escHtmlDash(top.reasoning || top.rationale || '')}</div>
-      ${url ? `<div>${qtTradeBtn(url, 'Trade this \u2192', '#c9920d')}</div>` : ''}
+      ${url ? `<div>${qtTradeBtn(url, 'View on Polymarket \u2192', '#c9920d')}</div>` : ''}
     `;
   } catch (e) {
     card.innerHTML = '<div style="text-align:center;padding:32px;color:var(--dim);font-size:13px">Crystal ball unavailable right now.</div>';
@@ -12946,8 +12947,7 @@ async function doQuickTradeSearch() {
           <span style="font-family:var(--mono);font-size:11px;color:#ef4444;font-weight:700">${noPct}%</span>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          ${url ? qtTradeBtn(url, 'Buy YES \u2192', '#22c55e') : ''}
-          ${url ? qtTradeBtn(url, 'Buy NO \u2192', '#ef4444') : ''}
+          ${url ? qtTradeBtn(url, 'View on Polymarket \u2192', '#c9920d') : ''}
         </div>
       </div>`;
     }).join('');
@@ -12984,7 +12984,7 @@ async function loadWhaleIndexPicks() {
             </div>
           </div>
           <div style="flex-shrink:0">
-            ${url ? qtTradeBtn(url, 'Trade \u2192', '#c9920d') : ''}
+            ${url ? qtTradeBtn(url, 'View on Polymarket \u2192', '#c9920d') : ''}
           </div>
         </div>
       </div>`;
@@ -13028,7 +13028,7 @@ async function loadExpiringMarkets() {
             </div>
           </div>
           <div style="flex-shrink:0">
-            ${url ? qtTradeBtn(url, 'Last chance \u2192', '#c9920d') : ''}
+            ${url ? qtTradeBtn(url, 'View on Polymarket \u2192', '#c9920d') : ''}
           </div>
         </div>
       </div>`;

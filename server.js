@@ -17615,7 +17615,8 @@ async function generateCrystalBallPredictions() {
   if (indexData && indexData.picks) {
     for (const pick of indexData.picks) {
       if (pick.whale_count < 5) continue;
-      const confidence = Math.min(100, pick.whale_count * 8 + pick.consensus_pct * 0.3);
+      const rawConf = pick.whale_count * 8 + pick.consensus_pct * 0.3;
+      const confidence = Math.max(1, Math.min(95, rawConf >= 100 ? 81 + (pick.whale_count > 15 ? 10 : pick.whale_count > 10 ? 5 : 0) : rawConf));
       const priceDisplay = Math.round((pick.current_price || 0.5) * 100);
       predictions.push({
         type: 'WHALE_CONVERGENCE',
@@ -17649,7 +17650,8 @@ async function generateCrystalBallPredictions() {
         ? Math.min(99, (m.current_price || 50) + Math.round(absChange * 0.5))
         : Math.max(1, (m.current_price || 50) - Math.round(absChange * 0.5));
       const volumeIncreasing = absChange > 15; // proxy: larger moves imply volume
-      const confidence = Math.min(100, absChange * 3 + (volumeIncreasing ? 20 : 0));
+      const rawConf = absChange * 3 + (volumeIncreasing ? 20 : 0);
+      const confidence = Math.max(1, Math.min(95, rawConf >= 100 ? 72 + Math.min(15, Math.abs(absChange)) : rawConf));
       predictions.push({
         type: 'MOMENTUM_BREAKOUT',
         prediction: `${(m.question || '').substring(0, 100)} momentum suggests continuation to ${target}%`,
@@ -17680,7 +17682,8 @@ async function generateCrystalBallPredictions() {
       const whaleTarget = pick.consensus_side === 'YES' ? pick.consensus_pct : (100 - pick.consensus_pct);
       const divergence = Math.abs(whaleTarget - mktPrice);
       if (divergence < 20) continue;
-      const confidence = Math.min(100, 50 + divergence * 1.5);
+      const rawConf = 50 + divergence * 1.5;
+      const confidence = Math.max(1, Math.min(95, rawConf >= 100 ? 65 + Math.min(20, divergence * 0.5) : rawConf));
       predictions.push({
         type: 'SMART_VS_DUMB',
         prediction: `Market says ${mktPrice}% but whales say ${whaleTarget}%. Whales typically win when gap >20%`,
@@ -17735,7 +17738,8 @@ async function generateCrystalBallPredictions() {
           return keywords.some(kw => q.includes(kw));
         });
 
-        const confidence = Math.min(100, (hlPos.leverage || 1) * 2 + 30);
+        const rawConf = (hlPos.leverage || 1) * 2 + 30;
+        const confidence = Math.max(1, Math.min(95, rawConf >= 100 ? 78 + Math.min(12, (hlPos.leverage || 1) * 0.3) : rawConf));
         const side = hlPos.side || 'LONG';
         const marketQ = matchedPick ? matchedPick.market : `${coin} price movement`;
         const marketUrl = matchedPick ? (matchedPick.url || 'https://polymarket.com') : 'https://polymarket.com';
@@ -17792,7 +17796,8 @@ async function generateCrystalBallPredictions() {
       }
 
       const urgency = Math.max(0, Math.round(100 - hoursLeft * 2));
-      const confidence = Math.min(100, 40 + (whaleCount * 5) + urgency * 0.3);
+      const rawConf = 40 + (whaleCount * 5) + urgency * 0.3;
+      const confidence = Math.max(1, Math.min(95, rawConf >= 100 ? 68 + Math.min(20, (48 - hoursLeft) * 0.5) : rawConf));
       predictions.push({
         type: 'EXPIRY_CONVERGENCE',
         prediction: `${(mkt.question || '').substring(0, 100)} expires in ${Math.round(hoursLeft)}h, currently at ${price}%.${whaleInfo}`,
@@ -17826,7 +17831,9 @@ async function generateCrystalBallPredictions() {
         if (!isBullishDisagree && !isBearishDisagree) continue;
 
         const direction = ni.sentiment === 'bullish' ? 'UP' : 'DOWN';
-        const confidence = Math.min(85, 50 + Math.abs(mkt.yes_pct - 50) * 0.5);
+        const rawConf = 50 + Math.abs(mkt.yes_pct - 50) * 0.5;
+        const headlineCount = _newsImpactCache.data.news_impacts.length || 1;
+        const confidence = Math.max(1, Math.min(95, rawConf >= 85 ? 60 + Math.min(15, headlineCount * 3) : rawConf));
         predictions.push({
           type: 'NEWS_SENTIMENT',
           prediction: `Breaking news suggests "${(mkt.question || '').substring(0, 80)}" may move ${direction} (currently ${mkt.yes_pct}%)`,

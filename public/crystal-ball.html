@@ -310,7 +310,7 @@ a:hover { text-decoration: underline; }
     <a href="/crystal-ball" class="nav-link active">Crystal Ball</a>
     <a href="/accuracy" class="nav-link">&#x1F3AF; Accuracy</a>
     <a href="/screener" class="nav-link">Screener</a>
-    <a href="/predictors" class="nav-link">Leaderboard</a>
+    <a href="/predictors" class="nav-link">Predictors</a>
     <a href="/odds" class="nav-link">Odds</a>
     <a href="/data" class="nav-link">Data</a>
     <a href="/api-docs" class="nav-link">API</a>
@@ -618,7 +618,7 @@ async function loadContrarian() {
         '</div>' +
         '<div class="contrarian-suggestion">' + escHtml(s.suggestion) + '</div>' +
         '<div class="contrarian-note">' + escHtml(s.historical_note) + '</div>' +
-        (s.url ? '<a href="' + escAttr(s.url) + '" target="_blank" rel="noopener" style="display:inline-block;margin-top:10px;font-family:var(--mono);font-size:11px;color:var(--gold)">Trade this market &rarr;</a>' : '') +
+        (s.url ? '<a href="' + escAttr(s.url.startsWith('https://polymarket.com') ? s.url : 'https://polymarket.com') + '" target="_blank" rel="noopener" style="display:inline-block;margin-top:10px;font-family:var(--mono);font-size:11px;color:var(--gold)">View on Polymarket &rarr;</a>' : '') +
       '</div>';
     }).join('');
   } catch (err) {
@@ -663,7 +663,7 @@ async function loadExpiring() {
             '<span>Whale agrees: <span class="val">' + (m.whale_agrees ? 'Yes' : 'No') + '</span></span>' +
           '</div>' +
           '<div class="expiring-insight">' + escHtml(m.insight || '') + '</div>' +
-          (m.url ? '<a href="' + escAttr(m.url) + '" target="_blank" rel="noopener" style="display:inline-block;margin-top:8px;font-family:var(--mono);font-size:11px;color:var(--gold)">Last chance to trade &rarr;</a>' : '') +
+          (m.url ? '<a href="' + escAttr(m.url.startsWith('https://polymarket.com') ? m.url : 'https://polymarket.com') + '" target="_blank" rel="noopener" style="display:inline-block;margin-top:8px;font-family:var(--mono);font-size:11px;color:var(--gold)">View on Polymarket &rarr;</a>' : '') +
         '</div>' +
         '<div class="expiring-countdown">' +
           '<div class="expiring-countdown-val" style="color:' + probColor + '">' + countdownVal + '</div>' +

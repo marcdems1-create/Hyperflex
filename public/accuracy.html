@@ -237,6 +237,10 @@ a:hover { text-decoration: underline; }
   <div id="seed-notice" class="seed-notice" style="display:none">
     Simulated accuracy from backtested whale signals. Live tracking starts when predictions are logged.
   </div>
+  <div style="margin-top:20px;padding:16px 28px;border:2px solid var(--gold);background:rgba(19,19,17,0.85);border-radius:12px;display:inline-block;max-width:640px">
+    <div style="font-family:var(--sans);font-size:16px;font-weight:700;color:var(--gold);margin-bottom:6px">&#x1F4CA; Tracking in Progress</div>
+    <div style="font-family:var(--mono);font-size:13px;color:var(--text-soft);line-height:1.6">We started tracking Crystal Ball accuracy on March 22, 2026. Check back in 30 days for verified results.</div>
+  </div>
 </header>
 
 <div class="container">
@@ -245,32 +249,32 @@ a:hover { text-decoration: underline; }
   <div class="stat-row">
     <div class="stat-card">
       <div class="stat-icon">&#x1F3AF;</div>
-      <div class="stat-value green" id="stat-accuracy">--</div>
+      <div class="stat-value" id="stat-accuracy" style="color:var(--muted)">&mdash;</div>
       <div class="stat-label">Overall Accuracy</div>
-      <div class="stat-sub" id="stat-accuracy-sub"></div>
+      <div class="stat-sub" id="stat-accuracy-sub">Tracking since March 22, 2026</div>
     </div>
     <div class="stat-card">
       <div class="stat-icon">&#x1F4CA;</div>
-      <div class="stat-value" id="stat-total">--</div>
+      <div class="stat-value" id="stat-total" style="color:var(--muted)">&mdash;</div>
       <div class="stat-label">Total Predictions</div>
-      <div class="stat-sub" id="stat-total-sub"></div>
+      <div class="stat-sub" id="stat-total-sub">Collecting data</div>
     </div>
     <div class="stat-card">
       <div class="stat-icon">&#x1F525;</div>
-      <div class="stat-value gold" id="stat-streak">--</div>
+      <div class="stat-value" id="stat-streak" style="color:var(--muted)">&mdash;</div>
       <div class="stat-label">Current Streak</div>
-      <div class="stat-sub" id="stat-streak-sub"></div>
+      <div class="stat-sub" id="stat-streak-sub">Not enough data yet</div>
     </div>
     <div class="stat-card">
       <div class="stat-icon">&#x1F4B0;</div>
-      <div class="stat-value green" id="stat-pnl">--</div>
+      <div class="stat-value" id="stat-pnl" style="color:var(--muted)">&mdash;</div>
       <div class="stat-label">Simulated P&L</div>
       <div class="stat-sub">If you bet $100 on every call</div>
     </div>
   </div>
 
-  <!-- ACCURACY OVER TIME -->
-  <div class="section">
+  <!-- ACCURACY OVER TIME (hidden until data available) -->
+  <div class="section" id="section-chart" style="display:none">
     <div class="section-header">
       <div class="section-title"><span class="icon">&#x1F4C8;</span> Accuracy Over Time</div>
       <span class="section-badge">30 DAYS</span>
@@ -280,8 +284,8 @@ a:hover { text-decoration: underline; }
     </div>
   </div>
 
-  <!-- TWO COLUMN: Bars + Donut -->
-  <div class="two-col">
+  <!-- TWO COLUMN: Bars + Donut (hidden until data available) -->
+  <div class="two-col" id="section-breakdown" style="display:none">
     <!-- BY SIGNAL TYPE -->
     <div class="section">
       <div class="section-header">
@@ -306,8 +310,8 @@ a:hover { text-decoration: underline; }
     </div>
   </div>
 
-  <!-- RECENT PREDICTIONS -->
-  <div class="section">
+  <!-- RECENT PREDICTIONS (hidden until data available) -->
+  <div class="section" id="section-recent" style="display:none">
     <div class="section-header">
       <div class="section-title"><span class="icon">&#x1F4CB;</span> Recent Predictions</div>
       <span class="section-badge" id="recent-badge">LAST 20</span>
@@ -389,23 +393,41 @@ async function loadStats() {
     document.getElementById('seed-notice').style.display = 'inline-block';
   }
 
+  // Check if we have real data (more than 0 graded predictions)
+  const hasData = _stats.overall && _stats.overall.total > 0;
+
+  if (!hasData) {
+    // Keep the "tracking in progress" state — dash values already set in HTML
+    return;
+  }
+
+  // Show sections only when there's data
+  document.getElementById('section-chart').style.display = '';
+  document.getElementById('section-breakdown').style.display = '';
+  document.getElementById('section-recent').style.display = '';
+
   // Hero stat cards
   const acc = _stats.overall.accuracy;
   const accEl = document.getElementById('stat-accuracy');
   accEl.textContent = acc + '%';
   accEl.className = 'stat-value ' + accColor(acc);
+  accEl.style.color = '';
   document.getElementById('stat-accuracy-sub').textContent = _stats.overall.correct + ' correct / ' + _stats.overall.total + ' graded';
 
   document.getElementById('stat-total').textContent = _stats.overall.total.toLocaleString();
+  document.getElementById('stat-total').style.color = '';
   document.getElementById('stat-total-sub').textContent = 'Avg confidence: ' + _stats.overall.avg_confidence + '%';
 
   document.getElementById('stat-streak').textContent = _stats.streak.current;
+  document.getElementById('stat-streak').style.color = '';
+  document.getElementById('stat-streak').className = 'stat-value gold';
   document.getElementById('stat-streak-sub').textContent = 'correct in a row (best: ' + _stats.streak.best + ')';
 
   const pnl = _stats.simulated_pnl || 0;
   const pnlEl = document.getElementById('stat-pnl');
   pnlEl.textContent = (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toLocaleString();
   pnlEl.className = 'stat-value ' + (pnl >= 0 ? 'green' : 'red');
+  pnlEl.style.color = '';
 
   document.getElementById('cta-accuracy').textContent = acc + '%';
 

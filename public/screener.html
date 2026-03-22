@@ -355,15 +355,16 @@ function renderTable() {
     const changeClass = m.price_change_24h > 0 ? 'up' : m.price_change_24h < 0 ? 'down' : 'flat';
     const expiryStr = m.days_until_expiry != null ? (m.days_until_expiry === 0 ? 'Today' : m.days_until_expiry + 'd') : '--';
 
-    return '<tr' + rowClass + ' onclick="window.open(\'' + m.url + '\', \'_blank\')">' +
-      '<td class="mkt-question"><a href="' + m.url + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">' + truncate(m.question, 55) + '</a></td>' +
+    var safeUrl = m.url && m.url.startsWith('https://polymarket.com') ? m.url : (m.slug ? 'https://polymarket.com/event/' + m.slug : 'https://polymarket.com');
+    return '<tr' + rowClass + ' onclick="window.open(\'' + safeUrl + '\', \'_blank\')">' +
+      '<td class="mkt-question"><a href="' + safeUrl + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">' + truncate(m.question, 55) + '</a></td>' +
       '<td><span class="cat-pill ' + catClass + '">' + m.category + '</span></td>' +
       '<td class="yes-pct ' + yesClass + '">' + yesPct + '%</td>' +
       '<td class="whale-cell' + whaleClass + '">' + m.whale_count + whaleIcon + '</td>' +
       '<td class="vol-val">' + fmtVol(m.volume) + '</td>' +
       '<td class="change-val ' + changeClass + '">' + changeStr + '</td>' +
       '<td class="expiry-val">' + expiryStr + '</td>' +
-      '<td><a href="' + m.url + '" target="_blank" rel="noopener" class="trade-link" onclick="event.stopPropagation()">Trade \u2192</a></td>' +
+      '<td><a href="' + (m.url && m.url.startsWith('https://polymarket.com') ? m.url : (m.slug ? 'https://polymarket.com/event/' + m.slug : 'https://polymarket.com')) + '" target="_blank" rel="noopener" class="trade-link" onclick="event.stopPropagation()">View on Polymarket \u2192</a></td>' +
     '</tr>';
   }).join('');
 }
