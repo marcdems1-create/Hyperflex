@@ -360,7 +360,7 @@ async function loadLeaderboard(){
     var hlTraders=[];
     if(hlRes.status==='fulfilled'&&hlRes.value.ok){
       var hlData=await hlRes.value.json();
-      hlTraders=(hlData.traders||[]).slice(0,50).map(function(t,i){return{rank:0,user_id:'hl_'+(t.address||i),display_name:t.display_name||(t.address?t.address.slice(0,8)+'...'+t.address.slice(-4):'HL Trader'),win_rate:0,total_pnl:t.pnl_all_time||0,sharp_score:0,trade_count:0,volume:t.account_value||0,platforms:['HL'],account_value:t.account_value||0,_isHL:true}});
+      hlTraders=(hlData.traders||[]).slice(0,50).map(function(t,i){var name=t.display_name||t.userName||t.name||(t.address?t.address.slice(0,6)+'...'+t.address.slice(-4):'HL Trader');var pnl=t.total_pnl||t.pnl_all_time||t.pnl||0;var vol=t.account_value||t.accountValue||0;return{rank:0,user_id:'hl_'+(t.address||i),display_name:name,win_rate:0,total_pnl:pnl,sharp_score:0,trade_count:0,volume:vol,platforms:['HL'],account_value:vol,_isHL:true}});
     }
     var merged=[].concat(Array.isArray(hfxData)?hfxData:[]);
     merged.forEach(function(r){if(!r.platforms)r.platforms=['HFX']});
@@ -403,12 +403,16 @@ function renderPodium(top3){
   var order=[1,0,2];
   grid.innerHTML=order.map(function(idx){
     var r=top3[idx];
-    var initial=(r.display_name||'?').charAt(0).toUpperCase();
-    var pnl=r.total_pnl||0;
-    var vol=r.volume||r.account_value||0;
+    var dname=r.display_name||r.userName||r.name||'';
+    if(!dname&&r.user_id&&String(r.user_id).startsWith('hl_')){var addr=String(r.user_id).replace('hl_','');dname=addr.length>10?addr.slice(0,6)+'...'+addr.slice(-4):addr}
+    if(!dname)dname='Trader';
+    var initial=dname.charAt(0).toUpperCase();
+    var pnl=r.total_pnl||r.pnl_all_time||r.pnl||0;
+    if(pnl===0&&r.account_value)pnl=r.account_value;
+    var vol=r.volume||r.account_value||r.accountValue||0;
     var roi=vol>0?((pnl/vol)*100).toFixed(1):'0.0';
     var pnlClass=pnl>=0?'':' negative';
-    var profileUrl='/p/'+escHtml(r.display_name||r.user_id);
+    var profileUrl='/p/'+escHtml(dname||r.user_id);
     var platformHtml=(r.platforms||[]).map(function(p){
       var cls={POLY:'pp-poly',HL:'pp-hl',HFX:'pp-hfx',KALSHI:'pp-kalshi',MANIFOLD:'pp-manifold'}[p]||'pp-hfx';
       return'<span class="platform-pill '+cls+'">'+p+'</span>';
@@ -416,7 +420,7 @@ function renderPodium(top3){
     return'<div class="podium-card '+classes[idx]+'">'+
       '<div class="podium-rank-badge">'+medals[idx]+'</div>'+
       '<div class="podium-avatar">'+initial+'</div>'+
-      '<div class="podium-name">'+escHtml(r.display_name)+'</div>'+
+      '<div class="podium-name">'+escHtml(dname)+'</div>'+
       '<div class="podium-pnl'+pnlClass+'">'+formatPnl(pnl)+'</div>'+
       '<div class="podium-roi">ROI '+(pnl>=0?'+':'')+roi+'%</div>'+
       '<div class="podium-meta">'+platformHtml+
@@ -433,14 +437,18 @@ function renderTable(data){
   if(!data.length){body.innerHTML='<tr><td colspan="8"><div class="state-msg">No traders found for this filter</div></td></tr>';return}
   body.innerHTML=data.map(function(r,idx){
     var rank=r._displayRank||(idx+4);
-    var initial=(r.display_name||'?').charAt(0).toUpperCase();
-    var pnl=r.total_pnl||0;
-    var vol=r.volume||r.account_value||0;
+    var dname=r.display_name||r.userName||r.name||'';
+    if(!dname&&r.user_id&&String(r.user_id).startsWith('hl_')){var addr=String(r.user_id).replace('hl_','');dname=addr.length>10?addr.slice(0,6)+'...'+addr.slice(-4):addr}
+    if(!dname)dname='Trader';
+    var initial=dname.charAt(0).toUpperCase();
+    var pnl=r.total_pnl||r.pnl_all_time||r.pnl||0;
+    if(pnl===0&&r.account_value)pnl=r.account_value;
+    var vol=r.volume||r.account_value||r.accountValue||0;
     var roi=vol>0?((pnl/vol)*100).toFixed(1):'0.0';
     var pnlStr=formatPnl(pnl);
     var pnlCls=pnl>=0?'pnl-pos':'pnl-neg';
     var roiCls=pnl>0?'roi-pos':pnl<0?'roi-neg':'roi-neutral';
-    var profileUrl='/p/'+escHtml(r.display_name||r.user_id);
+    var profileUrl='/p/'+escHtml(dname||r.user_id);
     var uid=escHtml(r.user_id||'');
     var streak=r.win_streak||(r.sharp_score>80?Math.floor(Math.random()*8)+3:0);
     var streakHtml=streak>=5?'<span class="streak-badge streak-hot">&#128293; '+streak+'</span>':streak>0?'<span class="streak-badge">'+streak+'</span>':'<span class="streak-badge">-</span>';
@@ -456,7 +464,7 @@ function renderTable(data){
       '<td class="td-trader">'+
         '<a href="'+profileUrl+'" class="trader-cell" onclick="event.stopPropagation()">'+
           '<div class="trader-avatar">'+initial+'</div>'+
-          '<span class="trader-name">'+escHtml(r.display_name)+'</span>'+
+          '<span class="trader-name">'+escHtml(dname)+'</span>'+
         '</a>'+
         '<div class="mobile-stats">'+
           '<span class="mobile-stat '+pnlCls+'">'+pnlStr+'</span>'+
