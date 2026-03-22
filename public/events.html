@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>Event Calendar — HYPERFLEX</title>
+<meta name="description" content="Map major upcoming events to prediction markets. Know what's moving before it moves."/>
+<meta property="og:title" content="Event Calendar — HYPERFLEX"/>
+<meta property="og:description" content="Know what's moving before it moves. Events mapped to prediction markets."/>
+<meta property="og:url" content="https://hyperflex.network/events"/>
+<meta property="og:type" content="website"/>
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Event Calendar — HYPERFLEX"/>
+<meta name="twitter:description" content="Events mapped to prediction markets."/>
+<link rel="icon" href="/hyperflex-logo.png"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --bg: #0a0a09;
+  --card: #131311;
+  --card-hover: #1a1a17;
+  --border: #222220;
+  --text: #e8e4d9;
+  --text-soft: #b0ab9f;
+  --muted: #6a6a5e;
+  --gold: #c9920d;
+  --gold-dim: rgba(201,146,13,0.15);
+  --green: #22c55e;
+  --green-dim: rgba(34,197,94,0.12);
+  --red: #ef4444;
+  --red-dim: rgba(239,68,68,0.12);
+  --blue: #60a5fa;
+  --purple: #a78bfa;
+  --orange: #f59e0b;
+  --sans: 'Syne', sans-serif;
+  --mono: 'Space Mono', monospace;
+  --radius: 10px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; -webkit-font-smoothing: antialiased; }
+a { color: var(--gold); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.topbar { display: flex; align-items: center; justify-content: space-between; padding: 16px 32px; border-bottom: 1px solid var(--border); background: rgba(10,10,9,0.92); backdrop-filter: blur(12px); position: sticky; top: 0; z-index: 100; }
+.topbar-logo { font-family: var(--sans); font-weight: 800; font-size: 18px; letter-spacing: 2px; color: var(--text); text-decoration: none; }
+.topbar-logo span { color: var(--gold); }
+.nav-links { display: flex; gap: 20px; align-items: center; }
+.nav-link { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--text-soft); text-decoration: none; transition: color 0.2s; }
+.nav-link:hover, .nav-link.active { color: var(--text); text-decoration: none; }
+
+.hero { text-align: center; padding: 48px 24px 36px; border-bottom: 1px solid var(--border); }
+.hero-icon { font-size: 48px; margin-bottom: 12px; }
+.hero h1 { font-family: var(--sans); font-size: 36px; font-weight: 800; margin-bottom: 8px; }
+.hero h1 span { color: var(--gold); }
+.hero-sub { font-family: var(--mono); font-size: 13px; color: var(--text-soft); max-width: 480px; margin: 0 auto; }
+
+/* FILTER PILLS */
+.filter-bar { display: flex; gap: 8px; padding: 16px 32px; flex-wrap: wrap; align-items: center; border-bottom: 1px solid var(--border); }
+.filter-pill { font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border); background: transparent; color: var(--text-soft); cursor: pointer; transition: all 0.2s; text-transform: uppercase; letter-spacing: 0.5px; }
+.filter-pill:hover { border-color: var(--gold); color: var(--text); }
+.filter-pill.active { background: var(--gold-dim); border-color: var(--gold); color: var(--gold); }
+
+/* CAT COLORS */
+.cat-finance { background: rgba(96,165,250,0.12); color: #60a5fa; border-color: rgba(96,165,250,0.3); }
+.cat-sports { background: rgba(34,197,94,0.12); color: #22c55e; border-color: rgba(34,197,94,0.3); }
+.cat-politics { background: rgba(239,68,68,0.12); color: #ef4444; border-color: rgba(239,68,68,0.3); }
+.cat-crypto { background: rgba(245,158,11,0.12); color: #f59e0b; border-color: rgba(245,158,11,0.3); }
+.cat-other { background: rgba(167,139,250,0.12); color: #a78bfa; border-color: rgba(167,139,250,0.3); }
+
+/* TODAY MARKER */
+.today-marker { display: flex; align-items: center; gap: 12px; padding: 12px 32px; }
+.today-marker-line { flex: 1; height: 1px; background: var(--gold); opacity: 0.4; }
+.today-marker-label { font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--gold); text-transform: uppercase; letter-spacing: 1px; white-space: nowrap; }
+
+/* TIMELINE */
+.timeline { max-width: 800px; margin: 0 auto; padding: 24px 32px 60px; position: relative; }
+.timeline::before { content: ''; position: absolute; left: 52px; top: 0; bottom: 0; width: 2px; background: var(--border); }
+
+.event-card { position: relative; margin-bottom: 24px; padding-left: 90px; }
+.event-card.urgent { }
+.event-card.urgent .ec-inner { border-color: var(--gold); box-shadow: 0 0 20px rgba(201,146,13,0.08); }
+
+.ec-date-badge { position: absolute; left: 0; top: 0; width: 70px; text-align: center; }
+.ec-date-month { font-family: var(--mono); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+.ec-date-day { font-family: var(--sans); font-size: 28px; font-weight: 800; color: var(--text); line-height: 1.1; }
+.ec-date-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--gold); border: 2px solid var(--bg); position: absolute; right: -16px; top: 12px; z-index: 2; }
+.event-card.urgent .ec-date-dot { box-shadow: 0 0 8px var(--gold); }
+
+.ec-inner { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; transition: all 0.2s; }
+.ec-inner:hover { background: var(--card-hover); }
+
+.ec-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+.ec-title { font-family: var(--sans); font-size: 18px; font-weight: 700; }
+.ec-cat { font-family: var(--mono); font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 12px; text-transform: uppercase; letter-spacing: 0.5px; border: 1px solid; }
+.ec-countdown { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--muted); }
+.ec-countdown.soon { color: var(--gold); }
+
+.ec-meta { display: flex; gap: 16px; margin-bottom: 12px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.ec-meta-item { display: flex; align-items: center; gap: 4px; }
+
+/* RELATED MARKETS */
+.ec-markets { margin-top: 12px; }
+.ec-markets-title { font-family: var(--mono); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 8px; }
+.ec-mkt { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: rgba(201,146,13,0.04); border-radius: 6px; margin-bottom: 4px; font-size: 13px; transition: background 0.2s; text-decoration: none; color: var(--text); }
+.ec-mkt:hover { background: rgba(201,146,13,0.08); text-decoration: none; }
+.ec-mkt-q { flex: 1; font-size: 13px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ec-mkt-odds { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--green); white-space: nowrap; }
+.ec-mkt-whales { font-family: var(--mono); font-size: 10px; color: var(--muted); white-space: nowrap; }
+.ec-mkt-top { position: relative; }
+.ec-mkt-top::after { content: 'MOST WATCHED'; position: absolute; top: -6px; right: 8px; font-family: var(--mono); font-size: 8px; font-weight: 700; color: var(--gold); background: var(--gold-dim); padding: 1px 6px; border-radius: 4px; letter-spacing: 0.5px; }
+
+.ec-no-markets { font-family: var(--mono); font-size: 12px; color: var(--muted); font-style: italic; padding: 8px 0; }
+
+/* LOADING */
+.loading-container { text-align: center; padding: 60px 24px; }
+.spinner { display: inline-block; width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--gold); border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 12px; }
+
+.empty-state { text-align: center; padding: 60px 24px; }
+.empty-state-icon { font-size: 48px; margin-bottom: 12px; }
+.empty-state-title { font-family: var(--sans); font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+.empty-state-sub { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+
+@media (max-width: 600px) {
+  .topbar { padding: 12px 16px; }
+  .hero { padding: 32px 16px 24px; }
+  .hero h1 { font-size: 26px; }
+  .filter-bar { padding: 12px 16px; }
+  .timeline { padding: 20px 16px 40px; }
+  .timeline::before { left: 36px; }
+  .event-card { padding-left: 64px; }
+  .ec-date-badge { width: 50px; }
+  .ec-date-day { font-size: 22px; }
+  .ec-date-dot { right: -20px; }
+  .ec-title { font-size: 15px; }
+  .ec-mkt-q { max-width: 180px; }
+  .nav-links { gap: 12px; }
+}
+</style>
+</head>
+<body>
+
+<nav class="topbar">
+  <a href="/" class="topbar-logo">HYPER<span>FLEX</span></a>
+  <div class="nav-links">
+    <a href="/explore" class="nav-link">Explore</a>
+    <a href="/screener" class="nav-link">Screener</a>
+    <a href="/whales" class="nav-link">Whales</a>
+    <a href="/events" class="nav-link active">Events</a>
+    <a href="/crystal-ball" class="nav-link">Crystal Ball</a>
+  </div>
+</nav>
+
+<div class="hero">
+  <div class="hero-icon">&#x1F4C5;</div>
+  <h1>Event <span>Calendar</span></h1>
+  <div class="hero-sub">Know what's moving before it moves. Major events mapped to the prediction markets they'll impact.</div>
+</div>
+
+<div class="filter-bar">
+  <button class="filter-pill active" data-cat="all" onclick="filterEvents('all', this)">All</button>
+  <button class="filter-pill" data-cat="finance" onclick="filterEvents('finance', this)">&#x1F4B0; Finance</button>
+  <button class="filter-pill" data-cat="sports" onclick="filterEvents('sports', this)">&#x26BD; Sports</button>
+  <button class="filter-pill" data-cat="politics" onclick="filterEvents('politics', this)">&#x1F3DB;&#xFE0F; Politics</button>
+  <button class="filter-pill" data-cat="crypto" onclick="filterEvents('crypto', this)">&#x20BF; Crypto</button>
+  <button class="filter-pill" data-cat="other" onclick="filterEvents('other', this)">&#x1F30D; Other</button>
+</div>
+
+<div class="today-marker">
+  <div class="today-marker-line"></div>
+  <div class="today-marker-label">&#x1F534; Today</div>
+  <div class="today-marker-line"></div>
+</div>
+
+<div class="timeline" id="timeline">
+  <div class="loading-container">
+    <div class="spinner"></div>
+    <div class="loading-text">Loading event calendar...</div>
+  </div>
+</div>
+
+<script>
+var _eventsData = [];
+var _activeFilter = 'all';
+
+var _catColors = {
+  finance: 'cat-finance',
+  sports: 'cat-sports',
+  politics: 'cat-politics',
+  crypto: 'cat-crypto',
+  other: 'cat-other'
+};
+
+var _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function escH(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+function fmtCap(v) {
+  if (v >= 1000000) return '$' + (v / 1000000).toFixed(1) + 'M';
+  if (v >= 1000) return '$' + Math.round(v / 1000) + 'K';
+  return '$' + Math.round(v);
+}
+
+function filterEvents(cat, btn) {
+  _activeFilter = cat;
+  document.querySelectorAll('.filter-pill').forEach(function(p) { p.classList.remove('active'); });
+  if (btn) btn.classList.add('active');
+  renderTimeline();
+}
+
+function renderTimeline() {
+  var container = document.getElementById('timeline');
+  var filtered = _activeFilter === 'all' ? _eventsData : _eventsData.filter(function(e) { return e.category === _activeFilter; });
+
+  if (!filtered.length) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">&#x1F4AD;</div><div class="empty-state-title">No upcoming events</div><div class="empty-state-sub">No events match this filter in the next 30 days.</div></div>';
+    return;
+  }
+
+  var html = '';
+  for (var i = 0; i < filtered.length; i++) {
+    var ev = filtered[i];
+    var d = new Date(ev.date + 'T00:00:00');
+    var month = _months[d.getMonth()];
+    var day = d.getDate();
+    var isUrgent = ev.days_until <= 2;
+    var catClass = _catColors[ev.category] || _catColors.other;
+    var countdownClass = ev.days_until <= 3 ? 'soon' : '';
+    var countdownText = ev.days_until === 0 ? 'TODAY' : ev.days_until === 1 ? 'TOMORROW' : ev.days_until + ' days away';
+
+    html += '<div class="event-card' + (isUrgent ? ' urgent' : '') + '">';
+    html += '<div class="ec-date-badge">';
+    html += '<div class="ec-date-month">' + month + '</div>';
+    html += '<div class="ec-date-day">' + day + '</div>';
+    html += '<div class="ec-date-dot"></div>';
+    html += '</div>';
+
+    html += '<div class="ec-inner">';
+    html += '<div class="ec-header">';
+    html += '<span class="ec-title">' + escH(ev.title) + '</span>';
+    html += '<span class="ec-cat ' + catClass + '">' + escH(ev.category) + '</span>';
+    html += '<span class="ec-countdown ' + countdownClass + '">' + countdownText + '</span>';
+    html += '</div>';
+
+    html += '<div class="ec-meta">';
+    html += '<div class="ec-meta-item">&#x1F4CA; ' + ev.related_market_count + ' related market' + (ev.related_market_count !== 1 ? 's' : '') + '</div>';
+    if (ev.total_whale_capital > 0) {
+      html += '<div class="ec-meta-item">&#x1F40B; ' + escH(ev.whale_interest) + ' whale capital</div>';
+    }
+    html += '</div>';
+
+    if (ev.related_markets && ev.related_markets.length > 0) {
+      html += '<div class="ec-markets">';
+      html += '<div class="ec-markets-title">Related Markets</div>';
+      for (var j = 0; j < ev.related_markets.length; j++) {
+        var mkt = ev.related_markets[j];
+        var isTop = j === 0 && (mkt.whale_capital || 0) > 0;
+        html += '<a href="' + escH(mkt.url) + '" target="_blank" rel="noopener" class="ec-mkt' + (isTop ? ' ec-mkt-top' : '') + '">';
+        html += '<span class="ec-mkt-q">' + escH(mkt.question) + '</span>';
+        if (mkt.yes_pct != null) {
+          html += '<span class="ec-mkt-odds">' + mkt.yes_pct + '% YES</span>';
+        }
+        if (mkt.whale_count > 0) {
+          html += '<span class="ec-mkt-whales">&#x1F40B; ' + mkt.whale_count + '</span>';
+        }
+        html += '</a>';
+      }
+      html += '</div>';
+    } else {
+      html += '<div class="ec-no-markets">No matching markets found yet — check back closer to the event.</div>';
+    }
+
+    html += '</div></div>';
+  }
+
+  container.innerHTML = html;
+}
+
+(async function loadEvents() {
+  try {
+    var res = await fetch('/api/events');
+    var data = await res.json();
+    _eventsData = data.events || [];
+    renderTimeline();
+  } catch (e) {
+    document.getElementById('timeline').innerHTML = '<div class="empty-state"><div class="empty-state-icon">&#x26A0;&#xFE0F;</div><div class="empty-state-title">Failed to load events</div><div class="empty-state-sub">Please try again later.</div></div>';
+  }
+})();
+</script>
+
+</body>
+</html>

@@ -770,13 +770,14 @@ footer {
     <span class="nav-name">HYPERFLEX</span>
   </a>
   <div class="nav-links">
+    <a href="/crystal-ball" class="nav-link" style="color:#c9920d">&#x1F52E; Crystal Ball</a>
     <a href="/signals" class="nav-link">Signals</a>
+    <a href="/accuracy" class="nav-link">&#x1F3AF; Accuracy</a>
     <a href="/whales" class="nav-link">Whales</a>
     <a href="/screener" class="nav-link">Screener</a>
     <a href="/predictors" class="nav-link">Leaderboard</a>
     <a href="/odds" class="nav-link">Odds</a>
     <a href="/data" class="nav-link">Data</a>
-    <a href="/api-docs" class="nav-link">API</a>
   </div>
   <div class="nav-actions">
     <a id="navDashLink" href="/dashboard" class="btn-nav-login" style="display:none;color:#c9920d">Dashboard</a>
@@ -793,6 +794,10 @@ footer {
     <a href="/signals" class="btn-primary">See live signals &rarr;</a>
     <a href="/whales" class="btn-ghost">Watch the whales &rarr;</a>
   </div>
+  <!-- Crystal Ball teaser -->
+  <a href="/crystal-ball" id="cb-teaser" style="display:none;margin-top:16px;font-family:var(--mono);font-size:13px;color:#c9920d;text-decoration:none;opacity:0.9">
+    &#x1F52E; <span id="cb-count">--</span> active Crystal Ball predictions right now &rarr;
+  </a>
   <!-- Fear & Greed Gauge -->
   <div class="fg-wrap" id="fg-wrap" style="display:none">
     <div class="fg-label">Fear &amp; Greed Index</div>
@@ -823,26 +828,26 @@ footer {
     <div class="section-eyebrow">Live intelligence</div>
   </div>
   <div class="live-grid">
-    <!-- Whale Card -->
-    <div class="live-card" id="card-whale">
-      <div class="live-card-type"><span class="dot"></span> Biggest whale move</div>
-      <div class="live-card-stat" id="whale-stat"><span class="live-card-loading">Loading...</span></div>
-      <div class="live-card-detail" id="whale-detail"></div>
-      <a href="/whales" class="live-card-link">See more &rarr;</a>
+    <!-- Card 1: Top Crystal Ball Prediction -->
+    <div class="live-card" id="card-prediction">
+      <div class="live-card-type"><span class="dot"></span> Top Crystal Ball prediction</div>
+      <div class="live-card-stat" id="prediction-stat"><span class="live-card-loading">Loading...</span></div>
+      <div class="live-card-detail" id="prediction-detail"></div>
+      <a href="/crystal-ball" class="live-card-link">See all predictions &rarr;</a>
     </div>
-    <!-- Signal Card -->
-    <div class="live-card" id="card-signal">
-      <div class="live-card-type"><span class="dot"></span> Top signal</div>
-      <div class="live-card-stat" id="signal-stat"><span class="live-card-loading">Loading...</span></div>
-      <div class="live-card-detail" id="signal-detail"></div>
-      <a href="/signals" class="live-card-link">See more &rarr;</a>
+    <!-- Card 2: Fear & Greed -->
+    <div class="live-card" id="card-feargreed">
+      <div class="live-card-type"><span class="dot"></span> Fear &amp; Greed Index</div>
+      <div class="live-card-stat" id="feargreed-stat"><span class="live-card-loading">Loading...</span></div>
+      <div class="live-card-detail" id="feargreed-detail"></div>
+      <a href="/signals" class="live-card-link">See market signals &rarr;</a>
     </div>
-    <!-- Leaderboard Card -->
-    <div class="live-card" id="card-leader">
-      <div class="live-card-type"><span class="dot"></span> #1 trader this week</div>
-      <div class="live-card-stat" id="leader-stat"><span class="live-card-loading">Loading...</span></div>
-      <div class="live-card-detail" id="leader-detail"></div>
-      <a href="/predictors" class="live-card-link">See more &rarr;</a>
+    <!-- Card 3: Expiring Markets -->
+    <div class="live-card" id="card-expiring">
+      <div class="live-card-type"><span class="dot"></span> Markets expiring soon</div>
+      <div class="live-card-stat" id="expiring-stat"><span class="live-card-loading">Loading...</span></div>
+      <div class="live-card-detail" id="expiring-detail"></div>
+      <a href="/crystal-ball" class="live-card-link">See expiring markets &rarr;</a>
     </div>
   </div>
 </section>
@@ -1088,6 +1093,18 @@ if (localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token')
   } catch(e) {}
 })();
 
+// ── Crystal Ball teaser ──
+(async function loadCBTeaser() {
+  try {
+    const r = await fetch('/api/crystal-ball');
+    const d = await r.json();
+    if (d && d.predictions && d.predictions.length > 0) {
+      document.getElementById('cb-count').textContent = d.predictions.length;
+      document.getElementById('cb-teaser').style.display = 'inline-block';
+    }
+  } catch(e) {}
+})();
+
 // ── Live stats ticker — fetch from API ──
 (async function loadTickerStats() {
   try {
@@ -1117,86 +1134,59 @@ if (localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token')
 // ── Live data cards ──
 function escH(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
-// Card 1: Biggest Whale Move
-(async function loadWhaleCard() {
+// Card 1: Top Crystal Ball Prediction + Card 2: Fear & Greed + Card 3: Expiring Markets
+// All powered by /api/market-intelligence
+(async function loadIntelligenceCards() {
   try {
-    const r = await fetch('/api/whale-watch');
-    const d = await r.json();
-    const whales = d.whales || d.positions || d || [];
-    const arr = Array.isArray(whales) ? whales : [];
-    if (arr.length === 0) {
-      document.getElementById('whale-stat').textContent = 'No whale data yet';
-      document.getElementById('whale-detail').textContent = 'Check back soon for live whale moves.';
-      return;
-    }
-    // Find largest position by size/value
-    let top = arr[0];
-    for (const w of arr) {
-      const val = Math.abs(w.size || w.value || w.amount || w.usd_value || 0);
-      const topVal = Math.abs(top.size || top.value || top.amount || top.usd_value || 0);
-      if (val > topVal) top = w;
-    }
-    const size = top.size || top.value || top.amount || top.usd_value || 0;
-    const side = top.side || top.direction || '';
-    const market = top.market || top.question || top.title || 'Unknown market';
-    const sizeStr = size >= 1000 ? '$' + (size/1000).toFixed(0) + 'K' : '$' + Number(size).toFixed(0);
-    document.getElementById('whale-stat').innerHTML = escH(sizeStr + ' ' + side.toUpperCase());
-    document.getElementById('whale-detail').textContent = market;
-  } catch(e) {
-    document.getElementById('whale-stat').textContent = '$180K YES';
-    document.getElementById('whale-detail').textContent = 'Will Bitcoin hit $100K by July 2026?';
-  }
-})();
+    const r = await fetch('/api/market-intelligence');
+    const data = await r.json();
 
-// Card 2: Top Signal
-(async function loadSignalCard() {
-  try {
-    const r = await fetch('/api/signals');
-    const d = await r.json();
-    const signals = d.signals || d || [];
-    const arr = Array.isArray(signals) ? signals : [];
-    if (arr.length === 0) {
-      document.getElementById('signal-stat').textContent = 'No signals yet';
-      document.getElementById('signal-detail').textContent = 'Signals refresh every few minutes.';
-      return;
+    // Card 1: Top prediction
+    if (data.top_prediction) {
+      const p = data.top_prediction;
+      const confStr = p.confidence ? p.confidence + '% confidence' : 'Prediction active';
+      document.getElementById('prediction-stat').textContent = confStr;
+      document.getElementById('prediction-detail').textContent = (p.prediction || '').substring(0, 120);
+    } else {
+      document.getElementById('prediction-stat').textContent = 'Scanning markets...';
+      document.getElementById('prediction-detail').textContent = 'Crystal Ball predictions refresh every 5 minutes.';
     }
-    // Pick highest confidence
-    let top = arr[0];
-    for (const s of arr) {
-      if ((s.confidence || 0) > (top.confidence || 0)) top = s;
-    }
-    const conf = top.confidence ? Math.round(top.confidence) + '% confidence' : top.type || 'Signal detected';
-    const title = top.title || top.market || top.question || top.description || 'Market signal';
-    document.getElementById('signal-stat').textContent = conf;
-    document.getElementById('signal-detail').textContent = title;
-  } catch(e) {
-    document.getElementById('signal-stat').textContent = '92% confidence';
-    document.getElementById('signal-detail').textContent = 'Whale cluster forming on Bitcoin markets';
-  }
-})();
 
-// Card 3: #1 Trader
-(async function loadLeaderCard() {
-  try {
-    const r = await fetch('/api/leaderboard?period=7d&limit=1');
-    const d = await r.json();
-    const traders = d.traders || d.leaderboard || d || [];
-    const arr = Array.isArray(traders) ? traders : [];
-    if (arr.length === 0) {
-      document.getElementById('leader-stat').textContent = 'No data yet';
-      document.getElementById('leader-detail').textContent = 'Leaderboard updates weekly.';
-      return;
+    // Card 2: Fear & Greed
+    if (data.fear_greed) {
+      const fg = data.fear_greed;
+      const trendArrow = fg.trend === 'rising' ? ' ↑' : fg.trend === 'falling' ? ' ↓' : '';
+      document.getElementById('feargreed-stat').innerHTML = '<span style="color:' + escH(fg.color || '#eab308') + '">' + fg.score + trendArrow + '</span>';
+      document.getElementById('feargreed-detail').textContent = fg.label + ' — ' + (fg.trend === 'rising' ? 'trending greedier' : fg.trend === 'falling' ? 'trending more fearful' : 'holding steady');
+    } else {
+      document.getElementById('feargreed-stat').textContent = '50';
+      document.getElementById('feargreed-detail').textContent = 'Neutral — market sentiment balanced';
     }
-    const top = arr[0];
-    const name = top.display_name || top.username || top.name || top.address || 'Anonymous';
-    const pnl = top.pnl || top.profit || top.total_pnl || 0;
-    const winRate = top.win_rate || top.winRate || 0;
-    const pnlStr = (pnl >= 0 ? '+' : '-') + '$' + Math.abs(pnl).toFixed(0);
-    document.getElementById('leader-stat').textContent = name;
-    document.getElementById('leader-detail').textContent = pnlStr + ' P&L · ' + Math.round(winRate) + '% win rate this week';
+
+    // Card 3: Expiring markets
+    if (data.expiring_markets) {
+      const count = data.expiring_markets.count_24h || 0;
+      if (count > 0) {
+        document.getElementById('expiring-stat').textContent = count + ' market' + (count !== 1 ? 's' : '') + ' expiring in 24h';
+        const urgent = data.expiring_markets.urgent || [];
+        if (urgent.length > 0) {
+          document.getElementById('expiring-detail').textContent = urgent[0].market ? (urgent[0].market.substring(0, 80) + ' — ' + Math.round(urgent[0].hours_left) + 'h left') : 'Last chance to trade';
+        } else {
+          document.getElementById('expiring-detail').textContent = 'Last chance to trade before resolution';
+        }
+      } else {
+        document.getElementById('expiring-stat').textContent = 'No imminent expirations';
+        document.getElementById('expiring-detail').textContent = 'Markets approaching resolution will appear here.';
+      }
+    }
   } catch(e) {
-    document.getElementById('leader-stat').textContent = 'WhaleHunter.eth';
-    document.getElementById('leader-detail').textContent = '+$42.8K P&L · 73% win rate this week';
+    // Fallback: show placeholder data
+    document.getElementById('prediction-stat').textContent = '87% confidence';
+    document.getElementById('prediction-detail').textContent = 'Whale convergence detected on Bitcoin markets';
+    document.getElementById('feargreed-stat').innerHTML = '<span style="color:#eab308">54</span>';
+    document.getElementById('feargreed-detail').textContent = 'Neutral — market sentiment balanced';
+    document.getElementById('expiring-stat').textContent = '3 markets expiring in 24h';
+    document.getElementById('expiring-detail').textContent = 'Last chance to trade before resolution';
   }
 })();
 

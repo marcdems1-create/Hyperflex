@@ -824,6 +824,7 @@ nav {
     <a href="/predictors">Predictors</a>
     <a href="/explore" style="color:var(--text-soft)">Explore</a>
     <a href="/odds">Odds</a>
+    <a href="/crystal-ball" style="color:#c9920d">&#x1F52E; Crystal Ball</a>
     <a href="/whales">Whales</a>
     <a href="/data">Data</a>
     <a href="/templates">Templates</a>
@@ -1134,6 +1135,14 @@ nav {
       <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Biggest price changes in last 24h</div>
       <div id="marketMoversList"><div class="loading" style="padding:8px 0;">Loading movers...</div></div>
       <a href="/odds" class="sidebar-footer-link">See all &#8594;</a>
+    </div>
+
+    <!-- NEWS IMPACT -->
+    <div class="sidebar-card" id="newsImpactCard">
+      <div class="sidebar-title">&#x1F4F0; NEWS IMPACT</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Breaking news mapped to markets</div>
+      <div id="newsImpactList"><div class="loading" style="padding:8px 0;">Loading news...</div></div>
+      <a href="/events" class="sidebar-footer-link">See all &#8594;</a>
     </div>
 
     <!-- FOLLOWING (kept, shown when logged in) -->
@@ -2409,6 +2418,41 @@ async function loadFollowingFeed() {
   } catch(e) {
     console.error('Market movers error:', e);
     var el = document.getElementById('marketMoversList');
+    if (el) el.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:8px 0">Data unavailable</div>';
+  }
+})();
+
+// ── NEWS IMPACT SIDEBAR ──
+(async function loadNewsImpact() {
+  try {
+    const res = await fetch('/api/news-impact');
+    if (!res.ok) throw new Error('Failed');
+    const data = await res.json();
+    const el = document.getElementById('newsImpactList');
+    if (!el) return;
+    const items = (data.news_impacts || []).filter(n => n.related_markets && n.related_markets.length > 0).slice(0, 3);
+    if (!items.length) {
+      el.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:8px 0">No news-market matches right now</div>';
+      return;
+    }
+    el.innerHTML = items.map(n => {
+      const badge = n.sentiment === 'bullish' ? '<span style="color:#22c55e;font-size:10px">&#x1F7E2;</span>' : n.sentiment === 'bearish' ? '<span style="color:#ef4444;font-size:10px">&#x1F534;</span>' : '<span style="color:#6a6a5e;font-size:10px">&#x26AA;</span>';
+      const mkt = n.related_markets[0];
+      const mktText = mkt ? '<div style="font-size:10px;color:var(--gold);margin-top:2px">' + _escH((mkt.question || '').substring(0, 50)) + (mkt.yes_pct != null ? ' — ' + mkt.yes_pct + '%' : '') + '</div>' : '';
+      return '<a href="' + _escH(n.link || '/events') + '" target="_blank" rel="noopener" class="sidebar-row" style="text-decoration:none;display:block">' +
+        '<div style="display:flex;align-items:flex-start;gap:6px">' +
+          badge +
+          '<div style="flex:1;min-width:0">' +
+            '<div style="font-size:11px;color:var(--text);line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + _escH((n.headline || '').substring(0, 70)) + '</div>' +
+            (n.source ? '<div style="font-size:9px;color:var(--muted);margin-top:1px">' + _escH(n.source) + '</div>' : '') +
+            mktText +
+          '</div>' +
+        '</div>' +
+      '</a>';
+    }).join('');
+  } catch(e) {
+    console.error('News impact error:', e);
+    var el = document.getElementById('newsImpactList');
     if (el) el.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:8px 0">Data unavailable</div>';
   }
 })();

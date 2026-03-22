@@ -154,6 +154,97 @@ a:hover { text-decoration: underline; }
   .hero h1 { font-size: 24px; }
   .signal-top { flex-direction: column; align-items: flex-start; }
 }
+
+/* CORRELATION PAIRS */
+.corr-pair {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  transition: all 0.2s;
+}
+.corr-pair:hover { border-color: rgba(201,146,13,0.35); transform: translateY(-2px); box-shadow: 0 6px 24px rgba(0,0,0,0.25); }
+.corr-market {
+  flex: 1;
+  background: var(--card);
+  padding: 18px 20px;
+  min-width: 0;
+}
+.corr-market-q {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.4;
+  margin-bottom: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.corr-market-link { font-family: var(--mono); font-size: 10px; color: var(--gold); text-decoration: none; }
+.corr-market-link:hover { text-decoration: underline; }
+.corr-connector {
+  width: 80px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  position: relative;
+  padding: 12px 4px;
+}
+.corr-connector::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: 2px;
+}
+.corr-connector.positive::before { background: var(--gold); box-shadow: 0 0 8px rgba(201,146,13,0.4); }
+.corr-connector.negative::before { background: var(--red); box-shadow: 0 0 8px rgba(239,68,68,0.4); }
+.corr-connector.mixed::before { background: var(--muted); }
+.corr-whales-badge {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 10px;
+  background: rgba(201,146,13,0.12);
+  color: var(--gold);
+  white-space: nowrap;
+  z-index: 1;
+}
+.corr-type-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  z-index: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.corr-type-label.positive { color: var(--gold); }
+.corr-type-label.negative { color: var(--red); }
+.corr-type-label.mixed { color: var(--muted); }
+.corr-insight {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-soft);
+  line-height: 1.5;
+  margin-top: 8px;
+  padding: 10px 14px;
+  background: rgba(201,146,13,0.04);
+  border-radius: 8px;
+  border-left: 3px solid var(--gold);
+}
+
+@media (max-width: 600px) {
+  .corr-pair { flex-direction: column; }
+  .corr-connector { width: 100%; height: 40px; flex-direction: row; padding: 8px 16px; }
+  .corr-connector::before { top: 0; left: 50%; width: 3px; height: 100%; right: auto; }
+}
 </style>
 </head>
 <body>
@@ -166,7 +257,9 @@ a:hover { text-decoration: underline; }
     <a href="/explore" class="nav-link">Explore</a>
     <a href="/whales" class="nav-link">Whales</a>
     <a href="/whale-index" class="nav-link">Whale Index</a>
+    <a href="/crystal-ball" class="nav-link" style="color:#c9920d">&#x1F52E; Crystal Ball</a>
     <a href="/signals" class="nav-link active">Signals</a>
+    <a href="/accuracy" class="nav-link">&#x1F3AF; Accuracy</a>
     <a href="/screener" class="nav-link">Screener</a>
     <a href="/data" class="nav-link">Data</a>
   </div>
@@ -264,6 +357,18 @@ a:hover { text-decoration: underline; }
           <div class="loading"><div class="loading-spinner"></div></div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Section 6: Market Correlations -->
+  <div class="section" id="correlations-section">
+    <div class="section-header">
+      <div class="section-title"><span class="icon">&#x1F517;</span> Market Correlations</div>
+      <span class="section-badge">WHALE OVERLAP</span>
+    </div>
+    <div style="font-size:12px;color:var(--text-soft);margin-bottom:20px;line-height:1.5">Markets that move together — connected by shared whale capital. Gold = positive correlation, Red = inverse.</div>
+    <div id="correlationsContainer" style="display:flex;flex-direction:column;gap:20px">
+      <div class="loading"><div class="loading-spinner"></div></div>
     </div>
   </div>
 </div>
@@ -547,11 +652,48 @@ async function loadConsistentPicks() {
   }
 }
 
+// ── Correlations ──
+async function loadCorrelations() {
+  const el = document.getElementById('correlationsContainer');
+  try {
+    const r = await fetch('/api/correlations');
+    const data = await r.json();
+    const pairs = (data.pairs || []).slice(0, 5);
+
+    if (!pairs.length) {
+      el.innerHTML = '<div class="empty-state">No correlated market pairs detected yet. Data feeds may still be warming up.</div>';
+      return;
+    }
+
+    el.innerHTML = pairs.map(p => {
+      const connClass = p.correlation_type || 'mixed';
+      return '<div class="corr-pair">' +
+        '<div class="corr-market">' +
+          '<div class="corr-market-q">' + escHtml((p.market_a || '').substring(0, 70)) + '</div>' +
+          '<a href="' + escHtml(p.url_a || '#') + '" target="_blank" rel="noopener" class="corr-market-link">View market &rarr;</a>' +
+        '</div>' +
+        '<div class="corr-connector ' + connClass + '">' +
+          '<span class="corr-whales-badge">' + p.shared_whales + ' whales</span>' +
+          '<span class="corr-type-label ' + connClass + '">' + (connClass === 'positive' ? '+' : connClass === 'negative' ? '&minus;' : '~') + ' ' + p.same_side_pct + '%</span>' +
+        '</div>' +
+        '<div class="corr-market">' +
+          '<div class="corr-market-q">' + escHtml((p.market_b || '').substring(0, 70)) + '</div>' +
+          '<a href="' + escHtml(p.url_b || '#') + '" target="_blank" rel="noopener" class="corr-market-link">View market &rarr;</a>' +
+        '</div>' +
+      '</div>' +
+      '<div class="corr-insight">' + escHtml(p.insight || '') + '</div>';
+    }).join('');
+  } catch (e) {
+    el.innerHTML = '<div class="empty-state">Failed to load correlations.</div>';
+  }
+}
+
 // ── Init ──
 loadSignals();
 loadWhalePicks();
 loadFearGreed();
 loadConsistentPicks();
+loadCorrelations();
 
 // Auto-refresh every 5 minutes
 setInterval(loadSignals, 5 * 60 * 1000);

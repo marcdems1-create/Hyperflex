@@ -335,6 +335,7 @@ td { padding: 12px; font-size: 13px; vertical-align: middle; }
     <a href="/predictors" class="nav-link">Predictors</a>
     <a href="/explore" class="nav-link">Explore</a>
     <a href="/odds" class="nav-link">Odds</a>
+    <a href="/crystal-ball" class="nav-link" style="color:#c9920d">&#x1F52E; Crystal Ball</a>
     <a href="/whales" class="nav-link active">Whales</a>
     <a href="/whale-index" class="nav-link">Whale Index</a>
     <a href="/screener" class="nav-link">Screener</a>
@@ -1277,14 +1278,16 @@ function drawVolumeChart(canvasId, history) {
 <script>
 var _wpCatColors = { sports: '#3b82f6', politics: '#ef4444', crypto: '#f59e0b', entertainment: '#a855f7', tech: '#06b6d4', other: '#6b7280' };
 
-function openWhaleProfile(addressOrName) {
+async function openWhaleProfile(addressOrName) {
   var overlay = document.getElementById('wpOverlay');
   if (!overlay) return;
   overlay.classList.add('open');
   document.getElementById('wpContent').innerHTML = '<div class="wp-loading"><div class="spinner" style="display:inline-block;width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin 0.8s linear infinite"></div><p>Loading profile...</p></div>';
 
-  fetch('/api/whale-profile/' + encodeURIComponent(addressOrName)).then(function(r) { return r.json(); }).then(function(d) {
-    if (!d || d.error) { document.getElementById('wpContent').innerHTML = '<div class="wp-loading">Could not load profile.</div>'; return; }
+  try {
+  var r = await fetch('/api/whale-profile/' + encodeURIComponent(addressOrName));
+  var d = await r.json();
+  if (!d || d.error) { document.getElementById('wpContent').innerHTML = '<div class="wp-loading">Could not load profile.</div>'; return; }
 
     var pnlColor = (d.pnl || 0) >= 0 ? 'var(--green)' : 'var(--red)';
     var pnlSign = (d.pnl || 0) >= 0 ? '+' : '';
@@ -1317,6 +1320,30 @@ function openWhaleProfile(addressOrName) {
     // First market URL for CTA
     var firstUrl = (d.top_positions && d.top_positions[0] && d.top_positions[0].url) ? d.top_positions[0].url : 'https://polymarket.com';
 
+    // Fetch whale behavior data (non-blocking enrichment)
+    var behaviorHtml = '';
+    try {
+      var bRes = await fetch('/api/whale-patterns');
+      var bData = await bRes.json();
+      var profiles = bData.whale_profiles || [];
+      var match = profiles.find(function(wp) { return wp.name === d.name || wp.proxyWallet === (d.proxyWallet || d.address || ''); });
+      if (match) {
+        var tagColors = { 'Active Accumulator': '#22c55e', 'Passive Holder': '#6a6a5e', 'Quick Flipper': '#f59e0b', 'Category Specialist': '#a78bfa' };
+        var tagColor = tagColors[match.behavior_tag] || '#6a6a5e';
+        var tagBg = tagColor + '1f';
+        behaviorHtml = '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;margin-bottom:4px">' +
+          '<span style="font-family:\'Space Mono\',monospace;font-size:10px;font-weight:700;padding:3px 10px;border-radius:12px;background:' + tagBg + ';color:' + tagColor + ';border:1px solid ' + tagColor + '33">' + (match.behavior_tag || '') + '</span>' +
+          '<span style="font-family:\'Space Mono\',monospace;font-size:10px;color:var(--muted)">' + (match.conviction_style || '') + ' \u00B7 ' + (match.position_count || 0) + ' positions \u00B7 avg ' + (match.avg_position_size_display || '') + '</span>' +
+        '</div>';
+        if (match.category_focus && match.category_concentration >= 40) {
+          behaviorHtml += '<div style="font-family:\'Space Mono\',monospace;font-size:10px;color:var(--text-soft);margin-bottom:4px">Focuses on ' + match.category_focus + ' (' + match.category_concentration + '% of positions)</div>';
+        }
+        if (match.recent_activity) {
+          behaviorHtml += '<div style="font-family:\'Space Mono\',monospace;font-size:10px;color:var(--gold);margin-bottom:4px">\u26A1 Active in last 24h (' + match.recent_trade_count + ' trade' + (match.recent_trade_count !== 1 ? 's' : '') + ')</div>';
+        }
+      }
+    } catch(e) { /* non-blocking */ }
+
     var html = '<div class="wp-header">' +
       '<div>' +
         '<div class="wp-name">' + (d.name || 'Unknown').replace(/</g, '&lt;') + '</div>' +
@@ -1324,6 +1351,7 @@ function openWhaleProfile(addressOrName) {
           (d.rank ? '<span class="wp-rank-badge">#' + d.rank + '</span>' : '') +
           '<span class="wp-pnl" style="color:' + pnlColor + '">' + pnlSign + pnlFmt + ' PnL</span>' +
         '</div>' +
+        behaviorHtml +
       '</div>' +
     '</div>' +
     '<div class="wp-stats">' +
@@ -1341,9 +1369,9 @@ function openWhaleProfile(addressOrName) {
     '<a href="' + firstUrl + '" target="_blank" rel="noopener" class="wp-cta">Copy this whale\'s portfolio \u2192</a>';
 
     document.getElementById('wpContent').innerHTML = html;
-  }).catch(function() {
+  } catch(e) {
     document.getElementById('wpContent').innerHTML = '<div class="wp-loading">Failed to load profile. Try again.</div>';
-  });
+  }
 }
 
 function closeWhaleProfile() {

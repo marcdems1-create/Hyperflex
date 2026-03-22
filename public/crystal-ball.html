@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>Crystal Ball — HYPERFLEX Prediction Engine</title>
+<meta name="description" content="AI-powered predictions about prediction markets. Whale convergence, momentum breakouts, smart money divergence, and leverage signals — actionable forecasts."/>
+<meta property="og:title" content="Crystal Ball — HYPERFLEX"/>
+<meta property="og:description" content="AI-powered predictions about prediction markets. What the smart money is telling us right now."/>
+<meta property="og:url" content="https://hyperflex.network/crystal-ball"/>
+<meta property="og:type" content="website"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:title" content="Crystal Ball — HYPERFLEX"/>
+<meta name="twitter:description" content="AI-powered predictions about prediction markets."/>
+<link rel="icon" href="/hyperflex-logo.png"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --bg: #0a0a09;
+  --card: #131311;
+  --card-hover: #1a1a17;
+  --border: #222220;
+  --text: #e8e4d9;
+  --text-soft: #b0ab9f;
+  --muted: #6a6a5e;
+  --gold: #c9920d;
+  --gold-dim: rgba(201,146,13,0.15);
+  --green: #22c55e;
+  --green-dim: rgba(34,197,94,0.12);
+  --red: #ef4444;
+  --red-dim: rgba(239,68,68,0.12);
+  --purple: #a78bfa;
+  --purple-dim: rgba(167,139,250,0.12);
+  --blue: #60a5fa;
+  --blue-dim: rgba(96,165,250,0.12);
+  --sans: 'Syne', sans-serif;
+  --mono: 'Space Mono', monospace;
+  --radius: 10px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; -webkit-font-smoothing: antialiased; }
+a { color: var(--gold); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* NAV */
+.topbar { display: flex; align-items: center; justify-content: space-between; padding: 16px 32px; border-bottom: 1px solid var(--border); background: rgba(10,10,9,0.92); backdrop-filter: blur(12px); position: sticky; top: 0; z-index: 100; }
+.topbar-logo { font-family: var(--sans); font-weight: 800; font-size: 18px; letter-spacing: 2px; color: var(--text); text-decoration: none; }
+.topbar-logo span { color: var(--gold); }
+.nav-links { display: flex; gap: 20px; align-items: center; }
+.nav-link { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--text-soft); text-decoration: none; transition: color 0.2s; }
+.nav-link:hover, .nav-link.active { color: var(--text); text-decoration: none; }
+
+/* HERO */
+.hero {
+  text-align: center;
+  padding: 64px 24px 48px;
+  border-bottom: 1px solid var(--border);
+  background: radial-gradient(ellipse at 50% 0%, rgba(201,146,13,0.10) 0%, transparent 60%);
+  position: relative;
+  overflow: hidden;
+}
+.hero::before {
+  content: '';
+  position: absolute;
+  top: 30%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 320px;
+  height: 320px;
+  background: radial-gradient(circle, rgba(201,146,13,0.12) 0%, transparent 70%);
+  border-radius: 50%;
+  animation: heroGlow 4s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes heroGlow {
+  0%, 100% { opacity: 0.6; transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
+}
+.hero-icon { font-size: 64px; margin-bottom: 16px; display: block; filter: drop-shadow(0 0 24px rgba(201,146,13,0.4)); animation: crystalPulse 3s ease-in-out infinite; }
+@keyframes crystalPulse {
+  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 24px rgba(201,146,13,0.4)); }
+  50% { transform: scale(1.05); filter: drop-shadow(0 0 40px rgba(201,146,13,0.7)); }
+}
+.hero h1 {
+  font-family: var(--sans);
+  font-size: 44px;
+  font-weight: 800;
+  margin-bottom: 8px;
+  background: linear-gradient(135deg, var(--gold), #f5d68a, var(--gold));
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: goldShimmer 4s ease-in-out infinite;
+}
+@keyframes goldShimmer {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.hero-sub { font-family: var(--mono); font-size: 13px; color: var(--text-soft); max-width: 520px; margin: 0 auto 8px; line-height: 1.6; }
+.hero-tagline { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 8px; }
+.hero-counter { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 20px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.hero-counter .gold { color: var(--gold); font-weight: 700; }
+.hero-counter .sep { color: var(--border); }
+
+/* CONTAINER */
+.container { max-width: 960px; margin: 0 auto; padding: 32px 24px 80px; }
+
+/* FILTER TABS */
+.filter-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; flex-wrap: wrap; gap: 12px; }
+.filter-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+.filter-tab {
+  font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 6px 14px;
+  border-radius: 20px; border: 1px solid var(--border); background: transparent;
+  color: var(--text-soft); cursor: pointer; transition: all 0.2s;
+}
+.filter-tab:hover { border-color: rgba(201,146,13,0.3); color: var(--text); }
+.filter-tab.active { background: var(--gold-dim); color: var(--gold); border-color: rgba(201,146,13,0.4); }
+.sort-select {
+  font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 6px 12px;
+  border-radius: 8px; border: 1px solid var(--border); background: var(--card);
+  color: var(--text-soft); cursor: pointer; outline: none;
+}
+.sort-select:hover { border-color: rgba(201,146,13,0.3); }
+
+/* PREDICTION CARDS */
+.prediction-list { display: flex; flex-direction: column; gap: 20px; }
+.prediction-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  display: grid; grid-template-columns: 100px 1fr 160px; gap: 0;
+  transition: all 0.25s; position: relative; overflow: hidden;
+}
+.prediction-card:hover { border-color: rgba(201,146,13,0.35); background: var(--card-hover); transform: translateY(-2px); box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+
+/* Confidence gauge (left) */
+.pred-gauge { display: flex; align-items: center; justify-content: center; padding: 24px 16px; border-right: 1px solid var(--border); position: relative; }
+.gauge-circle {
+  width: 72px; height: 72px; border-radius: 50%; position: relative;
+  display: flex; align-items: center; justify-content: center;
+}
+.gauge-circle svg { position: absolute; top: 0; left: 0; width: 72px; height: 72px; transform: rotate(-90deg); }
+.gauge-circle circle { fill: none; stroke-width: 5; stroke-linecap: round; }
+.gauge-bg { stroke: var(--border); }
+.gauge-fill { transition: stroke-dashoffset 1s ease; }
+.gauge-value { font-family: var(--mono); font-size: 18px; font-weight: 700; z-index: 1; }
+.gauge-label { font-family: var(--mono); font-size: 9px; color: var(--muted); position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); white-space: nowrap; }
+
+/* Center content */
+.pred-body { padding: 20px 24px; }
+.pred-type {
+  display: inline-block; font-family: var(--mono); font-size: 10px; font-weight: 700;
+  padding: 3px 10px; border-radius: 12px; margin-bottom: 10px; letter-spacing: 0.5px;
+}
+.pred-type.WHALE_CONVERGENCE { background: var(--blue-dim); color: var(--blue); border: 1px solid rgba(96,165,250,0.25); }
+.pred-type.MOMENTUM_BREAKOUT { background: var(--green-dim); color: var(--green); border: 1px solid rgba(34,197,94,0.25); }
+.pred-type.SMART_VS_DUMB { background: var(--purple-dim); color: var(--purple); border: 1px solid rgba(167,139,250,0.25); }
+.pred-type.LEVERAGE_SIGNAL { background: var(--red-dim); color: var(--red); border: 1px solid rgba(239,68,68,0.25); }
+.pred-type.EXPIRY_CONVERGENCE { background: var(--gold-dim); color: var(--gold); border: 1px solid rgba(201,146,13,0.25); }
+.pred-text { font-family: var(--sans); font-size: 16px; font-weight: 700; line-height: 1.45; margin-bottom: 10px; color: var(--text); }
+.pred-reasoning { list-style: none; padding: 0; margin: 0 0 10px 0; }
+.pred-reasoning li { font-family: var(--mono); font-size: 11px; color: var(--text-soft); line-height: 1.6; padding-left: 14px; position: relative; }
+.pred-reasoning li::before { content: '\2022'; position: absolute; left: 0; color: var(--muted); }
+.pred-market-link { font-family: var(--mono); font-size: 11px; color: var(--gold); }
+.pred-market-link:hover { text-decoration: underline; }
+
+/* Right action panel */
+.pred-action { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px 16px; border-left: 1px solid var(--border); gap: 12px; text-align: center; }
+.action-btn {
+  font-family: var(--mono); font-size: 12px; font-weight: 700; padding: 10px 18px;
+  border-radius: 8px; border: none; cursor: pointer; transition: all 0.2s;
+  text-decoration: none; display: inline-block; white-space: nowrap;
+}
+.action-btn.buy { background: rgba(34,197,94,0.15); color: var(--green); border: 1px solid rgba(34,197,94,0.3); }
+.action-btn.buy:hover { background: rgba(34,197,94,0.25); text-decoration: none; }
+.action-btn.sell { background: rgba(239,68,68,0.15); color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
+.action-btn.sell:hover { background: rgba(239,68,68,0.25); text-decoration: none; }
+.action-btn.watch { background: var(--gold-dim); color: var(--gold); border: 1px solid rgba(201,146,13,0.3); }
+.action-btn.watch:hover { background: rgba(201,146,13,0.25); text-decoration: none; }
+.pred-time { font-family: var(--mono); font-size: 10px; color: var(--muted); line-height: 1.5; }
+.pred-score { font-family: var(--mono); font-size: 10px; color: var(--gold); }
+
+/* LOADING + EMPTY */
+.loading-state { text-align: center; padding: 80px 20px; color: var(--muted); font-family: var(--mono); font-size: 14px; }
+.loading-state .spinner { font-size: 48px; margin-bottom: 16px; animation: crystalPulse 2s ease-in-out infinite; display: block; }
+.empty-state { text-align: center; padding: 60px 20px; }
+.empty-state p { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+
+/* CTA */
+.cta-section {
+  margin-top: 48px; padding: 32px; text-align: center;
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  background: linear-gradient(135deg, rgba(201,146,13,0.04), rgba(201,146,13,0.01));
+}
+.cta-section h3 { font-family: var(--sans); font-size: 20px; font-weight: 800; margin-bottom: 8px; }
+.cta-section p { font-family: var(--mono); font-size: 12px; color: var(--text-soft); margin-bottom: 20px; }
+.cta-form { display: flex; gap: 8px; max-width: 420px; margin: 0 auto; }
+.cta-form input {
+  flex: 1; font-family: var(--mono); font-size: 13px; padding: 12px 16px;
+  border-radius: 8px; border: 1px solid var(--border); background: var(--bg);
+  color: var(--text); outline: none;
+}
+.cta-form input:focus { border-color: var(--gold); }
+.cta-form button {
+  font-family: var(--mono); font-size: 12px; font-weight: 700; padding: 12px 24px;
+  border-radius: 8px; border: none; background: var(--gold); color: #0a0a09;
+  cursor: pointer; transition: background 0.2s; white-space: nowrap;
+}
+.cta-form button:hover { background: #d9a21f; }
+.cta-note { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 10px; }
+
+/* RESPONSIVE */
+@media (max-width: 768px) {
+  .topbar { padding: 12px 16px; }
+  .nav-links { gap: 12px; overflow-x: auto; }
+  .nav-link { font-size: 11px; white-space: nowrap; }
+  .hero { padding: 48px 16px 36px; }
+  .hero h1 { font-size: 30px; }
+  .hero-icon { font-size: 48px; }
+  .container { padding: 20px 16px 60px; }
+  .prediction-card { grid-template-columns: 1fr; }
+  .pred-gauge { border-right: none; border-bottom: 1px solid var(--border); padding: 16px; flex-direction: row; gap: 12px; justify-content: flex-start; }
+  .gauge-label { position: static; transform: none; }
+  .pred-action { border-left: none; border-top: 1px solid var(--border); flex-direction: row; padding: 14px 20px; justify-content: space-between; }
+  .filter-bar { flex-direction: column; align-items: flex-start; }
+  .cta-form { flex-direction: column; }
+}
+@media (max-width: 480px) {
+  .hero h1 { font-size: 24px; }
+  .pred-text { font-size: 14px; }
+}
+
+/* CONTRARIAN CARDS */
+.contrarian-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  padding: 20px 24px; transition: all 0.2s; position: relative; overflow: hidden;
+  border-left: 4px solid #f97316;
+}
+.contrarian-card:hover { border-color: rgba(249,115,22,0.4); background: var(--card-hover); }
+.contrarian-badge {
+  display: inline-block; font-family: var(--mono); font-size: 10px; font-weight: 700;
+  padding: 3px 10px; border-radius: 12px; margin-bottom: 10px;
+  background: rgba(249,115,22,0.12); color: #f97316; border: 1px solid rgba(249,115,22,0.25);
+}
+.contrarian-market { font-family: var(--sans); font-size: 15px; font-weight: 700; line-height: 1.4; margin-bottom: 12px; }
+.contrarian-stats { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 10px; }
+.contrarian-stat { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.contrarian-stat .val { color: var(--text-soft); font-weight: 700; }
+.contrarian-suggestion { font-family: var(--mono); font-size: 12px; color: var(--text-soft); line-height: 1.5; padding: 10px 14px; background: rgba(249,115,22,0.05); border-radius: 8px; margin-top: 8px; }
+.contrarian-note { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-top: 6px; font-style: italic; }
+.contrarian-score {
+  position: absolute; top: 16px; right: 16px;
+  font-family: var(--mono); font-size: 20px; font-weight: 800; color: #f97316;
+}
+
+/* EXPIRING CARDS */
+.expiring-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  padding: 20px 24px; transition: all 0.2s; position: relative; overflow: hidden;
+  display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center;
+}
+.expiring-card:hover { border-color: rgba(201,146,13,0.4); background: var(--card-hover); }
+.expiring-card.color-green { border-left: 4px solid var(--green); }
+.expiring-card.color-red { border-left: 4px solid var(--red); }
+.expiring-card.color-gold { border-left: 4px solid var(--gold); }
+.expiring-market { font-family: var(--sans); font-size: 14px; font-weight: 700; line-height: 1.4; margin-bottom: 8px; }
+.expiring-meta { display: flex; gap: 14px; flex-wrap: wrap; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.expiring-meta .val { font-weight: 700; }
+.expiring-insight { font-family: var(--mono); font-size: 11px; color: var(--text-soft); margin-top: 8px; line-height: 1.4; }
+.expiring-countdown {
+  text-align: center; min-width: 90px;
+}
+.expiring-countdown-val {
+  font-family: var(--mono); font-size: 28px; font-weight: 800; line-height: 1;
+}
+.expiring-countdown-label {
+  font-family: var(--mono); font-size: 10px; color: var(--muted); margin-top: 4px;
+}
+.expiring-prob {
+  font-family: var(--mono); font-size: 12px; font-weight: 700; margin-top: 8px;
+  padding: 4px 10px; border-radius: 8px; display: inline-block;
+}
+
+@media (max-width: 768px) {
+  .expiring-card { grid-template-columns: 1fr; }
+  .expiring-countdown { text-align: left; display: flex; gap: 12px; align-items: center; }
+}
+
+/* CONTRARIAN filter tab */
+.pred-type.CONTRARIAN { background: rgba(249,115,22,0.12); color: #f97316; border: 1px solid rgba(249,115,22,0.25); }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="topbar">
+  <a href="/" class="topbar-logo">HYPER<span>FLEX</span></a>
+  <div class="nav-links">
+    <a href="/signals" class="nav-link">Signals</a>
+    <a href="/whales" class="nav-link">Whales</a>
+    <a href="/crystal-ball" class="nav-link active">Crystal Ball</a>
+    <a href="/accuracy" class="nav-link">&#x1F3AF; Accuracy</a>
+    <a href="/screener" class="nav-link">Screener</a>
+    <a href="/predictors" class="nav-link">Leaderboard</a>
+    <a href="/odds" class="nav-link">Odds</a>
+    <a href="/data" class="nav-link">Data</a>
+    <a href="/api-docs" class="nav-link">API</a>
+    <a id="navDashLink" href="/dashboard" class="nav-link" style="display:none;color:#c9920d">Dashboard</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <span class="hero-icon">&#x1F52E;</span>
+  <h1>The Crystal Ball</h1>
+  <p class="hero-sub">AI-powered predictions about prediction markets</p>
+  <p class="hero-tagline">What the smart money is telling us right now</p>
+  <div class="hero-counter">
+    <span><span class="gold" id="pred-count">--</span> active predictions</span>
+    <span class="sep">|</span>
+    <span>Updated <span id="update-ago">--</span></span>
+  </div>
+</section>
+
+<!-- MAIN -->
+<div class="container">
+
+  <!-- FILTER BAR -->
+  <div class="filter-bar">
+    <div class="filter-tabs">
+      <button class="filter-tab active" data-filter="all">All</button>
+      <button class="filter-tab" data-filter="WHALE_CONVERGENCE">Whale Signals</button>
+      <button class="filter-tab" data-filter="MOMENTUM_BREAKOUT">Momentum</button>
+      <button class="filter-tab" data-filter="SMART_VS_DUMB">Divergence</button>
+      <button class="filter-tab" data-filter="LEVERAGE_SIGNAL">Leverage</button>
+      <button class="filter-tab" data-filter="EXPIRY_CONVERGENCE">Expiry</button>
+      <button class="filter-tab" data-filter="CONTRARIAN" onclick="document.getElementById('contrarian-list').scrollIntoView({behavior:'smooth',block:'start'})">Contrarian</button>
+    </div>
+    <select class="sort-select" id="sort-select">
+      <option value="score">Sort: Confidence</option>
+      <option value="newest">Sort: Newest</option>
+      <option value="expiring">Sort: Expiring Soon</option>
+    </select>
+  </div>
+
+  <!-- PREDICTIONS -->
+  <div class="prediction-list" id="predictions">
+    <div class="loading-state">
+      <span class="spinner">&#x1F52E;</span>
+      <p>Scanning whale activity, momentum, and leverage signals...</p>
+    </div>
+  </div>
+
+  <!-- CONTRARIAN SIGNALS -->
+  <div style="margin-top:48px;margin-bottom:40px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <h2 style="font-family:var(--sans);font-size:22px;font-weight:800">&#x1F504; Contrarian Signals</h2>
+      <span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;background:rgba(249,115,22,0.12);color:#f97316;border:1px solid rgba(249,115,22,0.3)">CONTRARIAN</span>
+    </div>
+    <div style="font-family:var(--mono);font-size:12px;color:var(--text-soft);margin-bottom:20px;line-height:1.5">When everyone agrees, they're often wrong. Markets where whale positioning diverges from the crowd.</div>
+    <div id="contrarian-list" style="display:flex;flex-direction:column;gap:16px">
+      <div class="loading-state"><span class="spinner">&#x1F504;</span><p>Scanning for contrarian signals...</p></div>
+    </div>
+  </div>
+
+  <!-- EXPIRING SOON -->
+  <div style="margin-bottom:40px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <h2 style="font-family:var(--sans);font-size:22px;font-weight:800">&#x23F0; Expiring Soon</h2>
+      <span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;background:var(--gold-dim);color:var(--gold);border:1px solid rgba(201,146,13,0.3)">LAST CHANCE</span>
+    </div>
+    <div style="font-family:var(--mono);font-size:12px;color:var(--text-soft);margin-bottom:20px;line-height:1.5">Markets about to resolve — your last chance to trade before the outcome is locked in.</div>
+    <div id="expiring-list" style="display:flex;flex-direction:column;gap:16px">
+      <div class="loading-state"><span class="spinner">&#x23F0;</span><p>Finding markets near resolution...</p></div>
+    </div>
+  </div>
+
+  <!-- CTA -->
+  <div class="cta-section">
+    <h3>Get these predictions as they happen</h3>
+    <p>Subscribe to Crystal Ball alerts — delivered to your inbox.</p>
+    <form class="cta-form" id="cta-subscribe" onsubmit="return handleCtaSubscribe(event)">
+      <input type="email" id="cta-email" placeholder="you@example.com" required/>
+      <button type="submit" id="cta-btn">Subscribe</button>
+    </form>
+    <div class="cta-note" id="cta-note">Free during beta</div>
+  </div>
+
+</div>
+
+<script>
+const TYPE_LABELS = {
+  WHALE_CONVERGENCE: 'WHALE CONVERGENCE',
+  MOMENTUM_BREAKOUT: 'MOMENTUM',
+  SMART_VS_DUMB: 'SMART vs DUMB',
+  LEVERAGE_SIGNAL: 'LEVERAGE',
+  EXPIRY_CONVERGENCE: 'EXPIRY'
+};
+
+let _predictions = [];
+let _activeFilter = 'all';
+let _activeSort = 'score';
+let _lastUpdated = null;
+
+async function loadPredictions() {
+  try {
+    const res = await fetch('/api/crystal-ball');
+    if (!res.ok) throw new Error('API error');
+    const data = await res.json();
+    _predictions = data.predictions || [];
+    _lastUpdated = data.updated_at ? new Date(data.updated_at) : new Date();
+    document.getElementById('pred-count').textContent = _predictions.length;
+    updateTimestamp();
+    renderPredictions();
+  } catch (err) {
+    console.error('[crystal-ball]', err);
+    document.getElementById('predictions').innerHTML = '<div class="empty-state"><p>Unable to load predictions. Data feeds may still be warming up.</p></div>';
+  }
+}
+
+function updateTimestamp() {
+  if (!_lastUpdated) return;
+  const secs = Math.round((Date.now() - _lastUpdated.getTime()) / 1000);
+  let display;
+  if (secs < 60) display = secs + 's ago';
+  else if (secs < 3600) display = Math.round(secs / 60) + 'm ago';
+  else display = Math.round(secs / 3600) + 'h ago';
+  document.getElementById('update-ago').textContent = display;
+}
+
+function getFiltered() {
+  let list = _predictions;
+  if (_activeFilter !== 'all') {
+    list = list.filter(p => p.type === _activeFilter);
+  }
+  // Sort
+  if (_activeSort === 'newest') {
+    list = [...list].sort((a, b) => new Date(b.detected_at) - new Date(a.detected_at));
+  } else if (_activeSort === 'expiring') {
+    list = [...list].sort((a, b) => new Date(a.expires_at) - new Date(b.expires_at));
+  }
+  // default: score (already sorted by API)
+  return list;
+}
+
+function gaugeColor(confidence) {
+  if (confidence >= 80) return 'var(--green)';
+  if (confidence >= 60) return '#c9920d';
+  return 'var(--red)';
+}
+
+function timeAgo(iso) {
+  const ms = Date.now() - new Date(iso).getTime();
+  const mins = Math.round(ms / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return mins + 'm ago';
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return hrs + 'h ago';
+  return Math.round(hrs / 24) + 'd ago';
+}
+
+function timeLeft(iso) {
+  const ms = new Date(iso).getTime() - Date.now();
+  if (ms <= 0) return 'expired';
+  const hrs = Math.round(ms / 3600000);
+  if (hrs < 1) return Math.round(ms / 60000) + 'm left';
+  if (hrs < 24) return hrs + 'h left';
+  return Math.round(hrs / 24) + 'd left';
+}
+
+function actionClass(action) {
+  const a = (action || '').toLowerCase();
+  if (a.startsWith('buy')) return 'buy';
+  if (a.startsWith('sell')) return 'sell';
+  return 'watch';
+}
+
+function renderPredictions() {
+  const list = getFiltered();
+  const container = document.getElementById('predictions');
+
+  if (!list.length) {
+    container.innerHTML = '<div class="empty-state"><p>No predictions match this filter. Try "All" to see everything.</p></div>';
+    return;
+  }
+
+  const circumference = 2 * Math.PI * 33;
+
+  container.innerHTML = list.map(p => {
+    const color = gaugeColor(p.confidence);
+    const offset = circumference - (p.confidence / 100) * circumference;
+    const actionLabel = (p.action || 'WATCH').length > 28 ? (p.action || 'WATCH').substring(0, 26) + '...' : (p.action || 'WATCH');
+    const btnClass = actionClass(p.action);
+    const marketUrl = p.market && p.market.url ? p.market.url : '#';
+    const marketQ = p.market && p.market.question ? p.market.question : '';
+
+    return `
+      <div class="prediction-card">
+        <div class="pred-gauge">
+          <div class="gauge-circle">
+            <svg viewBox="0 0 72 72">
+              <circle class="gauge-bg" cx="36" cy="36" r="33"/>
+              <circle class="gauge-fill" cx="36" cy="36" r="33"
+                stroke="${color}" stroke-dasharray="${circumference}" stroke-dashoffset="${offset}"/>
+            </svg>
+            <span class="gauge-value" style="color:${color}">${p.confidence}</span>
+          </div>
+          <span class="gauge-label">confidence</span>
+        </div>
+        <div class="pred-body">
+          <span class="pred-type ${p.type}">${TYPE_LABELS[p.type] || p.type}</span>
+          <div class="pred-text">${escHtml(p.prediction)}</div>
+          <ul class="pred-reasoning">
+            ${(p.reasoning || []).slice(0, 3).map(r => `<li>${escHtml(r)}</li>`).join('')}
+          </ul>
+          ${marketQ ? `<a href="${escAttr(marketUrl)}" target="_blank" rel="noopener" class="pred-market-link">${escHtml(marketQ.substring(0, 80))} &rarr;</a>` : ''}
+        </div>
+        <div class="pred-action">
+          <a href="${escAttr(marketUrl)}" target="_blank" rel="noopener" class="action-btn ${btnClass}">${escHtml(actionLabel)}</a>
+          <div class="pred-time">
+            Detected ${timeAgo(p.detected_at)}<br/>
+            ${timeLeft(p.expires_at)}
+          </div>
+          ${p.crystal_ball_score ? `<div class="pred-score">Score: ${p.crystal_ball_score}</div>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function escHtml(s) { return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escAttr(s) { return (s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+// Filter tabs
+document.querySelectorAll('.filter-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    _activeFilter = tab.dataset.filter;
+    renderPredictions();
+  });
+});
+
+// Sort select
+document.getElementById('sort-select').addEventListener('change', (e) => {
+  _activeSort = e.target.value;
+  renderPredictions();
+});
+
+// CTA subscribe
+async function handleCtaSubscribe(e) {
+  e.preventDefault();
+  const email = document.getElementById('cta-email').value.trim();
+  const btn = document.getElementById('cta-btn');
+  const note = document.getElementById('cta-note');
+  if (!email) return false;
+  btn.disabled = true;
+  btn.textContent = 'Subscribing...';
+  try {
+    const res = await fetch('/api/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    if (res.ok) {
+      note.textContent = 'Subscribed! You\'ll get Crystal Ball alerts.';
+      note.style.color = 'var(--green)';
+      btn.textContent = 'Subscribed';
+    } else {
+      const d = await res.json().catch(() => ({}));
+      note.textContent = d.error || 'Something went wrong. Try again.';
+      note.style.color = 'var(--red)';
+      btn.textContent = 'Subscribe';
+      btn.disabled = false;
+    }
+  } catch (err) {
+    note.textContent = 'Network error. Try again.';
+    note.style.color = 'var(--red)';
+    btn.textContent = 'Subscribe';
+    btn.disabled = false;
+  }
+  return false;
+}
+
+// ── Contrarian Signals ──
+async function loadContrarian() {
+  const el = document.getElementById('contrarian-list');
+  try {
+    const r = await fetch('/api/contrarian');
+    if (!r.ok) throw new Error('API error');
+    const data = await r.json();
+    const signals = data.signals || [];
+
+    if (!signals.length) {
+      el.innerHTML = '<div class="empty-state"><p>No contrarian signals detected. Markets and whales may be in agreement.</p></div>';
+      return;
+    }
+
+    el.innerHTML = signals.map(s => {
+      return '<div class="contrarian-card">' +
+        '<span class="contrarian-badge">&#x1F504; CONTRARIAN</span>' +
+        '<div class="contrarian-score">' + s.contrarian_score + '</div>' +
+        '<div class="contrarian-market">' + escHtml((s.market || '').substring(0, 100)) + '</div>' +
+        '<div class="contrarian-stats">' +
+          '<span class="contrarian-stat">Market: <span class="val">' + s.current_price + '% YES</span></span>' +
+          '<span class="contrarian-stat">Whales: <span class="val">' + escHtml(s.whale_consensus) + '</span></span>' +
+          '<span class="contrarian-stat">Divergence: <span class="val" style="color:#f97316">' + s.divergence + 'pts</span></span>' +
+          '<span class="contrarian-stat">Whales: <span class="val">' + (s.whale_count || 0) + '</span></span>' +
+        '</div>' +
+        '<div class="contrarian-suggestion">' + escHtml(s.suggestion) + '</div>' +
+        '<div class="contrarian-note">' + escHtml(s.historical_note) + '</div>' +
+        (s.url ? '<a href="' + escAttr(s.url) + '" target="_blank" rel="noopener" style="display:inline-block;margin-top:10px;font-family:var(--mono);font-size:11px;color:var(--gold)">Trade this market &rarr;</a>' : '') +
+      '</div>';
+    }).join('');
+  } catch (err) {
+    el.innerHTML = '<div class="empty-state"><p>Unable to load contrarian signals.</p></div>';
+  }
+}
+
+// ── Expiring Soon ──
+async function loadExpiring() {
+  const el = document.getElementById('expiring-list');
+  try {
+    const r = await fetch('/api/resolution-probability');
+    if (!r.ok) throw new Error('API error');
+    const data = await r.json();
+    const markets = data.markets || [];
+
+    if (!markets.length) {
+      el.innerHTML = '<div class="empty-state"><p>No markets expiring within 7 days detected.</p></div>';
+      return;
+    }
+
+    el.innerHTML = markets.map(m => {
+      const prob = m.resolution_probability || 50;
+      let colorClass, probColor, probBg;
+      if (prob > 70) { colorClass = 'color-green'; probColor = 'var(--green)'; probBg = 'var(--green-dim)'; }
+      else if (prob < 30) { colorClass = 'color-red'; probColor = 'var(--red)'; probBg = 'var(--red-dim)'; }
+      else { colorClass = 'color-gold'; probColor = 'var(--gold)'; probBg = 'var(--gold-dim)'; }
+
+      // Format countdown
+      const hrs = m.hours_to_expiry || 0;
+      let countdownVal, countdownLabel;
+      if (hrs < 1) { countdownVal = Math.round(hrs * 60) + 'm'; countdownLabel = 'remaining'; }
+      else if (hrs < 24) { countdownVal = Math.round(hrs) + 'h'; countdownLabel = 'remaining'; }
+      else { countdownVal = Math.round(hrs / 24) + 'd'; countdownLabel = Math.round(hrs % 24) + 'h remaining'; }
+
+      return '<div class="expiring-card ' + colorClass + '">' +
+        '<div>' +
+          '<div class="expiring-market">' + escHtml((m.market || '').substring(0, 100)) + '</div>' +
+          '<div class="expiring-meta">' +
+            '<span>Price: <span class="val">' + m.current_price + '% YES</span></span>' +
+            (m.whale_count ? '<span>Whales: <span class="val">' + m.whale_count + '</span></span>' : '') +
+            '<span>Whale agrees: <span class="val">' + (m.whale_agrees ? 'Yes' : 'No') + '</span></span>' +
+          '</div>' +
+          '<div class="expiring-insight">' + escHtml(m.insight || '') + '</div>' +
+          (m.url ? '<a href="' + escAttr(m.url) + '" target="_blank" rel="noopener" style="display:inline-block;margin-top:8px;font-family:var(--mono);font-size:11px;color:var(--gold)">Last chance to trade &rarr;</a>' : '') +
+        '</div>' +
+        '<div class="expiring-countdown">' +
+          '<div class="expiring-countdown-val" style="color:' + probColor + '">' + countdownVal + '</div>' +
+          '<div class="expiring-countdown-label">' + escHtml(countdownLabel) + '</div>' +
+          '<div class="expiring-prob" style="color:' + probColor + ';background:' + probBg + '">' + prob + '% likely</div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  } catch (err) {
+    el.innerHTML = '<div class="empty-state"><p>Unable to load expiring markets.</p></div>';
+  }
+}
+
+// Auto-refresh every 2 minutes
+setInterval(loadPredictions, 2 * 60 * 1000);
+// Update timestamp every 10 seconds
+setInterval(updateTimestamp, 10 * 1000);
+
+// Dashboard link check
+try {
+  const token = localStorage.getItem('hf_token');
+  if (token) document.getElementById('navDashLink').style.display = '';
+} catch(e) {}
+
+// Initial load
+loadPredictions();
+loadContrarian();
+loadExpiring();
+</script>
+</body>
+</html>
