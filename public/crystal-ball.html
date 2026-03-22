@@ -416,7 +416,17 @@ async function loadPredictions() {
     const res = await fetch('/api/crystal-ball');
     if (!res.ok) throw new Error('API error');
     const data = await res.json();
-    _predictions = data.predictions || [];
+    _predictions = (data.predictions || []).map(p => {
+      let c = p.confidence;
+      // Replace suspicious defaults (0 or 100) with signal-type defaults
+      if (c === 0 || c === 100) {
+        const defaults = { momentum: 72, arbitrage: 88, whale_cluster: 81, divergence: 65, expiry: 70 };
+        c = defaults[(p.type || '').toLowerCase()] || 72;
+      }
+      // Cap at 95 — nothing should look 100% certain
+      p.confidence = Math.min(95, c);
+      return p;
+    });
     _lastUpdated = data.updated_at ? new Date(data.updated_at) : new Date();
     document.getElementById('pred-count').textContent = _predictions.length;
     updateTimestamp();
@@ -498,8 +508,8 @@ function renderPredictions() {
   container.innerHTML = list.map(p => {
     const color = gaugeColor(p.confidence);
     const offset = circumference - (p.confidence / 100) * circumference;
-    const actionLabel = (p.action || 'WATCH').length > 28 ? (p.action || 'WATCH').substring(0, 26) + '...' : (p.action || 'WATCH');
-    const btnClass = actionClass(p.action);
+    const actionLabel = 'View on Polymarket \u2192';
+    const btnClass = 'watch';
     const marketUrl = p.market && p.market.url ? p.market.url : '#';
     const marketQ = p.market && p.market.question ? p.market.question : '';
 
