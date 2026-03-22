@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>Market Screener — HYPERFLEX</title>
+<meta name="description" content="Filter and discover Polymarket markets where the smart money is flowing. Whale-enriched market data."/>
+<meta property="og:title" content="Market Screener — HYPERFLEX"/>
+<meta property="og:description" content="Find markets where the smart money is flowing."/>
+<meta property="og:url" content="https://hyperflex.network/screener"/>
+<meta property="og:type" content="website"/>
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="Market Screener — HYPERFLEX"/>
+<meta name="twitter:description" content="Discover Polymarket markets enriched with whale data."/>
+<link rel="icon" href="/hyperflex-logo.png"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --bg: #0a0a09;
+  --card: #131311;
+  --card-hover: #1a1a17;
+  --border: #222220;
+  --text: #e8e4d9;
+  --text-soft: #b0ab9f;
+  --muted: #6a6a5e;
+  --gold: #c9920d;
+  --gold-dim: rgba(201,146,13,0.15);
+  --green: #22c55e;
+  --green-dim: rgba(34,197,94,0.12);
+  --red: #ef4444;
+  --red-dim: rgba(239,68,68,0.12);
+  --blue: #60a5fa;
+  --purple: #a78bfa;
+  --orange: #f59e0b;
+  --sans: 'Syne', sans-serif;
+  --mono: 'Space Mono', monospace;
+  --radius: 10px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; -webkit-font-smoothing: antialiased; }
+a { color: var(--gold); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* NAV */
+.topbar { display: flex; align-items: center; justify-content: space-between; padding: 16px 32px; border-bottom: 1px solid var(--border); background: rgba(10,10,9,0.92); backdrop-filter: blur(12px); position: sticky; top: 0; z-index: 100; }
+.topbar-logo { font-family: var(--sans); font-weight: 800; font-size: 18px; letter-spacing: 2px; color: var(--text); text-decoration: none; }
+.topbar-logo span { color: var(--gold); }
+.nav-links { display: flex; gap: 20px; align-items: center; }
+.nav-link { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--text-soft); text-decoration: none; transition: color 0.2s; }
+.nav-link:hover, .nav-link.active { color: var(--text); text-decoration: none; }
+
+/* HERO */
+.hero { text-align: center; padding: 48px 24px 36px; border-bottom: 1px solid var(--border); }
+.hero-icon { font-size: 48px; margin-bottom: 12px; }
+.hero h1 { font-family: var(--sans); font-size: 36px; font-weight: 800; margin-bottom: 8px; }
+.hero h1 span { color: var(--gold); }
+.hero-sub { font-family: var(--mono); font-size: 13px; color: var(--text-soft); max-width: 440px; margin: 0 auto; }
+
+/* FILTER BAR */
+.filter-bar { position: sticky; top: 57px; z-index: 90; background: rgba(10,10,9,0.95); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); padding: 14px 24px; }
+.filter-bar-inner { max-width: 1200px; margin: 0 auto; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.filter-section { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.filter-label { font-family: var(--mono); font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-right: 4px; white-space: nowrap; }
+.filter-pill { font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 5px 12px; border-radius: 18px; border: 1px solid var(--border); background: transparent; color: var(--text-soft); cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+.filter-pill:hover { border-color: var(--gold); color: var(--text); }
+.filter-pill.active { background: var(--gold-dim); border-color: var(--gold); color: var(--gold); }
+
+/* Category colors */
+.cat-pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-family: var(--mono); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+.cat-crypto { background: rgba(245,158,11,0.15); color: #f59e0b; }
+.cat-sports { background: rgba(34,197,94,0.15); color: #22c55e; }
+.cat-politics { background: rgba(96,165,250,0.15); color: #60a5fa; }
+.cat-entertainment { background: rgba(167,139,250,0.15); color: #a78bfa; }
+.cat-tech { background: rgba(56,189,248,0.15); color: #38bdf8; }
+.cat-other { background: rgba(148,148,138,0.15); color: #9a9a8a; }
+
+/* Sort select */
+.sort-select { font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 5px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text-soft); cursor: pointer; margin-left: auto; }
+
+/* CONTAINER */
+.container { max-width: 1200px; margin: 0 auto; padding: 24px 24px 80px; }
+
+/* RESULTS COUNT */
+.results-count { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-bottom: 16px; }
+
+/* TABLE */
+.table-wrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border); background: var(--card); }
+table { width: 100%; border-collapse: collapse; min-width: 900px; }
+thead th { font-family: var(--mono); font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; background: rgba(10,10,9,0.5); cursor: pointer; user-select: none; }
+thead th:hover { color: var(--text-soft); }
+tbody tr { border-bottom: 1px solid rgba(34,34,32,0.5); transition: background 0.15s; cursor: pointer; }
+tbody tr:hover { background: rgba(201,146,13,0.03); }
+tbody tr.whale-highlight { border-left: 3px solid var(--gold); background: rgba(201,146,13,0.02); }
+td { padding: 12px 14px; font-size: 13px; vertical-align: middle; }
+
+/* Market question */
+.mkt-question { font-family: var(--sans); font-weight: 600; font-size: 13px; line-height: 1.4; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mkt-question a { color: var(--text); transition: color 0.15s; }
+.mkt-question a:hover { color: var(--gold); text-decoration: none; }
+
+/* YES% */
+.yes-pct { font-family: var(--mono); font-size: 14px; font-weight: 700; }
+.yes-pct.high { color: var(--green); }
+.yes-pct.mid { color: var(--text); }
+.yes-pct.low { color: var(--red); }
+
+/* Whale cell */
+.whale-cell { font-family: var(--mono); font-size: 13px; font-weight: 700; }
+.whale-cell .icon { margin-left: 4px; }
+.whale-cell.hot { color: var(--gold); }
+
+/* Volume */
+.vol-val { font-family: var(--mono); font-size: 12px; color: var(--text-soft); }
+
+/* Change */
+.change-val { font-family: var(--mono); font-size: 12px; font-weight: 700; }
+.change-val.up { color: var(--green); }
+.change-val.down { color: var(--red); }
+.change-val.flat { color: var(--muted); }
+
+/* Expiry */
+.expiry-val { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+
+/* Trade link */
+.trade-link { font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--gold); padding: 5px 12px; border: 1px solid rgba(201,146,13,0.3); border-radius: 6px; transition: all 0.2s; white-space: nowrap; }
+.trade-link:hover { background: var(--gold-dim); text-decoration: none; }
+
+/* LOAD MORE */
+.load-more-wrap { text-align: center; padding: 28px 0; }
+.load-more-btn { font-family: var(--mono); font-size: 12px; font-weight: 700; padding: 10px 28px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text-soft); cursor: pointer; transition: all 0.2s; }
+.load-more-btn:hover { border-color: var(--gold); color: var(--gold); background: var(--gold-dim); }
+
+/* LOADING */
+.loading { text-align: center; padding: 80px 24px; }
+.loading-spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--gold); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+
+/* EMPTY */
+.empty-state { text-align: center; padding: 60px 24px; }
+.empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+.empty-state h3 { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+.empty-state p { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+
+/* MOBILE */
+@media (max-width: 768px) {
+  .topbar { padding: 12px 16px; }
+  .nav-links { gap: 12px; }
+  .nav-link { font-size: 11px; }
+  .hero { padding: 32px 16px 24px; }
+  .hero h1 { font-size: 28px; }
+  .filter-bar { padding: 10px 12px; }
+  .filter-bar-inner { gap: 8px; }
+  .filter-label { display: none; }
+  .filter-section { gap: 4px; }
+  .container { padding: 16px 12px 60px; }
+  .mkt-question { max-width: 200px; }
+  td { padding: 10px 8px; font-size: 12px; }
+}
+@media (max-width: 480px) {
+  .nav-links { gap: 8px; overflow-x: auto; }
+  .hero h1 { font-size: 24px; }
+  .filter-bar-inner { flex-direction: column; align-items: flex-start; }
+  .sort-select { margin-left: 0; }
+  .mkt-question { max-width: 150px; }
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="topbar">
+  <a href="/" class="topbar-logo">HYPER<span>FLEX</span></a>
+  <div class="nav-links">
+    <a href="/predictors" class="nav-link">Predictors</a>
+    <a href="/explore" class="nav-link">Explore</a>
+    <a href="/odds" class="nav-link">Odds</a>
+    <a href="/whales" class="nav-link">Whales</a>
+    <a href="/whale-index" class="nav-link">Whale Index</a>
+    <a href="/screener" class="nav-link active">Screener</a>
+    <a href="/data" class="nav-link">Data</a>
+    <a href="/templates" class="nav-link">Templates</a>
+    <a href="/api-docs" class="nav-link">API</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<header class="hero">
+  <div class="hero-icon">&#x1F4CA;</div>
+  <h1>Market <span>Screener</span></h1>
+  <p class="hero-sub">Find markets where the smart money is flowing</p>
+</header>
+
+<!-- FILTER BAR -->
+<div class="filter-bar">
+  <div class="filter-bar-inner">
+    <div class="filter-section">
+      <span class="filter-label">Category</span>
+      <button class="filter-pill active" data-cat="all" onclick="setCat('all')">All</button>
+      <button class="filter-pill" data-cat="crypto" onclick="setCat('crypto')">Crypto</button>
+      <button class="filter-pill" data-cat="sports" onclick="setCat('sports')">Sports</button>
+      <button class="filter-pill" data-cat="politics" onclick="setCat('politics')">Politics</button>
+      <button class="filter-pill" data-cat="entertainment" onclick="setCat('entertainment')">Entertainment</button>
+      <button class="filter-pill" data-cat="tech" onclick="setCat('tech')">Tech</button>
+    </div>
+    <div class="filter-section">
+      <span class="filter-label">Whales</span>
+      <button class="filter-pill active" data-whales="0" onclick="setWhaleFilter(0)">Any</button>
+      <button class="filter-pill" data-whales="3" onclick="setWhaleFilter(3)">3+</button>
+      <button class="filter-pill" data-whales="5" onclick="setWhaleFilter(5)">5+</button>
+      <button class="filter-pill" data-whales="10" onclick="setWhaleFilter(10)">10+</button>
+    </div>
+    <div class="filter-section">
+      <span class="filter-label">Volume</span>
+      <button class="filter-pill active" data-vol="0" onclick="setVolFilter(0)">Any</button>
+      <button class="filter-pill" data-vol="10000" onclick="setVolFilter(10000)">$10K+</button>
+      <button class="filter-pill" data-vol="100000" onclick="setVolFilter(100000)">$100K+</button>
+      <button class="filter-pill" data-vol="1000000" onclick="setVolFilter(1000000)">$1M+</button>
+    </div>
+    <select class="sort-select" id="sort-select" onchange="setSort(this.value)">
+      <option value="whale_count">Sort: Whale Count</option>
+      <option value="volume">Sort: Volume</option>
+      <option value="price_change">Sort: Price Change</option>
+      <option value="newest">Sort: Newest</option>
+    </select>
+  </div>
+</div>
+
+<div class="container">
+  <!-- LOADING -->
+  <div id="loading" class="loading">
+    <div class="loading-spinner"></div>
+    <div class="loading-text">Scanning 200 markets...</div>
+  </div>
+
+  <!-- CONTENT -->
+  <div id="content" style="display:none;">
+    <div class="results-count" id="results-count"></div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Market</th>
+            <th>Category</th>
+            <th>YES%</th>
+            <th>Whales</th>
+            <th>Volume</th>
+            <th>24h Change</th>
+            <th>Expiry</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="results-body"></tbody>
+      </table>
+    </div>
+
+    <div class="load-more-wrap" id="load-more-wrap" style="display:none;">
+      <button class="load-more-btn" onclick="loadMore()">Load more markets</button>
+    </div>
+
+    <div id="empty-state" class="empty-state" style="display:none;">
+      <div class="icon">&#x1F50D;</div>
+      <h3>No markets match your filters</h3>
+      <p>Try relaxing your filters to see more results.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+let _allMarkets = [];
+let _catFilter = 'all';
+let _whaleMin = 0;
+let _volMin = 0;
+let _sortBy = 'whale_count';
+let _displayCount = 50;
+
+function fmtVol(n) {
+  if (n >= 1000000) return '$' + (n / 1000000).toFixed(1) + 'M';
+  if (n >= 1000) return '$' + Math.round(n / 1000) + 'K';
+  return '$' + Math.round(n);
+}
+
+function truncate(s, max) {
+  return s.length > max ? s.substring(0, max - 1) + '\u2026' : s;
+}
+
+async function loadScreener() {
+  try {
+    const res = await fetch('/api/screener?sort=' + _sortBy);
+    if (!res.ok) throw new Error('API error ' + res.status);
+    _allMarkets = await res.json();
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('content').style.display = 'block';
+    _displayCount = 50;
+    renderTable();
+  } catch (err) {
+    document.getElementById('loading').innerHTML = '<div class="empty-state"><div class="icon">&#x26A0;&#xFE0F;</div><h3>Failed to load</h3><p>' + err.message + '</p></div>';
+  }
+}
+
+function getFiltered() {
+  let markets = [..._allMarkets];
+  if (_catFilter !== 'all') markets = markets.filter(m => m.category === _catFilter);
+  if (_whaleMin > 0) markets = markets.filter(m => m.whale_count >= _whaleMin);
+  if (_volMin > 0) markets = markets.filter(m => m.volume >= _volMin);
+
+  // Client-side sort
+  switch (_sortBy) {
+    case 'volume': markets.sort((a, b) => b.volume - a.volume); break;
+    case 'price_change': markets.sort((a, b) => Math.abs(b.price_change_24h || 0) - Math.abs(a.price_change_24h || 0)); break;
+    case 'newest': markets.sort((a, b) => (a.days_until_expiry == null ? 999 : a.days_until_expiry) - (b.days_until_expiry == null ? 999 : b.days_until_expiry)); break;
+    case 'whale_count':
+    default: markets.sort((a, b) => b.whale_count - a.whale_count || b.volume - a.volume); break;
+  }
+  return markets;
+}
+
+function renderTable() {
+  const filtered = getFiltered();
+  const showing = filtered.slice(0, _displayCount);
+  const tbody = document.getElementById('results-body');
+  const emptyState = document.getElementById('empty-state');
+  const loadMoreWrap = document.getElementById('load-more-wrap');
+  const countEl = document.getElementById('results-count');
+
+  countEl.textContent = filtered.length + ' market' + (filtered.length !== 1 ? 's' : '') + ' found';
+
+  if (!showing.length) {
+    tbody.innerHTML = '';
+    emptyState.style.display = 'block';
+    loadMoreWrap.style.display = 'none';
+    return;
+  }
+  emptyState.style.display = 'none';
+  loadMoreWrap.style.display = filtered.length > _displayCount ? 'block' : 'none';
+
+  tbody.innerHTML = showing.map(m => {
+    const rowClass = m.whale_count >= 10 ? ' class="whale-highlight"' : '';
+    const catClass = 'cat-' + m.category;
+    const yesPct = m.yes_price != null ? (m.yes_price * 100).toFixed(0) : '--';
+    const yesClass = m.yes_price >= 0.7 ? 'high' : m.yes_price <= 0.3 ? 'low' : 'mid';
+    const whaleClass = m.whale_count >= 5 ? ' hot' : '';
+    const whaleIcon = m.whale_count >= 5 ? ' <span class="icon">&#x1F40B;</span>' : '';
+    const changeStr = m.price_change_24h != null ? (m.price_change_24h >= 0 ? '+' : '') + m.price_change_24h.toFixed(1) + '%' : '--';
+    const changeClass = m.price_change_24h > 0 ? 'up' : m.price_change_24h < 0 ? 'down' : 'flat';
+    const expiryStr = m.days_until_expiry != null ? (m.days_until_expiry === 0 ? 'Today' : m.days_until_expiry + 'd') : '--';
+
+    return '<tr' + rowClass + ' onclick="window.open(\'' + m.url + '\', \'_blank\')">' +
+      '<td class="mkt-question"><a href="' + m.url + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">' + truncate(m.question, 55) + '</a></td>' +
+      '<td><span class="cat-pill ' + catClass + '">' + m.category + '</span></td>' +
+      '<td class="yes-pct ' + yesClass + '">' + yesPct + '%</td>' +
+      '<td class="whale-cell' + whaleClass + '">' + m.whale_count + whaleIcon + '</td>' +
+      '<td class="vol-val">' + fmtVol(m.volume) + '</td>' +
+      '<td class="change-val ' + changeClass + '">' + changeStr + '</td>' +
+      '<td class="expiry-val">' + expiryStr + '</td>' +
+      '<td><a href="' + m.url + '" target="_blank" rel="noopener" class="trade-link" onclick="event.stopPropagation()">Trade \u2192</a></td>' +
+    '</tr>';
+  }).join('');
+}
+
+function setCat(cat) {
+  _catFilter = cat;
+  _displayCount = 50;
+  document.querySelectorAll('[data-cat]').forEach(el => el.classList.toggle('active', el.getAttribute('data-cat') === cat));
+  renderTable();
+}
+
+function setWhaleFilter(min) {
+  _whaleMin = min;
+  _displayCount = 50;
+  document.querySelectorAll('[data-whales]').forEach(el => el.classList.toggle('active', parseInt(el.getAttribute('data-whales')) === min));
+  renderTable();
+}
+
+function setVolFilter(min) {
+  _volMin = min;
+  _displayCount = 50;
+  document.querySelectorAll('[data-vol]').forEach(el => el.classList.toggle('active', parseInt(el.getAttribute('data-vol')) === min));
+  renderTable();
+}
+
+function setSort(s) {
+  _sortBy = s;
+  renderTable();
+}
+
+function loadMore() {
+  _displayCount += 50;
+  renderTable();
+}
+
+// Init
+loadScreener();
+
+// Auto-refresh every 5 minutes
+setInterval(loadScreener, 5 * 60 * 1000);
+</script>
+</body>
+</html>

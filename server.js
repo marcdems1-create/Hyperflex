@@ -8469,7 +8469,7 @@ const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
   'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u', 'win',
-  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data'
+  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener'
 ]);
 
 // GET /my — private member dashboard
@@ -15707,8 +15707,303 @@ app.get('/api/whale-watch', async (req, res) => {
 // GET /whales — whale watch page
 app.get('/whales', (req, res) => res.sendFile(path.join(__dirname, 'public', 'whales.html')));
 
+// GET /whale-index — whale index portfolio page
+app.get('/whale-index', (req, res) => res.sendFile(path.join(__dirname, 'public', 'whale-index.html')));
+
+// GET /screener — market screener page
+app.get('/screener', (req, res) => res.sendFile(path.join(__dirname, 'public', 'screener.html')));
+
 // GET /data — premium data dashboard
 app.get('/data', (req, res) => res.sendFile(path.join(__dirname, 'public', 'data.html')));
+
+// ════════════════════════════════════════════════════════════
+// WHALE INDEX — auto-generated portfolio from top whale positions
+// ════════════════════════════════════════════════════════════
+let _whaleIndexCache = null;
+
+app.get('/api/whale-index', async (req, res) => {
+  try {
+    // Check cache (10 min TTL)
+    if (_whaleIndexCache && (Date.now() - _whaleIndexCache.ts < 10 * 60 * 1000)) {
+      return res.json(_whaleIndexCache.data);
+    }
+
+    // Get whale data from existing cache or fetch
+    let whaleData;
+    if (_whaleWatchCache && _whaleWatchCache.data) {
+      whaleData = _whaleWatchCache.data;
+    } else {
+      whaleData = await fetchWhalePositions();
+      _whaleWatchCache = { ts: Date.now(), data: whaleData };
+    }
+
+    const positions = whaleData.whales || [];
+    if (!positions.length) {
+      return res.json({ picks: [], summary: { total_picks: 0, total_capital_tracked: 0, avg_whale_count: 0, strong_picks: 0, simulated_value: 0 }, updated_at: new Date().toISOString() });
+    }
+
+    // Group positions by market
+    const marketMap = {};
+    for (const p of positions) {
+      const key = p.market || p.position || 'Unknown';
+      if (!marketMap[key]) {
+        marketMap[key] = { market: key, positions: [], url: p.market_url || 'https://polymarket.com' };
+      }
+      marketMap[key].positions.push(p);
+    }
+
+    // Build picks: markets with 3+ whales
+    const picks = [];
+    for (const [market, data] of Object.entries(marketMap)) {
+      const whaleCount = data.positions.length;
+      if (whaleCount < 3) continue;
+
+      // Group by side
+      const sideCap = {};
+      let totalCapital = 0;
+      let priceSum = 0;
+      let priceCount = 0;
+      for (const p of data.positions) {
+        const side = (p.side || 'Unknown').toUpperCase();
+        const normSide = (side === 'YES' || side === 'Y') ? 'YES' : (side === 'NO' || side === 'N') ? 'NO' : side;
+        if (!sideCap[normSide]) sideCap[normSide] = 0;
+        sideCap[normSide] += (p.size || 0);
+        totalCapital += (p.size || 0);
+        if (p.current_price > 0) { priceSum += p.current_price; priceCount++; }
+      }
+
+      // Find consensus side
+      let consensusSide = 'YES';
+      let maxCap = 0;
+      for (const [side, cap] of Object.entries(sideCap)) {
+        if (cap > maxCap) { maxCap = cap; consensusSide = side; }
+      }
+      const consensusPct = totalCapital > 0 ? Math.round((maxCap / totalCapital) * 100) : 50;
+      const avgPrice = priceCount > 0 ? parseFloat((priceSum / priceCount).toFixed(3)) : 0.5;
+
+      // Strength classification
+      let strength = 'EMERGING';
+      if (whaleCount >= 10) strength = 'STRONG';
+      else if (whaleCount >= 5) strength = 'MODERATE';
+
+      picks.push({
+        market,
+        whale_count: whaleCount,
+        total_capital: Math.round(totalCapital),
+        consensus_side: consensusSide,
+        consensus_pct: consensusPct,
+        current_price: avgPrice,
+        url: data.url,
+        strength,
+        // For consensus chart
+        yes_capital: Math.round(sideCap['YES'] || 0),
+        no_capital: Math.round(sideCap['NO'] || 0)
+      });
+    }
+
+    // Sort by whale_count DESC, then total_capital DESC
+    picks.sort((a, b) => b.whale_count - a.whale_count || b.total_capital - a.total_capital);
+
+    // Simulated performance: $100 per pick
+    const investPerPick = 100;
+    let simulatedValue = 0;
+    for (const pick of picks) {
+      // Simple sim: if consensus side price > 0.5, position is profitable
+      // Value = invested / entry_price * current_price (assume entry at avg_price)
+      const entryPrice = Math.max(0.1, Math.min(0.95, pick.current_price));
+      const shares = investPerPick / entryPrice;
+      const currentVal = shares * pick.current_price;
+      simulatedValue += currentVal;
+    }
+    simulatedValue = Math.round(simulatedValue);
+
+    const totalCapitalTracked = picks.reduce((s, p) => s + p.total_capital, 0);
+    const avgWhaleCount = picks.length > 0 ? Math.round(picks.reduce((s, p) => s + p.whale_count, 0) / picks.length) : 0;
+    const strongPicks = picks.filter(p => p.strength === 'STRONG').length;
+
+    const result = {
+      picks,
+      summary: {
+        total_picks: picks.length,
+        total_capital_tracked: totalCapitalTracked,
+        avg_whale_count: avgWhaleCount,
+        strong_picks: strongPicks,
+        simulated_value: simulatedValue,
+        invested: picks.length * investPerPick
+      },
+      updated_at: new Date().toISOString()
+    };
+
+    _whaleIndexCache = { ts: Date.now(), data: result };
+    res.json(result);
+  } catch (err) {
+    console.error('[whale-index]', err.message);
+    if (_whaleIndexCache) return res.json(_whaleIndexCache.data);
+    res.status(502).json({ error: 'Failed to build whale index', detail: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+// MARKET SCREENER — filter and discover enriched markets
+// ════════════════════════════════════════════════════════════
+let _screenerCache = null;
+
+app.get('/api/screener', async (req, res) => {
+  try {
+    // Check cache (5 min TTL)
+    if (_screenerCache && (Date.now() - _screenerCache.ts < 5 * 60 * 1000)) {
+      return res.json(filterScreenerResults(_screenerCache.data, req.query));
+    }
+
+    const fetch = _nodeFetch;
+
+    // Fetch top 200 markets from Gamma API
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 15000);
+    const mktRes = await fetch('https://gamma-api.polymarket.com/markets?closed=false&limit=200&order=volume&ascending=false', {
+      signal: ctrl.signal,
+      headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+    });
+    clearTimeout(tid);
+    if (!mktRes.ok) throw new Error('Gamma API returned ' + mktRes.status);
+    const rawMarkets = await mktRes.json();
+
+    // Build whale lookup from cached whale data
+    const whalePositions = (_whaleWatchCache && _whaleWatchCache.data && _whaleWatchCache.data.whales) ? _whaleWatchCache.data.whales : [];
+    const whaleByMarket = {};
+    for (const wp of whalePositions) {
+      const key = (wp.market || wp.position || '').toLowerCase().trim();
+      if (!key) continue;
+      if (!whaleByMarket[key]) whaleByMarket[key] = { count: 0, capital: 0 };
+      whaleByMarket[key].count++;
+      whaleByMarket[key].capital += (wp.size || 0);
+    }
+
+    // Auto-detect category
+    function detectCategory(q) {
+      const t = (q || '').toLowerCase();
+      if (/bitcoin|btc|eth|crypto|solana|sol |xrp|dogecoin|doge|token|defi|nft/i.test(t)) return 'crypto';
+      if (/nba|nfl|mlb|nhl|soccer|football|basketball|baseball|ufc|boxing|sport|game |match|playoff|super bowl|world cup|championship|league|team|player|coach|season|finals|series|mvp|draft|trade |free agent/i.test(t)) return 'sports';
+      if (/trump|biden|president|congress|senate|election|democrat|republican|politic|governor|vote |primary|gop|dnc|rnc|impeach|cabinet|supreme court/i.test(t)) return 'politics';
+      if (/movie|oscar|grammy|emmy|album|netflix|spotify|tiktok|youtube|celebrity|award|film|tv |show|music|concert|tour|streaming|actor|singer|rapper/i.test(t)) return 'entertainment';
+      if (/ai |openai|chatgpt|apple|google|microsoft|meta |tesla|nvidia|amazon|startup|tech|iphone|android/i.test(t)) return 'tech';
+      return 'other';
+    }
+
+    // Get 24h price changes from market_snapshots if available
+    const priceChanges = {};
+    try {
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      let snapRows = [];
+      if (pool) {
+        snapRows = await dbQuery(
+          'SELECT market_id, yes_price, snapshot_at FROM market_snapshots WHERE snapshot_at >= $1 ORDER BY snapshot_at ASC',
+          [twentyFourHoursAgo]
+        ).catch(() => []);
+      } else {
+        const { data } = await supabase.from('market_snapshots')
+          .select('market_id, yes_price, snapshot_at')
+          .gte('snapshot_at', twentyFourHoursAgo)
+          .order('snapshot_at', { ascending: true });
+        snapRows = data || [];
+      }
+      // Build first/last price per market
+      const firstLast = {};
+      for (const r of snapRows) {
+        if (!r.market_id || r.yes_price == null) continue;
+        if (!firstLast[r.market_id]) firstLast[r.market_id] = { first: parseFloat(r.yes_price), last: parseFloat(r.yes_price) };
+        else firstLast[r.market_id].last = parseFloat(r.yes_price);
+      }
+      for (const [mid, fl] of Object.entries(firstLast)) {
+        if (fl.first > 0) {
+          priceChanges[mid] = parseFloat(((fl.last - fl.first) / fl.first * 100).toFixed(1));
+        }
+      }
+    } catch (e) { /* silent */ }
+
+    // Build enriched market list
+    const markets = [];
+    for (const m of (rawMarkets || [])) {
+      const question = m.question || m.title || '';
+      if (!question) continue;
+
+      let yesPrice = null;
+      try {
+        const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
+        if (Array.isArray(prices) && prices[0] != null) yesPrice = parseFloat(prices[0]);
+      } catch {}
+
+      const volume = parseFloat(m.volume) || 0;
+      const marketId = m.conditionId || m.slug || m.id || '';
+      const slug = m.slug || m.conditionId || '';
+      const category = detectCategory(question);
+      const qLower = question.toLowerCase().trim();
+
+      // Whale enrichment: try exact match, then fuzzy
+      let whaleInfo = whaleByMarket[qLower] || null;
+      if (!whaleInfo) {
+        // Try substring matching for whale data
+        for (const [wKey, wVal] of Object.entries(whaleByMarket)) {
+          if (qLower.includes(wKey) || wKey.includes(qLower)) {
+            whaleInfo = wVal;
+            break;
+          }
+        }
+      }
+
+      // Days until expiry
+      let daysUntilExpiry = null;
+      if (m.endDate || m.end_date_iso) {
+        const endDate = new Date(m.endDate || m.end_date_iso);
+        daysUntilExpiry = Math.max(0, Math.round((endDate - Date.now()) / (1000 * 60 * 60 * 24)));
+      }
+
+      markets.push({
+        market_id: marketId,
+        question,
+        category,
+        yes_price: yesPrice,
+        volume,
+        whale_count: whaleInfo ? whaleInfo.count : 0,
+        total_whale_capital: whaleInfo ? Math.round(whaleInfo.capital) : 0,
+        price_change_24h: priceChanges[marketId] || null,
+        days_until_expiry: daysUntilExpiry,
+        url: slug ? `https://polymarket.com/event/${slug}` : 'https://polymarket.com',
+        slug
+      });
+    }
+
+    _screenerCache = { ts: Date.now(), data: markets };
+    res.json(filterScreenerResults(markets, req.query));
+  } catch (err) {
+    console.error('[screener]', err.message);
+    if (_screenerCache) return res.json(filterScreenerResults(_screenerCache.data, req.query));
+    res.status(502).json({ error: 'Failed to fetch screener data', detail: err.message });
+  }
+});
+
+function filterScreenerResults(markets, query) {
+  let filtered = [...markets];
+  const minWhales = parseInt(query.min_whales) || 0;
+  const category = (query.category || '').toLowerCase();
+  const minVolume = parseInt(query.min_volume) || 0;
+  const sort = query.sort || 'whale_count';
+
+  if (minWhales > 0) filtered = filtered.filter(m => m.whale_count >= minWhales);
+  if (category && category !== 'all') filtered = filtered.filter(m => m.category === category);
+  if (minVolume > 0) filtered = filtered.filter(m => m.volume >= minVolume);
+
+  // Sort
+  switch (sort) {
+    case 'volume': filtered.sort((a, b) => b.volume - a.volume); break;
+    case 'price_change': filtered.sort((a, b) => Math.abs(b.price_change_24h || 0) - Math.abs(a.price_change_24h || 0)); break;
+    case 'newest': filtered.sort((a, b) => (b.days_until_expiry || 999) - (a.days_until_expiry || 999)); break;
+    case 'whale_count':
+    default: filtered.sort((a, b) => b.whale_count - a.whale_count || b.volume - a.volume); break;
+  }
+
+  return filtered;
+}
 
 // ── WHALE FLOW INDEX — aggregated whale insights ──────────────────────────
 let _whaleFlowCache = null;
