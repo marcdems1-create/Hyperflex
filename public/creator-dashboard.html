@@ -2933,8 +2933,8 @@ body.nav-open .sidebar-backdrop {
       <a class="nav-item" onclick="showTab('performance')">
         <span class="nav-icon">📈</span><span class="nav-label">Performance</span>
       </a>
-      <a class="nav-item" onclick="showTab('logbets')">
-        <span class="nav-icon">📝</span><span class="nav-label">Track Bets</span>
+      <a class="nav-item" onclick="showTab('quicktrade')">
+        <span class="nav-icon">⚡</span><span class="nav-label">Quick Trade</span>
       </a>
       <a class="nav-item" onclick="showTab('findmarkets')">
         <span class="nav-icon">🔍</span><span class="nav-label">Find Markets</span>
@@ -5242,55 +5242,49 @@ body.nav-open .sidebar-backdrop {
         </div>
       </div><!-- /tab-performance -->
 
-      <!-- ═══════════════════════════════════ PLACE BET TAB ════════════════════════════ -->
-      <div id="tab-logbets" style="display:none">
+      <!-- ═══════════════════════════════════ QUICK TRADE TAB ════════════════════════════ -->
+      <div id="tab-quicktrade" style="display:none">
         <div class="section">
-          <div style="max-width:860px">
-            <!-- Stats row -->
-            <div id="betStatsRow" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:20px">
-              <div style="background:var(--cream);border:1px solid var(--border);border-radius:10px;padding:14px 16px"><div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">WAGERED</div><div id="betStatWagered" style="font-family:var(--mono);font-size:20px;font-weight:900;color:var(--text)">$0</div></div>
-              <div style="background:var(--cream);border:1px solid var(--border);border-radius:10px;padding:14px 16px"><div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">P&L</div><div id="betStatPnl" style="font-family:var(--mono);font-size:20px;font-weight:900;color:var(--dim)">$0</div></div>
-              <div style="background:var(--cream);border:1px solid var(--border);border-radius:10px;padding:14px 16px"><div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">WIN RATE</div><div id="betStatWinRate" style="font-family:var(--mono);font-size:20px;font-weight:900;color:var(--text)">—</div></div>
-              <div style="background:var(--cream);border:1px solid var(--border);border-radius:10px;padding:14px 16px"><div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">ROI</div><div id="betStatRoi" style="font-family:var(--mono);font-size:20px;font-weight:900;color:var(--dim)">—</div></div>
-            </div>
-            <!-- Platform breakdown -->
-            <div id="betPlatformPills" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px"></div>
-            <!-- Add Bet Form -->
-            <div style="background:var(--cream);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:20px">
-              <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px">Track a Bet</div>
-              <div style="font-size:12px;color:var(--dim);margin-bottom:16px">Log bets you've placed on DraftKings, FanDuel, Polymarket, or any platform to track your full record in one place.</div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-                <div><label style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;display:block;margin-bottom:4px">Platform</label>
-                  <select id="betPlatform" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--sans);font-size:13px;padding:10px 14px;outline:none">
-                    <option value="draftkings">DraftKings</option><option value="fanduel">FanDuel</option><option value="betmgm">BetMGM</option><option value="bet365">Bet365</option><option value="bovada">Bovada</option><option value="polymarket">Polymarket</option><option value="kalshi">Kalshi</option><option value="other">Other</option>
-                  </select></div>
-                <div><label style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;display:block;margin-bottom:4px">Side / Pick</label>
-                  <input type="text" id="betSide" placeholder="Lakers, Over 215.5, YES" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:10px 14px;outline:none;box-sizing:border-box"/></div>
-                <div style="grid-column:1/-1"><label style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;display:block;margin-bottom:4px">Event / Question</label>
-                  <input type="text" id="betQuestion" placeholder="Lakers -3.5 vs Celtics" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:10px 14px;outline:none;box-sizing:border-box"/></div>
-                <div><label style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;display:block;margin-bottom:4px">Amount ($)</label>
-                  <input type="number" id="betAmount" placeholder="100" min="0" step="0.01" oninput="autoCalcPayout()" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:13px;padding:10px 14px;outline:none;box-sizing:border-box"/></div>
-                <div><label style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;display:block;margin-bottom:4px">Odds</label>
-                  <input type="text" id="betOdds" placeholder="-110, +250" oninput="autoCalcPayout()" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:13px;padding:10px 14px;outline:none;box-sizing:border-box"/></div>
-                <div><label style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;display:block;margin-bottom:4px">Potential Payout ($)</label>
-                  <input type="number" id="betPayout" placeholder="190.91" min="0" step="0.01" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:13px;padding:10px 14px;outline:none;box-sizing:border-box"/></div>
-                <div><label style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;display:block;margin-bottom:4px">Notes (optional)</label>
-                  <input type="text" id="betNotes" placeholder="Sharp line move..." style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:10px 14px;outline:none;box-sizing:border-box"/></div>
+          <div style="max-width:900px">
+
+            <!-- 1. Top Crystal Ball Pick -->
+            <div id="qtCrystalBall" style="margin-bottom:28px">
+              <div style="font-family:var(--mono);font-size:10px;color:var(--gold);text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px">Top Crystal Ball Pick</div>
+              <div id="qtCrystalBallCard" style="background:linear-gradient(135deg,#1a1916 0%,#0f0e0c 100%);border:2px solid rgba(201,146,13,0.4);border-radius:16px;padding:28px 24px;position:relative;overflow:hidden">
+                <div style="position:absolute;top:0;right:0;width:120px;height:120px;background:radial-gradient(circle at top right,rgba(201,146,13,0.08) 0%,transparent 70%)"></div>
+                <div style="text-align:center;padding:32px;color:var(--dim);font-size:13px">Loading crystal ball...</div>
               </div>
-              <div id="betError" style="color:#ef4444;font-family:var(--mono);font-size:12px;margin-top:8px;display:none"></div>
-              <button id="betSubmitBtn" onclick="submitBet()" style="margin-top:16px;background:var(--gold);color:var(--ink);border:none;border-radius:10px;padding:12px 24px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer">Track Bets →</button>
             </div>
-            <!-- Bet filter tabs -->
-            <div style="display:flex;gap:8px;margin-bottom:16px">
-              <button onclick="filterBets('all')" id="betFilterAll" style="background:var(--gold);color:var(--ink);border:none;border-radius:6px;padding:6px 14px;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer">All</button>
-              <button onclick="filterBets('open')" id="betFilterOpen" style="background:transparent;color:var(--dim);border:1px solid var(--border);border-radius:6px;padding:6px 14px;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer">Open</button>
-              <button onclick="filterBets('settled')" id="betFilterSettled" style="background:transparent;color:var(--dim);border:1px solid var(--border);border-radius:6px;padding:6px 14px;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer">Settled</button>
+
+            <!-- 2. Quick Search -->
+            <div style="margin-bottom:28px">
+              <div style="font-family:var(--mono);font-size:10px;color:var(--gold);text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px">Quick Search</div>
+              <div style="position:relative;margin-bottom:16px">
+                <input type="text" id="qtSearchInput" placeholder="Search any market..." oninput="onQuickTradeSearch()" style="width:100%;background:#0f0e0c;border:1px solid var(--border);border-radius:12px;color:var(--text);font-family:var(--sans);font-size:14px;padding:14px 18px 14px 44px;outline:none;box-sizing:border-box;transition:border-color .2s" onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='var(--border)'"/>
+                <span style="position:absolute;left:16px;top:50%;transform:translateY(-50%);font-size:16px;color:var(--dim);pointer-events:none">🔍</span>
+              </div>
+              <div id="qtSearchResults" style="display:none"></div>
             </div>
-            <!-- Bet list -->
-            <div id="betList"><div style="text-align:center;padding:40px 20px;color:var(--dim)"><div style="font-size:32px;margin-bottom:12px">📝</div><div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">No bets logged yet</div><div style="font-size:13px">Use the form above to start tracking your bets across any platform.</div></div></div>
+
+            <!-- 3. Whale Index Top Picks -->
+            <div id="qtWhaleIndex" style="margin-bottom:28px">
+              <div style="font-family:var(--mono);font-size:10px;color:var(--gold);text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px">Whale Index Top Picks</div>
+              <div id="qtWhaleCards" style="display:grid;gap:10px">
+                <div style="text-align:center;padding:32px;color:var(--dim);font-size:13px">Loading whale picks...</div>
+              </div>
+            </div>
+
+            <!-- 4. Expiring Soon -->
+            <div id="qtExpiring" style="margin-bottom:28px">
+              <div style="font-family:var(--mono);font-size:10px;color:var(--gold);text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px">Expiring Soon</div>
+              <div id="qtExpiringCards" style="display:grid;gap:10px">
+                <div style="text-align:center;padding:32px;color:var(--dim);font-size:13px">Loading expiring markets...</div>
+              </div>
+            </div>
+
           </div>
         </div>
-      </div><!-- /tab-logbets -->
+      </div><!-- /tab-quicktrade -->
 
       <!-- ═══════════════════════════════════ FIND MARKETS TAB ════════════════════════════ -->
       <div id="tab-findmarkets" style="display:none">
@@ -7209,7 +7203,7 @@ function ensureMoreExpanded(tab) {
 // Tab switching
 function showTab(tab) {
   ensureMoreExpanded(tab);
-  ['overview','markets','resolve','members','leaderboard','share','rewards','seasons','settings','analytics','economy','branding','flexbot','ideas','portfolio','account','performance','logbets','findmarkets'].forEach(t => {
+  ['overview','markets','resolve','members','leaderboard','share','rewards','seasons','settings','analytics','economy','branding','flexbot','ideas','portfolio','account','performance','quicktrade','findmarkets'].forEach(t => {
     const el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === tab ? 'block' : 'none';
   });
@@ -7217,7 +7211,7 @@ function showTab(tab) {
   document.querySelectorAll('.nav-item').forEach(n => {
     if (n.getAttribute('onclick') && n.getAttribute('onclick').includes(`'${tab}'`)) n.classList.add('active');
   });
-  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Social', portfolio:'My Positions', account:'My Account', performance:'Performance', logbets:'Track Bets', findmarkets:'Find Markets' };
+  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Social', portfolio:'My Positions', account:'My Account', performance:'Performance', quicktrade:'Quick Trade', findmarkets:'Find Markets' };
   document.getElementById('topbarTitle').textContent = titles[tab] || tab;
   if (tab === 'analytics' && !analyticsLoaded) loadAnalytics();
   if (tab === 'members') { loadSocialTab(); loadMembers(); }
@@ -7257,7 +7251,7 @@ function showTab(tab) {
   }
   if (tab === 'portfolio') loadPortfolio();
   if (tab === 'performance') loadPerformanceTab();
-  if (tab === 'logbets') { loadBets(); loadBetStats(); }
+  if (tab === 'quicktrade') { loadQuickTrade(); }
   if (tab === 'account') populateAccountTab();
   if (tab === 'seasons' && !seasonsLoaded) loadSeasons();
   if (tab === 'markets') {
@@ -12738,75 +12732,197 @@ const PLATFORM_COLORS = {draftkings:'#00694b',fanduel:'#1493ff',betmgm:'#c9920d'
 let _betsFilter = 'all';
 let _betsData = [];
 
-function autoCalcPayout() {
-  const amount = parseFloat(document.getElementById('betAmount')?.value) || 0;
-  const oddsStr = (document.getElementById('betOdds')?.value || '').trim();
-  if (!amount || !oddsStr) return;
-  const odds = parseFloat(oddsStr);
-  if (isNaN(odds)) return;
-  let payout = 0;
-  if (odds > 0) payout = amount + (amount * odds / 100);
-  else if (odds < 0) payout = amount + (amount * 100 / Math.abs(odds));
-  else return;
-  const el = document.getElementById('betPayout');
-  if (el) el.value = payout.toFixed(2);
-}
+// ── QUICK TRADE TAB ─────────────────────────────────────────────────────────
+let _qtSearchTimer = null;
 
-async function submitBet() {
-  const errEl = document.getElementById('betError');
-  errEl.style.display = 'none';
-  const body = {
-    platform: document.getElementById('betPlatform').value,
-    question: document.getElementById('betQuestion').value.trim(),
-    side: document.getElementById('betSide').value.trim(),
-    amount: parseFloat(document.getElementById('betAmount').value) || 0,
-    odds: document.getElementById('betOdds').value.trim() || null,
-    potential_payout: parseFloat(document.getElementById('betPayout').value) || null,
-    notes: document.getElementById('betNotes').value.trim() || null,
-  };
-  if (!body.question || !body.side || !body.amount) {
-    errEl.textContent = 'Question, side, and amount are required';
-    errEl.style.display = 'block'; return;
+function qtTradeBtn(url, label, color) {
+  if (!url) return '';
+  const clob = typeof isClobTradingEnabled === 'function' && isClobTradingEnabled();
+  const btnLabel = clob ? 'Execute Trade' : label;
+  const bg = clob ? 'var(--gold)' : color;
+  const fg = (bg === 'var(--gold)' || color === '#c9920d') ? '#141412' : '#fff';
+  if (clob) {
+    return `<button onclick="openTradeModal({marketUrl:'${url.replace(/'/g,"\\'")}'},'buy')" style="background:${bg};color:${fg};border:none;border-radius:8px;padding:10px 18px;font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer;min-height:44px;white-space:nowrap">${btnLabel}</button>`;
   }
-  const btn = document.getElementById('betSubmitBtn');
-  btn.disabled = true; btn.textContent = 'Logging...';
-  try {
-    const token = (localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token'));
-    const r = await fetch('/api/bets', { method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+token}, body:JSON.stringify(body) });
-    const d = await r.json();
-    if (!r.ok) { errEl.textContent = d.error || 'Failed'; errEl.style.display = 'block'; return; }
-    showToast('Bet logged ✓', 'success');
-    document.getElementById('betQuestion').value = '';
-    document.getElementById('betSide').value = '';
-    document.getElementById('betAmount').value = '';
-    document.getElementById('betOdds').value = '';
-    document.getElementById('betPayout').value = '';
-    document.getElementById('betNotes').value = '';
-    loadBets(); loadBetStats();
-  } catch(e) { errEl.textContent = e.message; errEl.style.display = 'block'; }
-  finally { btn.disabled = false; btn.textContent = 'Track Bets →'; }
+  return `<button onclick="window.open('${url.replace(/'/g,"\\'")}','_blank')" style="background:${bg};color:${fg};border:none;border-radius:8px;padding:10px 18px;font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer;min-height:44px;white-space:nowrap">${btnLabel}</button>`;
 }
 
-async function loadBets() {
-  const el = document.getElementById('betList');
-  if (!el) return;
-  try {
-    const token = (localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token'));
-    const r = await fetch('/api/bets?limit=50', { headers:{Authorization:'Bearer '+token} });
-    const d = await r.json();
-    _betsData = Array.isArray(d) ? d : (d.data || d.bets || []);
-    renderBets();
-  } catch(e) { el.innerHTML = '<div style="color:#ef4444;padding:16px;font-size:13px">'+e.message+'</div>'; }
+async function loadQuickTrade() {
+  loadCrystalBallPick();
+  loadWhaleIndexPicks();
+  loadExpiringMarkets();
 }
 
-function filterBets(f) {
-  _betsFilter = f;
-  ['all','open','settled'].forEach(t => {
-    const btn = document.getElementById('betFilter'+t.charAt(0).toUpperCase()+t.slice(1));
-    if (btn) { btn.style.background = t===f?'var(--gold)':'transparent'; btn.style.color = t===f?'var(--ink)':'var(--dim)'; btn.style.border = t===f?'none':'1px solid var(--border)'; }
-  });
-  renderBets();
+async function loadCrystalBallPick() {
+  const card = document.getElementById('qtCrystalBallCard');
+  if (!card) return;
+  try {
+    const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+    const r = await fetch('/api/crystal-ball', { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) throw new Error('Failed to load');
+    const d = await r.json();
+    const picks = Array.isArray(d) ? d : (d.predictions || d.picks || d.data || []);
+    if (!picks.length) { card.innerHTML = '<div style="text-align:center;padding:32px;color:var(--dim);font-size:13px">No crystal ball predictions available right now.</div>'; return; }
+    const top = picks[0];
+    const conf = top.confidence || top.confidence_score || 0;
+    const confPct = Math.round(conf * (conf <= 1 ? 100 : 1));
+    const confColor = confPct >= 80 ? '#22c55e' : confPct >= 60 ? '#c9920d' : '#ef4444';
+    const url = top.market_url || top.url || top.polymarket_url || '';
+    card.innerHTML = `
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+        <div style="width:56px;height:56px;border-radius:50%;border:3px solid ${confColor};display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <span style="font-family:var(--mono);font-size:18px;font-weight:900;color:${confColor}">${confPct}%</span>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-family:var(--mono);font-size:10px;color:${confColor};text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">CONFIDENCE</div>
+          <div style="background:rgba(255,255,255,0.05);border-radius:6px;height:8px;overflow:hidden"><div style="height:100%;width:${confPct}%;background:${confColor};border-radius:6px;transition:width .6s ease"></div></div>
+        </div>
+      </div>
+      <div style="font-size:17px;font-weight:700;color:var(--text);margin-bottom:8px;line-height:1.4">${escHtmlDash(top.prediction || top.question || top.title || '')}</div>
+      <div style="font-size:13px;color:var(--dim);margin-bottom:16px;line-height:1.5">${escHtmlDash(top.reasoning || top.rationale || '')}</div>
+      ${url ? `<div>${qtTradeBtn(url, 'Trade this \u2192', '#c9920d')}</div>` : ''}
+    `;
+  } catch (e) {
+    card.innerHTML = '<div style="text-align:center;padding:32px;color:var(--dim);font-size:13px">Crystal ball unavailable right now.</div>';
+  }
 }
+
+function onQuickTradeSearch() {
+  clearTimeout(_qtSearchTimer);
+  _qtSearchTimer = setTimeout(doQuickTradeSearch, 300);
+}
+
+async function doQuickTradeSearch() {
+  const q = (document.getElementById('qtSearchInput')?.value || '').trim();
+  const resultsEl = document.getElementById('qtSearchResults');
+  if (!resultsEl) return;
+  if (!q || q.length < 2) { resultsEl.style.display = 'none'; resultsEl.innerHTML = ''; return; }
+  resultsEl.style.display = 'block';
+  resultsEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--dim);font-size:13px">Searching...</div>';
+  try {
+    const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+    const r = await fetch('/api/markets/search?q=' + encodeURIComponent(q), { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) throw new Error('Search failed');
+    const d = await r.json();
+    const markets = Array.isArray(d) ? d : (d.markets || d.data || d.results || []);
+    if (!markets.length) { resultsEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--dim);font-size:13px">No markets found for "' + escHtmlDash(q) + '"</div>'; return; }
+    resultsEl.innerHTML = markets.slice(0, 10).map(m => {
+      const yesPct = Math.round((m.yes_price || m.probability || 0.5) * 100);
+      const noPct = 100 - yesPct;
+      const url = m.market_url || m.url || m.polymarket_url || '';
+      const platform = m.platform || 'Polymarket';
+      return `<div style="background:#0f0e0c;border:1px solid #2a2825;border-radius:12px;padding:16px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <span style="font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:6px;background:rgba(124,58,237,0.12);color:#a78bfa;border:1px solid rgba(124,58,237,0.3)">${escHtmlDash(platform)}</span>
+        </div>
+        <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:10px;line-height:1.4">${escHtmlDash(m.question || m.title || '')}</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+          <div style="flex:1;display:flex;height:8px;border-radius:4px;overflow:hidden">
+            <div style="width:${yesPct}%;background:#22c55e"></div>
+            <div style="width:${noPct}%;background:#ef4444"></div>
+          </div>
+          <span style="font-family:var(--mono);font-size:11px;color:#22c55e;font-weight:700">${yesPct}%</span>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--dim)">/</span>
+          <span style="font-family:var(--mono);font-size:11px;color:#ef4444;font-weight:700">${noPct}%</span>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          ${url ? qtTradeBtn(url, 'Buy YES \u2192', '#22c55e') : ''}
+          ${url ? qtTradeBtn(url, 'Buy NO \u2192', '#ef4444') : ''}
+        </div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    resultsEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--dim);font-size:13px">Search error: ' + escHtmlDash(e.message) + '</div>';
+  }
+}
+
+async function loadWhaleIndexPicks() {
+  const container = document.getElementById('qtWhaleCards');
+  if (!container) return;
+  try {
+    const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+    const r = await fetch('/api/whale-index', { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) throw new Error('Failed');
+    const d = await r.json();
+    const picks = (Array.isArray(d) ? d : (d.picks || d.whales || d.data || [])).filter(p => (p.signal || p.strength || '').toLowerCase().includes('strong')).slice(0, 5);
+    if (!picks.length) { container.innerHTML = '<div style="text-align:center;padding:32px;color:var(--dim);font-size:13px">No strong whale picks right now.</div>'; return; }
+    container.innerHTML = picks.map((p, i) => {
+      const border = i === 0 ? 'border:2px solid var(--gold)' : 'border:1px solid #2a2825';
+      const url = p.market_url || p.url || p.polymarket_url || '';
+      const whaleCount = p.whale_count || p.whales || 0;
+      const side = (p.consensus_side || p.side || 'YES').toUpperCase();
+      const pct = Math.round(p.consensus_pct || p.probability || p.pct || 0);
+      const sideColor = side === 'YES' ? '#22c55e' : '#ef4444';
+      return `<div style="background:#0f0e0c;${border};border-radius:12px;padding:16px;${i === 0 ? 'position:relative;overflow:hidden' : ''}">
+        ${i === 0 ? '<div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--gold),transparent)"></div>' : ''}
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px;line-height:1.4">${escHtmlDash(p.market || p.question || p.title || '')}</div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span style="font-family:var(--mono);font-size:10px;padding:3px 10px;border-radius:20px;background:rgba(201,146,13,0.12);color:var(--gold);border:1px solid rgba(201,146,13,0.3);font-weight:700">${whaleCount} whale${whaleCount !== 1 ? 's' : ''}</span>
+              <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:${sideColor}">${side} ${pct}%</span>
+            </div>
+          </div>
+          <div style="flex-shrink:0">
+            ${url ? qtTradeBtn(url, 'Trade \u2192', '#c9920d') : ''}
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    container.innerHTML = '<div style="text-align:center;padding:32px;color:var(--dim);font-size:13px">Whale index unavailable.</div>';
+  }
+}
+
+async function loadExpiringMarkets() {
+  const container = document.getElementById('qtExpiringCards');
+  if (!container) return;
+  try {
+    const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+    const r = await fetch('/api/resolution-probability', { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) throw new Error('Failed');
+    const d = await r.json();
+    const all = Array.isArray(d) ? d : (d.markets || d.data || []);
+    const now = Date.now();
+    const cutoff = now + 48 * 3600 * 1000;
+    const expiring = all.filter(m => {
+      const end = m.end_date || m.close_date || m.expiry;
+      return end && new Date(end).getTime() > now && new Date(end).getTime() <= cutoff;
+    }).slice(0, 3);
+    if (!expiring.length) { container.innerHTML = '<div style="text-align:center;padding:32px;color:var(--dim);font-size:13px">No markets expiring in the next 48 hours.</div>'; return; }
+    container.innerHTML = expiring.map(m => {
+      const endTime = new Date(m.end_date || m.close_date || m.expiry).getTime();
+      const diff = endTime - now;
+      const hrs = Math.floor(diff / 3600000);
+      const mins = Math.floor((diff % 3600000) / 60000);
+      const countdown = hrs > 0 ? hrs + 'h ' + mins + 'm' : mins + 'm';
+      const price = Math.round((m.yes_price || m.probability || m.price || 0.5) * 100);
+      const url = m.market_url || m.url || m.polymarket_url || '';
+      return `<div style="background:#0f0e0c;border:1px solid #2a2825;border-radius:12px;padding:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px;line-height:1.4">${escHtmlDash(m.question || m.title || '')}</div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <span style="font-family:var(--mono);font-size:11px;padding:3px 10px;border-radius:20px;background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.3);font-weight:700">Expires in ${countdown}</span>
+              <span style="font-family:var(--mono);font-size:12px;color:var(--text);font-weight:700">${price}c</span>
+            </div>
+          </div>
+          <div style="flex-shrink:0">
+            ${url ? qtTradeBtn(url, 'Last chance \u2192', '#c9920d') : ''}
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    container.innerHTML = '<div style="text-align:center;padding:32px;color:var(--dim);font-size:13px">Expiring markets unavailable.</div>';
+  }
+}
+
+// ── LEGACY BET FUNCTIONS (kept for API compatibility, not called from UI) ───
+function autoCalcPayout() {}
+async function submitBet() {}
+async function loadBets() {}
+function filterBets(f) {}
 
 function renderBets() {
   const el = document.getElementById('betList');
@@ -12868,30 +12984,7 @@ async function deleteBet(id) {
   } catch(e) { showToast(e.message, 'error'); }
 }
 
-async function loadBetStats() {
-  try {
-    const token = (localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token'));
-    const r = await fetch('/api/bets/stats', { headers:{Authorization:'Bearer '+token} });
-    const d = await r.json();
-    document.getElementById('betStatWagered').textContent = '$'+(d.total_wagered||0).toLocaleString(undefined,{maximumFractionDigits:2});
-    const pnl = d.total_pnl||0;
-    const pnlEl = document.getElementById('betStatPnl');
-    pnlEl.textContent = (pnl>=0?'+':'')+' $'+Math.abs(pnl).toFixed(2);
-    pnlEl.style.color = pnl>=0?'#22c55e':'#ef4444';
-    document.getElementById('betStatWinRate').textContent = d.win_rate!=null?d.win_rate+'%':'—';
-    const roiEl = document.getElementById('betStatRoi');
-    roiEl.textContent = d.roi_pct!=null?(d.roi_pct>=0?'+':'')+d.roi_pct+'%':'—';
-    roiEl.style.color = (d.roi_pct||0)>=0?'#22c55e':'#ef4444';
-    // Platform pills
-    const pillsEl = document.getElementById('betPlatformPills');
-    if (pillsEl && d.by_platform) {
-      pillsEl.innerHTML = Object.entries(d.by_platform).map(([p,s]) => {
-        const pc = PLATFORM_COLORS[p]||'#6b7280';
-        return `<span style="font-family:var(--mono);font-size:10px;padding:4px 10px;border-radius:20px;background:${pc}18;color:${pc};border:1px solid ${pc}33">${p} · ${s.total} bets · ${s.pnl>=0?'+':''}$${Math.abs(s.pnl||0).toFixed(0)}</span>`;
-      }).join('');
-    }
-  } catch(e) { /* stats may fail if table doesn't exist */ }
-}
+async function loadBetStats() { /* legacy — no longer rendered */ }
 
 function updatePortfolioTabDots() {
   const pd=document.getElementById('ptab-poly-dot'),kd=document.getElementById('ptab-kalshi-dot'),md=document.getElementById('ptab-manifold-dot');
