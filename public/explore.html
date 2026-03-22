@@ -951,13 +951,19 @@ nav {
         return;
       }
       var items = trades.map(function(t) {
-        var sideClass = (t.side || '').toUpperCase() === 'YES' ? 'lf-side-yes' : 'lf-side-no';
-        var icon = t.type === 'whale_trade' ? '\uD83D\uDC0B ' : '';
+        var sideUp = (t.side || 'YES').toUpperCase();
+        var sideClass = sideUp === 'YES' ? 'lf-side-yes' : 'lf-side-no';
+        var whalePrefix = t.is_whale ? '\uD83D\uDC0B ' : '';
+        var sz = parseFloat(t.size) || 0;
+        var sizeStr = sz >= 1000000 ? '$' + (sz / 1000000).toFixed(1) + 'M' : sz >= 1000 ? '$' + (sz / 1000).toFixed(0) + 'K' : '$' + sz.toFixed(0);
+        var trader = t.trader || 'Anon';
+        if (trader.length > 14) trader = trader.substring(0, 12) + '..';
         var market = (t.market || 'Unknown');
-        if (market.length > 45) market = market.substring(0, 42) + '...';
+        if (market.length > 40) market = market.substring(0, 37) + '...';
         return '<a class="lf-item" href="' + (t.url || 'https://polymarket.com') + '" target="_blank" rel="noopener">' +
-          '<span class="lf-size">' + icon + (t.size_display || '$?') + '</span>' +
-          '<span class="lf-side ' + sideClass + '">' + (t.side || 'YES') + '</span>' +
+          '<span style="font-family:\'Space Mono\',monospace;font-size:11px;color:var(--dim)">' + whalePrefix + trader + '</span>' +
+          '<span class="lf-size">' + sizeStr + '</span>' +
+          '<span class="lf-side ' + sideClass + '">' + sideUp + '</span>' +
           '<span class="lf-market">' + market + '</span>' +
         '</a>';
       }).join('');
@@ -1091,6 +1097,14 @@ nav {
   </div>
 
   <div class="sidebar">
+    <!-- HOT STREAKS -->
+    <div class="sidebar-card" id="hotStreaksCard">
+      <div class="sidebar-title">&#x1F525; HOT STREAKS</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Traders profitable every week</div>
+      <div id="hotStreaksList"><div class="loading" style="padding:8px 0;">Loading consistent traders...</div></div>
+      <a href="/predictors" class="sidebar-footer-link">See full rankings &#8594;</a>
+    </div>
+
     <!-- BIGGEST TRADES (24H) -->
     <div class="sidebar-card" id="biggestTradesCard">
       <div class="sidebar-title">&#x1F40B; BIGGEST TRADES (24H)</div>
@@ -2395,6 +2409,44 @@ async function loadFollowingFeed() {
   } catch(e) {
     console.error('Market movers error:', e);
     var el = document.getElementById('marketMoversList');
+    if (el) el.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:8px 0">Data unavailable</div>';
+  }
+})();
+
+// ── HOT STREAKS SIDEBAR ──
+(async function loadHotStreaks() {
+  try {
+    const res = await fetch('/api/consistent-traders');
+    if (!res.ok) throw new Error('Failed to fetch consistent traders');
+    const traders = await res.json();
+    const el = document.getElementById('hotStreaksList');
+    if (!el) return;
+    if (!traders.length) {
+      el.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:8px 0">No consistent trader data available</div>';
+      return;
+    }
+    el.innerHTML = traders.slice(0, 5).map(t => {
+      const scoreColor = t.consistency_score >= 80 ? '#22c55e' : t.consistency_score >= 60 ? '#c9920d' : '#7a7870';
+      const scoreBg = t.consistency_score >= 80 ? 'rgba(34,197,94,0.12)' : t.consistency_score >= 60 ? 'rgba(201,146,13,0.12)' : 'rgba(90,88,84,0.15)';
+      const weekPnl = t.pnl_week >= 0 ? '+$' + _fmtNum(Math.abs(t.pnl_week)) : '-$' + _fmtNum(Math.abs(t.pnl_week));
+      const allPnl = t.pnl_all_time >= 0 ? '+$' + _fmtNum(Math.abs(t.pnl_all_time)) : '-$' + _fmtNum(Math.abs(t.pnl_all_time));
+      const profileUrl = '/p/' + (t.address || t.display_name || '');
+      return '<a href="' + _escH(profileUrl) + '" class="sidebar-row" style="text-decoration:none">' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">' +
+            '<span style="font-size:12px;font-weight:700;color:#c9920d;font-family:\'Space Mono\',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + _escH(t.display_name) + '</span>' +
+            '<span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:10px;background:' + scoreBg + ';color:' + scoreColor + ';border:1px solid ' + scoreColor + '33;flex-shrink:0">' + t.consistency_score + '</span>' +
+          '</div>' +
+          '<div style="display:flex;gap:10px;font-family:\'Space Mono\',monospace;font-size:10px">' +
+            '<span style="color:#22c55e">W: ' + weekPnl + '</span>' +
+            '<span style="color:var(--muted)">All: ' + allPnl + '</span>' +
+          '</div>' +
+        '</div>' +
+      '</a>';
+    }).join('');
+  } catch(e) {
+    console.error('Hot streaks error:', e);
+    var el = document.getElementById('hotStreaksList');
     if (el) el.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:8px 0">Data unavailable</div>';
   }
 })();

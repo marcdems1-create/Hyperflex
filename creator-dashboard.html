@@ -664,6 +664,90 @@ body {
 .toast.success { border-color: rgba(45,155,95,0.4); }
 .toast.error { border-color: rgba(192,57,43,0.4); }
 
+/* Bet cards */
+.bet-card {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.bet-card-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.bet-platform-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.bet-platform-badge.draftkings { background: #00694b; }
+.bet-platform-badge.fanduel { background: #1493ff; }
+.bet-platform-badge.betmgm { background: #c9920d; }
+.bet-platform-badge.bet365 { background: #b8860b; color: #000; }
+.bet-platform-badge.bovada { background: #cc0000; }
+.bet-platform-badge.polymarket { background: #5b21b6; }
+.bet-platform-badge.kalshi { background: #0ea5e9; }
+.bet-platform-badge.other { background: var(--dim); }
+.bet-status-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.bet-status-badge.open { background: rgba(201,146,13,0.15); color: var(--gold); }
+.bet-status-badge.won { background: rgba(45,155,95,0.15); color: var(--green); }
+.bet-status-badge.lost { background: rgba(192,57,43,0.15); color: var(--red); }
+.bet-status-badge.push { background: rgba(122,120,112,0.15); color: var(--dim); }
+.bet-status-badge.void { background: rgba(122,120,112,0.15); color: var(--dim); }
+.bet-side-badge {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(201,146,13,0.1);
+  color: var(--gold-lt);
+}
+.bet-card-question { font-size: 14px; font-weight: 600; color: var(--text); line-height: 1.4; }
+.bet-card-meta { display: flex; gap: 16px; flex-wrap: wrap; font-family: var(--mono); font-size: 11px; color: var(--dim); }
+.bet-card-actions { display: flex; gap: 8px; margin-top: 4px; }
+.bet-card-actions button {
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 5px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.bet-btn-won { background: rgba(45,155,95,0.15); color: var(--green); }
+.bet-btn-won:hover { background: rgba(45,155,95,0.3); }
+.bet-btn-lost { background: rgba(192,57,43,0.15); color: var(--red); }
+.bet-btn-lost:hover { background: rgba(192,57,43,0.3); }
+.bet-btn-push { background: rgba(122,120,112,0.15); color: var(--dim); }
+.bet-btn-push:hover { background: rgba(122,120,112,0.25); }
+.bet-btn-delete { background: none; color: var(--dim); font-size: 10px; }
+.bet-btn-delete:hover { color: var(--red); }
+.betFilterBtn.active { background: var(--gold); color: var(--ink); }
+.bet-platform-pill {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  color: var(--dim);
+  background: var(--cream);
+}
+
 @media (max-width: 900px) {
   .sidebar { display: none; }
   .main { margin-left: 0; }
@@ -706,6 +790,9 @@ body {
       </a>
       <a class="nav-item" onclick="showTab('share')">
         <span class="nav-icon">📣</span> Share & Grow
+      </a>
+      <a class="nav-item" onclick="showTab('bets')">
+        <span class="nav-icon">📝</span> Log Bets
       </a>
       <a class="nav-item" onclick="showTab('settings')">
         <span class="nav-icon">⚙️</span> Settings
@@ -863,6 +950,91 @@ body {
           <div class="share-section">
             <div class="share-title">📝 Ready-to-Post Templates</div>
             <div id="shareTemplates"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Log Bets Tab -->
+      <div id="tab-bets" style="display:none">
+        <!-- Stats Summary -->
+        <div class="stats-row" id="betStatsRow">
+          <div class="stat-card">
+            <div class="stat-label">Total Wagered</div>
+            <div class="stat-value" id="betStatWagered">$0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Total P&L</div>
+            <div class="stat-value" id="betStatPnl">$0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Win Rate</div>
+            <div class="stat-value gold" id="betStatWinRate">0%</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">ROI</div>
+            <div class="stat-value" id="betStatRoi">0%</div>
+          </div>
+        </div>
+
+        <!-- Platform breakdown pills -->
+        <div id="betPlatformBreakdown" style="display:flex;flex-wrap:wrap;gap:8px;margin:0 0 20px;"></div>
+
+        <!-- Add Bet Form -->
+        <div class="section">
+          <div class="markets-table" style="padding:24px">
+            <div style="font-size:15px;font-weight:700;margin-bottom:16px;color:var(--text)">Log a Bet</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <div class="field">
+                <label>Platform</label>
+                <select id="betPlatform">
+                  <option value="draftkings">DraftKings</option>
+                  <option value="fanduel">FanDuel</option>
+                  <option value="betmgm">BetMGM</option>
+                  <option value="bet365">Bet365</option>
+                  <option value="bovada">Bovada</option>
+                  <option value="polymarket">Polymarket</option>
+                  <option value="kalshi">Kalshi</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Question / Event</label>
+                <input type="text" id="betQuestion" placeholder="Lakers -3.5 vs Celtics"/>
+              </div>
+              <div class="field">
+                <label>Side / Pick</label>
+                <input type="text" id="betSide" placeholder="Lakers, Over 215.5, YES"/>
+              </div>
+              <div class="field">
+                <label>Amount ($)</label>
+                <input type="number" id="betAmount" placeholder="100" min="0" step="0.01"/>
+              </div>
+              <div class="field">
+                <label>Odds</label>
+                <input type="text" id="betOdds" placeholder="-110, +250, 2.5" oninput="autoCalcPayout()"/>
+              </div>
+              <div class="field">
+                <label>Potential Payout ($)</label>
+                <input type="number" id="betPayout" placeholder="Auto-calculated" min="0" step="0.01"/>
+              </div>
+            </div>
+            <div class="field" style="margin-top:12px">
+              <label>Notes <span style="font-weight:400;font-size:11px">(optional)</span></label>
+              <textarea id="betNotes" rows="2" placeholder="Injury news, line movement, gut feeling..."></textarea>
+            </div>
+            <button class="btn-primary" onclick="submitBet()" style="margin-top:12px;width:100%">Log Bet →</button>
+          </div>
+        </div>
+
+        <!-- Bets List -->
+        <div class="section" style="margin-top:20px">
+          <div style="display:flex;gap:8px;margin-bottom:16px">
+            <button class="btn-secondary betFilterBtn active" onclick="filterBets('all')" data-filter="all">All</button>
+            <button class="btn-secondary betFilterBtn" onclick="filterBets('open')" data-filter="open">Open</button>
+            <button class="btn-secondary betFilterBtn" onclick="filterBets('settled')" data-filter="settled">Settled</button>
+          </div>
+          <div id="betsList" style="display:flex;flex-direction:column;gap:10px">
+            <div class="loading-row">Loading bets...</div>
           </div>
         </div>
       </div>
@@ -1143,15 +1315,17 @@ function renderShareTemplates(creator) {
 
 // Tab switching
 function showTab(tab) {
-  ['overview','markets','resolve','leaderboard','share','settings'].forEach(t => {
-    document.getElementById('tab-' + t).style.display = t === tab ? 'block' : 'none';
+  ['overview','markets','resolve','leaderboard','share','settings','bets'].forEach(t => {
+    const el = document.getElementById('tab-' + t);
+    if (el) el.style.display = t === tab ? 'block' : 'none';
   });
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => {
     if (n.getAttribute('onclick') && n.getAttribute('onclick').includes(tab)) n.classList.add('active');
   });
-  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', settings:'Settings' };
+  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', settings:'Settings', bets:'Log Bets' };
   document.getElementById('topbarTitle').textContent = titles[tab] || tab;
+  if (tab === 'bets') { loadBets(); loadBetStats(); }
 }
 
 // Create market
@@ -1326,6 +1500,218 @@ function showToast(msg, type = 'success') {
   document.getElementById('toastIcon').textContent = type === 'success' ? '✓' : '✗';
   t.className = 'toast ' + type + ' show';
   setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ── Manual Bets ────────────────────────────────────────────────
+let _allBets = [];
+let _betFilter = 'all';
+
+const PLATFORM_LABELS = {
+  draftkings: 'DraftKings', fanduel: 'FanDuel', betmgm: 'BetMGM',
+  bet365: 'Bet365', bovada: 'Bovada', polymarket: 'Polymarket',
+  kalshi: 'Kalshi', other: 'Other'
+};
+
+function autoCalcPayout() {
+  const oddsStr = (document.getElementById('betOdds').value || '').trim();
+  const amount = parseFloat(document.getElementById('betAmount').value) || 0;
+  if (!oddsStr || !amount) return;
+  const odds = parseFloat(oddsStr);
+  if (isNaN(odds)) return;
+  let payout = 0;
+  if (odds < 0) {
+    payout = amount * (100 / Math.abs(odds));
+  } else if (odds > 0) {
+    payout = amount * (odds / 100);
+  }
+  if (payout > 0) {
+    document.getElementById('betPayout').value = (amount + payout).toFixed(2);
+  }
+}
+
+async function submitBet() {
+  const question = document.getElementById('betQuestion').value.trim();
+  const side = document.getElementById('betSide').value.trim();
+  const amount = parseFloat(document.getElementById('betAmount').value);
+  if (!question || !side || !amount) { showToast('Fill in question, side, and amount.', 'error'); return; }
+  try {
+    const r = await fetch(API + '/api/bets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({
+        platform: document.getElementById('betPlatform').value,
+        question, side, amount,
+        odds: document.getElementById('betOdds').value.trim() || null,
+        potential_payout: parseFloat(document.getElementById('betPayout').value) || null,
+        notes: document.getElementById('betNotes').value.trim() || null
+      })
+    });
+    const data = await r.json();
+    if (r.ok && data.id) {
+      showToast('Bet logged!', 'success');
+      document.getElementById('betQuestion').value = '';
+      document.getElementById('betSide').value = '';
+      document.getElementById('betAmount').value = '';
+      document.getElementById('betOdds').value = '';
+      document.getElementById('betPayout').value = '';
+      document.getElementById('betNotes').value = '';
+      loadBets();
+      loadBetStats();
+    } else {
+      showToast(data.error || 'Failed to log bet.', 'error');
+    }
+  } catch { showToast('Network error.', 'error'); }
+}
+
+async function loadBets() {
+  try {
+    const r = await fetch(API + '/api/bets?limit=200', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    if (!r.ok) throw new Error('Failed');
+    _allBets = await r.json();
+    renderBets();
+  } catch {
+    document.getElementById('betsList').innerHTML = '<div class="empty-state"><div class="empty-icon">📝</div><div class="empty-title">No bets yet</div><div class="empty-desc">Log your first bet above to start tracking.</div></div>';
+  }
+}
+
+async function loadBetStats() {
+  try {
+    const r = await fetch(API + '/api/bets/stats', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    if (!r.ok) return;
+    const s = await r.json();
+    document.getElementById('betStatWagered').textContent = '$' + (s.total_wagered || 0).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+    const pnlEl = document.getElementById('betStatPnl');
+    pnlEl.textContent = (s.total_pnl >= 0 ? '+$' : '-$') + Math.abs(s.total_pnl || 0).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+    pnlEl.style.color = s.total_pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    document.getElementById('betStatWinRate').textContent = (s.win_rate || 0) + '%';
+    const roiEl = document.getElementById('betStatRoi');
+    roiEl.textContent = (s.roi_pct >= 0 ? '+' : '') + (s.roi_pct || 0) + '%';
+    roiEl.style.color = s.roi_pct >= 0 ? 'var(--green)' : 'var(--red)';
+
+    // Platform breakdown pills
+    const bp = document.getElementById('betPlatformBreakdown');
+    if (s.by_platform && Object.keys(s.by_platform).length > 0) {
+      bp.innerHTML = Object.entries(s.by_platform).map(([p, d]) => {
+        const pnlColor = d.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+        const pnlSign = d.pnl >= 0 ? '+' : '';
+        return `<span class="bet-platform-pill"><span class="bet-platform-badge ${p}" style="font-size:9px;padding:2px 5px;margin-right:4px">${(PLATFORM_LABELS[p]||p).slice(0,3).toUpperCase()}</span> ${d.total} bets <span style="color:${pnlColor};margin-left:4px">${pnlSign}$${Math.abs(d.pnl).toFixed(2)}</span></span>`;
+      }).join('');
+    } else {
+      bp.innerHTML = '';
+    }
+  } catch {}
+}
+
+function filterBets(f) {
+  _betFilter = f;
+  document.querySelectorAll('.betFilterBtn').forEach(b => b.classList.toggle('active', b.dataset.filter === f));
+  renderBets();
+}
+
+function renderBets() {
+  const container = document.getElementById('betsList');
+  let bets = _allBets;
+  if (_betFilter === 'open') bets = bets.filter(b => b.status === 'open');
+  else if (_betFilter === 'settled') bets = bets.filter(b => b.status !== 'open');
+
+  if (!bets.length) {
+    const msg = _betFilter === 'open' ? 'No open bets.' : _betFilter === 'settled' ? 'No settled bets yet.' : 'No bets logged yet. Add your first one above!';
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">📝</div><div class="empty-title">${msg}</div></div>`;
+    return;
+  }
+
+  container.innerHTML = bets.map(b => {
+    const timeAgo = getTimeAgo(b.created_at);
+    const isOpen = b.status === 'open';
+    const pnlVal = parseFloat(b.pnl) || 0;
+    const pnlColor = pnlVal >= 0 ? 'var(--green)' : 'var(--red)';
+    const pnlSign = pnlVal >= 0 ? '+' : '';
+    const amtStr = '$' + (parseFloat(b.amount) || 0).toFixed(2);
+    const oddsStr = b.odds ? ` @ ${b.odds}` : '';
+
+    let actions = '';
+    if (isOpen) {
+      actions = `<div class="bet-card-actions">
+        <button class="bet-btn-won" onclick="settleBet('${b.id}','won')">Won</button>
+        <button class="bet-btn-lost" onclick="settleBet('${b.id}','lost')">Lost</button>
+        <button class="bet-btn-push" onclick="settleBet('${b.id}','push')">Push</button>
+        <button class="bet-btn-delete" onclick="deleteBet('${b.id}')">Delete</button>
+      </div>`;
+    } else {
+      actions = `<div class="bet-card-actions">
+        <span style="font-family:var(--mono);font-size:12px;color:${pnlColor};font-weight:700">${pnlSign}$${Math.abs(pnlVal).toFixed(2)}</span>
+        <button class="bet-btn-delete" onclick="deleteBet('${b.id}')" style="margin-left:auto">Delete</button>
+      </div>`;
+    }
+
+    return `<div class="bet-card">
+      <div class="bet-card-top">
+        <span class="bet-platform-badge ${b.platform}">${PLATFORM_LABELS[b.platform] || b.platform}</span>
+        <span class="bet-side-badge">${b.side}</span>
+        <span class="bet-status-badge ${b.status}">${b.status.toUpperCase()}</span>
+        <span style="margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--dim)">${timeAgo}</span>
+      </div>
+      <div class="bet-card-question">${escHtml(b.question)}</div>
+      <div class="bet-card-meta">
+        <span>${amtStr}${oddsStr}</span>
+        ${b.potential_payout ? '<span>Payout: $' + parseFloat(b.potential_payout).toFixed(2) + '</span>' : ''}
+        ${b.notes ? '<span style="color:var(--dim);font-style:italic">' + escHtml(b.notes).slice(0,60) + '</span>' : ''}
+      </div>
+      ${actions}
+    </div>`;
+  }).join('');
+}
+
+function escHtml(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+function getTimeAgo(dateStr) {
+  if (!dateStr) return '';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return mins + 'm ago';
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return hrs + 'h ago';
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return days + 'd ago';
+  return Math.floor(days / 30) + 'mo ago';
+}
+
+async function settleBet(id, status) {
+  try {
+    const r = await fetch(API + '/api/bets/' + id, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ status })
+    });
+    if (r.ok) {
+      showToast('Bet marked as ' + status + '!', 'success');
+      loadBets();
+      loadBetStats();
+    } else {
+      const data = await r.json();
+      showToast(data.error || 'Failed to settle bet.', 'error');
+    }
+  } catch { showToast('Network error.', 'error'); }
+}
+
+async function deleteBet(id) {
+  if (!confirm('Delete this bet?')) return;
+  try {
+    const r = await fetch(API + '/api/bets/' + id, {
+      method: 'DELETE',
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    if (r.ok) {
+      showToast('Bet deleted.', 'success');
+      loadBets();
+      loadBetStats();
+    }
+  } catch { showToast('Network error.', 'error'); }
 }
 
 // Init

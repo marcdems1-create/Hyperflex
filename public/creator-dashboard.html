@@ -12704,7 +12704,7 @@ async function loadPolymarketPositions(forceRefresh) {
       meta: (p.shares||0).toFixed(2)+' shares' + (endDate ? ' · Exp '+endDate : ''),
       pnl: p.pnl!=null?p.pnl:null,
       url: p.market_url||'#', accentColor:'#7c3aed',
-      posData:{question:p.question,side:p.side,platform:'polymarket',probability:p.current_price,pnl:p.pnl||null,shares:p.shares,market_url:p.market_url}
+      posData:{question:p.question,side:p.side,platform:'polymarket',probability:p.current_price,pnl:p.pnl||null,shares:p.shares,market_url:p.market_url,token_id:p.token_id||null,condition_id:p.condition_id||p.id||null,id:p.id}
     });}).join('');
 
     const ts = new Date(data.fetched_at || Date.now()).toLocaleTimeString();
@@ -13177,7 +13177,7 @@ function updateAllPositionsTab() {
             pnl: p.pnl != null ? p.pnl : null,
             url: p.market_url || '#',
             accentColor: p._accentColor || 'var(--gold)',
-            posData: { question: p.question, side: p.side, platform: p._platform, current_price: p.current_price || p.probability, pnl: p.pnl, shares: p.shares, market_url: p.market_url }
+            posData: { question: p.question, side: p.side, platform: p._platform, current_price: p.current_price || p.probability, pnl: p.pnl, shares: p.shares, market_url: p.market_url, token_id: p.token_id || null, condition_id: p.condition_id || p.id || null, id: p.id }
           });
         }).join('');
       }
@@ -13789,7 +13789,8 @@ async function loadOrderbook(pos) {
   if (!el) return;
   el.innerHTML = '<span style="color:var(--dim);font-family:var(--mono);font-size:11px">Loading orderbook...</span>';
   try {
-    const tokenId = pos.id || pos.conditionId || '';
+    // Use token_id (asset field) for orderbook — this is the correct CLOB token
+    const tokenId = pos.token_id || pos.id || pos.conditionId || '';
     if (!tokenId) { el.innerHTML = '<span style="color:var(--dim);font-size:11px">No token ID</span>'; return; }
     const r = await fetch('/api/polymarket/orderbook/' + encodeURIComponent(tokenId));
     const data = await r.json();
@@ -13797,7 +13798,8 @@ async function loadOrderbook(pos) {
     _tradeModalData._orderbook = data;
     const bestBid = data.best_bid ? (data.best_bid * 100).toFixed(1) + '\u00A2' : '—';
     const bestAsk = data.best_ask ? (data.best_ask * 100).toFixed(1) + '\u00A2' : '—';
-    el.innerHTML = '<div style="display:flex;gap:20px;font-family:var(--mono);font-size:11px"><div><span style="color:var(--dim)">Best Bid:</span> <span style="color:#22c55e;font-weight:700">' + bestBid + '</span></div><div><span style="color:var(--dim)">Best Ask:</span> <span style="color:#f87171;font-weight:700">' + bestAsk + '</span></div><div><span style="color:var(--dim)">Spread:</span> <span style="color:var(--gold);font-weight:700">' + (data.spread != null ? (data.spread * 100).toFixed(1) + '\u00A2' : '—') + '</span></div></div>';
+    const midPrice = data.mid_price ? (data.mid_price * 100).toFixed(1) + '\u00A2' : '—';
+    el.innerHTML = '<div style="display:flex;gap:16px;font-family:var(--mono);font-size:11px;flex-wrap:wrap"><div><span style="color:var(--dim)">Best Bid:</span> <span style="color:#22c55e;font-weight:700">' + bestBid + '</span></div><div><span style="color:var(--dim)">Best Ask:</span> <span style="color:#f87171;font-weight:700">' + bestAsk + '</span></div><div><span style="color:var(--dim)">Spread:</span> <span style="color:var(--gold);font-weight:700">' + (data.spread != null ? (data.spread * 100).toFixed(1) + '\u00A2' : '—') + '</span></div><div><span style="color:var(--dim)">Mid:</span> <span style="font-weight:700;color:var(--text)">' + midPrice + '</span></div></div>';
     updateTradeEstimate();
   } catch (e) {
     el.innerHTML = '<span style="color:#f87171;font-size:11px">Failed to load orderbook</span>';
@@ -13841,7 +13843,8 @@ async function confirmTrade() {
 
   btn.disabled = true;
 
-  const tokenId = _tradeModalData.id || _tradeModalData.conditionId || '';
+  // Use token_id (asset field) for order placement — the correct CLOB token
+  const tokenId = _tradeModalData.token_id || _tradeModalData.id || _tradeModalData.conditionId || '';
   const side = _tradeModalData.mode === 'buy' ? 'BUY' : 'SELL';
   const ob = _tradeModalData._orderbook || {};
   const price = side === 'BUY' ? (ob.best_ask || 0.5) : (ob.best_bid || 0.5);

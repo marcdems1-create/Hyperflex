@@ -252,6 +252,18 @@ a:hover { text-decoration: underline; }
           <div class="loading"><div class="loading-spinner"></div></div>
         </div>
       </div>
+
+      <!-- Section 5: Consistent Winner Picks -->
+      <div class="section">
+        <div class="section-header">
+          <div class="section-title"><span class="icon">&#x1F525;</span> Winner Picks</div>
+          <span class="section-badge">CONSISTENT</span>
+        </div>
+        <div style="font-size:12px;color:var(--text-soft);margin-bottom:16px;line-height:1.5">These traders win every week — here's what they're betting on now</div>
+        <div id="consistentPicksContainer" style="display:grid;gap:10px">
+          <div class="loading"><div class="loading-spinner"></div></div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -459,10 +471,87 @@ function getTimeAgo(ts) {
   return Math.floor(hrs / 24) + 'd ago';
 }
 
+// ── Consistent Winner Picks ──
+async function loadConsistentPicks() {
+  const el = document.getElementById('consistentPicksContainer');
+  try {
+    // Fetch consistent traders and whale positions in parallel
+    const [ctRes, whaleRes] = await Promise.allSettled([
+      fetch('/api/consistent-traders'),
+      fetch('/api/whale-watch')
+    ]);
+
+    let traders = [];
+    if (ctRes.status === 'fulfilled' && ctRes.value.ok) {
+      traders = await ctRes.value.json();
+    }
+    let positions = [];
+    if (whaleRes.status === 'fulfilled' && whaleRes.value.ok) {
+      const wd = await whaleRes.value.json();
+      positions = wd.whales || [];
+    }
+
+    if (!traders.length) {
+      el.innerHTML = '<div class="empty-state">No consistent trader data yet.</div>';
+      return;
+    }
+
+    // Match top 3 consistent traders to their current whale positions
+    const top3 = traders.slice(0, 3);
+    const cards = top3.map(t => {
+      // Find this trader's positions in whale data
+      const traderName = (t.display_name || '').toLowerCase();
+      const traderAddr = (t.address || '').toLowerCase();
+      const myPositions = positions.filter(p => {
+        const pTrader = (p.trader || '').toLowerCase();
+        const pWallet = (p.proxyWallet || '').toLowerCase();
+        return (traderAddr && pWallet === traderAddr) || (traderName && pTrader === traderName);
+      });
+
+      const scoreColor = t.consistency_score >= 80 ? 'var(--green)' : t.consistency_score >= 60 ? 'var(--gold)' : '#9ca3af';
+      const scoreBg = t.consistency_score >= 80 ? 'var(--green-dim)' : t.consistency_score >= 60 ? 'var(--gold-dim)' : 'rgba(107,114,128,0.15)';
+      const confLabel = t.consistency_score >= 80 ? 'HIGH' : t.consistency_score >= 60 ? 'MEDIUM' : 'LOW';
+
+      let positionHtml = '';
+      if (myPositions.length > 0) {
+        const topPos = myPositions[0];
+        const side = (topPos.side || '').toUpperCase();
+        const sideColor = side === 'YES' ? 'var(--green)' : 'var(--red)';
+        const sideBg = side === 'YES' ? 'var(--green-dim)' : 'var(--red-dim)';
+        const sizeStr = (topPos.size || 0) >= 1e6 ? '$' + ((topPos.size || 0)/1e6).toFixed(1) + 'M' : (topPos.size || 0) >= 1e3 ? '$' + ((topPos.size || 0)/1e3).toFixed(0) + 'K' : '$' + (topPos.size || 0);
+        positionHtml = '<div style="margin-top:10px;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px">' +
+          '<div style="font-size:12px;color:var(--text);line-height:1.4;margin-bottom:6px">' + escHtml((topPos.market || '').substring(0, 60)) + '</div>' +
+          '<div style="display:flex;align-items:center;gap:8px">' +
+            '<span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:' + sideBg + ';color:' + sideColor + '">' + side + '</span>' +
+            '<span style="font-family:var(--mono);font-size:11px;color:var(--text-soft)">' + sizeStr + '</span>' +
+            '<span class="confidence-badge conf-' + confLabel + '" style="margin-left:auto">' + confLabel + '</span>' +
+          '</div>' +
+        '</div>';
+      } else {
+        positionHtml = '<div style="margin-top:10px;font-size:11px;color:var(--muted);font-style:italic">No active whale positions detected</div>';
+      }
+
+      return '<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;transition:all 0.2s">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">' +
+          '<a href="/p/' + escHtml(t.address || t.display_name) + '" style="font-size:13px;font-weight:700;color:var(--gold)">' + escHtml(t.display_name) + '</a>' +
+          '<span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 8px;border-radius:10px;background:' + scoreBg + ';color:' + scoreColor + '">' + t.consistency_score + '</span>' +
+        '</div>' +
+        '<div style="font-family:var(--mono);font-size:11px;color:var(--muted)">W: <span style="color:var(--green)">+$' + formatNum(Math.abs(t.pnl_week)) + '</span> &middot; All: +$' + formatNum(Math.abs(t.pnl_all_time)) + '</div>' +
+        positionHtml +
+      '</div>';
+    });
+
+    el.innerHTML = cards.join('');
+  } catch (e) {
+    el.innerHTML = '<div class="empty-state">Failed to load consistent picks.</div>';
+  }
+}
+
 // ── Init ──
 loadSignals();
 loadWhalePicks();
 loadFearGreed();
+loadConsistentPicks();
 
 // Auto-refresh every 5 minutes
 setInterval(loadSignals, 5 * 60 * 1000);

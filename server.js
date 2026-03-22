@@ -14936,6 +14936,8 @@ app.get('/api/polymarket/positions/:address', async (req, res) => {
     const raw = await upstream.json();
     const positions = (Array.isArray(raw) ? raw : []).map(p => ({
       id: p.conditionId,
+      token_id: p.asset || null,
+      condition_id: p.conditionId || null,
       question: p.title || p.question || 'Unknown market',
       side: p.outcome || 'YES',
       shares: parseFloat(p.size) || 0,
@@ -14959,34 +14961,67 @@ app.get('/api/polymarket/positions/:address', async (req, res) => {
 });
 
 // ── POLYMARKET ORDERBOOK PROXY (10s cache) ────────────────────────────────
+// token_id = the `asset` field from positions API (long numeric string)
 const _orderbookCache = new Map();
 app.get('/api/polymarket/orderbook/:tokenId', async (req, res) => {
   const tokenId = req.params.tokenId.trim();
-  if (!tokenId) return res.status(400).json({ error: 'Token ID required' });
+  if (!tokenId) return res.status(400).json({ error: 'Token ID (asset) required' });
 
   const cacheKey = `ob_${tokenId}`;
   const cached = _orderbookCache.get(cacheKey);
   if (cached && Date.now() - cached._ts < 10000) return res.json(cached.data);
 
   try {
-    const upstream = await fetch(`https://clob.polymarket.com/book?token_id=${encodeURIComponent(tokenId)}`, {
-      headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
-    });
-    if (!upstream.ok) throw new Error('CLOB API ' + upstream.status);
-    const raw = await upstream.json();
+    let bids = [], asks = [];
 
-    // Parse best bid/ask from orderbook
-    const bids = raw.bids || [];
-    const asks = raw.asks || [];
-    const bestBid = bids.length > 0 ? parseFloat(bids[0].price) : null;
-    const bestAsk = asks.length > 0 ? parseFloat(asks[0].price) : null;
+    // Try CLOB book endpoint first
+    try {
+      const upstream = await fetch(`https://clob.polymarket.com/book?token_id=${encodeURIComponent(tokenId)}`, {
+        headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+      });
+      if (upstream.ok) {
+        const raw = await upstream.json();
+        bids = (raw.bids || []).map(b => ({ price: parseFloat(b.price), size: parseFloat(b.size) }));
+        asks = (raw.asks || []).map(a => ({ price: parseFloat(a.price), size: parseFloat(a.size) }));
+      } else {
+        throw new Error('CLOB book ' + upstream.status);
+      }
+    } catch (bookErr) {
+      // Fallback: try side-specific endpoints
+      console.warn('[orderbook] full book failed, trying side endpoints:', bookErr.message);
+      const [buyRes, sellRes] = await Promise.allSettled([
+        fetch(`https://clob.polymarket.com/book?token_id=${encodeURIComponent(tokenId)}&side=buy`, {
+          headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+        }).then(r => r.ok ? r.json() : null),
+        fetch(`https://clob.polymarket.com/book?token_id=${encodeURIComponent(tokenId)}&side=sell`, {
+          headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+        }).then(r => r.ok ? r.json() : null)
+      ]);
+      if (buyRes.status === 'fulfilled' && buyRes.value) {
+        bids = (buyRes.value.bids || []).map(b => ({ price: parseFloat(b.price), size: parseFloat(b.size) }));
+      }
+      if (sellRes.status === 'fulfilled' && sellRes.value) {
+        asks = (sellRes.value.asks || []).map(a => ({ price: parseFloat(a.price), size: parseFloat(a.size) }));
+      }
+    }
+
+    // Sort: bids descending by price, asks ascending by price
+    bids.sort((a, b) => b.price - a.price);
+    asks.sort((a, b) => a.price - b.price);
+
+    const bestBid = bids.length > 0 ? bids[0].price : null;
+    const bestAsk = asks.length > 0 ? asks[0].price : null;
     const spread = (bestBid != null && bestAsk != null) ? bestAsk - bestBid : null;
+    const midPrice = (bestBid != null && bestAsk != null) ? (bestBid + bestAsk) / 2 : (bestBid || bestAsk || null);
 
     const data = {
       token_id: tokenId,
+      bids,
+      asks,
       best_bid: bestBid,
       best_ask: bestAsk,
-      spread: spread,
+      spread,
+      mid_price: midPrice,
       bid_depth: bids.length,
       ask_depth: asks.length,
       fetched_at: new Date().toISOString()
@@ -16814,12 +16849,76 @@ app.get('/api/market-history/:marketId', async (req, res) => {
       rows = data || [];
     }
 
-    const question = rows.length ? rows[rows.length - 1].question : null;
-    const history = rows.map(r => ({
+    let question = rows.length ? rows[rows.length - 1].question : null;
+    let history = rows.map(r => ({
       yes_price: r.yes_price != null ? parseFloat(r.yes_price) : null,
       volume: r.volume != null ? parseFloat(r.volume) : null,
       snapshot_at: r.snapshot_at,
     }));
+
+    // If our snapshots are empty, try Polymarket native APIs as fallback
+    if (!history.length) {
+      // The marketId could be a token_id (asset) or a conditionId — try both approaches
+      // 1. CLOB prices-history (uses token_id / asset)
+      try {
+        const clobRes = await fetch(`https://clob.polymarket.com/prices-history?market=${encodeURIComponent(marketId)}&interval=max&fidelity=60`, {
+          headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+        });
+        if (clobRes.ok) {
+          const clobData = await clobRes.json();
+          const points = clobData.history || clobData || [];
+          if (Array.isArray(points) && points.length > 0) {
+            history = points.map(pt => ({
+              yes_price: pt.p != null ? parseFloat(pt.p) : (pt.price != null ? parseFloat(pt.price) : null),
+              volume: null,
+              snapshot_at: pt.t ? new Date(pt.t * 1000).toISOString() : (pt.timestamp || pt.time || null),
+            })).filter(h => h.yes_price != null);
+          }
+        }
+      } catch (e) { console.warn('[market-history] CLOB prices-history fallback failed:', e.message); }
+
+      // 2. Gamma API (uses conditionId) — for outcomePrices
+      if (!history.length) {
+        try {
+          const gammaRes = await fetch(`https://gamma-api.polymarket.com/markets/${encodeURIComponent(marketId)}`, {
+            headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+          });
+          if (gammaRes.ok) {
+            const gammaData = await gammaRes.json();
+            if (gammaData.outcomePrices) {
+              try {
+                const prices = JSON.parse(gammaData.outcomePrices);
+                if (Array.isArray(prices) && prices.length > 0) {
+                  history = [{ yes_price: parseFloat(prices[0]), volume: null, snapshot_at: new Date().toISOString() }];
+                }
+              } catch (_) { /* outcomePrices not parseable */ }
+            }
+            if (!question && gammaData.question) question = gammaData.question;
+          }
+        } catch (e) { console.warn('[market-history] gamma fallback failed:', e.message); }
+      }
+
+      // 3. Strapi-matic (uses conditionId)
+      if (!history.length) {
+        try {
+          const strapiRes = await fetch(`https://strapi-matic.polymarket.com/markets/${encodeURIComponent(marketId)}`, {
+            headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+          });
+          if (strapiRes.ok) {
+            const strapiData = await strapiRes.json();
+            if (strapiData.outcomePrices) {
+              try {
+                const prices = JSON.parse(strapiData.outcomePrices);
+                if (Array.isArray(prices) && prices.length > 0) {
+                  history = [{ yes_price: parseFloat(prices[0]), volume: null, snapshot_at: new Date().toISOString() }];
+                }
+              } catch (_) { /* not parseable */ }
+            }
+            if (!question && strapiData.question) question = strapiData.question;
+          }
+        } catch (e) { console.warn('[market-history] strapi fallback failed:', e.message); }
+      }
+    }
 
     const result = { market_id: marketId, question, history };
     _marketHistoryCache[cacheKey] = { _ts: Date.now(), data: result };
@@ -17921,131 +18020,140 @@ app.get('/api/live-feed', async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 20, 50);
 
-    // Check cache (30 second TTL for near real-time)
+    // Check cache (30 second TTL)
     if (_liveFeedCache && (Date.now() - _liveFeedCache.ts < 30 * 1000)) {
       return res.json({ trades: _liveFeedCache.data.slice(0, limit), updated_at: _liveFeedCache.updated_at });
     }
 
     const trades = [];
 
-    // 1. Try to fetch recent trades from Polymarket data API
+    // 1. Fetch REAL trades from Polymarket data API
     try {
       const fetch = _nodeFetch;
       const tradeRes = await fetch('https://data-api.polymarket.com/trades?limit=50', {
         headers: { 'Accept': 'application/json' },
-        signal: AbortSignal.timeout(5000)
+        signal: AbortSignal.timeout(8000)
       });
       if (tradeRes.ok) {
         const rawTrades = await tradeRes.json();
         if (Array.isArray(rawTrades)) {
           for (const t of rawTrades) {
-            const size = parseFloat(t.size || t.amount || 0);
-            if (size < 1000) continue; // Only large trades
+            const size = parseFloat(t.size || 0);
+            if (size <= 500) continue; // Filter dust trades
             trades.push({
               type: 'trade',
-              id: `lt_${(t.id || Date.now() + '_' + Math.random().toString(36).slice(2,6))}`,
-              trader: t.maker || t.taker || 'Unknown',
-              market: t.market || t.title || t.asset || 'Unknown',
-              side: (t.side || t.outcome || 'YES').toUpperCase(),
+              trader: t.pseudonym || (t.proxyWallet ? t.proxyWallet.slice(0, 8) : 'Unknown'),
+              side: t.outcome || t.side || 'YES',
+              market: t.title || 'Unknown',
               size: size,
-              size_display: size >= 1000000 ? '$' + (size / 1000000).toFixed(1) + 'M' : size >= 1000 ? '$' + (size / 1000).toFixed(0) + 'K' : '$' + size.toFixed(0),
               price: parseFloat(t.price || 0),
-              timestamp: t.timestamp || t.created_at || new Date().toISOString(),
-              url: t.slug ? `https://polymarket.com/event/${t.slug}` : (t.market_slug ? `https://polymarket.com/event/${t.market_slug}` : 'https://polymarket.com')
+              timestamp: t.timestamp ? new Date(t.timestamp * 1000).toISOString() : new Date().toISOString(),
+              url: 'https://polymarket.com/event/' + (t.eventSlug || t.slug || ''),
+              icon: t.icon || null,
+              tx: t.transactionHash || null,
+              is_whale: false
             });
           }
         }
       }
     } catch (e) {
-      console.warn('[live-feed] Polymarket trades API not available:', e.message);
+      console.warn('[live-feed] Polymarket trades API error:', e.message);
     }
 
-    // 2. Supplement with whale trade stream data
-    if (trades.length < limit && _whaleTradeStream && _whaleTradeStream.length > 0) {
+    // 2. Merge whale trades from _whaleTradeStream
+    if (_whaleTradeStream && _whaleTradeStream.length > 0) {
       for (const wt of _whaleTradeStream) {
-        if (trades.length >= limit) break;
-        // Avoid duplicates
+        // Avoid duplicates by tx hash or market+trader combo
+        if (wt.tx && trades.some(t => t.tx === wt.tx)) continue;
         if (trades.some(t => t.market === wt.question && t.trader === wt.trader_name)) continue;
         trades.push({
-          type: 'whale_trade',
-          id: wt.id || `wt_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
-          trader: wt.trader_name || 'Whale',
+          type: 'trade',
+          trader: wt.trader_name || wt.pseudonym || 'Whale',
+          side: wt.side || 'YES',
           market: wt.question || 'Unknown',
-          side: (wt.side || 'YES').toUpperCase(),
           size: wt.size || 0,
-          size_display: wt.size_display || '$0',
           price: wt.price || 0,
           timestamp: wt.ts || new Date().toISOString(),
           url: wt.url || 'https://polymarket.com',
-          action: wt.action,
-          trader_rank: wt.trader_rank
+          icon: wt.icon || null,
+          tx: wt.tx || null,
+          is_whale: true
         });
       }
-    }
-
-    // 3. If still empty, generate from market snapshot diffs (volume changes indicate trades)
-    if (trades.length < 5) {
-      try {
-        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-        let snapRows = [];
-        if (pool) {
-          snapRows = await dbQuery(
-            `SELECT market_id, question, yes_price, volume, snapshot_at
-             FROM market_snapshots
-             WHERE snapshot_at >= $1
-             ORDER BY market_id, snapshot_at DESC
-             LIMIT 200`, [oneHourAgo]
-          );
-        } else {
-          const { data } = await supabase.from('market_snapshots')
-            .select('market_id, question, yes_price, volume, snapshot_at')
-            .gte('snapshot_at', oneHourAgo)
-            .order('snapshot_at', { ascending: false })
-            .limit(200);
-          snapRows = data || [];
-        }
-
-        // Group by market, detect volume changes
-        const mktSnaps = {};
-        for (const r of snapRows) {
-          if (!mktSnaps[r.market_id]) mktSnaps[r.market_id] = [];
-          mktSnaps[r.market_id].push(r);
-        }
-
-        for (const [mId, snaps] of Object.entries(mktSnaps)) {
-          if (trades.length >= limit) break;
-          if (snaps.length < 2) continue;
-          const latest = snaps[0];
-          const prev = snaps[1];
-          const volDiff = (parseFloat(latest.volume) || 0) - (parseFloat(prev.volume) || 0);
-          if (volDiff >= 1000) {
-            const yesPrice = parseFloat(latest.yes_price) || 0.5;
-            trades.push({
-              type: 'volume_spike',
-              id: `vs_${mId.slice(0, 12)}_${Date.now()}`,
-              trader: 'Market activity',
-              market: latest.question || mId,
-              side: yesPrice > 0.5 ? 'YES' : 'NO',
-              size: volDiff,
-              size_display: volDiff >= 1000000 ? '$' + (volDiff / 1000000).toFixed(1) + 'M' : volDiff >= 1000 ? '$' + (volDiff / 1000).toFixed(0) + 'K' : '$' + volDiff.toFixed(0),
-              price: yesPrice,
-              timestamp: latest.snapshot_at || new Date().toISOString(),
-              url: 'https://polymarket.com'
-            });
-          }
-        }
-      } catch (e) { console.warn('[live-feed] snapshot diff error:', e.message); }
     }
 
     // Sort by timestamp descending
     trades.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
-    _liveFeedCache = { ts: Date.now(), data: trades, updated_at: new Date().toISOString() };
-    res.json({ trades: trades.slice(0, limit), updated_at: new Date().toISOString() });
+    const now = new Date().toISOString();
+    _liveFeedCache = { ts: Date.now(), data: trades, updated_at: now };
+    res.json({ trades: trades.slice(0, limit), updated_at: now });
   } catch (err) {
     console.error('[live-feed]', err.message);
     if (_liveFeedCache) return res.json({ trades: _liveFeedCache.data.slice(0, 20), updated_at: _liveFeedCache.updated_at });
     res.status(500).json({ error: 'Live feed failed', detail: err.message });
+  }
+});
+
+// ── Market trades for a specific conditionId ──
+let _marketTradesCache = {};
+
+app.get('/api/market-trades/:conditionId', async (req, res) => {
+  try {
+    const conditionId = req.params.conditionId;
+    if (!conditionId) return res.status(400).json({ error: 'conditionId required' });
+
+    // Check cache (60 second TTL)
+    const cached = _marketTradesCache[conditionId];
+    if (cached && (Date.now() - cached.ts < 60 * 1000)) {
+      return res.json({ trades: cached.data, updated_at: cached.updated_at });
+    }
+
+    const trades = [];
+    try {
+      const fetch = _nodeFetch;
+      const tradeRes = await fetch(`https://data-api.polymarket.com/trades?market=${encodeURIComponent(conditionId)}&limit=50`, {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(8000)
+      });
+      if (tradeRes.ok) {
+        const rawTrades = await tradeRes.json();
+        if (Array.isArray(rawTrades)) {
+          for (const t of rawTrades) {
+            trades.push({
+              type: 'trade',
+              trader: t.pseudonym || (t.proxyWallet ? t.proxyWallet.slice(0, 8) : 'Unknown'),
+              side: t.outcome || t.side || 'YES',
+              market: t.title || 'Unknown',
+              size: parseFloat(t.size || 0),
+              price: parseFloat(t.price || 0),
+              timestamp: t.timestamp ? new Date(t.timestamp * 1000).toISOString() : new Date().toISOString(),
+              url: 'https://polymarket.com/event/' + (t.eventSlug || t.slug || ''),
+              icon: t.icon || null,
+              tx: t.transactionHash || null
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[market-trades] Polymarket API error:', e.message);
+    }
+
+    trades.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    const now = new Date().toISOString();
+    _marketTradesCache[conditionId] = { ts: Date.now(), data: trades, updated_at: now };
+
+    // Evict old cache entries (keep max 50 markets cached)
+    const cacheKeys = Object.keys(_marketTradesCache);
+    if (cacheKeys.length > 50) {
+      const oldest = cacheKeys.sort((a, b) => _marketTradesCache[a].ts - _marketTradesCache[b].ts);
+      for (let i = 0; i < oldest.length - 50; i++) delete _marketTradesCache[oldest[i]];
+    }
+
+    res.json({ trades, updated_at: now });
+  } catch (err) {
+    console.error('[market-trades]', err.message);
+    res.status(500).json({ error: 'Market trades failed', detail: err.message });
   }
 });
 
@@ -18212,6 +18320,331 @@ app.get('/api/copy-bot/history', requireAuth, async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch trade history' });
   }
 });
+
+// ════════════════════════════════════════════════════════════
+// CONSISTENT TRADERS — best weekly performers with consistency scoring
+// ════════════════════════════════════════════════════════════
+let _consistentTradersCache = null; // { ts, data }
+
+async function fetchConsistentTraders() {
+  // Fetch leaderboard for week AND day windows in parallel
+  const [weekRes, dayRes, allRes] = await Promise.allSettled([
+    fetch('https://data-api.polymarket.com/v1/leaderboard?limit=50&window=week', { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(8000) }),
+    fetch('https://data-api.polymarket.com/v1/leaderboard?limit=50&window=day', { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(8000) }),
+    fetch('https://data-api.polymarket.com/v1/leaderboard?limit=50&window=all', { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(8000) }),
+  ]);
+
+  let weekTraders = [];
+  let dayTraders = [];
+  let allTraders = [];
+
+  if (weekRes.status === 'fulfilled' && weekRes.value.ok) {
+    weekTraders = await weekRes.value.json();
+  }
+  if (dayRes.status === 'fulfilled' && dayRes.value.ok) {
+    dayTraders = await dayRes.value.json();
+  }
+  if (allRes.status === 'fulfilled' && allRes.value.ok) {
+    allTraders = await allRes.value.json();
+  }
+
+  if (!Array.isArray(weekTraders) || weekTraders.length === 0) {
+    throw new Error('Could not fetch weekly leaderboard');
+  }
+
+  // Build day PnL lookup by address
+  const dayPnlMap = {};
+  (Array.isArray(dayTraders) ? dayTraders : []).forEach(t => {
+    const addr = t.proxyWallet || t.proxy_wallet || t.address || '';
+    if (addr) dayPnlMap[addr.toLowerCase()] = parseFloat(t.pnl) || 0;
+  });
+
+  // Build all-time lookup
+  const allTimeMap = {};
+  (Array.isArray(allTraders) ? allTraders : []).forEach(t => {
+    const addr = t.proxyWallet || t.proxy_wallet || t.address || '';
+    if (addr) allTimeMap[addr.toLowerCase()] = {
+      pnl: parseFloat(t.pnl) || 0,
+      vol: parseFloat(t.vol) || parseFloat(t.volume) || 0,
+    };
+  });
+
+  // Score each weekly trader
+  const scored = weekTraders.map(t => {
+    const address = t.proxyWallet || t.proxy_wallet || t.address || '';
+    const addrLower = address.toLowerCase();
+    const weekPnl = parseFloat(t.pnl) || 0;
+    const vol = parseFloat(t.vol) || parseFloat(t.volume) || 0;
+    const dayPnl = dayPnlMap[addrLower] || 0;
+    const allData = allTimeMap[addrLower] || { pnl: weekPnl, vol };
+    const allTimePnl = allData.pnl;
+    const totalVol = Math.max(allData.vol, vol);
+    const roi = totalVol > 0 ? allTimePnl / totalVol : 0;
+
+    // Estimate streak: if all-time PnL positive and weekly avg positive, estimate weeks profitable
+    const weeklyAvg = weekPnl || 1;
+    const streakEstimate = allTimePnl > 0 && weekPnl > 0 ? Math.max(1, Math.round(allTimePnl / Math.abs(weeklyAvg))) : (weekPnl > 0 ? 1 : 0);
+
+    // Consistency score formula
+    const consistencyScore = Math.min(100, Math.round(
+      (allTimePnl > 0 ? 30 : 0) +
+      (weekPnl > 0 ? 25 : 0) +
+      (dayPnl > 0 ? 15 : 0) +
+      Math.min(20, Math.log10(Math.max(1, totalVol)) * 3) +
+      (roi > 0.1 ? 10 : roi > 0 ? 5 : 0)
+    ));
+
+    return {
+      address,
+      display_name: t.userName || t.username || t.name || (address ? address.slice(0, 6) + '...' + address.slice(-4) : 'Trader'),
+      consistency_score: consistencyScore,
+      pnl_day: Math.round(dayPnl),
+      pnl_week: Math.round(weekPnl),
+      pnl_all_time: Math.round(allTimePnl),
+      volume: Math.round(totalVol),
+      roi: Math.round(roi * 10000) / 100, // percent with 2 decimals
+      streak_estimate: Math.min(streakEstimate, 52),
+      platforms: ['POLY'],
+    };
+  });
+
+  // Sort by consistency score desc, then by weekly PnL
+  scored.sort((a, b) => b.consistency_score - a.consistency_score || b.pnl_week - a.pnl_week);
+
+  // Top 20 with ranks
+  return scored.slice(0, 20).map((t, i) => ({ rank: i + 1, ...t }));
+}
+
+app.get('/api/consistent-traders', async (req, res) => {
+  try {
+    // 15 min cache
+    if (_consistentTradersCache && (Date.now() - _consistentTradersCache.ts < 15 * 60 * 1000)) {
+      return res.json(_consistentTradersCache.data);
+    }
+    const traders = await fetchConsistentTraders();
+    _consistentTradersCache = { ts: Date.now(), data: traders };
+    res.json(traders);
+  } catch (err) {
+    console.error('[consistent-traders]', err.message);
+    if (_consistentTradersCache) return res.json(_consistentTradersCache.data);
+    res.status(500).json({ error: 'Failed to fetch consistent traders', detail: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+// DAILY BRIEFING EMAIL — automated morning email to subscribers
+// ════════════════════════════════════════════════════════════
+
+function generateUnsubscribeToken(email) {
+  return crypto.createHmac('sha256', JWT_SECRET).update(email.toLowerCase().trim()).digest('hex').slice(0, 16);
+}
+
+app.get('/api/unsubscribe', async (req, res) => {
+  const { email, token } = req.query || {};
+  if (!email || !token) {
+    return res.status(400).send('<html><body style="background:#141412;color:#ddd8cc;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh"><div style="text-align:center"><h2>Invalid unsubscribe link</h2><p>Missing email or token.</p></div></body></html>');
+  }
+
+  const expectedToken = generateUnsubscribeToken(email);
+  if (token !== expectedToken) {
+    return res.status(403).send('<html><body style="background:#141412;color:#ddd8cc;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh"><div style="text-align:center"><h2>Invalid token</h2><p>This unsubscribe link is invalid or expired.</p></div></body></html>');
+  }
+
+  let unsubbed = false;
+  try {
+    if (pool) {
+      const result = await dbQuery('DELETE FROM subscribers WHERE LOWER(email) = $1', [email.toLowerCase().trim()]);
+      unsubbed = (result && (result.rowCount > 0 || (Array.isArray(result) && result.length >= 0)));
+    } else {
+      const { error } = await supabase.from('subscribers').delete().eq('email', email.toLowerCase().trim());
+      unsubbed = !error;
+    }
+  } catch (e) {
+    console.error('[unsubscribe]', e.message);
+  }
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"/><title>Unsubscribed</title></head>
+<body style="background:#141412;color:#ddd8cc;font-family:'Syne',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0">
+<div style="text-align:center;max-width:400px;padding:40px">
+  <div style="font-size:48px;margin-bottom:16px">${unsubbed ? '&#x2705;' : '&#x26A0;&#xFE0F;'}</div>
+  <h2 style="margin-bottom:12px">${unsubbed ? 'Unsubscribed' : 'Already unsubscribed'}</h2>
+  <p style="color:#7a7870;font-size:14px;line-height:1.6">${unsubbed ? 'You will no longer receive daily briefing emails from HYPERFLEX.' : 'This email was already removed from our mailing list.'}</p>
+  <a href="/" style="display:inline-block;margin-top:20px;background:#c9920d;color:#141412;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px">Back to HYPERFLEX</a>
+</div></body></html>`;
+  res.status(200).send(html);
+});
+
+async function sendDailyBriefingEmail() {
+  const transporter = createMailTransport();
+  if (!transporter) { console.log('[daily-briefing-email] SMTP not configured — skipping'); return; }
+
+  try {
+    // Get subscribers
+    let subscribers = [];
+    if (pool) {
+      subscribers = await dbQuery('SELECT email FROM subscribers');
+    } else {
+      const { data } = await supabase.from('subscribers').select('email');
+      subscribers = data || [];
+    }
+    if (!subscribers.length) { console.log('[daily-briefing-email] No subscribers — skipping'); return; }
+
+    // Generate briefing data
+    const briefing = generateDailyBriefing();
+
+    // Get consistent traders (top 3)
+    let topConsistent = [];
+    try {
+      if (_consistentTradersCache && _consistentTradersCache.data) {
+        topConsistent = _consistentTradersCache.data.slice(0, 3);
+      } else {
+        topConsistent = (await fetchConsistentTraders()).slice(0, 3);
+      }
+    } catch (e) { /* no consistent data available */ }
+
+    const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    const fgScore = briefing.fear_greed.score;
+    const fgLabel = briefing.fear_greed.label;
+    const fgColor = briefing.fear_greed.color;
+
+    const subject = `\uD83D\uDC0B HYPERFLEX Daily: ${(briefing.headline || 'Market Update').substring(0, 80)} | Fear & Greed: ${fgScore}`;
+
+    let sent = 0;
+    for (const sub of subscribers) {
+      const email = (sub.email || '').toLowerCase().trim();
+      if (!email) continue;
+
+      const unsubToken = generateUnsubscribeToken(email);
+      const unsubUrl = `https://hyperflex.network/api/unsubscribe?email=${encodeURIComponent(email)}&token=${unsubToken}`;
+
+      // Build whale moves HTML
+      const whaleMovesHtml = (briefing.whale_moves || []).slice(0, 5).map(w => {
+        const sideColor = (w.side || '').toUpperCase() === 'YES' ? '#22c55e' : '#ef4444';
+        return `<tr>
+          <td style="padding:10px 12px;border-bottom:1px solid #2a2a26;font-size:13px;color:#c9920d;font-weight:700">${_escHtmlStr(w.trader || 'Unknown')}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #2a2a26;font-size:13px;color:#ddd8cc">${_escHtmlStr((w.question || '').substring(0, 50))}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #2a2a26;font-size:13px;color:${sideColor};font-weight:700">${(w.side || '').toUpperCase()} ${w.size || ''}</td>
+        </tr>`;
+      }).join('');
+
+      // Whale index picks HTML
+      const picksHtml = (briefing.whale_index_picks || []).slice(0, 3).map((p, i) => {
+        const consensusColor = (p.consensus_side || '').toUpperCase() === 'YES' ? '#22c55e' : '#ef4444';
+        return `<tr>
+          <td style="padding:10px 12px;border-bottom:1px solid #2a2a26;font-size:14px;font-weight:800;color:#c9920d">#${i + 1}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #2a2a26;font-size:13px;color:#ddd8cc">${_escHtmlStr((p.market || '').substring(0, 50))}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #2a2a26;font-size:13px;font-weight:700;color:${consensusColor}">${(p.consensus_side || '').toUpperCase()} ${p.consensus_pct || 0}%</td>
+        </tr>`;
+      }).join('');
+
+      // Consistent winners HTML
+      const consistentHtml = topConsistent.map(t => {
+        const scoreColor = t.consistency_score >= 80 ? '#22c55e' : t.consistency_score >= 60 ? '#c9920d' : '#7a7870';
+        return `<tr>
+          <td style="padding:10px 12px;border-bottom:1px solid #2a2a26;font-size:13px;color:#c9920d;font-weight:700">${_escHtmlStr(t.display_name)}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #2a2a26;text-align:center"><span style="display:inline-block;background:${scoreColor}22;color:${scoreColor};font-size:12px;font-weight:700;padding:3px 10px;border-radius:12px;border:1px solid ${scoreColor}44">${t.consistency_score}</span></td>
+          <td style="padding:10px 12px;border-bottom:1px solid #2a2a26;font-size:13px;color:#22c55e;font-weight:700">+$${Math.abs(t.pnl_week).toLocaleString()}</td>
+        </tr>`;
+      }).join('');
+
+      // Market movers HTML
+      const moversHtml = (briefing.market_movers || []).slice(0, 3).map(m => {
+        const changeColor = (m.change_pct || 0) > 0 ? '#22c55e' : '#ef4444';
+        const changeSign = (m.change_pct || 0) > 0 ? '+' : '';
+        return `<tr>
+          <td style="padding:10px 12px;border-bottom:1px solid #2a2a26;font-size:13px;color:#ddd8cc">${_escHtmlStr((m.question || '').substring(0, 50))}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #2a2a26;font-size:13px;font-weight:700;color:${changeColor}">${changeSign}${(m.change_pct || 0).toFixed(1)}%</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #2a2a26;font-size:13px;color:#ddd8cc">${Math.round((m.current_price || 0) * 100)}%</td>
+        </tr>`;
+      }).join('');
+
+      const emailHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/></head>
+<body style="margin:0;padding:0;background:#0e0e0c;font-family:Arial,Helvetica,sans-serif">
+<div style="max-width:600px;margin:0 auto;background:#141412;border:1px solid #2a2a26">
+
+  <!-- Header -->
+  <div style="padding:24px 32px;border-bottom:1px solid #2a2a26;text-align:center">
+    <div style="font-size:20px;font-weight:800;letter-spacing:2px;color:#ddd8cc">HYPER<span style="color:#c9920d">FLEX</span></div>
+    <div style="font-size:12px;color:#7a7870;margin-top:6px">${today}</div>
+  </div>
+
+  <!-- Fear & Greed -->
+  <div style="padding:24px 32px;text-align:center;border-bottom:1px solid #2a2a26;background:linear-gradient(135deg, #141412 0%, rgba(201,146,13,0.04) 100%)">
+    <div style="font-size:11px;color:#7a7870;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Fear & Greed Index</div>
+    <div style="font-size:48px;font-weight:800;color:${fgColor};line-height:1">${fgScore}</div>
+    <div style="font-size:14px;font-weight:700;color:${fgColor};text-transform:uppercase;letter-spacing:2px;margin-top:4px">${_escHtmlStr(fgLabel)}</div>
+  </div>
+
+  <!-- Headline -->
+  <div style="padding:20px 32px;border-bottom:1px solid #2a2a26">
+    <div style="font-size:14px;color:#ddd8cc;line-height:1.6">${_escHtmlStr(briefing.headline || '')}</div>
+  </div>
+
+  <!-- Top Whale Moves -->
+  ${whaleMovesHtml ? `<div style="padding:24px 32px;border-bottom:1px solid #2a2a26">
+    <div style="font-size:16px;font-weight:800;color:#ddd8cc;margin-bottom:16px">\uD83D\uDC0B Top Whale Moves</div>
+    <table style="width:100%;border-collapse:collapse">${whaleMovesHtml}</table>
+  </div>` : ''}
+
+  <!-- Whale Index Picks -->
+  ${picksHtml ? `<div style="padding:24px 32px;border-bottom:1px solid #2a2a26">
+    <div style="font-size:16px;font-weight:800;color:#ddd8cc;margin-bottom:16px">\uD83C\uDFAF Whale Index Picks</div>
+    <table style="width:100%;border-collapse:collapse">${picksHtml}</table>
+  </div>` : ''}
+
+  <!-- Consistent Winners -->
+  ${consistentHtml ? `<div style="padding:24px 32px;border-bottom:1px solid #2a2a26">
+    <div style="font-size:16px;font-weight:800;color:#ddd8cc;margin-bottom:16px">\uD83D\uDD25 Consistent Winners</div>
+    <table style="width:100%;border-collapse:collapse">
+      <tr><th style="padding:8px 12px;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7a7870;text-align:left;border-bottom:1px solid #2a2a26">Trader</th><th style="padding:8px 12px;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7a7870;text-align:center;border-bottom:1px solid #2a2a26">Score</th><th style="padding:8px 12px;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7a7870;text-align:left;border-bottom:1px solid #2a2a26">Week P&L</th></tr>
+      ${consistentHtml}
+    </table>
+  </div>` : ''}
+
+  <!-- Market Movers -->
+  ${moversHtml ? `<div style="padding:24px 32px;border-bottom:1px solid #2a2a26">
+    <div style="font-size:16px;font-weight:800;color:#ddd8cc;margin-bottom:16px">\uD83D\uDCC8 Market Movers</div>
+    <table style="width:100%;border-collapse:collapse">${moversHtml}</table>
+  </div>` : ''}
+
+  <!-- Footer -->
+  <div style="padding:24px 32px;text-align:center">
+    <a href="https://hyperflex.network/whales" style="display:inline-block;background:#c9920d;color:#141412;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px">Track whales in real-time &rarr;</a>
+    <div style="margin-top:20px;font-size:11px;color:#5a5854">
+      You're receiving this because you subscribed to the HYPERFLEX Daily Briefing.<br/>
+      <a href="${unsubUrl}" style="color:#7a7870;text-decoration:underline">Unsubscribe</a>
+    </div>
+  </div>
+
+</div>
+</body></html>`;
+
+      try {
+        await transporter.sendMail({
+          from: process.env.SMTP_FROM || 'HYPERFLEX <noreply@hyperflex.network>',
+          to: email,
+          subject,
+          html: emailHtml,
+        });
+        sent++;
+      } catch (mailErr) {
+        console.warn('[daily-briefing-email] Failed to send to', email, mailErr.message);
+      }
+    }
+
+    console.log(`[daily-briefing-email] Sent ${sent}/${subscribers.length} emails`);
+  } catch (err) {
+    console.error('[daily-briefing-email]', err.message);
+  }
+}
+
+// Helper for email HTML escaping (used in email templates)
+function _escHtmlStr(s) {
+  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// Daily briefing email cron — 8am UTC daily
+cron.schedule('0 8 * * *', () => { console.log('[daily-briefing-email] Cron triggered'); sendDailyBriefingEmail(); });
 
 // 404 catch-all — must be last route
 app.use((req, res) => {
