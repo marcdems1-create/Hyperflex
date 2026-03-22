@@ -324,6 +324,8 @@ body::before {
 .pi-hfx { background: rgba(201,146,13,0.15); color: var(--gold); }
 .pi-poly { background: rgba(100,160,255,0.12); color: #6aa0ff; }
 .pi-kalshi { background: rgba(255,140,0,0.12); color: #ff8c00; }
+.pi-hl { background: rgba(119,185,0,0.15); color: #77b900; }
+.pi-manifold { background: rgba(16,185,129,0.12); color: #34d399; }
 .pi-manifold { background: rgba(130,80,230,0.12); color: #a78bfa; }
 
 /* Follow button */
@@ -448,7 +450,7 @@ body::before {
 <!-- HERO -->
 <section class="hero">
   <h1>&#127942; Prediction Market <span class="accent">Leaderboard</span></h1>
-  <p class="hero-sub">Ranked by verified track record across Polymarket &amp; Kalshi</p>
+  <p class="hero-sub">Ranked by verified track record across Polymarket, Kalshi &amp; Hyperliquid</p>
 </section>
 
 <!-- TIME FILTER TABS -->
@@ -502,9 +504,52 @@ async function loadLeaderboard() {
   const body = document.getElementById('lbBody');
   body.innerHTML = '<tr><td colspan="8"><div class="state-msg">Loading leaderboard...</div></td></tr>';
   try {
-    const res = await fetch(`/api/leaderboard?period=${currentPeriod}`);
-    if (!res.ok) throw new Error('Failed');
-    lbData = await res.json();
+    // Fetch both HFX/Polymarket leaderboard AND Hyperliquid leaderboard in parallel
+    const [hfxRes, hlRes] = await Promise.allSettled([
+      fetch(`/api/leaderboard?period=${currentPeriod}`),
+      fetch('/api/hyperliquid/whales')
+    ]);
+
+    let hfxData = [];
+    if (hfxRes.status === 'fulfilled' && hfxRes.value.ok) {
+      hfxData = await hfxRes.value.json();
+    }
+
+    let hlTraders = [];
+    if (hlRes.status === 'fulfilled' && hlRes.value.ok) {
+      const hlData = await hlRes.value.json();
+      hlTraders = (hlData.traders || []).slice(0, 50).map((t, i) => ({
+        rank: 0,
+        user_id: 'hl_' + (t.address || i),
+        display_name: t.display_name || (t.address ? t.address.slice(0, 8) + '...' + t.address.slice(-4) : 'HL Trader'),
+        win_rate: 0,
+        total_pnl: t.pnl_all_time || 0,
+        sharp_score: 0,
+        trade_count: 0,
+        platforms: ['HL'],
+        account_value: t.account_value || 0,
+        _isHL: true
+      }));
+    }
+
+    // Merge: HFX traders first, then append HL traders, sort by account_value or PnL
+    const merged = [...(Array.isArray(hfxData) ? hfxData : [])];
+    // Tag existing entries with their platform if not already
+    merged.forEach(r => { if (!r.platforms) r.platforms = ['HFX']; if (!r.platforms.includes('POLY') && r.total_pnl > 0) r.platforms = [...new Set([...r.platforms])]; });
+    // Append HL traders that are not already in the list
+    for (const hl of hlTraders) {
+      merged.push(hl);
+    }
+    // Sort by total_pnl desc (or account_value for HL traders)
+    merged.sort((a, b) => {
+      const va = a.account_value || Math.abs(a.total_pnl || 0);
+      const vb = b.account_value || Math.abs(b.total_pnl || 0);
+      return vb - va;
+    });
+    // Re-rank
+    merged.forEach((r, i) => r.rank = i + 1);
+
+    lbData = merged;
     renderLeaderboard();
   } catch (e) {
     body.innerHTML = '<tr><td colspan="8"><div class="state-msg">Could not load leaderboard. Try again later.</div></td></tr>';
@@ -547,7 +592,8 @@ function platformIcons(platforms) {
     HFX: 'pi-hfx',
     POLY: 'pi-poly',
     KALSHI: 'pi-kalshi',
-    MANIFOLD: 'pi-manifold'
+    MANIFOLD: 'pi-manifold',
+    HL: 'pi-hl'
   };
   return platforms.map(p => {
     const cls = map[p] || 'pi-hfx';
@@ -589,6 +635,9 @@ function renderRow(r, isDemo) {
   r.platforms = r.platforms || ['HFX'];
   const pnlClass = r.total_pnl >= 0 ? 'pnl-pos' : 'pnl-neg';
   const pnlSign = r.total_pnl >= 0 ? '+' : '';
+  const isHL = r._isHL || (r.platforms && r.platforms.includes('HL') && r.platforms.length === 1);
+  const pnlUnit = isHL ? '' : ' pts';
+  const pnlDisplay = isHL ? '$' + Math.abs(r.total_pnl).toLocaleString() : r.total_pnl.toLocaleString();
   const profileUrl = `/p/${escHtml(r.display_name || r.user_id)}`;
   const uid = escHtml(r.user_id);
 
@@ -601,7 +650,7 @@ function renderRow(r, isDemo) {
       </a>
       <div class="mobile-stats">
         <span class="mobile-stat"><strong>${r.win_rate}%</strong> WR</span>
-        <span class="mobile-stat ${pnlClass}">${pnlSign}${r.total_pnl.toLocaleString()} pts</span>
+        <span class="mobile-stat ${pnlClass}">${pnlSign}${pnlDisplay}${pnlUnit}</span>
         <span class="mobile-stat">Sharp <strong>${r.sharp_score}</strong></span>
       </div>
     </td>
@@ -611,7 +660,7 @@ function renderRow(r, isDemo) {
         <span class="wr-val" style="color:${r.win_rate >= 65 ? 'var(--green)' : 'var(--text)'}">${r.win_rate}%</span>
       </div>
     </td>
-    <td class="td-pnl"><span class="${pnlClass}">${pnlSign}${r.total_pnl.toLocaleString()} pts</span></td>
+    <td class="td-pnl"><span class="${pnlClass}">${pnlSign}${pnlDisplay}${pnlUnit}</span></td>
     <td class="td-sharp">${sharpBadgeHtml(r.sharp_score)}</td>
     <td class="td-trades"><span class="trades-val">${r.trade_count}</span></td>
     <td class="td-platforms"><div class="platform-icons">${platformIcons(r.platforms)}</div></td>

@@ -16541,6 +16541,248 @@ app.get('/api/market-news', async (req, res) => {
   }
 });
 
+// ── HYPERLIQUID API — positions, leaderboard, whale watch ──────────────────
+const _hlCache = new Map(); // key → { ts, data }
+
+function hlCacheGet(key, ttlMs) {
+  const entry = _hlCache.get(key);
+  if (entry && Date.now() - entry.ts < ttlMs) return entry.data;
+  return null;
+}
+function hlCacheSet(key, data) {
+  _hlCache.set(key, { ts: Date.now(), data });
+}
+
+// GET /api/hyperliquid/positions/:address — user's open positions
+app.get('/api/hyperliquid/positions/:address', async (req, res) => {
+  const address = req.params.address.trim();
+  if (!address || !/^0x[0-9a-fA-F]{40}$/.test(address)) {
+    return res.status(400).json({ error: 'Invalid EVM wallet address' });
+  }
+  const cacheKey = `hl_pos_${address.toLowerCase()}`;
+  const cached = hlCacheGet(cacheKey, 60 * 1000); // 60s cache
+  if (cached) return res.json(cached);
+
+  try {
+    const upstream = await _nodeFetch('https://api.hyperliquid.xyz/info', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'clearinghouseState', user: address })
+    });
+    if (!upstream.ok) throw new Error('Hyperliquid API returned ' + upstream.status);
+    const raw = await upstream.json();
+
+    const marginSummary = raw.marginSummary || {};
+    const accountValue = parseFloat(marginSummary.accountValue) || 0;
+    const marginUsed = parseFloat(marginSummary.totalMarginUsed) || 0;
+
+    const positions = (raw.assetPositions || [])
+      .filter(ap => ap.position && parseFloat(ap.position.szi) !== 0)
+      .map(ap => {
+        const p = ap.position;
+        const szi = parseFloat(p.szi) || 0;
+        const entryPx = parseFloat(p.entryPx) || 0;
+        const unrealizedPnl = parseFloat(p.unrealizedPnl) || 0;
+        const leverage = parseFloat(p.leverage?.value || p.leverage) || 1;
+        const markPx = entryPx !== 0 && szi !== 0 ? entryPx + (unrealizedPnl / Math.abs(szi)) : entryPx;
+        return {
+          coin: p.coin,
+          side: szi > 0 ? 'LONG' : 'SHORT',
+          size: Math.abs(szi),
+          size_usd: Math.abs(szi) * markPx,
+          entry_price: entryPx,
+          mark_price: markPx,
+          unrealized_pnl: unrealizedPnl,
+          leverage: leverage,
+          platform: 'hyperliquid'
+        };
+      });
+
+    const data = {
+      address,
+      account_value: accountValue,
+      margin_used: marginUsed,
+      positions,
+      fetched_at: new Date().toISOString()
+    };
+
+    hlCacheSet(cacheKey, data);
+    res.json(data);
+  } catch (err) {
+    console.error('[hyperliquid positions]', err.message);
+    res.status(502).json({ error: 'Failed to fetch Hyperliquid positions', detail: err.message });
+  }
+});
+
+// GET /api/hyperliquid/whales — top 50 traders from leaderboard
+app.get('/api/hyperliquid/whales', async (req, res) => {
+  const cacheKey = 'hl_whales';
+  const cached = hlCacheGet(cacheKey, 10 * 60 * 1000); // 10 min cache
+  if (cached) return res.json(cached);
+
+  try {
+    const upstream = await _nodeFetch('https://stats-data.hyperliquid.xyz/Mainnet/leaderboard', {
+      headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+    });
+    if (!upstream.ok) throw new Error('HL leaderboard API returned ' + upstream.status);
+    const raw = await upstream.json();
+
+    // raw is array of arrays or objects — parse top 50 by accountValue
+    const rows = Array.isArray(raw) ? raw : (raw.leaderboardRows || []);
+    const parsed = rows.map(r => {
+      // Handle both array format and object format
+      if (Array.isArray(r)) {
+        return {
+          address: r[1] || '',
+          display_name: r[2] || r[1] || 'Unknown',
+          account_value: parseFloat(r[3]) || 0,
+          pnl_day: parseFloat(r[4]) || 0,
+          pnl_week: parseFloat(r[5]) || 0,
+          pnl_month: parseFloat(r[6]) || 0,
+          pnl_all_time: parseFloat(r[7]) || 0,
+          volume_all_time: parseFloat(r[8]) || 0,
+          roi: parseFloat(r[9]) || 0
+        };
+      }
+      return {
+        address: r.ethAddress || r.address || r.user || '',
+        display_name: r.displayName || r.accountName || r.ethAddress || r.address || 'Unknown',
+        account_value: parseFloat(r.accountValue || r.equity || 0),
+        pnl_day: parseFloat(r.pnl?.day || r.dailyPnl || 0),
+        pnl_week: parseFloat(r.pnl?.week || r.weeklyPnl || 0),
+        pnl_month: parseFloat(r.pnl?.month || r.monthlyPnl || 0),
+        pnl_all_time: parseFloat(r.pnl?.allTime || r.allTimePnl || 0),
+        volume_all_time: parseFloat(r.vlm?.allTime || r.allTimeVlm || 0),
+        roi: parseFloat(r.roi || 0)
+      };
+    });
+
+    // Sort by accountValue desc, take top 50
+    parsed.sort((a, b) => b.account_value - a.account_value);
+    const top50 = parsed.slice(0, 50).map((t, i) => ({ rank: i + 1, ...t }));
+
+    const data = {
+      traders: top50,
+      total_traders: rows.length,
+      updated_at: new Date().toISOString()
+    };
+
+    hlCacheSet(cacheKey, data);
+    res.json(data);
+  } catch (err) {
+    console.error('[hyperliquid whales]', err.message);
+    // Return stale cache on error
+    const stale = _hlCache.get(cacheKey);
+    if (stale) return res.json(stale.data);
+    res.status(502).json({ error: 'Failed to fetch Hyperliquid leaderboard', detail: err.message });
+  }
+});
+
+// GET /api/hyperliquid/whale-positions — top 20 whales' open positions
+app.get('/api/hyperliquid/whale-positions', async (req, res) => {
+  const cacheKey = 'hl_whale_positions';
+  const cached = hlCacheGet(cacheKey, 10 * 60 * 1000); // 10 min cache
+  if (cached) return res.json(cached);
+
+  try {
+    // 1. Get top 20 from leaderboard
+    const lbRes = await _nodeFetch('https://stats-data.hyperliquid.xyz/Mainnet/leaderboard', {
+      headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+    });
+    if (!lbRes.ok) throw new Error('HL leaderboard API returned ' + lbRes.status);
+    const rawLb = await lbRes.json();
+    const rows = Array.isArray(rawLb) ? rawLb : (rawLb.leaderboardRows || []);
+
+    const traders = rows.map(r => {
+      if (Array.isArray(r)) {
+        return { address: r[1] || '', display_name: r[2] || r[1] || 'Unknown', account_value: parseFloat(r[3]) || 0, pnl_all_time: parseFloat(r[7]) || 0 };
+      }
+      return { address: r.ethAddress || r.address || r.user || '', display_name: r.displayName || r.accountName || r.ethAddress || 'Unknown', account_value: parseFloat(r.accountValue || r.equity || 0), pnl_all_time: parseFloat(r.pnl?.allTime || r.allTimePnl || 0) };
+    }).filter(t => t.address).sort((a, b) => b.account_value - a.account_value).slice(0, 20);
+
+    // 2. Fetch positions for each with 500ms delay between batches (same as Polymarket whale fetch)
+    const BATCH_SIZE = 5;
+    const BATCH_DELAY = 500;
+    const allPositions = [];
+
+    for (let i = 0; i < traders.length; i += BATCH_SIZE) {
+      const batch = traders.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map(async (trader, batchIdx) => {
+          try {
+            const posRes = await _nodeFetch('https://api.hyperliquid.xyz/info', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ type: 'clearinghouseState', user: trader.address })
+            });
+            if (!posRes.ok) return [];
+            const raw = await posRes.json();
+            return (raw.assetPositions || [])
+              .filter(ap => ap.position && parseFloat(ap.position.szi) !== 0)
+              .map(ap => {
+                const p = ap.position;
+                const szi = parseFloat(p.szi) || 0;
+                const entryPx = parseFloat(p.entryPx) || 0;
+                const uPnl = parseFloat(p.unrealizedPnl) || 0;
+                const lev = parseFloat(p.leverage?.value || p.leverage) || 1;
+                const markPx = entryPx !== 0 && szi !== 0 ? entryPx + (uPnl / Math.abs(szi)) : entryPx;
+                return {
+                  trader: trader.display_name,
+                  trader_address: trader.address,
+                  trader_account_value: trader.account_value,
+                  trader_pnl: trader.pnl_all_time,
+                  trader_rank: traders.indexOf(trader) + 1,
+                  coin: p.coin,
+                  side: szi > 0 ? 'LONG' : 'SHORT',
+                  size: Math.abs(szi),
+                  size_usd: Math.abs(szi) * markPx,
+                  entry_price: entryPx,
+                  mark_price: markPx,
+                  unrealized_pnl: uPnl,
+                  leverage: lev,
+                  platform: 'hyperliquid',
+                  fetched_at: new Date().toISOString()
+                };
+              });
+          } catch (err) {
+            console.warn(`[hl-whale-positions] Failed for ${trader.address}:`, err.message);
+            return [];
+          }
+        })
+      );
+
+      for (const r of results) {
+        if (r.status === 'fulfilled' && Array.isArray(r.value)) {
+          allPositions.push(...r.value);
+        }
+      }
+
+      // Delay between batches
+      if (i + BATCH_SIZE < traders.length) {
+        await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
+      }
+    }
+
+    // Sort by size_usd DESC
+    allPositions.sort((a, b) => b.size_usd - a.size_usd);
+
+    const data = {
+      positions: allPositions,
+      total_whales: traders.length,
+      total_positions: allPositions.length,
+      updated_at: new Date().toISOString()
+    };
+
+    hlCacheSet(cacheKey, data);
+    res.json(data);
+  } catch (err) {
+    console.error('[hl-whale-positions]', err.message);
+    const stale = _hlCache.get(cacheKey);
+    if (stale) return res.json(stale.data);
+    res.status(502).json({ error: 'Failed to fetch Hyperliquid whale positions', detail: err.message });
+  }
+});
+
 // 404 catch-all — must be last route
 app.use((req, res) => {
   res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
