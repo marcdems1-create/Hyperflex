@@ -2841,7 +2841,7 @@ body.nav-open .sidebar-backdrop {
         <span class="nav-icon">📈</span><span class="nav-label">Performance</span>
       </a>
       <a class="nav-item" onclick="showTab('logbets')">
-        <span class="nav-icon">📝</span><span class="nav-label">Place Bet</span>
+        <span class="nav-icon">📝</span><span class="nav-label">Track Bets</span>
       </a>
       <a class="nav-item" onclick="showTab('findmarkets')">
         <span class="nav-icon">🔍</span><span class="nav-label">Find Markets</span>
@@ -5020,7 +5020,8 @@ body.nav-open .sidebar-backdrop {
             <div id="betPlatformPills" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px"></div>
             <!-- Add Bet Form -->
             <div style="background:var(--cream);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:20px">
-              <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:16px">Place a Bet</div>
+              <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px">Track a Bet</div>
+              <div style="font-size:12px;color:var(--dim);margin-bottom:16px">Log bets you've placed on DraftKings, FanDuel, Polymarket, or any platform to track your full record in one place.</div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
                 <div><label style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;display:block;margin-bottom:4px">Platform</label>
                   <select id="betPlatform" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--sans);font-size:13px;padding:10px 14px;outline:none">
@@ -5040,7 +5041,7 @@ body.nav-open .sidebar-backdrop {
                   <input type="text" id="betNotes" placeholder="Sharp line move..." style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:10px 14px;outline:none;box-sizing:border-box"/></div>
               </div>
               <div id="betError" style="color:#ef4444;font-family:var(--mono);font-size:12px;margin-top:8px;display:none"></div>
-              <button id="betSubmitBtn" onclick="submitBet()" style="margin-top:16px;background:var(--gold);color:var(--ink);border:none;border-radius:10px;padding:12px 24px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer">Place Bet →</button>
+              <button id="betSubmitBtn" onclick="submitBet()" style="margin-top:16px;background:var(--gold);color:var(--ink);border:none;border-radius:10px;padding:12px 24px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer">Track Bets →</button>
             </div>
             <!-- Bet filter tabs -->
             <div style="display:flex;gap:8px;margin-bottom:16px">
@@ -6755,7 +6756,7 @@ function showTab(tab) {
   document.querySelectorAll('.nav-item').forEach(n => {
     if (n.getAttribute('onclick') && n.getAttribute('onclick').includes(`'${tab}'`)) n.classList.add('active');
   });
-  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Followers', portfolio:'My Positions', account:'My Account', performance:'Performance', logbets:'Place Bet', findmarkets:'Find Markets' };
+  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Followers', portfolio:'My Positions', account:'My Account', performance:'Performance', logbets:'Track Bets', findmarkets:'Find Markets' };
   document.getElementById('topbarTitle').textContent = titles[tab] || tab;
   if (tab === 'analytics' && !analyticsLoaded) loadAnalytics();
   if (tab === 'members') loadMembers();
@@ -12316,7 +12317,7 @@ async function submitBet() {
     document.getElementById('betNotes').value = '';
     loadBets(); loadBetStats();
   } catch(e) { errEl.textContent = e.message; errEl.style.display = 'block'; }
-  finally { btn.disabled = false; btn.textContent = 'Place Bet →'; }
+  finally { btn.disabled = false; btn.textContent = 'Track Bets →'; }
 }
 
 async function loadBets() {
