@@ -338,6 +338,15 @@ function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').
 function formatMoney(n){var a=Math.abs(n);if(a>=1e6)return'$'+(a/1e6).toFixed(1)+'M';if(a>=1e3)return'$'+(a/1e3).toFixed(a>=1e5?0:1)+'K';return'$'+a.toLocaleString()}
 function formatPnl(n){return(n>=0?'+':'-')+formatMoney(n)}
 
+function whaleNickname(address){
+  var adj=['Silent','Iron','Dark','Ghost','Blind','Sharp','Cold','Stone','Swift','Hollow','Burning','Frozen','Lunar','Savage','Feral','Copper','Neon','Void','Scarlet','Wired'];
+  var noun=['Jaguar','Condor','Viper','Falcon','Kraken','Sphinx','Cipher','Titan','Oracle','Phantom','Hydra','Comet','Raven','Piston','Golem','Pulsar','Dagger','Anvil','Cobra','Apex'];
+  var s=String(address);
+  var hash=0;
+  for(var i=0;i<s.length;i++)hash=hash+s.charCodeAt(i);
+  return adj[hash%adj.length]+' '+noun[Math.floor(hash/adj.length)%noun.length];
+}
+
 function setPeriod(period){
   currentPeriod=period;
   document.querySelectorAll('#periodFilters .filter-pill').forEach(function(t){t.classList.toggle('active',t.dataset.period===period)});
@@ -360,7 +369,7 @@ async function loadLeaderboard(){
     var hlTraders=[];
     if(hlRes.status==='fulfilled'&&hlRes.value.ok){
       var hlData=await hlRes.value.json();
-      hlTraders=(hlData.traders||[]).slice(0,50).map(function(t,i){var name=t.display_name||t.userName||t.name||(t.address?t.address.slice(0,6)+'...'+t.address.slice(-4):'HL Trader');var pnl=t.total_pnl||t.pnl_all_time||t.pnl||0;var vol=t.account_value||t.accountValue||0;return{rank:0,user_id:'hl_'+(t.address||i),display_name:name,win_rate:0,total_pnl:pnl,sharp_score:0,trade_count:0,volume:vol,platforms:['HL'],account_value:vol,_isHL:true}});
+      hlTraders=(hlData.traders||[]).slice(0,50).map(function(t,i){var name=t.display_name||t.userName||t.name||(t.address?whaleNickname(t.address):'HL Trader');var pnl=t.total_pnl||t.pnl_all_time||t.pnl||0;var vol=t.account_value||t.accountValue||0;return{rank:0,user_id:'hl_'+(t.address||i),display_name:name,win_rate:0,total_pnl:pnl,sharp_score:0,trade_count:0,volume:vol,platforms:['HL'],account_value:vol,_isHL:true}});
     }
     var merged=[].concat(Array.isArray(hfxData)?hfxData:[]);
     merged.forEach(function(r){if(!r.platforms)r.platforms=['HFX']});
@@ -404,8 +413,8 @@ function renderPodium(top3){
   grid.innerHTML=order.map(function(idx){
     var r=top3[idx];
     var dname=r.display_name||r.userName||r.name||'';
-    if(!dname&&r.user_id&&String(r.user_id).startsWith('hl_')){var addr=String(r.user_id).replace('hl_','');dname=addr.length>10?addr.slice(0,6)+'...'+addr.slice(-4):addr}
-    if(!dname)dname='Trader';
+    if(!dname&&r.user_id&&String(r.user_id).startsWith('hl_')){var addr=String(r.user_id).replace('hl_','');dname=addr.length>10?whaleNickname(addr):addr}
+    if(!dname)dname=r.user_id?whaleNickname(r.user_id):'Trader';
     var initial=dname.charAt(0).toUpperCase();
     var pnl=r.total_pnl||r.pnl_all_time||r.pnl||0;
     if(pnl===0&&r.account_value)pnl=r.account_value;
@@ -438,8 +447,8 @@ function renderTable(data){
   body.innerHTML=data.map(function(r,idx){
     var rank=r._displayRank||(idx+4);
     var dname=r.display_name||r.userName||r.name||'';
-    if(!dname&&r.user_id&&String(r.user_id).startsWith('hl_')){var addr=String(r.user_id).replace('hl_','');dname=addr.length>10?addr.slice(0,6)+'...'+addr.slice(-4):addr}
-    if(!dname)dname='Trader';
+    if(!dname&&r.user_id&&String(r.user_id).startsWith('hl_')){var addr=String(r.user_id).replace('hl_','');dname=addr.length>10?whaleNickname(addr):addr}
+    if(!dname)dname=r.user_id?whaleNickname(r.user_id):'Trader';
     var initial=dname.charAt(0).toUpperCase();
     var pnl=r.total_pnl||r.pnl_all_time||r.pnl||0;
     if(pnl===0&&r.account_value)pnl=r.account_value;
