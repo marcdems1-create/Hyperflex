@@ -8469,7 +8469,7 @@ const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
   'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u', 'win',
-  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener'
+  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals'
 ]);
 
 // GET /my — private member dashboard
@@ -17435,6 +17435,271 @@ app.get('/api/whale-profile/:address', async (req, res) => {
     res.status(500).json({ error: 'Failed to build whale profile', detail: err.message });
   }
 });
+
+// ════════════════════════════════════════════════════════════
+// POLYMARKET CLOB TRADING — API key derivation + HMAC order signing
+// ════════════════════════════════════════════════════════════
+
+// POST /api/polymarket/derive-api-key — derive CLOB API key from wallet signature
+app.post('/api/polymarket/derive-api-key', requireAuth, async (req, res) => {
+  const { address, signature, timestamp, nonce } = req.body;
+  if (!address || !signature || !timestamp) {
+    return res.status(400).json({ error: 'address, signature, and timestamp required' });
+  }
+  try {
+    const upstream = await fetch('https://clob.polymarket.com/auth/derive-api-key', {
+      method: 'GET',
+      headers: {
+        'POLY_ADDRESS': address,
+        'POLY_SIGNATURE': signature,
+        'POLY_TIMESTAMP': timestamp,
+        'POLY_NONCE': nonce || '0',
+        'Accept': 'application/json',
+        'User-Agent': 'Hyperflex/1.0'
+      }
+    });
+    const data = await upstream.json().catch(() => ({}));
+    if (!upstream.ok) {
+      console.error('[polymarket derive-api-key]', upstream.status, data);
+      return res.status(upstream.status >= 400 && upstream.status < 500 ? upstream.status : 502).json({
+        error: data.error || data.message || 'Failed to derive API key',
+        detail: data
+      });
+    }
+    console.log(`[polymarket derive-api-key] user=${req.userId} address=${address.slice(0,8)}... status=ok`);
+    res.json({
+      apiKey: data.apiKey || data.api_key || null,
+      secret: data.secret || data.apiSecret || null,
+      passphrase: data.passphrase || null
+    });
+  } catch (err) {
+    console.error('[polymarket derive-api-key]', err.message);
+    res.status(502).json({ error: 'Failed to derive API key from Polymarket', detail: err.message });
+  }
+});
+
+// POST /api/polymarket/clob-order — submit order with HMAC-signed headers (no wallet signature needed)
+app.post('/api/polymarket/clob-order', requireAuth, async (req, res) => {
+  const { token_id, side, size, price, api_key, api_secret, api_passphrase } = req.body;
+  if (!token_id || !side || !size || !price) {
+    return res.status(400).json({ error: 'token_id, side, size, and price required' });
+  }
+  if (!api_key || !api_secret || !api_passphrase) {
+    return res.status(400).json({ error: 'API credentials required. Enable trading first.' });
+  }
+
+  try {
+    const ts = Math.floor(Date.now() / 1000).toString();
+    const method = 'POST';
+    const requestPath = '/order';
+    const orderBody = JSON.stringify({
+      tokenID: token_id,
+      side: side.toUpperCase(),
+      size: parseFloat(size).toString(),
+      price: parseFloat(price).toString(),
+      type: 'GTC'
+    });
+
+    // Create HMAC-SHA256 signature: timestamp + method + path + body
+    const message = ts + method + requestPath + orderBody;
+    const hmacSignature = crypto.createHmac('sha256', api_secret).update(message).digest('base64');
+
+    const upstream = await fetch('https://clob.polymarket.com/order', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'User-Agent': 'Hyperflex/1.0',
+        'POLY_API_KEY': api_key,
+        'POLY_PASSPHRASE': api_passphrase,
+        'POLY_TIMESTAMP': ts,
+        'POLY_SIGNATURE': hmacSignature
+      },
+      body: orderBody
+    });
+
+    const data = await upstream.json().catch(() => ({}));
+    if (!upstream.ok) {
+      console.error('[polymarket clob-order]', upstream.status, data);
+      return res.status(upstream.status >= 400 && upstream.status < 500 ? upstream.status : 502).json({
+        error: data.error || data.message || 'Order rejected by Polymarket CLOB',
+        detail: data
+      });
+    }
+
+    console.log(`[polymarket clob-order] user=${req.userId} side=${side} size=${size} price=${price} token=${token_id.slice(0,12)}... status=ok`);
+    res.json({
+      success: true,
+      order_id: data.orderID || data.order_id || data.id || null,
+      ...data
+    });
+  } catch (err) {
+    console.error('[polymarket clob-order]', err.message);
+    res.status(502).json({ error: 'Failed to submit CLOB order', detail: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+// ALPHA SIGNALS — aggregated trading signals from all data sources
+// ════════════════════════════════════════════════════════════
+let _signalsCache = null;
+
+app.get('/api/signals', async (req, res) => {
+  try {
+    // Check cache (5 min TTL)
+    if (_signalsCache && (Date.now() - _signalsCache.ts < 5 * 60 * 1000)) {
+      return res.json(_signalsCache.data);
+    }
+
+    const signals = [];
+    const now = new Date().toISOString();
+
+    // Source 1: Whale clustering — markets with 5+ whales from whale-index
+    try {
+      if (_whaleIndexCache && _whaleIndexCache.data) {
+        const wiData = _whaleIndexCache.data;
+        const markets = wiData.markets || wiData.positions || [];
+        for (const m of markets) {
+          const whaleCount = m.whale_count || m.whales || 0;
+          if (whaleCount >= 5) {
+            const consensus = m.consensus_pct || m.consensus || 0;
+            const consensusSide = m.consensus_side || (consensus > 50 ? 'YES' : 'NO');
+            signals.push({
+              type: 'whale_cluster',
+              badge: 'Whale Cluster',
+              market: m.market || m.question || 'Unknown',
+              action: `BUY ${consensusSide} at ${consensus}%`,
+              side: consensusSide,
+              price: consensus / 100,
+              confidence: whaleCount >= 10 ? 'HIGH' : whaleCount >= 7 ? 'MEDIUM' : 'LOW',
+              whale_count: whaleCount,
+              capital: m.total_capital || m.capital || 0,
+              detected_at: now,
+              url: m.url || 'https://polymarket.com'
+            });
+          }
+        }
+      }
+    } catch (e) { console.warn('[signals] whale-cluster source error:', e.message); }
+
+    // Source 2: Price velocity — markets that moved 10%+ in last 24h from market-movers
+    try {
+      if (_marketMoversCache && _marketMoversCache.data) {
+        const movers = _marketMoversCache.data.movers || [];
+        for (const m of movers) {
+          const absChange = Math.abs(m.change_pct || 0);
+          if (absChange >= 10) {
+            const direction = m.change_pct > 0 ? 'YES' : 'NO';
+            signals.push({
+              type: 'momentum',
+              badge: 'Momentum',
+              market: m.question || 'Unknown',
+              action: `BUY ${direction} — moved ${m.change_pct > 0 ? '+' : ''}${m.change_pct.toFixed(1)}%`,
+              side: direction,
+              price: (m.current_price || 50) / 100,
+              confidence: absChange >= 25 ? 'HIGH' : absChange >= 15 ? 'MEDIUM' : 'LOW',
+              whale_count: 0,
+              change_pct: m.change_pct,
+              detected_at: now,
+              url: 'https://polymarket.com'
+            });
+          }
+        }
+      }
+    } catch (e) { console.warn('[signals] momentum source error:', e.message); }
+
+    // Source 3: Whale momentum — new positions from whale trade stream
+    try {
+      const recentTrades = (_whaleTradeStream || []).filter(t => {
+        const age = Date.now() - new Date(t.ts).getTime();
+        return age < 24 * 60 * 60 * 1000 && t.type === 'opened';
+      });
+      for (const t of recentTrades.slice(0, 10)) {
+        const p = t.position || {};
+        signals.push({
+          type: 'new_entry',
+          badge: 'New Entry',
+          market: p.title || p.market || 'Unknown',
+          action: `${t.trader_name || t.trader?.name || 'Whale'} opened ${p.outcome || 'YES'} position`,
+          side: p.outcome || 'YES',
+          price: p.current_price || 0,
+          confidence: (parseFloat(p.size) || 0) >= 50000 ? 'HIGH' : (parseFloat(p.size) || 0) >= 10000 ? 'MEDIUM' : 'LOW',
+          whale_count: 1,
+          capital: parseFloat(p.size) || 0,
+          detected_at: t.ts || now,
+          url: p.market_url || 'https://polymarket.com'
+        });
+      }
+    } catch (e) { console.warn('[signals] whale-stream source error:', e.message); }
+
+    // Source 4: Cross-platform arbitrage — compare Polymarket vs Kalshi prices from market search cache
+    try {
+      for (const [, cached] of _mktSearchCache) {
+        if (!cached || !cached.data) continue;
+        const polyMarkets = cached.data.polymarket || [];
+        const kalshiMarkets = cached.data.kalshi || [];
+        // Simple keyword match between platforms
+        for (const pm of polyMarkets) {
+          for (const km of kalshiMarkets) {
+            const pQ = (pm.question || '').toLowerCase();
+            const kQ = (km.question || km.title || '').toLowerCase();
+            // Check for significant keyword overlap
+            const pWords = pQ.split(/\s+/).filter(w => w.length > 4);
+            const kWords = kQ.split(/\s+/).filter(w => w.length > 4);
+            const overlap = pWords.filter(w => kWords.includes(w)).length;
+            if (overlap >= 3) {
+              const pPrice = (pm.yes_price || pm.yes_pct || 50) / 100;
+              const kPrice = (km.yes_price || km.yes_pct || 50) / 100;
+              const diff = Math.abs(pPrice - kPrice);
+              if (diff > 0.03) {
+                const cheaperPlatform = pPrice < kPrice ? 'Polymarket' : 'Kalshi';
+                const cheaperPrice = Math.min(pPrice, kPrice);
+                signals.push({
+                  type: 'arbitrage',
+                  badge: 'Arbitrage',
+                  market: pm.question || km.question || 'Unknown',
+                  action: `${(diff * 100).toFixed(1)}% gap — buy YES on ${cheaperPlatform} at ${(cheaperPrice * 100).toFixed(0)}%`,
+                  side: 'YES',
+                  price: cheaperPrice,
+                  confidence: diff > 0.08 ? 'HIGH' : diff > 0.05 ? 'MEDIUM' : 'LOW',
+                  whale_count: 0,
+                  price_diff: diff,
+                  detected_at: now,
+                  url: pm.url || 'https://polymarket.com'
+                });
+              }
+            }
+          }
+        }
+        break; // Only check first cached search result
+      }
+    } catch (e) { console.warn('[signals] arbitrage source error:', e.message); }
+
+    // Sort: HIGH first, then MEDIUM, then LOW; within same confidence, newest first
+    const confOrder = { HIGH: 0, MEDIUM: 1, LOW: 2 };
+    signals.sort((a, b) => {
+      const confDiff = (confOrder[a.confidence] || 2) - (confOrder[b.confidence] || 2);
+      if (confDiff !== 0) return confDiff;
+      return new Date(b.detected_at) - new Date(a.detected_at);
+    });
+
+    const result = {
+      signals: signals.slice(0, 20),
+      total: signals.length,
+      updated_at: now
+    };
+
+    _signalsCache = { ts: Date.now(), data: result };
+    res.json(result);
+  } catch (err) {
+    console.error('[signals]', err.message);
+    if (_signalsCache) return res.json(_signalsCache.data);
+    res.status(500).json({ error: 'Failed to compute signals', detail: err.message });
+  }
+});
+
+// GET /signals — alpha signals page
+app.get('/signals', (req, res) => res.sendFile(path.join(__dirname, 'public', 'signals.html')));
 
 // 404 catch-all — must be last route
 app.use((req, res) => {

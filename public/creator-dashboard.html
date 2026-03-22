@@ -13548,7 +13548,11 @@ function updateWalletUI() {
     }
     const maticHtml = window._walletBalanceMATIC != null ? '<span style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-left:8px">' + window._walletBalanceMATIC.toFixed(4) + ' POL</span>' : '';
     status.innerHTML = addrHtml + balHtml + maticHtml;
-    actions.innerHTML = '<button onclick="fetchWalletBalance(window._walletProvider, window._connectedWallet)" style="background:none;border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-family:var(--mono);font-size:11px;color:var(--dim);cursor:pointer;min-height:44px;margin-right:6px" title="Refresh balance">↺</button><button onclick="disconnectBrowserWallet()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-family:var(--mono);font-size:11px;color:var(--dim);cursor:pointer;min-height:44px" onmouseover="this.style.borderColor=\'var(--gold)\';this.style.color=\'var(--gold)\'" onmouseout="this.style.borderColor=\'var(--border)\';this.style.color=\'var(--dim)\'">Disconnect</button>';
+    const tradingEnabled = localStorage.getItem('poly_api_key');
+    const tradingBtnHtml = tradingEnabled
+      ? '<span id="tradingStatus" style="font-family:var(--mono);font-size:11px;color:#22c55e;margin-right:8px;display:flex;align-items:center;gap:4px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#22c55e"></span> Trading enabled</span>'
+      : '<button id="enableTradingBtn" onclick="derivePolymarketApiKey()" style="background:none;border:1px solid rgba(124,58,237,0.4);border-radius:8px;padding:8px 14px;font-family:var(--mono);font-size:11px;color:#a78bfa;cursor:pointer;min-height:44px;margin-right:6px;transition:all 0.15s" onmouseover="this.style.borderColor=\'#a78bfa\';this.style.background=\'rgba(124,58,237,0.08)\'" onmouseout="this.style.borderColor=\'rgba(124,58,237,0.4)\';this.style.background=\'none\'">Enable Trading</button>';
+    actions.innerHTML = tradingBtnHtml + '<button onclick="fetchWalletBalance(window._walletProvider, window._connectedWallet)" style="background:none;border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-family:var(--mono);font-size:11px;color:var(--dim);cursor:pointer;min-height:44px;margin-right:6px" title="Refresh balance">↺</button><button onclick="disconnectBrowserWallet()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-family:var(--mono);font-size:11px;color:var(--dim);cursor:pointer;min-height:44px" onmouseover="this.style.borderColor=\'var(--gold)\';this.style.color=\'var(--gold)\'" onmouseout="this.style.borderColor=\'var(--border)\';this.style.color=\'var(--dim)\'">Disconnect</button>';
   } else {
     status.textContent = 'Not connected';
     actions.innerHTML = '<button id="walletConnectBtn" onclick="connectBrowserWallet()" style="background:var(--gold);color:#141412;border:none;border-radius:8px;padding:9px 18px;font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;min-height:44px" onmouseover="this.style.opacity=\'0.88\'" onmouseout="this.style.opacity=\'1\'">&#x1F517; Connect Wallet</button>';
@@ -13603,6 +13607,10 @@ function disconnectBrowserWallet() {
   window._walletBalanceUSDC = null;
   window._walletBalanceMATIC = null;
   localStorage.removeItem('hf_wallet_address');
+  // Clear CLOB trading keys on disconnect
+  localStorage.removeItem('poly_api_key');
+  localStorage.removeItem('poly_api_secret');
+  localStorage.removeItem('poly_api_passphrase');
   updateWalletUI();
   showToast('Wallet disconnected', 'success');
 }
@@ -13650,6 +13658,77 @@ if (typeof window.ethereum !== 'undefined') {
       showToast('Wallet switched to ' + accounts[0].slice(0,6) + '...' + accounts[0].slice(-4), 'success');
     }
   });
+}
+
+// ── POLYMARKET CLOB API KEY DERIVATION ──────────────────────────────────────
+async function derivePolymarketApiKey() {
+  if (!window._connectedWallet || !window._walletSigner) {
+    showToast('Connect your MetaMask wallet first', 'error');
+    return;
+  }
+  const btn = document.getElementById('enableTradingBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Signing...'; }
+  try {
+    const address = window._connectedWallet;
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const nonce = '0';
+
+    // EIP-712 domain and types for CLOB auth
+    const domain = {
+      name: 'ClobAuthDomain',
+      version: '1',
+      chainId: 137
+    };
+    const types = {
+      ClobAuth: [
+        { name: 'address', type: 'address' },
+        { name: 'timestamp', type: 'string' },
+        { name: 'nonce', type: 'uint256' },
+        { name: 'message', type: 'string' }
+      ]
+    };
+    const value = {
+      address: address,
+      timestamp: timestamp,
+      nonce: parseInt(nonce),
+      message: 'This message attests that I control the given wallet'
+    };
+
+    const signature = await window._walletSigner.signTypedData(domain, types, value);
+
+    if (btn) btn.textContent = 'Deriving key...';
+
+    const token = localStorage.getItem('hf_token');
+    const res = await fetch('/api/polymarket/derive-api-key', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ address, signature, timestamp, nonce })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to derive API key');
+    }
+    if (data.apiKey) {
+      localStorage.setItem('poly_api_key', data.apiKey);
+      localStorage.setItem('poly_api_secret', data.secret);
+      localStorage.setItem('poly_api_passphrase', data.passphrase);
+      showToast('Trading enabled! You can now place orders directly.', 'success');
+      updateWalletUI();
+    } else {
+      throw new Error('No API key returned');
+    }
+  } catch (e) {
+    if (e.code === 'ACTION_REJECTED' || e.code === 4001) {
+      showToast('Signature rejected', 'error');
+    } else {
+      showToast('Failed to enable trading: ' + (e.message || 'Unknown error'), 'error');
+    }
+    if (btn) { btn.disabled = false; btn.textContent = 'Enable Trading'; }
+  }
+}
+
+function isClobTradingEnabled() {
+  return !!(localStorage.getItem('poly_api_key') && localStorage.getItem('poly_api_secret') && localStorage.getItem('poly_api_passphrase'));
 }
 
 // ── TRADE MODAL ─────────────────────────────────────────────────────────────
@@ -13744,7 +13823,7 @@ function updateTradeEstimate() {
 }
 
 async function confirmTrade() {
-  if (!window._connectedWallet || !window._walletSigner) {
+  if (!window._connectedWallet) {
     showToast('Connect your wallet first', 'error');
     return;
   }
@@ -13761,14 +13840,72 @@ async function confirmTrade() {
   }
 
   btn.disabled = true;
+
+  const tokenId = _tradeModalData.id || _tradeModalData.conditionId || '';
+  const side = _tradeModalData.mode === 'buy' ? 'BUY' : 'SELL';
+  const ob = _tradeModalData._orderbook || {};
+  const price = side === 'BUY' ? (ob.best_ask || 0.5) : (ob.best_bid || 0.5);
+
+  // Prefer HMAC (CLOB API key) path — no wallet popup needed
+  if (isClobTradingEnabled()) {
+    btn.textContent = 'Submitting order...';
+    try {
+      const token = localStorage.getItem('hf_token');
+      const r = await fetch('/api/polymarket/clob-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({
+          token_id: tokenId,
+          side: side,
+          size: amount.toString(),
+          price: price.toString(),
+          api_key: localStorage.getItem('poly_api_key'),
+          api_secret: localStorage.getItem('poly_api_secret'),
+          api_passphrase: localStorage.getItem('poly_api_passphrase')
+        })
+      });
+
+      const data = await r.json();
+      if (!r.ok) {
+        // If auth failed, clear stale keys and suggest re-enabling
+        if (r.status === 401 || r.status === 403) {
+          localStorage.removeItem('poly_api_key');
+          localStorage.removeItem('poly_api_secret');
+          localStorage.removeItem('poly_api_passphrase');
+          updateWalletUI();
+          errEl.textContent = 'API key expired. Please click "Enable Trading" again.';
+        } else {
+          errEl.textContent = data.error || 'Order failed';
+        }
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Confirm Trade';
+        return;
+      }
+
+      showToast((side === 'BUY' ? 'Buy' : 'Sell') + ' order submitted!', 'success');
+      closeTradeModal();
+      setTimeout(() => loadPolymarketPositions(true), 2000);
+    } catch (e) {
+      errEl.textContent = 'Trade failed: ' + (e.message || 'Unknown error');
+      errEl.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Confirm Trade';
+    }
+    return;
+  }
+
+  // Fallback: EIP-712 wallet signing path (MetaMask popup)
+  if (!window._walletSigner) {
+    showToast('Enable trading or connect wallet signer', 'error');
+    btn.disabled = false;
+    btn.textContent = 'Confirm Trade';
+    return;
+  }
+
   btn.textContent = 'Signing order...';
 
   try {
-    const tokenId = _tradeModalData.id || _tradeModalData.conditionId || '';
-    const side = _tradeModalData.mode === 'buy' ? 'BUY' : 'SELL';
-    const ob = _tradeModalData._orderbook || {};
-    const price = side === 'BUY' ? (ob.best_ask || 0.5) : (ob.best_bid || 0.5);
-
     // Build EIP-712 typed data for Polymarket CLOB order
     const domain = {
       name: 'Polymarket CTF Exchange',
@@ -13926,7 +14063,7 @@ function closePositionAll(posDataJson) {
       <div id="tradeModalError" style="display:none;color:#f87171;font-size:12px;font-family:var(--mono);padding:8px 12px;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);border-radius:8px;margin-bottom:12px"></div>
       <!-- Confirm button -->
       <button id="tradeConfirmBtn" onclick="confirmTrade()" style="width:100%;background:var(--gold);color:#141412;border:none;border-radius:10px;padding:14px;font-family:var(--sans);font-size:14px;font-weight:800;cursor:pointer;min-height:48px;transition:opacity .15s" onmouseover="this.style.opacity='0.88'" onmouseout="this.style.opacity='1'">Confirm Trade</button>
-      <div style="text-align:center;margin-top:10px;font-family:var(--mono);font-size:10px;color:var(--dim)">Order signed in your wallet. We never see your keys.</div>
+      <div style="text-align:center;margin-top:10px;font-family:var(--mono);font-size:10px;color:var(--dim)">Orders signed via HMAC or your wallet. We never store your keys.</div>
     </div>
   </div>
 </div>
