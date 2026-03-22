@@ -287,6 +287,65 @@ if (pool) {
   console.log('[boot] No DATABASE_URL — falling back to Supabase REST client only');
 }
 
+// ── API ACCESS TIERS ──────────────────────────────────────────────────────
+// Free: /api/whale-watch (delayed), /api/stats, /api/health, /api/leaderboard, /api/markets/search
+// Pro ($29/mo): /api/signals, /api/crystal-ball, /api/whale-index, /api/screener, /api/fear-greed
+// Premium ($99/mo): /api/correlations, /api/contrarian, /api/resolution-probability,
+//   /api/whale-patterns, /api/news-impact, /api/backtest, /api/market-intelligence,
+//   /api/consistent-traders, /api/daily-briefing, /api/whale-flow, /api/live-feed
+// API key access ($500/mo): all endpoints via X-API-Key header
+
+const PRO_ENDPOINTS = new Set(['/api/signals', '/api/crystal-ball', '/api/whale-index', '/api/screener', '/api/fear-greed']);
+const PREMIUM_ENDPOINTS = new Set(['/api/correlations', '/api/contrarian', '/api/resolution-probability', '/api/whale-patterns', '/api/news-impact', '/api/market-intelligence', '/api/consistent-traders', '/api/daily-briefing', '/api/whale-flow', '/api/live-feed']);
+const BACKTEST_PREFIX = '/api/backtest/';
+
+function requireApiTier(req, res, next) {
+  const path = req.path;
+
+  // Free endpoints — no gate
+  if (!PRO_ENDPOINTS.has(path) && !PREMIUM_ENDPOINTS.has(path) && !path.startsWith(BACKTEST_PREFIX)) {
+    return next();
+  }
+
+  // Check X-API-Key header first (for programmatic access)
+  const apiKey = req.headers['x-api-key'];
+  if (apiKey) {
+    // TODO: validate against api_keys table when built
+    // For now, allow any non-empty key (will add proper key management later)
+    return next();
+  }
+
+  // Check JWT auth — logged-in users on the website
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const token = authHeader.slice(7);
+      const decoded = jwt.verify(token, JWT_SECRET);
+      if (decoded) return next(); // Logged-in users get access during beta
+    } catch(e) { /* invalid token, fall through */ }
+  }
+
+  // Check if request comes from our own frontend (same-origin)
+  const referer = req.headers.referer || req.headers.origin || '';
+  if (referer.includes('hyperflex.network') || referer.includes('localhost')) {
+    return next(); // Our own pages can access
+  }
+
+  // External API access without key — blocked
+  return res.status(403).json({
+    error: 'API key required',
+    message: 'This endpoint requires authentication. Get API access at hyperflex.network/pricing',
+    tiers: {
+      pro: { price: '$29/mo', endpoints: [...PRO_ENDPOINTS] },
+      premium: { price: '$99/mo', endpoints: [...PRO_ENDPOINTS, ...PREMIUM_ENDPOINTS] },
+      api: { price: '$500/mo', endpoints: 'All endpoints via X-API-Key' }
+    }
+  });
+}
+
+// Apply API tier middleware to all /api/ routes
+app.use('/api/', requireApiTier);
+
 // Supabase JS client — used as fallback for complex queries + storage
 const _realSupabase = createClient(
   process.env.SUPABASE_URL,
@@ -17426,7 +17485,7 @@ app.get('/api/daily-briefing', (req, res) => {
 // ════════════════════════════════════════════════════════════
 let _crystalBallCache = null;
 
-function generateCrystalBallPredictions() {
+async function generateCrystalBallPredictions() {
   const now = new Date();
   const predictions = [];
 
@@ -17437,8 +17496,47 @@ function generateCrystalBallPredictions() {
     return '$' + Math.round(v);
   }
 
+  // Pre-warm caches if empty — fetch whale data directly
+  if (!_whaleWatchCache) {
+    try { await fetchWhalePositions(); } catch(e) { console.warn('[crystal-ball] whale warm failed:', e.message); }
+  }
+  // Build whale index inline if cache is empty
+  let indexData = _whaleIndexCache && _whaleIndexCache.data ? _whaleIndexCache.data : null;
+  if (!indexData && _whaleWatchCache && _whaleWatchCache.data) {
+    try {
+      const whales = _whaleWatchCache.data.whales || [];
+      const marketMap = {};
+      for (const w of whales) {
+        const key = w.market || w.question;
+        if (!key) continue;
+        if (!marketMap[key]) marketMap[key] = { market: key, sides: {}, total_capital: 0, url: w.url || '', whale_count: 0 };
+        const side = w.side || 'YES';
+        if (!marketMap[key].sides[side]) marketMap[key].sides[side] = { capital: 0, count: 0 };
+        marketMap[key].sides[side].capital += parseFloat(w.size || 0);
+        marketMap[key].sides[side].count++;
+        marketMap[key].total_capital += parseFloat(w.size || 0);
+        marketMap[key].whale_count++;
+      }
+      const picks = Object.values(marketMap)
+        .filter(m => m.whale_count >= 3)
+        .map(m => {
+          const sides = Object.entries(m.sides).sort((a,b) => b[1].capital - a[1].capital);
+          const topSide = sides[0];
+          const consensusPct = Math.round((topSide[1].capital / m.total_capital) * 100);
+          return {
+            market: m.market, whale_count: m.whale_count, total_capital: m.total_capital,
+            consensus_side: topSide[0], consensus_pct: consensusPct,
+            current_price: 0.5, url: m.url,
+            strength: m.whale_count >= 10 ? 'STRONG' : m.whale_count >= 5 ? 'MODERATE' : 'EMERGING'
+          };
+        })
+        .sort((a,b) => b.whale_count - a.whale_count);
+      indexData = { picks };
+      console.log(`[crystal-ball] Built inline index: ${picks.length} picks`);
+    } catch(e) { console.warn('[crystal-ball] inline index failed:', e.message); }
+  }
+
   // ── 1. WHALE CONVERGENCE — from whale index picks (5+ whales) ──
-  const indexData = _whaleIndexCache && _whaleIndexCache.data ? _whaleIndexCache.data : null;
   if (indexData && indexData.picks) {
     for (const pick of indexData.picks) {
       if (pick.whale_count < 5) continue;
@@ -17702,13 +17800,13 @@ function generateCrystalBallPredictions() {
   };
 }
 
-app.get('/api/crystal-ball', (req, res) => {
+app.get('/api/crystal-ball', async (req, res) => {
   try {
     // 5 min cache
     if (_crystalBallCache && (Date.now() - _crystalBallCache.ts < 5 * 60 * 1000)) {
       return res.json(_crystalBallCache.data);
     }
-    const data = generateCrystalBallPredictions();
+    const data = await generateCrystalBallPredictions();
     _crystalBallCache = { ts: Date.now(), data };
 
     // Fire-and-forget: log each prediction to accuracy tracker
