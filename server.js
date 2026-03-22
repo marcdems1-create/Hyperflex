@@ -9180,26 +9180,77 @@ app.get('/api/trader-profile/:username', async (req, res) => {
     const username = req.params.username.trim();
     if (!username) return res.status(400).json({ error: 'Username required' });
 
-    // Look up user by display_name (case-insensitive)
+    // Look up user by display_name (case-insensitive), or by wallet address
+    const isWallet = /^0x[a-fA-F0-9]{10,}$/.test(username);
     let user;
     try {
       if (pool) {
-        // Try exact match first, then case-insensitive, then without spaces
-        let rows = await dbQuery('SELECT * FROM users WHERE LOWER(display_name) = LOWER($1) LIMIT 1', [username]);
-        if (!rows.length) rows = await dbQuery('SELECT * FROM users WHERE LOWER(REPLACE(display_name, \' \', \'\')) = LOWER(REPLACE($1, \' \', \'\')) LIMIT 1', [username]);
-        if (!rows.length) rows = await dbQuery('SELECT * FROM users WHERE LOWER(tenant_slug) = LOWER($1) LIMIT 1', [username]);
+        let rows;
+        if (isWallet) {
+          // Wallet address lookup — check polymarket_address first
+          rows = await dbQuery('SELECT * FROM users WHERE LOWER(polymarket_address) = LOWER($1) LIMIT 1', [username]);
+        } else {
+          // Try exact match first, then case-insensitive, then without spaces
+          rows = await dbQuery('SELECT * FROM users WHERE LOWER(display_name) = LOWER($1) LIMIT 1', [username]);
+          if (!rows.length) rows = await dbQuery('SELECT * FROM users WHERE LOWER(REPLACE(display_name, \' \', \'\')) = LOWER(REPLACE($1, \' \', \'\')) LIMIT 1', [username]);
+          if (!rows.length) rows = await dbQuery('SELECT * FROM users WHERE LOWER(tenant_slug) = LOWER($1) LIMIT 1', [username]);
+        }
         user = rows[0] || null;
       } else {
-        let { data } = await supabase.from('users').select('*').ilike('display_name', username).limit(1).maybeSingle();
-        if (!data) {
-          const { data: d2 } = await supabase.from('users').select('*').ilike('tenant_slug', username).limit(1).maybeSingle();
-          data = d2;
+        if (isWallet) {
+          const { data } = await supabase.from('users').select('*').ilike('polymarket_address', username).limit(1).maybeSingle();
+          user = data;
+        } else {
+          let { data } = await supabase.from('users').select('*').ilike('display_name', username).limit(1).maybeSingle();
+          if (!data) {
+            const { data: d2 } = await supabase.from('users').select('*').ilike('tenant_slug', username).limit(1).maybeSingle();
+            data = d2;
+          }
+          user = data;
         }
-        user = data;
       }
     } catch (e) {
       console.error('[trader-profile] user lookup:', e.message);
       return res.status(500).json({ error: 'User lookup failed', detail: e.message });
+    }
+
+    // If wallet lookup failed, check whale watch data for the address
+    if (!user && isWallet) {
+      try {
+        const whaleData = _whaleWatchCache && _whaleWatchCache.data ? _whaleWatchCache.data : null;
+        if (whaleData && whaleData.whales) {
+          const whalePositions = whaleData.whales.filter(w => (w.address || w.wallet || '').toLowerCase() === username.toLowerCase());
+          if (whalePositions.length) {
+            const truncAddr = username.slice(0, 6) + '...' + username.slice(-4);
+            let whalePnl = 0;
+            const positions = whalePositions.map(w => {
+              const size = parseFloat(w.size || 0);
+              return { question: w.market || w.question || 'Unknown', side: w.side || 'YES', size, url: w.url || '' };
+            });
+            return res.json({
+              user_id: 'whale_' + username,
+              display_name: truncAddr,
+              username: truncAddr,
+              member_since: null,
+              follower_count: 0,
+              win_rate: 0,
+              total_pnl: whalePnl,
+              sharp_score: 0,
+              total_trades: whalePositions.length,
+              platforms_connected: ['polymarket'],
+              platform_stats: { polymarket: { count: whalePositions.length, pnl: 0 } },
+              best_calls: [],
+              recent_activity: positions.map(p => ({
+                question: p.question, side: p.side, amount: p.size, pnl: null,
+                status: 'OPEN', platform: 'polymarket', created_at: null
+              })),
+              pnl_chart: [],
+              wallet_address: username,
+            });
+          }
+        }
+      } catch (e) { console.warn('[trader-profile] whale lookup:', e.message); }
+      return res.status(404).json({ error: 'User not found' });
     }
     if (!user) return res.status(404).json({ error: 'User not found' });
 
@@ -16153,7 +16204,7 @@ app.get('/api/screener', async (req, res) => {
 
       const volume = parseFloat(m.volume) || 0;
       const marketId = m.conditionId || m.slug || m.id || '';
-      const slug = m.slug || m.conditionId || '';
+      const slug = m.slug || '';
       const category = detectCategory(question);
       const qLower = question.toLowerCase().trim();
 
@@ -16366,7 +16417,14 @@ app.get('/api/market-movers', async (req, res) => {
         const lastPrice = parseFloat(d.last.yes_price) || 0;
         const change = lastPrice - firstPrice;
         const change_pct = firstPrice > 0 ? Math.round(change / firstPrice * 10000) / 100 : 0;
-        return { market_id, question: d.question || 'Unknown', current_price: Math.round(lastPrice * 100), change_pct, abs_change: Math.abs(change_pct) };
+        // Cross-reference with screener cache to get slug/URL
+        let url = 'https://polymarket.com';
+        if (_screenerCache && _screenerCache.data) {
+          const match = _screenerCache.data.find(sm => sm.market_id === market_id || sm.slug === market_id);
+          if (match && match.url) url = match.url;
+          else if (match && match.slug) url = 'https://polymarket.com/event/' + match.slug;
+        }
+        return { market_id, question: d.question || 'Unknown', current_price: Math.round(lastPrice * 100), change_pct, abs_change: Math.abs(change_pct), url };
       })
       .filter(m => m.abs_change > 0)
       .sort((a, b) => b.abs_change - a.abs_change)
@@ -17584,7 +17642,7 @@ async function generateCrystalBallPredictions() {
       for (const w of whales) {
         const key = w.market || w.question;
         if (!key) continue;
-        if (!marketMap[key]) marketMap[key] = { market: key, sides: {}, total_capital: 0, url: w.url || '', whale_count: 0 };
+        if (!marketMap[key]) marketMap[key] = { market: key, sides: {}, total_capital: 0, url: w.market_url || w.url || '', whale_count: 0 };
         const side = w.side || 'YES';
         if (!marketMap[key].sides[side]) marketMap[key].sides[side] = { capital: 0, count: 0 };
         marketMap[key].sides[side].capital += parseFloat(w.size || 0);
@@ -17662,7 +17720,7 @@ async function generateCrystalBallPredictions() {
           `Similar moves historically continued ~65% of the time`
         ],
         action: direction === 'up' ? `BUY YES at current ${m.current_price}%` : `SELL NO at current ${m.current_price}%`,
-        market: { question: m.question, url: 'https://polymarket.com' },
+        market: { question: m.question, url: m.url || 'https://polymarket.com' },
         detected_at: now.toISOString(),
         expires_at: new Date(now.getTime() + 4 * 60 * 60 * 1000).toISOString(),
         _whale_count: 0,
@@ -17677,7 +17735,10 @@ async function generateCrystalBallPredictions() {
   if (indexData && indexData.picks) {
     for (const pick of indexData.picks) {
       if (pick.whale_count < 3) continue;
-      const mktPrice = Math.round((pick.current_price || 0.5) * 100);
+      // Skip already-resolved markets (price at or near 0% or 100%)
+      const rawPrice = pick.current_price || 0.5;
+      if (rawPrice >= 0.95 || rawPrice <= 0.05) continue;
+      const mktPrice = Math.round(rawPrice * 100);
       // Whale consensus says one side; compare with market price
       const whaleTarget = pick.consensus_side === 'YES' ? pick.consensus_pct : (100 - pick.consensus_pct);
       const divergence = Math.abs(whaleTarget - mktPrice);
@@ -17870,7 +17931,30 @@ async function generateCrystalBallPredictions() {
 
   // Remove internal scoring fields
   predictions.sort((a, b) => b.crystal_ball_score - a.crystal_ball_score);
-  const top10 = predictions.slice(0, 10).map(p => {
+
+  // ── Category cap: max 3 predictions per category for diversity ──
+  function detectCategory(p) {
+    const q = ((p.market && p.market.question) || p.prediction || '').toLowerCase();
+    if (/bitcoin|btc|eth|ethereum|solana|sol|crypto|token|defi|nft|doge|xrp|blockchain|coin/.test(q)) return 'crypto';
+    if (/trump|biden|election|president|congress|senate|vote|governor|democrat|republican|politic|legislation|nato|tariff|sanction/.test(q)) return 'politics';
+    if (/soccer|football|nfl|nba|nhl|mlb|tennis|ufc|mma|boxing|f1|formula|champion|league|premier|laliga|serie a|bundesliga|goal|match|team|player|sport|cup|tournament|playoff|super bowl|world cup/.test(q)) return 'sports';
+    return 'other';
+  }
+  const catCounts = {};
+  const MAX_PER_CATEGORY = 3;
+  const diversified = [];
+  for (const p of predictions) {
+    const cat = detectCategory(p);
+    catCounts[cat] = (catCounts[cat] || 0);
+    if (catCounts[cat] < MAX_PER_CATEGORY) {
+      diversified.push(p);
+      catCounts[cat]++;
+    }
+  }
+  // Re-sort diversified set by score
+  diversified.sort((a, b) => b.crystal_ball_score - a.crystal_ball_score);
+
+  const top10 = diversified.slice(0, 10).map(p => {
     const { _whale_count, _divergence, _momentum, _urgency, ...clean } = p;
     return clean;
   });
@@ -18272,7 +18356,7 @@ app.get('/api/signals', async (req, res) => {
               whale_count: 0,
               change_pct: m.change_pct,
               detected_at: now,
-              url: 'https://polymarket.com'
+              url: m.url || 'https://polymarket.com'
             });
           }
         }
