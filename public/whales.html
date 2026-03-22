@@ -236,6 +236,40 @@ td { padding: 12px; font-size: 13px; vertical-align: middle; }
   .wf-grid { grid-template-columns: 1fr; }
   .wf-conc-stats { min-width: 90px; font-size: 10px; }
 }
+
+/* WHALE PROFILE PANEL */
+.wp-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 1100; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 40px 16px; }
+.wp-overlay.open { display: flex; }
+.wp-modal { background: var(--card); border: 1px solid var(--border); border-radius: 16px; max-width: 520px; width: 100%; position: relative; padding: 28px; }
+.wp-close { position: absolute; top: 14px; right: 16px; background: none; border: none; color: var(--muted); font-size: 24px; cursor: pointer; }
+.wp-close:hover { color: var(--text); }
+.wp-header { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
+.wp-name { font-family: var(--sans); font-size: 20px; font-weight: 800; }
+.wp-rank-badge { font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 12px; background: var(--gold-dim); color: var(--gold); }
+.wp-pnl { font-family: var(--mono); font-size: 14px; font-weight: 700; }
+.wp-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px; }
+.wp-stat { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; text-align: center; }
+.wp-stat-val { font-family: var(--sans); font-size: 18px; font-weight: 800; color: var(--text); }
+.wp-stat-label { font-family: var(--mono); font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
+.wp-risk { display: inline-block; padding: 4px 12px; border-radius: 12px; font-family: var(--mono); font-size: 11px; font-weight: 700; margin-bottom: 16px; }
+.wp-risk.Aggressive { background: rgba(239,68,68,0.15); color: var(--red); }
+.wp-risk.Balanced { background: var(--gold-dim); color: var(--gold); }
+.wp-risk.Conservative { background: rgba(34,197,94,0.15); color: var(--green); }
+.wp-section-title { font-family: var(--mono); font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+.wp-pie-wrap { display: flex; align-items: center; gap: 20px; margin-bottom: 20px; }
+.wp-pie { width: 100px; height: 100px; border-radius: 50%; flex-shrink: 0; }
+.wp-pie-legend { display: flex; flex-direction: column; gap: 4px; }
+.wp-pie-legend-item { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 11px; color: var(--text-soft); }
+.wp-pie-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.wp-positions { margin-bottom: 16px; }
+.wp-pos-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid rgba(42,42,36,0.4); }
+.wp-pos-row:last-child { border: none; }
+.wp-pos-market { flex: 1; font-size: 12px; color: var(--text); line-height: 1.3; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-pos-side { font-family: var(--mono); font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 8px; }
+.wp-pos-size { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--gold); white-space: nowrap; }
+.wp-cta { display: block; width: 100%; padding: 12px; border: none; border-radius: 8px; background: var(--gold); color: #1a1a17; font-family: var(--sans); font-size: 13px; font-weight: 700; cursor: pointer; text-align: center; text-decoration: none; transition: opacity 0.15s; }
+.wp-cta:hover { opacity: 0.88; text-decoration: none; color: #1a1a17; }
+.wp-loading { text-align: center; padding: 40px 0; font-family: var(--mono); font-size: 12px; color: var(--muted); }
 </style>
 </head>
 <body>
@@ -621,7 +655,7 @@ function renderTable() {
     const profileUrl = '/p/' + (p.proxyWallet || '');
     return '<tr class="' + hl + '">' +
       '<td>' + rankBadge(p.trader_rank) + '</td>' +
-      '<td><a href="' + profileUrl + '" style="text-decoration:none"><div class="trader-name">' + (p.trader || 'Unknown') + '</div></a><div class="trader-pnl">PnL: ' + fmtPnl(p.trader_pnl) + '</div></td>' +
+      '<td><div class="trader-name" style="cursor:pointer;border-bottom:1px dashed rgba(201,146,13,0.3)" onclick="event.stopPropagation();openWhaleProfile(\'' + escAttr(p.proxyWallet || p.trader || '') + '\')">' + (p.trader || 'Unknown') + '</div><div class="trader-pnl">PnL: ' + fmtPnl(p.trader_pnl) + '</div></td>' +
       '<td style="max-width:280px"><span style="cursor:pointer;border-bottom:1px dashed rgba(201,146,13,0.3);transition:color .15s" onmouseover="this.style.color=\'var(--gold)\'" onmouseout="this.style.color=\'var(--text)\'" onclick="event.stopPropagation();openMarketDetail(\'' + escAttr(p.market || '') + '\',' + Math.round((p.current_price || 0) * 100) + ',\'' + escAttr(p.market_url || '') + '\',\'\')">' + truncate(p.market, 60) + '</span></td>' +
       '<td>' + sideBadge(p.side) + '</td>' +
       '<td class="size-cell">' + fmtFull$(p.size) + '</td>' +
@@ -644,7 +678,7 @@ function renderMobileCards() {
     const pricePct = Math.round(p.current_price * 100);
     return '<div class="whale-card ' + hl + '">' +
       '<div class="whale-card-header">' +
-        '<div class="whale-card-trader">' + rankBadge(p.trader_rank) + ' <span class="trader-name">' + (p.trader || 'Unknown') + '</span></div>' +
+        '<div class="whale-card-trader">' + rankBadge(p.trader_rank) + ' <span class="trader-name" style="cursor:pointer;border-bottom:1px dashed rgba(201,146,13,0.3)" onclick="event.stopPropagation();openWhaleProfile(\'' + escAttr(p.proxyWallet || p.trader || '') + '\')">' + (p.trader || 'Unknown') + '</span></div>' +
         '<div class="whale-card-size">' + fmt$(p.size) + '</div>' +
       '</div>' +
       '<div class="whale-card-market" style="cursor:pointer" onclick="openMarketDetail(\'' + escAttr(p.market || '') + '\',' + Math.round((p.current_price || 0) * 100) + ',\'' + escAttr(p.market_url || '') + '\',\'\')">' + truncate(p.market, 80) + '</div>' +
@@ -1147,5 +1181,92 @@ function drawVolumeChart(canvasId, history) {
     </div>
   </div>
 </div>
+<!-- Whale Profile Modal -->
+<div class="wp-overlay" id="wpOverlay" onclick="if(event.target===this)closeWhaleProfile()">
+  <div class="wp-modal">
+    <button class="wp-close" onclick="closeWhaleProfile()">&times;</button>
+    <div id="wpContent">
+      <div class="wp-loading"><div class="spinner" style="display:inline-block;width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin 0.8s linear infinite"></div><p>Loading profile...</p></div>
+    </div>
+  </div>
+</div>
+
+<script>
+var _wpCatColors = { sports: '#3b82f6', politics: '#ef4444', crypto: '#f59e0b', entertainment: '#a855f7', tech: '#06b6d4', other: '#6b7280' };
+
+function openWhaleProfile(addressOrName) {
+  var overlay = document.getElementById('wpOverlay');
+  if (!overlay) return;
+  overlay.classList.add('open');
+  document.getElementById('wpContent').innerHTML = '<div class="wp-loading"><div class="spinner" style="display:inline-block;width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin 0.8s linear infinite"></div><p>Loading profile...</p></div>';
+
+  fetch('/api/whale-profile/' + encodeURIComponent(addressOrName)).then(function(r) { return r.json(); }).then(function(d) {
+    if (!d || d.error) { document.getElementById('wpContent').innerHTML = '<div class="wp-loading">Could not load profile.</div>'; return; }
+
+    var pnlColor = (d.pnl || 0) >= 0 ? 'var(--green)' : 'var(--red)';
+    var pnlSign = (d.pnl || 0) >= 0 ? '+' : '';
+    var pnlFmt = Math.abs(d.pnl || 0) >= 1000000 ? '$' + (Math.abs(d.pnl) / 1000000).toFixed(1) + 'M' : Math.abs(d.pnl || 0) >= 1000 ? '$' + Math.round(Math.abs(d.pnl) / 1000) + 'K' : '$' + Math.round(Math.abs(d.pnl || 0));
+
+    // Build pie chart gradient
+    var pieSegments = [];
+    var cumDeg = 0;
+    var legendHtml = '';
+    (d.category_breakdown || []).forEach(function(cat) {
+      var deg = (cat.pct / 100) * 360;
+      var col = _wpCatColors[cat.category] || _wpCatColors.other;
+      pieSegments.push(col + ' ' + cumDeg + 'deg ' + (cumDeg + deg) + 'deg');
+      cumDeg += deg;
+      legendHtml += '<div class="wp-pie-legend-item"><div class="wp-pie-dot" style="background:' + col + '"></div>' + cat.category.charAt(0).toUpperCase() + cat.category.slice(1) + ' ' + cat.pct + '%</div>';
+    });
+    var pieGradient = pieSegments.length > 0 ? 'conic-gradient(' + pieSegments.join(', ') + ')' : 'var(--border)';
+
+    // Top positions
+    var posHtml = '';
+    (d.top_positions || []).forEach(function(p) {
+      var sideClass = (p.side || '').toUpperCase() === 'YES' || (p.side || '').toUpperCase() === 'Y' ? 'side-yes' : (p.side || '').toUpperCase() === 'NO' || (p.side || '').toUpperCase() === 'N' ? 'side-no' : 'side-other';
+      posHtml += '<div class="wp-pos-row">' +
+        '<span class="wp-pos-side ' + sideClass + '">' + ((p.side || '').toUpperCase()) + '</span>' +
+        '<span class="wp-pos-market">' + ((p.market || '').substring(0, 55).replace(/</g, '&lt;')) + '</span>' +
+        '<span class="wp-pos-size">' + (p.size_display || '') + '</span>' +
+      '</div>';
+    });
+
+    // First market URL for CTA
+    var firstUrl = (d.top_positions && d.top_positions[0] && d.top_positions[0].url) ? d.top_positions[0].url : 'https://polymarket.com';
+
+    var html = '<div class="wp-header">' +
+      '<div>' +
+        '<div class="wp-name">' + (d.name || 'Unknown').replace(/</g, '&lt;') + '</div>' +
+        '<div style="display:flex;gap:8px;align-items:center;margin-top:4px">' +
+          (d.rank ? '<span class="wp-rank-badge">#' + d.rank + '</span>' : '') +
+          '<span class="wp-pnl" style="color:' + pnlColor + '">' + pnlSign + pnlFmt + ' PnL</span>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="wp-stats">' +
+      '<div class="wp-stat"><div class="wp-stat-val">' + (d.total_positions || 0) + '</div><div class="wp-stat-label">Positions</div></div>' +
+      '<div class="wp-stat"><div class="wp-stat-val">' + (d.total_capital_display || '$0') + '</div><div class="wp-stat-label">Capital</div></div>' +
+      '<div class="wp-stat"><div class="wp-stat-val">' + (Object.keys(d.category_breakdown || {}).length || 0) + '</div><div class="wp-stat-label">Categories</div></div>' +
+    '</div>' +
+    '<div class="wp-risk ' + (d.risk_profile || 'Balanced') + '">' + (d.risk_profile || 'Unknown') + '</div>' +
+    '<div class="wp-section-title" style="margin-top:16px">Portfolio Allocation</div>' +
+    '<div class="wp-pie-wrap">' +
+      '<div class="wp-pie" style="background:' + pieGradient + '"></div>' +
+      '<div class="wp-pie-legend">' + legendHtml + '</div>' +
+    '</div>' +
+    (posHtml ? '<div class="wp-section-title">Top Positions</div><div class="wp-positions">' + posHtml + '</div>' : '') +
+    '<a href="' + firstUrl + '" target="_blank" rel="noopener" class="wp-cta">Copy this whale\'s portfolio \u2192</a>';
+
+    document.getElementById('wpContent').innerHTML = html;
+  }).catch(function() {
+    document.getElementById('wpContent').innerHTML = '<div class="wp-loading">Failed to load profile. Try again.</div>';
+  });
+}
+
+function closeWhaleProfile() {
+  var overlay = document.getElementById('wpOverlay');
+  if (overlay) overlay.classList.remove('open');
+}
+</script>
 </body>
 </html>

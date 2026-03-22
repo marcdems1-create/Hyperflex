@@ -789,6 +789,26 @@ nav {
 .explore-insight-stat { font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 800; color: var(--gold); flex-shrink: 0; white-space: nowrap; }
 .explore-insight-share { font-family: 'Space Mono', monospace; font-size: 9px; color: #7a7870; background: transparent; border: 1px solid #2a2a26; border-radius: 4px; padding: 3px 6px; cursor: pointer; flex-shrink: 0; text-decoration: none; transition: all 0.15s; }
 .explore-insight-share:hover { color: var(--text-soft); border-color: #7a7870; }
+
+/* DAILY BRIEFING */
+.briefing-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+.briefing-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; cursor: pointer; user-select: none; }
+.briefing-header:hover { background: rgba(201,146,13,0.04); }
+.briefing-title { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; color: var(--gold); text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 8px; }
+.briefing-toggle { font-size: 12px; color: var(--muted); transition: transform 0.2s; }
+.briefing-toggle.open { transform: rotate(180deg); }
+.briefing-body { padding: 0 16px 16px; display: none; }
+.briefing-body.open { display: block; }
+.briefing-headline { font-size: 14px; font-weight: 700; color: var(--text); line-height: 1.4; margin-bottom: 12px; }
+.briefing-bullets { list-style: none; padding: 0; margin: 0 0 12px; }
+.briefing-bullets li { font-size: 12px; color: #9a9a8e; line-height: 1.5; padding: 4px 0; border-bottom: 1px solid rgba(42,42,36,0.3); display: flex; gap: 8px; }
+.briefing-bullets li:last-child { border: none; }
+.briefing-bullets .bullet-icon { flex-shrink: 0; }
+.briefing-fg { display: inline-flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; margin-bottom: 12px; }
+.briefing-fg-score { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 800; }
+.briefing-fg-label { font-size: 11px; font-weight: 600; }
+.briefing-link { font-family: 'Space Mono', monospace; font-size: 11px; color: var(--gold); text-decoration: none; font-weight: 700; }
+.briefing-link:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -933,6 +953,26 @@ nav {
       ↑ <span id="newActivityCount">0</span> new activities — click to refresh
     </div>
 
+    <!-- DAILY BRIEFING -->
+    <div id="daily-briefing" class="briefing-card" style="display:none">
+      <div class="briefing-header" onclick="toggleBriefing()">
+        <div class="briefing-title"><span>&#x1F4CB;</span> Today's Briefing</div>
+        <span class="briefing-toggle" id="briefing-chevron">&#x25BC;</span>
+      </div>
+      <div class="briefing-body" id="briefing-body">
+        <div class="briefing-headline" id="briefing-headline"></div>
+        <ul class="briefing-bullets" id="briefing-bullets"></ul>
+        <div id="briefing-fg-wrap" class="briefing-fg" style="display:none">
+          <div class="briefing-fg-score" id="briefing-fg-score">50</div>
+          <div>
+            <div class="briefing-fg-label" id="briefing-fg-label">Neutral</div>
+            <div style="font-size:9px;color:var(--muted)">Fear & Greed</div>
+          </div>
+        </div>
+        <div><a href="/data" class="briefing-link">Read full briefing →</a></div>
+      </div>
+    </div>
+
     <!-- LIVE INSIGHTS -->
     <div id="explore-insights" style="display:none;margin-bottom:16px">
       <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gold);margin-bottom:12px;font-family:'Space Mono',monospace;display:flex;align-items:center;gap:8px">
@@ -1028,6 +1068,74 @@ let activityPollInterval = null;
 let _exploreFollowing = [];
 let _exploreSearchQuery = '';
 let _exploreSearchTimer = null;
+
+// ── DAILY BRIEFING ──
+let _briefingOpen = true;
+function toggleBriefing() {
+  _briefingOpen = !_briefingOpen;
+  var body = document.getElementById('briefing-body');
+  var chevron = document.getElementById('briefing-chevron');
+  if (body) body.className = 'briefing-body' + (_briefingOpen ? ' open' : '');
+  if (chevron) chevron.className = 'briefing-toggle' + (_briefingOpen ? ' open' : '');
+}
+
+function loadDailyBriefing() {
+  fetch('/api/daily-briefing').then(function(r) { return r.json(); }).then(function(data) {
+    if (!data || !data.headline) return;
+    var wrap = document.getElementById('daily-briefing');
+    if (wrap) wrap.style.display = '';
+
+    var headlineEl = document.getElementById('briefing-headline');
+    if (headlineEl) headlineEl.textContent = data.headline;
+
+    // Build 3 bullet points from whale moves + market movers
+    var bullets = [];
+    if (data.whale_moves && data.whale_moves.length > 0) {
+      var wm = data.whale_moves[0];
+      var verb = { opened:'opened', closed:'closed', increased:'increased', decreased:'decreased' }[wm.action] || wm.action;
+      bullets.push({ icon: '\uD83D\uDC0B', text: '#' + (wm.trader_rank || '?') + ' ' + (wm.trader || 'Whale') + ' ' + verb + ' ' + (wm.size || '?') + ' on "' + ((wm.question || '').substring(0, 50)) + '"' });
+    }
+    if (data.market_movers && data.market_movers.length > 0) {
+      var mm = data.market_movers[0];
+      var dir = (mm.change_pct || 0) > 0 ? 'up' : 'down';
+      bullets.push({ icon: '\uD83D\uDCC8', text: '"' + ((mm.question || '').substring(0, 45)) + '" moved ' + dir + ' ' + Math.abs(mm.change_pct || 0).toFixed(1) + '%' });
+    }
+    if (data.whale_index_picks && data.whale_index_picks.length > 0) {
+      var wp = data.whale_index_picks[0];
+      bullets.push({ icon: '\uD83C\uDFAF', text: 'Top whale pick: "' + ((wp.market || '').substring(0, 45)) + '" (' + (wp.whale_count || 0) + ' whales, ' + (wp.consensus_pct || 0) + '% ' + (wp.consensus_side || '') + ')' });
+    }
+    if (data.stat_of_the_day && bullets.length < 3) {
+      bullets.push({ icon: '\uD83D\uDCA1', text: data.stat_of_the_day });
+    }
+
+    var bulletsEl = document.getElementById('briefing-bullets');
+    if (bulletsEl) {
+      bulletsEl.innerHTML = bullets.map(function(b) {
+        return '<li><span class="bullet-icon">' + b.icon + '</span><span>' + b.text.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</span></li>';
+      }).join('');
+    }
+
+    // Fear & Greed mini display
+    if (data.fear_greed && typeof data.fear_greed.score === 'number') {
+      var fgWrap = document.getElementById('briefing-fg-wrap');
+      if (fgWrap) fgWrap.style.display = '';
+      var fgScore = document.getElementById('briefing-fg-score');
+      if (fgScore) { fgScore.textContent = data.fear_greed.score; fgScore.style.color = data.fear_greed.color || '#eab308'; }
+      var fgLabel = document.getElementById('briefing-fg-label');
+      if (fgLabel) { fgLabel.textContent = data.fear_greed.label || 'Neutral'; fgLabel.style.color = data.fear_greed.color || '#eab308'; }
+    }
+
+    // Auto-open the body
+    var body = document.getElementById('briefing-body');
+    if (body) body.className = 'briefing-body open';
+    var chevron = document.getElementById('briefing-chevron');
+    if (chevron) chevron.className = 'briefing-toggle open';
+  }).catch(function() { /* silent */ });
+}
+
+// Refresh briefing every 30 min
+loadDailyBriefing();
+setInterval(loadDailyBriefing, 30 * 60 * 1000);
 
 // ── LIVE INSIGHTS LOADER ──
 function loadExploreInsights() {

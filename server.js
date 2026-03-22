@@ -17078,6 +17078,364 @@ app.get('/api/hyperliquid/whale-positions', async (req, res) => {
   }
 });
 
+// ════════════════════════════════════════════════════════════
+// FEAR & GREED INDEX — single 0-100 sentiment score
+// ════════════════════════════════════════════════════════════
+let _fearGreedCache = null;
+
+function computeFearGreed() {
+  const factors = {};
+
+  // 1. whale_sentiment: YES% across all whale positions (from whale flow cache)
+  const flowData = _whaleFlowCache && _whaleFlowCache.data ? _whaleFlowCache.data : null;
+  if (flowData && flowData.sentiment) {
+    factors.whale_sentiment = flowData.sentiment.yes_pct || 50;
+  } else {
+    // Fallback: compute from whale watch cache
+    const positions = (_whaleWatchCache && _whaleWatchCache.data && _whaleWatchCache.data.whales) || [];
+    let yc = 0, nc = 0;
+    for (const p of positions) {
+      const s = (p.side || '').toUpperCase();
+      if (s === 'YES' || s === 'Y') yc++; else if (s === 'NO' || s === 'N') nc++;
+    }
+    const total = yc + nc || 1;
+    factors.whale_sentiment = Math.round(yc / total * 100);
+  }
+
+  // 2. price_momentum: average 24h price change across tracked markets → normalise to 0-100
+  const moversData = _marketMoversCache && _marketMoversCache.data ? _marketMoversCache.data : null;
+  if (moversData && moversData.movers && moversData.movers.length > 0) {
+    const avgChange = moversData.movers.reduce((s, m) => s + (m.change_pct || 0), 0) / moversData.movers.length;
+    // Map -30..+30 range to 0..100
+    factors.price_momentum = Math.max(0, Math.min(100, Math.round(50 + avgChange * 1.67)));
+  } else {
+    factors.price_momentum = 50;
+  }
+
+  // 3. volume_trend: are more markets getting attention? Use whale position count as proxy
+  const positions = (_whaleWatchCache && _whaleWatchCache.data && _whaleWatchCache.data.whales) || [];
+  const uniqueMarkets = new Set(positions.map(p => p.market)).size;
+  // Normalise: 0 markets → 0, 50+ markets → 100
+  factors.volume_trend = Math.min(100, Math.round(uniqueMarkets * 2));
+
+  // 4. whale_concentration: are whales piling into few markets? Higher concentration → greedier (FOMO)
+  if (flowData && flowData.concentration && flowData.concentration.length > 0) {
+    const topConcentration = flowData.concentration[0];
+    // More whales in top market → more concentrated → greedier
+    // Scale: 3 whales → 30, 10+ whales → 80+
+    factors.whale_concentration = Math.min(100, Math.round(topConcentration.whale_count * 8));
+  } else {
+    factors.whale_concentration = 50;
+  }
+
+  // 5. leverage_avg: from Hyperliquid whale positions — high leverage → extreme greed
+  const hlData = hlCacheGet('hl_whale_positions', 15 * 60 * 1000);
+  if (hlData && hlData.positions && hlData.positions.length > 0) {
+    const avgLev = hlData.positions.reduce((s, p) => s + (p.leverage || 1), 0) / hlData.positions.length;
+    // Map 1x-20x leverage to 0-100
+    factors.leverage_avg = Math.min(100, Math.round((avgLev - 1) * 5.26));
+  } else {
+    factors.leverage_avg = 50; // neutral if no data
+  }
+
+  // Weighted average
+  const weights = { whale_sentiment: 0.30, price_momentum: 0.20, volume_trend: 0.15, whale_concentration: 0.20, leverage_avg: 0.15 };
+  let score = 0;
+  for (const [k, w] of Object.entries(weights)) {
+    score += (factors[k] || 50) * w;
+  }
+  score = Math.round(Math.max(0, Math.min(100, score)));
+
+  // Label + color
+  let label, color;
+  if (score <= 20) { label = 'Extreme Fear'; color = '#ef4444'; }
+  else if (score <= 40) { label = 'Fear'; color = '#f97316'; }
+  else if (score <= 60) { label = 'Neutral'; color = '#eab308'; }
+  else if (score <= 80) { label = 'Greed'; color = '#22c55e'; }
+  else { label = 'Extreme Greed'; color = '#16a34a'; }
+
+  return { score, label, color, factors, updated_at: new Date().toISOString() };
+}
+
+app.get('/api/fear-greed', (req, res) => {
+  try {
+    // 15 min cache
+    if (_fearGreedCache && (Date.now() - _fearGreedCache.ts < 15 * 60 * 1000)) {
+      return res.json(_fearGreedCache.data);
+    }
+    const data = computeFearGreed();
+    _fearGreedCache = { ts: Date.now(), data };
+    res.json(data);
+  } catch (err) {
+    console.error('[fear-greed]', err.message);
+    if (_fearGreedCache) return res.json(_fearGreedCache.data);
+    res.status(500).json({ error: 'Failed to compute Fear & Greed', detail: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+// DAILY BRIEFING / WHALE DIGEST
+// ════════════════════════════════════════════════════════════
+let _dailyBriefingCache = null;
+
+function generateDailyBriefing() {
+  const now = new Date().toISOString();
+
+  // ── headline: biggest whale move of the day ──
+  const trades = _whaleTradeStream || [];
+  let headline = 'Markets are quiet today — no major whale moves detected.';
+  if (trades.length > 0) {
+    const biggest = trades.reduce((max, t) => (t.size || 0) > (max.size || 0) ? t : max, trades[0]);
+    const verb = { opened: 'opened', closed: 'closed', increased: 'increased', decreased: 'decreased' }[biggest.action] || 'moved';
+    headline = `${biggest.trader_name || 'A top whale'} ${verb} a ${biggest.size_display || '$?'} ${(biggest.side || '').toUpperCase()} position on "${(biggest.question || '').substring(0, 80)}"`;
+  }
+
+  // ── whale_moves: top 5 from trade stream ──
+  const whale_moves = trades.slice(0, 5).map(t => ({
+    trader: t.trader_name,
+    trader_rank: t.trader_rank,
+    action: t.action,
+    question: t.question,
+    side: t.side,
+    size: t.size_display,
+    ts: t.ts
+  }));
+
+  // ── market_movers: top 3 biggest price changes ──
+  const moversData = _marketMoversCache && _marketMoversCache.data ? _marketMoversCache.data : null;
+  const market_movers = (moversData && moversData.movers || []).slice(0, 3).map(m => ({
+    question: m.question,
+    current_price: m.current_price,
+    change_pct: m.change_pct
+  }));
+
+  // ── fear_greed: current score + label ──
+  let fear_greed = { score: 50, label: 'Neutral', color: '#eab308', change: null };
+  try {
+    const fg = computeFearGreed();
+    fear_greed = { score: fg.score, label: fg.label, color: fg.color, change: null };
+    // We store yesterday's score in a simple module-level var for change tracking
+    if (_fearGreedCache && _fearGreedCache.data) {
+      fear_greed.change = fg.score - _fearGreedCache.data.score;
+    }
+  } catch (e) { /* use defaults */ }
+
+  // ── whale_index_picks: top 3 whale index picks ──
+  const indexData = _whaleIndexCache && _whaleIndexCache.data ? _whaleIndexCache.data : null;
+  const whale_index_picks = (indexData && indexData.picks || []).slice(0, 3).map(p => ({
+    market: p.market,
+    whale_count: p.whale_count,
+    consensus_side: p.consensus_side,
+    consensus_pct: p.consensus_pct,
+    strength: p.strength,
+    url: p.url
+  }));
+
+  // ── stat_of_the_day ──
+  let stat_of_the_day = 'No interesting stats today.';
+  const flowData = _whaleFlowCache && _whaleFlowCache.data ? _whaleFlowCache.data : null;
+  if (flowData && flowData.concentration && flowData.concentration.length > 0) {
+    const top = flowData.concentration[0];
+    if (top.whale_count >= 5) {
+      stat_of_the_day = `${top.whale_count} whales are all in the same market: "${(top.market || '').substring(0, 60)}"`;
+    } else if (flowData.category_breakdown && flowData.category_breakdown.length > 0) {
+      const topCat = flowData.category_breakdown[0];
+      const capFmt = topCat.capital >= 1000000 ? '$' + (topCat.capital / 1000000).toFixed(1) + 'M' : '$' + Math.round(topCat.capital / 1000) + 'K';
+      stat_of_the_day = `Whales have ${capFmt} deployed in ${topCat.category} markets — ${topCat.pct}% of all tracked capital`;
+    }
+  }
+
+  return {
+    headline,
+    whale_moves,
+    market_movers,
+    fear_greed,
+    whale_index_picks,
+    stat_of_the_day,
+    updated_at: now
+  };
+}
+
+app.get('/api/daily-briefing', (req, res) => {
+  try {
+    // 30 min cache
+    if (_dailyBriefingCache && (Date.now() - _dailyBriefingCache.ts < 30 * 60 * 1000)) {
+      return res.json(_dailyBriefingCache.data);
+    }
+    const data = generateDailyBriefing();
+    _dailyBriefingCache = { ts: Date.now(), data };
+    res.json(data);
+  } catch (err) {
+    console.error('[daily-briefing]', err.message);
+    if (_dailyBriefingCache) return res.json(_dailyBriefingCache.data);
+    res.status(500).json({ error: 'Failed to generate briefing', detail: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+// EMAIL SUBSCRIBERS — daily briefing signup
+// ════════════════════════════════════════════════════════════
+app.post('/api/subscribe', async (req, res) => {
+  const { email } = req.body || {};
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: 'Valid email required' });
+  }
+  try {
+    if (pool) {
+      await dbQuery(
+        'INSERT INTO subscribers (email) VALUES ($1) ON CONFLICT (email) DO NOTHING',
+        [email.toLowerCase().trim()]
+      );
+    } else {
+      await supabase.from('subscribers').upsert({ email: email.toLowerCase().trim() }, { onConflict: 'email' });
+    }
+    res.json({ ok: true, message: 'Subscribed! You\'ll get the daily whale briefing.' });
+  } catch (err) {
+    console.error('[subscribe]', err.message);
+    res.status(500).json({ error: 'Failed to subscribe', detail: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+// WHALE PORTFOLIO PROFILES — full breakdown for a single whale
+// ════════════════════════════════════════════════════════════
+let _whaleProfileCache = new Map(); // address → { ts, data }
+
+app.get('/api/whale-profile/:address', async (req, res) => {
+  const address = (req.params.address || '').trim();
+  if (!address) return res.status(400).json({ error: 'Address required' });
+
+  try {
+    // 10 min cache per address
+    const cacheKey = address.toLowerCase();
+    const cached = _whaleProfileCache.get(cacheKey);
+    if (cached && (Date.now() - cached.ts < 10 * 60 * 1000)) {
+      return res.json(cached.data);
+    }
+
+    // Get positions from whale watch cache
+    const whaleData = (_whaleWatchCache && _whaleWatchCache.data) || null;
+    const allPositions = (whaleData && whaleData.whales) || [];
+
+    // Filter positions for this whale (match by proxyWallet or trader name)
+    let positions = allPositions.filter(p =>
+      (p.proxyWallet || '').toLowerCase() === cacheKey ||
+      (p.trader || '').toLowerCase() === cacheKey
+    );
+
+    // If no match by wallet, try partial name match
+    if (positions.length === 0) {
+      positions = allPositions.filter(p =>
+        (p.trader || '').toLowerCase().includes(cacheKey) ||
+        cacheKey.includes((p.trader || '').toLowerCase())
+      );
+    }
+
+    if (positions.length === 0) {
+      return res.json({
+        address,
+        total_positions: 0,
+        total_capital: 0,
+        category_breakdown: [],
+        top_positions: [],
+        win_rate: 0,
+        pnl: 0,
+        risk_profile: 'Unknown',
+        updated_at: new Date().toISOString()
+      });
+    }
+
+    // Basic info from first position
+    const traderName = positions[0].trader || 'Unknown';
+    const traderRank = positions[0].trader_rank || 0;
+    const traderPnl = positions[0].trader_pnl || 0;
+
+    // Category breakdown
+    const catKeywords = {
+      sports: /nba|nfl|nhl|mlb|ufc|mma|soccer|football|baseball|basketball|hockey|tennis|golf|boxing|f1|championship|playoffs|super bowl|world cup|premier league|match|game/i,
+      politics: /trump|biden|president|election|congress|senate|democrat|republican|governor|vote|political/i,
+      crypto: /bitcoin|btc|ethereum|eth|solana|sol|crypto|defi|nft|token|dogecoin|xrp|binance/i,
+      entertainment: /movie|oscar|grammy|emmy|album|netflix|spotify|tiktok|youtube|celebrity/i,
+      tech: /ai |openai|chatgpt|apple|google|microsoft|meta |tesla|nvidia|amazon|startup|tech/i
+    };
+
+    function categorizePosition(q) {
+      const text = (q || '').toLowerCase();
+      for (const [cat, regex] of Object.entries(catKeywords)) {
+        if (regex.test(text)) return cat;
+      }
+      return 'other';
+    }
+
+    const catMap = {};
+    let totalCapital = 0;
+    for (const p of positions) {
+      const cat = categorizePosition(p.market);
+      if (!catMap[cat]) catMap[cat] = 0;
+      catMap[cat] += (p.size || 0);
+      totalCapital += (p.size || 0);
+    }
+
+    const category_breakdown = Object.entries(catMap)
+      .map(([category, capital]) => ({
+        category,
+        capital: Math.round(capital),
+        pct: totalCapital > 0 ? Math.round(capital / totalCapital * 100) : 0
+      }))
+      .sort((a, b) => b.capital - a.capital);
+
+    // Top positions by size
+    const top_positions = [...positions]
+      .sort((a, b) => (b.size || 0) - (a.size || 0))
+      .slice(0, 5)
+      .map(p => ({
+        market: p.market,
+        side: p.side,
+        size: p.size,
+        size_display: p.size >= 1000000 ? '$' + (p.size / 1000000).toFixed(1) + 'M' : p.size >= 1000 ? '$' + Math.round(p.size / 1000) + 'K' : '$' + Math.round(p.size),
+        current_price: p.current_price,
+        url: p.market_url
+      }));
+
+    // Risk profile based on concentration + position count
+    const topPositionPct = positions.length > 0 && totalCapital > 0
+      ? ((positions.sort((a, b) => (b.size || 0) - (a.size || 0))[0].size || 0) / totalCapital * 100)
+      : 0;
+    const uniqueCats = Object.keys(catMap).length;
+    let risk_profile = 'Balanced';
+    if (topPositionPct > 50 || uniqueCats <= 1) risk_profile = 'Aggressive';
+    else if (positions.length > 10 && uniqueCats >= 3 && topPositionPct < 30) risk_profile = 'Conservative';
+
+    const data = {
+      address: positions[0].proxyWallet || address,
+      name: traderName,
+      rank: traderRank,
+      pnl: traderPnl,
+      total_positions: positions.length,
+      total_capital: Math.round(totalCapital),
+      total_capital_display: totalCapital >= 1000000 ? '$' + (totalCapital / 1000000).toFixed(1) + 'M' : totalCapital >= 1000 ? '$' + Math.round(totalCapital / 1000) + 'K' : '$' + Math.round(totalCapital),
+      category_breakdown,
+      top_positions,
+      win_rate: 0, // No resolved data yet
+      risk_profile,
+      updated_at: new Date().toISOString()
+    };
+
+    _whaleProfileCache.set(cacheKey, { ts: Date.now(), data });
+    // Cap cache at 200 entries
+    if (_whaleProfileCache.size > 200) {
+      const firstKey = _whaleProfileCache.keys().next().value;
+      _whaleProfileCache.delete(firstKey);
+    }
+    res.json(data);
+  } catch (err) {
+    console.error('[whale-profile]', err.message);
+    const stale = _whaleProfileCache.get(address.toLowerCase());
+    if (stale) return res.json(stale.data);
+    res.status(500).json({ error: 'Failed to build whale profile', detail: err.message });
+  }
+});
+
 // 404 catch-all — must be last route
 app.use((req, res) => {
   res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));

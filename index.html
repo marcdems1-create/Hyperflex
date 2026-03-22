@@ -1188,6 +1188,12 @@ function App() {
   const [creatorSuggestDesc, setCreatorSuggestDesc] = React.useState('');
   const [creatorSuggestions, setCreatorSuggestions] = React.useState([]);
   const [creatorSuggestLoading, setCreatorSuggestLoading] = React.useState(false);
+  const [fearGreed, setFearGreed] = React.useState(null);
+  const [subEmail, setSubEmail] = React.useState('');
+  const [subStatus, setSubStatus] = React.useState(''); // '' | 'sending' | 'ok' | 'err'
+  React.useEffect(() => {
+    fetch('/api/fear-greed').then(r => r.json()).then(d => { if (d && typeof d.score === 'number') setFearGreed(d); }).catch(() => {});
+  }, []);
   const [creatorAnalytics, setCreatorAnalytics] = React.useState(null);
   const [analyticsLoading, setAnalyticsLoading] = React.useState(false);
   const [creatorSubTab, setCreatorSubTab] = React.useState('dashboard');
@@ -1535,6 +1541,64 @@ function App() {
             🪨 VIEW COMMODITY MARKETS →
           </button>
         </div>
+
+        {/* ── FEAR & GREED GAUGE ─────────────────────────── */}
+        {fearGreed && (
+          <div style={{background:"linear-gradient(135deg,#0e0e0c,#1a1a17)",border:"1px solid #2a2a26",borderRadius:12,padding:20,marginBottom:14,textAlign:"center"}}>
+            <div style={{fontSize:9,color:"#c9920d",fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",marginBottom:14,fontFamily:"'Space Mono', monospace"}}>Prediction Market Fear & Greed Index</div>
+            <div style={{position:"relative",width:160,height:90,margin:"0 auto 12px"}}>
+              {/* Semi-circle gauge */}
+              <div style={{
+                width:160, height:80, borderRadius:"80px 80px 0 0", overflow:"hidden", position:"relative",
+                background: `conic-gradient(from 0.75turn, #ef4444 0deg, #f97316 36deg, #eab308 72deg, #22c55e 108deg, #16a34a 144deg, #16a34a 180deg, transparent 180deg)`,
+              }}>
+                {/* Needle overlay */}
+                <div style={{position:"absolute",bottom:0,left:"50%",width:2,height:70,background:"#fff",transformOrigin:"bottom center",transform:`rotate(${(fearGreed.score / 100) * 180 - 90}deg)`,transition:"transform 1s ease",borderRadius:1}}/>
+                {/* Center cover */}
+                <div style={{position:"absolute",bottom:0,left:"50%",transform:"translateX(-50%)",width:100,height:50,borderRadius:"50px 50px 0 0",background:"#0e0e0c"}}/>
+              </div>
+              {/* Score number in center */}
+              <div style={{position:"absolute",bottom:4,left:"50%",transform:"translateX(-50%)",fontSize:28,fontWeight:800,color:"#fff",fontFamily:"'Syne', sans-serif"}}>{fearGreed.score}</div>
+            </div>
+            <div style={{fontSize:16,fontWeight:700,color:fearGreed.color,marginBottom:6}}>{fearGreed.label}</div>
+            <div style={{fontSize:10,color:"#7a7870",lineHeight:1.5,marginBottom:14}}>Based on whale positions, price momentum, and leverage across Polymarket + Hyperliquid</div>
+            <a href="/data" style={{fontSize:11,color:"#c9920d",fontWeight:600,textDecoration:"none"}}>See full breakdown →</a>
+
+            {/* Email subscribe */}
+            <div style={{marginTop:16,paddingTop:16,borderTop:"1px solid #2a2a26"}}>
+              <div style={{fontSize:11,fontWeight:600,color:"#ddd8cc",marginBottom:8}}>Get the daily whale briefing in your inbox</div>
+              {subStatus === 'ok' ? (
+                <div style={{fontSize:12,color:"#22c55e",fontWeight:600,padding:"8px 0"}}>Subscribed! Check your inbox.</div>
+              ) : (
+                <div style={{display:"flex",gap:8,maxWidth:340,margin:"0 auto"}}>
+                  <input
+                    type="email"
+                    value={subEmail}
+                    onChange={e => setSubEmail(e.target.value)}
+                    placeholder="you@email.com"
+                    onKeyDown={e => { if (e.key === 'Enter') handleSubscribe(); }}
+                    style={{flex:1,padding:"8px 12px",background:"#0e0e0c",border:"1px solid #2a2a26",borderRadius:6,color:"#ddd8cc",fontSize:12,fontFamily:"inherit",outline:"none"}}
+                  />
+                  <button
+                    onClick={() => {
+                      if (!subEmail || subStatus === 'sending') return;
+                      setSubStatus('sending');
+                      fetch('/api/subscribe', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email:subEmail}) })
+                        .then(r => r.json())
+                        .then(d => { setSubStatus(d.ok ? 'ok' : 'err'); })
+                        .catch(() => setSubStatus('err'));
+                    }}
+                    disabled={subStatus === 'sending'}
+                    style={{padding:"8px 16px",background:"#c9920d",border:"none",borderRadius:6,color:"#0e0e0c",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",opacity:subStatus==='sending'?0.6:1}}
+                  >
+                    {subStatus === 'sending' ? '...' : 'Subscribe'}
+                  </button>
+                </div>
+              )}
+              {subStatus === 'err' && <div style={{fontSize:10,color:"#ef4444",marginTop:6}}>Something went wrong. Try again.</div>}
+            </div>
+          </div>
+        )}
 
         {/* STREAK WIDGET + Tabs — mobile only (on desktop these are in sidebar) */}
         {!isDesktop && (
