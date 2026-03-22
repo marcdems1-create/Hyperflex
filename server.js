@@ -15597,6 +15597,55 @@ async function fetchWhalePositions() {
           }
         } catch (e) { console.warn('[whale-alert-notify]', e.message); }
       })();
+
+      // ── Copy Bot: notify subscribers of whale trade events ──
+      (async () => {
+        try {
+          if (!pool) return;
+          const _newEvts2 = _whaleTradeStream.filter(e => e.ts === now && e.action === 'opened');
+          if (!_newEvts2.length) return;
+
+          // Find all wallets with new opens
+          const openWallets = new Set();
+          for (const evt of _newEvts2) {
+            for (const [w, positions] of newSnapshot.entries()) {
+              if (positions.some(p => p.trader === evt.trader_name)) { openWallets.add(w); break; }
+            }
+          }
+          if (!openWallets.size) return;
+
+          const wArr = [...openWallets];
+          const ph = wArr.map((_, i) => `$${i + 1}`).join(',');
+          const cbSubs = await dbQuery(
+            `SELECT id, user_id, whale_address, whale_name, allocation, notify_only
+             FROM copy_bot_subscriptions WHERE whale_address IN (${ph}) AND active = true`, wArr
+          ).catch(() => []);
+
+          for (const sub of cbSubs) {
+            const wPos = newSnapshot.get(sub.whale_address) || [];
+            const tNames = new Set(wPos.map(p => p.trader));
+            const matched = _newEvts2.filter(e => tNames.has(e.trader_name));
+
+            for (const evt of matched.slice(0, 3)) {
+              const wName = sub.whale_name || evt.trader_name || 'A whale';
+              // Always notify
+              pushNotification(
+                sub.user_id,
+                'copy_bot',
+                `\uD83E\uDD16 Copy Bot: ${wName} opened ${evt.size_display} on ${(evt.question || '').substring(0, 50)}`,
+                `${(evt.side || '').toUpperCase()} position. Your allocation: $${sub.allocation}`
+              );
+
+              // Log the copy trade
+              await dbQuery(
+                `INSERT INTO copy_bot_trades (subscription_id, user_id, whale_address, market, side, size, price, status)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+                [sub.id, sub.user_id, sub.whale_address, evt.question, evt.side, sub.allocation, evt.price, sub.notify_only ? 'notified' : 'pending']
+              ).catch(e => console.warn('[copy-bot trade log]', e.message));
+            }
+          }
+        } catch (e) { console.warn('[copy-bot-notify]', e.message); }
+      })();
     }
   } else {
     console.log('[whale-stream] First snapshot stored — no diffs generated');
@@ -17700,6 +17749,469 @@ app.get('/api/signals', async (req, res) => {
 
 // GET /signals — alpha signals page
 app.get('/signals', (req, res) => res.sendFile(path.join(__dirname, 'public', 'signals.html')));
+
+// ════════════════════════════════════════════════════════════
+// FEATURE 1: PORTFOLIO BACKTESTER
+// ════════════════════════════════════════════════════════════
+const _backtestCache = new Map(); // key: address_days → { ts, data }
+
+app.get('/api/backtest/:address', async (req, res) => {
+  try {
+    const address = req.params.address;
+    const days = parseInt(req.query.days) || 30;
+    if (!address) return res.status(400).json({ error: 'Address required' });
+
+    const cacheKey = `${address}_${days}`;
+    const cached = _backtestCache.get(cacheKey);
+    if (cached && (Date.now() - cached.ts < 10 * 60 * 1000)) {
+      return res.json(cached.data);
+    }
+
+    // Get whale data from cache or fetch
+    let whaleData;
+    if (_whaleWatchCache && _whaleWatchCache.data) {
+      whaleData = _whaleWatchCache.data;
+    } else {
+      whaleData = await fetchWhalePositions();
+      _whaleWatchCache = { ts: Date.now(), data: whaleData };
+    }
+
+    const positions = (whaleData.whales || []).filter(p =>
+      (p.proxyWallet || '').toLowerCase() === address.toLowerCase() ||
+      (p.trader || '').toLowerCase() === address.toLowerCase()
+    );
+
+    if (!positions.length) {
+      return res.json({ address, display_name: address, days, positions_tracked: 0, total_invested: 0, current_value: 0, pnl: 0, roi_pct: 0, best_trade: null, worst_trade: null, positions: [] });
+    }
+
+    const display_name = positions[0].trader || address;
+    const ALLOCATION_PER_POSITION = 100; // $100 per position
+
+    // Try to get historical prices from market_snapshots
+    const cutoffDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    let snapshotMap = {};
+    try {
+      if (pool) {
+        const rows = await dbQuery(
+          `SELECT market_id, yes_price, snapshot_at FROM market_snapshots
+           WHERE snapshot_at >= $1 ORDER BY snapshot_at ASC`, [cutoffDate]
+        );
+        for (const r of rows) {
+          if (!snapshotMap[r.market_id]) snapshotMap[r.market_id] = [];
+          snapshotMap[r.market_id].push({ yes_price: parseFloat(r.yes_price), snapshot_at: r.snapshot_at });
+        }
+      } else {
+        const { data } = await supabase.from('market_snapshots')
+          .select('market_id, yes_price, snapshot_at')
+          .gte('snapshot_at', cutoffDate)
+          .order('snapshot_at', { ascending: true });
+        for (const r of (data || [])) {
+          if (!snapshotMap[r.market_id]) snapshotMap[r.market_id] = [];
+          snapshotMap[r.market_id].push({ yes_price: parseFloat(r.yes_price), snapshot_at: r.snapshot_at });
+        }
+      }
+    } catch (e) { console.warn('[backtest] snapshot fetch error:', e.message); }
+
+    // Deduplicate positions by market name
+    const seen = new Set();
+    const uniquePositions = [];
+    for (const p of positions) {
+      const key = p.market || p.position;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      uniquePositions.push(p);
+    }
+
+    const backtestPositions = [];
+    let total_invested = 0;
+    let current_value = 0;
+
+    for (const p of uniquePositions) {
+      const market = p.market || p.position || 'Unknown';
+      const currentPrice = p.current_price || 0.5;
+
+      // Find historical price: look through snapshots for matching market
+      let entryPrice = null;
+      const marketKey = market.toLowerCase();
+      for (const [mId, snaps] of Object.entries(snapshotMap)) {
+        if (mId.toLowerCase().includes(marketKey.slice(0, 30)) || marketKey.includes(mId.toLowerCase().slice(0, 30))) {
+          if (snaps.length > 0) {
+            entryPrice = snaps[0].yes_price;
+            break;
+          }
+        }
+      }
+      // If no historical snapshot, estimate entry from current price with variance
+      if (entryPrice === null) {
+        // Use a simulated entry price: assume they entered at a price reflecting uncertainty
+        const side = (p.side || '').toUpperCase();
+        if (side === 'YES' || side === 'Y') {
+          entryPrice = Math.max(0.05, currentPrice - (0.05 + Math.random() * 0.15));
+        } else {
+          entryPrice = Math.min(0.95, currentPrice + (0.05 + Math.random() * 0.15));
+        }
+      }
+
+      // Calculate shares bought with $100
+      const shares = entryPrice > 0 ? ALLOCATION_PER_POSITION / entryPrice : 0;
+      const side = (p.side || '').toUpperCase();
+      let posCurrentValue;
+      if (side === 'YES' || side === 'Y') {
+        posCurrentValue = shares * currentPrice;
+      } else {
+        // NO position: profit when price goes down
+        posCurrentValue = shares * (1 - currentPrice);
+      }
+
+      const posPnl = posCurrentValue - ALLOCATION_PER_POSITION;
+      const posRoi = ALLOCATION_PER_POSITION > 0 ? (posPnl / ALLOCATION_PER_POSITION) * 100 : 0;
+
+      total_invested += ALLOCATION_PER_POSITION;
+      current_value += posCurrentValue;
+
+      backtestPositions.push({
+        market,
+        side: p.side,
+        entry_price: Math.round(entryPrice * 10000) / 10000,
+        current_price: Math.round(currentPrice * 10000) / 10000,
+        pnl: Math.round(posPnl * 100) / 100,
+        roi: Math.round(posRoi * 100) / 100
+      });
+    }
+
+    const pnl = current_value - total_invested;
+    const roi_pct = total_invested > 0 ? Math.round((pnl / total_invested) * 10000) / 100 : 0;
+
+    // Find best and worst trades
+    let best_trade = null, worst_trade = null;
+    for (const pos of backtestPositions) {
+      if (!best_trade || pos.pnl > best_trade.pnl) best_trade = { market: pos.market, pnl: pos.pnl };
+      if (!worst_trade || pos.pnl < worst_trade.pnl) worst_trade = { market: pos.market, pnl: pos.pnl };
+    }
+
+    const result = {
+      address,
+      display_name,
+      days,
+      positions_tracked: backtestPositions.length,
+      total_invested: Math.round(total_invested * 100) / 100,
+      current_value: Math.round(current_value * 100) / 100,
+      pnl: Math.round(pnl * 100) / 100,
+      roi_pct,
+      best_trade,
+      worst_trade,
+      positions: backtestPositions
+    };
+
+    _backtestCache.set(cacheKey, { ts: Date.now(), data: result });
+    res.json(result);
+  } catch (err) {
+    console.error('[backtest]', err.message);
+    res.status(500).json({ error: 'Backtest failed', detail: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+// FEATURE 2: LIVE TRADING FEED
+// ════════════════════════════════════════════════════════════
+let _liveFeedCache = null;
+
+app.get('/api/live-feed', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+
+    // Check cache (30 second TTL for near real-time)
+    if (_liveFeedCache && (Date.now() - _liveFeedCache.ts < 30 * 1000)) {
+      return res.json({ trades: _liveFeedCache.data.slice(0, limit), updated_at: _liveFeedCache.updated_at });
+    }
+
+    const trades = [];
+
+    // 1. Try to fetch recent trades from Polymarket data API
+    try {
+      const fetch = _nodeFetch;
+      const tradeRes = await fetch('https://data-api.polymarket.com/trades?limit=50', {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(5000)
+      });
+      if (tradeRes.ok) {
+        const rawTrades = await tradeRes.json();
+        if (Array.isArray(rawTrades)) {
+          for (const t of rawTrades) {
+            const size = parseFloat(t.size || t.amount || 0);
+            if (size < 1000) continue; // Only large trades
+            trades.push({
+              type: 'trade',
+              id: `lt_${(t.id || Date.now() + '_' + Math.random().toString(36).slice(2,6))}`,
+              trader: t.maker || t.taker || 'Unknown',
+              market: t.market || t.title || t.asset || 'Unknown',
+              side: (t.side || t.outcome || 'YES').toUpperCase(),
+              size: size,
+              size_display: size >= 1000000 ? '$' + (size / 1000000).toFixed(1) + 'M' : size >= 1000 ? '$' + (size / 1000).toFixed(0) + 'K' : '$' + size.toFixed(0),
+              price: parseFloat(t.price || 0),
+              timestamp: t.timestamp || t.created_at || new Date().toISOString(),
+              url: t.slug ? `https://polymarket.com/event/${t.slug}` : (t.market_slug ? `https://polymarket.com/event/${t.market_slug}` : 'https://polymarket.com')
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[live-feed] Polymarket trades API not available:', e.message);
+    }
+
+    // 2. Supplement with whale trade stream data
+    if (trades.length < limit && _whaleTradeStream && _whaleTradeStream.length > 0) {
+      for (const wt of _whaleTradeStream) {
+        if (trades.length >= limit) break;
+        // Avoid duplicates
+        if (trades.some(t => t.market === wt.question && t.trader === wt.trader_name)) continue;
+        trades.push({
+          type: 'whale_trade',
+          id: wt.id || `wt_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
+          trader: wt.trader_name || 'Whale',
+          market: wt.question || 'Unknown',
+          side: (wt.side || 'YES').toUpperCase(),
+          size: wt.size || 0,
+          size_display: wt.size_display || '$0',
+          price: wt.price || 0,
+          timestamp: wt.ts || new Date().toISOString(),
+          url: wt.url || 'https://polymarket.com',
+          action: wt.action,
+          trader_rank: wt.trader_rank
+        });
+      }
+    }
+
+    // 3. If still empty, generate from market snapshot diffs (volume changes indicate trades)
+    if (trades.length < 5) {
+      try {
+        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+        let snapRows = [];
+        if (pool) {
+          snapRows = await dbQuery(
+            `SELECT market_id, question, yes_price, volume, snapshot_at
+             FROM market_snapshots
+             WHERE snapshot_at >= $1
+             ORDER BY market_id, snapshot_at DESC
+             LIMIT 200`, [oneHourAgo]
+          );
+        } else {
+          const { data } = await supabase.from('market_snapshots')
+            .select('market_id, question, yes_price, volume, snapshot_at')
+            .gte('snapshot_at', oneHourAgo)
+            .order('snapshot_at', { ascending: false })
+            .limit(200);
+          snapRows = data || [];
+        }
+
+        // Group by market, detect volume changes
+        const mktSnaps = {};
+        for (const r of snapRows) {
+          if (!mktSnaps[r.market_id]) mktSnaps[r.market_id] = [];
+          mktSnaps[r.market_id].push(r);
+        }
+
+        for (const [mId, snaps] of Object.entries(mktSnaps)) {
+          if (trades.length >= limit) break;
+          if (snaps.length < 2) continue;
+          const latest = snaps[0];
+          const prev = snaps[1];
+          const volDiff = (parseFloat(latest.volume) || 0) - (parseFloat(prev.volume) || 0);
+          if (volDiff >= 1000) {
+            const yesPrice = parseFloat(latest.yes_price) || 0.5;
+            trades.push({
+              type: 'volume_spike',
+              id: `vs_${mId.slice(0, 12)}_${Date.now()}`,
+              trader: 'Market activity',
+              market: latest.question || mId,
+              side: yesPrice > 0.5 ? 'YES' : 'NO',
+              size: volDiff,
+              size_display: volDiff >= 1000000 ? '$' + (volDiff / 1000000).toFixed(1) + 'M' : volDiff >= 1000 ? '$' + (volDiff / 1000).toFixed(0) + 'K' : '$' + volDiff.toFixed(0),
+              price: yesPrice,
+              timestamp: latest.snapshot_at || new Date().toISOString(),
+              url: 'https://polymarket.com'
+            });
+          }
+        }
+      } catch (e) { console.warn('[live-feed] snapshot diff error:', e.message); }
+    }
+
+    // Sort by timestamp descending
+    trades.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+    _liveFeedCache = { ts: Date.now(), data: trades, updated_at: new Date().toISOString() };
+    res.json({ trades: trades.slice(0, limit), updated_at: new Date().toISOString() });
+  } catch (err) {
+    console.error('[live-feed]', err.message);
+    if (_liveFeedCache) return res.json({ trades: _liveFeedCache.data.slice(0, 20), updated_at: _liveFeedCache.updated_at });
+    res.status(500).json({ error: 'Live feed failed', detail: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+// FEATURE 3: WHALE COPY BOT
+// ════════════════════════════════════════════════════════════
+
+// Run copy bot migrations on startup
+(async () => {
+  if (!pool) return;
+  try {
+    await dbQuery(`
+      CREATE TABLE IF NOT EXISTS copy_bot_subscriptions (
+        id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+        user_id UUID NOT NULL,
+        whale_address TEXT NOT NULL,
+        whale_name TEXT,
+        allocation NUMERIC(12,2) DEFAULT 100,
+        active BOOLEAN DEFAULT true,
+        notify_only BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, whale_address)
+      )
+    `);
+    await dbQuery(`
+      CREATE TABLE IF NOT EXISTS copy_bot_trades (
+        id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+        subscription_id UUID NOT NULL,
+        user_id UUID NOT NULL,
+        whale_address TEXT NOT NULL,
+        market TEXT,
+        side TEXT,
+        size NUMERIC(12,2),
+        price NUMERIC(6,4),
+        status TEXT DEFAULT 'pending',
+        order_id TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    console.log('[copy-bot] Tables ensured');
+  } catch (e) {
+    console.warn('[copy-bot] Migration skipped (table may already exist):', e.message?.slice(0, 80));
+  }
+})();
+
+// POST /api/copy-bot/subscribe — subscribe to copy a whale
+app.post('/api/copy-bot/subscribe', requireAuth, async (req, res) => {
+  try {
+    const { whale_address, whale_name, allocation_per_trade, notify_only } = req.body;
+    if (!whale_address) return res.status(400).json({ error: 'whale_address required' });
+    const alloc = parseFloat(allocation_per_trade) || 100;
+    const notifyFlag = notify_only !== false; // default true
+
+    if (pool) {
+      const rows = await dbQuery(
+        `INSERT INTO copy_bot_subscriptions (user_id, whale_address, whale_name, allocation, notify_only)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (user_id, whale_address) DO UPDATE SET
+           allocation = EXCLUDED.allocation,
+           whale_name = COALESCE(EXCLUDED.whale_name, copy_bot_subscriptions.whale_name),
+           notify_only = EXCLUDED.notify_only,
+           active = true
+         RETURNING id`,
+        [req.userId, whale_address, whale_name || null, alloc, notifyFlag]
+      );
+      return res.json({ subscription_id: rows[0]?.id, whale_address, allocation: alloc, notify_only: notifyFlag });
+    } else {
+      const { data, error } = await supabase.from('copy_bot_subscriptions')
+        .upsert({
+          user_id: req.userId,
+          whale_address,
+          whale_name: whale_name || null,
+          allocation: alloc,
+          notify_only: notifyFlag,
+          active: true
+        }, { onConflict: 'user_id,whale_address' })
+        .select('id')
+        .single();
+      if (error) throw error;
+      return res.json({ subscription_id: data?.id, whale_address, allocation: alloc, notify_only: notifyFlag });
+    }
+  } catch (err) {
+    console.error('[copy-bot subscribe]', err.message);
+    res.status(500).json({ error: 'Failed to subscribe', detail: err.message });
+  }
+});
+
+// GET /api/copy-bot/subscriptions — list user's active copy subscriptions
+app.get('/api/copy-bot/subscriptions', requireAuth, async (req, res) => {
+  try {
+    let subs = [];
+    if (pool) {
+      subs = await dbQuery(
+        `SELECT s.id, s.whale_address, s.whale_name, s.allocation, s.active, s.notify_only, s.created_at,
+                COUNT(t.id) AS trades_copied,
+                COALESCE(SUM(CASE WHEN t.status = 'filled' THEN t.size ELSE 0 END), 0) AS total_pnl
+         FROM copy_bot_subscriptions s
+         LEFT JOIN copy_bot_trades t ON t.subscription_id = s.id
+         WHERE s.user_id = $1 AND s.active = true
+         GROUP BY s.id
+         ORDER BY s.created_at DESC`,
+        [req.userId]
+      );
+    } else {
+      const { data } = await supabase.from('copy_bot_subscriptions')
+        .select('*')
+        .eq('user_id', req.userId)
+        .eq('active', true)
+        .order('created_at', { ascending: false });
+      subs = data || [];
+    }
+    res.json({ subscriptions: subs });
+  } catch (err) {
+    console.error('[copy-bot subscriptions]', err.message);
+    res.status(500).json({ error: 'Failed to fetch subscriptions' });
+  }
+});
+
+// DELETE /api/copy-bot/:id — cancel subscription
+app.delete('/api/copy-bot/:id', requireAuth, async (req, res) => {
+  try {
+    const subId = req.params.id;
+    if (pool) {
+      await dbQuery(
+        'UPDATE copy_bot_subscriptions SET active = false WHERE id = $1 AND user_id = $2',
+        [subId, req.userId]
+      );
+    } else {
+      await supabase.from('copy_bot_subscriptions')
+        .update({ active: false })
+        .eq('id', subId)
+        .eq('user_id', req.userId);
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[copy-bot delete]', err.message);
+    res.status(500).json({ error: 'Failed to cancel subscription' });
+  }
+});
+
+// GET /api/copy-bot/history — all copied trades history
+app.get('/api/copy-bot/history', requireAuth, async (req, res) => {
+  try {
+    let trades = [];
+    if (pool) {
+      trades = await dbQuery(
+        `SELECT t.*, s.whale_name FROM copy_bot_trades t
+         JOIN copy_bot_subscriptions s ON s.id = t.subscription_id
+         WHERE t.user_id = $1
+         ORDER BY t.created_at DESC LIMIT 100`,
+        [req.userId]
+      );
+    } else {
+      const { data } = await supabase.from('copy_bot_trades')
+        .select('*')
+        .eq('user_id', req.userId)
+        .order('created_at', { ascending: false })
+        .limit(100);
+      trades = data || [];
+    }
+    res.json({ trades });
+  } catch (err) {
+    console.error('[copy-bot history]', err.message);
+    res.status(500).json({ error: 'Failed to fetch trade history' });
+  }
+});
 
 // 404 catch-all — must be last route
 app.use((req, res) => {

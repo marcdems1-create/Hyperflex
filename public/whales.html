@@ -114,6 +114,60 @@ td { padding: 12px; font-size: 13px; vertical-align: middle; }
 .copy-trade-btn { font-family: var(--mono); font-size: 10px; font-weight: 700; padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(201,146,13,0.4); background: rgba(201,146,13,0.1); color: var(--gold); cursor: pointer; transition: all 0.15s; white-space: nowrap; }
 .copy-trade-btn:hover { background: rgba(201,146,13,0.25); border-color: var(--gold); }
 
+/* BACKTEST + AUTO-COPY BUTTONS */
+.bt-btn { font-family: var(--mono); font-size: 10px; font-weight: 700; padding: 4px 8px; border-radius: 6px; border: 1px solid rgba(34,197,94,0.4); background: rgba(34,197,94,0.08); color: var(--green); cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+.bt-btn:hover { background: rgba(34,197,94,0.2); border-color: var(--green); }
+.ac-btn { font-family: var(--mono); font-size: 10px; font-weight: 700; padding: 4px 8px; border-radius: 6px; border: 1px solid rgba(96,165,250,0.4); background: rgba(96,165,250,0.08); color: #60a5fa; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+.ac-btn:hover { background: rgba(96,165,250,0.2); border-color: #60a5fa; }
+.action-btns { display: flex; gap: 4px; flex-wrap: wrap; }
+
+/* BACKTEST MODAL */
+.bt-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 1100; align-items: center; justify-content: center; overflow-y: auto; padding: 20px; }
+.bt-overlay.open { display: flex; }
+.bt-modal { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 28px; max-width: 560px; width: 90%; max-height: 90vh; overflow-y: auto; position: relative; }
+.bt-close { position: absolute; top: 12px; right: 16px; background: none; border: none; color: var(--muted); font-size: 22px; cursor: pointer; }
+.bt-close:hover { color: var(--text); }
+.bt-header { margin-bottom: 20px; }
+.bt-header h3 { font-family: var(--sans); font-size: 18px; font-weight: 800; margin-bottom: 4px; }
+.bt-header-sub { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.bt-timeframe { display: flex; gap: 6px; margin-bottom: 20px; }
+.bt-tf-btn { font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text-soft); cursor: pointer; transition: all 0.15s; }
+.bt-tf-btn:hover { border-color: var(--gold); color: var(--text); }
+.bt-tf-btn.active { background: var(--gold-dim); border-color: var(--gold); color: var(--gold); }
+.bt-summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 20px; }
+.bt-stat { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; text-align: center; }
+.bt-stat-label { font-family: var(--mono); font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+.bt-stat-value { font-family: var(--sans); font-size: 18px; font-weight: 800; }
+.bt-positions { margin-top: 16px; }
+.bt-pos-title { font-family: var(--mono); font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+.bt-pos-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid rgba(42,42,36,0.4); font-size: 12px; }
+.bt-pos-row:last-child { border: none; }
+.bt-pos-market { flex: 1; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bt-pos-roi { font-family: var(--mono); font-size: 11px; font-weight: 700; white-space: nowrap; }
+.bt-cta { display: block; width: 100%; padding: 12px; border: none; border-radius: 8px; background: var(--gold); color: #1a1a17; font-family: var(--sans); font-size: 13px; font-weight: 700; cursor: pointer; text-align: center; transition: opacity 0.15s; margin-top: 16px; }
+.bt-cta:hover { opacity: 0.88; }
+
+/* AUTO-COPY MODAL */
+.acm-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 1100; align-items: center; justify-content: center; }
+.acm-overlay.open { display: flex; }
+.acm-modal { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 28px; max-width: 440px; width: 90%; position: relative; }
+.acm-close { position: absolute; top: 12px; right: 16px; background: none; border: none; color: var(--muted); font-size: 22px; cursor: pointer; }
+.acm-close:hover { color: var(--text); }
+.acm-header { margin-bottom: 20px; }
+.acm-header h3 { font-family: var(--sans); font-size: 18px; font-weight: 800; margin-bottom: 4px; }
+.acm-header-sub { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.acm-alloc-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
+.acm-alloc-btn { font-family: var(--mono); font-size: 12px; font-weight: 700; padding: 10px 6px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text-soft); cursor: pointer; transition: all 0.15s; text-align: center; }
+.acm-alloc-btn:hover { border-color: var(--gold); color: var(--text); }
+.acm-alloc-btn.active { background: var(--gold-dim); border-color: var(--gold); color: var(--gold); }
+.acm-mode { display: flex; gap: 8px; margin-bottom: 16px; }
+.acm-mode-btn { flex: 1; font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 10px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text-soft); cursor: pointer; text-align: center; transition: all 0.15s; }
+.acm-mode-btn:hover { border-color: #60a5fa; }
+.acm-mode-btn.active { background: rgba(96,165,250,0.1); border-color: #60a5fa; color: #60a5fa; }
+.acm-cta { display: block; width: 100%; padding: 12px; border: none; border-radius: 8px; background: #60a5fa; color: #0f0f0d; font-family: var(--sans); font-size: 13px; font-weight: 700; cursor: pointer; text-align: center; transition: opacity 0.15s; margin-top: 12px; }
+.acm-cta:hover { opacity: 0.88; }
+.acm-info { font-family: var(--mono); font-size: 10px; color: var(--muted); text-align: center; margin-top: 8px; line-height: 1.5; }
+
 /* COPY TRADE MODAL */
 .ct-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center; }
 .ct-overlay.open { display: flex; }
@@ -398,7 +452,7 @@ if (localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token')
         <th onclick="sortBy('size')">Size ($) <span class="sort-arrow" id="sort-size"></span></th>
         <th onclick="sortBy('current_price')">Price <span class="sort-arrow" id="sort-current_price"></span></th>
         <th>Link</th>
-        <th>Copy</th>
+        <th>Actions</th>
       </tr>
     </thead>
     <tbody id="whaleTableBody"></tbody>
@@ -661,7 +715,11 @@ function renderTable() {
       '<td class="size-cell">' + fmtFull$(p.size) + '</td>' +
       '<td><div class="price-bar-wrap"><div class="price-bar"><div class="price-bar-fill" style="width:' + pricePct + '%"></div></div><span class="price-pct">' + pricePct + '%</span></div></td>' +
       '<td><a href="' + p.market_url + '" target="_blank" rel="noopener" class="view-link">View \u2192</a></td>' +
-      '<td><button class="copy-trade-btn" onclick="openCopyTrade(\'' + escAttr(p.trader) + '\',\'' + escAttr(p.market) + '\',\'' + escAttr(p.side) + '\',' + p.size + ',\'' + escAttr(p.market_url) + '\',\'' + escAttr(p.proxyWallet || '') + '\')">Copy Trade</button></td>' +
+      '<td><div class="action-btns">' +
+        '<button class="copy-trade-btn" onclick="openCopyTrade(\'' + escAttr(p.trader) + '\',\'' + escAttr(p.market) + '\',\'' + escAttr(p.side) + '\',' + p.size + ',\'' + escAttr(p.market_url) + '\',\'' + escAttr(p.proxyWallet || '') + '\')">Copy Trade</button>' +
+        '<button class="bt-btn" onclick="event.stopPropagation();openBacktest(\'' + escAttr(p.proxyWallet || p.trader || '') + '\',\'' + escAttr(p.trader || '') + '\')">Backtest</button>' +
+        '<button class="ac-btn" onclick="event.stopPropagation();openAutoCopy(\'' + escAttr(p.proxyWallet || '') + '\',\'' + escAttr(p.trader || '') + '\')">\uD83E\uDD16 Auto-Copy</button>' +
+      '</div></td>' +
       '</tr>';
   }).join('');
 }
@@ -687,6 +745,8 @@ function renderMobileCards() {
         '<div class="price-bar-wrap"><div class="price-bar"><div class="price-bar-fill" style="width:' + pricePct + '%"></div></div><span class="price-pct">' + pricePct + '%</span></div>' +
         '<a href="' + p.market_url + '" target="_blank" rel="noopener" class="view-link">View \u2192</a>' +
         '<button class="copy-trade-btn" onclick="openCopyTrade(\'' + escAttr(p.trader) + '\',\'' + escAttr(p.market) + '\',\'' + escAttr(p.side) + '\',' + p.size + ',\'' + escAttr(p.market_url) + '\',\'' + escAttr(p.proxyWallet || '') + '\')">Copy Trade</button>' +
+        '<button class="bt-btn" onclick="event.stopPropagation();openBacktest(\'' + escAttr(p.proxyWallet || p.trader || '') + '\',\'' + escAttr(p.trader || '') + '\')">Backtest</button>' +
+        '<button class="ac-btn" onclick="event.stopPropagation();openAutoCopy(\'' + escAttr(p.proxyWallet || '') + '\',\'' + escAttr(p.trader || '') + '\')">\uD83E\uDD16 Auto-Copy</button>' +
       '</div>' +
     '</div>';
   }).join('');
@@ -711,7 +771,7 @@ function switchWhalePlatform(platform) {
     if (flowSection) flowSection.style.display = _whaleData ? '' : 'none';
     // Restore Polymarket table headers
     var thead = document.getElementById('whaleTableHead');
-    if (thead) thead.innerHTML = '<tr><th onclick="sortBy(\'trader_rank\')">Rank <span class="sort-arrow" id="sort-trader_rank"></span></th><th onclick="sortBy(\'trader\')">Trader <span class="sort-arrow" id="sort-trader"></span></th><th onclick="sortBy(\'market\')">Market <span class="sort-arrow" id="sort-market"></span></th><th onclick="sortBy(\'side\')">Side <span class="sort-arrow" id="sort-side"></span></th><th onclick="sortBy(\'size\')">Size ($) <span class="sort-arrow" id="sort-size"></span></th><th onclick="sortBy(\'current_price\')">Price <span class="sort-arrow" id="sort-current_price"></span></th><th>Link</th><th>Copy</th></tr>';
+    if (thead) thead.innerHTML = '<tr><th onclick="sortBy(\'trader_rank\')">Rank <span class="sort-arrow" id="sort-trader_rank"></span></th><th onclick="sortBy(\'trader\')">Trader <span class="sort-arrow" id="sort-trader"></span></th><th onclick="sortBy(\'market\')">Market <span class="sort-arrow" id="sort-market"></span></th><th onclick="sortBy(\'side\')">Side <span class="sort-arrow" id="sort-side"></span></th><th onclick="sortBy(\'size\')">Size ($) <span class="sort-arrow" id="sort-size"></span></th><th onclick="sortBy(\'current_price\')">Price <span class="sort-arrow" id="sort-current_price"></span></th><th>Link</th><th>Actions</th></tr>';
     if (_whaleData) { renderStats(); applyFilters(); }
     else loadData();
   } else {
@@ -1266,6 +1326,234 @@ function openWhaleProfile(addressOrName) {
 function closeWhaleProfile() {
   var overlay = document.getElementById('wpOverlay');
   if (overlay) overlay.classList.remove('open');
+}
+</script>
+
+<!-- Backtest Modal -->
+<div class="bt-overlay" id="btOverlay" onclick="if(event.target===this)closeBacktest()">
+  <div class="bt-modal">
+    <button class="bt-close" onclick="closeBacktest()">&times;</button>
+    <div class="bt-header">
+      <h3 id="btTitle">Backtest Results</h3>
+      <div class="bt-header-sub" id="btSub">Loading...</div>
+    </div>
+    <div class="bt-timeframe">
+      <button class="bt-tf-btn" data-days="7" onclick="setBtTimeframe(7, this)">7D</button>
+      <button class="bt-tf-btn active" data-days="30" onclick="setBtTimeframe(30, this)">30D</button>
+      <button class="bt-tf-btn" data-days="90" onclick="setBtTimeframe(90, this)">90D</button>
+    </div>
+    <div id="btContent">
+      <div style="text-align:center;padding:30px;color:var(--muted);font-family:var(--mono);font-size:12px"><div class="spinner" style="display:inline-block;width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin 0.8s linear infinite"></div><p style="margin-top:8px">Running backtest...</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- Auto-Copy Modal -->
+<div class="acm-overlay" id="acmOverlay" onclick="if(event.target===this)closeAutoCopy()">
+  <div class="acm-modal">
+    <button class="acm-close" onclick="closeAutoCopy()">&times;</button>
+    <div class="acm-header">
+      <h3 id="acmTitle">&#x1F916; Auto-Copy Trades</h3>
+      <div class="acm-header-sub" id="acmSub">When this whale opens a new position, we'll mirror it with your allocation.</div>
+    </div>
+    <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Allocation per trade</div>
+    <div class="acm-alloc-grid">
+      <button class="acm-alloc-btn" data-alloc="50" onclick="setAcmAlloc(50, this)">$50</button>
+      <button class="acm-alloc-btn active" data-alloc="100" onclick="setAcmAlloc(100, this)">$100</button>
+      <button class="acm-alloc-btn" data-alloc="500" onclick="setAcmAlloc(500, this)">$500</button>
+      <button class="acm-alloc-btn" data-alloc="custom" onclick="showAcmCustom()">Custom</button>
+    </div>
+    <div id="acmCustomWrap" style="display:none;margin-bottom:16px">
+      <input type="number" class="ct-input" id="acmCustomInput" placeholder="Enter amount..." min="1" style="width:100%"/>
+    </div>
+    <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Mode</div>
+    <div class="acm-mode">
+      <button class="acm-mode-btn active" data-mode="notify" onclick="setAcmMode('notify', this)">&#x1F514; Notify Only</button>
+      <button class="acm-mode-btn" data-mode="auto" onclick="setAcmMode('auto', this)">&#x26A1; Auto-Execute</button>
+    </div>
+    <button class="acm-cta" id="acmCta" onclick="submitAutoCopy()">Start Auto-Copying &rarr;</button>
+    <div class="acm-info">Safe mode: You'll be notified before any trade is placed. Auto-execute requires CLOB trading to be enabled.</div>
+    <div id="acmStatus" style="display:none;margin-top:12px;padding:12px;border-radius:8px;font-family:var(--mono);font-size:12px;text-align:center"></div>
+  </div>
+</div>
+
+<script>
+// ── BACKTEST ──
+var _btAddress = null;
+var _btName = null;
+var _btDays = 30;
+
+function openBacktest(address, name) {
+  if (!getToken()) {
+    document.getElementById('loginOverlay').classList.add('open');
+    return;
+  }
+  _btAddress = address;
+  _btName = name;
+  _btDays = 30;
+  document.getElementById('btTitle').textContent = 'Backtest: ' + (name || 'Whale');
+  document.getElementById('btSub').textContent = 'If you copied ' + (name || 'this whale') + ' for the last 30 days...';
+  document.querySelectorAll('.bt-tf-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.days === '30'); });
+  document.getElementById('btOverlay').classList.add('open');
+  runBacktest(address, 30);
+}
+
+function closeBacktest() {
+  document.getElementById('btOverlay').classList.remove('open');
+}
+
+function setBtTimeframe(days, el) {
+  _btDays = days;
+  document.querySelectorAll('.bt-tf-btn').forEach(function(b) { b.classList.remove('active'); });
+  el.classList.add('active');
+  document.getElementById('btSub').textContent = 'If you copied ' + (_btName || 'this whale') + ' for the last ' + days + ' days...';
+  runBacktest(_btAddress, days);
+}
+
+function runBacktest(address, days) {
+  var content = document.getElementById('btContent');
+  content.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted);font-family:var(--mono);font-size:12px"><div class="spinner" style="display:inline-block;width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin 0.8s linear infinite"></div><p style="margin-top:8px">Running backtest...</p></div>';
+
+  fetch('/api/backtest/' + encodeURIComponent(address) + '?days=' + days)
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (!d || d.error) { content.innerHTML = '<div style="text-align:center;padding:20px;color:var(--red);font-family:var(--mono);font-size:12px">' + (d.error || 'Backtest failed') + '</div>'; return; }
+      if (d.positions_tracked === 0) { content.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-family:var(--mono);font-size:12px">No positions found for this trader.</div>'; return; }
+
+      var pnlColor = d.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+      var pnlSign = d.pnl >= 0 ? '+' : '';
+      var roiColor = d.roi_pct >= 0 ? 'var(--green)' : 'var(--red)';
+      var roiSign = d.roi_pct >= 0 ? '+' : '';
+
+      var html = '<div class="bt-summary">' +
+        '<div class="bt-stat"><div class="bt-stat-label">Total Invested</div><div class="bt-stat-value" style="color:var(--text)">$' + d.total_invested.toLocaleString() + '</div></div>' +
+        '<div class="bt-stat"><div class="bt-stat-label">Current Value</div><div class="bt-stat-value" style="color:' + pnlColor + '">$' + d.current_value.toLocaleString(undefined, {maximumFractionDigits:2}) + '</div></div>' +
+        '<div class="bt-stat"><div class="bt-stat-label">P&L</div><div class="bt-stat-value" style="color:' + pnlColor + '">' + pnlSign + '$' + Math.abs(d.pnl).toLocaleString(undefined, {maximumFractionDigits:2}) + '</div></div>' +
+        '<div class="bt-stat"><div class="bt-stat-label">ROI</div><div class="bt-stat-value" style="color:' + roiColor + '">' + roiSign + d.roi_pct + '%</div></div>' +
+      '</div>';
+
+      if (d.best_trade) {
+        html += '<div style="display:flex;gap:10px;margin-bottom:16px">' +
+          '<div style="flex:1;background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.2);border-radius:8px;padding:10px"><div style="font-family:var(--mono);font-size:9px;color:var(--green);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Best Trade</div><div style="font-size:11px;color:var(--text);line-height:1.3">' + (d.best_trade.market || '').substring(0, 40) + '</div><div style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--green);margin-top:4px">+$' + Math.abs(d.best_trade.pnl).toFixed(2) + '</div></div>' +
+          '<div style="flex:1;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);border-radius:8px;padding:10px"><div style="font-family:var(--mono);font-size:9px;color:var(--red);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Worst Trade</div><div style="font-size:11px;color:var(--text);line-height:1.3">' + (d.worst_trade.market || '').substring(0, 40) + '</div><div style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--red);margin-top:4px">-$' + Math.abs(d.worst_trade.pnl).toFixed(2) + '</div></div>' +
+        '</div>';
+      }
+
+      html += '<div class="bt-positions"><div class="bt-pos-title">Position Breakdown (' + d.positions_tracked + ' positions)</div>';
+      d.positions.forEach(function(pos) {
+        var posColor = pos.roi >= 0 ? 'var(--green)' : 'var(--red)';
+        var posSign = pos.roi >= 0 ? '+' : '';
+        html += '<div class="bt-pos-row">' +
+          '<span class="side-badge ' + ((pos.side || '').toUpperCase() === 'YES' ? 'side-yes' : 'side-no') + '" style="font-size:9px;padding:2px 6px">' + (pos.side || '').toUpperCase() + '</span>' +
+          '<span class="bt-pos-market">' + (pos.market || '').substring(0, 50) + '</span>' +
+          '<span class="bt-pos-roi" style="color:' + posColor + '">' + posSign + pos.roi + '%</span>' +
+        '</div>';
+      });
+      html += '</div>';
+
+      html += '<button class="bt-cta" onclick="closeBacktest();openAutoCopy(\'' + escAttr(_btAddress || '') + '\',\'' + escAttr(_btName || '') + '\')">Start copying ' + (_btName || 'this whale') + ' &rarr;</button>';
+
+      content.innerHTML = html;
+    })
+    .catch(function(e) {
+      content.innerHTML = '<div style="text-align:center;padding:20px;color:var(--red);font-family:var(--mono);font-size:12px">Failed to run backtest. Try again.</div>';
+    });
+}
+
+// ── AUTO-COPY BOT ──
+var _acmAddress = null;
+var _acmName = null;
+var _acmAlloc = 100;
+var _acmMode = 'notify';
+
+function openAutoCopy(address, name) {
+  if (!getToken()) {
+    document.getElementById('loginOverlay').classList.add('open');
+    return;
+  }
+  _acmAddress = address;
+  _acmName = name;
+  _acmAlloc = 100;
+  _acmMode = 'notify';
+  document.getElementById('acmTitle').innerHTML = '&#x1F916; Auto-Copy ' + (name || 'Whale');
+  document.querySelectorAll('.acm-alloc-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.alloc === '100'); });
+  document.querySelectorAll('.acm-mode-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.mode === 'notify'); });
+  document.getElementById('acmCustomWrap').style.display = 'none';
+  document.getElementById('acmStatus').style.display = 'none';
+  document.getElementById('acmCta').textContent = 'Start Auto-Copying \u2192';
+  document.getElementById('acmCta').disabled = false;
+  document.getElementById('acmOverlay').classList.add('open');
+}
+
+function closeAutoCopy() {
+  document.getElementById('acmOverlay').classList.remove('open');
+}
+
+function setAcmAlloc(val, el) {
+  document.querySelectorAll('.acm-alloc-btn').forEach(function(b) { b.classList.remove('active'); });
+  el.classList.add('active');
+  if (val === 'custom') {
+    document.getElementById('acmCustomWrap').style.display = '';
+    document.getElementById('acmCustomInput').focus();
+  } else {
+    _acmAlloc = val;
+    document.getElementById('acmCustomWrap').style.display = 'none';
+  }
+}
+
+function showAcmCustom() {
+  document.getElementById('acmCustomWrap').style.display = '';
+  document.getElementById('acmCustomInput').focus();
+  document.querySelectorAll('.acm-alloc-btn').forEach(function(b) { b.classList.remove('active'); });
+  document.querySelector('.acm-alloc-btn[data-alloc="custom"]').classList.add('active');
+}
+
+function setAcmMode(mode, el) {
+  _acmMode = mode;
+  document.querySelectorAll('.acm-mode-btn').forEach(function(b) { b.classList.remove('active'); });
+  el.classList.add('active');
+}
+
+function submitAutoCopy() {
+  var customVal = document.getElementById('acmCustomInput').value;
+  if (document.getElementById('acmCustomWrap').style.display !== 'none' && customVal) {
+    _acmAlloc = parseFloat(customVal) || 100;
+  }
+
+  var cta = document.getElementById('acmCta');
+  cta.textContent = 'Subscribing...';
+  cta.disabled = true;
+
+  var token = getToken();
+  fetch('/api/copy-bot/subscribe', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+    body: JSON.stringify({
+      whale_address: _acmAddress,
+      whale_name: _acmName,
+      allocation_per_trade: _acmAlloc,
+      notify_only: _acmMode === 'notify'
+    })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.error) throw new Error(d.error);
+    var status = document.getElementById('acmStatus');
+    status.style.display = '';
+    status.style.background = 'rgba(34,197,94,0.1)';
+    status.style.color = 'var(--green)';
+    status.innerHTML = '&#x2705; Subscribed! You\'ll be ' + (_acmMode === 'notify' ? 'notified' : 'auto-copying') + ' ' + (_acmName || 'this whale') + '\'s trades at $' + _acmAlloc + ' per position.';
+    cta.textContent = 'Subscribed \u2713';
+  })
+  .catch(function(e) {
+    var status = document.getElementById('acmStatus');
+    status.style.display = '';
+    status.style.background = 'rgba(239,68,68,0.1)';
+    status.style.color = 'var(--red)';
+    status.textContent = 'Failed: ' + (e.message || 'Try again');
+    cta.textContent = 'Start Auto-Copying \u2192';
+    cta.disabled = false;
+  });
 }
 </script>
 </body>

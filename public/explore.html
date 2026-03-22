@@ -909,6 +909,79 @@ nav {
   </div>
 </div>
 
+<!-- LIVE TRADING FEED TICKER -->
+<div id="liveFeedTicker" style="max-width:1200px;margin:0 auto 16px;padding:0 40px;overflow:hidden">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+    <span style="display:inline-flex;align-items:center;gap:5px;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:var(--green)"><span style="display:inline-block;width:6px;height:6px;background:var(--green);border-radius:50%;animation:pulse-dot 1.8s infinite"></span> LIVE TRADES</span>
+    <span style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted)" id="liveFeedUpdated"></span>
+  </div>
+  <div style="overflow:hidden;position:relative;border:1px solid var(--border);border-radius:10px;background:var(--card);padding:0">
+    <div id="liveFeedScroll" style="display:flex;gap:0;animation:tickerScroll 30s linear infinite;white-space:nowrap;padding:10px 0">
+      <span style="font-family:'Space Mono',monospace;font-size:12px;color:var(--muted);padding:0 16px">Loading live trades...</span>
+    </div>
+  </div>
+</div>
+<style>
+@keyframes tickerScroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+#liveFeedScroll:hover { animation-play-state: paused; }
+.lf-item { display: inline-flex; align-items: center; gap: 6px; padding: 4px 16px; border-right: 1px solid var(--border); white-space: nowrap; cursor: pointer; transition: background 0.15s; text-decoration: none; color: inherit; flex-shrink: 0; }
+.lf-item:hover { background: rgba(201,146,13,0.06); }
+.lf-item:last-child { border-right: none; }
+.lf-size { font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700; color: var(--gold); }
+.lf-side { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; }
+.lf-side-yes { background: rgba(34,197,94,0.15); color: var(--green); }
+.lf-side-no { background: rgba(239,68,68,0.15); color: var(--red); }
+.lf-market { font-size: 12px; color: var(--text); max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 960px) {
+  #liveFeedTicker { padding: 0 16px; }
+}
+</style>
+<script>
+(function() {
+  var _lfInterval = null;
+
+  function loadLiveFeed() {
+    fetch('/api/live-feed?limit=10').then(function(r) { return r.json(); }).then(function(d) {
+      var trades = d.trades || [];
+      if (!trades.length) {
+        document.getElementById('liveFeedScroll').innerHTML = '<span style="font-family:\'Space Mono\',monospace;font-size:12px;color:var(--muted);padding:0 16px">No recent large trades detected.</span>';
+        return;
+      }
+      var items = trades.map(function(t) {
+        var sideClass = (t.side || '').toUpperCase() === 'YES' ? 'lf-side-yes' : 'lf-side-no';
+        var icon = t.type === 'whale_trade' ? '\uD83D\uDC0B ' : '';
+        var market = (t.market || 'Unknown');
+        if (market.length > 45) market = market.substring(0, 42) + '...';
+        return '<a class="lf-item" href="' + (t.url || 'https://polymarket.com') + '" target="_blank" rel="noopener">' +
+          '<span class="lf-size">' + icon + (t.size_display || '$?') + '</span>' +
+          '<span class="lf-side ' + sideClass + '">' + (t.side || 'YES') + '</span>' +
+          '<span class="lf-market">' + market + '</span>' +
+        '</a>';
+      }).join('');
+      // Duplicate for seamless scroll
+      document.getElementById('liveFeedScroll').innerHTML = items + items;
+
+      // Adjust animation duration based on content width
+      var scroll = document.getElementById('liveFeedScroll');
+      var totalW = scroll.scrollWidth / 2;
+      var dur = Math.max(15, totalW / 40); // ~40px per second
+      scroll.style.animationDuration = dur + 's';
+
+      if (d.updated_at) {
+        var ago = Math.round((Date.now() - new Date(d.updated_at).getTime()) / 1000);
+        document.getElementById('liveFeedUpdated').textContent = ago < 60 ? 'just now' : Math.floor(ago / 60) + 'm ago';
+      }
+    }).catch(function() {});
+  }
+
+  loadLiveFeed();
+  _lfInterval = setInterval(loadLiveFeed, 30000);
+})();
+</script>
+
 <div class="explore-search-wrap" id="exploreSearchWrap">
   <input type="search" id="exploreSearchInput" placeholder="🔍 Search markets, communities…" oninput="onExploreSearch(this.value)" style="width:100%;box-sizing:border-box;padding:11px 16px;border-radius:12px;border:1.5px solid #2a2a27;background:#1c1c19;color:#e8e3d5;font-size:14px;font-family:inherit;outline:none;max-width:680px;display:block;margin:0 auto;" />
 </div>
