@@ -2804,6 +2804,99 @@ body.nav-open .sidebar-backdrop {
 @media (max-width: 480px) {
   #portfolioSummaryBar > div > div { grid-template-columns: 1fr 1fr !important; }
 }
+
+/* ══ Social Tab ══ */
+.social-accounts-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+@media (max-width: 900px) { .social-accounts-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 540px) { .social-accounts-grid { grid-template-columns: 1fr; } }
+
+.social-account-card {
+  background: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px;
+  transition: border-color .15s;
+}
+.social-account-card:hover { border-color: rgba(201,146,13,0.35); }
+.social-account-card--disabled { opacity: .5; pointer-events: none; }
+.social-account-card--connected { border-color: rgba(45,155,95,0.4); }
+
+.social-connect-btn {
+  display: inline-block;
+  background: rgba(201,146,13,0.12);
+  border: 1px solid rgba(201,146,13,0.35);
+  color: var(--gold);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background .15s;
+}
+.social-connect-btn:hover { background: rgba(201,146,13,0.22); }
+.social-connect-btn--connected {
+  background: rgba(45,155,95,0.12);
+  border-color: rgba(45,155,95,0.35);
+  color: var(--green);
+  cursor: default;
+}
+.social-connect-btn--soon {
+  background: rgba(122,120,112,0.08);
+  border-color: var(--border);
+  color: var(--dim);
+  cursor: default;
+}
+
+.social-follow-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.social-follow-row:last-child { border-bottom: none; }
+.social-follow-avatar {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(201,146,13,0.22), rgba(201,146,13,0.06));
+  border: 1px solid rgba(201,146,13,0.35);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--sans); font-weight: 800; font-size: 13px; color: var(--gold);
+  flex-shrink: 0;
+}
+.social-follow-name { font-weight: 700; font-size: 13px; }
+.social-follow-meta { font-family: var(--mono); font-size: 11px; color: var(--dim); }
+.social-follow-badge {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+.social-follow-badge--poly { background: rgba(124,58,237,0.15); color: #a78bfa; }
+.social-follow-badge--hl { background: rgba(119,185,0,0.15); color: #77b900; }
+.social-unfollow-btn {
+  margin-left: auto;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color .15s, color .15s;
+}
+.social-unfollow-btn:hover { border-color: var(--red); color: var(--red); }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.9.0/dist/ethers.umd.min.js"></script>
@@ -3244,85 +3337,172 @@ body.nav-open .sidebar-backdrop {
       </div>
 
       <!-- Leaderboard Tab -->
-      <!-- ══ MEMBERS TAB ══════════════════════════════════════ -->
+      <!-- ══ SOCIAL TAB (was MEMBERS) ══════════════════════════════════════ -->
       <div id="tab-members" style="display:none">
 
-        <!-- ROI Summary Bar -->
-        <div class="section" id="membersRoiBar" style="display:none">
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;padding:20px 24px">
-            <div style="text-align:center">
-              <div style="font-size:11px;font-family:var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Total Members</div>
-              <div style="font-size:28px;font-weight:900;color:var(--text)" id="mbrStatTotal">—</div>
+        <!-- ── Connected Accounts ── -->
+        <div class="section" style="padding:20px 24px">
+          <div style="font-size:15px;font-weight:700;margin-bottom:4px">Connected Accounts</div>
+          <div style="font-size:12px;font-family:var(--mono);color:var(--dim);margin-bottom:16px">Link your trading platforms and social profiles</div>
+          <div class="social-accounts-grid" id="socialAccountsGrid">
+            <!-- Polymarket -->
+            <div class="social-account-card" id="socialCardPoly">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+                <span style="font-size:20px">&#x1F7E3;</span>
+                <span style="font-weight:700;font-size:14px">Polymarket</span>
+              </div>
+              <div id="socialPolyStatus" style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:12px;min-height:18px">Checking...</div>
+              <button id="socialPolyBtn" class="social-connect-btn" onclick="socialConnectPoly()">Connect</button>
             </div>
-            <div style="text-align:center">
-              <div style="font-size:11px;font-family:var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Active Predictors</div>
-              <div style="font-size:28px;font-weight:900;color:var(--gold)" id="mbrStatActive">—</div>
-              <div style="font-size:11px;font-family:var(--mono);color:var(--dim)" id="mbrStatEngRate">— engagement</div>
+            <!-- Hyperliquid -->
+            <div class="social-account-card" id="socialCardHL">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+                <span style="font-size:20px">&#x1F7E2;</span>
+                <span style="font-weight:700;font-size:14px">Hyperliquid</span>
+              </div>
+              <div id="socialHLStatus" style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:12px;min-height:18px">Checking...</div>
+              <button id="socialHLBtn" class="social-connect-btn" onclick="socialConnectHL()">Connect</button>
             </div>
-            <div style="text-align:center">
-              <div style="font-size:11px;font-family:var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Total Predictions</div>
-              <div style="font-size:28px;font-weight:900;color:var(--text)" id="mbrStatPreds">—</div>
+            <!-- X / Twitter -->
+            <div class="social-account-card" id="socialCardTwitter">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+                <span style="font-size:18px">&#x1D54F;</span>
+                <span style="font-weight:700;font-size:14px">X / Twitter</span>
+              </div>
+              <div id="socialTwitterStatus" style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:12px;min-height:18px">Checking...</div>
+              <button id="socialTwitterBtn" class="social-connect-btn" onclick="socialConnectTwitter()">Connect with X</button>
             </div>
-            <div style="text-align:center">
-              <div style="font-size:11px;font-family:var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">New This Week</div>
-              <div style="font-size:28px;font-weight:900;color:#22c55e" id="mbrStatNew">—</div>
+            <!-- YouTube -->
+            <div class="social-account-card" id="socialCardYT">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+                <span style="font-size:18px">&#x25B6;&#xFE0F;</span>
+                <span style="font-weight:700;font-size:14px">YouTube</span>
+              </div>
+              <div id="socialYTStatus" style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:12px;min-height:18px">Not connected</div>
+              <button id="socialYTBtn" class="social-connect-btn social-connect-btn--soon" disabled>Coming soon</button>
             </div>
-            <div style="text-align:center;background:rgba(201,146,13,0.06);border:1px solid rgba(201,146,13,0.2);border-radius:10px;padding:12px">
-              <div style="font-size:11px;font-family:var(--mono);color:var(--gold);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Est. Engagement Value</div>
-              <div style="font-size:26px;font-weight:900;color:var(--gold)" id="mbrStatValue">—</div>
-              <div style="font-size:10px;color:var(--dim);margin-top:3px">vs. paid ad clicks @ $0.80 CPC</div>
+            <!-- Discord -->
+            <div class="social-account-card social-account-card--disabled" id="socialCardDiscord">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+                <span style="font-size:18px">&#x1F4AC;</span>
+                <span style="font-weight:700;font-size:14px;color:var(--dim)">Discord</span>
+              </div>
+              <div style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:12px;min-height:18px">Integration coming soon</div>
+              <button class="social-connect-btn social-connect-btn--soon" disabled>Coming soon</button>
+            </div>
+            <!-- Telegram -->
+            <div class="social-account-card" id="socialCardTelegram">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+                <span style="font-size:18px">&#x1F4F1;</span>
+                <span style="font-weight:700;font-size:14px">Telegram</span>
+              </div>
+              <div id="socialTelegramStatus" style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:12px;min-height:18px">Checking...</div>
+              <button id="socialTelegramBtn" class="social-connect-btn" onclick="socialConnectTelegram()">Set up</button>
             </div>
           </div>
         </div>
 
-        <!-- Controls row -->
-        <div class="section">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 20px;flex-wrap:wrap">
-            <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:200px">
-              <input type="text" id="memberSearch" placeholder="Search members…" oninput="filterMembers(this.value)"
-                style="flex:1;max-width:260px;background:var(--paper);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:12px;padding:8px 12px;outline:none"/>
-              <select id="memberSort" onchange="sortMembers(this.value)"
-                style="background:var(--paper);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:11px;padding:8px 10px;outline:none;cursor:pointer">
-                <option value="joined_desc">Newest first</option>
-                <option value="preds_desc">Most predictions</option>
-                <option value="balance_desc">Most points</option>
-                <option value="winrate_desc">Highest win rate</option>
-                <option value="active_desc">Recently active</option>
-              </select>
-            </div>
-            <div style="display:flex;gap:8px;align-items:center">
-              <span style="font-size:12px;font-family:var(--mono);color:var(--dim)" id="memberCountLabel"></span>
-              <button class="btn-secondary" style="font-size:11px;padding:7px 14px" onclick="exportMembersCSV()" id="exportMembersBtn">⬇ Export CSV</button>
-            </div>
+        <!-- ── Traders I Follow ── -->
+        <div class="section" style="padding:20px 24px">
+          <div style="font-size:15px;font-weight:700;margin-bottom:4px">Traders I Follow</div>
+          <div style="font-size:12px;font-family:var(--mono);color:var(--dim);margin-bottom:16px">People you follow on HYPERFLEX</div>
+          <div id="socialFollowingList">
+            <div style="padding:20px;text-align:center;font-family:var(--mono);font-size:12px;color:var(--dim)">Loading...</div>
           </div>
+        </div>
 
-          <!-- Member table -->
-          <div style="overflow-x:auto">
-            <table style="width:100%;border-collapse:collapse" id="membersTable">
-              <thead>
-                <tr style="border-bottom:1px solid var(--border)">
-                  <th style="text-align:left;padding:10px 20px;font-size:10px;font-family:var(--mono);color:var(--dim);font-weight:700;letter-spacing:.08em;text-transform:uppercase">Member</th>
-                  <th style="text-align:right;padding:10px 12px;font-size:10px;font-family:var(--mono);color:var(--dim);font-weight:700;letter-spacing:.08em;text-transform:uppercase">Balance</th>
-                  <th style="text-align:right;padding:10px 12px;font-size:10px;font-family:var(--mono);color:var(--dim);font-weight:700;letter-spacing:.08em;text-transform:uppercase">Predictions</th>
-                  <th style="text-align:right;padding:10px 12px;font-size:10px;font-family:var(--mono);color:var(--dim);font-weight:700;letter-spacing:.08em;text-transform:uppercase">Win Rate</th>
-                  <th style="text-align:right;padding:10px 12px;font-size:10px;font-family:var(--mono);color:var(--dim);font-weight:700;letter-spacing:.08em;text-transform:uppercase">Joined</th>
-                  <th style="text-align:right;padding:10px 12px;font-size:10px;font-family:var(--mono);color:var(--dim);font-weight:700;letter-spacing:.08em;text-transform:uppercase">Last Active</th>
-                  <th style="text-align:right;padding:10px 20px;font-size:10px;font-family:var(--mono);color:var(--dim);font-weight:700;letter-spacing:.08em;text-transform:uppercase">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="membersTableBody">
-                <tr><td colspan="7" style="padding:32px;text-align:center;font-family:var(--mono);font-size:12px;color:var(--dim)">Loading members…</td></tr>
-              </tbody>
-            </table>
+        <!-- ── People Following Me ── -->
+        <div class="section" style="padding:20px 24px">
+          <div style="font-size:15px;font-weight:700;margin-bottom:4px">People Following Me</div>
+          <div style="font-size:12px;font-family:var(--mono);color:var(--dim);margin-bottom:16px">Users who follow your profile</div>
+          <div id="socialFollowersList">
+            <div style="padding:20px;text-align:center;font-family:var(--mono);font-size:12px;color:var(--dim)">Loading...</div>
           </div>
+        </div>
 
-          <!-- Pro gate for email column -->
-          <div id="membersEmailGate" style="display:none;padding:16px 20px;border-top:1px solid var(--border);background:rgba(201,146,13,0.04)">
-            <span style="font-size:12px;font-family:var(--mono);color:var(--dim)">🔒 Member email addresses are visible on <strong style="color:var(--gold)">Pro</strong> and above — <a href="#" onclick="showUpgrade()" style="color:var(--gold);text-decoration:none">upgrade to unlock →</a></span>
+        <!-- ── Community Members (collapsible, legacy) ── -->
+        <div class="section" style="padding:0">
+          <button onclick="toggleCommunityMembers()" style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:16px 24px;background:none;border:none;border-bottom:1px solid var(--border);cursor:pointer;color:var(--dim);font-family:var(--mono);font-size:12px;letter-spacing:.06em">
+            <span>Community Members</span>
+            <span id="communityMembersArrow" style="transition:transform .2s">&#9660;</span>
+          </button>
+          <div id="communityMembersCollapse" style="display:none">
+            <!-- ROI Summary Bar -->
+            <div id="membersRoiBar" style="display:none">
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;padding:20px 24px">
+                <div style="text-align:center">
+                  <div style="font-size:11px;font-family:var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Total Members</div>
+                  <div style="font-size:28px;font-weight:900;color:var(--text)" id="mbrStatTotal">—</div>
+                </div>
+                <div style="text-align:center">
+                  <div style="font-size:11px;font-family:var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Active Predictors</div>
+                  <div style="font-size:28px;font-weight:900;color:var(--gold)" id="mbrStatActive">—</div>
+                  <div style="font-size:11px;font-family:var(--mono);color:var(--dim)" id="mbrStatEngRate">— engagement</div>
+                </div>
+                <div style="text-align:center">
+                  <div style="font-size:11px;font-family:var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Total Predictions</div>
+                  <div style="font-size:28px;font-weight:900;color:var(--text)" id="mbrStatPreds">—</div>
+                </div>
+                <div style="text-align:center">
+                  <div style="font-size:11px;font-family:var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">New This Week</div>
+                  <div style="font-size:28px;font-weight:900;color:#22c55e" id="mbrStatNew">—</div>
+                </div>
+                <div style="text-align:center;background:rgba(201,146,13,0.06);border:1px solid rgba(201,146,13,0.2);border-radius:10px;padding:12px">
+                  <div style="font-size:11px;font-family:var(--mono);color:var(--gold);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Est. Engagement Value</div>
+                  <div style="font-size:26px;font-weight:900;color:var(--gold)" id="mbrStatValue">—</div>
+                  <div style="font-size:10px;color:var(--dim);margin-top:3px">vs. paid ad clicks @ $0.80 CPC</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Controls row -->
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 20px;flex-wrap:wrap">
+              <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:200px">
+                <input type="text" id="memberSearch" placeholder="Search members…" oninput="filterMembers(this.value)"
+                  style="flex:1;max-width:260px;background:var(--paper);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:12px;padding:8px 12px;outline:none"/>
+                <select id="memberSort" onchange="sortMembers(this.value)"
+                  style="background:var(--paper);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:11px;padding:8px 10px;outline:none;cursor:pointer">
+                  <option value="joined_desc">Newest first</option>
+                  <option value="preds_desc">Most predictions</option>
+                  <option value="balance_desc">Most points</option>
+                  <option value="winrate_desc">Highest win rate</option>
+                  <option value="active_desc">Recently active</option>
+                </select>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <span style="font-size:12px;font-family:var(--mono);color:var(--dim)" id="memberCountLabel"></span>
+                <button class="btn-secondary" style="font-size:11px;padding:7px 14px" onclick="exportMembersCSV()" id="exportMembersBtn">⬇ Export CSV</button>
+              </div>
+            </div>
+
+            <!-- Member table -->
+            <div style="overflow-x:auto">
+              <table style="width:100%;border-collapse:collapse" id="membersTable">
+                <thead>
+                  <tr style="border-bottom:1px solid var(--border)">
+                    <th style="text-align:left;padding:10px 20px;font-size:10px;font-family:var(--mono);color:var(--dim);font-weight:700;letter-spacing:.08em;text-transform:uppercase">Member</th>
+                    <th style="text-align:right;padding:10px 12px;font-size:10px;font-family:var(--mono);color:var(--dim);font-weight:700;letter-spacing:.08em;text-transform:uppercase">Balance</th>
+                    <th style="text-align:right;padding:10px 12px;font-size:10px;font-family:var(--mono);color:var(--dim);font-weight:700;letter-spacing:.08em;text-transform:uppercase">Predictions</th>
+                    <th style="text-align:right;padding:10px 12px;font-size:10px;font-family:var(--mono);color:var(--dim);font-weight:700;letter-spacing:.08em;text-transform:uppercase">Win Rate</th>
+                    <th style="text-align:right;padding:10px 12px;font-size:10px;font-family:var(--mono);color:var(--dim);font-weight:700;letter-spacing:.08em;text-transform:uppercase">Joined</th>
+                    <th style="text-align:right;padding:10px 12px;font-size:10px;font-family:var(--mono);color:var(--dim);font-weight:700;letter-spacing:.08em;text-transform:uppercase">Last Active</th>
+                    <th style="text-align:right;padding:10px 20px;font-size:10px;font-family:var(--mono);color:var(--dim);font-weight:700;letter-spacing:.08em;text-transform:uppercase">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="membersTableBody">
+                  <tr><td colspan="7" style="padding:32px;text-align:center;font-family:var(--mono);font-size:12px;color:var(--dim)">Loading members…</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Pro gate for email column -->
+            <div id="membersEmailGate" style="display:none;padding:16px 20px;border-top:1px solid var(--border);background:rgba(201,146,13,0.04)">
+              <span style="font-size:12px;font-family:var(--mono);color:var(--dim)">🔒 Member email addresses are visible on <strong style="color:var(--gold)">Pro</strong> and above — <a href="#" onclick="showUpgrade()" style="color:var(--gold);text-decoration:none">upgrade to unlock →</a></span>
+            </div>
           </div>
         </div>
       </div>
-      <!-- ══ /MEMBERS TAB ══════════════════════════════════════ -->
+      <!-- ══ /SOCIAL TAB ══════════════════════════════════════ -->
 
       <div id="tab-leaderboard" style="display:none">
         <div class="section">
@@ -6509,7 +6689,231 @@ async function quickResolve(marketId, outcome) {
 let lbPeriod = 'all_time';
 
 // ══════════════════════════════════════════════════════════
-// MEMBERS TAB
+// SOCIAL TAB
+// ══════════════════════════════════════════════════════════
+let _socialLoaded = false;
+
+function loadSocialTab() {
+  refreshSocialCards();
+  if (!_socialLoaded) {
+    _socialLoaded = true;
+    loadFollowingList();
+    loadFollowersList();
+  }
+}
+
+/* ── Connected accounts card state ── */
+function refreshSocialCards() {
+  // Polymarket
+  var polyAddr = _polyWalletAddress || (creatorData && creatorData.creator && creatorData.creator.polymarket_address) || '';
+  var polyStatusEl = document.getElementById('socialPolyStatus');
+  var polyBtnEl = document.getElementById('socialPolyBtn');
+  var polyCardEl = document.getElementById('socialCardPoly');
+  if (polyAddr) {
+    polyStatusEl.innerHTML = '<span style="color:var(--green)">Connected</span> <span style="color:var(--dim)">' + polyAddr.slice(0,6) + '...' + polyAddr.slice(-4) + '</span>';
+    polyBtnEl.textContent = 'Connected';
+    polyBtnEl.className = 'social-connect-btn social-connect-btn--connected';
+    polyBtnEl.onclick = null;
+    polyCardEl.classList.add('social-account-card--connected');
+  } else {
+    polyStatusEl.textContent = 'Not connected';
+    polyBtnEl.textContent = 'Connect';
+    polyBtnEl.className = 'social-connect-btn';
+    polyBtnEl.onclick = socialConnectPoly;
+    polyCardEl.classList.remove('social-account-card--connected');
+  }
+
+  // Hyperliquid
+  var hlAddr = _hlWalletAddress || '';
+  var hlStatusEl = document.getElementById('socialHLStatus');
+  var hlBtnEl = document.getElementById('socialHLBtn');
+  var hlCardEl = document.getElementById('socialCardHL');
+  if (hlAddr) {
+    hlStatusEl.innerHTML = '<span style="color:var(--green)">Connected</span> <span style="color:var(--dim)">' + hlAddr.slice(0,6) + '...' + hlAddr.slice(-4) + '</span>';
+    hlBtnEl.textContent = 'Connected';
+    hlBtnEl.className = 'social-connect-btn social-connect-btn--connected';
+    hlBtnEl.onclick = null;
+    hlCardEl.classList.add('social-account-card--connected');
+  } else {
+    hlStatusEl.textContent = 'Not connected';
+    hlBtnEl.textContent = 'Connect';
+    hlBtnEl.className = 'social-connect-btn';
+    hlBtnEl.onclick = socialConnectHL;
+    hlCardEl.classList.remove('social-account-card--connected');
+  }
+
+  // Twitter
+  var twId = (creatorData && creatorData.creator && creatorData.creator.twitter_id) || '';
+  var twUser = (creatorData && creatorData.creator && creatorData.creator.twitter_username) || '';
+  var twStatusEl = document.getElementById('socialTwitterStatus');
+  var twBtnEl = document.getElementById('socialTwitterBtn');
+  var twCardEl = document.getElementById('socialCardTwitter');
+  if (twId || twUser) {
+    twStatusEl.innerHTML = '<span style="color:var(--green)">Connected</span>' + (twUser ? ' <span style="color:var(--dim)">@' + twUser + '</span>' : '');
+    twBtnEl.textContent = 'Connected';
+    twBtnEl.className = 'social-connect-btn social-connect-btn--connected';
+    twBtnEl.onclick = null;
+    twCardEl.classList.add('social-account-card--connected');
+  } else {
+    twStatusEl.textContent = 'Not connected';
+    twBtnEl.textContent = 'Connect with X';
+    twBtnEl.className = 'social-connect-btn';
+    twBtnEl.onclick = socialConnectTwitter;
+    twCardEl.classList.remove('social-account-card--connected');
+  }
+
+  // Telegram
+  var tgId = (creatorData && creatorData.creator && creatorData.creator.telegram_chat_id) || '';
+  var tgStatusEl = document.getElementById('socialTelegramStatus');
+  var tgBtnEl = document.getElementById('socialTelegramBtn');
+  var tgCardEl = document.getElementById('socialCardTelegram');
+  if (tgId) {
+    tgStatusEl.innerHTML = '<span style="color:var(--green)">Connected</span> <span style="color:var(--dim)">ID: ' + tgId + '</span>';
+    tgBtnEl.textContent = 'Connected';
+    tgBtnEl.className = 'social-connect-btn social-connect-btn--connected';
+    tgBtnEl.onclick = null;
+    tgCardEl.classList.add('social-account-card--connected');
+  } else {
+    tgStatusEl.textContent = 'Not connected';
+    tgBtnEl.textContent = 'Set up';
+    tgBtnEl.className = 'social-connect-btn';
+    tgBtnEl.onclick = socialConnectTelegram;
+    tgCardEl.classList.remove('social-account-card--connected');
+  }
+}
+
+/* ── Connect actions ── */
+function socialConnectPoly() {
+  showTab('portfolio');
+  setTimeout(function() { switchPortfolioTab('poly'); }, 100);
+}
+function socialConnectHL() {
+  showTab('portfolio');
+  setTimeout(function() { switchPortfolioTab('hl'); }, 100);
+}
+function socialConnectTwitter() {
+  window.location.href = '/auth/twitter';
+}
+function socialConnectTelegram() {
+  showTab('settings');
+}
+
+/* ── Following list ── */
+async function loadFollowingList() {
+  var el = document.getElementById('socialFollowingList');
+  if (!el) return;
+  try {
+    var r = await fetch(API + '/api/predictor-follows/following', { headers: { 'Authorization': 'Bearer ' + token } });
+    if (!r.ok) throw new Error('Failed');
+    var data = await r.json();
+    var list = data.following || data || [];
+    if (!Array.isArray(list) || list.length === 0) {
+      el.innerHTML = '<div style="padding:32px 20px;text-align:center;background:var(--ink);border:1px solid var(--border);border-radius:12px">' +
+        '<div style="font-size:24px;margin-bottom:10px">&#x1F50D;</div>' +
+        '<div style="font-size:13px;color:var(--text);margin-bottom:6px">No traders followed yet</div>' +
+        '<div style="font-size:12px;font-family:var(--mono);color:var(--dim);margin-bottom:14px">Follow traders from the Leaderboard to see their moves here</div>' +
+        '<button class="social-connect-btn" onclick="window.location.href=\'/predictors\'">Browse Leaderboard</button>' +
+        '</div>';
+      return;
+    }
+    el.innerHTML = list.map(function(u) {
+      var name = u.display_name || u.name || 'Trader';
+      var initials = name.split(' ').map(function(w) { return w[0]; }).join('').slice(0,2).toUpperCase();
+      var badge = '';
+      if (u.polymarket_address) badge += '<span class="social-follow-badge social-follow-badge--poly">POLY</span> ';
+      if (u.hyperliquid_address) badge += '<span class="social-follow-badge social-follow-badge--hl">HL</span> ';
+      var lastAct = u.last_active ? timeAgo(u.last_active) : '';
+      var uid = u.followed_id || u.user_id || u.id || '';
+      return '<div class="social-follow-row">' +
+        '<div class="social-follow-avatar">' + initials + '</div>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div class="social-follow-name">' + escHtml(name) + '</div>' +
+          '<div class="social-follow-meta">' + badge + (lastAct ? 'Active ' + lastAct : '') + '</div>' +
+        '</div>' +
+        '<button class="social-unfollow-btn" onclick="socialUnfollow(\'' + uid + '\',this)">Unfollow</button>' +
+        '</div>';
+    }).join('');
+  } catch (e) {
+    el.innerHTML = '<div style="padding:20px;text-align:center;font-family:var(--mono);font-size:12px;color:var(--dim)">Could not load following list</div>';
+  }
+}
+
+async function socialUnfollow(userId, btnEl) {
+  if (!userId) return;
+  btnEl.disabled = true;
+  btnEl.textContent = '...';
+  try {
+    var r = await fetch(API + '/api/predictor-follows/' + userId, {
+      method: 'DELETE',
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    if (r.ok) {
+      var row = btnEl.closest('.social-follow-row');
+      if (row) row.remove();
+      var container = document.getElementById('socialFollowingList');
+      if (container && !container.querySelector('.social-follow-row')) {
+        _socialLoaded = false;
+        loadFollowingList();
+      }
+    } else {
+      btnEl.disabled = false;
+      btnEl.textContent = 'Unfollow';
+    }
+  } catch (e) {
+    btnEl.disabled = false;
+    btnEl.textContent = 'Unfollow';
+  }
+}
+
+/* ── Followers list ── */
+async function loadFollowersList() {
+  var el = document.getElementById('socialFollowersList');
+  if (!el) return;
+  try {
+    var r = await fetch(API + '/api/predictor-follows/followers', { headers: { 'Authorization': 'Bearer ' + token } });
+    if (!r.ok) throw new Error('Failed');
+    var data = await r.json();
+    var list = data.followers || data || [];
+    if (!Array.isArray(list) || list.length === 0) {
+      var slug = (creatorData && creatorData.creator && creatorData.creator.slug) || '';
+      var profileUrl = slug ? '/p/' + slug : '/predictors';
+      el.innerHTML = '<div style="padding:32px 20px;text-align:center;background:var(--ink);border:1px solid var(--border);border-radius:12px">' +
+        '<div style="font-size:24px;margin-bottom:10px">&#x1F465;</div>' +
+        '<div style="font-size:13px;color:var(--text);margin-bottom:6px">No followers yet</div>' +
+        '<div style="font-size:12px;font-family:var(--mono);color:var(--dim)">Share your profile to get followers &#x2192; <a href="' + profileUrl + '" style="color:var(--gold);text-decoration:none">' + profileUrl + '</a></div>' +
+        '</div>';
+      return;
+    }
+    el.innerHTML = list.map(function(u) {
+      var name = u.display_name || u.name || 'User';
+      var initials = name.split(' ').map(function(w) { return w[0]; }).join('').slice(0,2).toUpperCase();
+      var followedDate = u.created_at ? new Date(u.created_at).toLocaleDateString() : '';
+      return '<div class="social-follow-row">' +
+        '<div class="social-follow-avatar">' + initials + '</div>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div class="social-follow-name">' + escHtml(name) + '</div>' +
+          '<div class="social-follow-meta">' + (followedDate ? 'Followed ' + followedDate : '') + '</div>' +
+        '</div>' +
+        '</div>';
+    }).join('');
+  } catch (e) {
+    el.innerHTML = '<div style="padding:20px;text-align:center;font-family:var(--mono);font-size:12px;color:var(--dim)">Could not load followers list</div>';
+  }
+}
+
+/* ── Community Members collapsible toggle ── */
+function toggleCommunityMembers() {
+  var el = document.getElementById('communityMembersCollapse');
+  var arrow = document.getElementById('communityMembersArrow');
+  if (!el) return;
+  var isHidden = el.style.display === 'none';
+  el.style.display = isHidden ? 'block' : 'none';
+  if (arrow) arrow.style.transform = isHidden ? 'rotate(180deg)' : '';
+  if (isHidden) loadMembers();
+}
+
+// ══════════════════════════════════════════════════════════
+// MEMBERS TAB (legacy community members)
 // ══════════════════════════════════════════════════════════
 let _membersData    = [];   // full roster from API
 let _membersFiltered = [];  // after search/sort
@@ -6813,10 +7217,10 @@ function showTab(tab) {
   document.querySelectorAll('.nav-item').forEach(n => {
     if (n.getAttribute('onclick') && n.getAttribute('onclick').includes(`'${tab}'`)) n.classList.add('active');
   });
-  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Followers', portfolio:'My Positions', account:'My Account', performance:'Performance', logbets:'Track Bets', findmarkets:'Find Markets' };
+  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Social', portfolio:'My Positions', account:'My Account', performance:'Performance', logbets:'Track Bets', findmarkets:'Find Markets' };
   document.getElementById('topbarTitle').textContent = titles[tab] || tab;
   if (tab === 'analytics' && !analyticsLoaded) loadAnalytics();
-  if (tab === 'members') loadMembers();
+  if (tab === 'members') { loadSocialTab(); loadMembers(); }
   if (tab === 'ideas' && !ideasLoaded) loadMarketIdeas(false);
   if (tab === 'share') {
     loadCreatorReferralStats();
