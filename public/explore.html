@@ -1279,11 +1279,38 @@ function applyExploreSearch() {
   const q = _exploreSearchQuery;
   if (activeTab === 'activity') {
     if (!q) { renderActivityFeed(activityData); return; }
+    // Also search communities and show matching ones above activity results
+    const comms = (feedData && feedData.communities) || {};
+    const matchingComms = {};
+    Object.keys(comms).forEach(slug => {
+      const name = (comms[slug].display_name || slug).toLowerCase();
+      if (name.includes(q) || slug.includes(q)) matchingComms[slug] = comms[slug];
+    });
+    const commSlugs = Object.keys(matchingComms).sort((a,b) => (matchingComms[b].total_traders||0) - (matchingComms[a].total_traders||0));
+    let commHtml = '';
+    if (commSlugs.length) {
+      commHtml = '<div style="margin-bottom:16px"><div style="font-family:var(--mono);font-size:10px;color:var(--gold);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Communities</div>' +
+        commSlugs.slice(0, 5).map(slug => {
+          const c = matchingComms[slug];
+          const traders = c.total_traders || 0;
+          const markets = c.market_count || 0;
+          return `<a href="/${slug}" style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--card);border:1px solid var(--border);border-radius:10px;text-decoration:none;color:var(--text);margin-bottom:8px;">
+            <div style="width:9px;height:9px;border-radius:50%;background:${c.primary_color||'#c9920d'};flex-shrink:0"></div>
+            <div style="flex:1"><div style="font-size:13px;font-weight:600">${c.display_name||slug}</div><div style="font-size:11px;color:var(--muted);margin-top:2px">${markets} markets · ${traders.toLocaleString()} trades</div></div>
+          </a>`;
+        }).join('') + '</div>';
+    }
     const filtered = activityData.filter(a => {
       const text = ((a.question||'') + ' ' + (a.market_question||'') + ' ' + (a.community_name||a.community_slug||'') + ' ' + (a.username||'') + ' ' + (a.trader_name||'') + ' ' + (a.user||'')).toLowerCase();
       return text.includes(q);
     });
-    renderActivityFeed(filtered);
+    const feedEl = document.getElementById('activity-feed');
+    if (commHtml && feedEl) {
+      renderActivityFeed(filtered);
+      feedEl.insertAdjacentHTML('afterbegin', commHtml);
+    } else {
+      renderActivityFeed(filtered);
+    }
   } else if ((activeTab === 'hot' || activeTab === 'new') && feedData) {
     const key = activeTab === 'hot' ? 'hot' : 'newest';
     const markets = feedData[key] || [];
