@@ -18465,6 +18465,17 @@ app.get('/api/signals', async (req, res) => {
           if (whaleCount >= 5) {
             const consensus = m.consensus_pct || m.consensus || 0;
             const consensusSide = m.consensus_side || (consensus > 50 ? 'YES' : 'NO');
+            // Cross-reference screener cache for end_date and yes_pct
+            let endDate = null;
+            let yesPct = consensus;
+            if (_screenerCache && _screenerCache.data) {
+              const mktQ = (m.market || m.question || '').toLowerCase();
+              const match = _screenerCache.data.find(sm => (sm.question || '').toLowerCase() === mktQ);
+              if (match) {
+                endDate = match.end_date || null;
+                if (match.yes_price != null) yesPct = Math.round(match.yes_price * 100);
+              }
+            }
             signals.push({
               type: 'whale_cluster',
               badge: 'Whale Cluster',
@@ -18475,6 +18486,8 @@ app.get('/api/signals', async (req, res) => {
               confidence: whaleCount >= 10 ? 'HIGH' : whaleCount >= 7 ? 'MEDIUM' : 'LOW',
               whale_count: whaleCount,
               capital: m.total_capital || m.capital || 0,
+              yes_pct: yesPct,
+              end_date: endDate,
               detected_at: now,
               url: m.url || 'https://polymarket.com'
             });
