@@ -10691,7 +10691,7 @@ app.get('/api/activity', async (req, res) => {
             yes_pct: yesPct,
             volume: vol,
             volume_display: vol >= 1000000 ? '$' + (vol / 1000000).toFixed(1) + 'M' : vol >= 1000 ? '$' + (vol / 1000).toFixed(0) + 'K' : '$' + vol.toFixed(0),
-            url: m.slug ? `https://polymarket.com/event/${m.eventSlug || m.slug}` : 'https://polymarket.com',
+            url: (m.events && m.events[0] && m.events[0].slug) ? `https://polymarket.com/event/${m.events[0].slug}` : (m.slug ? `https://polymarket.com/event/${m.slug}` : 'https://polymarket.com'),
             end_date: m.endDate || null,
           });
         });
@@ -10724,7 +10724,7 @@ app.get('/api/activity', async (req, res) => {
               : 'other';
             const id = `tpoly_${m.id || ('extra' + i)}`;
             seenPolyIds.add(id);
-            activities.push({ type: 'trending_external', id, ts: new Date().toISOString(), platform: 'polymarket', question: m.question || m.title || '', category, yes_pct: yesPct, volume: vol, volume_display: vol >= 1000000 ? '$' + (vol/1000000).toFixed(1) + 'M' : vol >= 1000 ? '$' + (vol/1000).toFixed(0) + 'K' : '$' + vol.toFixed(0), url: m.slug ? `https://polymarket.com/event/${m.eventSlug || m.slug}` : 'https://polymarket.com', end_date: m.endDate || null });
+            activities.push({ type: 'trending_external', id, ts: new Date().toISOString(), platform: 'polymarket', question: m.question || m.title || '', category, yes_pct: yesPct, volume: vol, volume_display: vol >= 1000000 ? '$' + (vol/1000000).toFixed(1) + 'M' : vol >= 1000 ? '$' + (vol/1000).toFixed(0) + 'K' : '$' + vol.toFixed(0), url: (m.events && m.events[0] && m.events[0].slug) ? `https://polymarket.com/event/${m.events[0].slug}` : (m.slug ? `https://polymarket.com/event/${m.slug}` : 'https://polymarket.com'), end_date: m.endDate || null });
           });
         } catch (e) { console.warn('[poly extra feed]', e.message); }
       };
@@ -16256,8 +16256,8 @@ app.get('/api/screener', async (req, res) => {
         daysUntilExpiry = Math.max(0, Math.round((endDate - Date.now()) / (1000 * 60 * 60 * 24)));
       }
 
-      // Build Polymarket URL — Gamma API only returns slug, /event/{slug} works for all markets
-      const eventSlug = m.eventSlug || slug;
+      // Build Polymarket URL — use event slug from events array (market slug 404s)
+      const eventSlug = (m.events && m.events[0] && m.events[0].slug) || m.eventSlug || '';
       const marketUrl = eventSlug ? `https://polymarket.com/event/${eventSlug}` : 'https://polymarket.com';
 
       markets.push({
@@ -17685,8 +17685,8 @@ async function generateCrystalBallPredictions() {
         const markets = (rawMarkets || []).filter(m => m.question).map(m => {
           let yesPrice = null;
           try { const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices; if (Array.isArray(prices) && prices[0] != null) yesPrice = parseFloat(prices[0]); } catch {}
-          const slug = m.eventSlug || m.slug || '';
-          return { market_id: m.conditionId || slug || m.id || '', question: m.question, yes_price: yesPrice, volume: parseFloat(m.volume) || 0, end_date: (m.endDate || m.end_date_iso) ? new Date(m.endDate || m.end_date_iso).toISOString() : null, url: slug ? `https://polymarket.com/event/${slug}` : 'https://polymarket.com', slug };
+          const evtSlug = (m.events && m.events[0] && m.events[0].slug) || m.slug || '';
+          return { market_id: m.conditionId || evtSlug || m.id || '', question: m.question, yes_price: yesPrice, volume: parseFloat(m.volume) || 0, end_date: (m.endDate || m.end_date_iso) ? new Date(m.endDate || m.end_date_iso).toISOString() : null, url: evtSlug ? `https://polymarket.com/event/${evtSlug}` : 'https://polymarket.com', slug: evtSlug };
         });
         _screenerCache = { ts: Date.now(), data: markets };
         console.log('[crystal-ball] Warmed screener cache:', markets.length, 'markets');
@@ -20136,7 +20136,8 @@ app.get('/api/events', async (req, res) => {
               const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
               if (Array.isArray(prices) && prices[0] != null) yesPrice = parseFloat(prices[0]);
             } catch {}
-            return { question: m.question || m.title || '', yes_price: yesPrice, whale_count: 0, total_whale_capital: 0, url: m.slug ? 'https://polymarket.com/event/' + m.slug : 'https://polymarket.com', volume: parseFloat(m.volume) || 0 };
+            const evtSlug = (m.events && m.events[0] && m.events[0].slug) || m.slug || '';
+            return { question: m.question || m.title || '', yes_price: yesPrice, whale_count: 0, total_whale_capital: 0, url: evtSlug ? 'https://polymarket.com/event/' + evtSlug : 'https://polymarket.com', volume: parseFloat(m.volume) || 0 };
           });
         }
       } catch (e) { console.warn('[events] Gamma fetch failed:', e.message); }
