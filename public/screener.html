@@ -205,7 +205,7 @@ td { padding: 12px 14px; font-size: 13px; vertical-align: middle; }
 <div id="narrative-section" style="margin:0 auto 24px;max-width:960px;padding:0 20px">
   <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:14px">
     <h2 style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:#f0ebe3;letter-spacing:.05em;text-transform:uppercase;margin:0">\uD83E\uDDED Narrative Intelligence</h2>
-    <span style="font-family:'Space Mono',monospace;font-size:11px;color:#555">what themes dominate prediction markets this week</span>
+    <span style="font-family:'Space Mono',monospace;font-size:11px;color:#555">dominant themes \u00B7 lifecycle stage \u00B7 are we early or late?</span>
   </div>
   <div id="narrative-grid" style="display:flex;flex-direction:column;gap:6px">
     <div style="color:#555;font-family:'Space Mono',monospace;font-size:12px;padding:12px 0">Loading narratives\u2026</div>
@@ -316,28 +316,64 @@ const NARRATIVE_KW = {
 };
 async function loadNarratives(){
   try{
-    var r=await fetch('/api/screener/narratives');
+    // Try lifecycle endpoint first (has stage detection), fall back to basic narratives
+    var r=await fetch('/api/screener/narrative-lifecycle');
     var narratives=await r.json();
+    if(!Array.isArray(narratives)||!narratives.length){
+      r=await fetch('/api/screener/narratives');
+      narratives=await r.json();
+    }
     if(!Array.isArray(narratives)||!narratives.length){document.getElementById('narrative-grid').innerHTML='<div style="color:#555;font-size:12px;font-family:Space Mono,monospace">No narrative data available yet</div>';return}
     var maxD=narratives[0].dominance_pct||1;
     document.getElementById('narrative-grid').innerHTML=narratives.map(function(n){
       var color=NARRATIVE_COLORS[n.narrative]||'#c9920d';
       var barPct=maxD>0?(n.dominance_pct/maxD)*100:0;
-      var wHtml='';
-      if(n.weekly_change===null)wHtml='<span class="narrative-weekly flat">new</span>';
-      else if(n.weekly_change>0.1)wHtml='<span class="narrative-weekly up">\u25B2 '+n.weekly_change.toFixed(1)+'%</span>';
-      else if(n.weekly_change<-0.1)wHtml='<span class="narrative-weekly down">\u25BC '+Math.abs(n.weekly_change).toFixed(1)+'%</span>';
-      else wHtml='<span class="narrative-weekly flat">\u2013 0%</span>';
-      var topQ=n.top_market?(n.top_market.question.length>55?n.top_market.question.substring(0,52)+'\u2026':n.top_market.question):'';
-      var topVol=n.top_market?(n.top_market.volume>=1e6?'$'+(n.top_market.volume/1e6).toFixed(1)+'M':'$'+(n.top_market.volume/1e3).toFixed(0)+'K'):'';
+
+      // Lifecycle stage badge (from lifecycle endpoint)
+      var stageHtml='';
+      if(n.stage_label){
+        stageHtml='<span style="font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:4px;font-weight:700;white-space:nowrap;flex-shrink:0;position:relative;background:'+n.stage_color+'18;color:'+n.stage_color+';border:1px solid '+n.stage_color+'33">'+n.stage_label+'</span>';
+      } else {
+        // Fallback to weekly change
+        if(n.weekly_change===null)stageHtml='<span class="narrative-weekly flat">new</span>';
+        else if(n.weekly_change>0.1)stageHtml='<span class="narrative-weekly up">\u25B2 '+n.weekly_change.toFixed(1)+'%</span>';
+        else if(n.weekly_change<-0.1)stageHtml='<span class="narrative-weekly down">\u25BC '+Math.abs(n.weekly_change).toFixed(1)+'%</span>';
+        else stageHtml='<span class="narrative-weekly flat">\u2013 0%</span>';
+      }
+
+      // Momentum arrow
+      var momHtml='';
+      if(n.momentum_7d!=null){
+        var momColor=n.momentum_7d>0?'#22c55e':n.momentum_7d<0?'#ef4444':'#555';
+        var momSign=n.momentum_7d>0?'+':'';
+        momHtml='<span style="font-family:var(--mono);font-size:10px;color:'+momColor+';flex-shrink:0;position:relative;min-width:42px;text-align:right">'+momSign+n.momentum_7d.toFixed(1)+'</span>';
+      }
+
+      // Mini sparkline from history
+      var sparkHtml='';
+      if(n.history&&n.history.length>=3){
+        var mn=Math.min.apply(null,n.history);var mx=Math.max.apply(null,n.history);var range=mx-mn||1;
+        var pts=n.history.map(function(v,i){return Math.round(i/(n.history.length-1)*40)+','+Math.round(16-(v-mn)/range*14)}).join(' ');
+        var sparkColor=n.history[n.history.length-1]>=n.history[0]?'#22c55e':'#ef4444';
+        sparkHtml='<svg width="40" height="16" viewBox="0 0 40 16" style="flex-shrink:0;position:relative;margin:0 2px"><polyline points="'+pts+'" fill="none" stroke="'+sparkColor+'" stroke-width="1.5"/></svg>';
+      }
+
+      // News intensity bar
+      var newsHtml='';
+      if(n.news_intensity!=null){
+        newsHtml='<span style="position:relative;display:inline-flex;align-items:center;gap:3px;flex-shrink:0" title="News intensity: '+n.news_intensity+'/100"><span style="width:24px;height:4px;border-radius:2px;background:#222;overflow:hidden;display:inline-block"><span style="width:'+n.news_intensity+'%;height:100%;background:'+(n.news_intensity>60?'#22c55e':n.news_intensity>30?'#c9920d':'#555')+';display:block;border-radius:2px"></span></span></span>';
+      }
+
       return'<div class="narrative-row" onclick="filterByNarrative(\''+n.narrative.replace(/'/g,"\\'")+'\')" data-narrative="'+n.narrative+'">'+
         '<div class="narrative-bar-fill" style="width:'+barPct+'%"></div>'+
         '<span style="width:10px;height:10px;border-radius:50%;background:'+color+';flex-shrink:0;display:inline-block;position:relative"></span>'+
         '<span class="narrative-name">'+n.narrative+'</span>'+
         '<span class="narrative-dominance">'+n.dominance_pct.toFixed(1)+'%</span>'+
-        wHtml+
+        stageHtml+
+        momHtml+
+        sparkHtml+
+        newsHtml+
         '<span class="narrative-count">'+n.market_count+' mkts</span>'+
-        '<span class="narrative-top-market">'+topQ+(topVol?' \u00B7 <b style="color:#888">'+topVol+'</b>':'')+'</span>'+
       '</div>';
     }).join('');
   }catch(e){document.getElementById('narrative-grid').innerHTML='<div style="color:#555;font-size:12px;font-family:Space Mono,monospace">Unable to load narratives</div>'}

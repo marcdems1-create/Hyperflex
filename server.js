@@ -4528,8 +4528,9 @@ app.post('/api/admin/reset-password', async (req, res) => {
 function _sendResetEmail(toEmail, name, token) {
   try {
     const transporter = createMailTransport();
-    if (!transporter) return;
+    if (!transporter) { console.warn('[reset-email] No SMTP configured — SMTP_HOST not set'); return; }
     const resetUrl = `https://hyperflex.network/reset-password?token=${token}`;
+    console.log('[reset-email] Attempting to send to', toEmail, 'via', process.env.SMTP_HOST);
     transporter.sendMail({
       from: process.env.SMTP_FROM || 'HYPERFLEX <noreply@hyperflex.network>',
       to: toEmail,
@@ -4541,9 +4542,23 @@ function _sendResetEmail(toEmail, name, token) {
         <a href="${resetUrl}" style="display:inline-block;background:#c9920d;color:#0e0e0c;font-weight:700;padding:13px 28px;border-radius:6px;text-decoration:none;font-size:15px;">Reset Password &rarr;</a>
         <p style="color:#555;font-size:12px;margin-top:28px;">If you didn't request this, ignore this email.<br/>Link: ${resetUrl}</p>
       </div>`
-    }).catch(e => console.warn('[reset-email]', e.message));
-  } catch(e) { console.warn('[reset-email]', e.message); }
+    }).then(info => {
+      console.log('[reset-email] SENT to', toEmail, 'messageId:', info.messageId);
+    }).catch(e => console.error('[reset-email] FAILED:', e.message));
+  } catch(e) { console.error('[reset-email] ERROR:', e.message); }
 }
+
+// Temporary: manual password reset via token lookup (bypass email)
+app.get('/api/auth/reset-token/:email', async (req, res) => {
+  const secret = req.headers['x-admin-secret'];
+  if (secret !== process.env.ADMIN_SECRET) return res.status(403).json({ error: 'Forbidden' });
+  try {
+    const rows = await dbQuery('SELECT password_reset_token, password_reset_expires FROM creator_settings WHERE LOWER(email) = $1 LIMIT 1', [req.params.email.toLowerCase()]);
+    if (!rows[0] || !rows[0].password_reset_token) return res.json({ token: null, message: 'No pending reset' });
+    const url = `https://hyperflex.network/reset-password?token=${rows[0].password_reset_token}`;
+    res.json({ url, expires: rows[0].password_reset_expires });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
 
 app.get('/reset-password', (req, res) => res.sendFile(path.join(__dirname, 'public', 'reset-password.html')));
 
@@ -17414,6 +17429,181 @@ app.get('/api/screener/narratives', async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error('[narratives]', err.message);
+    res.json([]);
+  }
+});
+
+// ── NARRATIVE LIFECYCLE — scan internet for dominant themes + momentum ─────
+// Determines if a narrative is EMERGING, PEAKING, or FADING by comparing
+// current news volume against historical baseline from snapshots
+const _narrativeLifecycleCache = { data: null, ts: 0 };
+
+app.get('/api/screener/narrative-lifecycle', async (req, res) => {
+  try {
+    if (_narrativeLifecycleCache.data && Date.now() - _narrativeLifecycleCache.ts < 30 * 60 * 1000) {
+      return res.json(_narrativeLifecycleCache.data);
+    }
+
+    const NEWS_KEY = process.env.NEWS_API_KEY;
+
+    // 1. Get current narrative dominance from Polymarket volume
+    let currentNarratives = _narrativeCache.data;
+    if (!currentNarratives || !currentNarratives.length) {
+      // Fetch inline if cache empty
+      try {
+        const pmRes = await fetch('https://gamma-api.polymarket.com/markets?closed=false&limit=300&order=volume&ascending=false', {
+          headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' },
+          signal: AbortSignal.timeout(10000)
+        });
+        if (pmRes.ok) {
+          const raw = await pmRes.json();
+          const markets = (Array.isArray(raw) ? raw : []).filter(m => m.question);
+          const groups = {};
+          let totalVol = 0;
+          for (const m of markets) {
+            const n = classifyNarrative(m.question);
+            if (!groups[n]) groups[n] = { volume: 0, count: 0 };
+            const v = parseFloat(m.volume) || 0;
+            groups[n].volume += v;
+            groups[n].count++;
+            totalVol += v;
+          }
+          currentNarratives = Object.entries(groups).map(([narrative, g]) => ({
+            narrative,
+            dominance_pct: totalVol > 0 ? Math.round((g.volume / totalVol) * 1000) / 10 : 0,
+            market_count: g.count,
+            total_volume: Math.round(g.volume)
+          })).filter(n => n.narrative !== 'Other' || n.market_count > 5).sort((a, b) => b.dominance_pct - a.dominance_pct);
+        }
+      } catch(e) { console.warn('[narrative-lifecycle] polymarket fetch:', e.message); }
+    }
+
+    if (!currentNarratives || !currentNarratives.length) return res.json([]);
+
+    // 2. Get historical snapshots for lifecycle stage detection
+    let snapshots7d = [], snapshots14d = [], snapshots30d = [];
+    try {
+      const d7 = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
+      const d14 = new Date(Date.now() - 14 * 86400000).toISOString().split('T')[0];
+      const d30 = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
+      snapshots7d = await dbQuery('SELECT narrative, dominance_pct FROM narrative_snapshots WHERE snapshot_date = $1', [d7]).catch(() => []);
+      snapshots14d = await dbQuery('SELECT narrative, dominance_pct FROM narrative_snapshots WHERE snapshot_date = $1', [d14]).catch(() => []);
+      snapshots30d = await dbQuery('SELECT narrative, dominance_pct FROM narrative_snapshots WHERE snapshot_date = $1', [d30]).catch(() => []);
+    } catch(e) { /* no snapshots yet */ }
+
+    const snap7 = Object.fromEntries((snapshots7d || []).map(r => [r.narrative, parseFloat(r.dominance_pct)]));
+    const snap14 = Object.fromEntries((snapshots14d || []).map(r => [r.narrative, parseFloat(r.dominance_pct)]));
+    const snap30 = Object.fromEntries((snapshots30d || []).map(r => [r.narrative, parseFloat(r.dominance_pct)]));
+
+    // 3. Scan news volume per narrative (if NEWS_API_KEY available)
+    const newsVolume = {};
+    if (NEWS_KEY) {
+      const searchTerms = {
+        'Trump & US Politics': 'trump tariff executive order',
+        'Crypto & DeFi': 'bitcoin crypto ethereum',
+        'Middle East & War': 'iran israel ceasefire',
+        'AI & Big Tech': 'AI openai artificial intelligence',
+        'Macro & Economy': 'federal reserve interest rate inflation',
+        'Ukraine & Russia': 'ukraine russia ceasefire',
+        'NBA & Basketball': 'NBA playoffs basketball',
+        'NFL & American Sports': 'NFL MLB NCAA sports',
+        'Global Elections': 'election vote candidate'
+      };
+
+      const newsResults = await Promise.allSettled(
+        Object.entries(searchTerms).map(async ([narrative, query]) => {
+          try {
+            const r = await fetch(`https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&sortBy=publishedAt&pageSize=1&language=en&apiKey=${NEWS_KEY}`, { signal: AbortSignal.timeout(5000) });
+            if (!r.ok) return { narrative, totalResults: 0 };
+            const d = await r.json();
+            return { narrative, totalResults: d.totalResults || 0 };
+          } catch(e) { return { narrative, totalResults: 0 }; }
+        })
+      );
+
+      for (const r of newsResults) {
+        if (r.status === 'fulfilled') newsVolume[r.value.narrative] = r.value.totalResults;
+      }
+    }
+
+    // 4. Compute lifecycle stage for each narrative
+    const maxNewsVol = Math.max(1, ...Object.values(newsVolume));
+
+    const result = currentNarratives.map(n => {
+      const name = n.narrative;
+      const now = n.dominance_pct;
+      const w1 = snap7[name];
+      const w2 = snap14[name];
+      const m1 = snap30[name];
+
+      // Compute momentum (7d change in percentage points)
+      const momentum_7d = w1 != null ? Math.round((now - w1) * 10) / 10 : null;
+      const momentum_14d = w2 != null ? Math.round((now - w2) * 10) / 10 : null;
+      const momentum_30d = m1 != null ? Math.round((now - m1) * 10) / 10 : null;
+
+      // News intensity (0-100)
+      const newsIntensity = newsVolume[name] != null ? Math.round((newsVolume[name] / maxNewsVol) * 100) : null;
+
+      // Lifecycle stage determination
+      let stage, stageLabel, stageColor;
+      if (momentum_7d === null) {
+        // No history — first snapshot
+        stage = 'new';
+        stageLabel = 'NEW';
+        stageColor = '#3b82f6';
+      } else if (momentum_7d > 2 && (momentum_14d === null || momentum_14d > 0)) {
+        // Growing rapidly, started recently or still accelerating
+        stage = 'emerging';
+        stageLabel = 'EMERGING \u2191';
+        stageColor = '#22c55e';
+      } else if (momentum_7d > 0.5 && now >= 15) {
+        // Dominant and still growing
+        stage = 'dominant';
+        stageLabel = 'DOMINANT \u2B50';
+        stageColor = '#c9920d';
+      } else if (now >= 10 && Math.abs(momentum_7d) <= 1) {
+        // Big but flat — at peak
+        stage = 'peaking';
+        stageLabel = 'PEAKING \u26A0';
+        stageColor = '#f59e0b';
+      } else if (momentum_7d < -1) {
+        // Declining
+        stage = 'fading';
+        stageLabel = 'FADING \u2193';
+        stageColor = '#ef4444';
+      } else if (now < 5 && (momentum_7d === null || momentum_7d <= 0)) {
+        // Small and not growing
+        stage = 'niche';
+        stageLabel = 'NICHE';
+        stageColor = '#7a7870';
+      } else {
+        stage = 'stable';
+        stageLabel = 'STABLE';
+        stageColor = '#7a7870';
+      }
+
+      return {
+        narrative: name,
+        dominance_pct: now,
+        market_count: n.market_count,
+        total_volume: n.total_volume,
+        momentum_7d,
+        momentum_14d,
+        momentum_30d,
+        news_intensity: newsIntensity,
+        stage,
+        stage_label: stageLabel,
+        stage_color: stageColor,
+        // History for sparkline
+        history: [m1, w2, w1, now].filter(v => v != null)
+      };
+    });
+
+    _narrativeLifecycleCache.data = result;
+    _narrativeLifecycleCache.ts = Date.now();
+    res.json(result);
+  } catch (err) {
+    console.error('[narrative-lifecycle]', err.message);
     res.json([]);
   }
 });
