@@ -173,6 +173,19 @@ td { padding: 12px 14px; font-size: 13px; vertical-align: middle; }
   .sort-select { margin-left: 0; }
   .mkt-question { max-width: 150px; }
 }
+.narrative-row{display:flex;align-items:center;gap:12px;padding:10px 14px;background:#0e0e0c;border:1px solid #1e1e1c;border-radius:8px;cursor:pointer;transition:border-color .15s,background .15s;position:relative;overflow:hidden}
+.narrative-row:hover{border-color:#333;background:#111110}
+.narrative-row.active{border-color:#c9920d;background:#111110}
+.narrative-bar-fill{position:absolute;left:0;top:0;bottom:0;background:rgba(201,146,13,0.07);border-radius:8px 0 0 8px;pointer-events:none;transition:width .4s ease}
+.narrative-name{font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:#f0ebe3;min-width:180px;flex-shrink:0;position:relative}
+.narrative-dominance{font-family:'Space Mono',monospace;font-size:14px;font-weight:700;color:#c9920d;min-width:52px;flex-shrink:0;position:relative}
+.narrative-weekly{font-family:'Space Mono',monospace;font-size:11px;padding:2px 7px;border-radius:4px;flex-shrink:0;min-width:54px;text-align:center;position:relative}
+.narrative-weekly.up{background:rgba(0,200,100,.12);color:#00c864}
+.narrative-weekly.down{background:rgba(200,50,50,.12);color:#e05252}
+.narrative-weekly.flat{background:#1a1a18;color:#555}
+.narrative-count{font-family:'Space Mono',monospace;font-size:11px;color:#555;flex-shrink:0;position:relative}
+.narrative-top-market{font-family:'Space Mono',monospace;font-size:11px;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;position:relative}
+@media(max-width:600px){.narrative-top-market{display:none}.narrative-name{min-width:120px;font-size:11px}.narrative-row{gap:8px;padding:8px 10px}}
 </style>
 </head>
 <body>
@@ -187,6 +200,17 @@ td { padding: 12px 14px; font-size: 13px; vertical-align: middle; }
   <h1>Market <span>Screener</span></h1>
   <p class="hero-sub">Find markets where the smart money is flowing</p>
 </header>
+
+<!-- NARRATIVE INTELLIGENCE -->
+<div id="narrative-section" style="margin:0 auto 24px;max-width:960px;padding:0 20px">
+  <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:14px">
+    <h2 style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:#f0ebe3;letter-spacing:.05em;text-transform:uppercase;margin:0">\uD83E\uDDED Narrative Intelligence</h2>
+    <span style="font-family:'Space Mono',monospace;font-size:11px;color:#555">what themes dominate prediction markets this week</span>
+  </div>
+  <div id="narrative-grid" style="display:flex;flex-direction:column;gap:6px">
+    <div style="color:#555;font-family:'Space Mono',monospace;font-size:12px;padding:12px 0">Loading narratives\u2026</div>
+  </div>
+</div>
 
 <!-- FILTER BAR -->
 <div class="filter-bar">
@@ -271,6 +295,59 @@ let _whaleMin = 0;
 let _volMin = 0;
 let _sortBy = 'whale_count';
 let _displayCount = 50;
+let _activeNarrative = null;
+
+// Narrative Intelligence
+const NARRATIVE_COLORS = {
+  'Trump & US Politics':'#c9920d','Crypto & DeFi':'#627eea','Middle East & War':'#e05252',
+  'AI & Big Tech':'#00c8c8','Macro & Economy':'#a0c878','Ukraine & Russia':'#e08040',
+  'NBA & Basketball':'#ff6b35','NFL & American Sports':'#4a90e2','Global Elections':'#c94db4','Other':'#555'
+};
+const NARRATIVE_KW = {
+  'Trump & US Politics':['trump','president','democrat','republican','congress','senate','maga','white house','tariff','vance'],
+  'Crypto & DeFi':['bitcoin','btc','ethereum','eth','crypto','solana','sol','defi','nft','coinbase','xrp','dogecoin'],
+  'Middle East & War':['israel','iran','gaza','hamas','hezbollah','ceasefire','hormuz','middle east','lebanon'],
+  'AI & Big Tech':['ai ','openai','gpt','artificial intelligence','nvidia','apple','microsoft','google','meta ','chatgpt'],
+  'Macro & Economy':['fed ','federal reserve','interest rate','inflation','recession','gdp','cpi','unemployment','rate cut','crude oil'],
+  'Ukraine & Russia':['ukraine','russia','zelensky','putin','nato','kyiv'],
+  'NBA & Basketball':['nba','basketball','finals','playoff','lakers','celtics','warriors','nuggets','cavaliers','thunder','knicks'],
+  'NFL & American Sports':['nfl','super bowl','mlb','world series','nhl','stanley cup','ncaa'],
+  'Global Elections':['election','vote','ballot','candidate','prime minister','chancellor']
+};
+async function loadNarratives(){
+  try{
+    var r=await fetch('/api/screener/narratives');
+    var narratives=await r.json();
+    if(!Array.isArray(narratives)||!narratives.length){document.getElementById('narrative-grid').innerHTML='<div style="color:#555;font-size:12px;font-family:Space Mono,monospace">No narrative data available yet</div>';return}
+    var maxD=narratives[0].dominance_pct||1;
+    document.getElementById('narrative-grid').innerHTML=narratives.map(function(n){
+      var color=NARRATIVE_COLORS[n.narrative]||'#c9920d';
+      var barPct=maxD>0?(n.dominance_pct/maxD)*100:0;
+      var wHtml='';
+      if(n.weekly_change===null)wHtml='<span class="narrative-weekly flat">new</span>';
+      else if(n.weekly_change>0.1)wHtml='<span class="narrative-weekly up">\u25B2 '+n.weekly_change.toFixed(1)+'%</span>';
+      else if(n.weekly_change<-0.1)wHtml='<span class="narrative-weekly down">\u25BC '+Math.abs(n.weekly_change).toFixed(1)+'%</span>';
+      else wHtml='<span class="narrative-weekly flat">\u2013 0%</span>';
+      var topQ=n.top_market?(n.top_market.question.length>55?n.top_market.question.substring(0,52)+'\u2026':n.top_market.question):'';
+      var topVol=n.top_market?(n.top_market.volume>=1e6?'$'+(n.top_market.volume/1e6).toFixed(1)+'M':'$'+(n.top_market.volume/1e3).toFixed(0)+'K'):'';
+      return'<div class="narrative-row" onclick="filterByNarrative(\''+n.narrative.replace(/'/g,"\\'")+'\')" data-narrative="'+n.narrative+'">'+
+        '<div class="narrative-bar-fill" style="width:'+barPct+'%"></div>'+
+        '<span style="width:10px;height:10px;border-radius:50%;background:'+color+';flex-shrink:0;display:inline-block;position:relative"></span>'+
+        '<span class="narrative-name">'+n.narrative+'</span>'+
+        '<span class="narrative-dominance">'+n.dominance_pct.toFixed(1)+'%</span>'+
+        wHtml+
+        '<span class="narrative-count">'+n.market_count+' mkts</span>'+
+        '<span class="narrative-top-market">'+topQ+(topVol?' \u00B7 <b style="color:#888">'+topVol+'</b>':'')+'</span>'+
+      '</div>';
+    }).join('');
+  }catch(e){document.getElementById('narrative-grid').innerHTML='<div style="color:#555;font-size:12px;font-family:Space Mono,monospace">Unable to load narratives</div>'}
+}
+function filterByNarrative(narrative){
+  if(_activeNarrative===narrative){_activeNarrative=null;document.querySelectorAll('.narrative-row').forEach(function(r){r.classList.remove('active')});renderTable();return}
+  _activeNarrative=narrative;
+  document.querySelectorAll('.narrative-row').forEach(function(r){r.classList.toggle('active',r.dataset.narrative===narrative)});
+  renderTable();
+}
 
 function fmtVol(n) {
   if (n >= 1000000) return '$' + (n / 1000000).toFixed(1) + 'M';
@@ -344,6 +421,11 @@ async function loadScreener() {
 
 function getFiltered() {
   let markets = [..._allMarkets];
+  // Narrative filter
+  if (_activeNarrative && _activeNarrative !== 'Other') {
+    var kws = NARRATIVE_KW[_activeNarrative] || [];
+    if (kws.length) markets = markets.filter(function(m) { var q = (m.question || '').toLowerCase(); return kws.some(function(kw) { return q.includes(kw); }); });
+  }
   if (_catFilter !== 'all') markets = markets.filter(m => m.category === _catFilter);
   if (_whaleMin > 0) markets = markets.filter(m => m.whale_count >= _whaleMin);
   if (_volMin > 0) markets = markets.filter(m => m.volume >= _volMin);
@@ -437,6 +519,7 @@ function loadMore() {
 
 // Init
 loadScreener();
+loadNarratives();
 
 // Auto-refresh every 5 minutes
 setInterval(loadScreener, 5 * 60 * 1000);

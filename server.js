@@ -17317,6 +17317,134 @@ app.get('/api/catalysts', async (req, res) => {
   res.json({ catalysts: results });
 });
 
+// ── NARRATIVE INTELLIGENCE — group markets into dominant themes ────────────
+const NARRATIVE_KEYWORDS = {
+  'Trump & US Politics':   ['trump','president','democrat','republican','congress','senate','maga','white house','tariff','executive order','vance'],
+  'Crypto & DeFi':         ['bitcoin','btc','ethereum','eth','crypto','solana','sol','defi','nft','coinbase','stablecoin','altcoin','xrp','dogecoin','doge'],
+  'Middle East & War':     ['israel','iran','gaza','hamas','hezbollah','ceasefire','hormuz','middle east','lebanon','netanyahu'],
+  'AI & Big Tech':         ['ai ','openai','gpt','artificial intelligence','nvidia','apple','microsoft','google','meta ','anthropic','chatgpt'],
+  'Macro & Economy':       ['fed ','federal reserve','interest rate','inflation','recession','gdp','cpi','unemployment','rate cut','yield','crude oil','gold price','tariff'],
+  'Ukraine & Russia':      ['ukraine','russia','zelensky','putin','nato','kyiv','donbas'],
+  'NBA & Basketball':      ['nba','basketball','finals','playoff','lakers','celtics','warriors','nuggets','cavaliers','thunder','knicks','bucks','76ers','rockets','heat','suns','nets','kings','clippers','bulls'],
+  'NFL & American Sports': ['nfl','super bowl','mlb','world series','nhl','stanley cup','ncaa','march madness'],
+  'Global Elections':      ['election','vote','ballot','candidate','prime minister','chancellor','parliament'],
+  'Other':                 []
+};
+function classifyNarrative(question) {
+  const q = (question || '').toLowerCase();
+  for (const [narrative, keywords] of Object.entries(NARRATIVE_KEYWORDS)) {
+    if (narrative === 'Other') continue;
+    if (keywords.some(kw => q.includes(kw))) return narrative;
+  }
+  return 'Other';
+}
+
+async function snapshotNarratives(narrativeData) {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const rows = narrativeData.map(n => ({
+      narrative: n.narrative, snapshot_date: today,
+      dominance_pct: n.dominance_pct, market_count: n.market_count,
+      total_volume: n.total_volume
+    }));
+    if (pool) {
+      for (const r of rows) {
+        await dbQuery(
+          'INSERT INTO narrative_snapshots (narrative, snapshot_date, dominance_pct, market_count, total_volume) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (narrative, snapshot_date) DO UPDATE SET dominance_pct=$3, market_count=$4, total_volume=$5',
+          [r.narrative, r.snapshot_date, r.dominance_pct, r.market_count, r.total_volume]
+        ).catch(() => {});
+      }
+    } else {
+      await supabase.from('narrative_snapshots').upsert(rows, { onConflict: 'narrative,snapshot_date' });
+    }
+  } catch(e) { console.warn('[narrative-snapshot]', e.message); }
+}
+
+async function getNarrativeWeeklyDeltas() {
+  try {
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    let data;
+    if (pool) {
+      data = await dbQuery('SELECT narrative, dominance_pct FROM narrative_snapshots WHERE snapshot_date = $1', [weekAgo]).catch(() => []);
+    } else {
+      const res = await supabase.from('narrative_snapshots').select('narrative, dominance_pct').eq('snapshot_date', weekAgo);
+      data = res.data || [];
+    }
+    const map = {};
+    (data || []).forEach(r => { map[r.narrative] = parseFloat(r.dominance_pct); });
+    return map;
+  } catch(e) { return {}; }
+}
+
+const _narrativeCache = { data: null, ts: 0 };
+app.get('/api/screener/narratives', async (req, res) => {
+  try {
+    if (_narrativeCache.data && Date.now() - _narrativeCache.ts < 15 * 60 * 1000) {
+      return res.json(_narrativeCache.data);
+    }
+
+    // Use existing screener cache if available, otherwise fetch
+    let markets = [];
+    if (_screenerCache && _screenerCache.data && Array.isArray(_screenerCache.data)) {
+      markets = _screenerCache.data;
+    } else {
+      const pmRes = await fetch('https://gamma-api.polymarket.com/markets?closed=false&limit=300&order=volume&ascending=false', {
+        headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' },
+        signal: AbortSignal.timeout(10000)
+      });
+      if (pmRes.ok) {
+        const raw = await pmRes.json();
+        markets = (Array.isArray(raw) ? raw : []).filter(m => m.question);
+      }
+    }
+
+    if (!markets.length) return res.json([]);
+
+    // Group by narrative
+    const groups = {};
+    let totalVolume = 0;
+    for (const m of markets) {
+      const narrative = classifyNarrative(m.question);
+      if (!groups[narrative]) groups[narrative] = { markets: [], volume: 0 };
+      const vol = parseFloat(m.volume) || 0;
+      groups[narrative].markets.push(m);
+      groups[narrative].volume += vol;
+      totalVolume += vol;
+    }
+
+    const weeklyDeltas = await getNarrativeWeeklyDeltas();
+
+    const result = Object.entries(groups)
+      .map(([narrative, g]) => {
+        const dominance_pct = totalVolume > 0 ? Math.round((g.volume / totalVolume) * 1000) / 10 : 0;
+        const prior = weeklyDeltas[narrative];
+        const weekly_change = prior != null ? Math.round((dominance_pct - prior) * 10) / 10 : null;
+        const top = g.markets.sort((a, b) => (parseFloat(b.volume) || 0) - (parseFloat(a.volume) || 0))[0];
+        let topYesPct = null;
+        try {
+          const prices = typeof top.outcomePrices === 'string' ? JSON.parse(top.outcomePrices) : top.outcomePrices;
+          if (Array.isArray(prices) && prices[0] != null) topYesPct = Math.round(parseFloat(prices[0]) * 100);
+        } catch {}
+        return {
+          narrative, dominance_pct, weekly_change,
+          market_count: g.markets.length,
+          total_volume: Math.round(g.volume),
+          top_market: top ? { question: top.question || '', yes_pct: topYesPct, volume: Math.round(parseFloat(top.volume) || 0) } : null
+        };
+      })
+      .filter(n => n.narrative !== 'Other' || n.market_count > 5)
+      .sort((a, b) => b.dominance_pct - a.dominance_pct);
+
+    snapshotNarratives(result).catch(() => {});
+    _narrativeCache.data = result;
+    _narrativeCache.ts = Date.now();
+    res.json(result);
+  } catch (err) {
+    console.error('[narratives]', err.message);
+    res.json([]);
+  }
+});
+
 // ── MARKET MOVERS — biggest price changes in last 24h ─────────────────────
 let _marketMoversCache = null;
 
