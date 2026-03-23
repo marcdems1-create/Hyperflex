@@ -6267,6 +6267,184 @@ app.get('/api/market/:id/votes', async (req, res) => {
   }
 });
 
+// ── COHORT SENTIMENT — segment bettors by track record ───────────────────
+const _cohortCache = new Map();
+app.get('/api/market/:id/cohort-sentiment', async (req, res) => {
+  const marketId = req.params.id;
+  const cached = _cohortCache.get(marketId);
+  if (cached && Date.now() - cached.ts < 5 * 60 * 1000) return res.json(cached.data);
+
+  try {
+    // Get all bets on this market with user win rates
+    let bets = [];
+    if (pool) {
+      bets = await dbQuery(`
+        SELECT cb.user_id, cb.side, cb.amount,
+          COALESCE(u.display_name, '') as display_name,
+          (SELECT COUNT(*) FROM positions p WHERE p.user_id = cb.user_id AND p.won IS NOT NULL) as total_bets,
+          (SELECT COUNT(*) FROM positions p WHERE p.user_id = cb.user_id AND p.won = true) as wins
+        FROM community_balances cb
+        LEFT JOIN users u ON cb.user_id = u.id
+        WHERE cb.market_id = $1 AND cb.side IS NOT NULL
+      `, [marketId]);
+    } else {
+      // Supabase fallback — simpler query
+      const { data: cbData } = await supabase.from('community_balances').select('user_id, side, amount').eq('market_id', marketId).not('side', 'is', null);
+      bets = cbData || [];
+      // Enrich with win rates
+      for (const b of bets) {
+        try {
+          const { count: total } = await supabase.from('positions').select('id', { count: 'exact', head: true }).eq('user_id', b.user_id).not('won', 'is', null);
+          const { count: wins } = await supabase.from('positions').select('id', { count: 'exact', head: true }).eq('user_id', b.user_id).eq('won', true);
+          b.total_bets = total || 0;
+          b.wins = wins || 0;
+        } catch(e) { b.total_bets = 0; b.wins = 0; }
+      }
+    }
+
+    if (!bets.length) {
+      const empty = { market_id: marketId, cohorts: [], gap: 0, signal: 'INSUFFICIENT_DATA' };
+      _cohortCache.set(marketId, { ts: Date.now(), data: empty });
+      return res.json(empty);
+    }
+
+    // Segment into cohorts
+    const cohorts = { sharp: { yes_vol: 0, no_vol: 0, yes_count: 0, no_count: 0 }, experienced: { yes_vol: 0, no_vol: 0, yes_count: 0, no_count: 0 }, retail: { yes_vol: 0, no_vol: 0, yes_count: 0, no_count: 0 } };
+
+    for (const b of bets) {
+      const totalBets = parseInt(b.total_bets) || 0;
+      const wins = parseInt(b.wins) || 0;
+      const winRate = totalBets > 0 ? wins / totalBets : 0;
+      const amt = parseFloat(b.amount) || 0;
+      const side = (b.side || '').toUpperCase();
+
+      let cohort;
+      if (winRate >= 0.65 && totalBets >= 10) cohort = cohorts.sharp;
+      else if (winRate >= 0.50 && totalBets >= 5) cohort = cohorts.experienced;
+      else cohort = cohorts.retail;
+
+      if (side === 'YES' || side === 'Y') { cohort.yes_vol += amt; cohort.yes_count++; }
+      else if (side === 'NO' || side === 'N') { cohort.no_vol += amt; cohort.no_count++; }
+    }
+
+    const buildCohort = (label, desc, c) => {
+      const total = c.yes_vol + c.no_vol || 1;
+      return {
+        label, description: desc,
+        yes_pct: Math.round(c.yes_vol / total * 100),
+        no_pct: Math.round(c.no_vol / total * 100),
+        yes_count: c.yes_count, no_count: c.no_count,
+        yes_volume: Math.round(c.yes_vol), no_volume: Math.round(c.no_vol),
+        total_bettors: c.yes_count + c.no_count
+      };
+    };
+
+    const result = {
+      market_id: marketId,
+      cohorts: [
+        buildCohort('Sharp Money', '≥65% win rate, 10+ bets', cohorts.sharp),
+        buildCohort('Experienced', '50-65% win rate, 5+ bets', cohorts.experienced),
+        buildCohort('Retail', '<50% or <5 bets', cohorts.retail)
+      ].filter(c => c.total_bettors > 0)
+    };
+
+    // Compute gap and signal
+    const sharpC = result.cohorts.find(c => c.label === 'Sharp Money');
+    const retailC = result.cohorts.find(c => c.label === 'Retail');
+    const sharpYes = sharpC ? sharpC.yes_pct : 50;
+    const retailYes = retailC ? retailC.yes_pct : 50;
+    result.gap = sharpYes - retailYes;
+
+    if (Math.abs(result.gap) >= 15 && sharpYes > 60) result.signal = 'SHARP_YES';
+    else if (Math.abs(result.gap) >= 15 && sharpYes < 40) result.signal = 'SHARP_NO';
+    else if (result.cohorts.length >= 2 && Math.abs(result.gap) <= 5) result.signal = 'CONSENSUS';
+    else result.signal = 'SPLIT';
+
+    _cohortCache.set(marketId, { ts: Date.now(), data: result });
+    res.json(result);
+  } catch (err) {
+    console.error('[cohort-sentiment]', err.message);
+    res.json({ market_id: marketId, cohorts: [], gap: 0, signal: 'ERROR' });
+  }
+});
+
+// GET /api/explore/smart-money-divergence — top markets where sharp vs retail gap is largest
+app.get('/api/explore/smart-money-divergence', async (req, res) => {
+  try {
+    // Get all active markets with bets
+    let markets = [];
+    if (pool) {
+      markets = await dbQuery(`
+        SELECT DISTINCT m.id, m.question, m.tenant_slug as slug
+        FROM markets m
+        INNER JOIN community_balances cb ON cb.market_id = m.id
+        WHERE m.is_public = true AND m.outcome IS NULL
+        GROUP BY m.id, m.question, m.tenant_slug
+        HAVING COUNT(DISTINCT cb.user_id) >= 3
+        LIMIT 30
+      `);
+    } else {
+      const { data } = await supabase.from('markets').select('id, question, tenant_slug').is('outcome', null).eq('is_public', true).limit(30);
+      markets = data || [];
+    }
+
+    // Compute cohort for each market (use cached where available)
+    const results = [];
+    for (const m of markets) {
+      try {
+        let cohortData = _cohortCache.get(m.id);
+        if (!cohortData || Date.now() - cohortData.ts > 10 * 60 * 1000) {
+          // Quick inline computation
+          let bets = [];
+          if (pool) {
+            bets = await dbQuery(`
+              SELECT cb.side, cb.amount,
+                (SELECT COUNT(*) FROM positions p WHERE p.user_id = cb.user_id AND p.won IS NOT NULL) as total_bets,
+                (SELECT COUNT(*) FROM positions p WHERE p.user_id = cb.user_id AND p.won = true) as wins
+              FROM community_balances cb WHERE cb.market_id = $1 AND cb.side IS NOT NULL
+            `, [m.id]);
+          }
+          if (!bets.length) continue;
+
+          let sharpYes = 0, sharpNo = 0, retailYes = 0, retailNo = 0;
+          for (const b of bets) {
+            const wr = (parseInt(b.total_bets) || 0) > 0 ? (parseInt(b.wins) || 0) / parseInt(b.total_bets) : 0;
+            const amt = parseFloat(b.amount) || 0;
+            const isYes = (b.side || '').toUpperCase() === 'YES';
+            if (wr >= 0.65 && (parseInt(b.total_bets) || 0) >= 10) {
+              if (isYes) sharpYes += amt; else sharpNo += amt;
+            } else if (wr < 0.50 || (parseInt(b.total_bets) || 0) < 5) {
+              if (isYes) retailYes += amt; else retailNo += amt;
+            }
+          }
+          const sharpTotal = sharpYes + sharpNo || 1;
+          const retailTotal = retailYes + retailNo || 1;
+          const sharpPct = Math.round(sharpYes / sharpTotal * 100);
+          const retailPct = Math.round(retailYes / retailTotal * 100);
+          const gap = sharpPct - retailPct;
+          if (Math.abs(gap) < 10) continue; // Only show meaningful divergence
+
+          results.push({
+            market_id: m.id,
+            question: m.question,
+            slug: m.tenant_slug || m.slug,
+            sharp_yes_pct: sharpPct,
+            retail_yes_pct: retailPct,
+            gap,
+            signal: gap >= 15 && sharpPct > 60 ? 'SHARP_YES' : (gap <= -15 && sharpPct < 40 ? 'SHARP_NO' : 'DIVERGENCE')
+          });
+        }
+      } catch(e) { /* skip market */ }
+    }
+
+    results.sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap));
+    res.json({ markets: results.slice(0, 5) });
+  } catch (err) {
+    console.error('[smart-money-divergence]', err.message);
+    res.json({ markets: [] });
+  }
+});
+
 app.get('/api/creator/disputes', requireCreator, async (req, res) => {
   try {
     let data;

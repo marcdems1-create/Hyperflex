@@ -1062,6 +1062,15 @@ nav {
       </div>
     </div>
 
+    <!-- SMART MONEY DIVERGENCE -->
+    <div id="smartMoneySection" style="display:none;margin-bottom:20px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gold);margin-bottom:12px;font-family:'Space Mono',monospace;display:flex;align-items:center;gap:8px">
+        <span>\u26A1</span> Smart Money Divergence
+      </div>
+      <div style="font-family:'Space Mono',monospace;font-size:10px;color:#7a7870;margin-bottom:12px">Markets where sharp predictors (\u226565% win rate) disagree most with retail</div>
+      <div id="smartMoneyCards" style="display:flex;flex-direction:column;gap:8px"></div>
+    </div>
+
     <!-- LIVE INSIGHTS -->
     <div id="explore-insights" style="display:none;margin-bottom:16px">
       <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gold);margin-bottom:12px;font-family:'Space Mono',monospace;display:flex;align-items:center;gap:8px">
@@ -1266,6 +1275,38 @@ function loadExploreInsights() {
   }).catch(() => {});
 }
 loadExploreInsights();
+
+// ── SMART MONEY DIVERGENCE ──
+(function loadSmartMoney() {
+  fetch('/api/explore/smart-money-divergence').then(function(r){return r.ok?r.json():null}).then(function(d){
+    if(!d||!d.markets||!d.markets.length)return;
+    var section=document.getElementById('smartMoneySection');
+    var cards=document.getElementById('smartMoneyCards');
+    section.style.display='';
+    function esc(s){var el=document.createElement('div');el.textContent=s;return el.innerHTML}
+    cards.innerHTML=d.markets.map(function(m,i){
+      var gapColor=m.gap>0?'#22c55e':'#ef4444';
+      var gapSign=m.gap>0?'+':'';
+      var signalBadge='';
+      if(m.signal==='SHARP_YES')signalBadge='<span style="font-size:9px;padding:2px 8px;border-radius:4px;background:rgba(201,146,13,0.15);color:#c9920d;font-weight:700;border:1px solid rgba(201,146,13,0.3)">\u26A1 Sharp YES</span>';
+      else if(m.signal==='SHARP_NO')signalBadge='<span style="font-size:9px;padding:2px 8px;border-radius:4px;background:rgba(239,68,68,0.15);color:#ef4444;font-weight:700;border:1px solid rgba(239,68,68,0.3)">\u26A1 Sharp NO</span>';
+      return'<a href="/'+esc(m.slug||'')+'" style="display:block;background:#1a1917;border:1px solid #2a2a25;border-radius:10px;padding:14px 16px;text-decoration:none;transition:border-color .15s" onmouseover="this.style.borderColor=\'rgba(201,146,13,0.4)\'" onmouseout="this.style.borderColor=\'#2a2a25\'">'+
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'+
+          '<span style="font-family:\'Space Mono\',monospace;font-size:11px;color:#7a7870;font-weight:700">'+(i+1)+'.</span>'+
+          '<span style="font-size:13px;color:#e8e4d9;font-weight:600;flex:1">'+esc((m.question||'').length>55?m.question.substring(0,52)+'...':m.question)+'</span>'+
+          signalBadge+
+        '</div>'+
+        '<div style="display:flex;gap:16px;font-family:\'Space Mono\',monospace;font-size:11px">'+
+          '<span style="color:#22c55e">Sharp: '+m.sharp_yes_pct+'% YES</span>'+
+          '<span style="color:#7a7870">|</span>'+
+          '<span style="color:#ef4444">Retail: '+m.retail_yes_pct+'% YES</span>'+
+          '<span style="color:#7a7870">|</span>'+
+          '<span style="color:'+gapColor+';font-weight:700">Gap: '+gapSign+m.gap+'pts</span>'+
+        '</div>'+
+      '</a>';
+    }).join('');
+  }).catch(function(){});
+})();
 
 function onExploreSearch(val) {
   clearTimeout(_exploreSearchTimer);
