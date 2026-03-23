@@ -3706,15 +3706,15 @@ app.get('/api/odds/search', async (req, res) => {
 
   try {
     // Search cached_positions for matching market titles across all platforms
-    let data, error;
+    let data = [];
     if (pool) {
-      const _rows = await dbQuery('SELECT platform, external_id, market_title, side, probability, market_url FROM cached_positions WHERE market_title ILIKE $1 ORDER BY probability DESC LIMIT 100', [`%${q}%`]);
-      data = _rows;
+      data = await dbQuery('SELECT platform, external_id, market_title, side, probability, market_url FROM cached_positions WHERE market_title ILIKE $1 ORDER BY probability DESC LIMIT 100', [`%${q}%`]);
     } else {
-      const { data, error } = await supabase .from('cached_positions') .select('platform, external_id, market_title, side, probability, market_url') .ilike('market_title', `%${q}%`) .order('probability', { ascending: false }) .limit(100);
+      const result = await supabase .from('cached_positions') .select('platform, external_id, market_title, side, probability, market_url') .ilike('market_title', `%${q}%`) .order('probability', { ascending: false }) .limit(100);
+      if (result.error) { console.error('[odds-search]', result.error); return res.json({ clusters: [] }); }
+      data = result.data || [];
     }
 
-    if (error) { console.error('[odds-search]', error); return res.json({ clusters: [] }); }
     if (!data || !data.length) return res.json({ clusters: [] });
 
     // Deduplicate: keep the most recent entry per platform+external_id
@@ -15708,13 +15708,22 @@ app.get('/api/markets/search', async (req, res) => {
         syns.forEach(s => expandedTerms.add(s));
       }
     }
+    // Word boundary regex for precise matching (prevents "gold" matching "golden")
+    const qWordBoundaryRe = new RegExp('\\b' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
     const matchesQuery = (text) => {
       const t = (text || '').toLowerCase();
-      // Match if full query appears, or ALL query words appear, or any synonym matches
-      if (t.includes(q)) return true;
+      // Prefer word boundary match first
+      if (qWordBoundaryRe.test(t)) return true;
+      // Multi-word: all words must appear
       if (qWords.length > 1 && qWords.every(w => t.includes(w))) return true;
+      // Synonym word boundary match
       for (const term of expandedTerms) {
-        if (term.length >= 3 && t.includes(term)) return true;
+        if (term.length >= 3) {
+          try {
+            const termRe = new RegExp('\\b' + term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
+            if (termRe.test(t)) return true;
+          } catch(e) { if (t.includes(term)) return true; }
+        }
       }
       return false;
     };
@@ -15790,9 +15799,14 @@ app.get('/api/markets/search', async (req, res) => {
     if (kalshiRes.status === 'fulfilled' && kalshiRes.value.ok) {
       const raw = await kalshiRes.value.json();
       const events = raw.events || [];
+      // Debug: log Kalshi match count for commodity queries
+      if (['gold', 'oil', 'silver', 'copper'].includes(q)) {
+        const matchCount = events.filter(e => matchesQuery(e.title) || matchesQuery(e.category)).length;
+        console.log(`[market-search] Kalshi "${q}" query: ${events.length} total events, ${matchCount} matched`);
+      }
       for (const evt of events) {
-        // Check event title AND category against query
-        if (!matchesQuery(evt.title) && !matchesQuery(evt.category)) continue;
+        // Check event title, category, AND sub_title against query
+        if (!matchesQuery(evt.title) && !matchesQuery(evt.category) && !matchesQuery(evt.sub_title)) continue;
         const mkts = evt.markets || [];
         for (const m of mkts) {
           if (m.status !== 'open') continue;
