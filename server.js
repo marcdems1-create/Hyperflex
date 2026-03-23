@@ -15216,39 +15216,73 @@ app.delete('/api/push/subscribe', async (req, res) => {
 async function fireWhaleAlerts(newPositions) {
   if (!webpush || !newPositions.length) return;
   try {
+    // Get all push subscribers
     let subs;
     if (pool) {
-      subs = await dbQuery('SELECT endpoint, p256dh, auth, min_size FROM push_subscriptions');
+      subs = await dbQuery('SELECT endpoint, p256dh, auth, min_size, user_id FROM push_subscriptions');
     } else {
-      const { data } = await supabase.from('push_subscriptions').select('endpoint, p256dh, auth, min_size');
+      const { data } = await supabase.from('push_subscriptions').select('endpoint, p256dh, auth, min_size, user_id');
       subs = data || [];
     }
     if (!subs.length) return;
 
+    // Get all whale follows to personalize alerts
+    let follows = [];
+    try {
+      if (pool) {
+        follows = await dbQuery('SELECT user_id, trader_wallet FROM whale_alerts');
+      } else {
+        const { data: fd } = await supabase.from('whale_alerts').select('user_id, trader_wallet');
+        follows = fd || [];
+      }
+    } catch (e) { /* whale_alerts table may not exist yet */ }
+
+    // Build follower lookup: wallet → Set of user_ids
+    const followersByWallet = {};
+    for (const f of follows) {
+      if (!followersByWallet[f.trader_wallet]) followersByWallet[f.trader_wallet] = new Set();
+      followersByWallet[f.trader_wallet].add(f.user_id);
+    }
+
+    const sendPush = (sub, payload) => {
+      const pushSub = { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } };
+      webpush.sendNotification(pushSub, payload).catch(err => {
+        if (err.statusCode === 410 || err.statusCode === 404) {
+          if (pool) dbQuery('DELETE FROM push_subscriptions WHERE endpoint = $1', [sub.endpoint]).catch(() => {});
+          else supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint);
+        }
+      });
+    };
+
+    let sent = 0;
     for (const pos of newPositions) {
       const size = parseFloat(pos.size || 0);
       const traderName = pos.trader || 'Whale';
       const side = pos.side || 'YES';
       const question = (pos.market || pos.position || 'Unknown').substring(0, 60);
-      const payload = JSON.stringify({
-        title: `\uD83D\uDC0B ${traderName} just went ${side}`,
-        body: `$${Math.round(size).toLocaleString()} on "${question}"`,
-        url: 'https://hyperflex.network/whales'
-      });
+      const wallet = pos.proxyWallet || pos.wallet || '';
+      const followers = wallet ? (followersByWallet[wallet] || new Set()) : new Set();
 
-      const matching = subs.filter(s => size >= (s.min_size || 10000));
-      for (const sub of matching) {
-        const pushSub = { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } };
-        webpush.sendNotification(pushSub, payload).catch(err => {
-          if (err.statusCode === 410 || err.statusCode === 404) {
-            // Subscription expired — clean up
-            if (pool) dbQuery('DELETE FROM push_subscriptions WHERE endpoint = $1', [sub.endpoint]).catch(() => {});
-            else supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint);
-          }
+      for (const sub of subs) {
+        const isFollower = sub.user_id && followers.has(sub.user_id);
+        // Followers: alert on any position >= $5K from their whales
+        // Non-followers: only positions >= their min_size threshold (default $10K, but $50K for non-followers via push)
+        const threshold = isFollower ? 5000 : Math.max(sub.min_size || 10000, 50000);
+        if (size < threshold) continue;
+
+        const title = isFollower
+          ? `\uD83D\uDC0B ${traderName} (you follow) just went ${side}`
+          : `\uD83D\uDC0B ${traderName} just went ${side}`;
+        const payload = JSON.stringify({
+          title,
+          body: `$${Math.round(size).toLocaleString()} on "${question}"`,
+          url: 'https://hyperflex.network/whales'
         });
+        sendPush(sub, payload);
+        sent++;
       }
     }
-    console.log(`[push] Sent whale alerts for ${newPositions.length} positions to ${subs.length} subscribers`);
+    if (sent > 0) console.log(`[push] Sent ${sent} whale alerts for ${newPositions.length} positions`);
   } catch (e) {
     console.warn('[push] fireWhaleAlerts error:', e.message);
   }
@@ -18868,6 +18902,151 @@ app.get('/api/signals', async (req, res) => {
 
 // GET /signals — alpha signals page
 app.get('/signals', (req, res) => res.sendFile(path.join(__dirname, 'public', 'signals.html')));
+
+// ── ARBITRAGE DETECTION ──────────────────────────────────────────────────
+let _arbCache = null; // { ts, data: [...] }
+let _prevArbIds = new Set();
+
+async function detectArbitrageOpportunities() {
+  try {
+    const fetch = _nodeFetch;
+    // Fetch Polymarket events
+    const polyRes = await fetch('https://gamma-api.polymarket.com/events?closed=false&limit=50&order=liquidity&ascending=false', {
+      headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+    }).catch(() => null);
+    // Fetch Kalshi events
+    const kalshiRes = await fetch('https://api.elections.kalshi.com/trade-api/v2/events?limit=100&status=open&with_nested_markets=true', {
+      headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+    }).catch(() => null);
+
+    const polyMarkets = [];
+    if (polyRes && polyRes.ok) {
+      const raw = await polyRes.json();
+      for (const evt of (Array.isArray(raw) ? raw : [])) {
+        for (const m of (evt.markets || [])) {
+          if (m.closed) continue;
+          let yp = 0.5;
+          try { const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices; if (Array.isArray(prices) && prices[0] != null) yp = parseFloat(prices[0]); } catch {}
+          polyMarkets.push({ question: (m.question || m.groupItemTitle || evt.title || '').toLowerCase(), yes: yp, url: evt.slug ? `https://polymarket.com/event/${evt.slug}` : 'https://polymarket.com', title: m.question || m.groupItemTitle || evt.title || '' });
+        }
+      }
+    }
+
+    const kalshiMarkets = [];
+    if (kalshiRes && kalshiRes.ok) {
+      const raw = await kalshiRes.json();
+      for (const evt of (raw.events || [])) {
+        for (const m of (evt.markets || [])) {
+          if (m.status !== 'active') continue;
+          const yp = (m.yes_ask || m.last_price || 50) / 100;
+          kalshiMarkets.push({ question: (m.title || evt.title || '').toLowerCase(), yes: yp, url: `https://kalshi.com/markets/${m.ticker || ''}`, title: m.title || evt.title || '' });
+        }
+      }
+    }
+
+    // Match markets across platforms by keyword overlap
+    const arbs = [];
+    for (const pm of polyMarkets) {
+      const pWords = pm.question.split(/\s+/).filter(w => w.length > 4);
+      if (pWords.length < 2) continue;
+      for (const km of kalshiMarkets) {
+        const kWords = km.question.split(/\s+/).filter(w => w.length > 4);
+        const overlap = pWords.filter(w => kWords.includes(w)).length;
+        if (overlap < 3) continue;
+        // Check for arb: if poly_yes + kalshi_no < 1.0 (buy YES on poly, buy NO on kalshi)
+        const kalshiNo = 1 - km.yes;
+        const arbEdge1 = 1 - (pm.yes + kalshiNo); // positive = arb exists
+        const arbEdge2 = 1 - (km.yes + (1 - pm.yes)); // reverse direction
+        const bestEdge = Math.max(arbEdge1, arbEdge2);
+        if (bestEdge > 0.005) { // > 0.5% edge
+          const edgePct = Math.round(bestEdge * 10000) / 100;
+          const direction = arbEdge1 >= arbEdge2 ? 'Buy YES Poly + NO Kalshi' : 'Buy YES Kalshi + NO Poly';
+          arbs.push({
+            id: pm.question.slice(0, 30) + '_' + km.question.slice(0, 30),
+            market: pm.title || km.title,
+            polymarket_yes: Math.round(pm.yes * 100),
+            kalshi_yes: Math.round(km.yes * 100),
+            edge_pct: edgePct,
+            direction,
+            poly_url: pm.url,
+            kalshi_url: km.url,
+            detected_at: new Date().toISOString()
+          });
+        }
+      }
+    }
+    arbs.sort((a, b) => b.edge_pct - a.edge_pct);
+
+    // Push notify for new arbs >= 3%
+    const newArbIds = new Set(arbs.map(a => a.id));
+    if (webpush) {
+      const freshArbs = arbs.filter(a => a.edge_pct >= 3 && !_prevArbIds.has(a.id));
+      for (const arb of freshArbs.slice(0, 3)) {
+        // Fire to all push subscribers
+        let subs;
+        try {
+          if (pool) subs = await dbQuery('SELECT endpoint, p256dh, auth FROM push_subscriptions');
+          else { const { data } = await supabase.from('push_subscriptions').select('endpoint, p256dh, auth'); subs = data || []; }
+        } catch { subs = []; }
+        const payload = JSON.stringify({
+          title: `\u26A1 Arb Alert: ${arb.edge_pct}% edge`,
+          body: `${arb.market.substring(0, 50)} \u2014 Poly ${arb.polymarket_yes}% vs Kalshi ${arb.kalshi_yes}%`,
+          url: 'https://hyperflex.network/odds#arb'
+        });
+        for (const sub of subs) {
+          webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload).catch(err => {
+            if (err.statusCode === 410 || err.statusCode === 404) {
+              if (pool) dbQuery('DELETE FROM push_subscriptions WHERE endpoint = $1', [sub.endpoint]).catch(() => {});
+              else supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint);
+            }
+          });
+        }
+        console.log(`[arb-push] Sent alert for ${arb.edge_pct}% edge on ${arb.market.substring(0, 40)}`);
+      }
+    }
+    _prevArbIds = newArbIds;
+    _arbCache = { ts: Date.now(), data: arbs.slice(0, 20) };
+    if (arbs.length) console.log(`[arb] Detected ${arbs.length} arb opportunities, best edge: ${arbs[0].edge_pct}%`);
+  } catch (e) {
+    console.warn('[arb] detection error:', e.message);
+  }
+}
+
+// Run arb detection every 5 minutes
+cron.schedule('*/5 * * * *', detectArbitrageOpportunities);
+setTimeout(detectArbitrageOpportunities, 30000); // First run 30s after boot
+
+// POST /api/trade-intentions — log when a user decides to trade (from Kelly calculator)
+app.post('/api/trade-intentions', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { market, side, market_pct, whale_pct, bankroll, kelly_fraction, url } = req.body;
+    if (!market) return res.status(400).json({ error: 'market required' });
+    if (pool) {
+      await dbQuery(
+        'INSERT INTO trade_intentions (user_id, market, side, market_pct, whale_pct, bankroll, kelly_fraction, url, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())',
+        [userId, market, side || 'YES', market_pct || 0, whale_pct || 0, bankroll || 0, kelly_fraction || 0.5, url || '']
+      );
+    } else {
+      await supabase.from('trade_intentions').insert({
+        user_id: userId, market, side: side || 'YES', market_pct: market_pct || 0,
+        whale_pct: whale_pct || 0, bankroll: bankroll || 0, kelly_fraction: kelly_fraction || 0.5,
+        url: url || '', created_at: new Date().toISOString()
+      });
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    console.warn('[trade-intentions]', e.message);
+    res.json({ ok: true }); // Silent fail — don't block the trade
+  }
+});
+
+app.get('/api/arbitrage', (req, res) => {
+  if (_arbCache && (Date.now() - _arbCache.ts < 6 * 60 * 1000)) {
+    return res.json({ opportunities: _arbCache.data, updated_at: new Date(_arbCache.ts).toISOString() });
+  }
+  res.json({ opportunities: [], updated_at: null });
+});
 
 // ════════════════════════════════════════════════════════════
 // FEATURE 1: PORTFOLIO BACKTESTER

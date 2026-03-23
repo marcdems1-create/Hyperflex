@@ -897,7 +897,11 @@ footer {
       if(sig.end_date){var diff=new Date(sig.end_date).getTime()-Date.now();if(diff>0){var hrs=Math.floor(diff/3600000);var mins=Math.floor((diff%3600000)/60000);bh+='<span style="color:'+(diff<3600000?'var(--red)':'var(--dim)')+'">Closes in '+(hrs>0?hrs+'h ':'')+mins+'m</span><span style="color:var(--border)">\u00B7</span>';}}
       var yp=sig.yes_pct||Math.round((sig.price||0.5)*100);
       bh+='<span>'+yp+'% '+side+'</span>';
-      if(sig.url&&sig.url!=='https://polymarket.com')bh+='<a href="'+sig.url+'" target="_blank" rel="noopener" class="ib-trade-btn" style="margin-left:auto">Trade on Polymarket \u2192</a>';
+      if(sig.url&&sig.url!=='https://polymarket.com'){
+        var wPct=sig.yes_pct||Math.round((sig.price||0.5)*100);
+        var mPct=wPct; // market price = whale consensus for now
+        bh+='<a href="#" onclick="event.preventDefault();openKelly(\''+escH(sig.market||'').replace(/'/g,"\\'")+'\',\''+side+'\','+mPct+','+wPct+',\''+sig.url+'\','+sig.whale_count+','+(sig.capital||0)+')" class="ib-trade-btn" style="margin-left:auto">Trade on Polymarket \u2192</a>';
+      }
       document.getElementById('rn-bottom').innerHTML=bh;
     }).catch(function(){});
   }
@@ -984,6 +988,96 @@ async function toggleHomePush(){
   if(!('serviceWorker' in navigator))return;
   try{var r=await navigator.serviceWorker.getRegistration('/sw.js');if(r){var s=await r.pushManager.getSubscription();if(s){var b=document.getElementById('homePushBtn');if(b){b.innerHTML='&#x1F514; &#x2713;';b.style.borderColor='var(--gold)';b.style.color='var(--gold)'}}}}catch(e){}
 })();
+</script>
+
+<!-- KELLY CALCULATOR MODAL -->
+<div id="kellyOverlay" onclick="if(event.target===this)closeKelly()" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#1a1916;border:1px solid var(--border);border-radius:16px;max-width:480px;width:100%;padding:28px 24px;position:relative">
+    <button onclick="closeKelly()" style="position:absolute;top:12px;right:16px;background:none;border:none;color:var(--dim);font-size:20px;cursor:pointer">&times;</button>
+    <div style="font-family:var(--mono);font-size:10px;color:var(--gold);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Position Size Calculator</div>
+    <div id="kellyQuestion" style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:16px;line-height:1.4"></div>
+    <div id="kellyEdge" style="font-family:var(--mono);font-size:12px;margin-bottom:16px;padding:10px 14px;border-radius:8px"></div>
+    <div style="margin-bottom:16px">
+      <label style="font-family:var(--mono);font-size:11px;color:var(--dim);display:block;margin-bottom:6px">Your bankroll ($)</label>
+      <input type="number" id="kellyBankroll" placeholder="1000" oninput="calcKelly()" style="width:100%;background:var(--paper);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:14px;padding:10px 14px;outline:none;box-sizing:border-box"/>
+    </div>
+    <div id="kellyResult" style="margin-bottom:16px;font-family:var(--mono);font-size:13px;color:var(--text)"></div>
+    <div style="margin-bottom:16px">
+      <label style="font-family:var(--mono);font-size:11px;color:var(--dim);display:block;margin-bottom:6px">Kelly fraction</label>
+      <div style="display:flex;gap:8px">
+        <button onclick="setKellyFrac(1)" class="kf-btn" id="kf-full" style="flex:1;padding:8px;font-family:var(--mono);font-size:11px;border-radius:6px;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--dim)">Full</button>
+        <button onclick="setKellyFrac(0.5)" class="kf-btn" id="kf-half" style="flex:1;padding:8px;font-family:var(--mono);font-size:11px;border-radius:6px;cursor:pointer;border:1px solid var(--gold);background:rgba(201,146,13,0.12);color:var(--gold)">Half</button>
+        <button onclick="setKellyFrac(0.25)" class="kf-btn" id="kf-quarter" style="flex:1;padding:8px;font-family:var(--mono);font-size:11px;border-radius:6px;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--dim)">Quarter</button>
+      </div>
+    </div>
+    <a id="kellyTradeLink" href="#" target="_blank" rel="noopener" onclick="logTradeIntent()" style="display:block;text-align:center;background:var(--gold);color:#0e0e0c;font-family:var(--mono);font-size:13px;font-weight:700;padding:12px;border-radius:8px;text-decoration:none">Trade on Polymarket &rarr;</a>
+  </div>
+</div>
+<script>
+var _kellyData = {};
+var _kellyFrac = 0.5;
+
+function openKelly(question, side, marketPct, whalePct, url, whaleCount, capital) {
+  _kellyData = { question: question, side: side, marketPct: marketPct, whalePct: whalePct, url: url, whaleCount: whaleCount || 0, capital: capital || 0 };
+  document.getElementById('kellyQuestion').textContent = question;
+  // Edge display
+  var edgeEl = document.getElementById('kellyEdge');
+  var edge = whalePct - marketPct;
+  if (edge > 0) {
+    edgeEl.style.background = 'rgba(34,197,94,0.08)';
+    edgeEl.style.border = '1px solid rgba(34,197,94,0.3)';
+    edgeEl.innerHTML = '<span style="color:#22c55e;font-weight:700">+' + edge + '\u00A2 edge per dollar</span> \u2014 Whales say ' + whalePct + '%, market says ' + marketPct + '%';
+  } else {
+    edgeEl.style.background = 'rgba(239,68,68,0.08)';
+    edgeEl.style.border = '1px solid rgba(239,68,68,0.3)';
+    edgeEl.innerHTML = '<span style="color:#ef4444">\u26A0\uFE0F Edge may be gone</span> \u2014 market (' + marketPct + '%) already priced in whale consensus (' + whalePct + '%)';
+  }
+  document.getElementById('kellyTradeLink').href = url || '#';
+  var saved = localStorage.getItem('hfx_bankroll');
+  if (saved) document.getElementById('kellyBankroll').value = saved;
+  calcKelly();
+  document.getElementById('kellyOverlay').style.display = 'flex';
+}
+
+function closeKelly() { document.getElementById('kellyOverlay').style.display = 'none'; }
+
+function setKellyFrac(f) {
+  _kellyFrac = f;
+  document.querySelectorAll('.kf-btn').forEach(function(b) { b.style.borderColor = 'var(--border)'; b.style.background = 'transparent'; b.style.color = 'var(--dim)'; });
+  var id = f === 1 ? 'kf-full' : f === 0.5 ? 'kf-half' : 'kf-quarter';
+  var el = document.getElementById(id);
+  el.style.borderColor = 'var(--gold)'; el.style.background = 'rgba(201,146,13,0.12)'; el.style.color = 'var(--gold)';
+  calcKelly();
+}
+
+function calcKelly() {
+  var bankroll = parseFloat(document.getElementById('kellyBankroll').value) || 0;
+  localStorage.setItem('hfx_bankroll', bankroll || '');
+  var resEl = document.getElementById('kellyResult');
+  if (!bankroll || bankroll <= 0) { resEl.innerHTML = '<span style="color:var(--dim)">Enter your bankroll to see optimal bet size</span>'; return; }
+  var p = (_kellyData.whalePct || 50) / 100; // estimated win prob from whales
+  var marketP = (_kellyData.marketPct || 50) / 100;
+  var b = (1 / marketP) - 1; // odds offered by market
+  var q = 1 - p;
+  var kelly = (b * p - q) / b;
+  if (kelly <= 0) { resEl.innerHTML = '<span style="color:#ef4444">No positive edge \u2014 Kelly says don\'t bet</span>'; return; }
+  var adj = kelly * _kellyFrac;
+  var bet = Math.round(bankroll * adj);
+  var pctOfBankroll = (adj * 100).toFixed(1);
+  var fracLabel = _kellyFrac === 1 ? 'Full Kelly' : _kellyFrac === 0.5 ? 'Half Kelly' : 'Quarter Kelly';
+  resEl.innerHTML = '<div style="margin-bottom:6px">Optimal bet: <strong style="color:var(--gold);font-size:18px">$' + bet.toLocaleString() + '</strong> <span style="color:var(--dim)">(' + pctOfBankroll + '% of bankroll)</span></div><div style="font-size:11px;color:var(--dim)">' + fracLabel + ' \u00B7 Raw Kelly: ' + (kelly * 100).toFixed(1) + '%</div>';
+}
+
+function logTradeIntent() {
+  var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+  if (!token) return;
+  var bankroll = parseFloat(document.getElementById('kellyBankroll').value) || 0;
+  fetch('/api/trade-intentions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ market: _kellyData.question, side: _kellyData.side, market_pct: _kellyData.marketPct, whale_pct: _kellyData.whalePct, bankroll: bankroll, kelly_fraction: _kellyFrac, url: _kellyData.url })
+  }).catch(function(){});
+}
 </script>
 
 <!-- LIVE STATS TICKER -->

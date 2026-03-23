@@ -122,6 +122,9 @@ td { padding: 12px; font-size: 13px; vertical-align: middle; }
 .copy-trade-btn:hover { background: rgba(201,146,13,0.25); border-color: var(--gold); }
 
 /* BACKTEST + AUTO-COPY BUTTONS */
+.follow-btn { font-family: var(--mono); font-size: 10px; font-weight: 700; padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(201,146,13,0.4); background: rgba(201,146,13,0.08); color: var(--gold); cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+.follow-btn:hover { background: rgba(201,146,13,0.2); }
+.follow-btn.following { border-color: rgba(34,197,94,0.4); background: rgba(34,197,94,0.08); color: #22c55e; }
 .bt-btn { font-family: var(--mono); font-size: 10px; font-weight: 700; padding: 4px 8px; border-radius: 6px; border: 1px solid rgba(34,197,94,0.4); background: rgba(34,197,94,0.08); color: var(--green); cursor: pointer; transition: all 0.15s; white-space: nowrap; }
 .bt-btn:hover { background: rgba(34,197,94,0.2); border-color: var(--green); }
 .ac-btn { font-family: var(--mono); font-size: 10px; font-weight: 700; padding: 4px 8px; border-radius: 6px; border: 1px solid rgba(96,165,250,0.4); background: rgba(96,165,250,0.08); color: #60a5fa; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
@@ -363,6 +366,7 @@ if (localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token')
   <div id="platformToggle" style="display:inline-flex;background:#1a1a17;border:1px solid #2a2a24;border-radius:10px;overflow:hidden">
     <button id="togglePoly" onclick="switchWhalePlatform('polymarket')" style="padding:10px 24px;font-family:'Space Mono',monospace;font-size:12px;font-weight:700;border:none;cursor:pointer;transition:all .15s;background:rgba(201,146,13,0.15);color:#c9920d;letter-spacing:.04em;min-height:44px">Polymarket</button>
     <button id="toggleHL" onclick="switchWhalePlatform('hyperliquid')" style="padding:10px 24px;font-family:'Space Mono',monospace;font-size:12px;font-weight:700;border:none;cursor:pointer;transition:all .15s;background:transparent;color:#6a6a5e;letter-spacing:.04em;min-height:44px">Hyperliquid</button>
+    <button id="toggleMyWhales" onclick="switchWhalePlatform('my-whales')" style="padding:10px 24px;font-family:'Space Mono',monospace;font-size:12px;font-weight:700;border:none;cursor:pointer;transition:all .15s;background:transparent;color:#6a6a5e;letter-spacing:.04em;min-height:44px">&#x1F4CC; My Whales</button>
   </div>
 </div>
 
@@ -848,6 +852,7 @@ function renderTable() {
       '<td><div class="price-bar-wrap"><div class="price-bar"><div class="price-bar-fill" style="width:' + pricePct + '%"></div></div><span class="price-pct">' + pricePct + '%</span></div></td>' +
       '<td><a href="' + p.market_url + '" target="_blank" rel="noopener" class="view-link">View \u2192</a></td>' +
       '<td><div class="action-btns">' +
+        '<button class="follow-btn' + (_followedWhales.has(p.proxyWallet||'') ? ' following' : '') + '" onclick="event.stopPropagation();' + (_followedWhales.has(p.proxyWallet||'') ? "unfollowWhale('" + escAttr(p.proxyWallet||'') + "',this)" : "followWhale('" + escAttr(p.proxyWallet||'') + "','" + escAttr(whaleName(p.trader,p.proxyWallet)) + "',this)") + '">' + (_followedWhales.has(p.proxyWallet||'') ? 'Following \u2713' : '+ Follow') + '</button>' +
         '<button class="copy-trade-btn" onclick="openCopyTrade(\'' + escAttr(p.trader) + '\',\'' + escAttr(p.market) + '\',\'' + escAttr(p.side) + '\',' + p.size + ',\'' + escAttr(p.market_url) + '\',\'' + escAttr(p.proxyWallet || '') + '\')">Copy Trade</button>' +
         '<button class="bt-btn" onclick="event.stopPropagation();openBacktest(\'' + escAttr(p.proxyWallet || p.trader || '') + '\',\'' + escAttr(p.trader || '') + '\')">Backtest</button>' +
         '<button class="ac-btn" onclick="event.stopPropagation();openAutoCopy(\'' + escAttr(p.proxyWallet || '') + '\',\'' + escAttr(p.trader || '') + '\')">\uD83E\uDD16 Auto-Copy</button>' +
@@ -889,35 +894,97 @@ let _hlWhaleData = null;
 let _hlFiltered = [];
 let _activePlatform = 'polymarket';
 
+var _followedWhales = new Set(JSON.parse(localStorage.getItem('hfx_whale_follows') || '[]'));
+
 function switchWhalePlatform(platform) {
   _activePlatform = platform;
-  const polyBtn = document.getElementById('togglePoly');
-  const hlBtn = document.getElementById('toggleHL');
-  const heroSub = document.getElementById('heroSub');
-  const flowSection = document.getElementById('whaleFlowSection');
+  var polyBtn = document.getElementById('togglePoly');
+  var hlBtn = document.getElementById('toggleHL');
+  var myBtn = document.getElementById('toggleMyWhales');
+  var heroSub = document.getElementById('heroSub');
+  var flowSection = document.getElementById('whaleFlowSection');
+
+  [polyBtn, hlBtn, myBtn].forEach(function(b) { if(b){b.style.background='transparent';b.style.color='#6a6a5e'} });
+
+  if (platform === 'my-whales') {
+    if(myBtn){myBtn.style.background='rgba(201,146,13,0.15)';myBtn.style.color='#c9920d'}
+    if (heroSub) heroSub.textContent = 'Positions from whales you follow';
+    if (flowSection) flowSection.style.display = 'none';
+    var thead = document.getElementById('whaleTableHead');
+    if (thead) thead.innerHTML = '<tr><th>Rank</th><th>Trader</th><th>Market</th><th>Side</th><th>Size ($)</th><th>Price</th><th>Link</th><th>Actions</th></tr>';
+    renderMyWhales();
+    return;
+  }
 
   if (platform === 'polymarket') {
-    polyBtn.style.background = 'rgba(201,146,13,0.15)'; polyBtn.style.color = '#c9920d';
-    hlBtn.style.background = 'transparent'; hlBtn.style.color = '#6a6a5e';
+    if(polyBtn){polyBtn.style.background='rgba(201,146,13,0.15)';polyBtn.style.color='#c9920d'}
     if (heroSub) heroSub.textContent = 'What the top Polymarket traders are betting right now';
     if (flowSection) flowSection.style.display = _whaleData ? '' : 'none';
-    // Restore Polymarket table headers
     var thead = document.getElementById('whaleTableHead');
     if (thead) thead.innerHTML = '<tr><th onclick="sortBy(\'trader_rank\')">Rank <span class="sort-arrow" id="sort-trader_rank"></span></th><th onclick="sortBy(\'trader\')">Trader <span class="sort-arrow" id="sort-trader"></span></th><th onclick="sortBy(\'market\')">Market <span class="sort-arrow" id="sort-market"></span></th><th onclick="sortBy(\'side\')">Side <span class="sort-arrow" id="sort-side"></span></th><th onclick="sortBy(\'size\')">Size ($) <span class="sort-arrow" id="sort-size"></span></th><th onclick="sortBy(\'current_price\')">Price <span class="sort-arrow" id="sort-current_price"></span></th><th>Link</th><th>Actions</th></tr>';
     if (_whaleData) { renderStats(); applyFilters(); }
     else loadData();
   } else {
-    hlBtn.style.background = 'rgba(119,185,0,0.15)'; hlBtn.style.color = '#77b900';
-    polyBtn.style.background = 'transparent'; polyBtn.style.color = '#6a6a5e';
+    if(hlBtn){hlBtn.style.background='rgba(119,185,0,0.15)';hlBtn.style.color='#77b900'}
     if (heroSub) heroSub.textContent = 'What the top Hyperliquid traders are holding right now';
     if (flowSection) flowSection.style.display = 'none';
-    // HL table headers
     var thead = document.getElementById('whaleTableHead');
     if (thead) thead.innerHTML = '<tr><th onclick="sortBy(\'trader_rank\')">Rank</th><th onclick="sortBy(\'trader\')">Trader</th><th onclick="sortBy(\'coin\')">Coin</th><th onclick="sortBy(\'side\')">Side</th><th onclick="sortBy(\'size_usd\')">Size ($)</th><th onclick="sortBy(\'entry_price\')">Entry</th><th onclick="sortBy(\'mark_price\')">Mark</th><th onclick="sortBy(\'unrealized_pnl\')">uPnL</th><th onclick="sortBy(\'leverage\')">Lev</th></tr>';
     if (_hlWhaleData) { renderHlStats(); applyHlFilters(); }
     else loadHlData();
   }
 }
+
+function renderMyWhales() {
+  var tbody = document.getElementById('whaleTableBody');
+  if (!tbody) return;
+  if (!_followedWhales.size) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:60px 20px"><div style="font-size:28px;margin-bottom:12px">\uD83D\uDC0B</div><div style="font-size:14px;color:var(--text);margin-bottom:8px">Follow whales to track their moves here</div><div style="font-size:12px;color:var(--muted)">Click the + Follow button on any whale in the Polymarket tab</div></td></tr>';
+    return;
+  }
+  if (!_whaleData || !_whaleData.whales) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--muted)">Loading whale data...</td></tr>'; return; }
+  var positions = _whaleData.whales.filter(function(p) { return _followedWhales.has(p.proxyWallet || '') });
+  positions.sort(function(a, b) { return new Date(b.fetched_at || 0) - new Date(a.fetched_at || 0) });
+  if (!positions.length) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--muted)">No current positions from your followed whales.</td></tr>'; return; }
+  tbody.innerHTML = positions.map(function(p) {
+    var pricePct = Math.round(p.current_price * 100);
+    return '<tr><td>' + rankBadge(p.trader_rank) + '</td><td><div class="trader-name">' + whaleName(p.trader, p.proxyWallet) + '</div></td><td style="max-width:280px">' + truncate(p.market, 50) + '</td><td>' + sideBadge(p.side) + '</td><td>' + fmt$(p.size) + '</td><td>' + pricePct + '\u00A2</td><td>' + (p.market_url ? '<a href="' + p.market_url + '" target="_blank" rel="noopener" class="trade-link">Trade \u2192</a>' : '') + '</td><td><button class="follow-btn following" onclick="unfollowWhale(\'' + escAttr(p.proxyWallet || '') + '\',this)">Following \u2713</button></td></tr>';
+  }).join('');
+}
+
+function followWhale(wallet, name, btn) {
+  var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+  _followedWhales.add(wallet);
+  localStorage.setItem('hfx_whale_follows', JSON.stringify([..._followedWhales]));
+  if (btn) { btn.textContent = 'Following \u2713'; btn.classList.add('following'); btn.setAttribute('onclick', "unfollowWhale('" + wallet.replace(/'/g, "\\'") + "',this)"); }
+  if (token) {
+    fetch('/api/whale-alerts', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ trader_wallet: wallet, trader_name: name }) }).catch(function(){});
+  }
+}
+
+function unfollowWhale(wallet, btn) {
+  var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+  _followedWhales.delete(wallet);
+  localStorage.setItem('hfx_whale_follows', JSON.stringify([..._followedWhales]));
+  if (btn) { btn.textContent = '+ Follow'; btn.classList.remove('following'); btn.setAttribute('onclick', "followWhale('" + wallet.replace(/'/g, "\\'") + "','',this)"); }
+  if (token) {
+    fetch('/api/whale-alerts/' + encodeURIComponent(wallet), { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } }).catch(function(){});
+  }
+  if (_activePlatform === 'my-whales') renderMyWhales();
+}
+
+// Sync follows from server on load
+(async function syncFollows() {
+  var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+  if (!token) return;
+  try {
+    var r = await fetch('/api/whale-alerts', { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) return;
+    var d = await r.json();
+    (d.alerts || []).forEach(function(a) { _followedWhales.add(a.trader_wallet) });
+    localStorage.setItem('hfx_whale_follows', JSON.stringify([..._followedWhales]));
+  } catch(e) {}
+})()
 
 function renderHlStats() {
   if (!_hlWhaleData) return;
