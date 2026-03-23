@@ -339,9 +339,11 @@ const pool = process.env.DATABASE_URL
   ? new Pool({
       connectionString: process.env.DATABASE_URL,
       ssl: { rejectUnauthorized: false },
-      max: 10,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 10000,
+      max: 5,
+      idleTimeoutMillis: 10000,
+      connectionTimeoutMillis: 15000,
+      statement_timeout: 15000,
+      query_timeout: 15000,
     })
   : null;
 if (pool) {
@@ -454,12 +456,21 @@ const _realSupabase = createClient(
 );
 
 // Helper: run a query via direct Postgres
-async function dbQuery(text, params = []) {
+async function dbQuery(text, params = [], timeoutMs = 15000) {
   if (!pool) throw new Error('No database pool');
-  const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error(`dbQuery timeout (30s): ${text.slice(0, 80)}`)), 30000));
-  const query = pool.query(text, params);
-  const result = await Promise.race([query, timeout]);
-  return result.rows;
+  const client = await Promise.race([
+    pool.connect(),
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`dbQuery connect timeout: ${text.slice(0, 60)}`)), timeoutMs))
+  ]);
+  try {
+    const result = await Promise.race([
+      client.query(text, params),
+      new Promise((_, reject) => setTimeout(() => reject(new Error(`dbQuery query timeout: ${text.slice(0, 60)}`)), timeoutMs))
+    ]);
+    return result.rows;
+  } finally {
+    client.release();
+  }
 }
 
 // ── SUPABASE PROXY ──────────────────────────────────────────────────────────
