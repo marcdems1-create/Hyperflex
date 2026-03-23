@@ -409,7 +409,13 @@ function renderSignals() {
   const filtered = _currentFilter === 'all' ? _allSignals : _allSignals.filter(s => s.type === _currentFilter);
 
   if (filtered.length === 0) {
-    grid.innerHTML = '<div class="empty-state">No ' + (_currentFilter === 'all' ? '' : _currentFilter.replace('_', ' ') + ' ') + 'signals detected right now. Check back soon.</div>';
+    const emptyMessages = {
+      new_entry: 'No new whale entries detected in the last hour. Check back soon.',
+      arbitrage: 'No arbitrage opportunities detected right now. Check back soon.',
+      whale_cluster: 'No whale cluster signals detected right now. Check back soon.',
+      momentum: 'No momentum signals detected right now. Check back soon.'
+    };
+    grid.innerHTML = '<div class="empty-state">' + (emptyMessages[_currentFilter] || 'No signals detected right now. Check back soon.') + '</div>';
     return;
   }
 

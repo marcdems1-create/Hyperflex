@@ -426,7 +426,8 @@ function renderPodium(top3){
     var vol=r.volume||r.account_value||r.accountValue||0;
     var roi=vol>0?((pnl/vol)*100).toFixed(1):'0.0';
     var pnlClass=pnl>=0?'':' negative';
-    var profileUrl='/p/'+escHtml(dname||r.user_id);
+    var profileId=r.wallet||r.address||(r.user_id&&String(r.user_id).startsWith('hl_')?String(r.user_id).replace('hl_',''):'')||r.user_id||dname;
+    var profileUrl='/p/'+encodeURIComponent(profileId);
     var platformHtml=(r.platforms||[]).map(function(p){
       var cls={POLY:'pp-poly',HL:'pp-hl',HFX:'pp-hfx',KALSHI:'pp-kalshi',MANIFOLD:'pp-manifold'}[p]||'pp-hfx';
       return'<span class="platform-pill '+cls+'">'+p+'</span>';
@@ -463,7 +464,8 @@ function renderTable(data){
     var pnlStr=formatPnl(pnl);
     var pnlCls=pnl>=0?'pnl-pos':'pnl-neg';
     var roiCls=pnl>0?'roi-pos':pnl<0?'roi-neg':'roi-neutral';
-    var profileUrl='/p/'+escHtml(dname||r.user_id);
+    var profileId=r.wallet||r.address||(r.user_id&&String(r.user_id).startsWith('hl_')?String(r.user_id).replace('hl_',''):'')||r.user_id||dname;
+    var profileUrl='/p/'+encodeURIComponent(profileId);
     var uid=escHtml(r.user_id||'');
     var streak=r.win_streak||(r.sharp_score>80?Math.floor(Math.random()*8)+3:0);
     var streakHtml=streak>=5?'<span class="streak-badge streak-hot">&#128293; '+streak+'</span>':streak>0?'<span class="streak-badge">'+streak+'</span>':'<span class="streak-badge">-</span>';

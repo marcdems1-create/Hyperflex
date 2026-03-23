@@ -9223,45 +9223,63 @@ app.get('/api/trader-profile/:username', async (req, res) => {
       return res.status(500).json({ error: 'User lookup failed', detail: e.message });
     }
 
-    // If wallet lookup failed, check whale watch data for the address
-    if (!user && isWallet) {
+    // If DB lookup failed, check whale watch cache (by wallet address, proxyWallet, or nickname)
+    if (!user) {
       try {
         const whaleData = _whaleWatchCache && _whaleWatchCache.data ? _whaleWatchCache.data : null;
         if (whaleData && whaleData.whales) {
-          const whalePositions = whaleData.whales.filter(w => (w.address || w.wallet || '').toLowerCase() === username.toLowerCase());
+          let whalePositions;
+          let walletAddr = username;
+          if (isWallet) {
+            // Direct wallet address match
+            whalePositions = whaleData.whales.filter(w => (w.proxyWallet || w.address || w.wallet || '').toLowerCase() === username.toLowerCase());
+          } else {
+            // Try matching by trader nickname or name
+            whalePositions = whaleData.whales.filter(w => (w.trader || '').toLowerCase() === username.toLowerCase());
+            if (!whalePositions.length) {
+              // Try matching by nickname generated from proxyWallet
+              const walletMatch = whaleData.whales.find(w => w.proxyWallet && getWhaleNickname(w.proxyWallet).toLowerCase() === username.toLowerCase());
+              if (walletMatch) {
+                walletAddr = walletMatch.proxyWallet;
+                whalePositions = whaleData.whales.filter(w => (w.proxyWallet || '').toLowerCase() === walletAddr.toLowerCase());
+              }
+            }
+            if (whalePositions.length) walletAddr = whalePositions[0].proxyWallet || walletAddr;
+          }
           if (whalePositions.length) {
-            const truncAddr = username.slice(0, 6) + '...' + username.slice(-4);
-            let whalePnl = 0;
-            const positions = whalePositions.map(w => {
-              const size = parseFloat(w.size || 0);
-              return { question: w.market || w.question || 'Unknown', side: w.side || 'YES', size, url: w.url || '' };
-            });
+            const displayName = whalePositions[0].trader || (isWallet ? getWhaleNickname(username) : username);
+            const traderPnl = whalePositions[0].trader_pnl || 0;
+            const traderRank = whalePositions[0].trader_rank || 0;
+            const positions = whalePositions.map(w => ({
+              question: w.market || w.question || 'Unknown', side: w.side || 'YES',
+              size: parseFloat(w.size || 0), url: w.market_url || w.url || ''
+            }));
             return res.json({
-              user_id: 'whale_' + username,
-              display_name: truncAddr,
-              username: truncAddr,
+              user_id: 'whale_' + walletAddr,
+              display_name: displayName,
+              username: displayName,
               member_since: null,
               follower_count: 0,
               win_rate: 0,
-              total_pnl: whalePnl,
+              total_pnl: traderPnl,
               sharp_score: 0,
               total_trades: whalePositions.length,
+              rank: traderRank,
               platforms_connected: ['polymarket'],
-              platform_stats: { polymarket: { count: whalePositions.length, pnl: 0 } },
+              platform_stats: { polymarket: { count: whalePositions.length, pnl: traderPnl } },
               best_calls: [],
               recent_activity: positions.map(p => ({
                 question: p.question, side: p.side, amount: p.size, pnl: null,
                 status: 'OPEN', platform: 'polymarket', created_at: null
               })),
               pnl_chart: [],
-              wallet_address: username,
+              wallet_address: walletAddr,
             });
           }
         }
       } catch (e) { console.warn('[trader-profile] whale lookup:', e.message); }
       return res.status(404).json({ error: 'User not found' });
     }
-    if (!user) return res.status(404).json({ error: 'User not found' });
 
     const userId = user.id;
     const displayName = user.display_name || user.username || (user.email ? user.email.split('@')[0] : 'Trader');
