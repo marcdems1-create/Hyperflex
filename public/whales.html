@@ -735,21 +735,26 @@ function renderStats() {
   document.getElementById('statAvgSize').textContent = fmt$(avgSize);
   document.getElementById('heroCapital').textContent = 'Tracking ' + fmt$(totalCap) + ' in positions across the top ' + _whaleData.total_whales + ' traders';
 
-  // Largest position
+  // Largest position — shortened format, links to market
   const largest = positions.length ? positions.reduce((a, b) => a.size > b.size ? a : b) : null;
   const largestEl = document.getElementById('statLargest');
   if (largest) {
     const url = largest.market_url || '#';
-    largestEl.innerHTML = `<a href="${url}" target="_blank" rel="noopener" style="color:var(--gold);text-decoration:none">${fmtFull$(largest.size)}</a><div style="font-size:10px;color:var(--dim);margin-top:4px">${truncate(largest.trader || '', 15)} → ${truncate(largest.market || '', 25)}</div>`;
+    largestEl.innerHTML = `<a href="${url}" target="_blank" rel="noopener" style="color:var(--gold);text-decoration:none;font-size:28px">${fmt$(largest.size)}</a><div style="font-size:10px;color:var(--dim);margin-top:4px">${truncate(largest.trader || '', 15)}</div>`;
   }
 
-  // Most popular market
+  // Most popular market — exclude closed/esports/resolved
   const marketCounts = {};
-  positions.forEach(p => { marketCounts[p.market] = (marketCounts[p.market] || 0) + 1; });
+  const esportsKeywords = ['counter-strike','csgo','cs2','dota','league of legends','valorant','overwatch','blast','esl','iem'];
+  positions.forEach(p => {
+    const mLower = (p.market || '').toLowerCase();
+    if (esportsKeywords.some(kw => mLower.includes(kw))) return; // skip esports
+    if (p.current_price >= 0.99 || p.current_price <= 0.01) return; // skip resolved
+    marketCounts[p.market] = (marketCounts[p.market] || 0) + 1;
+  });
   const popular = Object.entries(marketCounts).sort((a, b) => b[1] - a[1])[0];
   const popEl = document.getElementById('statPopular');
   if (popular) {
-    // Find the URL of the most popular market
     const popPosition = positions.find(p => p.market === popular[0]);
     const popUrl = popPosition?.market_url || `/odds?q=${encodeURIComponent(popular[0])}`;
     popEl.innerHTML = `<a href="${popUrl}" target="_blank" rel="noopener" style="color:var(--text);text-decoration:none;border-bottom:1px dashed rgba(201,146,13,0.4);transition:color .15s" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='var(--text)'">${truncate(popular[0], 40)}</a> <span style="color:var(--dim);font-size:11px">(${popular[1]} whales)</span>`;
@@ -1525,7 +1530,8 @@ async function openWhaleProfile(addressOrName) {
       var col = _wpCatColors[cat.category] || _wpCatColors.other;
       pieSegments.push(col + ' ' + cumDeg + 'deg ' + (cumDeg + deg) + 'deg');
       cumDeg += deg;
-      legendHtml += '<div class="wp-pie-legend-item"><div class="wp-pie-dot" style="background:' + col + '"></div>' + cat.category.charAt(0).toUpperCase() + cat.category.slice(1) + ' ' + cat.pct + '%</div>';
+      var catLabel = cat.category === 'other' ? 'General' : cat.category.charAt(0).toUpperCase() + cat.category.slice(1);
+      legendHtml += '<div class="wp-pie-legend-item"><div class="wp-pie-dot" style="background:' + col + '"></div>' + catLabel + ' ' + cat.pct + '%</div>';
     });
     var pieGradient = pieSegments.length > 0 ? 'conic-gradient(' + pieSegments.join(', ') + ')' : 'var(--border)';
 
