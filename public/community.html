@@ -1825,6 +1825,12 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
   body { overflow-x: hidden; }
   input, textarea, select { font-size: 16px !important; }
 }
+.cohort-row{display:flex;align-items:center;gap:6px;padding:4px 0;font-family:var(--mono);font-size:10px;flex-wrap:wrap}
+.cohort-bar{flex:1;display:flex;height:4px;border-radius:2px;overflow:hidden;min-width:60px;max-width:120px}
+.cohort-badge{font-size:9px;padding:1px 6px;border-radius:3px;font-weight:700}
+.cohort-badge.sharp-yes{background:rgba(201,146,13,0.15);color:#c9920d;border:1px solid rgba(201,146,13,0.3)}
+.cohort-badge.sharp-no{background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.3)}
+.cohort-badge.consensus{background:rgba(255,255,255,0.08);color:#7a7870;border:1px solid rgba(255,255,255,0.1)}
 </style>
 </head>
 <body>
@@ -3023,6 +3029,9 @@ function renderFilteredMarkets() {
     if (currentFilter === 'truth') updateTruthFeedSummary(sorted);
   }
 
+  // Load cohort sentiment for active markets (non-blocking)
+  loadCohortSentiment(sorted.filter(m => !m.resolved));
+
   // Load vote data for expired unresolved markets (non-blocking)
   if (expiredUnresolved.length) loadMarketVoteData(expiredUnresolved);
 }
@@ -3317,6 +3326,7 @@ function marketCardHTML(m, isResolved, featured) {
         <div class="market-question">${escHtml(m.question)}</div>
         ${posHTML}
         ${oddsBarHTML}
+        <div id="cohort-${m.id}" class="cohort-row" style="display:none"></div>
         ${innerActionsHTML}
         ${metaHTML}
       </div>
@@ -5027,6 +5037,28 @@ window._marketVoteCache = {};
 window._myVotes = {};
 
 // Pre-load vote data for all expired unresolved markets after render
+function loadCohortSentiment(markets) {
+  markets.slice(0, 10).forEach(function(m) {
+    fetch('/api/market/' + m.id + '/cohort-sentiment').then(function(r) { return r.ok ? r.json() : null; }).then(function(d) {
+      if (!d || !d.cohorts || !d.cohorts.length) return;
+      var sharp = d.cohorts.find(function(c) { return c.label === 'Sharp Money'; });
+      if (!sharp || sharp.total_bettors < 3) return;
+      var el = document.getElementById('cohort-' + m.id);
+      if (!el) return;
+      var badgeHtml = '';
+      if (d.signal === 'SHARP_YES') badgeHtml = '<span class="cohort-badge sharp-yes">\u26A1 Sharp YES</span>';
+      else if (d.signal === 'SHARP_NO') badgeHtml = '<span class="cohort-badge sharp-no">\u26A1 Sharp NO</span>';
+      else if (d.signal === 'CONSENSUS') badgeHtml = '<span class="cohort-badge consensus">\u2713 Consensus</span>';
+      el.innerHTML =
+        '<span style="color:#7a7870">Sharp Money:</span>' +
+        '<span class="cohort-bar"><span style="width:' + sharp.yes_pct + '%;background:#22c55e"></span><span style="width:' + sharp.no_pct + '%;background:#ef4444"></span></span>' +
+        '<span style="color:#e8e4d9;font-weight:700">' + sharp.yes_pct + '% YES</span>' +
+        badgeHtml;
+      el.style.display = '';
+    }).catch(function() {});
+  });
+}
+
 async function loadMarketVoteData(marketList) {
   const expired = (marketList || []).filter(m => !m.resolved && m.expiry_date && new Date(m.expiry_date) < new Date());
   if (!expired.length) return;
