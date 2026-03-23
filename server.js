@@ -4445,6 +4445,121 @@ app.post('/api/creator/login', async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
+// PASSWORD RESET — forgot + reset + admin-trigger
+// ════════════════════════════════════════════════════════════
+app.post('/api/auth/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body || {};
+    if (!email) return res.status(400).json({ error: 'Email required' });
+    const token = require('crypto').randomBytes(32).toString('hex');
+    const expires = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour
+
+    // Check creator_settings
+    let found = false;
+    if (pool) {
+      const rows = await dbQuery('SELECT id, display_name FROM creator_settings WHERE LOWER(email) = $1 LIMIT 1', [email.toLowerCase().trim()]);
+      if (rows[0]) {
+        await dbQuery('UPDATE creator_settings SET password_reset_token = $1, password_reset_expires = $2 WHERE id = $3', [token, expires, rows[0].id]);
+        _sendResetEmail(email, rows[0].display_name || 'there', token);
+        found = true;
+      }
+    } else {
+      const { data: creator } = await supabase.from('creator_settings').select('id, display_name').eq('email', email.toLowerCase().trim()).maybeSingle();
+      if (creator) {
+        await supabase.from('creator_settings').update({ password_reset_token: token, password_reset_expires: expires }).eq('id', creator.id);
+        _sendResetEmail(email, creator.display_name || 'there', token);
+        found = true;
+      }
+    }
+
+    // Always return ok — don't reveal whether email exists
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[forgot-password]', err.message);
+    res.status(500).json({ error: 'Something went wrong' });
+  }
+});
+
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    const { token, password } = req.body || {};
+    if (!token || !password) return res.status(400).json({ error: 'Token and password required' });
+    if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+
+    const now = new Date().toISOString();
+    const password_hash = await bcrypt.hash(password, 10);
+
+    if (pool) {
+      const rows = await dbQuery('SELECT id FROM creator_settings WHERE password_reset_token = $1 AND password_reset_expires > $2 LIMIT 1', [token, now]);
+      if (rows[0]) {
+        await dbQuery('UPDATE creator_settings SET password_hash = $1, password_reset_token = NULL, password_reset_expires = NULL WHERE id = $2', [password_hash, rows[0].id]);
+        return res.json({ ok: true });
+      }
+    } else {
+      const { data: creator } = await supabase.from('creator_settings').select('id').eq('password_reset_token', token).gt('password_reset_expires', now).maybeSingle();
+      if (creator) {
+        await supabase.from('creator_settings').update({ password_hash, password_reset_token: null, password_reset_expires: null }).eq('id', creator.id);
+        return res.json({ ok: true });
+      }
+    }
+
+    res.status(400).json({ error: 'Reset link is invalid or has expired' });
+  } catch (err) {
+    console.error('[reset-password]', err.message);
+    res.status(500).json({ error: 'Something went wrong' });
+  }
+});
+
+app.post('/api/admin/reset-password', async (req, res) => {
+  const secret = req.headers['x-admin-secret'];
+  if (secret !== process.env.ADMIN_SECRET) return res.status(403).json({ error: 'Forbidden' });
+  try {
+    const { email } = req.body || {};
+    if (!email) return res.status(400).json({ error: 'Email required' });
+    const token = require('crypto').randomBytes(32).toString('hex');
+    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24h for admin
+
+    if (pool) {
+      const rows = await dbQuery('SELECT id, display_name FROM creator_settings WHERE LOWER(email) = $1 LIMIT 1', [email.toLowerCase().trim()]);
+      if (!rows[0]) return res.status(404).json({ error: 'No account found with that email' });
+      await dbQuery('UPDATE creator_settings SET password_reset_token = $1, password_reset_expires = $2 WHERE id = $3', [token, expires, rows[0].id]);
+      _sendResetEmail(email, rows[0].display_name || 'there', token);
+    } else {
+      const { data: creator } = await supabase.from('creator_settings').select('id, display_name').eq('email', email.toLowerCase().trim()).maybeSingle();
+      if (!creator) return res.status(404).json({ error: 'No account found with that email' });
+      await supabase.from('creator_settings').update({ password_reset_token: token, password_reset_expires: expires }).eq('id', creator.id);
+      _sendResetEmail(email, creator.display_name || 'there', token);
+    }
+    res.json({ ok: true, sent_to: email });
+  } catch (err) {
+    console.error('[admin-reset-password]', err.message);
+    res.status(500).json({ error: 'Something went wrong' });
+  }
+});
+
+function _sendResetEmail(toEmail, name, token) {
+  try {
+    const transporter = createMailTransport();
+    if (!transporter) return;
+    const resetUrl = `https://hyperflex.network/reset-password?token=${token}`;
+    transporter.sendMail({
+      from: process.env.SMTP_FROM || 'HYPERFLEX <noreply@hyperflex.network>',
+      to: toEmail,
+      subject: 'Reset your HYPERFLEX password',
+      html: `<div style="background:#0e0e0c;color:#f0ebe3;font-family:sans-serif;max-width:520px;margin:0 auto;padding:32px;border-radius:10px;">
+        <div style="font-size:22px;font-weight:800;margin-bottom:8px;"><span style="color:#c9920d;">HYPER</span>FLEX</div>
+        <h2 style="font-size:18px;margin:24px 0 8px;">Reset your password</h2>
+        <p style="color:#aaa;font-size:14px;line-height:1.6;margin-bottom:24px;">Hey ${name}, click below to reset your password. This link expires in 1 hour.</p>
+        <a href="${resetUrl}" style="display:inline-block;background:#c9920d;color:#0e0e0c;font-weight:700;padding:13px 28px;border-radius:6px;text-decoration:none;font-size:15px;">Reset Password &rarr;</a>
+        <p style="color:#555;font-size:12px;margin-top:28px;">If you didn't request this, ignore this email.<br/>Link: ${resetUrl}</p>
+      </div>`
+    }).catch(e => console.warn('[reset-email]', e.message));
+  } catch(e) { console.warn('[reset-email]', e.message); }
+}
+
+app.get('/reset-password', (req, res) => res.sendFile(path.join(__dirname, 'public', 'reset-password.html')));
+
+// ════════════════════════════════════════════════════════════
 // LEADERBOARD WITH PERIOD FILTER
 // GET /api/creator/leaderboard?period=all_time|monthly|weekly
 // Auth: Bearer token required
