@@ -866,6 +866,19 @@ footer {
   function truncate(s,n){return s.length>n?s.slice(0,n)+'...':s}
   function timeAgo(ts){var d=Date.now()-new Date(ts).getTime();if(d<60000)return'<1m';if(d<3600000)return Math.floor(d/60000)+'m';return Math.floor(d/3600000)+'h'}
 
+  function detectCat(q){
+    var t=(q||'').toLowerCase();
+    if(/bitcoin|btc|eth|crypto|solana|sol |xrp|dogecoin|doge|token|defi|nft/i.test(t))return'crypto';
+    if(/nba|nfl|mlb|nhl|soccer|football|basketball|baseball|ufc|boxing|game |match|playoff|super bowl|world cup|championship|league|team|player|coach|season|finals|series|mvp|draft|vs\.|yankees|mets|dodgers|warriors|lakers|celtics|nets|kings|bulls|thunder|nuggets|cavaliers|clippers|rockets|suns|heat|bucks|knicks|76ers|spurs|hawks|pacers|pistons|grizzlies|blazers|wolves|timberwolves|hornets|magic|wizards|pelicans|raptors|jazz|mavericks|chiefs|eagles|cowboys|49ers|ravens|bills|bengals|dolphins|lions|steelers|packers|bears|rams|seahawks|saints|texans|jaguars|titans|colts|broncos|raiders|chargers|panthers|falcons|vikings|browns|commanders|cardinals|giants|jets|patriots|buccaneers|atletico|madrid|barcelona|real |fc |win on 20|ray|tampa/i.test(t))return'sports';
+    if(/trump|biden|vance|president|congress|senate|election|democrat|republican|politic|governor|vote |primary|gop|dnc|rnc|impeach|cabinet|supreme court|us strikes|iran|tariff/i.test(t))return'politics';
+    if(/movie|oscar|grammy|emmy|album|netflix|spotify|tiktok|youtube|celebrity|award|film|tv |show|music|concert|tour|streaming|actor|singer|rapper|mrbeast/i.test(t))return'entertainment';
+    if(/ai |openai|chatgpt|apple|google|microsoft|meta |tesla|nvidia|amazon|startup|tech|iphone|android/i.test(t))return'tech';
+    return'other';
+  }
+  var catEmoji={sports:'\uD83C\uDFC8',crypto:'\u20BF',politics:'\uD83C\uDFDB\uFE0F',entertainment:'\uD83C\uDFAC',tech:'\uD83D\uDCBB',other:'\uD83D\uDCCA'};
+  var catColors={sports:'#22c55e',crypto:'#f59e0b',politics:'#3b82f6',entertainment:'#a855f7',tech:'#06b6d4',other:'#888'};
+  function catBadge(q){var c=detectCat(q);var e=catEmoji[c]||'';var col=catColors[c]||'#888';return'<span style="font-size:10px;padding:1px 6px;border-radius:3px;background:'+col+'18;color:'+col+';border:1px solid '+col+'33;font-family:var(--mono);white-space:nowrap">'+e+' '+c.toUpperCase()+'</span>';}
+
   // PANEL 1: RIGHT NOW
   function loadRightNow(){
     fetch('/api/signals').then(function(r){return r.ok?r.json():null}).then(function(d){
@@ -899,6 +912,8 @@ footer {
         '<span style="color:var(--text)">\uD83D\uDC0B '+sig.whale_count+' whales</span>'+
         '<span style="color:var(--dim)">|</span>'+
         '<span style="color:var(--gold-lt)">'+fmtCap(sig.capital||0)+'</span>'+
+        '<span style="color:var(--dim)">|</span>'+
+        catBadge(sig.market||'')+
         '<span style="color:var(--dim)">|</span>'+
         '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:'+urgC+'">'+urgI+' '+urg.toFixed(1)+'</span>';
       document.getElementById('rn-question').textContent=sig.market||'';
@@ -940,11 +955,13 @@ footer {
         var side=(w.side||'YES').toUpperCase();
         var sc=side==='YES'||side==='UP'?'#22c55e':'#ef4444';
         var url=w.market_url||w.url||'';
+        var mkt=w.market||w.position||'';
         return'<div class="lh-row">'+
           '<span class="lh-time">'+timeAgo(w.fetched_at)+'</span>'+
           '<span class="lh-trader">'+escH(name)+'</span>'+
           '<span style="color:var(--muted)">'+fmtCap(w.size||0)+'</span>'+
-          '<span class="lh-market">'+escH(truncate(w.market||w.position||'',40))+'</span>'+
+          catBadge(mkt)+
+          '<span class="lh-market">'+escH(truncate(mkt,35))+'</span>'+
           '<span style="color:'+sc+';font-weight:700;font-size:10px">'+side+'</span>'+
           (url?'<a href="'+url+'" target="_blank" rel="noopener" class="ib-trade-btn">View \u2192</a>':'')+
           '</div>';
@@ -966,9 +983,10 @@ footer {
         var cs=(p.consensus_side||'YES').toUpperCase();
         var sc=cs==='YES'||cs==='UP'?'#22c55e':'#ef4444';
         var url=p.url||'';
+        var pmkt=p.market||'';
         return'<div class="wl-card">'+
-          '<div style="margin-bottom:10px"><span class="wl-badge '+bc+'">'+str+'</span></div>'+
-          '<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px;line-height:1.4;min-height:36px">'+escH(truncate(p.market||'',35))+'</div>'+
+          '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;flex-wrap:wrap"><span class="wl-badge '+bc+'">'+str+'</span>'+catBadge(pmkt)+'</div>'+
+          '<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px;line-height:1.4;min-height:36px">'+escH(truncate(pmkt,35))+'</div>'+
           '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:12px">'+
             '<span>\uD83D\uDC0B '+p.whale_count+'</span>'+
             '<span style="color:var(--border)">\u00B7</span>'+
