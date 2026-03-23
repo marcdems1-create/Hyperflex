@@ -17930,11 +17930,18 @@ const _aiAnalysisRateLimit = new Map(); // ip -> { count, resetAt }
 app.post('/api/ai/market-analysis', async (req, res) => {
   try {
     const body = req.body || {};
-    const markets = body.markets || body.market ? [body.market] : [];
-    const question = body.question || (markets[0] && markets[0].question) || '';
 
-    if (!question && (!Array.isArray(markets) || markets.length === 0)) {
-      return res.status(400).json({ error: 'markets array or question required' });
+    // Extract question from any format the client might send
+    let markets = [];
+    if (Array.isArray(body.markets)) {
+      markets = body.markets.filter(Boolean);
+    } else if (body.market && typeof body.market === 'object') {
+      markets = [body.market];
+    }
+    const question = body.question || (markets[0] ? markets[0].question : '') || '';
+
+    if (!question && markets.length === 0) {
+      return res.status(400).json({ error: 'Enter a market question to analyze' });
     }
 
     // Rate limit: 10 per IP per minute
@@ -17950,17 +17957,21 @@ app.post('/api/ai/market-analysis', async (req, res) => {
     rl.count++;
     _aiAnalysisRateLimit.set(ip, rl);
 
-    // Check if Anthropic API key is configured
     if (!process.env.ANTHROPIC_API_KEY) {
       return res.json({ analysis: 'AI analysis is not configured yet. Check back soon.' });
     }
 
-    const top3 = Array.isArray(markets) && markets.length > 0
+    // Build market summary for Claude
+    const top3 = markets.length > 0
       ? markets.slice(0, 3)
-      : [{ question, yes_pct: body.yes_pct || 'N/A', volume: body.volume || 'N/A', platform: body.platform || 'Unknown' }];
+      : [{ question, yes_pct: body.yes_pct || 'N/A', volume: body.volume || 'N/A', platform: body.platform || 'Polymarket' }];
 
     const marketSummary = top3.map((m, i) => {
-      return `${i + 1}. "${m.question || m}" — YES ${m.yes_pct || 'N/A'}% — Volume: ${m.volume || 'N/A'} — Platform: ${m.platform || 'Unknown'}`;
+      const q = (typeof m === 'string') ? m : (m.question || m.title || 'Unknown');
+      const pct = m.yes_pct || 'N/A';
+      const vol = m.volume || 'N/A';
+      const plat = m.platform || 'Polymarket';
+      return `${i + 1}. "${q}" — YES ${pct}% — Volume: ${vol} — Platform: ${plat}`;
     }).join('\n');
 
     const resp = await anthropic.messages.create({
