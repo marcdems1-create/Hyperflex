@@ -374,7 +374,7 @@ async function loadLeaderboard(){
     var merged=[].concat(Array.isArray(hfxData)?hfxData:[]);
     merged.forEach(function(r){if(!r.platforms)r.platforms=['HFX']});
     hlTraders.forEach(function(hl){merged.push(hl)});
-    merged.sort(function(a,b){return(b.account_value||Math.abs(b.total_pnl||0))-(a.account_value||Math.abs(a.total_pnl||0))});
+    merged.sort(function(a,b){var aVal=a._isHL?Math.abs(a.total_pnl||0):(a.account_value||Math.abs(a.total_pnl||0));var bVal=b._isHL?Math.abs(b.total_pnl||0):(b.account_value||Math.abs(b.total_pnl||0));return bVal-aVal});
     merged.forEach(function(r,i){r.rank=i+1});
     lbData=merged;
     if(!allTimeData&&currentPeriod!=='all'){
@@ -417,11 +417,12 @@ function renderPodium(top3){
   grid.innerHTML=order.map(function(idx){
     var r=top3[idx];
     var dname=r.display_name||r.userName||r.name||'';
+    // If display_name is a raw hex address, use whale nickname instead
+    if(dname&&/^0x[0-9a-fA-F]{6,}/.test(dname))dname=whaleNickname(dname);
     if(!dname&&r.user_id&&String(r.user_id).startsWith('hl_')){var addr=String(r.user_id).replace('hl_','');dname=addr.length>10?whaleNickname(addr):addr}
     if(!dname)dname=r.user_id?whaleNickname(r.user_id):'Trader';
     var initial=dname.charAt(0).toUpperCase();
     var pnl=r.total_pnl||r.pnl_all_time||r.pnl||0;
-    if(pnl===0&&r.account_value)pnl=r.account_value;
     var vol=r.volume||r.account_value||r.accountValue||0;
     var roi=vol>0?((pnl/vol)*100).toFixed(1):'0.0';
     var pnlClass=pnl>=0?'':' negative';
@@ -451,11 +452,12 @@ function renderTable(data){
   body.innerHTML=data.map(function(r,idx){
     var rank=r._displayRank||(idx+4);
     var dname=r.display_name||r.userName||r.name||'';
+    // If display_name is a raw hex address, use whale nickname instead
+    if(dname&&/^0x[0-9a-fA-F]{6,}/.test(dname))dname=whaleNickname(dname);
     if(!dname&&r.user_id&&String(r.user_id).startsWith('hl_')){var addr=String(r.user_id).replace('hl_','');dname=addr.length>10?whaleNickname(addr):addr}
     if(!dname)dname=r.user_id?whaleNickname(r.user_id):'Trader';
     var initial=dname.charAt(0).toUpperCase();
     var pnl=r.total_pnl||r.pnl_all_time||r.pnl||0;
-    if(pnl===0&&r.account_value)pnl=r.account_value;
     var vol=r.volume||r.account_value||r.accountValue||0;
     var roi=vol>0?((pnl/vol)*100).toFixed(1):'0.0';
     var pnlStr=formatPnl(pnl);
