@@ -33,3 +33,22 @@ CREATE TABLE IF NOT EXISTS agent_log (
 );
 
 CREATE INDEX IF NOT EXISTS agent_log_user_idx ON agent_log (user_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS agent_decisions (
+  id BIGSERIAL PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  market_question TEXT NOT NULL,
+  market_url TEXT,
+  direction TEXT NOT NULL DEFAULT 'YES',
+  whale_count INTEGER DEFAULT 0,
+  edge_pct NUMERIC DEFAULT 0,
+  recommended_size NUMERIC DEFAULT 0,
+  kelly_fraction NUMERIC DEFAULT 0.5,
+  signal_strength TEXT DEFAULT 'MEDIUM',
+  fired_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  outcome TEXT,
+  outcome_set_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS agent_decisions_user_idx ON agent_decisions (user_id, fired_at DESC);
+CREATE INDEX IF NOT EXISTS agent_decisions_date_idx ON agent_decisions (user_id, fired_at) WHERE outcome IS NULL;

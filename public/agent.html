@@ -110,8 +110,8 @@ body{background:var(--paper);color:var(--text);font-family:var(--sans);min-heigh
 
     <div class="config-section">
       <div class="config-title">Recent Agent Decisions</div>
-      <div id="logFeed" style="max-height:400px;overflow-y:auto">
-        <div style="text-align:center;padding:32px;color:var(--dim);font-size:13px">No agent decisions yet. Your agent will log every signal it evaluates.</div>
+      <div id="decisionFeed" style="max-height:400px;overflow-y:auto">
+        <div style="text-align:center;padding:32px;color:var(--dim);font-size:13px">No agent decisions yet. Your agent evaluates signals every 5 minutes.</div>
       </div>
     </div>
   </div>
@@ -299,24 +299,36 @@ function renderDash() {
   document.getElementById('toggleBtn').textContent = c.active ? 'Pause' : 'Resume';
   document.getElementById('statBudget').textContent = '$' + (c.budget_per_trade || c.budget || 25);
   document.getElementById('statWhales').textContent = (c.min_whales || c.minWhales || 5) + '+';
-  loadLog();
+  loadDecisions();
 }
 
-async function loadLog() {
+async function loadDecisions() {
   try {
-    var r = await fetch(API + '/api/agent/log', { headers: { Authorization: 'Bearer ' + token } });
+    var r = await fetch(API + '/api/agent/decisions', { headers: { Authorization: 'Bearer ' + token } });
     var d = await r.json();
-    var logs = d.log || [];
-    document.getElementById('statAlerts').textContent = logs.length;
+    var decisions = d.decisions || [];
+    document.getElementById('statAlerts').textContent = decisions.length;
     var today = new Date().toDateString();
-    document.getElementById('statToday').textContent = logs.filter(function(l) { return new Date(l.created_at).toDateString() === today }).length;
-    var el = document.getElementById('logFeed');
-    if (!logs.length) { el.innerHTML = '<div style="text-align:center;padding:32px;color:var(--dim);font-size:13px">No agent decisions yet. Your agent will log every signal it evaluates.</div>'; return; }
-    el.innerHTML = logs.map(function(l) {
-      var t = new Date(l.created_at);
+    document.getElementById('statToday').textContent = decisions.filter(function(l) { return new Date(l.fired_at).toDateString() === today }).length;
+    var el = document.getElementById('decisionFeed');
+    if (!decisions.length) { el.innerHTML = '<div style="text-align:center;padding:32px;color:var(--dim);font-size:13px">No agent decisions yet. Your agent evaluates signals every 5 minutes.</div>'; return; }
+    el.innerHTML = decisions.map(function(d) {
+      var t = new Date(d.fired_at);
       var time = t.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' + t.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-      var sideColor = (l.side || '').toUpperCase() === 'YES' ? '#22c55e' : '#ef4444';
-      return '<div class="log-entry"><span class="log-time">' + time + '</span><span class="log-market">' + (l.market || '').substring(0, 50) + '</span><span style="color:' + sideColor + ';font-weight:700">' + (l.side || '').toUpperCase() + '</span><span class="log-size">$' + Math.round(l.recommended_size || 0) + '</span></div>';
+      var dirColor = (d.direction || '').toUpperCase() === 'YES' ? '#22c55e' : '#ef4444';
+      var strengthBg = d.signal_strength === 'STRONG' ? 'rgba(34,197,94,0.12)' : d.signal_strength === 'HIGH' ? 'rgba(201,146,13,0.12)' : 'rgba(120,120,112,0.08)';
+      var strengthColor = d.signal_strength === 'STRONG' ? '#22c55e' : d.signal_strength === 'HIGH' ? 'var(--gold)' : 'var(--dim)';
+      var url = d.market_url || '';
+      return '<div class="log-entry" style="flex-wrap:wrap;gap:8px">' +
+        '<span class="log-time">' + time + '</span>' +
+        '<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:' + strengthBg + ';color:' + strengthColor + ';font-weight:700">' + (d.signal_strength || 'MEDIUM') + '</span>' +
+        '<span class="log-market">' + (d.market_question || '').substring(0, 45) + '</span>' +
+        '<span style="color:' + dirColor + ';font-weight:700">' + (d.direction || '').toUpperCase() + '</span>' +
+        '<span style="color:var(--dim)">\uD83D\uDC0B ' + (d.whale_count || 0) + '</span>' +
+        '<span style="color:var(--gold);font-weight:700">$' + Math.round(d.recommended_size || 0) + '</span>' +
+        '<span style="color:var(--dim)">' + (d.edge_pct || 0) + '% edge</span>' +
+        (url ? '<a href="' + url + '" target="_blank" rel="noopener" style="color:var(--gold);font-size:10px;text-decoration:none;margin-left:auto">Trade \u2192</a>' : '') +
+        '</div>';
     }).join('');
   } catch (e) {}
 }

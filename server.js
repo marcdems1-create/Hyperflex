@@ -19154,6 +19154,219 @@ app.get('/api/agent/log', requireAuth, async (req, res) => {
 // Serve agent page
 app.get('/agent', (req, res) => res.sendFile(path.join(__dirname, 'public', 'agent.html')));
 
+// GET /api/agent/decisions — returns last 50 agent decisions for this user
+app.get('/api/agent/decisions', requireAuth, async (req, res) => {
+  try {
+    let decisions;
+    if (pool) {
+      decisions = await dbQuery('SELECT * FROM agent_decisions WHERE user_id = $1 ORDER BY fired_at DESC LIMIT 50', [req.user.id]);
+    } else {
+      const { data } = await supabase.from('agent_decisions').select('*').eq('user_id', req.user.id).order('fired_at', { ascending: false }).limit(50);
+      decisions = data || [];
+    }
+    res.json({ decisions });
+  } catch (e) {
+    console.error('[agent-decisions]', e.message);
+    res.status(500).json({ error: 'Failed to load decisions' });
+  }
+});
+
+// ── AGENT EVALUATION CRON ─────────────────────────────────────────────────
+// Runs every 5 minutes: evaluates live signals against each active user's config
+const _agentFiredToday = new Map(); // userId → Set of market_question hashes (dedup within day)
+
+async function evaluateAgentSignals() {
+  try {
+    // 1. Get all active agent configs
+    let configs;
+    if (pool) {
+      configs = await dbQuery('SELECT * FROM agent_configs WHERE active = true');
+    } else {
+      const { data } = await supabase.from('agent_configs').select('*').eq('active', true);
+      configs = data || [];
+    }
+    if (!configs.length) return;
+
+    // 2. Get current signals from cache
+    const signalData = _signalsCache && _signalsCache.data ? _signalsCache.data : null;
+    if (!signalData || !signalData.signals || !signalData.signals.length) return;
+    const signals = signalData.signals;
+
+    // 3. Get screener cache for market prices (to calculate edge)
+    const screenerMarkets = (_screenerCache && _screenerCache.data) ? _screenerCache.data : [];
+
+    // Reset daily dedup at midnight
+    const todayKey = new Date().toDateString();
+    if (_agentFiredToday._day !== todayKey) {
+      _agentFiredToday.clear();
+      _agentFiredToday._day = todayKey;
+    }
+
+    let totalFired = 0;
+
+    for (const config of configs) {
+      const userId = config.user_id;
+      const categories = Array.isArray(config.categories) ? config.categories : (typeof config.categories === 'string' ? JSON.parse(config.categories) : ['all']);
+      const followedWhales = Array.isArray(config.followed_whales) ? config.followed_whales : (typeof config.followed_whales === 'string' ? JSON.parse(config.followed_whales) : []);
+      const minWhales = config.min_whales || 5;
+      const budgetPerTrade = parseFloat(config.budget_per_trade) || 25;
+      const maxDaily = parseFloat(config.max_daily_spend) || 200;
+      const kellyFrac = parseFloat(config.kelly_fraction) || 0.5;
+      const alertMethod = config.alert_method || 'push';
+
+      // Check daily spend
+      let dailySpent = 0;
+      try {
+        const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+        if (pool) {
+          const rows = await dbQuery('SELECT COALESCE(SUM(recommended_size), 0) as total FROM agent_decisions WHERE user_id = $1 AND fired_at >= $2', [userId, todayStart.toISOString()]);
+          dailySpent = parseFloat(rows[0]?.total) || 0;
+        } else {
+          const { data } = await supabase.from('agent_decisions').select('recommended_size').eq('user_id', userId).gte('fired_at', todayStart.toISOString());
+          dailySpent = (data || []).reduce((s, d) => s + (parseFloat(d.recommended_size) || 0), 0);
+        }
+      } catch (e) { /* table may not exist yet */ }
+
+      if (dailySpent >= maxDaily) continue; // Budget exhausted
+
+      // Dedup set for this user
+      if (!_agentFiredToday.has(userId)) _agentFiredToday.set(userId, new Set());
+      const firedSet = _agentFiredToday.get(userId);
+
+      for (const sig of signals) {
+        if (sig.type !== 'whale_cluster') continue; // Only evaluate whale cluster signals
+
+        // Check whale count
+        const whaleCount = sig.whale_count || 0;
+        if (whaleCount < minWhales) continue;
+
+        // Check category
+        if (!categories.includes('all')) {
+          const sigCat = detectSignalCategory(sig.market || '');
+          if (!categories.includes(sigCat)) continue;
+        }
+
+        // Check followed whales (if configured)
+        // For now, we skip this check if no wallet info on the signal — whale_cluster signals are market-level
+        // If user set followed_whales, we'd need to check if any of those whales are in this market's whale set
+        // This is a best-effort check using the whale watch cache
+        if (followedWhales.length > 0) {
+          const whaleData = _whaleWatchCache && _whaleWatchCache.data ? _whaleWatchCache.data : null;
+          if (whaleData && whaleData.whales) {
+            const marketQ = (sig.market || '').toLowerCase();
+            const marketWhaleWallets = whaleData.whales
+              .filter(w => (w.market || '').toLowerCase() === marketQ)
+              .map(w => w.proxyWallet)
+              .filter(Boolean);
+            const hasFollowed = followedWhales.some(fw => marketWhaleWallets.includes(fw));
+            if (!hasFollowed) continue;
+          }
+        }
+
+        // Dedup: don't fire same market twice in one day
+        const dedupKey = (sig.market || '').substring(0, 50);
+        if (firedSet.has(dedupKey)) continue;
+
+        // Check remaining daily budget
+        if (dailySpent + budgetPerTrade > maxDaily) continue;
+
+        // Calculate edge
+        const whalePct = sig.yes_pct || Math.round((sig.price || 0.5) * 100);
+        let marketPct = whalePct; // Default: use whale consensus as market price
+        // Try to find actual market price from screener
+        const mktMatch = screenerMarkets.find(m => (m.question || '').toLowerCase() === (sig.market || '').toLowerCase());
+        if (mktMatch && mktMatch.yes_price != null) {
+          marketPct = Math.round(mktMatch.yes_price * 100);
+        }
+        const edge = whalePct - marketPct;
+
+        // Kelly calculation
+        const p = whalePct / 100;
+        const mP = marketPct / 100;
+        const b = mP > 0 ? (1 / mP) - 1 : 1;
+        const q = 1 - p;
+        const rawKelly = b > 0 ? (b * p - q) / b : 0;
+        if (rawKelly <= 0) continue; // No positive edge
+
+        const adjKelly = rawKelly * kellyFrac;
+        const recommendedSize = Math.min(Math.round(budgetPerTrade * adjKelly * 10) / 10, budgetPerTrade); // Cap at budget_per_trade
+        const finalSize = Math.max(1, recommendedSize); // Min $1
+
+        const direction = (sig.side || 'YES').toUpperCase();
+        const strength = whaleCount >= 10 ? 'STRONG' : whaleCount >= 7 ? 'HIGH' : whaleCount >= 5 ? 'MEDIUM' : 'LOW';
+        const edgePct = Math.round(edge * 10) / 10;
+
+        // 4. Insert decision
+        try {
+          if (pool) {
+            await dbQuery(
+              'INSERT INTO agent_decisions (user_id, market_question, market_url, direction, whale_count, edge_pct, recommended_size, kelly_fraction, signal_strength, fired_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())',
+              [userId, sig.market || '', sig.url || '', direction, whaleCount, edgePct, finalSize, kellyFrac, strength]
+            );
+          } else {
+            await supabase.from('agent_decisions').insert({
+              user_id: userId, market_question: sig.market || '', market_url: sig.url || '',
+              direction, whale_count: whaleCount, edge_pct: edgePct, recommended_size: finalSize,
+              kelly_fraction: kellyFrac, signal_strength: strength, fired_at: new Date().toISOString()
+            });
+          }
+        } catch (e) { console.warn('[agent-eval] insert error:', e.message); continue; }
+
+        firedSet.add(dedupKey);
+        dailySpent += finalSize;
+        totalFired++;
+
+        // 5. Fire alert
+        if (alertMethod === 'push' || alertMethod === 'both') {
+          // Send push notification
+          if (webpush) {
+            try {
+              let subs;
+              if (pool) {
+                subs = await dbQuery('SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = $1', [userId]);
+              } else {
+                const { data: sd } = await supabase.from('push_subscriptions').select('endpoint, p256dh, auth').eq('user_id', userId);
+                subs = sd || [];
+              }
+              const payload = JSON.stringify({
+                title: `\uD83E\uDD16 Agent: ${direction} on ${(sig.market || '').substring(0, 40)}`,
+                body: `${whaleCount} whales \u00B7 $${Math.round(finalSize)} recommended \u00B7 ${edgePct}% edge`,
+                url: 'https://hyperflex.network/agent'
+              });
+              for (const sub of subs) {
+                webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload).catch(() => {});
+              }
+            } catch (e) { /* silent */ }
+          }
+        }
+
+        if (alertMethod === 'email' || alertMethod === 'both') {
+          // Fire in-app notification (existing system)
+          try { pushNotification(userId, 'agent_signal', `\uD83E\uDD16 Agent: ${direction} $${Math.round(finalSize)} on ${(sig.market || '').substring(0, 50)}`, `${whaleCount} whales \u00B7 ${edgePct}% edge`); } catch {}
+        }
+      }
+    }
+
+    if (totalFired > 0) console.log(`[agent-eval] Fired ${totalFired} recommendations across ${configs.length} active agents`);
+  } catch (e) {
+    console.error('[agent-eval] cron error:', e.message);
+  }
+}
+
+// Helper: detect category from market question
+function detectSignalCategory(q) {
+  const t = (q || '').toLowerCase();
+  if (/bitcoin|btc|eth|crypto|solana|xrp|dogecoin|token|defi/i.test(t)) return 'crypto';
+  if (/nba|nfl|mlb|nhl|soccer|football|basketball|baseball|ufc|boxing|sport|game|match|playoff|finals|mvp/i.test(t)) return 'sports';
+  if (/trump|biden|president|congress|senate|election|democrat|republican|politic/i.test(t)) return 'politics';
+  if (/movie|oscar|grammy|netflix|celebrity|award|film|music/i.test(t)) return 'entertainment';
+  return 'other';
+}
+
+// Run agent evaluation every 5 minutes
+cron.schedule('*/5 * * * *', evaluateAgentSignals);
+setTimeout(evaluateAgentSignals, 60000); // First run 1 min after boot
+
 app.get('/api/arbitrage', (req, res) => {
   if (_arbCache && (Date.now() - _arbCache.ts < 6 * 60 * 1000)) {
     return res.json({ opportunities: _arbCache.data, updated_at: new Date(_arbCache.ts).toISOString() });
