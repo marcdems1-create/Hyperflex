@@ -837,7 +837,8 @@ function renderTable() {
         '<button class="follow-btn' + (_followedWhales.has(p.proxyWallet||'') ? ' following' : '') + '" onclick="event.stopPropagation();' + (_followedWhales.has(p.proxyWallet||'') ? "unfollowWhale('" + escAttr(p.proxyWallet||'') + "',this)" : "followWhale('" + escAttr(p.proxyWallet||'') + "','" + escAttr(whaleName(p.trader,p.proxyWallet)) + "',this)") + '">' + (_followedWhales.has(p.proxyWallet||'') ? 'Following \u2713' : '+ Follow') + '</button>' +
         '<button class="copy-trade-btn" onclick="openCopyTrade(\'' + escAttr(p.trader) + '\',\'' + escAttr(p.market) + '\',\'' + escAttr(p.side) + '\',' + p.size + ',\'' + escAttr(p.market_url) + '\',\'' + escAttr(p.proxyWallet || '') + '\')">Copy Trade</button>' +
         '<button class="bt-btn" onclick="event.stopPropagation();openBacktest(\'' + escAttr(p.proxyWallet || p.trader || '') + '\',\'' + escAttr(p.trader || '') + '\')">Backtest</button>' +
-        '<button class="ac-btn" onclick="event.stopPropagation();openAutoCopy(\'' + escAttr(p.proxyWallet || '') + '\',\'' + escAttr(p.trader || '') + '\')">\uD83E\uDD16 Auto-Copy</button>' +
+        '<button class="ac-btn" title="Mirror all future trades from this wallet automatically" onclick="event.stopPropagation();openAutoCopy(\'' + escAttr(p.proxyWallet || '') + '\',\'' + escAttr(p.trader || '') + '\')">\uD83E\uDD16 Auto-Mirror</button>' +
+      '<div style="font-size:9px;color:#666;margin-top:3px;text-align:center">Copy: this trade \u00B7 Mirror: all future</div>' +
       '</div></td>' +
       '</tr>';
   }).join('');
@@ -865,7 +866,7 @@ function renderMobileCards() {
         '<a href="' + p.market_url + '" target="_blank" rel="noopener" class="view-link">View \u2192</a>' +
         '<button class="copy-trade-btn" onclick="openCopyTrade(\'' + escAttr(p.trader) + '\',\'' + escAttr(p.market) + '\',\'' + escAttr(p.side) + '\',' + p.size + ',\'' + escAttr(p.market_url) + '\',\'' + escAttr(p.proxyWallet || '') + '\')">Copy Trade</button>' +
         '<button class="bt-btn" onclick="event.stopPropagation();openBacktest(\'' + escAttr(p.proxyWallet || p.trader || '') + '\',\'' + escAttr(p.trader || '') + '\')">Backtest</button>' +
-        '<button class="ac-btn" onclick="event.stopPropagation();openAutoCopy(\'' + escAttr(p.proxyWallet || '') + '\',\'' + escAttr(p.trader || '') + '\')">\uD83E\uDD16 Auto-Copy</button>' +
+        '<button class="ac-btn" title="Mirror all future trades from this wallet automatically" onclick="event.stopPropagation();openAutoCopy(\'' + escAttr(p.proxyWallet || '') + '\',\'' + escAttr(p.trader || '') + '\')">\uD83E\uDD16 Auto-Mirror</button>' +
       '</div>' +
     '</div>';
   }).join('');
@@ -902,6 +903,8 @@ function switchWhalePlatform(platform) {
     if(polyBtn){polyBtn.style.background='rgba(201,146,13,0.15)';polyBtn.style.color='#c9920d'}
     if (heroSub) heroSub.textContent = 'What the top Polymarket traders are betting right now';
     if (flowSection) flowSection.style.display = _whaleData ? '' : 'none';
+    var capFilter = document.getElementById('hl-cap-filter');
+    if (capFilter) capFilter.style.display = 'none';
     var thead = document.getElementById('whaleTableHead');
     if (thead) thead.innerHTML = '<tr><th onclick="sortBy(\'trader_rank\')">Rank <span class="sort-arrow" id="sort-trader_rank"></span></th><th onclick="sortBy(\'trader\')">Trader <span class="sort-arrow" id="sort-trader"></span></th><th onclick="sortBy(\'market\')">Market <span class="sort-arrow" id="sort-market"></span></th><th onclick="sortBy(\'side\')">Side <span class="sort-arrow" id="sort-side"></span></th><th onclick="sortBy(\'size\')">Size ($) <span class="sort-arrow" id="sort-size"></span></th><th onclick="sortBy(\'current_price\')">Price <span class="sort-arrow" id="sort-current_price"></span></th><th>Link</th><th>Actions</th></tr>';
     if (_whaleData) { renderStats(); applyFilters(); }
@@ -912,6 +915,24 @@ function switchWhalePlatform(platform) {
     if (flowSection) flowSection.style.display = 'none';
     var thead = document.getElementById('whaleTableHead');
     if (thead) thead.innerHTML = '<tr><th onclick="sortBy(\'trader_rank\')">Rank</th><th onclick="sortBy(\'trader\')">Trader</th><th onclick="sortBy(\'coin\')">Coin</th><th onclick="sortBy(\'side\')">Side</th><th onclick="sortBy(\'size_usd\')">Size ($)</th><th onclick="sortBy(\'entry_price\')">Entry</th><th onclick="sortBy(\'mark_price\')">Mark</th><th onclick="sortBy(\'unrealized_pnl\')">uPnL</th><th onclick="sortBy(\'leverage\')">Lev</th></tr>';
+    // Add cap filter pills
+    var filterWrap = document.getElementById('hl-cap-filter');
+    if (!filterWrap) {
+      filterWrap = document.createElement('div');
+      filterWrap.id = 'hl-cap-filter';
+      filterWrap.style.cssText = 'display:flex;gap:8px;margin:12px 0 8px;align-items:center;flex-wrap:wrap';
+      filterWrap.innerHTML = '<span style="font-size:11px;color:#888;font-family:var(--mono);text-transform:uppercase;letter-spacing:.05em">Filter:</span>' +
+        '<button class="hl-filter-pill active" data-filter="large" onclick="setHLFilter(\'large\')" style="background:transparent;border:1px solid #c9920d;color:#c9920d;padding:4px 10px;border-radius:20px;font-size:11px;cursor:pointer;font-family:var(--mono)">Large Cap</button>' +
+        '<button class="hl-filter-pill" data-filter="mid" onclick="setHLFilter(\'mid\')" style="background:transparent;border:1px solid #333;color:#888;padding:4px 10px;border-radius:20px;font-size:11px;cursor:pointer;font-family:var(--mono)">Mid Cap</button>' +
+        '<button class="hl-filter-pill" data-filter="small" onclick="setHLFilter(\'small\')" style="background:transparent;border:1px solid #333;color:#888;padding:4px 10px;border-radius:20px;font-size:11px;cursor:pointer;font-family:var(--mono)">Small Cap</button>' +
+        '<button class="hl-filter-pill" data-filter="all" onclick="setHLFilter(\'all\')" style="background:transparent;border:1px solid #333;color:#888;padding:4px 10px;border-radius:20px;font-size:11px;cursor:pointer;font-family:var(--mono)">All</button>' +
+        '<span id="hl-filter-count" style="font-size:11px;color:#888;margin-left:4px"></span>';
+      var tableWrap = document.getElementById('tableWrap');
+      if (tableWrap) tableWrap.insertBefore(filterWrap, tableWrap.firstChild);
+    }
+    filterWrap.style.display = '';
+    _hlCapFilter = 'large';
+    filterWrap.querySelectorAll('.hl-filter-pill').forEach(function(p) { p.classList.toggle('active', p.dataset.filter === 'large'); p.style.borderColor = p.dataset.filter === 'large' ? '#c9920d' : '#333'; p.style.color = p.dataset.filter === 'large' ? '#c9920d' : '#888'; });
     if (_hlWhaleData) { renderHlStats(); applyHlFilters(); }
     else loadHlData();
   }
@@ -1004,8 +1025,34 @@ function renderHlStats() {
   document.getElementById('updatedAt').textContent = 'Updated ' + timeAgo(_hlWhaleData.updated_at);
 }
 
+// HL cap tier system
+var HL_LARGE_CAP = new Set(['BTC','ETH','SOL','BNB','XRP','DOGE','ADA','AVAX','TRX','LINK','DOT','MATIC','UNI','LTC','BCH','SUI','ARB','OP','APT','ATOM','NEAR','FIL','ICP','INJ','WLD','MKR','AAVE','SNX','CRV','GMX','PENDLE','WIF','PEPE','SHIB','TON','STX','RUNE','SEI','TIA','JUP']);
+var HL_MID_CAP = new Set(['BLUR','ENS','DYDX','LDO','COMP','BAL','YFI','SUSHI','1INCH','CAKE','ZRX','BAND','API3','UMA','BADGER','PERP','IMX','BOBA','MAGIC','HFT','HOOK','RDNT','VELA','UMAMI']);
+var _hlCapFilter = 'large';
+function getHLTier(coin) { if (HL_LARGE_CAP.has(coin)) return 'large'; if (HL_MID_CAP.has(coin)) return 'mid'; return 'small'; }
+function getHLTierBadge(coin) {
+  var t = getHLTier(coin);
+  if (t === 'large') return ' <span style="font-size:9px;padding:1px 5px;border-radius:3px;background:rgba(59,130,246,0.15);color:#3b82f6;font-family:var(--mono)">L</span>';
+  if (t === 'mid') return ' <span style="font-size:9px;padding:1px 5px;border-radius:3px;background:rgba(234,179,8,0.15);color:#eab308;font-family:var(--mono)">M</span>';
+  return ' <span style="font-size:9px;padding:1px 5px;border-radius:3px;background:rgba(239,68,68,0.15);color:#ef4444;font-family:var(--mono)">S</span>';
+}
+function setHLFilter(f) {
+  _hlCapFilter = f;
+  document.querySelectorAll('.hl-filter-pill').forEach(function(p) {
+    var isActive = p.dataset.filter === f;
+    p.classList.toggle('active', isActive);
+    p.style.borderColor = isActive ? '#c9920d' : '#333';
+    p.style.color = isActive ? '#c9920d' : '#888';
+  });
+  applyHlFilters();
+}
+
 function applyHlFilters() {
-  _hlFiltered = (_hlWhaleData ? _hlWhaleData.positions : []).filter(function(p) { return (p.size_usd || 0) >= _minSize; });
+  _hlFiltered = (_hlWhaleData ? _hlWhaleData.positions : []).filter(function(p) {
+    if ((p.size_usd || 0) < _minSize) return false;
+    if (_hlCapFilter !== 'all' && getHLTier(p.coin) !== _hlCapFilter) return false;
+    return true;
+  });
   _hlFiltered.sort(function(a, b) {
     var va = a[_sortField], vb = b[_sortField];
     if (typeof va === 'string') va = va.toLowerCase();
@@ -1014,6 +1061,8 @@ function applyHlFilters() {
     if (va > vb) return 1 * _sortDir;
     return 0;
   });
+  var countEl = document.getElementById('hl-filter-count');
+  if (countEl) countEl.textContent = _hlFiltered.length + ' positions';
   renderHlTable();
   renderHlMobileCards();
 }
@@ -1037,11 +1086,11 @@ function renderHlTable() {
     return '<tr class="' + hl + '" style="border-left:3px solid #77b900">' +
       '<td>' + rankBadge(p.trader_rank) + '</td>' +
       '<td><div class="trader-name">' + truncate(p.trader || '', 18) + '</div><div class="trader-pnl">PnL: ' + fmtPnl(p.trader_pnl || 0) + '</div></td>' +
-      '<td style="font-family:var(--mono);font-weight:700;color:#77b900">' + (p.coin || '') + '</td>' +
+      '<td style="font-family:var(--mono);font-weight:700;color:#77b900">' + (p.coin || '') + getHLTierBadge(p.coin || '') + '</td>' +
       '<td>' + hlSideBadge(p.side) + '</td>' +
       '<td class="size-cell">' + fmtFull$(p.size_usd || 0) + '</td>' +
-      '<td style="font-family:var(--mono);font-size:12px">$' + (p.entry_price || 0).toLocaleString('en-US', { maximumFractionDigits: 2 }) + '</td>' +
-      '<td style="font-family:var(--mono);font-size:12px">$' + (p.mark_price || 0).toLocaleString('en-US', { maximumFractionDigits: 2 }) + '</td>' +
+      '<td style="font-family:var(--mono);font-size:12px">' + (p.entry_price && p.entry_price > 0 ? '$' + p.entry_price.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '\u2014') + '</td>' +
+      '<td style="font-family:var(--mono);font-size:12px">' + (p.mark_price && p.mark_price > 0 ? '$' + p.mark_price.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '\u2014') + '</td>' +
       '<td style="font-family:var(--mono);font-weight:700;color:' + pnlColor + '">' + pnlStr + '</td>' +
       '<td style="font-family:var(--mono);font-size:12px;color:var(--text-soft)">' + (p.leverage || 1) + 'x</td>' +
     '</tr>';
@@ -1573,12 +1622,12 @@ function closeWhaleProfile() {
   </div>
 </div>
 
-<!-- Auto-Copy Modal -->
+<!-- Auto-Mirror Modal -->
 <div class="acm-overlay" id="acmOverlay" onclick="if(event.target===this)closeAutoCopy()">
   <div class="acm-modal">
     <button class="acm-close" onclick="closeAutoCopy()">&times;</button>
     <div class="acm-header">
-      <h3 id="acmTitle">&#x1F916; Auto-Copy Trades</h3>
+      <h3 id="acmTitle">&#x1F916; Auto-Mirror Trades</h3>
       <div class="acm-header-sub" id="acmSub">When this whale opens a new position, we'll mirror it with your allocation.</div>
     </div>
     <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Allocation per trade</div>
@@ -1596,7 +1645,7 @@ function closeWhaleProfile() {
       <button class="acm-mode-btn active" data-mode="notify" onclick="setAcmMode('notify', this)">&#x1F514; Notify Only</button>
       <button class="acm-mode-btn" data-mode="auto" onclick="setAcmMode('auto', this)">&#x26A1; Auto-Execute</button>
     </div>
-    <button class="acm-cta" id="acmCta" onclick="submitAutoCopy()">Start Auto-Copying &rarr;</button>
+    <button class="acm-cta" id="acmCta" onclick="submitAutoCopy()">Start Auto-Mirroring &rarr;</button>
     <div class="acm-info">Safe mode: You'll be notified before any trade is placed. Auto-execute requires CLOB trading to be enabled.</div>
     <div id="acmStatus" style="display:none;margin-top:12px;padding:12px;border-radius:8px;font-family:var(--mono);font-size:12px;text-align:center"></div>
   </div>
@@ -1700,12 +1749,12 @@ function openAutoCopy(address, name) {
   _acmName = name;
   _acmAlloc = 100;
   _acmMode = 'notify';
-  document.getElementById('acmTitle').innerHTML = '&#x1F916; Auto-Copy ' + (name || 'Whale');
+  document.getElementById('acmTitle').innerHTML = '&#x1F916; Auto-Mirror ' + (name || 'Whale');
   document.querySelectorAll('.acm-alloc-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.alloc === '100'); });
   document.querySelectorAll('.acm-mode-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.mode === 'notify'); });
   document.getElementById('acmCustomWrap').style.display = 'none';
   document.getElementById('acmStatus').style.display = 'none';
-  document.getElementById('acmCta').textContent = 'Start Auto-Copying \u2192';
+  document.getElementById('acmCta').textContent = 'Start Auto-Mirroring \u2192';
   document.getElementById('acmCta').disabled = false;
   document.getElementById('acmOverlay').classList.add('open');
 }
@@ -1767,7 +1816,7 @@ function submitAutoCopy() {
     status.style.display = '';
     status.style.background = 'rgba(34,197,94,0.1)';
     status.style.color = 'var(--green)';
-    status.innerHTML = '&#x2705; Subscribed! You\'ll be ' + (_acmMode === 'notify' ? 'notified' : 'auto-copying') + ' ' + (_acmName || 'this whale') + '\'s trades at $' + _acmAlloc + ' per position.';
+    status.innerHTML = '&#x2705; Subscribed! You\'ll be ' + (_acmMode === 'notify' ? 'notified' : 'auto-mirroring') + ' ' + (_acmName || 'this whale') + '\'s trades at $' + _acmAlloc + ' per position.';
     cta.textContent = 'Subscribed \u2713';
   })
   .catch(function(e) {
@@ -1776,7 +1825,7 @@ function submitAutoCopy() {
     status.style.background = 'rgba(239,68,68,0.1)';
     status.style.color = 'var(--red)';
     status.textContent = 'Failed: ' + (e.message || 'Try again');
-    cta.textContent = 'Start Auto-Copying \u2192';
+    cta.textContent = 'Start Auto-Mirroring \u2192';
     cta.disabled = false;
   });
 }

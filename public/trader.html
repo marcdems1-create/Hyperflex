@@ -220,10 +220,20 @@ function render(){
     }else{html+='<div class="empty">No open positions</div>';}
     // Won positions
     if(d.polymarket.won_positions.length){
-      html+='<div style="margin-top:16px;font-family:var(--mono);font-size:10px;color:var(--gold);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Recent Wins ('+d.polymarket.win_count+')</div>';
-      d.polymarket.won_positions.slice(0,10).forEach(function(w){
-        html+='<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(42,42,36,0.3);font-family:var(--mono);font-size:11px"><span class="win-badge">WIN</span><span style="flex:1;color:var(--dim)">'+escH(w.question.length>45?w.question.substring(0,42)+'...':w.question)+'</span><span class="pnl-pos">+'+fmt$(w.payout)+'</span></div>';
-      });
+      var wins=d.polymarket.won_positions.filter(function(w){return w.payout>0});
+      var losses=d.polymarket.won_positions.filter(function(w){return w.payout<=0});
+      if(wins.length){
+        html+='<div style="margin-top:16px;font-family:var(--mono);font-size:10px;color:var(--gold);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Recent Wins ('+wins.length+')</div>';
+        wins.slice(0,10).forEach(function(w){
+          html+='<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(42,42,36,0.3);font-family:var(--mono);font-size:11px"><span class="win-badge">WIN</span><span style="flex:1;color:var(--dim)">'+escH(w.question.length>45?w.question.substring(0,42)+'...':w.question)+'</span><span class="pnl-pos">+'+fmt$(w.payout)+'</span></div>';
+        });
+      }
+      if(losses.length){
+        html+='<div style="margin-top:16px;font-family:var(--mono);font-size:10px;color:var(--red);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Recent Losses ('+losses.length+')</div>';
+        losses.slice(0,5).forEach(function(w){
+          html+='<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(42,42,36,0.3);font-family:var(--mono);font-size:11px"><span class="loss-badge">LOSS</span><span style="flex:1;color:var(--dim)">'+escH(w.question.length>45?w.question.substring(0,42)+'...':w.question)+'</span>'+fmtPnl(w.payout)+'</div>';
+        });
+      }
     }
     html+='</div>';
   }

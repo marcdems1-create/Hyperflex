@@ -270,7 +270,7 @@ async function load() {
         <div class="avatar" style="background:${avatarBg};color:${avgColor};border-color:${avgColor}44">${initials}</div>
         <div class="hero-info">
           <div class="hero-name">${user.display_name}</div>
-          <div class="hero-since">Member since ${new Date(user.member_since).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</div>
+          ${user.member_since && new Date(user.member_since).getFullYear() >= 2020 ? `<div class="hero-since">Member since ${new Date(user.member_since).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</div>` : ''}
           <div class="hero-badges">
             ${tierBadge(stats.win_rate, stats.streak)}
             <span id="sharpBadge" style="display:none;font-size:11px;font-weight:700;padding:4px 10px;border-radius:100px;letter-spacing:0.3px;background:rgba(201,146,13,0.15);color:var(--gold);border:1px solid rgba(201,146,13,0.35)"></span>

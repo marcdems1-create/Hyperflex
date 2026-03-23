@@ -17684,8 +17684,8 @@ app.post('/api/ai/market-analysis', async (req, res) => {
     const analysis = resp.content[0]?.text?.trim() || 'Unable to generate analysis.';
     res.json({ analysis });
   } catch (err) {
-    console.error('[ai-analysis]', err.message);
-    res.json({ analysis: 'Unable to analyze this market right now.' });
+    console.error('[ai-analysis]', err.message, err.stack?.split('\n')[1]);
+    res.json({ analysis: 'AI analysis temporarily unavailable. The whale data above provides the key signal.' });
   }
 });
 
@@ -18701,6 +18701,12 @@ async function generateCrystalBallPredictions() {
     for (const m of moversData.movers) {
       const absChange = Math.abs(m.change_pct || 0);
       if (absChange < 10) continue;
+      // Filter: near-zero baseline, resolved markets, tiny moves
+      const startP = (m.start_price || 0) / 100;
+      const endP = (m.current_price || 0) / 100;
+      if (startP < 0.03) continue; // near-zero start = noise
+      if (Math.abs(endP - startP) < 0.03) continue; // less than 3¢ absolute move
+      if (endP >= 0.99 || endP <= 0.01) continue; // resolved market
       const direction = (m.change_pct || 0) > 0 ? 'up' : 'down';
       const target = direction === 'up'
         ? Math.min(99, (m.current_price || 50) + Math.round(absChange * 0.5))
@@ -19355,7 +19361,15 @@ app.get('/api/signals', async (req, res) => {
         }
         const mm = {};
         for (const r of rows) { if (!r.market_id) continue; if (!mm[r.market_id]) mm[r.market_id] = { question: r.question, first: r, last: r }; mm[r.market_id].last = r; mm[r.market_id].question = r.question || mm[r.market_id].question; }
-        const movers = Object.entries(mm).map(([market_id, d]) => { const fp = parseFloat(d.first.yes_price)||0; const lp = parseFloat(d.last.yes_price)||0; const cp = fp > 0 ? Math.round((lp-fp)/fp*10000)/100 : 0; return { market_id, question: d.question||'Unknown', current_price: Math.round(lp*100), change_pct: cp, abs_change: Math.abs(cp), url: 'https://polymarket.com' }; }).filter(m => m.abs_change > 0).sort((a,b) => b.abs_change - a.abs_change).slice(0, 10).map(({abs_change,...rest}) => rest);
+        const movers = Object.entries(mm).map(([market_id, d]) => {
+          const fp = parseFloat(d.first.yes_price)||0; const lp = parseFloat(d.last.yes_price)||0;
+          const cp = fp > 0 ? Math.round((lp-fp)/fp*10000)/100 : 0;
+          // Filter: skip near-zero baseline (noise), skip tiny absolute moves, skip resolved (99%+ or 1%-)
+          if (fp < 0.03) return null; // near-zero start = noise
+          if (Math.abs(lp - fp) < 0.03) return null; // less than 3¢ move
+          if (lp >= 0.99 || lp <= 0.01) return null; // resolved market
+          return { market_id, question: d.question||'Unknown', current_price: Math.round(lp*100), start_price: Math.round(fp*100), change_pct: cp, abs_change: Math.abs(cp), odds_change_pts: Math.round((lp-fp)*100), url: 'https://polymarket.com' };
+        }).filter(Boolean).sort((a,b) => b.abs_change - a.abs_change).slice(0, 10).map(({abs_change,...rest}) => rest);
         _marketMoversCache = { ts: Date.now(), data: { movers, updated_at: new Date().toISOString() } };
         console.log('[signals] Warmed movers cache:', movers.length, 'movers');
       } catch(e) { console.warn('[signals] movers warm failed:', e.message); }
@@ -19414,9 +19428,15 @@ app.get('/api/signals', async (req, res) => {
         for (const m of movers) {
           const absChange = Math.abs(m.change_pct || 0);
           if (absChange >= 10) {
-            const direction = m.change_pct > 0 ? 'YES' : 'NO';
+            // BUY direction must match price movement
+            const priceUp = (m.current_price || 50) > (m.start_price || 0);
+            const direction = priceUp ? 'YES' : 'NO';
             // Skip resolved markets (price at 0 or 100)
             if ((m.current_price || 50) >= 99 || (m.current_price || 50) <= 1) continue;
+            // Skip near-zero baseline (noise)
+            if ((m.start_price || 0) < 3) continue;
+            // Skip tiny absolute moves (less than 3¢)
+            if (Math.abs((m.current_price || 0) - (m.start_price || 0)) < 3) continue;
             signals.push({
               type: 'momentum',
               badge: 'Momentum',
