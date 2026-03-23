@@ -796,90 +796,172 @@ footer {
     <a href="/signals" class="btn-primary">See live signals &rarr;</a>
     <a href="/whales" class="btn-ghost">Watch the whales &rarr;</a>
   </div>
-  <!-- Crystal Ball teaser -->
-  <a href="/crystal-ball" id="cb-teaser" style="display:none;margin-top:16px;font-family:var(--mono);font-size:13px;color:#c9920d;text-decoration:none;opacity:0.9">
-    &#x1F52E; <span id="cb-count">--</span> active Crystal Ball predictions right now &rarr;
-  </a>
-  <!-- Fear & Greed Gauge -->
-  <div class="fg-wrap" id="fg-wrap" style="display:none">
-    <div class="fg-label">Fear &amp; Greed Index</div>
-    <div class="fg-gauge">
-      <div class="fg-needle" id="fg-needle" style="left:50%"></div>
-    </div>
-    <div><span class="fg-score" id="fg-score">--</span> <span class="fg-sentiment" id="fg-sentiment"></span></div>
-  </div>
 </section>
 
-<!-- RIGHT NOW CARD -->
-<div id="right-now-card" style="display:none;max-width:680px;margin:0 auto;padding:0 20px">
-  <div id="right-now-inner" style="background:#1a1916;border-left:3px solid var(--gold);border-radius:10px;padding:20px 24px;position:relative;overflow:hidden">
-    <div style="position:absolute;top:0;right:0;width:100px;height:100px;background:radial-gradient(circle at top right,rgba(201,146,13,0.06) 0%,transparent 70%);pointer-events:none"></div>
-    <div id="rn-top" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;font-family:var(--mono);font-size:11px"></div>
-    <div id="rn-question" style="font-family:var(--sans);font-size:18px;font-weight:700;color:#fff;line-height:1.4;margin-bottom:14px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden"></div>
-    <div id="rn-bottom" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--dim)"></div>
+<!-- INTELLIGENCE BRIEFING -->
+<div id="intel-briefing" style="max-width:720px;margin:0 auto;padding:0 20px;display:flex;flex-direction:column;gap:16px">
+
+  <!-- PANEL 1: RIGHT NOW -->
+  <div id="rn-panel" style="display:none">
+    <div style="background:#1a1916;border-left:3px solid var(--gold);border-radius:10px;padding:20px 24px;position:relative;overflow:hidden">
+      <div style="position:absolute;top:0;right:0;width:100px;height:100px;background:radial-gradient(circle at top right,rgba(201,146,13,0.06) 0%,transparent 70%);pointer-events:none"></div>
+      <div id="rn-top" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;font-family:var(--mono);font-size:11px"></div>
+      <div id="rn-question" style="font-family:var(--sans);font-size:18px;font-weight:700;color:#fff;line-height:1.4;margin-bottom:14px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden"></div>
+      <div id="rn-bottom" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--dim)"></div>
+    </div>
   </div>
+
+  <!-- PANEL 2: LAST HOUR -->
+  <div id="lh-panel" style="display:none">
+    <div style="background:#1a1916;border:1px solid var(--border);border-radius:10px;padding:20px 24px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+        <span style="width:8px;height:8px;border-radius:50%;background:#22c55e;animation:livePulse 2s infinite"></span>
+        <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.08em">\uD83D\uDC0B Last Hour</span>
+      </div>
+      <div id="lh-feed" style="display:flex;flex-direction:column;gap:8px"></div>
+    </div>
+  </div>
+
+  <!-- PANEL 3: TODAY'S WATCHLIST -->
+  <div id="wl-panel" style="display:none">
+    <div style="background:#1a1916;border:1px solid var(--border);border-radius:10px;padding:20px 24px">
+      <div style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:14px">\uD83D\uDCCB Today's Watchlist</div>
+      <div id="wl-cards" style="display:flex;gap:12px;flex-wrap:wrap"></div>
+    </div>
+  </div>
+
 </div>
+
 <style>
+@keyframes livePulse{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(34,197,94,0.4)}50%{opacity:.7;box-shadow:0 0 0 6px rgba(34,197,94,0)}}
+.ib-trade-btn{color:var(--gold);font-family:var(--mono);font-size:10px;font-weight:700;text-decoration:none;padding:5px 12px;border:1px solid rgba(201,146,13,0.3);border-radius:6px;white-space:nowrap;transition:background .15s}
+.ib-trade-btn:hover{background:rgba(201,146,13,0.12)}
+.lh-row{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:11px;color:var(--dim);padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04)}
+.lh-row:last-child{border-bottom:none}
+.lh-time{color:var(--muted);min-width:36px;flex-shrink:0}
+.lh-trader{color:var(--gold-lt);flex-shrink:0}
+.lh-market{color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wl-card{flex:1;min-width:180px;background:var(--paper);border:1px solid var(--border);border-radius:8px;padding:14px 16px}
+.wl-badge{font-family:var(--mono);font-size:9px;font-weight:700;padding:2px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:.04em}
+.wl-badge-strong{background:rgba(34,197,94,0.12);color:#22c55e;border:1px solid rgba(34,197,94,0.3)}
+.wl-badge-moderate{background:rgba(201,146,13,0.12);color:var(--gold);border:1px solid rgba(201,146,13,0.3)}
+.wl-badge-emerging{background:rgba(120,120,112,0.12);color:var(--dim);border:1px solid rgba(120,120,112,0.3)}
 @media(max-width:600px){
   #rn-top{gap:6px!important}
   #rn-question{font-size:15px!important}
   #rn-bottom{flex-direction:column;align-items:flex-start!important;gap:10px!important}
-  #rn-bottom .rn-trade-btn{width:100%;text-align:center}
+  #rn-bottom .ib-trade-btn{width:100%;text-align:center;display:block}
+  .lh-row{flex-wrap:wrap;gap:4px}
+  .wl-card{min-width:100%}
+  #wl-cards{flex-direction:column}
 }
 </style>
+
 <script>
 (function(){
   function fmtCap(n){if(n>=1e6)return'$'+(n/1e6).toFixed(1)+'M';if(n>=1e3)return'$'+Math.round(n/1e3)+'K';return'$'+Math.round(n)}
+  function escH(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
+  function truncate(s,n){return s.length>n?s.slice(0,n)+'...':s}
+  function timeAgo(ts){var d=Date.now()-new Date(ts).getTime();if(d<60000)return'<1m';if(d<3600000)return Math.floor(d/60000)+'m';return Math.floor(d/3600000)+'h'}
+
+  // PANEL 1: RIGHT NOW
   function loadRightNow(){
-    fetch('/api/signals').then(r=>r.ok?r.json():null).then(function(d){
+    fetch('/api/signals').then(function(r){return r.ok?r.json():null}).then(function(d){
       if(!d||!d.signals)return;
       var sig=null;
       for(var i=0;i<d.signals.length;i++){
         var s=d.signals[i];
         if(s.type==='whale_cluster'&&(s.whale_count||0)>=5){
-          // Skip stale signals (>2h old)
-          if(s.detected_at){var age=Date.now()-new Date(s.detected_at).getTime();if(age>2*60*60*1000)continue}
+          if(s.detected_at){var age=Date.now()-new Date(s.detected_at).getTime();if(age>2*3600000)continue}
           sig=s;break;
         }
       }
-      var card=document.getElementById('right-now-card');
-      if(!sig){card.style.display='none';return}
-      card.style.display='block';
-      // Top line
+      var panel=document.getElementById('rn-panel');
+      if(!sig){panel.style.display='none';return}
+      panel.style.display='block';
       var side=(sig.side||'YES').toUpperCase();
       var isUp=side==='YES'||side==='UP'||side==='OVER';
-      var badgeColor=isUp?'#22c55e':'#ef4444';
-      var badgeText=isUp?'UP':'DOWN';
-      var topHtml='<span style="color:var(--gold);font-weight:700;letter-spacing:.08em">\u26A1 RIGHT NOW</span>';
-      topHtml+='<span style="color:var(--dim)">|</span>';
-      topHtml+='<span style="background:'+badgeColor+';color:#fff;padding:2px 8px;border-radius:4px;font-weight:700;font-size:10px">'+badgeText+'</span>';
-      topHtml+='<span style="color:var(--dim)">|</span>';
-      topHtml+='<span style="color:var(--text)">\uD83D\uDC0B '+sig.whale_count+' whales</span>';
-      topHtml+='<span style="color:var(--dim)">|</span>';
-      topHtml+='<span style="color:var(--gold-lt)">'+fmtCap(sig.capital||0)+'</span>';
-      document.getElementById('rn-top').innerHTML=topHtml;
-      // Question
+      var bc=isUp?'#22c55e':'#ef4444';
+      var bt=isUp?'UP':'DOWN';
+      document.getElementById('rn-top').innerHTML=
+        '<span style="color:var(--gold);font-weight:700;letter-spacing:.08em">\u26A1 RIGHT NOW</span>'+
+        '<span style="color:var(--dim)">|</span>'+
+        '<span style="background:'+bc+';color:#fff;padding:2px 8px;border-radius:4px;font-weight:700;font-size:10px">'+bt+'</span>'+
+        '<span style="color:var(--dim)">|</span>'+
+        '<span style="color:var(--text)">\uD83D\uDC0B '+sig.whale_count+' whales</span>'+
+        '<span style="color:var(--dim)">|</span>'+
+        '<span style="color:var(--gold-lt)">'+fmtCap(sig.capital||0)+'</span>';
       document.getElementById('rn-question').textContent=sig.market||'';
-      // Bottom line
-      var bottomHtml='';
-      if(sig.end_date){
-        var diff=new Date(sig.end_date).getTime()-Date.now();
-        if(diff>0){
-          var hrs=Math.floor(diff/3600000);var mins=Math.floor((diff%3600000)/60000);
-          var timeColor=diff<3600000?'var(--red)':'var(--dim)';
-          bottomHtml+='<span style="color:'+timeColor+'">Closes in '+(hrs>0?hrs+'h ':'')+mins+'m</span><span style="color:var(--border)">\u00B7</span>';
-        }
-      }
-      var yesPct=sig.yes_pct||Math.round((sig.price||0.5)*100);
-      bottomHtml+='<span>Current odds: <strong style="color:var(--text)">'+yesPct+'% '+side+'</strong></span>';
-      if(sig.url&&sig.url!=='https://polymarket.com'){
-        bottomHtml+='<a href="'+sig.url+'" target="_blank" rel="noopener" class="rn-trade-btn" style="margin-left:auto;color:var(--gold);font-weight:700;text-decoration:none;padding:6px 14px;border:1px solid rgba(201,146,13,0.4);border-radius:6px;transition:background .15s;white-space:nowrap" onmouseover="this.style.background=\'rgba(201,146,13,0.12)\'" onmouseout="this.style.background=\'transparent\'">Trade on Polymarket \u2192</a>';
-      }
-      document.getElementById('rn-bottom').innerHTML=bottomHtml;
+      var bh='';
+      if(sig.end_date){var diff=new Date(sig.end_date).getTime()-Date.now();if(diff>0){var hrs=Math.floor(diff/3600000);var mins=Math.floor((diff%3600000)/60000);bh+='<span style="color:'+(diff<3600000?'var(--red)':'var(--dim)')+'">Closes in '+(hrs>0?hrs+'h ':'')+mins+'m</span><span style="color:var(--border)">\u00B7</span>';}}
+      var yp=sig.yes_pct||Math.round((sig.price||0.5)*100);
+      bh+='<span>'+yp+'% '+side+'</span>';
+      if(sig.url&&sig.url!=='https://polymarket.com')bh+='<a href="'+sig.url+'" target="_blank" rel="noopener" class="ib-trade-btn" style="margin-left:auto">Trade on Polymarket \u2192</a>';
+      document.getElementById('rn-bottom').innerHTML=bh;
     }).catch(function(){});
   }
-  loadRightNow();
+
+  // PANEL 2: LAST HOUR
+  function loadLastHour(){
+    fetch('/api/whale-watch').then(function(r){return r.ok?r.json():null}).then(function(d){
+      if(!d)return;
+      var whales=(d.whales||d.positions||[]).slice();
+      whales.sort(function(a,b){return new Date(b.fetched_at||0)-new Date(a.fetched_at||0)});
+      var recent=whales.filter(function(w){return w.fetched_at&&(Date.now()-new Date(w.fetched_at).getTime()<3600000)}).slice(0,5);
+      var panel=document.getElementById('lh-panel');
+      if(!recent.length){panel.style.display='none';return}
+      panel.style.display='block';
+      document.getElementById('lh-feed').innerHTML=recent.map(function(w){
+        var name=w.trader||'';
+        if(!name||/^0x/.test(name))name=name?(name.slice(0,6)+'...'):'\uD83D\uDC0B';
+        var side=(w.side||'YES').toUpperCase();
+        var sc=side==='YES'||side==='UP'?'#22c55e':'#ef4444';
+        var url=w.market_url||w.url||'';
+        return'<div class="lh-row">'+
+          '<span class="lh-time">'+timeAgo(w.fetched_at)+'</span>'+
+          '<span class="lh-trader">'+escH(name)+'</span>'+
+          '<span style="color:var(--muted)">'+fmtCap(w.size||0)+'</span>'+
+          '<span class="lh-market">'+escH(truncate(w.market||w.position||'',40))+'</span>'+
+          '<span style="color:'+sc+';font-weight:700;font-size:10px">'+side+'</span>'+
+          (url?'<a href="'+url+'" target="_blank" rel="noopener" class="ib-trade-btn">View \u2192</a>':'')+
+          '</div>';
+      }).join('');
+    }).catch(function(){});
+  }
+
+  // PANEL 3: WATCHLIST
+  function loadWatchlist(){
+    fetch('/api/whale-index').then(function(r){return r.ok?r.json():null}).then(function(d){
+      if(!d)return;
+      var picks=(d.picks||[]).slice(0,3);
+      var panel=document.getElementById('wl-panel');
+      if(!picks.length){panel.style.display='none';return}
+      panel.style.display='block';
+      document.getElementById('wl-cards').innerHTML=picks.map(function(p){
+        var str=(p.strength||'EMERGING').toUpperCase();
+        var bc=str==='STRONG'?'wl-badge-strong':str==='MODERATE'?'wl-badge-moderate':'wl-badge-emerging';
+        var cs=(p.consensus_side||'YES').toUpperCase();
+        var sc=cs==='YES'||cs==='UP'?'#22c55e':'#ef4444';
+        var url=p.url||'';
+        return'<div class="wl-card">'+
+          '<div style="margin-bottom:10px"><span class="wl-badge '+bc+'">'+str+'</span></div>'+
+          '<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px;line-height:1.4;min-height:36px">'+escH(truncate(p.market||'',35))+'</div>'+
+          '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:12px">'+
+            '<span>\uD83D\uDC0B '+p.whale_count+'</span>'+
+            '<span style="color:var(--border)">\u00B7</span>'+
+            '<span style="color:'+sc+';font-weight:700">'+cs+' '+(p.consensus_pct||0)+'%</span>'+
+            '<span style="color:var(--border)">\u00B7</span>'+
+            '<span>'+fmtCap(p.total_capital||0)+'</span>'+
+          '</div>'+
+          (url?'<a href="'+url+'" target="_blank" rel="noopener" class="ib-trade-btn">Trade \u2192</a>':'')+
+          '</div>';
+      }).join('');
+    }).catch(function(){});
+  }
+
+  loadRightNow();loadLastHour();loadWatchlist();
   setInterval(loadRightNow,60000);
+  setInterval(loadLastHour,90000);
 })();
 </script>
 
@@ -1150,36 +1232,6 @@ if (localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token')
 }
 
 // ── Fear & Greed ──
-(async function loadFearGreed() {
-  try {
-    const r = await fetch('/api/fear-greed');
-    const d = await r.json();
-    if (!d || d.score == null) return;
-    const wrap = document.getElementById('fg-wrap');
-    const needle = document.getElementById('fg-needle');
-    const score = document.getElementById('fg-score');
-    const sentiment = document.getElementById('fg-sentiment');
-    wrap.style.display = 'flex';
-    needle.style.left = d.score + '%';
-    score.textContent = d.score;
-    const labels = ['Extreme Fear','Fear','Neutral','Greed','Extreme Greed'];
-    const idx = d.score < 20 ? 0 : d.score < 40 ? 1 : d.score < 60 ? 2 : d.score < 80 ? 3 : 4;
-    sentiment.textContent = labels[idx];
-  } catch(e) {}
-})();
-
-// ── Crystal Ball teaser ──
-(async function loadCBTeaser() {
-  try {
-    const r = await fetch('/api/crystal-ball');
-    const d = await r.json();
-    if (d && d.predictions && d.predictions.length > 0) {
-      document.getElementById('cb-count').textContent = d.predictions.length;
-      document.getElementById('cb-teaser').style.display = 'inline-block';
-    }
-  } catch(e) {}
-})();
-
 // ── Live stats ticker — fetch from API ──
 (async function loadTickerStats() {
   try {
