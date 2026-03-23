@@ -115,17 +115,36 @@ body { background: var(--paper); color: var(--text); font-family: var(--sans); l
 
 <section class="hero">
   <h1>Public <span>API</span></h1>
-  <p>Access whale watch data, trader leaderboards, cross-platform odds, and real-time statistics. No authentication required.</p>
+  <p>Access whale watch data, trader leaderboards, cross-platform odds, and real-time statistics.</p>
   <div class="hero-badge">BASE URL: https://hyperflex.network</div>
 </section>
 
 <div class="container">
 
+  <!-- Auth instructions -->
+  <div style="background:#1a1916;border:1px solid var(--border);border-radius:12px;padding:24px 28px;margin-bottom:24px">
+    <div style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--gold);margin-bottom:12px">&#x1F511; Authentication</div>
+    <p style="font-size:13px;color:var(--text);margin-bottom:12px;line-height:1.6">Pass your API key in the <code style="font-family:var(--mono);color:var(--gold)">Authorization</code> header:</p>
+    <div style="background:var(--paper);border:1px solid var(--border);border-radius:8px;padding:14px 18px;font-family:var(--mono);font-size:12px;color:var(--text);margin-bottom:16px;overflow-x:auto">
+      Authorization: Bearer hfx_your_api_key_here
+    </div>
+    <p style="font-size:13px;color:var(--dim);line-height:1.6;margin-bottom:4px">Generate a key in your <a href="/creator/dashboard" style="color:var(--gold);text-decoration:none">Dashboard → Settings → API Access</a>.</p>
+    <p style="font-size:13px;color:var(--dim);line-height:1.6"><code style="font-family:var(--mono);color:var(--text)">/api/stats</code> is the only endpoint that doesn't require auth.</p>
+  </div>
+
   <div class="rate-banner">
     <div class="rate-banner-icon">&#9889;</div>
     <div class="rate-banner-text">
-      <strong>Rate Limit:</strong> All public endpoints are rate-limited to <strong>60 requests per minute</strong> per IP address. Exceeding this limit returns <code style="font-family:var(--mono);color:var(--gold)">429 Too Many Requests</code>.
+      <strong>Rate Limits by Plan:</strong><br/>
+      <span style="color:var(--gold)">Pro ($29/mo)</span> — <strong>60 requests/min</strong><br/>
+      <span style="color:var(--gold)">Premium ($99/mo)</span> — <strong>300 requests/min</strong><br/>
+      Exceeding your limit returns <code style="font-family:var(--mono);color:var(--gold)">429 Too Many Requests</code>.
     </div>
+  </div>
+
+  <div style="background:rgba(201,146,13,0.06);border:1px solid rgba(201,146,13,0.2);border-radius:10px;padding:18px 24px;margin-bottom:36px;text-align:center">
+    <div style="font-size:14px;color:var(--text);margin-bottom:8px">Don't have an API key yet?</div>
+    <a href="/creator/signup" style="display:inline-block;background:var(--gold);color:#0e0e0c;font-family:var(--mono);font-size:13px;font-weight:700;padding:10px 24px;border-radius:8px;text-decoration:none">Get API Access →</a>
   </div>
 
   <!-- Endpoint 1: Whale Watch -->

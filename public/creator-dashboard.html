@@ -4339,6 +4339,19 @@ body.nav-open .sidebar-backdrop {
           </div>
         </div>
 
+        <!-- API Access -->
+        <div class="section">
+          <div class="section-header">
+            <div>
+              <div class="section-title">🔑 API Access</div>
+              <div class="section-subtitle">Programmatic access to whale data, signals, and market intelligence</div>
+            </div>
+          </div>
+          <div class="markets-table" style="padding:28px" id="apiAccessSection">
+            <div id="apiAccessContent"></div>
+          </div>
+        </div>
+
         <!-- Economy Settings -->
         <div class="section">
           <div class="section-header">
@@ -7362,6 +7375,7 @@ function showTab(tab) {
       else flEl.innerHTML = '<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">All caught up!</div><div class="empty-desc">No markets need resolution right now.</div></div>';
     }
   }
+  if (tab === 'settings') loadApiAccess();
   if (tab === 'portfolio') loadPortfolio();
   if (tab === 'performance') loadPerformanceTab();
   if (tab === 'quicktrade') { loadQuickTrade(); }
@@ -8131,6 +8145,55 @@ async function saveSettings() {
 document.getElementById('settingColor').addEventListener('input', function() {
   document.getElementById('settingColorHex').textContent = this.value;
 });
+
+// API Access
+async function loadApiAccess() {
+  const el = document.getElementById('apiAccessContent');
+  if (!el) return;
+  // Check plan from the global plan variable
+  if (typeof plan !== 'undefined' && plan === 'free') {
+    el.innerHTML = '<div style="text-align:center;padding:20px"><div style="font-size:28px;margin-bottom:12px">🔒</div><div style="font-size:14px;color:var(--text);margin-bottom:8px">API access requires Pro or Premium</div><div style="font-size:12px;color:var(--dim);margin-bottom:16px">Get programmatic access to whale data, signals, and market intelligence.</div><div style="display:flex;gap:8px;justify-content:center"><a href="/api-docs" style="color:var(--gold);font-family:var(--mono);font-size:12px;text-decoration:none">View API docs →</a></div></div>';
+    return;
+  }
+  try {
+    const r = await fetch(API + '/api/user/api-key', { headers: { Authorization: 'Bearer ' + token } });
+    const d = await r.json();
+    if (d.has_key) {
+      el.innerHTML = '<div style="margin-bottom:16px"><label style="font-size:12px;color:var(--dim);font-family:var(--mono);display:block;margin-bottom:6px">Your API Key</label><div style="display:flex;gap:8px;align-items:center"><code id="apiKeyDisplay" style="flex:1;font-family:var(--mono);font-size:13px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);overflow:hidden;text-overflow:ellipsis">' + (d.api_key_masked || '') + '</code><button class="btn-secondary" onclick="copyApiKey()" style="padding:8px 14px;font-size:12px;white-space:nowrap">Copy</button></div></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn-secondary" onclick="generateApiKey()" style="padding:8px 14px;font-size:12px">Regenerate</button><button class="btn-secondary" onclick="revokeApiKey()" style="padding:8px 14px;font-size:12px;color:var(--dim)">Revoke</button><a href="/api-docs" style="color:var(--gold);font-family:var(--mono);font-size:12px;text-decoration:none;padding:8px 0">API docs →</a></div><div style="font-size:11px;color:var(--dim);margin-top:12px">Rate limit: ' + (d.plan === 'platinum' ? '300' : '60') + ' requests/min</div>';
+    } else {
+      el.innerHTML = '<div style="text-align:center;padding:16px"><div style="font-size:13px;color:var(--text);margin-bottom:12px">Generate an API key to access HYPERFLEX data programmatically.</div><button class="btn-primary" onclick="generateApiKey()" style="padding:10px 20px;font-size:13px">Generate API Key</button><div style="margin-top:12px"><a href="/api-docs" style="color:var(--gold);font-family:var(--mono);font-size:12px;text-decoration:none">View API docs →</a></div></div>';
+    }
+  } catch (e) {
+    el.innerHTML = '<div style="color:var(--dim);font-size:13px">Failed to load API key status.</div>';
+  }
+}
+var _fullApiKey = null;
+async function generateApiKey() {
+  if (!confirm('Generate a new API key? Any existing key will be replaced.')) return;
+  try {
+    const r = await fetch(API + '/api/user/generate-api-key', { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
+    const d = await r.json();
+    if (d.error) { showToast(d.error, 'error'); return; }
+    _fullApiKey = d.api_key;
+    showToast('API key generated! Copy it now — it won\'t be shown again.', 'success');
+    const el = document.getElementById('apiAccessContent');
+    el.innerHTML = '<div style="margin-bottom:12px"><label style="font-size:12px;color:var(--gold);font-family:var(--mono);display:block;margin-bottom:6px">⚠️ Copy your key now — it won\'t be shown again</label><div style="display:flex;gap:8px;align-items:center"><code style="flex:1;font-family:var(--mono);font-size:12px;background:var(--surface);border:1px solid var(--gold);border-radius:8px;padding:10px 14px;color:var(--gold);word-break:break-all">' + d.api_key + '</code><button class="btn-primary" onclick="copyApiKey()" style="padding:8px 14px;font-size:12px;white-space:nowrap">Copy</button></div></div><div style="font-size:11px;color:var(--dim)">Use this key in the Authorization header: <code style="font-family:var(--mono);color:var(--text)">Bearer ' + d.api_key.slice(0,12) + '...</code></div>';
+  } catch (e) { showToast('Failed to generate key', 'error'); }
+}
+async function revokeApiKey() {
+  if (!confirm('Revoke your API key? Any integrations using it will stop working.')) return;
+  try {
+    const r = await fetch(API + '/api/user/api-key', { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } });
+    const d = await r.json();
+    if (d.ok) { showToast('API key revoked', 'success'); _fullApiKey = null; loadApiAccess(); }
+    else showToast(d.error || 'Failed', 'error');
+  } catch (e) { showToast('Failed to revoke', 'error'); }
+}
+function copyApiKey() {
+  var key = _fullApiKey || document.getElementById('apiKeyDisplay')?.textContent || '';
+  if (key.includes('\u2022')) { showToast('Generate a new key to copy it', 'error'); return; }
+  navigator.clipboard.writeText(key).then(function() { showToast('API key copied!', 'success'); });
+}
 
 async function changeSlug() {
   const newSlug = document.getElementById('newSlugInput').value.trim();

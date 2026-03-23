@@ -50,6 +50,45 @@ function getWhaleNickname(address) {
 
 const JWT_SECRET = process.env.JWT_SECRET || 'hyperflex-dev-secret-change-in-prod';
 
+// ── API Key Auth middleware (for /api-docs documented endpoints) ──
+const _apiKeyRateLimit = new Map(); // userId → { count, resetAt }
+function apiKeyAuth(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'API key required. Pass Authorization: Bearer <your_key>' });
+  }
+  const key = authHeader.slice(7).trim();
+  if (!key) return res.status(401).json({ error: 'API key required' });
+  // Look up key in creator_settings — deferred to first call (async wrapper)
+  (async () => {
+    try {
+      let creator;
+      if (pool) {
+        const rows = await dbQuery('SELECT id, plan, slug FROM creator_settings WHERE api_key = $1 LIMIT 1', [key]);
+        creator = rows[0] || null;
+      } else {
+        const { data } = await supabase.from('creator_settings').select('id, plan, slug').eq('api_key', key).maybeSingle();
+        creator = data;
+      }
+      if (!creator) return res.status(401).json({ error: 'Invalid API key' });
+      if (creator.plan === 'free') return res.status(401).json({ error: 'API access requires Pro or Premium plan' });
+      // Rate limit by plan
+      const maxPerMin = creator.plan === 'platinum' ? 300 : 60;
+      const now = Date.now();
+      let rl = _apiKeyRateLimit.get(creator.id);
+      if (!rl || now > rl.resetAt) rl = { count: 0, resetAt: now + 60000 };
+      if (rl.count >= maxPerMin) return res.status(429).json({ error: `Rate limit exceeded (${maxPerMin} req/min for ${creator.plan === 'platinum' ? 'Premium' : 'Pro'} plan)` });
+      rl.count++;
+      _apiKeyRateLimit.set(creator.id, rl);
+      req.apiUser = { userId: creator.id, plan: creator.plan, slug: creator.slug };
+      next();
+    } catch (e) {
+      console.error('[apiKeyAuth]', e.message);
+      res.status(500).json({ error: 'Auth check failed' });
+    }
+  })();
+}
+
 // ── Telegram Bot (optional — no-op if TELEGRAM_BOT_TOKEN not set) ──
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
@@ -317,12 +356,39 @@ function requireApiTier(req, res, next) {
     return next();
   }
 
-  // Check X-API-Key header first (for programmatic access)
-  const apiKey = req.headers['x-api-key'];
-  if (apiKey) {
-    // TODO: validate against api_keys table when built
-    // For now, allow any non-empty key (will add proper key management later)
-    return next();
+  // Check API key (Authorization: Bearer hfx_... or X-API-Key header)
+  const authH = req.headers.authorization;
+  const apiKey = req.headers['x-api-key'] || (authH && authH.startsWith('Bearer hfx_') ? authH.slice(7).trim() : null);
+  if (apiKey && apiKey.startsWith('hfx_')) {
+    // Validate API key against creator_settings
+    (async () => {
+      try {
+        let creator;
+        if (pool) {
+          const rows = await dbQuery('SELECT id, plan FROM creator_settings WHERE api_key = $1 LIMIT 1', [apiKey]);
+          creator = rows[0] || null;
+        } else {
+          const { data } = await supabase.from('creator_settings').select('id, plan').eq('api_key', apiKey).maybeSingle();
+          creator = data;
+        }
+        if (!creator) return res.status(401).json({ error: 'Invalid API key' });
+        if (creator.plan === 'free') return res.status(401).json({ error: 'API access requires Pro or Premium plan' });
+        // Rate limit by plan
+        const maxPerMin = creator.plan === 'platinum' ? 300 : 60;
+        const now = Date.now();
+        let rl = _apiKeyRateLimit.get(creator.id);
+        if (!rl || now > rl.resetAt) rl = { count: 0, resetAt: now + 60000 };
+        if (rl.count >= maxPerMin) return res.status(429).json({ error: `Rate limit exceeded (${maxPerMin} req/min)` });
+        rl.count++;
+        _apiKeyRateLimit.set(creator.id, rl);
+        req.apiUser = { userId: creator.id, plan: creator.plan };
+        next();
+      } catch (e) {
+        console.error('[api-key-auth]', e.message);
+        res.status(500).json({ error: 'Auth check failed' });
+      }
+    })();
+    return;
   }
 
   // Check JWT auth — logged-in users on the website
@@ -15003,6 +15069,74 @@ app.get('/api/user/wallets', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[wallets GET]', err.message);
     res.status(500).json({ error: 'Failed to load wallet info' });
+  }
+});
+
+// POST /api/user/generate-api-key — generate a new API key (Pro/Premium only)
+app.post('/api/user/generate-api-key', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    // Find creator_settings for this user
+    let creator;
+    if (pool) {
+      const rows = await dbQuery('SELECT id, plan FROM creator_settings WHERE creator_id = $1 LIMIT 1', [userId]);
+      creator = rows[0] || null;
+    } else {
+      const { data } = await supabase.from('creator_settings').select('id, plan').eq('creator_id', userId).maybeSingle();
+      creator = data;
+    }
+    if (!creator) return res.status(404).json({ error: 'Creator account not found' });
+    if (creator.plan === 'free') return res.status(403).json({ error: 'API access requires Pro or Premium plan' });
+    // Generate 32-byte hex key with hfx_ prefix
+    const crypto = require('crypto');
+    const key = 'hfx_' + crypto.randomBytes(32).toString('hex');
+    if (pool) {
+      await dbQuery('UPDATE creator_settings SET api_key = $1 WHERE id = $2', [key, creator.id]);
+    } else {
+      await supabase.from('creator_settings').update({ api_key: key }).eq('id', creator.id);
+    }
+    res.json({ api_key: key });
+  } catch (e) {
+    console.error('[generate-api-key]', e.message);
+    res.status(500).json({ error: 'Failed to generate API key' });
+  }
+});
+
+// DELETE /api/user/api-key — revoke API key
+app.delete('/api/user/api-key', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    if (pool) {
+      await dbQuery('UPDATE creator_settings SET api_key = NULL WHERE creator_id = $1', [userId]);
+    } else {
+      await supabase.from('creator_settings').update({ api_key: null }).eq('creator_id', userId);
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[revoke-api-key]', e.message);
+    res.status(500).json({ error: 'Failed to revoke API key' });
+  }
+});
+
+// GET /api/user/api-key — get current API key (masked)
+app.get('/api/user/api-key', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    let creator;
+    if (pool) {
+      const rows = await dbQuery('SELECT api_key, plan FROM creator_settings WHERE creator_id = $1 LIMIT 1', [userId]);
+      creator = rows[0] || null;
+    } else {
+      const { data } = await supabase.from('creator_settings').select('api_key, plan').eq('creator_id', userId).maybeSingle();
+      creator = data;
+    }
+    if (!creator) return res.json({ api_key: null, plan: 'free' });
+    const key = creator.api_key;
+    const masked = key ? ('hfx_' + '\u2022'.repeat(8) + '...' + key.slice(-4)) : null;
+    res.json({ api_key_masked: masked, has_key: !!key, plan: creator.plan || 'free' });
+  } catch (e) {
+    console.error('[get-api-key]', e.message);
+    res.status(500).json({ error: 'Failed to get API key status' });
   }
 });
 
