@@ -535,11 +535,12 @@ async function runAiAnalysis() {
   resultEl.innerHTML = '<div class="loading"><div class="loading-spinner"></div><div style="margin-top:8px;font-family:var(--mono);font-size:11px;color:var(--muted)">Claude is thinking...</div></div>';
 
   try {
-    const token = localStorage.getItem('hf_token');
+    const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+    if (!token) { resultEl.innerHTML = '<div style="color:var(--gold);font-family:var(--mono);font-size:12px"><a href="/creator/login" style="color:var(--gold)">Sign in</a> to use AI analysis.</div>'; btn.disabled = false; btn.textContent = 'Analyze'; return; }
     const r = await fetch('/api/ai/market-analysis', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
-      body: JSON.stringify({ question })
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ markets: [{ question, yes_pct: 50, volume: 'N/A', platform: 'Polymarket' }] })
     });
     const data = await r.json();
     if (data.error) throw new Error(data.error);
