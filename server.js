@@ -16256,13 +16256,13 @@ app.get('/api/screener', async (req, res) => {
         daysUntilExpiry = Math.max(0, Math.round((endDate - Date.now()) / (1000 * 60 * 60 * 24)));
       }
 
-      // Build correct Polymarket URL — sports use /sports/, others use /event/
+      // Build Polymarket URL — prefer direct url from API, fall back to /event/{slug}
       let marketUrl = 'https://polymarket.com';
-      const eventSlug = m.eventSlug || slug;
-      if (eventSlug) {
-        if (m.groupSlug && category === 'sports') {
-          marketUrl = `https://polymarket.com/sports/${m.groupSlug}/${eventSlug}`;
-        } else {
+      if (m.url && m.url.startsWith('https://polymarket.com')) {
+        marketUrl = m.url;
+      } else {
+        const eventSlug = m.eventSlug || slug;
+        if (eventSlug) {
           marketUrl = `https://polymarket.com/event/${eventSlug}`;
         }
       }
