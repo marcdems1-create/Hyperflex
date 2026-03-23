@@ -387,10 +387,16 @@ let _allSignals = [];
 let _currentFilter = 'all';
 
 // ── Load signals ──
+var _sharpnessLabel = null;
+var _sharpnessColor = null;
+
 async function loadSignals() {
   const grid = document.getElementById('signalsGrid');
   try {
-    const r = await fetch('/api/signals');
+    const [r, sharpRes] = await Promise.all([
+      fetch('/api/signals'),
+      fetch('/api/agent/sharpness').catch(() => null)
+    ]);
     const data = await r.json();
     if (data.error) throw new Error(data.error);
 
@@ -400,6 +406,18 @@ async function loadSignals() {
       const d = new Date(data.updated_at);
       document.getElementById('heroUpdatedAt').textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     }
+
+    // Load sharpness
+    if (sharpRes && sharpRes.ok) {
+      try {
+        const sh = await sharpRes.json();
+        if (sh && sh.last_10_return !== null) {
+          _sharpnessLabel = sh.label;
+          _sharpnessColor = sh.last_10_return >= 0 ? 'var(--green)' : 'var(--red)';
+        }
+      } catch(e) {}
+    }
+
     renderSignals();
   } catch (e) {
     grid.innerHTML = '<div class="empty-state">Failed to load signals. ' + (e.message || '') + '</div>';
@@ -455,6 +473,7 @@ function renderSignals() {
         '<span style="font-family:var(--mono);font-size:10px;color:var(--muted)">' + age + '</span>' +
       '</div>' +
       '<div class="signal-question">' + escHtml(s.market) + '</div>' +
+      (_sharpnessLabel ? '<div style="font-family:var(--mono);font-size:10px;color:' + _sharpnessColor + ';margin-bottom:8px">If you\'d followed our last 10 signals: ' + _sharpnessLabel + '</div>' : '') +
       '<div class="signal-action side-' + (s.side || 'YES') + '">' + escHtml(s.action) + '</div>' +
       '<div class="signal-meta">' + whaleHtml + capHtml + changeHtml + diffHtml + '</div>' +
       '<div class="signal-actions">' + tradeBtn +

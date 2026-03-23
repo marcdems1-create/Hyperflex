@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>Agent Performance — Signal Track Record | HYPERFLEX</title>
+<meta name="description" content="Verified signal performance from HYPERFLEX Agent. Win rate, returns, and category breakdown — fully transparent."/>
+<link rel="canonical" href="https://hyperflex.network/agent/performance"/>
+<meta property="og:type" content="website"/>
+<meta property="og:url" content="https://hyperflex.network/agent/performance"/>
+<meta property="og:title" content="Agent Signal Performance — HYPERFLEX"/>
+<meta property="og:description" content="Verified signal track record. Win rate, returns, best calls — fully transparent."/>
+<meta property="og:image" content="https://hyperflex.network/og-default.png"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:site" content="@HyperFlexApp"/>
+<meta name="twitter:title" content="Agent Signal Performance — HYPERFLEX"/>
+<link rel="icon" href="/hyperflex-logo.png"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --bg: #0a0a09; --card: #131311; --card-hover: #1a1a17; --border: #2a2a25;
+  --gold: #c9920d; --gold-lt: #e0b340; --text: #e8e4d9; --dim: #888;
+  --green: #22c55e; --red: #ef4444; --blue: #3b82f6; --purple: #a855f7;
+  --sans: 'Syne', sans-serif; --mono: 'Space Mono', monospace;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg); color:var(--text); font-family:var(--sans); min-height:100vh; }
+a { color:var(--gold); text-decoration:none; }
+
+.topbar { display:flex; align-items:center; gap:24px; padding:16px 32px; border-bottom:1px solid var(--border); background:var(--bg); position:sticky; top:0; z-index:100; }
+.topbar-logo { font-family:var(--sans); font-weight:800; font-size:18px; color:var(--text); letter-spacing:.02em; }
+.topbar-logo span { color:var(--gold); }
+.nav-links { display:flex; gap:16px; margin-left:auto; }
+.nav-link { font-family:var(--mono); font-size:11px; color:var(--dim); transition:color .15s; }
+.nav-link:hover { color:var(--text); }
+.nav-link.active { color:var(--gold); }
+
+.container { max-width:800px; margin:0 auto; padding:40px 20px; }
+
+.hero { text-align:center; margin-bottom:40px; }
+.hero h1 { font-size:36px; font-weight:800; margin-bottom:8px; }
+.hero h1 span { color:var(--gold); }
+.hero p { font-family:var(--mono); font-size:12px; color:var(--dim); max-width:500px; margin:0 auto; }
+
+.stats-grid { display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; margin-bottom:32px; }
+.stat-card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:20px; text-align:center; }
+.stat-card .label { font-family:var(--mono); font-size:9px; color:var(--dim); text-transform:uppercase; letter-spacing:.08em; margin-bottom:6px; }
+.stat-card .value { font-family:var(--sans); font-size:28px; font-weight:800; }
+.stat-card .sub { font-family:var(--mono); font-size:10px; color:var(--dim); margin-top:4px; }
+
+.section-title { font-family:var(--mono); font-size:11px; color:var(--gold); text-transform:uppercase; letter-spacing:.1em; margin-bottom:16px; padding-bottom:8px; border-bottom:1px solid var(--border); }
+
+.best-call { background:var(--card); border:1px solid var(--border); border-left:3px solid var(--green); border-radius:10px; padding:20px; margin-bottom:32px; }
+.best-call .bc-label { font-family:var(--mono); font-size:10px; color:var(--gold); text-transform:uppercase; letter-spacing:.08em; margin-bottom:8px; }
+.best-call .bc-market { font-size:16px; font-weight:700; color:#fff; margin-bottom:8px; line-height:1.4; }
+.best-call .bc-meta { font-family:var(--mono); font-size:11px; color:var(--dim); }
+
+.cat-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:12px; margin-bottom:32px; }
+.cat-card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:16px; }
+.cat-card .cat-name { font-family:var(--mono); font-size:11px; color:var(--text); text-transform:uppercase; letter-spacing:.06em; margin-bottom:8px; }
+.cat-card .cat-wr { font-size:22px; font-weight:700; }
+.cat-card .cat-count { font-family:var(--mono); font-size:10px; color:var(--dim); margin-top:4px; }
+.cat-bar { height:4px; border-radius:2px; background:var(--border); margin-top:8px; overflow:hidden; }
+.cat-bar-fill { height:100%; border-radius:2px; }
+
+.chart-section { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:24px; margin-bottom:32px; }
+.chart-section canvas { width:100%; height:200px; }
+
+.cta-section { text-align:center; background:var(--card); border:1px solid var(--border); border-radius:14px; padding:40px 20px; }
+.cta-section h3 { font-size:20px; font-weight:700; margin-bottom:8px; }
+.cta-section p { font-family:var(--mono); font-size:12px; color:var(--dim); margin-bottom:20px; }
+.cta-btn { display:inline-block; background:var(--gold); color:#000; font-family:var(--mono); font-weight:700; font-size:13px; padding:14px 32px; border-radius:8px; text-decoration:none; transition:all .15s; }
+.cta-btn:hover { background:var(--gold-lt); transform:translateY(-1px); }
+
+.loading { text-align:center; padding:60px 20px; font-family:var(--mono); font-size:13px; color:var(--dim); }
+
+@media(max-width:600px) {
+  .topbar { padding:12px 16px; }
+  .nav-links { display:none; }
+  .hero h1 { font-size:24px; }
+  .stats-grid { grid-template-columns:1fr 1fr; }
+  .stat-card .value { font-size:22px; }
+  .cat-grid { grid-template-columns:1fr 1fr; }
+}
+</style>
+</head>
+<body>
+<nav class="topbar">
+  <a href="/" class="topbar-logo">HYPER<span>FLEX</span></a>
+  <div class="nav-links">
+    <a href="/signals" class="nav-link">Signals</a>
+    <a href="/whales" class="nav-link">Whales</a>
+    <a href="/screener" class="nav-link">Screener</a>
+    <a href="/agent/performance" class="nav-link active">Agent</a>
+    <a id="navDashLink" href="/creator/dashboard" class="nav-link" style="display:none;color:#c9920d">Dashboard</a>
+  </div>
+</nav>
+<script>if(localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token')){var dl=document.getElementById('navDashLink');if(dl)dl.style.display='';}</script>
+
+<div class="container">
+  <div class="hero">
+    <h1>Agent <span>Performance</span></h1>
+    <p>Every signal tracked. Every outcome verified. Full transparency.</p>
+  </div>
+
+  <div id="loadingState" class="loading">Loading track record...</div>
+
+  <div id="content" style="display:none">
+    <div class="stats-grid" id="statsGrid"></div>
+
+    <div id="bestCallSection" style="display:none">
+      <div class="section-title">Best Call</div>
+      <div class="best-call" id="bestCall"></div>
+    </div>
+
+    <div id="catSection">
+      <div class="section-title">Performance by Category</div>
+      <div class="cat-grid" id="catGrid"></div>
+    </div>
+
+    <div class="chart-section">
+      <div class="section-title">Signal Accuracy (Rolling)</div>
+      <canvas id="accuracyChart"></canvas>
+      <div style="text-align:center;margin-top:8px;font-family:var(--mono);font-size:10px;color:var(--dim)" id="chartNote"></div>
+    </div>
+
+    <div class="cta-section">
+      <h3>Start following signals</h3>
+      <p>Get notified the moment whales move. Set up your agent to filter by category, whale count, and edge size.</p>
+      <a href="/creator/signup" class="cta-btn">Get started free &rarr;</a>
+    </div>
+  </div>
+</div>
+
+<script>
+function escH(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+async function loadPerformance() {
+  try {
+    var res = await fetch('/api/agent/performance');
+    if (!res.ok) throw new Error('API error');
+    var stats = await res.json();
+    render(stats);
+  } catch (e) {
+    document.getElementById('loadingState').innerHTML = '<p style="color:var(--red)">Could not load performance data.</p>';
+  }
+}
+
+function render(s) {
+  document.getElementById('loadingState').style.display = 'none';
+  document.getElementById('content').style.display = '';
+
+  var resolved = s.correct + s.wrong;
+  var wrColor = s.win_rate >= 60 ? 'var(--green)' : s.win_rate >= 45 ? 'var(--gold)' : 'var(--red)';
+  var retColor = s.total_return >= 0 ? 'var(--green)' : 'var(--red)';
+
+  document.getElementById('statsGrid').innerHTML =
+    '<div class="stat-card"><div class="label">Total Signals</div><div class="value">' + s.total + '</div><div class="sub">' + s.pending + ' pending</div></div>' +
+    '<div class="stat-card"><div class="label">Win Rate</div><div class="value" style="color:' + wrColor + '">' + s.win_rate + '%</div><div class="sub">' + resolved + ' resolved</div></div>' +
+    '<div class="stat-card"><div class="label">Avg Edge</div><div class="value" style="color:var(--gold)">' + (s.avg_edge > 0 ? '+' : '') + s.avg_edge + '%</div><div class="sub">at signal time</div></div>' +
+    '<div class="stat-card"><div class="label">Est. Return</div><div class="value" style="color:' + retColor + '">' + (s.total_return >= 0 ? '+$' : '-$') + Math.abs(s.total_return) + '</div><div class="sub">if followed all</div></div>';
+
+  // Best call
+  if (s.best_call) {
+    document.getElementById('bestCallSection').style.display = '';
+    var bc = s.best_call;
+    document.getElementById('bestCall').innerHTML =
+      '<div class="bc-label">\u2B50 Best Call Ever</div>' +
+      '<div class="bc-market">' + escH(bc.market || '') + '</div>' +
+      '<div class="bc-meta">' +
+        '<span style="color:var(--green);font-weight:700">' + (bc.direction || '') + '</span> &middot; ' +
+        (bc.return_pct ? '+' + bc.return_pct + '% return' : '$' + bc.size + ' recommended') + ' &middot; ' +
+        new Date(bc.fired_at).toLocaleDateString() +
+      '</div>';
+  }
+
+  // Category breakdown
+  var cats = s.by_category || {};
+  var catKeys = Object.keys(cats);
+  if (catKeys.length) {
+    var catIcons = { sports: '\uD83C\uDFC8', crypto: '\u20BF', politics: '\uD83C\uDFDB', entertainment: '\uD83C\uDFAC', other: '\uD83D\uDCCA' };
+    document.getElementById('catGrid').innerHTML = catKeys.map(function(cat) {
+      var d = cats[cat];
+      var catResolved = d.correct + d.wrong;
+      var barW = catResolved > 0 ? d.win_rate : 0;
+      var barColor = d.win_rate >= 60 ? 'var(--green)' : d.win_rate >= 45 ? 'var(--gold)' : 'var(--red)';
+      return '<div class="cat-card">' +
+        '<div class="cat-name">' + (catIcons[cat] || '') + ' ' + cat + '</div>' +
+        '<div class="cat-wr" style="color:' + barColor + '">' + d.win_rate + '%</div>' +
+        '<div class="cat-count">' + d.total + ' signals &middot; ' + catResolved + ' resolved</div>' +
+        '<div class="cat-bar"><div class="cat-bar-fill" style="width:' + barW + '%;background:' + barColor + '"></div></div>' +
+      '</div>';
+    }).join('');
+  } else {
+    document.getElementById('catSection').style.display = 'none';
+  }
+
+  // Simple accuracy visualization using canvas
+  drawChart(s);
+}
+
+function drawChart(s) {
+  var canvas = document.getElementById('accuracyChart');
+  var ctx = canvas.getContext('2d');
+  canvas.width = canvas.offsetWidth * 2;
+  canvas.height = 400;
+  ctx.scale(2, 2);
+  var w = canvas.offsetWidth;
+  var h = 200;
+
+  var resolved = s.correct + s.wrong;
+  if (resolved < 2) {
+    document.getElementById('chartNote').textContent = 'Chart will appear after more signals are resolved.';
+    ctx.fillStyle = '#888';
+    ctx.font = '12px "Space Mono"';
+    ctx.textAlign = 'center';
+    ctx.fillText('Not enough data yet', w / 2, h / 2);
+    return;
+  }
+
+  // Simulate rolling accuracy from aggregate stats
+  // Since we don't have per-signal timeline from this endpoint, show a simple bar visualization
+  var total = s.total;
+  var segments = [
+    { label: 'Correct', value: s.correct, color: '#22c55e' },
+    { label: 'Wrong', value: s.wrong, color: '#ef4444' },
+    { label: 'Pending', value: s.pending, color: '#c9920d' },
+    { label: 'Skipped', value: s.skipped || 0, color: '#888' }
+  ].filter(function(seg) { return seg.value > 0; });
+
+  var barH = 32;
+  var y = (h - barH) / 2;
+  var x = 40;
+  var barW = w - 80;
+  var usedX = x;
+
+  // Background
+  ctx.fillStyle = '#2a2a25';
+  ctx.beginPath();
+  ctx.roundRect(x, y, barW, barH, 6);
+  ctx.fill();
+
+  // Segments
+  for (var i = 0; i < segments.length; i++) {
+    var seg = segments[i];
+    var segW = total > 0 ? (seg.value / total) * barW : 0;
+    if (segW < 1) continue;
+    ctx.fillStyle = seg.color;
+    if (i === 0) {
+      ctx.beginPath();
+      ctx.roundRect(usedX, y, segW, barH, i === 0 ? [6, 0, 0, 6] : (i === segments.length - 1 ? [0, 6, 6, 0] : 0));
+      ctx.fill();
+    } else {
+      ctx.fillRect(usedX, y, segW, barH);
+    }
+
+    // Label
+    if (segW > 40) {
+      ctx.fillStyle = '#fff';
+      ctx.font = '600 11px "Space Mono"';
+      ctx.textAlign = 'center';
+      ctx.fillText(seg.value + '', usedX + segW / 2, y + barH / 2 + 4);
+    }
+    usedX += segW;
+  }
+
+  // Legend
+  var legendY = y + barH + 24;
+  var legendX = x;
+  ctx.font = '10px "Space Mono"';
+  for (var j = 0; j < segments.length; j++) {
+    var seg2 = segments[j];
+    ctx.fillStyle = seg2.color;
+    ctx.fillRect(legendX, legendY - 6, 8, 8);
+    ctx.fillStyle = '#888';
+    ctx.textAlign = 'left';
+    ctx.fillText(seg2.label + ' (' + seg2.value + ')', legendX + 12, legendY + 1);
+    legendX += ctx.measureText(seg2.label + ' (' + seg2.value + ')').width + 28;
+  }
+
+  document.getElementById('chartNote').textContent = 'Signal tracking since launch. Updated in real time.';
+}
+
+loadPerformance();
+</script>
+</body>
+</html>

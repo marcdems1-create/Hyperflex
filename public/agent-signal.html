@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>Agent Signal — HYPERFLEX</title>
+<meta name="description" content="HYPERFLEX Agent signal recommendation — whale-driven trade intelligence."/>
+<link rel="icon" href="/hyperflex-logo.png"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --bg: #0a0a09; --card: #131311; --card-hover: #1a1a17; --border: #2a2a25;
+  --gold: #c9920d; --gold-lt: #e0b340; --text: #e8e4d9; --dim: #888;
+  --green: #22c55e; --red: #ef4444; --blue: #3b82f6; --purple: #a855f7;
+  --sans: 'Syne', sans-serif; --mono: 'Space Mono', monospace;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg); color:var(--text); font-family:var(--sans); min-height:100vh; }
+a { color:var(--gold); text-decoration:none; }
+
+.topbar { display:flex; align-items:center; gap:24px; padding:16px 32px; border-bottom:1px solid var(--border); background:var(--bg); position:sticky; top:0; z-index:100; }
+.topbar-logo { font-family:var(--sans); font-weight:800; font-size:18px; color:var(--text); letter-spacing:.02em; }
+.topbar-logo span { color:var(--gold); }
+.nav-links { display:flex; gap:16px; margin-left:auto; }
+.nav-link { font-family:var(--mono); font-size:11px; color:var(--dim); transition:color .15s; }
+.nav-link:hover { color:var(--text); }
+
+.container { max-width:720px; margin:0 auto; padding:40px 20px; }
+
+.signal-hero { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:32px; position:relative; overflow:hidden; }
+.signal-hero::before { content:''; position:absolute; top:0; left:0; width:4px; height:100%; background:var(--gold); }
+
+.signal-meta-row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px; font-family:var(--mono); font-size:11px; }
+.badge { padding:3px 10px; border-radius:4px; font-weight:700; font-size:11px; font-family:var(--mono); }
+.badge-yes { background:#22c55e22; color:#22c55e; border:1px solid #22c55e44; }
+.badge-no { background:#ef444422; color:#ef4444; border:1px solid #ef444444; }
+.badge-strong { background:#c9920d22; color:var(--gold); border:1px solid #c9920d44; }
+
+.signal-question { font-size:24px; font-weight:700; color:#fff; line-height:1.35; margin-bottom:20px; }
+
+.signal-stats { display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:12px; margin-bottom:24px; }
+.stat-box { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:12px; text-align:center; }
+.stat-label { font-family:var(--mono); font-size:9px; color:var(--dim); text-transform:uppercase; letter-spacing:.08em; margin-bottom:4px; }
+.stat-val { font-family:var(--mono); font-size:18px; font-weight:700; }
+
+.kelly-section { background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:20px; margin-bottom:20px; }
+.kelly-title { font-family:var(--mono); font-size:11px; color:var(--gold); text-transform:uppercase; letter-spacing:.08em; margin-bottom:12px; }
+.kelly-row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+.kelly-row label { font-family:var(--mono); font-size:11px; color:var(--dim); }
+.kelly-row input { background:var(--card); border:1px solid var(--border); color:var(--text); font-family:var(--mono); font-size:14px; padding:8px 12px; border-radius:6px; width:120px; }
+.kelly-fraction-btns { display:flex; gap:6px; }
+.kf-btn { background:var(--card); border:1px solid var(--border); color:var(--dim); font-family:var(--mono); font-size:11px; padding:6px 14px; border-radius:6px; cursor:pointer; transition:all .15s; }
+.kf-btn.active { background:var(--gold); color:#000; border-color:var(--gold); }
+.kelly-result { font-family:var(--mono); font-size:16px; font-weight:700; color:var(--gold); margin-top:8px; }
+
+.why-section { margin-bottom:24px; }
+.why-toggle { background:none; border:1px solid var(--border); color:var(--dim); font-family:var(--mono); font-size:11px; padding:8px 16px; border-radius:6px; cursor:pointer; transition:all .15s; width:100%; text-align:left; }
+.why-toggle:hover { color:var(--text); border-color:var(--gold); }
+.why-content { display:none; margin-top:12px; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:16px; }
+.why-content.open { display:block; }
+.whale-row { display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--border); font-family:var(--mono); font-size:12px; }
+.whale-row:last-child { border:none; }
+
+.action-btns { display:flex; gap:12px; flex-wrap:wrap; }
+.trade-btn { display:inline-block; background:var(--gold); color:#000; font-family:var(--mono); font-weight:700; font-size:13px; padding:14px 28px; border-radius:8px; border:none; cursor:pointer; text-align:center; text-decoration:none; transition:all .15s; flex:1; min-width:200px; }
+.trade-btn:hover { background:var(--gold-lt); transform:translateY(-1px); }
+.skip-btn { display:inline-block; background:transparent; border:1px solid var(--border); color:var(--dim); font-family:var(--mono); font-size:12px; padding:14px 20px; border-radius:8px; cursor:pointer; transition:all .15s; }
+.skip-btn:hover { border-color:var(--red); color:var(--red); }
+
+.loading { text-align:center; padding:80px 20px; font-family:var(--mono); font-size:13px; color:var(--dim); }
+.error-state { text-align:center; padding:80px 20px; }
+.error-state h2 { font-size:20px; margin-bottom:8px; }
+.error-state p { font-family:var(--mono); font-size:12px; color:var(--dim); }
+
+@media(max-width:600px) {
+  .topbar { padding:12px 16px; }
+  .nav-links { display:none; }
+  .container { padding:20px 16px; }
+  .signal-question { font-size:18px; }
+  .signal-stats { grid-template-columns:1fr 1fr; }
+  .action-btns { flex-direction:column; }
+  .trade-btn, .skip-btn { width:100%; }
+}
+</style>
+</head>
+<body>
+<nav class="topbar">
+  <a href="/" class="topbar-logo">HYPER<span>FLEX</span></a>
+  <div class="nav-links">
+    <a href="/signals" class="nav-link">Signals</a>
+    <a href="/whales" class="nav-link">Whales</a>
+    <a href="/agent/performance" class="nav-link">Agent Performance</a>
+    <a id="navDashLink" href="/creator/dashboard" class="nav-link" style="display:none;color:#c9920d">Dashboard</a>
+  </div>
+</nav>
+<script>if(localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token')){var dl=document.getElementById('navDashLink');if(dl)dl.style.display='';}</script>
+
+<div class="container">
+  <div id="loadingState" class="loading">Loading signal...</div>
+  <div id="errorState" class="error-state" style="display:none">
+    <h2>Signal not found</h2>
+    <p>This signal may have expired or you don't have access.</p>
+    <a href="/signals" style="display:inline-block;margin-top:16px;color:var(--gold);font-family:var(--mono);font-size:12px">Back to Signals &rarr;</a>
+  </div>
+  <div id="signalContent" style="display:none">
+    <div class="signal-hero">
+      <div class="signal-meta-row" id="metaRow"></div>
+      <div class="signal-question" id="sigQuestion"></div>
+      <div class="signal-stats" id="sigStats"></div>
+
+      <div class="kelly-section">
+        <div class="kelly-title">Position Sizing</div>
+        <div class="kelly-row">
+          <label>Your bankroll ($):</label>
+          <input type="number" id="bankrollInput" min="10" step="10" placeholder="500"/>
+        </div>
+        <div class="kelly-row">
+          <label>Kelly fraction:</label>
+          <div class="kelly-fraction-btns">
+            <button class="kf-btn" data-frac="1" onclick="setFrac(1,this)">Full</button>
+            <button class="kf-btn active" data-frac="0.5" onclick="setFrac(0.5,this)">Half</button>
+            <button class="kf-btn" data-frac="0.25" onclick="setFrac(0.25,this)">Quarter</button>
+          </div>
+        </div>
+        <div class="kelly-result" id="kellyResult">-</div>
+      </div>
+
+      <div class="why-section">
+        <button class="why-toggle" onclick="toggleWhy()">Why this signal? &darr;</button>
+        <div class="why-content" id="whyContent"></div>
+      </div>
+
+      <div class="action-btns">
+        <a id="tradeBtn" href="#" target="_blank" class="trade-btn">Trade on Polymarket &rarr;</a>
+        <button id="skipBtn" class="skip-btn" onclick="skipSignal()">Skip this one</button>
+      </div>
+    </div>
+
+    <div id="sharpnessBar" style="margin-top:16px;padding:12px 16px;background:var(--card);border:1px solid var(--border);border-radius:8px;font-family:var(--mono);font-size:12px;display:none"></div>
+  </div>
+</div>
+
+<script>
+var _decision = null;
+var _whales = [];
+var _kellyFrac = 0.5;
+var _alphaScores = {};
+
+function escH(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function fmt$(n) { return n >= 1000000 ? '$' + (n/1000000).toFixed(1) + 'M' : n >= 1000 ? '$' + (n/1000).toFixed(0) + 'K' : '$' + n.toFixed(0); }
+
+function getSignalId() {
+  var parts = window.location.pathname.split('/');
+  return parts[parts.length - 1];
+}
+
+async function loadSignal() {
+  var id = getSignalId();
+  var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+  if (!token) { showError(); return; }
+
+  try {
+    var [sigRes, alphaRes] = await Promise.all([
+      fetch('/api/agent/decisions/' + id, { headers: { Authorization: 'Bearer ' + token } }),
+      fetch('/api/whale-scores').catch(function() { return null; })
+    ]);
+    if (!sigRes.ok) { showError(); return; }
+    var data = await sigRes.json();
+    _decision = data.decision;
+    _whales = data.whales || [];
+
+    if (alphaRes && alphaRes.ok) {
+      try { var ad = await alphaRes.json(); _alphaScores = ad.scores || {}; } catch(e) {}
+    }
+
+    renderSignal();
+  } catch (e) {
+    console.error(e);
+    showError();
+  }
+}
+
+function showError() {
+  document.getElementById('loadingState').style.display = 'none';
+  document.getElementById('errorState').style.display = '';
+}
+
+function renderSignal() {
+  var d = _decision;
+  document.getElementById('loadingState').style.display = 'none';
+  document.getElementById('signalContent').style.display = '';
+
+  var dir = (d.direction || 'YES').toUpperCase();
+  var isYes = dir === 'YES' || dir === 'UP' || dir === 'OVER';
+  var urgency = d.signal_urgency || 0;
+  var urgIcon = urgency >= 8 ? '\uD83D\uDD25' : '\u26A1';
+  var urgColor = urgency >= 8 ? '#ff5722' : urgency >= 5 ? '#c9920d' : '#888';
+
+  document.getElementById('metaRow').innerHTML =
+    '<span class="badge ' + (isYes ? 'badge-yes' : 'badge-no') + '">' + dir + '</span>' +
+    '<span class="badge badge-strong">' + (d.signal_strength || 'MEDIUM') + '</span>' +
+    (urgency > 0 ? '<span style="font-family:var(--mono);font-size:12px;font-weight:700;color:' + urgColor + '">' + urgIcon + ' ' + urgency.toFixed(1) + '</span>' : '') +
+    '<span style="font-family:var(--mono);font-size:11px;color:var(--dim)">' + new Date(d.fired_at).toLocaleString() + '</span>';
+
+  document.getElementById('sigQuestion').textContent = d.market_question || '';
+
+  var edgeColor = (d.edge_pct || 0) > 0 ? 'var(--green)' : 'var(--red)';
+  document.getElementById('sigStats').innerHTML =
+    '<div class="stat-box"><div class="stat-label">Whales</div><div class="stat-val">\uD83D\uDC0B ' + (d.whale_count || 0) + '</div></div>' +
+    '<div class="stat-box"><div class="stat-label">Edge</div><div class="stat-val" style="color:' + edgeColor + '">' + (d.edge_pct > 0 ? '+' : '') + (d.edge_pct || 0).toFixed(1) + '%</div></div>' +
+    '<div class="stat-box"><div class="stat-label">Market Odds</div><div class="stat-val">' + Math.round((d.odds_at_signal || 0.5) * 100) + '%</div></div>' +
+    '<div class="stat-box"><div class="stat-label">Urgency</div><div class="stat-val" style="color:' + urgColor + '">' + urgIcon + ' ' + (urgency || '-') + '</div></div>';
+
+  // Set trade link
+  var url = d.market_url || 'https://polymarket.com';
+  document.getElementById('tradeBtn').href = url;
+
+  // If already resolved or skipped
+  if (d.outcome === 'skipped') {
+    document.getElementById('skipBtn').textContent = 'Skipped';
+    document.getElementById('skipBtn').disabled = true;
+    document.getElementById('skipBtn').style.opacity = '0.5';
+  } else if (d.outcome === 'correct' || d.outcome === 'wrong') {
+    var outcomeColor = d.outcome === 'correct' ? 'var(--green)' : 'var(--red)';
+    var outcomeIcon = d.outcome === 'correct' ? '\u2705' : '\u274C';
+    document.getElementById('skipBtn').innerHTML = outcomeIcon + ' ' + d.outcome.charAt(0).toUpperCase() + d.outcome.slice(1);
+    document.getElementById('skipBtn').disabled = true;
+    document.getElementById('skipBtn').style.borderColor = outcomeColor;
+    document.getElementById('skipBtn').style.color = outcomeColor;
+  }
+
+  // Load bankroll from localStorage
+  var savedBankroll = localStorage.getItem('hfx_bankroll');
+  if (savedBankroll) document.getElementById('bankrollInput').value = savedBankroll;
+  document.getElementById('bankrollInput').addEventListener('input', function() {
+    localStorage.setItem('hfx_bankroll', this.value);
+    calcKelly();
+  });
+  calcKelly();
+
+  // Render why section
+  renderWhales();
+
+  // Load sharpness
+  fetch('/api/agent/sharpness').then(function(r) { return r.ok ? r.json() : null; }).then(function(sh) {
+    if (!sh || sh.last_10_return === null) return;
+    var bar = document.getElementById('sharpnessBar');
+    var c = sh.last_10_return >= 0 ? 'var(--green)' : 'var(--red)';
+    bar.innerHTML = '<span style="color:' + c + '">If you\'d followed our last 10 signals: ' + sh.label + '</span>';
+    bar.style.display = '';
+  }).catch(function() {});
+}
+
+function calcKelly() {
+  var d = _decision;
+  if (!d) return;
+  var bankroll = parseFloat(document.getElementById('bankrollInput').value) || 0;
+  if (bankroll <= 0) { document.getElementById('kellyResult').textContent = 'Enter your bankroll above'; return; }
+
+  var whalePct = (d.edge_pct || 0) + Math.round((d.odds_at_signal || 0.5) * 100);
+  var marketPct = Math.round((d.odds_at_signal || 0.5) * 100);
+  var p = whalePct / 100;
+  var mP = marketPct / 100;
+  var b = mP > 0 ? (1 / mP) - 1 : 1;
+  var q = 1 - p;
+  var rawKelly = b > 0 ? (b * p - q) / b : 0;
+  if (rawKelly <= 0) { document.getElementById('kellyResult').textContent = 'No positive edge detected'; return; }
+
+  var adjKelly = rawKelly * _kellyFrac;
+  var betSize = Math.min(Math.round(bankroll * adjKelly * 100) / 100, bankroll);
+  var pctOfBankroll = ((betSize / bankroll) * 100).toFixed(1);
+  var fracLabel = _kellyFrac === 1 ? 'Full Kelly' : _kellyFrac === 0.5 ? 'Half Kelly' : 'Quarter Kelly';
+
+  document.getElementById('kellyResult').innerHTML =
+    'Bet <strong>$' + betSize.toFixed(0) + '</strong> (' + pctOfBankroll + '% of bankroll) at ' + fracLabel;
+}
+
+function setFrac(frac, btn) {
+  _kellyFrac = frac;
+  document.querySelectorAll('.kf-btn').forEach(function(b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+  calcKelly();
+}
+
+function toggleWhy() {
+  var el = document.getElementById('whyContent');
+  el.classList.toggle('open');
+}
+
+function renderWhales() {
+  var el = document.getElementById('whyContent');
+  if (!_whales.length) {
+    el.innerHTML = '<p style="font-family:var(--mono);font-size:12px;color:var(--dim)">Whale position data not available for this signal.</p>';
+    return;
+  }
+  el.innerHTML = _whales.map(function(w) {
+    var name = w.trader || 'Unknown';
+    if (/^0x/.test(name)) name = name.slice(0, 6) + '...';
+    var alpha = _alphaScores[w.proxyWallet || ''];
+    var alphaHtml = '';
+    if (alpha) {
+      var colors = { 'A+': '#00e676', 'A': '#4caf50', 'B': '#c9920d', 'C': '#ff9800', 'D': '#f44336' };
+      var c = colors[alpha.grade] || '#888';
+      alphaHtml = ' <span style="font-size:10px;padding:1px 5px;border-radius:3px;background:' + c + '22;color:' + c + ';border:1px solid ' + c + '44">' + alpha.grade + ' ' + alpha.score + '</span>';
+    }
+    var sizeStr = (w.size || 0) >= 1000 ? '$' + ((w.size || 0) / 1000).toFixed(0) + 'K' : '$' + (w.size || 0);
+    return '<div class="whale-row">' +
+      '<span>' + escH(name) + alphaHtml + (w.rank ? ' <span style="color:var(--dim);font-size:10px">#' + w.rank + '</span>' : '') + '</span>' +
+      '<span style="color:var(--gold)">' + sizeStr + ' ' + (w.side || '') + '</span>' +
+    '</div>';
+  }).join('');
+}
+
+async function skipSignal() {
+  var id = getSignalId();
+  var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+  if (!token) return;
+  try {
+    var res = await fetch('/api/agent/decisions/' + id + '/skip', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    if (res.ok) {
+      var btn = document.getElementById('skipBtn');
+      btn.textContent = 'Skipped';
+      btn.disabled = true;
+      btn.style.opacity = '0.5';
+    }
+  } catch (e) { console.error(e); }
+}
+
+loadSignal();
+</script>
+</body>
+</html>
