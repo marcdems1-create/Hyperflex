@@ -39,6 +39,15 @@ function getSharp() {
 
 const app = express();
 
+// Deterministic whale nickname from wallet address
+function getWhaleNickname(address) {
+  const adj = ['Silent','Phantom','Iron','Golden','Shadow','Crystal','Storm','Neon','Cosmic','Jade','Scarlet','Azure','Onyx','Silver','Crimson'];
+  const noun = ['Hawk','Wolf','Jaguar','Falcon','Viper','Phoenix','Titan','Oracle','Cipher','Ghost','Specter','Baron','Knight','Sage','Nomad'];
+  let h = 0;
+  for (let i = 0; i < address.length; i++) h = (h * 31 + address.charCodeAt(i)) >>> 0;
+  return adj[h % adj.length] + ' ' + noun[(h >> 4) % noun.length];
+}
+
 const JWT_SECRET = process.env.JWT_SECRET || 'hyperflex-dev-secret-change-in-prod';
 
 // ── Telegram Bot (optional — no-op if TELEGRAM_BOT_TOKEN not set) ──
@@ -9618,7 +9627,7 @@ async function fetchPolymarketLeaderboard(period) {
     ));
     return {
       rank: i + 1,
-      display_name: t.userName || t.username || t.name || ('Trader ' + (i + 1)),
+      display_name: (() => { const n = t.userName || t.username || t.name || ''; return (!n || /^0x[0-9a-fA-F]{6,}/.test(n)) ? getWhaleNickname(t.proxyWallet || t.proxy_wallet || t.address || n || `trader_${i+1}`) : n; })(),
       total_pnl: Math.round(pnl),
       volume: Math.round(vol),
       wallet: t.proxyWallet || t.proxy_wallet || t.address || '',
@@ -15708,7 +15717,7 @@ async function fetchWhalePositions() {
 
   const traders = (leaderboard || []).slice(0, 50).map((t, i) => ({
     rank: i + 1,
-    userName: t.userName || t.username || `trader_${i + 1}`,
+    userName: (() => { const n = t.userName || t.username || ''; return (!n || /^0x[0-9a-fA-F]{6,}/.test(n)) ? getWhaleNickname(t.proxyWallet || t.proxy_wallet || n || `trader_${i + 1}`) : n; })(),
     proxyWallet: t.proxyWallet || t.proxy_wallet || '',
     pnl: parseFloat(t.pnl || t.profit || 0),
     vol: parseFloat(t.vol || t.volume || 0)
@@ -16084,6 +16093,11 @@ app.get('/api/whale-index', async (req, res) => {
       if (whaleCount >= 10) strength = 'STRONG';
       else if (whaleCount >= 5) strength = 'MODERATE';
 
+      // For consensus chart: map consensus side capital vs opposition
+      // Works for both YES/NO markets and sports markets with team names
+      const consensusCapital = Math.round(maxCap);
+      const oppositionCapital = Math.round(totalCapital - maxCap);
+
       picks.push({
         market,
         whale_count: whaleCount,
@@ -16093,9 +16107,9 @@ app.get('/api/whale-index', async (req, res) => {
         current_price: avgPrice,
         url: data.url,
         strength,
-        // For consensus chart
-        yes_capital: Math.round(sideCap['YES'] || 0),
-        no_capital: Math.round(sideCap['NO'] || 0)
+        // For consensus chart — consensus side mapped to YES, opposition to NO
+        yes_capital: consensusCapital,
+        no_capital: oppositionCapital
       });
     }
 
@@ -17303,7 +17317,7 @@ app.get('/api/hyperliquid/whales', async (req, res) => {
       if (Array.isArray(r)) {
         return {
           address: r[1] || '',
-          display_name: r[2] || r[1] || 'Unknown',
+          display_name: (() => { const n = r[2] || ''; return (!n || /^0x[0-9a-fA-F]{6,}/.test(n)) ? getWhaleNickname(r[1] || `trader`) : n; })(),
           account_value: parseFloat(r[3]) || 0,
           pnl_day: parseFloat(r[4]) || 0,
           pnl_week: parseFloat(r[5]) || 0,
@@ -17315,7 +17329,7 @@ app.get('/api/hyperliquid/whales', async (req, res) => {
       }
       return {
         address: r.ethAddress || r.address || r.user || '',
-        display_name: r.displayName || r.accountName || r.ethAddress || r.address || 'Unknown',
+        display_name: (() => { const n = r.displayName || r.accountName || ''; return (!n || /^0x[0-9a-fA-F]{6,}/.test(n)) ? getWhaleNickname(r.ethAddress || r.address || r.user || 'unknown') : n; })(),
         account_value: parseFloat(r.accountValue || r.equity || 0),
         pnl_day: parseFloat(r.pnl?.day || r.dailyPnl || 0),
         pnl_week: parseFloat(r.pnl?.week || r.weeklyPnl || 0),

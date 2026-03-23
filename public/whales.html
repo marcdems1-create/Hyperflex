@@ -587,6 +587,17 @@ async function handleCopyTradeCta() {
   closeCopyTrade();
 }
 
+function getWhaleNickname(addr) {
+  var adj=['Silent','Phantom','Iron','Golden','Shadow','Crystal','Storm','Neon','Cosmic','Jade','Scarlet','Azure','Onyx','Silver','Crimson'];
+  var noun=['Hawk','Wolf','Jaguar','Falcon','Viper','Phoenix','Titan','Oracle','Cipher','Ghost','Specter','Baron','Knight','Sage','Nomad'];
+  var h=0;for(var i=0;i<addr.length;i++)h=(h*31+addr.charCodeAt(i))>>>0;
+  return adj[h%adj.length]+' '+noun[(h>>4)%noun.length];
+}
+function whaleName(name, wallet) {
+  if (!name || /^0x[0-9a-fA-F]{6,}/.test(name)) return getWhaleNickname(wallet || name || 'unknown');
+  return name;
+}
+
 function fmt$(n) {
   if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
   if (n >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
@@ -740,7 +751,7 @@ function renderTable() {
     const profileUrl = '/p/' + (p.proxyWallet || '');
     return '<tr class="' + hl + '">' +
       '<td>' + rankBadge(p.trader_rank) + '</td>' +
-      '<td><div class="trader-name" style="cursor:pointer;border-bottom:1px dashed rgba(201,146,13,0.3)" onclick="event.stopPropagation();openWhaleProfile(\'' + escAttr(p.proxyWallet || p.trader || '') + '\')">' + (p.trader || 'Unknown') + consistencyDot(p.trader, p.proxyWallet) + '</div><div class="trader-pnl">PnL: ' + fmtPnl(p.trader_pnl) + '</div></td>' +
+      '<td><div class="trader-name" style="cursor:pointer;border-bottom:1px dashed rgba(201,146,13,0.3)" onclick="event.stopPropagation();openWhaleProfile(\'' + escAttr(p.proxyWallet || p.trader || '') + '\')">' + whaleName(p.trader, p.proxyWallet) + consistencyDot(p.trader, p.proxyWallet) + '</div><div class="trader-pnl">PnL: ' + fmtPnl(p.trader_pnl) + '</div></td>' +
       '<td style="max-width:280px"><span style="cursor:pointer;border-bottom:1px dashed rgba(201,146,13,0.3);transition:color .15s" onmouseover="this.style.color=\'var(--gold)\'" onmouseout="this.style.color=\'var(--text)\'" onclick="event.stopPropagation();openMarketDetail(\'' + escAttr(p.market || '') + '\',' + Math.round((p.current_price || 0) * 100) + ',\'' + escAttr(p.market_url || '') + '\',\'\')">' + truncate(p.market, 60) + '</span></td>' +
       '<td>' + sideBadge(p.side) + '</td>' +
       '<td class="size-cell">' + fmtFull$(p.size) + '</td>' +
@@ -767,7 +778,7 @@ function renderMobileCards() {
     const pricePct = Math.round(p.current_price * 100);
     return '<div class="whale-card ' + hl + '">' +
       '<div class="whale-card-header">' +
-        '<div class="whale-card-trader">' + rankBadge(p.trader_rank) + ' <span class="trader-name" style="cursor:pointer;border-bottom:1px dashed rgba(201,146,13,0.3)" onclick="event.stopPropagation();openWhaleProfile(\'' + escAttr(p.proxyWallet || p.trader || '') + '\')">' + (p.trader || 'Unknown') + consistencyDot(p.trader, p.proxyWallet) + '</span></div>' +
+        '<div class="whale-card-trader">' + rankBadge(p.trader_rank) + ' <span class="trader-name" style="cursor:pointer;border-bottom:1px dashed rgba(201,146,13,0.3)" onclick="event.stopPropagation();openWhaleProfile(\'' + escAttr(p.proxyWallet || p.trader || '') + '\')">' + whaleName(p.trader, p.proxyWallet) + consistencyDot(p.trader, p.proxyWallet) + '</span></div>' +
         '<div class="whale-card-size">' + fmt$(p.size) + '</div>' +
       '</div>' +
       '<div class="whale-card-market" style="cursor:pointer" onclick="openMarketDetail(\'' + escAttr(p.market || '') + '\',' + Math.round((p.current_price || 0) * 100) + ',\'' + escAttr(p.market_url || '') + '\',\'\')">' + truncate(p.market, 80) + '</div>' +

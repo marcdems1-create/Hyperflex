@@ -403,8 +403,8 @@ function renderConsensusChart() {
     return '<div class="consensus-row">' +
       '<div class="consensus-label" title="' + p.market.replace(/"/g, '&quot;') + '">' + truncate(p.market, 35) + '</div>' +
       '<div class="consensus-bar-wrap">' +
-        '<div class="consensus-bar-yes" style="width:' + yesPct.toFixed(1) + '%"><span>' + (yesPct > 15 ? 'YES ' + fmtCap(p.yes_capital) : '') + '</span></div>' +
-        '<div class="consensus-bar-no" style="width:' + noPct.toFixed(1) + '%"><span>' + (noPct > 15 ? 'NO ' + fmtCap(p.no_capital) : '') + '</span></div>' +
+        '<div class="consensus-bar-yes" style="width:' + yesPct.toFixed(1) + '%"><span>' + (yesPct > 15 ? (p.consensus_side || 'YES') + ' ' + fmtCap(p.yes_capital) : '') + '</span></div>' +
+        '<div class="consensus-bar-no" style="width:' + noPct.toFixed(1) + '%"><span>' + (noPct > 15 ? fmtCap(p.no_capital) : '') + '</span></div>' +
       '</div>' +
       '<div class="consensus-whales">&#x1F40B; ' + p.whale_count + '</div>' +
     '</div>';
