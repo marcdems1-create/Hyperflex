@@ -16037,7 +16037,13 @@ async function fetchWhalePositions() {
           if (!posRes.ok) return [];
           const positions = await posRes.json();
           return (positions || [])
-            .filter(p => parseFloat(p.size || 0) > 1000)
+            .filter(p => {
+              if (parseFloat(p.size || 0) <= 1000) return false;
+              // Filter expired/resolved markets
+              const endDate = p.endDate || p.end_date_iso || p.expirationDate;
+              if (endDate && new Date(endDate) < new Date()) return false;
+              return true;
+            })
             .map(p => ({
               trader: trader.userName,
               trader_pnl: trader.pnl,
@@ -16050,6 +16056,7 @@ async function fetchWhalePositions() {
               current_price: parseFloat(p.curPrice || p.cur_price || 0),
               market_url: p.eventSlug ? `https://polymarket.com/event/${p.eventSlug}` : (p.slug ? `https://polymarket.com/event/${p.slug}` : 'https://polymarket.com'),
               pnl: parseFloat(p.pnl || 0),
+              end_date: p.endDate || p.end_date_iso || null,
               fetched_at: new Date().toISOString()
             }));
         } catch (err) {
@@ -16539,11 +16546,15 @@ app.get('/api/screener', async (req, res) => {
       }
     } catch (e) { /* silent */ }
 
-    // Build enriched market list
+    // Build enriched market list (filter expired markets)
+    const now = new Date();
     const markets = [];
     for (const m of (rawMarkets || [])) {
       const question = m.question || m.title || '';
       if (!question) continue;
+      // Skip expired/resolved markets
+      const mEndDate = m.endDate || m.end_date_iso;
+      if (mEndDate && new Date(mEndDate) < now) continue;
 
       let yesPrice = null;
       try {
