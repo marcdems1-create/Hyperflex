@@ -6,7 +6,11 @@
 <title>HYPERFLEX — Sign Up</title>
 </head>
 <body>
-<script>window.location.href = '/creator/login#signup';</script>
+<script>
+// Preserve OAuth params when redirecting to login page
+var params = window.location.search;
+window.location.href = '/creator/login' + params + (params ? '&' : '?') + '_mode=signup#signup';
+</script>
 <noscript><meta http-equiv="refresh" content="0;url=/creator/login#signup"/></noscript>
 <p>Redirecting to <a href="/creator/login#signup">sign up</a>...</p>
 </body>

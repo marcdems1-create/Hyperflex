@@ -555,8 +555,44 @@ let mode = 'login'; // 'login' or 'signup'
   const err = params.get('error');
   if (err) showError(decodeURIComponent(err).replace(/_/g, ' '));
 
+  // Handle OAuth callback — user authenticated via Google/X, needs account setup
+  const oauthToken = params.get('oauth_token');
+  if (oauthToken) {
+    const oauthEmail = params.get('email') || '';
+    const oauthName = params.get('display_name') || '';
+    // Pre-fill signup fields
+    toggleMode('signup');
+    var nameEl = document.getElementById('displayName');
+    var emailEl = document.getElementById('email');
+    if (nameEl && oauthName) nameEl.value = decodeURIComponent(oauthName);
+    if (emailEl && oauthEmail) emailEl.value = decodeURIComponent(oauthEmail);
+    // Auto-complete: create creator_settings for this OAuth user
+    (async function() {
+      try {
+        var slug = (oauthName || 'creator').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').substring(0, 30) || 'creator-' + Date.now().toString(36);
+        var r = await fetch('/api/creator/oauth-complete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + decodeURIComponent(oauthToken) },
+          body: JSON.stringify({ slug: slug, display_name: decodeURIComponent(oauthName) || 'Creator' })
+        });
+        var data = await r.json();
+        if (data.token) {
+          localStorage.setItem('hf_token', data.token);
+          localStorage.setItem('hf_creator_token', data.token);
+          if (data.user) localStorage.setItem('hf_user', JSON.stringify(data.user));
+          document.getElementById('successBanner').classList.add('show');
+          document.getElementById('successText').textContent = 'Account created via OAuth — redirecting...';
+          setTimeout(function() { window.location.replace('/creator/dashboard'); }, 1000);
+          return;
+        }
+        if (data.error) showError(data.error);
+      } catch(e) { showError('OAuth setup failed: ' + e.message); }
+    })();
+    return;
+  }
+
   // Auto-toggle to signup if #signup in URL
-  if (location.hash === '#signup') {
+  if (location.hash.includes('signup') || params.get('_mode') === 'signup') {
     toggleMode('signup');
   }
 })();
