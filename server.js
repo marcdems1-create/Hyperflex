@@ -4452,30 +4452,22 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     const { email } = req.body || {};
     if (!email) return res.status(400).json({ error: 'Email required' });
     const token = require('crypto').randomBytes(32).toString('hex');
-    const expires = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour
+    const expires = new Date(Date.now() + 60 * 60 * 1000).toISOString();
 
-    // Check creator_settings
-    let found = false;
-    if (pool) {
-      const rows = await dbQuery('SELECT id, display_name FROM creator_settings WHERE LOWER(email) = $1 LIMIT 1', [email.toLowerCase().trim()]);
-      if (rows[0]) {
-        await dbQuery('UPDATE creator_settings SET password_reset_token = $1, password_reset_expires = $2 WHERE id = $3', [token, expires, rows[0].id]);
-        _sendResetEmail(email, rows[0].display_name || 'there', token);
-        found = true;
-      }
-    } else {
-      const { data: creator } = await supabase.from('creator_settings').select('id, display_name').eq('email', email.toLowerCase().trim()).maybeSingle();
-      if (creator) {
-        await supabase.from('creator_settings').update({ password_reset_token: token, password_reset_expires: expires }).eq('id', creator.id);
-        _sendResetEmail(email, creator.display_name || 'there', token);
-        found = true;
-      }
+    // Ensure columns exist (safe to call repeatedly)
+    await dbQuery('ALTER TABLE creator_settings ADD COLUMN IF NOT EXISTS password_reset_token TEXT').catch(() => {});
+    await dbQuery('ALTER TABLE creator_settings ADD COLUMN IF NOT EXISTS password_reset_expires TIMESTAMPTZ').catch(() => {});
+
+    const rows = await dbQuery('SELECT id, display_name, email FROM creator_settings WHERE LOWER(email) = $1 LIMIT 1', [email.toLowerCase().trim()]);
+    if (rows[0]) {
+      await dbQuery('UPDATE creator_settings SET password_reset_token = $1, password_reset_expires = $2 WHERE id = $3', [token, expires, rows[0].id]);
+      _sendResetEmail(email, rows[0].display_name || 'there', token);
     }
 
     // Always return ok — don't reveal whether email exists
     res.json({ ok: true });
   } catch (err) {
-    console.error('[forgot-password]', err.message);
+    console.error('[forgot-password]', err.message, err.stack);
     res.status(500).json({ error: 'Something went wrong' });
   }
 });
@@ -4489,18 +4481,10 @@ app.post('/api/auth/reset-password', async (req, res) => {
     const now = new Date().toISOString();
     const password_hash = await bcrypt.hash(password, 10);
 
-    if (pool) {
-      const rows = await dbQuery('SELECT id FROM creator_settings WHERE password_reset_token = $1 AND password_reset_expires > $2 LIMIT 1', [token, now]);
-      if (rows[0]) {
-        await dbQuery('UPDATE creator_settings SET password_hash = $1, password_reset_token = NULL, password_reset_expires = NULL WHERE id = $2', [password_hash, rows[0].id]);
-        return res.json({ ok: true });
-      }
-    } else {
-      const { data: creator } = await supabase.from('creator_settings').select('id').eq('password_reset_token', token).gt('password_reset_expires', now).maybeSingle();
-      if (creator) {
-        await supabase.from('creator_settings').update({ password_hash, password_reset_token: null, password_reset_expires: null }).eq('id', creator.id);
-        return res.json({ ok: true });
-      }
+    const rows = await dbQuery('SELECT id FROM creator_settings WHERE password_reset_token = $1 AND password_reset_expires > $2 LIMIT 1', [token, now]);
+    if (rows[0]) {
+      await dbQuery('UPDATE creator_settings SET password_hash = $1, password_reset_token = NULL, password_reset_expires = NULL WHERE id = $2', [password_hash, rows[0].id]);
+      return res.json({ ok: true });
     }
 
     res.status(400).json({ error: 'Reset link is invalid or has expired' });
