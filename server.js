@@ -16256,16 +16256,9 @@ app.get('/api/screener', async (req, res) => {
         daysUntilExpiry = Math.max(0, Math.round((endDate - Date.now()) / (1000 * 60 * 60 * 24)));
       }
 
-      // Build Polymarket URL — prefer direct url from API, fall back to /event/{slug}
-      let marketUrl = 'https://polymarket.com';
-      if (m.url && m.url.startsWith('https://polymarket.com')) {
-        marketUrl = m.url;
-      } else {
-        const eventSlug = m.eventSlug || slug;
-        if (eventSlug) {
-          marketUrl = `https://polymarket.com/event/${eventSlug}`;
-        }
-      }
+      // Build Polymarket URL — Gamma API only returns slug, /event/{slug} works for all markets
+      const eventSlug = m.eventSlug || slug;
+      const marketUrl = eventSlug ? `https://polymarket.com/event/${eventSlug}` : 'https://polymarket.com';
 
       markets.push({
         market_id: marketId,
