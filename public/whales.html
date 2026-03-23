@@ -339,27 +339,8 @@ td { padding: 12px; font-size: 13px; vertical-align: middle; }
 <body>
 
 <!-- NAV -->
-<nav class="topbar">
-  <a href="/" class="topbar-logo">HYPER<span>FLEX</span></a>
-  <div class="nav-links">
-    <a href="/predictors" class="nav-link">Predictors</a>
-    <a href="/explore" class="nav-link">Explore</a>
-    <a href="/odds" class="nav-link">Odds</a>
-    <a href="/crystal-ball" class="nav-link" style="color:#c9920d">&#x1F52E; Crystal Ball</a>
-    <a href="/whales" class="nav-link active">Whales</a>
-    <a href="/whale-index" class="nav-link">Whale Index</a>
-    <a href="/screener" class="nav-link">Screener</a>
-    <a href="/data" class="nav-link">Data</a>
-    <a href="/templates" class="nav-link">Templates</a>
-    <a href="/api-docs" class="nav-link">API</a>
-    <a id="navDashLink" href="/dashboard" class="nav-link" style="display:none;color:#c9920d">Dashboard</a>
-  </div>
-</nav>
-<script>
-if (localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token')) {
-  const dl = document.getElementById('navDashLink'); if (dl) dl.style.display = '';
-}
-</script>
+<div id="nav-root"></div>
+<script src="/nav.js"></script>
 
 <!-- PLATFORM TOGGLE -->
 <div style="display:flex;justify-content:center;padding:24px 24px 0">

@@ -302,21 +302,8 @@ a:hover { text-decoration: underline; }
 <body>
 
 <!-- NAV -->
-<nav class="topbar">
-  <a href="/" class="topbar-logo">HYPER<span>FLEX</span></a>
-  <div class="nav-links">
-    <a href="/signals" class="nav-link">Signals</a>
-    <a href="/whales" class="nav-link">Whales</a>
-    <a href="/crystal-ball" class="nav-link active">Crystal Ball</a>
-    <a href="/accuracy" class="nav-link">&#x1F3AF; Accuracy</a>
-    <a href="/screener" class="nav-link">Screener</a>
-    <a href="/predictors" class="nav-link">Predictors</a>
-    <a href="/odds" class="nav-link">Odds</a>
-    <a href="/data" class="nav-link">Data</a>
-    <a href="/api-docs" class="nav-link">API</a>
-    <a id="navDashLink" href="/dashboard" class="nav-link" style="display:none;color:#c9920d">Dashboard</a>
-  </div>
-</nav>
+<div id="nav-root"></div>
+<script src="/nav.js"></script>
 
 <!-- HERO -->
 <section class="hero">
@@ -691,12 +678,6 @@ async function loadExpiring() {
 setInterval(loadPredictions, 2 * 60 * 1000);
 // Update timestamp every 10 seconds
 setInterval(updateTimestamp, 10 * 1000);
-
-// Dashboard link check
-try {
-  const token = localStorage.getItem('hf_token');
-  if (token) document.getElementById('navDashLink').style.display = '';
-} catch(e) {}
 
 // Initial load
 loadPredictions();

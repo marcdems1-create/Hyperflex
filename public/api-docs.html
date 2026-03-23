@@ -99,21 +99,8 @@ body { background: var(--paper); color: var(--text); font-family: var(--sans); l
 </head>
 <body>
 
-<nav class="nav">
-  <a href="/" class="nav-logo">HYPERFLEX</a>
-  <div class="nav-links">
-    <a href="/predictors" class="nav-link">Predictors</a>
-    <a href="/explore" class="nav-link">Explore</a>
-    <a href="/odds" class="nav-link">Odds</a>
-    <a href="/crystal-ball" class="nav-link" style="color:#c9920d">&#x1F52E; Crystal Ball</a>
-    <a href="/whales" class="nav-link">Whales</a>
-    <a href="/data" class="nav-link">Data</a>
-    <a href="/templates" class="nav-link">Templates</a>
-    <a href="/api-docs" class="nav-link active">API</a>
-    <a id="navDashLink" href="/creator/dashboard" class="nav-link" style="display:none;color:#c9920d">Dashboard</a>
-  </div>
-</nav>
-<script>if(localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token')){var dl=document.getElementById('navDashLink');if(dl)dl.style.display='';}</script>
+<div id="nav-root"></div>
+<script src="/nav.js"></script>
 
 <section class="hero">
   <h1>Public <span>API</span></h1>

@@ -218,20 +218,8 @@ a:hover { text-decoration: underline; }
 </head>
 <body>
 
-<nav class="topbar">
-  <a href="/" class="topbar-logo">HYPER<span>FLEX</span></a>
-  <div class="nav-links">
-    <a href="/predictors" class="nav-link">Predictors</a>
-    <a href="/explore" class="nav-link">Explore</a>
-    <a href="/whales" class="nav-link">Whales</a>
-    <a href="/whale-index" class="nav-link">Whale Index</a>
-    <a href="/crystal-ball" class="nav-link">Crystal Ball</a>
-    <a href="/signals" class="nav-link">Signals</a>
-    <a href="/accuracy" class="nav-link active" style="color:#c9920d">Accuracy</a>
-    <a id="navDashLink" href="/creator/dashboard" class="nav-link" style="display:none;color:#c9920d">Dashboard</a>
-  </div>
-</nav>
-<script>if(localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token')){var dl=document.getElementById('navDashLink');if(dl)dl.style.display='';}</script>
+<div id="nav-root"></div>
+<script src="/nav.js"></script>
 
 <header class="hero">
   <h1>Prediction <span>Accuracy</span></h1>

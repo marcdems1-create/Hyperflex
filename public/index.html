@@ -763,30 +763,8 @@ footer {
 <body>
 
 <!-- NAV -->
-<nav class="nav">
-  <a href="/" class="nav-logo">
-    <svg class="nav-hex" viewBox="0 0 32 32" fill="none">
-      <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="#c9920d" stroke-width="1.5" fill="rgba(201,146,13,0.1)"/>
-      <path d="M16 8L22 11.5V18.5L16 22L10 18.5V11.5L16 8Z" fill="#c9920d" opacity="0.6"/>
-    </svg>
-    <span class="nav-name">HYPERFLEX</span>
-  </a>
-  <div class="nav-links">
-    <a href="/crystal-ball" class="nav-link" style="color:#c9920d">&#x1F52E; Crystal Ball</a>
-    <a href="/signals" class="nav-link">Signals</a>
-    <a href="/accuracy" class="nav-link">&#x1F3AF; Accuracy</a>
-    <a href="/whales" class="nav-link">Whales</a>
-    <a href="/screener" class="nav-link">Screener</a>
-    <a href="/predictors" class="nav-link">Predictors</a>
-    <a href="/odds" class="nav-link">Odds</a>
-    <a href="/data" class="nav-link">Data</a>
-  </div>
-  <div class="nav-actions">
-    <a id="navDashLink" href="/dashboard" class="btn-nav-login" style="display:none;color:#c9920d">Dashboard</a>
-    <a href="/creator/login" class="btn-nav-login" id="navLoginLink">Sign in</a>
-    <a href="/creator/login#signup" class="btn-nav-cta" id="navSignupLink">Get started free</a>
-  </div>
-</nav>
+<div id="nav-root"></div>
+<script src="/nav.js"></script>
 
 <!-- HERO -->
 <section class="hero">
@@ -1414,13 +1392,6 @@ function logTradeIntent() {
 </footer>
 
 <script>
-// ── Nav auth state ──
-if (localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token')) {
-  const dl = document.getElementById('navDashLink'); if (dl) dl.style.display = '';
-  const ll = document.getElementById('navLoginLink'); if (ll) ll.style.display = 'none';
-  const sl = document.getElementById('navSignupLink'); if (sl) sl.style.display = 'none';
-}
-
 // ── Fear & Greed ──
 // ── Live stats ticker — fetch from API ──
 (async function loadTickerStats() {
