@@ -399,8 +399,9 @@ function renderTable() {
     const yesClass = m.yes_price >= 0.7 ? 'high' : m.yes_price <= 0.3 ? 'low' : 'mid';
     const whaleClass = m.whale_count >= 5 ? ' hot' : '';
     const whaleIcon = m.whale_count >= 5 ? ' <span class="icon">&#x1F40B;</span>' : '';
-    const changeStr = m.price_change_24h != null ? (m.price_change_24h >= 0 ? '+' : '') + m.price_change_24h.toFixed(1) + '%' : '--';
-    const changeClass = m.price_change_24h > 0 ? 'up' : m.price_change_24h < 0 ? 'down' : 'flat';
+    const oddsChg = m.odds_change_24h != null ? m.odds_change_24h : (m.price_change_24h != null ? Math.round(m.price_change_24h * (m.yes_price || 0.5)) : null);
+    const changeStr = oddsChg != null ? (oddsChg >= 0 ? '+' : '') + oddsChg + 'pts' : '--';
+    const changeClass = oddsChg > 0 ? 'up' : oddsChg < 0 ? 'down' : 'flat';
     const expiryStr = m.days_until_expiry != null ? (m.days_until_expiry === 0 ? 'Today' : m.days_until_expiry + 'd') : '--';
 
     var safeUrl = m.url && m.url.startsWith('https://polymarket.com') ? m.url : (m.slug ? 'https://polymarket.com/event/' + m.slug : 'https://polymarket.com');

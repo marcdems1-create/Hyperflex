@@ -16725,6 +16725,7 @@ app.get('/api/screener', async (req, res) => {
         whale_count: whaleInfo ? whaleInfo.count : 0,
         total_whale_capital: whaleInfo ? Math.round(whaleInfo.capital) : 0,
         price_change_24h: priceChanges[marketId] || null,
+        odds_change_24h: priceChanges[marketId] != null && yesPrice != null ? Math.round((yesPrice - yesPrice / (1 + (priceChanges[marketId] || 0) / 100)) * 100) : null,
         days_until_expiry: daysUntilExpiry,
         end_date: (m.endDate || m.end_date_iso) ? new Date(m.endDate || m.end_date_iso).toISOString() : null,
         url: marketUrl,
@@ -16913,7 +16914,7 @@ app.get('/api/market-movers', async (req, res) => {
           if (match && match.url) url = match.url;
           else if (match && match.slug) url = 'https://polymarket.com/event/' + match.slug;
         }
-        return { market_id, question: d.question || 'Unknown', current_price: Math.round(lastPrice * 100), change_pct, abs_change: Math.abs(change_pct), url };
+        return { market_id, question: d.question || 'Unknown', current_price: Math.round(lastPrice * 100), start_price: Math.round(firstPrice * 100), change_pct, abs_change: Math.abs(change_pct), odds_change_pts: Math.round((lastPrice - firstPrice) * 100), url };
       })
       .filter(m => m.abs_change > 0)
       .sort((a, b) => b.abs_change - a.abs_change)
@@ -17051,24 +17052,27 @@ function generateContentStream() {
   // ── d) market_mover — biggest price change ──
   if (moversData && moversData.movers && moversData.movers.length > 0) {
     const topMover = moversData.movers[0];
-    const changePts = Math.abs(topMover.change_pct).toFixed(0);
-    const direction = topMover.change_pct > 0 ? 'surged' : 'dropped';
-    const sign = topMover.change_pct > 0 ? '+' : '-';
+    const oddsChangePts = topMover.odds_change_pts || Math.round((topMover.change_pct || 0) * (topMover.start_price || 50) / 100);
+    const absOddsPts = Math.abs(oddsChangePts);
+    const direction = oddsChangePts > 0 ? 'surged' : 'dropped';
+    const sign = oddsChangePts > 0 ? '+' : '-';
+    const startC = topMover.start_price || 0;
+    const endC = topMover.current_price || 0;
     const shortQ = (topMover.question || '').length > 50 ? topMover.question.substring(0, 47) + '...' : topMover.question;
     // Count whales in this market
     const whalesInMarket = mktMap[topMover.question] ? mktMap[topMover.question].whale_count : 0;
     const whaleNote = whalesInMarket > 0 ? `${whalesInMarket} whale${whalesInMarket > 1 ? 's' : ''} active in this market` : 'Major price movement detected';
     insights.push({
       type: 'market_mover',
-      headline: `${shortQ} ${direction} ${sign}${changePts}%`,
+      headline: `${shortQ} odds ${direction} ${startC}\u00A2 \u2192 ${endC}\u00A2`,
       body: whaleNote,
-      stat: `${sign}${changePts}pts`,
+      stat: `${sign}${absOddsPts}pts`,
       icon: '\uD83D\uDE80',
       timestamp: now,
       cta_label: 'See Odds \u2192',
       cta_url: '/odds',
-      share_text: `\uD83D\uDE80 ${shortQ} just ${direction} ${sign}${changePts}% on Polymarket. Track the move \u2192 hyperflex.network/odds`,
-      _sort_score: Math.abs(topMover.change_pct) * 100
+      share_text: `\uD83D\uDE80 ${shortQ} odds just ${direction} from ${startC}\u00A2 to ${endC}\u00A2 on Polymarket. Track the move \u2192 hyperflex.network/odds`,
+      _sort_score: absOddsPts * 100
     });
   }
 
@@ -18226,12 +18230,15 @@ async function generateCrystalBallPredictions() {
       const volumeIncreasing = absChange > 15; // proxy: larger moves imply volume
       const rawConf = absChange * 3 + (volumeIncreasing ? 20 : 0);
       const confidence = Math.max(1, Math.min(95, rawConf >= 100 ? 72 + Math.min(15, Math.abs(absChange)) : rawConf));
+      const startCents = m.start_price || 0;
+      const endCents = m.current_price || 0;
+      const oddsChangeStr = `YES odds: ${startCents}\u00A2 \u2192 ${endCents}\u00A2 in 24h`;
       predictions.push({
         type: 'MOMENTUM_BREAKOUT',
         prediction: `${(m.question || '').substring(0, 100)} momentum suggests continuation to ${target}%`,
         confidence: Math.round(confidence),
         reasoning: [
-          `Price moved ${m.change_pct > 0 ? '+' : ''}${m.change_pct}% in last 24 hours`,
+          oddsChangeStr,
           `Volume trending ${volumeIncreasing ? 'up' : 'stable'}`,
           `Similar moves historically continued ~65% of the time`
         ],
@@ -18932,7 +18939,7 @@ app.get('/api/signals', async (req, res) => {
               type: 'momentum',
               badge: 'Momentum',
               market: m.question || 'Unknown',
-              action: `BUY ${direction} — moved ${m.change_pct > 0 ? '+' : ''}${m.change_pct.toFixed(1)}%`,
+              action: `BUY ${direction} — odds: ${m.start_price || '?'}\u00A2 \u2192 ${m.current_price || '?'}\u00A2`,
               side: direction,
               price: (m.current_price || 50) / 100,
               confidence: absChange >= 25 ? 'HIGH' : absChange >= 15 ? 'MEDIUM' : 'LOW',
@@ -20398,11 +20405,12 @@ async function sendDailyBriefingEmail() {
 
       // Market movers HTML
       const moversHtml = (briefing.market_movers || []).slice(0, 3).map(m => {
-        const changeColor = (m.change_pct || 0) > 0 ? '#22c55e' : '#ef4444';
-        const changeSign = (m.change_pct || 0) > 0 ? '+' : '';
+        const oddsPts = m.odds_change_pts || Math.round((m.change_pct || 0) * (m.start_price || 50) / 100);
+        const changeColor = oddsPts > 0 ? '#22c55e' : '#ef4444';
+        const changeSign = oddsPts > 0 ? '+' : '';
         return `<tr>
           <td style="padding:10px 12px;border-bottom:1px solid #2a2a26;font-size:13px;color:#ddd8cc">${_escHtmlStr((m.question || '').substring(0, 50))}</td>
-          <td style="padding:10px 12px;border-bottom:1px solid #2a2a26;font-size:13px;font-weight:700;color:${changeColor}">${changeSign}${(m.change_pct || 0).toFixed(1)}%</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #2a2a26;font-size:13px;font-weight:700;color:${changeColor}">${m.start_price || '?'}\u00A2 \u2192 ${m.current_price || '?'}\u00A2</td>
           <td style="padding:10px 12px;border-bottom:1px solid #2a2a26;font-size:13px;color:#ddd8cc">${Math.round((m.current_price || 0) * 100)}%</td>
         </tr>`;
       }).join('');
