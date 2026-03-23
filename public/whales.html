@@ -375,8 +375,98 @@ if (localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token')
   <div class="hero-meta">
     <span id="updatedAt">--</span>
     <button class="refresh-btn" id="refreshBtn" onclick="refreshData()">&#x21BB; Refresh</button>
+    <span style="color:var(--border)">|</span>
+    <button id="pushAlertBtn" onclick="togglePushAlerts()" style="background:transparent;border:1px solid var(--border);color:var(--dim);font-family:var(--mono);font-size:11px;padding:6px 14px;border-radius:20px;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:6px">
+      &#x1F514; Get whale alerts
+    </button>
+    <select id="pushThreshold" onchange="updatePushThreshold()" style="background:var(--ink);border:1px solid var(--border);color:var(--dim);font-family:var(--mono);font-size:10px;padding:4px 8px;border-radius:6px;cursor:pointer">
+      <option value="10000">$10K+</option>
+      <option value="50000">$50K+</option>
+      <option value="100000">$100K+</option>
+    </select>
   </div>
 </section>
+<script>
+var _pushSub = null;
+function getPushThreshold() { return parseInt(localStorage.getItem('hfx_push_threshold') || '10000'); }
+function updatePushThreshold() {
+  var v = document.getElementById('pushThreshold').value;
+  localStorage.setItem('hfx_push_threshold', v);
+  if (_pushSub) togglePushAlerts(); // re-subscribe with new threshold
+}
+async function togglePushAlerts() {
+  var btn = document.getElementById('pushAlertBtn');
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    alert('Push notifications are not supported in this browser.');
+    return;
+  }
+  // Check if already subscribed
+  var reg = await navigator.serviceWorker.getRegistration('/sw.js');
+  if (reg) {
+    var sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      // Unsubscribe
+      await sub.unsubscribe();
+      await fetch('/api/push/subscribe', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: sub.endpoint }) }).catch(function(){});
+      _pushSub = null;
+      btn.innerHTML = '&#x1F514; Get whale alerts';
+      btn.style.borderColor = 'var(--border)';
+      btn.style.color = 'var(--dim)';
+      return;
+    }
+  }
+  // Subscribe
+  var perm = await Notification.requestPermission();
+  if (perm !== 'granted') { alert('Please allow notifications to receive whale alerts.'); return; }
+  reg = await navigator.serviceWorker.register('/sw.js');
+  await navigator.serviceWorker.ready;
+  var keyRes = await fetch('/api/push/vapid-key');
+  var keyData = await keyRes.json();
+  if (!keyData.key) { alert('Push notifications not configured on server yet.'); return; }
+  var sub = await reg.pushManager.subscribe({
+    userAgentVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(keyData.key)
+  });
+  var subJson = sub.toJSON();
+  var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+  await fetch('/api/push/subscribe', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': token ? 'Bearer ' + token : '' },
+    body: JSON.stringify({ endpoint: subJson.endpoint, keys: subJson.keys, threshold: getPushThreshold() })
+  });
+  _pushSub = sub;
+  btn.innerHTML = '&#x1F514; Alerts on &#x2713;';
+  btn.style.borderColor = 'var(--gold)';
+  btn.style.color = 'var(--gold)';
+}
+function urlBase64ToUint8Array(base64String) {
+  var padding = '='.repeat((4 - base64String.length % 4) % 4);
+  var base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  var raw = atob(base64);
+  var arr = new Uint8Array(raw.length);
+  for (var i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+// Check existing subscription on load
+(async function checkPushState() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  var t = localStorage.getItem('hfx_push_threshold');
+  if (t) document.getElementById('pushThreshold').value = t;
+  try {
+    var reg = await navigator.serviceWorker.getRegistration('/sw.js');
+    if (reg) {
+      var sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        _pushSub = sub;
+        var btn = document.getElementById('pushAlertBtn');
+        btn.innerHTML = '&#x1F514; Alerts on &#x2713;';
+        btn.style.borderColor = 'var(--gold)';
+        btn.style.color = 'var(--gold)';
+      }
+    }
+  } catch(e) {}
+})();
+</script>
 
 <!-- SUMMARY STATS -->
 <div class="stats-bar">

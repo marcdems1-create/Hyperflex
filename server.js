@@ -29,6 +29,21 @@ const crypto = require('crypto');
 const dns = require('dns').promises;
 const nodemailer = require('nodemailer');
 
+// Web Push notifications
+let webpush = null;
+try {
+  webpush = require('web-push');
+  if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+    webpush.setVapidDetails('mailto:hello@hyperflex.network', process.env.VAPID_PUBLIC_KEY, process.env.VAPID_PRIVATE_KEY);
+    console.log('[boot] Web Push configured with VAPID keys');
+  } else {
+    console.log('[boot] Web Push: VAPID keys not set — push notifications disabled');
+    webpush = null;
+  }
+} catch (e) {
+  console.log('[boot] web-push not available:', e.message);
+}
+
 // sharp is optional — loaded lazily so server starts even before npm install runs on Railway
 let _sharp = null;
 function getSharp() {
@@ -15140,6 +15155,105 @@ app.get('/api/user/api-key', requireAuth, async (req, res) => {
   }
 });
 
+// ── PUSH NOTIFICATIONS ──────────────────────────────────────────────────
+
+// GET /api/push/vapid-key — public VAPID key for client subscription
+app.get('/api/push/vapid-key', (req, res) => {
+  res.json({ key: process.env.VAPID_PUBLIC_KEY || null });
+});
+
+// POST /api/push/subscribe — save push subscription
+app.post('/api/push/subscribe', async (req, res) => {
+  try {
+    const { endpoint, keys, threshold } = req.body;
+    if (!endpoint || !keys || !keys.p256dh || !keys.auth) {
+      return res.status(400).json({ error: 'Invalid subscription: endpoint and keys required' });
+    }
+    const minSize = parseInt(threshold) || 10000;
+    // Get user_id from JWT if logged in (optional)
+    let userId = null;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ') && !authHeader.startsWith('Bearer hfx_')) {
+      try { const d = jwt.verify(authHeader.slice(7), JWT_SECRET); userId = d.id || d.sub || null; } catch {}
+    }
+    if (pool) {
+      await dbQuery(
+        `INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, min_size, created_at)
+         VALUES ($1, $2, $3, $4, $5, NOW())
+         ON CONFLICT (endpoint) DO UPDATE SET p256dh = $3, auth = $4, min_size = $5, user_id = COALESCE($1, push_subscriptions.user_id)`,
+        [userId, endpoint, keys.p256dh, keys.auth, minSize]
+      );
+    } else {
+      await supabase.from('push_subscriptions').upsert({
+        user_id: userId, endpoint, p256dh: keys.p256dh, auth: keys.auth, min_size: minSize, created_at: new Date().toISOString()
+      }, { onConflict: 'endpoint' });
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[push-subscribe]', e.message);
+    res.status(500).json({ error: 'Failed to save subscription' });
+  }
+});
+
+// DELETE /api/push/subscribe — remove push subscription
+app.delete('/api/push/subscribe', async (req, res) => {
+  try {
+    const { endpoint } = req.body;
+    if (!endpoint) return res.status(400).json({ error: 'endpoint required' });
+    if (pool) {
+      await dbQuery('DELETE FROM push_subscriptions WHERE endpoint = $1', [endpoint]);
+    } else {
+      await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint);
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[push-unsubscribe]', e.message);
+    res.status(500).json({ error: 'Failed to remove subscription' });
+  }
+});
+
+// Fire whale alerts to all matching push subscribers
+async function fireWhaleAlerts(newPositions) {
+  if (!webpush || !newPositions.length) return;
+  try {
+    let subs;
+    if (pool) {
+      subs = await dbQuery('SELECT endpoint, p256dh, auth, min_size FROM push_subscriptions');
+    } else {
+      const { data } = await supabase.from('push_subscriptions').select('endpoint, p256dh, auth, min_size');
+      subs = data || [];
+    }
+    if (!subs.length) return;
+
+    for (const pos of newPositions) {
+      const size = parseFloat(pos.size || 0);
+      const traderName = pos.trader || 'Whale';
+      const side = pos.side || 'YES';
+      const question = (pos.market || pos.position || 'Unknown').substring(0, 60);
+      const payload = JSON.stringify({
+        title: `\uD83D\uDC0B ${traderName} just went ${side}`,
+        body: `$${Math.round(size).toLocaleString()} on "${question}"`,
+        url: 'https://hyperflex.network/whales'
+      });
+
+      const matching = subs.filter(s => size >= (s.min_size || 10000));
+      for (const sub of matching) {
+        const pushSub = { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } };
+        webpush.sendNotification(pushSub, payload).catch(err => {
+          if (err.statusCode === 410 || err.statusCode === 404) {
+            // Subscription expired — clean up
+            if (pool) dbQuery('DELETE FROM push_subscriptions WHERE endpoint = $1', [sub.endpoint]).catch(() => {});
+            else supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint);
+          }
+        });
+      }
+    }
+    console.log(`[push] Sent whale alerts for ${newPositions.length} positions to ${subs.length} subscribers`);
+  } catch (e) {
+    console.warn('[push] fireWhaleAlerts error:', e.message);
+  }
+}
+
 // PUT /api/user/wallets — update connected wallet/platform info
 app.put('/api/user/wallets', requireAuth, async (req, res) => {
   try {
@@ -16007,6 +16121,12 @@ async function fetchWhalePositions() {
           }
         } catch (e) { console.warn('[whale-alert-notify]', e.message); }
       })();
+
+      // ── Web Push: fire browser push notifications for new whale positions ──
+      const _pushPositions = _whaleTradeStream.filter(e => e.ts === now && (e.action === 'opened' || e.action === 'increased') && (e.size || 0) >= 10000);
+      if (_pushPositions.length > 0) {
+        fireWhaleAlerts(_pushPositions.map(e => ({ trader: e.trader_name, side: e.side, size: e.size, market: e.question, position: e.question })));
+      }
 
       // ── Copy Bot: notify subscribers of whale trade events ──
       (async () => {
