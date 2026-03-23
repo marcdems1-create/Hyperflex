@@ -295,6 +295,7 @@ function fmtCap(n) {
 function truncate(s, max) {
   return s.length > max ? s.substring(0, max - 1) + '\u2026' : s;
 }
+function regionFlag(q){var t=(q||'').toLowerCase();if(/\bus\b|united states|america|trump|biden|vance|congress|senate|fed |federal reserve|us forces/i.test(t))return'\uD83C\uDDFA\uD83C\uDDF8';if(/\biran|iranian|tehran/i.test(t))return'\uD83C\uDDEE\uD83C\uDDF7';if(/\bisrael|israeli|idf|netanyahu|gaza|hamas|hezbollah|lebanon/i.test(t))return'\uD83C\uDDEE\uD83C\uDDF1';if(/\bruss|ukraine|kyiv|kremlin|putin|zelensky/i.test(t))return'\uD83C\uDDFA\uD83C\uDDE6';if(/\bchina|chinese|beijing|jilin|guangdong|zhejiang|liaoning|shandong/i.test(t))return'\uD83C\uDDE8\uD83C\uDDF3';if(/\bindia|modi|ipl|chennai/i.test(t))return'\uD83C\uDDEE\uD83C\uDDF3';if(/\bjapan|japanese|tokyo/i.test(t))return'\uD83C\uDDEF\uD83C\uDDF5';if(/\bkorea|korean|seoul/i.test(t))return'\uD83C\uDDF0\uD83C\uDDF7';if(/\bbrazil|brazilian/i.test(t))return'\uD83C\uDDE7\uD83C\uDDF7';if(/\bcanad|toronto|montreal/i.test(t))return'\uD83C\uDDE8\uD83C\uDDE6';if(/\baustrali|sydney|melbourne/i.test(t))return'\uD83C\uDDE6\uD83C\uDDFA';if(/\bturk|istanbul|erdogan/i.test(t))return'\uD83C\uDDF9\uD83C\uDDF7';if(/\bArgentin|messi/i.test(t))return'\uD83C\uDDE6\uD83C\uDDF7';if(/\buk\b|britain|london|premier league|england/i.test(t))return'\uD83C\uDDEC\uD83C\uDDE7';if(/\bfrance|french|paris|ligue 1/i.test(t))return'\uD83C\uDDEB\uD83C\uDDF7';if(/\bgerman|bundesliga|berlin|bayern/i.test(t))return'\uD83C\uDDE9\uD83C\uDDEA';if(/\bspain|spanish|la liga|madrid|barcelona|atletico/i.test(t))return'\uD83C\uDDEA\uD83C\uDDF8';if(/\bitaly|italian|serie a|milan|juventus|napoli/i.test(t))return'\uD83C\uDDEE\uD83C\uDDF9';if(/\bportug|benfica|porto/i.test(t))return'\uD83C\uDDF5\uD83C\uDDF9';if(/\bcroat|dubrovnik/i.test(t))return'\uD83C\uDDED\uD83C\uDDF7';if(/nba|nfl|mlb|nhl|ncaa|super bowl|march madness/i.test(t))return'\uD83C\uDDFA\uD83C\uDDF8';if(/yankees|mets|dodgers|warriors|lakers|celtics|nets|kings|bulls|thunder|nuggets|cavaliers|clippers|rockets|suns|heat|bucks|knicks|76ers|spurs|hawks|pacers|pistons|grizzlies|blazers|timberwolves|hornets|magic|wizards|pelicans|jazz|mavericks|chiefs|eagles|cowboys|49ers|ravens|bills|bengals|dolphins|lions|steelers|packers|bears|rams|seahawks|saints|texans|jaguars|titans|colts|broncos|raiders|chargers|panthers|falcons|vikings|browns|commanders|cardinals|giants|jets|patriots|buccaneers/i.test(t))return'\uD83C\uDDFA\uD83C\uDDF8';if(/\bufc|boxing/i.test(t))return'\uD83E\uDD4A';if(/bitcoin|btc|eth|crypto|solana|xrp|dogecoin|token|defi|nft|crude oil/i.test(t))return'\uD83C\uDF10';if(/champions league|europa league|uefa/i.test(t))return'\uD83C\uDDEA\uD83C\uDDFA';return'';}
 
 function timeAgo(iso) {
   const diff = Date.now() - new Date(iso).getTime();
@@ -387,7 +388,7 @@ function renderTable() {
 
     return '<tr' + rowClass + '>' +
       '<td><span class="strength-badge ' + strengthClass + '">' + p.strength + '</span></td>' +
-      '<td class="market-name"><a href="' + p.url + '" target="_blank" rel="noopener">' + truncate(p.market, 60) + '</a></td>' +
+      '<td class="market-name"><a href="' + p.url + '" target="_blank" rel="noopener">' + regionFlag(p.market) + (regionFlag(p.market) ? ' ' : '') + truncate(p.market, 57) + '</a></td>' +
       '<td><div class="consensus-badge"><span class="consensus-side ' + consensusClass + '">' + p.consensus_side + '</span><span class="consensus-pct">' + p.consensus_pct + '%</span></div></td>' +
       '<td class="whale-count"><span class="icon">&#x1F40B;</span> ' + p.whale_count + '</td>' +
       '<td class="capital-val">' + fmtCap(p.total_capital) + '</td>' +
@@ -407,7 +408,7 @@ function renderConsensusChart() {
     const yesPct = total > 0 ? (p.yes_capital / total * 100) : 50;
     const noPct = 100 - yesPct;
     return '<div class="consensus-row">' +
-      '<div class="consensus-label" title="' + p.market.replace(/"/g, '&quot;') + '">' + truncate(p.market, 35) + '</div>' +
+      '<div class="consensus-label" title="' + p.market.replace(/"/g, '&quot;') + '">' + regionFlag(p.market) + (regionFlag(p.market) ? ' ' : '') + truncate(p.market, 32) + '</div>' +
       '<div class="consensus-bar-wrap">' +
         '<div class="consensus-bar-yes" style="width:' + yesPct.toFixed(1) + '%"><span>' + (yesPct > 15 ? (p.consensus_side || 'YES') + ' ' + fmtCap(p.yes_capital) : '') + '</span></div>' +
         '<div class="consensus-bar-no" style="width:' + noPct.toFixed(1) + '%"><span>' + (noPct > 15 ? fmtCap(p.no_capital) : '') + '</span></div>' +

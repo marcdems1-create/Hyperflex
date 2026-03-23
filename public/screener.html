@@ -296,6 +296,52 @@ function truncate(s, max) {
   return s.length > max ? s.substring(0, max - 1) + '\u2026' : s;
 }
 
+function regionFlag(q) {
+  var t = (q || '').toLowerCase();
+  // Countries / geopolitics
+  if (/\bus\b|united states|america|trump|biden|vance|congress|senate|fbi|cia|fed |federal reserve|nasdaq|s&p|dow jones|nyse|sec |ftc|fda|epa|us forces|usd |dollar/i.test(t)) return '\uD83C\uDDFA\uD83C\uDDF8';
+  if (/\biran|iranian|tehran/i.test(t)) return '\uD83C\uDDEE\uD83C\uDDF7';
+  if (/\bisrael|israeli|idf|netanyahu|tel aviv|gaza|hamas|hezbollah|lebanon/i.test(t)) return '\uD83C\uDDEE\uD83C\uDDF1';
+  if (/\bruss|ukraine|kyiv|kremlin|putin|zelensky|moscow/i.test(t)) return '\uD83C\uDDFA\uD83C\uDDE6';
+  if (/\bchina|chinese|beijing|shanghai|ccp|xi jinping|jilin|guangdong|zhejiang|liaoning|shandong/i.test(t)) return '\uD83C\uDDE8\uD83C\uDDF3';
+  if (/\bindia|modi|mumbai|delhi|ipl|chennai|kolkata|bangalore/i.test(t)) return '\uD83C\uDDEE\uD83C\uDDF3';
+  if (/\bjapan|japanese|tokyo|nippon/i.test(t)) return '\uD83C\uDDEF\uD83C\uDDF5';
+  if (/\bkorea|korean|seoul|pyongyang/i.test(t)) return '\uD83C\uDDF0\uD83C\uDDF7';
+  if (/\bbrazil|brazilian|s[aã]o paulo|bolsonaro|lula/i.test(t)) return '\uD83C\uDDE7\uD83C\uDDF7';
+  if (/\bmexico|mexican|liga mx/i.test(t)) return '\uD83C\uDDF2\uD83C\uDDFD';
+  if (/\bcanad|toronto|montreal|ottawa|vancouver/i.test(t)) return '\uD83C\uDDE8\uD83C\uDDE6';
+  if (/\baustrali|sydney|melbourne|afl/i.test(t)) return '\uD83C\uDDE6\uD83C\uDDFA';
+  if (/\bturk|istanbul|ankara|erdogan/i.test(t)) return '\uD83C\uDDF9\uD83C\uDDF7';
+  if (/\bsaudi|riyadh/i.test(t)) return '\uD83C\uDDF8\uD83C\uDDE6';
+  if (/\bUAE|dubai|abu dhabi|emirates/i.test(t)) return '\uD83C\uDDE6\uD83C\uDDEA';
+  if (/\bArgentin|buenos aires|messi/i.test(t)) return '\uD83C\uDDE6\uD83C\uDDF7';
+  // European countries
+  if (/\buk\b|united kingdom|britain|british|london|premier league|epl|england|scottish|wales/i.test(t)) return '\uD83C\uDDEC\uD83C\uDDE7';
+  if (/\bfrance|french|paris|ligue 1|macron/i.test(t)) return '\uD83C\uDDEB\uD83C\uDDF7';
+  if (/\bgerman|bundesliga|berlin|munich|bayern/i.test(t)) return '\uD83C\uDDE9\uD83C\uDDEA';
+  if (/\bspain|spanish|la liga|madrid|barcelona|atletico|sevilla/i.test(t)) return '\uD83C\uDDEA\uD83C\uDDF8';
+  if (/\bitaly|italian|serie a|milan|roma|juventus|napoli/i.test(t)) return '\uD83C\uDDEE\uD83C\uDDF9';
+  if (/\bportug|lisbon|benfica|porto|sporting/i.test(t)) return '\uD83C\uDDF5\uD83C\uDDF9';
+  if (/\bnetherland|dutch|amsterdam|eredivisie/i.test(t)) return '\uD83C\uDDF3\uD83C\uDDF1';
+  if (/\bpoland|polish|warsaw/i.test(t)) return '\uD83C\uDDF5\uD83C\uDDF1';
+  if (/\bsweden|swedish|stockholm/i.test(t)) return '\uD83C\uDDF8\uD83C\uDDEA';
+  if (/\bnorway|norwegian|oslo/i.test(t)) return '\uD83C\uDDF3\uD83C\uDDF4';
+  if (/\bswitz|swiss|zurich|geneva/i.test(t)) return '\uD83C\uDDE8\uD83C\uDDED';
+  if (/\bgreece|greek|athens/i.test(t)) return '\uD83C\uDDEC\uD83C\uDDF7';
+  if (/\bcroat|zagreb|dubrovnik/i.test(t)) return '\uD83C\uDDED\uD83C\uDDF7';
+  if (/\bserb|belgrade/i.test(t)) return '\uD83C\uDDF7\uD83C\uDDF8';
+  // US sports teams (NBA, NFL, MLB, NHL, NCAA) → US flag
+  if (/nba|nfl|mlb|nhl|ncaa|super bowl|world series|stanley cup|march madness/i.test(t)) return '\uD83C\uDDFA\uD83C\uDDF8';
+  if (/yankees|mets|dodgers|warriors|lakers|celtics|nets|kings|bulls|thunder|nuggets|cavaliers|clippers|rockets|suns|heat|bucks|knicks|76ers|spurs|hawks|pacers|pistons|grizzlies|blazers|timberwolves|hornets|magic|wizards|pelicans|raptors|jazz|mavericks|chiefs|eagles|cowboys|49ers|ravens|bills|bengals|dolphins|lions|steelers|packers|bears|rams|seahawks|saints|texans|jaguars|titans|colts|broncos|raiders|chargers|panthers|falcons|vikings|browns|commanders|cardinals|giants|jets|patriots|buccaneers/i.test(t)) return '\uD83C\uDDFA\uD83C\uDDF8';
+  // UFC / boxing
+  if (/\bufc|bellator|boxing|fight night/i.test(t)) return '\uD83E\uDD4A';
+  // Crypto — global, use globe
+  if (/bitcoin|btc|eth|crypto|solana|sol |xrp|dogecoin|doge|token|defi|nft|backpack/i.test(t)) return '\uD83C\uDF10';
+  // Champions League / Europa — EU flag
+  if (/champions league|europa league|uefa/i.test(t)) return '\uD83C\uDDEA\uD83C\uDDFA';
+  return '';
+}
+
 async function loadScreener() {
   try {
     const res = await fetch('/api/screener?sort=' + _sortBy);
@@ -359,7 +405,7 @@ function renderTable() {
 
     var safeUrl = m.url && m.url.startsWith('https://polymarket.com') ? m.url : (m.slug ? 'https://polymarket.com/event/' + m.slug : 'https://polymarket.com');
     return '<tr' + rowClass + ' onclick="window.open(\'' + safeUrl + '\', \'_blank\')">' +
-      '<td class="mkt-question"><a href="' + safeUrl + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">' + truncate(m.question, 55) + '</a></td>' +
+      '<td class="mkt-question"><a href="' + safeUrl + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">' + regionFlag(m.question) + (regionFlag(m.question) ? ' ' : '') + truncate(m.question, 52) + '</a></td>' +
       '<td><span class="cat-pill ' + catClass + '">' + ({sports:'\uD83C\uDFC8',crypto:'\u20BF',politics:'\uD83C\uDFDB\uFE0F',entertainment:'\uD83C\uDFAC',tech:'\uD83D\uDCBB',other:'\uD83D\uDCCA'}[m.category]||'') + ' ' + m.category + '</span></td>' +
       '<td class="yes-pct ' + yesClass + '">' + yesPct + '%</td>' +
       '<td class="whale-cell' + whaleClass + '">' + m.whale_count + whaleIcon + '</td>' +
