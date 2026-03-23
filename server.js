@@ -17144,7 +17144,7 @@ function generateContentStream() {
       type: 'market_mover',
       headline: `${shortQ} odds ${direction} ${startC}\u00A2 \u2192 ${endC}\u00A2`,
       body: whaleNote,
-      stat: `${sign}${absOddsPts}pts`,
+      stat: `${startC}\u00A2 \u2192 ${endC}\u00A2`,
       icon: '\uD83D\uDE80',
       timestamp: now,
       cta_label: 'See Odds \u2192',
