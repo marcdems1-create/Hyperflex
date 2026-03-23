@@ -87,7 +87,9 @@ input:focus, textarea:focus { border-color: var(--gold); }
 <nav>
   <a href="/" class="nav-logo">HYPERFLEX</a>
   <a href="/explore" class="nav-link">Explore →</a>
+  <a id="navDashLink" href="/creator/dashboard" class="nav-link" style="display:none;color:#c9920d">Dashboard</a>
 </nav>
+<script>if(localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token')){var dl=document.getElementById('navDashLink');if(dl)dl.style.display='';}</script>
 
 <div class="page">
   <div class="hero">

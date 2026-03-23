@@ -158,8 +158,10 @@ a:hover { text-decoration: underline; }
     <a href="/whales" class="nav-link">Whales</a>
     <a href="/events" class="nav-link active">Events</a>
     <a href="/crystal-ball" class="nav-link">Crystal Ball</a>
+    <a id="navDashLink" href="/creator/dashboard" class="nav-link" style="display:none;color:#c9920d">Dashboard</a>
   </div>
 </nav>
+<script>if(localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token')){var dl=document.getElementById('navDashLink');if(dl)dl.style.display='';}</script>
 
 <div class="hero">
   <div class="hero-icon">&#x1F4C5;</div>

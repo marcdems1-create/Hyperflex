@@ -110,8 +110,10 @@ body { background: var(--paper); color: var(--text); font-family: var(--sans); l
     <a href="/data" class="nav-link">Data</a>
     <a href="/templates" class="nav-link">Templates</a>
     <a href="/api-docs" class="nav-link active">API</a>
+    <a id="navDashLink" href="/creator/dashboard" class="nav-link" style="display:none;color:#c9920d">Dashboard</a>
   </div>
 </nav>
+<script>if(localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token')){var dl=document.getElementById('navDashLink');if(dl)dl.style.display='';}</script>
 
 <section class="hero">
   <h1>Public <span>API</span></h1>
