@@ -9587,6 +9587,190 @@ app.get('/api/trader-profile/:username', async (req, res) => {
   }
 });
 
+// ── MULTI-PLATFORM TRADER PROFILE (/trader/:address) ─────────────────────
+app.get('/trader/:address', (req, res) => res.sendFile(path.join(__dirname, 'public', 'trader.html')));
+
+const _traderProfileCache = new Map();
+app.get('/api/trader/:address/profile', async (req, res) => {
+  const address = (req.params.address || '').trim();
+  if (!/^0x[0-9a-fA-F]{40}$/i.test(address)) {
+    return res.status(400).json({ error: 'Invalid EVM address' });
+  }
+  const addrLower = address.toLowerCase();
+
+  // 3-min cache
+  const cached = _traderProfileCache.get(addrLower);
+  if (cached && Date.now() - cached.ts < 3 * 60 * 1000) return res.json(cached.data);
+
+  try {
+    const fetchTO = (url, opts, ms = 8000) => {
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), ms);
+      return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(tid));
+    };
+
+    // Parallel fetch: Polymarket (open + won) + Hyperliquid (state + fills) + HFX account
+    const [polyOpenRes, polyWonRes, hlStateRes, hlFillsRes, hfxRes] = await Promise.allSettled([
+      fetchTO(`https://data-api.polymarket.com/positions?user=${addrLower}&limit=100&sortBy=CURRENT&winning=false`, { headers: { Accept: 'application/json' } }),
+      fetchTO(`https://data-api.polymarket.com/positions?user=${addrLower}&limit=100&sortBy=CURRENT&winning=true`, { headers: { Accept: 'application/json' } }),
+      fetchTO('https://api.hyperliquid.xyz/info', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'clearinghouseState', user: addrLower }) }),
+      fetchTO('https://api.hyperliquid.xyz/info', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'userFills', user: addrLower, startTime: Date.now() - 7 * 24 * 60 * 60 * 1000 }) }),
+      (async () => {
+        try {
+          if (pool) {
+            const rows = await dbQuery("SELECT user_id FROM creator_settings WHERE LOWER(polymarket_address) = $1 LIMIT 1", [addrLower]);
+            return rows[0] || null;
+          } else {
+            const { data } = await supabase.from('creator_settings').select('user_id').ilike('polymarket_address', addrLower).maybeSingle();
+            return data;
+          }
+        } catch(e) { return null; }
+      })()
+    ]);
+
+    // ── Parse Polymarket ──
+    let polyData = { active: false, open_positions: [], won_positions: [], open_pnl: 0, realized_pnl: 0, open_value: 0, total_invested: 0, roi_pct: 0, win_count: 0 };
+    try {
+      let openPos = [];
+      if (polyOpenRes.status === 'fulfilled' && polyOpenRes.value.ok) {
+        openPos = await polyOpenRes.value.json();
+        if (!Array.isArray(openPos)) openPos = [];
+      }
+      let wonPos = [];
+      if (polyWonRes.status === 'fulfilled' && polyWonRes.value.ok) {
+        wonPos = await polyWonRes.value.json();
+        if (!Array.isArray(wonPos)) wonPos = [];
+      }
+
+      if (openPos.length || wonPos.length) {
+        polyData.active = true;
+        polyData.open_positions = openPos.slice(0, 50).map(p => ({
+          question: p.title || p.question || '',
+          condition_id: p.conditionId || p.condition_id || '',
+          side: p.outcome || 'YES',
+          size: parseFloat(p.size) || 0,
+          avg_price: parseFloat(p.avgPrice) || 0,
+          cur_price: parseFloat(p.curPrice) || 0,
+          pnl: parseFloat(p.cashPnl) || 0,
+          value: parseFloat(p.currentValue) || parseFloat(p.size) || 0,
+          market_url: p.eventSlug ? `https://polymarket.com/event/${p.eventSlug}` : (p.slug ? `https://polymarket.com/event/${p.slug}` : 'https://polymarket.com')
+        }));
+        polyData.won_positions = wonPos.slice(0, 20).map(p => ({
+          question: p.title || p.question || '',
+          payout: parseFloat(p.cashPnl) || parseFloat(p.payout) || 0,
+          side: p.outcome || 'YES',
+          end_date: p.endDate || null
+        }));
+        polyData.open_pnl = polyData.open_positions.reduce((s, p) => s + p.pnl, 0);
+        polyData.open_value = polyData.open_positions.reduce((s, p) => s + p.value, 0);
+        polyData.total_invested = polyData.open_positions.reduce((s, p) => s + (p.size * p.avg_price), 0);
+        polyData.realized_pnl = polyData.won_positions.reduce((s, p) => s + p.payout, 0);
+        polyData.win_count = wonPos.length;
+        const totalInv = polyData.total_invested || 1;
+        polyData.roi_pct = Math.round((polyData.open_pnl + polyData.realized_pnl) / totalInv * 1000) / 10;
+      }
+    } catch(e) { console.warn('[trader-profile] poly parse:', e.message); }
+
+    // ── Parse Hyperliquid ──
+    let hlData = { active: false, open_positions: [], account_value: 0, total_notional: 0, unrealized_pnl: 0, realized_pnl: 0, margin_used: 0, withdrawable: 0, recent_fills: [], win_count: 0, loss_count: 0 };
+    try {
+      if (hlStateRes.status === 'fulfilled' && hlStateRes.value.ok) {
+        const hlState = await hlStateRes.value.json();
+        const assetPos = hlState.assetPositions || [];
+        const margin = hlState.marginSummary || {};
+        const acctVal = parseFloat(margin.accountValue) || 0;
+
+        if (assetPos.length > 0 || acctVal > 0) {
+          hlData.active = true;
+          hlData.account_value = acctVal;
+          hlData.total_notional = parseFloat(margin.totalNtlPos) || 0;
+          hlData.margin_used = parseFloat(margin.totalMarginUsed) || 0;
+          hlData.withdrawable = parseFloat(margin.withdrawable) || 0;
+
+          hlData.open_positions = assetPos.map(a => {
+            const p = a.position || a;
+            return {
+              coin: p.coin || '',
+              side: parseFloat(p.szi) > 0 ? 'LONG' : 'SHORT',
+              size: Math.abs(parseFloat(p.szi) || 0),
+              entry_price: parseFloat(p.entryPx) || 0,
+              position_value: parseFloat(p.positionValue) || 0,
+              unrealized_pnl: parseFloat(p.unrealizedPnl) || 0,
+              roi_pct: Math.round((parseFloat(p.returnOnEquity) || 0) * 1000) / 10,
+              liquidation_price: parseFloat(p.liquidationPx) || 0,
+              margin_used: parseFloat(p.marginUsed) || 0
+            };
+          }).sort((a, b) => Math.abs(b.unrealized_pnl) - Math.abs(a.unrealized_pnl));
+
+          hlData.unrealized_pnl = hlData.open_positions.reduce((s, p) => s + p.unrealized_pnl, 0);
+        }
+      }
+
+      if (hlFillsRes.status === 'fulfilled' && hlFillsRes.value.ok) {
+        const fills = await hlFillsRes.value.json();
+        if (Array.isArray(fills) && fills.length > 0) {
+          if (!hlData.active) hlData.active = true;
+          hlData.recent_fills = fills.slice(0, 50).map(f => ({
+            coin: f.coin || '',
+            side: f.side === 'B' ? 'BUY' : 'SELL',
+            dir: f.dir || '',
+            size: parseFloat(f.sz) || 0,
+            price: parseFloat(f.px) || 0,
+            closed_pnl: f.closedPnl && f.closedPnl !== '' ? parseFloat(f.closedPnl) : null,
+            time: f.time || null
+          }));
+          let realPnl = 0, wins = 0, losses = 0;
+          for (const f of fills) {
+            if (f.closedPnl && f.closedPnl !== '') {
+              const pnl = parseFloat(f.closedPnl);
+              if (!isNaN(pnl)) {
+                realPnl += pnl;
+                if (pnl > 0) wins++;
+                else if (pnl < 0) losses++;
+              }
+            }
+          }
+          hlData.realized_pnl = Math.round(realPnl * 100) / 100;
+          hlData.win_count = wins;
+          hlData.loss_count = losses;
+        }
+      }
+    } catch(e) { console.warn('[trader-profile] hl parse:', e.message); }
+
+    // ── HFX account check ──
+    const hfxUser = hfxRes.status === 'fulfilled' ? hfxRes.value : null;
+
+    // ── Build summary ──
+    const platforms = [];
+    if (polyData.active) platforms.push('polymarket');
+    if (hlData.active) platforms.push('hyperliquid');
+    if (hfxUser) platforms.push('hfx');
+
+    const totalPnl = (polyData.open_pnl + polyData.realized_pnl) + (hlData.unrealized_pnl + hlData.realized_pnl);
+
+    const result = {
+      address: addrLower,
+      has_hfx_account: !!hfxUser,
+      hfx_user_id: hfxUser ? hfxUser.user_id : null,
+      platforms,
+      polymarket: polyData,
+      hyperliquid: hlData,
+      summary: {
+        total_pnl: Math.round(totalPnl * 100) / 100,
+        open_positions_count: polyData.open_positions.length + hlData.open_positions.length,
+        platforms_active: platforms.filter(p => p !== 'hfx').length
+      },
+      fetched_at: new Date().toISOString()
+    };
+
+    _traderProfileCache.set(addrLower, { ts: Date.now(), data: result });
+    res.json(result);
+  } catch (err) {
+    console.error('[trader-profile]', err.message);
+    res.status(500).json({ error: 'Failed to load trader profile' });
+  }
+});
+
 // GET /nominate — nominate your creator page
 app.get('/nominate', (req, res) => res.sendFile(path.join(__dirname, 'public', 'nominate.html')));
 

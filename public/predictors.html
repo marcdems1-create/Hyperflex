@@ -472,6 +472,7 @@ function renderTable(data){
       '<td class="td-streak">'+streakHtml+'</td>'+
       '<td class="td-platform">'+platformHtml+'</td>'+
       '<td class="td-actions">'+
+        (/^0x[0-9a-fA-F]{10,}$/i.test(profileId)?'<a href="/trader/'+escHtml(profileId)+'" onclick="event.stopPropagation()" style="font-size:10px;font-family:var(--mono);color:var(--gold);border:1px solid rgba(201,146,13,0.4);border-radius:12px;padding:3px 10px;text-decoration:none;background:rgba(201,146,13,0.06);margin-right:6px;white-space:nowrap">\uD83D\uDD17 Positions</a>':'')+
         '<button class="follow-btn" id="follow-'+uid+'" onclick="event.stopPropagation();toggleFollow(\''+uid+'\',this)">Follow</button>'+
       '</td>'+
     '</tr>';
