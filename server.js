@@ -352,14 +352,14 @@ if (pool) {
 }
 
 // ── API ACCESS TIERS ──────────────────────────────────────────────────────
-// Free: /api/whale-watch (delayed), /api/stats, /api/health, /api/leaderboard, /api/markets/search
-// Pro ($29/mo): /api/signals, /api/crystal-ball, /api/whale-index, /api/screener, /api/fear-greed
+// Free (no auth): /api/stats, /api/health, /api/leaderboard, /api/markets/search
+// Pro ($29/mo): /api/whale-watch, /api/signals, /api/crystal-ball, /api/whale-index, /api/screener, /api/fear-greed, /api/odds/search, /api/arbitrage
 // Premium ($99/mo): /api/correlations, /api/contrarian, /api/resolution-probability,
 //   /api/whale-patterns, /api/news-impact, /api/backtest, /api/market-intelligence,
 //   /api/consistent-traders, /api/daily-briefing, /api/whale-flow, /api/live-feed
 // API key access ($500/mo): all endpoints via X-API-Key header
 
-const PRO_ENDPOINTS = new Set(['/api/signals', '/api/crystal-ball', '/api/whale-index', '/api/screener', '/api/fear-greed']);
+const PRO_ENDPOINTS = new Set(['/api/signals', '/api/crystal-ball', '/api/whale-index', '/api/screener', '/api/fear-greed', '/api/whale-watch', '/api/odds/search', '/api/arbitrage']);
 const PREMIUM_ENDPOINTS = new Set(['/api/correlations', '/api/contrarian', '/api/resolution-probability', '/api/whale-patterns', '/api/news-impact', '/api/market-intelligence', '/api/consistent-traders', '/api/daily-briefing', '/api/whale-flow', '/api/live-feed']);
 const BACKTEST_PREFIX = '/api/backtest/';
 
