@@ -16306,6 +16306,131 @@ async function fetchWhalePositions() {
   };
 }
 
+// ── HFX ALPHA SCORE — Proprietary whale quality scoring ──────────────────
+let _whaleAlphaCache = null; // { ts, scores: Map<wallet, { score, grade, breakdown }> }
+
+function computeWhaleAlphaScores() {
+  const whaleData = _whaleWatchCache && _whaleWatchCache.data ? _whaleWatchCache.data : null;
+  if (!whaleData || !whaleData.whales) return new Map();
+
+  // Group positions by trader wallet
+  const byWallet = new Map();
+  for (const w of whaleData.whales) {
+    if (!w.proxyWallet) continue;
+    if (!byWallet.has(w.proxyWallet)) {
+      byWallet.set(w.proxyWallet, { name: w.trader, rank: w.trader_rank, pnl: w.trader_pnl, positions: [] });
+    }
+    byWallet.get(w.proxyWallet).positions.push(w);
+  }
+
+  const scores = new Map();
+  const now = Date.now();
+
+  for (const [wallet, data] of byWallet) {
+    const positions = data.positions;
+    const totalPos = positions.length;
+
+    // 1. Win rate proxy (30% weight) — use PnL as proxy (positive PnL = higher win rate estimate)
+    const pnl = data.pnl || 0;
+    // Normalize: $0 PnL → 50, $1M+ → 95, negative → 20-50
+    let winRateScore;
+    if (pnl >= 1000000) winRateScore = 95;
+    else if (pnl >= 500000) winRateScore = 85;
+    else if (pnl >= 100000) winRateScore = 75;
+    else if (pnl >= 10000) winRateScore = 65;
+    else if (pnl >= 0) winRateScore = 50;
+    else if (pnl >= -50000) winRateScore = 35;
+    else winRateScore = 20;
+
+    // 2. Category diversification (20% weight) — more categories = higher score
+    const categories = new Set();
+    for (const p of positions) {
+      const q = (p.market || '').toLowerCase();
+      if (/nba|nfl|mlb|soccer|football|vs\.|match|game|win on/.test(q)) categories.add('sports');
+      else if (/bitcoin|ethereum|crypto|btc|eth|solana/.test(q)) categories.add('crypto');
+      else if (/president|election|trump|biden|congress/.test(q)) categories.add('politics');
+      else if (/youtube|tiktok|twitter|views|subscribers/.test(q)) categories.add('entertainment');
+      else categories.add('other');
+    }
+    const catScore = Math.min(95, categories.size * 25);
+
+    // 3. Early entry score (25% weight) — positions with favorable current price vs entry
+    let earlySum = 0;
+    let earlyCount = 0;
+    for (const p of positions) {
+      const price = p.current_price || 0;
+      const side = (p.side || '').toUpperCase();
+      // If YES and price went up, or NO and price went down = early entry
+      if (side === 'YES' && price > 0.5) { earlySum += Math.min(95, price * 100); earlyCount++; }
+      else if (side === 'NO' && price < 0.5) { earlySum += Math.min(95, (1 - price) * 100); earlyCount++; }
+      else { earlySum += 40; earlyCount++; }
+    }
+    const earlyScore = earlyCount > 0 ? Math.round(earlySum / earlyCount) : 50;
+
+    // 4. Sizing discipline (15% weight) — consistent sizing = higher score
+    const sizes = positions.map(p => p.size).filter(s => s > 0);
+    let sizingScore = 50;
+    if (sizes.length >= 3) {
+      const avg = sizes.reduce((a, b) => a + b, 0) / sizes.length;
+      const stddev = Math.sqrt(sizes.reduce((s, v) => s + (v - avg) ** 2, 0) / sizes.length);
+      const cv = avg > 0 ? stddev / avg : 1; // coefficient of variation
+      sizingScore = cv < 0.3 ? 90 : cv < 0.6 ? 75 : cv < 1 ? 60 : 40;
+    }
+
+    // 5. Recency (10% weight) — penalize inactive traders
+    let recencyScore = 50;
+    if (data.rank <= 10) recencyScore = 90; // Top 10 by definition active
+    else if (data.rank <= 25) recencyScore = 75;
+    else if (data.rank <= 40) recencyScore = 60;
+    else recencyScore = 45;
+    if (totalPos >= 5) recencyScore = Math.min(95, recencyScore + 15);
+
+    // Composite
+    const composite = Math.round(
+      winRateScore * 0.30 +
+      catScore * 0.20 +
+      earlyScore * 0.25 +
+      sizingScore * 0.15 +
+      recencyScore * 0.10
+    );
+    const score = Math.min(99, Math.max(1, composite));
+
+    // Letter grade
+    let grade;
+    if (score >= 90) grade = 'A+';
+    else if (score >= 80) grade = 'A';
+    else if (score >= 70) grade = 'B';
+    else if (score >= 55) grade = 'C';
+    else grade = 'D';
+
+    scores.set(wallet, {
+      score, grade, name: data.name, rank: data.rank,
+      breakdown: { win_rate: winRateScore, category: catScore, early_entry: earlyScore, sizing: sizingScore, recency: recencyScore }
+    });
+  }
+
+  return scores;
+}
+
+// GET /api/whale-scores — public, cached 30 min
+app.get('/api/whale-scores', async (req, res) => {
+  try {
+    if (_whaleAlphaCache && (Date.now() - _whaleAlphaCache.ts < 30 * 60 * 1000)) {
+      return res.json({ scores: Object.fromEntries(_whaleAlphaCache.scores) });
+    }
+    // Ensure whale data is loaded
+    if (!_whaleWatchCache) {
+      try { const data = await fetchWhalePositions(); _whaleWatchCache = { ts: Date.now(), data }; } catch (e) {}
+    }
+    const scores = computeWhaleAlphaScores();
+    _whaleAlphaCache = { ts: Date.now(), scores };
+    res.json({ scores: Object.fromEntries(scores) });
+  } catch (e) {
+    console.error('[whale-scores]', e.message);
+    res.json({ scores: {} });
+  }
+});
+
 app.get('/api/whale-watch', async (req, res) => {
   try {
     // Check cache (10 minute TTL)
@@ -19171,6 +19296,139 @@ app.get('/api/agent/decisions', requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/agent/decisions/:id — single decision detail
+app.get('/api/agent/decisions/:id', requireAuth, async (req, res) => {
+  try {
+    let dec;
+    if (pool) {
+      const rows = await dbQuery('SELECT * FROM agent_decisions WHERE id = $1 AND user_id = $2 LIMIT 1', [req.params.id, req.user.id]);
+      dec = rows[0] || null;
+    } else {
+      const { data } = await supabase.from('agent_decisions').select('*').eq('id', req.params.id).eq('user_id', req.user.id).maybeSingle();
+      dec = data;
+    }
+    if (!dec) return res.status(404).json({ error: 'Decision not found' });
+    // Get whale details for this market from whale cache
+    let whales = [];
+    if (_whaleWatchCache && _whaleWatchCache.data && _whaleWatchCache.data.whales) {
+      const mktQ = (dec.market_question || '').toLowerCase();
+      whales = _whaleWatchCache.data.whales
+        .filter(w => (w.market || '').toLowerCase() === mktQ)
+        .map(w => ({ trader: w.trader, size: w.size, side: w.side, rank: w.trader_rank }))
+        .sort((a, b) => b.size - a.size)
+        .slice(0, 10);
+    }
+    res.json({ decision: dec, whales });
+  } catch (e) {
+    console.error('[agent-decision-detail]', e.message);
+    res.status(500).json({ error: 'Failed to load decision' });
+  }
+});
+
+// POST /api/agent/decisions/:id/skip — mark decision as skipped
+app.post('/api/agent/decisions/:id/skip', requireAuth, async (req, res) => {
+  try {
+    if (pool) {
+      await dbQuery('UPDATE agent_decisions SET outcome = $1, outcome_set_at = NOW() WHERE id = $2 AND user_id = $3 AND outcome IS NULL', ['skipped', req.params.id, req.user.id]);
+    } else {
+      await supabase.from('agent_decisions').update({ outcome: 'skipped', outcome_set_at: new Date().toISOString() }).eq('id', req.params.id).eq('user_id', req.user.id).is('outcome', null);
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to skip' });
+  }
+});
+
+// GET /api/agent/performance — public aggregate stats with category breakdown (no auth)
+app.get('/api/agent/performance', async (req, res) => {
+  try {
+    let rows;
+    if (pool) {
+      rows = await dbQuery("SELECT outcome, edge_pct, recommended_size, market_question, direction, odds_at_signal, signal_urgency, fired_at FROM agent_decisions WHERE outcome IN ('correct','wrong','skipped') OR outcome IS NULL ORDER BY fired_at DESC LIMIT 500");
+    } else {
+      const { data } = await supabase.from('agent_decisions').select('outcome, edge_pct, recommended_size, market_question, direction, odds_at_signal, signal_urgency, fired_at').order('fired_at', { ascending: false }).limit(500);
+      rows = data || [];
+    }
+
+    const stats = { total: rows.length, correct: 0, wrong: 0, pending: 0, skipped: 0, avg_edge: 0, best_call: null, total_return: 0, by_category: {} };
+    let edgeSum = 0;
+    let bestReturn = -Infinity;
+
+    for (const r of rows) {
+      edgeSum += parseFloat(r.edge_pct) || 0;
+
+      // Categorize
+      const q = (r.market_question || '').toLowerCase();
+      let cat = 'other';
+      if (/nba|nfl|mlb|soccer|football|vs\.|match|game|win on|nhl|ufc/.test(q)) cat = 'sports';
+      else if (/bitcoin|ethereum|crypto|btc|eth|solana|defi/.test(q)) cat = 'crypto';
+      else if (/president|election|trump|biden|congress|senate/.test(q)) cat = 'politics';
+      else if (/youtube|tiktok|twitter|views|subscribers|movie/.test(q)) cat = 'entertainment';
+
+      if (!stats.by_category[cat]) stats.by_category[cat] = { total: 0, correct: 0, wrong: 0, pending: 0 };
+      stats.by_category[cat].total++;
+
+      if (r.outcome === 'correct') {
+        stats.correct++;
+        stats.by_category[cat].correct++;
+        const odds = parseFloat(r.odds_at_signal) || 0.5;
+        const outcomeReturn = odds > 0 ? (1 / odds) - 1 : 0; // return per dollar
+        const ret = (parseFloat(r.recommended_size) || 0) * outcomeReturn;
+        stats.total_return += ret;
+        if (ret > bestReturn) { bestReturn = ret; stats.best_call = { market: r.market_question, direction: r.direction, return_pct: Math.round(outcomeReturn * 100), size: parseFloat(r.recommended_size) || 0, fired_at: r.fired_at }; }
+      } else if (r.outcome === 'wrong') {
+        stats.wrong++;
+        stats.by_category[cat].wrong++;
+        stats.total_return -= parseFloat(r.recommended_size) || 0;
+      } else if (r.outcome === 'skipped') {
+        stats.skipped++;
+      } else {
+        stats.pending++;
+        stats.by_category[cat].pending++;
+      }
+    }
+
+    stats.avg_edge = stats.total > 0 ? Math.round(edgeSum / stats.total * 10) / 10 : 0;
+    const resolved = stats.correct + stats.wrong;
+    stats.win_rate = resolved > 0 ? Math.round(stats.correct / resolved * 100) : 0;
+    stats.total_return = Math.round(stats.total_return);
+    // Add win rate per category
+    for (const [cat, d] of Object.entries(stats.by_category)) {
+      const catResolved = d.correct + d.wrong;
+      d.win_rate = catResolved > 0 ? Math.round(d.correct / catResolved * 100) : 0;
+    }
+    if (bestReturn === -Infinity) stats.best_call = null;
+    res.json(stats);
+  } catch (e) {
+    console.error('[agent-performance]', e.message);
+    res.json({ total: 0, correct: 0, wrong: 0, pending: 0, skipped: 0, avg_edge: 0, win_rate: 0, total_return: 0, best_call: null, by_category: {} });
+  }
+});
+
+// GET /api/agent/sharpness — rolling last 10 signal return (public)
+app.get('/api/agent/sharpness', async (req, res) => {
+  try {
+    let rows;
+    if (pool) {
+      rows = await dbQuery("SELECT outcome, recommended_size FROM agent_decisions WHERE outcome IN ('correct','wrong') ORDER BY fired_at DESC LIMIT 10");
+    } else {
+      const { data } = await supabase.from('agent_decisions').select('outcome, recommended_size').in('outcome', ['correct', 'wrong']).order('fired_at', { ascending: false }).limit(10);
+      rows = data || [];
+    }
+    if (!rows.length) return res.json({ last_10_return: null, label: null });
+    const pnl = rows.reduce((s, r) => s + (r.outcome === 'correct' ? parseFloat(r.recommended_size) || 0 : -(parseFloat(r.recommended_size) || 0)), 0);
+    const totalRisked = rows.reduce((s, r) => s + (parseFloat(r.recommended_size) || 0), 0);
+    const pct = totalRisked > 0 ? Math.round(pnl / totalRisked * 100) : 0;
+    res.json({ last_10_return: pct, label: pct >= 0 ? `+${pct}%` : `${pct}%` });
+  } catch (e) {
+    res.json({ last_10_return: null, label: null });
+  }
+});
+
+// Serve agent signal detail + performance pages
+app.get('/agent/signal/:id', (req, res) => res.sendFile(path.join(__dirname, 'public', 'agent-signal.html')));
+app.get('/agent/performance', (req, res) => res.sendFile(path.join(__dirname, 'public', 'agent-performance.html')));
+
 // ── AGENT EVALUATION CRON ─────────────────────────────────────────────────
 // Runs every 5 minutes: evaluates live signals against each active user's config
 const _agentFiredToday = new Map(); // userId → Set of market_question hashes (dedup within day)
@@ -19295,19 +19553,35 @@ async function evaluateAgentSignals() {
         const direction = (sig.side || 'YES').toUpperCase();
         const strength = whaleCount >= 10 ? 'STRONG' : whaleCount >= 7 ? 'HIGH' : whaleCount >= 5 ? 'MEDIUM' : 'LOW';
         const edgePct = Math.round(edge * 10) / 10;
+        const oddsAtSignal = mP; // market price at signal time (0-1)
+
+        // Signal Urgency Score
+        let urgencyBase = Math.min(100, whaleCount * 10);
+        const closeTime = sig.close_time ? new Date(sig.close_time) : null;
+        let timeFactor = 1;
+        if (closeTime) {
+          const hoursToClose = (closeTime - Date.now()) / 3600000;
+          if (hoursToClose < 6) timeFactor = 2;
+          else if (hoursToClose < 24) timeFactor = 1.5;
+          else if (hoursToClose > 168) timeFactor = 0.6;
+        }
+        const consensusPct = whalePct;
+        const consensusFactor = consensusPct > 80 ? 1.3 : consensusPct < 60 ? 0.7 : 1;
+        const signalUrgency = Math.min(10, Math.max(1, Math.round((urgencyBase / 10) * timeFactor * consensusFactor * 10) / 10));
 
         // 4. Insert decision
         try {
           if (pool) {
             await dbQuery(
-              'INSERT INTO agent_decisions (user_id, market_question, market_url, direction, whale_count, edge_pct, recommended_size, kelly_fraction, signal_strength, fired_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())',
-              [userId, sig.market || '', sig.url || '', direction, whaleCount, edgePct, finalSize, kellyFrac, strength]
+              'INSERT INTO agent_decisions (user_id, market_question, market_url, direction, whale_count, edge_pct, recommended_size, kelly_fraction, signal_strength, fired_at, odds_at_signal, signal_urgency) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW(),$10,$11)',
+              [userId, sig.market || '', sig.url || '', direction, whaleCount, edgePct, finalSize, kellyFrac, strength, oddsAtSignal, signalUrgency]
             );
           } else {
             await supabase.from('agent_decisions').insert({
               user_id: userId, market_question: sig.market || '', market_url: sig.url || '',
               direction, whale_count: whaleCount, edge_pct: edgePct, recommended_size: finalSize,
-              kelly_fraction: kellyFrac, signal_strength: strength, fired_at: new Date().toISOString()
+              kelly_fraction: kellyFrac, signal_strength: strength, fired_at: new Date().toISOString(),
+              odds_at_signal: oddsAtSignal, signal_urgency: signalUrgency
             });
           }
         } catch (e) { console.warn('[agent-eval] insert error:', e.message); continue; }
@@ -19400,10 +19674,13 @@ async function resolveAgentOutcomes() {
       else continue; // Still active
 
       const correct = dec.direction.toUpperCase() === outcome ? 'correct' : 'wrong';
+      // Calculate outcome_return: correct → (1/odds) - 1, wrong → -1
+      const odds = parseFloat(dec.odds_at_signal) || 0.5;
+      const outcomeReturn = correct === 'correct' ? (odds > 0 ? (1 / odds) - 1 : 0) : -1;
       if (pool) {
-        await dbQuery('UPDATE agent_decisions SET outcome = $1, outcome_set_at = NOW() WHERE id = $2', [correct, dec.id]);
+        await dbQuery('UPDATE agent_decisions SET outcome = $1, outcome_set_at = NOW(), outcome_return = $3 WHERE id = $2', [correct, dec.id, Math.round(outcomeReturn * 1000) / 1000]);
       } else {
-        await supabase.from('agent_decisions').update({ outcome: correct, outcome_set_at: new Date().toISOString() }).eq('id', dec.id);
+        await supabase.from('agent_decisions').update({ outcome: correct, outcome_set_at: new Date().toISOString(), outcome_return: Math.round(outcomeReturn * 1000) / 1000 }).eq('id', dec.id);
       }
       resolved++;
     }

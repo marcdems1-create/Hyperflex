@@ -809,6 +809,7 @@ footer {
       <div id="rn-top" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;font-family:var(--mono);font-size:11px;padding-right:50px"></div>
       <div id="rn-question" style="font-family:var(--sans);font-size:18px;font-weight:700;color:#fff;line-height:1.4;margin-bottom:14px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden"></div>
       <div id="rn-bottom" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--dim)"></div>
+      <div id="rn-sharpness" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)"></div>
     </div>
   </div>
 
@@ -884,6 +885,12 @@ footer {
       var isUp=side==='YES'||side==='UP'||side==='OVER';
       var bc=isUp?'#22c55e':'#ef4444';
       var bt=isUp?'UP':'DOWN';
+      // Signal urgency
+      var urgB=Math.min(100,(sig.whale_count||0)*10);var tF=1;
+      if(sig.close_time||sig.end_date){var hrsL=(new Date(sig.close_time||sig.end_date)-Date.now())/3600000;if(hrsL<6)tF=2;else if(hrsL<24)tF=1.5;else if(hrsL>168)tF=0.6}
+      var cP=sig.yes_pct||50;var cF=cP>80?1.3:cP<60?0.7:1;
+      var urg=Math.min(10,Math.max(1,Math.round((urgB/10)*tF*cF*10)/10));
+      var urgI=urg>=8?'\uD83D\uDD25':'\u26A1';var urgC=urg>=8?'#ff5722':urg>=5?'#c9920d':'#888';
       document.getElementById('rn-top').innerHTML=
         '<span style="color:var(--gold);font-weight:700;letter-spacing:.08em">\u26A1 RIGHT NOW</span>'+
         '<span style="color:var(--dim)">|</span>'+
@@ -891,7 +898,9 @@ footer {
         '<span style="color:var(--dim)">|</span>'+
         '<span style="color:var(--text)">\uD83D\uDC0B '+sig.whale_count+' whales</span>'+
         '<span style="color:var(--dim)">|</span>'+
-        '<span style="color:var(--gold-lt)">'+fmtCap(sig.capital||0)+'</span>';
+        '<span style="color:var(--gold-lt)">'+fmtCap(sig.capital||0)+'</span>'+
+        '<span style="color:var(--dim)">|</span>'+
+        '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:'+urgC+'">'+urgI+' '+urg.toFixed(1)+'</span>';
       document.getElementById('rn-question').textContent=sig.market||'';
       var bh='';
       if(sig.end_date){var diff=new Date(sig.end_date).getTime()-Date.now();if(diff>0){var hrs=Math.floor(diff/3600000);var mins=Math.floor((diff%3600000)/60000);bh+='<span style="color:'+(diff<3600000?'var(--red)':'var(--dim)')+'">Closes in '+(hrs>0?hrs+'h ':'')+mins+'m</span><span style="color:var(--border)">\u00B7</span>';}}
@@ -903,6 +912,15 @@ footer {
         bh+='<a href="#" onclick="event.preventDefault();openKelly(\''+escH(sig.market||'').replace(/'/g,"\\'")+'\',\''+side+'\','+mPct+','+wPct+',\''+sig.url+'\','+sig.whale_count+','+(sig.capital||0)+')" class="ib-trade-btn" style="margin-left:auto">Trade on Polymarket \u2192</a>';
       }
       document.getElementById('rn-bottom').innerHTML=bh;
+      // Load sharpness indicator
+      fetch('/api/agent/sharpness').then(function(r){return r.ok?r.json():null}).then(function(sh){
+        if(!sh||sh.last_10_return===null)return;
+        var el=document.getElementById('rn-sharpness');
+        if(!el)return;
+        var c=sh.last_10_return>=0?'#22c55e':'#ef4444';
+        el.innerHTML='<span style="font-family:var(--mono);font-size:11px;color:'+c+'">Last 10 signals: '+sh.label+'</span>';
+        el.style.display='block';
+      }).catch(function(){});
     }).catch(function(){});
   }
 

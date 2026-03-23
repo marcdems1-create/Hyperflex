@@ -358,12 +358,21 @@ function setPlatform(platform){
   renderAll();
 }
 
+var _alphaScores={};
+function alphaGradeBadge(wallet){
+  var s=_alphaScores[wallet];if(!s)return'';
+  var colors={'A+':'#00e676','A':'#4caf50','B':'#c9920d','C':'#ff9800','D':'#f44336'};
+  var c=colors[s.grade]||'#888';
+  return' <span title="HFX Alpha\u2122 '+s.score+'/99" style="display:inline-block;font-family:var(--mono);font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px;background:'+c+'22;color:'+c+';border:1px solid '+c+'44;margin-left:4px;vertical-align:middle">'+s.grade+' '+s.score+'</span>';
+}
+
 async function loadLeaderboard(){
   var body=document.getElementById('lbBody');
   body.innerHTML='<tr><td colspan="8"><div class="state-msg">Loading the elite...</div></td></tr>';
   document.getElementById('podiumSection').style.display='none';
   try{
-    var[hfxRes,hlRes]=await Promise.allSettled([fetch('/api/leaderboard?period='+currentPeriod),fetch('/api/hyperliquid/whales')]);
+    var[hfxRes,hlRes,alphaRes]=await Promise.allSettled([fetch('/api/leaderboard?period='+currentPeriod),fetch('/api/hyperliquid/whales'),fetch('/api/whale-scores')]);
+    if(alphaRes.status==='fulfilled'&&alphaRes.value.ok){try{var ad=await alphaRes.value.json();_alphaScores=ad.scores||{}}catch(e){}}
     var hfxData=[];
     if(hfxRes.status==='fulfilled'&&hfxRes.value.ok)hfxData=await hfxRes.value.json();
     var hlTraders=[];
@@ -435,7 +444,7 @@ function renderPodium(top3){
     return'<div class="podium-card '+classes[idx]+'">'+
       '<div class="podium-rank-badge">'+medals[idx]+'</div>'+
       '<div class="podium-avatar">'+initial+'</div>'+
-      '<div class="podium-name">'+escHtml(dname)+'</div>'+
+      '<div class="podium-name">'+escHtml(dname)+alphaGradeBadge(r.wallet||r.address||(r.user_id&&String(r.user_id).startsWith('hl_')?String(r.user_id).replace('hl_',''):'')||'')+'</div>'+
       '<div class="podium-pnl'+pnlClass+'">'+formatPnl(pnl)+'</div>'+
       '<div class="podium-roi">ROI '+(pnl>=0?'+':'')+roi+'%</div>'+
       '<div class="podium-meta">'+platformHtml+
@@ -481,7 +490,7 @@ function renderTable(data){
       '<td class="td-trader">'+
         '<a href="'+profileUrl+'" class="trader-cell" onclick="event.stopPropagation()">'+
           '<div class="trader-avatar">'+initial+'</div>'+
-          '<span class="trader-name">'+escHtml(dname)+'</span>'+
+          '<span class="trader-name">'+escHtml(dname)+alphaGradeBadge(r.wallet||r.address||(r.user_id&&String(r.user_id).startsWith('hl_')?String(r.user_id).replace('hl_',''):'')||'')+'</span>'+
         '</a>'+
         '<div class="mobile-stats">'+
           '<span class="mobile-stat '+pnlCls+'">'+pnlStr+'</span>'+

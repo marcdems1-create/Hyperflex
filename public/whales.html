@@ -845,7 +845,7 @@ function renderTable() {
     const profileUrl = '/p/' + (p.proxyWallet || '');
     return '<tr class="' + hl + '">' +
       '<td>' + rankBadge(p.trader_rank) + '</td>' +
-      '<td><div class="trader-name" style="cursor:pointer;border-bottom:1px dashed rgba(201,146,13,0.3)" onclick="event.stopPropagation();openWhaleProfile(\'' + escAttr(p.proxyWallet || p.trader || '') + '\')">' + whaleName(p.trader, p.proxyWallet) + consistencyDot(p.trader, p.proxyWallet) + '</div><div class="trader-pnl">PnL: ' + fmtPnl(p.trader_pnl) + '</div></td>' +
+      '<td><div class="trader-name" style="cursor:pointer;border-bottom:1px dashed rgba(201,146,13,0.3)" onclick="event.stopPropagation();openWhaleProfile(\'' + escAttr(p.proxyWallet || p.trader || '') + '\')">' + whaleName(p.trader, p.proxyWallet) + consistencyDot(p.trader, p.proxyWallet) + alphaGradeBadge(p.proxyWallet) + '</div><div class="trader-pnl">PnL: ' + fmtPnl(p.trader_pnl) + '</div></td>' +
       '<td style="max-width:280px"><span style="cursor:pointer;border-bottom:1px dashed rgba(201,146,13,0.3);transition:color .15s" onmouseover="this.style.color=\'var(--gold)\'" onmouseout="this.style.color=\'var(--text)\'" onclick="event.stopPropagation();openMarketDetail(\'' + escAttr(p.market || '') + '\',' + Math.round((p.current_price || 0) * 100) + ',\'' + escAttr(p.market_url || '') + '\',\'\')">' + truncate(p.market, 60) + '</span></td>' +
       '<td>' + sideBadge(p.side) + '</td>' +
       '<td class="size-cell">' + fmtFull$(p.size) + '</td>' +
@@ -873,7 +873,7 @@ function renderMobileCards() {
     const pricePct = Math.round(p.current_price * 100);
     return '<div class="whale-card ' + hl + '">' +
       '<div class="whale-card-header">' +
-        '<div class="whale-card-trader">' + rankBadge(p.trader_rank) + ' <span class="trader-name" style="cursor:pointer;border-bottom:1px dashed rgba(201,146,13,0.3)" onclick="event.stopPropagation();openWhaleProfile(\'' + escAttr(p.proxyWallet || p.trader || '') + '\')">' + whaleName(p.trader, p.proxyWallet) + consistencyDot(p.trader, p.proxyWallet) + '</span></div>' +
+        '<div class="whale-card-trader">' + rankBadge(p.trader_rank) + ' <span class="trader-name" style="cursor:pointer;border-bottom:1px dashed rgba(201,146,13,0.3)" onclick="event.stopPropagation();openWhaleProfile(\'' + escAttr(p.proxyWallet || p.trader || '') + '\')">' + whaleName(p.trader, p.proxyWallet) + consistencyDot(p.trader, p.proxyWallet) + alphaGradeBadge(p.proxyWallet) + '</span></div>' +
         '<div class="whale-card-size">' + fmt$(p.size) + '</div>' +
       '</div>' +
       '<div class="whale-card-market" style="cursor:pointer" onclick="openMarketDetail(\'' + escAttr(p.market || '') + '\',' + Math.round((p.current_price || 0) * 100) + ',\'' + escAttr(p.market_url || '') + '\',\'\')">' + truncate(p.market, 80) + '</div>' +
@@ -1180,15 +1180,32 @@ function renderWhaleFlow() {
   }).join('');
 }
 
+var _alphaScores = {};
+function alphaGradeBadge(wallet) {
+  const s = _alphaScores[wallet];
+  if (!s) return '';
+  const colors = { 'A+': '#00e676', 'A': '#4caf50', 'B': '#c9920d', 'C': '#ff9800', 'D': '#f44336' };
+  const c = colors[s.grade] || '#888';
+  return ' <span class="hfx-alpha" title="HFX Alpha\u2122 Score: ' + s.score + '/99" style="display:inline-block;font-family:var(--mono);font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px;background:' + c + '22;color:' + c + ';border:1px solid ' + c + '44;margin-left:4px;vertical-align:middle">' + s.grade + ' ' + s.score + '</span>';
+}
+
 async function loadData() {
   try {
     document.getElementById('loadingState').style.display = '';
     document.getElementById('tableWrap').style.display = 'none';
     document.getElementById('refreshBtn').disabled = true;
 
-    const res = await fetch('/api/whale-watch');
+    const [res, alphaRes] = await Promise.all([
+      fetch('/api/whale-watch'),
+      fetch('/api/whale-scores').catch(() => null)
+    ]);
     if (!res.ok) throw new Error('API returned ' + res.status);
     _whaleData = await res.json();
+
+    // Load Alpha scores
+    if (alphaRes && alphaRes.ok) {
+      try { const ad = await alphaRes.json(); _alphaScores = ad.scores || {}; } catch(e) {}
+    }
 
     renderStats();
     renderWhaleFlow();
