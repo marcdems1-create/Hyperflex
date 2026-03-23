@@ -19367,6 +19367,55 @@ function detectSignalCategory(q) {
 cron.schedule('*/5 * * * *', evaluateAgentSignals);
 setTimeout(evaluateAgentSignals, 60000); // First run 1 min after boot
 
+// ── AGENT OUTCOME RESOLUTION ──────────────────────────────────────────────
+// Checks pending agent decisions against screener cache for resolved markets
+async function resolveAgentOutcomes() {
+  try {
+    let pending;
+    if (pool) {
+      pending = await dbQuery("SELECT id, market_question, direction FROM agent_decisions WHERE outcome IS NULL AND fired_at < NOW() - INTERVAL '1 hour' LIMIT 100");
+    } else {
+      const cutoff = new Date(Date.now() - 3600000).toISOString();
+      const { data } = await supabase.from('agent_decisions').select('id, market_question, direction').is('outcome', null).lt('fired_at', cutoff).limit(100);
+      pending = data || [];
+    }
+    if (!pending.length) return;
+
+    // Check screener cache for market prices — if price is 0 or 1 (0% or 100%), market has resolved
+    const screenerMarkets = (_screenerCache && _screenerCache.data) ? _screenerCache.data : [];
+    let resolved = 0;
+
+    for (const dec of pending) {
+      const q = (dec.market_question || '').toLowerCase().trim();
+      const match = screenerMarkets.find(m => (m.question || '').toLowerCase().trim() === q);
+      if (!match) continue;
+
+      const yesPrice = match.yes_price;
+      if (yesPrice == null) continue;
+
+      // Market resolved if price is very close to 0 or 1
+      let outcome = null;
+      if (yesPrice >= 0.95) outcome = 'YES'; // Resolved YES
+      else if (yesPrice <= 0.05) outcome = 'NO'; // Resolved NO
+      else continue; // Still active
+
+      const correct = dec.direction.toUpperCase() === outcome ? 'correct' : 'wrong';
+      if (pool) {
+        await dbQuery('UPDATE agent_decisions SET outcome = $1, outcome_set_at = NOW() WHERE id = $2', [correct, dec.id]);
+      } else {
+        await supabase.from('agent_decisions').update({ outcome: correct, outcome_set_at: new Date().toISOString() }).eq('id', dec.id);
+      }
+      resolved++;
+    }
+    if (resolved > 0) console.log(`[agent-resolve] Resolved ${resolved} agent decision outcomes`);
+  } catch (e) {
+    console.warn('[agent-resolve] error:', e.message);
+  }
+}
+
+// Run outcome resolution every 30 minutes
+cron.schedule('*/30 * * * *', resolveAgentOutcomes);
+
 app.get('/api/arbitrage', (req, res) => {
   if (_arbCache && (Date.now() - _arbCache.ts < 6 * 60 * 1000)) {
     return res.json({ opportunities: _arbCache.data, updated_at: new Date(_arbCache.ts).toISOString() });

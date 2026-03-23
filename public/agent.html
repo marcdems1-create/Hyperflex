@@ -73,6 +73,41 @@ body{background:var(--paper);color:var(--text);font-family:var(--sans);min-heigh
 <script>if(localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token')){var dl=document.getElementById('navDashLink');if(dl)dl.style.display='';}</script>
 
 <div class="container">
+  <!-- STATE: FREE USER GATE -->
+  <div id="gateState" style="display:none">
+    <div class="hero-section">
+      <h1>Your Trading <span>Agent</span></h1>
+      <div class="hero-sub">An AI agent that monitors whale signals 24/7 and fires targeted trade recommendations when your thresholds are hit.</div>
+    </div>
+    <!-- Blurred preview -->
+    <div style="position:relative;margin-bottom:24px">
+      <div style="filter:blur(6px);pointer-events:none;opacity:0.5">
+        <div class="status-card active" style="margin-bottom:16px">
+          <div style="display:flex;align-items:center;gap:8px"><span class="status-dot active"></span><span style="font-family:var(--mono);font-size:13px;font-weight:700">Active</span><span style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-left:8px">Min 5 whales · push</span></div>
+        </div>
+        <div class="stats-row">
+          <div class="stat-box"><div class="stat-num">47</div><div class="stat-label">Signals Fired</div></div>
+          <div class="stat-box"><div class="stat-num">68%</div><div class="stat-label">Win Rate</div></div>
+          <div class="stat-box"><div class="stat-num">4.2%</div><div class="stat-label">Avg Edge</div></div>
+          <div class="stat-box"><div class="stat-num" style="color:#22c55e">+$312</div><div class="stat-label">Est. P&L</div></div>
+        </div>
+        <div class="config-section">
+          <div class="config-title">Recent Agent Decisions</div>
+          <div class="log-entry"><span>✅</span><span class="log-time">2h ago</span><span style="font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(34,197,94,0.12);color:#22c55e;font-weight:700">STRONG</span><span class="log-market">Bitcoin Up or Down - March 22</span><span style="color:#22c55e;font-weight:700">YES</span><span style="color:var(--gold);font-weight:700">$25</span></div>
+          <div class="log-entry"><span>⏳</span><span class="log-time">4h ago</span><span style="font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(201,146,13,0.12);color:var(--gold);font-weight:700">HIGH</span><span class="log-market">Will PSG reach the Champions League...</span><span style="color:#ef4444;font-weight:700">NO</span><span style="color:var(--gold);font-weight:700">$18</span></div>
+        </div>
+      </div>
+      <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:2">
+        <div style="background:rgba(10,10,8,0.9);border:2px solid var(--gold);border-radius:16px;padding:32px 40px;text-align:center;max-width:380px">
+          <div style="font-size:32px;margin-bottom:12px">🤖</div>
+          <div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:8px">Upgrade to activate your Agent</div>
+          <div style="font-family:var(--mono);font-size:12px;color:var(--dim);margin-bottom:20px;line-height:1.6">Pro users get a personal AI agent that monitors whale signals 24/7 and fires trade recommendations with Kelly-optimized sizing.</div>
+          <a href="/creator/signup" class="btn-primary" style="display:block;text-decoration:none">Upgrade to Pro — $29/mo &rarr;</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- STATE: NOT CONFIGURED -->
   <div id="heroState" class="hero-section">
     <h1>Your Trading <span>Agent</span></h1>
@@ -102,10 +137,10 @@ body{background:var(--paper);color:var(--text);font-family:var(--sans);min-heigh
     </div>
 
     <div class="stats-row">
-      <div class="stat-box"><div class="stat-num" id="statAlerts">0</div><div class="stat-label">Alerts Sent</div></div>
-      <div class="stat-box"><div class="stat-num" id="statToday">0</div><div class="stat-label">Today</div></div>
-      <div class="stat-box"><div class="stat-num" id="statBudget">$0</div><div class="stat-label">Budget / Trade</div></div>
-      <div class="stat-box"><div class="stat-num" id="statWhales">0+</div><div class="stat-label">Min Whales</div></div>
+      <div class="stat-box"><div class="stat-num" id="statAlerts">0</div><div class="stat-label">Signals Fired</div></div>
+      <div class="stat-box"><div class="stat-num" id="statWinRate">—</div><div class="stat-label">Win Rate</div></div>
+      <div class="stat-box"><div class="stat-num" id="statAvgEdge">—</div><div class="stat-label">Avg Edge</div></div>
+      <div class="stat-box"><div class="stat-num" id="statPnL">—</div><div class="stat-label">Est. P&amp;L</div></div>
     </div>
 
     <div class="config-section">
@@ -307,20 +342,34 @@ async function loadDecisions() {
     var r = await fetch(API + '/api/agent/decisions', { headers: { Authorization: 'Bearer ' + token } });
     var d = await r.json();
     var decisions = d.decisions || [];
+    // Performance stats
     document.getElementById('statAlerts').textContent = decisions.length;
-    var today = new Date().toDateString();
-    document.getElementById('statToday').textContent = decisions.filter(function(l) { return new Date(l.fired_at).toDateString() === today }).length;
+    var resolved = decisions.filter(function(d) { return d.outcome === 'correct' || d.outcome === 'wrong' });
+    var correct = resolved.filter(function(d) { return d.outcome === 'correct' });
+    document.getElementById('statWinRate').textContent = resolved.length ? Math.round(correct.length / resolved.length * 100) + '%' : '\u2014';
+    var totalEdge = decisions.reduce(function(s, d) { return s + (parseFloat(d.edge_pct) || 0) }, 0);
+    document.getElementById('statAvgEdge').textContent = decisions.length ? (totalEdge / decisions.length).toFixed(1) + '%' : '\u2014';
+    var pnl = resolved.reduce(function(s, d) { return s + (d.outcome === 'correct' ? (parseFloat(d.recommended_size) || 0) : -(parseFloat(d.recommended_size) || 0)) }, 0);
+    var pnlEl = document.getElementById('statPnL');
+    pnlEl.textContent = resolved.length ? (pnl >= 0 ? '+$' : '-$') + Math.abs(Math.round(pnl)) : '\u2014';
+    pnlEl.style.color = pnl >= 0 ? '#22c55e' : '#ef4444';
+    // Render feed
     var el = document.getElementById('decisionFeed');
     if (!decisions.length) { el.innerHTML = '<div style="text-align:center;padding:32px;color:var(--dim);font-size:13px">No agent decisions yet. Your agent evaluates signals every 5 minutes.</div>'; return; }
     el.innerHTML = decisions.map(function(d) {
       var t = new Date(d.fired_at);
-      var time = t.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' + t.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+      var ago = Date.now() - t.getTime();
+      var timeStr = ago < 3600000 ? Math.floor(ago / 60000) + 'm ago' : ago < 86400000 ? Math.floor(ago / 3600000) + 'h ago' : t.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
       var dirColor = (d.direction || '').toUpperCase() === 'YES' ? '#22c55e' : '#ef4444';
+      var outcomeBadge = d.outcome === 'correct' ? '<span style="color:#22c55e;font-size:12px" title="Correct">\u2705</span>'
+        : d.outcome === 'wrong' ? '<span style="color:#ef4444;font-size:12px" title="Wrong">\u274C</span>'
+        : '<span style="color:var(--dim);font-size:12px" title="Pending">\u23F3</span>';
       var strengthBg = d.signal_strength === 'STRONG' ? 'rgba(34,197,94,0.12)' : d.signal_strength === 'HIGH' ? 'rgba(201,146,13,0.12)' : 'rgba(120,120,112,0.08)';
       var strengthColor = d.signal_strength === 'STRONG' ? '#22c55e' : d.signal_strength === 'HIGH' ? 'var(--gold)' : 'var(--dim)';
       var url = d.market_url || '';
       return '<div class="log-entry" style="flex-wrap:wrap;gap:8px">' +
-        '<span class="log-time">' + time + '</span>' +
+        outcomeBadge +
+        '<span class="log-time">' + timeStr + '</span>' +
         '<span style="font-size:10px;padding:2px 8px;border-radius:4px;background:' + strengthBg + ';color:' + strengthColor + ';font-weight:700">' + (d.signal_strength || 'MEDIUM') + '</span>' +
         '<span class="log-market">' + (d.market_question || '').substring(0, 45) + '</span>' +
         '<span style="color:' + dirColor + ';font-weight:700">' + (d.direction || '').toUpperCase() + '</span>' +
@@ -337,7 +386,19 @@ function fmtCap(n) { if (n >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M'; if (
 
 // Init
 (async function init() {
-  if (!token) return; // Show hero/setup state
+  if (!token) return; // Show hero/setup state for anonymous users
+  // Check plan — agent is Pro+ only
+  try {
+    var planRes = await fetch(API + '/api/user/api-key', { headers: { Authorization: 'Bearer ' + token } });
+    var planData = await planRes.json();
+    var userPlan = planData.plan || 'free';
+    if (userPlan === 'free') {
+      // Show gate state
+      document.getElementById('heroState').style.display = 'none';
+      document.getElementById('gateState').style.display = '';
+      return;
+    }
+  } catch (e) { /* continue — beta override may apply */ }
   try {
     var r = await fetch(API + '/api/agent/config', { headers: { Authorization: 'Bearer ' + token } });
     var d = await r.json();
