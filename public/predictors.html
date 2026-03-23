@@ -394,7 +394,11 @@ function getFilteredData(){
 function renderAll(){
   var data=getFilteredData();
   data.forEach(function(r,i){r._displayRank=i+1});
-  var totalCapital=data.reduce(function(s,r){return s+Math.abs(r.total_pnl||0)+(r.volume||0)},0);
+  var totalCapital=data.reduce(function(s,r){
+    // For HL traders use PnL (account_value inflates to $billions); for Polymarket use volume
+    if(r._isHL)return s+Math.abs(r.total_pnl||0);
+    return s+(r.volume||Math.abs(r.total_pnl||0));
+  },0);
   document.getElementById('heroStat').textContent=formatMoney(totalCapital)+' tracked across '+data.length+' traders';
   renderPodium(data.slice(0,3));
   renderTable(data.slice(3,50));
