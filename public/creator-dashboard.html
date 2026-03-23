@@ -12997,11 +12997,43 @@ async function doQuickTradeSearch() {
     const r = await fetch('/api/markets/search?q=' + encodeURIComponent(q), { headers: { Authorization: 'Bearer ' + token } });
     if (!r.ok) throw new Error('Search failed');
     const d = await r.json();
-    const markets = Array.isArray(d) ? d : (d.markets || d.data || d.results || []);
+    // Combine polymarket + kalshi results, tag with platform
+    let markets = [];
+    if (d.polymarket) markets.push(...d.polymarket.map(m => ({ ...m, platform: 'Polymarket' })));
+    if (d.kalshi) markets.push(...d.kalshi.map(m => ({ ...m, platform: 'Kalshi' })));
+    // Fallback for flat array responses
+    if (!markets.length && Array.isArray(d)) markets = d;
+    if (!markets.length && d.markets) markets = d.markets;
+    if (!markets.length && d.results) markets = d.results;
+    // Relevance scoring
+    const qLower = q.toLowerCase();
+    const qWords = qLower.split(/\s+/).filter(w => w.length >= 2);
+    markets.forEach(m => {
+      const title = (m.question || m.title || '').toLowerCase();
+      let score = 0;
+      if (title === qLower) score += 3;
+      else if (title.startsWith(qLower)) score += 2.5;
+      // Category exact match
+      if ((m.category || '').toLowerCase() === qLower) score += 2;
+      // First 3 words match
+      const firstWords = title.split(/\s+/).slice(0, 3).join(' ');
+      if (qWords.some(w => firstWords.includes(w))) score += 1;
+      // Exact word boundary match (not partial)
+      const wordBoundary = new RegExp('\\b' + qLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b');
+      if (wordBoundary.test(title)) score += 1.5;
+      else if (title.includes(qLower)) score += 0.5; // partial
+      // Volume boost (higher volume = more relevant)
+      if (m.volume > 100000) score += 0.5;
+      m._relevance = score;
+    });
+    markets.sort((a, b) => (b._relevance || 0) - (a._relevance || 0));
     if (!markets.length) { resultsEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--dim);font-size:13px">No markets found for "' + escHtmlDash(q) + '"</div>'; return; }
     resultsEl.innerHTML = markets.slice(0, 10).map(m => {
-      const yesPct = Math.round((m.yes_price || m.probability || 0.5) * 100);
-      const noPct = 100 - yesPct;
+      // yes_pct comes as 0-100 integer from API, yes_price as 0-1 float
+      const yesPct = m.yes_pct != null ? m.yes_pct : (m.yes_price != null ? Math.round(m.yes_price * 100) : (m.probability != null ? Math.round(m.probability * 100) : null));
+      const showOdds = yesPct != null && yesPct > 0 && yesPct < 100;
+      const noPct = showOdds ? 100 - yesPct : 50;
+      const displayYes = showOdds ? yesPct : null;
       const url = m.market_url || m.url || m.polymarket_url || '';
       const platform = m.platform || 'Polymarket';
       return `<div style="background:#0f0e0c;border:1px solid #2a2825;border-radius:12px;padding:16px;margin-bottom:8px">
@@ -13009,15 +13041,15 @@ async function doQuickTradeSearch() {
           <span style="font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:6px;background:rgba(124,58,237,0.12);color:#a78bfa;border:1px solid rgba(124,58,237,0.3)">${escHtmlDash(platform)}</span>
         </div>
         <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:10px;line-height:1.4">${escHtmlDash(m.question || m.title || '')}</div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        ${displayYes != null ? `<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
           <div style="flex:1;display:flex;height:8px;border-radius:4px;overflow:hidden">
-            <div style="width:${yesPct}%;background:#22c55e"></div>
+            <div style="width:${displayYes}%;background:#22c55e"></div>
             <div style="width:${noPct}%;background:#ef4444"></div>
           </div>
-          <span style="font-family:var(--mono);font-size:11px;color:#22c55e;font-weight:700">${yesPct}%</span>
+          <span style="font-family:var(--mono);font-size:11px;color:#22c55e;font-weight:700">${displayYes}%</span>
           <span style="font-family:var(--mono);font-size:11px;color:var(--dim)">/</span>
           <span style="font-family:var(--mono);font-size:11px;color:#ef4444;font-weight:700">${noPct}%</span>
-        </div>
+        </div>` : `<div style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:12px">Odds not available</div>`}
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           ${url ? qtTradeBtn(url, 'View on Polymarket \u2192', '#c9920d') : ''}
         </div>
