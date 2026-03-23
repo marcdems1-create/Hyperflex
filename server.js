@@ -22427,12 +22427,15 @@ if (pool) {
         id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
         creator_id TEXT, tenant_slug TEXT, question TEXT, category TEXT DEFAULT 'other',
         expiry_date TIMESTAMPTZ, outcome TEXT, resolved_at TIMESTAMPTZ,
-        resolution_note TEXT, source_url TEXT,
+        resolution_note TEXT, source_url TEXT, resolution_source TEXT,
         is_public BOOLEAN DEFAULT true, trader_count INTEGER DEFAULT 0,
-        volume INTEGER DEFAULT 0, yes_price NUMERIC DEFAULT 0.5,
+        volume INTEGER DEFAULT 0, yes_price NUMERIC DEFAULT 0.5, no_price NUMERIC DEFAULT 0.5,
+        yes_pool NUMERIC DEFAULT 5000, no_pool NUMERIC DEFAULT 5000,
+        resolved BOOLEAN DEFAULT false, archived BOOLEAN DEFAULT false,
+        commodity TEXT, target_price NUMERIC DEFAULT 0, direction TEXT,
         options JSONB, season_id TEXT,
         source_tweet_url TEXT, tweet_text TEXT, tweet_author TEXT,
-        blasted_at TIMESTAMPTZ,
+        blasted_at TIMESTAMPTZ, sponsor_name TEXT,
         created_at TIMESTAMPTZ DEFAULT NOW()
       )`).catch(() => {});
 
