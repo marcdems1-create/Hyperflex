@@ -22207,5 +22207,17 @@ app.use((req, res) => {
   res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
 });
 
+// Auto-migrate: ensure required columns exist
+if (pool) {
+  (async () => {
+    try {
+      await dbQuery('ALTER TABLE creator_settings ADD COLUMN IF NOT EXISTS password_reset_token TEXT').catch(() => {});
+      await dbQuery('ALTER TABLE creator_settings ADD COLUMN IF NOT EXISTS password_reset_expires TIMESTAMPTZ').catch(() => {});
+      await dbQuery('ALTER TABLE creator_settings ADD COLUMN IF NOT EXISTS api_key TEXT').catch(() => {});
+      console.log('[boot] Auto-migration complete');
+    } catch(e) { console.warn('[boot] Auto-migration skipped:', e.message); }
+  })();
+}
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`HYPERFLEX server running on port ${PORT}`));
