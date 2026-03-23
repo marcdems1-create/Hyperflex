@@ -450,7 +450,7 @@ app.use('/api/', requireApiTier);
 const _realSupabase = createClient(
   process.env.SUPABASE_URL,
   _supaKey,
-  { db: { schema: 'public' }, global: { fetch: _nodeFetch } }
+  { db: { schema: 'public' }, global: { fetch: _nodeFetch }, auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }
 );
 
 // Helper: run a query via direct Postgres
