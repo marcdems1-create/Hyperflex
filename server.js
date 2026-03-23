@@ -16720,26 +16720,26 @@ app.get('/api/whale-alerts', requireAuth, async (req, res) => {
 });
 
 // ── AI MARKET ANALYSIS ────────────────────────────────────────────────────
-const _aiAnalysisRateLimit = new Map(); // userId -> { count, resetAt }
+const _aiAnalysisRateLimit = new Map(); // ip -> { count, resetAt }
 
-app.post('/api/ai/market-analysis', requireAuth, async (req, res) => {
-  const userId = req.user.id;
+app.post('/api/ai/market-analysis', async (req, res) => {
   const { markets } = req.body;
   if (!markets || !Array.isArray(markets) || markets.length === 0) {
     return res.status(400).json({ error: 'markets array required' });
   }
 
-  // Rate limit: 10 per user per day
+  // Rate limit: 10 per IP per minute
+  const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown';
   const now = Date.now();
-  let rl = _aiAnalysisRateLimit.get(userId);
+  let rl = _aiAnalysisRateLimit.get(ip);
   if (!rl || now > rl.resetAt) {
-    rl = { count: 0, resetAt: now + 24 * 60 * 60 * 1000 };
+    rl = { count: 0, resetAt: now + 60 * 1000 };
   }
   if (rl.count >= 10) {
-    return res.status(429).json({ error: 'Rate limit reached (10 analyses per day). Try again tomorrow.' });
+    return res.status(429).json({ error: 'Rate limit reached. Try again in a minute.' });
   }
   rl.count++;
-  _aiAnalysisRateLimit.set(userId, rl);
+  _aiAnalysisRateLimit.set(ip, rl);
 
   try {
     const top3 = markets.slice(0, 3);
