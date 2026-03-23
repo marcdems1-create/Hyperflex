@@ -448,7 +448,15 @@ function renderSignals() {
     const age = getTimeAgo(s.detected_at);
     const whaleHtml = s.whale_count ? '<span>Whales: <span class="val">' + s.whale_count + '</span></span>' : '';
     const capHtml = s.capital ? '<span>Capital: <span class="val">$' + formatNum(s.capital) + '</span></span>' : '';
-    const changeHtml = s.change_pct ? '<span>Move: <span class="val" style="color:' + (s.change_pct > 0 ? 'var(--green)' : 'var(--red)') + '">' + (s.change_pct > 0 ? '+' : '') + s.change_pct.toFixed(1) + '%</span></span>' : '';
+    let changeHtml = '';
+    if (s.start_price != null && s.odds_price != null) {
+      const chgColor = s.odds_price > s.start_price ? 'var(--green)' : 'var(--red)';
+      changeHtml = '<span>Odds: <span class="val" style="color:' + chgColor + '">' + s.start_price + '\u00A2 \u2192 ' + s.odds_price + '\u00A2</span></span>';
+    } else if (s.change_pct) {
+      const absPts = Math.abs(Math.round(s.change_pct * (s.price || 0.5)));
+      const chgColor = s.change_pct > 0 ? 'var(--green)' : 'var(--red)';
+      changeHtml = '<span>Move: <span class="val" style="color:' + chgColor + '">' + (s.change_pct > 0 ? '+' : '-') + absPts + 'pts</span></span>';
+    }
     const diffHtml = s.price_diff ? '<span>Gap: <span class="val" style="color:var(--purple)">' + (s.price_diff * 100).toFixed(1) + '%</span></span>' : '';
     // Signal Urgency Score
     let urgBase = Math.min(100, (s.whale_count || 0) * 10);

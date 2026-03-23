@@ -17259,28 +17259,39 @@ app.get('/api/whale-alerts', requireAuth, async (req, res) => {
 const _aiAnalysisRateLimit = new Map(); // ip -> { count, resetAt }
 
 app.post('/api/ai/market-analysis', async (req, res) => {
-  const { markets } = req.body;
-  if (!markets || !Array.isArray(markets) || markets.length === 0) {
-    return res.status(400).json({ error: 'markets array required' });
-  }
-
-  // Rate limit: 10 per IP per minute
-  const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown';
-  const now = Date.now();
-  let rl = _aiAnalysisRateLimit.get(ip);
-  if (!rl || now > rl.resetAt) {
-    rl = { count: 0, resetAt: now + 60 * 1000 };
-  }
-  if (rl.count >= 10) {
-    return res.status(429).json({ error: 'Rate limit reached. Try again in a minute.' });
-  }
-  rl.count++;
-  _aiAnalysisRateLimit.set(ip, rl);
-
   try {
-    const top3 = markets.slice(0, 3);
+    const body = req.body || {};
+    const markets = body.markets || body.market ? [body.market] : [];
+    const question = body.question || (markets[0] && markets[0].question) || '';
+
+    if (!question && (!Array.isArray(markets) || markets.length === 0)) {
+      return res.status(400).json({ error: 'markets array or question required' });
+    }
+
+    // Rate limit: 10 per IP per minute
+    const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+    const now = Date.now();
+    let rl = _aiAnalysisRateLimit.get(ip);
+    if (!rl || now > rl.resetAt) {
+      rl = { count: 0, resetAt: now + 60 * 1000 };
+    }
+    if (rl.count >= 10) {
+      return res.status(429).json({ error: 'Rate limit reached. Try again in a minute.' });
+    }
+    rl.count++;
+    _aiAnalysisRateLimit.set(ip, rl);
+
+    // Check if Anthropic API key is configured
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return res.json({ analysis: 'AI analysis is not configured yet. Check back soon.' });
+    }
+
+    const top3 = Array.isArray(markets) && markets.length > 0
+      ? markets.slice(0, 3)
+      : [{ question, yes_pct: body.yes_pct || 'N/A', volume: body.volume || 'N/A', platform: body.platform || 'Unknown' }];
+
     const marketSummary = top3.map((m, i) => {
-      return `${i + 1}. "${m.question}" — YES ${m.yes_pct}% — Volume: ${m.volume || 'N/A'} — Platform: ${m.platform || 'Unknown'}`;
+      return `${i + 1}. "${m.question || m}" — YES ${m.yes_pct || 'N/A'}% — Volume: ${m.volume || 'N/A'} — Platform: ${m.platform || 'Unknown'}`;
     }).join('\n');
 
     const resp = await anthropic.messages.create({
@@ -17296,7 +17307,7 @@ app.post('/api/ai/market-analysis', async (req, res) => {
     res.json({ analysis });
   } catch (err) {
     console.error('[ai-analysis]', err.message);
-    res.status(500).json({ error: 'AI analysis failed' });
+    res.json({ analysis: 'Unable to analyze this market right now.' });
   }
 });
 
@@ -18996,6 +19007,8 @@ app.get('/api/signals', async (req, res) => {
                 if (match.yes_price != null) yesPct = Math.round(match.yes_price * 100);
               }
             }
+            // Skip resolved markets (price at 0% or 100%)
+            if (yesPct >= 99 || yesPct <= 1) continue;
             signals.push({
               type: 'whale_cluster',
               badge: 'Whale Cluster',
@@ -19024,6 +19037,8 @@ app.get('/api/signals', async (req, res) => {
           const absChange = Math.abs(m.change_pct || 0);
           if (absChange >= 10) {
             const direction = m.change_pct > 0 ? 'YES' : 'NO';
+            // Skip resolved markets (price at 0 or 100)
+            if ((m.current_price || 50) >= 99 || (m.current_price || 50) <= 1) continue;
             signals.push({
               type: 'momentum',
               badge: 'Momentum',
@@ -19034,6 +19049,8 @@ app.get('/api/signals', async (req, res) => {
               confidence: absChange >= 25 ? 'HIGH' : absChange >= 15 ? 'MEDIUM' : 'LOW',
               whale_count: 0,
               change_pct: m.change_pct,
+              start_price: m.start_price || null,
+              odds_price: m.current_price || null,
               detected_at: now,
               url: m.url || 'https://polymarket.com'
             });
@@ -19050,6 +19067,8 @@ app.get('/api/signals', async (req, res) => {
       });
       for (const t of recentTrades.slice(0, 10)) {
         const p = t.position || {};
+        // Skip resolved markets
+        if ((p.current_price || 0) >= 0.99 || (p.current_price || 0) <= 0.01) continue;
         signals.push({
           type: 'new_entry',
           badge: 'New Entry',
