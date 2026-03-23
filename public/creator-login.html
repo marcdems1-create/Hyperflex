@@ -606,7 +606,7 @@ async function handleSubmit() {
       const r = await fetch(`${API}/api/creator/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, display_name: displayName })
+        body: JSON.stringify({ email, password, display_name: displayName, slug: displayName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').substring(0, 30) || 'trader-' + Date.now().toString(36) })
       });
       const data = await r.json();
       if (!r.ok) { showError(data.error || 'Signup failed. Please try again.'); return; }

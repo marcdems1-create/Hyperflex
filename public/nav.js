@@ -13,7 +13,12 @@
       '.nav-link{font-family:"Space Mono",monospace;font-size:12px;font-weight:700;color:#7a7870;text-decoration:none;transition:color .15s}' +
       '.nav-link:hover{color:#e8e4d9}' +
       '.nav-link.active{color:#e8e4d9;border-bottom:2px solid #c9920d;padding-bottom:2px}' +
-      '@media(max-width:768px){.topbar{padding:12px 16px}.nav-links{gap:10px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}.nav-links::-webkit-scrollbar{display:none}.nav-link{font-size:11px;white-space:nowrap}}';
+      '.nav-auth{display:flex;align-items:center;gap:8px;margin-left:12px;flex-shrink:0}' +
+      '.nav-signin{font-family:"Space Mono",monospace;font-size:11px;color:#7a7870;text-decoration:none;padding:6px 12px;border:1px solid #2a2a25;border-radius:6px;transition:all .15s;white-space:nowrap}' +
+      '.nav-signin:hover{color:#e8e4d9;border-color:#555}' +
+      '.nav-cta{font-family:"Space Mono",monospace;font-size:11px;font-weight:700;color:#141412;background:#c9920d;text-decoration:none;padding:6px 14px;border-radius:6px;transition:all .15s;white-space:nowrap}' +
+      '.nav-cta:hover{background:#e0b340}' +
+      '@media(max-width:768px){.topbar{padding:12px 16px}.nav-links{gap:10px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}.nav-links::-webkit-scrollbar{display:none}.nav-link{font-size:11px;white-space:nowrap}.nav-auth{gap:6px;margin-left:8px}.nav-signin{font-size:10px;padding:5px 8px}.nav-cta{font-size:10px;padding:5px 10px}}';
     document.head.appendChild(style);
   }
 
@@ -30,6 +35,8 @@
 
   var path = window.location.pathname.replace(/\/$/, '') || '/';
 
+  var isLoggedIn = !!(localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token'));
+
   var nav = document.createElement('nav');
   nav.className = 'topbar';
   nav.innerHTML =
@@ -41,7 +48,13 @@
         var style = l.gold && !isActive ? ' style="color:#c9920d"' : '';
         return '<a href="' + l.href + '" class="' + cls + '"' + style + '>' + l.label + '</a>';
       }).join('') +
-      '<a id="navDashLink" href="/creator/dashboard" class="nav-link" style="display:none;color:#c9920d">Dashboard</a>' +
+      '<a id="navDashLink" href="/creator/dashboard" class="nav-link" style="' + (isLoggedIn ? '' : 'display:none;') + 'color:#c9920d">Dashboard</a>' +
+    '</div>' +
+    '<div class="nav-auth">' +
+      (isLoggedIn
+        ? ''
+        : '<a href="/creator/login" class="nav-signin">Sign in</a>' +
+          '<a href="/creator/login#signup" class="nav-cta">Get started free</a>') +
     '</div>';
 
   var root = document.getElementById('nav-root');
@@ -51,9 +64,5 @@
     document.body.insertBefore(nav, document.body.firstChild);
   }
 
-  // Show Dashboard link if logged in
-  if (localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token')) {
-    var dl = document.getElementById('navDashLink');
-    if (dl) dl.style.display = '';
-  }
+  // Dashboard link visibility already handled by isLoggedIn above
 })();
