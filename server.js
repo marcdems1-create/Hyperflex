@@ -18246,16 +18246,29 @@ async function generateCrystalBallPredictions() {
         marketMap[key].total_capital += parseFloat(w.size || 0);
         marketMap[key].whale_count++;
       }
+      // Cross-reference screener cache for correct URLs and prices
+      const screenerLookup = {};
+      if (_screenerCache && _screenerCache.data) {
+        for (const sm of _screenerCache.data) {
+          if (sm.question) screenerLookup[sm.question.toLowerCase()] = sm;
+        }
+      }
       const picks = Object.values(marketMap)
         .filter(m => m.whale_count >= 3)
         .map(m => {
           const sides = Object.entries(m.sides).sort((a,b) => b[1].capital - a[1].capital);
           const topSide = sides[0];
           const consensusPct = Math.round((topSide[1].capital / m.total_capital) * 100);
+          // Get correct URL from screener cache (has accurate slugs), fallback to whale position URL
+          const screenerMatch = screenerLookup[(m.market || '').toLowerCase()];
+          const bestUrl = (screenerMatch && screenerMatch.url && screenerMatch.url !== 'https://polymarket.com')
+            ? screenerMatch.url
+            : (m.url && m.url !== 'https://polymarket.com' ? m.url : 'https://polymarket.com');
+          const bestPrice = screenerMatch && screenerMatch.yes_price != null ? screenerMatch.yes_price : 0.5;
           return {
             market: m.market, whale_count: m.whale_count, total_capital: m.total_capital,
             consensus_side: topSide[0], consensus_pct: consensusPct,
-            current_price: 0.5, url: m.url,
+            current_price: bestPrice, url: bestUrl,
             strength: m.whale_count >= 10 ? 'STRONG' : m.whale_count >= 5 ? 'MODERATE' : 'EMERGING'
           };
         })
