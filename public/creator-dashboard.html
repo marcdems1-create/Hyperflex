@@ -12920,8 +12920,9 @@ let _qtSearchTimer = null;
 
 function qtTradeBtn(url, label, color) {
   if (!url) return '';
-  const safeUrl = url.startsWith('https://polymarket.com') ? url : 'https://polymarket.com';
-  url = safeUrl;
+  // Only allow real Polymarket URLs with a slug path, not bare domain
+  if (!url.startsWith('https://polymarket.com')) return '';
+  if (url === 'https://polymarket.com' || url === 'https://polymarket.com/') return '';
   const btnLabel = 'View on Polymarket \u2192';
   const bg = color || '#c9920d';
   const fg = (bg === 'var(--gold)' || color === '#c9920d') ? '#141412' : '#fff';
@@ -12950,7 +12951,16 @@ async function loadCrystalBallPick() {
     if (confPct === 0 || confPct === 100) confPct = 72;
     confPct = Math.min(95, confPct);
     const confColor = confPct >= 80 ? '#22c55e' : confPct >= 60 ? '#c9920d' : '#ef4444';
-    const url = top.market_url || (top.market && top.market.url) || top.url || top.polymarket_url || '';
+    // Extract market URL — prefer nested market.url, skip bare domain fallbacks
+    let url = top.market_url || (top.market && top.market.url) || top.url || top.polymarket_url || '';
+    // If URL is just the bare domain with no slug, it's useless — try to build from question
+    if (url === 'https://polymarket.com' || url === 'https://polymarket.com/') {
+      const q = (top.market && top.market.question) || top.prediction || '';
+      if (q) {
+        const slug = q.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').substring(0, 80);
+        url = 'https://polymarket.com/event/' + slug;
+      }
+    }
     card.innerHTML = `
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
         <div style="width:56px;height:56px;border-radius:50%;border:3px solid ${confColor};display:flex;align-items:center;justify-content:center;flex-shrink:0">
