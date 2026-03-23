@@ -19693,6 +19693,14 @@ app.get('/api/signals', async (req, res) => {
             }
             // Skip resolved markets (price at 0% or 100%)
             if (yesPct >= 99 || yesPct <= 1) continue;
+            // Skip expired/closed markets
+            if (endDate && new Date(endDate) < new Date()) continue;
+            // Skip markets not found in screener (likely closed/delisted)
+            if (_screenerCache && _screenerCache.data && _screenerCache.data.length > 10) {
+              const mktQ2 = (m.market || m.question || '').toLowerCase();
+              const inScreener = _screenerCache.data.some(sm => (sm.question || '').toLowerCase() === mktQ2);
+              if (!inScreener) continue; // not in active markets = closed
+            }
             signals.push({
               type: 'whale_cluster',
               badge: 'Whale Cluster',
@@ -19817,6 +19825,27 @@ app.get('/api/signals', async (req, res) => {
         break; // Only check first cached search result
       }
     } catch (e) { console.warn('[signals] arbitrage source error:', e.message); }
+
+    // ── Global filter: remove closed/expired markets from ALL signal types ──
+    const activeMarketQuestions = new Set();
+    if (_screenerCache && Array.isArray(_screenerCache.data) && _screenerCache.data.length > 5) {
+      _screenerCache.data.forEach(m => { if (m.question) activeMarketQuestions.add(m.question.toLowerCase().trim()); });
+      signals = signals.filter(sig => {
+        const q = (sig.market || '').toLowerCase().trim();
+        if (!q) return true; // keep signals without market question
+        // If we have a screener with active markets, only keep signals for active ones
+        if (activeMarketQuestions.has(q)) return true;
+        // Fuzzy: check if first 40 chars match any active market
+        const prefix = q.substring(0, 40);
+        for (const aq of activeMarketQuestions) { if (aq.startsWith(prefix)) return true; }
+        return false; // not in active markets = closed/expired
+      });
+    }
+    // Also filter by end_date if available
+    signals = signals.filter(sig => {
+      if (!sig.end_date) return true;
+      return new Date(sig.end_date) > new Date();
+    });
 
     // ── Dedup signals by base question (strip date variants) ──
     function _baseQuestion(q) {
