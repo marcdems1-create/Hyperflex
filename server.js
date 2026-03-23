@@ -4519,17 +4519,10 @@ app.post('/api/admin/reset-password', async (req, res) => {
     const token = require('crypto').randomBytes(32).toString('hex');
     const expires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24h for admin
 
-    if (pool) {
-      const rows = await dbQuery('SELECT id, display_name FROM creator_settings WHERE LOWER(email) = $1 LIMIT 1', [email.toLowerCase().trim()]);
-      if (!rows[0]) return res.status(404).json({ error: 'No account found with that email' });
-      await dbQuery('UPDATE creator_settings SET password_reset_token = $1, password_reset_expires = $2 WHERE id = $3', [token, expires, rows[0].id]);
-      _sendResetEmail(email, rows[0].display_name || 'there', token);
-    } else {
-      const { data: creator } = await supabase.from('creator_settings').select('id, display_name').eq('email', email.toLowerCase().trim()).maybeSingle();
-      if (!creator) return res.status(404).json({ error: 'No account found with that email' });
-      await supabase.from('creator_settings').update({ password_reset_token: token, password_reset_expires: expires }).eq('id', creator.id);
-      _sendResetEmail(email, creator.display_name || 'there', token);
-    }
+    const rows = await dbQuery('SELECT id, display_name FROM creator_settings WHERE LOWER(email) = $1 LIMIT 1', [email.toLowerCase().trim()]);
+    if (!rows[0]) return res.status(404).json({ error: 'No account found with that email' });
+    await dbQuery('UPDATE creator_settings SET password_reset_token = $1, password_reset_expires = $2 WHERE id = $3', [token, expires, rows[0].id]);
+    _sendResetEmail(email, rows[0].display_name || 'there', token);
     res.json({ ok: true, sent_to: email });
   } catch (err) {
     console.error('[admin-reset-password]', err.message);
@@ -12638,41 +12631,19 @@ app.get('/admin', (req, res) => {
 // GET /api/admin/creators — all creators with stats
 app.get('/api/admin/creators', requireAdmin, async (req, res) => {
   try {
-    // All creator settings
-    let settings;
-    if (pool) {
-      settings = await dbQuery('SELECT creator_id, slug, display_name, plan, created_at, custom_points_name, primary_color, plan_trial_expires_at FROM creator_settings ORDER BY created_at DESC');
-    } else {
-      const { data: d } = await supabase.from('creator_settings')
-        .select('creator_id, slug, display_name, plan, created_at, custom_points_name, primary_color, plan_trial_expires_at')
-        .order('created_at', { ascending: false });
-      settings = d;
-    }
+    // All creator settings — use pg pool directly (supabase-js has auth issues)
+    const settings = await dbQuery('SELECT creator_id, slug, display_name, plan, created_at, custom_points_name, primary_color, plan_trial_expires_at FROM creator_settings ORDER BY created_at DESC');
 
     if (!settings?.length) return res.json([]);
 
     const slugs      = settings.map(s => s.slug);
     const creatorIds = settings.map(s => s.creator_id).filter(Boolean);
 
-    // Run all enrichment queries in parallel
-    let usersData, marketData, memberData;
-    if (pool) {
-      const [uRows, mRows, bRows] = await Promise.all([
-        creatorIds.length ? dbQuery('SELECT id, email FROM users WHERE id = ANY($1)', [creatorIds]) : [],
-        dbQuery('SELECT tenant_slug FROM markets WHERE tenant_slug = ANY($1)', [slugs]),
-        dbQuery('SELECT creator_slug FROM community_balances WHERE creator_slug = ANY($1)', [slugs]),
-      ]);
-      usersData = uRows; marketData = mRows; memberData = bRows;
-    } else {
-      const [usersRes, marketRes, memberRes] = await Promise.all([
-        creatorIds.length
-          ? supabase.from('users').select('id, email').in('id', creatorIds)
-          : Promise.resolve({ data: [] }),
-        supabase.from('markets').select('tenant_slug').in('tenant_slug', slugs),
-        supabase.from('community_balances').select('creator_slug').in('creator_slug', slugs),
-      ]);
-      usersData = usersRes.data || []; marketData = marketRes.data || []; memberData = memberRes.data || [];
-    }
+    const [usersData, marketData, memberData] = await Promise.all([
+      creatorIds.length ? dbQuery('SELECT id, email FROM users WHERE id = ANY($1)', [creatorIds]) : [],
+      dbQuery('SELECT tenant_slug FROM markets WHERE tenant_slug = ANY($1)', [slugs]),
+      dbQuery('SELECT creator_slug FROM community_balances WHERE creator_slug = ANY($1)', [slugs]),
+    ]);
 
     const emailMap = Object.fromEntries((usersData || []).map(u => [u.id, u.email]));
 
@@ -12709,16 +12680,7 @@ app.post('/api/admin/set-plan', requireAdmin, async (req, res) => {
     if (!slug || !['free','pro','platinum'].includes(plan)) {
       return res.status(400).json({ error: 'slug and valid plan required' });
     }
-    let error;
-    if (pool) {
-      const _upd = { plan, plan_trial_expires_at: null };
-      const _cols = Object.keys(_upd); const _vals = Object.values(_upd);
-      const _set = _cols.map((c, i) => `${c} = $${i + 1}`).join(', ');
-      await dbQuery(`UPDATE creator_settings SET ${_set}`, _vals);
-    } else {
-      const { error } = await supabase .from('creator_settings') .update({ plan, plan_trial_expires_at: null }) // clear any trial when plan is set manually .eq('slug', slug);
-    }
-    if (error) throw error;
+    await dbQuery('UPDATE creator_settings SET plan = $1, plan_trial_expires_at = NULL WHERE slug = $2', [plan, slug]);
     console.log(`[admin] set ${slug} → ${plan}`);
     res.json({ ok: true });
   } catch (err) {
@@ -12730,46 +12692,19 @@ app.post('/api/admin/set-plan', requireAdmin, async (req, res) => {
 // GET /api/admin/users — all non-creator members with activity stats
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   try {
-    let allUsers;
-    if (pool) {
-      const _rows = await dbQuery('SELECT id, email, display_name, created_at FROM users ORDER BY created_at DESC', []);
-      allUsers = _rows;
-    } else {
-      const { data: allUsers } = await supabase .from('users') .select('id, email, display_name, created_at') .order('created_at', { ascending: false });
-    }
-
+    const allUsers = await dbQuery('SELECT id, email, display_name, created_at FROM users ORDER BY created_at DESC');
     if (!allUsers?.length) return res.json([]);
 
-    // Which users are creators?
-    let creatorSettings;
-    if (pool) {
-      const _rows = await dbQuery('SELECT creator_id FROM creator_settings', []);
-      creatorSettings = _rows;
-    } else {
-      const { data: creatorSettings } = await supabase .from('creator_settings') .select('creator_id');
-    }
+    const creatorSettings = await dbQuery('SELECT creator_id FROM creator_settings');
     const creatorIdSet = new Set((creatorSettings || []).map(s => s.creator_id));
 
-    // Trade counts per user
     const allUserIds = allUsers.map(u => u.id);
-    let positions;
-    if (pool) {
-      const _rows = await dbQuery('SELECT user_id FROM positions WHERE user_id = ANY($1)', [allUserIds]);
-      positions = _rows;
-    } else {
-      const { data: positions } = await supabase .from('positions') .select('user_id') .in('user_id', allUserIds);
-    }
+    const [positions, balances] = await Promise.all([
+      dbQuery('SELECT user_id FROM positions WHERE user_id = ANY($1)', [allUserIds]),
+      dbQuery('SELECT user_id, balance FROM community_balances WHERE user_id = ANY($1)', [allUserIds])
+    ]);
     const tradeMap = {};
     (positions || []).forEach(p => { tradeMap[p.user_id] = (tradeMap[p.user_id] || 0) + 1; });
-
-    // Community balance totals per user
-    let balances;
-    if (pool) {
-      const _rows = await dbQuery('SELECT user_id, balance FROM community_balances WHERE user_id = ANY($1)', [allUserIds]);
-      balances = _rows;
-    } else {
-      const { data: balances } = await supabase .from('community_balances') .select('user_id, balance') .in('user_id', allUserIds);
-    }
     const balMap = {};
     (balances || []).forEach(b => { balMap[b.user_id] = (balMap[b.user_id] || 0) + (b.balance || 0); });
 
@@ -12794,47 +12729,21 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
 app.get('/api/admin/platform-stats', requireAdmin, async (req, res) => {
   try {
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-
-    let totalUsers, totalCreators, totalMarkets, totalTrades, newUsers7d, newTrades7d;
-    if (pool) {
-      const [r1, r2, r3, r4, r5, r6] = await Promise.all([
-        dbQuery('SELECT count(*) as count FROM users'),
-        dbQuery('SELECT count(*) as count FROM creator_settings'),
-        dbQuery('SELECT count(*) as count FROM markets'),
-        dbQuery('SELECT count(*) as count FROM positions'),
-        dbQuery('SELECT count(*) as count FROM users WHERE created_at >= $1', [sevenDaysAgo]),
-        dbQuery('SELECT count(*) as count FROM positions WHERE created_at >= $1', [sevenDaysAgo]),
-      ]);
-      totalUsers = parseInt(r1[0]?.count || 0);
-      totalCreators = parseInt(r2[0]?.count || 0);
-      totalMarkets = parseInt(r3[0]?.count || 0);
-      totalTrades = parseInt(r4[0]?.count || 0);
-      newUsers7d = parseInt(r5[0]?.count || 0);
-      newTrades7d = parseInt(r6[0]?.count || 0);
-    } else {
-      const [r1, r2, r3, r4, r5, r6] = await Promise.all([
-        supabase.from('users').select('*', { count: 'exact', head: true }),
-        supabase.from('creator_settings').select('*', { count: 'exact', head: true }),
-        supabase.from('markets').select('*', { count: 'exact', head: true }),
-        supabase.from('positions').select('*', { count: 'exact', head: true }),
-        supabase.from('users').select('*', { count: 'exact', head: true }).gte('created_at', sevenDaysAgo),
-        supabase.from('positions').select('*', { count: 'exact', head: true }).gte('created_at', sevenDaysAgo)
-      ]);
-      totalUsers = r1.count || 0;
-      totalCreators = r2.count || 0;
-      totalMarkets = r3.count || 0;
-      totalTrades = r4.count || 0;
-      newUsers7d = r5.count || 0;
-      newTrades7d = r6.count || 0;
-    }
-
+    const [r1, r2, r3, r4, r5, r6] = await Promise.all([
+      dbQuery('SELECT count(*) as count FROM users'),
+      dbQuery('SELECT count(*) as count FROM creator_settings'),
+      dbQuery('SELECT count(*) as count FROM markets'),
+      dbQuery('SELECT count(*) as count FROM positions'),
+      dbQuery('SELECT count(*) as count FROM users WHERE created_at >= $1', [sevenDaysAgo]),
+      dbQuery('SELECT count(*) as count FROM positions WHERE created_at >= $1', [sevenDaysAgo]),
+    ]);
     res.json({
-      total_users:    totalUsers   || 0,
-      total_creators: totalCreators || 0,
-      total_markets:  totalMarkets  || 0,
-      total_trades:   totalTrades   || 0,
-      new_users_7d:   newUsers7d    || 0,
-      new_trades_7d:  newTrades7d   || 0
+      total_users:    parseInt(r1[0]?.count || 0),
+      total_creators: parseInt(r2[0]?.count || 0),
+      total_markets:  parseInt(r3[0]?.count || 0),
+      total_trades:   parseInt(r4[0]?.count || 0),
+      new_users_7d:   parseInt(r5[0]?.count || 0),
+      new_trades_7d:  parseInt(r6[0]?.count || 0)
     });
   } catch (err) {
     console.error('[admin] platform-stats error:', err.message);
@@ -12848,14 +12757,7 @@ app.get('/api/admin/platform-stats', requireAdmin, async (req, res) => {
 
 app.get('/api/admin/invites', requireAdmin, async (req, res) => {
   try {
-    let data, error;
-    if (pool) {
-      const _rows = await dbQuery('SELECT * FROM creator_invites ORDER BY sent_at DESC LIMIT 200', []);
-      data = _rows;
-    } else {
-      const { data, error } = await supabase .from('creator_invites') .select('*') .order('sent_at', { ascending: false }) .limit(200);
-    }
-    if (error) throw error;
+    const data = await dbQuery('SELECT * FROM creator_invites ORDER BY sent_at DESC LIMIT 200');
     res.json({ invites: data || [] });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -13296,17 +13198,7 @@ app.post('/api/admin/gift-trial', requireAdmin, async (req, res) => {
     if (!slug) return res.status(400).json({ error: 'slug required' });
     const n = Math.min(Math.max(parseInt(days) || 30, 1), 365);
     const expiresAt = new Date(Date.now() + n * 86400000).toISOString();
-    let error;
-    if (pool) {
-      const _upd = { plan: 'platinum', plan_trial_expires_at: expiresAt };
-      const _cols = Object.keys(_upd); const _vals = Object.values(_upd);
-      const _set = _cols.map((c, i) => `${c} = $${i + 1}`).join(', ');
-      const _where = [slug];
-      await dbQuery(`UPDATE creator_settings SET ${_set} WHERE slug = $${_vals.length + 1}`, [..._vals, ..._where]);
-    } else {
-      const { error } = await supabase .from('creator_settings') .update({ plan: 'platinum', plan_trial_expires_at: expiresAt }) .eq('slug', slug);
-    }
-    if (error) throw error;
+    await dbQuery('UPDATE creator_settings SET plan = $1, plan_trial_expires_at = $2 WHERE slug = $3', ['platinum', expiresAt, slug]);
     console.log(`[admin] gifted ${n}d Premium trial to ${slug}, expires ${expiresAt}`);
     res.json({ ok: true, expires_at: expiresAt });
   } catch (err) {
@@ -13322,46 +13214,17 @@ app.post('/api/admin/transfer-creator', requireAdmin, async (req, res) => {
     const { slug, new_email } = req.body;
     if (!slug || !new_email) return res.status(400).json({ error: 'slug and new_email required' });
 
-    // Find the new owner by email
-    let newUser;
-    if (pool) {
-      const _rows = await dbQuery('SELECT id, email, display_name FROM users WHERE email = $1 LIMIT 1', [new_email.toLowerCase().trim()]);
-      newUser = _rows[0] || null;
-    } else {
-      const { data: newUser } = await supabase .from('users') .select('id, email, display_name') .eq('email', new_email.toLowerCase().trim()) .maybeSingle();
-    }
+    const userRows = await dbQuery('SELECT id, email, display_name FROM users WHERE email = $1 LIMIT 1', [new_email.toLowerCase().trim()]);
+    const newUser = userRows[0] || null;
     if (!newUser) return res.status(404).json({ error: `No user found with email: ${new_email}` });
 
-    // Get current creator settings
-    let cs;
-    if (pool) {
-      const _rows = await dbQuery('SELECT creator_id, slug, display_name FROM creator_settings WHERE slug = $1 LIMIT 1', [slug]);
-      cs = _rows[0] || null;
-    } else {
-      const { data: cs } = await supabase .from('creator_settings') .select('creator_id, slug, display_name') .eq('slug', slug) .maybeSingle();
-    }
+    const csRows = await dbQuery('SELECT creator_id, slug, display_name FROM creator_settings WHERE slug = $1 LIMIT 1', [slug]);
+    const cs = csRows[0] || null;
     if (!cs) return res.status(404).json({ error: `No creator found with slug: ${slug}` });
     if (cs.creator_id === newUser.id) return res.status(400).json({ error: 'That user already owns this account' });
 
-    // Update creator_settings and markets to new owner
-    let csErr;
-    if (pool) {
-      const _upd = { creator_id: newUser.id };
-      const _cols = Object.keys(_upd); const _vals = Object.values(_upd);
-      const _set = _cols.map((c, i) => `${c} = $${i + 1}`).join(', ');
-      const _where = [slug];
-      await dbQuery(`UPDATE creator_settings SET ${_set} WHERE slug = $${_vals.length + 1}`, [..._vals, ..._where]);
-    } else {
-      const { error: csErr } = await supabase .from('creator_settings') .update({ creator_id: newUser.id }) .eq('slug', slug);
-    }
-    if (csErr) throw csErr;
-
-    // Reassign markets to new owner
-    if (pool) {
-      await dbQuery('UPDATE markets SET creator_id = $1 WHERE creator_id = $2 AND tenant_slug = $3', [newUser.id, cs.creator_id, slug]);
-    } else {
-      await supabase.from('markets').update({ creator_id: newUser.id }).eq('creator_id', cs.creator_id).eq('tenant_slug', slug);
-    }
+    await dbQuery('UPDATE creator_settings SET creator_id = $1 WHERE slug = $2', [newUser.id, slug]);
+    await dbQuery('UPDATE markets SET creator_id = $1 WHERE creator_id = $2 AND tenant_slug = $3', [newUser.id, cs.creator_id, slug]);
 
     console.log(`[admin] transferred /${slug} from ${cs.creator_id} to ${newUser.id} (${newUser.email})`);
     res.json({ ok: true, new_owner: { id: newUser.id, email: newUser.email, display_name: newUser.display_name } });
