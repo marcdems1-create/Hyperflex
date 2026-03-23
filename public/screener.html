@@ -360,7 +360,7 @@ function renderTable() {
     var safeUrl = m.url && m.url.startsWith('https://polymarket.com') ? m.url : (m.slug ? 'https://polymarket.com/event/' + m.slug : 'https://polymarket.com');
     return '<tr' + rowClass + ' onclick="window.open(\'' + safeUrl + '\', \'_blank\')">' +
       '<td class="mkt-question"><a href="' + safeUrl + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">' + truncate(m.question, 55) + '</a></td>' +
-      '<td><span class="cat-pill ' + catClass + '">' + m.category + '</span></td>' +
+      '<td><span class="cat-pill ' + catClass + '">' + ({sports:'\uD83C\uDFC8',crypto:'\u20BF',politics:'\uD83C\uDFDB\uFE0F',entertainment:'\uD83C\uDFAC',tech:'\uD83D\uDCBB',other:'\uD83D\uDCCA'}[m.category]||'') + ' ' + m.category + '</span></td>' +
       '<td class="yes-pct ' + yesClass + '">' + yesPct + '%</td>' +
       '<td class="whale-cell' + whaleClass + '">' + m.whale_count + whaleIcon + '</td>' +
       '<td class="vol-val">' + fmtVol(m.volume) + '</td>' +
