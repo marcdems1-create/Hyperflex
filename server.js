@@ -9883,6 +9883,14 @@ app.post('/api/predictors/:userId/follow', requireAuth, async (req, res) => {
     const followerId = req.user.id;
     const followingId = req.params.userId;
     if (followerId === followingId) return res.status(400).json({ error: 'Cannot follow yourself' });
+
+    // following_id column is UUID with FK to users — validate before querying
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(followingId)) {
+      // Non-UUID IDs (HL/Poly traders) — store in localStorage only, not DB
+      return res.json({ following: true, client_only: true });
+    }
+
     let existing;
     if (pool) {
       const rows = await dbQuery('SELECT id FROM predictor_follows WHERE follower_id = $1 AND following_id = $2 LIMIT 1', [followerId, followingId]);
