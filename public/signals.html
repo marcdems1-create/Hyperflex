@@ -463,6 +463,7 @@ function renderSignals() {
         '<div style="display:flex;gap:8px;align-items:center">' +
           '<span class="signal-type-badge badge-' + s.type + '">' + icon + ' ' + escHtml(label) + '</span>' +
           '<span class="confidence-badge conf-' + s.confidence + '">' + s.confidence + '</span>' + urgHtml +
+          (s._narrative && s._narrative !== 'Other' ? '<span style="font-family:var(--mono);font-size:9px;padding:1px 6px;border-radius:3px;background:#1a1a18;color:#555;border:1px solid #222;letter-spacing:.04em;text-transform:uppercase">' + escHtml(s._narrative) + '</span>' : '') +
         '</div>' +
         '<span style="font-family:var(--mono);font-size:10px;color:var(--muted)">' + age + '</span>' +
       '</div>' +
@@ -474,6 +475,7 @@ function renderSignals() {
       '<div class="signal-actions">' + tradeBtn +
         '<button class="signal-trade-btn secondary" onclick="analyzeFromSignal(\'' + escHtml(s.market).replace(/'/g, "\\'") + '\')">AI Analysis</button>' +
       '</div>' +
+      (s._altCount > 0 ? '<div style="margin-top:8px;padding:6px 10px;background:#0e0e0c;border:1px solid #222;border-radius:6px;font-family:var(--mono);font-size:10px;color:#555;display:flex;align-items:center;gap:6px"><span style="color:#444">\uD83D\uDCC5</span><span>+' + s._altCount + ' similar market' + (s._altCount > 1 ? 's' : '') + ' (different deadline)</span></div>' : '') +
     '</div>';
   }).join('');
 

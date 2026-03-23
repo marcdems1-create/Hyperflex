@@ -19654,17 +19654,73 @@ app.get('/api/signals', async (req, res) => {
       }
     } catch (e) { console.warn('[signals] arbitrage source error:', e.message); }
 
+    // ── Dedup signals by base question (strip date variants) ──
+    function _baseQuestion(q) {
+      return (q || '')
+        .replace(/\s+by\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+\d{1,2}[,]?\s*(\d{4})?(\?)?$/i, '')
+        .replace(/\s+by\s+\w+\s+\d{4}(\?)?$/i, '')
+        .replace(/\s+before\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+\d{1,2}(\?)?$/i, '')
+        .replace(/\s+in\s+(q[1-4]|q[1-4]\s+\d{4}|\d{4})(\?)?$/i, '')
+        .replace(/\s+(by|before|in|through|until)\s+\d{4}(\?)?$/i, '')
+        .replace(/\s+on\s+\d{4}-\d{2}-\d{2}(\?)?$/i, '')
+        .replace(/\s+\d{4}-\d{2}-\d{2}(\?)?$/, '')
+        .replace(/\?$/, '').trim().toLowerCase();
+    }
+    const _dedupSeen = new Map();
+    for (const sig of signals) {
+      const base = _baseQuestion(sig.market || '');
+      if (!base) { _dedupSeen.set(sig.market + Math.random(), { ...sig, _altCount: 0 }); continue; }
+      const existing = _dedupSeen.get(base);
+      if (!existing) {
+        _dedupSeen.set(base, { ...sig, _altCount: 0 });
+      } else {
+        const eScore = (existing.whale_count || 0) * 10 + (existing.capital || 0) / 1000;
+        const nScore = (sig.whale_count || 0) * 10 + (sig.capital || 0) / 1000;
+        if (nScore > eScore) {
+          _dedupSeen.set(base, { ...sig, _altCount: existing._altCount + 1 });
+        } else {
+          existing._altCount++;
+        }
+      }
+    }
+    let deduped = Array.from(_dedupSeen.values());
+
+    // ── Per-narrative cap: max 2 signals per theme ──
+    function _signalNarrative(market) {
+      const q = (market || '').toLowerCase();
+      if (/trump|president|democrat|republican|congress|senate|maga|white house|tariff|vance/i.test(q)) return 'Trump & US Politics';
+      if (/bitcoin|btc|ethereum|eth|crypto|solana|sol|defi|nft|coinbase|xrp|dogecoin/i.test(q)) return 'Crypto & DeFi';
+      if (/israel|iran|gaza|hamas|hezbollah|ceasefire|hormuz|middle east|lebanon/i.test(q)) return 'Middle East & War';
+      if (/\bai\b|openai|gpt|artificial intelligence|nvidia|apple|microsoft|google|meta /i.test(q)) return 'AI & Big Tech';
+      if (/\bfed\b|federal reserve|interest rate|inflation|recession|gdp|cpi|unemployment|rate cut|crude oil/i.test(q)) return 'Macro & Economy';
+      if (/ukraine|russia|zelensky|putin|nato|kyiv/i.test(q)) return 'Ukraine & Russia';
+      if (/nba|basketball|finals|playoff|lakers|celtics|warriors|nuggets|cavaliers|thunder|knicks/i.test(q)) return 'NBA & Basketball';
+      if (/nfl|super bowl|mlb|world series|nhl|stanley cup|ncaa/i.test(q)) return 'NFL & American Sports';
+      if (/election|vote|ballot|candidate|prime minister|chancellor/i.test(q)) return 'Global Elections';
+      return 'Other';
+    }
+    const _narrativeCounts = {};
+    const diversified = [];
+    for (const sig of deduped) {
+      const narr = _signalNarrative(sig.market || '');
+      sig._narrative = narr;
+      _narrativeCounts[narr] = (_narrativeCounts[narr] || 0) + 1;
+      if (narr === 'Other' || _narrativeCounts[narr] <= 2) {
+        diversified.push(sig);
+      }
+    }
+
     // Sort: HIGH first, then MEDIUM, then LOW; within same confidence, newest first
     const confOrder = { HIGH: 0, MEDIUM: 1, LOW: 2 };
-    signals.sort((a, b) => {
+    diversified.sort((a, b) => {
       const confDiff = (confOrder[a.confidence] || 2) - (confOrder[b.confidence] || 2);
       if (confDiff !== 0) return confDiff;
       return new Date(b.detected_at) - new Date(a.detected_at);
     });
 
     const result = {
-      signals: signals.slice(0, 20),
-      total: signals.length,
+      signals: diversified.slice(0, 20),
+      total: diversified.length,
       updated_at: now
     };
 
