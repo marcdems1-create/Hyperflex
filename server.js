@@ -17669,9 +17669,36 @@ async function generateCrystalBallPredictions() {
     return '$' + Math.round(v);
   }
 
-  // Pre-warm caches if empty — fetch whale data directly
-  if (!_whaleWatchCache) {
-    try { await fetchWhalePositions(); } catch(e) { console.warn('[crystal-ball] whale warm failed:', e.message); }
+  // Pre-warm caches if empty — fetch data synchronously before generating predictions
+  if (!_whaleWatchCache || !_whaleWatchCache.data) {
+    try {
+      const whaleData = await fetchWhalePositions();
+      _whaleWatchCache = { ts: Date.now(), data: whaleData };
+      console.log('[crystal-ball] Warmed whale cache:', (whaleData.whales || []).length, 'positions');
+    } catch(e) { console.warn('[crystal-ball] whale warm failed:', e.message); }
+  }
+  if (!_screenerCache || !_screenerCache.data) {
+    try {
+      const fetch = _nodeFetch;
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), 15000);
+      const mktRes = await fetch('https://gamma-api.polymarket.com/markets?closed=false&limit=200&order=volume&ascending=false', {
+        signal: ctrl.signal,
+        headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+      });
+      clearTimeout(tid);
+      if (mktRes.ok) {
+        const rawMarkets = await mktRes.json();
+        const markets = (rawMarkets || []).filter(m => m.question).map(m => {
+          let yesPrice = null;
+          try { const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices; if (Array.isArray(prices) && prices[0] != null) yesPrice = parseFloat(prices[0]); } catch {}
+          const slug = m.eventSlug || m.slug || '';
+          return { market_id: m.conditionId || slug || m.id || '', question: m.question, yes_price: yesPrice, volume: parseFloat(m.volume) || 0, end_date: (m.endDate || m.end_date_iso) ? new Date(m.endDate || m.end_date_iso).toISOString() : null, url: slug ? `https://polymarket.com/event/${slug}` : 'https://polymarket.com', slug };
+        });
+        _screenerCache = { ts: Date.now(), data: markets };
+        console.log('[crystal-ball] Warmed screener cache:', markets.length, 'markets');
+      }
+    } catch(e) { console.warn('[crystal-ball] screener warm failed:', e.message); }
   }
   // Build whale index inline if cache is empty
   let indexData = _whaleIndexCache && _whaleIndexCache.data ? _whaleIndexCache.data : null;
@@ -17869,9 +17896,10 @@ async function generateCrystalBallPredictions() {
 
   // ── 5. EXPIRY CONVERGENCE — markets expiring within 48h with uncertain outcome ──
   // Use screener cache if available (has end_date info)
-  if (_screenerCache && _screenerCache.data && _screenerCache.data.markets) {
+  const screenerMarkets = _screenerCache && _screenerCache.data ? (Array.isArray(_screenerCache.data) ? _screenerCache.data : (_screenerCache.data.markets || [])) : [];
+  if (screenerMarkets.length > 0) {
     const fortyEightHours = 48 * 60 * 60 * 1000;
-    for (const mkt of _screenerCache.data.markets) {
+    for (const mkt of screenerMarkets) {
       if (!mkt.end_date) continue;
       const endDate = new Date(mkt.end_date);
       const hoursLeft = (endDate.getTime() - now.getTime()) / (60 * 60 * 1000);
