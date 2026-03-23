@@ -416,15 +416,17 @@ function requireApiTier(req, res, next) {
     } catch(e) { /* invalid token, fall through */ }
   }
 
-  // Check if request comes from our own frontend (same-origin)
-  // Only allow exact domain match — not substrings like "evil-hyperflex.network"
+  // Check if request comes from our own frontend (same-origin AJAX only)
+  // Block direct browser navigation (Sec-Fetch-Mode: navigate) — only allow fetch/XHR
+  const secFetchMode = req.headers['sec-fetch-mode'] || '';
+  const isDirectNav = secFetchMode === 'navigate';
   const referer = req.headers.referer || req.headers.origin || '';
   try {
-    if (referer) {
+    if (referer && !isDirectNav) {
       const refUrl = new URL(referer);
       const host = refUrl.hostname;
       if (host === 'hyperflex.network' || host === 'www.hyperflex.network' || host === 'localhost' || host === '127.0.0.1') {
-        return next(); // Our own pages can access
+        return next(); // Our own JS fetch() calls can access
       }
     }
   } catch (e) { /* malformed referer — fall through to 403 */ }
