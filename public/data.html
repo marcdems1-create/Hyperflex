@@ -298,10 +298,12 @@ function fmtCap(n) {
         const isHigh = m.consensus_pct >= 65;
         const isGold = m.whale_count >= 10;
         const q = (m.market || '').length > 65 ? m.market.substring(0, 62) + '...' : (m.market || '');
+        var mUrl = m.url && m.url !== 'https://polymarket.com' ? m.url : '';
         return '<div class="conc-row' + (isGold ? ' gold' : '') + '">' +
           '<div class="conc-stats">' + m.whale_count + ' whales &middot; ' + fmtCap(m.total_capital) + '</div>' +
           '<div class="conc-question">' + _esc(q) + '</div>' +
           '<div class="conc-consensus ' + (isHigh ? 'high' : 'low') + '">' + m.consensus_pct + '% ' + m.consensus_side + '</div>' +
+          (mUrl ? '<a href="' + mUrl + '" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:11px;color:var(--gold);white-space:nowrap;flex-shrink:0;text-decoration:none;transition:color .15s" onmouseover="this.style.color=\'#e0b340\'" onmouseout="this.style.color=\'#c9920d\'">View &rarr;</a>' : '') +
         '</div>';
       }).join('');
     } else {
