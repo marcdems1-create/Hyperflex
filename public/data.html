@@ -301,7 +301,7 @@ function fmtCap(n) {
         var mUrl = m.url && m.url !== 'https://polymarket.com' ? m.url : '';
         return '<div class="conc-row' + (isGold ? ' gold' : '') + '">' +
           '<div class="conc-stats">' + m.whale_count + ' whales &middot; ' + fmtCap(m.total_capital) + '</div>' +
-          '<div class="conc-question">' + _esc(q) + '</div>' +
+          '<div class="conc-question">' + (mUrl ? '<a href="' + mUrl + '" target="_blank" rel="noopener" style="color:var(--text);text-decoration:none;border-bottom:1px dashed rgba(201,146,13,0.3);transition:color .15s" onmouseover="this.style.color=\'var(--gold)\'" onmouseout="this.style.color=\'var(--text)\'">' + _esc(q) + '</a>' : _esc(q)) + '</div>' +
           '<div class="conc-consensus ' + (isHigh ? 'high' : 'low') + '">' + m.consensus_pct + '% ' + m.consensus_side + '</div>' +
           (mUrl ? '<a href="' + mUrl + '" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:11px;color:var(--gold);white-space:nowrap;flex-shrink:0;text-decoration:none;transition:color .15s" onmouseover="this.style.color=\'#e0b340\'" onmouseout="this.style.color=\'#c9920d\'">View &rarr;</a>' : '') +
         '</div>';
@@ -377,61 +377,85 @@ function fmtCap(n) {
 // ── Load Cross-Platform Comparison ──
 (async function loadCrossPlatform() {
   try {
-    // Fetch odds data which contains both Polymarket and Kalshi markets
-    const res = await fetch('/api/markets/search?q=&limit=100');
-    if (!res.ok) throw new Error('API error');
-    const data = await res.json();
-    const results = data.results || data.markets || [];
+    // Fetch multiple high-volume queries to get both Polymarket + Kalshi markets
+    var queries = ['trump', 'election', 'bitcoin', 'iran', 'fed'];
+    var results = await Promise.allSettled(queries.map(function(q) {
+      return fetch('/api/markets/search?q=' + q).then(function(r) { return r.ok ? r.json() : null; });
+    }));
 
-    // Group by normalized question to find cross-platform matches
-    const normalized = {};
-    results.forEach(m => {
-      const key = (m.title || m.question || '').toLowerCase().replace(/[^a-z0-9 ]/g, '').trim().substring(0, 50);
-      if (!key) return;
-      if (!normalized[key]) normalized[key] = [];
-      normalized[key].push(m);
+    // Merge all Polymarket and Kalshi results
+    var allPoly = [];
+    var allKalshi = [];
+    var seenPoly = new Set();
+    var seenKalshi = new Set();
+    results.forEach(function(r) {
+      if (r.status !== 'fulfilled' || !r.value) return;
+      var d = r.value;
+      (d.polymarket || []).forEach(function(m) {
+        var key = (m.question || '').toLowerCase().substring(0, 50);
+        if (!seenPoly.has(key)) { seenPoly.add(key); allPoly.push(m); }
+      });
+      (d.kalshi || []).forEach(function(m) {
+        var key = (m.question || '').toLowerCase().substring(0, 50);
+        if (!seenKalshi.has(key)) { seenKalshi.add(key); allKalshi.push(m); }
+      });
     });
 
-    // Find pairs with different platforms
-    const pairs = [];
-    Object.values(normalized).forEach(group => {
-      const platforms = new Set(group.map(m => (m.platform || '').toLowerCase()));
-      if (platforms.size >= 2) {
-        const poly = group.find(m => (m.platform || '').toLowerCase() === 'polymarket');
-        const kalshi = group.find(m => (m.platform || '').toLowerCase() === 'kalshi');
-        if (poly && kalshi) {
-          const polyPrice = Math.round((poly.probability || poly.yes_price || 0.5) * 100);
-          const kalshiPrice = Math.round((kalshi.probability || kalshi.yes_price || 0.5) * 100);
-          const spread = Math.abs(polyPrice - kalshiPrice);
-          pairs.push({
-            question: poly.title || poly.question || 'Unknown',
-            polyPrice,
-            kalshiPrice,
-            spread,
-            isArb: spread > 3
-          });
-        }
+    // Match across platforms by fuzzy question matching
+    var pairs = [];
+    var usedKalshi = new Set();
+    allPoly.forEach(function(pm) {
+      var pQ = (pm.question || '').toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+      if (!pQ || pQ.length < 10) return;
+      var pWords = pQ.split(/\s+/).filter(function(w) { return w.length > 3; });
+      // Find best Kalshi match
+      var bestMatch = null;
+      var bestScore = 0;
+      allKalshi.forEach(function(km, idx) {
+        if (usedKalshi.has(idx)) return;
+        var kQ = (km.question || '').toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+        var matchCount = pWords.filter(function(w) { return kQ.includes(w); }).length;
+        var score = matchCount / Math.max(pWords.length, 1);
+        if (score > bestScore && score >= 0.5) { bestScore = score; bestMatch = { km: km, idx: idx }; }
+      });
+      if (bestMatch) {
+        usedKalshi.add(bestMatch.idx);
+        var polyPrice = pm.yes_pct != null ? pm.yes_pct : (pm.yes_price != null ? Math.round(pm.yes_price * 100) : null);
+        var kalshiPrice = bestMatch.km.yes_pct != null ? bestMatch.km.yes_pct : null;
+        if (polyPrice == null || kalshiPrice == null) return;
+        var spread = Math.abs(polyPrice - kalshiPrice);
+        pairs.push({
+          question: pm.question || 'Unknown',
+          polyPrice: polyPrice,
+          kalshiPrice: kalshiPrice,
+          spread: spread,
+          polyUrl: pm.url || '',
+          kalshiUrl: bestMatch.km.url || '',
+          isArb: spread > 3
+        });
       }
     });
 
-    pairs.sort((a, b) => b.spread - a.spread);
-    const el = document.getElementById('dataArbitrage');
+    pairs.sort(function(a, b) { return b.spread - a.spread; });
+    var el = document.getElementById('dataArbitrage');
 
     if (!pairs.length) {
       el.innerHTML = '<div style="text-align:center;padding:32px 16px">' +
         '<div style="font-size:32px;margin-bottom:12px">&#x1F50D;</div>' +
-        '<div style="font-family:var(--mono);font-size:12px;color:var(--muted);line-height:1.6">Cross-platform arbitrage data is updated as markets are indexed across both Polymarket and Kalshi.<br>Check back soon for price comparison opportunities.</div>' +
+        '<div style="font-family:var(--mono);font-size:12px;color:var(--muted);line-height:1.6">No cross-platform matches found right now. Markets are indexed across Polymarket and Kalshi continuously.<br>Check back soon for price comparison opportunities.</div>' +
       '</div>';
       return;
     }
 
-    el.innerHTML = pairs.slice(0, 10).map(p => {
-      const q = p.question.length > 55 ? p.question.substring(0, 52) + '...' : p.question;
+    el.innerHTML = pairs.slice(0, 10).map(function(p) {
+      var q = p.question.length > 55 ? p.question.substring(0, 52) + '...' : p.question;
+      var polyLink = p.polyUrl && p.polyUrl !== 'https://polymarket.com' ? ' <a href="' + p.polyUrl + '" target="_blank" rel="noopener" style="color:var(--gold);text-decoration:none;font-size:10px">\u2192</a>' : '';
+      var kalshiLink = p.kalshiUrl && p.kalshiUrl !== 'https://kalshi.com' ? ' <a href="' + p.kalshiUrl + '" target="_blank" rel="noopener" style="color:var(--gold);text-decoration:none;font-size:10px">\u2192</a>' : '';
       return '<div class="arb-row' + (p.isArb ? ' opportunity' : '') + '">' +
         '<div class="arb-question">' + _esc(q) + '</div>' +
         '<div class="arb-prices">' +
-          '<span class="arb-platform poly">Poly ' + p.polyPrice + '%</span>' +
-          '<span class="arb-platform kalshi">Kalshi ' + p.kalshiPrice + '%</span>' +
+          '<span class="arb-platform poly">Poly ' + p.polyPrice + '%' + polyLink + '</span>' +
+          '<span class="arb-platform kalshi">Kalshi ' + p.kalshiPrice + '%' + kalshiLink + '</span>' +
         '</div>' +
         '<div class="arb-spread">' + (p.isArb ? '&#x26A0; ' : '') + p.spread + '% spread</div>' +
       '</div>';
