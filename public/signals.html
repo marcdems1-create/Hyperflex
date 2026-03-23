@@ -516,12 +516,12 @@ async function loadWhalePicks() {
     if (data.error) throw new Error(data.error);
 
     const markets = (data.markets || data.positions || [])
-      .filter(m => (m.strength || '').toLowerCase() === 'strong')
+      .filter(m => (m.strength || '').toLowerCase() === 'strong' || (m.strength || '').toLowerCase() === 'moderate')
       .sort((a, b) => (b.whale_count || 0) - (a.whale_count || 0))
       .slice(0, 5);
 
     if (markets.length === 0) {
-      el.innerHTML = '<div class="empty-state">No strong consensus picks right now.</div>';
+      el.innerHTML = '<div class="empty-state">No whale consensus picks right now. Check back soon.</div>';
       return;
     }
 
