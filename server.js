@@ -22202,15 +22202,187 @@ app.use((req, res) => {
   res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
 });
 
-// Auto-migrate: ensure required columns exist
+// Auto-migrate: create all tables on fresh DB, add missing columns on existing DB
 if (pool) {
   (async () => {
     try {
-      await dbQuery('ALTER TABLE creator_settings ADD COLUMN IF NOT EXISTS password_reset_token TEXT').catch(() => {});
-      await dbQuery('ALTER TABLE creator_settings ADD COLUMN IF NOT EXISTS password_reset_expires TIMESTAMPTZ').catch(() => {});
-      await dbQuery('ALTER TABLE creator_settings ADD COLUMN IF NOT EXISTS api_key TEXT').catch(() => {});
-      console.log('[boot] Auto-migration complete');
-    } catch(e) { console.warn('[boot] Auto-migration skipped:', e.message); }
+      // Core tables
+      await dbQuery(`CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        email TEXT UNIQUE, display_name TEXT, password_hash TEXT,
+        google_id TEXT, x_id TEXT, x_username TEXT,
+        polymarket_address TEXT, kalshi_api_key TEXT, manifold_username TEXT,
+        email_unsubscribe_token TEXT, email_unsubscribed BOOLEAN DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+
+      await dbQuery(`CREATE TABLE IF NOT EXISTS creator_settings (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        creator_id TEXT REFERENCES users(id), slug TEXT UNIQUE, display_name TEXT,
+        email TEXT, password_hash TEXT, plan TEXT DEFAULT 'free',
+        custom_points_name TEXT DEFAULT 'Flex Points', primary_color TEXT DEFAULT '#c9920d',
+        community_description TEXT, logo_url TEXT, banner_url TEXT,
+        starting_balance INTEGER DEFAULT 10000, is_active BOOLEAN DEFAULT true,
+        polymarket_address TEXT, kalshi_api_key TEXT, manifold_username TEXT,
+        plan_trial_expires_at TIMESTAMPTZ, api_key TEXT,
+        password_reset_token TEXT, password_reset_expires TIMESTAMPTZ,
+        youtube_channel_id TEXT, auto_scan_enabled BOOLEAN DEFAULT false,
+        auto_scan_cadence TEXT DEFAULT 'daily', auto_scan_last_run TIMESTAMPTZ,
+        discord_webhook_url TEXT, last_milestone_notified INTEGER DEFAULT 0,
+        email_unsubscribe_token TEXT, email_unsubscribed BOOLEAN DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+
+      await dbQuery(`CREATE TABLE IF NOT EXISTS markets (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        creator_id TEXT, tenant_slug TEXT, question TEXT, category TEXT DEFAULT 'other',
+        expiry_date TIMESTAMPTZ, outcome TEXT, resolved_at TIMESTAMPTZ,
+        resolution_note TEXT, source_url TEXT,
+        is_public BOOLEAN DEFAULT true, trader_count INTEGER DEFAULT 0,
+        volume INTEGER DEFAULT 0, yes_price NUMERIC DEFAULT 0.5,
+        options JSONB, season_id TEXT,
+        source_tweet_url TEXT, tweet_text TEXT, tweet_author TEXT,
+        blasted_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+
+      await dbQuery(`CREATE TABLE IF NOT EXISTS positions (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        user_id TEXT, market_id TEXT, side TEXT, amount INTEGER DEFAULT 0,
+        potential_payout NUMERIC, won BOOLEAN, settled BOOLEAN DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+
+      await dbQuery(`CREATE TABLE IF NOT EXISTS community_balances (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        user_id TEXT, creator_slug TEXT, market_id TEXT,
+        balance INTEGER DEFAULT 0, side TEXT, amount INTEGER DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+
+      // Supporting tables
+      await dbQuery(`CREATE TABLE IF NOT EXISTS market_comments (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        market_id TEXT, user_id TEXT, content TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+
+      await dbQuery(`CREATE TABLE IF NOT EXISTS creator_invites (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        name TEXT, email TEXT, channel_url TEXT, note TEXT,
+        accepted BOOLEAN DEFAULT false, sent_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+
+      await dbQuery(`CREATE TABLE IF NOT EXISTS creator_referrals (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        referrer_slug TEXT, referred_slug TEXT, accepted BOOLEAN DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW(), accepted_at TIMESTAMPTZ
+      )`).catch(() => {});
+
+      await dbQuery(`CREATE TABLE IF NOT EXISTS market_disputes (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        market_id TEXT, user_id TEXT, creator_slug TEXT,
+        reason TEXT, status TEXT DEFAULT 'pending',
+        dispute_type TEXT, requested_outcome TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+
+      await dbQuery(`CREATE TABLE IF NOT EXISTS creator_follows (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        user_id TEXT, creator_slug TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, creator_slug)
+      )`).catch(() => {});
+
+      await dbQuery(`CREATE TABLE IF NOT EXISTS notifications (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        user_id TEXT, type TEXT, title TEXT, body TEXT, url TEXT,
+        read BOOLEAN DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+
+      await dbQuery(`CREATE TABLE IF NOT EXISTS creator_wall (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        creator_slug TEXT, user_id TEXT, content TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+
+      await dbQuery(`CREATE TABLE IF NOT EXISTS seasons (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        creator_slug TEXT, name TEXT, description TEXT,
+        prize TEXT, end_date TIMESTAMPTZ, active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+
+      await dbQuery(`CREATE TABLE IF NOT EXISTS creator_rewards (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        creator_id TEXT, slug TEXT, type TEXT, config JSONB,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+
+      await dbQuery(`CREATE TABLE IF NOT EXISTS predictor_follows (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        follower_id TEXT, followed_id TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(follower_id, followed_id)
+      )`).catch(() => {});
+
+      await dbQuery(`CREATE TABLE IF NOT EXISTS cached_positions (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        user_id TEXT, platform TEXT, external_id TEXT,
+        market_title TEXT, side TEXT, size NUMERIC, probability NUMERIC,
+        market_url TEXT, pnl NUMERIC,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+
+      await dbQuery(`CREATE TABLE IF NOT EXISTS subscribers (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        email TEXT UNIQUE, created_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+
+      await dbQuery(`CREATE TABLE IF NOT EXISTS prediction_log (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        source TEXT, market_id TEXT, market_question TEXT,
+        predicted_side TEXT, predicted_confidence NUMERIC,
+        market_price_at_prediction NUMERIC, target_price NUMERIC,
+        actual_outcome TEXT, resolved_at TIMESTAMPTZ, expires_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+
+      await dbQuery(`CREATE TABLE IF NOT EXISTS market_snapshots (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        market_id TEXT, yes_price NUMERIC, question TEXT,
+        snapshot_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+
+      await dbQuery(`CREATE TABLE IF NOT EXISTS narrative_snapshots (
+        id BIGSERIAL PRIMARY KEY,
+        narrative TEXT NOT NULL, snapshot_date DATE NOT NULL,
+        dominance_pct NUMERIC(5,2), market_count INTEGER, total_volume BIGINT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(narrative, snapshot_date)
+      )`).catch(() => {});
+
+      await dbQuery(`CREATE TABLE IF NOT EXISTS agent_configs (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        user_id TEXT UNIQUE, budget_per_trade NUMERIC, max_daily_spend NUMERIC,
+        min_whales INTEGER DEFAULT 5, categories JSONB, followed_whales JSONB,
+        kelly_fraction TEXT DEFAULT 'half', alert_method TEXT DEFAULT 'push',
+        active BOOLEAN DEFAULT false, created_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+
+      await dbQuery(`CREATE TABLE IF NOT EXISTS agent_decisions (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        user_id TEXT, market_question TEXT, market_url TEXT,
+        direction TEXT, whale_count INTEGER, edge_pct NUMERIC,
+        recommended_size NUMERIC, kelly_fraction TEXT, signal_strength TEXT,
+        signal_urgency NUMERIC, odds_at_signal NUMERIC,
+        outcome TEXT, outcome_return NUMERIC, outcome_set_at TIMESTAMPTZ,
+        fired_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+
+      console.log('[boot] Auto-migration complete — all tables ensured');
+    } catch(e) { console.warn('[boot] Auto-migration error:', e.message); }
   })();
 }
 
