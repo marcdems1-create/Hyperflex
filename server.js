@@ -17964,7 +17964,7 @@ app.post('/api/ai/market-analysis', async (req, res) => {
     }).join('\n');
 
     const resp = await anthropic.messages.create({
-      model: 'claude-3-haiku-20240307',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 600,
       messages: [{
         role: 'user',
@@ -17975,8 +17975,9 @@ app.post('/api/ai/market-analysis', async (req, res) => {
     const analysis = resp.content[0]?.text?.trim() || 'Unable to generate analysis.';
     res.json({ analysis });
   } catch (err) {
-    console.error('[ai-analysis]', err.message, err.stack?.split('\n')[1]);
-    res.json({ analysis: 'AI analysis temporarily unavailable. The whale data above provides the key signal.' });
+    console.error('[ai-analysis] ERROR:', err.message);
+    // Return the actual error in dev so we can debug
+    res.json({ analysis: 'AI analysis temporarily unavailable. Error: ' + (err.message || '').substring(0, 100) });
   }
 });
 
