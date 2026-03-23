@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Trading Agent — HYPERFLEX</title>
+<meta name="description" content="Configure your AI trading agent to monitor whale signals 24/7 and fire targeted recommendations."/>
+<link rel="icon" href="/hyperflex-logo.png"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+:root{--ink:#0e0e0c;--paper:#0a0a08;--card:#13130f;--text:#ddd8cc;--gold:#c9920d;--gold-lt:#e0a820;--gold-dim:rgba(201,146,13,0.15);--border:#2a2a26;--dim:#7a7870;--muted:#5a5854;--green:#22c55e;--red:#c0392b;--sans:'Syne',sans-serif;--mono:'Space Mono',monospace;--radius:10px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--paper);color:var(--text);font-family:var(--sans);min-height:100vh}
+.nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 32px;height:56px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:rgba(10,10,8,.92);backdrop-filter:blur(14px)}
+.nav-logo{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--gold);text-decoration:none;letter-spacing:1px}
+.nav-links{display:flex;gap:20px;overflow-x:auto}
+.nav-link{font-family:var(--mono);font-size:11px;color:var(--dim);text-decoration:none;white-space:nowrap;transition:color .15s}
+.nav-link:hover,.nav-link.active{color:var(--text)}
+.container{max-width:720px;margin:0 auto;padding:80px 20px 60px}
+.hero-section{text-align:center;padding:40px 0 32px}
+.hero-section h1{font-size:clamp(28px,4vw,42px);font-weight:800;margin-bottom:12px}
+.hero-section h1 span{color:var(--gold)}
+.hero-sub{font-family:var(--mono);font-size:13px;color:var(--dim);max-width:500px;margin:0 auto 24px;line-height:1.6}
+.status-card{background:var(--card);border:2px solid var(--border);border-radius:14px;padding:24px;margin-bottom:24px;position:relative;overflow:hidden}
+.status-card.active{border-color:rgba(34,197,94,0.4)}
+.status-card.paused{border-color:rgba(239,68,68,0.3)}
+.status-dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:8px}
+.status-dot.active{background:#22c55e;box-shadow:0 0 8px rgba(34,197,94,0.5);animation:pulse 2s infinite}
+.status-dot.paused{background:#ef4444}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.config-section{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:20px}
+.config-title{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.08em;margin-bottom:16px}
+.field{margin-bottom:16px}
+.field label{display:block;font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:6px}
+.field input,.field select{width:100%;background:var(--paper);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:13px;padding:10px 14px;outline:none;box-sizing:border-box;transition:border-color .15s}
+.field input:focus,.field select:focus{border-color:var(--gold)}
+.pill-group{display:flex;gap:8px;flex-wrap:wrap}
+.pill{font-family:var(--mono);font-size:11px;padding:8px 16px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--dim);cursor:pointer;transition:all .15s}
+.pill.selected{border-color:var(--gold);background:var(--gold-dim);color:var(--gold)}
+.pill:hover{border-color:var(--gold)}
+.cat-check{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;color:var(--dim);cursor:pointer;padding:6px 0}
+.cat-check input{accent-color:var(--gold);width:16px;height:16px}
+.btn-primary{display:inline-block;background:var(--gold);color:var(--ink);font-family:var(--mono);font-size:13px;font-weight:700;padding:12px 28px;border-radius:8px;border:none;cursor:pointer;text-decoration:none;transition:opacity .15s}
+.btn-primary:hover{opacity:.88}
+.btn-secondary{display:inline-block;background:transparent;color:var(--dim);font-family:var(--mono);font-size:12px;font-weight:700;padding:10px 20px;border-radius:8px;border:1px solid var(--border);cursor:pointer;transition:all .15s}
+.btn-secondary:hover{border-color:var(--gold);color:var(--gold)}
+.log-entry{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-family:var(--mono);font-size:11px}
+.log-entry:last-child{border-bottom:none}
+.log-time{color:var(--muted);min-width:60px;flex-shrink:0}
+.log-market{color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.log-size{color:var(--gold);flex-shrink:0}
+.stats-row{display:flex;gap:12px;margin-bottom:24px}
+.stat-box{flex:1;background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center}
+.stat-num{font-family:var(--mono);font-size:20px;font-weight:700;color:var(--gold);margin-bottom:4px}
+.stat-label{font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
+@media(max-width:600px){.pill-group{gap:6px}.stats-row{flex-wrap:wrap}.stat-box{min-width:calc(50% - 6px)}.btn-primary{width:100%;text-align:center}}
+</style>
+</head>
+<body>
+<nav class="nav">
+  <a href="/" class="nav-logo">HYPERFLEX</a>
+  <div class="nav-links">
+    <a href="/predictors" class="nav-link">Predictors</a>
+    <a href="/explore" class="nav-link">Explore</a>
+    <a href="/odds" class="nav-link">Odds</a>
+    <a href="/whales" class="nav-link">Whales</a>
+    <a href="/screener" class="nav-link">Screener</a>
+    <a href="/agent" class="nav-link active" style="color:#c9920d">Agent</a>
+    <a href="/api-docs" class="nav-link">API</a>
+    <a id="navDashLink" href="/creator/dashboard" class="nav-link" style="display:none;color:#c9920d">Dashboard</a>
+  </div>
+</nav>
+<script>if(localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token')){var dl=document.getElementById('navDashLink');if(dl)dl.style.display='';}</script>
+
+<div class="container">
+  <!-- STATE: NOT CONFIGURED -->
+  <div id="heroState" class="hero-section">
+    <h1>Your Trading <span>Agent</span></h1>
+    <div class="hero-sub">An AI agent that monitors whale signals 24/7 and fires targeted trade recommendations when your thresholds are hit. Set it once, get alerted only when it matters.</div>
+    <div id="heroActions">
+      <button class="btn-primary" onclick="showConfig()">Set up your agent &rarr;</button>
+    </div>
+  </div>
+
+  <!-- STATE: CONFIGURED — status + stats + log -->
+  <div id="dashState" style="display:none">
+    <div class="hero-section" style="padding-bottom:16px">
+      <h1>Your Trading <span>Agent</span></h1>
+    </div>
+    <div id="statusCard" class="status-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+        <div>
+          <span id="statusDot" class="status-dot active"></span>
+          <span id="statusText" style="font-family:var(--mono);font-size:13px;font-weight:700">Active</span>
+          <span id="statusMeta" style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-left:8px"></span>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button id="toggleBtn" class="btn-secondary" onclick="toggleAgent()">Pause</button>
+          <button class="btn-secondary" onclick="showConfig()">Edit config</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-box"><div class="stat-num" id="statAlerts">0</div><div class="stat-label">Alerts Sent</div></div>
+      <div class="stat-box"><div class="stat-num" id="statToday">0</div><div class="stat-label">Today</div></div>
+      <div class="stat-box"><div class="stat-num" id="statBudget">$0</div><div class="stat-label">Budget / Trade</div></div>
+      <div class="stat-box"><div class="stat-num" id="statWhales">0+</div><div class="stat-label">Min Whales</div></div>
+    </div>
+
+    <div class="config-section">
+      <div class="config-title">Recent Agent Decisions</div>
+      <div id="logFeed" style="max-height:400px;overflow-y:auto">
+        <div style="text-align:center;padding:32px;color:var(--dim);font-size:13px">No agent decisions yet. Your agent will log every signal it evaluates.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONFIG PANEL -->
+  <div id="configPanel" style="display:none">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <div class="config-title" style="margin:0">Agent Configuration</div>
+      <button class="btn-secondary" onclick="hideConfig()" style="font-size:11px;padding:6px 14px">&times; Close</button>
+    </div>
+
+    <div class="config-section">
+      <div class="config-title">Trade Sizing</div>
+      <div class="field">
+        <label>Budget per trade ($)</label>
+        <div class="pill-group" id="budgetPills">
+          <button class="pill" onclick="setBudget(10)">$10</button>
+          <button class="pill selected" onclick="setBudget(25)">$25</button>
+          <button class="pill" onclick="setBudget(50)">$50</button>
+          <button class="pill" onclick="setBudget(100)">$100</button>
+          <input type="number" id="budgetCustom" placeholder="Custom" oninput="setBudget(this.value)" style="width:80px;background:var(--paper);border:1px solid var(--border);border-radius:20px;color:var(--text);font-family:var(--mono);font-size:11px;padding:8px 12px;outline:none"/>
+        </div>
+      </div>
+      <div class="field">
+        <label>Max daily spend ($)</label>
+        <input type="number" id="maxDaily" value="200" min="10"/>
+      </div>
+      <div class="field">
+        <label>Kelly fraction</label>
+        <div class="pill-group" id="kellyPills">
+          <button class="pill" onclick="setKelly(1)">Full</button>
+          <button class="pill selected" onclick="setKelly(0.5)">Half</button>
+          <button class="pill" onclick="setKelly(0.25)">Quarter</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="config-section">
+      <div class="config-title">Signal Filters</div>
+      <div class="field">
+        <label>Minimum whale count to trigger</label>
+        <div class="pill-group" id="whalePills">
+          <button class="pill" onclick="setMinWhales(3)">3+</button>
+          <button class="pill selected" onclick="setMinWhales(5)">5+</button>
+          <button class="pill" onclick="setMinWhales(7)">7+</button>
+          <button class="pill" onclick="setMinWhales(10)">10+</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Market categories</label>
+        <div style="display:flex;flex-wrap:wrap;gap:12px 24px">
+          <label class="cat-check"><input type="checkbox" value="all" checked onchange="updateCats()"/> All</label>
+          <label class="cat-check"><input type="checkbox" value="sports" onchange="updateCats()"/> Sports</label>
+          <label class="cat-check"><input type="checkbox" value="crypto" onchange="updateCats()"/> Crypto</label>
+          <label class="cat-check"><input type="checkbox" value="politics" onchange="updateCats()"/> Politics</label>
+          <label class="cat-check"><input type="checkbox" value="entertainment" onchange="updateCats()"/> Entertainment</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="config-section">
+      <div class="config-title">Whale Tracking (optional)</div>
+      <div class="field">
+        <label>Follow specific whales — only fire on their moves</label>
+        <div id="whaleMultiSelect" style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px">
+          <div style="text-align:center;color:var(--dim);font-size:12px;padding:12px">Loading top whales...</div>
+        </div>
+        <div style="font-size:11px;color:var(--dim);margin-top:4px">Leave empty to get alerts on all whales meeting your threshold</div>
+      </div>
+    </div>
+
+    <div class="config-section">
+      <div class="config-title">Alert Method</div>
+      <div class="field">
+        <div class="pill-group" id="alertPills">
+          <button class="pill selected" onclick="setAlert('push')">Push notification</button>
+          <button class="pill" onclick="setAlert('email')">Email</button>
+          <button class="pill" onclick="setAlert('both')">Both</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:12px;margin-top:8px">
+      <button class="btn-primary" onclick="saveConfig()" style="flex:1">Activate Agent</button>
+      <button class="btn-secondary" onclick="hideConfig()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+var API = '';
+var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || '';
+var _agentConfig = null;
+var _cfg = { budget: 25, maxDaily: 200, minWhales: 5, kelly: 0.5, categories: ['all'], followedWhales: [], alert: 'push' };
+
+function pillSelect(groupId, value, setter) {
+  document.querySelectorAll('#' + groupId + ' .pill').forEach(function(p) { p.classList.remove('selected') });
+  event.target.classList.add('selected');
+}
+function setBudget(v) { _cfg.budget = parseFloat(v) || 25; document.querySelectorAll('#budgetPills .pill').forEach(function(p) { p.classList.toggle('selected', p.textContent === '$' + v) }); }
+function setKelly(v) { _cfg.kelly = v; document.querySelectorAll('#kellyPills .pill').forEach(function(p) { var map = { 'Full': 1, 'Half': 0.5, 'Quarter': 0.25 }; p.classList.toggle('selected', map[p.textContent] === v) }); }
+function setMinWhales(v) { _cfg.minWhales = v; document.querySelectorAll('#whalePills .pill').forEach(function(p) { p.classList.toggle('selected', p.textContent === v + '+') }); }
+function setAlert(v) { _cfg.alert = v; document.querySelectorAll('#alertPills .pill').forEach(function(p) { var map = { 'Push notification': 'push', 'Email': 'email', 'Both': 'both' }; p.classList.toggle('selected', map[p.textContent] === v) }); }
+function updateCats() {
+  var checks = document.querySelectorAll('.cat-check input');
+  var allCheck = checks[0];
+  var selected = [];
+  checks.forEach(function(c) { if (c.checked && c.value !== 'all') selected.push(c.value) });
+  if (allCheck.checked || selected.length === 0) { _cfg.categories = ['all']; checks.forEach(function(c) { c.checked = c.value === 'all' }); }
+  else { _cfg.categories = selected; allCheck.checked = false; }
+}
+
+function showConfig() { document.getElementById('configPanel').style.display = ''; document.getElementById('heroState').style.display = 'none'; document.getElementById('dashState').style.display = 'none'; loadTopWhales(); }
+function hideConfig() { if (_agentConfig) { document.getElementById('dashState').style.display = ''; document.getElementById('heroState').style.display = 'none'; } else { document.getElementById('heroState').style.display = ''; } document.getElementById('configPanel').style.display = 'none'; }
+
+async function loadTopWhales() {
+  try {
+    var r = await fetch('/api/whale-watch');
+    if (!r.ok) { document.getElementById('whaleMultiSelect').innerHTML = '<div style="color:var(--dim);font-size:12px;padding:8px">Sign in to see top whales</div>'; return; }
+    var d = await r.json();
+    var whales = d.whales || [];
+    // Dedupe by proxyWallet, sort by size, take top 20
+    var seen = new Set();
+    var top = [];
+    whales.sort(function(a, b) { return b.size - a.size });
+    for (var i = 0; i < whales.length && top.length < 20; i++) {
+      var w = whales[i];
+      if (!w.proxyWallet || seen.has(w.proxyWallet)) continue;
+      seen.add(w.proxyWallet);
+      top.push(w);
+    }
+    var el = document.getElementById('whaleMultiSelect');
+    if (!top.length) { el.innerHTML = '<div style="color:var(--dim);font-size:12px;padding:8px">No whale data available</div>'; return; }
+    el.innerHTML = top.map(function(w) {
+      var name = w.trader || w.proxyWallet.slice(0, 8) + '...';
+      var checked = _cfg.followedWhales.includes(w.proxyWallet) ? ' checked' : '';
+      return '<label style="display:flex;align-items:center;gap:8px;padding:6px 4px;cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--dim)"><input type="checkbox" value="' + w.proxyWallet + '" onchange="updateFollowedWhales()"' + checked + ' style="accent-color:var(--gold)"/> <span style="color:var(--text)">' + name + '</span> <span style="margin-left:auto;color:var(--gold)">' + fmtCap(w.size) + '</span></label>';
+    }).join('');
+  } catch (e) {
+    document.getElementById('whaleMultiSelect').innerHTML = '<div style="color:var(--dim);font-size:12px;padding:8px">Failed to load whales</div>';
+  }
+}
+
+function updateFollowedWhales() {
+  var checks = document.querySelectorAll('#whaleMultiSelect input:checked');
+  _cfg.followedWhales = [];
+  checks.forEach(function(c) { _cfg.followedWhales.push(c.value) });
+}
+
+async function saveConfig() {
+  if (!token) { alert('Sign in to set up your agent.'); window.location.href = '/creator/login'; return; }
+  _cfg.maxDaily = parseFloat(document.getElementById('maxDaily').value) || 200;
+  try {
+    var r = await fetch(API + '/api/agent/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ budget_per_trade: _cfg.budget, max_daily_spend: _cfg.maxDaily, min_whales: _cfg.minWhales, categories: _cfg.categories, followed_whales: _cfg.followedWhales, kelly_fraction: _cfg.kelly, alert_method: _cfg.alert })
+    });
+    var d = await r.json();
+    if (d.ok) { _agentConfig = d.config || _cfg; hideConfig(); renderDash(); }
+    else alert(d.error || 'Failed to save');
+  } catch (e) { alert('Network error'); }
+}
+
+async function toggleAgent() {
+  try {
+    var r = await fetch(API + '/api/agent/toggle', { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
+    var d = await r.json();
+    _agentConfig.active = d.active;
+    renderDash();
+  } catch (e) { alert('Failed to toggle agent'); }
+}
+
+function renderDash() {
+  if (!_agentConfig) return;
+  var c = _agentConfig;
+  document.getElementById('dashState').style.display = '';
+  document.getElementById('heroState').style.display = 'none';
+  document.getElementById('configPanel').style.display = 'none';
+  var card = document.getElementById('statusCard');
+  card.className = 'status-card ' + (c.active ? 'active' : 'paused');
+  document.getElementById('statusDot').className = 'status-dot ' + (c.active ? 'active' : 'paused');
+  document.getElementById('statusText').textContent = c.active ? 'Active' : 'Paused';
+  document.getElementById('statusMeta').textContent = 'Min ' + (c.min_whales || c.minWhales || 5) + ' whales \u00B7 ' + (c.alert_method || c.alert || 'push');
+  document.getElementById('toggleBtn').textContent = c.active ? 'Pause' : 'Resume';
+  document.getElementById('statBudget').textContent = '$' + (c.budget_per_trade || c.budget || 25);
+  document.getElementById('statWhales').textContent = (c.min_whales || c.minWhales || 5) + '+';
+  loadLog();
+}
+
+async function loadLog() {
+  try {
+    var r = await fetch(API + '/api/agent/log', { headers: { Authorization: 'Bearer ' + token } });
+    var d = await r.json();
+    var logs = d.log || [];
+    document.getElementById('statAlerts').textContent = logs.length;
+    var today = new Date().toDateString();
+    document.getElementById('statToday').textContent = logs.filter(function(l) { return new Date(l.created_at).toDateString() === today }).length;
+    var el = document.getElementById('logFeed');
+    if (!logs.length) { el.innerHTML = '<div style="text-align:center;padding:32px;color:var(--dim);font-size:13px">No agent decisions yet. Your agent will log every signal it evaluates.</div>'; return; }
+    el.innerHTML = logs.map(function(l) {
+      var t = new Date(l.created_at);
+      var time = t.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' + t.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+      var sideColor = (l.side || '').toUpperCase() === 'YES' ? '#22c55e' : '#ef4444';
+      return '<div class="log-entry"><span class="log-time">' + time + '</span><span class="log-market">' + (l.market || '').substring(0, 50) + '</span><span style="color:' + sideColor + ';font-weight:700">' + (l.side || '').toUpperCase() + '</span><span class="log-size">$' + Math.round(l.recommended_size || 0) + '</span></div>';
+    }).join('');
+  } catch (e) {}
+}
+
+function fmtCap(n) { if (n >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M'; if (n >= 1e3) return '$' + Math.round(n / 1e3) + 'K'; return '$' + Math.round(n); }
+
+// Init
+(async function init() {
+  if (!token) return; // Show hero/setup state
+  try {
+    var r = await fetch(API + '/api/agent/config', { headers: { Authorization: 'Bearer ' + token } });
+    var d = await r.json();
+    if (d.config) { _agentConfig = d.config; renderDash(); }
+  } catch (e) {}
+})();
+</script>
+</body>
+</html>

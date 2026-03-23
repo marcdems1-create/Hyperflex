@@ -8685,7 +8685,7 @@ const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
   'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u', 'win',
-  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events'
+  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent'
 ]);
 
 // GET /my — private member dashboard
@@ -19051,6 +19051,108 @@ app.post('/api/trade-intentions', requireAuth, async (req, res) => {
     res.json({ ok: true }); // Silent fail — don't block the trade
   }
 });
+
+// ── AGENT CONFIG ──────────────────────────────────────────────────────────
+
+app.get('/api/agent/config', requireAuth, async (req, res) => {
+  try {
+    let config;
+    if (pool) {
+      const rows = await dbQuery('SELECT * FROM agent_configs WHERE user_id = $1 LIMIT 1', [req.user.id]);
+      config = rows[0] || null;
+    } else {
+      const { data } = await supabase.from('agent_configs').select('*').eq('user_id', req.user.id).maybeSingle();
+      config = data;
+    }
+    res.json({ config: config || null });
+  } catch (e) {
+    console.error('[agent-config]', e.message);
+    res.status(500).json({ error: 'Failed to load agent config' });
+  }
+});
+
+app.put('/api/agent/config', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { budget_per_trade, max_daily_spend, min_whales, categories, followed_whales, kelly_fraction, alert_method } = req.body;
+    const payload = {
+      user_id: userId,
+      budget_per_trade: parseFloat(budget_per_trade) || 25,
+      max_daily_spend: parseFloat(max_daily_spend) || 200,
+      min_whales: parseInt(min_whales) || 5,
+      categories: categories || ['all'],
+      followed_whales: followed_whales || [],
+      kelly_fraction: parseFloat(kelly_fraction) || 0.5,
+      alert_method: alert_method || 'push',
+      active: true,
+      updated_at: new Date().toISOString()
+    };
+    if (pool) {
+      const existing = await dbQuery('SELECT id FROM agent_configs WHERE user_id = $1 LIMIT 1', [userId]);
+      if (existing.length) {
+        await dbQuery(
+          'UPDATE agent_configs SET budget_per_trade=$1, max_daily_spend=$2, min_whales=$3, categories=$4, followed_whales=$5, kelly_fraction=$6, alert_method=$7, active=$8, updated_at=$9 WHERE user_id=$10',
+          [payload.budget_per_trade, payload.max_daily_spend, payload.min_whales, JSON.stringify(payload.categories), JSON.stringify(payload.followed_whales), payload.kelly_fraction, payload.alert_method, payload.active, payload.updated_at, userId]
+        );
+      } else {
+        await dbQuery(
+          'INSERT INTO agent_configs (user_id, budget_per_trade, max_daily_spend, min_whales, categories, followed_whales, kelly_fraction, alert_method, active, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
+          [userId, payload.budget_per_trade, payload.max_daily_spend, payload.min_whales, JSON.stringify(payload.categories), JSON.stringify(payload.followed_whales), payload.kelly_fraction, payload.alert_method, payload.active, payload.updated_at]
+        );
+      }
+    } else {
+      await supabase.from('agent_configs').upsert(payload, { onConflict: 'user_id' });
+    }
+    res.json({ ok: true, config: payload });
+  } catch (e) {
+    console.error('[agent-config]', e.message);
+    res.status(500).json({ error: 'Failed to save agent config' });
+  }
+});
+
+app.post('/api/agent/toggle', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    let current;
+    if (pool) {
+      const rows = await dbQuery('SELECT active FROM agent_configs WHERE user_id = $1 LIMIT 1', [userId]);
+      current = rows[0];
+    } else {
+      const { data } = await supabase.from('agent_configs').select('active').eq('user_id', userId).maybeSingle();
+      current = data;
+    }
+    if (!current) return res.status(404).json({ error: 'No agent configured' });
+    const newActive = !current.active;
+    if (pool) {
+      await dbQuery('UPDATE agent_configs SET active = $1, updated_at = NOW() WHERE user_id = $2', [newActive, userId]);
+    } else {
+      await supabase.from('agent_configs').update({ active: newActive, updated_at: new Date().toISOString() }).eq('user_id', userId);
+    }
+    res.json({ active: newActive });
+  } catch (e) {
+    console.error('[agent-toggle]', e.message);
+    res.status(500).json({ error: 'Failed to toggle agent' });
+  }
+});
+
+app.get('/api/agent/log', requireAuth, async (req, res) => {
+  try {
+    let logs;
+    if (pool) {
+      logs = await dbQuery('SELECT * FROM agent_log WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50', [req.user.id]);
+    } else {
+      const { data } = await supabase.from('agent_log').select('*').eq('user_id', req.user.id).order('created_at', { ascending: false }).limit(50);
+      logs = data || [];
+    }
+    res.json({ log: logs });
+  } catch (e) {
+    console.error('[agent-log]', e.message);
+    res.status(500).json({ error: 'Failed to load agent log' });
+  }
+});
+
+// Serve agent page
+app.get('/agent', (req, res) => res.sendFile(path.join(__dirname, 'public', 'agent.html')));
 
 app.get('/api/arbitrage', (req, res) => {
   if (_arbCache && (Date.now() - _arbCache.ts < 6 * 60 * 1000)) {
