@@ -456,7 +456,7 @@ const _realSupabase = createClient(
 // Helper: run a query via direct Postgres
 async function dbQuery(text, params = []) {
   if (!pool) throw new Error('No database pool');
-  const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error(`dbQuery timeout (10s): ${text.slice(0, 60)}`)), 10000));
+  const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error(`dbQuery timeout (30s): ${text.slice(0, 80)}`)), 30000));
   const query = pool.query(text, params);
   const result = await Promise.race([query, timeout]);
   return result.rows;
@@ -7831,7 +7831,7 @@ app.get('/api/community/:slug', async (req, res) => {
 
     let settings;
     if (pool) {
-      const settingsRows = await dbQuery("SELECT * FROM creator_settings WHERE slug = $1 AND is_active = true LIMIT 1", [slug]);
+      const settingsRows = await dbQuery("SELECT * FROM creator_settings WHERE slug = $1 LIMIT 1", [slug]);
       settings = settingsRows[0] || null;
     } else {
       const { data } = await supabase
@@ -12549,7 +12549,7 @@ app.get('/:slug', async (req, res, next) => {
     // Fetch community data for meta tags
     let settings;
     if (pool) {
-      const rows = await dbQuery('SELECT display_name, community_description, custom_points_name, slug FROM creator_settings WHERE slug = $1 AND is_active = true LIMIT 1', [slug]);
+      const rows = await dbQuery('SELECT display_name, community_description, custom_points_name, slug FROM creator_settings WHERE slug = $1 LIMIT 1', [slug]);
       settings = rows[0] || null;
     } else {
       const { data } = await supabase.from('creator_settings').select('display_name, community_description, custom_points_name, slug').eq('slug', slug).eq('is_active', true).maybeSingle();
