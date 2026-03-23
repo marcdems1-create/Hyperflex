@@ -967,6 +967,14 @@ footer {
         el.innerHTML='<span style="font-family:var(--mono);font-size:11px;color:'+c+'">Last 10 signals: '+sh.label+'</span>';
         el.style.display='block';
       }).catch(function(){});
+      // Load news catalyst
+      fetch('/api/catalyst?q='+encodeURIComponent(sig.market||'')).then(function(r){return r.ok?r.json():null}).then(function(cd){
+        if(!cd||!cd.catalyst)return;
+        var cat=cd.catalyst;
+        var el=document.getElementById('rn-catalyst');
+        if(!el){el=document.createElement('div');el.id='rn-catalyst';el.style.cssText='margin-top:8px;font-family:var(--mono);font-size:11px;color:var(--dim)';var rnP=document.getElementById('rn-panel');if(rnP)rnP.querySelector('.ib-card').appendChild(el);}
+        el.innerHTML='\uD83D\uDCF0 <span style="color:var(--text)">'+escH(cat.source)+'</span> \u00B7 \u201C'+escH(cat.headline.length>80?cat.headline.substring(0,77)+'...':cat.headline)+'\u201D \u00B7 <span style="color:var(--dim)">'+cat.timeAgo+'</span>';
+      }).catch(function(){});
     }).catch(function(){});
   }
 

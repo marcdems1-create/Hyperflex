@@ -473,6 +473,7 @@ function renderSignals() {
         '<span style="font-family:var(--mono);font-size:10px;color:var(--muted)">' + age + '</span>' +
       '</div>' +
       '<div class="signal-question">' + regionFlag(s.market) + (regionFlag(s.market) ? ' ' : '') + escHtml(s.market) + '</div>' +
+      '<div class="signal-catalyst" data-market="' + escHtml(s.market).replace(/"/g, '&quot;') + '" style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:8px;display:none"></div>' +
       (_sharpnessLabel ? '<div style="font-family:var(--mono);font-size:10px;color:' + _sharpnessColor + ';margin-bottom:8px">If you\'d followed our last 10 signals: ' + _sharpnessLabel + '</div>' : '') +
       '<div class="signal-action side-' + (s.side || 'YES') + '">' + escHtml(s.action) + '</div>' +
       '<div class="signal-meta">' + whaleHtml + capHtml + changeHtml + diffHtml + '</div>' +
@@ -481,6 +482,26 @@ function renderSignals() {
       '</div>' +
     '</div>';
   }).join('');
+
+  // Batch fetch catalysts for visible signals
+  var catEls = document.querySelectorAll('.signal-catalyst[data-market]');
+  var markets = [];
+  catEls.forEach(function(el) { var m = el.getAttribute('data-market'); if (m && markets.indexOf(m) === -1) markets.push(m); });
+  if (markets.length > 0) {
+    fetch('/api/catalysts?markets=' + encodeURIComponent(markets.slice(0, 10).join('||')))
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(d) {
+        if (!d || !d.catalysts) return;
+        catEls.forEach(function(el) {
+          var m = el.getAttribute('data-market');
+          var cat = d.catalysts[m];
+          if (cat) {
+            el.innerHTML = '\uD83D\uDCF0 <span style="color:var(--text)">' + escHtml(cat.source) + '</span> \u00B7 \u201C' + escHtml(cat.headline.length > 70 ? cat.headline.substring(0, 67) + '...' : cat.headline) + '\u201D \u00B7 ' + cat.timeAgo;
+            el.style.display = '';
+          }
+        });
+      }).catch(function() {});
+  }
 }
 
 function filterSignals(type, btn) {

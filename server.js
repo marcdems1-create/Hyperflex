@@ -16863,6 +16863,82 @@ app.get('/api/whale-flow', async (req, res) => {
   }
 });
 
+// ── NEWS CATALYST — surface breaking news behind whale signals ─────────────
+const _catalystCache = new Map(); // key: normalized question → { headline, source, url, publishedAt, ts }
+const CATALYST_TTL = 30 * 60 * 1000; // 30 min
+
+function extractKeywords(question) {
+  // Extract 2-4 meaningful keywords from a market question
+  const stop = new Set(['will','the','a','an','in','on','at','by','for','of','to','is','be','and','or','not','this','that','it','its','has','have','had','do','does','did','win','vs','vs.','above','below','before','after','end','next','last','first','over','under','hit','reach','get','would','should','could','from','with','than','more','most','less','new','old','2024','2025','2026','2027','2028','march','april','may','june','july','august','september','october','november','december','january','february']);
+  const words = (question || '').replace(/[?!.,;:'"()\[\]{}]/g, '').split(/\s+/).filter(w => w.length > 2 && !stop.has(w.toLowerCase()));
+  // Take first 3-4 meaningful words
+  return words.slice(0, 4).join(' ');
+}
+
+async function fetchMarketCatalyst(question) {
+  const key = (question || '').toLowerCase().trim();
+  if (!key) return null;
+
+  // Check cache
+  const cached = _catalystCache.get(key);
+  if (cached && Date.now() - cached.ts < CATALYST_TTL) return cached.data;
+
+  const apiKey = process.env.NEWS_API_KEY;
+  if (!apiKey) return null;
+
+  try {
+    const keywords = extractKeywords(question);
+    if (!keywords || keywords.length < 3) return null;
+    const url = `https://newsapi.org/v2/everything?q=${encodeURIComponent(keywords)}&sortBy=publishedAt&pageSize=3&language=en&apiKey=${apiKey}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) { _catalystCache.set(key, { data: null, ts: Date.now() }); return null; }
+    const data = await res.json();
+    const articles = (data.articles || []).filter(a => a.title && a.title !== '[Removed]' && a.source?.name);
+    if (!articles.length) { _catalystCache.set(key, { data: null, ts: Date.now() }); return null; }
+
+    const top = articles[0];
+    const result = {
+      headline: top.title.substring(0, 120),
+      source: top.source.name,
+      url: top.url,
+      publishedAt: top.publishedAt,
+      timeAgo: _timeAgoStr(top.publishedAt)
+    };
+    _catalystCache.set(key, { data: result, ts: Date.now() });
+    return result;
+  } catch (e) {
+    _catalystCache.set(key, { data: null, ts: Date.now() });
+    return null;
+  }
+}
+
+function _timeAgoStr(iso) {
+  const d = Date.now() - new Date(iso).getTime();
+  if (d < 60000) return '<1m ago';
+  if (d < 3600000) return Math.floor(d / 60000) + 'm ago';
+  if (d < 86400000) return Math.floor(d / 3600000) + 'h ago';
+  return Math.floor(d / 86400000) + 'd ago';
+}
+
+// GET /api/catalyst?q=market question text — returns news catalyst for a market
+app.get('/api/catalyst', async (req, res) => {
+  const q = req.query.q || '';
+  if (!q) return res.json({ catalyst: null });
+  const catalyst = await fetchMarketCatalyst(q);
+  res.json({ catalyst });
+});
+
+// GET /api/catalysts — batch: accepts ?markets=q1||q2||q3 (|| separated)
+app.get('/api/catalysts', async (req, res) => {
+  const raw = req.query.markets || '';
+  const questions = raw.split('||').filter(Boolean).slice(0, 10); // max 10
+  const results = {};
+  await Promise.allSettled(questions.map(async q => {
+    results[q] = await fetchMarketCatalyst(q);
+  }));
+  res.json({ catalysts: results });
+});
+
 // ── MARKET MOVERS — biggest price changes in last 24h ─────────────────────
 let _marketMoversCache = null;
 
