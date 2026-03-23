@@ -18374,6 +18374,59 @@ app.get('/api/signals', async (req, res) => {
       return res.json(_signalsCache.data);
     }
 
+    // Pre-warm caches if empty
+    if (!_whaleWatchCache || !_whaleWatchCache.data) {
+      try {
+        const whaleData = await fetchWhalePositions();
+        _whaleWatchCache = { ts: Date.now(), data: whaleData };
+        console.log('[signals] Warmed whale cache:', (whaleData.whales || []).length, 'positions');
+      } catch(e) { console.warn('[signals] whale warm failed:', e.message); }
+    }
+    if (!_whaleIndexCache || !_whaleIndexCache.data) {
+      // Build whale index inline from whale watch data
+      if (_whaleWatchCache && _whaleWatchCache.data) {
+        try {
+          const whales = _whaleWatchCache.data.whales || [];
+          const marketMap = {};
+          for (const w of whales) {
+            const key = w.market || w.question;
+            if (!key) continue;
+            if (!marketMap[key]) marketMap[key] = { market: key, sides: {}, total_capital: 0, url: w.market_url || w.url || '', whale_count: 0 };
+            const side = w.side || 'YES';
+            if (!marketMap[key].sides[side]) marketMap[key].sides[side] = { capital: 0, count: 0 };
+            marketMap[key].sides[side].capital += parseFloat(w.size || 0);
+            marketMap[key].sides[side].count++;
+            marketMap[key].total_capital += parseFloat(w.size || 0);
+            marketMap[key].whale_count++;
+          }
+          const picks = Object.values(marketMap).filter(m => m.whale_count >= 3).map(m => {
+            const sides = Object.entries(m.sides).sort((a,b) => b[1].capital - a[1].capital);
+            const topSide = sides[0];
+            return { market: m.market, whale_count: m.whale_count, total_capital: m.total_capital, consensus_side: topSide[0], consensus_pct: Math.round((topSide[1].capital / m.total_capital) * 100), url: m.url, strength: m.whale_count >= 10 ? 'STRONG' : m.whale_count >= 5 ? 'MODERATE' : 'EMERGING' };
+          }).sort((a,b) => b.whale_count - a.whale_count);
+          _whaleIndexCache = { ts: Date.now(), data: { picks } };
+          console.log('[signals] Warmed whale index:', picks.length, 'picks');
+        } catch(e) { console.warn('[signals] whale index build failed:', e.message); }
+      }
+    }
+    if (!_marketMoversCache || !_marketMoversCache.data) {
+      try {
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        let rows = [];
+        if (pool) {
+          rows = await dbQuery('SELECT market_id, question, yes_price, snapshot_at FROM market_snapshots WHERE snapshot_at >= $1 ORDER BY market_id, snapshot_at ASC', [twentyFourHoursAgo]).catch(() => []);
+        } else {
+          const { data } = await supabase.from('market_snapshots').select('market_id, question, yes_price, snapshot_at').gte('snapshot_at', twentyFourHoursAgo).order('snapshot_at', { ascending: true });
+          rows = data || [];
+        }
+        const mm = {};
+        for (const r of rows) { if (!r.market_id) continue; if (!mm[r.market_id]) mm[r.market_id] = { question: r.question, first: r, last: r }; mm[r.market_id].last = r; mm[r.market_id].question = r.question || mm[r.market_id].question; }
+        const movers = Object.entries(mm).map(([market_id, d]) => { const fp = parseFloat(d.first.yes_price)||0; const lp = parseFloat(d.last.yes_price)||0; const cp = fp > 0 ? Math.round((lp-fp)/fp*10000)/100 : 0; return { market_id, question: d.question||'Unknown', current_price: Math.round(lp*100), change_pct: cp, abs_change: Math.abs(cp), url: 'https://polymarket.com' }; }).filter(m => m.abs_change > 0).sort((a,b) => b.abs_change - a.abs_change).slice(0, 10).map(({abs_change,...rest}) => rest);
+        _marketMoversCache = { ts: Date.now(), data: { movers, updated_at: new Date().toISOString() } };
+        console.log('[signals] Warmed movers cache:', movers.length, 'movers');
+      } catch(e) { console.warn('[signals] movers warm failed:', e.message); }
+    }
+
     const signals = [];
     const now = new Date().toISOString();
 
