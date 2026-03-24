@@ -848,7 +848,7 @@ function renderTable() {
   tbody.innerHTML = _filtered.map(p => {
     const hl = highlightClass(p.size);
     const pricePct = Math.round(p.current_price * 100);
-    const profileUrl = '/p/' + (p.proxyWallet || '');
+    const profileUrl = /^0x[0-9a-fA-F]{10,}$/i.test(p.proxyWallet||'') ? '/trader/' + (p.proxyWallet||'') : '/p/' + (p.proxyWallet || '');
     return '<tr class="' + hl + '">' +
       '<td>' + rankBadge(p.trader_rank) + '</td>' +
       '<td><div class="trader-name" style="cursor:pointer;border-bottom:1px dashed rgba(201,146,13,0.3)" onclick="event.stopPropagation();openWhaleProfile(\'' + escAttr(p.proxyWallet || p.trader || '') + '\')">' + whaleName(p.trader, p.proxyWallet) + consistencyDot(p.trader, p.proxyWallet) + alphaGradeBadge(p.proxyWallet) + '</div><div class="trader-pnl">PnL: ' + fmtPnl(p.trader_pnl) + '</div></td>' +

@@ -720,7 +720,7 @@ async function loadConsistentPicks() {
 
       return '<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;transition:all 0.2s">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">' +
-          '<a href="/p/' + escHtml(t.address || t.display_name) + '" style="font-size:13px;font-weight:700;color:var(--gold)">' + escHtml(t.display_name) + '</a>' +
+          '<a href="' + (/^0x[0-9a-fA-F]{10,}$/i.test(t.address||'') ? '/trader/' + escHtml(t.address) : '/p/' + escHtml(t.address || t.display_name)) + '" style="font-size:13px;font-weight:700;color:var(--gold)">' + escHtml(t.display_name) + '</a>' +
           '<span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 8px;border-radius:10px;background:' + scoreBg + ';color:' + scoreColor + '">' + t.consistency_score + '</span>' +
         '</div>' +
         '<div style="font-family:var(--mono);font-size:11px;color:var(--muted)">W: <span style="color:var(--green)">+$' + formatNum(Math.abs(t.pnl_week)) + '</span> &middot; All: +$' + formatNum(Math.abs(t.pnl_all_time)) + '</div>' +

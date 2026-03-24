@@ -2596,7 +2596,7 @@ async function loadFollowingFeed() {
       const scoreBg = t.consistency_score >= 80 ? 'rgba(34,197,94,0.12)' : t.consistency_score >= 60 ? 'rgba(201,146,13,0.12)' : 'rgba(90,88,84,0.15)';
       const weekPnl = t.pnl_week >= 0 ? '+$' + _fmtNum(Math.abs(t.pnl_week)) : '-$' + _fmtNum(Math.abs(t.pnl_week));
       const allPnl = t.pnl_all_time >= 0 ? '+$' + _fmtNum(Math.abs(t.pnl_all_time)) : '-$' + _fmtNum(Math.abs(t.pnl_all_time));
-      const profileUrl = '/p/' + (t.address || t.display_name || '');
+      const profileUrl = /^0x[0-9a-fA-F]{10,}$/i.test(t.address||'') ? '/trader/' + (t.address||'') : '/p/' + (t.address || t.display_name || '');
       return '<a href="' + _escH(profileUrl) + '" class="sidebar-row" style="text-decoration:none">' +
         '<div style="flex:1;min-width:0">' +
           '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">' +
