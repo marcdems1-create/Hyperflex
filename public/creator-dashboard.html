@@ -5076,6 +5076,9 @@ body.nav-open .sidebar-backdrop {
                   </div>
                 </div>
               </div>
+              <div id="hlDashLink" style="display:none;margin-bottom:12px;text-align:right">
+                <a id="hlDashLinkA" href="#" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:11px;color:#77b900;border:1px solid rgba(119,185,0,0.3);border-radius:8px;padding:6px 16px;text-decoration:none;display:inline-flex;align-items:center;gap:6px;transition:all .15s" onmouseover="this.style.background='rgba(119,185,0,0.1)'" onmouseout="this.style.background='none'">&#x1F4C8; Full P&amp;L charts on HyperDash &#x2192;</a>
+              </div>
               <div id="hlPositions"></div>
             </div>
             <!-- HFX COMMUNITY tab -->
@@ -13614,6 +13617,9 @@ function renderHlPositionCard(p) {
           '<div style="font-family:var(--mono);font-size:10px;color:#5a5752;margin-top:2px">' + p.leverage + 'x</div>' +
         '</div>' +
       '</div>' +
+      '<div style="margin-top:10px;padding-top:8px;border-top:1px solid #1e1c19;display:flex;align-items:center;gap:8px">' +
+        (_hlWalletAddress ? '<a href="https://hyperdash.com/?previewAddress=' + encodeURIComponent(_hlWalletAddress) + '&previewFrom=toptraders" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:10px;color:#77b900;border:1px solid rgba(119,185,0,0.3);border-radius:6px;padding:4px 10px;text-decoration:none;transition:all .15s" onmouseover="this.style.background=\'rgba(119,185,0,0.1)\'" onmouseout="this.style.background=\'none\'">&#x1F4C8; View on HyperDash</a>' : '') +
+      '</div>' +
     '</div>' +
   '</div>';
 }
@@ -13646,6 +13652,14 @@ async function loadHyperliquidPositions(forceRefresh) {
       const upnlEl = document.getElementById('hlTotalUpnl');
       upnlEl.textContent = (totalUpnl >= 0 ? '+' : '') + '$' + Math.abs(totalUpnl).toLocaleString('en-US', { maximumFractionDigits: 2 });
       upnlEl.style.color = totalUpnl >= 0 ? '#22c55e' : '#ef4444';
+    }
+
+    // Show HyperDash link
+    var hdLink = document.getElementById('hlDashLink');
+    var hdLinkA = document.getElementById('hlDashLinkA');
+    if (hdLink && hdLinkA && _hlWalletAddress) {
+      hdLinkA.href = 'https://hyperdash.com/?previewAddress=' + encodeURIComponent(_hlWalletAddress) + '&previewFrom=toptraders';
+      hdLink.style.display = 'block';
     }
 
     setTimeout(updatePortfolioSummary, 100);
