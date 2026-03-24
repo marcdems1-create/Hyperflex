@@ -10573,6 +10573,48 @@ app.post('/api/predictors/:userId/copy-trade', requireAuth, async (req, res) => 
   }
 });
 
+// Play money copy trade — log a copy trade with Flex Points
+app.post('/api/copy-trade', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { trader, asset, side, size_usd, leverage, allocation_pts, platform, market, market_url } = req.body || {};
+    if (!trader || !side) return res.status(400).json({ error: 'trader and side required' });
+    const pts = parseInt(allocation_pts) || 1000;
+    if (pts < 100) return res.status(400).json({ error: 'Minimum 100 Flex Points' });
+
+    // Create the copy_trades table if it doesn't exist
+    await dbQuery(`CREATE TABLE IF NOT EXISTS copy_trades (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      user_id TEXT NOT NULL, trader TEXT, platform TEXT,
+      asset TEXT, market TEXT, market_url TEXT,
+      side TEXT, size_usd NUMERIC, leverage NUMERIC,
+      allocation_pts INTEGER, entry_price NUMERIC,
+      current_value_pts INTEGER, pnl_pts INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'open', closed_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`).catch(() => {});
+
+    await dbQuery(`INSERT INTO copy_trades (user_id, trader, platform, asset, market, market_url, side, size_usd, leverage, allocation_pts)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [userId, trader, platform || 'polymarket', asset || null, market || null, market_url || null, side, size_usd || 0, leverage || 1, pts]);
+
+    res.json({ ok: true, allocation_pts: pts, message: `Copied ${trader}'s ${asset || market || side} position with ${pts} Flex Points` });
+  } catch(e) {
+    console.error('[copy-trade]', e.message);
+    res.status(500).json({ error: 'Failed to log copy trade' });
+  }
+});
+
+// Get user's copy trade history
+app.get('/api/copy-trades', requireAuth, async (req, res) => {
+  try {
+    const trades = await dbQuery('SELECT * FROM copy_trades WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50', [req.user.id]);
+    res.json({ trades: trades || [] });
+  } catch(e) {
+    res.json({ trades: [] });
+  }
+});
+
 // Get copy trade status
 app.get('/api/predictors/:userId/copy-status', optionalAuth, async (req, res) => {
   const targetId = req.params.userId;

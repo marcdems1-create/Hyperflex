@@ -560,10 +560,11 @@ function urlBase64ToUint8Array(base64String) {
       <label>Their position size</label><div class="ct-value" id="ctSize">--</div>
     </div>
     <div class="ct-field">
-      <label>Your amount ($)</label>
-      <input type="number" class="ct-input" id="ctAmount" placeholder="100" min="1" step="1"/>
+      <label>Copy with Flex Points (play money)</label>
+      <input type="number" class="ct-input" id="ctAmount" placeholder="1000" min="100" step="100" value="1000"/>
     </div>
-    <a id="ctCta" href="#" target="_blank" rel="noopener" class="ct-cta">Open on Polymarket &rarr;</a>
+    <button onclick="submitPolyCopyTrade()" class="ct-cta" style="border:none;cursor:pointer;width:100%;text-align:center;display:block;font-family:var(--sans)">Copy with Flex Points &rarr;</button>
+    <a id="ctCta" href="#" target="_blank" rel="noopener" style="display:block;text-align:center;margin-top:8px;font-family:var(--mono);font-size:11px;color:var(--gold)">or trade on Polymarket &rarr;</a>
     <label class="ct-alert-toggle">
       <input type="checkbox" id="ctAlertToggle"/>
       <span>&#x1F514; Alert me when this trader makes new moves</span>
@@ -644,6 +645,24 @@ function openCopyTrade(trader, market, side, size, marketUrl, proxyWallet) {
 function closeCopyTrade() {
   document.getElementById('ctOverlay').classList.remove('open');
   _ctPending = null;
+}
+
+async function submitPolyCopyTrade() {
+  if (!_ctPending) return;
+  var pts = parseInt(document.getElementById('ctAmount').value) || 1000;
+  if (pts < 100) { alert('Minimum 100 Flex Points'); return; }
+  try {
+    var r = await fetch('/api/copy-trade', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + getToken() },
+      body: JSON.stringify({ trader: _ctPending.trader, market: _ctPending.market, side: _ctPending.side, size_usd: _ctPending.size, allocation_pts: pts, platform: 'polymarket', market_url: _ctPending.marketUrl })
+    });
+    var d = await r.json();
+    if (d.ok) {
+      showToast('\u2705 Copied ' + _ctPending.trader + ' with ' + pts + ' Flex Points');
+      closeCopyTrade();
+    } else { alert(d.error || 'Copy failed'); }
+  } catch(e) { alert('Network error'); }
 }
 
 async function handleCopyTradeCta() {
@@ -919,7 +938,7 @@ function switchWhalePlatform(platform) {
     if (heroSub) heroSub.textContent = 'What the top Hyperliquid traders are holding right now';
     if (flowSection) flowSection.style.display = 'none';
     var thead = document.getElementById('whaleTableHead');
-    if (thead) thead.innerHTML = '<tr><th onclick="sortBy(\'trader_rank\')">Rank</th><th onclick="sortBy(\'trader\')">Trader</th><th onclick="sortBy(\'coin\')">Coin</th><th onclick="sortBy(\'side\')">Side</th><th onclick="sortBy(\'size_usd\')">Size ($)</th><th onclick="sortBy(\'entry_price\')">Entry</th><th onclick="sortBy(\'mark_price\')">Mark</th><th onclick="sortBy(\'unrealized_pnl\')">uPnL</th><th onclick="sortBy(\'leverage\')">Lev</th></tr>';
+    if (thead) thead.innerHTML = '<tr><th onclick="sortBy(\'trader_rank\')">Rank</th><th onclick="sortBy(\'trader\')">Trader</th><th onclick="sortBy(\'coin\')">Coin</th><th onclick="sortBy(\'side\')">Side</th><th onclick="sortBy(\'size_usd\')">Size ($)</th><th onclick="sortBy(\'entry_price\')">Entry</th><th onclick="sortBy(\'mark_price\')">Mark</th><th onclick="sortBy(\'unrealized_pnl\')">uPnL</th><th onclick="sortBy(\'leverage\')">Lev</th><th>Actions</th></tr>';
     // Add cap filter pills
     var filterWrap = document.getElementById('hl-cap-filter');
     if (!filterWrap) {
@@ -1098,8 +1117,34 @@ function renderHlTable() {
       '<td style="font-family:var(--mono);font-size:12px">' + (p.mark_price && p.mark_price > 0 ? '$' + p.mark_price.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '\u2014') + '</td>' +
       '<td style="font-family:var(--mono);font-weight:700;color:' + pnlColor + '">' + pnlStr + '</td>' +
       '<td style="font-family:var(--mono);font-size:12px;color:var(--text-soft)">' + (p.leverage || 1) + 'x</td>' +
+      '<td><div class="action-btns" style="gap:4px">' +
+        '<a href="/trader/' + escAttr(p.trader_address || '') + '" onclick="event.stopPropagation()" style="font-size:10px;font-family:var(--mono);color:#7c3aed;border:1px solid rgba(124,58,237,0.4);border-radius:6px;padding:3px 8px;text-decoration:none;white-space:nowrap">\uD83D\uDD17 Profile</a>' +
+        '<button class="copy-trade-btn" style="font-size:10px;padding:3px 8px" onclick="event.stopPropagation();copyHlTrade(\'' + escAttr(p.trader || '') + '\',\'' + escAttr(p.coin || '') + '\',\'' + escAttr(p.side || '') + '\',' + (p.size_usd || 0) + ',' + (p.leverage || 1) + ')">Copy</button>' +
+        '<button class="ac-btn" style="font-size:10px;padding:3px 8px" title="Mirror all future trades from this HL trader" onclick="event.stopPropagation();openAutoCopy(\'' + escAttr(p.trader_address || '') + '\',\'' + escAttr(p.trader || '') + '\')">\uD83E\uDD16</button>' +
+      '</div></td>' +
     '</tr>';
   }).join('');
+}
+
+// Copy HL trade with play money (Flex Points)
+function copyHlTrade(trader, coin, side, sizeUsd, leverage) {
+  if (!getToken()) { document.getElementById('loginOverlay').classList.add('open'); return; }
+  var alloc = prompt('Copy ' + trader + '\\'s ' + coin + ' ' + side + ' position (' + leverage + 'x)\\n\\nHow many Flex Points to allocate? (play money)', '1000');
+  if (!alloc) return;
+  var pts = parseInt(alloc);
+  if (isNaN(pts) || pts < 100) { alert('Minimum 100 Flex Points'); return; }
+  // Log the copy trade
+  fetch('/api/copy-trade', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + getToken() },
+    body: JSON.stringify({ trader: trader, asset: coin, side: side, size_usd: sizeUsd, leverage: leverage, allocation_pts: pts, platform: 'hyperliquid' })
+  }).then(function(r) { return r.json(); }).then(function(d) {
+    if (d.ok) {
+      showToast('\u2705 Copied ' + trader + '\\'s ' + coin + ' ' + side + ' with ' + pts + ' Flex Points');
+    } else {
+      alert(d.error || 'Copy failed');
+    }
+  }).catch(function() { alert('Network error'); });
 }
 
 function renderHlMobileCards() {
