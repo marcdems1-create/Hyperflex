@@ -2095,12 +2095,12 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
 
   <!-- Fact-Check Engine -->
   <div id="factCheckSection" style="margin-bottom:32px">
-    <div class="section-label">\uD83D\uDD0D Fact-Check Engine</div>
+    <div class="section-label">&#x1F50D; Fact-Check Engine</div>
     <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px">
       <div style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:12px">Paste a claim, tweet, or prediction \u2014 AI checks it against live Polymarket data</div>
       <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
         <input type="text" id="factCheckInput" placeholder="e.g. &quot;The bottom is in for gold&quot; or &quot;Trump will win 2028&quot;" style="flex:1;min-width:200px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:12px;padding:10px 14px;outline:none" onkeydown="if(event.key==='Enter')runFactCheck()"/>
-        <button onclick="runFactCheck()" id="factCheckBtn" style="background:var(--gold);color:#000;border:none;border-radius:8px;padding:10px 20px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap">\uD83D\uDD0D Check</button>
+        <button onclick="runFactCheck()" id="factCheckBtn" style="background:var(--gold);color:#000;border:none;border-radius:8px;padding:10px 20px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap">&#x1F50D; Check</button>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:12px">
         <input type="text" id="factCheckAuthor" placeholder="Source (optional, e.g. @tradermayne)" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--dim);font-family:var(--mono);font-size:11px;padding:6px 10px;outline:none"/>
@@ -2368,9 +2368,14 @@ function restoreSession() {
   }
 }
 
-// Safe loader: wraps any async function so it can never crash the page
+// Safe loader: wraps any sync/async function so it can never crash the page
 function safeLoad(fn, label) {
-  try { fn(); } catch(e) { console.warn('[' + (label || 'safe') + ']', e.message); }
+  try {
+    var result = fn();
+    if (result && typeof result.catch === 'function') {
+      result.catch(function(e) { console.warn('[' + (label || 'safe') + ']', e.message); });
+    }
+  } catch(e) { console.warn('[' + (label || 'safe') + ']', e.message); }
 }
 
 async function loadCommunity() {
@@ -2982,9 +2987,13 @@ function filterByCategory(cat) {
 }
 
 function renderFilteredMarkets() {
-  const active = markets.filter(m => !m.resolved &&
-    (!activeCategoryFilter || (m.category || 'other').toLowerCase() === activeCategoryFilter) &&
-    (!_marketSearchQuery || m.question.toLowerCase().includes(_marketSearchQuery)));
+  const active = markets.filter(m => {
+    if (m.resolved || m.outcome) return false; // resolved
+    if (m.archived) return false; // archived
+    if (!activeCategoryFilter || (m.category || 'other').toLowerCase() === activeCategoryFilter) {} else return false;
+    if (_marketSearchQuery && !m.question.toLowerCase().includes(_marketSearchQuery)) return false;
+    return true;
+  });
   let filtered;
   let sortFn;
 
@@ -3240,7 +3249,7 @@ function marketCardHTML(m, isResolved, featured) {
       ${!isResolved ? `<button id="${commentBtnId}" onclick="event.stopPropagation();toggleComments('${m.id}')" style="background:transparent;border:none;font-family:var(--mono);font-size:10px;color:var(--dim);cursor:pointer;display:flex;align-items:center;gap:4px;padding:2px 0;letter-spacing:.04em" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='var(--dim)'">
         💬 <span id="cmtCount-${m.id}">${commentCount > 0 ? commentCount : ''}</span>
       </button>` : ''}
-      <button onclick="event.stopPropagation();shareMarket(this,${JSON.stringify(m.id)},${JSON.stringify(m.question)})" style="background:transparent;border:none;font-family:var(--mono);font-size:10px;color:var(--dim);cursor:pointer;display:flex;align-items:center;gap:4px;padding:2px 0;letter-spacing:.04em" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='var(--dim)'" title="Share this market">
+      <button onclick="event.stopPropagation();shareMarket(this,'${(m.id || '').replace(/'/g,'')}','${(m.question || '').replace(/'/g,"\\'").replace(/"/g,"").substring(0,100)}')" style="background:transparent;border:none;font-family:var(--mono);font-size:10px;color:var(--dim);cursor:pointer;display:flex;align-items:center;gap:4px;padding:2px 0;letter-spacing:.04em" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='var(--dim)'" title="Share this market">
         ↗ Share
       </button>
     </div>
@@ -4858,7 +4867,7 @@ async function loadRecentFactChecks() {
 }
 
 // Load recent fact checks on page load
-setTimeout(loadRecentFactChecks, 2000);
+setTimeout(function() { try { loadRecentFactChecks(); } catch(e) {} }, 2000);
 
 async function loadCrowdWisdom() {
   try {
