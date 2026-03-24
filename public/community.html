@@ -3024,17 +3024,9 @@ function renderFilteredMarkets() {
     sortFn = getSortFn();
   }
 
-  // Include RECENTLY expired unresolved markets (last 7 days only — older ones are archived)
-  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-  const expiredUnresolved = currentFilter === 'all' || currentFilter === 'mine'
-    ? markets.filter(m => !m.resolved && !m.outcome && m.expiry_date && new Date(m.expiry_date) < new Date()
-        && new Date(m.expiry_date).getTime() > sevenDaysAgo
-        && (!activeCategoryFilter || (m.category || 'other').toLowerCase() === activeCategoryFilter)
-        && (!_marketSearchQuery || m.question.toLowerCase().includes(_marketSearchQuery)))
-    : [];
-
+  // Expired unresolved markets are hidden — auto-resolution handles them server-side
   const grid = document.getElementById('marketsGrid');
-  const allToShow = [...filtered, ...expiredUnresolved.filter(eu => !filtered.find(f => f.id === eu.id))];
+  const allToShow = filtered;
 
   if (allToShow.length === 0) {
     const slug = community?.slug || '';

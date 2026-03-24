@@ -15374,8 +15374,136 @@ async function autoResolveExpiredMarkets() {
   }
 }
 
+// FEATURE 4B — autoResolveNoSourceMarkets()
+// Resolves expired markets that have NO resolution_source — uses vote consensus or Claude knowledge
+async function autoResolveNoSourceMarkets() {
+  try {
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    // Find markets expired 24h+ ago, unresolved, NO resolution source
+    let markets;
+    if (pool) {
+      markets = await dbQuery(
+        `SELECT id, question, tenant_slug, expiry_date, yes_price, yes_votes, no_votes, options
+         FROM markets WHERE resolved = $1 AND expiry_date < $2
+         AND (resolution_source IS NULL OR resolution_source = '')`,
+        [false, twentyFourHoursAgo]
+      );
+    } else {
+      const { data } = await supabase.from('markets').select('id, question, tenant_slug, expiry_date, yes_price, yes_votes, no_votes, options')
+        .eq('resolved', false).lt('expiry_date', twentyFourHoursAgo).or('resolution_source.is.null,resolution_source.eq.');
+      markets = data || [];
+    }
+    if (!markets || !markets.length) return;
+
+    for (const market of markets) {
+      try {
+        // Skip multi-option markets for now (complex resolution)
+        if (market.options) continue;
+
+        const yesVotes = parseInt(market.yes_votes) || 0;
+        const noVotes = parseInt(market.no_votes) || 0;
+        const totalVotes = yesVotes + noVotes;
+        let outcome = null;
+        let method = '';
+
+        // Method 1: Strong community vote consensus (≥3 votes, ≥70% one side)
+        if (totalVotes >= 3) {
+          const yesPct = yesVotes / totalVotes;
+          if (yesPct >= 0.70) { outcome = 'YES'; method = 'community vote consensus'; }
+          else if (yesPct <= 0.30) { outcome = 'NO'; method = 'community vote consensus'; }
+        }
+
+        // Method 2: Ask Claude if the question has a knowable answer
+        if (!outcome && process.env.ANTHROPIC_API_KEY) {
+          try {
+            const aiRes = await anthropic.messages.create({
+              model: 'claude-haiku-4-5-20251001',
+              max_tokens: 200,
+              system: 'You resolve prediction markets. The market has expired. Based on your knowledge, determine if the prediction came true. Return ONLY valid JSON: { "outcome": "YES"|"NO"|"UNCERTAIN", "confidence": 0.0-1.0, "reasoning": "brief" }. If you genuinely cannot determine the answer, return UNCERTAIN.',
+              messages: [{ role: 'user', content: `Expired market question: "${market.question}"\nExpiry date: ${market.expiry_date}\nToday: ${new Date().toISOString().split('T')[0]}\n\nDid this come true?` }],
+            });
+            const txt = aiRes?.content?.[0]?.text || '';
+            const parsed = JSON.parse(txt);
+            if (parsed?.outcome && parsed.outcome !== 'UNCERTAIN' && parsed.confidence >= 0.80) {
+              outcome = parsed.outcome;
+              method = `AI knowledge (${Math.round(parsed.confidence * 100)}%): ${parsed.reasoning || ''}`;
+            }
+          } catch (e) { /* Claude failed, skip */ }
+        }
+
+        // Method 3: If expired 7+ days with no votes at all → resolve as NO (default)
+        if (!outcome) {
+          const daysSinceExpiry = (Date.now() - new Date(market.expiry_date).getTime()) / (1000 * 60 * 60 * 24);
+          if (daysSinceExpiry >= 7 && totalVotes === 0) {
+            outcome = 'NO';
+            method = 'auto-expired (7+ days, no activity)';
+          }
+        }
+
+        if (!outcome) continue;
+
+        // Settle positions
+        let positions;
+        if (pool) {
+          positions = await dbQuery('SELECT * FROM positions WHERE market_id = $1 AND settled = $2', [market.id, false]);
+        } else {
+          const { data } = await supabase.from('positions').select('*').eq('market_id', market.id).eq('settled', false);
+          positions = data || [];
+        }
+
+        if (positions && positions.length) {
+          for (const pos of positions) {
+            const won = pos.side === outcome;
+            const payout = won ? (Number(pos.potential_payout) || 0) : 0;
+            if (pool) {
+              await dbQuery('UPDATE positions SET settled = $1, won = $2 WHERE id = $3', [true, won, pos.id]);
+            } else {
+              await supabase.from('positions').update({ settled: true, won }).eq('id', pos.id);
+            }
+            if (won && payout > 0) {
+              let bal;
+              if (pool) {
+                const rows = await dbQuery('SELECT balance FROM community_balances WHERE user_id = $1 AND creator_slug = $2 LIMIT 1', [pos.user_id, market.tenant_slug]);
+                bal = rows[0] || null;
+              } else {
+                const { data: d } = await supabase.from('community_balances').select('balance').eq('user_id', pos.user_id).eq('creator_slug', market.tenant_slug).maybeSingle();
+                bal = d;
+              }
+              const cur = Number(bal?.balance) || 0;
+              if (pool) {
+                await dbQuery('INSERT INTO community_balances (id, user_id, creator_slug, balance) VALUES ($1, $2, $3, $4) ON CONFLICT (user_id, creator_slug) DO UPDATE SET balance = $4',
+                  [require('crypto').randomUUID(), pos.user_id, market.tenant_slug, cur + payout]);
+              } else {
+                await supabase.from('community_balances').upsert({ user_id: pos.user_id, creator_slug: market.tenant_slug, balance: cur + payout }, { onConflict: 'user_id,creator_slug' });
+              }
+            }
+          }
+        }
+
+        // Mark resolved
+        if (pool) {
+          await dbQuery('UPDATE markets SET resolved = $1, resolved_at = $2, resolution_outcome = $3, resolution_note = $4 WHERE id = $5',
+            [true, new Date().toISOString(), outcome, `Auto-resolved: ${method}`, market.id]);
+        } else {
+          await supabase.from('markets').update({ resolved: true, resolved_at: new Date().toISOString(), resolution_outcome: outcome, resolution_note: `Auto-resolved: ${method}` }).eq('id', market.id);
+        }
+
+        console.log(`[auto-resolve-nosource] Resolved ${market.id} as ${outcome} via ${method}`);
+      } catch (e) {
+        console.error(`[auto-resolve-nosource] Error on ${market.id}:`, e.message);
+      }
+    }
+  } catch (err) {
+    console.error('[auto-resolve-nosource] Fatal:', err.message);
+  }
+}
+
 // Run auto-resolve check every 30 minutes — wrapped to prevent unhandled rejections
-cron.schedule('*/30 * * * *', () => { autoResolveExpiredMarkets().catch(err => console.error('[auto-resolve] Cron error:', err.message)); });
+cron.schedule('*/30 * * * *', () => {
+  autoResolveExpiredMarkets().catch(err => console.error('[auto-resolve] Cron error:', err.message));
+  // Run no-source resolution 5 min after source-based, to avoid overlapping
+  setTimeout(() => { autoResolveNoSourceMarkets().catch(err => console.error('[auto-resolve-nosource] Cron error:', err.message)); }, 5 * 60 * 1000);
+});
 
 // Auto-sync platform positions — every hour — wrapped to prevent unhandled rejections
 cron.schedule('0 * * * *', () => { syncAllUserPositions().catch(err => console.error('[auto-sync] Cron error:', err.message)); });
