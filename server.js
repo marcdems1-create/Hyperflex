@@ -8525,6 +8525,97 @@ app.get('/api/fact-checks', async (req, res) => {
   } catch(e) { res.json({ checks: [] }); }
 });
 
+// ── PER-USER PREDICTION TRACK RECORD ─────────────────────────────────────
+// Every user gets a score based on their resolved predictions
+app.get('/api/community/:slug/user-scores', async (req, res) => {
+  try {
+    const { slug } = req.params;
+
+    // Get all resolved markets + all positions for this community
+    const [resolvedMarkets, allPositions] = await Promise.all([
+      dbQuery('SELECT id, question, outcome FROM markets WHERE tenant_slug = $1 AND outcome IS NOT NULL', [slug]),
+      dbQuery(`SELECT p.user_id, p.market_id, p.side, p.amount
+        FROM positions p
+        INNER JOIN markets m ON p.market_id = m.id
+        WHERE m.tenant_slug = $1 AND m.outcome IS NOT NULL`, [slug])
+    ]);
+
+    if (!resolvedMarkets.length || !allPositions.length) {
+      return res.json({ users: [], message: 'No resolved predictions yet' });
+    }
+
+    // Build outcome map
+    const outcomeMap = {};
+    for (const m of resolvedMarkets) { outcomeMap[m.id] = (m.outcome || '').toUpperCase(); }
+
+    // Score each user
+    const userStats = {};
+    for (const p of allPositions) {
+      const uid = p.user_id;
+      if (!userStats[uid]) userStats[uid] = { correct: 0, wrong: 0, total: 0, total_wagered: 0, best_call: null, worst_call: null, categories: {} };
+
+      const outcome = outcomeMap[p.market_id];
+      if (!outcome) continue;
+
+      const side = (p.side || '').toUpperCase();
+      const wasCorrect = side === outcome;
+      const amount = parseInt(p.amount) || 0;
+
+      userStats[uid].total++;
+      userStats[uid].total_wagered += amount;
+      if (wasCorrect) userStats[uid].correct++;
+      else userStats[uid].wrong++;
+
+      // Track best/worst by amount
+      const mkt = resolvedMarkets.find(m => m.id === p.market_id);
+      if (wasCorrect && (!userStats[uid].best_call || amount > userStats[uid].best_call.amount)) {
+        userStats[uid].best_call = { question: mkt?.question, amount, side };
+      }
+      if (!wasCorrect && (!userStats[uid].worst_call || amount > userStats[uid].worst_call.amount)) {
+        userStats[uid].worst_call = { question: mkt?.question, amount, side };
+      }
+    }
+
+    // Get user display names
+    const userIds = Object.keys(userStats);
+    const users = userIds.length ? await dbQuery('SELECT id, display_name FROM users WHERE id = ANY($1)', [userIds]) : [];
+    const nameMap = {};
+    for (const u of users) { nameMap[u.id] = u.display_name || 'Anonymous'; }
+
+    // Build leaderboard
+    const leaderboard = Object.entries(userStats)
+      .filter(([, s]) => s.total >= 3) // need at least 3 predictions
+      .map(([uid, s]) => {
+        const accuracy = Math.round(s.correct / s.total * 1000) / 10;
+        let grade, gradeColor;
+        if (accuracy >= 75) { grade = 'A+'; gradeColor = '#22c55e'; }
+        else if (accuracy >= 65) { grade = 'A'; gradeColor = '#22c55e'; }
+        else if (accuracy >= 55) { grade = 'B'; gradeColor = '#c9920d'; }
+        else if (accuracy >= 45) { grade = 'C'; gradeColor = '#f59e0b'; }
+        else { grade = 'D'; gradeColor = '#ef4444'; }
+
+        return {
+          user_id: uid,
+          display_name: nameMap[uid] || 'Anonymous',
+          correct: s.correct,
+          wrong: s.wrong,
+          total: s.total,
+          accuracy_pct: accuracy,
+          total_wagered: s.total_wagered,
+          grade, grade_color: gradeColor,
+          best_call: s.best_call,
+          worst_call: s.worst_call
+        };
+      })
+      .sort((a, b) => b.accuracy_pct - a.accuracy_pct || b.total - a.total);
+
+    res.json({ users: leaderboard });
+  } catch(err) {
+    console.error('[user-scores]', err.message);
+    res.json({ users: [] });
+  }
+});
+
 app.get('/api/community/:slug/announcements', async (req, res) => {
   try {
     let data;

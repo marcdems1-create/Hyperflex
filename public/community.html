@@ -2117,6 +2117,13 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
     <div id="crowdWisdomCard" style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px"></div>
   </div>
 
+  <!-- Predictor Scores -->
+  <div id="predictorScoresSection" style="display:none;margin-bottom:32px">
+    <div class="section-label">&#x1F3AF; Predictor Scores</div>
+    <div style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:12px">Every member scored by their prediction accuracy</div>
+    <div id="predictorScoresCard" style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px"></div>
+  </div>
+
   <!-- Rewards -->
   <div id="rewardsSection" class="rewards-wrap" style="display:none">
     <div class="section-label">🎁 Rewards</div>
@@ -2336,14 +2343,15 @@ let allRewards      = [];
   restoreSession();
   await loadCommunity();
   if (currentUser) {
-    await Promise.all([fetchCommunityBalance(), fetchMyPositions()]);
-    // Auto-follow if this is a returning user visiting a community they haven't joined yet
-    if (communityBalance === null) await followCommunity();
-    loadFollowStatus();
-    renderUserHeader();
-    renderReferralSection();
+    try {
+      await Promise.all([fetchCommunityBalance(), fetchMyPositions()]);
+      if (communityBalance === null) await followCommunity();
+      loadFollowStatus();
+      renderUserHeader();
+      renderReferralSection();
+    } catch(e) { console.warn('[init] post-load error:', e.message); }
   }
-})();
+})().catch(function(e) { console.error('[init] FATAL:', e.message); });
 
 function captureReferralParam() {
   const refId = new URLSearchParams(window.location.search).get('ref');
@@ -2395,6 +2403,7 @@ async function loadCommunity() {
     safeLoad(() => renderRewards(allRewards), 'rewards');
     safeLoad(() => loadLeaderboard(), 'leaderboard');
     safeLoad(() => loadCrowdWisdom(), 'crowd-wisdom');
+    safeLoad(() => loadPredictorScores(), 'predictor-scores');
     safeLoad(() => loadRecentFactChecks(), 'fact-checks');
     safeLoad(() => { if (data.challenge_progress) renderChallengeBar(data.challenge_progress); }, 'challenge');
     safeLoad(() => { if (data.announcements && data.announcements.length) renderAnnouncements(data.announcements); }, 'announcements');
@@ -4446,6 +4455,12 @@ function signOut() {
 
 // ── ERRORS ────────────────────────────────────────────────────
 function showCommunityError() {
+  console.error('[showCommunityError] CALLED — stack:', new Error().stack);
+  // Only show error if community data never loaded
+  if (community && community.display_name) {
+    console.warn('[showCommunityError] BLOCKED — community already loaded:', community.display_name);
+    return; // Don't overwrite a successfully loaded page
+  }
   document.getElementById('heroTitle').textContent = 'Community not found';
   document.getElementById('heroDesc').textContent  = 'This page doesn\'t exist or isn\'t active yet.';
   document.getElementById('marketsGrid').innerHTML = '<div class="empty"><div class="empty-icon">🔍</div>No community found for this URL.</div>';
@@ -4868,6 +4883,42 @@ async function loadRecentFactChecks() {
 
 // Load recent fact checks on page load
 setTimeout(function() { try { loadRecentFactChecks(); } catch(e) {} }, 2000);
+
+async function loadPredictorScores() {
+  try {
+    var r = await fetch('/api/community/' + slug + '/user-scores');
+    if (!r.ok) return;
+    var d = await r.json();
+    if (!d.users || !d.users.length) return;
+
+    var section = document.getElementById('predictorScoresSection');
+    var card = document.getElementById('predictorScoresCard');
+    section.style.display = '';
+
+    var html = '<table style="width:100%;border-collapse:collapse">';
+    html += '<thead><tr style="border-bottom:1px solid var(--border)">';
+    html += '<th style="text-align:left;padding:8px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em">Rank</th>';
+    html += '<th style="text-align:left;padding:8px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase">Predictor</th>';
+    html += '<th style="text-align:center;padding:8px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase">Grade</th>';
+    html += '<th style="text-align:center;padding:8px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase">Accuracy</th>';
+    html += '<th style="text-align:center;padding:8px;font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase">W/L</th>';
+    html += '</tr></thead><tbody>';
+
+    d.users.slice(0, 15).forEach(function(u, i) {
+      var accColor = u.accuracy_pct >= 60 ? '#22c55e' : u.accuracy_pct >= 50 ? '#c9920d' : '#ef4444';
+      html += '<tr style="border-bottom:1px solid rgba(42,42,36,0.3)">';
+      html += '<td style="padding:8px;font-family:var(--mono);font-size:12px;color:var(--dim)">' + (i + 1) + '</td>';
+      html += '<td style="padding:8px;font-size:13px;color:var(--text);font-weight:600">' + escHtml(u.display_name) + '</td>';
+      html += '<td style="padding:8px;text-align:center"><span style="font-family:var(--mono);font-size:12px;font-weight:700;color:' + u.grade_color + ';background:' + u.grade_color + '15;padding:2px 8px;border-radius:4px;border:1px solid ' + u.grade_color + '33">' + u.grade + '</span></td>';
+      html += '<td style="padding:8px;text-align:center;font-family:var(--mono);font-size:13px;font-weight:700;color:' + accColor + '">' + u.accuracy_pct + '%</td>';
+      html += '<td style="padding:8px;text-align:center;font-family:var(--mono);font-size:11px"><span style="color:#22c55e">' + u.correct + 'W</span> <span style="color:var(--dim)">/</span> <span style="color:#ef4444">' + u.wrong + 'L</span></td>';
+      html += '</tr>';
+    });
+
+    html += '</tbody></table>';
+    card.innerHTML = html;
+  } catch(e) { /* silent */ }
+}
 
 async function loadCrowdWisdom() {
   try {
