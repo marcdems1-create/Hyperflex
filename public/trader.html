@@ -193,7 +193,11 @@ function render(){
   var html='';
 
   // Hero
-  html+='<div class="hero-card"><div class="hero-top"><div class="avatar">'+avatarChars+'</div><span class="addr" onclick="copyAddr()">'+shortAddr+'</span><div class="badges">'+badgesHtml+'</div>'+followHtml+'</div><div class="stats-grid">'+statsHtml+'</div></div>';
+  var extLinksHtml='<div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">'+
+    '<a href="https://hyperdash.com/?previewAddress='+d.address+'&previewFrom=toptraders" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:11px;color:#7c3aed;border:1px solid rgba(124,58,237,0.35);border-radius:8px;padding:6px 14px;text-decoration:none;background:rgba(124,58,237,0.06);transition:all .15s" onmouseover="this.style.background=\'rgba(124,58,237,0.12)\'" onmouseout="this.style.background=\'rgba(124,58,237,0.06)\'">&#x1F4C8; HyperDash Charts</a>'+
+    (d.polymarket&&d.polymarket.active?'<a href="https://polymarket.com/profile/'+d.address+'" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:11px;color:var(--blue);border:1px solid rgba(0,102,255,0.35);border-radius:8px;padding:6px 14px;text-decoration:none;background:rgba(0,102,255,0.06);transition:all .15s" onmouseover="this.style.background=\'rgba(0,102,255,0.12)\'" onmouseout="this.style.background=\'rgba(0,102,255,0.06)\'">&#x1F50D; Polymarket Profile</a>':'')+
+  '</div>';
+  html+='<div class="hero-card"><div class="hero-top"><div class="avatar">'+avatarChars+'</div><span class="addr" onclick="copyAddr()">'+shortAddr+'</span><div class="badges">'+badgesHtml+'</div>'+followHtml+'</div><div class="stats-grid">'+statsHtml+'</div>'+extLinksHtml+'</div>';
 
   // Chart
   html+='<div class="chart-wrap" id="chartWrap"><div class="chart-title">P&L Timeline (7d)</div><canvas id="pnlChart"></canvas></div>';
