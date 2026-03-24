@@ -194,13 +194,13 @@ function render(){
 
   // Hero
   var extLinksHtml='<div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">'+
-    '<a href="https://hyperdash.com/?previewAddress='+d.address+'&previewFrom=toptraders" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:11px;color:#7c3aed;border:1px solid rgba(124,58,237,0.35);border-radius:8px;padding:6px 14px;text-decoration:none;background:rgba(124,58,237,0.06);transition:all .15s" onmouseover="this.style.background=\'rgba(124,58,237,0.12)\'" onmouseout="this.style.background=\'rgba(124,58,237,0.06)\'">&#x1F4C8; HyperDash Charts</a>'+
+    (d.hyperliquid&&d.hyperliquid.active?'<a href="https://app.hyperliquid.xyz/explorer/address/'+d.address+'" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:11px;color:#77b900;border:1px solid rgba(119,185,0,0.35);border-radius:8px;padding:6px 14px;text-decoration:none;background:rgba(119,185,0,0.06);transition:all .15s" onmouseover="this.style.background=\'rgba(119,185,0,0.12)\'" onmouseout="this.style.background=\'rgba(119,185,0,0.06)\'">&#x26A1; Hyperliquid Explorer</a>':'')+
     (d.polymarket&&d.polymarket.active?'<a href="https://polymarket.com/profile/'+d.address+'" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:11px;color:var(--blue);border:1px solid rgba(0,102,255,0.35);border-radius:8px;padding:6px 14px;text-decoration:none;background:rgba(0,102,255,0.06);transition:all .15s" onmouseover="this.style.background=\'rgba(0,102,255,0.12)\'" onmouseout="this.style.background=\'rgba(0,102,255,0.06)\'">&#x1F50D; Polymarket Profile</a>':'')+
   '</div>';
   html+='<div class="hero-card"><div class="hero-top"><div class="avatar">'+avatarChars+'</div><span class="addr" onclick="copyAddr()">'+shortAddr+'</span><div class="badges">'+badgesHtml+'</div>'+followHtml+'</div><div class="stats-grid">'+statsHtml+'</div>'+extLinksHtml+'</div>';
 
   // Chart
-  html+='<div class="chart-wrap" id="chartWrap"><div class="chart-title">P&L Timeline (7d)</div><canvas id="pnlChart"></canvas></div>';
+  html+='<div class="chart-wrap" id="chartWrap"><div class="chart-title">Cumulative P&amp;L (30d)</div><canvas id="pnlChart"></canvas></div>';
 
   // Determine layout
   var bothActive=d.polymarket.active&&d.hyperliquid.active;
@@ -335,34 +335,81 @@ function drawPnlChart(){
 
   var ctx=canvas.getContext('2d');
   var dpr=window.devicePixelRatio||1;
-  var w=canvas.offsetWidth;var h=160;
+  var w=canvas.offsetWidth;var h=200;
   canvas.width=w*dpr;canvas.height=h*dpr;
   canvas.style.height=h+'px';
   ctx.scale(dpr,dpr);
 
   var vals=points.map(function(p){return p.cum});
   var mn=Math.min(0,...vals);var mx=Math.max(0,...vals);
-  var range=mx-mn||1;var pad=16;var plotW=w-pad*2;var plotH=h-pad*2;
+  var range=mx-mn||1;
+  var padL=60;var padR=16;var padT=16;var padB=32;
+  var plotW=w-padL-padR;var plotH=h-padT-padB;
 
-  // Zero line
-  var zeroY=pad+plotH-(0-mn)/range*plotH;
-  ctx.strokeStyle='rgba(255,255,255,0.08)';ctx.lineWidth=1;
-  ctx.beginPath();ctx.moveTo(pad,zeroY);ctx.lineTo(w-pad,zeroY);ctx.stroke();
+  // Grid lines + Y-axis labels
+  ctx.font='10px "Space Mono",monospace';
+  ctx.textAlign='right';
+  var ySteps=4;
+  for(var i=0;i<=ySteps;i++){
+    var val=mn+(range/ySteps)*i;
+    var py=padT+plotH-(val-mn)/range*plotH;
+    ctx.strokeStyle='rgba(255,255,255,0.05)';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(padL,py);ctx.lineTo(w-padR,py);ctx.stroke();
+    ctx.fillStyle='#5a5752';
+    var label=Math.abs(val)>=1000?(val>=0?'+':'')+'$'+(val/1000).toFixed(1)+'K':(val>=0?'+':'-')+'$'+Math.abs(val).toFixed(0);
+    ctx.fillText(label,padL-6,py+4);
+  }
+
+  // Zero line (thicker)
+  var zeroY=padT+plotH-(0-mn)/range*plotH;
+  ctx.strokeStyle='rgba(255,255,255,0.15)';ctx.lineWidth=1;
+  ctx.setLineDash([4,4]);
+  ctx.beginPath();ctx.moveTo(padL,zeroY);ctx.lineTo(w-padR,zeroY);ctx.stroke();
+  ctx.setLineDash([]);
+
+  // X-axis date labels
+  ctx.textAlign='center';ctx.fillStyle='#5a5752';
+  var dateStep=Math.max(1,Math.floor(points.length/5));
+  for(var i=0;i<points.length;i+=dateStep){
+    var x=padL+i/(points.length-1)*plotW;
+    var d=new Date(points[i].t);
+    ctx.fillText((d.getMonth()+1)+'/'+d.getDate(),x,h-6);
+  }
+
+  // Fill area — green above zero, red below
+  var finalPnl=points[points.length-1].cum;
+  var fillColor=finalPnl>=0?'rgba(34,197,94,0.10)':'rgba(239,68,68,0.10)';
+  ctx.beginPath();
+  points.forEach(function(p,i){
+    var x=padL+i/(points.length-1)*plotW;
+    var y=padT+plotH-(p.cum-mn)/range*plotH;
+    if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+  });
+  ctx.lineTo(padL+(points.length-1)/(points.length-1)*plotW,padT+plotH);
+  ctx.lineTo(padL,padT+plotH);ctx.closePath();
+  ctx.fillStyle=fillColor;ctx.fill();
 
   // P&L line
-  ctx.strokeStyle='#c9920d';ctx.lineWidth=2;ctx.beginPath();
+  var lineColor=finalPnl>=0?'#22c55e':'#ef4444';
+  ctx.strokeStyle=lineColor;ctx.lineWidth=2;ctx.beginPath();
   points.forEach(function(p,i){
-    var x=pad+i/(points.length-1)*plotW;
-    var y=pad+plotH-(p.cum-mn)/range*plotH;
+    var x=padL+i/(points.length-1)*plotW;
+    var y=padT+plotH-(p.cum-mn)/range*plotH;
     if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
   });
   ctx.stroke();
 
-  // Fill
-  var lastX=pad+(points.length-1)/(points.length-1)*plotW;
-  var lastY=pad+plotH-(points[points.length-1].cum-mn)/range*plotH;
-  ctx.lineTo(lastX,h);ctx.lineTo(pad,h);ctx.closePath();
-  ctx.fillStyle='rgba(201,146,13,0.08)';ctx.fill();
+  // End dot
+  var lastX=padL+(points.length-1)/(points.length-1)*plotW;
+  var lastY=padT+plotH-(finalPnl-mn)/range*plotH;
+  ctx.beginPath();ctx.arc(lastX,lastY,4,0,Math.PI*2);
+  ctx.fillStyle=lineColor;ctx.fill();
+
+  // End label
+  ctx.textAlign='left';ctx.font='bold 12px "Space Mono",monospace';
+  ctx.fillStyle=lineColor;
+  var endLabel=finalPnl>=0?'+$'+Math.abs(finalPnl).toLocaleString(undefined,{maximumFractionDigits:0}):'-$'+Math.abs(finalPnl).toLocaleString(undefined,{maximumFractionDigits:0});
+  ctx.fillText(endLabel,lastX+8,lastY+4);
 }
 
 async function toggleFollow(){

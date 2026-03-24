@@ -10286,7 +10286,7 @@ app.get('/api/trader/:address/profile', async (req, res) => {
       fetchTO(`https://data-api.polymarket.com/positions?user=${addrLower}&limit=100&sortBy=CURRENT&winning=false`, { headers: { Accept: 'application/json' } }),
       fetchTO(`https://data-api.polymarket.com/positions?user=${addrLower}&limit=100&sortBy=CURRENT&winning=true`, { headers: { Accept: 'application/json' } }),
       fetchTO('https://api.hyperliquid.xyz/info', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'clearinghouseState', user: addrLower }) }),
-      fetchTO('https://api.hyperliquid.xyz/info', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'userFills', user: addrLower, startTime: Date.now() - 7 * 24 * 60 * 60 * 1000 }) }),
+      fetchTO('https://api.hyperliquid.xyz/info', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'userFills', user: addrLower, startTime: Date.now() - 30 * 24 * 60 * 60 * 1000 }) }),
       (async () => {
         try {
           if (pool) {

@@ -1119,7 +1119,6 @@ function renderHlTable() {
       '<td style="font-family:var(--mono);font-size:12px;color:var(--text-soft)">' + (p.leverage || 1) + 'x</td>' +
       '<td><div class="action-btns" style="gap:4px">' +
         '<a href="/trader/' + escAttr(p.trader_address || '') + '" onclick="event.stopPropagation()" style="font-size:10px;font-family:var(--mono);color:#7c3aed;border:1px solid rgba(124,58,237,0.4);border-radius:6px;padding:3px 8px;text-decoration:none;white-space:nowrap">\uD83D\uDD17 Profile</a>' +
-        (p.trader_address ? '<a href="https://hyperdash.com/?previewAddress=' + escAttr(p.trader_address) + '&previewFrom=toptraders" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="font-size:10px;font-family:var(--mono);color:#77b900;border:1px solid rgba(119,185,0,0.4);border-radius:6px;padding:3px 8px;text-decoration:none;white-space:nowrap">\uD83D\uDCC8</a>' : '') +
         '<button class="copy-trade-btn" style="font-size:10px;padding:3px 8px" onclick="event.stopPropagation();copyHlTrade(\'' + escAttr(p.trader || '') + '\',\'' + escAttr(p.coin || '') + '\',\'' + escAttr(p.side || '') + '\',' + (p.size_usd || 0) + ',' + (p.leverage || 1) + ')">Copy</button>' +
         '<button class="ac-btn" style="font-size:10px;padding:3px 8px" title="Mirror all future trades from this HL trader" onclick="event.stopPropagation();openAutoCopy(\'' + escAttr(p.trader_address || '') + '\',\'' + escAttr(p.trader || '') + '\')">\uD83E\uDD16</button>' +
       '</div></td>' +
