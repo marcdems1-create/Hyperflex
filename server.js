@@ -20242,7 +20242,7 @@ app.get('/api/signals', async (req, res) => {
       } catch(e) { console.warn('[signals] movers warm failed:', e.message); }
     }
 
-    const signals = [];
+    let signals = [];
     const now = new Date().toISOString();
 
     // Source 1: Whale clustering — markets with 5+ whales from whale-index
