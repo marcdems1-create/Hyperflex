@@ -1972,7 +1972,7 @@ app.get('/api/user/community-balance/:slug', async (req, res) => {
       min_bet: settings?.min_bet ?? 1000,
       max_bet: settings?.max_bet ?? null,
       starting_balance: settings?.starting_balance ?? 100000,
-      custom_points_name: settings?.custom_points_name || 'Flex Points'
+      custom_points_name: settings?.custom_points_name || 'Points'
     });
   } catch (err) {
     console.error('community-balance error:', err);
@@ -3546,7 +3546,7 @@ app.get('/api/discover', async (req, res) => {
         primary_color:  c.primary_color || '#c9920d',
         description:    c.community_description,
         plan:           c.plan || 'free',
-        points_name:    c.custom_points_name || 'Flex Points',
+        points_name:    c.custom_points_name || 'Points',
         members,
         active_markets: markets.length,
         total_trades:   totalTraders,
@@ -3705,7 +3705,7 @@ app.get('/api/creator/:slug/theme', async (req, res) => {
   if (error || !data) return res.status(404).json({ error: 'Creator not found' });
   res.json({
     display_name: data.display_name,
-    custom_points_name: data.custom_points_name || 'Flex Points',
+    custom_points_name: data.custom_points_name || 'Points',
     theme_type: data.theme_type || 'default',
   });
 });
@@ -4135,7 +4135,7 @@ app.post('/api/creator/signup', async (req, res) => {
   try {
     const {
       display_name, email, password, slug,
-      custom_points_name = 'Flex Points',
+      custom_points_name = 'Points',
       primary_color = '#c9920d',
       community_description = '',
       selected_markets = [],
@@ -4145,6 +4145,11 @@ app.post('/api/creator/signup', async (req, res) => {
     // Validate required fields
     if (!display_name || !email || !password || !slug) {
       return res.status(400).json({ error: 'Missing required fields' });
+    }
+    // Reserve "Flex Points" — only HYPERFLEX platform can use it
+    const RESERVED_POINTS_NAMES = ['flex points', 'flex', 'flexpoints', 'hfx points', 'hfx', 'hyperflex points'];
+    if (RESERVED_POINTS_NAMES.includes((custom_points_name || '').toLowerCase().trim())) {
+      return res.status(400).json({ error: '"Flex Points" is reserved for the HYPERFLEX platform. Choose a unique name for your community currency.' });
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ error: 'Invalid email' });
@@ -4920,7 +4925,7 @@ app.get('/api/creator/members', requireCreator, async (req, res) => {
     }
     const slug    = settings?.slug;
     const plan    = settings?.plan || 'free';
-    const ptsName = settings?.custom_points_name || 'Flex Points';
+    const ptsName = settings?.custom_points_name || 'Points';
     if (!slug) return res.status(404).json({ error: 'Creator not found' });
 
     // All members + their balances
@@ -5392,7 +5397,7 @@ app.get('/api/creator/sponsor-kit', requireCreator, async (req, res) => {
     }
 
     const slug     = settings.slug;
-    const ptsName  = settings.custom_points_name || 'Flex Points';
+    const ptsName  = settings.custom_points_name || 'Points';
     const name     = settings.display_name || slug;
 
     // Fetch stats
@@ -5732,6 +5737,12 @@ app.put('/api/creator/settings', requireCreator, async (req, res) => {
       // Ideas niche
       community_category
     } = req.body;
+
+    // Block reserved currency names
+    const _reservedPts = ['flex points', 'flex', 'flexpoints', 'hfx points', 'hfx', 'hyperflex points'];
+    if (custom_points_name && _reservedPts.includes(custom_points_name.toLowerCase().trim())) {
+      return res.status(400).json({ error: '"Flex Points" is reserved for the HYPERFLEX platform. Choose a unique name.' });
+    }
 
     const updates = {
       display_name,
@@ -8841,7 +8852,7 @@ app.post('/api/creator/oauth-complete', async (req, res) => {
     let insErr;
     if (pool) {
       try {
-        await dbQuery('INSERT INTO creator_settings (creator_id, slug, display_name, custom_points_name, primary_color, is_active, plan, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)', [payload.id, slug, display_name, 'Flex Points', '#c9920d', true, 'free', new Date().toISOString()]);
+        await dbQuery('INSERT INTO creator_settings (creator_id, slug, display_name, custom_points_name, primary_color, is_active, plan, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)', [payload.id, slug, display_name, 'Points', '#c9920d', true, 'free', new Date().toISOString()]);
       } catch (e) { insErr = e; }
     } else {
       if (pool) {
@@ -8933,7 +8944,7 @@ app.get('/api/search', async (req, res) => {
       display_name:       s.display_name || s.slug,
       logo_url:           s.logo_url || null,
       primary_color:      s.primary_color || '#c9920d',
-      custom_points_name: s.custom_points_name || 'Flex Points',
+      custom_points_name: s.custom_points_name || 'Points',
       member_count:       memberCounts[s.slug] || 0,
       i_follow:           mySlugSet.has(s.slug),
     }));
@@ -9173,7 +9184,7 @@ app.get('/api/embed/:slug', async (req, res) => {
         slug,
         name:       cs.display_name || slug,
         color:      cs.primary_color || '#c9920d',
-        pts_name:   cs.custom_points_name || 'Flex Points',
+        pts_name:   cs.custom_points_name || 'Points',
         logo_url:   cs.logo_url || null,
         url:        `https://hyperflex.network/${slug}`,
         min_bet:    cs.min_bet  ?? 10000,   // centpoints (default 100 pts)
@@ -9282,7 +9293,7 @@ app.get('/api/user/dashboard', requireAuth, async (req, res) => {
           display_name:      c.display_name || b.creator_slug,
           primary_color:     c.primary_color || '#c9920d',
           logo_url:          c.logo_url || null,
-          custom_points_name: c.custom_points_name || 'Flex Points',
+          custom_points_name: c.custom_points_name || 'Points',
           balance:           Math.floor(b.balance / 100),
           rank,
           open_positions:    openCount,
@@ -11082,7 +11093,7 @@ app.get('/api/activity', async (req, res) => {
         user:                 userMap[b.user_id] || 'Anonymous',
         side:                 (b.side || '').toUpperCase(),
         amount:               b.amount ? Math.round(b.amount / 100) : 0,
-        pts_name:             communities[slug]?.custom_points_name || 'Flex Points',
+        pts_name:             communities[slug]?.custom_points_name || 'Points',
         market_id:            b.market_id,
         market_question:      m?.question,
         market_yes_price:     m?.yes_price,
@@ -11151,7 +11162,7 @@ app.get('/api/activity', async (req, res) => {
           side:            (w.side || '').toUpperCase(),
           amount:          w.amount ? Math.round(w.amount / 100) : 0,
           payout:          Math.round(payout / 100),
-          pts_name:        communities[slug]?.custom_points_name || 'Flex Points',
+          pts_name:        communities[slug]?.custom_points_name || 'Points',
           market_id:       w.market_id,
           market_question: m.question,
           outcome:         m.outcome,
@@ -11198,7 +11209,7 @@ app.get('/api/activity', async (req, res) => {
         creator_slug:     slug,
         community_name:   communities[slug]?.display_name || slug,
         community_color:  communities[slug]?.primary_color || '#c9920d',
-        pts_name:         communities[slug]?.custom_points_name || 'Flex Points',
+        pts_name:         communities[slug]?.custom_points_name || 'Points',
       });
     }
 
@@ -11695,7 +11706,7 @@ async function sendWeeklyDigests() {
       const slug         = creator.slug;
       const communityName = creator.display_name || slug;
       const accentColor  = creator.primary_color || '#c9920d';
-      const ptsName      = creator.custom_points_name || 'Flex Points';
+      const ptsName      = creator.custom_points_name || 'Points';
       const communityUrl = `https://hyperflex.network/${slug}`;
 
       // Fetch top 3 hot markets
@@ -12105,7 +12116,7 @@ async function sendStreakWarningEmails() {
         const ms = (marketsBySlug[slug] || []).slice(0, 2);
         for (const m of ms) {
           const cs = settingsBySlug[slug] || {};
-          candidateMarkets.push({ ...m, community_name: cs.display_name || slug, slug, accent: cs.primary_color || '#c9920d', ptsName: cs.custom_points_name || 'Flex Points' });
+          candidateMarkets.push({ ...m, community_name: cs.display_name || slug, slug, accent: cs.primary_color || '#c9920d', ptsName: cs.custom_points_name || 'Points' });
         }
       }
       // Sort by trader_count desc, take top 3
@@ -12396,7 +12407,7 @@ async function sendMemberWinBackEmails() {
         const ms = (marketsBySlug[slug] || []).slice(0, 2);
         const cs = creatorMap[slug] || {};
         for (const m of ms) {
-          candidateMarkets.push({ ...m, community_name: cs.display_name || slug, slug, accent: cs.primary_color || '#c9920d', ptsName: cs.custom_points_name || 'Flex Points' });
+          candidateMarkets.push({ ...m, community_name: cs.display_name || slug, slug, accent: cs.primary_color || '#c9920d', ptsName: cs.custom_points_name || 'Points' });
         }
       }
       candidateMarkets.sort((a, b) => (b.trader_count || 0) - (a.trader_count || 0));
@@ -12538,7 +12549,7 @@ app.get('/api/win-card/:marketId/:userId', async (req, res) => {
       },
       community: {
         display_name: settings?.display_name || slug || 'HYPERFLEX',
-        custom_points_name: settings?.custom_points_name || 'Flex Points',
+        custom_points_name: settings?.custom_points_name || 'Points',
         primary_color: settings?.primary_color || '#c9920d',
         logo_url: settings?.logo_url || null,
         slug: slug || ''
@@ -12614,7 +12625,7 @@ app.get('/:slug', async (req, res, next) => {
 
     if (settings) {
       const name = settings.display_name || slug;
-      const pts  = settings.custom_points_name || 'Flex Points';
+      const pts  = settings.custom_points_name || 'Points';
       const desc = settings.community_description
         ? settings.community_description.slice(0, 160)
         : `Make predictions, earn ${pts}, and climb the leaderboard in ${name}'s community on HYPERFLEX.`;
@@ -14027,7 +14038,7 @@ app.post('/api/creator/digest/send', requireCreator, async (req, res) => {
 
     const communityName = creator.display_name || slug;
     const accentColor   = creator.primary_color || '#c9920d';
-    const ptsName       = creator.custom_points_name || 'Flex Points';
+    const ptsName       = creator.custom_points_name || 'Points';
     const communityUrl  = `https://hyperflex.network/${slug}`;
 
     let markets;
@@ -14162,7 +14173,7 @@ app.post('/api/creator/markets/:marketId/blast', requireCreator, async (req, res
 
     const communityName = creator.display_name || slug;
     const accent        = creator.primary_color || '#c9920d';
-    const ptsName       = creator.custom_points_name || 'Flex Points';
+    const ptsName       = creator.custom_points_name || 'Points';
     const communityUrl  = `https://hyperflex.network/${slug}`;
     const marketUrl     = `${communityUrl}?market=${marketId}&ref=blast`;
 
