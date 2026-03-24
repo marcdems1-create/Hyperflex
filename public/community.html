@@ -2093,6 +2093,12 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
     </div>
   </div>
 
+  <!-- Crowd Wisdom Score -->
+  <div id="crowdWisdomSection" style="display:none;margin-bottom:32px">
+    <div class="section-label">\uD83C\uDFAF Crowd Wisdom Score</div>
+    <div id="crowdWisdomCard" style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px"></div>
+  </div>
+
   <!-- Rewards -->
   <div id="rewardsSection" class="rewards-wrap" style="display:none">
     <div class="section-label">🎁 Rewards</div>
@@ -2355,6 +2361,7 @@ async function loadCommunity() {
     renderPage(data);
     renderRewards(allRewards);
     loadLeaderboard();
+    loadCrowdWisdom();
     if (data.challenge_progress) renderChallengeBar(data.challenge_progress);
     if (data.announcements && data.announcements.length) renderAnnouncements(data.announcements);
     if (data.recent_activity && data.recent_activity.length) renderActivityFeed(data.recent_activity);
@@ -4761,6 +4768,93 @@ function renderActivityFeed(activity) {
 
 // ── ANNOUNCEMENTS ─────────────────────────────────────────────
 // ── SEASONS ──────────────────────────────────────────────────────────────────
+async function loadCrowdWisdom() {
+  try {
+    var r = await fetch('/api/community/' + _slug + '/accuracy');
+    if (!r.ok) return;
+    var d = await r.json();
+    if (!d || d.total_resolved < 1) return;
+
+    var section = document.getElementById('crowdWisdomSection');
+    var card = document.getElementById('crowdWisdomCard');
+    section.style.display = '';
+
+    var accColor = d.accuracy_pct >= 60 ? '#22c55e' : d.accuracy_pct >= 50 ? '#c9920d' : '#ef4444';
+    var vsStr = d.vs_random != null ? (d.vs_random > 0 ? '+' + d.vs_random : d.vs_random) + '% vs random' : '';
+
+    var html = '';
+
+    // Grade + main stat
+    html += '<div style="display:flex;align-items:center;gap:20px;margin-bottom:16px;flex-wrap:wrap">';
+    html += '<div style="width:64px;height:64px;border-radius:50%;border:3px solid ' + (d.grade_color || '#7a7870') + ';display:flex;align-items:center;justify-content:center;flex-shrink:0"><span style="font-family:var(--sans);font-size:28px;font-weight:800;color:' + (d.grade_color || '#7a7870') + '">' + (d.grade || '\u2014') + '</span></div>';
+    html += '<div><div style="font-family:var(--sans);font-size:24px;font-weight:800;color:' + accColor + '">' + (d.accuracy_pct != null ? d.accuracy_pct + '%' : '\u2014') + ' <span style="font-size:14px;font-weight:600;color:var(--dim)">accuracy</span></div>';
+    html += '<div style="font-family:var(--mono);font-size:11px;color:var(--dim)">' + d.total_resolved + ' markets resolved \u00B7 ' + d.correct + ' correct \u00B7 ' + d.wrong + ' wrong' + (vsStr ? ' \u00B7 ' + vsStr : '') + '</div></div>';
+    html += '</div>';
+
+    // Stats row
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:16px">';
+    html += '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center"><div style="font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em">Correct</div><div style="font-family:var(--sans);font-size:20px;font-weight:800;color:#22c55e">' + d.correct + '</div></div>';
+    html += '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center"><div style="font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em">Wrong</div><div style="font-family:var(--sans);font-size:20px;font-weight:800;color:#ef4444">' + d.wrong + '</div></div>';
+    html += '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center"><div style="font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em">Avg Confidence</div><div style="font-family:var(--sans);font-size:20px;font-weight:800;color:var(--text)">' + (d.avg_confidence || 0) + '%</div></div>';
+    html += '</div>';
+
+    // Best and worst calls
+    if (d.best_call || d.worst_call) {
+      html += '<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">';
+      if (d.best_call) {
+        html += '<div style="flex:1;min-width:200px;background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.2);border-radius:8px;padding:12px">';
+        html += '<div style="font-family:var(--mono);font-size:9px;color:#22c55e;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">\u2B50 Best Call</div>';
+        html += '<div style="font-size:12px;color:var(--text);line-height:1.4;margin-bottom:4px">' + escHtml((d.best_call.question || '').substring(0, 60)) + '</div>';
+        html += '<div style="font-family:var(--mono);font-size:11px;color:#22c55e">Community said ' + d.best_call.community_said + ' at ' + d.best_call.community_pct + '% \u2714</div>';
+        html += '</div>';
+      }
+      if (d.worst_call) {
+        html += '<div style="flex:1;min-width:200px;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);border-radius:8px;padding:12px">';
+        html += '<div style="font-family:var(--mono);font-size:9px;color:#ef4444;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">\u274C Worst Call</div>';
+        html += '<div style="font-size:12px;color:var(--text);line-height:1.4;margin-bottom:4px">' + escHtml((d.worst_call.question || '').substring(0, 60)) + '</div>';
+        html += '<div style="font-family:var(--mono);font-size:11px;color:#ef4444">Community said ' + d.worst_call.community_said + ' at ' + d.worst_call.community_pct + '% \u2718</div>';
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+
+    // Category breakdown
+    var cats = Object.entries(d.by_category || {}).filter(function(c) { return c[1].total >= 2; }).sort(function(a, b) { return b[1].total - a[1].total; });
+    if (cats.length) {
+      html += '<div style="font-family:var(--mono);font-size:10px;color:var(--gold);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Accuracy by Category</div>';
+      html += '<div style="display:flex;flex-direction:column;gap:4px">';
+      cats.forEach(function(c) {
+        var cat = c[0] === 'other' ? 'General' : c[0].charAt(0).toUpperCase() + c[0].slice(1);
+        var acc = c[1].accuracy_pct;
+        var col = acc >= 60 ? '#22c55e' : acc >= 50 ? '#c9920d' : '#ef4444';
+        html += '<div style="display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px">';
+        html += '<span style="min-width:80px;color:var(--dim)">' + cat + '</span>';
+        html += '<div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden"><div style="height:100%;width:' + (acc || 0) + '%;background:' + col + ';border-radius:3px"></div></div>';
+        html += '<span style="min-width:35px;text-align:right;color:' + col + ';font-weight:700">' + (acc != null ? acc + '%' : '\u2014') + '</span>';
+        html += '<span style="color:var(--dim);font-size:10px">(' + c[1].total + ')</span>';
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+
+    // Recent calls
+    if (d.recent && d.recent.length) {
+      html += '<div style="font-family:var(--mono);font-size:10px;color:var(--gold);text-transform:uppercase;letter-spacing:.08em;margin:16px 0 8px">Recent Calls</div>';
+      d.recent.slice(0, 8).forEach(function(c) {
+        var icon = c.correct ? '\u2705' : '\u274C';
+        var col = c.correct ? '#22c55e' : '#ef4444';
+        html += '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(42,42,36,0.3);font-family:var(--mono);font-size:11px">';
+        html += '<span>' + icon + '</span>';
+        html += '<span style="flex:1;color:var(--dim)">' + escHtml((c.question || '').substring(0, 50)) + '</span>';
+        html += '<span style="color:' + col + ';font-weight:700">' + c.community_pct + '% ' + c.community_said + '</span>';
+        html += '</div>';
+      });
+    }
+
+    card.innerHTML = html;
+  } catch(e) { /* silent */ }
+}
+
 async function loadActiveSeason() {
   try {
     const r = await fetch(`/api/community/${slug}/seasons`);

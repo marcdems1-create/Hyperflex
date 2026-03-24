@@ -8293,6 +8293,140 @@ app.post('/api/creator/announcements', requireCreator, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── COMMUNITY ACCURACY / CROWD WISDOM SCORE ─────────────────────────────
+// Measures how good this community is at predicting outcomes
+app.get('/api/community/:slug/accuracy', async (req, res) => {
+  try {
+    const { slug } = req.params;
+
+    // Get all resolved markets for this community
+    const resolved = await dbQuery(`
+      SELECT id, question, category, outcome, yes_votes, no_votes, trader_count,
+             resolved_at, created_at, expiry_date
+      FROM markets
+      WHERE tenant_slug = $1 AND outcome IS NOT NULL
+      ORDER BY resolved_at DESC
+    `, [slug]);
+
+    if (!resolved || !resolved.length) {
+      return res.json({
+        slug,
+        total_resolved: 0,
+        correct: 0,
+        wrong: 0,
+        accuracy_pct: null,
+        vs_random: null,
+        best_call: null,
+        worst_call: null,
+        by_category: {},
+        recent: [],
+        message: 'No markets resolved yet. Accuracy tracking begins when markets close.'
+      });
+    }
+
+    let correct = 0;
+    let wrong = 0;
+    let totalConfidence = 0;
+    const byCategory = {};
+    const calls = [];
+
+    for (const m of resolved) {
+      const yesVotes = parseInt(m.yes_votes) || 0;
+      const noVotes = parseInt(m.no_votes) || 0;
+      const totalVotes = yesVotes + noVotes;
+      if (totalVotes < 2) continue; // need at least 2 votes to count
+
+      const communityPct = Math.round(yesVotes / totalVotes * 100);
+      const communitySide = communityPct >= 50 ? 'YES' : 'NO';
+      const communityConfidence = Math.abs(communityPct - 50); // 0-50, higher = more confident
+      const actualOutcome = (m.outcome || '').toUpperCase();
+      const wasCorrect = communitySide === actualOutcome;
+
+      if (wasCorrect) correct++;
+      else wrong++;
+      totalConfidence += communityConfidence;
+
+      // Category tracking
+      const cat = m.category || 'other';
+      if (!byCategory[cat]) byCategory[cat] = { correct: 0, wrong: 0, total: 0 };
+      byCategory[cat].total++;
+      if (wasCorrect) byCategory[cat].correct++;
+      else byCategory[cat].wrong++;
+
+      calls.push({
+        market_id: m.id,
+        question: m.question,
+        category: cat,
+        community_said: communitySide,
+        community_pct: communityPct,
+        confidence: communityConfidence,
+        actual_outcome: actualOutcome,
+        correct: wasCorrect,
+        traders: parseInt(m.trader_count) || 0,
+        resolved_at: m.resolved_at
+      });
+    }
+
+    const totalJudged = correct + wrong;
+    const accuracyPct = totalJudged > 0 ? Math.round(correct / totalJudged * 1000) / 10 : null;
+    const vsRandom = accuracyPct != null ? Math.round((accuracyPct - 50) * 10) / 10 : null;
+    const avgConfidence = totalJudged > 0 ? Math.round(totalConfidence / totalJudged) : 0;
+
+    // Best and worst calls (by confidence * correctness)
+    const correctCalls = calls.filter(c => c.correct).sort((a, b) => b.confidence - a.confidence);
+    const wrongCalls = calls.filter(c => !c.correct).sort((a, b) => b.confidence - a.confidence);
+
+    // Category accuracy
+    const categoryAccuracy = {};
+    for (const [cat, data] of Object.entries(byCategory)) {
+      categoryAccuracy[cat] = {
+        total: data.total,
+        correct: data.correct,
+        accuracy_pct: data.total > 0 ? Math.round(data.correct / data.total * 1000) / 10 : null
+      };
+    }
+
+    // Calibration: when community says 70%, how often are they right?
+    const calibration = {};
+    for (const c of calls) {
+      const bucket = Math.round(c.community_pct / 10) * 10; // 10%, 20%, ... 90%
+      if (!calibration[bucket]) calibration[bucket] = { predicted: 0, actual: 0 };
+      calibration[bucket].predicted++;
+      if ((c.community_said === 'YES' && c.correct) || (c.community_said === 'NO' && c.correct)) {
+        calibration[bucket].actual++;
+      }
+    }
+
+    // Grade
+    let grade, gradeColor;
+    if (accuracyPct === null) { grade = '—'; gradeColor = '#7a7870'; }
+    else if (accuracyPct >= 70) { grade = 'A'; gradeColor = '#22c55e'; }
+    else if (accuracyPct >= 60) { grade = 'B'; gradeColor = '#c9920d'; }
+    else if (accuracyPct >= 50) { grade = 'C'; gradeColor = '#f59e0b'; }
+    else { grade = 'D'; gradeColor = '#ef4444'; }
+
+    res.json({
+      slug,
+      total_resolved: totalJudged,
+      correct,
+      wrong,
+      accuracy_pct: accuracyPct,
+      vs_random: vsRandom,
+      avg_confidence: avgConfidence,
+      grade,
+      grade_color: gradeColor,
+      best_call: correctCalls[0] || null,
+      worst_call: wrongCalls[0] || null,
+      by_category: categoryAccuracy,
+      calibration,
+      recent: calls.slice(0, 20)
+    });
+  } catch (err) {
+    console.error('[community-accuracy]', err.message);
+    res.json({ slug: req.params.slug, total_resolved: 0, accuracy_pct: null, message: 'Accuracy data unavailable' });
+  }
+});
+
 app.get('/api/community/:slug/announcements', async (req, res) => {
   try {
     let data;
