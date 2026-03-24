@@ -9321,7 +9321,7 @@ const RESERVED_SLUGS = new Set([
 ]);
 
 // GET /my — private member dashboard
-app.get('/my', (req, res) => res.sendFile(path.join(__dirname, 'public', 'user-dashboard.html')));
+app.get('/my', (req, res) => res.redirect('/creator/dashboard'));
 
 // GET /templates — market template gallery (SEO + activation)
 app.get('/templates', (req, res) => res.sendFile(path.join(__dirname, 'public', 'templates.html')));

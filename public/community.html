@@ -2093,23 +2093,7 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
     </div>
   </div>
 
-  <!-- Fact-Check Engine -->
-  <div id="factCheckSection" style="margin-bottom:32px">
-    <div class="section-label">&#x1F50D; Fact-Check Engine</div>
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px">
-      <div style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:12px">Paste a claim, tweet, or prediction \u2014 AI checks it against live Polymarket data</div>
-      <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-        <input type="text" id="factCheckInput" placeholder="e.g. &quot;The bottom is in for gold&quot; or &quot;Trump will win 2028&quot;" style="flex:1;min-width:200px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:12px;padding:10px 14px;outline:none" onkeydown="if(event.key==='Enter')runFactCheck()"/>
-        <button onclick="runFactCheck()" id="factCheckBtn" style="background:var(--gold);color:#000;border:none;border-radius:8px;padding:10px 20px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap">&#x1F50D; Check</button>
-      </div>
-      <div style="display:flex;gap:8px;margin-bottom:12px">
-        <input type="text" id="factCheckAuthor" placeholder="Source (optional, e.g. @tradermayne)" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--dim);font-family:var(--mono);font-size:11px;padding:6px 10px;outline:none"/>
-        <input type="text" id="factCheckUrl" placeholder="URL (optional)" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--dim);font-family:var(--mono);font-size:11px;padding:6px 10px;outline:none"/>
-      </div>
-      <div id="factCheckResult" style="display:none"></div>
-      <div id="factCheckRecent"></div>
-    </div>
-  </div>
+  <!-- Fact-Check Engine — disabled until Twitter API available -->
 
   <!-- Crowd Wisdom Score -->
   <div id="crowdWisdomSection" style="display:none;margin-bottom:32px">
@@ -2404,7 +2388,7 @@ async function loadCommunity() {
     safeLoad(() => loadLeaderboard(), 'leaderboard');
     safeLoad(() => loadCrowdWisdom(), 'crowd-wisdom');
     safeLoad(() => loadPredictorScores(), 'predictor-scores');
-    safeLoad(() => loadRecentFactChecks(), 'fact-checks');
+    // safeLoad(() => loadRecentFactChecks(), 'fact-checks'); // disabled until Twitter API
     safeLoad(() => { if (data.challenge_progress) renderChallengeBar(data.challenge_progress); }, 'challenge');
     safeLoad(() => { if (data.announcements && data.announcements.length) renderAnnouncements(data.announcements); }, 'announcements');
     safeLoad(() => { if (data.recent_activity && data.recent_activity.length) renderActivityFeed(data.recent_activity); }, 'activity');
@@ -4887,7 +4871,7 @@ async function loadRecentFactChecks() {
 }
 
 // Load recent fact checks on page load
-setTimeout(function() { try { loadRecentFactChecks(); } catch(e) {} }, 2000);
+// setTimeout(function() { try { loadRecentFactChecks(); } catch(e) {} }, 2000); // disabled
 
 async function loadPredictorScores() {
   try {
