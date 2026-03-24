@@ -2093,6 +2093,24 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
     </div>
   </div>
 
+  <!-- Fact-Check Engine -->
+  <div id="factCheckSection" style="margin-bottom:32px">
+    <div class="section-label">\uD83D\uDD0D Fact-Check Engine</div>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px">
+      <div style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:12px">Paste a claim, tweet, or prediction \u2014 AI checks it against live Polymarket data</div>
+      <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+        <input type="text" id="factCheckInput" placeholder="e.g. &quot;The bottom is in for gold&quot; or &quot;Trump will win 2028&quot;" style="flex:1;min-width:200px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:12px;padding:10px 14px;outline:none" onkeydown="if(event.key==='Enter')runFactCheck()"/>
+        <button onclick="runFactCheck()" id="factCheckBtn" style="background:var(--gold);color:#000;border:none;border-radius:8px;padding:10px 20px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap">\uD83D\uDD0D Check</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <input type="text" id="factCheckAuthor" placeholder="Source (optional, e.g. @tradermayne)" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--dim);font-family:var(--mono);font-size:11px;padding:6px 10px;outline:none"/>
+        <input type="text" id="factCheckUrl" placeholder="URL (optional)" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--dim);font-family:var(--mono);font-size:11px;padding:6px 10px;outline:none"/>
+      </div>
+      <div id="factCheckResult" style="display:none"></div>
+      <div id="factCheckRecent"></div>
+    </div>
+  </div>
+
   <!-- Crowd Wisdom Score -->
   <div id="crowdWisdomSection" style="display:none;margin-bottom:32px">
     <div class="section-label">\uD83C\uDFAF Crowd Wisdom Score</div>
@@ -4768,6 +4786,69 @@ function renderActivityFeed(activity) {
 
 // ── ANNOUNCEMENTS ─────────────────────────────────────────────
 // ── SEASONS ──────────────────────────────────────────────────────────────────
+async function runFactCheck() {
+  var claim = (document.getElementById('factCheckInput').value || '').trim();
+  if (!claim || claim.length < 10) { alert('Enter a claim to check (at least 10 characters)'); return; }
+  var author = (document.getElementById('factCheckAuthor').value || '').trim();
+  var url = (document.getElementById('factCheckUrl').value || '').trim();
+  var btn = document.getElementById('factCheckBtn');
+  var resultEl = document.getElementById('factCheckResult');
+  btn.disabled = true; btn.textContent = 'Checking...';
+  resultEl.style.display = 'block';
+  resultEl.innerHTML = '<div style="text-align:center;padding:16px;color:var(--dim);font-family:var(--mono);font-size:12px">Analyzing claim against live market data...</div>';
+  try {
+    var r = await fetch('/api/fact-check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ claim: claim, source_author: author || null, source_url: url || null })
+    });
+    var d = await r.json();
+    if (d.error) { resultEl.innerHTML = '<div style="color:var(--red);font-family:var(--mono);font-size:12px;padding:8px">' + escHtml(d.error) + '</div>'; btn.disabled = false; btn.textContent = '\uD83D\uDD0D Check'; return; }
+
+    var vc = d.verdict_color || '#7a7870';
+    var confBar = Math.min(d.confidence || 0, 100);
+    resultEl.innerHTML =
+      '<div style="border:1px solid ' + vc + '33;border-radius:10px;padding:16px;margin-top:4px;background:' + vc + '08">' +
+        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">' +
+          '<span style="font-family:var(--sans);font-size:16px;font-weight:800;color:' + vc + '">' + escHtml(d.verdict || 'UNKNOWN') + '</span>' +
+          '<span style="font-family:var(--mono);font-size:11px;color:var(--dim)">Confidence: ' + (d.confidence || 0) + '%</span>' +
+          '<div style="flex:1;min-width:60px;height:4px;background:var(--border);border-radius:2px;overflow:hidden"><div style="height:100%;width:' + confBar + '%;background:' + vc + ';border-radius:2px"></div></div>' +
+        '</div>' +
+        (d.testable_assertion ? '<div style="font-family:var(--mono);font-size:11px;color:var(--text);margin-bottom:8px;padding:8px;background:var(--bg);border-radius:6px;border-left:3px solid ' + vc + '">\u201C' + escHtml(d.testable_assertion) + '\u201D</div>' : '') +
+        '<div style="font-family:var(--mono);font-size:12px;color:var(--dim);line-height:1.6;margin-bottom:8px">' + escHtml(d.reasoning || '') + '</div>' +
+        (d.related_market ? '<div style="font-family:var(--mono);font-size:10px;color:var(--gold);margin-top:6px">\uD83D\uDCCA Related market: ' + escHtml(d.related_market) + (d.market_odds ? ' \u2014 ' + escHtml(d.market_odds) : '') + '</div>' : '') +
+        (d.edge_vs_market ? '<div style="font-family:var(--mono);font-size:10px;color:#f59e0b;margin-top:4px">\u26A1 ' + escHtml(d.edge_vs_market) + '</div>' : '') +
+      '</div>';
+    loadRecentFactChecks();
+  } catch(e) {
+    resultEl.innerHTML = '<div style="color:var(--red);font-family:var(--mono);font-size:12px;padding:8px">Fact-check failed: ' + escHtml(e.message) + '</div>';
+  }
+  btn.disabled = false; btn.textContent = '\uD83D\uDD0D Check';
+}
+
+async function loadRecentFactChecks() {
+  try {
+    var r = await fetch('/api/fact-checks');
+    var d = await r.json();
+    var checks = (d.checks || []).slice(0, 5);
+    if (!checks.length) return;
+    var el = document.getElementById('factCheckRecent');
+    var verdictColors = { 'LIKELY TRUE': '#22c55e', 'LIKELY FALSE': '#ef4444', 'MIXED': '#f59e0b', 'UNVERIFIABLE': '#7a7870' };
+    el.innerHTML = '<div style="font-family:var(--mono);font-size:10px;color:var(--gold);text-transform:uppercase;letter-spacing:.06em;margin:16px 0 8px">Recent Checks</div>' +
+      checks.map(function(c) {
+        var col = verdictColors[c.verdict] || '#7a7870';
+        return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(42,42,36,0.3);font-family:var(--mono);font-size:11px">' +
+          '<span style="font-weight:700;color:' + col + ';min-width:90px;font-size:9px">' + escHtml(c.verdict || '') + '</span>' +
+          '<span style="flex:1;color:var(--dim)">' + escHtml((c.claim || '').substring(0, 50)) + '</span>' +
+          (c.source_author ? '<span style="color:var(--dim);font-size:10px">' + escHtml(c.source_author) + '</span>' : '') +
+        '</div>';
+      }).join('');
+  } catch(e) { /* silent */ }
+}
+
+// Load recent fact checks on page load
+setTimeout(loadRecentFactChecks, 2000);
+
 async function loadCrowdWisdom() {
   try {
     var r = await fetch('/api/community/' + _slug + '/accuracy');

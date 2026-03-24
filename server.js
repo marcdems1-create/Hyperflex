@@ -8427,6 +8427,104 @@ app.get('/api/community/:slug/accuracy', async (req, res) => {
   }
 });
 
+// ── FACT-CHECK ENGINE ────────────────────────────────────────────────────
+// Submit a claim (tweet, headline, prediction) → AI extracts the testable
+// assertion → matches against live Polymarket data → scores it
+app.post('/api/fact-check', async (req, res) => {
+  try {
+    const { claim, source_url, source_author } = req.body || {};
+    if (!claim || claim.length < 10) return res.status(400).json({ error: 'Claim must be at least 10 characters' });
+    if (!process.env.ANTHROPIC_API_KEY) return res.json({ verdict: null, error: 'AI not configured' });
+
+    // Rate limit
+    const ip = req.ip || 'unknown';
+    const now = Date.now();
+    if (!_factCheckRL) _factCheckRL = new Map();
+    let rl = _factCheckRL.get(ip);
+    if (!rl || now > rl.resetAt) rl = { count: 0, resetAt: now + 60000 };
+    if (rl.count >= 5) return res.status(429).json({ error: 'Rate limited. Try again in a minute.' });
+    rl.count++;
+    _factCheckRL.set(ip, rl);
+
+    // Get current market data for context
+    const screenerMkts = _screenerCache && Array.isArray(_screenerCache.data) ? _screenerCache.data : [];
+    const marketContext = screenerMkts.slice(0, 30).map(m => {
+      const price = m.yes_price != null ? Math.round(m.yes_price * 100) : '?';
+      return `"${(m.question || '').substring(0, 80)}" — ${price}% YES`;
+    }).join('\n');
+
+    // Ask Claude to fact-check the claim against market data
+    const resp = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 800,
+      messages: [{
+        role: 'user',
+        content: `You are a prediction market fact-checker. Analyze this claim and score it.
+
+CLAIM: "${claim}"
+${source_author ? `SOURCE: ${source_author}` : ''}
+${source_url ? `URL: ${source_url}` : ''}
+
+CURRENT POLYMARKET DATA (live odds on real events):
+${marketContext || 'No market data available'}
+
+Respond in this exact JSON format:
+{
+  "testable_assertion": "The specific factual claim being made",
+  "verdict": "LIKELY TRUE" or "LIKELY FALSE" or "MIXED" or "UNVERIFIABLE",
+  "confidence": 1-100,
+  "reasoning": "2-3 sentence explanation of why, referencing market data where relevant",
+  "related_market": "The most relevant Polymarket question if one exists, or null",
+  "market_odds": "What the market currently says (e.g. '73% YES') or null",
+  "edge_vs_market": "If the claim disagrees with the market, explain the gap"
+}
+
+Only respond with the JSON object, nothing else.`
+      }]
+    });
+
+    const text = (resp.content[0]?.text || '').trim();
+    let result;
+    try {
+      // Extract JSON from response (handle markdown code blocks)
+      const jsonStr = text.replace(/^```json?\n?/, '').replace(/\n?```$/, '').trim();
+      result = JSON.parse(jsonStr);
+    } catch(e) {
+      result = { verdict: 'UNVERIFIABLE', confidence: 30, reasoning: text.substring(0, 300), testable_assertion: claim };
+    }
+
+    // Color coding
+    const verdictColors = { 'LIKELY TRUE': '#22c55e', 'LIKELY FALSE': '#ef4444', 'MIXED': '#f59e0b', 'UNVERIFIABLE': '#7a7870' };
+    result.verdict_color = verdictColors[result.verdict] || '#7a7870';
+
+    // Log to DB for tracking
+    await dbQuery(`CREATE TABLE IF NOT EXISTS fact_checks (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      claim TEXT, source_url TEXT, source_author TEXT,
+      verdict TEXT, confidence INTEGER, reasoning TEXT,
+      related_market TEXT, market_odds TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`).catch(() => {});
+    await dbQuery('INSERT INTO fact_checks (claim, source_url, source_author, verdict, confidence, reasoning, related_market, market_odds) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+      [claim, source_url || null, source_author || null, result.verdict, result.confidence, result.reasoning, result.related_market || null, result.market_odds || null]
+    ).catch(() => {});
+
+    res.json(result);
+  } catch(err) {
+    console.error('[fact-check]', err.message);
+    res.json({ verdict: 'ERROR', confidence: 0, reasoning: 'Fact-check temporarily unavailable.', verdict_color: '#7a7870' });
+  }
+});
+let _factCheckRL = new Map();
+
+// Get recent fact-checks (public)
+app.get('/api/fact-checks', async (req, res) => {
+  try {
+    const rows = await dbQuery('SELECT claim, source_author, verdict, confidence, reasoning, related_market, market_odds, created_at FROM fact_checks ORDER BY created_at DESC LIMIT 20').catch(() => []);
+    res.json({ checks: rows || [] });
+  } catch(e) { res.json({ checks: [] }); }
+});
+
 app.get('/api/community/:slug/announcements', async (req, res) => {
   try {
     let data;
