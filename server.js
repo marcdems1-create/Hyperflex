@@ -1424,13 +1424,22 @@ app.post('/markets', async (req, res) => {
         ? 'pro' : cs.plan;
       const FREE_MARKET_LIMIT = 5;
       if (effectivePlan === 'free') {
-        let count;
-        if (pool) {
-          const _rows = await dbQuery('SELECT count(*) as count FROM markets WHERE tenant_slug = $1 AND resolved = $2 AND archived = $3', [row.tenant_slug, false, false]);
-          count = parseInt(_rows[0]?.count || 0);
-        } else {
-          const { count } = await supabase .from('markets') .select('id', { count: 'exact', head: true }) .eq('tenant_slug', row.tenant_slug) .eq('resolved', false) .eq('archived', false);
-        }
+        let count = 0;
+        try {
+          if (pool) {
+            // Try with archived column first, fall back without it
+            try {
+              const _rows = await dbQuery('SELECT count(*) as count FROM markets WHERE tenant_slug = $1 AND resolved = $2 AND archived = $3', [row.tenant_slug, false, false]);
+              count = parseInt(_rows[0]?.count || 0);
+            } catch (colErr) {
+              const _rows = await dbQuery('SELECT count(*) as count FROM markets WHERE tenant_slug = $1 AND resolved = $2', [row.tenant_slug, false]);
+              count = parseInt(_rows[0]?.count || 0);
+            }
+          } else {
+            const result = await supabase .from('markets') .select('id', { count: 'exact', head: true }) .eq('tenant_slug', row.tenant_slug) .eq('resolved', false);
+            count = result.count || 0;
+          }
+        } catch (e) { console.warn('[POST /markets] count check failed:', e.message); }
         if ((count || 0) >= FREE_MARKET_LIMIT) {
           return res.status(403).json({
             error: 'Free plan limit reached',
@@ -1476,14 +1485,47 @@ app.post('/markets', async (req, res) => {
   }
 
   let data, error;
-  if (pool) {
-    const _insData = Array.isArray([row]) ? ([row])[0] : ([row]);
-    const _cols = Object.keys(_insData); const _vals = Object.values(_insData);
-    const _phs = _cols.map((_, i) => `$${i + 1}`).join(', ');
-    const _rows = await dbQuery(`INSERT INTO markets (${_cols.join(', ')}) VALUES (${_phs}) RETURNING *`, _vals);
-    data = _rows[0] || null;
-  } else {
-    const { data, error } = await supabase .from('markets') .insert([row]) .select() .single();
+  try {
+    // Stringify JSONB fields for raw SQL
+    if (row.options && typeof row.options !== 'string') row.options = JSON.stringify(row.options);
+    if (row.resolution_sources && typeof row.resolution_sources !== 'string') row.resolution_sources = JSON.stringify(row.resolution_sources);
+
+    if (pool) {
+      const _insData = row;
+      const _cols = Object.keys(_insData); const _vals = Object.values(_insData);
+      const _phs = _cols.map((_, i) => `$${i + 1}`).join(', ');
+      const _rows = await dbQuery(`INSERT INTO markets (${_cols.join(', ')}) VALUES (${_phs}) RETURNING *`, _vals);
+      data = _rows[0] || null;
+    } else {
+      const result = await supabase .from('markets') .insert([row]) .select() .single();
+      data = result.data;
+      error = result.error;
+    }
+  } catch (insertErr) {
+    console.error('POST /markets insert crash:', insertErr.message, insertErr.stack);
+    // If a column doesn't exist, retry with only core columns
+    if (/column.*does not exist|undefined/i.test(insertErr.message)) {
+      try {
+        const safeRow = { question: row.question, expiry_date: row.expiry_date, commodity: row.commodity, target_price: row.target_price, direction: row.direction, yes_price: row.yes_price, no_price: row.no_price, yes_pool: row.yes_pool, no_pool: row.no_pool, resolved: row.resolved };
+        if (row.category) safeRow.category = row.category;
+        if (row.creator_id) safeRow.creator_id = row.creator_id;
+        if (row.tenant_slug) safeRow.tenant_slug = row.tenant_slug;
+        if (row.is_public !== undefined) safeRow.is_public = row.is_public;
+        if (pool) {
+          const _cols = Object.keys(safeRow); const _vals = Object.values(safeRow);
+          const _phs = _cols.map((_, i) => `$${i + 1}`).join(', ');
+          const _rows = await dbQuery(`INSERT INTO markets (${_cols.join(', ')}) VALUES (${_phs}) RETURNING *`, _vals);
+          data = _rows[0] || null;
+        } else {
+          const result = await supabase.from('markets').insert([safeRow]).select().single();
+          data = result.data; error = result.error;
+        }
+      } catch (retryErr) {
+        return res.status(500).json({ error: 'Failed to create market', detail: retryErr.message });
+      }
+    } else {
+      return res.status(500).json({ error: 'Failed to create market', detail: insertErr.message });
+    }
   }
   if (error) {
     console.error('POST /markets insert error:', JSON.stringify({ message: error.message, code: error.code, details: error.details, hint: error.hint, row }));
@@ -1496,7 +1538,7 @@ app.post('/markets', async (req, res) => {
   if (data?.id) {
     scoreMarketResonance(data.question, data.category).then(score => {
       if (score) { if (pool) { dbQuery('UPDATE markets SET resonance_score = $1 WHERE id = $2', [score, data.id]).catch(() => {}); } else { supabase.from('markets').update({ resonance_score: score }).eq('id', data.id).then(() => {}); } }
-    });
+    }).catch(() => {});
     // Notify followers if market is published immediately
     if (row.is_public === true && row.tenant_slug) {
       sendNewMarketNotifications(data, row.tenant_slug).catch(() => {});
