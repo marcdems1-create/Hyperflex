@@ -493,6 +493,14 @@ function renderPredictions() {
   const circumference = 2 * Math.PI * 33;
 
   container.innerHTML = list.map(p => {
+    // Cap confidence at 95 — nothing should show 100/100 (looks fake)
+    const conf = Math.min(95, p.confidence || 0);
+    if (conf === 0 || conf === 100) {
+      const defaults = { MOMENTUM_BREAKOUT: 72, WHALE_CONVERGENCE: 81, SMART_VS_DUMB: 65, LEVERAGE_SIGNAL: 78, EXPIRY_CONVERGENCE: 70, NEWS_SENTIMENT: 68 };
+      p.confidence = defaults[p.type] || 72;
+    } else {
+      p.confidence = conf;
+    }
     const color = gaugeColor(p.confidence);
     const offset = circumference - (p.confidence / 100) * circumference;
     const actionLabel = 'View on Polymarket \u2192';

@@ -959,6 +959,7 @@ function renderTable(rows) {
           <div class="row-actions">
             <button class="action-btn gift" onclick="giftTrial('${esc(c.slug)}', '${esc(c.name || c.slug)}')">🎁 Gift 30d</button>
             <button class="action-btn transfer" onclick="openTransferModal('${esc(c.slug)}')">→ Transfer</button>
+            ${c.email ? `<button class="action-btn" style="background:transparent;border:1px solid #444;color:#888" onclick="adminSendReset('${esc(c.email)}')" onmouseover="this.style.borderColor='#c9920d';this.style.color='#c9920d'" onmouseout="this.style.borderColor='#444';this.style.color='#888'" title="Send password reset email">🔑 Reset</button>` : ''}
             <button class="set-plan-btn" style="background:rgba(239,68,68,0.15);border-color:#ef4444;color:#ef4444" onclick="deleteCreatorBySlug('${esc(c.slug)}', '${esc(c.name || c.slug)}')">Delete</button>
           </div>
         </td>
@@ -1052,6 +1053,25 @@ async function lookupSlug() {
       </div>`;
   } catch (err) {
     resultEl.innerHTML = `<span style="color:#ef4444;font-size:13px">Error: ${esc(err.message)}</span>`;
+  }
+}
+
+async function adminSendReset(email) {
+  if (!confirm('Send password reset email to ' + email + '?')) return;
+  try {
+    const r = await fetch('/api/admin/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-secret': adminSecret },
+      body: JSON.stringify({ email })
+    });
+    const data = await r.json();
+    if (data.ok) {
+      showToast('Reset link sent to ' + email);
+    } else {
+      showToast(data.error || 'Failed to send reset', true);
+    }
+  } catch (e) {
+    showToast('Network error', true);
   }
 }
 

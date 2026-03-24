@@ -1042,6 +1042,15 @@ nav {
       ↑ <span id="newActivityCount">0</span> new activities — click to refresh
     </div>
 
+    <!-- SMART MONEY DIVERGENCE -->
+    <div id="smart-money-section" style="display:none;margin-bottom:20px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px">
+      <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px">
+        <span style="font-family:var(--display);font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.05em">⚡ Smart Money Divergence</span>
+        <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">where sharp predictors disagree with retail</span>
+      </div>
+      <div id="smart-money-list" style="display:flex;flex-direction:column;gap:8px"></div>
+    </div>
+
     <!-- DAILY BRIEFING -->
     <div id="daily-briefing" class="briefing-card" style="display:none">
       <div class="briefing-header" onclick="toggleBriefing()">
@@ -2301,6 +2310,32 @@ updateNavAuthState();
 // Initial loads
 loadActivityFeed();
 loadFeed();
+loadSmartMoneyDivergence();
+
+async function loadSmartMoneyDivergence() {
+  try {
+    const r = await fetch('/api/explore/smart-money-divergence');
+    const data = await r.json();
+    if (!data || !data.length) return;
+    const section = document.getElementById('smart-money-section');
+    const list = document.getElementById('smart-money-list');
+    if (!section || !list) return;
+    section.style.display = '';
+    list.innerHTML = data.map(function(d, i) {
+      const gapColor = d.gap > 0 ? 'var(--green)' : 'var(--red)';
+      const gapSign = d.gap > 0 ? '+' : '';
+      return '<div style="display:flex;align-items:center;gap:12px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px">' +
+        '<span style="font-family:var(--mono);font-size:12px;color:var(--muted);min-width:18px">' + (i + 1) + '.</span>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + (d.question || '').substring(0, 70) + '</div>' +
+          '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px">Sharp: ' + d.sharp_yes_pct + '% YES · Retail: ' + d.retail_yes_pct + '% YES</div>' +
+        '</div>' +
+        '<span style="font-family:var(--mono);font-size:13px;font-weight:700;color:' + gapColor + ';white-space:nowrap">' + gapSign + d.gap + 'pts</span>' +
+        (d.creator_slug ? '<a href="/' + d.creator_slug + '" style="font-family:var(--mono);font-size:10px;color:var(--gold);text-decoration:none;white-space:nowrap">View →</a>' : '') +
+      '</div>';
+    }).join('');
+  } catch (e) { /* silent */ }
+}
 
 // FOLLOWING FEED
 let _followingFeedLoaded = false;

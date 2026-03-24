@@ -436,8 +436,19 @@ function renderSignals() {
     const capHtml = s.capital ? '<span>Capital: <span class="val">$' + formatNum(s.capital) + '</span></span>' : '';
     let changeHtml = '';
     if (s.start_price != null && s.odds_price != null) {
-      const chgColor = s.odds_price > s.start_price ? 'var(--green)' : 'var(--red)';
-      changeHtml = '<span>Odds: <span class="val" style="color:' + chgColor + '">' + s.start_price + '\u00A2 \u2192 ' + s.odds_price + '\u00A2</span></span>';
+      const priceMoved = (s.odds_price || 0) - (s.start_price || 0);
+      const chgColor = priceMoved >= 0 ? 'var(--green)' : 'var(--red)';
+      const moveSign = priceMoved >= 0 ? '+' : '';
+      // Cap % display at 999% for near-zero starts
+      let pctNote = '';
+      if ((s.start_price || 0) >= 3) {
+        const rawPct = Math.round(((s.odds_price - s.start_price) / s.start_price) * 100);
+        const capped = Math.min(Math.abs(rawPct), 999);
+        pctNote = ' (' + (rawPct >= 0 ? '+' : '-') + capped + '%)';
+      } else if ((s.start_price || 0) < 3 && Math.abs(priceMoved) > 0) {
+        pctNote = ' (from near-zero)';
+      }
+      changeHtml = '<span>Odds: <span class="val" style="color:' + chgColor + '">' + s.start_price + '\u00A2 \u2192 ' + s.odds_price + '\u00A2</span> <span style="font-size:10px;color:' + chgColor + '">' + moveSign + priceMoved + 'pts' + pctNote + '</span></span>';
     } else if (s.change_pct) {
       const absPts = Math.abs(Math.round(s.change_pct * (s.price || 0.5)));
       const chgColor = s.change_pct > 0 ? 'var(--green)' : 'var(--red)';
@@ -598,9 +609,13 @@ async function runAiAnalysis() {
     });
     const data = await r.json();
     if (data.error) throw new Error(data.error);
-    resultEl.innerHTML = '<div class="ai-result">' + escHtml(data.analysis || data.content || JSON.stringify(data)) + '</div>';
+    const analysisText = data.analysis || data.content || '';
+    if (!analysisText) throw new Error('empty');
+    resultEl.innerHTML = '<div class="ai-result">' + escHtml(analysisText) + '</div>';
   } catch (e) {
-    resultEl.innerHTML = '<div style="color:var(--red);font-family:var(--mono);font-size:12px">' + escHtml(e.message || 'Analysis failed') + '</div>';
+    const fallback = 'AI analysis temporarily unavailable. Use the whale data and momentum signals above for your edge.';
+    const errMsg = (e.message === 'empty' || /unable|unavailable|failed/i.test(e.message)) ? fallback : escHtml(e.message || fallback);
+    resultEl.innerHTML = '<div style="color:var(--muted);font-family:var(--mono);font-size:12px;line-height:1.5">' + errMsg + '</div>';
   }
   btn.disabled = false;
   btn.textContent = 'Analyze';
