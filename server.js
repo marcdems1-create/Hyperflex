@@ -16421,7 +16421,10 @@ async function fetchWhalePositions() {
               size: parseFloat(p.size || 0),
               current_price: parseFloat(p.curPrice || p.cur_price || 0),
               market_url: p.eventSlug ? `https://polymarket.com/event/${p.eventSlug}` : (p.slug ? `https://polymarket.com/event/${p.slug}` : 'https://polymarket.com'),
-              pnl: parseFloat(p.pnl || 0),
+              pnl: parseFloat(p.cashPnl || p.pnl || 0),
+              avg_price: parseFloat(p.avgPrice || 0),
+              initial_value: parseFloat(p.initialValue || 0),
+              current_value: parseFloat(p.currentValue || 0),
               end_date: p.endDate || p.end_date_iso || null,
               fetched_at: new Date().toISOString()
             }));
@@ -20690,21 +20693,34 @@ app.get('/api/backtest/:address', async (req, res) => {
       const market = p.market || p.position || 'Unknown';
       const currentPrice = p.current_price || 0.5;
 
-      // Find historical price: look through snapshots for matching market
-      let entryPrice = null;
-      const marketKey = market.toLowerCase();
-      for (const [mId, snaps] of Object.entries(snapshotMap)) {
-        if (mId.toLowerCase().includes(marketKey.slice(0, 30)) || marketKey.includes(mId.toLowerCase().slice(0, 30))) {
-          if (snaps.length > 0) {
-            entryPrice = snaps[0].yes_price;
-            break;
+      // Entry price: use whale's actual avg buy price if available
+      // p.avg_price comes from Polymarket's avgPrice field in position data
+      let entryPrice = parseFloat(p.avg_price || p.avgPrice || 0);
+
+      // If no avg_price, try historical snapshots
+      if (!entryPrice || entryPrice <= 0) {
+        const marketKey = market.toLowerCase();
+        for (const [mId, snaps] of Object.entries(snapshotMap)) {
+          if (mId.toLowerCase().includes(marketKey.slice(0, 30)) || marketKey.includes(mId.toLowerCase().slice(0, 30))) {
+            if (snaps.length > 0) { entryPrice = snaps[0].yes_price; break; }
           }
         }
       }
-      // If no historical snapshot, use current price as entry (conservative — shows 0 P&L rather than fake data)
-      if (entryPrice === null) {
-        entryPrice = currentPrice;
+
+      // If still no entry price, estimate from cashPnl if available
+      if ((!entryPrice || entryPrice <= 0) && p.pnl != null && parseFloat(p.pnl) !== 0) {
+        // Back-calculate: pnl = (currentPrice - entryPrice) * shares
+        // entryPrice = currentPrice - pnl/shares
+        const shares = parseFloat(p.size || 0);
+        if (shares > 0) {
+          entryPrice = currentPrice - (parseFloat(p.pnl) / shares);
+          if (entryPrice < 0.01) entryPrice = 0.01;
+          if (entryPrice > 0.99) entryPrice = 0.99;
+        }
       }
+
+      // Last resort: use current price (shows 0 P&L — better than fake data)
+      if (!entryPrice || entryPrice <= 0) entryPrice = currentPrice;
 
       // Use REAL position size from whale data
       const realSize = parseFloat(p.size || 0);
