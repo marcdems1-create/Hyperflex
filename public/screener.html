@@ -555,7 +555,7 @@ function loadMore() {
 
 // Init
 loadScreener();
-loadNarratives();
+try { loadNarratives(); } catch(e) { console.warn('[screener] narratives failed:', e.message); }
 
 // Auto-refresh every 5 minutes
 setInterval(loadScreener, 5 * 60 * 1000);

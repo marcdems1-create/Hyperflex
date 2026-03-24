@@ -2368,6 +2368,11 @@ function restoreSession() {
   }
 }
 
+// Safe loader: wraps any async function so it can never crash the page
+function safeLoad(fn, label) {
+  try { fn(); } catch(e) { console.warn('[' + (label || 'safe') + ']', e.message); }
+}
+
 async function loadCommunity() {
   try {
     const r = await fetch(`${API}/api/community/${slug}`);
@@ -2376,16 +2381,22 @@ async function loadCommunity() {
     community = data.community;
     markets   = data.markets || [];
     allRewards = data.rewards || [];
+
+    // Core render — if THIS fails, show error
     renderPage(data);
-    renderRewards(allRewards);
-    loadLeaderboard();
-    loadCrowdWisdom();
-    if (data.challenge_progress) renderChallengeBar(data.challenge_progress);
-    if (data.announcements && data.announcements.length) renderAnnouncements(data.announcements);
-    if (data.recent_activity && data.recent_activity.length) renderActivityFeed(data.recent_activity);
-    // Load active season (non-blocking)
-    loadActiveSeason();
-  } catch {
+
+    // Everything below is non-critical — each wrapped so one failure
+    // never takes down the entire page
+    safeLoad(() => renderRewards(allRewards), 'rewards');
+    safeLoad(() => loadLeaderboard(), 'leaderboard');
+    safeLoad(() => loadCrowdWisdom(), 'crowd-wisdom');
+    safeLoad(() => loadRecentFactChecks(), 'fact-checks');
+    safeLoad(() => { if (data.challenge_progress) renderChallengeBar(data.challenge_progress); }, 'challenge');
+    safeLoad(() => { if (data.announcements && data.announcements.length) renderAnnouncements(data.announcements); }, 'announcements');
+    safeLoad(() => { if (data.recent_activity && data.recent_activity.length) renderActivityFeed(data.recent_activity); }, 'activity');
+    safeLoad(() => loadActiveSeason(), 'season');
+  } catch(e) {
+    console.error('[loadCommunity] FATAL:', e.message, e.stack);
     showCommunityError();
   }
 }

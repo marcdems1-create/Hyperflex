@@ -1247,9 +1247,9 @@ function loadDailyBriefing() {
   }).catch(function() { /* silent */ });
 }
 
-// Refresh briefing every 30 min
-loadDailyBriefing();
-setInterval(loadDailyBriefing, 30 * 60 * 1000);
+// Refresh briefing every 30 min — wrapped so crashes never break the page
+try { loadDailyBriefing(); } catch(e) { console.warn('[explore] briefing load failed:', e.message); }
+setInterval(function() { try { loadDailyBriefing(); } catch(e) {} }, 30 * 60 * 1000);
 
 // ── LIVE INSIGHTS LOADER ──
 function loadExploreInsights() {
@@ -1274,7 +1274,7 @@ function loadExploreInsights() {
     section.style.display = 'block';
   }).catch(() => {});
 }
-loadExploreInsights();
+try { loadExploreInsights(); } catch(e) { console.warn('[explore] insights failed:', e.message); }
 
 // ── SMART MONEY DIVERGENCE ──
 (function loadSmartMoney() {

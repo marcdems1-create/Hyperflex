@@ -753,15 +753,15 @@ async function loadCorrelations() {
   }
 }
 
-// ── Init ──
+// ── Init — each loader isolated so one crash never takes down the page ──
 loadSignals();
-loadWhalePicks();
-loadFearGreed();
-loadConsistentPicks();
-loadCorrelations();
+try { loadWhalePicks(); } catch(e) { console.warn('[signals] whale picks failed:', e.message); }
+try { loadFearGreed(); } catch(e) { console.warn('[signals] fear greed failed:', e.message); }
+try { loadConsistentPicks(); } catch(e) { console.warn('[signals] consistent picks failed:', e.message); }
+try { loadCorrelations(); } catch(e) { console.warn('[signals] correlations failed:', e.message); }
 
 // Auto-refresh every 5 minutes
-setInterval(loadSignals, 5 * 60 * 1000);
+setInterval(function() { try { loadSignals(); } catch(e) {} }, 5 * 60 * 1000);
 </script>
 </body>
 </html>

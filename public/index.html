@@ -1017,7 +1017,9 @@ footer {
     }).catch(function(){});
   }
 
-  loadRightNow();loadLastHour();loadWatchlist();
+  try{loadRightNow()}catch(e){console.warn('[home] rightNow:',e.message)}
+  try{loadLastHour()}catch(e){console.warn('[home] lastHour:',e.message)}
+  try{loadWatchlist()}catch(e){console.warn('[home] watchlist:',e.message)}
   setInterval(loadRightNow,60000);
   setInterval(loadLastHour,90000);
 })();
