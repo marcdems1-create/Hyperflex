@@ -64,6 +64,20 @@ function getWhaleNickname(address) {
 }
 
 const JWT_SECRET = process.env.JWT_SECRET || 'hyperflex-dev-secret-change-in-prod';
+if (!process.env.JWT_SECRET) console.warn('[SECURITY] JWT_SECRET not set — using insecure default. Set JWT_SECRET env var in production!');
+
+// ── Rate limiting helpers ──
+const _rateLimits = {};
+function rateLimit(key, identifier, maxAttempts, windowMs) {
+  const bucket = key + ':' + identifier;
+  if (!_rateLimits[bucket] || Date.now() > _rateLimits[bucket].resetAt) {
+    _rateLimits[bucket] = { count: 0, resetAt: Date.now() + windowMs };
+  }
+  _rateLimits[bucket].count++;
+  return _rateLimits[bucket].count <= maxAttempts;
+}
+// Cleanup stale entries every 10 min
+setInterval(() => { const now = Date.now(); for (const k of Object.keys(_rateLimits)) { if (now > _rateLimits[k].resetAt) delete _rateLimits[k]; } }, 600000);
 
 // ── API Key Auth middleware (for /api-docs documented endpoints) ──
 const _apiKeyRateLimit = new Map(); // userId → { count, resetAt }
@@ -133,7 +147,7 @@ app.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (re
     event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
   } catch (err) {
     console.error('Stripe webhook signature error:', err.message);
-    return res.status(400).send('Webhook error: ' + err.message);
+    return res.status(400).send('Webhook signature verification failed');
   }
 
   try {
@@ -874,6 +888,8 @@ app.post('/register', async (req, res) => {
 
 // Login
 app.post('/login', async (req, res) => {
+  const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+  if (!rateLimit('login', ip, 10, 60000)) return res.status(429).json({ error: 'Too many login attempts. Try again in a minute.' });
   const timer = setTimeout(() => {
     if (!res.headersSent) res.status(504).json({ error: 'Login timed out — please try again' });
   }, 12000);
@@ -4174,6 +4190,8 @@ app.get('/api/creator/check-slug', async (req, res) => {
 //         primary_color, community_description, selected_markets[] }
 // ════════════════════════════════════════════════════════════
 app.post('/api/creator/signup', async (req, res) => {
+  const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+  if (!rateLimit('signup', ip, 5, 300000)) return res.status(429).json({ error: 'Too many signup attempts. Try again in 5 minutes.' });
   try {
     const {
       display_name, email, password, slug,
@@ -4506,6 +4524,8 @@ app.post('/api/creator/login', async (req, res) => {
 // PASSWORD RESET — forgot + reset + admin-trigger
 // ════════════════════════════════════════════════════════════
 app.post('/api/auth/forgot-password', async (req, res) => {
+  const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+  if (!rateLimit('forgot-pw', ip, 3, 300000)) return res.status(429).json({ error: 'Too many reset requests. Try again in 5 minutes.' });
   try {
     const { email } = req.body || {};
     if (!email) return res.status(400).json({ error: 'Email required' });
@@ -4553,6 +4573,11 @@ app.post('/api/auth/reset-password', async (req, res) => {
 });
 
 app.post('/api/admin/reset-password', async (req, res) => {
+  const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+  if (!rateLimit('admin-secret', ip, 10, 3600000)) {
+    console.warn('[security] Admin secret brute force attempt from', ip);
+    return res.status(429).json({ error: 'Too many attempts' });
+  }
   const secret = req.headers['x-admin-secret'];
   if (secret !== process.env.ADMIN_SECRET) return res.status(403).json({ error: 'Forbidden' });
   try {
@@ -4595,17 +4620,7 @@ function _sendResetEmail(toEmail, name, token) {
   } catch(e) { console.error('[reset-email] ERROR:', e.message); }
 }
 
-// Temporary: manual password reset via token lookup (bypass email)
-app.get('/api/auth/reset-token/:email', async (req, res) => {
-  const secret = req.headers['x-admin-secret'];
-  if (secret !== process.env.ADMIN_SECRET) return res.status(403).json({ error: 'Forbidden' });
-  try {
-    const rows = await dbQuery('SELECT password_reset_token, password_reset_expires FROM creator_settings WHERE LOWER(email) = $1 LIMIT 1', [req.params.email.toLowerCase()]);
-    if (!rows[0] || !rows[0].password_reset_token) return res.json({ token: null, message: 'No pending reset' });
-    const url = `https://hyperflex.network/reset-password?token=${rows[0].password_reset_token}`;
-    res.json({ url, expires: rows[0].password_reset_expires });
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
+// REMOVED: reset-token/:email endpoint — security risk (token enumeration)
 
 app.get('/reset-password', (req, res) => res.sendFile(path.join(__dirname, 'public', 'reset-password.html')));
 
@@ -14364,7 +14379,8 @@ app.put('/api/creator/discord-webhook', requireCreator, async (req, res) => {
   try {
     const { discord_webhook_url } = req.body;
     // Basic validation — must be empty string (to clear) or a Discord webhook URL
-    if (discord_webhook_url && !discord_webhook_url.startsWith('https://discord.com/api/webhooks/') && !discord_webhook_url.startsWith('https://discordapp.com/api/webhooks/')) {
+    if (discord_webhook_url) { try { const _dwu = new URL(discord_webhook_url); if (!['discord.com','discordapp.com'].includes(_dwu.hostname) || !_dwu.pathname.startsWith('/api/webhooks/')) throw new Error(); } catch { return res.status(400).json({ error: 'Must be a valid Discord webhook URL (https://discord.com/api/webhooks/…)' }); } }
+    if (false) { // replaced by strict URL validation above
       return res.status(400).json({ error: 'Must be a valid Discord webhook URL (https://discord.com/api/webhooks/…)' });
     }
     let error;
