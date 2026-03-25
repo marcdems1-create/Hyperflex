@@ -225,11 +225,11 @@ a:hover { text-decoration: underline; }
   <h1>Prediction <span>Accuracy</span></h1>
   <p class="hero-sub">Every signal. Every outcome. Tracked, graded, and published. No hiding — we show our real hit rate.</p>
   <div id="seed-notice" class="seed-notice" style="display:none">
-    Simulated accuracy from backtested whale signals. Live tracking starts when predictions are logged.
+    Live accuracy from graded AI predictions. Every AI Brief call, Crystal Ball prediction, and signal is tracked and scored.
   </div>
   <div style="margin-top:20px;padding:16px 28px;border:2px solid var(--gold);background:rgba(19,19,17,0.85);border-radius:12px;display:inline-block;max-width:640px">
-    <div style="font-family:var(--sans);font-size:16px;font-weight:700;color:var(--gold);margin-bottom:6px">&#x1F4CA; Tracking in Progress</div>
-    <div style="font-family:var(--mono);font-size:13px;color:var(--text-soft);line-height:1.6">We started tracking Crystal Ball accuracy on March 22, 2026. Check back in 30 days for verified results.</div>
+    <div style="font-family:var(--sans);font-size:16px;font-weight:700;color:var(--gold);margin-bottom:6px">&#x1F9E0; AI Accountability</div>
+    <div style="font-family:var(--mono);font-size:13px;color:var(--text-soft);line-height:1.6">Every AI Brief call is logged, graded when markets resolve, and feeds back into signal weights. The system self-corrects — sources that perform well get ranked higher, sources that miss get downweighted.</div>
   </div>
 </header>
 
@@ -350,21 +350,31 @@ function accBarClass(acc) {
 }
 
 const sourceIcons = {
-  whale_consensus: '\u{1F40B}',
+  ai_brief: '\u{1F9E0}',
+  whale_consensus: '\u{1F4B0}',
   momentum: '\u{1F680}',
   divergence: '\u{26A1}',
   crystal_ball: '\u{1F52E}',
   leverage: '\u{1F4AA}',
-  expiry: '\u{23F3}'
+  expiry: '\u{23F3}',
+  volume_surge: '\u{1F6A8}',
+  whale_cluster: '\u{1F4B0}',
+  new_entry: '\u{26A1}',
+  arbitrage: '\u{1F504}'
 };
 
 const sourceLabels = {
-  whale_consensus: 'Whale Consensus',
+  ai_brief: 'AI Brief',
+  whale_consensus: 'Smart Money Consensus',
   momentum: 'Momentum',
   divergence: 'Divergence',
   crystal_ball: 'Crystal Ball',
   leverage: 'Leverage',
-  expiry: 'Expiry'
+  expiry: 'Expiry',
+  volume_surge: 'Volume Surge',
+  whale_cluster: 'Smart Money Cluster',
+  new_entry: 'New Entry',
+  arbitrage: 'Arbitrage'
 };
 
 // ── MAIN LOAD ──

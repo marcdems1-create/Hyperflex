@@ -19470,9 +19470,28 @@ let _aiBriefCache = null; // { ts, data }
 
 app.get('/api/daily-brief', async (req, res) => {
   try {
-    // 30-min cache
+    // 30-min cache with staleness detection
     if (_aiBriefCache && (Date.now() - _aiBriefCache.ts < 30 * 60 * 1000)) {
-      return res.json(_aiBriefCache.data);
+      // Check for significant data shifts that should invalidate the cache
+      let stale = false;
+      try {
+        const fp = _aiBriefCache.data._briefFingerprint;
+        if (fp) {
+          const currentFG = computeFearGreed();
+          if (Math.abs((currentFG.score || 50) - (fp.fg_score || 50)) >= 15) {
+            stale = true;
+            console.log('[daily-brief] Staleness: Fear & Greed shifted by 15+ pts, regenerating');
+          }
+          // Check if top smart money pick changed
+          const currentPicks = (_whaleIndexCache && _whaleIndexCache.data && _whaleIndexCache.data.picks) || [];
+          const currentTopPick = (currentPicks[0] || {}).market || '';
+          if (fp.top_pick && currentTopPick && fp.top_pick !== currentTopPick && fp.pick_count > 0) {
+            stale = true;
+            console.log('[daily-brief] Staleness: Top smart money pick changed, regenerating');
+          }
+        }
+      } catch (e) { /* ignore staleness check errors */ }
+      if (!stale) return res.json(_aiBriefCache.data);
     }
 
     // Gather all data from existing caches
@@ -19562,6 +19581,69 @@ app.get('/api/daily-brief', async (req, res) => {
       cross_asset_alerts: crossAssetAlerts.slice(0, 5),
       stat_of_the_day: briefData.stat_of_the_day,
       updated_at: new Date().toISOString()
+    };
+
+    // ── Log every AI call to prediction_log + signal_outcomes for accountability ──
+    const loggedCallHashes = new Set();
+    for (const call of (result.ai_calls || [])) {
+      if (!call.market) continue;
+      const side = /BUY\s+YES/i.test(call.thesis || '') ? 'YES' : /BUY\s+NO/i.test(call.thesis || '') ? 'NO' : 'YES';
+      const confMap = { HIGH: 85, MEDIUM: 65, LOW: 45 };
+      const confNum = confMap[call.confidence] || 65;
+      const hash = `ai_brief:${side}:${(call.market || '').substring(0, 40).toLowerCase()}`;
+      if (loggedCallHashes.has(hash)) continue;
+      loggedCallHashes.add(hash);
+
+      // Find the market in screener cache for price + end_date
+      let entryPrice = 0.5, marketId = null, expiresAt = null;
+      if (_screenerCache && _screenerCache.data) {
+        const match = _screenerCache.data.find(m => m.question && (call.market || '').toLowerCase().includes(m.question.toLowerCase().substring(0, 30)));
+        if (match) {
+          entryPrice = match.yes_price || 0.5;
+          marketId = match.market_id || null;
+          expiresAt = match.end_date || null;
+        }
+      }
+      // If no end_date, expire in 7 days (default grading window)
+      if (!expiresAt) expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+      // Log to prediction_log (for accuracy page)
+      try {
+        if (pool) {
+          await dbQuery(
+            `INSERT INTO prediction_log (source, market_id, market_question, predicted_side, predicted_confidence, market_price_at_prediction, expires_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7)
+             ON CONFLICT DO NOTHING`,
+            ['ai_brief', marketId, (call.market || '').substring(0, 200), side, confNum, entryPrice, expiresAt]
+          );
+        } else {
+          await supabase.from('prediction_log').insert({
+            source: 'ai_brief', market_id: marketId, market_question: (call.market || '').substring(0, 200),
+            predicted_side: side, predicted_confidence: confNum, market_price_at_prediction: entryPrice, expires_at: expiresAt
+          });
+        }
+      } catch (logErr) { /* silent — don't break brief delivery */ }
+
+      // Log to signal_outcomes (for source accuracy weights)
+      try {
+        if (pool) {
+          await dbQuery(
+            `INSERT INTO signal_outcomes (signal_type, source, market_question, predicted_side, predicted_at, market_price_at_signal, confidence_level, whale_count)
+             VALUES ($1,$2,$3,$4,NOW(),$5,$6,$7)`,
+            ['ai_brief', 'ai_brief', (call.market || '').substring(0, 200), side, entryPrice, call.confidence || 'MEDIUM', 0]
+          );
+        }
+      } catch (logErr) { /* silent */ }
+    }
+    console.log(`[daily-brief] Logged ${loggedCallHashes.size} AI calls to prediction_log + signal_outcomes`);
+
+    // ── Staleness detection: invalidate cache if key data shifts significantly ──
+    // Store key metrics for comparison on next request
+    result._briefFingerprint = {
+      fg_score: (result.fear_greed || {}).score || 50,
+      top_pick: ((result.smart_money_picks || [])[0] || {}).market || '',
+      pick_count: (result.smart_money_picks || []).length,
+      mover_count: (result.top_movers || []).length
     };
 
     _aiBriefCache = { ts: Date.now(), data: result };
