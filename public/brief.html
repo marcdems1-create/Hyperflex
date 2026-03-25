@@ -244,7 +244,7 @@ async function loadBrief() {
         ) : '';
         return '<div class="call-card" id="call-' + callId + '" style="transition:border-color 0.3s">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
-            '<div class="call-market" style="margin-bottom:0">' + escHtml(c.market || '') + '</div>' +
+            (c.url ? '<a href="' + escAttr(c.url) + '" target="_blank" rel="noopener" class="call-market" style="margin-bottom:0;color:var(--text);text-decoration:none">' + escHtml(c.market || '') + ' <span style="font-size:11px;color:var(--gold)">&rarr;</span></a>' : '<div class="call-market" style="margin-bottom:0">' + escHtml(c.market || '') + '</div>') +
             '<div style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--gold);white-space:nowrap;margin-left:12px">' + stake + ' pts staked</div>' +
           '</div>' +
           '<div class="call-thesis">' + escHtml(c.thesis || '') + '</div>' +
@@ -261,8 +261,9 @@ async function loadBrief() {
     if (d.cross_asset_alerts && d.cross_asset_alerts.length > 0) {
       document.getElementById('crossSection').style.display = '';
       document.getElementById('crossContainer').innerHTML = d.cross_asset_alerts.map(function(a) {
+        var link = a.url && a.url.startsWith('https://') ? a.url : '';
         return '<div class="cross-alert">' +
-          '<div class="cross-trigger">' + escHtml(a.trigger) + '</div>' +
+          (link ? '<a href="' + escAttr(link) + '" target="_blank" rel="noopener" class="cross-trigger" style="color:var(--text);text-decoration:none">' + escHtml(a.trigger) + ' <span style="font-size:11px;color:var(--gold)">&rarr;</span></a>' : '<div class="cross-trigger">' + escHtml(a.trigger) + '</div>') +
           '<div class="cross-watch">\u2192 ' + escHtml(a.watch) + '</div>' +
         '</div>';
       }).join('');
@@ -277,8 +278,12 @@ async function loadBrief() {
         var diff = cp - sp;
         var color = diff >= 0 ? 'var(--green)' : 'var(--red)';
         var sign = diff >= 0 ? '+' : '';
+        var link = m.url && m.url.startsWith('https://') && m.url !== 'https://polymarket.com' ? m.url : '';
+        var qHtml = link
+          ? '<a href="' + escAttr(link) + '" target="_blank" rel="noopener" class="mover-q" style="color:var(--text);text-decoration:none">' + escHtml((m.question||'').substring(0,60)) + ' <span style="font-size:11px;color:var(--gold)">&rarr;</span></a>'
+          : '<div class="mover-q">' + escHtml((m.question||'').substring(0,60)) + '</div>';
         return '<div class="mover-row">' +
-          '<div class="mover-q">' + escHtml((m.question||'').substring(0,60)) + '</div>' +
+          qHtml +
           '<div class="mover-change" style="color:' + color + '">' + sp + '\u00A2 \u2192 ' + cp + '\u00A2 (' + sign + diff + 'pts)</div>' +
         '</div>';
       }).join('');
@@ -289,8 +294,12 @@ async function loadBrief() {
       document.getElementById('picksSection').style.display = '';
       document.getElementById('picksContainer').innerHTML = d.smart_money_picks.map(function(p) {
         var sideColor = (p.consensus_side||'').toUpperCase() === 'YES' ? 'var(--green)' : 'var(--red)';
+        var link = p.url && p.url.startsWith('https://') ? p.url : '';
+        var qHtml = link
+          ? '<a href="' + escAttr(link) + '" target="_blank" rel="noopener" class="mover-q" style="color:var(--text);text-decoration:none">' + escHtml((p.market||'').substring(0,60)) + ' <span style="font-size:11px;color:var(--gold)">&rarr;</span></a>'
+          : '<div class="mover-q">' + escHtml((p.market||'').substring(0,60)) + '</div>';
         return '<div class="mover-row">' +
-          '<div class="mover-q">' + escHtml((p.market||'').substring(0,60)) + '</div>' +
+          qHtml +
           '<div class="mover-change"><span style="color:' + sideColor + ';font-weight:700">' + (p.consensus_side||'').toUpperCase() + ' ' + (p.consensus_pct||0) + '%</span> <span style="color:var(--dim);font-size:11px">' + (p.whale_count||0) + ' wallets</span></div>' +
         '</div>';
       }).join('');

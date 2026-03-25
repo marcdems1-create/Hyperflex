@@ -19513,11 +19513,12 @@ app.get('/api/daily-brief', async (req, res) => {
     const crossAssetAlerts = [];
     const movers = (briefData.market_movers || []);
     const picks = (briefData.whale_index_picks || []);
-    const allMarkets = [...movers, ...picks].map(m => m.question || m.market || '');
-    for (const q of allMarkets) {
+    const allMarkets = [...movers, ...picks];
+    for (const m of allMarkets) {
+      const q = m.question || m.market || '';
       for (const [pattern, assets] of Object.entries(CROSS_ASSET)) {
         if (new RegExp(pattern, 'i').test(q)) {
-          crossAssetAlerts.push({ trigger: q.substring(0, 60), watch: assets });
+          crossAssetAlerts.push({ trigger: q.substring(0, 60), watch: assets, url: m.url || m.market_url || '' });
           break;
         }
       }
@@ -19556,9 +19557,23 @@ app.get('/api/daily-brief', async (req, res) => {
 
     // ── Step 2: Attach stake amounts + ROI to each call ──
     const confStakes = { HIGH: 100, MEDIUM: 50, LOW: 25 }; // Flex Points
+    // Build URL lookup from picks + screener for market → URL mapping
+    const mktUrlLookup = {};
+    for (const p of picks) { if (p.market && p.url) mktUrlLookup[p.market.toLowerCase().trim()] = p.url; }
+    for (const s of screenerMkts) { if (s.question && s.url) mktUrlLookup[s.question.toLowerCase().trim()] = s.url; }
+
     aiCalls.forEach((c, i) => {
       c.call_id = i + 1;
       c.stake = confStakes[c.confidence] || 50;
+      // Attach market URL by matching market name
+      const mKey = (c.market || '').toLowerCase().trim();
+      c.url = mktUrlLookup[mKey] || '';
+      if (!c.url) {
+        // Fuzzy: try prefix match
+        for (const [k, v] of Object.entries(mktUrlLookup)) {
+          if (k.startsWith(mKey.substring(0, 30)) || mKey.startsWith(k.substring(0, 30))) { c.url = v; break; }
+        }
+      }
       // Parse trade ROI from thesis: "BUY YES at 22%", "BUY NO at ~95%+", "BUY YES at ~85-89%"
       const tm = (c.thesis || '').match(/BUY\s+(YES|NO)\s+(?:\([^)]*\)\s+)?(?:at\s+)?[~]?(?:current\s+)?(?:market\s+)?(?:\d+-)?(\d+)%/i);
       if (tm) {
