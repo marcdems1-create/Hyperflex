@@ -19534,34 +19534,17 @@ app.get('/api/daily-brief', async (req, res) => {
       cross_asset: crossAssetAlerts.slice(0,3),
     };
 
-    let narrative = '';
+    // ── Step 1: Generate AI calls FIRST (these are the tracked, accountable predictions) ──
     let aiCalls = [];
-    try {
-      const response = await anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 1200,
-        system: `You are HYPERFLEX's AI market analyst. Write a concise, opinionated morning brief about prediction markets. Be direct — state what matters and what the smart money is doing. Use concrete numbers. Write like a sharp analyst, not a data dump. Format as 3-4 short paragraphs. End with one sentence on what to watch today. Do NOT use markdown headers or bullet points — write flowing prose. Do NOT say "Good morning" or greet the reader.`,
-        messages: [{
-          role: 'user',
-          content: `Write today's HYPERFLEX Morning Intelligence brief based on this data:\n\n${JSON.stringify(promptData, null, 2)}`
-        }]
-      });
-      narrative = (response.content[0]?.text || '').trim();
-    } catch (aiErr) {
-      console.warn('[daily-brief] Claude narrative failed:', aiErr.message);
-      narrative = briefData.headline || 'Markets are active. Check back for the AI analysis.';
-    }
-
-    // Generate AI calls (top 3 picks with reasoning)
     try {
       if (picks.length > 0 || movers.length > 0) {
         const callResponse = await anthropic.messages.create({
           model: 'claude-haiku-4-5-20251001',
           max_tokens: 800,
-          system: `You are an AI prediction market analyst. For each market provided, write a one-sentence trade thesis. Be specific — reference the data points. Return valid JSON array: [{"market":"...","thesis":"BUY YES/NO at X% because...","confidence":"HIGH/MEDIUM/LOW"}]. Max 3 calls.`,
+          system: `You are an AI prediction market analyst. For each market provided, write a one-sentence trade thesis. Be specific — reference the data points. Return valid JSON array: [{"market":"...","thesis":"BUY YES/NO at X% because...","confidence":"HIGH/MEDIUM/LOW"}]. Max 5 calls.`,
           messages: [{
             role: 'user',
-            content: `Generate AI trade calls from this data:\nSmart money picks: ${JSON.stringify(picks.slice(0,3))}\nTop movers: ${JSON.stringify(movers.slice(0,2))}`
+            content: `Generate AI trade calls from this data:\nSmart money picks: ${JSON.stringify(picks.slice(0,4))}\nTop movers: ${JSON.stringify(movers.slice(0,3))}`
           }]
         });
         const raw = (callResponse.content[0]?.text || '').trim().replace(/^```json?\s*/i, '').replace(/```\s*$/, '');
@@ -19569,6 +19552,41 @@ app.get('/api/daily-brief', async (req, res) => {
       }
     } catch (callErr) {
       console.warn('[daily-brief] AI calls failed:', callErr.message);
+    }
+
+    // ── Step 2: Generate narrative CONSTRAINED to only reference tracked calls ──
+    // The narrative must be grounded in the AI calls — no untracked claims
+    let narrative = '';
+    const callSummaries = aiCalls.map((c, i) => `CALL #${i+1}: ${c.market} — ${c.thesis} [${c.confidence}]`).join('\n');
+    try {
+      const response = await anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1200,
+        system: `You are HYPERFLEX's AI market analyst. Write a concise, opinionated morning brief.
+
+CRITICAL ACCOUNTABILITY RULE: You may ONLY make verifiable claims that are covered by the AI Trade Calls listed below. Every prediction or directional statement in your narrative must reference one of these tracked calls. Do NOT make claims about markets or outcomes that aren't in the calls list — those won't be graded and would be unaccountable.
+
+You CAN:
+- Provide context, analysis, and reasoning around the tracked calls
+- Reference Fear & Greed score and general market sentiment
+- Discuss cross-asset implications of the tracked predictions
+- State facts from the data (prices, volumes, wallet counts)
+
+You CANNOT:
+- Predict outcomes for markets not in the calls list
+- Make directional claims ("X will happen") without a corresponding tracked call
+- Invent data or statistics not provided
+
+Format: 3-4 short paragraphs of flowing prose. End with what to watch today. No markdown headers, no bullet points, no greetings.`,
+        messages: [{
+          role: 'user',
+          content: `Write today's HYPERFLEX Morning Intelligence brief.\n\nTRACKED AI CALLS (only reference these):\n${callSummaries || 'No calls generated yet.'}\n\nMARKET DATA:\n${JSON.stringify(promptData, null, 2)}`
+        }]
+      });
+      narrative = (response.content[0]?.text || '').trim();
+    } catch (aiErr) {
+      console.warn('[daily-brief] Claude narrative failed:', aiErr.message);
+      narrative = briefData.headline || 'Markets are active. Check back for the AI analysis.';
     }
 
     const result = {
