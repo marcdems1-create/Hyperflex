@@ -19554,11 +19554,20 @@ app.get('/api/daily-brief', async (req, res) => {
       console.warn('[daily-brief] AI calls failed:', callErr.message);
     }
 
-    // ── Step 2: Attach stake amounts to each call ──
+    // ── Step 2: Attach stake amounts + ROI to each call ──
     const confStakes = { HIGH: 100, MEDIUM: 50, LOW: 25 }; // Flex Points
     aiCalls.forEach((c, i) => {
       c.call_id = i + 1;
       c.stake = confStakes[c.confidence] || 50;
+      // Parse trade ROI from thesis: "BUY YES at 22%" or "BUY NO at 78%"
+      const tm = (c.thesis || '').match(/BUY\s+(YES|NO)\s+at\s+(\d+)%/i);
+      if (tm) {
+        const side = tm[1].toUpperCase();
+        const pct = parseInt(tm[2]);
+        const entry = side === 'YES' ? pct : (100 - pct);
+        const profit = 100 - entry;
+        c.trade = { side, entry_cost: entry, potential_profit: profit, roi_pct: entry > 0 ? Math.round((profit / entry) * 100) : 0 };
+      }
     });
 
     // ── Step 3: Generate narrative CONSTRAINED to only reference tracked calls ──
@@ -20298,6 +20307,29 @@ async function generateCrystalBallPredictions() {
 
   const top10 = diversified.slice(0, 10).map(p => {
     const { _whale_count, _divergence, _momentum, _urgency, ...clean } = p;
+
+    // ── ROI calculation ──
+    // Parse side + price from the action string: "BUY YES at current 22%" or "BUY NO at current 78%"
+    const actionMatch = (clean.action || '').match(/BUY\s+(YES|NO)\s+at\s+current\s+(\d+)%/i);
+    if (actionMatch) {
+      const side = actionMatch[1].toUpperCase();
+      const yesPct = side === 'YES'
+        ? parseInt(actionMatch[2])
+        : 100 - parseInt(actionMatch[2]);
+      const entryCost = side === 'YES' ? yesPct : (100 - yesPct);  // cents per share
+      const payout = 100 - entryCost;  // profit per share if correct
+      const roiPct = entryCost > 0 ? Math.round((payout / entryCost) * 100) : 0;
+      clean.trade = {
+        side,
+        entry_cost: entryCost,        // ¢ you pay per share
+        potential_profit: payout,      // ¢ you win per share
+        roi_pct: roiPct,              // % return if correct
+        yes_pct: yesPct               // current YES odds
+      };
+    } else if ((clean.action || '').startsWith('WATCH')) {
+      clean.trade = null;  // no actionable trade
+    }
+
     return clean;
   });
 

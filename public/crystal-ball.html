@@ -189,6 +189,25 @@ a:hover { text-decoration: underline; }
 .pred-time { font-family: var(--mono); font-size: 10px; color: var(--muted); line-height: 1.5; }
 .pred-score { font-family: var(--mono); font-size: 10px; color: var(--gold); }
 
+/* ROI STRIP — the money line */
+.roi-strip {
+  display: flex; align-items: center; gap: 14px; padding: 10px 16px; margin-top: 12px;
+  background: linear-gradient(90deg, rgba(34,197,94,0.06), rgba(34,197,94,0.02));
+  border: 1px solid rgba(34,197,94,0.15); border-radius: 8px;
+}
+.roi-strip.sell-side {
+  background: linear-gradient(90deg, rgba(239,68,68,0.06), rgba(239,68,68,0.02));
+  border-color: rgba(239,68,68,0.15);
+}
+.roi-entry { display: flex; flex-direction: column; gap: 1px; }
+.roi-label { font-family: var(--mono); font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.roi-value { font-family: var(--mono); font-size: 14px; font-weight: 700; }
+.roi-value.cost { color: var(--text); }
+.roi-value.profit { color: #22c55e; }
+.roi-value.return { color: #22c55e; font-size: 16px; }
+.roi-arrow { color: var(--muted); font-size: 14px; }
+.roi-divider { width: 1px; height: 28px; background: var(--border); }
+
 /* LOADING + EMPTY */
 .loading-state { text-align: center; padding: 80px 20px; color: var(--muted); font-family: var(--mono); font-size: 14px; }
 .loading-state .spinner { font-size: 48px; margin-bottom: 16px; animation: crystalPulse 2s ease-in-out infinite; display: block; }
@@ -530,6 +549,24 @@ function renderPredictions() {
             ${(p.reasoning || []).slice(0, 3).map(r => `<li>${escHtml(r)}</li>`).join('')}
           </ul>
           ${marketQ ? `<a href="${escAttr(marketUrl)}" target="_blank" rel="noopener" class="pred-market-link">${escHtml(marketQ.substring(0, 80))} &rarr;</a>` : ''}
+          ${p.trade ? `
+            <div class="roi-strip${p.trade.side === 'NO' ? ' sell-side' : ''}">
+              <div class="roi-entry">
+                <span class="roi-label">You pay</span>
+                <span class="roi-value cost">${p.trade.entry_cost}&cent;</span>
+              </div>
+              <span class="roi-arrow">&rarr;</span>
+              <div class="roi-entry">
+                <span class="roi-label">You win</span>
+                <span class="roi-value profit">+${p.trade.potential_profit}&cent;</span>
+              </div>
+              <div class="roi-divider"></div>
+              <div class="roi-entry">
+                <span class="roi-label">ROI if right</span>
+                <span class="roi-value return">+${p.trade.roi_pct}%</span>
+              </div>
+            </div>
+          ` : ''}
         </div>
         <div class="pred-action">
           <a href="${escAttr(marketUrl)}" target="_blank" rel="noopener" class="action-btn ${btnClass}">${escHtml(actionLabel)}</a>

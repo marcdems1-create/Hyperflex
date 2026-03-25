@@ -49,6 +49,18 @@ body { background: var(--ink); color: var(--text); font-family: var(--sans); min
 .call-conf.MEDIUM { background: rgba(201,146,13,0.15); color: var(--gold); }
 .call-conf.LOW { background: rgba(107,114,128,0.15); color: #9ca3af; }
 
+/* ROI strip */
+.call-roi { display: flex; align-items: center; gap: 14px; padding: 10px 14px; margin-top: 12px; background: linear-gradient(90deg, rgba(34,197,94,0.06), rgba(34,197,94,0.02)); border: 1px solid rgba(34,197,94,0.12); border-radius: 8px; }
+.call-roi.no-side { background: linear-gradient(90deg, rgba(239,68,68,0.06), rgba(239,68,68,0.02)); border-color: rgba(239,68,68,0.12); }
+.call-roi-item { display: flex; flex-direction: column; gap: 1px; }
+.call-roi-label { font-family: var(--mono); font-size: 9px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.5px; }
+.call-roi-val { font-family: var(--mono); font-size: 14px; font-weight: 700; }
+.call-roi-val.cost { color: var(--text); }
+.call-roi-val.profit { color: #22c55e; }
+.call-roi-val.pct { color: #22c55e; font-size: 16px; }
+.call-roi-arrow { color: var(--dim); font-size: 14px; }
+.call-roi-div { width: 1px; height: 28px; background: var(--border); }
+
 /* Fear & Greed */
 .fg-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 24px; text-align: center; margin-bottom: 32px; }
 .fg-score { font-size: 56px; font-weight: 800; line-height: 1; }
@@ -220,12 +232,23 @@ async function loadBrief() {
       document.getElementById('callsContainer').innerHTML = d.ai_calls.map(function(c) {
         var callId = c.call_id || 0;
         var stake = c.stake || 50;
+        var t = c.trade;
+        var roiHtml = t ? (
+          '<div class="call-roi' + (t.side === 'NO' ? ' no-side' : '') + '">' +
+            '<div class="call-roi-item"><span class="call-roi-label">You pay</span><span class="call-roi-val cost">' + t.entry_cost + '&cent;</span></div>' +
+            '<span class="call-roi-arrow">&rarr;</span>' +
+            '<div class="call-roi-item"><span class="call-roi-label">You win</span><span class="call-roi-val profit">+' + t.potential_profit + '&cent;</span></div>' +
+            '<div class="call-roi-div"></div>' +
+            '<div class="call-roi-item"><span class="call-roi-label">ROI if right</span><span class="call-roi-val pct">+' + t.roi_pct + '%</span></div>' +
+          '</div>'
+        ) : '';
         return '<div class="call-card" id="call-' + callId + '" style="transition:border-color 0.3s">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
             '<div class="call-market" style="margin-bottom:0">' + escHtml(c.market || '') + '</div>' +
             '<div style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--gold);white-space:nowrap;margin-left:12px">' + stake + ' pts staked</div>' +
           '</div>' +
           '<div class="call-thesis">' + escHtml(c.thesis || '') + '</div>' +
+          roiHtml +
           '<div style="display:flex;align-items:center;gap:8px;margin-top:8px">' +
             '<span class="call-conf ' + (c.confidence || 'MEDIUM') + '">' + (c.confidence || 'MEDIUM') + '</span>' +
             '<span style="font-family:var(--mono);font-size:10px;color:var(--dim)">CALL #' + callId + '</span>' +
