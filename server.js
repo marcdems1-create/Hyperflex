@@ -19647,11 +19647,223 @@ app.get('/api/daily-brief', async (req, res) => {
     };
 
     _aiBriefCache = { ts: Date.now(), data: result };
+
+    // Fire-and-forget: AI trader places bets based on the brief
+    autoTradeAIBriefCalls().catch(e => console.warn('[daily-brief] AI trader error:', e.message));
+
     res.json(result);
   } catch (err) {
     console.error('[daily-brief]', err.message);
     if (_aiBriefCache) return res.json(_aiBriefCache.data);
     res.status(500).json({ error: 'Failed to generate brief', detail: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+// AI AUTO-TRADER — puts Flex Points where its mouth is
+// ════════════════════════════════════════════════════════════
+const AI_TRADER_ID = 'ai-trader-hyperflex-bot';
+const AI_TRADER_NAME = 'HYPERFLEX AI';
+const AI_TRADER_SLUG = 'hyperflex'; // trades on the main HYPERFLEX community
+const AI_BET_SIZE = 5000; // 50 Flex Points per trade (in centpoints)
+let _aiTraderInitialized = false;
+
+async function ensureAITrader() {
+  if (_aiTraderInitialized || !pool) return;
+  try {
+    // Create AI user if not exists
+    const existing = await dbQuery('SELECT id FROM users WHERE id = $1', [AI_TRADER_ID]);
+    if (!existing || existing.length === 0) {
+      await dbQuery(
+        `INSERT INTO users (id, email, display_name, is_creator, created_at)
+         VALUES ($1, $2, $3, false, NOW())
+         ON CONFLICT (id) DO NOTHING`,
+        [AI_TRADER_ID, 'ai@hyperflex.internal', AI_TRADER_NAME]
+      );
+      console.log('[ai-trader] Created AI trader account');
+    }
+    // Ensure community balance exists (auto-created by getCommunityBalance)
+    await getCommunityBalance(AI_TRADER_ID, AI_TRADER_SLUG);
+    _aiTraderInitialized = true;
+  } catch (e) {
+    console.warn('[ai-trader] Init failed:', e.message);
+  }
+}
+
+async function aiTradeOnMarket(marketId, side, betSize) {
+  if (!pool) return null;
+  try {
+    // Get market
+    const mRows = await dbQuery('SELECT * FROM markets WHERE id = $1 LIMIT 1', [marketId]);
+    const market = mRows[0];
+    if (!market || market.resolved) return null;
+
+    const creatorSlug = market.tenant_slug || AI_TRADER_SLUG;
+
+    // Check balance
+    const bal = await getCommunityBalance(AI_TRADER_ID, creatorSlug);
+    if (bal < betSize) {
+      console.log(`[ai-trader] Insufficient balance (${bal} < ${betSize}) on ${creatorSlug}`);
+      return null;
+    }
+
+    // Check if already traded this market
+    const priorRows = await dbQuery('SELECT count(*) as count FROM positions WHERE market_id = $1 AND user_id = $2', [marketId, AI_TRADER_ID]);
+    if (parseInt(priorRows[0]?.count || 0) > 0) return null; // already in this market
+
+    // Calculate CPMM pricing
+    const yesPool = parseFloat(market.yes_pool) || 5000;
+    const noPool = parseFloat(market.no_pool) || 5000;
+    const price = side === 'YES' ? yesPool / (yesPool + noPool) : noPool / (yesPool + noPool);
+    const potential_payout = Math.round(betSize / price);
+
+    // Deduct balance
+    await setCommunityBalance(AI_TRADER_ID, creatorSlug, bal - betSize);
+
+    // Insert position
+    const posRows = await dbQuery(
+      `INSERT INTO positions (user_id, market_id, side, amount, potential_payout) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      [AI_TRADER_ID, marketId, side, betSize, potential_payout]
+    );
+
+    // Update market pools + volume + trader_count
+    const poolUpdate = side === 'YES'
+      ? { yes_pool: yesPool + betSize, yes_price: (yesPool + betSize) / (yesPool + betSize + noPool), no_price: noPool / (yesPool + betSize + noPool) }
+      : { no_pool: noPool + betSize, yes_price: yesPool / (yesPool + noPool + betSize), no_price: (noPool + betSize) / (yesPool + noPool + betSize) };
+
+    await dbQuery(
+      `UPDATE markets SET yes_pool = $1, no_pool = $2, yes_price = $3, no_price = $4, volume = volume + $5, trader_count = trader_count + 1 WHERE id = $6`,
+      [poolUpdate.yes_pool || yesPool, poolUpdate.no_pool || noPool, poolUpdate.yes_price, poolUpdate.no_price, betSize, marketId]
+    );
+
+    console.log(`[ai-trader] BET ${side} ${betSize/100}pts on "${(market.question||'').substring(0,50)}" @ ${Math.round(price*100)}%`);
+    return posRows[0] || null;
+  } catch (e) {
+    console.warn('[ai-trader] Trade failed:', e.message);
+    return null;
+  }
+}
+
+// Auto-trade based on AI Brief calls — matches AI calls to HFX community markets
+async function autoTradeAIBriefCalls() {
+  if (!pool) return;
+  try {
+    await ensureAITrader();
+
+    // Get AI Brief calls
+    const briefData = _aiBriefCache && _aiBriefCache.data;
+    if (!briefData || !briefData.ai_calls || briefData.ai_calls.length === 0) return;
+
+    // Get active HFX community markets
+    const hfxMarkets = await dbQuery(
+      "SELECT id, question, yes_price, no_price, resolved FROM markets WHERE tenant_slug = $1 AND resolved = false AND (expiry_date IS NULL OR expiry_date > NOW())",
+      [AI_TRADER_SLUG]
+    );
+    if (!hfxMarkets || hfxMarkets.length === 0) return;
+
+    let tradesPlaced = 0;
+    for (const call of briefData.ai_calls) {
+      if (!call.market || !call.thesis) continue;
+      const side = /BUY\s+YES/i.test(call.thesis) ? 'YES' : /BUY\s+NO/i.test(call.thesis) ? 'NO' : null;
+      if (!side) continue;
+
+      // Match to HFX market by fuzzy question match
+      const callQ = (call.market || '').toLowerCase();
+      const match = hfxMarkets.find(m => {
+        const mQ = (m.question || '').toLowerCase();
+        // Exact match or significant overlap
+        if (mQ === callQ) return true;
+        if (callQ.length > 20 && mQ.length > 20 && callQ.substring(0, 20) === mQ.substring(0, 20)) return true;
+        // Word overlap
+        const callWords = callQ.split(/\s+/).filter(w => w.length > 4);
+        const mWords = mQ.split(/\s+/).filter(w => w.length > 4);
+        const overlap = callWords.filter(w => mWords.includes(w)).length;
+        return overlap >= 3;
+      });
+
+      if (match) {
+        // Scale bet by confidence
+        const confMultiplier = call.confidence === 'HIGH' ? 2 : call.confidence === 'LOW' ? 0.5 : 1;
+        const betSize = Math.round(AI_BET_SIZE * confMultiplier);
+        const result = await aiTradeOnMarket(match.id, side, betSize);
+        if (result) tradesPlaced++;
+      }
+    }
+
+    // Also trade on Polymarket smart money consensus picks if matching HFX markets exist
+    const picks = briefData.smart_money_picks || [];
+    for (const pick of picks) {
+      if (!pick.market || !pick.consensus_side) continue;
+      const pickQ = (pick.market || '').toLowerCase();
+      const match = hfxMarkets.find(m => {
+        const mQ = (m.question || '').toLowerCase();
+        if (mQ === pickQ) return true;
+        const pickWords = pickQ.split(/\s+/).filter(w => w.length > 4);
+        const mWords = mQ.split(/\s+/).filter(w => w.length > 4);
+        return pickWords.filter(w => mWords.includes(w)).length >= 3;
+      });
+
+      if (match) {
+        const side = (pick.consensus_side || '').toUpperCase() === 'YES' ? 'YES' : 'NO';
+        const result = await aiTradeOnMarket(match.id, side, AI_BET_SIZE);
+        if (result) tradesPlaced++;
+      }
+    }
+
+    if (tradesPlaced > 0) console.log(`[ai-trader] Placed ${tradesPlaced} trades from AI Brief`);
+  } catch (e) {
+    console.warn('[ai-trader] autoTradeAIBriefCalls error:', e.message);
+  }
+}
+
+// GET /api/ai-trader — public portfolio + track record
+app.get('/api/ai-trader', async (req, res) => {
+  try {
+    if (!pool) return res.json({ positions: [], stats: {}, balance: 0 });
+
+    // Get all positions
+    const positions = await dbQuery(
+      `SELECT p.*, m.question, m.yes_price, m.resolved, m.outcome, m.tenant_slug
+       FROM positions p JOIN markets m ON p.market_id = m.id
+       WHERE p.user_id = $1 ORDER BY p.created_at DESC LIMIT 50`,
+      [AI_TRADER_ID]
+    );
+
+    // Calculate stats
+    const resolved = positions.filter(p => p.resolved);
+    const wins = resolved.filter(p => p.won === true);
+    const totalBet = positions.reduce((s, p) => s + (parseInt(p.amount) || 0), 0);
+    const totalPnl = resolved.reduce((s, p) => s + (parseFloat(p.pnl) || 0), 0);
+    const bal = await getCommunityBalance(AI_TRADER_ID, AI_TRADER_SLUG).catch(() => 0);
+
+    res.json({
+      trader: { id: AI_TRADER_ID, name: AI_TRADER_NAME, slug: AI_TRADER_SLUG },
+      positions: positions.map(p => ({
+        market: p.question,
+        side: p.side,
+        amount: parseInt(p.amount) || 0,
+        potential_payout: parseFloat(p.potential_payout) || 0,
+        resolved: p.resolved || false,
+        won: p.won,
+        pnl: parseFloat(p.pnl) || 0,
+        created_at: p.created_at
+      })),
+      stats: {
+        total_trades: positions.length,
+        resolved: resolved.length,
+        wins: wins.length,
+        losses: resolved.length - wins.length,
+        win_rate: resolved.length > 0 ? Math.round(wins.length / resolved.length * 100) : 0,
+        total_wagered: totalBet,
+        total_pnl: Math.round(totalPnl),
+        roi: totalBet > 0 ? Math.round(totalPnl / totalBet * 10000) / 100 : 0
+      },
+      balance: bal,
+      updated_at: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('[ai-trader/api]', err.message);
+    res.status(500).json({ error: 'Failed to load AI trader data' });
   }
 });
 
