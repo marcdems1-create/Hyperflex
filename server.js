@@ -17529,6 +17529,12 @@ app.get('/api/whale-index', async (req, res) => {
 // ════════════════════════════════════════════════════════════
 let _screenerCache = null;
 
+// ── Volume Tracker: in-memory ring buffer for spike detection ──
+// Tracks volume deltas between screener refreshes (5-min intervals, 24 samples = 2h)
+let _volumeTracker = {};  // { market_id: { samples: [{volume, yes_price, ts}] } }
+const VOLUME_TRACKER_MAX_SAMPLES = 24;
+let _volumeBaselineCache = null; // { ts, data: { market_id: avg_volume } }
+
 app.get('/api/screener', async (req, res) => {
   try {
     // Check cache (5 min TTL)
@@ -17662,6 +17668,25 @@ app.get('/api/screener', async (req, res) => {
         url: marketUrl,
         slug: eventSlug
       });
+    }
+
+    // ── Volume tracking: diff old vs new screener before overwriting ──
+    if (_screenerCache && _screenerCache.data) {
+      const oldByMid = {};
+      for (const om of _screenerCache.data) { if (om.market_id) oldByMid[om.market_id] = om; }
+      for (const nm of markets) {
+        if (!nm.market_id) continue;
+        if (!_volumeTracker[nm.market_id]) _volumeTracker[nm.market_id] = { samples: [] };
+        _volumeTracker[nm.market_id].samples.push({
+          volume: nm.volume || 0,
+          yes_price: nm.yes_price,
+          ts: Date.now()
+        });
+        // Trim to max samples
+        if (_volumeTracker[nm.market_id].samples.length > VOLUME_TRACKER_MAX_SAMPLES) {
+          _volumeTracker[nm.market_id].samples = _volumeTracker[nm.market_id].samples.slice(-VOLUME_TRACKER_MAX_SAMPLES);
+        }
+      }
     }
 
     _screenerCache = { ts: Date.now(), data: markets };
@@ -20241,6 +20266,26 @@ app.get('/api/signals', async (req, res) => {
         console.log('[signals] Warmed movers cache:', movers.length, 'movers');
       } catch(e) { console.warn('[signals] movers warm failed:', e.message); }
     }
+    // Warm volume baseline cache (7-day avg volume per market, 30-min TTL)
+    if (!_volumeBaselineCache || (Date.now() - _volumeBaselineCache.ts > 30 * 60 * 1000)) {
+      try {
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        let vRows = [];
+        if (pool) {
+          vRows = await dbQuery('SELECT market_id, AVG(volume) as avg_volume FROM market_snapshots WHERE snapshot_at >= $1 AND volume > 0 GROUP BY market_id', [sevenDaysAgo]).catch(() => []);
+        } else {
+          // Supabase doesn't support AVG in select — fetch raw and compute in JS
+          const { data } = await supabase.from('market_snapshots').select('market_id, volume').gte('snapshot_at', sevenDaysAgo).gt('volume', 0);
+          const sums = {};
+          for (const r of (data || [])) { if (!r.market_id) continue; if (!sums[r.market_id]) sums[r.market_id] = { total: 0, count: 0 }; sums[r.market_id].total += parseFloat(r.volume) || 0; sums[r.market_id].count++; }
+          vRows = Object.entries(sums).map(([market_id, s]) => ({ market_id, avg_volume: s.total / s.count }));
+        }
+        const baseline = {};
+        for (const r of vRows) { if (r.market_id && r.avg_volume) baseline[r.market_id] = parseFloat(r.avg_volume); }
+        _volumeBaselineCache = { ts: Date.now(), data: baseline };
+        console.log('[signals] Warmed volume baseline:', Object.keys(baseline).length, 'markets');
+      } catch(e) { console.warn('[signals] volume baseline warm failed:', e.message); }
+    }
 
     let signals = [];
     const now = new Date().toISOString();
@@ -20400,6 +20445,129 @@ app.get('/api/signals', async (req, res) => {
         break; // Only check first cached search result
       }
     } catch (e) { console.warn('[signals] arbitrage source error:', e.message); }
+
+    // Source 5: Volume Surge — unusual volume, price velocity, and whale convergence
+    try {
+      const CROSS_ASSET_MAP = {
+        'iran|hormuz|persian gulf': 'Watch: crude oil futures (CL), defense ETFs (ITA)',
+        'tariff|trade war|import duty': 'Watch: S&P 500 (ES), USD/CNY',
+        'fed |federal reserve|rate cut|rate hike|interest rate': 'Watch: Treasury yields (TLT), gold (GC)',
+        'ukraine|russia|nato|kyiv|putin': 'Watch: natural gas (NG), wheat futures (ZW)',
+        'bitcoin|btc |ethereum|eth |crypto': 'Watch: MSTR, COIN, mining ETFs (WGMI)',
+        'election|president|democrat|republican': 'Watch: Russell 2000 (IWM), Treasury yields',
+        'oil|opec|crude|petroleum|energy': 'Watch: crude oil futures (CL), energy ETFs (XLE)',
+        'china|xi jinping|taiwan|south china sea': 'Watch: FXI, KWEB, USD/CNY',
+      };
+
+      function getCrossAssetHint(question) {
+        const q = (question || '').toLowerCase();
+        for (const [pattern, hint] of Object.entries(CROSS_ASSET_MAP)) {
+          if (new RegExp(pattern, 'i').test(q)) return hint;
+        }
+        return '';
+      }
+
+      const screenerMkts = (_screenerCache && _screenerCache.data) || [];
+      const baseline = (_volumeBaselineCache && _volumeBaselineCache.data) || {};
+      const recentWhaleEvents = (_whaleTradeStream || []).filter(t => {
+        const age = Date.now() - new Date(t.ts).getTime();
+        return age < 60 * 60 * 1000 && (t.action === 'opened' || t.action === 'increased');
+      });
+
+      for (const m of screenerMkts) {
+        if (!m.market_id || !m.question) continue;
+        const currentVol = m.volume || 0;
+        const baselineVol = baseline[m.market_id] || 0;
+
+        // ── Component 1: Volume Spike Score (0-100) ──
+        let volumeRatio = 1;
+        let volumeScore = 0;
+        if (baselineVol > 10000 && currentVol > 0) {
+          volumeRatio = currentVol / baselineVol;
+          volumeScore = Math.min(100, Math.max(0, (volumeRatio - 1) * 50));
+        }
+
+        // ── Component 2: Price Velocity Score (0-100) ──
+        let velocityScore = 0;
+        let rapidMoveCount = 0;
+        const tracker = _volumeTracker[m.market_id];
+        if (tracker && tracker.samples.length >= 3) {
+          // Count rapid price moves (>2c change between consecutive samples) in 2h window
+          for (let i = 1; i < tracker.samples.length; i++) {
+            const prev = tracker.samples[i-1];
+            const curr = tracker.samples[i];
+            if (prev.yes_price != null && curr.yes_price != null) {
+              const delta = Math.abs(curr.yes_price - prev.yes_price);
+              if (delta > 0.02) rapidMoveCount++;
+            }
+          }
+          velocityScore = Math.min(100, rapidMoveCount * 25);
+        }
+
+        // ── Component 3: Whale Convergence Score (0-100) ──
+        const mktQ = m.question.toLowerCase().trim();
+        const whalesInMarket = new Set();
+        for (const we of recentWhaleEvents) {
+          const weQ = (we.question || we.market || '').toLowerCase().trim();
+          if (weQ === mktQ || (weQ.length > 30 && mktQ.length > 30 && weQ.substring(0, 30) === mktQ.substring(0, 30))) {
+            whalesInMarket.add(we.trader_name || we.trader);
+          }
+        }
+        const whaleConvergence = whalesInMarket.size;
+        const convergenceScore = Math.min(100, whaleConvergence * 33);
+
+        // ── Combined Score ──
+        const combined = volumeScore * 0.4 + velocityScore * 0.3 + convergenceScore * 0.3;
+        if (combined < 30) continue; // Not unusual enough
+
+        // Skip resolved markets
+        const yesPct = m.yes_price != null ? Math.round(m.yes_price * 100) : 50;
+        if (yesPct >= 99 || yesPct <= 1) continue;
+        // Skip expired
+        if (m.end_date && new Date(m.end_date) < new Date()) continue;
+
+        // Determine confidence
+        const confidence = combined >= 70 ? 'HIGH' : combined >= 45 ? 'MEDIUM' : 'LOW';
+
+        // Build action text
+        const parts = [];
+        if (volumeRatio >= 1.5) parts.push(volumeRatio.toFixed(1) + 'x volume surge');
+        if (rapidMoveCount >= 2) parts.push(rapidMoveCount + ' rapid price moves in 2h');
+        if (whaleConvergence >= 2) parts.push(whaleConvergence + ' whale entries in 1h');
+        if (parts.length === 0) parts.push('Unusual market activity detected');
+        let actionText = parts.join(' + ');
+        const crossAssetHint = getCrossAssetHint(m.question);
+        if (crossAssetHint) actionText += ' \u2014 ' + crossAssetHint;
+
+        // Determine dominant side from price movement
+        let side = 'YES';
+        if (tracker && tracker.samples.length >= 2) {
+          const firstP = tracker.samples[0].yes_price || 0.5;
+          const lastP = tracker.samples[tracker.samples.length - 1].yes_price || 0.5;
+          side = lastP >= firstP ? 'YES' : 'NO';
+        }
+
+        signals.push({
+          type: 'volume_surge',
+          badge: 'Volume Surge',
+          market: m.question,
+          action: actionText,
+          side,
+          price: m.yes_price || 0.5,
+          confidence,
+          whale_count: whaleConvergence,
+          capital: 0,
+          volume_ratio: Math.round(volumeRatio * 10) / 10,
+          volume_24h: currentVol,
+          rapid_moves: rapidMoveCount,
+          yes_pct: yesPct,
+          end_date: m.end_date || null,
+          detected_at: now,
+          url: m.url || 'https://polymarket.com',
+          slug: m.slug || ''
+        });
+      }
+    } catch (e) { console.warn('[signals] volume-surge source error:', e.message); }
 
     // ── Global filter: remove closed/expired markets from ALL signal types ──
     const activeMarketQuestions = new Set();

@@ -83,6 +83,7 @@ a:hover { text-decoration: underline; }
 .signal-card.type-momentum::before { background: linear-gradient(90deg, var(--green), var(--gold)); }
 .signal-card.type-new_entry::before { background: linear-gradient(90deg, var(--gold), #f59e0b); }
 .signal-card.type-arbitrage::before { background: linear-gradient(90deg, var(--purple), var(--blue)); }
+.signal-card.type-volume_surge::before { background: linear-gradient(90deg, #ff5722, #ff9800); }
 
 .signal-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 10px; }
 .signal-type-badge { font-family: var(--mono); font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 12px; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
@@ -90,6 +91,7 @@ a:hover { text-decoration: underline; }
 .badge-momentum { background: var(--green-dim); color: var(--green); border: 1px solid rgba(34,197,94,0.3); }
 .badge-new_entry { background: var(--gold-dim); color: var(--gold); border: 1px solid rgba(201,146,13,0.3); }
 .badge-arbitrage { background: var(--purple-dim); color: var(--purple); border: 1px solid rgba(167,139,250,0.3); }
+.badge-volume_surge { background: rgba(255,87,34,0.15); color: #ff5722; border: 1px solid rgba(255,87,34,0.3); }
 
 .confidence-badge { font-family: var(--mono); font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 6px; }
 .conf-HIGH { background: rgba(34,197,94,0.15); color: var(--green); border: 1px solid rgba(34,197,94,0.3); }
@@ -292,6 +294,7 @@ a:hover { text-decoration: underline; }
           <button class="sig-filter" data-filter="momentum" onclick="filterSignals('momentum',this)">Momentum</button>
           <button class="sig-filter" data-filter="new_entry" onclick="filterSignals('new_entry',this)">New Entry</button>
           <button class="sig-filter" data-filter="arbitrage" onclick="filterSignals('arbitrage',this)">Arbitrage</button>
+          <button class="sig-filter" data-filter="volume_surge" onclick="filterSignals('volume_surge',this)">Volume Surge</button>
         </div>
         <style>
           .sig-filter { font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border); background: transparent; color: var(--text-soft); cursor: pointer; transition: all 0.2s; }
@@ -421,14 +424,15 @@ function renderSignals() {
       new_entry: 'No new whale entries detected in the last hour. Check back soon.',
       arbitrage: 'No arbitrage opportunities detected right now. Check back soon.',
       whale_cluster: 'No whale cluster signals detected right now. Check back soon.',
-      momentum: 'No momentum signals detected right now. Check back soon.'
+      momentum: 'No momentum signals detected right now. Check back soon.',
+      volume_surge: 'No volume surges detected right now. Check back soon.'
     };
     grid.innerHTML = '<div class="empty-state">' + (emptyMessages[_currentFilter] || 'No signals detected right now. Check back soon.') + '</div>';
     return;
   }
 
-  const typeIcons = { whale_cluster: '\uD83D\uDC0B', momentum: '\uD83D\uDCC8', new_entry: '\u26A1', arbitrage: '\uD83D\uDD04' };
-  const typeLabels = { whale_cluster: 'Whale Cluster', momentum: 'Momentum', new_entry: 'New Entry', arbitrage: 'Arbitrage' };
+  const typeIcons = { whale_cluster: '\uD83D\uDC0B', momentum: '\uD83D\uDCC8', new_entry: '\u26A1', arbitrage: '\uD83D\uDD04', volume_surge: '\uD83D\uDEA8' };
+  const typeLabels = { whale_cluster: 'Whale Cluster', momentum: 'Momentum', new_entry: 'New Entry', arbitrage: 'Arbitrage', volume_surge: 'Volume Surge' };
 
   grid.innerHTML = filtered.map(s => {
     const icon = typeIcons[s.type] || '\uD83D\uDCE1';
@@ -457,6 +461,7 @@ function renderSignals() {
       changeHtml = '<span>Move: <span class="val" style="color:' + chgColor + '">' + (s.change_pct > 0 ? '+' : '-') + absPts + 'pts</span></span>';
     }
     const diffHtml = s.price_diff ? '<span>Gap: <span class="val" style="color:var(--purple)">' + (s.price_diff * 100).toFixed(1) + '%</span></span>' : '';
+    const volRatioHtml = s.volume_ratio && s.volume_ratio > 1.1 ? '<span>Volume: <span class="val" style="color:#ff5722">' + s.volume_ratio.toFixed(1) + 'x normal</span></span>' : '';
     // Signal Urgency Score
     let urgBase = Math.min(100, (s.whale_count || 0) * 10);
     let tFactor = 1;
@@ -484,7 +489,7 @@ function renderSignals() {
       '<div class="signal-catalyst" data-market="' + escHtml(s.market).replace(/"/g, '&quot;') + '" style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:8px;display:none"></div>' +
       (_sharpnessLabel ? '<div style="font-family:var(--mono);font-size:10px;color:' + _sharpnessColor + ';margin-bottom:8px">If you\'d followed our last 10 signals: ' + _sharpnessLabel + '</div>' : '') +
       '<div class="signal-action side-' + (s.side || 'YES') + '">' + escHtml(s.action) + '</div>' +
-      '<div class="signal-meta">' + whaleHtml + capHtml + changeHtml + diffHtml + '</div>' +
+      '<div class="signal-meta">' + whaleHtml + capHtml + changeHtml + diffHtml + volRatioHtml + '</div>' +
       '<div class="signal-actions">' + tradeBtn +
         '<button class="signal-trade-btn secondary" onclick="analyzeFromSignal(\'' + escHtml(s.market).replace(/'/g, "\\'") + '\')">AI Analysis</button>' +
       '</div>' +
