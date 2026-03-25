@@ -19559,8 +19559,8 @@ app.get('/api/daily-brief', async (req, res) => {
     aiCalls.forEach((c, i) => {
       c.call_id = i + 1;
       c.stake = confStakes[c.confidence] || 50;
-      // Parse trade ROI from thesis: "BUY YES at 22%" or "BUY NO at 78%"
-      const tm = (c.thesis || '').match(/BUY\s+(YES|NO)\s+at\s+(\d+)%/i);
+      // Parse trade ROI from thesis: "BUY YES at 22%", "BUY NO at ~95%+", "BUY NO at current 78%"
+      const tm = (c.thesis || '').match(/BUY\s+(YES|NO)\s+(?:at\s+)?[~]?(?:current\s+)?(\d+)%/i);
       if (tm) {
         const side = tm[1].toUpperCase();
         const pct = parseInt(tm[2]);
@@ -20309,8 +20309,8 @@ async function generateCrystalBallPredictions() {
     const { _whale_count, _divergence, _momentum, _urgency, ...clean } = p;
 
     // ── ROI calculation ──
-    // Parse side + price from the action string: "BUY YES at current 22%" or "BUY NO at current 78%"
-    const actionMatch = (clean.action || '').match(/BUY\s+(YES|NO)\s+at\s+current\s+(\d+)%/i);
+    // Parse side + price from action: "BUY YES at current 22%", "BUY NO at current 78%", "SELL NO at current 50%"
+    const actionMatch = (clean.action || '').match(/(?:BUY|SELL)\s+(YES|NO)\s+(?:at\s+)?[~]?(?:current\s+)?(\d+)%/i);
     if (actionMatch) {
       const side = actionMatch[1].toUpperCase();
       const yesPct = side === 'YES'
