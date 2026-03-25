@@ -153,15 +153,18 @@ a:hover { text-decoration: underline; }
   .two-col { grid-template-columns: 1fr; }
   .topbar { padding: 12px 16px; }
   .nav-links { gap: 10px; overflow-x: auto; }
-  .nav-link { font-size: 11px; }
+  .nav-link { font-size: 11px; min-height: 44px; display: inline-flex; align-items: center; }
   .hero h1 { font-size: 28px; }
   .hero { padding: 36px 16px 28px; }
   .container { padding: 20px 16px 60px; }
+  .sig-filter { min-height: 44px; display: inline-flex; align-items: center; }
+  .signal-trade-btn { min-height: 44px; }
 }
 @media (max-width: 480px) {
   .nav-links { gap: 8px; }
   .hero h1 { font-size: 24px; }
   .signal-top { flex-direction: column; align-items: flex-start; }
+  .ai-input-row { flex-direction: column; }
 }
 
 /* CORRELATION PAIRS */

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
 <title>HYPERFLEX — Prediction Market Intelligence</title>
 <meta name="description" content="AI-powered market intelligence for prediction markets. Real-time signals, smart money flow, and cross-asset analysis across Polymarket & Hyperliquid."/>
 <link rel="canonical" href="https://hyperflex.network/"/>
@@ -735,8 +735,10 @@ footer {
 
 /* ── RESPONSIVE ── */
 @media (max-width: 960px) {
-  .nav-links { display: none; }
+  .nav-links { gap: 10px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .nav-links a { font-size: 11px; white-space: nowrap; min-height: 44px; display: inline-flex; align-items: center; }
   .nav { padding: 0 16px; }
+  .btn-nav-login, .btn-nav-cta { min-height: 44px; display: inline-flex; align-items: center; }
   .live-grid { grid-template-columns: 1fr; }
   .product-block { grid-template-columns: 1fr; gap: 40px; }
   .product-block.reverse .product-copy { order: 1; }
