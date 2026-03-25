@@ -60,7 +60,7 @@ function getWhaleNickname(address) {
   const noun = ['Hawk','Wolf','Jaguar','Falcon','Viper','Phoenix','Titan','Oracle','Cipher','Ghost','Specter','Baron','Knight','Sage','Nomad'];
   let h = 0;
   for (let i = 0; i < address.length; i++) h = (h * 31 + address.charCodeAt(i)) >>> 0;
-  return adj[h % adj.length] + ' ' + noun[(h >> 4) % noun.length];
+  return adj[h % adj.length] + ' ' + noun[(h >>> 4) % noun.length];
 }
 
 const JWT_SECRET = process.env.JWT_SECRET || 'hyperflex-dev-secret-change-in-prod';
