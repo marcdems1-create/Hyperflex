@@ -1146,7 +1146,7 @@ function copyHlTrade(trader, coin, side, sizeUsd, leverage) {
     body: JSON.stringify({ trader: trader, asset: coin, side: side, size_usd: sizeUsd, leverage: leverage, allocation_pts: pts, platform: 'hyperliquid' })
   }).then(function(r) { return r.json(); }).then(function(d) {
     if (d.ok) {
-      showToast('\u2705 Copied ' + trader + '\\'s ' + coin + ' ' + side + ' with ' + pts + ' Flex Points');
+      showToast('\u2705 Copied ' + trader + '\u2019s ' + coin + ' ' + side + ' with ' + pts + ' Flex Points');
     } else {
       alert(d.error || 'Copy failed');
     }
