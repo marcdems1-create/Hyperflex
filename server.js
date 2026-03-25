@@ -13065,6 +13065,30 @@ app.get('/win/:marketId/:userId', async (req, res) => {
 // Read community.html once at startup and cache it
 const COMMUNITY_HTML = fs.readFileSync(path.join(__dirname, 'public', 'community.html'), 'utf8');
 
+// /health ENDPOINT — must be before /:slug catch-all
+app.get('/health', (req, res) => {
+  const uptimeMin = Math.round(process.uptime() / 60);
+  const mem = process.memoryUsage();
+  const now = Date.now();
+  const staleThresholdMs = 15 * 60 * 1000;
+  const staleChecks = {};
+  for (const [key, ts] of Object.entries(_healthTimestamps)) {
+    if (key === 'boot' || key === 'watchdogRestarts' || key === 'lastCacheCleanup' || !ts) continue;
+    const age = now - new Date(ts).getTime();
+    staleChecks[key] = { last: ts, age_min: Math.round(age / 60000), stale: age > staleThresholdMs };
+  }
+  const anyStale = Object.values(staleChecks).some(c => c.stale);
+  res.json({
+    status: anyStale ? 'DEGRADED' : 'OK',
+    uptime_minutes: uptimeMin,
+    memory: { rss_mb: Math.round(mem.rss / 1048576), heap_used_mb: Math.round(mem.heapUsed / 1048576), heap_total_mb: Math.round(mem.heapTotal / 1048576) },
+    data_freshness: staleChecks,
+    watchdog_restarts: _healthTimestamps.watchdogRestarts,
+    recent_errors: _recentErrors.slice(-10),
+    boot_time: _healthTimestamps.boot
+  });
+});
+
 app.get('/:slug', async (req, res, next) => {
   const { slug } = req.params;
   if (RESERVED_SLUGS.has(slug) || slug.includes('.')) return next();
@@ -24273,37 +24297,6 @@ setTimeout(() => {
   dbQuery('ALTER TABLE signal_outcomes ADD COLUMN IF NOT EXISTS edge_cents INTEGER').catch(() => {});
   dbQuery('ALTER TABLE source_accuracy ADD COLUMN IF NOT EXISTS avg_edge NUMERIC').catch(() => {});
 }, 60000);
-
-// ══════════════════════════════════════════════════════════════════════
-// /health ENDPOINT — observability for uptime monitoring
-// ══════════════════════════════════════════════════════════════════════
-app.get('/health', (req, res) => {
-  const uptimeMin = Math.round(process.uptime() / 60);
-  const mem = process.memoryUsage();
-  const now = Date.now();
-  // Check staleness (>15 min without data update = warning)
-  const staleThresholdMs = 15 * 60 * 1000;
-  const staleChecks = {};
-  for (const [key, ts] of Object.entries(_healthTimestamps)) {
-    if (key === 'boot' || key === 'watchdogRestarts' || key === 'lastCacheCleanup' || !ts) continue;
-    const age = now - new Date(ts).getTime();
-    staleChecks[key] = { last: ts, age_min: Math.round(age / 60000), stale: age > staleThresholdMs };
-  }
-  const anyStale = Object.values(staleChecks).some(c => c.stale);
-  res.json({
-    status: anyStale ? 'DEGRADED' : 'OK',
-    uptime_minutes: uptimeMin,
-    memory: {
-      rss_mb: Math.round(mem.rss / 1048576),
-      heap_used_mb: Math.round(mem.heapUsed / 1048576),
-      heap_total_mb: Math.round(mem.heapTotal / 1048576)
-    },
-    data_freshness: staleChecks,
-    watchdog_restarts: _healthTimestamps.watchdogRestarts,
-    recent_errors: _recentErrors.slice(-10),
-    boot_time: _healthTimestamps.boot
-  });
-});
 
 // ══════════════════════════════════════════════════════════════════════
 // WATCHDOG — every 5 min, check data freshness and restart stale polls
