@@ -20114,10 +20114,17 @@ async function generateCrystalBallPredictions() {
           if (screenerMatch && screenerMatch.yes_price != null) {
             bestPrice = screenerMatch.yes_price;
           } else {
-            // Calculate from whale positions: avg current_price across all positions in this market
+            // Calculate YES price from whale positions
+            // IMPORTANT: curPrice from Polymarket positions API is the price of the TOKEN the whale holds
+            // If whale holds NO tokens, curPrice = NO price, so YES price = 1 - curPrice
             const mktWhales = whales.filter(w => (w.market || w.question || '').toLowerCase() === mktLower);
-            const prices = mktWhales.map(w => parseFloat(w.current_price) || 0).filter(p => p > 0 && p < 1);
-            if (prices.length > 0) bestPrice = prices.reduce((s, p) => s + p, 0) / prices.length;
+            const yesPrices = mktWhales.map(w => {
+              const p = parseFloat(w.current_price) || 0;
+              if (p <= 0 || p >= 1) return null;
+              const side = (w.side || '').toUpperCase();
+              return side === 'NO' || side === 'No' ? (1 - p) : p;
+            }).filter(p => p !== null);
+            if (yesPrices.length > 0) bestPrice = yesPrices.reduce((s, p) => s + p, 0) / yesPrices.length;
           }
           return {
             market: m.market, whale_count: m.whale_count, total_capital: m.total_capital,
