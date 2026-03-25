@@ -19964,12 +19964,30 @@ async function generateCrystalBallPredictions() {
           const sides = Object.entries(m.sides).sort((a,b) => b[1].capital - a[1].capital);
           const topSide = sides[0];
           const consensusPct = Math.round((topSide[1].capital / m.total_capital) * 100);
-          // Get correct URL from screener cache (has accurate slugs), fallback to whale position URL
-          const screenerMatch = screenerLookup[(m.market || '').toLowerCase()];
+          // Get correct URL + price from screener cache, with fuzzy matching for multi-level markets
+          const mktLower = (m.market || '').toLowerCase();
+          let screenerMatch = screenerLookup[mktLower];
+          // Fuzzy: try matching first 30 chars if exact match fails (handles multi-level markets like crude $90/$100/$110)
+          if (!screenerMatch) {
+            const prefix = mktLower.substring(0, 30);
+            for (const [sq, sm] of Object.entries(screenerLookup)) {
+              if (sq.startsWith(prefix) || prefix.startsWith(sq.substring(0, 30))) { screenerMatch = sm; break; }
+            }
+          }
           const bestUrl = (screenerMatch && screenerMatch.url && screenerMatch.url !== 'https://polymarket.com')
             ? screenerMatch.url
             : (m.url && m.url !== 'https://polymarket.com' ? m.url : 'https://polymarket.com');
-          const bestPrice = screenerMatch && screenerMatch.yes_price != null ? screenerMatch.yes_price : 0.5;
+          // Use whale position avg price as market price proxy when screener match fails
+          // (whale positions have current_price from the positions API)
+          let bestPrice = 0.5;
+          if (screenerMatch && screenerMatch.yes_price != null) {
+            bestPrice = screenerMatch.yes_price;
+          } else {
+            // Calculate from whale positions: avg current_price across all positions in this market
+            const mktWhales = whales.filter(w => (w.market || w.question || '').toLowerCase() === mktLower);
+            const prices = mktWhales.map(w => parseFloat(w.current_price) || 0).filter(p => p > 0 && p < 1);
+            if (prices.length > 0) bestPrice = prices.reduce((s, p) => s + p, 0) / prices.length;
+          }
           return {
             market: m.market, whale_count: m.whale_count, total_capital: m.total_capital,
             consensus_side: topSide[0], consensus_pct: consensusPct,
