@@ -179,10 +179,26 @@ async function loadBrief() {
       document.getElementById('briefUpdated').textContent = mins < 2 ? 'Updated just now' : 'Updated ' + mins + ' min ago';
     }
 
-    // Narrative
+    // Build call lookup for inline links
+    var _callLookup = {};
+    (d.ai_calls || []).forEach(function(c) {
+      if (c.call_id) _callLookup[c.call_id] = c;
+    });
+
+    // Narrative with [CALL-X] replaced by clickable links
     if (d.narrative) {
       var paragraphs = d.narrative.split('\n\n').filter(function(p) { return p.trim(); });
-      document.getElementById('narrativeText').innerHTML = paragraphs.map(function(p) { return '<p>' + escHtml(p) + '</p>'; }).join('');
+      document.getElementById('narrativeText').innerHTML = paragraphs.map(function(p) {
+        var safe = escHtml(p);
+        // Replace [CALL-X] with clickable pill showing stake
+        safe = safe.replace(/\[CALL-(\d+)\]/g, function(match, num) {
+          var call = _callLookup[parseInt(num)];
+          if (!call) return match;
+          var stake = call.stake || 50;
+          return '<a href="#call-' + num + '" class="call-ref" onclick="document.getElementById(\'call-' + num + '\').scrollIntoView({behavior:\'smooth\',block:\'center\'});document.getElementById(\'call-' + num + '\').style.borderColor=\'var(--gold)\';setTimeout(function(){document.getElementById(\'call-' + num + '\').style.borderColor=\'\'},2000)" style="display:inline-flex;align-items:center;gap:4px;background:rgba(201,146,13,0.12);color:var(--gold);font-family:var(--mono);font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;text-decoration:none;border:1px solid rgba(201,146,13,0.25);cursor:pointer;white-space:nowrap">' + stake + ' pts \u2192 CALL #' + num + '</a>';
+        });
+        return '<p>' + safe + '</p>';
+      }).join('');
     }
 
     // Fear & Greed
@@ -202,10 +218,18 @@ async function loadBrief() {
     if (d.ai_calls && d.ai_calls.length > 0) {
       document.getElementById('callsSection').style.display = '';
       document.getElementById('callsContainer').innerHTML = d.ai_calls.map(function(c) {
-        return '<div class="call-card">' +
-          '<div class="call-market">' + escHtml(c.market || '') + '</div>' +
+        var callId = c.call_id || 0;
+        var stake = c.stake || 50;
+        return '<div class="call-card" id="call-' + callId + '" style="transition:border-color 0.3s">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
+            '<div class="call-market" style="margin-bottom:0">' + escHtml(c.market || '') + '</div>' +
+            '<div style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--gold);white-space:nowrap;margin-left:12px">' + stake + ' pts staked</div>' +
+          '</div>' +
           '<div class="call-thesis">' + escHtml(c.thesis || '') + '</div>' +
-          '<span class="call-conf ' + (c.confidence || 'MEDIUM') + '">' + (c.confidence || 'MEDIUM') + '</span>' +
+          '<div style="display:flex;align-items:center;gap:8px;margin-top:8px">' +
+            '<span class="call-conf ' + (c.confidence || 'MEDIUM') + '">' + (c.confidence || 'MEDIUM') + '</span>' +
+            '<span style="font-family:var(--mono);font-size:10px;color:var(--dim)">CALL #' + callId + '</span>' +
+          '</div>' +
         '</div>';
       }).join('');
     }

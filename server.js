@@ -19554,33 +19554,35 @@ app.get('/api/daily-brief', async (req, res) => {
       console.warn('[daily-brief] AI calls failed:', callErr.message);
     }
 
-    // ── Step 2: Generate narrative CONSTRAINED to only reference tracked calls ──
-    // The narrative must be grounded in the AI calls — no untracked claims
+    // ── Step 2: Attach stake amounts to each call ──
+    const confStakes = { HIGH: 100, MEDIUM: 50, LOW: 25 }; // Flex Points
+    aiCalls.forEach((c, i) => {
+      c.call_id = i + 1;
+      c.stake = confStakes[c.confidence] || 50;
+    });
+
+    // ── Step 3: Generate narrative CONSTRAINED to only reference tracked calls ──
     let narrative = '';
-    const callSummaries = aiCalls.map((c, i) => `CALL #${i+1}: ${c.market} — ${c.thesis} [${c.confidence}]`).join('\n');
+    const callSummaries = aiCalls.map(c => `[CALL-${c.call_id}]: ${c.market} — ${c.thesis} [${c.confidence}] (${c.stake} pts staked)`).join('\n');
     try {
       const response = await anthropic.messages.create({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 1200,
         system: `You are HYPERFLEX's AI market analyst. Write a concise, opinionated morning brief.
 
-CRITICAL ACCOUNTABILITY RULE: You may ONLY make verifiable claims that are covered by the AI Trade Calls listed below. Every prediction or directional statement in your narrative must reference one of these tracked calls. Do NOT make claims about markets or outcomes that aren't in the calls list — those won't be graded and would be unaccountable.
+ACCOUNTABILITY RULES:
+1. You may ONLY make verifiable claims covered by the AI Trade Calls below.
+2. When you reference a tracked prediction, you MUST include the tag exactly as written: [CALL-1], [CALL-2], etc. This creates a clickable link to the tracked bet.
+3. Do NOT make directional claims without a corresponding [CALL-X] tag.
+4. Include the stake amount when referencing a call, e.g. "our 100-pt bet on crude staying below $100 [CALL-2] looks solid"
 
-You CAN:
-- Provide context, analysis, and reasoning around the tracked calls
-- Reference Fear & Greed score and general market sentiment
-- Discuss cross-asset implications of the tracked predictions
-- State facts from the data (prices, volumes, wallet counts)
+You CAN: provide context, analysis, reasoning, Fear & Greed commentary, cross-asset implications, and facts from the data.
+You CANNOT: predict outcomes without a [CALL-X] tag, invent statistics, or make untracked claims.
 
-You CANNOT:
-- Predict outcomes for markets not in the calls list
-- Make directional claims ("X will happen") without a corresponding tracked call
-- Invent data or statistics not provided
-
-Format: 3-4 short paragraphs of flowing prose. End with what to watch today. No markdown headers, no bullet points, no greetings.`,
+Format: 3-4 short paragraphs of flowing prose. End with what to watch today. No markdown headers, no bullet points, no greetings. Naturally weave [CALL-X] tags into the prose.`,
         messages: [{
           role: 'user',
-          content: `Write today's HYPERFLEX Morning Intelligence brief.\n\nTRACKED AI CALLS (only reference these):\n${callSummaries || 'No calls generated yet.'}\n\nMARKET DATA:\n${JSON.stringify(promptData, null, 2)}`
+          content: `Write today's HYPERFLEX Morning Intelligence brief.\n\nTRACKED AI CALLS:\n${callSummaries || 'No calls generated yet.'}\n\nMARKET DATA:\n${JSON.stringify(promptData, null, 2)}`
         }]
       });
       narrative = (response.content[0]?.text || '').trim();
