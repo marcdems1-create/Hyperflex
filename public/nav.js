@@ -23,9 +23,10 @@
   }
 
   var links = [
-    { href: '/crystal-ball', label: '\uD83D\uDD2E Crystal Ball', gold: true },
+    { href: '/brief', label: '\uD83E\uDDE0 AI Brief', gold: true },
+    { href: '/crystal-ball', label: 'Crystal Ball' },
     { href: '/signals', label: 'Signals' },
-    { href: '/whales', label: 'Whales' },
+    { href: '/whales', label: 'Market Intel' },
     { href: '/screener', label: 'Screener' },
     { href: '/predictors', label: 'Predictors' },
     { href: '/odds', label: 'Odds' },

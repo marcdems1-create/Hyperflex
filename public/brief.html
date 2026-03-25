@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AI Morning Brief — HYPERFLEX</title>
+<meta name="description" content="AI-generated market intelligence. What prediction markets are telling us today — and what it means for your portfolio."/>
+<meta property="og:title" content="AI Morning Brief — HYPERFLEX"/>
+<meta property="og:description" content="AI-generated market intelligence. What prediction markets are telling us today."/>
+<meta property="og:url" content="https://hyperflex.network/brief"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:title" content="AI Morning Brief — HYPERFLEX"/>
+<meta name="twitter:description" content="AI-generated market intelligence. What prediction markets are telling us today."/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+:root { --sans: 'Syne', sans-serif; --mono: 'Space Mono', monospace; --gold: #c9920d; --text: #e8e4d9; --text-soft: #a09d94; --dim: #7a7870; --ink: #141412; --card: #1a1a17; --border: #2a2a25; --green: #22c55e; --red: #ef4444; --blue: #60a5fa; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--ink); color: var(--text); font-family: var(--sans); min-height: 100vh; }
+
+.brief-container { max-width: 720px; margin: 0 auto; padding: 40px 24px 80px; }
+
+.brief-header { text-align: center; margin-bottom: 40px; }
+.brief-date { font-family: var(--mono); font-size: 12px; color: var(--dim); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 12px; }
+.brief-title { font-size: 32px; font-weight: 800; color: var(--text); margin-bottom: 8px; }
+.brief-title span { color: var(--gold); }
+.brief-subtitle { font-family: var(--mono); font-size: 13px; color: var(--text-soft); }
+.brief-updated { font-family: var(--mono); font-size: 11px; color: var(--dim); margin-top: 12px; }
+
+/* AI Narrative */
+.narrative-section { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 28px 32px; margin-bottom: 32px; position: relative; overflow: hidden; }
+.narrative-section::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, var(--gold), #e0b340, var(--gold)); }
+.narrative-label { font-family: var(--mono); font-size: 10px; font-weight: 700; color: var(--gold); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+.narrative-label::before { content: '\uD83E\uDDE0'; }
+.narrative-text { font-size: 15px; line-height: 1.75; color: var(--text); }
+.narrative-text p { margin-bottom: 14px; }
+.narrative-text p:last-child { margin-bottom: 0; }
+
+/* AI Calls */
+.calls-section { margin-bottom: 32px; }
+.section-title { font-family: var(--sans); font-size: 18px; font-weight: 800; color: var(--text); margin-bottom: 16px; display: flex; align-items: center; gap: 10px; }
+.section-title .icon { font-size: 20px; }
+
+.call-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 20px 24px; margin-bottom: 12px; }
+.call-market { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 8px; line-height: 1.4; }
+.call-thesis { font-family: var(--mono); font-size: 12px; color: var(--text-soft); line-height: 1.6; }
+.call-conf { display: inline-block; font-family: var(--mono); font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px; margin-top: 8px; }
+.call-conf.HIGH { background: rgba(34,197,94,0.15); color: var(--green); }
+.call-conf.MEDIUM { background: rgba(201,146,13,0.15); color: var(--gold); }
+.call-conf.LOW { background: rgba(107,114,128,0.15); color: #9ca3af; }
+
+/* Fear & Greed */
+.fg-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 24px; text-align: center; margin-bottom: 32px; }
+.fg-score { font-size: 56px; font-weight: 800; line-height: 1; }
+.fg-label { font-family: var(--mono); font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; margin-top: 6px; }
+.fg-sub { font-family: var(--mono); font-size: 11px; color: var(--dim); margin-top: 8px; }
+
+/* Cross-Asset Alerts */
+.cross-alert { background: rgba(255,152,0,0.08); border: 1px solid rgba(255,152,0,0.2); border-radius: 8px; padding: 14px 18px; margin-bottom: 10px; }
+.cross-trigger { font-family: var(--mono); font-size: 12px; color: var(--text-soft); margin-bottom: 4px; }
+.cross-watch { font-family: var(--mono); font-size: 13px; font-weight: 700; color: #ff9800; }
+
+/* Movers Table */
+.mover-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.mover-q { font-size: 13px; color: var(--text); flex: 1; margin-right: 16px; line-height: 1.4; }
+.mover-change { font-family: var(--mono); font-size: 13px; font-weight: 700; white-space: nowrap; }
+
+/* Subscribe CTA */
+.subscribe-section { background: linear-gradient(135deg, rgba(201,146,13,0.08) 0%, var(--card) 100%); border: 1px solid rgba(201,146,13,0.3); border-radius: 12px; padding: 28px 32px; text-align: center; margin-top: 40px; }
+.subscribe-section h3 { font-size: 18px; font-weight: 800; color: var(--text); margin-bottom: 8px; }
+.subscribe-section p { font-family: var(--mono); font-size: 12px; color: var(--text-soft); margin-bottom: 16px; }
+.sub-form { display: flex; gap: 8px; max-width: 400px; margin: 0 auto; }
+.sub-form input { flex: 1; background: var(--ink); border: 1px solid var(--border); color: var(--text); font-family: var(--mono); font-size: 13px; padding: 10px 14px; border-radius: 8px; outline: none; }
+.sub-form input:focus { border-color: var(--gold); }
+.sub-form button { background: var(--gold); color: var(--ink); font-family: var(--mono); font-size: 12px; font-weight: 700; padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; white-space: nowrap; }
+.sub-form button:hover { background: #e0b340; }
+.sub-note { font-family: var(--mono); font-size: 11px; color: var(--dim); margin-top: 10px; }
+
+.loading { text-align: center; padding: 60px 0; font-family: var(--mono); font-size: 13px; color: var(--dim); }
+
+@media (max-width: 600px) {
+  .brief-container { padding: 24px 16px 60px; }
+  .brief-title { font-size: 24px; }
+  .narrative-section { padding: 20px; }
+  .fg-score { font-size: 42px; }
+  .sub-form { flex-direction: column; }
+}
+</style>
+</head>
+<body>
+
+<div id="nav-root"></div>
+<script src="/nav.js"></script>
+
+<div class="brief-container">
+
+  <!-- Header -->
+  <div class="brief-header">
+    <div class="brief-date" id="briefDate">--</div>
+    <h1 class="brief-title">Morning <span>Intelligence</span></h1>
+    <div class="brief-subtitle">AI-generated market analysis from prediction market data</div>
+    <div class="brief-updated" id="briefUpdated">Loading...</div>
+  </div>
+
+  <!-- AI Narrative -->
+  <div class="narrative-section">
+    <div class="narrative-label">AI Market Analysis</div>
+    <div class="narrative-text" id="narrativeText">
+      <div class="loading">Generating AI analysis...</div>
+    </div>
+  </div>
+
+  <!-- Fear & Greed -->
+  <div class="fg-card" id="fgCard" style="display:none">
+    <div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">Fear & Greed Index</div>
+    <div class="fg-score" id="fgScore">--</div>
+    <div class="fg-label" id="fgLabel">--</div>
+    <div class="fg-sub" id="fgChange"></div>
+  </div>
+
+  <!-- AI Calls -->
+  <div class="calls-section" id="callsSection" style="display:none">
+    <div class="section-title"><span class="icon">&#x1F3AF;</span> AI Trade Calls</div>
+    <div id="callsContainer"></div>
+  </div>
+
+  <!-- Cross-Asset Alerts -->
+  <div id="crossSection" style="display:none;margin-bottom:32px">
+    <div class="section-title"><span class="icon">&#x1F4E1;</span> Cross-Asset Signals</div>
+    <div id="crossContainer"></div>
+  </div>
+
+  <!-- Market Movers -->
+  <div id="moversSection" style="display:none;margin-bottom:32px">
+    <div class="section-title"><span class="icon">&#x1F4C8;</span> Biggest Moves (24h)</div>
+    <div id="moversContainer"></div>
+  </div>
+
+  <!-- Smart Money Picks -->
+  <div id="picksSection" style="display:none;margin-bottom:32px">
+    <div class="section-title"><span class="icon">&#x1F4B0;</span> Smart Money Consensus</div>
+    <div id="picksContainer"></div>
+  </div>
+
+  <!-- Subscribe CTA -->
+  <div class="subscribe-section">
+    <h3>Get this in your inbox every morning</h3>
+    <p>AI-generated market intelligence delivered at 8am UTC</p>
+    <form class="sub-form" onsubmit="return handleSubscribe(event)">
+      <input type="email" id="subEmail" placeholder="you@example.com" required/>
+      <button type="submit" id="subBtn">Subscribe</button>
+    </form>
+    <div class="sub-note" id="subNote">Free during Early Access</div>
+  </div>
+
+</div>
+
+<script>
+function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+async function loadBrief() {
+  try {
+    const res = await fetch('/api/daily-brief');
+    if (!res.ok) throw new Error('API error ' + res.status);
+    const d = await res.json();
+
+    // Date
+    var now = new Date();
+    document.getElementById('briefDate').textContent = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
+    // Updated
+    if (d.updated_at) {
+      var updated = new Date(d.updated_at);
+      var mins = Math.round((now - updated) / 60000);
+      document.getElementById('briefUpdated').textContent = mins < 2 ? 'Updated just now' : 'Updated ' + mins + ' min ago';
+    }
+
+    // Narrative
+    if (d.narrative) {
+      var paragraphs = d.narrative.split('\n\n').filter(function(p) { return p.trim(); });
+      document.getElementById('narrativeText').innerHTML = paragraphs.map(function(p) { return '<p>' + escHtml(p) + '</p>'; }).join('');
+    }
+
+    // Fear & Greed
+    if (d.fear_greed && d.fear_greed.score != null) {
+      document.getElementById('fgCard').style.display = '';
+      document.getElementById('fgScore').textContent = d.fear_greed.score;
+      document.getElementById('fgScore').style.color = d.fear_greed.color || '#eab308';
+      document.getElementById('fgLabel').textContent = d.fear_greed.label || 'Neutral';
+      document.getElementById('fgLabel').style.color = d.fear_greed.color || '#eab308';
+      if (d.fear_greed.change != null && d.fear_greed.change !== 0) {
+        var sign = d.fear_greed.change > 0 ? '+' : '';
+        document.getElementById('fgChange').textContent = sign + d.fear_greed.change + ' pts from yesterday';
+      }
+    }
+
+    // AI Calls
+    if (d.ai_calls && d.ai_calls.length > 0) {
+      document.getElementById('callsSection').style.display = '';
+      document.getElementById('callsContainer').innerHTML = d.ai_calls.map(function(c) {
+        return '<div class="call-card">' +
+          '<div class="call-market">' + escHtml(c.market || '') + '</div>' +
+          '<div class="call-thesis">' + escHtml(c.thesis || '') + '</div>' +
+          '<span class="call-conf ' + (c.confidence || 'MEDIUM') + '">' + (c.confidence || 'MEDIUM') + '</span>' +
+        '</div>';
+      }).join('');
+    }
+
+    // Cross-Asset Alerts
+    if (d.cross_asset_alerts && d.cross_asset_alerts.length > 0) {
+      document.getElementById('crossSection').style.display = '';
+      document.getElementById('crossContainer').innerHTML = d.cross_asset_alerts.map(function(a) {
+        return '<div class="cross-alert">' +
+          '<div class="cross-trigger">' + escHtml(a.trigger) + '</div>' +
+          '<div class="cross-watch">\u2192 ' + escHtml(a.watch) + '</div>' +
+        '</div>';
+      }).join('');
+    }
+
+    // Market Movers
+    if (d.top_movers && d.top_movers.length > 0) {
+      document.getElementById('moversSection').style.display = '';
+      document.getElementById('moversContainer').innerHTML = d.top_movers.map(function(m) {
+        var cp = m.current_price || 0;
+        var sp = m.start_price || 0;
+        var diff = cp - sp;
+        var color = diff >= 0 ? 'var(--green)' : 'var(--red)';
+        var sign = diff >= 0 ? '+' : '';
+        return '<div class="mover-row">' +
+          '<div class="mover-q">' + escHtml((m.question||'').substring(0,60)) + '</div>' +
+          '<div class="mover-change" style="color:' + color + '">' + sp + '\u00A2 \u2192 ' + cp + '\u00A2 (' + sign + diff + 'pts)</div>' +
+        '</div>';
+      }).join('');
+    }
+
+    // Smart Money Picks
+    if (d.smart_money_picks && d.smart_money_picks.length > 0) {
+      document.getElementById('picksSection').style.display = '';
+      document.getElementById('picksContainer').innerHTML = d.smart_money_picks.map(function(p) {
+        var sideColor = (p.consensus_side||'').toUpperCase() === 'YES' ? 'var(--green)' : 'var(--red)';
+        return '<div class="mover-row">' +
+          '<div class="mover-q">' + escHtml((p.market||'').substring(0,60)) + '</div>' +
+          '<div class="mover-change"><span style="color:' + sideColor + ';font-weight:700">' + (p.consensus_side||'').toUpperCase() + ' ' + (p.consensus_pct||0) + '%</span> <span style="color:var(--dim);font-size:11px">' + (p.whale_count||0) + ' wallets</span></div>' +
+        '</div>';
+      }).join('');
+    }
+
+  } catch (err) {
+    console.error('[brief]', err);
+    document.getElementById('narrativeText').innerHTML = '<p style="color:var(--dim)">Brief is loading. Caches are warming up — refresh in a few minutes.</p>';
+  }
+}
+
+async function handleSubscribe(e) {
+  e.preventDefault();
+  var email = document.getElementById('subEmail').value.trim();
+  if (!email) return false;
+  var btn = document.getElementById('subBtn');
+  btn.textContent = 'Subscribing...';
+  btn.disabled = true;
+  try {
+    var res = await fetch('/api/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email }) });
+    if (res.ok) {
+      document.getElementById('subNote').textContent = '\u2705 You\'re in! First brief arrives tomorrow at 8am UTC.';
+      document.getElementById('subNote').style.color = 'var(--green)';
+    } else {
+      document.getElementById('subNote').textContent = 'Something went wrong. Try again.';
+      document.getElementById('subNote').style.color = 'var(--red)';
+    }
+  } catch (err) {
+    document.getElementById('subNote').textContent = 'Network error. Try again.';
+  }
+  btn.textContent = 'Subscribe';
+  btn.disabled = false;
+  return false;
+}
+
+loadBrief();
+// Refresh every 30 min
+setInterval(loadBrief, 30 * 60 * 1000);
+</script>
+</body>
+</html>

@@ -19464,6 +19464,116 @@ app.get('/api/daily-briefing', (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
+// AI DAILY BRIEF — Claude-generated morning intelligence
+// ════════════════════════════════════════════════════════════
+let _aiBriefCache = null; // { ts, data }
+
+app.get('/api/daily-brief', async (req, res) => {
+  try {
+    // 30-min cache
+    if (_aiBriefCache && (Date.now() - _aiBriefCache.ts < 30 * 60 * 1000)) {
+      return res.json(_aiBriefCache.data);
+    }
+
+    // Gather all data from existing caches
+    const briefData = generateDailyBriefing();
+    const screenerMkts = (_screenerCache && _screenerCache.data) || [];
+    const topByVol = screenerMkts.slice().sort((a,b) => (b.volume||0) - (a.volume||0)).slice(0, 5);
+
+    // Build cross-asset alerts from volume surge data
+    const CROSS_ASSET = {
+      'iran|hormuz|persian gulf': 'crude oil futures (CL), defense ETFs',
+      'tariff|trade war': 'S&P 500 futures (ES), USD/CNY',
+      'fed |federal reserve|rate cut|rate hike': 'Treasury yields (TLT), gold (GC)',
+      'ukraine|russia|nato': 'natural gas (NG), wheat futures',
+      'bitcoin|btc |ethereum|eth |crypto': 'MSTR, COIN, mining ETFs',
+      'oil|opec|crude|petroleum': 'crude oil futures (CL), energy ETFs (XLE)',
+      'china|taiwan|xi jinping': 'FXI, KWEB, USD/CNY',
+      'election|president|democrat|republican': 'Russell 2000 (IWM), Treasury yields',
+    };
+    const crossAssetAlerts = [];
+    const movers = (briefData.market_movers || []);
+    const picks = (briefData.whale_index_picks || []);
+    const allMarkets = [...movers, ...picks].map(m => m.question || m.market || '');
+    for (const q of allMarkets) {
+      for (const [pattern, assets] of Object.entries(CROSS_ASSET)) {
+        if (new RegExp(pattern, 'i').test(q)) {
+          crossAssetAlerts.push({ trigger: q.substring(0, 60), watch: assets });
+          break;
+        }
+      }
+    }
+
+    // Build prompt for Claude
+    const promptData = {
+      date: new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }),
+      fear_greed: briefData.fear_greed,
+      top_movers: movers.map(m => `"${(m.question||'').substring(0,60)}" moved from ${m.start_price||'?'}¢ to ${m.current_price||'?'}¢ (${m.change_pct > 0 ? '+' : ''}${Math.round(m.change_pct||0)}%)`),
+      smart_money_picks: picks.map(p => `"${(p.market||'').substring(0,60)}" — ${p.whale_count} wallets, ${p.consensus_pct}% consensus ${p.consensus_side}`),
+      whale_moves: (briefData.whale_moves || []).slice(0,3).map(w => `${w.trader} ${w.action} ${w.size} ${(w.side||'').toUpperCase()} on "${(w.question||'').substring(0,50)}"`),
+      top_volume_markets: topByVol.map(m => `"${(m.question||'').substring(0,50)}" — $${m.volume >= 1e6 ? (m.volume/1e6).toFixed(1)+'M' : Math.round(m.volume/1e3)+'K'} volume, ${Math.round((m.yes_price||0)*100)}% YES`),
+      cross_asset: crossAssetAlerts.slice(0,3),
+    };
+
+    let narrative = '';
+    let aiCalls = [];
+    try {
+      const response = await anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1200,
+        system: `You are HYPERFLEX's AI market analyst. Write a concise, opinionated morning brief about prediction markets. Be direct — state what matters and what the smart money is doing. Use concrete numbers. Write like a sharp analyst, not a data dump. Format as 3-4 short paragraphs. End with one sentence on what to watch today. Do NOT use markdown headers or bullet points — write flowing prose. Do NOT say "Good morning" or greet the reader.`,
+        messages: [{
+          role: 'user',
+          content: `Write today's HYPERFLEX Morning Intelligence brief based on this data:\n\n${JSON.stringify(promptData, null, 2)}`
+        }]
+      });
+      narrative = (response.content[0]?.text || '').trim();
+    } catch (aiErr) {
+      console.warn('[daily-brief] Claude narrative failed:', aiErr.message);
+      narrative = briefData.headline || 'Markets are active. Check back for the AI analysis.';
+    }
+
+    // Generate AI calls (top 3 picks with reasoning)
+    try {
+      if (picks.length > 0 || movers.length > 0) {
+        const callResponse = await anthropic.messages.create({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 800,
+          system: `You are an AI prediction market analyst. For each market provided, write a one-sentence trade thesis. Be specific — reference the data points. Return valid JSON array: [{"market":"...","thesis":"BUY YES/NO at X% because...","confidence":"HIGH/MEDIUM/LOW"}]. Max 3 calls.`,
+          messages: [{
+            role: 'user',
+            content: `Generate AI trade calls from this data:\nSmart money picks: ${JSON.stringify(picks.slice(0,3))}\nTop movers: ${JSON.stringify(movers.slice(0,2))}`
+          }]
+        });
+        const raw = (callResponse.content[0]?.text || '').trim().replace(/^```json?\s*/i, '').replace(/```\s*$/, '');
+        aiCalls = JSON.parse(raw);
+      }
+    } catch (callErr) {
+      console.warn('[daily-brief] AI calls failed:', callErr.message);
+    }
+
+    const result = {
+      narrative,
+      ai_calls: aiCalls.slice(0, 5),
+      top_movers: movers,
+      smart_money_picks: picks,
+      whale_moves: (briefData.whale_moves || []).slice(0, 5),
+      fear_greed: briefData.fear_greed,
+      cross_asset_alerts: crossAssetAlerts.slice(0, 5),
+      stat_of_the_day: briefData.stat_of_the_day,
+      updated_at: new Date().toISOString()
+    };
+
+    _aiBriefCache = { ts: Date.now(), data: result };
+    res.json(result);
+  } catch (err) {
+    console.error('[daily-brief]', err.message);
+    if (_aiBriefCache) return res.json(_aiBriefCache.data);
+    res.status(500).json({ error: 'Failed to generate brief', detail: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
 // CRYSTAL BALL — prediction engine from cached data
 // ════════════════════════════════════════════════════════════
 let _crystalBallCache = null;
@@ -19926,6 +20036,7 @@ app.get('/api/crystal-ball', async (req, res) => {
 
 // GET /crystal-ball — Crystal Ball prediction page
 app.get('/crystal-ball', (req, res) => res.sendFile(path.join(__dirname, 'public', 'crystal-ball.html')));
+app.get('/brief', (req, res) => res.sendFile(path.join(__dirname, 'public', 'brief.html')));
 
 // ════════════════════════════════════════════════════════════
 // EMAIL SUBSCRIBERS — daily briefing signup
