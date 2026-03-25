@@ -19559,8 +19559,8 @@ app.get('/api/daily-brief', async (req, res) => {
     aiCalls.forEach((c, i) => {
       c.call_id = i + 1;
       c.stake = confStakes[c.confidence] || 50;
-      // Parse trade ROI from thesis: "BUY YES at 22%", "BUY NO at ~95%+", "BUY NO at current 78%"
-      const tm = (c.thesis || '').match(/BUY\s+(YES|NO)\s+(?:at\s+)?[~]?(?:current\s+)?(\d+)%/i);
+      // Parse trade ROI from thesis: "BUY YES at 22%", "BUY NO at ~95%+", "BUY YES at ~85-89%"
+      const tm = (c.thesis || '').match(/BUY\s+(YES|NO)\s+(?:\([^)]*\)\s+)?(?:at\s+)?[~]?(?:current\s+)?(?:market\s+)?(?:\d+-)?(\d+)%/i);
       if (tm) {
         const side = tm[1].toUpperCase();
         const pct = parseInt(tm[2]);
