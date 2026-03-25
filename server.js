@@ -1,5 +1,86 @@
 require('dotenv').config();
 
+// ══════════════════════════════════════════════════════════════════════
+// GLOBAL ERROR HANDLERS — prevent silent process death
+// ══════════════════════════════════════════════════════════════════════
+const _recentErrors = [];
+const MAX_ERROR_LOG = 50;
+function _logError(source, err) {
+  const entry = { source, message: String(err && err.message || err), ts: new Date().toISOString() };
+  _recentErrors.push(entry);
+  if (_recentErrors.length > MAX_ERROR_LOG) _recentErrors.shift();
+  console.error(`[${source}]`, entry.message);
+}
+process.on('uncaughtException', (err) => {
+  _logError('FATAL/uncaughtException', err);
+  // Don't exit — Railway will restart, but let's try to stay alive
+});
+process.on('unhandledRejection', (reason) => {
+  _logError('FATAL/unhandledRejection', reason);
+  // Don't exit — log and continue
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// HEALTH TRACKING — timestamps for last successful data fetches
+// ══════════════════════════════════════════════════════════════════════
+const _healthTimestamps = {
+  boot: new Date().toISOString(),
+  lastPolymarketFetch: null,
+  lastHyperliquidFetch: null,
+  lastScreenerFetch: null,
+  lastWhaleFetch: null,
+  lastSignalCompute: null,
+  lastBriefGenerate: null,
+  lastCacheCleanup: null,
+  watchdogRestarts: 0
+};
+
+// ══════════════════════════════════════════════════════════════════════
+// RESILIENT FETCH — retry with exponential backoff + timeout
+// ══════════════════════════════════════════════════════════════════════
+async function resilientFetch(url, options = {}, { retries = 3, baseDelay = 1000, timeoutMs = 15000, label = '' } = {}) {
+  const _fetch = options._fetch || globalThis.fetch || require('node-fetch');
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await _fetch(url, { ...options, signal: controller.signal });
+      clearTimeout(timer);
+      if (!res.ok && attempt < retries) {
+        const delay = baseDelay * Math.pow(2, attempt);
+        console.warn(`[resilientFetch] ${label || url} returned ${res.status}, retry ${attempt + 1}/${retries} in ${delay}ms`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      return res;
+    } catch (err) {
+      clearTimeout(timer);
+      if (attempt < retries) {
+        const delay = baseDelay * Math.pow(2, attempt);
+        console.warn(`[resilientFetch] ${label || url} failed: ${err.message}, retry ${attempt + 1}/${retries} in ${delay}ms`);
+        await new Promise(r => setTimeout(r, delay));
+      } else {
+        _logError('resilientFetch/' + (label || 'unknown'), err);
+        throw err;
+      }
+    }
+  }
+}
+
+// Safe wrapper for async cron/interval callbacks
+function safeCron(name, fn) {
+  return () => {
+    try {
+      const result = fn();
+      if (result && typeof result.catch === 'function') {
+        result.catch(e => _logError('cron/' + name, e));
+      }
+    } catch (e) {
+      _logError('cron/' + name, e);
+    }
+  };
+}
+
 // CRITICAL: Force IPv4 for ALL connections — Railway IPv6 to Supabase/Cloudflare hangs
 const { setDefaultResultOrder } = require('dns');
 setDefaultResultOrder('ipv4first');
@@ -2782,7 +2863,7 @@ async function expireTrials() {
     console.error('[trial-expiry] error:', err.message);
   }
 }
-cron.schedule('30 * * * *', expireTrials); // runs at :30 past each hour
+cron.schedule('30 * * * *', safeCron('expireTrials', expireTrials));
 
 // ── EMAIL QUEUE PROCESSOR ─────────────────────────────────────────────────
 // Picks up any pending_emails where send_after <= now, sends them, marks sent
@@ -2828,7 +2909,7 @@ async function processPendingEmails() {
     console.error('[email-queue] processor error:', err.message);
   }
 }
-cron.schedule('15 * * * *', processPendingEmails); // runs at :15 past each hour
+cron.schedule('15 * * * *', safeCron('processPendingEmails', processPendingEmails));
 
 // ── WEEKLY REFILLS ────────────────────────────────
 
@@ -17351,7 +17432,7 @@ app.get('/api/whale-scores', async (req, res) => {
     }
     // Ensure whale data is loaded
     if (!_whaleWatchCache) {
-      try { const data = await fetchWhalePositions(); _whaleWatchCache = { ts: Date.now(), data }; } catch (e) {}
+      try { const data = await fetchWhalePositions(); _whaleWatchCache = { ts: Date.now(), data }; _healthTimestamps.lastWhaleFetch = new Date().toISOString(); } catch (e) { console.warn('[whale-watch] Pre-warm failed:', e.message); }
     }
     const scores = computeWhaleAlphaScores();
     _whaleAlphaCache = { ts: Date.now(), scores };
@@ -17371,6 +17452,7 @@ app.get('/api/whale-watch', async (req, res) => {
 
     const data = await fetchWhalePositions();
     _whaleWatchCache = { ts: Date.now(), data };
+    _healthTimestamps.lastWhaleFetch = new Date().toISOString();
     res.json(data);
   } catch (err) {
     console.error('[whale-watch]', err.message);
@@ -17690,6 +17772,7 @@ app.get('/api/screener', async (req, res) => {
     }
 
     _screenerCache = { ts: Date.now(), data: markets };
+    _healthTimestamps.lastScreenerFetch = new Date().toISOString();
     res.json(filterScreenerResults(markets, req.query));
   } catch (err) {
     console.error('[screener]', err.message);
@@ -21159,6 +21242,7 @@ app.get('/api/signals', async (req, res) => {
     };
 
     _signalsCache = { ts: Date.now(), data: result };
+    _healthTimestamps.lastSignalCompute = new Date().toISOString();
     res.json(result);
   } catch (err) {
     console.error('[signals]', err.message);
@@ -21280,7 +21364,7 @@ async function detectArbitrageOpportunities() {
 }
 
 // Run arb detection every 5 minutes
-cron.schedule('*/5 * * * *', detectArbitrageOpportunities);
+cron.schedule('*/5 * * * *', safeCron('detectArbitrageOpportunities', detectArbitrageOpportunities));
 setTimeout(detectArbitrageOpportunities, 30000); // First run 30s after boot
 
 // POST /api/trade-intentions — log when a user decides to trade (from Kelly calculator)
@@ -21769,7 +21853,7 @@ function detectSignalCategory(q) {
 }
 
 // Run agent evaluation every 5 minutes
-cron.schedule('*/5 * * * *', evaluateAgentSignals);
+cron.schedule('*/5 * * * *', safeCron('evaluateAgentSignals', evaluateAgentSignals));
 setTimeout(evaluateAgentSignals, 60000); // First run 1 min after boot
 
 // ── AGENT OUTCOME RESOLUTION ──────────────────────────────────────────────
@@ -21822,7 +21906,7 @@ async function resolveAgentOutcomes() {
 }
 
 // Run outcome resolution every 30 minutes
-cron.schedule('*/30 * * * *', resolveAgentOutcomes);
+cron.schedule('*/30 * * * *', safeCron('resolveAgentOutcomes', resolveAgentOutcomes));
 
 app.get('/api/arbitrage', (req, res) => {
   if (_arbCache && (Date.now() - _arbCache.ts < 6 * 60 * 1000)) {
@@ -24176,19 +24260,171 @@ app.get('/api/intelligence', async (req, res) => {
   }
 });
 
-// 8. CRONS
-setInterval(resolveSignalOutcomes, 30 * 60 * 1000);    // resolve outcomes every 30 min
-setInterval(refreshSourceWeights, 60 * 60 * 1000);      // refresh weights hourly
-setInterval(updatePlatformMetrics, 60 * 60 * 1000);     // platform metrics hourly
-setTimeout(() => {                                        // initial run 60s after boot
-  resolveSignalOutcomes();
-  refreshSourceWeights();
+// 8. CRONS — all wrapped with safeCron to prevent unhandled rejections
+setInterval(safeCron('resolveSignalOutcomes', resolveSignalOutcomes), 30 * 60 * 1000);
+setInterval(safeCron('refreshSourceWeights', refreshSourceWeights), 60 * 60 * 1000);
+setInterval(safeCron('updatePlatformMetrics', updatePlatformMetrics), 60 * 60 * 1000);
+setTimeout(() => {
+  resolveSignalOutcomes().catch(e => _logError('boot/resolveSignalOutcomes', e));
+  refreshSourceWeights().catch(e => _logError('boot/refreshSourceWeights', e));
   // Add missing columns if they don't exist yet
   dbQuery('ALTER TABLE signal_outcomes ADD COLUMN IF NOT EXISTS confidence_level TEXT').catch(() => {});
   dbQuery('ALTER TABLE signal_outcomes ADD COLUMN IF NOT EXISTS whale_count INTEGER DEFAULT 0').catch(() => {});
   dbQuery('ALTER TABLE signal_outcomes ADD COLUMN IF NOT EXISTS edge_cents INTEGER').catch(() => {});
   dbQuery('ALTER TABLE source_accuracy ADD COLUMN IF NOT EXISTS avg_edge NUMERIC').catch(() => {});
 }, 60000);
+
+// ══════════════════════════════════════════════════════════════════════
+// /health ENDPOINT — observability for uptime monitoring
+// ══════════════════════════════════════════════════════════════════════
+app.get('/health', (req, res) => {
+  const uptimeMin = Math.round(process.uptime() / 60);
+  const mem = process.memoryUsage();
+  const now = Date.now();
+  // Check staleness (>15 min without data update = warning)
+  const staleThresholdMs = 15 * 60 * 1000;
+  const staleChecks = {};
+  for (const [key, ts] of Object.entries(_healthTimestamps)) {
+    if (key === 'boot' || key === 'watchdogRestarts' || key === 'lastCacheCleanup' || !ts) continue;
+    const age = now - new Date(ts).getTime();
+    staleChecks[key] = { last: ts, age_min: Math.round(age / 60000), stale: age > staleThresholdMs };
+  }
+  const anyStale = Object.values(staleChecks).some(c => c.stale);
+  res.json({
+    status: anyStale ? 'DEGRADED' : 'OK',
+    uptime_minutes: uptimeMin,
+    memory: {
+      rss_mb: Math.round(mem.rss / 1048576),
+      heap_used_mb: Math.round(mem.heapUsed / 1048576),
+      heap_total_mb: Math.round(mem.heapTotal / 1048576)
+    },
+    data_freshness: staleChecks,
+    watchdog_restarts: _healthTimestamps.watchdogRestarts,
+    recent_errors: _recentErrors.slice(-10),
+    boot_time: _healthTimestamps.boot
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// WATCHDOG — every 5 min, check data freshness and restart stale polls
+// ══════════════════════════════════════════════════════════════════════
+setInterval(() => {
+  try {
+    const now = Date.now();
+    const staleMs = 20 * 60 * 1000; // 20 min threshold
+
+    // Check whale cache
+    if (_whaleWatchCache && _whaleWatchCache.ts && (now - _whaleWatchCache.ts > staleMs)) {
+      console.warn('[watchdog] Whale cache stale, triggering refresh...');
+      _healthTimestamps.watchdogRestarts++;
+      fetchWhalePositions()
+        .then(data => { _whaleWatchCache = { ts: Date.now(), data }; _healthTimestamps.lastWhaleFetch = new Date().toISOString(); console.log('[watchdog] Whale cache refreshed'); })
+        .catch(e => _logError('watchdog/whale', e));
+    }
+
+    // Check screener cache
+    if (_screenerCache && _screenerCache.ts && (now - _screenerCache.ts > staleMs)) {
+      console.warn('[watchdog] Screener cache stale — will refresh on next request');
+      _screenerCache = null; // force refresh on next API call
+    }
+
+    // Check signals cache
+    if (_signalsCache && _signalsCache.ts && (now - _signalsCache.ts > staleMs)) {
+      _signalsCache = null; // force refresh
+    }
+
+  } catch (e) {
+    _logError('watchdog', e);
+  }
+}, 5 * 60 * 1000);
+
+// ══════════════════════════════════════════════════════════════════════
+// CACHE CLEANUP — every 30 min, prune unbounded Maps to prevent leaks
+// ══════════════════════════════════════════════════════════════════════
+setInterval(() => {
+  try {
+    const MAX_CACHE_SIZE = 500;
+    const now = Date.now();
+    const ttl = 30 * 60 * 1000; // 30 min TTL for most caches
+
+    // _catalystCache — unbounded, grows per market question
+    if (typeof _catalystCache !== 'undefined' && _catalystCache instanceof Map && _catalystCache.size > MAX_CACHE_SIZE) {
+      console.log(`[cleanup] _catalystCache: ${_catalystCache.size} → pruning to ${MAX_CACHE_SIZE}`);
+      const entries = [..._catalystCache.entries()];
+      _catalystCache.clear();
+      entries.slice(-MAX_CACHE_SIZE).forEach(([k, v]) => _catalystCache.set(k, v));
+    }
+
+    // _traderProfileCache
+    if (typeof _traderProfileCache !== 'undefined' && _traderProfileCache instanceof Map && _traderProfileCache.size > MAX_CACHE_SIZE) {
+      const entries = [..._traderProfileCache.entries()];
+      _traderProfileCache.clear();
+      entries.slice(-MAX_CACHE_SIZE).forEach(([k, v]) => _traderProfileCache.set(k, v));
+    }
+
+    // _cohortCache
+    if (typeof _cohortCache !== 'undefined' && _cohortCache instanceof Map && _cohortCache.size > MAX_CACHE_SIZE) {
+      _cohortCache.clear();
+    }
+
+    // _orderbookCache
+    if (typeof _orderbookCache !== 'undefined' && _orderbookCache instanceof Map && _orderbookCache.size > MAX_CACHE_SIZE) {
+      _orderbookCache.clear();
+    }
+
+    // _backtestCache
+    if (typeof _backtestCache !== 'undefined' && _backtestCache instanceof Map && _backtestCache.size > MAX_CACHE_SIZE) {
+      _backtestCache.clear();
+    }
+
+    // _hlCache
+    if (typeof _hlCache !== 'undefined' && _hlCache instanceof Map && _hlCache.size > MAX_CACHE_SIZE) {
+      _hlCache.clear();
+    }
+
+    // _aiAnalysisRateLimit — prune expired entries
+    if (typeof _aiAnalysisRateLimit !== 'undefined' && _aiAnalysisRateLimit instanceof Map) {
+      for (const [k, v] of _aiAnalysisRateLimit) {
+        if (v.resetAt && now > v.resetAt) _aiAnalysisRateLimit.delete(k);
+      }
+    }
+
+    // _apiKeyRateLimit — prune expired entries
+    if (typeof _apiKeyRateLimit !== 'undefined' && _apiKeyRateLimit instanceof Map) {
+      for (const [k, v] of _apiKeyRateLimit) {
+        if (v.resetAt && now > v.resetAt) _apiKeyRateLimit.delete(k);
+      }
+    }
+
+    // _predictorFollowCache — prune to max size
+    if (typeof _predictorFollowCache !== 'undefined' && _predictorFollowCache instanceof Map && _predictorFollowCache.size > MAX_CACHE_SIZE) {
+      _predictorFollowCache.clear();
+    }
+
+    // _volumeTracker — prune old market keys (object, not Map)
+    if (typeof _volumeTracker !== 'undefined' && typeof _volumeTracker === 'object') {
+      const keys = Object.keys(_volumeTracker);
+      if (keys.length > 1000) {
+        const toDelete = keys.slice(0, keys.length - 500);
+        toDelete.forEach(k => delete _volumeTracker[k]);
+        console.log(`[cleanup] _volumeTracker: pruned ${toDelete.length} stale keys`);
+      }
+    }
+
+    // _marketHistoryCache — prune (object)
+    if (typeof _marketHistoryCache !== 'undefined' && typeof _marketHistoryCache === 'object') {
+      const keys = Object.keys(_marketHistoryCache);
+      if (keys.length > 500) {
+        const toDelete = keys.slice(0, keys.length - 250);
+        toDelete.forEach(k => delete _marketHistoryCache[k]);
+      }
+    }
+
+    _healthTimestamps.lastCacheCleanup = new Date().toISOString();
+  } catch (e) {
+    _logError('cacheCleanup', e);
+  }
+}, 30 * 60 * 1000);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`HYPERFLEX server running on port ${PORT}`));
