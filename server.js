@@ -19470,8 +19470,8 @@ let _aiBriefCache = null; // { ts, data }
 
 app.get('/api/daily-brief', async (req, res) => {
   try {
-    // 30-min cache with staleness detection
-    if (_aiBriefCache && (Date.now() - _aiBriefCache.ts < 30 * 60 * 1000)) {
+    // 30-min cache with staleness detection (skip on ?refresh=1)
+    if (_aiBriefCache && (Date.now() - _aiBriefCache.ts < 30 * 60 * 1000) && req.query.refresh !== '1') {
       // Check for significant data shifts that should invalidate the cache
       let stale = false;
       try {
