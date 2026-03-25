@@ -1129,7 +1129,7 @@ function renderHlTable() {
 // Copy HL trade with play money (Flex Points)
 function copyHlTrade(trader, coin, side, sizeUsd, leverage) {
   if (!getToken()) { document.getElementById('loginOverlay').classList.add('open'); return; }
-  var alloc = prompt('Copy ' + trader + '\\'s ' + coin + ' ' + side + ' position (' + leverage + 'x)\\n\\nHow many Flex Points to allocate? (play money)', '1000');
+  var alloc = prompt('Copy ' + trader + ' ' + coin + ' ' + side + ' position (' + leverage + 'x)\n\nHow many Flex Points to allocate? (play money)', '1000');
   if (!alloc) return;
   var pts = parseInt(alloc);
   if (isNaN(pts) || pts < 100) { alert('Minimum 100 Flex Points'); return; }
