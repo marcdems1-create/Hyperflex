@@ -19544,10 +19544,29 @@ app.get('/api/fear-greed/history', async (req, res) => {
       label: d.value_classification
     })).reverse(); // oldest first for charting
 
+    // Fetch VIX (stock market fear gauge) from Yahoo Finance
+    let stockFG = [];
+    try {
+      const vixR = await fetch('https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX?range=3mo&interval=1d', { headers: { 'User-Agent': 'Mozilla/5.0' } });
+      const vixJson = await vixR.json();
+      const vixData = vixJson.chart.result[0];
+      const timestamps = vixData.timestamp || [];
+      const closes = vixData.indicators.quote[0].close || [];
+      stockFG = timestamps.map((ts, i) => {
+        const vix = closes[i];
+        if (vix == null) return null;
+        // Convert VIX to 0-100 F&G scale (inverted: high VIX = fear, low VIX = greed)
+        // VIX 10 → 90 (extreme greed), VIX 20 → 60 (greed), VIX 30 → 30 (fear), VIX 40+ → 5 (extreme fear)
+        const fg = Math.max(0, Math.min(100, Math.round(100 - (vix - 10) * 3)));
+        return { date: new Date(ts * 1000).toISOString().split('T')[0], score: fg, vix: Math.round(vix * 100) / 100 };
+      }).filter(Boolean);
+    } catch (e) { console.warn('[fear-greed] VIX fetch failed:', e.message); }
+
     // Add today's HYPERFLEX score
     const hfx = computeFearGreed();
     const result = {
       crypto: history,
+      stocks: stockFG,
       hyperflex: { score: hfx.score, label: hfx.label, color: hfx.color, factors: hfx.factors },
       updated_at: new Date().toISOString()
     };

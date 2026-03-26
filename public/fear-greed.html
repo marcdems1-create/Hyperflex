@@ -97,7 +97,23 @@ function scoreLabel(s) {
 }
 
 var _chartData = [];
+var _stockData = [];
 var _chartDays = 30;
+
+function drawLine(ctx, data, pad, cw, ch, color, opacity) {
+  if (!data || data.length < 2) return;
+  ctx.beginPath();
+  ctx.lineWidth = 2;
+  data.forEach(function(d, i) {
+    var x = pad.left + (i / (data.length - 1)) * cw;
+    var y = pad.top + ch - (d.score / 100 * ch);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = color;
+  ctx.globalAlpha = opacity;
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
 
 function drawChart(canvas, data) {
   var ctx = canvas.getContext('2d');
@@ -181,7 +197,20 @@ function drawChart(canvas, data) {
   ctx.fillStyle = grad;
   ctx.fill();
 
-  // Dots on last point
+  // Draw stock market line (VIX-based) if available
+  var stockSlice = _stockData.slice(-_chartDays);
+  if (stockSlice.length > 1) {
+    drawLine(ctx, stockSlice, pad, cw, ch, '#60a5fa', 0.6);
+    // Stock dot
+    var sx = pad.left + ((stockSlice.length - 1) / (stockSlice.length - 1)) * cw;
+    var sy = pad.top + ch - (stockSlice[stockSlice.length - 1].score / 100 * ch);
+    ctx.beginPath();
+    ctx.arc(sx, sy, 4, 0, Math.PI * 2);
+    ctx.fillStyle = '#60a5fa';
+    ctx.fill();
+  }
+
+  // Dots on last point (crypto)
   var lx = pad.left + ((data.length - 1) / (data.length - 1)) * cw;
   var ly = pad.top + ch - (data[data.length - 1].score / 100 * ch);
   ctx.beginPath();
@@ -212,6 +241,9 @@ async function loadFearGreed() {
     _chartData = crypto;
 
     var today = crypto.length > 0 ? crypto[crypto.length - 1] : { score: 0, label: 'N/A' };
+    var stocks = d.stocks || [];
+    _stockData = stocks;
+    var stockToday = stocks.length > 0 ? stocks[stocks.length - 1] : null;
 
     var html = '';
 
@@ -222,6 +254,13 @@ async function loadFearGreed() {
     html += '<div class="score-card-val" style="color:' + scoreColor(today.score) + '">' + today.score + '</div>';
     html += '<div class="score-card-tag" style="color:' + scoreColor(today.score) + '">' + scoreLabel(today.score) + '</div>';
     html += '</div>';
+    if (stockToday) {
+      html += '<div class="score-card">';
+      html += '<div class="score-card-label">Stock Market (VIX)</div>';
+      html += '<div class="score-card-val" style="color:' + scoreColor(stockToday.score) + '">' + stockToday.score + '</div>';
+      html += '<div class="score-card-tag" style="color:' + scoreColor(stockToday.score) + '">' + scoreLabel(stockToday.score) + ' <span style="font-size:10px;color:var(--dim)">(VIX ' + stockToday.vix + ')</span></div>';
+      html += '</div>';
+    }
     html += '<div class="score-card">';
     html += '<div class="score-card-label">HYPERFLEX Sentiment</div>';
     html += '<div class="score-card-val" style="color:' + (hfx.color || '#eab308') + '">' + (hfx.score || '--') + '</div>';
@@ -232,7 +271,7 @@ async function loadFearGreed() {
     // Chart
     html += '<div class="chart-card">';
     html += '<div class="chart-header">';
-    html += '<div class="chart-title">Crypto Fear & Greed — 90 Days</div>';
+    html += '<div class="chart-title"><span style="color:#c9920d">&#9644; Crypto</span> &nbsp; <span style="color:#60a5fa">&#9644; Stocks</span> &nbsp; Fear & Greed — 90 Days</div>';
     html += '<div class="chart-pills">';
     html += '<button class="chart-pill" data-days="7" onclick="filterChart(7)">7D</button>';
     html += '<button class="chart-pill active" data-days="30" onclick="filterChart(30)">30D</button>';
