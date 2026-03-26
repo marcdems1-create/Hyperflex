@@ -23109,54 +23109,70 @@ async function generateAndPostDailyTweet() {
     throw new Error('Brief narrative empty — skipping tweet');
   }
 
-  // Pull whale data for the tweet
-  let whaleContext = '';
+  // Build context: pick the SINGLE most interesting market + whale data
+  let bestMarket = null;
+  const calls = briefData.ai_calls || [];
+  if (calls.length > 0) {
+    // Pick the call with highest ROI or most interesting thesis
+    bestMarket = calls[0];
+    for (const c of calls) {
+      if (c.trade && bestMarket.trade && c.trade.roi_pct > bestMarket.trade.roi_pct) bestMarket = c;
+    }
+  }
+
+  let whaleMove = '';
   try {
     const whaleData = _whaleIndexCache && _whaleIndexCache.data ? _whaleIndexCache.data : null;
     if (whaleData && whaleData.picks && whaleData.picks.length > 0) {
       const topPick = whaleData.picks[0];
       const cap = topPick.total_capital >= 1000000 ? '$' + (topPick.total_capital/1000000).toFixed(1) + 'M' : '$' + Math.round(topPick.total_capital/1000) + 'K';
-      whaleContext = `\n\nTop whale move: ${topPick.whale_count} whales have ${cap} on "${topPick.market}" (${topPick.consensus_pct}% ${topPick.consensus_side})`;
+      whaleMove = `${topPick.whale_count} wallets just put ${cap} on "${topPick.market}" — ${topPick.consensus_pct}% ${topPick.consensus_side}`;
     }
   } catch(e) {}
 
-  // Use Claude to generate a PolymarketStory-style tweet
+  // Calculate potential payout from best market
+  let payoutLine = '';
+  if (bestMarket && bestMarket.trade) {
+    const payout = Math.round((100 / bestMarket.trade.entry_cost) * 100);
+    if (payout > 150) payoutLine = `Potential payout: $${payout.toLocaleString()} on a $100 bet`;
+  }
+
   const anthropic = new Anthropic();
   const tweetRes = await anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
-    max_tokens: 300,
-    system: `You write viral prediction market tweets for @HyperFlexapp. Study this style from @PolymarketStory (50K+ views per tweet):
+    max_tokens: 280,
+    system: `You write ONE tweet. Follow this EXACT format — no deviations:
 
-HEADLINE IN CAPS WITH A QUESTION MARK?
+SHORT PROVOCATIVE HEADLINE?
 
-> Bullet point with specific data
-> Another bullet with dollar amounts
-> Third bullet building tension
+> First fact with a number
+> Second fact with a dollar amount
+> Third fact building urgency
 
-One line about a whale move or smart money flow with exact dollar amount.
+[whale/money line if available]
 
-Potential payout: $X,XXX+
+[potential payout line if available]
 
-Rules:
-- Max 260 chars (link added separately)
-- Start with a provocative ALL CAPS headline question
-- Use > for bullet points (3 max)
-- Include at least one specific dollar amount
-- End with "Potential payout: $X" or a hook
-- No hashtags. No emojis. No "Good morning" or "Today's brief"
-- Sound like a trader breaking news, not a newsletter`,
+HARD RULES:
+- Pick ONE market/story. Not a summary. ONE story.
+- Total tweet MUST be under 240 characters including all lines
+- ALL CAPS headline, 3-7 words, ends with ?
+- Exactly 3 bullet lines starting with >
+- Each bullet under 60 chars
+- Include at least one $ amount
+- No hashtags, no emojis, no "Good morning", no "Today's"
+- If it's over 240 chars, cut bullets shorter. NEVER exceed 240.`,
     messages: [{
       role: 'user',
-      content: `Write a viral tweet from this data:\n\nBrief: ${briefData.narrative.substring(0, 600)}\n\nFear & Greed: ${briefData.fear_greed?.score || 'N/A'} (${briefData.fear_greed?.label || ''})${whaleContext}\n\nAI Calls: ${(briefData.ai_calls || []).map(c => c.market + ' — ' + c.thesis + ' (' + c.confidence + ')').join('; ').substring(0, 400)}\n\nMax 260 chars. Use the @PolymarketStory format exactly.`
+      content: `Pick the SINGLE most interesting story and write one tweet.\n\nMarket: ${bestMarket ? bestMarket.market + ' — ' + bestMarket.thesis : 'N/A'}\nFear & Greed: ${briefData.fear_greed?.score || 'N/A'}\nWhale move: ${whaleMove || 'None detected'}\nPayout: ${payoutLine || 'N/A'}\n\nBrief excerpt: ${briefData.narrative.substring(0, 400)}\n\nUNDER 240 CHARS TOTAL. Count carefully.`
     }]
   });
 
   let tweet = (tweetRes.content[0]?.text || '').trim();
-  // Remove quotes if Claude wrapped it
   tweet = tweet.replace(/^["']|["']$/g, '').trim();
-  // Append link
-  const fullTweet = tweet.length > 260 ? tweet.substring(0, 257) + '...' : tweet;
-  const tweetWithLink = fullTweet + '\n\nhyperflex.network/brief';
+  // Hard cap at 240 chars to leave room for link
+  if (tweet.length > 240) tweet = tweet.substring(0, 237) + '...';
+  const tweetWithLink = tweet + '\n\nhyperflex.network/brief';
 
   if (tweetWithLink.length > 280) {
     // Truncate tweet body to fit
