@@ -621,7 +621,7 @@ function consistencyDot(traderName, proxyWallet) {
   return ' <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#22c55e;vertical-align:middle;margin-left:4px" title="Consistent winner — profitable for ~' + weeks + ' consecutive weeks"></span>';
 }
 
-function escAttr(s) { return String(s).replace(/'/g, '\\x27').replace(/"/g, '&quot;').replace(/\\/g, '\\\\'); }
+function escAttr(s) { return String(s).replace(/\\/g, '\\\\').replace(/'/g, '\\x27').replace(/"/g, '&quot;').replace(/\n/g, ' ').replace(/\r/g, ''); }
 
 function getToken() { return localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || null; }
 
@@ -698,6 +698,7 @@ function whaleName(name, wallet) {
 }
 
 function fmt$(n) {
+  n = parseFloat(n) || 0;
   if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
   if (n >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
   return '$' + n.toFixed(0);
@@ -1237,18 +1238,25 @@ function renderWhaleFlow() {
   document.getElementById('wfSentYes').textContent = yesPct + '% YES';
   document.getElementById('wfSentNo').textContent = noPct + '% NO';
 
-  // Whale concentration
+  // Whale concentration — filter out resolved/near-resolved markets (price >= 0.95 or <= 0.05)
   const mktMap = {};
   positions.forEach(p => {
     const key = p.market || 'Unknown';
-    if (!mktMap[key]) mktMap[key] = { q: key, wc: 0, cap: 0, yc: 0, nc: 0, url: p.market_url || '' };
+    if (!mktMap[key]) mktMap[key] = { q: key, wc: 0, cap: 0, yc: 0, nc: 0, url: p.market_url || '', prices: [] };
     mktMap[key].wc++;
     mktMap[key].cap += (p.size || 0);
+    if (p.current_price != null) mktMap[key].prices.push(p.current_price);
     const s = (p.side || '').toUpperCase();
     if (s === 'YES' || s === 'Y') mktMap[key].yc++;
     else if (s === 'NO' || s === 'N') mktMap[key].nc++;
   });
-  const top5 = Object.values(mktMap).sort((a, b) => b.wc - a.wc).slice(0, 5);
+  // Filter out essentially resolved markets
+  const filteredMkts = Object.values(mktMap).filter(m => {
+    if (!m.prices.length) return true;
+    const avgPrice = m.prices.reduce((s, v) => s + v, 0) / m.prices.length;
+    return avgPrice < 0.95 && avgPrice > 0.05;
+  });
+  const top5 = filteredMkts.sort((a, b) => b.wc - a.wc).slice(0, 5);
   const concEl = document.getElementById('wfConcentration');
   concEl.innerHTML = top5.map(m => {
     const total = m.yc + m.nc || 1;
@@ -1288,14 +1296,20 @@ async function loadData() {
     if (!res.ok) throw new Error('API returned ' + res.status);
     _whaleData = await res.json();
 
+    // Validate response shape
+    if (!_whaleData || !Array.isArray(_whaleData.whales)) {
+      throw new Error('Invalid response shape — expected { whales: [...] }');
+    }
+
     // Load Alpha scores
     if (alphaRes && alphaRes.ok) {
       try { const ad = await alphaRes.json(); _alphaScores = ad.scores || {}; } catch(e) {}
     }
 
-    renderStats();
-    renderWhaleFlow();
-    applyFilters();
+    // Render each section independently so a failure in one doesn't block the others
+    try { renderStats(); } catch(e) { console.error('[whale-watch] renderStats failed:', e); }
+    try { renderWhaleFlow(); } catch(e) { console.error('[whale-watch] renderWhaleFlow failed:', e); }
+    try { applyFilters(); } catch(e) { console.error('[whale-watch] applyFilters failed:', e); }
 
     document.getElementById('loadingState').style.display = 'none';
     document.getElementById('tableWrap').style.display = '';
@@ -1303,6 +1317,7 @@ async function loadData() {
     console.error('[whale-watch]', err);
     document.getElementById('loadingState').innerHTML =
       '<p style="color:var(--red);font-family:var(--mono);font-size:13px">Failed to load whale data. Try refreshing.</p>' +
+      '<p style="color:var(--muted);font-family:var(--mono);font-size:11px;margin-top:4px">' + (err.message || '') + '</p>' +
       '<button class="refresh-btn" onclick="loadData()" style="margin-top:12px">Try again</button>';
   } finally {
     document.getElementById('refreshBtn').disabled = false;

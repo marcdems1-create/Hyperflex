@@ -23198,8 +23198,13 @@ async function postTweet(text) {
   return data;
 }
 
-async function generateAndPostDailyTweet() {
-  console.log('[daily-tweet] Generating tweet from brief...');
+// Generate tweet text without posting — used by draft mode
+async function generateDraftTweet() {
+  console.log('[daily-tweet/draft] Generating draft tweet...');
+  return await generateAndPostDailyTweet(true);
+}
+
+async function generateAndPostDailyTweet(draftOnly = false) {
 
   // Get brief data directly from cache or generate fresh
   let briefData;
@@ -23249,58 +23254,89 @@ async function generateAndPostDailyTweet() {
   const tweetRes = await anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 280,
-    system: `You write ONE tweet. Follow this EXACT format — no deviations:
+    system: `You write viral prediction market tweets like @PolymarketStory. Conversational, provocative, slightly unhinged. You pick ONE market and tell ONE story.
 
-SHORT PROVOCATIVE HEADLINE?
-
-> First fact with a number
-> Second fact with a dollar amount
-> Third fact building urgency
-
-[whale/money line if available]
-
-[potential payout line if available]
+STYLE:
+- Sound like a sharp trader talking to friends, not a newsletter
+- Lead with the most shocking number or fact
+- Create tension — "someone is about to lose a LOT of money"
+- Use $ amounts always (e.g. "$2.3M riding on this")
+- Short punchy sentences. No filler words.
+- End with a hook — a question, a dare, or a cliffhanger
 
 HARD RULES:
-- Pick ONE market/story. Not a summary. ONE story.
-- ALL CAPS headline, 3-7 words, ends with ?
-- Exactly 3 bullet lines starting with >
-- Each bullet under 50 chars
-- Use specific numbers: "$70,000" not "$billions"
-- Do NOT use cashtags ($BTC, $ETH etc) — Twitter auto-links them
-- No hashtags, no emojis, no "Good morning", no "Today's"
-- Output ONLY the tweet text. No character counts, no notes, no explanations, no "---", no markdown.
-- Keep the whole thing short. 5 lines max.`,
+- NEVER use bullet points or lines starting with >
+- NEVER use hashtags or emojis
+- NEVER use cashtags ($BTC, $ETH) — Twitter auto-links them
+- NEVER start with "Good morning" or "Today's"
+- MUST include at least one specific $ amount
+- MUST be under 240 characters total — do NOT go over, do NOT truncate
+- Pick ONE market. Tell ONE story. That's it.
+- Output ONLY the tweet text. No notes, no explanations, no markdown.`,
     messages: [{
       role: 'user',
-      content: `Pick the SINGLE most interesting story and write one tweet. Output ONLY the tweet text, nothing else.\n\nMarket: ${bestMarket ? bestMarket.market + ' — ' + bestMarket.thesis : 'N/A'}\nFear & Greed: ${briefData.fear_greed?.score || 'N/A'}\nWhale move: ${whaleMove || 'None detected'}\nPayout: ${payoutLine || 'N/A'}\n\nBrief excerpt: ${briefData.narrative.substring(0, 400)}`
+      content: `Write one tweet about the most interesting story here. MUST be under 240 chars. Output ONLY the tweet text.\n\nMarket: ${bestMarket ? bestMarket.market + ' — ' + bestMarket.thesis : 'N/A'}\nFear & Greed: ${briefData.fear_greed?.score || 'N/A'}\nWhale move: ${whaleMove || 'None detected'}\nPayout: ${payoutLine || 'N/A'}\n\nBrief excerpt: ${briefData.narrative.substring(0, 400)}`
     }]
   });
 
   let tweet = (tweetRes.content[0]?.text || '').trim();
-  // Strip any meta-commentary Claude might leak (character counts, notes, markdown)
+  // Strip any meta-commentary Claude might leak
   tweet = tweet.replace(/\*\*.*?\*\*/g, '').replace(/^---+$/gm, '').replace(/character count.*$/gim, '').replace(/^\s*\n/gm, '\n').trim();
   tweet = tweet.replace(/^["']|["']$/g, '').trim();
-  // Hard cap at 240 chars to leave room for link
-  if (tweet.length > 240) tweet = tweet.substring(0, 237) + '...';
+  // Remove any > bullet lines that slipped through
+  tweet = tweet.replace(/^>\s*/gm, '').trim();
+  // Hard cap at 240 chars — no truncation, just cut cleanly at last sentence/space
+  if (tweet.length > 240) {
+    // Try to cut at last sentence boundary
+    let cut = tweet.substring(0, 240);
+    const lastPeriod = cut.lastIndexOf('.');
+    const lastQuestion = cut.lastIndexOf('?');
+    const lastBreak = Math.max(lastPeriod, lastQuestion);
+    if (lastBreak > 140) {
+      tweet = cut.substring(0, lastBreak + 1);
+    } else {
+      // Fall back to last space
+      const lastSpace = cut.lastIndexOf(' ');
+      tweet = lastSpace > 100 ? cut.substring(0, lastSpace) : cut;
+    }
+  }
   const tweetWithLink = tweet + '\n\nhyperflex.network/brief';
 
   if (tweetWithLink.length > 280) {
-    // Truncate tweet body to fit
-    const maxBody = 280 - '\n\nhyperflex.network/brief'.length - 3;
-    const truncated = tweet.substring(0, maxBody) + '...';
-    return await postTweet(truncated + '\n\nhyperflex.network/brief');
+    const maxBody = 280 - '\n\nhyperflex.network/brief'.length;
+    let cut = tweet.substring(0, maxBody);
+    const lastSpace = cut.lastIndexOf(' ');
+    if (lastSpace > 80) cut = cut.substring(0, lastSpace);
+    const finalTweet = cut + '\n\nhyperflex.network/brief';
+    if (draftOnly) return { text: finalTweet, posted: false };
+    return { text: finalTweet, posted: true, ...(await postTweet(finalTweet)) };
   }
 
-  return await postTweet(tweetWithLink);
+  if (draftOnly) return { text: tweetWithLink, posted: false };
+  return { text: tweetWithLink, posted: true, ...(await postTweet(tweetWithLink)) };
 }
 
 // POST /api/tweet-brief — manual trigger (admin only)
-// Returns immediately, runs tweet generation in background to avoid Railway timeout
-app.post('/api/tweet-brief', (req, res) => {
+// ?draft=true returns the tweet text without posting
+// Returns immediately in post mode, runs tweet generation in background to avoid Railway timeout
+app.post('/api/tweet-brief', async (req, res) => {
   const adminSecret = req.headers['x-admin-secret'] || req.query.admin;
   if (adminSecret !== process.env.ADMIN_SECRET) return res.status(403).json({ error: 'Unauthorized' });
-  // Fire and respond immediately
+
+  const isDraft = req.query.draft === 'true' || req.body?.draft === true;
+
+  if (isDraft) {
+    // Draft mode: generate tweet text and return it without posting
+    try {
+      const result = await generateDraftTweet();
+      return res.json({ ok: true, draft: true, tweet: result.text });
+    } catch (err) {
+      console.error('[tweet-brief/draft]', err.message);
+      return res.status(500).json({ error: 'Draft generation failed', detail: err.message });
+    }
+  }
+
+  // Post mode: fire and respond immediately
   res.json({ ok: true, status: 'Tweet generation started — check @HyperFlexapp in ~30 seconds' });
   generateAndPostDailyTweet().catch(err => {
     console.error('[tweet-brief]', err.message);
