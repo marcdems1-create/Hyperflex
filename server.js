@@ -9455,7 +9455,7 @@ const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
   'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u', 'win',
-  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health'
+  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed'
 ]);
 
 // GET /my — private member dashboard
@@ -19528,6 +19528,38 @@ app.get('/api/fear-greed', (req, res) => {
   }
 });
 
+// GET /api/fear-greed/history — crypto Fear & Greed Index from Alternative.me + HYPERFLEX score
+let _fgHistoryCache = null;
+app.get('/api/fear-greed/history', async (req, res) => {
+  try {
+    const days = Math.min(365, parseInt(req.query.days) || 90);
+    if (_fgHistoryCache && (Date.now() - _fgHistoryCache.ts < 30 * 60 * 1000) && _fgHistoryCache.days >= days) {
+      return res.json(_fgHistoryCache.data);
+    }
+    const r = await fetch(`https://api.alternative.me/fng/?limit=${days}&format=json`);
+    const json = await r.json();
+    const history = (json.data || []).map(d => ({
+      date: new Date(parseInt(d.timestamp) * 1000).toISOString().split('T')[0],
+      score: parseInt(d.value),
+      label: d.value_classification
+    })).reverse(); // oldest first for charting
+
+    // Add today's HYPERFLEX score
+    const hfx = computeFearGreed();
+    const result = {
+      crypto: history,
+      hyperflex: { score: hfx.score, label: hfx.label, color: hfx.color, factors: hfx.factors },
+      updated_at: new Date().toISOString()
+    };
+    _fgHistoryCache = { ts: Date.now(), data: result, days };
+    res.json(result);
+  } catch (err) {
+    console.error('[fear-greed/history]', err.message);
+    if (_fgHistoryCache) return res.json(_fgHistoryCache.data);
+    res.status(500).json({ error: 'Failed to fetch F&G history' });
+  }
+});
+
 // ════════════════════════════════════════════════════════════
 // DAILY BRIEFING / WHALE DIGEST
 // ════════════════════════════════════════════════════════════
@@ -20710,6 +20742,7 @@ app.get('/api/crystal-ball', async (req, res) => {
 // GET /crystal-ball — Crystal Ball prediction page
 app.get('/crystal-ball', (req, res) => res.sendFile(path.join(__dirname, 'public', 'crystal-ball.html')));
 app.get('/brief', (req, res) => res.sendFile(path.join(__dirname, 'public', 'brief.html')));
+app.get('/fear-greed', (req, res) => res.sendFile(path.join(__dirname, 'public', 'fear-greed.html')));
 
 // ════════════════════════════════════════════════════════════
 // EMAIL SUBSCRIBERS — daily briefing signup

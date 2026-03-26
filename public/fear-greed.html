@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>Fear & Greed Index — HYPERFLEX</title>
+<meta name="description" content="Crypto Fear & Greed Index chart with HYPERFLEX prediction market sentiment. Track market emotions over time."/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+:root { --sans: 'Syne', sans-serif; --mono: 'Space Mono', monospace; --gold: #c9920d; --text: #e8e4d9; --text-soft: #a09d94; --dim: #7a7870; --ink: #141412; --card: #1a1a17; --border: #2a2a25; --green: #22c55e; --red: #ef4444; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--ink); color: var(--text); font-family: var(--sans); min-height: 100vh; }
+
+.container { max-width: 800px; margin: 0 auto; padding: 40px 24px 80px; }
+
+.back-link { font-family: var(--mono); font-size: 12px; color: var(--gold); text-decoration: none; display: inline-block; margin-bottom: 24px; }
+.back-link:hover { text-decoration: underline; }
+
+.header { text-align: center; margin-bottom: 40px; }
+.header h1 { font-size: 32px; font-weight: 800; margin-bottom: 8px; }
+.header h1 span { color: var(--gold); }
+.header p { font-family: var(--mono); font-size: 13px; color: var(--text-soft); }
+
+/* Score cards */
+.scores-row { display: flex; gap: 16px; margin-bottom: 32px; }
+.score-card { flex: 1; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; text-align: center; }
+.score-card-label { font-family: var(--mono); font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+.score-card-val { font-size: 48px; font-weight: 800; line-height: 1; }
+.score-card-tag { font-family: var(--mono); font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-top: 8px; }
+
+/* Chart */
+.chart-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+.chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.chart-title { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--text-soft); text-transform: uppercase; letter-spacing: 1px; }
+.chart-pills { display: flex; gap: 6px; }
+.chart-pill { font-family: var(--mono); font-size: 10px; font-weight: 700; padding: 4px 10px; border-radius: 12px; border: 1px solid var(--border); background: transparent; color: var(--dim); cursor: pointer; }
+.chart-pill.active { background: var(--gold); color: var(--ink); border-color: var(--gold); }
+.chart-canvas-wrap { position: relative; width: 100%; height: 300px; }
+.chart-canvas-wrap canvas { width: 100%; height: 100%; }
+
+/* Zones legend */
+.zones { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin-top: 16px; }
+.zone { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 10px; color: var(--dim); }
+.zone-dot { width: 10px; height: 10px; border-radius: 2px; }
+
+/* Factors breakdown */
+.factors-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+.factor-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.factor-row:last-child { border-bottom: none; }
+.factor-name { font-family: var(--mono); font-size: 12px; color: var(--text-soft); }
+.factor-bar-wrap { flex: 1; margin: 0 16px; height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; }
+.factor-bar { height: 100%; border-radius: 3px; transition: width 0.6s ease; }
+.factor-val { font-family: var(--mono); font-size: 13px; font-weight: 700; min-width: 32px; text-align: right; }
+
+.source { font-family: var(--mono); font-size: 10px; color: var(--dim); text-align: center; margin-top: 16px; }
+.source a { color: var(--gold); text-decoration: none; }
+
+.loading { text-align: center; padding: 60px; font-family: var(--mono); font-size: 13px; color: var(--dim); }
+
+@media (max-width: 600px) {
+  .scores-row { flex-direction: column; }
+  .score-card-val { font-size: 40px; }
+  .chart-canvas-wrap { height: 220px; }
+  .chart-header { flex-direction: column; gap: 10px; align-items: flex-start; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="/brief" class="back-link">&larr; Back to AI Brief</a>
+
+  <div class="header">
+    <h1>Fear & <span>Greed</span> Index</h1>
+    <p>Crypto market sentiment over time</p>
+  </div>
+
+  <div id="content">
+    <div class="loading">Loading Fear & Greed data...</div>
+  </div>
+</div>
+
+<script>
+function scoreColor(s) {
+  if (s <= 20) return '#ef4444';
+  if (s <= 40) return '#f97316';
+  if (s <= 60) return '#eab308';
+  if (s <= 80) return '#22c55e';
+  return '#16a34a';
+}
+function scoreLabel(s) {
+  if (s <= 20) return 'Extreme Fear';
+  if (s <= 40) return 'Fear';
+  if (s <= 60) return 'Neutral';
+  if (s <= 80) return 'Greed';
+  return 'Extreme Greed';
+}
+
+var _chartData = [];
+var _chartDays = 30;
+
+function drawChart(canvas, data) {
+  var ctx = canvas.getContext('2d');
+  var dpr = window.devicePixelRatio || 1;
+  var w = canvas.parentElement.clientWidth;
+  var h = canvas.parentElement.clientHeight;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+  ctx.scale(dpr, dpr);
+
+  var pad = { top: 20, right: 16, bottom: 40, left: 40 };
+  var cw = w - pad.left - pad.right;
+  var ch = h - pad.top - pad.bottom;
+
+  // Background zones
+  var zones = [
+    { y0: 0, y1: 20, color: 'rgba(239,68,68,0.06)' },
+    { y0: 20, y1: 40, color: 'rgba(249,115,22,0.04)' },
+    { y0: 40, y1: 60, color: 'rgba(234,179,8,0.03)' },
+    { y0: 60, y1: 80, color: 'rgba(34,197,94,0.04)' },
+    { y0: 80, y1: 100, color: 'rgba(22,163,106,0.06)' }
+  ];
+  zones.forEach(function(z) {
+    ctx.fillStyle = z.color;
+    var y1 = pad.top + ch - (z.y1 / 100 * ch);
+    var y0 = pad.top + ch - (z.y0 / 100 * ch);
+    ctx.fillRect(pad.left, y1, cw, y0 - y1);
+  });
+
+  // Grid lines
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.lineWidth = 1;
+  [0, 25, 50, 75, 100].forEach(function(v) {
+    var y = pad.top + ch - (v / 100 * ch);
+    ctx.beginPath();
+    ctx.moveTo(pad.left, y);
+    ctx.lineTo(pad.left + cw, y);
+    ctx.stroke();
+    ctx.fillStyle = '#7a7870';
+    ctx.font = '10px "Space Mono", monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(v, pad.left - 6, y + 4);
+  });
+
+  if (data.length === 0) return;
+
+  // X axis labels
+  ctx.fillStyle = '#7a7870';
+  ctx.font = '10px "Space Mono", monospace';
+  ctx.textAlign = 'center';
+  var step = Math.max(1, Math.floor(data.length / 6));
+  for (var i = 0; i < data.length; i += step) {
+    var x = pad.left + (i / (data.length - 1)) * cw;
+    var parts = data[i].date.split('-');
+    ctx.fillText(parts[1] + '/' + parts[2], x, h - pad.bottom + 20);
+  }
+
+  // Line
+  ctx.beginPath();
+  ctx.lineWidth = 2;
+  data.forEach(function(d, i) {
+    var x = pad.left + (i / (data.length - 1)) * cw;
+    var y = pad.top + ch - (d.score / 100 * ch);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = '#c9920d';
+  ctx.stroke();
+
+  // Gradient fill
+  var lastX = pad.left + cw;
+  var lastY = pad.top + ch - (data[data.length - 1].score / 100 * ch);
+  ctx.lineTo(lastX, pad.top + ch);
+  ctx.lineTo(pad.left, pad.top + ch);
+  ctx.closePath();
+  var grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
+  grad.addColorStop(0, 'rgba(201,146,13,0.2)');
+  grad.addColorStop(1, 'rgba(201,146,13,0)');
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Dots on last point
+  var lx = pad.left + ((data.length - 1) / (data.length - 1)) * cw;
+  var ly = pad.top + ch - (data[data.length - 1].score / 100 * ch);
+  ctx.beginPath();
+  ctx.arc(lx, ly, 5, 0, Math.PI * 2);
+  ctx.fillStyle = scoreColor(data[data.length - 1].score);
+  ctx.fill();
+  ctx.strokeStyle = '#141412';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+}
+
+function filterChart(days) {
+  _chartDays = days;
+  document.querySelectorAll('.chart-pill').forEach(function(p) {
+    p.classList.toggle('active', parseInt(p.dataset.days) === days);
+  });
+  var filtered = _chartData.slice(-days);
+  drawChart(document.getElementById('fgChart'), filtered);
+}
+
+async function loadFearGreed() {
+  try {
+    var res = await fetch('/api/fear-greed/history?days=90');
+    if (!res.ok) throw new Error('API error');
+    var d = await res.json();
+    var crypto = d.crypto || [];
+    var hfx = d.hyperflex || {};
+    _chartData = crypto;
+
+    var today = crypto.length > 0 ? crypto[crypto.length - 1] : { score: 0, label: 'N/A' };
+
+    var html = '';
+
+    // Score cards
+    html += '<div class="scores-row">';
+    html += '<div class="score-card">';
+    html += '<div class="score-card-label">Crypto Fear & Greed</div>';
+    html += '<div class="score-card-val" style="color:' + scoreColor(today.score) + '">' + today.score + '</div>';
+    html += '<div class="score-card-tag" style="color:' + scoreColor(today.score) + '">' + scoreLabel(today.score) + '</div>';
+    html += '</div>';
+    html += '<div class="score-card">';
+    html += '<div class="score-card-label">HYPERFLEX Sentiment</div>';
+    html += '<div class="score-card-val" style="color:' + (hfx.color || '#eab308') + '">' + (hfx.score || '--') + '</div>';
+    html += '<div class="score-card-tag" style="color:' + (hfx.color || '#eab308') + '">' + (hfx.label || 'N/A') + '</div>';
+    html += '</div>';
+    html += '</div>';
+
+    // Chart
+    html += '<div class="chart-card">';
+    html += '<div class="chart-header">';
+    html += '<div class="chart-title">Crypto Fear & Greed — 90 Days</div>';
+    html += '<div class="chart-pills">';
+    html += '<button class="chart-pill" data-days="7" onclick="filterChart(7)">7D</button>';
+    html += '<button class="chart-pill active" data-days="30" onclick="filterChart(30)">30D</button>';
+    html += '<button class="chart-pill" data-days="90" onclick="filterChart(90)">90D</button>';
+    html += '</div></div>';
+    html += '<div class="chart-canvas-wrap"><canvas id="fgChart"></canvas></div>';
+    html += '<div class="zones">';
+    html += '<div class="zone"><div class="zone-dot" style="background:#ef4444"></div> Extreme Fear (0-20)</div>';
+    html += '<div class="zone"><div class="zone-dot" style="background:#f97316"></div> Fear (21-40)</div>';
+    html += '<div class="zone"><div class="zone-dot" style="background:#eab308"></div> Neutral (41-60)</div>';
+    html += '<div class="zone"><div class="zone-dot" style="background:#22c55e"></div> Greed (61-80)</div>';
+    html += '<div class="zone"><div class="zone-dot" style="background:#16a34a"></div> Extreme Greed (81-100)</div>';
+    html += '</div></div>';
+
+    // HYPERFLEX factors breakdown
+    if (hfx.factors) {
+      var factorNames = {
+        whale_sentiment: 'Whale Sentiment',
+        price_momentum: 'Price Momentum',
+        volume_trend: 'Volume Trend',
+        whale_concentration: 'Whale Concentration',
+        leverage_avg: 'Leverage Average'
+      };
+      html += '<div class="factors-card">';
+      html += '<div class="chart-title" style="margin-bottom:16px">HYPERFLEX Score Breakdown</div>';
+      for (var key in hfx.factors) {
+        var val = hfx.factors[key];
+        var col = scoreColor(val);
+        html += '<div class="factor-row">';
+        html += '<div class="factor-name">' + (factorNames[key] || key) + '</div>';
+        html += '<div class="factor-bar-wrap"><div class="factor-bar" style="width:' + val + '%;background:' + col + '"></div></div>';
+        html += '<div class="factor-val" style="color:' + col + '">' + val + '</div>';
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+
+    html += '<div class="source">Crypto data from <a href="https://alternative.me/crypto/fear-and-greed-index/" target="_blank">Alternative.me</a> &middot; HYPERFLEX score from whale + market data</div>';
+
+    document.getElementById('content').innerHTML = html;
+
+    // Draw chart after DOM update
+    setTimeout(function() {
+      filterChart(30);
+      window.addEventListener('resize', function() { filterChart(_chartDays); });
+    }, 50);
+
+  } catch (err) {
+    console.error('[fear-greed]', err);
+    document.getElementById('content').innerHTML = '<div class="loading">Failed to load Fear & Greed data. <a href="javascript:loadFearGreed()" style="color:#c9920d">Retry</a></div>';
+  }
+}
+
+loadFearGreed();
+</script>
+</body>
+</html>
