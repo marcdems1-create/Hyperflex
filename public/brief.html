@@ -154,12 +154,15 @@ body { background: var(--ink); color: var(--text); font-family: var(--sans); min
   </div>
 
   <!-- Fear & Greed -->
-  <div class="fg-card" id="fgCard" style="display:none">
+  <a href="/signals#fear-greed" style="text-decoration:none;display:block">
+  <div class="fg-card" id="fgCard" style="display:none;cursor:pointer;transition:border-color 0.2s" onmouseenter="this.style.borderColor='var(--gold)'" onmouseleave="this.style.borderColor='var(--border)'">
     <div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">Fear & Greed Index</div>
     <div class="fg-score" id="fgScore">--</div>
     <div class="fg-label" id="fgLabel">--</div>
     <div class="fg-sub" id="fgChange"></div>
+    <div style="font-family:var(--mono);font-size:10px;color:var(--gold);margin-top:10px">View breakdown &rarr;</div>
   </div>
+  </a>
 
   <!-- AI Calls -->
   <div class="calls-section" id="callsSection" style="display:none">
