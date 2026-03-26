@@ -23109,15 +23109,45 @@ async function generateAndPostDailyTweet() {
     throw new Error('Brief narrative empty — skipping tweet');
   }
 
-  // Use Claude to generate a concise tweet
+  // Pull whale data for the tweet
+  let whaleContext = '';
+  try {
+    const whaleData = _whaleIndexCache && _whaleIndexCache.data ? _whaleIndexCache.data : null;
+    if (whaleData && whaleData.picks && whaleData.picks.length > 0) {
+      const topPick = whaleData.picks[0];
+      const cap = topPick.total_capital >= 1000000 ? '$' + (topPick.total_capital/1000000).toFixed(1) + 'M' : '$' + Math.round(topPick.total_capital/1000) + 'K';
+      whaleContext = `\n\nTop whale move: ${topPick.whale_count} whales have ${cap} on "${topPick.market}" (${topPick.consensus_pct}% ${topPick.consensus_side})`;
+    }
+  } catch(e) {}
+
+  // Use Claude to generate a PolymarketStory-style tweet
   const anthropic = new Anthropic();
   const tweetRes = await anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 300,
-    system: `You write daily market intelligence tweets for @HyperFlexapp — a prediction market AI platform. Write a single tweet (max 260 chars to leave room for link). Be sharp, data-driven, provocative. Include 1-2 specific numbers or market calls. No hashtags. No emojis. End with a hook that makes people click. Voice: confident analyst, not hype marketer.`,
+    system: `You write viral prediction market tweets for @HyperFlexapp. Study this style from @PolymarketStory (50K+ views per tweet):
+
+HEADLINE IN CAPS WITH A QUESTION MARK?
+
+> Bullet point with specific data
+> Another bullet with dollar amounts
+> Third bullet building tension
+
+One line about a whale move or smart money flow with exact dollar amount.
+
+Potential payout: $X,XXX+
+
+Rules:
+- Max 260 chars (link added separately)
+- Start with a provocative ALL CAPS headline question
+- Use > for bullet points (3 max)
+- Include at least one specific dollar amount
+- End with "Potential payout: $X" or a hook
+- No hashtags. No emojis. No "Good morning" or "Today's brief"
+- Sound like a trader breaking news, not a newsletter`,
     messages: [{
       role: 'user',
-      content: `Write a tweet summarizing today's AI brief. Here's the data:\n\nNarrative: ${briefData.narrative.substring(0, 800)}\n\nFear & Greed: ${briefData.fear_greed?.score || 'N/A'} (${briefData.fear_greed?.label || ''})\n\nAI Calls: ${(briefData.ai_calls || []).map(c => c.market + ' — ' + c.thesis).join('; ').substring(0, 300)}\n\nKeep under 260 characters. No hashtags. No emojis.`
+      content: `Write a viral tweet from this data:\n\nBrief: ${briefData.narrative.substring(0, 600)}\n\nFear & Greed: ${briefData.fear_greed?.score || 'N/A'} (${briefData.fear_greed?.label || ''})${whaleContext}\n\nAI Calls: ${(briefData.ai_calls || []).map(c => c.market + ' — ' + c.thesis + ' (' + c.confidence + ')').join('; ').substring(0, 400)}\n\nMax 260 chars. Use the @PolymarketStory format exactly.`
     }]
   });
 
