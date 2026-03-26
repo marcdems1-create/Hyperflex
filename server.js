@@ -20525,7 +20525,7 @@ app.get('/api/crystal-ball', async (req, res) => {
             } else {
               await supabase.from('prediction_log').insert(body);
             }
-          } catch (e) { /* fire-and-forget */ }
+          } catch (e) { console.warn('[prediction-log] Insert failed:', e.message); }
         })();
       }
     }
