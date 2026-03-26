@@ -22504,7 +22504,7 @@ async function fetchConsistentTraders() {
 
     return {
       address,
-      display_name: t.userName || t.username || t.name || (address ? address.slice(0, 6) + '...' + address.slice(-4) : 'Trader'),
+      display_name: (() => { const n = t.userName || t.username || t.name || ''; return (!n || /^0x[0-9a-fA-F]{6,}/.test(n)) ? getWhaleNickname(address || n || `trader_${addrLower}`) : n; })(),
       consistency_score: consistencyScore,
       pnl_day: Math.round(dayPnl),
       pnl_week: Math.round(weekPnl),
