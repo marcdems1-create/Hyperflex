@@ -172,11 +172,6 @@ td { padding: 12px 14px; font-size: 13px; vertical-align: middle; }
 .empty-state h3 { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
 .empty-state p { font-family: var(--mono); font-size: 12px; color: var(--muted); }
 
-/* VIEW TOGGLE */
-.view-toggle { display: flex; gap: 4px; }
-.view-btn { font-family: var(--mono); font-size: 12px; padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; transition: all 0.2s; }
-.view-btn.active { background: var(--gold-dim); color: var(--gold); border-color: rgba(201,146,13,0.3); }
-.view-btn:hover { border-color: rgba(201,146,13,0.2); color: var(--text-soft); }
 
 /* STORY CARDS */
 .cards-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
@@ -258,19 +253,29 @@ td { padding: 12px 14px; font-size: 13px; vertical-align: middle; }
   .story-roi { gap: 8px; }
   .story-card { padding: 16px; }
 }
-.narrative-row{display:flex;align-items:center;gap:12px;padding:10px 14px;background:#0e0e0c;border:1px solid #1e1e1c;border-radius:8px;cursor:pointer;transition:border-color .15s,background .15s;position:relative;overflow:hidden}
-.narrative-row:hover{border-color:#333;background:#111110}
-.narrative-row.active{border-color:#c9920d;background:#111110}
-.narrative-bar-fill{position:absolute;left:0;top:0;bottom:0;background:rgba(201,146,13,0.07);border-radius:8px 0 0 8px;pointer-events:none;transition:width .4s ease}
-.narrative-name{font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:#f0ebe3;min-width:180px;flex-shrink:0;position:relative}
-.narrative-dominance{font-family:'Space Mono',monospace;font-size:14px;font-weight:700;color:#c9920d;min-width:52px;flex-shrink:0;position:relative}
-.narrative-weekly{font-family:'Space Mono',monospace;font-size:11px;padding:2px 7px;border-radius:4px;flex-shrink:0;min-width:54px;text-align:center;position:relative}
-.narrative-weekly.up{background:rgba(0,200,100,.12);color:#00c864}
-.narrative-weekly.down{background:rgba(200,50,50,.12);color:#e05252}
-.narrative-weekly.flat{background:#1a1a18;color:#555}
-.narrative-count{font-family:'Space Mono',monospace;font-size:11px;color:#555;flex-shrink:0;position:relative}
-.narrative-top-market{font-family:'Space Mono',monospace;font-size:11px;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;position:relative}
-@media(max-width:600px){.narrative-top-market{display:none}.narrative-name{min-width:120px;font-size:11px}.narrative-row{gap:8px;padding:8px 10px}}
+/* SIGNAL LANES */
+.signal-lanes { max-width: 1200px; margin: 0 auto 8px; padding: 0 24px; }
+.signal-lane { margin-bottom: 24px; }
+.lane-header { display: flex; align-items: baseline; gap: 8px; margin-bottom: 12px; padding: 0 4px; }
+.lane-icon { font-size: 18px; }
+.lane-title { font-family: var(--sans); font-size: 16px; font-weight: 800; color: var(--text); }
+.lane-sub { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-left: 4px; }
+.lane-scroll { display: flex; gap: 14px; overflow-x: auto; padding: 4px 0 12px; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+.lane-scroll::-webkit-scrollbar { height: 4px; }
+.lane-scroll::-webkit-scrollbar-track { background: transparent; }
+.lane-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.lane-card { flex: 0 0 300px; scroll-snap-align: start; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; cursor: pointer; transition: all 0.2s; }
+.lane-card:hover { border-color: rgba(201,146,13,0.3); transform: translateY(-2px); box-shadow: 0 6px 24px rgba(0,0,0,0.3); }
+.lane-card-q { font-family: var(--sans); font-size: 14px; font-weight: 700; line-height: 1.35; color: var(--text); margin-bottom: 8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.lane-card-meta { font-family: var(--mono); font-size: 11px; color: var(--text-soft); margin-bottom: 8px; }
+.lane-card-signal { font-family: var(--mono); font-size: 12px; font-weight: 700; }
+.lane-card-signal.green { color: var(--green); }
+.lane-card-signal.gold { color: var(--gold); }
+.lane-card-signal.red { color: var(--red); }
+.lane-card-roi { font-family: var(--mono); font-size: 11px; color: var(--text-soft); margin-top: 6px; }
+.lane-card-roi strong { color: var(--green); font-weight: 700; }
+.lane-empty { font-family: var(--mono); font-size: 12px; color: var(--muted); padding: 20px; }
+@media(max-width:768px) { .lane-card { flex: 0 0 260px; } .signal-lanes { padding: 0 12px; } }
 </style>
 </head>
 <body>
@@ -281,19 +286,23 @@ td { padding: 12px 14px; font-size: 13px; vertical-align: middle; }
 
 <!-- HERO -->
 <header class="hero">
-  <div class="hero-icon">&#x1F4CA;</div>
   <h1>Market <span>Screener</span></h1>
-  <p class="hero-sub">Find markets where the smart money is flowing</p>
+  <p class="hero-sub">What should you bet on right now — and why</p>
 </header>
 
-<!-- NARRATIVE INTELLIGENCE -->
-<div id="narrative-section" style="margin:0 auto 24px;max-width:960px;padding:0 20px">
-  <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:14px">
-    <h2 style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:#f0ebe3;letter-spacing:.05em;text-transform:uppercase;margin:0">&#x1F9ED; Narrative Intelligence</h2>
-    <span style="font-family:'Space Mono',monospace;font-size:11px;color:#555">dominant themes &#xB7; lifecycle stage &#xB7; are we early or late?</span>
+<!-- SIGNAL LANES -->
+<div class="signal-lanes" id="signal-lanes">
+  <div class="signal-lane">
+    <div class="lane-header"><span class="lane-icon">&#x1F40B;</span> <span class="lane-title">Whale Moves</span><span class="lane-sub">Smart money just entered</span></div>
+    <div class="lane-scroll" id="lane-whales"></div>
   </div>
-  <div id="narrative-grid" style="display:flex;flex-direction:column;gap:6px">
-    <div style="color:#555;font-family:'Space Mono',monospace;font-size:12px;padding:12px 0">Loading narratives\u2026</div>
+  <div class="signal-lane">
+    <div class="lane-header"><span class="lane-icon">&#x1F4C8;</span> <span class="lane-title">Odds Shifting</span><span class="lane-sub">Biggest 24h movers</span></div>
+    <div class="lane-scroll" id="lane-movers"></div>
+  </div>
+  <div class="signal-lane">
+    <div class="lane-header"><span class="lane-icon">&#x23F3;</span> <span class="lane-title">Expiring Soon</span><span class="lane-sub">Resolving within 7 days, still contested</span></div>
+    <div class="lane-scroll" id="lane-expiring"></div>
   </div>
 </div>
 
@@ -366,102 +375,8 @@ let _whaleMin = 0;
 let _volMin = 0;
 let _sortBy = 'edge_score';
 let _displayCount = 50;
-let _activeNarrative = null;
 
-// Narrative Intelligence
-const NARRATIVE_COLORS = {
-  'Trump & US Politics':'#c9920d','Crypto & DeFi':'#627eea','Middle East & War':'#e05252',
-  'AI & Big Tech':'#00c8c8','Macro & Economy':'#a0c878','Ukraine & Russia':'#e08040',
-  'NBA & Basketball':'#ff6b35','NFL & American Sports':'#4a90e2','Soccer & Football':'#22c55e',
-  'Health & Science':'#f472b6','Pop Culture':'#a78bfa','Weather & Climate':'#38bdf8',
-  'Global Elections':'#c94db4','Other':'#555'
-};
-const NARRATIVE_KW = {
-  'Trump & US Politics':['trump','president','democrat','republican','congress','senate','maga','white house','tariff','vance','gop','biden','kamala','scotus'],
-  'Crypto & DeFi':['bitcoin','btc','ethereum','eth','crypto','solana','sol','defi','nft','coinbase','xrp','dogecoin','memecoin','binance','token','blockchain','backpack'],
-  'Middle East & War':['israel','iran','gaza','hamas','hezbollah','ceasefire','hormuz','middle east','lebanon','strike','invasion','military','pentagon','troops','bomb','missile','war ','idf','tehran','syria','yemen','houthi'],
-  'AI & Big Tech':['ai ','openai','gpt','artificial intelligence','nvidia','apple','microsoft','google','meta ','chatgpt','claude','gemini','tesla','spacex','elon musk'],
-  'Macro & Economy':['fed ','federal reserve','interest rate','inflation','recession','gdp','cpi','unemployment','rate cut','crude oil','s&p','nasdaq','dow','stock market','tariff','gold price','oil price'],
-  'Ukraine & Russia':['ukraine','russia','zelensky','putin','nato','kyiv','crimea','moscow'],
-  'NBA & Basketball':['nba','basketball','finals','playoff','lakers','celtics','warriors','nuggets','cavaliers','thunder','knicks','bucks','76ers','rockets','heat','suns'],
-  'NFL & American Sports':['nfl','super bowl','mlb','world series','nhl','stanley cup','ncaa','march madness','yankees','dodgers','chiefs','eagles','cowboys','ufc','boxing'],
-  'Soccer & Football':['premier league','champions league','la liga','serie a','bundesliga','uefa','fifa','world cup','manchester','liverpool','arsenal','chelsea','barcelona','real madrid','soccer','mls'],
-  'Health & Science':['measles','vaccine','fda','covid','pandemic','virus','disease','outbreak','drug','pharma','cdc','health','bird flu','monkeypox'],
-  'Pop Culture':['oscar','grammy','emmy','movie','film','album','celebrity','taylor swift','netflix','disney','tiktok','box office','award'],
-  'Weather & Climate':['temperature','hurricane','wildfire','flood','earthquake','tornado','climate','weather','heat wave','storm','drought'],
-  'Global Elections':['election','vote','ballot','candidate','prime minister','chancellor','parliament']
-};
-async function loadNarratives(){
-  try{
-    // Try lifecycle endpoint first (has stage detection), fall back to basic narratives
-    var r=await fetch('/api/screener/narrative-lifecycle');
-    var narratives=await r.json();
-    if(!Array.isArray(narratives)||!narratives.length){
-      r=await fetch('/api/screener/narratives');
-      narratives=await r.json();
-    }
-    if(!Array.isArray(narratives)||!narratives.length){document.getElementById('narrative-grid').innerHTML='<div style="color:#555;font-size:12px;font-family:Space Mono,monospace">No narrative data available yet</div>';return}
-    var maxD=narratives[0].dominance_pct||1;
-    document.getElementById('narrative-grid').innerHTML=narratives.map(function(n){
-      var color=NARRATIVE_COLORS[n.narrative]||'#c9920d';
-      var barPct=maxD>0?(n.dominance_pct/maxD)*100:0;
-
-      // Lifecycle stage badge (from lifecycle endpoint)
-      var stageHtml='';
-      if(n.stage_label){
-        stageHtml='<span style="font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:4px;font-weight:700;white-space:nowrap;flex-shrink:0;position:relative;background:'+n.stage_color+'18;color:'+n.stage_color+';border:1px solid '+n.stage_color+'33">'+n.stage_label+'</span>';
-      } else {
-        // Fallback to weekly change
-        if(n.weekly_change===null)stageHtml='<span class="narrative-weekly flat">new</span>';
-        else if(n.weekly_change>0.1)stageHtml='<span class="narrative-weekly up">\u25B2 '+n.weekly_change.toFixed(1)+'%</span>';
-        else if(n.weekly_change<-0.1)stageHtml='<span class="narrative-weekly down">\u25BC '+Math.abs(n.weekly_change).toFixed(1)+'%</span>';
-        else stageHtml='<span class="narrative-weekly flat">\u2013 0%</span>';
-      }
-
-      // Momentum arrow
-      var momHtml='';
-      if(n.momentum_7d!=null){
-        var momColor=n.momentum_7d>0?'#22c55e':n.momentum_7d<0?'#ef4444':'#555';
-        var momSign=n.momentum_7d>0?'+':'';
-        momHtml='<span style="font-family:var(--mono);font-size:10px;color:'+momColor+';flex-shrink:0;position:relative;min-width:42px;text-align:right">'+momSign+n.momentum_7d.toFixed(1)+'</span>';
-      }
-
-      // Mini sparkline from history
-      var sparkHtml='';
-      if(n.history&&n.history.length>=3){
-        var mn=Math.min.apply(null,n.history);var mx=Math.max.apply(null,n.history);var range=mx-mn||1;
-        var pts=n.history.map(function(v,i){return Math.round(i/(n.history.length-1)*40)+','+Math.round(16-(v-mn)/range*14)}).join(' ');
-        var sparkColor=n.history[n.history.length-1]>=n.history[0]?'#22c55e':'#ef4444';
-        sparkHtml='<svg width="40" height="16" viewBox="0 0 40 16" style="flex-shrink:0;position:relative;margin:0 2px"><polyline points="'+pts+'" fill="none" stroke="'+sparkColor+'" stroke-width="1.5"/></svg>';
-      }
-
-      // News intensity bar
-      var newsHtml='';
-      if(n.news_intensity!=null){
-        newsHtml='<span style="position:relative;display:inline-flex;align-items:center;gap:3px;flex-shrink:0" title="News intensity: '+n.news_intensity+'/100"><span style="width:24px;height:4px;border-radius:2px;background:#222;overflow:hidden;display:inline-block"><span style="width:'+n.news_intensity+'%;height:100%;background:'+(n.news_intensity>60?'#22c55e':n.news_intensity>30?'#c9920d':'#555')+';display:block;border-radius:2px"></span></span></span>';
-      }
-
-      return'<div class="narrative-row" onclick="filterByNarrative(\''+n.narrative.replace(/'/g,"\\'")+'\')" data-narrative="'+n.narrative+'">'+
-        '<div class="narrative-bar-fill" style="width:'+barPct+'%"></div>'+
-        '<span style="width:10px;height:10px;border-radius:50%;background:'+color+';flex-shrink:0;display:inline-block;position:relative"></span>'+
-        '<span class="narrative-name">'+n.narrative+'</span>'+
-        '<span class="narrative-dominance">'+n.dominance_pct.toFixed(1)+'%</span>'+
-        stageHtml+
-        momHtml+
-        sparkHtml+
-        newsHtml+
-        '<span class="narrative-count">'+n.market_count+' mkts</span>'+
-      '</div>';
-    }).join('');
-  }catch(e){document.getElementById('narrative-grid').innerHTML='<div style="color:#555;font-size:12px;font-family:Space Mono,monospace">Unable to load narratives</div>'}
-}
-function filterByNarrative(narrative){
-  if(_activeNarrative===narrative){_activeNarrative=null;document.querySelectorAll('.narrative-row').forEach(function(r){r.classList.remove('active')});renderView();return}
-  _activeNarrative=narrative;
-  document.querySelectorAll('.narrative-row').forEach(function(r){r.classList.toggle('active',r.dataset.narrative===narrative)});
-  renderView();
-}
-function renderView() { if (_viewMode === 'cards') renderCards(); else renderTable(); }
+function renderView() { renderCards(); }
 
 function fmtVol(n) {
   if (n >= 1000000) return '$' + (n / 1000000).toFixed(1) + 'M';
@@ -527,6 +442,7 @@ async function loadScreener() {
     document.getElementById('loading').style.display = 'none';
     document.getElementById('content').style.display = 'block';
     _displayCount = 50;
+    renderLanes();
     renderCards();
   } catch (err) {
     document.getElementById('loading').innerHTML = '<div class="empty-state"><div class="icon">&#x26A0;&#xFE0F;</div><h3>Failed to load</h3><p>' + err.message + '</p></div>';
@@ -535,11 +451,6 @@ async function loadScreener() {
 
 function getFiltered() {
   let markets = [..._allMarkets];
-  // Narrative filter
-  if (_activeNarrative && _activeNarrative !== 'Other') {
-    var kws = NARRATIVE_KW[_activeNarrative] || [];
-    if (kws.length) markets = markets.filter(function(m) { var q = (m.question || '').toLowerCase(); return kws.some(function(kw) { return q.includes(kw); }); });
-  }
   if (_catFilter !== 'all') markets = markets.filter(m => m.category === _catFilter);
   if (_whaleMin > 0) markets = markets.filter(m => m.whale_count >= _whaleMin);
   if (_volMin > 0) markets = markets.filter(m => m.volume >= _volMin);
@@ -676,9 +587,61 @@ function loadMore() {
   renderView();
 }
 
+function renderLaneCard(m, signalHtml) {
+  var safeUrl = m.url && m.url.startsWith('https://polymarket.com') ? m.url : (m.slug ? 'https://polymarket.com/event/' + m.slug : 'https://polymarket.com');
+  var yesPct = m.yes_price != null ? Math.round(m.yes_price * 100) : null;
+  var roiLine = '';
+  if (m.trade) roiLine = '<div class="lane-card-roi">Pay ' + m.trade.entry_cost + '\u00A2 \u2192 Win +' + m.trade.potential_profit + '\u00A2 \u2192 <strong>+' + m.trade.roi_pct + '% ROI</strong></div>';
+  return '<div class="lane-card" onclick="window.open(\'' + safeUrl + '\',\'_blank\')">' +
+    '<div class="lane-card-q">' + regionFlag(m.question) + ' ' + escH(m.question) + '</div>' +
+    '<div class="lane-card-meta">' + (yesPct != null ? yesPct + '% YES' : '') + (m.volume ? ' \u00B7 ' + fmtVol(m.volume) : '') + '</div>' +
+    signalHtml +
+    roiLine +
+  '</div>';
+}
+
+function renderLanes() {
+  var all = _allMarkets;
+  // Whale Moves: markets with whale_count > 0, sorted by whale capital
+  var whales = all.filter(function(m) { return m.whale_count >= 1; }).sort(function(a,b) { return (b.total_whale_capital||0) - (a.total_whale_capital||0); }).slice(0, 10);
+  var wEl = document.getElementById('lane-whales');
+  if (whales.length) {
+    wEl.innerHTML = whales.map(function(m) {
+      var cap = m.total_whale_capital >= 1000000 ? '$' + (m.total_whale_capital/1000000).toFixed(1) + 'M' : m.total_whale_capital >= 1000 ? '$' + Math.round(m.total_whale_capital/1000) + 'K' : '$' + (m.total_whale_capital||0);
+      return renderLaneCard(m, '<div class="lane-card-signal gold">' + m.whale_count + ' whale' + (m.whale_count>1?'s':'') + ' \u00B7 ' + cap + ' positioned</div>');
+    }).join('');
+  } else {
+    wEl.innerHTML = '<div class="lane-empty">No whale activity detected right now</div>';
+  }
+
+  // Odds Shifting: biggest absolute price_change_24h
+  var movers = all.filter(function(m) { return m.price_change_24h != null && Math.abs(m.price_change_24h) >= 1; }).sort(function(a,b) { return Math.abs(b.price_change_24h) - Math.abs(a.price_change_24h); }).slice(0, 10);
+  var mEl = document.getElementById('lane-movers');
+  if (movers.length) {
+    mEl.innerHTML = movers.map(function(m) {
+      var chg = m.price_change_24h;
+      var cls = chg > 0 ? 'green' : 'red';
+      return renderLaneCard(m, '<div class="lane-card-signal ' + cls + '">' + (chg > 0 ? '\u2191 +' : '\u2193 ') + Math.abs(chg).toFixed(1) + '% in 24h</div>');
+    }).join('');
+  } else {
+    mEl.innerHTML = '<div class="lane-empty">No significant price movement in the last 24h</div>';
+  }
+
+  // Expiring Soon: within 7 days, still contested (20-80%)
+  var expiring = all.filter(function(m) { return m.days_until_expiry != null && m.days_until_expiry <= 7 && m.yes_price != null && m.yes_price >= 0.15 && m.yes_price <= 0.85; }).sort(function(a,b) { return (a.days_until_expiry||0) - (b.days_until_expiry||0); }).slice(0, 10);
+  var eEl = document.getElementById('lane-expiring');
+  if (expiring.length) {
+    eEl.innerHTML = expiring.map(function(m) {
+      var dStr = m.days_until_expiry === 0 ? 'Resolves today' : 'Resolves in ' + m.days_until_expiry + 'd';
+      return renderLaneCard(m, '<div class="lane-card-signal red">' + dStr + ' \u2014 still at ' + Math.round(m.yes_price*100) + '%</div>');
+    }).join('');
+  } else {
+    eEl.innerHTML = '<div class="lane-empty">No contested markets expiring soon</div>';
+  }
+}
+
 // Init
 loadScreener();
-try { loadNarratives(); } catch(e) { console.warn('[screener] narratives failed:', e.message); }
 
 // Auto-refresh every 5 minutes
 setInterval(loadScreener, 5 * 60 * 1000);
