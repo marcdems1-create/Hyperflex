@@ -103,8 +103,8 @@ tbody tr.whale-highlight { border-left: 3px solid var(--gold); background: rgba(
 td { padding: 12px 14px; font-size: 13px; vertical-align: middle; }
 
 /* Market question */
-.mkt-question { font-family: var(--sans); font-weight: 600; font-size: 13px; line-height: 1.4; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mkt-question a { color: var(--text); transition: color 0.15s; }
+.mkt-question { font-family: var(--sans); font-weight: 600; font-size: 13px; line-height: 1.4; max-width: 320px; }
+.mkt-question a { color: var(--text); transition: color 0.15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; max-width: 300px; }
 .mkt-question a:hover { color: var(--gold); text-decoration: none; }
 
 /* YES% */
@@ -133,6 +133,27 @@ td { padding: 12px 14px; font-size: 13px; vertical-align: middle; }
 /* Trade link */
 .trade-link { font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--gold); padding: 5px 12px; border: 1px solid rgba(201,146,13,0.3); border-radius: 6px; transition: all 0.2s; white-space: nowrap; }
 .trade-link:hover { background: var(--gold-dim); text-decoration: none; }
+
+/* Edge pill in table */
+.edge-pill { font-family: var(--mono); font-size: 13px; font-weight: 800; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+.edge-pill.edge-hot { background: rgba(34,197,94,0.15); color: #22c55e; border: 2px solid rgba(34,197,94,0.4); }
+.edge-pill.edge-warm { background: rgba(201,146,13,0.12); color: #c9920d; border: 2px solid rgba(201,146,13,0.3); }
+.edge-pill.edge-cold { background: rgba(100,100,90,0.1); color: #6a6a5e; border: 2px solid rgba(100,100,90,0.2); }
+
+/* Color-coded rows */
+.row-consensus { background: rgba(34,197,94,0.04) !important; border-left: 3px solid var(--green) !important; }
+.row-consensus:hover { background: rgba(34,197,94,0.07) !important; }
+.row-divergence { background: rgba(201,146,13,0.03) !important; border-left: 3px solid var(--gold) !important; }
+.row-divergence:hover { background: rgba(201,146,13,0.06) !important; }
+
+/* AI hook under market name in table */
+.tbl-ai-hook { font-family: var(--mono); font-size: 10px; font-style: italic; color: var(--gold); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; opacity: 0.85; }
+
+/* ROI strip in table */
+.tbl-roi-strip { font-family: var(--mono); font-size: 11px; white-space: nowrap; }
+.tbl-roi-cost { color: var(--text-soft); }
+.tbl-roi-profit { color: var(--green); font-weight: 700; }
+.tbl-roi-pct { color: var(--green); font-weight: 700; font-size: 10px; }
 
 /* LOAD MORE */
 .load-more-wrap { text-align: center; padding: 28px 0; }
@@ -167,17 +188,23 @@ td { padding: 12px 14px; font-size: 13px; vertical-align: middle; }
 .story-card.high-edge { border-color: rgba(201,146,13,0.25); box-shadow: 0 0 20px rgba(201,146,13,0.06); }
 .story-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
 .story-card-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.story-card h3 { font-family: var(--sans); font-size: 16px; font-weight: 700; line-height: 1.4; color: var(--text); margin: 0 0 10px; }
+.story-card h3 { font-family: var(--sans); font-size: 18px; font-weight: 800; line-height: 1.35; color: var(--text); margin: 0 0 10px; }
 .story-hook { font-family: var(--mono); font-size: 12px; color: var(--gold); line-height: 1.5; margin-bottom: 12px; font-style: italic; }
-.story-evidence { list-style: none; padding: 0; margin: 0 0 12px; }
-.story-evidence li { font-family: var(--mono); font-size: 11px; color: var(--text-soft); line-height: 1.6; padding-left: 14px; position: relative; }
-.story-evidence li::before { content: '\203A'; position: absolute; left: 0; color: var(--muted); font-weight: 700; }
+.story-bullets { margin: 0 0 14px; }
+.story-bullet { font-family: var(--mono); font-size: 12px; color: var(--text-soft); line-height: 1.7; }
+.story-payout { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--green); margin-top: 6px; }
+.story-odds-big { font-family: var(--mono); font-size: 22px; font-weight: 800; }
+/* Card tints */
+.card-consensus { border-color: rgba(34,197,94,0.25) !important; box-shadow: 0 0 20px rgba(34,197,94,0.06); }
+.card-divergence { border-color: rgba(201,146,13,0.25) !important; box-shadow: 0 0 20px rgba(201,146,13,0.06); }
 
 /* Edge Score Badge */
-.edge-badge { display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 50%; font-family: var(--mono); font-size: 13px; font-weight: 700; flex-shrink: 0; }
-.edge-badge.high { background: rgba(34,197,94,0.12); color: #22c55e; border: 2px solid rgba(34,197,94,0.3); }
-.edge-badge.mid { background: rgba(201,146,13,0.12); color: var(--gold); border: 2px solid rgba(201,146,13,0.3); }
-.edge-badge.low { background: rgba(107,114,128,0.12); color: #9ca3af; border: 2px solid rgba(107,114,128,0.2); }
+.edge-badge { display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 48px; padding: 6px 10px; border-radius: 8px; font-family: var(--mono); flex-shrink: 0; gap: 1px; }
+.edge-badge .edge-num { font-size: 16px; font-weight: 800; line-height: 1; }
+.edge-badge .edge-label { font-size: 7px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.7; }
+.edge-badge.high { background: rgba(34,197,94,0.12); color: #22c55e; border: 1px solid rgba(34,197,94,0.3); }
+.edge-badge.mid { background: rgba(201,146,13,0.12); color: var(--gold); border: 1px solid rgba(201,146,13,0.3); }
+.edge-badge.low { background: rgba(107,114,128,0.08); color: #9ca3af; border: 1px solid rgba(107,114,128,0.15); }
 
 /* ROI Strip (reuse from crystal-ball) */
 .story-roi {
@@ -315,37 +342,10 @@ td { padding: 12px 14px; font-size: 13px; vertical-align: middle; }
 
   <!-- CONTENT -->
   <div id="content" style="display:none;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <div class="results-count" id="results-count" style="margin-bottom:0"></div>
-      <div class="view-toggle">
-        <button class="view-btn active" id="viewCards" onclick="setView('cards')">&#x1F4F0; Stories</button>
-        <button class="view-btn" id="viewTable" onclick="setView('table')">&#x1F4CA; Table</button>
-      </div>
-    </div>
+    <div class="results-count" id="results-count"></div>
 
     <!-- CARD VIEW -->
     <div id="cards-view" class="cards-grid"></div>
-
-    <!-- TABLE VIEW -->
-    <div id="table-view" style="display:none">
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Market</th>
-            <th>Category</th>
-            <th>YES%</th>
-            <th>Whales</th>
-            <th>Volume</th>
-            <th>24h Change</th>
-            <th>Expiry</th>
-            <th>Action</th>
-          </tr>
-        </thead>
-        <tbody id="results-body"></tbody>
-      </table>
-    </div>
-    </div><!-- /table-view -->
 
     <div class="load-more-wrap" id="load-more-wrap" style="display:none;">
       <button class="load-more-btn" onclick="loadMore()">Load more markets</button>
@@ -372,18 +372,24 @@ let _activeNarrative = null;
 const NARRATIVE_COLORS = {
   'Trump & US Politics':'#c9920d','Crypto & DeFi':'#627eea','Middle East & War':'#e05252',
   'AI & Big Tech':'#00c8c8','Macro & Economy':'#a0c878','Ukraine & Russia':'#e08040',
-  'NBA & Basketball':'#ff6b35','NFL & American Sports':'#4a90e2','Global Elections':'#c94db4','Other':'#555'
+  'NBA & Basketball':'#ff6b35','NFL & American Sports':'#4a90e2','Soccer & Football':'#22c55e',
+  'Health & Science':'#f472b6','Pop Culture':'#a78bfa','Weather & Climate':'#38bdf8',
+  'Global Elections':'#c94db4','Other':'#555'
 };
 const NARRATIVE_KW = {
-  'Trump & US Politics':['trump','president','democrat','republican','congress','senate','maga','white house','tariff','vance'],
-  'Crypto & DeFi':['bitcoin','btc','ethereum','eth','crypto','solana','sol','defi','nft','coinbase','xrp','dogecoin'],
-  'Middle East & War':['israel','iran','gaza','hamas','hezbollah','ceasefire','hormuz','middle east','lebanon'],
-  'AI & Big Tech':['ai ','openai','gpt','artificial intelligence','nvidia','apple','microsoft','google','meta ','chatgpt'],
-  'Macro & Economy':['fed ','federal reserve','interest rate','inflation','recession','gdp','cpi','unemployment','rate cut','crude oil'],
-  'Ukraine & Russia':['ukraine','russia','zelensky','putin','nato','kyiv'],
-  'NBA & Basketball':['nba','basketball','finals','playoff','lakers','celtics','warriors','nuggets','cavaliers','thunder','knicks'],
-  'NFL & American Sports':['nfl','super bowl','mlb','world series','nhl','stanley cup','ncaa'],
-  'Global Elections':['election','vote','ballot','candidate','prime minister','chancellor']
+  'Trump & US Politics':['trump','president','democrat','republican','congress','senate','maga','white house','tariff','vance','gop','biden','kamala','scotus'],
+  'Crypto & DeFi':['bitcoin','btc','ethereum','eth','crypto','solana','sol','defi','nft','coinbase','xrp','dogecoin','memecoin','binance','token','blockchain','backpack'],
+  'Middle East & War':['israel','iran','gaza','hamas','hezbollah','ceasefire','hormuz','middle east','lebanon','strike','invasion','military','pentagon','troops','bomb','missile','war ','idf','tehran','syria','yemen','houthi'],
+  'AI & Big Tech':['ai ','openai','gpt','artificial intelligence','nvidia','apple','microsoft','google','meta ','chatgpt','claude','gemini','tesla','spacex','elon musk'],
+  'Macro & Economy':['fed ','federal reserve','interest rate','inflation','recession','gdp','cpi','unemployment','rate cut','crude oil','s&p','nasdaq','dow','stock market','tariff','gold price','oil price'],
+  'Ukraine & Russia':['ukraine','russia','zelensky','putin','nato','kyiv','crimea','moscow'],
+  'NBA & Basketball':['nba','basketball','finals','playoff','lakers','celtics','warriors','nuggets','cavaliers','thunder','knicks','bucks','76ers','rockets','heat','suns'],
+  'NFL & American Sports':['nfl','super bowl','mlb','world series','nhl','stanley cup','ncaa','march madness','yankees','dodgers','chiefs','eagles','cowboys','ufc','boxing'],
+  'Soccer & Football':['premier league','champions league','la liga','serie a','bundesliga','uefa','fifa','world cup','manchester','liverpool','arsenal','chelsea','barcelona','real madrid','soccer','mls'],
+  'Health & Science':['measles','vaccine','fda','covid','pandemic','virus','disease','outbreak','drug','pharma','cdc','health','bird flu','monkeypox'],
+  'Pop Culture':['oscar','grammy','emmy','movie','film','album','celebrity','taylor swift','netflix','disney','tiktok','box office','award'],
+  'Weather & Climate':['temperature','hurricane','wildfire','flood','earthquake','tornado','climate','weather','heat wave','storm','drought'],
+  'Global Elections':['election','vote','ballot','candidate','prime minister','chancellor','parliament']
 };
 async function loadNarratives(){
   try{
@@ -521,7 +527,7 @@ async function loadScreener() {
     document.getElementById('loading').style.display = 'none';
     document.getElementById('content').style.display = 'block';
     _displayCount = 50;
-    setView(_viewMode);
+    renderCards();
   } catch (err) {
     document.getElementById('loading').innerHTML = '<div class="empty-state"><div class="icon">&#x26A0;&#xFE0F;</div><h3>Failed to load</h3><p>' + err.message + '</p></div>';
   }
@@ -550,18 +556,7 @@ function getFiltered() {
   return markets;
 }
 
-// ── View toggle ──
-var _viewMode = localStorage.getItem('hfx_screener_view') || 'cards';
-function setView(mode) {
-  _viewMode = mode;
-  localStorage.setItem('hfx_screener_view', mode);
-  document.getElementById('viewCards').classList.toggle('active', mode === 'cards');
-  document.getElementById('viewTable').classList.toggle('active', mode === 'table');
-  document.getElementById('cards-view').style.display = mode === 'cards' ? '' : 'none';
-  document.getElementById('table-view').style.display = mode === 'table' ? '' : 'none';
-  if (mode === 'cards') renderCards();
-  else renderTable();
-}
+function renderView() { renderCards(); }
 
 function escH(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
@@ -586,26 +581,31 @@ function renderCards() {
 
   grid.innerHTML = showing.map(function(m) {
     var edge = m.edge_score || 0;
-    var edgeClass = edge >= 70 ? 'high' : edge >= 40 ? 'mid' : 'low';
-    var highEdge = edge >= 70 ? ' high-edge' : '';
+    var edgeClass = edge >= 60 ? 'high' : edge >= 35 ? 'mid' : 'low';
+    var highEdge = edge >= 60 ? ' high-edge' : '';
+    // Row tint
+    var hasConsensus = m.whale_count >= 3 && m.trade && m.trade.roi_pct >= 50;
+    var hasMomentum = m.price_change_24h != null && Math.abs(m.price_change_24h) >= 5;
+    var isDivergence = m.whale_count >= 3 && m.yes_price != null && m.yes_price > 0.3 && m.yes_price < 0.7;
+    var tintClass = (hasConsensus && hasMomentum) ? ' card-consensus' : isDivergence ? ' card-divergence' : '';
     var catEmoji = {crypto:'\uD83D\uDCB0',sports:'\u26BD',politics:'\uD83C\uDFDB',entertainment:'\uD83C\uDFAC',tech:'\uD83D\uDCBB',other:'\uD83D\uDCCA'}[m.category] || '\uD83D\uDCCA';
     var yesPct = m.yes_price != null ? Math.round(m.yes_price * 100) : null;
 
-    // Evidence bullets
+    // PolymarketStory-style narrative bullets — punchy, data-forward
     var bullets = [];
     if (m.whale_count > 0) {
       var cap = m.total_whale_capital >= 1000000 ? '$' + (m.total_whale_capital/1000000).toFixed(1) + 'M' : m.total_whale_capital >= 1000 ? '$' + Math.round(m.total_whale_capital/1000) + 'K' : '$' + m.total_whale_capital;
-      bullets.push(m.whale_count + ' whale' + (m.whale_count>1?'s':'') + ' with ' + cap + ' positioned');
+      bullets.push('>' + m.whale_count + ' whale wallet' + (m.whale_count>1?'s':'') + ' with ' + cap + ' on this');
     }
     if (m.price_change_24h != null && Math.abs(m.price_change_24h) >= 1) {
-      bullets.push('Odds moved ' + (m.price_change_24h > 0 ? '+' : '') + Math.round(m.price_change_24h) + '% in 24h');
+      bullets.push('>Odds ' + (m.price_change_24h > 0 ? 'surged' : 'dropped') + ' ' + (m.price_change_24h > 0 ? '+' : '') + Math.round(m.price_change_24h) + '% in 24h');
     }
-    if (yesPct != null) bullets.push('Currently at ' + yesPct + '% YES' + (m.volume ? ' \u00B7 ' + fmtVol(m.volume) + ' volume' : ''));
+    if (yesPct != null) bullets.push('>Currently at ' + yesPct + '% YES \u00B7 ' + fmtVol(m.volume) + ' volume');
     if (m.days_until_expiry != null && m.days_until_expiry <= 7) {
-      bullets.push('Resolves in ' + (m.days_until_expiry === 0 ? 'hours' : m.days_until_expiry + ' day' + (m.days_until_expiry>1?'s':'')) + ' \u2014 imminent');
+      bullets.push('>Resolves in ' + (m.days_until_expiry === 0 ? 'hours' : m.days_until_expiry + 'd') + ' \u2014 outcome uncertain');
     }
 
-    // ROI strip
+    // Big ROI callout (PolymarketStory style: "Potential payout: $X")
     var roiHtml = '';
     if (m.trade) {
       var t = m.trade;
@@ -616,73 +616,32 @@ function renderCards() {
         '<span style="color:var(--muted)">|</span>' +
         '<div class="story-roi-item"><span class="story-roi-label">ROI</span><span class="story-roi-val pct">+' + t.roi_pct + '%</span></div>' +
       '</div>';
+      // Potential payout line (PolymarketStory style)
+      if (t.roi_pct >= 100) {
+        roiHtml += '<div class="story-payout">Potential payout: $' + ((100 / t.entry_cost) * 100).toFixed(0) + ' on a $100 bet</div>';
+      }
     }
 
     var safeUrl = m.url && m.url.startsWith('https://polymarket.com') ? m.url : (m.slug ? 'https://polymarket.com/event/' + m.slug : 'https://polymarket.com');
     var expiryStr = m.days_until_expiry != null ? (m.days_until_expiry === 0 ? 'Today' : m.days_until_expiry + 'd left') : '';
 
-    return '<div class="story-card' + highEdge + '">' +
+    return '<div class="story-card' + highEdge + tintClass + '">' +
       '<div class="story-card-top">' +
         '<div class="story-card-meta">' +
           '<span class="cat-pill cat-' + m.category + '">' + catEmoji + ' ' + (m.category || 'other').toUpperCase() + '</span>' +
           (expiryStr ? '<span class="story-expiry">' + expiryStr + '</span>' : '') +
         '</div>' +
-        '<div class="edge-badge ' + edgeClass + '">' + edge + '</div>' +
+        '<div class="edge-badge ' + edgeClass + '"><span class="edge-num">' + edge + '</span><span class="edge-label">' + (edge >= 60 ? 'Hot' : edge >= 35 ? 'Edge' : 'Low') + '</span></div>' +
       '</div>' +
       '<h3>' + regionFlag(m.question) + ' ' + escH(m.question) + '</h3>' +
       (m.ai_hook ? '<div class="story-hook">' + escH(m.ai_hook) + '</div>' : '') +
-      '<ul class="story-evidence">' + bullets.map(function(b) { return '<li>' + escH(b) + '</li>'; }).join('') + '</ul>' +
+      '<div class="story-bullets">' + bullets.map(function(b) { return '<div class="story-bullet">' + escH(b) + '</div>'; }).join('') + '</div>' +
       roiHtml +
       '<div class="story-card-footer">' +
         '<a href="' + safeUrl + '" target="_blank" rel="noopener" class="story-trade-btn">Trade on Polymarket &rarr;</a>' +
-        (yesPct != null ? '<span style="font-family:var(--mono);font-size:18px;font-weight:800;color:' + (yesPct >= 70 ? 'var(--green)' : yesPct <= 30 ? 'var(--red)' : 'var(--text)') + '">' + yesPct + '%</span>' : '') +
+        (yesPct != null ? '<span class="story-odds-big" style="color:' + (yesPct >= 70 ? 'var(--green)' : yesPct <= 30 ? 'var(--red)' : 'var(--text)') + '">' + yesPct + '%</span>' : '') +
       '</div>' +
     '</div>';
-  }).join('');
-}
-
-function renderTable() {
-  const filtered = getFiltered();
-  const showing = filtered.slice(0, _displayCount);
-  const tbody = document.getElementById('results-body');
-  const emptyState = document.getElementById('empty-state');
-  const loadMoreWrap = document.getElementById('load-more-wrap');
-  const countEl = document.getElementById('results-count');
-
-  countEl.textContent = filtered.length + ' market' + (filtered.length !== 1 ? 's' : '') + ' found';
-
-  if (!showing.length) {
-    tbody.innerHTML = '';
-    emptyState.style.display = 'block';
-    loadMoreWrap.style.display = 'none';
-    return;
-  }
-  emptyState.style.display = 'none';
-  loadMoreWrap.style.display = filtered.length > _displayCount ? 'block' : 'none';
-
-  tbody.innerHTML = showing.map(m => {
-    const rowClass = m.whale_count >= 10 ? ' class="whale-highlight"' : '';
-    const catClass = 'cat-' + m.category;
-    const yesPct = m.yes_price != null ? (m.yes_price * 100).toFixed(0) : '--';
-    const yesClass = m.yes_price >= 0.7 ? 'high' : m.yes_price <= 0.3 ? 'low' : 'mid';
-    const whaleClass = m.whale_count >= 5 ? ' hot' : '';
-    const whaleIcon = m.whale_count >= 5 ? ' <span class="icon">&#x1F40B;</span>' : '';
-    const oddsChg = m.odds_change_24h != null ? m.odds_change_24h : (m.price_change_24h != null ? Math.round(m.price_change_24h * (m.yes_price || 0.5)) : null);
-    const changeStr = oddsChg != null ? (oddsChg >= 0 ? '+' : '') + oddsChg + 'pts' : '--';
-    const changeClass = oddsChg > 0 ? 'up' : oddsChg < 0 ? 'down' : 'flat';
-    const expiryStr = m.days_until_expiry != null ? (m.days_until_expiry === 0 ? 'Today' : m.days_until_expiry + 'd') : '--';
-
-    var safeUrl = m.url && m.url.startsWith('https://polymarket.com') ? m.url : (m.slug ? 'https://polymarket.com/event/' + m.slug : 'https://polymarket.com');
-    return '<tr' + rowClass + ' onclick="window.open(\'' + safeUrl + '\', \'_blank\')">' +
-      '<td class="mkt-question"><a href="' + safeUrl + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">' + regionFlag(m.question) + (regionFlag(m.question) ? ' ' : '') + truncate(m.question, 52) + '</a></td>' +
-      '<td><span class="cat-pill ' + catClass + '">' + ({sports:'\uD83C\uDFC8',crypto:'\u20BF',politics:'\uD83C\uDFDB\uFE0F',entertainment:'\uD83C\uDFAC',tech:'\uD83D\uDCBB',other:'\uD83D\uDCCA'}[m.category]||'') + ' ' + m.category + '</span></td>' +
-      '<td class="yes-pct ' + yesClass + '">' + yesPct + '%</td>' +
-      '<td class="whale-cell' + whaleClass + '">' + m.whale_count + whaleIcon + '</td>' +
-      '<td class="vol-val">' + fmtVol(m.volume) + '</td>' +
-      '<td class="change-val ' + changeClass + '">' + changeStr + '</td>' +
-      '<td class="expiry-val">' + expiryStr + '</td>' +
-      '<td><a href="' + safeUrl + '" target="_blank" rel="noopener" class="trade-link" onclick="event.stopPropagation()">View on Polymarket \u2192</a></td>' +
-    '</tr>';
   }).join('');
 }
 

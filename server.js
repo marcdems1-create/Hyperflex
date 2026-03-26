@@ -18061,15 +18061,19 @@ app.get('/api/catalysts', async (req, res) => {
 
 // ── NARRATIVE INTELLIGENCE — group markets into dominant themes ────────────
 const NARRATIVE_KEYWORDS = {
-  'Trump & US Politics':   ['trump','president','democrat','republican','congress','senate','maga','white house','tariff','executive order','vance'],
-  'Crypto & DeFi':         ['bitcoin','btc','ethereum','eth','crypto','solana','sol','defi','nft','coinbase','stablecoin','altcoin','xrp','dogecoin','doge'],
-  'Middle East & War':     ['israel','iran','gaza','hamas','hezbollah','ceasefire','hormuz','middle east','lebanon','netanyahu'],
-  'AI & Big Tech':         ['ai ','openai','gpt','artificial intelligence','nvidia','apple','microsoft','google','meta ','anthropic','chatgpt'],
-  'Macro & Economy':       ['fed ','federal reserve','interest rate','inflation','recession','gdp','cpi','unemployment','rate cut','yield','crude oil','gold price','tariff'],
-  'Ukraine & Russia':      ['ukraine','russia','zelensky','putin','nato','kyiv','donbas'],
-  'NBA & Basketball':      ['nba','basketball','finals','playoff','lakers','celtics','warriors','nuggets','cavaliers','thunder','knicks','bucks','76ers','rockets','heat','suns','nets','kings','clippers','bulls'],
-  'NFL & American Sports': ['nfl','super bowl','mlb','world series','nhl','stanley cup','ncaa','march madness'],
-  'Global Elections':      ['election','vote','ballot','candidate','prime minister','chancellor','parliament'],
+  'Trump & US Politics':   ['trump','president','democrat','republican','congress','senate','maga','white house','tariff','executive order','vance','gop','biden','kamala','rnc','dnc','impeach','scotus','supreme court'],
+  'Crypto & DeFi':         ['bitcoin','btc','ethereum','eth','crypto','solana','sol','defi','nft','coinbase','stablecoin','altcoin','xrp','dogecoin','doge','memecoin','binance','token','blockchain','web3','polygon','avalanche','cardano','chainlink','uniswap','aave','backpack'],
+  'Middle East & War':     ['israel','iran','gaza','hamas','hezbollah','ceasefire','hormuz','middle east','lebanon','netanyahu','strike','invasion','military','pentagon','troops','bomb','missile','airstrike','war ','warfare','conflict','idf','tehran','syria','yemen','houthi'],
+  'AI & Big Tech':         ['ai ','openai','gpt','artificial intelligence','nvidia','apple','microsoft','google','meta ','anthropic','chatgpt','claude','gemini','llm','machine learning','deepseek','tesla','spacex','elon musk','robot','autonomous'],
+  'Macro & Economy':       ['fed ','federal reserve','interest rate','inflation','recession','gdp','cpi','unemployment','rate cut','yield','crude oil','gold price','tariff','s&p','nasdaq','dow','stock market','treasury','bond','commodity','forex','oil price','copper','silver'],
+  'Ukraine & Russia':      ['ukraine','russia','zelensky','putin','nato','kyiv','donbas','crimea','moscow','sanctions'],
+  'NBA & Basketball':      ['nba','basketball','finals','playoff','lakers','celtics','warriors','nuggets','cavaliers','thunder','knicks','bucks','76ers','rockets','heat','suns','nets','kings','clippers','bulls','pacers','timberwolves','grizzlies','hawks','pistons','hornets','magic','wizards','pelicans','raptors','jazz','mavericks','spurs','blazers'],
+  'NFL & American Sports': ['nfl','super bowl','mlb','world series','nhl','stanley cup','ncaa','march madness','yankees','dodgers','mets','cubs','red sox','chiefs','eagles','cowboys','49ers','ravens','bills','bengals','dolphins','lions','steelers','packers','bears','rams','seahawks','saints','ufc','boxing','fight night'],
+  'Soccer & Football':     ['premier league','champions league','la liga','serie a','bundesliga','ligue 1','uefa','fifa','world cup','epl','manchester','liverpool','arsenal','chelsea','barcelona','real madrid','psg','bayern','juventus','napoli','inter milan','tottenham','man city','man united','mls','soccer'],
+  'Health & Science':      ['measles','vaccine','fda','covid','pandemic','virus','disease','outbreak','drug','pharma','clinical trial','cdc','who ','health','cancer','obesity','bird flu','monkeypox','treatment','epidemic'],
+  'Pop Culture':           ['oscar','grammy','emmy','movie','film','album','celebrity','kardashian','taylor swift','drake','beyonce','kanye','netflix','disney','tiktok','youtube','spotify','concert','box office','award','super bowl halftime'],
+  'Weather & Climate':     ['temperature','hurricane','wildfire','flood','earthquake','tornado','climate','weather','heat wave','cold snap','storm','drought','el nino','la nina','celsius','fahrenheit'],
+  'Global Elections':      ['election','vote','ballot','candidate','prime minister','chancellor','parliament','referendum','runoff','polling','constituency'],
   'Other':                 []
 };
 function classifyNarrative(question) {
