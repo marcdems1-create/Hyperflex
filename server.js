@@ -17198,6 +17198,11 @@ async function fetchWhalePositions() {
     if (_whaleTradeStream.length > 100) _whaleTradeStream.length = 100;
     const _newEvtCount = _whaleTradeStream.filter(e => e.ts === now).length;
     console.log(`[whale-stream] Detected ${_newEvtCount} new whale trade events`);
+    // Tweet the biggest new whale move (if any)
+    if (_newEvtCount > 0) {
+      const biggestMove = _whaleTradeStream.filter(e => e.ts === now).sort((a, b) => (b.size || 0) - (a.size || 0))[0];
+      if (biggestMove && biggestMove.size >= 10000) tweetWhaleAlert(biggestMove).catch(() => {});
+    }
 
     // ── Whale alert notifications: notify subscribed users of trader moves ──
     if (_newEvtCount > 0) {
@@ -18460,6 +18465,10 @@ app.get('/api/market-movers', async (req, res) => {
       .map(({ abs_change, ...rest }) => rest);
 
     const result = { movers, updated_at: new Date().toISOString() };
+    // Tweet biggest mover if 10%+ change and cache was stale (first compute or refresh)
+    if (!_marketMoversCache && movers.length && Math.abs(movers[0].change_pct) >= 10) {
+      tweetOddsShift({ question: movers[0].question, yes_price: movers[0].current_price / 100, volume: null }, movers[0].change_pct).catch(() => {});
+    }
     _marketMoversCache = { ts: Date.now(), data: result };
     res.json(result);
   } catch (err) {
@@ -21659,7 +21668,14 @@ async function detectArbitrageOpportunities() {
     }
     _prevArbIds = newArbIds;
     _arbCache = { ts: Date.now(), data: arbs.slice(0, 20) };
-    if (arbs.length) console.log(`[arb] Detected ${arbs.length} arb opportunities, best edge: ${arbs[0].edge_pct}%`);
+    if (arbs.length) {
+      console.log(`[arb] Detected ${arbs.length} arb opportunities, best edge: ${arbs[0].edge_pct}%`);
+      // Tweet the biggest arb opportunity
+      const topArb = arbs[0];
+      if (topArb.edge_pct >= 3) {
+        tweetArbAlert({ market: topArb.market, poly_pct: topArb.poly_yes, kalshi_pct: topArb.kalshi_yes, edge: Math.round(topArb.edge_pct), direction: topArb.direction }).catch(() => {});
+      }
+    }
   } catch (e) {
     console.warn('[arb] detection error:', e.message);
   }
@@ -23072,6 +23088,77 @@ function _xOAuthSign(method, url, params) {
   return authHeader;
 }
 
+// ── Tweet rate limiting: max 5/day, minimum 2h gap ──
+const _tweetLog = []; // timestamps of recent tweets
+function canTweet() {
+  const now = Date.now();
+  // Remove tweets older than 24h
+  while (_tweetLog.length && now - _tweetLog[0] > 24 * 60 * 60 * 1000) _tweetLog.shift();
+  if (_tweetLog.length >= 5) return false; // max 5/day
+  if (_tweetLog.length && now - _tweetLog[_tweetLog.length - 1] < 2 * 60 * 60 * 1000) return false; // 2h gap
+  return true;
+}
+
+// ── Event-driven tweets (fire-and-forget, rate-limited) ──
+
+async function tweetWhaleAlert(evt) {
+  if (!canTweet()) return;
+  if (evt.size < 10000) return; // Only tweet positions $10K+
+  const tweet = `${evt.trader_name || 'A whale'} just ${evt.action} a ${evt.size_display} position\n\n> ${evt.question}\n> ${evt.side} side at ${Math.round(evt.price * 100)}%\n> Rank #${evt.trader_rank || '?'} trader\n\nhyperflex.network/brief`;
+  if (tweet.length > 280) return;
+  try { await postTweet(tweet); _tweetLog.push(Date.now()); } catch(e) { console.warn('[tweet-whale]', e.message); }
+}
+
+async function tweetOddsShift(market, pctChange) {
+  if (!canTweet()) return;
+  if (Math.abs(pctChange) < 10) return; // Only tweet 10%+ moves
+  const dir = pctChange > 0 ? 'SURGED' : 'CRASHED';
+  const yesPct = market.yes_price != null ? Math.round(market.yes_price * 100) : '?';
+  const tweet = `ODDS JUST ${dir} ${Math.abs(Math.round(pctChange))} POINTS?\n\n> ${market.question}\n> Now at ${yesPct}% YES\n> ${market.volume ? '$' + Math.round(market.volume/1000) + 'K volume' : 'Volume spiking'}\n\nhyperflex.network/screener`;
+  if (tweet.length > 280) return;
+  try { await postTweet(tweet); _tweetLog.push(Date.now()); } catch(e) { console.warn('[tweet-odds]', e.message); }
+}
+
+async function tweetArbAlert(arb) {
+  if (!canTweet()) return;
+  if (arb.edge < 3) return; // Only tweet 3%+ edge
+  const tweet = `SAME MARKET, DIFFERENT PRICES?\n\n> Polymarket: ${arb.poly_pct}%\n> Kalshi: ${arb.kalshi_pct}%\n> ${arb.edge}pt spread — ${arb.direction}\n\n"${arb.market}"\n\nhyperflex.network/odds`;
+  if (tweet.length > 280) return;
+  try { await postTweet(tweet); _tweetLog.push(Date.now()); } catch(e) { console.warn('[tweet-arb]', e.message); }
+}
+
+async function tweetExpiryAlert(market) {
+  if (!canTweet()) return;
+  const yesPct = market.yes_price != null ? Math.round(market.yes_price * 100) : null;
+  if (yesPct == null || yesPct < 20 || yesPct > 80) return; // Only contested markets
+  const vol = market.volume >= 1000000 ? '$' + (market.volume/1000000).toFixed(1) + 'M' : '$' + Math.round(market.volume/1000) + 'K';
+  const tweet = `RESOLVES TODAY AND STILL AT ${yesPct}%?\n\n> ${market.question}\n> ${vol} volume, no consensus\n> Someone is about to be very wrong\n\nhyperflex.network/screener`;
+  if (tweet.length > 280) return;
+  try { await postTweet(tweet); _tweetLog.push(Date.now()); } catch(e) { console.warn('[tweet-expiry]', e.message); }
+}
+
+async function tweetWinRecap(pred, outcome) {
+  if (!canTweet()) return;
+  if (outcome !== 'correct') return;
+  // Get overall track record
+  let record = '';
+  try {
+    const rows = pool
+      ? await dbQuery("SELECT outcome, COUNT(*) as c FROM prediction_log WHERE resolved = true AND outcome IN ('correct','incorrect') GROUP BY outcome")
+      : ((await supabase.from('prediction_log').select('outcome').eq('resolved', true).in('outcome', ['correct','incorrect'])).data || []);
+    if (Array.isArray(rows) && rows.length) {
+      const wins = rows.find(r => r.outcome === 'correct');
+      const losses = rows.find(r => r.outcome === 'incorrect');
+      const w = parseInt(wins?.c || wins?.count || 0);
+      const l = parseInt(losses?.c || losses?.count || 0);
+      if (w + l > 0) record = `\n\nTrack record: ${w}/${w + l} correct`;
+    }
+  } catch(e) {}
+  const tweet = `AI CALLED IT?\n\n> "${pred.market_question}"\n> Predicted ${pred.predicted_side} at ${Math.round((pred.market_price_at_prediction || 0.5) * 100)}%\n> Result: CORRECT${record}\n\nhyperflex.network/brief`;
+  if (tweet.length > 280) return;
+  try { await postTweet(tweet); _tweetLog.push(Date.now()); } catch(e) { console.warn('[tweet-recap]', e.message); }
+}
+
 async function postTweet(text) {
   const url = 'https://api.x.com/2/tweets';
   const body = JSON.stringify({ text });
@@ -23202,6 +23289,35 @@ app.post('/api/tweet-brief', (req, res) => {
 
 // Daily tweet cron — 1:30pm UTC (8:30am ET) — right after brief generates + caches warm
 cron.schedule('30 13 * * *', safeCron('dailyTweet', generateAndPostDailyTweet));
+
+// Expiry countdown tweet — 3pm UTC (10am ET) — check for markets expiring today that are still contested
+cron.schedule('0 15 * * *', safeCron('expiryTweet', async () => {
+  try {
+    const screenerRes = await fetch('https://gamma-api.polymarket.com/markets?closed=false&limit=100&order=volume&ascending=false', {
+      headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' },
+      signal: AbortSignal.timeout(10000)
+    });
+    if (!screenerRes.ok) return;
+    const markets = await screenerRes.json();
+    const today = new Date();
+    const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+    const expiringToday = (Array.isArray(markets) ? markets : []).filter(m => {
+      if (m.closed) return false;
+      const end = new Date(m.endDate || m.end_date_iso || '');
+      if (isNaN(end.getTime())) return false;
+      if (end > tomorrow) return false;
+      let yesPct = null;
+      try { if (m.outcomePrices) yesPct = Math.round(JSON.parse(m.outcomePrices)[0] * 100); } catch {}
+      return yesPct != null && yesPct >= 20 && yesPct <= 80;
+    }).sort((a, b) => (parseFloat(b.volume) || 0) - (parseFloat(a.volume) || 0));
+    if (expiringToday.length > 0) {
+      const top = expiringToday[0];
+      let yesPct = null;
+      try { if (top.outcomePrices) yesPct = Math.round(JSON.parse(top.outcomePrices)[0] * 100); } catch {}
+      tweetExpiryAlert({ question: top.question, yes_price: yesPct / 100, volume: parseFloat(top.volume) || 0 }).catch(() => {});
+    }
+  } catch(e) { console.warn('[expiry-tweet]', e.message); }
+}));
 
 // ════════════════════════════════════════════════════════════
 // ACCURACY TRACKING — the core product
@@ -23468,6 +23584,8 @@ async function gradeExpiredPredictions() {
             resolved_at: new Date().toISOString(), pnl_if_followed: pnl
           }).eq('id', pred.id);
         }
+        // Tweet win recap
+        if (outcome === 'correct') tweetWinRecap(pred, outcome).catch(() => {});
       } catch (e) {
         console.warn('[accuracy/grade] Failed to update prediction:', pred.id, e.message);
       }
