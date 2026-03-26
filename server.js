@@ -9453,7 +9453,7 @@ const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
   'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u', 'win',
-  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed'
+  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed', 'market-intel'
 ]);
 
 // GET /my — private member dashboard
@@ -17528,6 +17528,8 @@ app.get('/api/whale-watch', async (req, res) => {
 
 // GET /whales — whale watch page
 app.get('/whales', (req, res) => res.sendFile(path.join(__dirname, 'public', 'whales.html')));
+// GET /market-intel — serves whale watch page (rebranded in nav)
+app.get('/market-intel', (req, res) => res.sendFile(path.join(__dirname, 'public', 'whales.html')));
 
 // GET /whale-index — whale index portfolio page
 app.get('/whale-index', (req, res) => res.sendFile(path.join(__dirname, 'public', 'whale-index.html')));

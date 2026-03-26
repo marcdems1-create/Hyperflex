@@ -720,6 +720,17 @@ try { loadFearGreed(); } catch(e) { console.warn('[signals] fear greed failed:',
 try { loadConsistentPicks(); } catch(e) { console.warn('[signals] consistent picks failed:', e.message); }
 try { loadCorrelations(); } catch(e) { console.warn('[signals] correlations failed:', e.message); }
 
+// Auto-retry after 30s if signals came back empty (cold cache after deploy)
+setTimeout(function() {
+  var grid = document.getElementById('signalGrid');
+  if (grid && grid.querySelector('.empty-state')) {
+    console.log('[signals] Empty on first load — retrying...');
+    loadSignals();
+    try { loadWhalePicks(); } catch(e) {}
+    try { loadConsistentPicks(); } catch(e) {}
+  }
+}, 30000);
+
 // Auto-refresh every 5 minutes
 setInterval(function() { try { loadSignals(); } catch(e) {} }, 5 * 60 * 1000);
 </script>
