@@ -22813,13 +22813,17 @@ async function postTweet(text) {
 async function generateAndPostDailyTweet() {
   console.log('[daily-tweet] Generating tweet from brief...');
 
-  // Fetch brief data
+  // Get brief data directly from cache or generate fresh
   let briefData;
   try {
-    const briefRes = await fetch(`http://localhost:${process.env.PORT || 3000}/api/daily-brief`);
-    briefData = await briefRes.json();
+    if (_dailyBriefingCache && _dailyBriefingCache.data && _dailyBriefingCache.data.narrative) {
+      briefData = _dailyBriefingCache.data;
+    } else {
+      // Generate fresh brief inline
+      briefData = await generateDailyBriefing();
+    }
   } catch (e) {
-    throw new Error('Failed to fetch brief: ' + e.message);
+    throw new Error('Failed to get brief data: ' + e.message);
   }
 
   if (!briefData.narrative || briefData.narrative.length < 50) {
