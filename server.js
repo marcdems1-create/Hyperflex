@@ -19749,6 +19749,20 @@ app.get('/api/daily-brief', async (req, res) => {
       }
     });
 
+    // ── Filter out zero-edge calls (entry ≥ 95¢ = ROI ≤ 5%) ──
+    const preFilterCount = aiCalls.length;
+    for (let i = aiCalls.length - 1; i >= 0; i--) {
+      const t = aiCalls[i].trade;
+      if (t && t.entry_cost >= 95) {
+        aiCalls.splice(i, 1);
+      }
+    }
+    // Re-number call IDs after filtering
+    aiCalls.forEach((c, i) => { c.call_id = i + 1; });
+    if (aiCalls.length < preFilterCount) {
+      console.log(`[daily-brief] Filtered ${preFilterCount - aiCalls.length} zero-edge calls (entry ≥ 95¢)`);
+    }
+
     // ── Step 3: Generate narrative CONSTRAINED to only reference tracked calls ──
     let narrative = '';
     const callSummaries = aiCalls.map(c => `[CALL-${c.call_id}]: ${c.market} — ${c.thesis} [${c.confidence}] (${c.stake} pts staked)`).join('\n');
