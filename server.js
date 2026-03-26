@@ -22816,11 +22816,10 @@ async function generateAndPostDailyTweet() {
   // Get brief data directly from cache or generate fresh
   let briefData;
   try {
-    if (_dailyBriefingCache && _dailyBriefingCache.data && _dailyBriefingCache.data.narrative) {
-      briefData = _dailyBriefingCache.data;
+    if (_aiBriefCache && _aiBriefCache.data && _aiBriefCache.data.narrative) {
+      briefData = _aiBriefCache.data;
     } else {
-      // Generate fresh brief inline
-      briefData = await generateDailyBriefing();
+      throw new Error('Brief cache is cold — visit /brief first to warm it, then retry');
     }
   } catch (e) {
     throw new Error('Failed to get brief data: ' + e.message);
