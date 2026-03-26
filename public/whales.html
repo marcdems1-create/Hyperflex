@@ -688,10 +688,9 @@ async function handleCopyTradeCta() {
 }
 
 function getWhaleNickname(addr) {
-  var adj=['Silent','Phantom','Iron','Golden','Shadow','Crystal','Storm','Neon','Cosmic','Jade','Scarlet','Azure','Onyx','Silver','Crimson'];
-  var noun=['Hawk','Wolf','Jaguar','Falcon','Viper','Phoenix','Titan','Oracle','Cipher','Ghost','Specter','Baron','Knight','Sage','Nomad'];
-  var h=0;for(var i=0;i<addr.length;i++)h=(h*31+addr.charCodeAt(i))>>>0;
-  return adj[h%adj.length]+' '+noun[(h>>4)%noun.length];
+  var s=String(addr);
+  if(s.length>10)return s.slice(0,6)+'...'+s.slice(-4);
+  return s||'Trader';
 }
 function whaleName(name, wallet) {
   if (!name || /^0x[0-9a-fA-F]{6,}/.test(name)) return getWhaleNickname(wallet || name || 'unknown');

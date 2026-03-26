@@ -137,11 +137,9 @@ const app = express();
 
 // Deterministic whale nickname from wallet address
 function getWhaleNickname(address) {
-  const adj = ['Silent','Phantom','Iron','Golden','Shadow','Crystal','Storm','Neon','Cosmic','Jade','Scarlet','Azure','Onyx','Silver','Crimson'];
-  const noun = ['Hawk','Wolf','Jaguar','Falcon','Viper','Phoenix','Titan','Oracle','Cipher','Ghost','Specter','Baron','Knight','Sage','Nomad'];
-  let h = 0;
-  for (let i = 0; i < address.length; i++) h = (h * 31 + address.charCodeAt(i)) >>> 0;
-  return adj[h % adj.length] + ' ' + noun[(h >>> 4) % noun.length];
+  const s = String(address);
+  if (s.length > 10) return s.slice(0, 6) + '...' + s.slice(-4);
+  return s || 'Trader';
 }
 
 const JWT_SECRET = process.env.JWT_SECRET || 'hyperflex-dev-secret-change-in-prod';
@@ -10680,7 +10678,7 @@ async function fetchPolymarketLeaderboard(period) {
     ));
     return {
       rank: i + 1,
-      display_name: (() => { const n = t.userName || t.username || t.name || ''; return (!n || /^0x[0-9a-fA-F]{6,}/.test(n)) ? getWhaleNickname(t.proxyWallet || t.proxy_wallet || t.address || n || `trader_${i+1}`) : n; })(),
+      display_name: (() => { const n = t.userName || t.username || t.name || ''; if (n && !/^0x[0-9a-fA-F]{6,}/.test(n)) return n; const addr = t.proxyWallet || t.proxy_wallet || t.address || n || ''; return addr.length > 10 ? addr.slice(0, 6) + '...' + addr.slice(-4) : addr || `Trader #${i+1}`; })(),
       total_pnl: Math.round(pnl),
       volume: Math.round(vol),
       wallet: t.proxyWallet || t.proxy_wallet || t.address || '',
