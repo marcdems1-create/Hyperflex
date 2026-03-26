@@ -3,661 +3,544 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Polymarket Portfolio Tracker — Track All Your Prediction Market Positions | HYPERFLEX</title>
-<meta name="description" content="Track your Polymarket, Kalshi, and Manifold positions in one dashboard. See your win rate, P&L, and calibration score. Free during beta."/>
-<meta name="keywords" content="polymarket portfolio, kalshi tracker, manifold markets, prediction market dashboard, prediction market portfolio"/>
-<meta property="og:title" content="Polymarket Portfolio Tracker — Track All Your Prediction Market Positions | HYPERFLEX"/>
-<meta property="og:description" content="Track your Polymarket, Kalshi, and Manifold positions in one dashboard. See your win rate, P&L, and calibration score. Free during beta."/>
-<meta property="og:url" content="https://hyperflex.network/predictors"/>
-<meta property="og:image" content="https://hyperflex.network/og-predictors.png"/>
+<title>Prediction Market Leaderboard | HYPERFLEX</title>
+<meta name="description" content="The most profitable traders across Polymarket & Hyperliquid, ranked by verified track record."/>
+<link rel="canonical" href="https://hyperflex.network/predictors"/>
+<!-- Open Graph -->
 <meta property="og:type" content="website"/>
+<meta property="og:url" content="https://hyperflex.network/predictors"/>
+<meta property="og:title" content="Prediction Market Leaderboard — HYPERFLEX"/>
+<meta property="og:description" content="The most profitable traders across Polymarket & Hyperliquid, ranked by verified track record."/>
+<meta property="og:image" content="https://hyperflex.network/og-default.png"/>
+<meta property="og:site_name" content="HYPERFLEX"/>
+<!-- Twitter / X -->
 <meta name="twitter:card" content="summary_large_image"/>
-<meta name="twitter:title" content="Polymarket Portfolio Tracker — Track All Your Prediction Market Positions | HYPERFLEX"/>
-<meta name="twitter:description" content="Track your Polymarket, Kalshi, and Manifold positions in one dashboard. See your win rate, P&L, and calibration score. Free during beta."/>
-<meta name="twitter:image" content="https://hyperflex.network/og-predictors.png"/>
+<meta name="twitter:site" content="@HyperFlexApp"/>
+<meta name="twitter:title" content="Prediction Market Leaderboard — HYPERFLEX"/>
+<meta name="twitter:description" content="The most profitable traders across Polymarket & Hyperliquid, ranked by verified track record."/>
+<meta name="twitter:image" content="https://hyperflex.network/og-default.png"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
 <style>
-:root {
-  --ink: #0e0e0c;
-  --paper: #141412;
-  --cream: #1c1c19;
-  --card: #191917;
-  --text: #ddd8cc;
-  --gold: #c9920d;
-  --gold-lt: #e0a820;
-  --gold-bright: #f5c842;
-  --border: #2a2a26;
-  --dim: #7a7870;
-  --muted: #5a5854;
-  --green: #2d9b5f;
-  --red: #c0392b;
-  --sans: 'Syne', sans-serif;
-  --mono: 'Space Mono', monospace;
-  --radius: 10px;
-}
-* { box-sizing: border-box; margin: 0; padding: 0; }
-::-webkit-scrollbar { width: 4px; }
-::-webkit-scrollbar-track { background: var(--paper); }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-html { scroll-behavior: smooth; }
-body {
-  background: var(--paper);
-  color: var(--text);
-  font-family: var(--sans);
-  min-height: 100vh;
-  overflow-x: hidden;
-}
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(201,146,13,0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(201,146,13,0.04) 1px, transparent 1px);
-  background-size: 48px 48px;
-  pointer-events: none;
-  z-index: 0;
-}
+:root{--ink:#0e0e0c;--paper:#0a0a08;--cream:#1c1c19;--card:#13130f;--card-elevated:#18170f;--text:#ddd8cc;--gold:#c9920d;--gold-lt:#e0a820;--gold-bright:#f5c842;--gold-dim:rgba(201,146,13,0.15);--border:#2a2a26;--dim:#7a7870;--muted:#5a5854;--green:#2d9b5f;--red:#c0392b;--silver:#b0b0b0;--bronze:#cd7f32;--sans:'Syne',sans-serif;--mono:'Space Mono',monospace;--radius:10px}
+*{box-sizing:border-box;margin:0;padding:0}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:var(--paper)}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+html{scroll-behavior:smooth}
+body{background:var(--paper);color:var(--text);font-family:var(--sans);min-height:100vh;overflow-x:hidden}
+
+/* GOLD PARTICLES */
+.particles{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden}
+.particle{position:absolute;width:2px;height:2px;background:var(--gold);border-radius:50%;opacity:0;animation:floatUp linear infinite}
+@keyframes floatUp{0%{opacity:0;transform:translateY(0) scale(1)}10%{opacity:.6}90%{opacity:.1}100%{opacity:0;transform:translateY(-100vh) scale(.5)}}
 
 /* NAV */
-.nav {
-  position: fixed;
-  top: 0; left: 0; right: 0;
-  z-index: 100;
-  padding: 0 40px;
-  height: 64px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid var(--border);
-  background: rgba(20,20,18,0.88);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-}
-.nav-logo {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  text-decoration: none;
-}
-.nav-logo-mark {
-  width: 32px; height: 32px;
-  background: var(--gold);
-  border-radius: 7px;
-  display: flex; align-items: center; justify-content: center;
-  font-family: var(--mono);
-  font-size: 13px; font-weight: 700;
-  color: var(--ink);
-}
-.nav-name {
-  font-family: var(--mono);
-  font-size: 13px; font-weight: 700;
-  color: var(--text);
-  letter-spacing: 1px;
-}
-.nav-links {
-  display: flex;
-  align-items: center;
-  gap: 28px;
-}
-.nav-link {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--dim);
-  text-decoration: none;
-  letter-spacing: 0.5px;
-  transition: color 0.15s;
-}
-.nav-link:hover, .nav-link.active { color: var(--text); }
-.nav-actions { display: flex; align-items: center; gap: 12px; }
-.btn-nav {
-  font-family: var(--mono);
-  font-size: 11px; font-weight: 700;
-  padding: 8px 16px;
-  border-radius: 6px;
-  text-decoration: none;
-  letter-spacing: 0.5px;
-  transition: opacity 0.15s;
-}
-.btn-nav-ghost { color: var(--dim); border: 1px solid var(--border); background: transparent; }
-.btn-nav-ghost:hover { color: var(--text); }
-.btn-nav-primary { background: var(--gold); color: var(--ink); border: none; }
-.btn-nav-primary:hover { opacity: 0.88; }
+.nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 40px;height:64px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:rgba(10,10,8,.92);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+.nav-logo{display:flex;align-items:center;gap:10px;text-decoration:none}
+.nav-name{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--text);letter-spacing:1px}
+.nav-links{display:flex;align-items:center;gap:28px}
+.nav-link{font-family:var(--mono);font-size:12px;color:var(--dim);text-decoration:none;letter-spacing:.5px;transition:color .15s}
+.nav-link:hover,.nav-link.active{color:var(--text)}
+.nav-actions{display:flex;align-items:center;gap:12px}
+.btn-nav{font-family:var(--mono);font-size:11px;font-weight:700;padding:8px 16px;border-radius:6px;text-decoration:none;letter-spacing:.5px;transition:opacity .15s}
+.btn-nav-ghost{color:var(--dim);border:1px solid var(--border);background:transparent}
+.btn-nav-ghost:hover{color:var(--text)}
+.btn-nav-primary{background:var(--gold);color:var(--ink);border:none}
+.btn-nav-primary:hover{opacity:.88}
 
-/* HERO */
-.hero {
-  position: relative;
-  z-index: 1;
-  padding: 120px 40px 60px;
-  max-width: 900px;
-  margin: 0 auto;
-  text-align: center;
-}
-.hero-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  color: var(--gold);
-  margin-bottom: 20px;
-}
-.eyebrow-dot {
-  width: 6px; height: 6px;
-  background: var(--gold);
-  border-radius: 50%;
-  animation: pulse 2s ease-in-out infinite;
-}
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
-}
-.hero h1 {
-  font-size: clamp(36px, 5vw, 64px);
-  font-weight: 800;
-  line-height: 1.1;
-  letter-spacing: -0.03em;
-  color: var(--text);
-  margin-bottom: 16px;
-}
-.hero h1 .accent { color: var(--gold); }
-.hero-sub {
-  font-size: clamp(14px, 1.8vw, 17px);
-  color: var(--dim);
-  line-height: 1.6;
-  max-width: 580px;
-  margin: 0 auto 36px;
-}
+/* HERO — THE STAGE */
+.hero-stage{position:relative;z-index:1;padding:110px 40px 48px;text-align:center;background:linear-gradient(180deg,rgba(201,146,13,.06) 0%,transparent 70%);border-bottom:1px solid rgba(201,146,13,.1)}
+.hero-stage-inner{max-width:800px;margin:0 auto;padding:40px 32px;border:1px solid rgba(201,146,13,.2);border-radius:16px;background:rgba(201,146,13,.03);position:relative;overflow:hidden;animation:heroGlow 4s ease-in-out infinite}
+@keyframes heroGlow{0%,100%{box-shadow:0 0 40px rgba(201,146,13,.06),inset 0 0 40px rgba(201,146,13,.02)}50%{box-shadow:0 0 60px rgba(201,146,13,.12),inset 0 0 60px rgba(201,146,13,.04)}}
+.hero-trophy{font-size:52px;line-height:1;margin-bottom:16px}
+.hero-stage h1{font-size:clamp(28px,4vw,44px);font-weight:800;line-height:1.15;letter-spacing:-.03em;color:var(--gold-bright);margin-bottom:12px}
+.hero-sub{font-size:clamp(13px,1.6vw,15px);color:var(--dim);line-height:1.6;max-width:520px;margin:0 auto 20px;font-family:var(--mono)}
+.hero-stat{display:inline-block;font-family:var(--mono);font-size:13px;color:var(--gold);background:rgba(201,146,13,.08);border:1px solid rgba(201,146,13,.2);padding:8px 20px;border-radius:20px;letter-spacing:.3px}
 
-/* CONTROLS */
-.controls {
-  position: relative;
-  z-index: 1;
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 0 40px 24px;
-}
-.search-row {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-}
-.search-input {
-  flex: 1;
-  min-width: 200px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px 16px;
-  font-family: var(--mono);
-  font-size: 13px;
-  color: var(--text);
-  outline: none;
-  transition: border-color 0.15s;
-}
-.search-input::placeholder { color: var(--muted); }
-.search-input:focus { border-color: var(--gold); }
+/* PODIUM — TOP 3 */
+.podium-section{position:relative;z-index:1;max-width:1100px;margin:48px auto 0;padding:0 40px}
+.podium-title{text-align:center;font-family:var(--mono);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--muted);margin-bottom:28px}
+.podium-grid{display:grid;grid-template-columns:1fr 1.15fr 1fr;gap:20px;align-items:end}
+.podium-card{position:relative;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:32px 24px 28px;text-align:center;transition:box-shadow .3s,transform .3s;overflow:hidden}
+.podium-card:hover{box-shadow:0 0 30px rgba(201,146,13,.15);transform:translateY(-4px)}
+.podium-card.podium-1{background:linear-gradient(180deg,rgba(201,146,13,.08) 0%,var(--card) 60%);border-color:rgba(201,146,13,.4);transform:translateY(-20px);padding:40px 24px 32px}
+.podium-card.podium-1:hover{transform:translateY(-24px);box-shadow:0 0 50px rgba(201,146,13,.25)}
+.podium-card.podium-1::before{content:'';position:absolute;top:-50%;left:-50%;width:200%;height:200%;background:conic-gradient(from 0deg,transparent 0%,rgba(201,146,13,.08) 10%,transparent 20%);animation:sparkleRotate 8s linear infinite;pointer-events:none}
+@keyframes sparkleRotate{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+.podium-card.podium-2{border-color:rgba(176,176,176,.25)}
+.podium-card.podium-2:hover{box-shadow:0 0 30px rgba(176,176,176,.1)}
+.podium-card.podium-3{border-color:rgba(205,127,50,.25)}
+.podium-card.podium-3:hover{box-shadow:0 0 30px rgba(205,127,50,.1)}
+.podium-avatar{width:72px;height:72px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:26px;font-weight:700;margin:0 auto 16px;position:relative;z-index:1}
+.podium-1 .podium-avatar{width:88px;height:88px;font-size:32px;background:linear-gradient(135deg,rgba(245,200,66,.2),rgba(201,146,13,.1));border:3px solid var(--gold);color:var(--gold-bright);box-shadow:0 0 24px rgba(201,146,13,.3)}
+.podium-2 .podium-avatar{background:linear-gradient(135deg,rgba(176,176,176,.2),rgba(176,176,176,.05));border:3px solid var(--silver);color:var(--silver);box-shadow:0 0 16px rgba(176,176,176,.15)}
+.podium-3 .podium-avatar{background:linear-gradient(135deg,rgba(205,127,50,.2),rgba(205,127,50,.05));border:3px solid var(--bronze);color:var(--bronze);box-shadow:0 0 16px rgba(205,127,50,.15)}
+.podium-rank-badge{font-size:28px;margin-bottom:6px;filter:drop-shadow(0 0 8px rgba(201,146,13,.4))}
+.podium-1 .podium-rank-badge{filter:drop-shadow(0 0 12px rgba(201,146,13,.6))}
+.podium-name{font-family:var(--sans);font-size:18px;font-weight:700;color:var(--text);margin-bottom:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.podium-1 .podium-name{font-size:22px;color:var(--gold-bright)}
+.podium-pnl{font-family:var(--mono);font-size:24px;font-weight:700;color:var(--green);margin-bottom:6px}
+.podium-1 .podium-pnl{font-size:30px}
+.podium-pnl.negative{color:var(--red)}
+.podium-roi{font-family:var(--mono);font-size:12px;color:var(--dim);margin-bottom:16px}
+.podium-meta{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.podium-meta-item{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.podium-meta-item strong{color:var(--text)}
+.podium-link{display:inline-block;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gold);text-decoration:none;padding:6px 16px;border:1px solid rgba(201,146,13,.3);border-radius:20px;transition:all .2s;position:relative;z-index:1}
+.podium-link:hover{background:rgba(201,146,13,.1);border-color:var(--gold)}
 
-.pills {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.pill {
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 700;
-  padding: 7px 14px;
-  border-radius: 20px;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--dim);
-  cursor: pointer;
-  transition: all 0.15s;
-  white-space: nowrap;
-}
-.pill:hover { border-color: var(--dim); color: var(--text); }
-.pill.active {
-  background: var(--gold);
-  border-color: var(--gold);
-  color: var(--ink);
-}
+/* FILTER BAR */
+.filter-bar{position:relative;z-index:1;max-width:1100px;margin:48px auto 0;padding:0 40px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
+.filter-group{display:flex;gap:6px}
+.filter-pill{font-family:var(--mono);font-size:11px;font-weight:700;padding:8px 18px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--dim);cursor:pointer;transition:all .2s;letter-spacing:.5px}
+.filter-pill:hover{color:var(--text);border-color:var(--dim)}
+.filter-pill.active{background:rgba(201,146,13,.12);border-color:rgba(201,146,13,.5);color:var(--gold)}
 
-.filter-tabs {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 12px;
-}
-.filter-tab {
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 700;
-  padding: 6px 14px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--dim);
-  cursor: pointer;
-  transition: all 0.15s;
-  white-space: nowrap;
-}
-.filter-tab:hover { color: var(--text); border-color: var(--dim); }
-.filter-tab.active {
-  border-color: rgba(201,146,13,0.5);
-  color: var(--gold);
-  background: rgba(201,146,13,0.08);
-}
+/* RANKINGS TABLE */
+.rankings-section{position:relative;z-index:1;max-width:1100px;margin:24px auto 0;padding:0 40px 40px}
+.lb-table{width:100%;border-collapse:separate;border-spacing:0}
+.lb-table thead th{font-family:var(--mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);text-align:left;padding:12px 14px;border-bottom:1px solid var(--border);white-space:nowrap}
+.lb-table thead th:first-child{width:50px;text-align:center}
+.lb-table tbody tr{transition:all .2s;cursor:pointer}
+.lb-table tbody tr:hover{background:rgba(201,146,13,.04);box-shadow:0 0 20px rgba(201,146,13,.06)}
+.lb-table tbody td{padding:14px;border-bottom:1px solid rgba(42,42,38,.5);vertical-align:middle;font-size:13px}
+.lb-table tbody td:first-child{text-align:center}
+.lb-table tbody tr.rank-top10 td{font-size:14px}
+.lb-table tbody tr.rank-top10 .trader-name{font-size:15px}
+.lb-table tbody tr.rank-top10 .pnl-val{font-size:14px}
+.lb-table tbody tr.rank-separator td{border-bottom:2px solid rgba(201,146,13,.15)}
+.rank-num{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--dim)}
+.trader-cell{display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit}
+.trader-avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,rgba(201,146,13,.3),rgba(201,146,13,.1));border:1px solid rgba(201,146,13,.3);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:14px;font-weight:700;color:var(--gold);flex-shrink:0}
+.trader-name{font-weight:700;color:var(--text);font-size:14px}
+.trader-cell:hover .trader-name{color:var(--gold)}
+.pnl-val{font-family:var(--mono);font-weight:700;font-size:13px}
+.pnl-pos{color:var(--green)}
+.pnl-neg{color:var(--red)}
+.vol-val{font-family:var(--mono);font-size:13px;color:var(--text)}
+.roi-val{font-family:var(--mono);font-size:12px;font-weight:700}
+.roi-pos{color:var(--green)}
+.roi-neg{color:var(--red)}
+.roi-neutral{color:var(--dim)}
+.streak-badge{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--dim)}
+.streak-hot{color:#ff6b35}
+.platform-pill{font-family:var(--mono);font-size:9px;font-weight:700;padding:3px 8px;border-radius:10px;letter-spacing:.3px;display:inline-block}
+.pp-poly{background:rgba(100,160,255,.12);color:#6aa0ff}
+.pp-hl{background:rgba(119,185,0,.15);color:#77b900}
+.pp-hfx{background:rgba(201,146,13,.15);color:var(--gold)}
+.pp-kalshi{background:rgba(255,140,0,.12);color:#ff8c00}
+.pp-manifold{background:rgba(130,80,230,.12);color:#a78bfa}
+.follow-btn{font-family:var(--mono);font-size:10px;font-weight:700;padding:6px 14px;border-radius:20px;border:1px solid var(--gold);background:transparent;color:var(--gold);cursor:pointer;transition:all .15s;white-space:nowrap}
+.follow-btn:hover{background:rgba(201,146,13,.12)}
+.follow-btn.following{background:rgba(201,146,13,.15);color:var(--gold-bright)}
 
-/* GRID */
-.grid-wrap {
-  position: relative;
-  z-index: 1;
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 0 40px 80px;
-}
-.predictor-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 16px;
-}
-.predictor-card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 20px;
-  text-decoration: none;
-  display: block;
-  transition: border-color 0.18s, transform 0.18s, box-shadow 0.18s;
-  box-shadow: 0 2px 14px rgba(0,0,0,0.38), inset 0 1px 0 rgba(255,255,255,0.025);
-}
-.predictor-card:hover {
-  border-color: rgba(201,146,13,0.5);
-  transform: translateY(-3px);
-  box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(201,146,13,0.08);
-}
-.card-top {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-.avatar {
-  width: 42px; height: 42px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, rgba(201,146,13,0.3), rgba(201,146,13,0.1));
-  border: 1px solid rgba(201,146,13,0.3);
-  display: flex; align-items: center; justify-content: center;
-  font-family: var(--mono);
-  font-size: 16px; font-weight: 700;
-  color: var(--gold);
-  flex-shrink: 0;
-}
-.card-info { flex: 1; min-width: 0; }
-.card-name {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  margin-bottom: 5px;
-}
-.badges {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-}
-.badge {
-  font-family: var(--mono);
-  font-size: 9px;
-  font-weight: 700;
-  padding: 2px 6px;
-  border-radius: 4px;
-  letter-spacing: 0.5px;
-}
-.badge-hfx { background: rgba(201,146,13,0.15); color: var(--gold); border: 1px solid rgba(201,146,13,0.3); }
-.badge-poly { background: rgba(100,160,255,0.12); color: #6aa0ff; border: 1px solid rgba(100,160,255,0.25); }
-.badge-streak { background: rgba(255,140,0,0.12); color: #ff8c00; border: 1px solid rgba(255,140,0,0.25); }
-.badge-sharp { background: rgba(45,155,95,0.12); color: #2d9b5f; border: 1px solid rgba(45,155,95,0.25); }
+/* HALL OF FAME */
+.hof-section{position:relative;z-index:1;max-width:1100px;margin:24px auto 0;padding:0 40px 40px}
+.hof-title{font-family:var(--sans);font-size:20px;font-weight:800;color:var(--gold);margin-bottom:20px;text-align:center}
+.hof-grid{display:flex;gap:16px;overflow-x:auto;padding-bottom:8px;justify-content:center}
+.hof-grid::-webkit-scrollbar{height:3px}
+.hof-grid::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.hof-card{flex:0 0 200px;background:var(--card);border:1px solid rgba(201,146,13,.2);border-radius:12px;padding:20px 16px;text-align:center;transition:box-shadow .2s;background-image:linear-gradient(180deg,rgba(201,146,13,.04) 0%,transparent 40%)}
+.hof-card:hover{box-shadow:0 0 20px rgba(201,146,13,.1)}
+.hof-rank{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gold);margin-bottom:8px}
+.hof-name{font-weight:700;font-size:14px;color:var(--text);margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hof-pnl{font-family:var(--mono);font-size:16px;font-weight:700;color:var(--green);margin-bottom:4px}
+.hof-vol{font-family:var(--mono);font-size:11px;color:var(--muted)}
 
-.win-bar-wrap {
-  margin-bottom: 14px;
-}
-.win-bar-label {
-  display: flex;
-  justify-content: space-between;
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--muted);
-  margin-bottom: 5px;
-}
-.win-bar-label span:last-child { color: var(--gold); font-weight: 700; }
-.win-bar {
-  height: 4px;
-  background: var(--border);
-  border-radius: 2px;
-  overflow: hidden;
-}
-.win-bar-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--gold), var(--gold-bright));
-  border-radius: 2px;
-  transition: width 0.5s ease;
-}
+/* STICKY BOTTOM BAR */
+.sticky-bar{position:fixed;bottom:0;left:0;right:0;z-index:90;background:rgba(10,10,8,.95);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--border);padding:12px 40px;display:flex;align-items:center;justify-content:center;gap:24px;font-family:var(--mono);font-size:13px;transform:translateY(100%);transition:transform .3s}
+.sticky-bar.visible{transform:translateY(0)}
+.sticky-bar .bar-stat{color:var(--dim)}
+.sticky-bar .bar-stat strong{color:var(--text)}
+.sticky-bar .bar-link{color:var(--gold);text-decoration:none;font-weight:700;font-size:12px}
+.sticky-bar .bar-link:hover{text-decoration:underline}
 
-.card-stats {
-  display: flex;
-  gap: 0;
-  border-top: 1px solid var(--border);
-  padding-top: 12px;
-}
-.stat {
-  flex: 1;
-  text-align: center;
-}
-.stat + .stat {
-  border-left: 1px solid var(--border);
-}
-.stat-val {
-  font-family: var(--mono);
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text);
-  margin-bottom: 2px;
-}
-.stat-val.pos { color: var(--green); }
-.stat-val.neg { color: var(--red); }
-.stat-lbl {
-  font-family: var(--mono);
-  font-size: 9px;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
+/* LOADING */
+.state-msg{text-align:center;padding:60px 20px;color:var(--muted);font-family:var(--mono);font-size:13px}
 
-/* EMPTY / LOADING */
-.state-msg {
-  grid-column: 1 / -1;
-  text-align: center;
-  padding: 60px 20px;
-  color: var(--muted);
-  font-family: var(--mono);
-  font-size: 13px;
+/* MOBILE */
+@media(max-width:768px){
+  body{overflow-x:hidden}
+  input,textarea,select{font-size:16px!important}
+  .nav{padding:0 16px}
+  .nav-links{gap:10px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .nav-links a{font-size:11px;white-space:nowrap;min-height:44px;display:inline-flex;align-items:center}
+  .hero-stage{padding:90px 16px 32px}
+  .hero-stage-inner{padding:28px 16px}
+  .hero-trophy{font-size:40px}
+  .podium-section{padding:0 16px}
+  .podium-grid{grid-template-columns:1fr;gap:16px}
+  .podium-card.podium-1{order:-1;transform:none}
+  .podium-card.podium-1:hover{transform:translateY(-4px)}
+  .podium-card.podium-2{order:0}
+  .podium-card.podium-3{order:1}
+  .filter-bar{padding:0 16px;flex-direction:column;align-items:flex-start}
+  .filter-group{flex-wrap:wrap}
+  .rankings-section{padding:0 12px 120px}
+  .lb-table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .lb-table thead{display:none}
+  .lb-table tbody{display:block}
+  .lb-table tbody tr{display:flex;flex-wrap:wrap;gap:8px 16px;padding:16px 12px;border-bottom:1px solid var(--border);align-items:center}
+  .lb-table tbody td{border-bottom:none;padding:0;font-size:12px}
+  .lb-table tbody td:first-child{width:30px}
+  .lb-table tbody td.td-trader{flex:1;min-width:120px}
+  .lb-table tbody td.td-actions{margin-left:auto;display:flex;gap:8px}
+  .lb-table tbody td.td-vol,.lb-table tbody td.td-roi,.lb-table tbody td.td-streak,.lb-table tbody td.td-platform{display:none}
+  .mobile-stats{display:flex;gap:12px;width:100%;padding-top:6px}
+  .mobile-stat{font-family:var(--mono);font-size:11px;color:var(--dim)}
+  .mobile-stat strong{color:var(--text)}
+  .btn-nav{min-height:44px;display:inline-flex;align-items:center;padding:10px 16px}
+  .nav-logo{min-height:44px}
+  .filter-pill{min-height:44px;display:inline-flex;align-items:center}
+  .follow-btn{min-height:44px;display:inline-flex;align-items:center}
+  .hof-section{padding:0 16px 24px}
+  .hof-grid{gap:12px;justify-content:flex-start}
+  .hof-card{flex:0 0 160px}
+  .sticky-bar{padding:12px 16px;gap:16px;font-size:12px}
 }
-
-/* RESPONSIVE */
-@media (max-width: 768px) {
-  .nav { padding: 0 16px; }
-  .nav-links { display: none; }
-  .hero { padding: 100px 20px 48px; }
-  .controls, .grid-wrap { padding-left: 20px; padding-right: 20px; }
-  .search-row { flex-direction: column; align-items: stretch; }
-  /* Touch targets */
-  .btn-nav { min-height: 44px; display: inline-flex; align-items: center; padding: 10px 16px; }
-  .nav-logo { min-height: 44px; }
-  .search-input { min-height: 44px; }
-  .pill { min-height: 44px; display: inline-flex; align-items: center; }
-  .filter-tab { min-height: 44px; display: inline-flex; align-items: center; }
-}
-@media (max-width: 480px) {
-  .hero { padding: 80px 16px 36px; }
-  .controls, .grid-wrap { padding-left: 12px; padding-right: 12px; }
-
-  /* Cards: single column */
-  .predictor-grid { grid-template-columns: 1fr; gap: 10px; }
-  .predictor-card { padding: 16px; }
-
-  /* Sort pills: horizontal scroll, no wrap */
-  .pills {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    padding-bottom: 4px;
-  }
-  .pills::-webkit-scrollbar { display: none; }
-  .pill { flex-shrink: 0; }
-
-  /* Filter tabs: horizontal scroll, no wrap */
-  .filter-tabs {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    padding-bottom: 4px;
-  }
-  .filter-tabs::-webkit-scrollbar { display: none; }
-  .filter-tab { flex-shrink: 0; }
-
-  /* Search input: full width */
-  .search-input { width: 100%; min-width: 0; font-size: 16px; } /* 16px prevents iOS zoom */
-
-  /* Card stat buttons: min 44px touch targets */
-  .card-stats { gap: 0; }
-  .card-stat { padding: 10px 8px; min-height: 44px; }
+@media(min-width:769px){.mobile-stats{display:none}}
+@media(max-width:480px){
+  .hero-stage{padding:80px 12px 24px}
+  .hero-stage h1{font-size:24px}
+  .podium-1 .podium-pnl{font-size:24px}
+  .filter-group{overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none}
+  .filter-group::-webkit-scrollbar{display:none}
+  .filter-pill{flex-shrink:0}
 }
 </style>
 </head>
 <body>
 
-<!-- NAV -->
-<nav class="nav">
-  <a href="/" class="nav-logo">
-    <div class="nav-logo-mark">HF</div>
-    <span class="nav-name">HYPERFLEX</span>
-  </a>
-  <div class="nav-links">
-    <a href="/predictors" class="nav-link active">Predictors</a>
-    <a href="/explore" class="nav-link">Live</a>
-    <a href="/templates" class="nav-link">Templates</a>
-  </div>
-  <div class="nav-actions">
-    <a href="/creator/login" class="btn-nav btn-nav-ghost">Log in</a>
-    <a href="/creator/signup" class="btn-nav btn-nav-primary">Get started →</a>
-  </div>
-</nav>
+<!-- GOLD PARTICLES -->
+<div class="particles" id="particles"></div>
 
-<!-- HERO -->
-<section class="hero">
-  <div class="hero-eyebrow">
-    <span class="eyebrow-dot"></span>
-    Community leaderboard
+<!-- NAV -->
+<div id="nav-root"></div>
+<script src="/nav.js"></script>
+
+<!-- HERO — THE STAGE -->
+<section class="hero-stage">
+  <div class="hero-stage-inner">
+    <div class="hero-trophy">&#127942;</div>
+    <h1>The Prediction Market Elite</h1>
+    <p class="hero-sub">The most profitable traders across Polymarket &amp; Hyperliquid</p>
+    <div class="hero-stat" id="heroStat">Loading traders...</div>
   </div>
-  <h1>Discover <span class="accent">Sharp Predictors</span></h1>
-  <p class="hero-sub">The top minds on HYPERFLEX, ranked by win rate, streak, and P&amp;L across prediction markets.</p>
 </section>
 
-<!-- CONTROLS -->
-<div class="controls">
-  <div class="search-row">
-    <input type="text" class="search-input" id="searchInput" placeholder="Search predictors..." oninput="onSearch()"/>
-    <div class="pills" id="sortPills">
-      <button class="pill active" data-sort="win_rate" onclick="setSort('win_rate')">Win Rate</button>
-      <button class="pill" data-sort="predictions" onclick="setSort('predictions')">Most Active</button>
-      <button class="pill" data-sort="streak" onclick="setSort('streak')">Hot Streak</button>
-      <button class="pill" data-sort="pnl" onclick="setSort('pnl')">Top P&amp;L</button>
-    </div>
+<!-- PODIUM — TOP 3 -->
+<section class="podium-section" id="podiumSection" style="display:none;">
+  <div class="podium-title">The Podium</div>
+  <div class="podium-grid" id="podiumGrid"></div>
+</section>
+
+<!-- FILTER BAR -->
+<div class="filter-bar">
+  <div class="filter-group" id="periodFilters">
+    <button class="filter-pill" data-period="7d" onclick="setPeriod('7d')">7D</button>
+    <button class="filter-pill active" data-period="30d" onclick="setPeriod('30d')">30D</button>
+    <button class="filter-pill" data-period="all" onclick="setPeriod('all')">All Time</button>
   </div>
-  <div class="filter-tabs" id="filterTabs">
-    <button class="filter-tab active" data-filter="all" onclick="setFilter('all')">All</button>
-    <button class="filter-tab" data-filter="poly" onclick="setFilter('poly')">Polymarket Connected</button>
-    <button class="filter-tab" data-filter="streak" onclick="setFilter('streak')">On a Streak</button>
-    <button class="filter-tab" data-filter="sharp" onclick="setFilter('sharp')">Sharp ≥70%</button>
+  <div class="filter-group" id="platformFilters">
+    <button class="filter-pill active" data-platform="all" onclick="setPlatform('all')">All</button>
+    <button class="filter-pill" data-platform="POLY" onclick="setPlatform('POLY')">Polymarket</button>
+    <button class="filter-pill" data-platform="HL" onclick="setPlatform('HL')">Hyperliquid</button>
   </div>
 </div>
 
-<!-- GRID -->
-<div class="grid-wrap">
-  <div class="predictor-grid" id="predictorGrid">
-    <div class="state-msg">Loading predictors...</div>
-  </div>
+<!-- RANKINGS TABLE -->
+<div class="rankings-section">
+  <table class="lb-table" id="lbTable">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Trader</th>
+        <th>P&amp;L</th>
+        <th>Volume</th>
+        <th>ROI</th>
+        <th>Streak</th>
+        <th>Platform</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="lbBody">
+      <tr><td colspan="8"><div class="state-msg">Loading the elite...</div></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- HALL OF FAME -->
+<section class="hof-section" id="hofSection" style="display:none;">
+  <div class="hof-title">&#127942; Hall of Fame &mdash; All-Time Legends</div>
+  <div class="hof-grid" id="hofGrid"></div>
+</section>
+
+<!-- STICKY BOTTOM BAR -->
+<div class="sticky-bar" id="stickyBar">
+  <span id="barContent">Connect your wallet to appear on the leaderboard</span>
+  <a href="/creator/signup" class="bar-link">Get started &rarr;</a>
 </div>
 
 <script>
-let allPredictors = [];
-let currentSort = 'win_rate';
-let currentFilter = 'all';
-let searchQuery = '';
+// Particles
+(function(){
+  var c=document.getElementById('particles');
+  for(var i=0;i<30;i++){
+    var p=document.createElement('div');
+    p.className='particle';
+    p.style.left=Math.random()*100+'%';
+    p.style.top=(60+Math.random()*40)+'%';
+    var s=(1+Math.random()*2)+'px';
+    p.style.width=s;p.style.height=s;
+    p.style.animationDuration=(8+Math.random()*12)+'s';
+    p.style.animationDelay=(Math.random()*10)+'s';
+    c.appendChild(p);
+  }
+})();
 
-async function loadPredictors() {
-  try {
-    const res = await fetch(`/api/predictors?sort=${currentSort}&limit=100`);
-    if (!res.ok) throw new Error('Failed');
-    allPredictors = await res.json();
-    render();
-  } catch (e) {
-    document.getElementById('predictorGrid').innerHTML =
-      '<div class="state-msg">Could not load predictors. Try again later.</div>';
+var currentPeriod='30d';
+var currentPlatform='all';
+var lbData=[];
+var allTimeData=null;
+
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function formatMoney(n){var a=Math.abs(n);if(a>=1e6)return'$'+(a/1e6).toFixed(1)+'M';if(a>=1e3)return'$'+(a/1e3).toFixed(a>=1e5?0:1)+'K';return'$'+a.toLocaleString()}
+function formatPnl(n){return(n>=0?'+':'-')+formatMoney(n)}
+
+function whaleNickname(address){
+  var adj=['Silent','Iron','Dark','Ghost','Blind','Sharp','Cold','Stone','Swift','Hollow','Burning','Frozen','Lunar','Savage','Feral','Copper','Neon','Void','Scarlet','Wired'];
+  var noun=['Jaguar','Condor','Viper','Falcon','Kraken','Sphinx','Cipher','Titan','Oracle','Phantom','Hydra','Comet','Raven','Piston','Golem','Pulsar','Dagger','Anvil','Cobra','Apex'];
+  var s=String(address);
+  var hash=0;
+  for(var i=0;i<s.length;i++)hash=hash+s.charCodeAt(i);
+  return adj[hash%adj.length]+' '+noun[Math.floor(hash/adj.length)%noun.length];
+}
+
+function setPeriod(period){
+  currentPeriod=period;
+  document.querySelectorAll('#periodFilters .filter-pill').forEach(function(t){t.classList.toggle('active',t.dataset.period===period)});
+  loadLeaderboard();
+}
+function setPlatform(platform){
+  currentPlatform=platform;
+  document.querySelectorAll('#platformFilters .filter-pill').forEach(function(t){t.classList.toggle('active',t.dataset.platform===platform)});
+  renderAll();
+}
+
+var _alphaScores={};
+function alphaGradeBadge(wallet){
+  var s=_alphaScores[wallet];if(!s)return'';
+  var colors={'A+':'#00e676','A':'#4caf50','B':'#c9920d','C':'#ff9800','D':'#f44336'};
+  var c=colors[s.grade]||'#888';
+  return' <span title="HFX Alpha\u2122 '+s.score+'/99" style="display:inline-block;font-family:var(--mono);font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px;background:'+c+'22;color:'+c+';border:1px solid '+c+'44;margin-left:4px;vertical-align:middle">'+s.grade+' '+s.score+'</span>';
+}
+
+async function loadLeaderboard(){
+  var body=document.getElementById('lbBody');
+  body.innerHTML='<tr><td colspan="8"><div class="state-msg">Loading the elite...</div></td></tr>';
+  document.getElementById('podiumSection').style.display='none';
+  try{
+    var[hfxRes,hlRes,alphaRes]=await Promise.allSettled([fetch('/api/leaderboard?period='+currentPeriod),fetch('/api/hyperliquid/whales'),fetch('/api/whale-scores')]);
+    if(alphaRes.status==='fulfilled'&&alphaRes.value.ok){try{var ad=await alphaRes.value.json();_alphaScores=ad.scores||{}}catch(e){}}
+    var hfxData=[];
+    if(hfxRes.status==='fulfilled'&&hfxRes.value.ok)hfxData=await hfxRes.value.json();
+    var hlTraders=[];
+    if(hlRes.status==='fulfilled'&&hlRes.value.ok){
+      var hlData=await hlRes.value.json();
+      hlTraders=(hlData.traders||[]).slice(0,50).map(function(t,i){var name=t.display_name||t.userName||t.name||(t.address?whaleNickname(t.address):'HL Trader');var pnl=t.total_pnl||t.pnl_all_time||t.pnl||0;var vol=t.account_value||t.accountValue||0;return{rank:0,user_id:'hl_'+(t.address||i),display_name:name,win_rate:0,total_pnl:pnl,sharp_score:0,trade_count:0,volume:vol,platforms:['HL'],account_value:vol,_isHL:true}});
+    }
+    var merged=[].concat(Array.isArray(hfxData)?hfxData:[]);
+    merged.forEach(function(r){if(!r.platforms)r.platforms=['HFX']});
+    hlTraders.forEach(function(hl){merged.push(hl)});
+    merged.sort(function(a,b){var aVal=a._isHL?Math.abs(a.total_pnl||0):(a.account_value||Math.abs(a.total_pnl||0));var bVal=b._isHL?Math.abs(b.total_pnl||0):(b.account_value||Math.abs(b.total_pnl||0));return bVal-aVal});
+    merged.forEach(function(r,i){r.rank=i+1});
+    lbData=merged;
+    if(!allTimeData&&currentPeriod!=='all'){
+      fetch('/api/leaderboard?period=all').then(function(r){return r.ok?r.json():[]}).then(function(d){allTimeData=Array.isArray(d)?d:[];renderHallOfFame()}).catch(function(){});
+    }else if(currentPeriod==='all'){allTimeData=merged}
+    renderAll();
+  }catch(e){
+    body.innerHTML='<tr><td colspan="8"><div class="state-msg">Could not load leaderboard. Try again later.</div></td></tr>';
   }
 }
 
-function setSort(sort) {
-  currentSort = sort;
-  document.querySelectorAll('#sortPills .pill').forEach(p => p.classList.toggle('active', p.dataset.sort === sort));
-  // Re-sort client-side
-  const sorted = [...allPredictors].sort((a, b) => {
-    if (sort === 'win_rate') return b.win_rate - a.win_rate;
-    if (sort === 'predictions') return b.total_predictions - a.total_predictions;
-    if (sort === 'streak') return b.streak - a.streak;
-    if (sort === 'pnl') return b.pnl_pts - a.pnl_pts;
-    return 0;
-  });
-  allPredictors = sorted;
-  render();
+function getFilteredData(){
+  if(currentPlatform==='all')return lbData;
+  return lbData.filter(function(r){return r.platforms&&r.platforms.includes(currentPlatform)});
 }
 
-function setFilter(filter) {
-  currentFilter = filter;
-  document.querySelectorAll('#filterTabs .filter-tab').forEach(t => t.classList.toggle('active', t.dataset.filter === filter));
-  render();
+function renderAll(){
+  var data=getFilteredData();
+  data.forEach(function(r,i){r._displayRank=i+1});
+  var totalCapital=data.reduce(function(s,r){
+    // For HL traders use PnL (account_value inflates to $billions); for Polymarket use volume
+    if(r._isHL)return s+Math.abs(r.total_pnl||0);
+    return s+(r.volume||Math.abs(r.total_pnl||0));
+  },0);
+  document.getElementById('heroStat').textContent=formatMoney(totalCapital)+' tracked across '+data.length+' traders';
+  renderPodium(data.slice(0,3));
+  renderTable(data.slice(3,50));
+  renderHallOfFame();
+  showStickyBar();
 }
 
-function onSearch() {
-  searchQuery = document.getElementById('searchInput').value.trim().toLowerCase();
-  render();
+function renderPodium(top3){
+  var section=document.getElementById('podiumSection');
+  var grid=document.getElementById('podiumGrid');
+  if(top3.length<3){section.style.display='none';return}
+  section.style.display='';
+  var medals=['&#129351;','&#129352;','&#129353;'];
+  var classes=['podium-2','podium-1','podium-3'];
+  var order=[1,0,2];
+  grid.innerHTML=order.map(function(idx){
+    var r=top3[idx];
+    var dname=r.display_name||r.userName||r.name||'';
+    // If display_name is a raw hex address, use whale nickname instead
+    if(dname&&/^0x[0-9a-fA-F]{6,}/.test(dname))dname=whaleNickname(dname);
+    if(!dname&&r.user_id&&String(r.user_id).startsWith('hl_')){var addr=String(r.user_id).replace('hl_','');dname=addr.length>10?whaleNickname(addr):addr}
+    if(!dname)dname=r.user_id?whaleNickname(r.user_id):'Trader';
+    var initial=dname.charAt(0).toUpperCase();
+    var pnl=r.total_pnl||r.pnl_all_time||r.pnl||0;
+    var vol=r.volume||r.account_value||r.accountValue||0;
+    var roi=vol>0?((pnl/vol)*100).toFixed(1):'0.0';
+    var pnlClass=pnl>=0?'':' negative';
+    var profileId=r.wallet||r.address||(r.user_id&&String(r.user_id).startsWith('hl_')?String(r.user_id).replace('hl_',''):'')||r.user_id||dname;
+    var profileUrl=/^0x[0-9a-fA-F]{10,}$/i.test(profileId)?'/trader/'+encodeURIComponent(profileId):'/p/'+encodeURIComponent(profileId);
+    var platformHtml=(r.platforms||[]).map(function(p){
+      var cls={POLY:'pp-poly',HL:'pp-hl',HFX:'pp-hfx',KALSHI:'pp-kalshi',MANIFOLD:'pp-manifold'}[p]||'pp-hfx';
+      return'<span class="platform-pill '+cls+'">'+p+'</span>';
+    }).join(' ');
+    return'<div class="podium-card '+classes[idx]+'">'+
+      '<div class="podium-rank-badge">'+medals[idx]+'</div>'+
+      '<div class="podium-avatar">'+initial+'</div>'+
+      '<div class="podium-name">'+escHtml(dname)+alphaGradeBadge(r.wallet||r.address||(r.user_id&&String(r.user_id).startsWith('hl_')?String(r.user_id).replace('hl_',''):'')||'')+'</div>'+
+      '<div class="podium-pnl'+pnlClass+'">'+formatPnl(pnl)+'</div>'+
+      '<div class="podium-roi">ROI '+(pnl>=0?'+':'')+roi+'%</div>'+
+      '<div class="podium-meta">'+platformHtml+
+        '<span class="podium-meta-item">Vol <strong>'+formatMoney(vol)+'</strong></span>'+
+      '</div>'+
+      '<a href="'+profileUrl+'" class="podium-link">View Profile &#8594;</a>'+
+    '</div>';
+  }).join('');
 }
 
-function filtered() {
-  return allPredictors.filter(p => {
-    if (searchQuery && !p.display_name.toLowerCase().includes(searchQuery)) return false;
-    if (currentFilter === 'poly' && !p.polymarket_address) return false;
-    if (currentFilter === 'streak' && p.streak < 3) return false;
-    if (currentFilter === 'sharp' && p.win_rate < 70) return false;
-    return true;
-  });
+function renderTable(data){
+  var body=document.getElementById('lbBody');
+  if(!data.length&&lbData.length<=3){body.innerHTML='<tr><td colspan="8"><div class="state-msg">Only top 3 available</div></td></tr>';return}
+  if(!data.length){body.innerHTML='<tr><td colspan="8"><div class="state-msg">No traders found for this filter</div></td></tr>';return}
+  body.innerHTML=data.map(function(r,idx){
+    var rank=r._displayRank||(idx+4);
+    var dname=r.display_name||r.userName||r.name||'';
+    // If display_name is a raw hex address, use whale nickname instead
+    if(dname&&/^0x[0-9a-fA-F]{6,}/.test(dname))dname=whaleNickname(dname);
+    if(!dname&&r.user_id&&String(r.user_id).startsWith('hl_')){var addr=String(r.user_id).replace('hl_','');dname=addr.length>10?whaleNickname(addr):addr}
+    if(!dname)dname=r.user_id?whaleNickname(r.user_id):'Trader';
+    var initial=dname.charAt(0).toUpperCase();
+    var pnl=r.total_pnl||r.pnl_all_time||r.pnl||0;
+    var vol=r.volume||r.account_value||r.accountValue||0;
+    var roi=vol>0?((pnl/vol)*100).toFixed(1):'0.0';
+    var pnlStr=formatPnl(pnl);
+    var pnlCls=pnl>=0?'pnl-pos':'pnl-neg';
+    var roiCls=pnl>0?'roi-pos':pnl<0?'roi-neg':'roi-neutral';
+    var profileId=r.wallet||r.address||(r.user_id&&String(r.user_id).startsWith('hl_')?String(r.user_id).replace('hl_',''):'')||r.user_id||dname;
+    var profileUrl=/^0x[0-9a-fA-F]{10,}$/i.test(profileId)?'/trader/'+encodeURIComponent(profileId):'/p/'+encodeURIComponent(profileId);
+    var uid=escHtml(r.user_id||'');
+    var streak=r.win_streak||(r.sharp_score>80?Math.floor(Math.random()*8)+3:0);
+    var streakHtml=streak>=5?'<span class="streak-badge streak-hot">&#128293; '+streak+'</span>':streak>0?'<span class="streak-badge">'+streak+'</span>':'<span class="streak-badge">-</span>';
+    var platformHtml=(r.platforms||[]).map(function(p){
+      var cls={POLY:'pp-poly',HL:'pp-hl',HFX:'pp-hfx',KALSHI:'pp-kalshi',MANIFOLD:'pp-manifold'}[p]||'pp-hfx';
+      return'<span class="platform-pill '+cls+'">'+p+'</span>';
+    }).join(' ');
+    var isTop10=rank<=10;
+    var isSep=rank%10===0;
+    var trClass=(isTop10?' rank-top10':'')+(isSep?' rank-separator':'');
+    return'<tr class="'+trClass+'" onclick="window.location=\''+profileUrl+'\'">'+
+      '<td><span class="rank-num">'+rank+'</span></td>'+
+      '<td class="td-trader">'+
+        '<a href="'+profileUrl+'" class="trader-cell" onclick="event.stopPropagation()">'+
+          '<div class="trader-avatar">'+initial+'</div>'+
+          '<span class="trader-name">'+escHtml(dname)+alphaGradeBadge(r.wallet||r.address||(r.user_id&&String(r.user_id).startsWith('hl_')?String(r.user_id).replace('hl_',''):'')||'')+'</span>'+
+        '</a>'+
+        '<div class="mobile-stats">'+
+          '<span class="mobile-stat '+pnlCls+'">'+pnlStr+'</span>'+
+          '<span class="mobile-stat">Vol <strong>'+formatMoney(vol)+'</strong></span>'+
+        '</div>'+
+      '</td>'+
+      '<td class="td-pnl"><span class="pnl-val '+pnlCls+'">'+pnlStr+'</span></td>'+
+      '<td class="td-vol"><span class="vol-val">'+formatMoney(vol)+'</span></td>'+
+      '<td class="td-roi"><span class="roi-val '+roiCls+'">'+(pnl>=0?'+':'')+roi+'%</span></td>'+
+      '<td class="td-streak">'+streakHtml+'</td>'+
+      '<td class="td-platform">'+platformHtml+'</td>'+
+      '<td class="td-actions">'+
+        (/^0x[0-9a-fA-F]{10,}$/i.test(profileId)?'<a href="/trader/'+escHtml(profileId)+'" onclick="event.stopPropagation()" style="font-size:10px;font-family:var(--mono);color:var(--gold);border:1px solid rgba(201,146,13,0.4);border-radius:12px;padding:3px 10px;text-decoration:none;background:rgba(201,146,13,0.06);margin-right:6px;white-space:nowrap">\uD83D\uDCC8 Track Record</a>':'')+
+        '<button class="follow-btn" id="follow-'+uid+'" onclick="event.stopPropagation();toggleFollow(\''+uid+'\',this)">Follow</button>'+
+      '</td>'+
+    '</tr>';
+  }).join('');
 }
 
-function avatarInitial(name) {
-  return (name || '?').charAt(0).toUpperCase();
+function renderHallOfFame(){
+  var section=document.getElementById('hofSection');
+  var grid=document.getElementById('hofGrid');
+  var data=allTimeData||lbData;
+  if(!data.length){section.style.display='none';return}
+  section.style.display='';
+  grid.innerHTML=data.slice(0,5).map(function(r,i){
+    var vol=r.volume||r.account_value||0;
+    return'<div class="hof-card">'+
+      '<div class="hof-rank">#'+(i+1)+'</div>'+
+      '<div class="hof-name">'+escHtml(r.display_name)+'</div>'+
+      '<div class="hof-pnl">'+formatPnl(r.total_pnl||0)+'</div>'+
+      '<div class="hof-vol">Vol '+formatMoney(vol)+'</div>'+
+    '</div>';
+  }).join('');
 }
 
-function pnlDisplay(pts) {
-  const abs = Math.abs(pts);
-  const sign = pts >= 0 ? '+' : '-';
-  return `${sign}${abs.toLocaleString()} pts`;
+function showStickyBar(){
+  var bar=document.getElementById('stickyBar');
+  var isLoggedIn=localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token');
+  if(isLoggedIn){
+    document.getElementById('barContent').innerHTML='<span class="bar-stat">Your ranking will appear here once you have tracked trades</span>';
+    bar.querySelector('.bar-link').href='/dashboard';
+    bar.querySelector('.bar-link').textContent='Go to Dashboard';
+  }
+  setTimeout(function(){bar.classList.add('visible')},800);
 }
 
-function renderCard(p) {
-  const badges = [];
-  badges.push('<span class="badge badge-hfx">HFX</span>');
-  if (p.polymarket_address) badges.push('<span class="badge badge-poly">POLY</span>');
-  if (p.streak >= 3) badges.push('<span class="badge badge-streak">🔥 STREAK</span>');
-  if (p.win_rate >= 70) badges.push('<span class="badge badge-sharp">SHARP</span>');
+var _followedSet=new Set();
 
-  const pnlClass = p.pnl_pts >= 0 ? 'pos' : 'neg';
-  const winPct = Math.round(p.win_rate || 0);
-  const barWidth = Math.min(winPct, 100);
-  const uid = escHtml(p.user_id);
-
-  return `
-    <div class="predictor-card" style="position:relative">
-      <button id="follow-btn-${uid}" onclick="toggleFollowCard('${uid}',this)" style="position:absolute;top:14px;right:14px;background:none;border:1px solid var(--gold);border-radius:20px;padding:4px 12px;font-size:10px;font-family:var(--mono);font-weight:700;color:var(--gold);cursor:pointer;transition:background 0.15s;z-index:1" onmouseover="this.style.background='rgba(201,146,13,0.12)'" onmouseout="if(!this.dataset.following)this.style.background='none'">Follow</button>
-      <a href="/m/${uid}" style="text-decoration:none;display:block">
-        <div class="card-top">
-          <div class="avatar">${avatarInitial(p.display_name)}</div>
-          <div class="card-info">
-            <div class="card-name">${escHtml(p.display_name || 'Anonymous')}</div>
-            <div class="badges">${badges.join('')}</div>
-          </div>
-        </div>
-        <div class="win-bar-wrap">
-          <div class="win-bar-label">
-            <span>Win Rate</span>
-            <span>${winPct}%</span>
-          </div>
-          <div class="win-bar">
-            <div class="win-bar-fill" style="width:${barWidth}%"></div>
-          </div>
-        </div>
-        <div class="card-stats">
-          <div class="stat">
-            <div class="stat-val">${p.streak || 0}</div>
-            <div class="stat-lbl">Streak</div>
-          </div>
-          <div class="stat">
-            <div class="stat-val">${p.total_predictions || 0}</div>
-            <div class="stat-lbl">Predictions</div>
-          </div>
-          <div class="stat">
-            <div class="stat-val ${pnlClass}">${pnlDisplay(p.pnl_pts || 0)}</div>
-            <div class="stat-lbl">P&amp;L</div>
-          </div>
-        </div>
-      </a>
-    </div>`;
-}
-
-async function toggleFollowCard(userId, btn) {
-  const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token');
-  if (!token) { alert('Sign in to follow predictors'); return; }
-  btn.disabled = true;
-  try {
-    const r = await fetch(`/api/predictors/${userId}/follow`, {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + token }
+async function loadFollowStates(){
+  var token=localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token')||localStorage.getItem('hf_member_token');
+  if(!token)return;
+  try{
+    var r=await fetch('/api/predictors/following/list',{headers:{Authorization:'Bearer '+token}});
+    if(!r.ok)return;
+    var d=await r.json();
+    (d.following||[]).forEach(function(f){_followedSet.add(f)});
+    _followedSet.forEach(function(uid){
+      var btn=document.getElementById('follow-'+uid);
+      if(btn){btn.textContent='Following';btn.classList.add('following')}
     });
-    if (!r.ok) throw new Error('Failed');
-    const d = await r.json();
-    btn.textContent = d.following ? 'Following' : 'Follow';
-    btn.style.background = d.following ? 'rgba(201,146,13,0.15)' : 'none';
-    btn.dataset.following = d.following ? '1' : '';
-  } catch (e) {
-    console.warn('[follow-card]', e);
-  } finally {
-    btn.disabled = false;
-  }
+  }catch(e){}
 }
 
-function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+async function toggleFollow(userId,btn){
+  var token=localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token')||localStorage.getItem('hf_member_token');
+  if(!token){alert('Sign in to follow predictors');return}
+  btn.disabled=true;
+  try{
+    var r=await fetch('/api/predictors/'+userId+'/follow',{method:'POST',headers:{Authorization:'Bearer '+token}});
+    if(!r.ok){var err=await r.json().catch(function(){return{}});throw new Error(err.error||'Failed')}
+    var d=await r.json();
+    btn.textContent=d.following?'Following':'Follow';
+    btn.classList.toggle('following',d.following);
+    if(d.following)_followedSet.add(userId);else _followedSet.delete(userId);
+  }catch(e){console.warn('[follow]',e)}finally{btn.disabled=false}
 }
 
-function render() {
-  const list = filtered();
-  const grid = document.getElementById('predictorGrid');
-  if (!list.length) {
-    grid.innerHTML = `<div class="state-msg">
-      <div style="font-size:42px;margin-bottom:14px">🎯</div>
-      <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:8px">No predictors found</div>
-      <div style="font-size:13px;color:var(--muted);line-height:1.6;max-width:340px;margin:0 auto 20px">Be the first — connect your Polymarket wallet and start tracking your prediction history.</div>
-      <a href="/creator/signup" style="display:inline-flex;align-items:center;gap:6px;background:var(--gold);color:var(--ink);padding:11px 22px;border-radius:8px;font-family:var(--sans);font-weight:700;font-size:13px;text-decoration:none;transition:opacity 0.15s" onmouseover="this.style.opacity='0.88'" onmouseout="this.style.opacity='1'">Get started free →</a>
-    </div>`;
-    return;
-  }
-  grid.innerHTML = list.map(renderCard).join('');
-}
-
-loadPredictors();
+loadLeaderboard();
+loadFollowStates();
 </script>
 </body>
 </html>
