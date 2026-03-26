@@ -24064,12 +24064,36 @@ if (pool) {
       )`).catch(() => {});
 
       await dbQuery(`CREATE TABLE IF NOT EXISTS prediction_log (
-        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        source TEXT, market_id TEXT, market_question TEXT,
-        predicted_side TEXT, predicted_confidence NUMERIC,
+        id SERIAL PRIMARY KEY,
+        source TEXT NOT NULL DEFAULT 'crystal_ball',
+        market_id TEXT, market_question TEXT,
+        predicted_side TEXT, predicted_confidence INTEGER,
         market_price_at_prediction NUMERIC, target_price NUMERIC,
-        actual_outcome TEXT, resolved_at TIMESTAMPTZ, expires_at TIMESTAMPTZ,
-        created_at TIMESTAMPTZ DEFAULT NOW()
+        expires_at TIMESTAMPTZ, detected_at TIMESTAMPTZ DEFAULT NOW(),
+        resolved BOOLEAN DEFAULT false, outcome TEXT,
+        market_price_at_resolution NUMERIC, resolved_at TIMESTAMPTZ,
+        pnl_if_followed NUMERIC
+      )`).catch(() => {});
+      // Ensure columns exist (for tables created with old schema)
+      await dbQuery(`ALTER TABLE prediction_log ADD COLUMN IF NOT EXISTS detected_at TIMESTAMPTZ DEFAULT NOW()`).catch(() => {});
+      await dbQuery(`ALTER TABLE prediction_log ADD COLUMN IF NOT EXISTS resolved BOOLEAN DEFAULT false`).catch(() => {});
+      await dbQuery(`ALTER TABLE prediction_log ADD COLUMN IF NOT EXISTS outcome TEXT`).catch(() => {});
+      await dbQuery(`ALTER TABLE prediction_log ADD COLUMN IF NOT EXISTS market_price_at_resolution NUMERIC`).catch(() => {});
+      await dbQuery(`ALTER TABLE prediction_log ADD COLUMN IF NOT EXISTS pnl_if_followed NUMERIC`).catch(() => {});
+
+      await dbQuery(`CREATE TABLE IF NOT EXISTS signal_outcomes (
+        id SERIAL PRIMARY KEY, signal_type TEXT, source TEXT,
+        market_question TEXT, predicted_side TEXT,
+        predicted_at TIMESTAMPTZ DEFAULT NOW(), market_price_at_signal NUMERIC,
+        confidence_level TEXT, whale_count INTEGER DEFAULT 0,
+        outcome TEXT, resolved_at TIMESTAMPTZ, was_correct BOOLEAN
+      )`).catch(() => {});
+
+      await dbQuery(`CREATE TABLE IF NOT EXISTS source_accuracy (
+        id SERIAL PRIMARY KEY, source TEXT UNIQUE NOT NULL,
+        total_predictions INTEGER DEFAULT 0, correct_predictions INTEGER DEFAULT 0,
+        accuracy_pct NUMERIC DEFAULT 0, avg_roi NUMERIC DEFAULT 0,
+        last_updated TIMESTAMPTZ DEFAULT NOW()
       )`).catch(() => {});
 
       await dbQuery(`CREATE TABLE IF NOT EXISTS market_snapshots (
