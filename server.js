@@ -23155,20 +23155,23 @@ SHORT PROVOCATIVE HEADLINE?
 
 HARD RULES:
 - Pick ONE market/story. Not a summary. ONE story.
-- Total tweet MUST be under 240 characters including all lines
 - ALL CAPS headline, 3-7 words, ends with ?
 - Exactly 3 bullet lines starting with >
-- Each bullet under 60 chars
-- Include at least one $ amount
+- Each bullet under 50 chars
+- Use specific numbers: "$70,000" not "$billions"
+- Do NOT use cashtags ($BTC, $ETH etc) — Twitter auto-links them
 - No hashtags, no emojis, no "Good morning", no "Today's"
-- If it's over 240 chars, cut bullets shorter. NEVER exceed 240.`,
+- Output ONLY the tweet text. No character counts, no notes, no explanations, no "---", no markdown.
+- Keep the whole thing short. 5 lines max.`,
     messages: [{
       role: 'user',
-      content: `Pick the SINGLE most interesting story and write one tweet.\n\nMarket: ${bestMarket ? bestMarket.market + ' — ' + bestMarket.thesis : 'N/A'}\nFear & Greed: ${briefData.fear_greed?.score || 'N/A'}\nWhale move: ${whaleMove || 'None detected'}\nPayout: ${payoutLine || 'N/A'}\n\nBrief excerpt: ${briefData.narrative.substring(0, 400)}\n\nUNDER 240 CHARS TOTAL. Count carefully.`
+      content: `Pick the SINGLE most interesting story and write one tweet. Output ONLY the tweet text, nothing else.\n\nMarket: ${bestMarket ? bestMarket.market + ' — ' + bestMarket.thesis : 'N/A'}\nFear & Greed: ${briefData.fear_greed?.score || 'N/A'}\nWhale move: ${whaleMove || 'None detected'}\nPayout: ${payoutLine || 'N/A'}\n\nBrief excerpt: ${briefData.narrative.substring(0, 400)}`
     }]
   });
 
   let tweet = (tweetRes.content[0]?.text || '').trim();
+  // Strip any meta-commentary Claude might leak (character counts, notes, markdown)
+  tweet = tweet.replace(/\*\*.*?\*\*/g, '').replace(/^---+$/gm, '').replace(/character count.*$/gim, '').replace(/^\s*\n/gm, '\n').trim();
   tweet = tweet.replace(/^["']|["']$/g, '').trim();
   // Hard cap at 240 chars to leave room for link
   if (tweet.length > 240) tweet = tweet.substring(0, 237) + '...';
