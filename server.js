@@ -22860,16 +22860,16 @@ async function generateAndPostDailyTweet() {
 }
 
 // POST /api/tweet-brief — manual trigger (admin only)
-app.post('/api/tweet-brief', async (req, res) => {
+// Returns immediately, runs tweet generation in background to avoid Railway timeout
+app.post('/api/tweet-brief', (req, res) => {
   const adminSecret = req.headers['x-admin-secret'] || req.query.admin;
   if (adminSecret !== process.env.ADMIN_SECRET) return res.status(403).json({ error: 'Unauthorized' });
-  try {
-    const result = await generateAndPostDailyTweet();
-    res.json({ ok: true, tweet_id: result.data?.id });
-  } catch (err) {
+  // Fire and respond immediately
+  res.json({ ok: true, status: 'Tweet generation started — check @HyperFlexapp in ~30 seconds' });
+  generateAndPostDailyTweet().catch(err => {
     console.error('[tweet-brief]', err.message);
-    res.status(500).json({ error: err.message });
-  }
+    _logError('tweet-brief', err);
+  });
 });
 
 // Daily tweet cron — 1:30pm UTC (8:30am ET) — right after brief generates + caches warm
