@@ -3,22 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Explore — Live Prediction Market Activity | HYPERFLEX</title>
-<meta name="description" content="Live prediction market activity, whale trades, and news impact across all platforms."/>
-<link rel="canonical" href="https://hyperflex.network/explore"/>
-<!-- Open Graph -->
-<meta property="og:type" content="website"/>
-<meta property="og:url" content="https://hyperflex.network/explore"/>
-<meta property="og:title" content="Explore — HYPERFLEX"/>
-<meta property="og:description" content="Live prediction market activity, whale trades, and news impact across all platforms."/>
-<meta property="og:image" content="https://hyperflex.network/og-default.png"/>
-<meta property="og:site_name" content="HYPERFLEX"/>
-<!-- Twitter / X -->
-<meta name="twitter:card" content="summary_large_image"/>
-<meta name="twitter:site" content="@HyperFlexApp"/>
-<meta name="twitter:title" content="Explore — HYPERFLEX"/>
-<meta name="twitter:description" content="Live prediction market activity, whale trades, and news impact across all platforms."/>
-<meta name="twitter:image" content="https://hyperflex.network/og-default.png"/>
+<title>Explore — HYPERFLEX</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -286,7 +271,7 @@ nav {
   flex-wrap: wrap;
 }
 .community-pill {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   padding: 2px 8px;
   border-radius: 4px;
@@ -371,7 +356,7 @@ nav {
 .ac-market-card:hover { border-color: rgba(201,146,13,0.5); }
 .ac-market-inner { padding: 12px 14px; }
 .ac-community-pill {
-  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
   padding: 2px 8px; border-radius: 4px; display: inline-block; margin-bottom: 6px;
 }
 .ac-question { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.45; margin-bottom: 8px; }
@@ -463,31 +448,7 @@ nav {
 }
 .community-row:last-child { border-bottom: none; }
 .community-row:hover { opacity: 1; color: var(--text); }
-.community-row:hover .community-name { color: #d4a83a; }
-.sidebar-footer-link {
-  display: block;
-  margin-top: 12px;
-  font-family: 'Space Mono', monospace;
-  font-size: 11px;
-  color: var(--gold);
-  text-decoration: none;
-  font-weight: 700;
-}
-.sidebar-footer-link:hover { text-decoration: underline; }
-.sidebar-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 9px 6px;
-  border-bottom: 1px solid var(--border);
-  text-decoration: none;
-  color: inherit;
-  transition: background 0.15s;
-  border-radius: 4px;
-  margin: 0 -6px;
-}
-.sidebar-row:last-child { border-bottom: none; }
-.sidebar-row:hover { background: rgba(201,146,13,0.06); }
+.community-row:hover .community-name { color: var(--gold-dim-text, #d4a83a); }
 .community-dot {
   width: 8px;
   height: 8px;
@@ -515,7 +476,7 @@ nav {
   border-bottom: 1px solid var(--border);
 }
 .announcement-item:last-child { border-bottom: none; }
-.announcement-community { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--gold); margin-bottom: 4px; }
+.announcement-community { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--gold); margin-bottom: 4px; }
 .announcement-title { font-size: 12px; color: var(--text-soft); line-height: 1.45; }
 .announcement-time { font-size: 11px; color: var(--muted); margin-top: 4px; }
 
@@ -653,7 +614,7 @@ nav {
 }
 .predictor-trades { font-size: 11px; color: var(--muted); margin-top: 1px; }
 .predictor-tier {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   padding: 3px 8px;
   border-radius: 4px;
@@ -700,7 +661,7 @@ nav {
   box-shadow: 0 0 0 1px rgba(201,146,13,0.08);
 }
 .featured-label {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 1.5px;
@@ -770,80 +731,22 @@ nav {
   font-size: 12px;
   color: var(--muted);
 }
-/* ── READABILITY & MOBILE POLISH ── */
-@media (max-width: 768px) {
-  body { overflow-x: hidden; }
-  input, textarea, select { font-size: 16px !important; }
-  .nav-links { display: none; }
-}
-@keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.4} }
-.explore-insight-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: #0f0e0c;
-  border: 1px solid #2a2a26;
-  border-left: 3px solid var(--gold);
-  border-radius: 8px;
-  padding: 12px 14px;
-  cursor: pointer;
-  text-decoration: none;
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-.explore-insight-card:hover { border-color: rgba(201,146,13,0.4); box-shadow: 0 2px 12px rgba(0,0,0,0.3); }
-.explore-insight-icon { font-size: 22px; flex-shrink: 0; }
-.explore-insight-info { flex: 1; min-width: 0; }
-.explore-insight-headline { font-size: 13px; font-weight: 700; color: var(--text-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.explore-insight-body { font-size: 11px; color: #7a7870; margin-top: 2px; }
-.explore-insight-stat { font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 800; color: var(--gold); flex-shrink: 0; white-space: nowrap; }
-.explore-insight-share { font-family: 'Space Mono', monospace; font-size: 9px; color: #7a7870; background: transparent; border: 1px solid #2a2a26; border-radius: 4px; padding: 3px 6px; cursor: pointer; flex-shrink: 0; text-decoration: none; transition: all 0.15s; }
-.explore-insight-share:hover { color: var(--text-soft); border-color: #7a7870; }
-
-/* DAILY BRIEFING */
-.briefing-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
-.briefing-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; cursor: pointer; user-select: none; }
-.briefing-header:hover { background: rgba(201,146,13,0.04); }
-.briefing-title { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; color: var(--gold); text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 8px; }
-.briefing-toggle { font-size: 12px; color: var(--muted); transition: transform 0.2s; }
-.briefing-toggle.open { transform: rotate(180deg); }
-.briefing-body { padding: 0 16px 16px; display: none; }
-.briefing-body.open { display: block; }
-.briefing-headline { font-size: 14px; font-weight: 700; color: var(--text); line-height: 1.4; margin-bottom: 12px; }
-.briefing-bullets { list-style: none; padding: 0; margin: 0 0 12px; }
-.briefing-bullets li { font-size: 12px; color: #9a9a8e; line-height: 1.5; padding: 4px 0; border-bottom: 1px solid rgba(42,42,36,0.3); display: flex; gap: 8px; }
-.briefing-bullets li:last-child { border: none; }
-.briefing-bullets .bullet-icon { flex-shrink: 0; }
-.briefing-fg { display: inline-flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; margin-bottom: 12px; }
-.briefing-fg-score { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 800; }
-.briefing-fg-label { font-size: 11px; font-weight: 600; }
-.briefing-link { font-family: 'Space Mono', monospace; font-size: 11px; color: var(--gold); text-decoration: none; font-weight: 700; }
-.briefing-link:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
 
 <nav>
-  <a href="/" class="nav-logo">
-    <svg viewBox="0 0 32 32" fill="none" style="width:24px;height:24px;margin-right:8px;vertical-align:middle">
-      <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="#c9920d" stroke-width="1.5" fill="rgba(201,146,13,0.1)"/>
-      <path d="M16 8L22 11.5V18.5L16 22L10 18.5V11.5L16 8Z" fill="#c9920d" opacity="0.6"/>
-    </svg>HYPERFLEX
-  </a>
+  <a href="/" class="nav-logo">HYPERFLEX</a>
   <div class="nav-links">
-    <a href="/predictors">Predictors</a>
-    <a href="/explore" style="color:var(--text-soft)">Explore</a>
+    <a href="/explore">Explore</a>
     <a href="/odds">Odds</a>
-    <a href="/crystal-ball" style="color:#c9920d">&#x1F52E; Crystal Ball</a>
-    <a href="/whales">Market Intel</a>
-    <a href="/data">Data</a>
-    <a href="/templates">Templates</a>
-    <a href="/api-docs">API</a>
     <!-- logged-in state -->
-    <a href="/creator/dashboard" id="navDashboardLink" style="display:none;color:var(--gold)">Dashboard</a>
+    <a href="/my" id="navDashboardLink" style="display:none;color:var(--gold)">My Dashboard</a>
     <button id="navSignOutBtn" onclick="memberSignOut()" style="display:none;background:none;border:1px solid rgba(255,255,255,.15);color:#aaa8a0;font-size:13px;padding:6px 14px;border-radius:6px;cursor:pointer;font-family:inherit">Sign out</button>
     <!-- logged-out state -->
-    <button id="navMemberSignIn" onclick="openMemberAuth('login')" style="background:none;border:1px solid rgba(255,255,255,.15);color:#aaa8a0;font-size:13px;padding:6px 14px;border-radius:6px;cursor:pointer;font-family:inherit">Sign in</button>
-    <a href="/creator/signup" class="nav-cta" id="navStartFree">Get started free</a>
+    <button id="navMemberSignIn" onclick="openMemberAuth('login')" style="background:none;border:1px solid rgba(255,255,255,.15);color:#aaa8a0;font-size:13px;padding:6px 14px;border-radius:6px;cursor:pointer;font-family:inherit">Member sign in</button>
+    <a href="/creator/login" id="navCreatorLogin" style="color:#aaa8a0;font-size:13px;text-decoration:none;padding:6px 14px">Creator login</a>
+    <a href="/creator/signup" class="nav-cta" id="navStartFree">Start Free</a>
   </div>
 </nav>
 
@@ -900,7 +803,7 @@ nav {
 <div class="hero">
   <div class="live-badge">Live across all communities</div>
   <h1>What the crowd is<br><span>betting on right now</span></h1>
-  <p>Real-time predictions from top Polymarket &amp; Kalshi traders.</p>
+  <p>Real-time predictions from top Polymarket, Kalshi &amp; Manifold traders.</p>
   <div class="stats-ticker" id="statsTicker">
     <div class="stat-pill">
       <div class="stat-pill-value" id="statTotalTrades">—</div>
@@ -919,117 +822,26 @@ nav {
   </div>
 </div>
 
-<!-- LIVE TRADING FEED TICKER -->
-<div id="liveFeedTicker" style="max-width:1200px;margin:0 auto 16px;padding:0 40px;overflow:hidden">
-  <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-    <span style="display:inline-flex;align-items:center;gap:5px;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:var(--green)"><span style="display:inline-block;width:6px;height:6px;background:var(--green);border-radius:50%;animation:pulse-dot 1.8s infinite"></span> LIVE TRADES</span>
-    <span style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted)" id="liveFeedUpdated"></span>
-  </div>
-  <div style="overflow:hidden;position:relative;border:1px solid var(--border);border-radius:10px;background:var(--card);padding:0">
-    <div id="liveFeedScroll" style="display:flex;gap:0;animation:tickerScroll 30s linear infinite;white-space:nowrap;padding:10px 0">
-      <span style="font-family:'Space Mono',monospace;font-size:12px;color:var(--muted);padding:0 16px">Loading live trades...</span>
-    </div>
-  </div>
-</div>
-<style>
-@keyframes tickerScroll {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(-50%); }
-}
-#liveFeedScroll:hover { animation-play-state: paused; }
-.lf-item { display: inline-flex; align-items: center; gap: 6px; padding: 4px 16px; border-right: 1px solid var(--border); white-space: nowrap; cursor: pointer; transition: background 0.15s; text-decoration: none; color: inherit; flex-shrink: 0; }
-.lf-item:hover { background: rgba(201,146,13,0.06); }
-.lf-item:last-child { border-right: none; }
-.lf-size { font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700; color: var(--gold); }
-.lf-side { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; }
-.lf-side-yes { background: rgba(34,197,94,0.15); color: var(--green); }
-.lf-side-no { background: rgba(239,68,68,0.15); color: var(--red); }
-.lf-market { font-size: 12px; color: var(--text); max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
-@media (max-width: 960px) {
-  #liveFeedTicker { padding: 0 16px; }
-}
-</style>
-<script>
-(function() {
-  var _lfInterval = null;
-
-  function loadLiveFeed() {
-    fetch('/api/live-feed?limit=10').then(function(r) { return r.json(); }).then(function(d) {
-      var trades = d.trades || [];
-      if (!trades.length) {
-        document.getElementById('liveFeedScroll').innerHTML = '<span style="font-family:\'Space Mono\',monospace;font-size:12px;color:var(--muted);padding:0 16px">No recent large trades detected.</span>';
-        return;
-      }
-      var items = trades.map(function(t) {
-        var sideUp = (t.side || 'YES').toUpperCase();
-        var sideClass = sideUp === 'YES' ? 'lf-side-yes' : 'lf-side-no';
-        var whalePrefix = t.is_whale ? '\uD83D\uDC0B ' : '';
-        var sz = parseFloat(t.size) || 0;
-        var sizeStr = sz >= 1000000 ? '$' + (sz / 1000000).toFixed(1) + 'M' : sz >= 1000 ? '$' + (sz / 1000).toFixed(0) + 'K' : '$' + sz.toFixed(0);
-        var trader = t.trader || 'Anon';
-        if (trader.length > 14) trader = trader.substring(0, 12) + '..';
-        var market = (t.market || 'Unknown');
-        if (market.length > 40) market = market.substring(0, 37) + '...';
-        return '<a class="lf-item" href="' + (t.url || 'https://polymarket.com') + '" target="_blank" rel="noopener">' +
-          '<span style="font-family:\'Space Mono\',monospace;font-size:11px;color:var(--dim)">' + whalePrefix + trader + '</span>' +
-          '<span class="lf-size">' + sizeStr + '</span>' +
-          '<span class="lf-side ' + sideClass + '">' + sideUp + '</span>' +
-          '<span class="lf-market">' + market + '</span>' +
-        '</a>';
-      }).join('');
-      // Duplicate for seamless scroll
-      document.getElementById('liveFeedScroll').innerHTML = items + items;
-
-      // Adjust animation duration based on content width
-      var scroll = document.getElementById('liveFeedScroll');
-      var totalW = scroll.scrollWidth / 2;
-      var dur = Math.max(15, totalW / 40); // ~40px per second
-      scroll.style.animationDuration = dur + 's';
-
-      if (d.updated_at) {
-        var ago = Math.round((Date.now() - new Date(d.updated_at).getTime()) / 1000);
-        document.getElementById('liveFeedUpdated').textContent = ago < 60 ? 'just now' : Math.floor(ago / 60) + 'm ago';
-      }
-    }).catch(function() {});
-  }
-
-  loadLiveFeed();
-  _lfInterval = setInterval(loadLiveFeed, 30000);
-})();
-</script>
-
 <div class="explore-search-wrap" id="exploreSearchWrap">
   <input type="search" id="exploreSearchInput" placeholder="🔍 Search markets, communities…" oninput="onExploreSearch(this.value)" style="width:100%;box-sizing:border-box;padding:11px 16px;border-radius:12px;border:1.5px solid #2a2a27;background:#1c1c19;color:#e8e3d5;font-size:14px;font-family:inherit;outline:none;max-width:680px;display:block;margin:0 auto;" />
 </div>
-<!-- Category filter pills -->
-<div style="display:flex;justify-content:center;gap:8px;padding:8px 16px 16px;flex-wrap:wrap;max-width:680px;margin:0 auto">
-  <button class="feed-filter active" onclick="setFeedFilter('all')" data-filter="all" style="background:rgba(201,146,13,0.15);color:#c9920d;border:1px solid rgba(201,146,13,0.3);border-radius:20px;padding:7px 16px;font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer;transition:all .15s">All</button>
-  <button class="feed-filter" onclick="setFeedFilter('finance')" data-filter="finance" style="background:transparent;color:var(--dim);border:1px solid var(--border);border-radius:20px;padding:7px 16px;font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">💰 Finance</button>
-  <button class="feed-filter" onclick="setFeedFilter('crypto')" data-filter="crypto" style="background:transparent;color:var(--dim);border:1px solid var(--border);border-radius:20px;padding:7px 16px;font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">₿ Crypto</button>
-  <button class="feed-filter" onclick="setFeedFilter('sports')" data-filter="sports" style="background:transparent;color:var(--dim);border:1px solid var(--border);border-radius:20px;padding:7px 16px;font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">🏆 Sports</button>
-  <button class="feed-filter" onclick="setFeedFilter('politics')" data-filter="politics" style="background:transparent;color:var(--dim);border:1px solid var(--border);border-radius:20px;padding:7px 16px;font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">🏛 Politics</button>
-  <button class="feed-filter" onclick="setFeedFilter('entertainment')" data-filter="entertainment" style="background:transparent;color:var(--dim);border:1px solid var(--border);border-radius:20px;padding:7px 16px;font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">🎬 Entertainment</button>
+<div class="tabs-wrap" id="tabs-wrap">
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('activity')">⚡ Activity</button>
+    <button class="tab" onclick="switchTab('discover')">🔍 Discover</button>
+    <button class="tab" onclick="switchTab('predictors')">👥 Predictors</button>
+  </div>
 </div>
 
 <div class="explore-layout">
   <div class="main-col">
 
-    <!-- WALLET CONNECT CTA STRIP -->
+    <!-- CREATOR CTA STRIP -->
     <div class="creator-cta-strip" id="creatorCta">
       <div class="cta-text">
-        <strong>Connect your Polymarket wallet</strong> — Track your positions, prove your record, and see your sharp score. Free to start.
+        <strong>Run a finance community?</strong> Give your audience a prediction market with leaderboards, streaks, and bragging rights. Free to start — takes 2 minutes.
       </div>
-      <a href="/creator/signup" class="cta-btn">Connect your wallet →</a>
-    </div>
-
-    <!-- Page tabs -->
-    <div class="tabs-wrap" id="tabs-wrap" style="margin-bottom:0">
-      <div class="tabs">
-        <button class="tab active" onclick="switchTab('activity')">⚡ Activity</button>
-        <button class="tab" onclick="switchTab('predictors')">👥 Predictors</button>
-        <button class="tab" onclick="window.location.href='/odds'" style="display:flex;align-items:center;gap:5px">📊 Odds</button>
-        <button class="tab" onclick="window.location.href='/whales'" style="display:flex;align-items:center;gap:5px">&#x1F40B; Whales</button>
-      </div>
+      <a href="/creator/signup" class="cta-btn">Set up your community →</a>
     </div>
 
     <div class="refresh-bar">
@@ -1040,53 +852,6 @@ nav {
     <!-- NEW ACTIVITY BANNER (Twitter-style "X new items") -->
     <div id="newActivityBanner" style="display:none;background:var(--gold);color:#141412;text-align:center;padding:8px 16px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:12px;transition:opacity 0.2s;" onclick="loadNewActivity()">
       ↑ <span id="newActivityCount">0</span> new activities — click to refresh
-    </div>
-
-    <!-- SMART MONEY DIVERGENCE -->
-    <div id="smart-money-section" style="display:none;margin-bottom:20px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px">
-      <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px">
-        <span style="font-family:var(--display);font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.05em">⚡ Smart Money Divergence</span>
-        <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">where sharp predictors disagree with retail</span>
-      </div>
-      <div id="smart-money-list" style="display:flex;flex-direction:column;gap:8px"></div>
-    </div>
-
-    <!-- DAILY BRIEFING -->
-    <div id="daily-briefing" class="briefing-card" style="display:none">
-      <div class="briefing-header" onclick="toggleBriefing()">
-        <div class="briefing-title"><span>&#x1F4CB;</span> Today's Briefing</div>
-        <span class="briefing-toggle" id="briefing-chevron">&#x25BC;</span>
-      </div>
-      <div class="briefing-body" id="briefing-body">
-        <div class="briefing-headline" id="briefing-headline"></div>
-        <ul class="briefing-bullets" id="briefing-bullets"></ul>
-        <div id="briefing-fg-wrap" class="briefing-fg" style="display:none">
-          <div class="briefing-fg-score" id="briefing-fg-score">50</div>
-          <div>
-            <div class="briefing-fg-label" id="briefing-fg-label">Neutral</div>
-            <div style="font-size:9px;color:var(--muted)">Fear & Greed</div>
-          </div>
-        </div>
-        <div><a href="/data" class="briefing-link">Read full briefing →</a></div>
-      </div>
-    </div>
-
-    <!-- SMART MONEY DIVERGENCE -->
-    <div id="smartMoneySection" style="display:none;margin-bottom:20px">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gold);margin-bottom:12px;font-family:'Space Mono',monospace;display:flex;align-items:center;gap:8px">
-        <span>\u26A1</span> Smart Money Divergence
-      </div>
-      <div style="font-family:'Space Mono',monospace;font-size:10px;color:#7a7870;margin-bottom:12px">Markets where sharp predictors (\u226565% win rate) disagree most with retail</div>
-      <div id="smartMoneyCards" style="display:flex;flex-direction:column;gap:8px"></div>
-    </div>
-
-    <!-- LIVE INSIGHTS -->
-    <div id="explore-insights" style="display:none;margin-bottom:16px">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gold);margin-bottom:12px;font-family:'Space Mono',monospace;display:flex;align-items:center;gap:8px">
-        <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#2d9b5f;animation:pulse-dot 2s infinite"></span>
-        Live Insights
-      </div>
-      <div id="explore-insights-cards" style="display:flex;flex-direction:column;gap:8px"></div>
     </div>
 
     <!-- ACTIVITY FEED TAB -->
@@ -1125,58 +890,42 @@ nav {
   </div>
 
   <div class="sidebar">
-    <!-- HOT STREAKS -->
-    <div class="sidebar-card" id="hotStreaksCard">
-      <div class="sidebar-title">&#x1F525; HOT STREAKS</div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Traders profitable every week</div>
-      <div id="hotStreaksList"><div class="loading" style="padding:8px 0;">Loading consistent traders...</div></div>
-      <a href="/predictors" class="sidebar-footer-link">See full rankings &#8594;</a>
+    <div class="sidebar-card">
+      <div class="sidebar-title">COMMUNITIES</div>
+      <div id="communities-list"><div class="loading" style="padding:16px 0;">Loading...</div></div>
     </div>
-
-    <!-- BIGGEST TRADES (24H) -->
-    <div class="sidebar-card" id="biggestTradesCard">
-      <div class="sidebar-title">&#x1F40B; BIGGEST TRADES (24H)</div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Top whale positions by size</div>
-      <div id="biggestTradesList"><div class="loading" style="padding:8px 0;">Loading whale data...</div></div>
-      <a href="/whales" class="sidebar-footer-link">See all whales &#8594;</a>
+    <div class="sidebar-card">
+      <div class="sidebar-title">LATEST ANNOUNCEMENTS</div>
+      <div id="announcements-list"><div class="loading" style="padding:16px 0;">Loading...</div></div>
     </div>
-
-    <!-- BEST P&L -->
-    <div class="sidebar-card" id="bestPnlCard">
-      <div class="sidebar-title">&#x1F4B0; BEST P&amp;L</div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Top traders by total profit</div>
-      <div id="bestPnlList"><div class="loading" style="padding:8px 0;">Loading...</div></div>
-      <a href="/predictors" class="sidebar-footer-link">See full leaderboard &#8594;</a>
-    </div>
-
-    <!-- MOST ACTIVE MARKETS -->
-    <div class="sidebar-card" id="activeMarketsCard">
-      <div class="sidebar-title">&#x1F525; MOST ACTIVE MARKETS</div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Markets with the most whale activity</div>
-      <div id="activeMarketsList"><div class="loading" style="padding:8px 0;">Loading...</div></div>
-    </div>
-
-    <!-- MARKET MOVERS -->
-    <div class="sidebar-card" id="marketMoversCard">
-      <div class="sidebar-title">&#x1F4CA; MARKET MOVERS</div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Biggest price changes in last 24h</div>
-      <div id="marketMoversList"><div class="loading" style="padding:8px 0;">Loading movers...</div></div>
-      <a href="/odds" class="sidebar-footer-link">See all &#8594;</a>
-    </div>
-
-    <!-- NEWS IMPACT -->
-    <div class="sidebar-card" id="newsImpactCard">
-      <div class="sidebar-title">&#x1F4F0; NEWS IMPACT</div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Breaking news mapped to markets</div>
-      <div id="newsImpactList"><div class="loading" style="padding:8px 0;">Loading news...</div></div>
-      <a href="/events" class="sidebar-footer-link">See all &#8594;</a>
-    </div>
-
-    <!-- FOLLOWING (kept, shown when logged in) -->
+    <!-- FOLLOWING -->
     <div class="sidebar-card" id="followingCard" style="display:none">
       <div class="sidebar-title">FOLLOWING</div>
       <div id="following-list"></div>
     </div>
+
+    <!-- TOP PREDICTORS -->
+    <div class="sidebar-card" id="topPredictorsCard">
+      <div class="sidebar-title">TOP PREDICTORS</div>
+      <div id="top-predictors-list"><div class="loading" style="padding:12px 0;">Loading...</div></div>
+      <a href="/predictors" style="display:block;margin-top:12px;font-family:var(--mono);font-size:11px;color:var(--gold);text-decoration:none;font-weight:700;">See all →</a>
+    </div>
+
+    <!-- SMART MONEY -->
+    <div class="sidebar-card" id="smartMoneyCardExplore" style="display:none">
+      <div class="sidebar-title">🧠 SMART MONEY</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px">How sharp predictors are positioned</div>
+      <div id="smartMoneyListExplore"></div>
+      <a href="/odds" style="display:block;margin-top:12px;font-family:'Space Mono',monospace;font-size:11px;color:var(--gold);text-decoration:none;font-weight:700;">Compare odds →</a>
+    </div>
+
+    <!-- NOMINATE CTA -->
+    <a href="/nominate" style="display:block;background:linear-gradient(135deg,#1d1b13 0%,#191917 100%);border:1px solid rgba(201,146,13,0.3);border-radius:var(--radius);padding:16px 18px;text-decoration:none;transition:border-color 0.2s;" onmouseover="this.style.borderColor='rgba(201,146,13,0.7)'" onmouseout="this.style.borderColor='rgba(201,146,13,0.3)'">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--gold);margin-bottom:6px">For Fans</div>
+      <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px">Nominate your creator</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.4;margin-bottom:10px">Tell us which creator should have a prediction market. We'll reach out.</div>
+      <div style="font-size:12px;color:var(--gold);font-weight:600">Nominate them →</div>
+    </a>
   </div>
 </div>
 
@@ -1192,131 +941,6 @@ let _exploreFollowing = [];
 let _exploreSearchQuery = '';
 let _exploreSearchTimer = null;
 
-// ── DAILY BRIEFING ──
-let _briefingOpen = true;
-function toggleBriefing() {
-  _briefingOpen = !_briefingOpen;
-  var body = document.getElementById('briefing-body');
-  var chevron = document.getElementById('briefing-chevron');
-  if (body) body.className = 'briefing-body' + (_briefingOpen ? ' open' : '');
-  if (chevron) chevron.className = 'briefing-toggle' + (_briefingOpen ? ' open' : '');
-}
-
-function loadDailyBriefing() {
-  fetch('/api/daily-briefing').then(function(r) { return r.json(); }).then(function(data) {
-    if (!data || !data.headline) return;
-    var wrap = document.getElementById('daily-briefing');
-    if (wrap) wrap.style.display = '';
-
-    var headlineEl = document.getElementById('briefing-headline');
-    if (headlineEl) headlineEl.textContent = data.headline;
-
-    // Build 3 bullet points from whale moves + market movers
-    var bullets = [];
-    if (data.whale_moves && data.whale_moves.length > 0) {
-      var wm = data.whale_moves[0];
-      var verb = { opened:'opened', closed:'closed', increased:'increased', decreased:'decreased' }[wm.action] || wm.action;
-      bullets.push({ icon: '\uD83D\uDC0B', text: '#' + (wm.trader_rank || '?') + ' ' + (wm.trader || 'Whale') + ' ' + verb + ' ' + (wm.size || '?') + ' on "' + ((wm.question || '').substring(0, 50)) + '"' });
-    }
-    if (data.market_movers && data.market_movers.length > 0) {
-      var mm = data.market_movers[0];
-      var dir = (mm.change_pct || 0) > 0 ? 'up' : 'down';
-      bullets.push({ icon: '\uD83D\uDCC8', text: '"' + ((mm.question || '').substring(0, 45)) + '" moved ' + dir + ' ' + Math.abs(mm.change_pct || 0).toFixed(1) + '%' });
-    }
-    if (data.whale_index_picks && data.whale_index_picks.length > 0) {
-      var wp = data.whale_index_picks[0];
-      bullets.push({ icon: '\uD83C\uDFAF', text: 'Top whale pick: "' + ((wp.market || '').substring(0, 45)) + '" (' + (wp.whale_count || 0) + ' whales, ' + (wp.consensus_pct || 0) + '% ' + (wp.consensus_side || '') + ')' });
-    }
-    if (data.stat_of_the_day && bullets.length < 3) {
-      bullets.push({ icon: '\uD83D\uDCA1', text: data.stat_of_the_day });
-    }
-
-    var bulletsEl = document.getElementById('briefing-bullets');
-    if (bulletsEl) {
-      bulletsEl.innerHTML = bullets.map(function(b) {
-        return '<li><span class="bullet-icon">' + b.icon + '</span><span>' + b.text.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</span></li>';
-      }).join('');
-    }
-
-    // Fear & Greed mini display
-    if (data.fear_greed && typeof data.fear_greed.score === 'number') {
-      var fgWrap = document.getElementById('briefing-fg-wrap');
-      if (fgWrap) fgWrap.style.display = '';
-      var fgScore = document.getElementById('briefing-fg-score');
-      if (fgScore) { fgScore.textContent = data.fear_greed.score; fgScore.style.color = data.fear_greed.color || '#eab308'; }
-      var fgLabel = document.getElementById('briefing-fg-label');
-      if (fgLabel) { fgLabel.textContent = data.fear_greed.label || 'Neutral'; fgLabel.style.color = data.fear_greed.color || '#eab308'; }
-    }
-
-    // Auto-open the body
-    var body = document.getElementById('briefing-body');
-    if (body) body.className = 'briefing-body open';
-    var chevron = document.getElementById('briefing-chevron');
-    if (chevron) chevron.className = 'briefing-toggle open';
-  }).catch(function() { /* silent */ });
-}
-
-// Refresh briefing every 30 min — wrapped so crashes never break the page
-try { loadDailyBriefing(); } catch(e) { console.warn('[explore] briefing load failed:', e.message); }
-setInterval(function() { try { loadDailyBriefing(); } catch(e) {} }, 30 * 60 * 1000);
-
-// ── LIVE INSIGHTS LOADER ──
-function loadExploreInsights() {
-  fetch('/api/content-stream?limit=2').then(r => r.json()).then(data => {
-    const insights = data.insights || [];
-    if (!insights.length) return;
-    const container = document.getElementById('explore-insights-cards');
-    const section = document.getElementById('explore-insights');
-    function escH(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-    container.innerHTML = insights.map(ins => {
-      const shareUrl = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(ins.share_text || '');
-      return `<a href="${ins.cta_url || '/whales'}" class="explore-insight-card">
-        <div class="explore-insight-icon">${ins.icon || ''}</div>
-        <div class="explore-insight-info">
-          <div class="explore-insight-headline">${escH(ins.headline || '')}</div>
-          <div class="explore-insight-body">${escH(ins.body || '')}</div>
-        </div>
-        <div class="explore-insight-stat">${escH(ins.stat || '')}</div>
-        <a href="${shareUrl}" target="_blank" rel="noopener" class="explore-insight-share" onclick="event.stopPropagation()">Share on X</a>
-      </a>`;
-    }).join('');
-    section.style.display = 'block';
-  }).catch(() => {});
-}
-try { loadExploreInsights(); } catch(e) { console.warn('[explore] insights failed:', e.message); }
-
-// ── SMART MONEY DIVERGENCE ──
-(function loadSmartMoney() {
-  fetch('/api/explore/smart-money-divergence').then(function(r){return r.ok?r.json():null}).then(function(d){
-    if(!d||!d.markets||!d.markets.length)return;
-    var section=document.getElementById('smartMoneySection');
-    var cards=document.getElementById('smartMoneyCards');
-    section.style.display='';
-    function esc(s){var el=document.createElement('div');el.textContent=s;return el.innerHTML}
-    cards.innerHTML=d.markets.map(function(m,i){
-      var gapColor=m.gap>0?'#22c55e':'#ef4444';
-      var gapSign=m.gap>0?'+':'';
-      var signalBadge='';
-      if(m.signal==='SHARP_YES')signalBadge='<span style="font-size:9px;padding:2px 8px;border-radius:4px;background:rgba(201,146,13,0.15);color:#c9920d;font-weight:700;border:1px solid rgba(201,146,13,0.3)">\u26A1 Sharp YES</span>';
-      else if(m.signal==='SHARP_NO')signalBadge='<span style="font-size:9px;padding:2px 8px;border-radius:4px;background:rgba(239,68,68,0.15);color:#ef4444;font-weight:700;border:1px solid rgba(239,68,68,0.3)">\u26A1 Sharp NO</span>';
-      return'<a href="/'+esc(m.slug||'')+'" style="display:block;background:#1a1917;border:1px solid #2a2a25;border-radius:10px;padding:14px 16px;text-decoration:none;transition:border-color .15s" onmouseover="this.style.borderColor=\'rgba(201,146,13,0.4)\'" onmouseout="this.style.borderColor=\'#2a2a25\'">'+
-        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'+
-          '<span style="font-family:\'Space Mono\',monospace;font-size:11px;color:#7a7870;font-weight:700">'+(i+1)+'.</span>'+
-          '<span style="font-size:13px;color:#e8e4d9;font-weight:600;flex:1">'+esc((m.question||'').length>55?m.question.substring(0,52)+'...':m.question)+'</span>'+
-          signalBadge+
-        '</div>'+
-        '<div style="display:flex;gap:16px;font-family:\'Space Mono\',monospace;font-size:11px">'+
-          '<span style="color:#22c55e">Sharp: '+m.sharp_yes_pct+'% YES</span>'+
-          '<span style="color:#7a7870">|</span>'+
-          '<span style="color:#ef4444">Retail: '+m.retail_yes_pct+'% YES</span>'+
-          '<span style="color:#7a7870">|</span>'+
-          '<span style="color:'+gapColor+';font-weight:700">Gap: '+gapSign+m.gap+'pts</span>'+
-        '</div>'+
-      '</a>';
-    }).join('');
-  }).catch(function(){});
-})();
-
 function onExploreSearch(val) {
   clearTimeout(_exploreSearchTimer);
   _exploreSearchTimer = setTimeout(() => {
@@ -1329,38 +953,11 @@ function applyExploreSearch() {
   const q = _exploreSearchQuery;
   if (activeTab === 'activity') {
     if (!q) { renderActivityFeed(activityData); return; }
-    // Also search communities and show matching ones above activity results
-    const comms = (feedData && feedData.communities) || {};
-    const matchingComms = {};
-    Object.keys(comms).forEach(slug => {
-      const name = (comms[slug].display_name || slug).toLowerCase();
-      if (name.includes(q) || slug.includes(q)) matchingComms[slug] = comms[slug];
-    });
-    const commSlugs = Object.keys(matchingComms).sort((a,b) => (matchingComms[b].total_traders||0) - (matchingComms[a].total_traders||0));
-    let commHtml = '';
-    if (commSlugs.length) {
-      commHtml = '<div style="margin-bottom:16px"><div style="font-family:var(--mono);font-size:10px;color:var(--gold);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Communities</div>' +
-        commSlugs.slice(0, 5).map(slug => {
-          const c = matchingComms[slug];
-          const traders = c.total_traders || 0;
-          const markets = c.market_count || 0;
-          return `<a href="/${slug}" style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--card);border:1px solid var(--border);border-radius:10px;text-decoration:none;color:var(--text);margin-bottom:8px;">
-            <div style="width:9px;height:9px;border-radius:50%;background:${c.primary_color||'#c9920d'};flex-shrink:0"></div>
-            <div style="flex:1"><div style="font-size:13px;font-weight:600">${c.display_name||slug}</div><div style="font-size:11px;color:var(--muted);margin-top:2px">${markets} markets · ${traders.toLocaleString()} trades</div></div>
-          </a>`;
-        }).join('') + '</div>';
-    }
     const filtered = activityData.filter(a => {
-      const text = ((a.question||'') + ' ' + (a.market_question||'') + ' ' + (a.community_name||a.community_slug||'') + ' ' + (a.username||'') + ' ' + (a.trader_name||'') + ' ' + (a.user||'')).toLowerCase();
+      const text = ((a.question||'') + ' ' + (a.community_name||a.community_slug||'') + ' ' + (a.username||'')).toLowerCase();
       return text.includes(q);
     });
-    const feedEl = document.getElementById('activity-feed');
-    if (commHtml && feedEl) {
-      renderActivityFeed(filtered);
-      feedEl.insertAdjacentHTML('afterbegin', commHtml);
-    } else {
-      renderActivityFeed(filtered);
-    }
+    renderActivityFeed(filtered);
   } else if ((activeTab === 'hot' || activeTab === 'new') && feedData) {
     const key = activeTab === 'hot' ? 'hot' : 'newest';
     const markets = feedData[key] || [];
@@ -1668,96 +1265,6 @@ function activityCard(a) {
     </a>`;
   }
 
-  if (a.type === 'trending_external') {
-    const platform = (a.platform || 'polymarket').toLowerCase();
-    const platformMeta = {
-      polymarket: { label: 'Polymarket', color: '#a78bfa', bg: 'rgba(124,58,237,0.12)', border: 'rgba(124,58,237,0.3)', emoji: '🟣' },
-      kalshi:     { label: 'Kalshi',     color: '#fbbf24', bg: 'rgba(217,119,6,0.12)', border: 'rgba(217,119,6,0.3)', emoji: '🟡' },
-    };
-    const pm = platformMeta[platform] || platformMeta.polymarket;
-    const yesPct = a.yes_pct;
-    const noPct = yesPct != null ? 100 - yesPct : null;
-    const dest = a.url || '/odds';
-    const fmtDate = a.end_date ? new Date(a.end_date).toLocaleDateString('en-US', { month:'short', day:'numeric' }) : '';
-    return `<div class="activity-card" style="cursor:pointer;border-left:3px solid ${pm.color}" onclick="window.open('${dest}','_blank')">
-      <div class="ac-avatar" style="background:${pm.bg};border:1px solid ${pm.border};font-size:16px;display:flex;align-items:center;justify-content:center">📈</div>
-      <div class="ac-body">
-        <div class="ac-header">
-          <span style="font-weight:700;color:${pm.color}">${a.whale_trader ? '🐋 ' + escHtml(a.whale_trader) : pm.label}</span>
-          <span class="ac-action">${a.whale_trader ? 'whale position · #' + (a.whale_rank || '') : 'trending market'}</span>
-          <span class="ac-time">${a.volume_display ? a.volume_display + ' · ' + timeAgo(a.ts) : timeAgo(a.ts)}</span>
-        </div>
-        <div class="ac-market-card" style="cursor:pointer">
-          <div class="ac-market-inner">
-            <span class="ac-community-pill" style="background:${pm.bg};color:${pm.color};border:1px solid ${pm.border}">${pm.emoji} ${pm.label}</span>
-            ${fmtDate ? `<span style="font-size:10px;color:var(--dim);font-family:var(--mono);margin-left:6px">Exp ${fmtDate}</span>` : ''}
-            <div class="ac-question">${escHtml(a.question || '')}</div>
-            ${yesPct != null ? `<div class="ac-odds-bar"><div class="ac-odds-fill" style="width:${yesPct}%;background:#22c55e"></div></div>
-            <div class="ac-odds-labels"><span style="color:#22c55e;font-weight:600">YES ${yesPct}%</span><span style="color:#ef4444;font-weight:600">NO ${noPct}%</span></div>` : ''}
-          </div>
-        </div>
-        <div class="ac-footer">
-          <span style="font-family:var(--mono);font-size:11px;color:var(--dim)">${a.volume_display || ''}</span>
-          ${a.sparkline && a.sparkline.length >= 2 ? (() => {
-            const pts = a.sparkline;
-            const mn = Math.min(...pts.filter(v=>v!=null));
-            const mx = Math.max(...pts.filter(v=>v!=null));
-            const rng = mx - mn || 0.01;
-            const coords = pts.map((v,i) => {
-              const x = Math.round(i / (pts.length - 1) * 60);
-              const y = Math.round(20 - ((v - mn) / rng) * 18);
-              return x + ',' + y;
-            }).join(' ');
-            const clr = pts[pts.length-1] >= pts[0] ? '#22c55e' : '#ef4444';
-            return '<svg width="60" height="20" viewBox="0 0 60 20" style="margin-left:8px;vertical-align:middle"><polyline points="' + coords + '" fill="none" stroke="' + clr + '" stroke-width="1.5"/></svg>';
-          })() : ''}
-          <a href="${escHtml(dest)}" target="_blank" rel="noopener" style="margin-left:auto;font-size:11px;color:${pm.color};font-family:var(--mono);text-decoration:none;font-weight:700">View on ${pm.label} →</a>
-        </div>
-      </div>
-    </div>`;
-  }
-
-  if (a.type === 'whale_trade') {
-    const actionVerb = { opened: 'just opened', closed: 'just closed', increased: 'increased position on', decreased: 'decreased position on' }[a.action] || a.action;
-    const sizeStr = a.size_display || '$' + (a.size || 0).toLocaleString();
-    const pricePct = a.price ? Math.round(a.price * 100) + '%' : '';
-    const sideColor = (a.side || '').toUpperCase() === 'YES' ? '#22c55e' : (a.side || '').toUpperCase() === 'NO' ? '#ef4444' : '#c9920d';
-    const sizeChange = (a.action === 'increased' || a.action === 'decreased') && a.old_size_display && a.new_size_display
-      ? ` from ${a.old_size_display} → ${a.new_size_display}`
-      : '';
-    const dest = a.url || 'https://polymarket.com';
-    const isExt = dest.startsWith('http');
-    const _ctTrader = escHtml(a.trader_name || 'Whale');
-    const _ctQuestion = escHtml(a.question || '');
-    const _ctSide = escHtml(a.side || '');
-    const _ctSize = a.size || 0;
-    const _ctUrl = escHtml(dest);
-    return `<div class="activity-card" style="border-left:3px solid #c9920d;cursor:pointer" onclick="if(event.target.closest('.whale-copy-btn'))return;window.open('${_ctUrl}','_blank')">
-      <div class="ac-avatar" style="background:rgba(201,146,13,0.15);border:1px solid rgba(201,146,13,0.3);font-size:22px;display:flex;align-items:center;justify-content:center">&#x1F40B;</div>
-      <div class="ac-body">
-        <div class="ac-header">
-          <span class="ac-actor" style="color:#c9920d">${_ctTrader}</span>
-          <span class="ac-action">${actionVerb}</span>
-          <span class="ac-time">${timeAgo(a.ts)}</span>
-        </div>
-        <div class="ac-market-card">
-          <div class="ac-market-inner">
-            <span class="ac-community-pill" style="background:rgba(99,102,241,0.12);color:#818cf8;border:1px solid rgba(99,102,241,0.3)">Polymarket</span>
-            <div class="ac-question">${_ctQuestion}</div>
-            ${pricePct ? `<div class="ac-odds-bar"><div class="ac-odds-fill" style="width:${Math.round(a.price * 100)}%;background:${sideColor}"></div></div>` : ''}
-          </div>
-        </div>
-        <div class="ac-footer">
-          <span class="ac-tag" style="background:${sideColor}22;color:${sideColor};font-weight:700">${escHtml((a.side || '').toUpperCase())}</span>
-          <span class="ac-stat" style="font-weight:700">${sizeStr}${sizeChange}</span>
-          ${pricePct ? `<span class="ac-stat">at ${pricePct}</span>` : ''}
-          <span class="ac-stat" style="color:var(--dim)">Rank #${a.trader_rank || '?'} · ${a.trader_pnl >= 0 ? '+' : ''}$${Math.round(a.trader_pnl || 0).toLocaleString()} PnL</span>
-          <button class="whale-copy-btn" onclick="event.stopPropagation();openWhaleCopyTrade('${_ctTrader.replace(/'/g,"\\'")}','${_ctQuestion.replace(/'/g,"\\'")}','${_ctSide}',${_ctSize},'${_ctUrl}','')" style="margin-left:auto;font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:6px;border:1px solid rgba(201,146,13,0.4);background:rgba(201,146,13,0.1);color:#c9920d;cursor:pointer;white-space:nowrap;transition:all .15s">Copy Trade</button>
-        </div>
-      </div>
-    </div>`;
-  }
-
   if (a.type === 'external_bet') {
     const isYes = (a.side || 'YES') === 'YES';
     const conf = a.current_price ? Math.round(a.current_price * 100) : null;
@@ -1771,7 +1278,7 @@ function activityCard(a) {
     const dest = a.market_url || '/explore';
     const isExt = dest.startsWith('http');
     const pnlBadge = a.pnl_pct ? `<span style="font-size:11px;font-family:var(--mono);font-weight:700;color:${a.pnl_pct > 0 ? '#22c55e' : '#ef4444'}">${a.pnl_pct > 0 ? '+' : ''}${a.pnl_pct}%</span>` : '';
-    const cashBadge = a.cash_value ? `<span class="ac-stat">$${parseFloat(a.cash_value).toFixed(2)}</span>` : '';
+    const cashBadge = a.cash_value ? `<span class="ac-stat">${platform === 'manifold' ? 'M$' : '$'}${parseFloat(a.cash_value).toFixed(2)}</span>` : '';
     const tweetText = encodeURIComponent(`${a.user} went ${a.side} on "${a.question}" at ${conf !== null ? conf + '%' : '?'} on ${pm.label} — tracked on HYPERFLEX\nhttps://hyperflex.network`);
     return `<div class="activity-card" style="cursor:default">
       <div class="ac-avatar" style="background:${pm.bg};border:1px solid ${pm.border};font-size:18px;display:flex;align-items:center;justify-content:center">${pm.emoji}</div>
@@ -1816,81 +1323,17 @@ function renderActivityFeed(activities) {
   if (activities[0]?.ts) activityLatestTs = activities[0].ts;
 }
 
-let _activityPage = 0;
-let _activityLoading = false;
-let _activityDone = false;
-
-async function loadActivityFeed(append) {
-  if (_activityLoading || (_activityDone && append)) return;
-  _activityLoading = true;
+async function loadActivityFeed() {
   try {
-    const limit = 40;
-    const r = await fetch(`/api/activity?limit=${limit}&page=${_activityPage}`);
-    if (!r.ok) { _activityLoading = false; return; }
+    const r = await fetch('/api/activity?limit=40');
+    if (!r.ok) return;
     const data = await r.json();
-    const items = data.activities || [];
-    if (!append) {
-      activityData = items;
-      renderActivityFeed(activityData);
-    } else {
-      activityData = activityData.concat(items);
-      const el = document.getElementById('activity-feed');
-      const wrap = el?.querySelector('.activity-feed-wrap');
-      if (wrap) wrap.insertAdjacentHTML('beforeend', items.map(activityCard).join(''));
-    }
-    if (items.length < limit) _activityDone = true;
-    _activityPage++;
+    activityData = data.activities || [];
+    renderActivityFeed(activityData);
   } catch (err) {
     console.error('Activity feed error:', err);
   }
-  _activityLoading = false;
 }
-
-// ── Feed category filter ─────────────────────────────────────
-let _activeFeedFilter = 'all';
-const _filterKeywords = {
-  finance: ['finance','fed','interest rate','inflation','recession','gdp','stock','s&p','nasdaq','dow','bond','treasury','economy','bank','fiscal','monetary','earnings','ipo','market cap','etf','index','oil','gold','commodity','forex'],
-  crypto: ['crypto','bitcoin','btc','ethereum','eth','solana','sol','defi','nft','blockchain','token','altcoin','web3','binance','coinbase','stablecoin','memecoin','doge','xrp','ada','matic','polygon','avalanche','layer 2'],
-  sports: ['nba','nfl','mlb','nhl','ufc','mma','premier league','soccer','football','basketball','baseball','hockey','tennis','boxing','f1','formula','cricket','golf','champion','playoff','super bowl','world series','world cup','olympics','draft','trade deadline','mvp','game','match','tournament','spread','moneyline','betting'],
-  politics: ['trump','biden','democrat','republican','congress','senate','election','vote','president','governor','political','policy','legislation','supreme court','law','regulation','tariff','sanction','nato','ukraine','russia','china','iran','war','military','ceasefire','diplomacy','pope','government'],
-  entertainment: ['movie','film','oscar','grammy','emmy','tv','show','music','album','spotify','youtube','tiktok','celebrity','concert','festival','box office','streaming','netflix','disney','ai','tech','apple','google','tesla','spacex','elon','mars'],
-};
-
-function matchesFilter(item, filter) {
-  if (filter === 'all') return true;
-  // Server-side category match (for trending_external items)
-  if (item.category && item.category === filter) return true;
-  // Client-side keyword match (for community items)
-  const keywords = _filterKeywords[filter] || [];
-  const text = ((item.question || '') + ' ' + (item.market_question || '') + ' ' + (item.community_name || '')).toLowerCase();
-  return keywords.some(kw => text.includes(kw));
-}
-
-function setFeedFilter(filter) {
-  _activeFeedFilter = filter;
-  document.querySelectorAll('.feed-filter').forEach(btn => {
-    const isActive = btn.getAttribute('data-filter') === filter;
-    btn.classList.toggle('active', isActive);
-    btn.style.background = isActive ? 'rgba(201,146,13,0.15)' : 'transparent';
-    btn.style.color = isActive ? '#c9920d' : 'var(--dim)';
-    btn.style.borderColor = isActive ? 'rgba(201,146,13,0.3)' : 'var(--border)';
-  });
-  // Re-render with filter
-  if (activityData.length) {
-    const filtered = activityData.filter(a => matchesFilter(a, filter));
-    renderActivityFeed(filtered);
-  }
-}
-
-// Infinite scroll
-window.addEventListener('scroll', () => {
-  if (_activityDone || _activityLoading) return;
-  const tab = document.getElementById('tab-activity');
-  if (!tab || tab.style.display === 'none') return;
-  if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 400) {
-    loadActivityFeed(true);
-  }
-});
 
 async function pollNewActivity() {
   if (!activityLatestTs) return;
@@ -1993,11 +1436,9 @@ function renderMarkets(markets, communities, containerId) {
 }
 
 function renderCommunities(communities) {
-  const el = document.getElementById('communities-list');
-  if (!el) return;
   const slugs = Object.keys(communities);
   if (!slugs.length) {
-    el.innerHTML = '<div class="empty" style="padding:8px 0;">No communities yet.</div>';
+    document.getElementById('communities-list').innerHTML = '<div class="empty" style="padding:8px 0;">No communities yet.</div>';
     return;
   }
   const sorted = slugs.sort((a, b) => (communities[b].total_traders || 0) - (communities[a].total_traders || 0));
@@ -2012,7 +1453,7 @@ function renderCommunities(communities) {
         <div class="community-markets" style="font-size:11px;color:#666">${traders > 0 ? traders.toLocaleString() + ' trades' : markets + ' mkts'}</div>
       </a>`;
   }).join('');
-  if (el) el.innerHTML = html;
+  document.getElementById('communities-list').innerHTML = html;
 }
 
 function renderCommunitySections(sections, communities, topPredictors) {
@@ -2076,10 +1517,8 @@ function renderCommunitySections(sections, communities, topPredictors) {
 }
 
 function renderAnnouncements(announcements, communities) {
-  var _annEl = document.getElementById('announcements-list');
-  if (!_annEl) return;
   if (!announcements.length) {
-    _annEl.innerHTML = '<div class="empty" style="padding:8px 0;">No announcements.</div>';
+    document.getElementById('announcements-list').innerHTML = '<div class="empty" style="padding:8px 0;">No announcements.</div>';
     return;
   }
   const html = announcements.slice(0, 5).map(a => {
@@ -2092,22 +1531,12 @@ function renderAnnouncements(announcements, communities) {
         <div class="announcement-time">${timeAgo(a.created_at)}</div>
       </div>`;
   }).join('');
-  _annEl.innerHTML = html;
+  document.getElementById('announcements-list').innerHTML = html;
 }
 
 function renderStatsTicker(stats) {
-  if (!stats) {
-    // Fallback: try loading from public /api/stats endpoint
-    fetch('/api/stats').then(r => r.ok ? r.json() : null).then(d => {
-      if (!d) return;
-      const fmt = n => n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K' : (n || 0).toLocaleString();
-      document.getElementById('statTotalTrades').textContent  = fmt(d.total_predictions || d.total_trades || 0);
-      document.getElementById('statLiveMarkets').textContent  = fmt(d.live_markets || d.total_live_markets || 0);
-      document.getElementById('statCommunities').textContent  = fmt(d.communities || d.total_communities || 0);
-    }).catch(() => {});
-    return;
-  }
-  const fmt = n => n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K' : (n || 0).toLocaleString();
+  if (!stats) return;
+  const fmt = n => n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K' : n.toLocaleString();
   document.getElementById('statTotalTrades').textContent  = fmt(stats.total_trades);
   document.getElementById('statLiveMarkets').textContent  = fmt(stats.total_live_markets);
   document.getElementById('statCommunities').textContent  = fmt(stats.total_communities);
@@ -2217,12 +1646,12 @@ if (urlTab) {
 let memberAuthTab = 'login';
 
 function updateNavAuthState() {
-  const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+  const token = localStorage.getItem('hf_token');
   const loggedIn = !!token;
   document.getElementById('navDashboardLink').style.display  = loggedIn ? '' : 'none';
   document.getElementById('navSignOutBtn').style.display     = loggedIn ? '' : 'none';
   document.getElementById('navMemberSignIn').style.display   = loggedIn ? 'none' : '';
-  const cl = document.getElementById('navCreatorLogin'); if (cl) cl.style.display = loggedIn ? 'none' : '';
+  document.getElementById('navCreatorLogin').style.display   = loggedIn ? 'none' : '';
   document.getElementById('navStartFree').style.display      = loggedIn ? 'none' : '';
 }
 
@@ -2273,14 +1702,14 @@ async function submitMemberAuth() {
       const r1 = await fetch('/register', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ display_name: name, email, password: pw }) });
       const d1 = await r1.json();
       if (!r1.ok) throw new Error(d1.error || 'Registration failed.');
-      const r2 = await fetch('/api/creator/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email, password: pw }) });
+      const r2 = await fetch('/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email, password: pw }) });
       data = await r2.json();
       if (!r2.ok) throw new Error(data.error || 'Login failed.');
     } else {
       const email = document.getElementById('maLoginEmail').value.trim();
       const pw    = document.getElementById('maLoginPassword').value;
       if (!email || !pw) throw new Error('Email and password required.');
-      const r = await fetch('/api/creator/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email, password: pw }) });
+      const r = await fetch('/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ email, password: pw }) });
       data = await r.json();
       if (!r.ok) throw new Error(data.error || 'Invalid credentials.');
     }
@@ -2290,7 +1719,7 @@ async function submitMemberAuth() {
     closeMemberAuth();
     updateNavAuthState();
     // Redirect to dashboard
-    window.location.href = '/creator/dashboard';
+    window.location.href = '/my';
   } catch (err) {
     errEl.textContent = err.message;
     errEl.style.display = 'block';
@@ -2310,32 +1739,6 @@ updateNavAuthState();
 // Initial loads
 loadActivityFeed();
 loadFeed();
-loadSmartMoneyDivergence();
-
-async function loadSmartMoneyDivergence() {
-  try {
-    const r = await fetch('/api/explore/smart-money-divergence');
-    const data = await r.json();
-    if (!data || !data.length) return;
-    const section = document.getElementById('smart-money-section');
-    const list = document.getElementById('smart-money-list');
-    if (!section || !list) return;
-    section.style.display = '';
-    list.innerHTML = data.map(function(d, i) {
-      const gapColor = d.gap > 0 ? 'var(--green)' : 'var(--red)';
-      const gapSign = d.gap > 0 ? '+' : '';
-      return '<div style="display:flex;align-items:center;gap:12px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px">' +
-        '<span style="font-family:var(--mono);font-size:12px;color:var(--muted);min-width:18px">' + (i + 1) + '.</span>' +
-        '<div style="flex:1;min-width:0">' +
-          '<div style="font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + (d.question || '').substring(0, 70) + '</div>' +
-          '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px">Sharp: ' + d.sharp_yes_pct + '% YES · Retail: ' + d.retail_yes_pct + '% YES</div>' +
-        '</div>' +
-        '<span style="font-family:var(--mono);font-size:13px;font-weight:700;color:' + gapColor + ';white-space:nowrap">' + gapSign + d.gap + 'pts</span>' +
-        (d.creator_slug ? '<a href="/' + d.creator_slug + '" style="font-family:var(--mono);font-size:10px;color:var(--gold);text-decoration:none;white-space:nowrap">View →</a>' : '') +
-      '</div>';
-    }).join('');
-  } catch (e) { /* silent */ }
-}
 
 // FOLLOWING FEED
 let _followingFeedLoaded = false;
@@ -2361,7 +1764,7 @@ async function loadFollowingFeed() {
     el.innerHTML = header + data.items.map(item => {
       if (item.type === 'external_bet') {
         const platformColor = item.platform === 'polymarket' ? '#6366f1' : item.platform === 'kalshi' ? '#8b5cf6' : '#10b981';
-        const platformName  = item.platform === 'polymarket' ? 'Polymarket' : item.platform === 'kalshi' ? 'Kalshi' : item.platform;
+        const platformName  = item.platform === 'polymarket' ? 'Polymarket' : item.platform === 'kalshi' ? 'Kalshi' : 'Manifold';
         const pnlHtml = item.pnl !== null && item.pnl !== undefined
           ? `<span style="color:${item.pnl >= 0 ? '#10b981' : '#ef4444'};font-weight:700">${item.pnl >= 0 ? '+' : ''}${item.pnl.toFixed(2)}</span>` : '';
         return `<div class="activity-card" style="border-left:3px solid ${platformColor}">
@@ -2397,311 +1800,56 @@ async function loadFollowingFeed() {
   }
 }
 
-// WHALE-POWERED SIDEBAR — single fetch, populates all 3 sections
-(async function loadSidebar() {
+// TOP PREDICTORS sidebar
+(async function loadTopPredictors() {
   try {
-    const res = await fetch('/api/whale-watch');
-    if (!res.ok) throw new Error('Failed to fetch whale data');
-    const data = await res.json();
-    const whales = data.whales || [];
-
-    // --- 1. BIGGEST TRADES (24H): top 5 by size ---
-    const biggestEl = document.getElementById('biggestTradesList');
-    if (biggestEl) {
-      const top5 = whales.slice(0, 5);
-      if (!top5.length) {
-        biggestEl.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:8px 0">No whale trades found</div>';
-      } else {
-        biggestEl.innerHTML = top5.map(w => {
-          const question = (w.market || '').length > 48 ? w.market.substring(0, 45) + '...' : (w.market || '');
-          const size = w.size >= 1e6 ? '$' + (w.size/1e6).toFixed(1) + 'M' : w.size >= 1e3 ? '$' + (w.size/1e3).toFixed(0) + 'K' : '$' + (w.size||0).toFixed(0);
-          const side = (w.side||'').toUpperCase();
-          const sideColor = side === 'YES' ? '#22c55e' : side === 'NO' ? '#ef4444' : 'var(--gold)';
-          const sideBg = side === 'YES' ? 'rgba(34,197,94,0.12)' : side === 'NO' ? 'rgba(239,68,68,0.12)' : 'rgba(201,146,13,0.12)';
-          const link = w.polymarket_url || w.market_url || '#';
-          return '<a href="' + _escH(link) + '" target="_blank" rel="noopener" class="sidebar-row">' +
-            '<div style="flex:1;min-width:0">' +
-              '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">' +
-                '<span style="font-size:12px;font-weight:700;color:var(--gold);font-family:\'Space Mono\',monospace">' + _escH(w.trader || 'Unknown') + '</span>' +
-                '<span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px;background:' + sideBg + ';color:' + sideColor + ';letter-spacing:0.3px">' + _escH(side) + '</span>' +
-              '</div>' +
-              '<div style="font-size:11px;color:var(--text-soft);line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + _escH(question) + '</div>' +
-            '</div>' +
-            '<div style="font-family:\'Space Mono\',monospace;font-size:12px;font-weight:700;color:var(--text);flex-shrink:0;padding-top:2px">' + size + '</div>' +
-          '</a>';
-        }).join('');
-      }
-    }
-
-    // --- 2. BEST P&L: aggregate by trader, rank by total PnL ---
-    const pnlEl = document.getElementById('bestPnlList');
-    if (pnlEl) {
-      const traderMap = {};
-      whales.forEach(w => {
-        const name = w.trader || 'Unknown';
-        if (!traderMap[name]) traderMap[name] = { pnl: 0, volume: 0 };
-        traderMap[name].pnl += (w.pnl || w.profit || 0);
-        traderMap[name].volume += (w.size || 0);
-      });
-      const ranked = Object.entries(traderMap)
-        .map(([name, d]) => ({ name, pnl: d.pnl, volume: d.volume }))
-        .sort((a, b) => b.pnl - a.pnl)
-        .slice(0, 5);
-      if (!ranked.length || ranked.every(r => r.pnl === 0)) {
-        pnlEl.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:8px 0">No P&amp;L data available</div>';
-      } else {
-        pnlEl.innerHTML = ranked.map((t, i) => {
-          const pnlStr = t.pnl >= 0 ? '+$' + _fmtNum(t.pnl) : '-$' + _fmtNum(Math.abs(t.pnl));
-          const pnlColor = t.pnl >= 0 ? 'var(--green)' : 'var(--red)';
-          const volStr = '$' + _fmtNum(t.volume);
-          const badges = ['#c9920d','#a8a8a8','#cd7f32','var(--muted)','var(--muted)'];
-          return '<div class="sidebar-row">' +
-            '<div style="width:22px;height:22px;border-radius:50%;background:' + badges[i] + '22;border:1px solid ' + badges[i] + '44;display:flex;align-items:center;justify-content:center;font-family:\'Space Mono\',monospace;font-size:10px;font-weight:700;color:' + badges[i] + ';flex-shrink:0">' + (i+1) + '</div>' +
-            '<div style="flex:1;min-width:0">' +
-              '<div style="font-size:12px;font-weight:700;color:var(--gold);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:\'Space Mono\',monospace">' + _escH(t.name) + '</div>' +
-              '<div style="font-size:10px;color:var(--muted);margin-top:1px">Vol: ' + volStr + '</div>' +
-            '</div>' +
-            '<div style="font-family:\'Space Mono\',monospace;font-size:12px;font-weight:700;color:' + pnlColor + ';flex-shrink:0">' + pnlStr + '</div>' +
-          '</div>';
-        }).join('');
-      }
-    }
-
-    // --- 3. MOST ACTIVE MARKETS: count whales per market ---
-    const mktsEl = document.getElementById('activeMarketsList');
-    if (mktsEl) {
-      const marketMap = {};
-      whales.forEach(w => {
-        const key = w.market || 'Unknown';
-        if (!marketMap[key]) marketMap[key] = { question: key, count: 0, yesCount: 0, totalCount: 0, url: w.polymarket_url || w.market_url || '#' };
-        marketMap[key].count++;
-        marketMap[key].totalCount++;
-        if ((w.side||'').toUpperCase() === 'YES') marketMap[key].yesCount++;
-      });
-      const topMarkets = Object.values(marketMap).sort((a, b) => b.count - a.count).slice(0, 5);
-      if (!topMarkets.length) {
-        mktsEl.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:8px 0">No market data available</div>';
-      } else {
-        mktsEl.innerHTML = topMarkets.map(m => {
-          const question = m.question.length > 52 ? m.question.substring(0, 49) + '...' : m.question;
-          const yesPct = m.totalCount > 0 ? Math.round((m.yesCount / m.totalCount) * 100) : null;
-          const yesBadge = yesPct !== null ? '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:rgba(34,197,94,0.12);color:#22c55e">' + yesPct + '% YES</span>' : '';
-          return '<a href="' + _escH(m.url) + '" target="_blank" rel="noopener" class="sidebar-row">' +
-            '<div style="flex:1;min-width:0">' +
-              '<div style="font-size:11px;color:var(--text);line-height:1.4;margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + _escH(question) + '</div>' +
-              '<div style="display:flex;align-items:center;gap:6px">' +
-                '<span style="font-size:10px;font-weight:700;color:var(--gold);font-family:\'Space Mono\',monospace">' + m.count + ' whale' + (m.count !== 1 ? 's' : '') + '</span>' +
-                yesBadge +
-              '</div>' +
-            '</div>' +
-          '</a>';
-        }).join('');
-      }
-    }
-  } catch(e) {
-    console.error('Sidebar whale data error:', e);
-    var fallback = '<div style="font-size:11px;color:var(--muted);padding:8px 0">Data unavailable</div>';
-    var el1 = document.getElementById('biggestTradesList');
-    var el2 = document.getElementById('bestPnlList');
-    var el3 = document.getElementById('activeMarketsList');
-    if (el1) el1.innerHTML = fallback;
-    if (el2) el2.innerHTML = fallback;
-    if (el3) el3.innerHTML = fallback;
-  }
-})();
-
-// ── MARKET MOVERS SIDEBAR ──
-(async function loadMarketMovers() {
-  try {
-    const res = await fetch('/api/market-movers');
-    if (!res.ok) throw new Error('Failed to fetch movers');
-    const data = await res.json();
-    const movers = data.movers || [];
-    const el = document.getElementById('marketMoversList');
-    if (!el) return;
-    if (!movers.length) {
-      el.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:8px 0">No price moves detected yet</div>';
-      return;
-    }
-    el.innerHTML = movers.slice(0, 5).map(m => {
-      const question = (m.question || '').length > 48 ? m.question.substring(0, 45) + '...' : (m.question || '');
-      const isUp = m.change_pct >= 0;
-      const changeStr = (isUp ? '+' : '') + m.change_pct.toFixed(1) + '%';
-      const changeColor = isUp ? 'var(--green)' : 'var(--red)';
-      const changeBg = isUp ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)';
-      return '<div class="sidebar-row">' +
-        '<div style="flex:1;min-width:0">' +
-          '<div style="font-size:11px;color:var(--text);line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + _escH(question) + '</div>' +
-          '<div style="font-size:10px;color:var(--muted);margin-top:2px">Price: ' + (m.current_price || 0) + '%</div>' +
-        '</div>' +
-        '<div style="font-family:\'Space Mono\',monospace;font-size:12px;font-weight:700;padding:2px 8px;border-radius:4px;background:' + changeBg + ';color:' + changeColor + ';flex-shrink:0">' + changeStr + '</div>' +
-      '</div>';
-    }).join('');
-  } catch(e) {
-    console.error('Market movers error:', e);
-    var el = document.getElementById('marketMoversList');
-    if (el) el.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:8px 0">Data unavailable</div>';
-  }
-})();
-
-// ── NEWS IMPACT SIDEBAR ──
-(async function loadNewsImpact() {
-  try {
-    const res = await fetch('/api/news-impact');
+    const res = await fetch('/api/predictors?sort=win_rate&limit=5');
     if (!res.ok) throw new Error('Failed');
-    const data = await res.json();
-    const el = document.getElementById('newsImpactList');
-    if (!el) return;
-    const items = (data.news_impacts || []).filter(n => n.related_markets && n.related_markets.length > 0).slice(0, 3);
-    if (!items.length) {
-      el.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:8px 0">No news-market matches right now</div>';
-      return;
-    }
-    el.innerHTML = items.map(n => {
-      const badge = n.sentiment === 'bullish' ? '<span style="color:#22c55e;font-size:10px">&#x1F7E2;</span>' : n.sentiment === 'bearish' ? '<span style="color:#ef4444;font-size:10px">&#x1F534;</span>' : '<span style="color:#6a6a5e;font-size:10px">&#x26AA;</span>';
-      const mkt = n.related_markets[0];
-      const mktText = mkt ? '<div style="font-size:10px;color:var(--gold);margin-top:2px">' + _escH((mkt.question || '').substring(0, 50)) + (mkt.yes_pct != null ? ' — ' + mkt.yes_pct + '%' : '') + '</div>' : '';
-      return '<a href="' + _escH(n.link || '/events') + '" target="_blank" rel="noopener" class="sidebar-row" style="text-decoration:none;display:block">' +
-        '<div style="display:flex;align-items:flex-start;gap:6px">' +
-          badge +
-          '<div style="flex:1;min-width:0">' +
-            '<div style="font-size:11px;color:var(--text);line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + _escH((n.headline || '').substring(0, 70)) + '</div>' +
-            (n.source ? '<div style="font-size:9px;color:var(--muted);margin-top:1px">' + _escH(n.source) + '</div>' : '') +
-            mktText +
-          '</div>' +
-        '</div>' +
-      '</a>';
+    const list = await res.json();
+    const el = document.getElementById('top-predictors-list');
+    if (!list.length) { el.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:8px 0;">No data yet.</div>'; return; }
+    el.innerHTML = list.map((p, i) => {
+      const initial = (p.display_name || '?').charAt(0).toUpperCase();
+      const wr = Math.round(p.win_rate || 0);
+      return `<a href="/m/${p.user_id}" style="display:flex;align-items:center;gap:10px;padding:8px 0;text-decoration:none;border-bottom:1px solid var(--border);">
+        <div style="width:28px;height:28px;border-radius:50%;background:rgba(201,146,13,0.15);border:1px solid rgba(201,146,13,0.3);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gold);flex-shrink:0;">${initial}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.display_name || 'Anonymous'}</div>
+          <div style="font-size:10px;font-family:var(--mono);color:var(--muted);">${wr}% win rate</div>
+        </div>
+        <div style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gold);flex-shrink:0;">#${i+1}</div>
+      </a>`;
     }).join('');
   } catch(e) {
-    console.error('News impact error:', e);
-    var el = document.getElementById('newsImpactList');
-    if (el) el.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:8px 0">Data unavailable</div>';
+    const el = document.getElementById('top-predictors-list');
+    if (el) el.innerHTML = '';
   }
 })();
 
-// ── HOT STREAKS SIDEBAR ──
-(async function loadHotStreaks() {
+// SMART MONEY sidebar
+(async function loadSmartMoneyExplore() {
   try {
-    const res = await fetch('/api/consistent-traders');
-    if (!res.ok) throw new Error('Failed to fetch consistent traders');
-    const traders = await res.json();
-    const el = document.getElementById('hotStreaksList');
-    if (!el) return;
-    if (!traders.length) {
-      el.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:8px 0">No consistent trader data available</div>';
-      return;
-    }
-    el.innerHTML = traders.slice(0, 5).map(t => {
-      const scoreColor = t.consistency_score >= 80 ? '#22c55e' : t.consistency_score >= 60 ? '#c9920d' : '#7a7870';
-      const scoreBg = t.consistency_score >= 80 ? 'rgba(34,197,94,0.12)' : t.consistency_score >= 60 ? 'rgba(201,146,13,0.12)' : 'rgba(90,88,84,0.15)';
-      const weekPnl = t.pnl_week >= 0 ? '+$' + _fmtNum(Math.abs(t.pnl_week)) : '-$' + _fmtNum(Math.abs(t.pnl_week));
-      const allPnl = t.pnl_all_time >= 0 ? '+$' + _fmtNum(Math.abs(t.pnl_all_time)) : '-$' + _fmtNum(Math.abs(t.pnl_all_time));
-      const profileUrl = /^0x[0-9a-fA-F]{10,}$/i.test(t.address||'') ? '/trader/' + (t.address||'') : '/p/' + (t.address || t.display_name || '');
-      return '<a href="' + _escH(profileUrl) + '" class="sidebar-row" style="text-decoration:none">' +
-        '<div style="flex:1;min-width:0">' +
-          '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">' +
-            '<span style="font-size:12px;font-weight:700;color:#c9920d;font-family:\'Space Mono\',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + _escH(t.display_name) + '</span>' +
-            '<span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:10px;background:' + scoreBg + ';color:' + scoreColor + ';border:1px solid ' + scoreColor + '33;flex-shrink:0">' + t.consistency_score + '</span>' +
-          '</div>' +
-          '<div style="display:flex;gap:10px;font-family:\'Space Mono\',monospace;font-size:10px">' +
-            '<span style="color:#22c55e">W: ' + weekPnl + '</span>' +
-            '<span style="color:var(--muted)">All: ' + allPnl + '</span>' +
-          '</div>' +
-        '</div>' +
-      '</a>';
+    const res = await fetch('/api/smart-money');
+    const data = await res.json();
+    if (!data.markets || !data.markets.length) return;
+    const card = document.getElementById('smartMoneyCardExplore');
+    const list = document.getElementById('smartMoneyListExplore');
+    if (!card || !list) return;
+    list.innerHTML = data.markets.slice(0, 5).map(m => {
+      const color = m.yes_pct >= 60 ? '#22c55e' : m.yes_pct <= 40 ? '#ef4444' : '#c9920d';
+      return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
+        <div style="flex:1;min-width:0;font-size:11px;color:var(--text);line-height:1.4;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${m.title}</div>
+        <div style="width:40px;height:5px;border-radius:3px;background:rgba(239,68,68,0.2);overflow:hidden;flex-shrink:0"><div style="height:100%;width:${m.yes_pct}%;background:#22c55e;border-radius:3px"></div></div>
+        <div style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:${color};width:30px;text-align:right;flex-shrink:0">${m.yes_pct}%</div>
+      </div>`;
     }).join('');
-  } catch(e) {
-    console.error('Hot streaks error:', e);
-    var el = document.getElementById('hotStreaksList');
-    if (el) el.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:8px 0">Data unavailable</div>';
-  }
+    card.style.display = 'block';
+  } catch(e) { /* silent */ }
 })();
-
-function _fmtNum(n) {
-  if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
-  if (n >= 1e3) return (n/1e3).toFixed(0) + 'K';
-  return Math.round(n).toLocaleString();
-}
-
-function _sharpTimeAgo(ts) {
-  if (!ts) return '';
-  const diff = Date.now() - new Date(ts).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return mins + 'm ago';
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return hrs + 'h ago';
-  return Math.floor(hrs / 24) + 'd ago';
-}
-function _escH(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 // Auto-refresh: activity feed polls every 20s for new items (banner); explore every 30s
 activityPollInterval = setInterval(pollNewActivity, 20000);
 refreshInterval = setInterval(loadFeed, 30000);
-
-// ── WHALE COPY TRADE MODAL (explore page) ──
-function openWhaleCopyTrade(trader, market, side, size, marketUrl, proxyWallet) {
-  const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
-  if (!token) {
-    // Show a simple login prompt
-    if (confirm('Sign in to copy trades and set up alerts.\n\nGo to sign in page?')) {
-      window.location.href = '/creator/login';
-    }
-    return;
-  }
-  window._exploreCopyCtx = { trader, market, side, size, marketUrl, proxyWallet };
-  const modal = document.getElementById('exploreCopyModal');
-  if (!modal) return;
-  document.getElementById('ect-trader').textContent = trader;
-  document.getElementById('ect-market').textContent = market;
-  const sUpper = (side || '').toUpperCase();
-  document.getElementById('ect-side').innerHTML = '<span style="color:' + (sUpper === 'YES' ? '#22c55e' : sUpper === 'NO' ? '#ef4444' : '#c9920d') + ';font-weight:700">' + _escH(side) + '</span>';
-  const fmtSize = size >= 1e6 ? '$' + (size/1e6).toFixed(2) + 'M' : size >= 1e3 ? '$' + (size/1e3).toFixed(1) + 'K' : '$' + (size||0).toFixed(0);
-  document.getElementById('ect-size').textContent = fmtSize;
-  document.getElementById('ect-amount').value = '';
-  document.getElementById('ect-alert').checked = false;
-  document.getElementById('ect-cta').href = marketUrl || 'https://polymarket.com';
-  modal.style.display = 'flex';
-}
-function closeExploreCopy() {
-  const modal = document.getElementById('exploreCopyModal');
-  if (modal) modal.style.display = 'none';
-  window._exploreCopyCtx = null;
-}
-async function handleExploreCopyCta() {
-  const ctx = window._exploreCopyCtx;
-  if (!ctx) return;
-  if (document.getElementById('ect-alert').checked && ctx.proxyWallet) {
-    const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
-    try {
-      await fetch('/api/whale-alerts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-        body: JSON.stringify({ trader_wallet: ctx.proxyWallet, trader_name: ctx.trader })
-      });
-    } catch(e) {}
-  }
-  closeExploreCopy();
-}
 </script>
-
-<!-- EXPLORE COPY TRADE MODAL -->
-<div id="exploreCopyModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center" onclick="if(event.target===this)closeExploreCopy()">
-  <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:28px;max-width:440px;width:90%;position:relative">
-    <button onclick="closeExploreCopy()" style="position:absolute;top:12px;right:16px;background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer">&times;</button>
-    <h3 style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;margin-bottom:4px">Copy this trade?</h3>
-    <div style="font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);margin-bottom:20px">This will open Polymarket with the trade pre-selected</div>
-    <div style="margin-bottom:12px"><div style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Trader</div><div id="ect-trader" style="font-family:'Space Mono',monospace;font-size:13px;color:var(--text)">--</div></div>
-    <div style="margin-bottom:12px"><div style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Market</div><div id="ect-market" style="font-family:'Space Mono',monospace;font-size:13px;color:var(--text)">--</div></div>
-    <div style="margin-bottom:12px"><div style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Side</div><div id="ect-side" style="font-family:'Space Mono',monospace;font-size:13px">--</div></div>
-    <div style="margin-bottom:12px"><div style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Their position size</div><div id="ect-size" style="font-family:'Space Mono',monospace;font-size:13px;color:var(--text)">--</div></div>
-    <div style="margin-bottom:16px"><div style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Your amount ($)</div><input type="number" id="ect-amount" placeholder="100" min="1" step="1" style="width:100%;background:var(--paper);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-family:'Space Mono',monospace;font-size:14px;color:var(--text);outline:none"/></div>
-    <a id="ect-cta" href="#" target="_blank" rel="noopener" onclick="handleExploreCopyCta()" style="display:block;width:100%;padding:12px;border:none;border-radius:8px;background:#c9920d;color:#0f0f0d;font-family:'Syne',sans-serif;font-size:14px;font-weight:700;cursor:pointer;text-align:center;text-decoration:none;transition:opacity .15s">Open on Polymarket &rarr;</a>
-    <label style="display:flex;align-items:center;gap:10px;margin-top:16px;padding:12px;background:rgba(201,146,13,0.06);border-radius:8px;cursor:pointer">
-      <input type="checkbox" id="ect-alert" style="width:18px;height:18px;accent-color:#c9920d"/>
-      <span style="font-family:'Space Mono',monospace;font-size:12px;color:var(--muted)">&#x1F514; Alert me when this trader makes new moves</span>
-    </label>
-  </div>
-</div>
 </body>
 </html>

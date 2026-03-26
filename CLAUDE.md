@@ -409,8 +409,27 @@
 **Plan in Cowork (VM), build in Claude Code (Mac).**
 - Cowork sessions: strategy, feature planning, architecture decisions, CLAUDE.md updates
 - Claude Code sessions: file edits, git commits, pushes, code implementation
-- Files are shared via mount — both environments see the same codebase
 - Only Claude Code (Mac) should run git commands
+
+**⚠️ VirtioFS SYNC ISSUE — happens every session:**
+VirtioFS does NOT reliably flush Cowork VM writes to the Mac in real time.
+Claude Code at `/Users/marcdems/Desktop/HYPERFLEX` will show a clean working tree
+even after Cowork has made changes.
+
+**Fix (Cowork must do this at the end of every coding session):**
+```bash
+cd /sessions/relaxed-determined-euler/mnt/hyperflex
+git diff HEAD > cowork-latest.patch
+```
+Then tell the user: "Run `git apply cowork-latest.patch` in Claude Code before committing."
+
+**Claude Code apply + commit flow:**
+```bash
+cd /Users/marcdems/Desktop/HYPERFLEX
+git apply cowork-latest.patch
+git status   # verify files are dirty
+# then commit + push as normal
+```
 
 ---
 
@@ -445,6 +464,17 @@
 28. `supabase_migration_shared_positions.sql`
 29. `supabase_migration_predictor_follows.sql`
 30. `supabase_migration_cached_positions.sql`
+31. `supabase_migration_archived.sql` ← adds `archived` col to markets
+32. `supabase_migration_banner_position.sql` ← banner focal point on creator_settings
+33. `supabase_migration_branding.sql` ← custom branding cols
+34. `supabase_migration_community_category.sql` ← community_category on creator_settings
+35. `supabase_migration_news_scanner.sql` ← news feed settings on creator_settings
+36. `supabase_migration_pending_emails.sql` ← creates pending_emails queue table
+37. `supabase_migration_plan_scheduling.sql` ← plan_scheduled_change on creator_settings
+38. `supabase_migration_resonance.sql` ← resonance_score on markets
+39. `supabase_migration_sponsored_embed.sql` ← sponsored markets + embed attribution
+40. `supabase_migration_narrative_snapshots.sql` ← narrative dominance snapshots for screener (Claude Code creates this)
+41. `supabase_migration_errors.sql` ← error logging table for reliability monitoring
 - **Email notifications**: Opt-in via Railway env vars: `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
   - Fires after both manual resolve and cron settlement
   - No-op if SMTP_HOST is not set — safe to deploy without configuring

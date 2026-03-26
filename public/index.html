@@ -2,23 +2,21 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
-<title>HYPERFLEX — Prediction Market Intelligence</title>
-<meta name="description" content="AI-powered market intelligence for prediction markets. Real-time signals, smart money flow, and cross-asset analysis across Polymarket & Hyperliquid."/>
-<link rel="canonical" href="https://hyperflex.network/"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>HYPERFLEX — All Your Predictions. One Place.</title>
+<meta name="description" content="Track your Polymarket, Kalshi &amp; Manifold positions in one dashboard. Compare odds, share your best calls, compete on leaderboards. Free during Early Access."/>
 <!-- Open Graph -->
 <meta property="og:type" content="website"/>
 <meta property="og:url" content="https://hyperflex.network/"/>
-<meta property="og:title" content="HYPERFLEX — Prediction Market Intelligence"/>
-<meta property="og:description" content="AI-powered market intelligence for prediction markets. Real-time signals, smart money flow, and cross-asset analysis across Polymarket & Hyperliquid."/>
-<meta property="og:image" content="https://hyperflex.network/og-default.png"/>
+<meta property="og:title" content="HYPERFLEX — All Your Predictions. One Place."/>
+<meta property="og:description" content="Track your Polymarket, Kalshi &amp; Manifold positions in one dashboard. Free during Early Access."/>
+<meta property="og:image" content="https://hyperflex.network/og-home.png"/>
 <meta property="og:site_name" content="HYPERFLEX"/>
 <!-- Twitter / X -->
 <meta name="twitter:card" content="summary_large_image"/>
-<meta name="twitter:site" content="@HyperFlexApp"/>
-<meta name="twitter:title" content="HYPERFLEX — Prediction Market Intelligence"/>
-<meta name="twitter:description" content="AI-powered market intelligence for prediction markets. Real-time signals, smart money flow, and cross-asset analysis across Polymarket & Hyperliquid."/>
-<meta name="twitter:image" content="https://hyperflex.network/og-default.png"/>
+<meta name="twitter:title" content="HYPERFLEX — All Your Predictions. One Place."/>
+<meta name="twitter:description" content="Track your Polymarket, Kalshi &amp; Manifold positions in one dashboard. Free during Early Access."/>
+<meta name="twitter:image" content="https://hyperflex.network/og-home.png"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
 <style>
@@ -33,7 +31,6 @@
   --border: #2a2a26;
   --dim: #7a7870;
   --green: #2d9b5f;
-  --red: #c0392b;
   --sans: 'Syne', sans-serif;
   --mono: 'Space Mono', monospace;
 }
@@ -42,6 +39,7 @@
 ::-webkit-scrollbar-track { background: var(--paper); }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 html { scroll-behavior: smooth; }
+
 body {
   background: var(--paper);
   color: var(--text);
@@ -60,7 +58,6 @@ body::before {
   pointer-events: none;
   z-index: 0;
 }
-section { position: relative; z-index: 1; }
 
 /* ── NAV ── */
 .nav {
@@ -93,7 +90,7 @@ section { position: relative; z-index: 1; }
 .nav-links {
   display: flex;
   align-items: center;
-  gap: 28px;
+  gap: 32px;
 }
 .nav-link {
   font-family: var(--mono);
@@ -130,6 +127,49 @@ section { position: relative; z-index: 1; }
   transition: all 0.2s;
 }
 .btn-nav-cta:hover { background: var(--gold-bright); }
+.btn-nav-explore {
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: 13px;
+  color: #4fc3f7;
+  background: rgba(79,195,247,0.08);
+  border: 1px solid rgba(79,195,247,0.3);
+  padding: 9px 18px;
+  border-radius: 6px;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+.btn-nav-explore:hover { background: rgba(79,195,247,0.15); border-color: rgba(79,195,247,0.55); }
+
+/* ── SHARED ── */
+section { position: relative; z-index: 1; }
+
+.section-eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--gold);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.section-eyebrow::before {
+  content: '';
+  display: inline-block;
+  width: 20px; height: 1px;
+  background: var(--gold);
+}
+.section-title {
+  font-size: clamp(28px, 4vw, 44px);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.08;
+  margin-bottom: 56px;
+  color: var(--text);
+  max-width: 580px;
+}
 
 /* ── HERO ── */
 .hero {
@@ -139,7 +179,32 @@ section { position: relative; z-index: 1; }
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 120px 24px 60px;
+  padding: 120px 24px 80px;
+}
+.hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--gold);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  background: rgba(201,146,13,0.08);
+  border: 1px solid rgba(201,146,13,0.25);
+  padding: 6px 16px;
+  border-radius: 20px;
+  margin-bottom: 32px;
+}
+.eyebrow-dot {
+  width: 5px; height: 5px;
+  background: var(--gold);
+  border-radius: 50%;
+  animation: pulse-blink 2s ease-in-out infinite;
+}
+@keyframes pulse-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
 }
 .hero h1 {
   font-size: clamp(44px, 7.5vw, 92px);
@@ -151,10 +216,11 @@ section { position: relative; z-index: 1; }
   margin-bottom: 28px;
 }
 .hero h1 .accent { color: var(--gold); }
+.hero h1 .muted  { color: var(--dim); }
 .hero-sub {
   font-size: clamp(15px, 2vw, 19px);
   color: var(--dim);
-  max-width: 600px;
+  max-width: 540px;
   line-height: 1.65;
   margin-bottom: 44px;
 }
@@ -164,7 +230,7 @@ section { position: relative; z-index: 1; }
   align-items: center;
   flex-wrap: wrap;
   justify-content: center;
-  margin-bottom: 48px;
+  margin-bottom: 64px;
 }
 .btn-primary {
   font-family: var(--sans);
@@ -196,333 +262,523 @@ section { position: relative; z-index: 1; }
   letter-spacing: 0.04em;
 }
 .btn-ghost:hover { color: var(--text); border-color: var(--dim); }
+.hero-proof {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.proof-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+  letter-spacing: 0.06em;
+}
+.proof-check {
+  width: 18px; height: 18px;
+  background: rgba(45,155,95,0.1);
+  border: 1px solid rgba(45,155,95,0.3);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: var(--green);
+  flex-shrink: 0;
+}
+.proof-sep { width: 1px; height: 14px; background: var(--border); }
 
-/* ── FEAR & GREED GAUGE ── */
-.fg-wrap {
+/* ── LIVE STATS BAR ── */
+.stats-bar {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0;
+  padding: 0;
+  background: rgba(201,146,13,0.04);
+  border-top: 1px solid rgba(201,146,13,0.15);
+  border-bottom: 1px solid rgba(201,146,13,0.15);
+}
+.stats-bar-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  padding: 18px 48px;
+  border-right: 1px solid rgba(201,146,13,0.12);
+  flex: 1;
+  max-width: 260px;
 }
-.fg-label {
+.stats-bar-item:last-child { border-right: none; }
+.stats-bar-num {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--gold);
+  letter-spacing: -0.02em;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.stats-bar-label {
+  font-family: var(--mono);
+  font-size: 10px;
   color: var(--dim);
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
-.fg-gauge {
-  width: 200px;
-  height: 12px;
-  background: linear-gradient(90deg, #c0392b, #e67e22, #f1c40f, #2ecc71, #27ae60);
-  border-radius: 6px;
-  position: relative;
-  border: 1px solid var(--border);
+@media (max-width: 600px) {
+  .stats-bar { gap: 0; }
+  .stats-bar-item { padding: 14px 16px; }
+  .stats-bar-num { font-size: 18px; }
 }
-.fg-needle {
-  position: absolute;
-  top: -4px;
-  width: 4px;
-  height: 20px;
-  background: var(--text);
-  border-radius: 2px;
-  transform: translateX(-50%);
-  transition: left 0.8s ease;
-}
-.fg-score {
-  font-family: var(--mono);
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--gold-lt);
-}
-.fg-sentiment {
-  font-size: 13px;
-  color: var(--dim);
+@media (max-width: 480px) {
+  /* Stats bar: 2×2 grid so 4 items fit without squishing */
+  .stats-bar { flex-wrap: wrap; }
+  .stats-bar-item {
+    min-width: 50%;
+    max-width: 50%;
+    border-right: none;
+    border-bottom: 1px solid rgba(201,146,13,0.12);
+    padding: 14px 10px;
+  }
+  .stats-bar-item:nth-child(odd) { border-right: 1px solid rgba(201,146,13,0.12); }
+  .stats-bar-item:nth-last-child(-n+2) { border-bottom: none; }
+  .stats-bar-num { font-size: 20px; }
+
+  /* Hero: tighten padding */
+  .hero { padding-left: 16px; padding-right: 16px; }
+
+  /* How it works: single column */
+  .steps { grid-template-columns: 1fr; }
+  .how { padding: 60px 16px; }
+  .step { padding: 28px 20px 32px; }
+
+  /* Features: single column */
+  .features-grid { grid-template-columns: 1fr; gap: 12px; }
+  .features { padding: 60px 16px; }
+
+  /* Quick Preview card: reduce padding on mobile */
+  #qp-wallet, #qp-username { min-width: 0; width: 100%; }
 }
 
-/* ── LIVE STATS TICKER ── */
-.stats-ticker {
+/* ── MARQUEE ── */
+.marquee {
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 13px 0;
   overflow: hidden;
-  border-top: 1px solid rgba(201,146,13,0.15);
-  border-bottom: 1px solid rgba(201,146,13,0.15);
-  background: rgba(201,146,13,0.04);
-  padding: 14px 0;
   position: relative;
   z-index: 1;
+  background: rgba(201,146,13,0.015);
 }
-.stats-ticker::before, .stats-ticker::after {
+.marquee::before, .marquee::after {
   content: '';
   position: absolute;
   top: 0; bottom: 0;
-  width: 80px;
+  width: 100px;
   z-index: 2;
 }
-.stats-ticker::before { left: 0; background: linear-gradient(90deg, var(--paper), transparent); }
-.stats-ticker::after { right: 0; background: linear-gradient(270deg, var(--paper), transparent); }
-.ticker-track {
+.marquee::before { left: 0;  background: linear-gradient(90deg, var(--paper), transparent); }
+.marquee::after  { right: 0; background: linear-gradient(270deg, var(--paper), transparent); }
+.marquee-track {
   display: flex;
   width: max-content;
-  animation: ticker 25s linear infinite;
+  animation: marquee 30s linear infinite;
 }
-.ticker-item {
+.marquee-item {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 11px;
   color: var(--dim);
-  letter-spacing: 0.06em;
-  padding: 0 28px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 0 32px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   white-space: nowrap;
 }
-.ticker-item .num { color: var(--gold); font-weight: 700; }
-.ticker-sep { color: var(--gold); opacity: 0.4; font-size: 8px; }
-@keyframes ticker {
+.marquee-sep { color: var(--gold); opacity: 0.5; font-size: 8px; }
+@keyframes marquee {
   from { transform: translateX(0); }
   to   { transform: translateX(-50%); }
 }
 
-/* ── LIVE DATA CARDS ── */
-.live-cards {
-  padding: 80px 24px;
-  max-width: 1100px;
+/* ── HOW IT WORKS ── */
+.how {
+  padding: 100px 40px;
+  max-width: 1120px;
   margin: 0 auto;
 }
-.live-cards-header {
-  text-align: center;
-  margin-bottom: 40px;
+.steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
 }
-.section-eyebrow {
+.step {
+  background: var(--cream);
+  padding: 36px 32px 40px;
+}
+.step-num {
   font-family: var(--mono);
   font-size: 11px;
   color: var(--gold);
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  margin-bottom: 12px;
+  letter-spacing: 0.12em;
+  margin-bottom: 22px;
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 10px;
 }
-.section-eyebrow::before, .section-eyebrow::after {
-  content: '';
-  display: inline-block;
-  width: 20px; height: 1px;
-  background: var(--gold);
+.step-num::after { content: ''; flex: 1; height: 1px; background: rgba(201,146,13,0.18); }
+.step-icon { font-size: 34px; margin-bottom: 18px; display: block; }
+.step h3 {
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 10px;
+  letter-spacing: -0.01em;
 }
-.live-grid {
+.step p { font-size: 14px; color: var(--dim); line-height: 1.7; }
+
+/* ── FEATURES ── */
+.features {
+  padding: 100px 40px;
+  max-width: 1120px;
+  margin: 0 auto;
+}
+.features-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 20px;
 }
-.live-card {
-  background: var(--cream);
-  border: 1px solid var(--border);
-  border-top: 3px solid var(--gold);
-  border-radius: 12px;
-  padding: 28px 24px;
-  display: flex;
-  flex-direction: column;
-  min-height: 220px;
-  transition: border-color 0.2s, transform 0.2s;
-}
-.live-card:hover { border-color: rgba(201,146,13,0.4); transform: translateY(-3px); }
-.live-card-type {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--gold);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  margin-bottom: 14px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.live-card-type .dot {
-  width: 6px; height: 6px;
-  background: var(--green);
-  border-radius: 50%;
-  animation: pulse-blink 2s ease-in-out infinite;
-}
-@keyframes pulse-blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.25; }
-}
-.live-card-stat {
-  font-family: var(--sans);
-  font-size: 22px;
-  font-weight: 800;
-  color: var(--text);
-  margin-bottom: 8px;
-  line-height: 1.3;
-}
-.live-card-detail {
-  font-size: 13px;
-  color: var(--dim);
-  line-height: 1.55;
-  margin-bottom: auto;
-}
-.live-card-link {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--gold);
-  text-decoration: none;
-  font-weight: 700;
-  margin-top: 18px;
-  transition: color 0.15s;
-}
-.live-card-link:hover { color: var(--gold-bright); }
-.live-card-loading {
-  color: var(--dim);
-  font-family: var(--mono);
-  font-size: 12px;
-}
-
-/* ── EMAIL CAPTURE ── */
-.email-section {
-  padding: 60px 24px;
-  max-width: 600px;
-  margin: 0 auto;
-  text-align: center;
-}
-.email-card {
-  background: linear-gradient(135deg, rgba(201,146,13,0.08), rgba(201,146,13,0.03));
-  border: 1px solid rgba(201,146,13,0.25);
-  border-radius: 16px;
-  padding: 48px 36px;
-}
-.email-card h3 {
-  font-size: 24px;
-  font-weight: 800;
-  color: var(--text);
-  margin-bottom: 10px;
-}
-.email-card p {
-  font-size: 14px;
-  color: var(--dim);
-  margin-bottom: 28px;
-}
-.email-form {
-  display: flex;
-  gap: 10px;
-  max-width: 440px;
-  margin: 0 auto 14px;
-}
-.email-form input {
-  flex: 1;
-  background: var(--paper);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 14px 16px;
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: 13px;
-  outline: none;
-  transition: border-color 0.2s;
-}
-.email-form input:focus { border-color: var(--gold); }
-.email-form button {
-  background: var(--gold);
-  color: var(--ink);
-  border: none;
-  border-radius: 8px;
-  padding: 14px 24px;
-  font-family: var(--sans);
-  font-weight: 700;
-  font-size: 14px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.2s;
-}
-.email-form button:hover { background: var(--gold-bright); }
-.email-note {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--dim);
-}
-
-/* ── PRODUCT SECTIONS ── */
-.product-section {
-  padding: 80px 40px;
-  max-width: 1100px;
-  margin: 0 auto;
-}
-.product-block {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 64px;
-  align-items: center;
-  margin-bottom: 100px;
-}
-.product-block:last-child { margin-bottom: 0; }
-.product-block.reverse .product-copy { order: 2; }
-.product-block.reverse .product-visual { order: 1; }
-.product-copy h3 {
-  font-size: clamp(24px, 3.5vw, 36px);
-  font-weight: 800;
-  color: var(--text);
-  margin-bottom: 16px;
-  letter-spacing: -0.02em;
-}
-.product-copy p {
-  font-size: 15px;
-  color: var(--dim);
-  line-height: 1.7;
-  margin-bottom: 28px;
-}
-.product-copy .btn-primary { font-size: 14px; padding: 14px 28px; }
-.product-visual {
+.feat-card {
   background: var(--cream);
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 32px;
-  min-height: 280px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.2s, transform 0.2s;
+}
+.feat-card::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(201,146,13,0.5), transparent);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.feat-card:hover { border-color: rgba(201,146,13,0.3); transform: translateY(-3px); }
+.feat-card:hover::after { opacity: 1; }
+.feat-icon {
+  width: 48px; height: 48px;
+  background: rgba(201,146,13,0.08);
+  border: 1px solid rgba(201,146,13,0.18);
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: 22px;
+  margin-bottom: 22px;
 }
-.product-visual-inner {
-  width: 100%;
+.feat-card h3 {
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 10px;
+  letter-spacing: -0.01em;
 }
-.pv-row {
+.feat-card > p {
+  font-size: 14px;
+  color: var(--dim);
+  line-height: 1.65;
+  margin-bottom: 22px;
+}
+.feat-bullets {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.feat-bullet {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.45;
+}
+.feat-bullet::before { content: '—'; color: var(--gold); flex-shrink: 0; font-size: 10px; margin-top: 1px; }
+
+/* ── DEMO WINDOW ── */
+.demo {
+  padding: 0 40px 100px;
+  max-width: 1120px;
+  margin: 0 auto;
+}
+.demo-window {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.demo-bar {
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255,255,255,0.015);
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 14px 0;
-  border-bottom: 1px solid var(--border);
 }
-.pv-row:last-child { border-bottom: none; }
-.pv-icon { font-size: 20px; flex-shrink: 0; }
-.pv-label { font-size: 13px; color: var(--text); flex: 1; }
-.pv-val {
+.demo-dots { display: flex; gap: 6px; }
+.demo-dot { width: 11px; height: 11px; border-radius: 50%; }
+.demo-dot.r { background: #ff5f57; }
+.demo-dot.y { background: #febc2e; }
+.demo-dot.g { background: #28c840; }
+.demo-url-bar {
+  flex: 1;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 5px 12px;
   font-family: var(--mono);
+  font-size: 11px;
+  color: var(--dim);
+  text-align: center;
+}
+.demo-url-bar em { color: var(--gold); font-style: normal; }
+.demo-markets {
+  padding: 28px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+.demo-card {
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px;
+}
+.demo-live {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--green);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 11px;
+}
+.demo-live-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: pulse-blink 2s ease-in-out infinite;
+}
+.demo-q {
   font-size: 13px;
   font-weight: 700;
+  color: var(--text);
+  line-height: 1.35;
+  margin-bottom: 14px;
 }
-.pv-val.green { color: var(--green); }
-.pv-val.gold { color: var(--gold); }
-.pv-badge {
+.demo-bars { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+.demo-bar-row { display: flex; align-items: center; gap: 8px; }
+.demo-bar-lbl { font-family: var(--mono); font-size: 10px; width: 26px; flex-shrink: 0; }
+.demo-bar-lbl.y { color: var(--green); }
+.demo-bar-lbl.n { color: #e07060; }
+.demo-bar-track { flex: 1; height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; }
+.demo-bar-fill { height: 100%; border-radius: 3px; }
+.demo-bar-fill.y { background: var(--green); }
+.demo-bar-fill.n { background: #c0392b; }
+.demo-bar-pct { font-family: var(--mono); font-size: 10px; color: var(--dim); width: 28px; text-align: right; flex-shrink: 0; }
+.demo-meta { font-family: var(--mono); font-size: 10px; color: var(--dim); }
+
+/* ── EMBED SECTION ── */
+.embed-section {
+  padding: 100px 40px;
+  max-width: 1120px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 80px;
+  align-items: center;
+}
+.embed-copy { max-width: 480px; }
+.embed-copy .section-eyebrow { text-align: left; margin-bottom: 16px; }
+.embed-copy .section-title { text-align: left; margin-bottom: 16px; font-size: clamp(28px,4vw,40px); }
+.embed-copy p { font-size: 16px; color: var(--dim); line-height: 1.75; margin-bottom: 28px; }
+.embed-copy .embed-bullets { list-style: none; display: flex; flex-direction: column; gap: 12px; margin-bottom: 32px; }
+.embed-copy .embed-bullets li { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; color: var(--dim); line-height: 1.5; }
+.embed-copy .embed-bullets li span.eb-icon { color: var(--gold); font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+.embed-code-snippet {
+  background: #0d0d0b;
+  border: 1px solid rgba(201,146,13,0.25);
+  border-radius: 10px;
+  padding: 14px 18px;
   font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 700;
-  padding: 3px 8px;
-  border-radius: 4px;
-  letter-spacing: 0.06em;
+  font-size: 12px;
+  color: #c9920d;
+  letter-spacing: 0.03em;
+  word-break: break-all;
+  margin-bottom: 28px;
+  position: relative;
 }
-.pv-badge.live { background: rgba(45,155,95,0.12); color: var(--green); }
+.embed-code-snippet::before {
+  content: 'EMBED CODE';
+  position: absolute;
+  top: -9px;
+  left: 14px;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  background: var(--paper);
+  padding: 0 6px;
+  color: rgba(201,146,13,0.6);
+}
+.embed-preview {
+  background: #141412;
+  border: 1px solid #2a2a27;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.5);
+}
+.ep-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #1c1c19;
+  border-bottom: 1px solid #2a2a27;
+}
+.ep-dot { width: 8px; height: 8px; border-radius: 50%; background: #c9920d; animation: pulse 2s ease-in-out infinite; }
+.ep-name { font-size: 13px; font-weight: 800; color: #ddd8cc; }
+.ep-cta { font-size: 11px; font-family: var(--mono); color: #c9920d; border: 1px solid rgba(201,146,13,0.3); border-radius: 5px; padding: 4px 10px; background: rgba(201,146,13,0.08); }
+.ep-market {
+  padding: 12px 16px;
+  border-bottom: 1px solid #2a2a27;
+}
+.ep-market:last-of-type { border-bottom: none; }
+.ep-q { font-size: 12px; font-weight: 700; color: #ddd8cc; font-family: var(--mono); margin-bottom: 8px; line-height: 1.4; }
+.ep-bar { height: 3px; background: #2a2a27; border-radius: 2px; overflow: hidden; margin-bottom: 6px; }
+.ep-fill { height: 100%; border-radius: 2px; }
+.ep-odds { display: flex; justify-content: space-between; font-size: 10px; font-family: var(--mono); font-weight: 700; }
+.ep-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: rgba(201,146,13,0.04);
+  border-top: 1px solid rgba(201,146,13,0.12);
+}
+.ep-traders { font-size: 10px; font-family: var(--mono); color: #5a5550; text-align: right; margin-top: 4px; }
+.ep-footer-logo { display: flex; align-items: center; gap: 5px; }
+.ep-footer-logo-text { font-size: 10px; font-family: var(--mono); color: #5a5550; letter-spacing: 0.08em; font-weight: 700; }
+.ep-footer-pts { font-size: 10px; font-family: var(--mono); color: #5a5550; }
+@media (max-width: 860px) {
+  .embed-section { grid-template-columns: 1fr; gap: 48px; }
+  .embed-copy { max-width: 100%; }
+}
+
+/* ── SOCIAL PROOF ── */
+.social-proof {
+  padding: 80px 40px;
+  max-width: 1120px;
+  margin: 0 auto;
+}
+.sp-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  margin-top: 48px;
+}
+.sp-card {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 28px 26px;
+  position: relative;
+}
+.sp-card::before {
+  content: '"';
+  position: absolute;
+  top: 18px;
+  left: 22px;
+  font-size: 52px;
+  color: rgba(201,146,13,0.2);
+  font-family: Georgia, serif;
+  line-height: 1;
+}
+.sp-quote {
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.7;
+  margin-bottom: 20px;
+  padding-top: 24px;
+}
+.sp-author {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sp-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(201,146,13,0.15);
+  border: 1px solid rgba(201,146,13,0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--gold);
+  font-family: var(--sans);
+  flex-shrink: 0;
+}
+.sp-name { font-size: 13px; font-weight: 700; color: var(--text); }
+.sp-handle { font-size: 11px; color: var(--dim); font-family: var(--mono); }
+.sp-stat-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  margin-top: 48px;
+  text-align: center;
+}
+.sp-stat-box {
+  padding: 24px 20px;
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.sp-stat-num {
+  font-size: 36px;
+  font-weight: 800;
+  font-family: var(--mono);
+  color: var(--gold);
+  line-height: 1;
+  margin-bottom: 8px;
+}
+.sp-stat-label { font-size: 13px; color: var(--dim); line-height: 1.5; }
+@media (max-width: 860px) {
+  .sp-grid { grid-template-columns: 1fr; }
+  .sp-stat-row { grid-template-columns: 1fr; }
+  .social-proof { padding-left: 20px; padding-right: 20px; }
+}
 
 /* ── PRICING ── */
 .pricing {
   padding: 100px 40px;
-  max-width: 1100px;
+  max-width: 1120px;
   margin: 0 auto;
-}
-.pricing-title {
-  font-size: clamp(28px, 4vw, 44px);
-  font-weight: 800;
-  letter-spacing: -0.025em;
-  color: var(--text);
-  margin-bottom: 48px;
 }
 .pricing-grid {
   display: grid;
@@ -543,7 +799,7 @@ section { position: relative; z-index: 1; }
               linear-gradient(145deg, rgba(201,146,13,0.5) 0%, rgba(201,146,13,0.12) 55%, transparent 100%) border-box;
   border: 1px solid transparent;
 }
-.p-card.premium {
+.p-card.platinum {
   background: linear-gradient(160deg, #1e1c15 0%, #1a1812 100%) padding-box,
               linear-gradient(145deg, rgba(255,220,100,0.9) 0%, rgba(201,146,13,0.6) 40%, rgba(140,100,10,0.3) 100%) border-box;
   border: 1px solid transparent;
@@ -555,7 +811,7 @@ section { position: relative; z-index: 1; }
   left: 50%;
   transform: translateX(-50%);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -565,13 +821,44 @@ section { position: relative; z-index: 1; }
   border-radius: 20px;
   white-space: nowrap;
 }
-.p-popular-premium {
+.p-tier {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+.p-tier.free     { color: var(--dim); }
+.p-tier.pro      { color: var(--gold); }
+.p-tier.platinum {
+  background: linear-gradient(90deg, #ffe57a, var(--gold-bright), #c9920d);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: 0.18em;
+}
+.p-price {
+  font-size: 52px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.p-card.platinum .p-price {
+  background: linear-gradient(90deg, #ffe57a, var(--gold-bright));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.p-card.platinum .p-popular-premium {
   position: absolute;
   top: -12px;
   left: 50%;
   transform: translateX(-50%);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -580,37 +867,6 @@ section { position: relative; z-index: 1; }
   padding: 4px 14px;
   border-radius: 20px;
   white-space: nowrap;
-}
-.p-tier {
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  margin-bottom: 16px;
-}
-.p-tier.free { color: var(--dim); }
-.p-tier.pro { color: var(--gold); }
-.p-tier.premium-tier {
-  background: linear-gradient(90deg, #ffe57a, var(--gold-bright), #c9920d);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  letter-spacing: 0.18em;
-}
-.p-price {
-  font-size: 48px;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  line-height: 1;
-  color: var(--text);
-  margin-bottom: 4px;
-}
-.p-card.premium .p-price {
-  background: linear-gradient(90deg, #ffe57a, var(--gold-bright));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
 }
 .p-per {
   font-family: var(--mono);
@@ -640,9 +896,12 @@ section { position: relative; z-index: 1; }
   gap: 10px;
   font-size: 13px;
   line-height: 1.35;
-  color: var(--text);
 }
-.p-check { font-size: 12px; flex-shrink: 0; margin-top: 1px; color: var(--green); }
+.p-feat.yes { color: var(--text); }
+.p-feat.no  { color: var(--dim); opacity: 0.4; text-decoration: line-through; text-decoration-color: rgba(122,120,112,0.35); }
+.p-check { font-size: 12px; flex-shrink: 0; margin-top: 1px; }
+.p-check.y { color: var(--green); }
+.p-check.n { color: var(--dim); }
 .btn-p {
   width: 100%;
   padding: 14px;
@@ -656,18 +915,322 @@ section { position: relative; z-index: 1; }
   transition: all 0.2s;
   cursor: pointer;
   border: none;
+  letter-spacing: 0.01em;
 }
-.btn-p.free { background: transparent; border: 1px solid var(--border); color: var(--dim); }
+.btn-p.free     { background: transparent; border: 1px solid var(--border); color: var(--dim); }
 .btn-p.free:hover { border-color: var(--text); color: var(--text); }
-.btn-p.pro { background: var(--gold); color: var(--ink); }
+.btn-p.pro      { background: var(--gold); color: var(--ink); }
 .btn-p.pro:hover { background: var(--gold-bright); transform: translateY(-1px); }
-.btn-p.platinum {
-  background: linear-gradient(135deg, #ffe57a, var(--gold-bright), var(--gold));
-  color: var(--ink);
-  box-shadow: 0 2px 20px rgba(201,146,13,0.35);
-  font-weight: 800;
+.btn-p.platinum { background: linear-gradient(135deg, #ffe57a, var(--gold-bright), var(--gold)); color: var(--ink); box-shadow: 0 2px 20px rgba(201,146,13,0.35); font-weight: 800; letter-spacing: 0.04em; }
+.btn-p.platinum:hover { filter: brightness(1.1); transform: translateY(-2px); box-shadow: 0 6px 28px rgba(201,146,13,0.5); }
+
+/* ── EXPLORE PILL ── */
+.explore-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(201,146,13,0.08);
+  border: 1px solid rgba(201,146,13,0.3);
+  color: var(--gold);
+  font-size: 12px;
+  font-family: var(--mono);
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 100px;
+  text-decoration: none;
+  letter-spacing: 0.04em;
+  transition: background 0.2s, border-color 0.2s;
+  margin-bottom: 20px;
 }
-.btn-p.platinum:hover { filter: brightness(1.1); transform: translateY(-2px); }
+.explore-pill:hover { background: rgba(201,146,13,0.15); border-color: rgba(201,146,13,0.6); }
+.explore-pill-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--gold);
+  animation: pulse 1.5s infinite;
+}
+
+/* ── INFLUENCER BATTLES ── */
+.battles-section {
+  padding: 80px 40px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+.battles-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+  margin-top: 40px;
+}
+@media (max-width: 720px) { .battles-grid { grid-template-columns: 1fr; } }
+.battle-card {
+  background: #161614;
+  border: 1px solid #2a2a27;
+  border-radius: 14px;
+  overflow: hidden;
+  transition: border-color 0.2s, transform 0.2s;
+}
+.battle-card:hover { border-color: #444; transform: translateY(-2px); }
+.battle-header {
+  display: flex;
+  align-items: stretch;
+  min-height: 80px;
+}
+.battle-side {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 12px;
+  gap: 4px;
+}
+.battle-side-a { background: rgba(201,146,13,0.07); border-right: 1px solid #2a2a27; }
+.battle-side-b { background: rgba(96,165,250,0.07); }
+.battle-handle { font-family: var(--mono); font-size: 11px; color: var(--dim); }
+.battle-name { font-family: var(--display); font-size: 16px; font-weight: 800; color: var(--text); text-align: center; line-height: 1.2; }
+.battle-vs {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  font-family: var(--display);
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--dim);
+  flex-shrink: 0;
+}
+.battle-body { padding: 14px 18px 16px; }
+.battle-question { font-size: 13px; color: var(--text); line-height: 1.45; margin-bottom: 12px; font-family: var(--mono); }
+.battle-bar { height: 4px; background: #2a2a27; border-radius: 2px; overflow: hidden; margin-bottom: 8px; }
+.battle-bar-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, var(--gold), #e6a50f); transition: width 0.4s; }
+.battle-odds { display: flex; justify-content: space-between; font-size: 11px; font-family: var(--mono); margin-bottom: 14px; }
+.battle-odds .yes { color: #22c55e; font-weight: 700; }
+.battle-odds .no  { color: #ef4444; font-weight: 700; }
+.pick-side-btn {
+  display: block;
+  width: 100%;
+  text-align: center;
+  background: var(--gold);
+  color: #141412;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 9px 0;
+  border-radius: 6px;
+  text-decoration: none;
+  letter-spacing: 0.05em;
+  transition: opacity 0.15s;
+}
+.pick-side-btn:hover { opacity: 0.85; }
+
+/* ── TRENDING MARKETS ── */
+.trending-section {
+  padding: 80px 40px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+.trending-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 40px;
+}
+@media (max-width: 900px) { .trending-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .trending-grid { grid-template-columns: 1fr; } }
+.trending-card {
+  background: #161614;
+  border: 1px solid #2a2a27;
+  border-radius: 12px;
+  padding: 16px 18px;
+  text-decoration: none;
+  color: var(--text);
+  display: block;
+  transition: border-color 0.2s, transform 0.15s;
+}
+.trending-card:hover { transform: translateY(-2px); }
+.trending-community { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px; display: inline-block; margin-bottom: 10px; }
+.trending-question { font-family: var(--mono); font-size: 12px; line-height: 1.5; margin-bottom: 12px; color: var(--text); }
+.trending-bar { height: 3px; background: #2a2a27; border-radius: 2px; overflow: hidden; margin-bottom: 6px; }
+.trending-traders { font-size: 10px; color: var(--dim); margin-top: 6px; }
+
+/* ── ACCURACY LEADERBOARD ── */
+.accuracy-section {
+  padding: 80px 40px;
+  max-width: 720px;
+  margin: 0 auto;
+}
+.accuracy-board {
+  background: #161614;
+  border: 1px solid #2a2a27;
+  border-radius: 14px;
+  overflow: hidden;
+  margin-top: 40px;
+}
+.accuracy-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px;
+  border-bottom: 1px solid #1e1e1c;
+  transition: background 0.15s;
+}
+.accuracy-row:last-child { border-bottom: none; }
+.accuracy-row:hover { background: rgba(255,255,255,0.02); }
+.acc-rank { font-family: var(--display); font-size: 18px; font-weight: 800; width: 36px; text-align: center; flex-shrink: 0; }
+.acc-rank.g { color: #ffd700; }
+.acc-rank.s { color: #c0c0c0; }
+.acc-rank.b { color: #cd7f32; }
+.acc-name { flex: 1; font-size: 13px; font-weight: 700; }
+.acc-trades { font-size: 11px; color: var(--dim); }
+.acc-tier { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 4px; flex-shrink: 0; }
+.acc-tier.oracle { background: rgba(201,146,13,0.15); color: var(--gold); }
+.acc-tier.sharp  { background: rgba(34,197,94,0.12);  color: #22c55e; }
+.acc-tier.solid  { background: rgba(96,165,250,0.12); color: #60a5fa; }
+.acc-wr { font-family: var(--display); font-size: 20px; font-weight: 800; width: 56px; text-align: right; flex-shrink: 0; }
+.acc-wr.oracle { color: var(--gold); }
+.acc-wr.sharp  { color: #22c55e; }
+.acc-wr.solid  { color: #60a5fa; }
+.accuracy-empty { padding: 48px; text-align: center; color: var(--dim); font-size: 13px; font-family: var(--mono); }
+.accuracy-footer { padding: 14px 20px; text-align: center; border-top: 1px solid #2a2a27; }
+
+/* ── VIDEO ── */
+.video-section {
+  padding: 80px 40px 100px;
+  max-width: 960px;
+  margin: 0 auto;
+  text-align: center;
+}
+.video-sub {
+  color: var(--dim);
+  font-size: 15px;
+  line-height: 1.7;
+  max-width: 600px;
+  margin: 0 auto 48px;
+}
+.video-frame-wrap {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+}
+.video-frame {
+  position: relative;
+  width: 100%;
+  padding-bottom: 56.25%; /* 16:9 */
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(201,146,13,0.25);
+  background: #0d0d0b;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05);
+}
+.video-frame iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.video-glow {
+  position: absolute;
+  inset: -1px;
+  border-radius: 17px;
+  background: transparent;
+  box-shadow: 0 0 80px rgba(201,146,13,0.12), 0 0 160px rgba(201,146,13,0.06);
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* ── QUOTES ── */
+.quotes {
+  padding: 100px 40px;
+  max-width: 1120px;
+  margin: 0 auto;
+}
+.quote-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+.q-card {
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transition: border-color 0.2s;
+}
+.q-card:hover { border-color: rgba(201,146,13,0.2); }
+.q-stars { font-size: 13px; letter-spacing: 2px; color: var(--gold); }
+.q-text {
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.72;
+  flex: 1;
+  font-style: italic;
+}
+.q-text::before { content: '"'; color: var(--gold); font-style: normal; font-size: 22px; line-height: 0; vertical-align: -5px; margin-right: 2px; }
+.q-text::after  { content: '"'; color: var(--gold); font-style: normal; font-size: 22px; line-height: 0; vertical-align: -5px; margin-left: 2px; }
+.q-author { display: flex; align-items: center; gap: 12px; }
+.q-avatar {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  background: rgba(201,146,13,0.1);
+  border: 1px solid rgba(201,146,13,0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 13px;
+  color: var(--gold);
+  flex-shrink: 0;
+}
+.q-name { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 2px; }
+.q-handle { font-family: var(--mono); font-size: 10px; color: var(--dim); letter-spacing: 0.04em; }
+
+/* ── CTA BANNER ── */
+.cta-wrap {
+  padding: 0 40px 100px;
+  max-width: 1120px;
+  margin: 0 auto;
+}
+.cta-inner {
+  border-radius: 20px;
+  padding: 80px 48px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, rgba(201,146,13,0.12), rgba(201,146,13,0.04) 50%, rgba(201,146,13,0.08));
+  border: 1px solid rgba(201,146,13,0.25);
+}
+.cta-inner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(201,146,13,0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(201,146,13,0.06) 1px, transparent 1px);
+  background-size: 32px 32px;
+  pointer-events: none;
+}
+.cta-inner > * { position: relative; z-index: 1; }
+.cta-ey {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--gold);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  margin-bottom: 20px;
+}
+.cta-title {
+  font-size: clamp(28px, 4.5vw, 52px);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: var(--text);
+  margin-bottom: 16px;
+  line-height: 1.08;
+}
+.cta-sub { font-size: 16px; color: var(--dim); margin-bottom: 40px; line-height: 1.65; }
+.cta-actions { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
 
 /* ── FOOTER ── */
 footer {
@@ -676,11 +1239,9 @@ footer {
   position: relative;
   z-index: 1;
 }
-.footer-inner {
-  max-width: 1100px;
-  margin: 0 auto;
-}
 .footer-top {
+  max-width: 1120px;
+  margin: 0 auto;
   display: flex;
   justify-content: space-between;
   gap: 40px;
@@ -689,7 +1250,7 @@ footer {
   padding-bottom: 40px;
   border-bottom: 1px solid var(--border);
 }
-.footer-brand { max-width: 280px; }
+.footer-brand { max-width: 260px; }
 .footer-logo {
   display: flex;
   align-items: center;
@@ -699,21 +1260,26 @@ footer {
 }
 .footer-logo-name { font-weight: 800; font-size: 16px; letter-spacing: 0.08em; color: var(--text); }
 .footer-tagline { font-size: 13px; color: var(--dim); line-height: 1.65; }
-.footer-links {
-  display: flex;
-  gap: 28px;
-  flex-wrap: wrap;
-  align-items: flex-start;
-}
-.footer-links a {
+.footer-cols { display: flex; gap: 56px; flex-wrap: wrap; }
+.footer-col h4 {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 10px;
+  color: var(--dim);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+}
+.footer-col ul { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.footer-col ul a {
+  font-size: 13px;
   color: var(--dim);
   text-decoration: none;
   transition: color 0.15s;
 }
-.footer-links a:hover { color: var(--gold); }
+.footer-col ul a:hover { color: var(--gold); }
 .footer-bottom {
+  max-width: 1120px;
+  margin: 0 auto;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -724,600 +1290,433 @@ footer {
 .footer-legal { display: flex; gap: 20px; }
 .footer-legal a { font-family: var(--mono); font-size: 11px; color: var(--dim); text-decoration: none; transition: color 0.15s; }
 .footer-legal a:hover { color: var(--text); }
-.footer-social a {
-  color: var(--dim);
-  text-decoration: none;
-  font-family: var(--mono);
-  font-size: 12px;
-  transition: color 0.15s;
-}
-.footer-social a:hover { color: var(--gold); }
 
 /* ── RESPONSIVE ── */
 @media (max-width: 960px) {
-  .nav-links { gap: 10px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  .nav-links a { font-size: 11px; white-space: nowrap; min-height: 44px; display: inline-flex; align-items: center; }
+  .nav-links { display: none; }
   .nav { padding: 0 16px; }
-  .btn-nav-login, .btn-nav-cta { min-height: 44px; display: inline-flex; align-items: center; }
-  .live-grid { grid-template-columns: 1fr; }
-  .product-block { grid-template-columns: 1fr; gap: 40px; }
-  .product-block.reverse .product-copy { order: 1; }
-  .product-block.reverse .product-visual { order: 2; }
-  .pricing-grid { grid-template-columns: 1fr; }
-  .pricing, .product-section { padding-left: 20px; padding-right: 20px; }
+  .nav-actions { gap: 8px; }
+  .btn-nav-explore { padding: 10px 14px; font-size: 12px; min-height: 44px; display: inline-flex; align-items: center; }
+  .btn-nav-login { padding: 10px 14px; font-size: 12px; min-height: 44px; display: inline-flex; align-items: center; }
+  .btn-nav-cta { padding: 10px 16px; font-size: 12px; min-height: 44px; display: inline-flex; align-items: center; }
+  .steps, .features-grid, .pricing-grid, .quote-grid { grid-template-columns: 1fr; }
+  .demo-markets { grid-template-columns: 1fr; }
+  .how, .features, .demo, .pricing, .quotes, .cta-wrap, .video-section { padding-left: 20px; padding-right: 20px; }
   .footer-top { flex-direction: column; }
+  .cta-inner { padding: 48px 24px; }
 }
 @media (max-width: 640px) {
-  .hero { padding: 100px 20px 50px; }
+  .hero { padding: 100px 20px 60px; }
   .hero-actions { flex-direction: column; width: 100%; }
   .btn-primary, .btn-ghost { width: 100%; text-align: center; justify-content: center; min-height: 48px; }
-  .email-form { flex-direction: column; }
-  .email-form button { width: 100%; }
-  .footer-links { gap: 16px; }
+  .hero-proof { flex-direction: column; gap: 12px; }
+  .proof-sep { display: none; }
+  .footer-cols { grid-template-columns: 1fr; gap: 28px; }
+  .footer-legal { flex-wrap: wrap; gap: 12px; }
+  .footer-legal a { min-height: 44px; display: inline-flex; align-items: center; }
+  .nav-logo { min-height: 44px; display: flex; align-items: center; }
 }
 @media (max-width: 480px) {
-  .fg-gauge { width: 160px; }
-  .email-section { padding: 40px 16px; }
-  .email-card { padding: 32px 20px; }
+  .btn-nav-login { display: none; }
+}
+
+/* ── FEATURE CARDS ── */
+.feat-card {
+  background: linear-gradient(145deg, #1f1e19 0%, #191917 100%);
+  border: 1px solid #353530;
+  border-radius: 14px;
+  padding: 28px 24px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.03);
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+}
+.feat-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(201,146,13,0.38);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.55), 0 0 0 1px rgba(201,146,13,0.06), inset 0 1px 0 rgba(255,255,255,0.04);
+}
+.feat-card-icon {
+  font-size: 30px;
+  margin-bottom: 18px;
+  display: inline-block;
+  filter: drop-shadow(0 2px 8px rgba(201,146,13,0.2));
+}
+
+/* ── TESTIMONIAL CARDS ── */
+.testimonial-card {
+  background: linear-gradient(160deg, #1a1918 0%, #161614 100%);
+  border: 1px solid #2e2e2a;
+  border-radius: 12px;
+  padding: 26px 24px 22px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.testimonial-card::before {
+  content: '\201C';
+  position: absolute;
+  top: -8px;
+  left: 16px;
+  font-size: 72px;
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  color: rgba(201,146,13,0.09);
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+}
+.testimonial-card:hover {
+  border-color: rgba(201,146,13,0.22);
+  box-shadow: 0 6px 28px rgba(0,0,0,0.4);
+}
+.testimonial-quote {
+  font-size: 13px;
+  color: #ccc8bc;
+  line-height: 1.7;
+  margin: 0 0 18px;
+  position: relative;
+  z-index: 1;
 }
 </style>
 </head>
 <body>
 
 <!-- NAV -->
-<div id="nav-root"></div>
-<script src="/nav.js"></script>
+<nav class="nav">
+  <a href="/" class="nav-logo">
+    <svg class="nav-hex" viewBox="0 0 32 32" fill="none">
+      <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="#c9920d" stroke-width="1.5" fill="rgba(201,146,13,0.1)"/>
+      <path d="M16 8L22 11.5V18.5L16 22L10 18.5V11.5L16 8Z" fill="#c9920d" opacity="0.6"/>
+    </svg>
+    <span class="nav-name">HYPERFLEX</span>
+  </a>
+  <div class="nav-links">
+    <a href="/predictors" class="nav-link">Predictors</a>
+    <a href="/odds" class="nav-link">Odds</a>
+    <a href="/explore" class="nav-link">Explore</a>
+    <a href="#pricing" class="nav-link">Pricing</a>
+    <a href="/explore" class="nav-link" style="color:var(--gold);">🔴 Live</a>
+  </div>
+  <div class="nav-actions">
+    <a href="/explore" class="btn-nav-explore">Explore</a>
+    <a href="/creator/login" class="btn-nav-login">Sign in</a>
+    <a href="/creator/signup" class="btn-nav-cta">Get started free</a>
+  </div>
+</nav>
 
 <!-- HERO -->
 <section class="hero">
-  <h1>Prediction market<br/><span class="accent">intelligence.</span></h1>
-  <p class="hero-sub">AI-powered market intelligence across Polymarket and Hyperliquid.</p>
+  <a href="/explore" class="explore-pill">
+    <span class="explore-pill-dot"></span>
+    Live predictions happening now — explore →
+  </a>
+  <div class="hero-eyebrow">
+    <span class="eyebrow-dot"></span>
+    Prediction market dashboard · Early access
+  </div>
+  <h1>All your predictions.<br/><span class="accent">One place.</span></h1>
+  <p class="hero-sub">Track Polymarket, Kalshi, and Manifold positions in one unified portfolio. Share your best calls. Or launch your own branded prediction market for your community — in 5 minutes.</p>
   <div class="hero-actions">
-    <a href="/brief" class="btn-primary">Read the AI brief &rarr;</a>
-    <a href="/whales" class="btn-ghost">See market intel &rarr;</a>
+    <a href="/creator/signup" class="btn-primary">Get started free →</a>
+    <a href="/wallstreetbets" target="_blank" class="btn-ghost">View live demo →</a>
+  </div>
+  <div class="hero-proof">
+    <div class="proof-item"><div class="proof-check">✓</div>Polymarket connected</div>
+    <div class="proof-sep"></div>
+    <div class="proof-item"><div class="proof-check">✓</div>Kalshi connected</div>
+    <div class="proof-sep"></div>
+    <div class="proof-item"><div class="proof-check">✓</div>Free to start</div>
+    <div class="proof-sep"></div>
+    <div class="proof-item"><div class="proof-check">✓</div>No code required</div>
   </div>
 </section>
 
-<!-- INTELLIGENCE BRIEFING -->
-<div id="intel-briefing" style="max-width:720px;margin:0 auto;padding:0 20px;display:flex;flex-direction:column;gap:16px">
-
-  <!-- PANEL 1: RIGHT NOW -->
-  <div id="rn-panel" style="display:none">
-    <div style="background:#1a1916;border-left:3px solid var(--gold);border-radius:10px;padding:20px 24px;position:relative;overflow:hidden">
-      <div style="position:absolute;top:0;right:0;width:100px;height:100px;background:radial-gradient(circle at top right,rgba(201,146,13,0.06) 0%,transparent 70%);pointer-events:none"></div>
-      <button id="homePushBtn" onclick="toggleHomePush()" style="position:absolute;top:14px;right:16px;z-index:2;background:transparent;border:1px solid var(--border);color:var(--dim);font-family:var(--mono);font-size:10px;padding:4px 10px;border-radius:14px;cursor:pointer;transition:all .15s" title="Get push alerts for whale moves">&#x1F514;</button>
-      <div id="rn-top" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;font-family:var(--mono);font-size:11px;padding-right:50px"></div>
-      <div id="rn-question" style="font-family:var(--sans);font-size:18px;font-weight:700;color:#fff;line-height:1.4;margin-bottom:14px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden"></div>
-      <div id="rn-bottom" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--dim)"></div>
-      <div id="rn-sharpness" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)"></div>
-    </div>
+<!-- LIVE STATS BAR -->
+<div class="stats-bar">
+  <div class="stats-bar-item">
+    <div class="stats-bar-num" id="stat-markets">—</div>
+    <div class="stats-bar-label">Live Markets</div>
   </div>
-
-  <!-- PANEL 2: LAST HOUR -->
-  <div id="lh-panel" style="display:none">
-    <div style="background:#1a1916;border:1px solid var(--border);border-radius:10px;padding:20px 24px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
-        <span style="width:8px;height:8px;border-radius:50%;background:#22c55e;animation:livePulse 2s infinite"></span>
-        <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.08em">🐋 Last Hour</span>
-      </div>
-      <div id="lh-feed" style="display:flex;flex-direction:column;gap:8px"></div>
-    </div>
+  <div class="stats-bar-item">
+    <div class="stats-bar-num" id="stat-predictions">—</div>
+    <div class="stats-bar-label">Predictions Made</div>
   </div>
-
-  <!-- PANEL 3: TODAY'S WATCHLIST -->
-  <div id="wl-panel" style="display:none">
-    <div style="background:#1a1916;border:1px solid var(--border);border-radius:10px;padding:20px 24px">
-      <div style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:14px">📋 Today's Watchlist</div>
-      <div id="wl-cards" style="display:flex;gap:12px;flex-wrap:wrap"></div>
-    </div>
+  <div class="stats-bar-item">
+    <div class="stats-bar-num" id="stat-communities">—</div>
+    <div class="stats-bar-label">Communities</div>
   </div>
-
-</div>
-
-<style>
-@keyframes livePulse{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(34,197,94,0.4)}50%{opacity:.7;box-shadow:0 0 0 6px rgba(34,197,94,0)}}
-.ib-trade-btn{color:var(--gold);font-family:var(--mono);font-size:10px;font-weight:700;text-decoration:none;padding:5px 12px;border:1px solid rgba(201,146,13,0.3);border-radius:6px;white-space:nowrap;transition:background .15s}
-.ib-trade-btn:hover{background:rgba(201,146,13,0.12)}
-.lh-row{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:11px;color:var(--dim);padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04)}
-.lh-row:last-child{border-bottom:none}
-.lh-time{color:var(--muted);min-width:36px;flex-shrink:0}
-.lh-trader{color:var(--gold-lt);flex-shrink:0}
-.lh-market{color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.wl-card{flex:1;min-width:180px;background:var(--paper);border:1px solid var(--border);border-radius:8px;padding:14px 16px}
-.wl-badge{font-family:var(--mono);font-size:9px;font-weight:700;padding:2px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:.04em}
-.wl-badge-strong{background:rgba(34,197,94,0.12);color:#22c55e;border:1px solid rgba(34,197,94,0.3)}
-.wl-badge-moderate{background:rgba(201,146,13,0.12);color:var(--gold);border:1px solid rgba(201,146,13,0.3)}
-.wl-badge-emerging{background:rgba(120,120,112,0.12);color:var(--dim);border:1px solid rgba(120,120,112,0.3)}
-@media(max-width:600px){
-  #rn-top{gap:6px!important}
-  #rn-question{font-size:15px!important}
-  #rn-bottom{flex-direction:column;align-items:flex-start!important;gap:10px!important}
-  #rn-bottom .ib-trade-btn{width:100%;text-align:center;display:block}
-  .lh-row{flex-wrap:wrap;gap:4px}
-  .wl-card{min-width:100%}
-  #wl-cards{flex-direction:column}
-}
-</style>
-
-<script>
-(function(){
-  function fmtCap(n){if(n>=1e6)return'$'+(n/1e6).toFixed(1)+'M';if(n>=1e3)return'$'+Math.round(n/1e3)+'K';return'$'+Math.round(n)}
-  function escH(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
-  function truncate(s,n){return s.length>n?s.slice(0,n)+'...':s}
-  function timeAgo(ts){var d=Date.now()-new Date(ts).getTime();if(d<60000)return'<1m';if(d<3600000)return Math.floor(d/60000)+'m';return Math.floor(d/3600000)+'h'}
-
-  function regionFlag(q){
-    var t=(q||'').toLowerCase();
-    if(/\bus\b|united states|america|trump|biden|vance|congress|senate|fed |federal reserve|us forces|usd |dollar/i.test(t))return'\uD83C\uDDFA\uD83C\uDDF8';
-    if(/\biran|iranian|tehran/i.test(t))return'\uD83C\uDDEE\uD83C\uDDF7';
-    if(/\bisrael|israeli|idf|netanyahu|gaza|hamas|hezbollah|lebanon/i.test(t))return'\uD83C\uDDEE\uD83C\uDDF1';
-    if(/\bruss|ukraine|kyiv|kremlin|putin|zelensky/i.test(t))return'\uD83C\uDDFA\uD83C\uDDE6';
-    if(/\bchina|chinese|beijing|jilin|guangdong|zhejiang|liaoning|shandong/i.test(t))return'\uD83C\uDDE8\uD83C\uDDF3';
-    if(/\bindia|modi|ipl|chennai|kolkata/i.test(t))return'\uD83C\uDDEE\uD83C\uDDF3';
-    if(/\bjapan|japanese|tokyo/i.test(t))return'\uD83C\uDDEF\uD83C\uDDF5';
-    if(/\bkorea|korean|seoul/i.test(t))return'\uD83C\uDDF0\uD83C\uDDF7';
-    if(/\bbrazil|brazilian/i.test(t))return'\uD83C\uDDE7\uD83C\uDDF7';
-    if(/\bcanad|toronto|montreal/i.test(t))return'\uD83C\uDDE8\uD83C\uDDE6';
-    if(/\baustrali|sydney|melbourne/i.test(t))return'\uD83C\uDDE6\uD83C\uDDFA';
-    if(/\bturk|istanbul|erdogan/i.test(t))return'\uD83C\uDDF9\uD83C\uDDF7';
-    if(/\bArgentin|messi/i.test(t))return'\uD83C\uDDE6\uD83C\uDDF7';
-    if(/\buk\b|britain|london|premier league|england/i.test(t))return'\uD83C\uDDEC\uD83C\uDDE7';
-    if(/\bfrance|french|paris|ligue 1/i.test(t))return'\uD83C\uDDEB\uD83C\uDDF7';
-    if(/\bgerman|bundesliga|berlin|bayern/i.test(t))return'\uD83C\uDDE9\uD83C\uDDEA';
-    if(/\bspain|spanish|la liga|madrid|barcelona|atletico/i.test(t))return'\uD83C\uDDEA\uD83C\uDDF8';
-    if(/\bitaly|italian|serie a|milan|juventus|napoli/i.test(t))return'\uD83C\uDDEE\uD83C\uDDF9';
-    if(/\bportug|benfica|porto/i.test(t))return'\uD83C\uDDF5\uD83C\uDDF9';
-    if(/\bcroat|dubrovnik/i.test(t))return'\uD83C\uDDED\uD83C\uDDF7';
-    if(/nba|nfl|mlb|nhl|ncaa|super bowl|march madness/i.test(t))return'\uD83C\uDDFA\uD83C\uDDF8';
-    if(/yankees|mets|dodgers|warriors|lakers|celtics|nets|kings|bulls|thunder|nuggets|cavaliers|clippers|rockets|suns|heat|bucks|knicks|76ers|spurs|hawks|pacers|pistons|grizzlies|blazers|timberwolves|hornets|magic|wizards|pelicans|jazz|mavericks|chiefs|eagles|cowboys|49ers|ravens|bills|bengals|dolphins|lions|steelers|packers|bears|rams|seahawks|saints|texans|jaguars|titans|colts|broncos|raiders|chargers|panthers|falcons|vikings|browns|commanders|cardinals|giants|jets|patriots|buccaneers/i.test(t))return'\uD83C\uDDFA\uD83C\uDDF8';
-    if(/\bufc|boxing/i.test(t))return'\uD83E\uDD4A';
-    if(/bitcoin|btc|eth|crypto|solana|xrp|dogecoin|token|defi|nft|crude oil/i.test(t))return'\uD83C\uDF10';
-    if(/champions league|europa league|uefa/i.test(t))return'\uD83C\uDDEA\uD83C\uDDFA';
-    return'';
-  }
-
-  function detectCat(q){
-    var t=(q||'').toLowerCase();
-    if(/bitcoin|btc|eth|crypto|solana|sol |xrp|dogecoin|doge|token|defi|nft/i.test(t))return'crypto';
-    if(/nba|nfl|mlb|nhl|soccer|football|basketball|baseball|ufc|boxing|game |match|playoff|super bowl|world cup|championship|league|team|player|coach|season|finals|series|mvp|draft|vs\.|yankees|mets|dodgers|warriors|lakers|celtics|nets|kings|bulls|thunder|nuggets|cavaliers|clippers|rockets|suns|heat|bucks|knicks|76ers|spurs|hawks|pacers|pistons|grizzlies|blazers|wolves|timberwolves|hornets|magic|wizards|pelicans|raptors|jazz|mavericks|chiefs|eagles|cowboys|49ers|ravens|bills|bengals|dolphins|lions|steelers|packers|bears|rams|seahawks|saints|texans|jaguars|titans|colts|broncos|raiders|chargers|panthers|falcons|vikings|browns|commanders|cardinals|giants|jets|patriots|buccaneers|atletico|madrid|barcelona|real |fc |win on 20|ray|tampa/i.test(t))return'sports';
-    if(/trump|biden|vance|president|congress|senate|election|democrat|republican|politic|governor|vote |primary|gop|dnc|rnc|impeach|cabinet|supreme court|us strikes|iran|tariff/i.test(t))return'politics';
-    if(/movie|oscar|grammy|emmy|album|netflix|spotify|tiktok|youtube|celebrity|award|film|tv |show|music|concert|tour|streaming|actor|singer|rapper|mrbeast/i.test(t))return'entertainment';
-    if(/ai |openai|chatgpt|apple|google|microsoft|meta |tesla|nvidia|amazon|startup|tech|iphone|android/i.test(t))return'tech';
-    return'other';
-  }
-  var catEmoji={sports:'\uD83C\uDFC8',crypto:'\u20BF',politics:'\uD83C\uDFDB\uFE0F',entertainment:'\uD83C\uDFAC',tech:'\uD83D\uDCBB',other:'\uD83D\uDCCA'};
-  var catColors={sports:'#22c55e',crypto:'#f59e0b',politics:'#3b82f6',entertainment:'#a855f7',tech:'#06b6d4',other:'#888'};
-  function catBadge(q){var c=detectCat(q);var e=catEmoji[c]||'';var col=catColors[c]||'#888';return'<span style="font-size:10px;padding:1px 6px;border-radius:3px;background:'+col+'18;color:'+col+';border:1px solid '+col+'33;font-family:var(--mono);white-space:nowrap">'+e+' '+c.toUpperCase()+'</span>';}
-
-  // PANEL 1: RIGHT NOW
-  function loadRightNow(){
-    fetch('/api/signals').then(function(r){return r.ok?r.json():null}).then(function(d){
-      if(!d||!d.signals)return;
-      var sig=null;
-      for(var i=0;i<d.signals.length;i++){
-        var s=d.signals[i];
-        if(s.type==='whale_cluster'&&(s.whale_count||0)>=5){
-          if(s.detected_at){var age=Date.now()-new Date(s.detected_at).getTime();if(age>2*3600000)continue}
-          sig=s;break;
-        }
-      }
-      var panel=document.getElementById('rn-panel');
-      if(!sig){panel.style.display='none';return}
-      panel.style.display='block';
-      var side=(sig.side||'YES').toUpperCase();
-      var isUp=side==='YES'||side==='UP'||side==='OVER';
-      var bc=isUp?'#22c55e':'#ef4444';
-      var bt=isUp?'UP':'DOWN';
-      // Signal urgency
-      var urgB=Math.min(100,(sig.whale_count||0)*10);var tF=1;
-      if(sig.close_time||sig.end_date){var hrsL=(new Date(sig.close_time||sig.end_date)-Date.now())/3600000;if(hrsL<6)tF=2;else if(hrsL<24)tF=1.5;else if(hrsL>168)tF=0.6}
-      var cP=sig.yes_pct||50;var cF=cP>80?1.3:cP<60?0.7:1;
-      var urg=Math.min(10,Math.max(1,Math.round((urgB/10)*tF*cF*10)/10));
-      var urgI=urg>=8?'\uD83D\uDD25':'\u26A1';var urgC=urg>=8?'#ff5722':urg>=5?'#c9920d':'#888';
-      document.getElementById('rn-top').innerHTML=
-        '<span style="color:var(--gold);font-weight:700;letter-spacing:.08em">\u26A1 RIGHT NOW</span>'+
-        '<span style="color:var(--dim)">|</span>'+
-        '<span style="background:'+bc+';color:#fff;padding:2px 8px;border-radius:4px;font-weight:700;font-size:10px">'+bt+'</span>'+
-        '<span style="color:var(--dim)">|</span>'+
-        '<span style="color:var(--text)">\uD83D\uDC0B '+sig.whale_count+' whales</span>'+
-        '<span style="color:var(--dim)">|</span>'+
-        '<span style="color:var(--gold-lt)">'+fmtCap(sig.capital||0)+'</span>'+
-        '<span style="color:var(--dim)">|</span>'+
-        catBadge(sig.market||'')+
-        '<span style="color:var(--dim)">|</span>'+
-        '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:'+urgC+'">'+urgI+' '+urg.toFixed(1)+'</span>';
-      var rnF=regionFlag(sig.market||'');
-      document.getElementById('rn-question').innerHTML=(rnF?rnF+' ':'')+escH(sig.market||'');
-      var bh='';
-      if(sig.end_date){var diff=new Date(sig.end_date).getTime()-Date.now();if(diff>0){var hrs=Math.floor(diff/3600000);var mins=Math.floor((diff%3600000)/60000);bh+='<span style="color:'+(diff<3600000?'var(--red)':'var(--dim)')+'">Closes in '+(hrs>0?hrs+'h ':'')+mins+'m</span><span style="color:var(--border)">\u00B7</span>';}}
-      var yp=sig.yes_pct||Math.round((sig.price||0.5)*100);
-      bh+='<span>'+yp+'% '+side+'</span>';
-      if(sig.url&&sig.url!=='https://polymarket.com'){
-        var wPct=sig.yes_pct||Math.round((sig.price||0.5)*100);
-        var mPct=wPct; // market price = whale consensus for now
-        bh+='<a href="#" onclick="event.preventDefault();openKelly(\''+escH(sig.market||'').replace(/'/g,"\\'")+'\',\''+side+'\','+mPct+','+wPct+',\''+sig.url+'\','+sig.whale_count+','+(sig.capital||0)+')" class="ib-trade-btn" style="margin-left:auto">Trade on Polymarket \u2192</a>';
-      }
-      document.getElementById('rn-bottom').innerHTML=bh;
-      // Load sharpness indicator
-      fetch('/api/agent/sharpness').then(function(r){return r.ok?r.json():null}).then(function(sh){
-        if(!sh||sh.last_10_return===null)return;
-        var el=document.getElementById('rn-sharpness');
-        if(!el)return;
-        var c=sh.last_10_return>=0?'#22c55e':'#ef4444';
-        el.innerHTML='<span style="font-family:var(--mono);font-size:11px;color:'+c+'">Last 10 signals: '+sh.label+'</span>';
-        el.style.display='block';
-      }).catch(function(){});
-      // Load news catalyst
-      fetch('/api/catalyst?q='+encodeURIComponent(sig.market||'')).then(function(r){return r.ok?r.json():null}).then(function(cd){
-        if(!cd||!cd.catalyst)return;
-        var cat=cd.catalyst;
-        var el=document.getElementById('rn-catalyst');
-        if(!el){el=document.createElement('div');el.id='rn-catalyst';el.style.cssText='margin-top:8px;font-family:var(--mono);font-size:11px;color:var(--dim)';var rnP=document.getElementById('rn-panel');if(rnP)rnP.querySelector('.ib-card').appendChild(el);}
-        el.innerHTML='\uD83D\uDCF0 <span style="color:var(--text)">'+escH(cat.source)+'</span> \u00B7 \u201C'+escH(cat.headline.length>80?cat.headline.substring(0,77)+'...':cat.headline)+'\u201D \u00B7 <span style="color:var(--dim)">'+cat.timeAgo+'</span>';
-      }).catch(function(){});
-    }).catch(function(){});
-  }
-
-  // PANEL 2: LAST HOUR
-  function loadLastHour(){
-    fetch('/api/whale-watch').then(function(r){return r.ok?r.json():null}).then(function(d){
-      if(!d)return;
-      var whales=(d.whales||d.positions||[]).slice();
-      whales.sort(function(a,b){return new Date(b.fetched_at||0)-new Date(a.fetched_at||0)});
-      var recent=whales.filter(function(w){return w.fetched_at&&(Date.now()-new Date(w.fetched_at).getTime()<3600000)}).slice(0,5);
-      var panel=document.getElementById('lh-panel');
-      if(!recent.length){panel.style.display='none';return}
-      panel.style.display='block';
-      document.getElementById('lh-feed').innerHTML=recent.map(function(w){
-        var name=w.trader||'';
-        if(!name||/^0x/.test(name))name=name?(name.slice(0,6)+'...'):'\uD83D\uDC0B';
-        var side=(w.side||'YES').toUpperCase();
-        var sc=side==='YES'||side==='UP'?'#22c55e':'#ef4444';
-        var url=w.market_url||w.url||'';
-        var mkt=w.market||w.position||'';
-        return'<div class="lh-row">'+
-          '<span class="lh-time">'+timeAgo(w.fetched_at)+'</span>'+
-          '<span class="lh-trader">'+escH(name)+'</span>'+
-          '<span style="color:var(--muted)">'+fmtCap(w.size||0)+'</span>'+
-          catBadge(mkt)+
-          '<span class="lh-market">'+regionFlag(mkt)+(regionFlag(mkt)?' ':'')+escH(truncate(mkt,33))+'</span>'+
-          '<span style="color:'+sc+';font-weight:700;font-size:10px">'+side+'</span>'+
-          (url?'<a href="'+url+'" target="_blank" rel="noopener" class="ib-trade-btn">View \u2192</a>':'')+
-          '</div>';
-      }).join('');
-    }).catch(function(){});
-  }
-
-  // PANEL 3: WATCHLIST
-  function loadWatchlist(){
-    fetch('/api/whale-index').then(function(r){return r.ok?r.json():null}).then(function(d){
-      if(!d)return;
-      var picks=(d.picks||[]).slice(0,3);
-      var panel=document.getElementById('wl-panel');
-      if(!picks.length){panel.style.display='none';return}
-      panel.style.display='block';
-      document.getElementById('wl-cards').innerHTML=picks.map(function(p){
-        var str=(p.strength||'EMERGING').toUpperCase();
-        var bc=str==='STRONG'?'wl-badge-strong':str==='MODERATE'?'wl-badge-moderate':'wl-badge-emerging';
-        var cs=(p.consensus_side||'YES').toUpperCase();
-        var sc=cs==='YES'||cs==='UP'?'#22c55e':'#ef4444';
-        var url=p.url||'';
-        var pmkt=p.market||'';
-        return'<div class="wl-card">'+
-          '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;flex-wrap:wrap"><span class="wl-badge '+bc+'">'+str+'</span>'+catBadge(pmkt)+'</div>'+
-          '<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px;line-height:1.4;min-height:36px">'+regionFlag(pmkt)+(regionFlag(pmkt)?' ':'')+escH(truncate(pmkt,33))+'</div>'+
-          '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:12px">'+
-            '<span>\uD83D\uDC0B '+p.whale_count+'</span>'+
-            '<span style="color:var(--border)">\u00B7</span>'+
-            '<span style="color:'+sc+';font-weight:700">'+cs+' '+(p.consensus_pct||0)+'%</span>'+
-            '<span style="color:var(--border)">\u00B7</span>'+
-            '<span>'+fmtCap(p.total_capital||0)+'</span>'+
-          '</div>'+
-          (url?'<a href="'+url+'" target="_blank" rel="noopener" class="ib-trade-btn">Trade \u2192</a>':'')+
-          '</div>';
-      }).join('');
-    }).catch(function(){});
-  }
-
-  try{loadRightNow()}catch(e){console.warn('[home] rightNow:',e.message)}
-  try{loadLastHour()}catch(e){console.warn('[home] lastHour:',e.message)}
-  try{loadWatchlist()}catch(e){console.warn('[home] watchlist:',e.message)}
-  setInterval(loadRightNow,60000);
-  setInterval(loadLastHour,90000);
-})();
-
-// Homepage push alert button
-function urlBase64ToUint8Array(b){var p='='.repeat((4-b.length%4)%4);var r=atob((b+p).replace(/-/g,'+').replace(/_/g,'/'));var a=new Uint8Array(r.length);for(var i=0;i<r.length;i++)a[i]=r.charCodeAt(i);return a}
-async function toggleHomePush(){
-  var btn=document.getElementById('homePushBtn');
-  if(!('serviceWorker' in navigator)||!('PushManager' in window)){alert('Push notifications not supported.');return}
-  var reg=await navigator.serviceWorker.getRegistration('/sw.js');
-  if(reg){var sub=await reg.pushManager.getSubscription();if(sub){await sub.unsubscribe();fetch('/api/push/subscribe',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:sub.endpoint})}).catch(function(){});btn.innerHTML='&#x1F514;';btn.style.borderColor='var(--border)';btn.style.color='var(--dim)';return}}
-  var perm=await Notification.requestPermission();if(perm!=='granted')return;
-  reg=await navigator.serviceWorker.register('/sw.js');await navigator.serviceWorker.ready;
-  var kr=await fetch('/api/push/vapid-key');var kd=await kr.json();if(!kd.key){alert('Push not configured on server.');return}
-  var sub=await reg.pushManager.subscribe({userAgentVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(kd.key)});
-  var sj=sub.toJSON();var tk=localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token');
-  fetch('/api/push/subscribe',{method:'POST',headers:{'Content-Type':'application/json','Authorization':tk?'Bearer '+tk:''},body:JSON.stringify({endpoint:sj.endpoint,keys:sj.keys,threshold:10000})});
-  btn.innerHTML='&#x1F514; &#x2713;';btn.style.borderColor='var(--gold)';btn.style.color='var(--gold)';
-}
-(async function(){
-  if(!('serviceWorker' in navigator))return;
-  try{var r=await navigator.serviceWorker.getRegistration('/sw.js');if(r){var s=await r.pushManager.getSubscription();if(s){var b=document.getElementById('homePushBtn');if(b){b.innerHTML='&#x1F514; &#x2713;';b.style.borderColor='var(--gold)';b.style.color='var(--gold)'}}}}catch(e){}
-})();
-</script>
-
-<!-- KELLY CALCULATOR MODAL -->
-<div id="kellyOverlay" onclick="if(event.target===this)closeKelly()" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;padding:20px">
-  <div style="background:#1a1916;border:1px solid var(--border);border-radius:16px;max-width:480px;width:100%;padding:28px 24px;position:relative">
-    <button onclick="closeKelly()" style="position:absolute;top:12px;right:16px;background:none;border:none;color:var(--dim);font-size:20px;cursor:pointer">&times;</button>
-    <div style="font-family:var(--mono);font-size:10px;color:var(--gold);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Position Size Calculator</div>
-    <div id="kellyQuestion" style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:16px;line-height:1.4"></div>
-    <div id="kellyEdge" style="font-family:var(--mono);font-size:12px;margin-bottom:16px;padding:10px 14px;border-radius:8px"></div>
-    <div style="margin-bottom:16px">
-      <label style="font-family:var(--mono);font-size:11px;color:var(--dim);display:block;margin-bottom:6px">Your bankroll ($)</label>
-      <input type="number" id="kellyBankroll" placeholder="1000" oninput="calcKelly()" style="width:100%;background:var(--paper);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:14px;padding:10px 14px;outline:none;box-sizing:border-box"/>
-    </div>
-    <div id="kellyResult" style="margin-bottom:16px;font-family:var(--mono);font-size:13px;color:var(--text)"></div>
-    <div style="margin-bottom:16px">
-      <label style="font-family:var(--mono);font-size:11px;color:var(--dim);display:block;margin-bottom:6px">Kelly fraction</label>
-      <div style="display:flex;gap:8px">
-        <button onclick="setKellyFrac(1)" class="kf-btn" id="kf-full" style="flex:1;padding:8px;font-family:var(--mono);font-size:11px;border-radius:6px;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--dim)">Full</button>
-        <button onclick="setKellyFrac(0.5)" class="kf-btn" id="kf-half" style="flex:1;padding:8px;font-family:var(--mono);font-size:11px;border-radius:6px;cursor:pointer;border:1px solid var(--gold);background:rgba(201,146,13,0.12);color:var(--gold)">Half</button>
-        <button onclick="setKellyFrac(0.25)" class="kf-btn" id="kf-quarter" style="flex:1;padding:8px;font-family:var(--mono);font-size:11px;border-radius:6px;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--dim)">Quarter</button>
-      </div>
-    </div>
-    <a id="kellyTradeLink" href="#" target="_blank" rel="noopener" onclick="logTradeIntent()" style="display:block;text-align:center;background:var(--gold);color:#0e0e0c;font-family:var(--mono);font-size:13px;font-weight:700;padding:12px;border-radius:8px;text-decoration:none">Trade on Polymarket &rarr;</a>
+  <div class="stats-bar-item">
+    <div class="stats-bar-num" id="stat-predictors">—</div>
+    <div class="stats-bar-label">Predictors Tracked</div>
   </div>
 </div>
 <script>
-var _kellyData = {};
-var _kellyFrac = 0.5;
-
-function openKelly(question, side, marketPct, whalePct, url, whaleCount, capital) {
-  _kellyData = { question: question, side: side, marketPct: marketPct, whalePct: whalePct, url: url, whaleCount: whaleCount || 0, capital: capital || 0 };
-  document.getElementById('kellyQuestion').textContent = question;
-  // Edge display
-  var edgeEl = document.getElementById('kellyEdge');
-  var edge = whalePct - marketPct;
-  if (edge > 0) {
-    edgeEl.style.background = 'rgba(34,197,94,0.08)';
-    edgeEl.style.border = '1px solid rgba(34,197,94,0.3)';
-    edgeEl.innerHTML = '<span style="color:#22c55e;font-weight:700">+' + edge + '\u00A2 edge per dollar</span> \u2014 Whales say ' + whalePct + '%, market says ' + marketPct + '%';
-  } else {
-    edgeEl.style.background = 'rgba(239,68,68,0.08)';
-    edgeEl.style.border = '1px solid rgba(239,68,68,0.3)';
-    edgeEl.innerHTML = '<span style="color:#ef4444">\u26A0\uFE0F Edge may be gone</span> \u2014 market (' + marketPct + '%) already priced in whale consensus (' + whalePct + '%)';
-  }
-  document.getElementById('kellyTradeLink').href = url || '#';
-  var saved = localStorage.getItem('hfx_bankroll');
-  if (saved) document.getElementById('kellyBankroll').value = saved;
-  calcKelly();
-  document.getElementById('kellyOverlay').style.display = 'flex';
-}
-
-function closeKelly() { document.getElementById('kellyOverlay').style.display = 'none'; }
-
-function setKellyFrac(f) {
-  _kellyFrac = f;
-  document.querySelectorAll('.kf-btn').forEach(function(b) { b.style.borderColor = 'var(--border)'; b.style.background = 'transparent'; b.style.color = 'var(--dim)'; });
-  var id = f === 1 ? 'kf-full' : f === 0.5 ? 'kf-half' : 'kf-quarter';
-  var el = document.getElementById(id);
-  el.style.borderColor = 'var(--gold)'; el.style.background = 'rgba(201,146,13,0.12)'; el.style.color = 'var(--gold)';
-  calcKelly();
-}
-
-function calcKelly() {
-  var bankroll = parseFloat(document.getElementById('kellyBankroll').value) || 0;
-  localStorage.setItem('hfx_bankroll', bankroll || '');
-  var resEl = document.getElementById('kellyResult');
-  if (!bankroll || bankroll <= 0) { resEl.innerHTML = '<span style="color:var(--dim)">Enter your bankroll to see optimal bet size</span>'; return; }
-  var p = (_kellyData.whalePct || 50) / 100; // estimated win prob from whales
-  var marketP = (_kellyData.marketPct || 50) / 100;
-  var b = (1 / marketP) - 1; // odds offered by market
-  var q = 1 - p;
-  var kelly = (b * p - q) / b;
-  if (kelly <= 0) { resEl.innerHTML = '<span style="color:#ef4444">No positive edge \u2014 Kelly says don\'t bet</span>'; return; }
-  var adj = kelly * _kellyFrac;
-  var bet = Math.round(bankroll * adj);
-  var pctOfBankroll = (adj * 100).toFixed(1);
-  var fracLabel = _kellyFrac === 1 ? 'Full Kelly' : _kellyFrac === 0.5 ? 'Half Kelly' : 'Quarter Kelly';
-  resEl.innerHTML = '<div style="margin-bottom:6px">Optimal bet: <strong style="color:var(--gold);font-size:18px">$' + bet.toLocaleString() + '</strong> <span style="color:var(--dim)">(' + pctOfBankroll + '% of bankroll)</span></div><div style="font-size:11px;color:var(--dim)">' + fracLabel + ' \u00B7 Raw Kelly: ' + (kelly * 100).toFixed(1) + '%</div>';
-}
-
-function logTradeIntent() {
-  var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
-  if (!token) return;
-  var bankroll = parseFloat(document.getElementById('kellyBankroll').value) || 0;
-  fetch('/api/trade-intentions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-    body: JSON.stringify({ market: _kellyData.question, side: _kellyData.side, market_pct: _kellyData.marketPct, whale_pct: _kellyData.whalePct, bankroll: bankroll, kelly_fraction: _kellyFrac, url: _kellyData.url })
-  }).catch(function(){});
-}
+(async function loadStats() {
+  try {
+    const d = await fetch('/api/stats').then(r => r.json());
+    function fmt(n) {
+      if (n >= 1000000) return (n/1000000).toFixed(1).replace(/\.0$/,'') + 'M';
+      if (n >= 1000) return (n/1000).toFixed(1).replace(/\.0$/,'') + 'K';
+      return n.toLocaleString();
+    }
+    document.getElementById('stat-markets').textContent     = fmt(d.live_markets || 0);
+    document.getElementById('stat-predictions').textContent = fmt(d.total_predictions || 0);
+    document.getElementById('stat-communities').textContent = fmt(d.communities || 0);
+    document.getElementById('stat-predictors').textContent  = fmt(d.predictors || 0);
+    // Social proof section mirrors same data
+    const spM = document.getElementById('sp-markets');
+    const spP = document.getElementById('sp-predictions');
+    const spC = document.getElementById('sp-communities');
+    if (spM) spM.textContent = fmt(d.live_markets || 0);
+    if (spP) spP.textContent = fmt(d.total_predictions || 0);
+    if (spC) spC.textContent = fmt(d.communities || 0);
+  } catch(e) {}
+})();
 </script>
 
-<!-- LIVE STATS TICKER -->
-<div class="stats-ticker">
-  <div class="ticker-track">
-    <div class="ticker-item"><span class="num" id="tk-volume">$161M</span> tracked <span class="ticker-sep">&#10022;</span></div>
-    <div class="ticker-item"><span class="num" id="tk-traders">32,837</span> traders <span class="ticker-sep">&#10022;</span></div>
-    <div class="ticker-item"><span class="num" id="tk-markets">200+</span> markets <span class="ticker-sep">&#10022;</span></div>
-    <div class="ticker-item">Updated <span class="num">30s</span> ago <span class="ticker-sep">&#10022;</span></div>
-    <div class="ticker-item"><span class="num" id="tk-volume2">$161M</span> tracked <span class="ticker-sep">&#10022;</span></div>
-    <div class="ticker-item"><span class="num" id="tk-traders2">32,837</span> traders <span class="ticker-sep">&#10022;</span></div>
-    <div class="ticker-item"><span class="num" id="tk-markets2">200+</span> markets <span class="ticker-sep">&#10022;</span></div>
-    <div class="ticker-item">Updated <span class="num">30s</span> ago <span class="ticker-sep">&#10022;</span></div>
+<!-- MARQUEE -->
+<div class="marquee">
+  <div class="marquee-track">
+    <div class="marquee-item">AI Market Generation <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">Dynamic Live Odds <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">Streak Multipliers <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">YouTube AI Scanner <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">Built-in Referrals <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">Live Leaderboards <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">FLEX BOT AI Assistant <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">Custom Community Branding <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">AI Market Ideas <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">Economy Controls <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">5-Minute Setup <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">Play-money — Zero Risk <span class="marquee-sep">✦</span></div>
+    <!-- duplicate for seamless loop -->
+    <div class="marquee-item">AI Market Generation <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">Dynamic Live Odds <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">Streak Multipliers <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">YouTube AI Scanner <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">Built-in Referrals <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">Live Leaderboards <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">FLEX BOT AI Assistant <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">Custom Community Branding <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">AI Market Ideas <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">Economy Controls <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">5-Minute Setup <span class="marquee-sep">✦</span></div>
+    <div class="marquee-item">Play-money — Zero Risk <span class="marquee-sep">✦</span></div>
   </div>
 </div>
 
-<!-- LIVE DATA CARDS -->
-<section class="live-cards">
-  <div class="live-cards-header">
-    <div class="section-eyebrow">Live intelligence</div>
-  </div>
-  <div class="live-grid">
-    <!-- Card 1: Top Crystal Ball Prediction -->
-    <div class="live-card" id="card-prediction">
-      <div class="live-card-type"><span class="dot"></span> Top Crystal Ball prediction</div>
-      <div class="live-card-stat" id="prediction-stat"><span class="live-card-loading">Loading...</span></div>
-      <div class="live-card-detail" id="prediction-detail"></div>
-      <a href="/crystal-ball" class="live-card-link">See all predictions &rarr;</a>
+<!-- QUICK PREVIEW -->
+<section style="padding:60px 24px;max-width:720px;margin:0 auto;">
+  <div style="background:#191917;border:1px solid #2a2a26;border-radius:14px;padding:40px 36px;">
+    <h2 style="font-family:'Syne',sans-serif;font-size:24px;font-weight:800;color:#ddd8cc;margin:0 0 8px;">See your prediction stats in 10 seconds</h2>
+    <p style="color:#7a7870;font-size:15px;margin:0 0 28px;">No account needed — paste your Polymarket wallet or Manifold username</p>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+      <input id="qp-wallet" type="text" placeholder="0x... Polymarket wallet" style="flex:1;min-width:180px;background:#1a1916;border:1px solid #444;border-radius:8px;padding:12px 14px;color:#f0ebe3;font-family:'Space Mono',monospace;font-size:13px;outline:none;" onfocus="this.style.borderColor='#c9920d'" onblur="this.style.borderColor='#444'"/>
+      <input id="qp-username" type="text" placeholder="Manifold username" style="flex:1;min-width:140px;background:#1a1916;border:1px solid #444;border-radius:8px;padding:12px 14px;color:#f0ebe3;font-family:'Space Mono',monospace;font-size:13px;outline:none;" onfocus="this.style.borderColor='#c9920d'" onblur="this.style.borderColor='#444'"/>
+      <button onclick="runQuickPreview()" style="background:#c9920d;color:#141412;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;padding:12px 22px;border:none;border-radius:8px;cursor:pointer;white-space:nowrap;">Show my stats →</button>
     </div>
-    <!-- Card 2: Fear & Greed -->
-    <div class="live-card" id="card-feargreed">
-      <div class="live-card-type"><span class="dot"></span> Fear &amp; Greed Index</div>
-      <div class="live-card-stat" id="feargreed-stat"><span class="live-card-loading">Loading...</span></div>
-      <div class="live-card-detail" id="feargreed-detail"></div>
-      <a href="/signals" class="live-card-link">See market signals &rarr;</a>
-    </div>
-    <!-- Card 3: Expiring Markets -->
-    <div class="live-card" id="card-expiring">
-      <div class="live-card-type"><span class="dot"></span> Markets expiring soon</div>
-      <div class="live-card-stat" id="expiring-stat"><span class="live-card-loading">Loading...</span></div>
-      <div class="live-card-detail" id="expiring-detail"></div>
-      <a href="/crystal-ball" class="live-card-link">See expiring markets &rarr;</a>
-    </div>
+    <div id="qp-result" style="display:none;"></div>
   </div>
 </section>
+<script>
+async function runQuickPreview() {
+  const wallet   = document.getElementById('qp-wallet').value.trim();
+  const username = document.getElementById('qp-username').value.trim();
+  const resultEl = document.getElementById('qp-result');
+  const btn      = document.querySelector('[onclick="runQuickPreview()"]');
 
-<!-- EMAIL CAPTURE -->
-<section class="email-section">
-  <div class="email-card">
-    <h3>Get the AI morning brief</h3>
-    <p>AI-generated market intelligence, smart money moves, and cross-asset signals delivered every morning.</p>
-    <form class="email-form" id="subscribe-form" onsubmit="return handleSubscribe(event)">
-      <input type="email" id="sub-email" placeholder="you@example.com" required/>
-      <button type="submit" id="sub-btn">Subscribe</button>
-    </form>
-    <div class="email-note" id="sub-note">Free during beta</div>
-  </div>
-</section>
+  if (!wallet && !username) {
+    resultEl.style.display = 'block';
+    resultEl.innerHTML = '<p style="color:#c0392b;font-size:14px;margin:0;">Enter a Polymarket wallet address or Manifold username.</p>';
+    return;
+  }
 
-<!-- PRODUCT SECTIONS -->
-<section class="product-section">
-
-  <!-- Section A: Track the whales -->
-  <div class="product-block">
-    <div class="product-copy">
-      <h3>Follow the smart money</h3>
-      <p>See where $161M in smart money is positioned. Real-time updates every 10 minutes. Know what the biggest players are buying before the market moves.</p>
-      <a href="/whales" class="btn-primary">Open Market Intel &rarr;</a>
+  // Loading state
+  resultEl.style.display = 'block';
+  btn.disabled = true;
+  btn.textContent = 'Fetching…';
+  resultEl.innerHTML = `
+    <div style="background:#0e0e0c;border:1px solid #2a2a26;border-radius:10px;padding:24px 22px;display:flex;align-items:center;gap:14px;">
+      <div style="width:18px;height:18px;border:2px solid #c9920d;border-top-color:transparent;border-radius:50%;animation:qp-spin .7s linear infinite;flex-shrink:0;"></div>
+      <span style="color:#7a7870;font-size:14px;">Looking up your positions on ${wallet ? 'Polymarket' : 'Manifold'}…</span>
     </div>
-    <div class="product-visual">
-      <div class="product-visual-inner" id="pv-whales">
-        <div class="pv-row">
-          <div class="pv-icon">&#129435;</div>
-          <div class="pv-label">Top wallet</div>
-          <div class="pv-val gold">$2.4M positioned</div>
+    <style>@keyframes qp-spin{to{transform:rotate(360deg)}}</style>`;
+
+  try {
+    let data, platform, platformSlug;
+    if (wallet) {
+      const r = await fetch(`/api/polymarket/positions/${encodeURIComponent(wallet)}`);
+      if (!r.ok) { const e = await r.json().catch(()=>{}); throw new Error(e?.error || 'Could not fetch wallet — check the address and try again'); }
+      data = await r.json(); platform = 'Polymarket'; platformSlug = 'polymarket';
+    } else {
+      const r = await fetch(`/api/manifold/positions/${encodeURIComponent(username)}`);
+      if (!r.ok) { const e = await r.json().catch(()=>{}); throw new Error(e?.error || 'Manifold user not found — check the username and try again'); }
+      data = await r.json(); platform = 'Manifold'; platformSlug = 'manifold';
+    }
+
+    const positions  = data.positions || [];
+    const count      = positions.length;
+    const totalPnl   = positions.reduce((s, p) => s + (p.pnl || 0), 0);
+    const pnlPos     = totalPnl >= 0;
+    const pnlColor   = pnlPos ? '#2d9b5f' : '#c0392b';
+    const pnlBg      = pnlPos ? '#2d9b5f18' : '#c0392b18';
+    const pnlBorder  = pnlPos ? '#2d9b5f44' : '#c0392b44';
+    const pnlStr     = (pnlPos ? '+' : '−') + '$' + Math.abs(totalPnl).toFixed(2);
+    const topMarket  = positions[0]?.question || null;
+    const signupUrl  = `/creator/signup?ref=preview&platform=${platformSlug}`;
+
+    if (count === 0) {
+      // No positions found
+      resultEl.innerHTML = `
+        <div style="background:#0e0e0c;border:1px solid #2a2a26;border-radius:10px;padding:22px;margin-bottom:12px;text-align:center;">
+          <div style="font-size:28px;margin-bottom:10px;">🔍</div>
+          <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:#ddd8cc;margin-bottom:6px;">No open positions found</div>
+          <div style="color:#7a7870;font-size:14px;">Either the address has no active positions or they've all resolved.</div>
         </div>
-        <div class="pv-row">
-          <div class="pv-icon">&#128200;</div>
-          <div class="pv-label">Largest single trade</div>
-          <div class="pv-val green">$180K YES</div>
+        <div style="background:#c9920d18;border:1px solid #c9920d55;border-radius:10px;padding:20px 22px;">
+          <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:#ddd8cc;margin-bottom:6px;">You can still track future calls on HYPERFLEX</div>
+          <div style="color:#7a7870;font-size:13px;margin-bottom:16px;">Log predictions, build your track record, and see your calibration score — free.</div>
+          <a href="${signupUrl}" style="display:inline-block;background:#c9920d;color:#141412;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;padding:11px 22px;border-radius:8px;text-decoration:none;">Claim your free profile →</a>
+        </div>`;
+    } else {
+      // Positions found
+      const topMarketHtml = topMarket
+        ? `<div style="margin-top:14px;padding-top:14px;border-top:1px solid #2a2a26;">
+             <div style="color:#7a7870;font-size:11px;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">Top position</div>
+             <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:600;color:#ddd8cc;line-height:1.4;">${topMarket}</div>
+           </div>`
+        : '';
+      resultEl.innerHTML = `
+        <div style="background:#0e0e0c;border:1px solid #2a2a26;border-radius:10px;padding:22px;margin-bottom:12px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
+            <span style="background:#c9920d22;color:#c9920d;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;letter-spacing:.04em;">${platform}</span>
+            <span style="color:#7a7870;font-size:13px;">${count} open position${count !== 1 ? 's' : ''} found</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div style="background:#141412;border-radius:8px;padding:14px 16px;">
+              <div style="color:#7a7870;font-size:11px;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">Open Positions</div>
+              <div style="font-family:'Syne',sans-serif;font-size:26px;font-weight:800;color:#ddd8cc;">${count}</div>
+            </div>
+            <div style="background:${pnlBg};border:1px solid ${pnlBorder};border-radius:8px;padding:14px 16px;">
+              <div style="color:#7a7870;font-size:11px;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">Total P&amp;L</div>
+              <div style="font-family:'Syne',sans-serif;font-size:26px;font-weight:800;color:${pnlColor};">${pnlStr}</div>
+            </div>
+          </div>
+          ${topMarketHtml}
         </div>
-        <div class="pv-row">
-          <div class="pv-icon">&#9201;</div>
-          <div class="pv-label">Last update</div>
-          <div class="pv-val gold">2 min ago</div>
+        <div style="background:#c9920d18;border:1px solid #c9920d55;border-radius:10px;padding:20px 22px;">
+          <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:#ddd8cc;margin-bottom:6px;">📊 ${count} open position${count !== 1 ? 's' : ''} found — save your full history, track Kalshi too, and see your calibration score</div>
+          <div style="color:#7a7870;font-size:13px;margin-bottom:16px;">Free during beta. Takes 30 seconds to set up.</div>
+          <a href="${signupUrl}" style="display:inline-block;background:#c9920d;color:#141412;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;padding:11px 22px;border-radius:8px;text-decoration:none;">Claim your free profile →</a>
+        </div>`;
+    }
+  } catch(err) {
+    resultEl.innerHTML = `
+      <div style="background:#c0392b18;border:1px solid #c0392b44;border-radius:10px;padding:18px 20px;display:flex;gap:12px;align-items:flex-start;">
+        <span style="font-size:18px;flex-shrink:0;">⚠️</span>
+        <div>
+          <div style="color:#ddd8cc;font-size:14px;font-weight:600;margin-bottom:4px;">Could not fetch positions</div>
+          <div style="color:#7a7870;font-size:13px;">${err.message}</div>
         </div>
-        <div class="pv-row">
-          <div class="pv-icon">&#128176;</div>
-          <div class="pv-label">Total volume tracked</div>
-          <div class="pv-val gold">$161M+</div>
+      </div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Show my stats →';
+  }
+}
+document.getElementById('qp-wallet').addEventListener('keydown', e => { if (e.key === 'Enter') runQuickPreview(); });
+document.getElementById('qp-username').addEventListener('keydown', e => { if (e.key === 'Enter') runQuickPreview(); });
+</script>
+
+<!-- FEATURES SHOWCASE -->
+<section style="padding:80px 24px 60px;max-width:1000px;margin:0 auto">
+  <div style="text-align:center;margin-bottom:44px">
+    <div style="font-family:var(--mono);font-size:11px;color:var(--gold);letter-spacing:0.12em;text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:8px"><span style="display:inline-block;width:20px;height:1px;background:var(--gold)"></span>Why HYPERFLEX<span style="display:inline-block;width:20px;height:1px;background:var(--gold)"></span></div>
+    <h2 style="font-family:var(--sans);font-size:clamp(24px,4vw,36px);font-weight:800;color:var(--text);letter-spacing:-0.5px;margin:0">One dashboard for every prediction you make</h2>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;margin-bottom:64px">
+    <!-- Track -->
+    <div class="feat-card">
+      <div class="feat-card-icon">📊</div>
+      <h3 style="font-family:var(--sans);font-size:17px;font-weight:800;color:var(--text);margin:0 0 10px">Track every position</h3>
+      <p style="font-size:13px;color:var(--dim);line-height:1.6;margin:0">Polymarket, Kalshi, and Manifold in one unified dashboard. P&L auto-calculated across all platforms. No spreadsheets, no tab-switching.</p>
+    </div>
+    <!-- Prove -->
+    <div class="feat-card">
+      <div class="feat-card-icon">🏆</div>
+      <h3 style="font-family:var(--sans);font-size:17px;font-weight:800;color:var(--text);margin:0 0 10px">Prove your edge</h3>
+      <p style="font-size:13px;color:var(--dim);line-height:1.6;margin:0">Calibration score, win rate, and sharp score — all public on your profile. Show the world you're not just guessing. Leaderboards rank the best.</p>
+    </div>
+    <!-- Stay ahead -->
+    <div class="feat-card">
+      <div class="feat-card-icon">⚡</div>
+      <h3 style="font-family:var(--sans);font-size:17px;font-weight:800;color:var(--text);margin:0 0 10px">Stay ahead</h3>
+      <p style="font-size:13px;color:var(--dim);line-height:1.6;margin:0">Follow top predictors and see their calls in your feed. Weekly spotlight emails surface the sharpest minds. Never miss a signal.</p>
+    </div>
+  </div>
+
+  <!-- Testimonials -->
+  <div style="text-align:center;margin-bottom:32px">
+    <div style="font-family:var(--mono);font-size:11px;color:var(--dim);letter-spacing:0.1em;text-transform:uppercase">What traders are saying</div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px">
+    <div class="testimonial-card">
+      <p class="testimonial-quote">"I had positions across Polymarket and Manifold with no way to see my total P&L. Connected both in 30 seconds — now I check one dashboard instead of three tabs."</p>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:34px;height:34px;border-radius:50%;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.35);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#818cf8;flex-shrink:0">DK</div>
+        <div>
+          <div style="font-size:12px;font-weight:700;color:var(--text)">Daniel K.</div>
+          <div style="font-size:11px;color:var(--dim)">Active Polymarket trader</div>
+        </div>
+      </div>
+    </div>
+    <div class="testimonial-card">
+      <p class="testimonial-quote">"The sharp score is addictive. I went from guessing to actually tracking my calibration. My win rate went from 52% to 68% in two months just by seeing the data."</p>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:34px;height:34px;border-radius:50%;background:rgba(201,146,13,0.15);border:1px solid rgba(201,146,13,0.35);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--gold);flex-shrink:0">SP</div>
+        <div>
+          <div style="font-size:12px;font-weight:700;color:var(--text)">Sarah P.</div>
+          <div style="font-size:11px;color:var(--dim)">Kalshi + Manifold trader</div>
+        </div>
+      </div>
+    </div>
+    <div class="testimonial-card">
+      <p class="testimonial-quote">"Following the top predictors changed my whole approach. I see what the sharpest people are betting on before I make my own calls. The weekly spotlight email is gold."</p>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:34px;height:34px;border-radius:50%;background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.35);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#22c55e;flex-shrink:0">MR</div>
+        <div>
+          <div style="font-size:12px;font-weight:700;color:var(--text)">Marcus R.</div>
+          <div style="font-size:11px;color:var(--dim)">Polymarket + community predictor</div>
         </div>
       </div>
     </div>
   </div>
-
-  <!-- Section B: Get alpha signals -->
-  <div class="product-block reverse">
-    <div class="product-copy">
-      <h3>Get alpha signals</h3>
-      <p>Whale clusters, price momentum, arbitrage opportunities -- all in one feed. Stop scrolling Twitter for alpha. We surface it automatically.</p>
-      <a href="/signals" class="btn-primary">See live signals &rarr;</a>
-    </div>
-    <div class="product-visual">
-      <div class="product-visual-inner">
-        <div class="pv-row">
-          <div class="pv-icon">&#128640;</div>
-          <div class="pv-label">Signal: Whale cluster detected</div>
-          <div class="pv-badge live">LIVE</div>
-        </div>
-        <div class="pv-row">
-          <div class="pv-icon">&#9889;</div>
-          <div class="pv-label">Signal: Momentum breakout</div>
-          <div class="pv-badge live">LIVE</div>
-        </div>
-        <div class="pv-row">
-          <div class="pv-icon">&#128269;</div>
-          <div class="pv-label">Signal: Arbitrage opportunity</div>
-          <div class="pv-badge live">LIVE</div>
-        </div>
-        <div class="pv-row">
-          <div class="pv-icon">&#128202;</div>
-          <div class="pv-label">Confidence</div>
-          <div class="pv-val green">87%</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Section C: Copy the best traders -->
-  <div class="product-block">
-    <div class="product-copy">
-      <h3>Copy the best traders</h3>
-      <p>Auto-mirror whale trades. Backtest any trader's history. Prove your edge with verified on-chain track records.</p>
-      <a href="/creator/login#signup" class="btn-primary">Start copying &rarr;</a>
-    </div>
-    <div class="product-visual">
-      <div class="product-visual-inner">
-        <div class="pv-row">
-          <div class="pv-icon">&#127942;</div>
-          <div class="pv-label">#1 trader — 73% win rate</div>
-          <div class="pv-val green">+$42.8K</div>
-        </div>
-        <div class="pv-row">
-          <div class="pv-icon">&#129351;</div>
-          <div class="pv-label">#2 trader — 69% win rate</div>
-          <div class="pv-val green">+$31.2K</div>
-        </div>
-        <div class="pv-row">
-          <div class="pv-icon">&#129352;</div>
-          <div class="pv-label">#3 trader — 67% win rate</div>
-          <div class="pv-val green">+$24.1K</div>
-        </div>
-        <div class="pv-row">
-          <div class="pv-icon">&#128260;</div>
-          <div class="pv-label">Copy bot status</div>
-          <div class="pv-badge live">ACTIVE</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
 </section>
 
 <!-- PRICING -->
 <section class="pricing" id="pricing">
-  <div class="section-eyebrow" style="justify-content:flex-start">Pricing</div>
-  <h2 class="pricing-title">Start free. Upgrade for alpha.</h2>
+  <div class="section-eyebrow">Pricing</div>
+  <h2 class="section-title">Start free. Scale when you're ready.</h2>
   <div class="pricing-grid">
 
     <!-- FREE -->
     <div class="p-card">
       <div class="p-tier free">Free</div>
       <div class="p-price">$0</div>
-      <div class="p-per">forever</div>
-      <div class="p-desc">Whale Watch (delayed), basic search, public profile.</div>
+      <div class="p-per">forever free</div>
+      <div class="p-desc">See how your audience engages with prediction markets before committing a cent.</div>
       <div class="p-divider"></div>
       <ul class="p-features">
-        <li class="p-feat"><span class="p-check">&#10003;</span> Whale Watch (15-min delay)</li>
-        <li class="p-feat"><span class="p-check">&#10003;</span> Basic market search</li>
-        <li class="p-feat"><span class="p-check">&#10003;</span> Public trader profile</li>
-        <li class="p-feat"><span class="p-check">&#10003;</span> Leaderboard access</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> Run up to 5 live markets</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> Live leaderboard — see who your top fans are</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> Streak multipliers — members keep coming back daily</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> Real-time odds shift as the crowd bets</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> See which markets get the most action</li>
+        <li class="p-feat no"><span class="p-check n">×</span> Turn YouTube videos into markets in seconds</li>
+        <li class="p-feat no"><span class="p-check n">×</span> Embed markets in your Substack / website</li>
+        <li class="p-feat no"><span class="p-check n">×</span> Your brand, no HYPERFLEX watermark</li>
       </ul>
-      <a href="/creator/login#signup" class="btn-p free">Get started free &rarr;</a>
+      <a href="/creator/signup" class="btn-p free">Start for free →</a>
     </div>
 
     <!-- PRO -->
@@ -1326,36 +1725,41 @@ function logTradeIntent() {
       <div class="p-tier pro">Pro</div>
       <div class="p-price">$29</div>
       <div class="p-per">per month</div>
-      <div class="p-desc">Real-time signals, screener, AI analysis, full trade history.</div>
+      <div class="p-desc">Turn every upload into interactive content — and see exactly what keeps your audience coming back.</div>
       <div class="p-divider"></div>
       <ul class="p-features">
-        <li class="p-feat"><span class="p-check">&#10003;</span> Everything in Free</li>
-        <li class="p-feat"><span class="p-check">&#10003;</span> <strong>Real-time</strong> whale alerts</li>
-        <li class="p-feat"><span class="p-check">&#10003;</span> Signal feed + screener</li>
-        <li class="p-feat"><span class="p-check">&#10003;</span> AI market analysis</li>
-        <li class="p-feat"><span class="p-check">&#10003;</span> Full trade history</li>
-        <li class="p-feat"><span class="p-check">&#10003;</span> Daily whale briefing email</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> Run a market on <strong>every piece of content</strong> you publish</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> Paste a YouTube URL → AI writes the markets for you</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> Embed live markets in Substack, your site, bio link</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> See which topics your audience actually cares about</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> Members refer friends — you set the reward</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> Custom branding — your logo, colors, points name</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> Weekly recap email keeps members returning every Monday</li>
+        <li class="p-feat no"><span class="p-check n">×</span> Fully white-label — your brand only, no watermark</li>
+        <li class="p-feat no"><span class="p-check n">×</span> FLEX BOT AI community assistant</li>
       </ul>
-      <a href="/creator/login#signup" class="btn-p pro">Start Pro &rarr;</a>
+      <a href="/creator/signup" class="btn-p pro">Get early access →</a>
     </div>
 
     <!-- PREMIUM -->
-    <div class="p-card premium" style="position:relative">
-      <div class="p-popular-premium">Full Access</div>
-      <div class="p-tier premium-tier">Premium</div>
+    <div class="p-card platinum" style="position:relative">
+      <div class="p-popular-premium">Most Powerful</div>
+      <div class="p-tier platinum">✦ Premium</div>
       <div class="p-price">$99</div>
       <div class="p-per">per month</div>
-      <div class="p-desc">Copy bot, whale index, backtester, API access, priority alerts.</div>
+      <div class="p-desc">Your prediction market, your brand — no trace of HYPERFLEX. Built for pros who want full ownership.</div>
       <div class="p-divider"></div>
       <ul class="p-features">
-        <li class="p-feat"><span class="p-check">&#10003;</span> Everything in Pro</li>
-        <li class="p-feat"><span class="p-check">&#10003;</span> <strong>Copy bot</strong> — auto-mirror whale trades</li>
-        <li class="p-feat"><span class="p-check">&#10003;</span> Whale Index aggregate tracker</li>
-        <li class="p-feat"><span class="p-check">&#10003;</span> Backtester — test any strategy</li>
-        <li class="p-feat"><span class="p-check">&#10003;</span> Full API access</li>
-        <li class="p-feat"><span class="p-check">&#10003;</span> Priority alerts + Telegram bot</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> Everything in Pro</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> <strong>Zero watermark</strong> — looks 100% like your own product</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> Your own domain — community.yoursite.com</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> FLEX BOT — AI that grows your community for you</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> Inner Circle — spotlight your top 1% fans automatically</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> Charge brands to sponsor your markets</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> Dedicated onboarding call + priority support</li>
+        <li class="p-feat yes"><span class="p-check y">✓</span> First access to every new feature</li>
       </ul>
-      <a href="/creator/login#signup" class="btn-p platinum">Get Premium &rarr;</a>
+      <a href="/creator/signup" class="btn-p platinum">Get Premium →</a>
     </div>
 
   </div>
@@ -1363,160 +1767,52 @@ function logTradeIntent() {
 
 <!-- FOOTER -->
 <footer>
-  <div class="footer-inner">
-    <div class="footer-top">
-      <div class="footer-brand">
-        <a href="/" class="footer-logo">
-          <svg viewBox="0 0 32 32" fill="none" style="width:26px;height:26px;flex-shrink:0">
-            <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="#c9920d" stroke-width="1.5" fill="rgba(201,146,13,0.1)"/>
-            <path d="M16 8L22 11.5V18.5L16 22L10 18.5V11.5L16 8Z" fill="#c9920d" opacity="0.6"/>
-          </svg>
-          <span class="footer-logo-name">HYPERFLEX</span>
-        </a>
-        <p class="footer-tagline">Prediction market intelligence.</p>
-      </div>
-      <div class="footer-links">
-        <a href="/whales">Whales</a>
-        <a href="/signals">Signals</a>
-        <a href="/screener">Screener</a>
-        <a href="/predictors">Leaderboard</a>
-        <a href="/api-docs">API</a>
-        <a href="/data">Data</a>
-        <a href="https://twitter.com/hyperflexhq" target="_blank" rel="noopener">X / Twitter</a>
-      </div>
+  <div class="footer-top">
+    <div class="footer-brand">
+      <a href="/" class="footer-logo">
+        <svg viewBox="0 0 32 32" fill="none" style="width:26px;height:26px;flex-shrink:0">
+          <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="#c9920d" stroke-width="1.5" fill="rgba(201,146,13,0.1)"/>
+          <path d="M16 8L22 11.5V18.5L16 22L10 18.5V11.5L16 8Z" fill="#c9920d" opacity="0.6"/>
+        </svg>
+        <span class="footer-logo-name">HYPERFLEX</span>
+      </a>
+      <p class="footer-tagline">Prediction markets for creator communities. Play-money, AI-powered, no code required.</p>
     </div>
-    <div class="footer-bottom">
-      <div class="footer-copy">&copy; 2026 HYPERFLEX. All rights reserved.</div>
-      <div class="footer-legal">
-        <a href="/creator/terms">Terms</a>
-        <a href="/creator/terms">Privacy</a>
+    <div class="footer-cols">
+      <div class="footer-col">
+        <h4>Product</h4>
+        <ul>
+          <li><a href="#features">Features</a></li>
+          <li><a href="#pricing">Pricing</a></li>
+          <li><a href="/creator/signup">Get started</a></li>
+          <li><a href="/creator/login">Sign in</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Creators</h4>
+        <ul>
+          <li><a href="/creator/dashboard">Dashboard</a></li>
+          <li><a href="/creator/signup">Create community</a></li>
+          <li><a href="/creator/terms">Creator Terms</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Company</h4>
+        <ul>
+          <li><a href="mailto:legal@hyperflex.network">Contact</a></li>
+          <li><a href="/creator/terms">Terms of Service</a></li>
+        </ul>
       </div>
     </div>
   </div>
+  <div class="footer-bottom">
+    <div class="footer-copy">© 2026 HYPERFLEX. All rights reserved.</div>
+    <div class="footer-legal">
+      <a href="/creator/terms">Terms</a>
+      <a href="mailto:legal@hyperflex.network">legal@hyperflex.network</a>
+    </div>
+  </div>
 </footer>
-
-<script>
-// ── Fear & Greed ──
-// ── Live stats ticker — fetch from API ──
-(async function loadTickerStats() {
-  try {
-    const d = await fetch('/api/stats').then(r => r.json());
-    function fmt(n) {
-      if (n >= 1000000) return '$' + (n/1000000).toFixed(1).replace(/\.0$/,'') + 'M';
-      if (n >= 1000) return (n/1000).toFixed(1).replace(/\.0$/,'') + 'K';
-      return n.toLocaleString();
-    }
-    const traders = d.predictors || d.total_predictions || 0;
-    const markets = d.live_markets || 0;
-    if (traders) {
-      ['tk-traders','tk-traders2'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.textContent = fmt(traders);
-      });
-    }
-    if (markets) {
-      ['tk-markets','tk-markets2'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.textContent = markets > 200 ? fmt(markets) : markets + '+';
-      });
-    }
-  } catch(e) {}
-})();
-
-// ── Live data cards ──
-function escH(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-
-// Card 1: Top Crystal Ball Prediction + Card 2: Fear & Greed + Card 3: Expiring Markets
-// All powered by /api/market-intelligence
-(async function loadIntelligenceCards() {
-  try {
-    const r = await fetch('/api/market-intelligence');
-    const data = await r.json();
-
-    // Card 1: Top prediction
-    if (data.top_prediction) {
-      const p = data.top_prediction;
-      const confStr = p.confidence ? p.confidence + '% confidence' : 'Prediction active';
-      document.getElementById('prediction-stat').textContent = confStr;
-      document.getElementById('prediction-detail').textContent = (p.prediction || '').substring(0, 120);
-    } else {
-      document.getElementById('prediction-stat').textContent = 'Scanning markets...';
-      document.getElementById('prediction-detail').textContent = 'Crystal Ball predictions refresh every 5 minutes.';
-    }
-
-    // Card 2: Fear & Greed
-    if (data.fear_greed) {
-      const fg = data.fear_greed;
-      const trendArrow = fg.trend === 'rising' ? ' ↑' : fg.trend === 'falling' ? ' ↓' : '';
-      document.getElementById('feargreed-stat').innerHTML = '<span style="color:' + escH(fg.color || '#eab308') + '">' + fg.score + trendArrow + '</span>';
-      document.getElementById('feargreed-detail').textContent = fg.label + ' — ' + (fg.trend === 'rising' ? 'trending greedier' : fg.trend === 'falling' ? 'trending more fearful' : 'holding steady');
-    } else {
-      document.getElementById('feargreed-stat').textContent = '50';
-      document.getElementById('feargreed-detail').textContent = 'Neutral — market sentiment balanced';
-    }
-
-    // Card 3: Expiring markets
-    if (data.expiring_markets) {
-      const count = data.expiring_markets.count_24h || 0;
-      if (count > 0) {
-        document.getElementById('expiring-stat').textContent = count + ' market' + (count !== 1 ? 's' : '') + ' expiring in 24h';
-        const urgent = data.expiring_markets.urgent || [];
-        if (urgent.length > 0) {
-          document.getElementById('expiring-detail').textContent = urgent[0].market ? (urgent[0].market.substring(0, 80) + ' — ' + Math.round(urgent[0].hours_left) + 'h left') : 'Last chance to trade';
-        } else {
-          document.getElementById('expiring-detail').textContent = 'Last chance to trade before resolution';
-        }
-      } else {
-        document.getElementById('expiring-stat').textContent = 'No imminent expirations';
-        document.getElementById('expiring-detail').textContent = 'Markets approaching resolution will appear here.';
-      }
-    }
-  } catch(e) {
-    // Fallback: show placeholder data
-    document.getElementById('prediction-stat').textContent = '87% confidence';
-    document.getElementById('prediction-detail').textContent = 'Whale convergence detected on Bitcoin markets';
-    document.getElementById('feargreed-stat').innerHTML = '<span style="color:#eab308">54</span>';
-    document.getElementById('feargreed-detail').textContent = 'Neutral — market sentiment balanced';
-    document.getElementById('expiring-stat').textContent = '3 markets expiring in 24h';
-    document.getElementById('expiring-detail').textContent = 'Last chance to trade before resolution';
-  }
-})();
-
-// ── Email subscribe ──
-async function handleSubscribe(e) {
-  e.preventDefault();
-  const email = document.getElementById('sub-email').value.trim();
-  const btn = document.getElementById('sub-btn');
-  const note = document.getElementById('sub-note');
-  if (!email) return false;
-  btn.disabled = true;
-  btn.textContent = 'Subscribing...';
-  try {
-    const r = await fetch('/api/subscribe', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email })
-    });
-    if (r.ok) {
-      btn.textContent = 'Subscribed';
-      btn.style.background = '#2d9b5f';
-      note.textContent = 'You\'re in. Check your inbox.';
-    } else {
-      const d = await r.json().catch(() => ({}));
-      btn.textContent = 'Subscribe';
-      btn.disabled = false;
-      note.textContent = d.error || 'Something went wrong. Try again.';
-      note.style.color = '#c0392b';
-    }
-  } catch(err) {
-    btn.textContent = 'Subscribe';
-    btn.disabled = false;
-    note.textContent = 'Network error. Try again.';
-    note.style.color = '#c0392b';
-  }
-  return false;
-}
-</script>
 
 </body>
 </html>
