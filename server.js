@@ -22756,6 +22756,122 @@ function _escHtmlStr(s) {
 cron.schedule('0 8 * * *', () => { console.log('[daily-briefing-email] Cron triggered'); sendDailyBriefingEmail().catch(err => console.error('[daily-briefing-email] Cron error:', err.message)); });
 
 // ════════════════════════════════════════════════════════════
+// DAILY TWEET — auto-post brief summary to @HyperFlexapp
+// ════════════════════════════════════════════════════════════
+
+function _xOAuthSign(method, url, params) {
+  const apiKey = process.env.X_API_KEY;
+  const apiSecret = process.env.X_API_SECRET;
+  const accessToken = process.env.X_ACCESS_TOKEN;
+  const accessSecret = process.env.X_ACCESS_SECRET;
+  if (!apiKey || !apiSecret || !accessToken || !accessSecret) return null;
+
+  const oauthParams = {
+    oauth_consumer_key: apiKey,
+    oauth_nonce: crypto.randomBytes(16).toString('hex'),
+    oauth_signature_method: 'HMAC-SHA1',
+    oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
+    oauth_token: accessToken,
+    oauth_version: '1.0',
+    ...params
+  };
+
+  const sortedKeys = Object.keys(oauthParams).sort();
+  const paramStr = sortedKeys.map(k => `${encodeURIComponent(k)}=${encodeURIComponent(oauthParams[k])}`).join('&');
+  const baseStr = `${method.toUpperCase()}&${encodeURIComponent(url)}&${encodeURIComponent(paramStr)}`;
+  const signingKey = `${encodeURIComponent(apiSecret)}&${encodeURIComponent(accessSecret)}`;
+  const signature = crypto.createHmac('sha1', signingKey).update(baseStr).digest('base64');
+  oauthParams.oauth_signature = signature;
+
+  const authHeader = 'OAuth ' + Object.keys(oauthParams)
+    .filter(k => k.startsWith('oauth_'))
+    .sort()
+    .map(k => `${encodeURIComponent(k)}="${encodeURIComponent(oauthParams[k])}"`)
+    .join(', ');
+
+  return authHeader;
+}
+
+async function postTweet(text) {
+  const url = 'https://api.x.com/2/tweets';
+  const body = JSON.stringify({ text });
+  const auth = _xOAuthSign('POST', url, {});
+  if (!auth) throw new Error('X API keys not configured');
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Authorization': auth, 'Content-Type': 'application/json' },
+    body
+  });
+
+  const data = await res.json();
+  if (!res.ok) throw new Error(`X API ${res.status}: ${JSON.stringify(data)}`);
+  console.log('[tweet] Posted successfully:', data.data?.id);
+  return data;
+}
+
+async function generateAndPostDailyTweet() {
+  console.log('[daily-tweet] Generating tweet from brief...');
+
+  // Fetch brief data
+  let briefData;
+  try {
+    const briefRes = await fetch(`http://localhost:${process.env.PORT || 3000}/api/daily-brief`);
+    briefData = await briefRes.json();
+  } catch (e) {
+    throw new Error('Failed to fetch brief: ' + e.message);
+  }
+
+  if (!briefData.narrative || briefData.narrative.length < 50) {
+    throw new Error('Brief narrative empty — skipping tweet');
+  }
+
+  // Use Claude to generate a concise tweet
+  const anthropic = new Anthropic();
+  const tweetRes = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 300,
+    system: `You write daily market intelligence tweets for @HyperFlexapp — a prediction market AI platform. Write a single tweet (max 260 chars to leave room for link). Be sharp, data-driven, provocative. Include 1-2 specific numbers or market calls. No hashtags. No emojis. End with a hook that makes people click. Voice: confident analyst, not hype marketer.`,
+    messages: [{
+      role: 'user',
+      content: `Write a tweet summarizing today's AI brief. Here's the data:\n\nNarrative: ${briefData.narrative.substring(0, 800)}\n\nFear & Greed: ${briefData.fear_greed?.score || 'N/A'} (${briefData.fear_greed?.label || ''})\n\nAI Calls: ${(briefData.ai_calls || []).map(c => c.market + ' — ' + c.thesis).join('; ').substring(0, 300)}\n\nKeep under 260 characters. No hashtags. No emojis.`
+    }]
+  });
+
+  let tweet = (tweetRes.content[0]?.text || '').trim();
+  // Remove quotes if Claude wrapped it
+  tweet = tweet.replace(/^["']|["']$/g, '').trim();
+  // Append link
+  const fullTweet = tweet.length > 260 ? tweet.substring(0, 257) + '...' : tweet;
+  const tweetWithLink = fullTweet + '\n\nhyperflex.network/brief';
+
+  if (tweetWithLink.length > 280) {
+    // Truncate tweet body to fit
+    const maxBody = 280 - '\n\nhyperflex.network/brief'.length - 3;
+    const truncated = tweet.substring(0, maxBody) + '...';
+    return await postTweet(truncated + '\n\nhyperflex.network/brief');
+  }
+
+  return await postTweet(tweetWithLink);
+}
+
+// POST /api/tweet-brief — manual trigger (admin only)
+app.post('/api/tweet-brief', async (req, res) => {
+  const adminSecret = req.headers['x-admin-secret'] || req.query.admin;
+  if (adminSecret !== process.env.ADMIN_SECRET) return res.status(403).json({ error: 'Unauthorized' });
+  try {
+    const result = await generateAndPostDailyTweet();
+    res.json({ ok: true, tweet_id: result.data?.id });
+  } catch (err) {
+    console.error('[tweet-brief]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Daily tweet cron — 1:30pm UTC (8:30am ET) — right after brief generates + caches warm
+cron.schedule('30 13 * * *', safeCron('dailyTweet', generateAndPostDailyTweet));
+
+// ════════════════════════════════════════════════════════════
 // ACCURACY TRACKING — the core product
 // ════════════════════════════════════════════════════════════
 
