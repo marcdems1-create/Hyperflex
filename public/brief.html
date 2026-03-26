@@ -194,9 +194,12 @@ async function loadBrief() {
     if ((!d.narrative || d.narrative.length < 50) && (!d.ai_calls || d.ai_calls.length === 0)) {
       try { res = await fetch('/api/daily-brief?refresh=1'); d = await res.json(); } catch(e) {}
     }
-    // If still empty after refresh attempt, throw to trigger retry
+    // If narrative empty but we have other data (fear/greed, calls), render what we have
+    var hasAnyData = (d.fear_greed && d.fear_greed.score != null) || (d.ai_calls && d.ai_calls.length > 0);
     if (!d.narrative || d.narrative.length < 50) {
-      throw new Error('Brief narrative empty — cache still cold');
+      if (!hasAnyData) throw new Error('Brief completely empty — cache still cold');
+      // Show partial data with a note that narrative is generating
+      d.narrative = '';
     }
 
     // Date
@@ -217,7 +220,7 @@ async function loadBrief() {
     });
 
     // Narrative with [CALL-X] replaced by clickable links
-    if (d.narrative) {
+    if (d.narrative && d.narrative.length > 50) {
       var paragraphs = d.narrative.split('\n\n').filter(function(p) { return p.trim(); });
       document.getElementById('narrativeText').innerHTML = paragraphs.map(function(p) {
         var safe = escHtml(p);
@@ -230,6 +233,8 @@ async function loadBrief() {
         });
         return '<p>' + safe + '</p>';
       }).join('');
+    } else {
+      document.getElementById('narrativeText').innerHTML = '<p style="color:var(--dim);font-style:italic">AI narrative generating — data is live below.</p>';
     }
 
     // Fear & Greed
