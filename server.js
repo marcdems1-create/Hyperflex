@@ -16699,21 +16699,29 @@ app.get('/api/markets/search', async (req, res) => {
       const tid = setTimeout(() => ctrl.abort(), ms);
       return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(tid));
     };
-    // Build search keywords with synonym expansion for better matching
+    // Build search keywords with broad topic expansion for cross-platform matching
+    // Key insight: Kalshi uses generic titles ("Presidential Election") while Polymarket
+    // uses specific names ("Will Trump win?"). Expansions must bridge both naming styles.
     const synonyms = {
-      gold: ['gold', 'xau', 'gold price', 'precious metal'],
-      bitcoin: ['bitcoin', 'btc', 'crypto'],
-      ethereum: ['ethereum', 'eth', 'ether'],
-      trump: ['trump', 'donald trump', 'president trump'],
-      biden: ['biden', 'joe biden'],
-      oil: ['oil', 'crude', 'wti', 'brent'],
-      stocks: ['stocks', 'stock market', 's&p', 'sp500', 'nasdaq', 'dow'],
-      election: ['election', 'vote', 'presidential', 'midterm'],
-      fed: ['fed', 'federal reserve', 'interest rate', 'rate cut'],
-      ai: ['ai', 'artificial intelligence', 'openai', 'chatgpt'],
-      war: ['war', 'conflict', 'invasion', 'military'],
-      china: ['china', 'chinese', 'xi jinping', 'beijing'],
-      russia: ['russia', 'russian', 'putin', 'ukraine'],
+      trump: ['trump', 'donald trump', 'president trump', 'presidential', 'republican', 'gop', 'white house', '2028 election', 'maga', 'republican nominee'],
+      biden: ['biden', 'joe biden', 'democrat', 'democratic'],
+      bitcoin: ['bitcoin', 'btc', 'crypto', 'cryptocurrency', 'digital currency'],
+      ethereum: ['ethereum', 'eth', 'ether', 'defi'],
+      gold: ['gold', 'xau', 'gold price', 'precious metal', 'bullion'],
+      oil: ['oil', 'crude', 'wti', 'brent', 'opec', 'petroleum', 'barrel'],
+      stocks: ['stocks', 'stock market', 's&p', 'sp500', 'nasdaq', 'dow', 'equity', 'index'],
+      election: ['election', 'vote', 'presidential', 'midterm', 'nominee', 'candidate', 'electoral', 'ballot'],
+      fed: ['fed', 'federal reserve', 'interest rate', 'rate cut', 'rate hike', 'fomc', 'monetary policy', 'powell'],
+      recession: ['recession', 'gdp', 'economic contraction', 'downturn', 'unemployment'],
+      ai: ['ai', 'artificial intelligence', 'openai', 'chatgpt', 'deepseek', 'llm', 'machine learning'],
+      war: ['war', 'conflict', 'invasion', 'military', 'strike', 'troops', 'ceasefire'],
+      china: ['china', 'chinese', 'xi jinping', 'beijing', 'taiwan', 'prc', 'tariff'],
+      russia: ['russia', 'russian', 'putin', 'ukraine', 'moscow', 'kremlin'],
+      iran: ['iran', 'iranian', 'tehran', 'hormuz', 'strike', 'nuclear'],
+      pope: ['pope', 'papal', 'vatican', 'pontiff', 'catholic'],
+      nba: ['nba', 'basketball', 'finals', 'playoff'],
+      ufc: ['ufc', 'mma', 'fighting', 'fight night'],
+      inflation: ['inflation', 'cpi', 'consumer price', 'price index'],
     };
     const qWords = q.split(/\s+/).filter(w => w.length >= 2);
     // Expand query with synonyms
@@ -16796,6 +16804,7 @@ app.get('/api/markets/search', async (req, res) => {
           if (!evtMatch && !matchesQuery(mTitle)) continue;
           let yesPct = null;
           try { if (m.outcomePrices) yesPct = Math.round(JSON.parse(m.outcomePrices)[0] * 100); } catch {}
+          if (yesPct !== null && (yesPct >= 95 || yesPct <= 5)) continue; // Skip resolved/dead markets
           polyMarkets.push({
             question: mTitle,
             yes_pct: yesPct,
@@ -16825,9 +16834,11 @@ app.get('/api/markets/search', async (req, res) => {
         const mkts = evt.markets || [];
         for (const m of mkts) {
           if (m.status !== 'open') continue;
+          const _kYesPct = m.yes_ask != null ? Math.round(m.yes_ask * 100) : (m.last_price != null ? Math.round(m.last_price * 100) : null);
+          if (_kYesPct !== null && (_kYesPct >= 95 || _kYesPct <= 5)) continue; // Skip resolved/dead markets
           kalshiMarkets.push({
             question: m.title || evt.title || '',
-            yes_pct: m.yes_ask != null ? Math.round(m.yes_ask * 100) : (m.last_price != null ? Math.round(m.last_price * 100) : null),
+            yes_pct: _kYesPct,
             close_date: m.close_time || m.expiration_time || null,
             url: m.ticker ? `https://kalshi.com/markets/${(m.event_ticker || m.ticker || '').replace(/-\d+$/, '').toLowerCase()}` : 'https://kalshi.com',
             volume: m.volume || 0
@@ -16988,7 +16999,33 @@ app.get('/api/markets/search', async (req, res) => {
       smart_money = await Promise.race([smQuery, smTimeout]).catch(() => null);
     } catch (e) { console.warn('[smart-money]', e.message); }
 
-    const data = { polymarket: polyMarkets, kalshi: kalshiMarkets, sportsbooks, smart_money };
+    // --- Cross-platform pairing: match Poly ↔ Kalshi markets about the same question ---
+    const pairs = [];
+    const usedKalshi = new Set();
+    const usedPoly = new Set();
+    for (let pi = 0; pi < polyMarkets.length; pi++) {
+      const pWords = (polyMarkets[pi].question || '').toLowerCase().split(/\s+/).filter(w => w.length > 3);
+      let bestMatch = -1, bestOverlap = 0;
+      for (let ki = 0; ki < kalshiMarkets.length; ki++) {
+        if (usedKalshi.has(ki)) continue;
+        const kWords = (kalshiMarkets[ki].question || '').toLowerCase().split(/\s+/).filter(w => w.length > 3);
+        const overlap = pWords.filter(w => kWords.includes(w)).length;
+        if (overlap > bestOverlap) { bestOverlap = overlap; bestMatch = ki; }
+      }
+      if (bestOverlap >= 2 && bestMatch >= 0) {
+        const pPct = polyMarkets[pi].yes_pct; const kPct = kalshiMarkets[bestMatch].yes_pct;
+        const spread = (pPct != null && kPct != null) ? Math.abs(pPct - kPct) : null;
+        pairs.push({ poly: polyMarkets[pi], kalshi: kalshiMarkets[bestMatch], spread });
+        usedPoly.add(pi);
+        usedKalshi.add(bestMatch);
+      }
+    }
+    // Sort pairs by spread descending (biggest arbitrage first)
+    pairs.sort((a, b) => (b.spread || 0) - (a.spread || 0));
+    const unpairedPoly = polyMarkets.filter((_, i) => !usedPoly.has(i));
+    const unpairedKalshi = kalshiMarkets.filter((_, i) => !usedKalshi.has(i));
+
+    const data = { polymarket: unpairedPoly, kalshi: unpairedKalshi, pairs, sportsbooks, smart_money };
     _mktSearchCache.set(cacheKey, { ts: Date.now(), data });
     setTimeout(() => _mktSearchCache.delete(cacheKey), 3 * 60 * 1000);
     res.json(data);
@@ -21563,12 +21600,12 @@ async function detectArbitrageOpportunities() {
     // Match markets across platforms by keyword overlap
     const arbs = [];
     for (const pm of polyMarkets) {
-      const pWords = pm.question.split(/\s+/).filter(w => w.length > 4);
+      const pWords = pm.question.toLowerCase().split(/\s+/).filter(w => w.length > 3);
       if (pWords.length < 2) continue;
       for (const km of kalshiMarkets) {
-        const kWords = km.question.split(/\s+/).filter(w => w.length > 4);
+        const kWords = km.question.toLowerCase().split(/\s+/).filter(w => w.length > 3);
         const overlap = pWords.filter(w => kWords.includes(w)).length;
-        if (overlap < 3) continue;
+        if (overlap < 2) continue;
         // Check for arb: if poly_yes + kalshi_no < 1.0 (buy YES on poly, buy NO on kalshi)
         const kalshiNo = 1 - km.yes;
         const arbEdge1 = 1 - (pm.yes + kalshiNo); // positive = arb exists
