@@ -191,8 +191,12 @@ async function loadBrief() {
     if (!res.ok) throw new Error('API error ' + res.status);
     let d = await res.json();
     // If brief returned empty (cold cache), try once with refresh to force regeneration
-    if ((!d.ai_calls || d.ai_calls.length === 0) && (!d.smart_money_picks || d.smart_money_picks.length === 0)) {
+    if ((!d.narrative || d.narrative.length < 50) && (!d.ai_calls || d.ai_calls.length === 0)) {
       try { res = await fetch('/api/daily-brief?refresh=1'); d = await res.json(); } catch(e) {}
+    }
+    // If still empty after refresh attempt, throw to trigger retry
+    if (!d.narrative || d.narrative.length < 50) {
+      throw new Error('Brief narrative empty — cache still cold');
     }
 
     // Date
@@ -322,7 +326,8 @@ async function loadBrief() {
 
   } catch (err) {
     console.error('[brief]', err);
-    document.getElementById('narrativeText').innerHTML = '<p style="color:var(--dim)">Brief is loading. Caches are warming up — refresh in a few minutes.</p>';
+    document.getElementById('narrativeText').innerHTML = '<p style="color:var(--dim)">Brief is loading. Caches are warming up...</p>';
+    throw err; // re-throw so retry logic can catch it
   }
 }
 
@@ -350,9 +355,22 @@ async function handleSubscribe(e) {
   return false;
 }
 
-loadBrief();
-// Refresh every 30 min
-setInterval(loadBrief, 30 * 60 * 1000);
+// Load with auto-retry on failure (cold cache after deploy)
+var _briefRetries = 0;
+var _briefLoaded = false;
+(function loadBriefWithRetry() {
+  loadBrief().then(function() {
+    _briefLoaded = true;
+  }).catch(function() {
+    if (_briefRetries < 6) {
+      _briefRetries++;
+      document.getElementById('narrativeText').innerHTML = '<p style="color:var(--dim)">Loading market intelligence... (attempt ' + (_briefRetries + 1) + '/7)</p>';
+      setTimeout(loadBriefWithRetry, 15000);
+    }
+  });
+})();
+// Refresh every 10 min once loaded
+setInterval(loadBrief, 10 * 60 * 1000);
 </script>
 </body>
 </html>
