@@ -22895,11 +22895,12 @@ app.post('/api/accuracy/log', async (req, res) => {
   if (!source || !predicted_side) return res.status(400).json({ error: 'source and predicted_side required' });
   try {
     if (pool) {
-      await dbQuery(
+      const rows = await dbQuery(
         `INSERT INTO prediction_log (source, market_id, market_question, predicted_side, predicted_confidence, market_price_at_prediction, target_price, expires_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
         [source, market_id || null, market_question || null, predicted_side, predicted_confidence || null, market_price_at_prediction || null, target_price || null, expires_at || null]
       );
+      console.log('[accuracy/log] Inserted prediction_log id:', rows && rows[0] ? rows[0].id : 'NONE');
     } else {
       await supabase.from('prediction_log').insert({
         source, market_id: market_id || null, market_question: market_question || null,
