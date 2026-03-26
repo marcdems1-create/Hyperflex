@@ -18000,15 +18000,34 @@ app.get('/api/whale-flow', async (req, res) => {
         return { market: m.market, whale_count: m.whale_count, total_capital: Math.round(m.total_capital), consensus_side, consensus_pct, url: m.url };
       });
 
-    // ── Sentiment — overall YES/NO split ──
-    let yesCount = 0, noCount = 0;
+    // ── Sentiment — capital-weighted YES/NO split (overall + per category) ──
+    let yesCapital = 0, noCapital = 0, yesCount = 0, noCount = 0;
+    const catSent = {}; // { sports: { yes_cap: 0, no_cap: 0, yes_count: 0, no_count: 0 }, ... }
     positions.forEach(p => {
       const s = (p.side || '').toUpperCase();
-      if (s === 'YES' || s === 'Y') yesCount++;
-      else if (s === 'NO' || s === 'N') noCount++;
+      const cap = p.size || 0;
+      const cat = categorize(p.market);
+      if (!catSent[cat]) catSent[cat] = { yes_capital: 0, no_capital: 0, yes_count: 0, no_count: 0 };
+      if (s === 'YES' || s === 'Y') { yesCapital += cap; yesCount++; catSent[cat].yes_capital += cap; catSent[cat].yes_count++; }
+      else if (s === 'NO' || s === 'N') { noCapital += cap; noCount++; catSent[cat].no_capital += cap; catSent[cat].no_count++; }
     });
-    const sentTotal = yesCount + noCount || 1;
-    const sentiment = { yes_pct: Math.round(yesCount / sentTotal * 100), no_pct: Math.round(noCount / sentTotal * 100), total_positions: positions.length };
+    const sentCapTotal = yesCapital + noCapital || 1;
+    const sentCountTotal = yesCount + noCount || 1;
+    const sentiment = {
+      yes_pct: Math.round(yesCapital / sentCapTotal * 100),
+      no_pct: Math.round(noCapital / sentCapTotal * 100),
+      yes_capital: Math.round(yesCapital),
+      no_capital: Math.round(noCapital),
+      total_positions: positions.length,
+      total_capital: Math.round(yesCapital + noCapital),
+      weighted_by: 'capital',
+      by_category: Object.entries(catSent)
+        .map(([cat, d]) => {
+          const total = d.yes_capital + d.no_capital || 1;
+          return { category: cat, yes_pct: Math.round(d.yes_capital / total * 100), no_pct: Math.round(d.no_capital / total * 100), yes_capital: Math.round(d.yes_capital), no_capital: Math.round(d.no_capital), positions: d.yes_count + d.no_count };
+        })
+        .sort((a, b) => (b.yes_capital + b.no_capital) - (a.yes_capital + a.no_capital))
+    };
 
     // ── Largest moves (from whale trade stream) ──
     const largest_moves = (_whaleTradeStream || []).slice(0, 10).map(e => ({
@@ -24915,10 +24934,15 @@ setInterval(() => {
         .catch(e => _logError('watchdog/whale', e));
     }
 
-    // Check screener cache
-    if (_screenerCache && _screenerCache.ts && (now - _screenerCache.ts > staleMs)) {
-      console.warn('[watchdog] Screener cache stale — will refresh on next request');
-      _screenerCache = null; // force refresh on next API call
+    // Check screener cache — proactively refresh (same pattern as whale watchdog)
+    if (!_screenerCache || (_screenerCache.ts && (now - _screenerCache.ts > staleMs))) {
+      console.warn('[watchdog] Screener cache stale, triggering proactive refresh...');
+      _healthTimestamps.watchdogRestarts++;
+      const _screenerPort = process.env.PORT || 3000;
+      fetch(`http://localhost:${_screenerPort}/api/screener`)
+        .then(r => { if (!r.ok) throw new Error('screener refresh returned ' + r.status); return r.json(); })
+        .then(() => console.log('[watchdog] Screener cache refreshed'))
+        .catch(e => _logError('watchdog/screener', e));
     }
 
     // Check signals cache
