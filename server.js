@@ -20121,8 +20121,9 @@ async function generateCrystalBallPredictions() {
             const yesPrices = mktWhales.map(w => {
               const p = parseFloat(w.current_price) || 0;
               if (p <= 0 || p >= 1) return null;
-              const side = (w.side || '').toUpperCase();
-              return side === 'NO' || side === 'No' ? (1 - p) : p;
+              const wSide = (w.side || '').toUpperCase();
+              // NO token price = probability of NO, so YES = 1 - p
+              return wSide === 'NO' ? (1 - p) : p;
             }).filter(p => p !== null);
             if (yesPrices.length > 0) bestPrice = yesPrices.reduce((s, p) => s + p, 0) / yesPrices.length;
           }
@@ -20157,6 +20158,7 @@ async function generateCrystalBallPredictions() {
         ],
         action: pick.consensus_side === 'YES' ? `BUY YES at current ${priceDisplay}%` : `SELL NO at current ${100 - priceDisplay}%`,
         market: { question: pick.market, url: pick.url || 'https://polymarket.com' },
+        yes_pct: priceDisplay,
         detected_at: now.toISOString(),
         expires_at: new Date(now.getTime() + 6 * 60 * 60 * 1000).toISOString(),
         _whale_count: pick.whale_count,
@@ -20236,6 +20238,7 @@ async function generateCrystalBallPredictions() {
         ],
         action: pick.consensus_side === 'YES' ? `BUY YES at current ${mktPrice}%` : `BUY NO at current ${100 - mktPrice}%`,
         market: { question: pick.market, url: pick.url || 'https://polymarket.com' },
+        yes_pct: mktPrice,
         detected_at: now.toISOString(),
         expires_at: new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString(),
         _whale_count: pick.whale_count,
@@ -20438,25 +20441,33 @@ async function generateCrystalBallPredictions() {
     const { _whale_count, _divergence, _momentum, _urgency, ...clean } = p;
 
     // ── ROI calculation ──
-    // Parse side + price from action: "BUY YES at current 22%", "BUY NO at current 78%", "SELL NO at current 50%"
-    const actionMatch = (clean.action || '').match(/(?:BUY|SELL)\s+(YES|NO)\s+(?:at\s+)?[~]?(?:current\s+)?(\d+)%/i);
+    // Calculate ROI from action + price data
+    const actionMatch = (clean.action || '').match(/(?:BUY|SELL)\s+(YES|NO)/i);
     if (actionMatch) {
       const side = actionMatch[1].toUpperCase();
-      const yesPct = side === 'YES'
-        ? parseInt(actionMatch[2])
-        : 100 - parseInt(actionMatch[2]);
-      const entryCost = side === 'YES' ? yesPct : (100 - yesPct);  // cents per share
-      const payout = 100 - entryCost;  // profit per share if correct
-      const roiPct = entryCost > 0 ? Math.round((payout / entryCost) * 100) : 0;
-      clean.trade = {
-        side,
-        entry_cost: entryCost,        // ¢ you pay per share
-        potential_profit: payout,      // ¢ you win per share
-        roi_pct: roiPct,              // % return if correct
-        yes_pct: yesPct               // current YES odds
-      };
+      // Use yes_pct field if available (most reliable), else parse from action text
+      let yesPct = clean.yes_pct || null;
+      if (yesPct == null) {
+        const pctMatch = (clean.action || '').match(/(\d+)%/);
+        if (pctMatch) {
+          const num = parseInt(pctMatch[1]);
+          yesPct = side === 'YES' ? num : 100 - num;
+        }
+      }
+      if (yesPct != null && yesPct > 0 && yesPct < 100) {
+        const entryCost = side === 'YES' ? yesPct : (100 - yesPct);  // ¢ you pay per share
+        const payout = 100 - entryCost;  // ¢ profit per share if correct
+        const roiPct = entryCost > 0 ? Math.round((payout / entryCost) * 100) : 0;
+        clean.trade = {
+          side,
+          entry_cost: entryCost,
+          potential_profit: payout,
+          roi_pct: roiPct,
+          yes_pct: yesPct
+        };
+      }
     } else if ((clean.action || '').startsWith('WATCH')) {
-      clean.trade = null;  // no actionable trade
+      clean.trade = null;
     }
 
     return clean;
