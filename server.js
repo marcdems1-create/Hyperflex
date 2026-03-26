@@ -21626,6 +21626,15 @@ async function detectArbitrageOpportunities() {
   }
 }
 
+// Refresh whale data every 10 minutes to keep F&G and signals fresh
+cron.schedule('*/10 * * * *', safeCron('refreshWhaleData', async () => {
+  try {
+    const data = await fetchWhalePositions();
+    _whaleWatchCache = { ts: Date.now(), data };
+    console.log('[whale-refresh] Updated whale cache:', (data.whales || []).length, 'positions');
+  } catch (e) { console.warn('[whale-refresh]', e.message); }
+}));
+
 // Run arb detection every 5 minutes
 cron.schedule('*/5 * * * *', safeCron('detectArbitrageOpportunities', detectArbitrageOpportunities));
 setTimeout(detectArbitrageOpportunities, 30000); // First run 30s after boot
@@ -24803,4 +24812,22 @@ setInterval(() => {
 }, 30 * 60 * 1000);
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`HYPERFLEX server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`HYPERFLEX server running on port ${PORT}`);
+
+  // Pre-warm critical data caches on startup (non-blocking)
+  setTimeout(async () => {
+    console.log('[boot] Pre-warming data caches...');
+    const warmups = [
+      ['whale-watch', async () => { const data = await fetchWhalePositions(); _whaleWatchCache = { ts: Date.now(), data }; }],
+      ['market-movers', async () => { const r = await fetch(`http://localhost:${PORT}/api/market-movers`); if (!r.ok) throw new Error(r.status); }],
+      ['whale-flow', async () => { const r = await fetch(`http://localhost:${PORT}/api/whale-flow`); if (!r.ok) throw new Error(r.status); }],
+      ['screener', async () => { const r = await fetch(`http://localhost:${PORT}/api/screener`); if (!r.ok) throw new Error(r.status); }],
+      ['fear-greed', async () => { const r = await fetch(`http://localhost:${PORT}/api/fear-greed`); if (!r.ok) throw new Error(r.status); }],
+    ];
+    for (const [name, fn] of warmups) {
+      try { await fn(); console.log(`[boot] ✓ ${name}`); } catch (e) { console.warn(`[boot] ✗ ${name}: ${e.message}`); }
+    }
+    console.log('[boot] Cache pre-warm complete');
+  }, 5000); // Wait 5s for DB connections to establish
+});
