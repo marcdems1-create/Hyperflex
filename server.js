@@ -17759,20 +17759,76 @@ app.get('/api/screener', async (req, res) => {
       const eventSlug = (m.events && m.events[0] && m.events[0].slug) || m.eventSlug || '';
       const marketUrl = eventSlug ? `https://polymarket.com/event/${eventSlug}` : 'https://polymarket.com';
 
+      // Skip resolved markets (95%+ or 5%-)
+      if (yesPrice != null && (yesPrice >= 0.95 || yesPrice <= 0.05)) continue;
+
+      const wCount = whaleInfo ? whaleInfo.count : 0;
+      const wCapital = whaleInfo ? Math.round(whaleInfo.capital) : 0;
+      const pChange = priceChanges[marketId] || null;
+      const oddsChg = pChange != null && yesPrice != null ? Math.round((yesPrice - yesPrice / (1 + pChange / 100)) * 100) : null;
+
+      // ── Edge Score (1–100) ──
+      const edgeWhale = Math.min(40, wCount * 8);
+      const edgeMomentum = Math.min(20, Math.abs(pChange || 0) * 2);
+      const edgeVolume = volume >= 1000000 ? 15 : volume >= 100000 ? 10 : volume >= 10000 ? 5 : 0;
+      const edgeExpiry = (daysUntilExpiry != null && daysUntilExpiry <= 7) ? 15 : (daysUntilExpiry != null && daysUntilExpiry <= 30) ? 5 : 0;
+      const edgeDivergence = (wCount >= 3 && yesPrice != null) ? Math.min(10, Math.abs(50 - Math.round(yesPrice * 100)) * 0.3) : 0;
+      const edgeScore = Math.min(100, Math.round(edgeWhale + edgeMomentum + edgeVolume + edgeExpiry + edgeDivergence));
+
+      // ── Trade ROI ──
+      let trade = null;
+      if (yesPrice != null && yesPrice > 0.05 && yesPrice < 0.95) {
+        // Default: BUY YES if price < 50%, BUY NO if price > 50%. Whale consensus overrides.
+        let side = yesPrice <= 0.5 ? 'YES' : 'NO';
+        // If whales have consensus, follow them
+        if (whaleInfo && whaleInfo.count >= 3) {
+          // Whale consensus side comes from the whale index if available
+          const wIdx = (_whaleIndexCache && _whaleIndexCache.data && _whaleIndexCache.data.picks) || [];
+          const wPick = wIdx.find(p => (p.market || '').toLowerCase() === qLower);
+          if (wPick && wPick.consensus_side) side = wPick.consensus_side;
+        }
+        const yesPct = Math.round(yesPrice * 100);
+        const entryCost = side === 'YES' ? yesPct : (100 - yesPct);
+        const profit = 100 - entryCost;
+        trade = {
+          side,
+          entry_cost: entryCost,
+          potential_profit: profit,
+          roi_pct: entryCost > 0 ? Math.round((profit / entryCost) * 100) : 0
+        };
+      }
+
+      // ── AI Story Hook (template, no API call) ──
+      let aiHook = '';
+      if (wCount >= 5 && wCapital > 100000) {
+        aiHook = `${wCount} whales have $${wCapital >= 1000000 ? (wCapital/1000000).toFixed(1)+'M' : Math.round(wCapital/1000)+'K'} on this — smart money is paying attention`;
+      } else if (pChange != null && Math.abs(pChange) >= 10) {
+        aiHook = `Odds ${pChange > 0 ? 'surged' : 'dropped'} ${Math.abs(Math.round(pChange))}% in 24h — something changed`;
+      } else if (daysUntilExpiry != null && daysUntilExpiry <= 3 && yesPrice != null && yesPrice > 0.2 && yesPrice < 0.8) {
+        aiHook = `Resolves in ${daysUntilExpiry === 0 ? 'hours' : daysUntilExpiry + 'd'} and still at ${Math.round(yesPrice*100)}% — outcome uncertain`;
+      } else if (volume >= 1000000) {
+        aiHook = `$${(volume/1000000).toFixed(1)}M volume — one of the most-traded markets right now`;
+      } else if (wCount >= 3) {
+        aiHook = `${wCount} whale wallets positioned — watching for consensus`;
+      }
+
       markets.push({
         market_id: marketId,
         question,
         category,
         yes_price: yesPrice,
         volume,
-        whale_count: whaleInfo ? whaleInfo.count : 0,
-        total_whale_capital: whaleInfo ? Math.round(whaleInfo.capital) : 0,
-        price_change_24h: priceChanges[marketId] || null,
-        odds_change_24h: priceChanges[marketId] != null && yesPrice != null ? Math.round((yesPrice - yesPrice / (1 + (priceChanges[marketId] || 0) / 100)) * 100) : null,
+        whale_count: wCount,
+        total_whale_capital: wCapital,
+        price_change_24h: pChange,
+        odds_change_24h: oddsChg,
         days_until_expiry: daysUntilExpiry,
         end_date: (m.endDate || m.end_date_iso) ? new Date(m.endDate || m.end_date_iso).toISOString() : null,
         url: marketUrl,
-        slug: eventSlug
+        slug: eventSlug,
+        edge_score: edgeScore,
+        trade,
+        ai_hook: aiHook || null
       });
     }
 
@@ -17810,7 +17866,7 @@ function filterScreenerResults(markets, query) {
   const minWhales = parseInt(query.min_whales) || 0;
   const category = (query.category || '').toLowerCase();
   const minVolume = parseInt(query.min_volume) || 0;
-  const sort = query.sort || 'whale_count';
+  const sort = query.sort || 'edge_score';
 
   if (minWhales > 0) filtered = filtered.filter(m => m.whale_count >= minWhales);
   if (category && category !== 'all') filtered = filtered.filter(m => m.category === category);
@@ -17821,8 +17877,9 @@ function filterScreenerResults(markets, query) {
     case 'volume': filtered.sort((a, b) => b.volume - a.volume); break;
     case 'price_change': filtered.sort((a, b) => Math.abs(b.price_change_24h || 0) - Math.abs(a.price_change_24h || 0)); break;
     case 'newest': filtered.sort((a, b) => (b.days_until_expiry || 999) - (a.days_until_expiry || 999)); break;
-    case 'whale_count':
-    default: filtered.sort((a, b) => b.whale_count - a.whale_count || b.volume - a.volume); break;
+    case 'edge_score': filtered.sort((a, b) => (b.edge_score || 0) - (a.edge_score || 0)); break;
+    case 'whale_count': filtered.sort((a, b) => b.whale_count - a.whale_count || b.volume - a.volume); break;
+    default: filtered.sort((a, b) => (b.edge_score || 0) - (a.edge_score || 0)); break;
   }
 
   return filtered;

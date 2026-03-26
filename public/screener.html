@@ -151,6 +151,57 @@ td { padding: 12px 14px; font-size: 13px; vertical-align: middle; }
 .empty-state h3 { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
 .empty-state p { font-family: var(--mono); font-size: 12px; color: var(--muted); }
 
+/* VIEW TOGGLE */
+.view-toggle { display: flex; gap: 4px; }
+.view-btn { font-family: var(--mono); font-size: 12px; padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; transition: all 0.2s; }
+.view-btn.active { background: var(--gold-dim); color: var(--gold); border-color: rgba(201,146,13,0.3); }
+.view-btn:hover { border-color: rgba(201,146,13,0.2); color: var(--text-soft); }
+
+/* STORY CARDS */
+.cards-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+.story-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+  padding: 20px; transition: all 0.25s; position: relative; overflow: hidden;
+}
+.story-card:hover { border-color: rgba(201,146,13,0.3); transform: translateY(-2px); box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+.story-card.high-edge { border-color: rgba(201,146,13,0.25); box-shadow: 0 0 20px rgba(201,146,13,0.06); }
+.story-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+.story-card-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.story-card h3 { font-family: var(--sans); font-size: 16px; font-weight: 700; line-height: 1.4; color: var(--text); margin: 0 0 10px; }
+.story-hook { font-family: var(--mono); font-size: 12px; color: var(--gold); line-height: 1.5; margin-bottom: 12px; font-style: italic; }
+.story-evidence { list-style: none; padding: 0; margin: 0 0 12px; }
+.story-evidence li { font-family: var(--mono); font-size: 11px; color: var(--text-soft); line-height: 1.6; padding-left: 14px; position: relative; }
+.story-evidence li::before { content: '\203A'; position: absolute; left: 0; color: var(--muted); font-weight: 700; }
+
+/* Edge Score Badge */
+.edge-badge { display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 50%; font-family: var(--mono); font-size: 13px; font-weight: 700; flex-shrink: 0; }
+.edge-badge.high { background: rgba(34,197,94,0.12); color: #22c55e; border: 2px solid rgba(34,197,94,0.3); }
+.edge-badge.mid { background: rgba(201,146,13,0.12); color: var(--gold); border: 2px solid rgba(201,146,13,0.3); }
+.edge-badge.low { background: rgba(107,114,128,0.12); color: #9ca3af; border: 2px solid rgba(107,114,128,0.2); }
+
+/* ROI Strip (reuse from crystal-ball) */
+.story-roi {
+  display: flex; align-items: center; gap: 12px; padding: 8px 12px; margin-bottom: 12px;
+  background: linear-gradient(90deg, rgba(34,197,94,0.06), rgba(34,197,94,0.02));
+  border: 1px solid rgba(34,197,94,0.12); border-radius: 8px; flex-wrap: wrap;
+}
+.story-roi.no-side {
+  background: linear-gradient(90deg, rgba(239,68,68,0.06), rgba(239,68,68,0.02));
+  border-color: rgba(239,68,68,0.12);
+}
+.story-roi-item { display: flex; flex-direction: column; gap: 1px; }
+.story-roi-label { font-family: var(--mono); font-size: 8px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.story-roi-val { font-family: var(--mono); font-size: 13px; font-weight: 700; }
+.story-roi-val.cost { color: var(--text); }
+.story-roi-val.profit { color: #22c55e; }
+.story-roi-val.pct { color: #22c55e; font-size: 14px; }
+.story-roi-arrow { color: var(--muted); font-size: 12px; }
+
+.story-card-footer { display: flex; justify-content: space-between; align-items: center; }
+.story-trade-btn { font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--gold); padding: 6px 14px; border: 1px solid rgba(201,146,13,0.3); border-radius: 6px; text-decoration: none; transition: all 0.2s; }
+.story-trade-btn:hover { background: var(--gold-dim); text-decoration: none; }
+.story-expiry { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+
 /* MOBILE */
 @media (max-width: 768px) {
   .topbar { padding: 12px 16px; }
@@ -168,6 +219,8 @@ td { padding: 12px 14px; font-size: 13px; vertical-align: middle; }
   .container { padding: 16px 12px 60px; }
   .mkt-question { max-width: 200px; }
   td { padding: 10px 8px; font-size: 12px; }
+  .cards-grid { grid-template-columns: 1fr; }
+  .story-card h3 { font-size: 14px; }
 }
 @media (max-width: 480px) {
   .nav-links { gap: 8px; overflow-x: auto; }
@@ -175,6 +228,8 @@ td { padding: 12px 14px; font-size: 13px; vertical-align: middle; }
   .filter-bar-inner { flex-direction: column; align-items: flex-start; }
   .sort-select { margin-left: 0; }
   .mkt-question { max-width: 150px; }
+  .story-roi { gap: 8px; }
+  .story-card { padding: 16px; }
 }
 .narrative-row{display:flex;align-items:center;gap:12px;padding:10px 14px;background:#0e0e0c;border:1px solid #1e1e1c;border-radius:8px;cursor:pointer;transition:border-color .15s,background .15s;position:relative;overflow:hidden}
 .narrative-row:hover{border-color:#333;background:#111110}
@@ -242,6 +297,7 @@ td { padding: 12px 14px; font-size: 13px; vertical-align: middle; }
       <button class="filter-pill" data-vol="1000000" onclick="setVolFilter(1000000)">$1M+</button>
     </div>
     <select class="sort-select" id="sort-select" onchange="setSort(this.value)">
+      <option value="edge_score">Sort: Edge Score</option>
       <option value="whale_count">Sort: Whale Count</option>
       <option value="volume">Sort: Volume</option>
       <option value="price_change">Sort: Price Change</option>
@@ -259,8 +315,19 @@ td { padding: 12px 14px; font-size: 13px; vertical-align: middle; }
 
   <!-- CONTENT -->
   <div id="content" style="display:none;">
-    <div class="results-count" id="results-count"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="results-count" id="results-count" style="margin-bottom:0"></div>
+      <div class="view-toggle">
+        <button class="view-btn active" id="viewCards" onclick="setView('cards')">&#x1F4F0; Stories</button>
+        <button class="view-btn" id="viewTable" onclick="setView('table')">&#x1F4CA; Table</button>
+      </div>
+    </div>
 
+    <!-- CARD VIEW -->
+    <div id="cards-view" class="cards-grid"></div>
+
+    <!-- TABLE VIEW -->
+    <div id="table-view" style="display:none">
     <div class="table-wrap">
       <table>
         <thead>
@@ -278,6 +345,7 @@ td { padding: 12px 14px; font-size: 13px; vertical-align: middle; }
         <tbody id="results-body"></tbody>
       </table>
     </div>
+    </div><!-- /table-view -->
 
     <div class="load-more-wrap" id="load-more-wrap" style="display:none;">
       <button class="load-more-btn" onclick="loadMore()">Load more markets</button>
@@ -296,7 +364,7 @@ let _allMarkets = [];
 let _catFilter = 'all';
 let _whaleMin = 0;
 let _volMin = 0;
-let _sortBy = 'whale_count';
+let _sortBy = 'edge_score';
 let _displayCount = 50;
 let _activeNarrative = null;
 
@@ -382,11 +450,12 @@ async function loadNarratives(){
   }catch(e){document.getElementById('narrative-grid').innerHTML='<div style="color:#555;font-size:12px;font-family:Space Mono,monospace">Unable to load narratives</div>'}
 }
 function filterByNarrative(narrative){
-  if(_activeNarrative===narrative){_activeNarrative=null;document.querySelectorAll('.narrative-row').forEach(function(r){r.classList.remove('active')});renderTable();return}
+  if(_activeNarrative===narrative){_activeNarrative=null;document.querySelectorAll('.narrative-row').forEach(function(r){r.classList.remove('active')});renderView();return}
   _activeNarrative=narrative;
   document.querySelectorAll('.narrative-row').forEach(function(r){r.classList.toggle('active',r.dataset.narrative===narrative)});
-  renderTable();
+  renderView();
 }
+function renderView() { if (_viewMode === 'cards') renderCards(); else renderTable(); }
 
 function fmtVol(n) {
   if (n >= 1000000) return '$' + (n / 1000000).toFixed(1) + 'M';
@@ -452,7 +521,7 @@ async function loadScreener() {
     document.getElementById('loading').style.display = 'none';
     document.getElementById('content').style.display = 'block';
     _displayCount = 50;
-    renderTable();
+    setView(_viewMode);
   } catch (err) {
     document.getElementById('loading').innerHTML = '<div class="empty-state"><div class="icon">&#x26A0;&#xFE0F;</div><h3>Failed to load</h3><p>' + err.message + '</p></div>';
   }
@@ -474,10 +543,102 @@ function getFiltered() {
     case 'volume': markets.sort((a, b) => b.volume - a.volume); break;
     case 'price_change': markets.sort((a, b) => Math.abs(b.price_change_24h || 0) - Math.abs(a.price_change_24h || 0)); break;
     case 'newest': markets.sort((a, b) => (a.days_until_expiry == null ? 999 : a.days_until_expiry) - (b.days_until_expiry == null ? 999 : b.days_until_expiry)); break;
-    case 'whale_count':
-    default: markets.sort((a, b) => b.whale_count - a.whale_count || b.volume - a.volume); break;
+    case 'edge_score': markets.sort((a, b) => (b.edge_score || 0) - (a.edge_score || 0)); break;
+    case 'whale_count': markets.sort((a, b) => b.whale_count - a.whale_count || b.volume - a.volume); break;
+    default: markets.sort((a, b) => (b.edge_score || 0) - (a.edge_score || 0)); break;
   }
   return markets;
+}
+
+// ── View toggle ──
+var _viewMode = localStorage.getItem('hfx_screener_view') || 'cards';
+function setView(mode) {
+  _viewMode = mode;
+  localStorage.setItem('hfx_screener_view', mode);
+  document.getElementById('viewCards').classList.toggle('active', mode === 'cards');
+  document.getElementById('viewTable').classList.toggle('active', mode === 'table');
+  document.getElementById('cards-view').style.display = mode === 'cards' ? '' : 'none';
+  document.getElementById('table-view').style.display = mode === 'table' ? '' : 'none';
+  if (mode === 'cards') renderCards();
+  else renderTable();
+}
+
+function escH(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function renderCards() {
+  var filtered = getFiltered();
+  var showing = filtered.slice(0, _displayCount);
+  var grid = document.getElementById('cards-view');
+  var countEl = document.getElementById('results-count');
+  var emptyState = document.getElementById('empty-state');
+  var loadMoreWrap = document.getElementById('load-more-wrap');
+
+  countEl.textContent = filtered.length + ' market' + (filtered.length !== 1 ? 's' : '') + ' found';
+
+  if (!showing.length) {
+    grid.innerHTML = '';
+    emptyState.style.display = 'block';
+    loadMoreWrap.style.display = 'none';
+    return;
+  }
+  emptyState.style.display = 'none';
+  loadMoreWrap.style.display = filtered.length > _displayCount ? 'block' : 'none';
+
+  grid.innerHTML = showing.map(function(m) {
+    var edge = m.edge_score || 0;
+    var edgeClass = edge >= 70 ? 'high' : edge >= 40 ? 'mid' : 'low';
+    var highEdge = edge >= 70 ? ' high-edge' : '';
+    var catEmoji = {crypto:'\uD83D\uDCB0',sports:'\u26BD',politics:'\uD83C\uDFDB',entertainment:'\uD83C\uDFAC',tech:'\uD83D\uDCBB',other:'\uD83D\uDCCA'}[m.category] || '\uD83D\uDCCA';
+    var yesPct = m.yes_price != null ? Math.round(m.yes_price * 100) : null;
+
+    // Evidence bullets
+    var bullets = [];
+    if (m.whale_count > 0) {
+      var cap = m.total_whale_capital >= 1000000 ? '$' + (m.total_whale_capital/1000000).toFixed(1) + 'M' : m.total_whale_capital >= 1000 ? '$' + Math.round(m.total_whale_capital/1000) + 'K' : '$' + m.total_whale_capital;
+      bullets.push(m.whale_count + ' whale' + (m.whale_count>1?'s':'') + ' with ' + cap + ' positioned');
+    }
+    if (m.price_change_24h != null && Math.abs(m.price_change_24h) >= 1) {
+      bullets.push('Odds moved ' + (m.price_change_24h > 0 ? '+' : '') + Math.round(m.price_change_24h) + '% in 24h');
+    }
+    if (yesPct != null) bullets.push('Currently at ' + yesPct + '% YES' + (m.volume ? ' \u00B7 ' + fmtVol(m.volume) + ' volume' : ''));
+    if (m.days_until_expiry != null && m.days_until_expiry <= 7) {
+      bullets.push('Resolves in ' + (m.days_until_expiry === 0 ? 'hours' : m.days_until_expiry + ' day' + (m.days_until_expiry>1?'s':'')) + ' \u2014 imminent');
+    }
+
+    // ROI strip
+    var roiHtml = '';
+    if (m.trade) {
+      var t = m.trade;
+      roiHtml = '<div class="story-roi' + (t.side === 'NO' ? ' no-side' : '') + '">' +
+        '<div class="story-roi-item"><span class="story-roi-label">You pay</span><span class="story-roi-val cost">' + t.entry_cost + '&cent;</span></div>' +
+        '<span class="story-roi-arrow">&rarr;</span>' +
+        '<div class="story-roi-item"><span class="story-roi-label">You win</span><span class="story-roi-val profit">+' + t.potential_profit + '&cent;</span></div>' +
+        '<span style="color:var(--muted)">|</span>' +
+        '<div class="story-roi-item"><span class="story-roi-label">ROI</span><span class="story-roi-val pct">+' + t.roi_pct + '%</span></div>' +
+      '</div>';
+    }
+
+    var safeUrl = m.url && m.url.startsWith('https://polymarket.com') ? m.url : (m.slug ? 'https://polymarket.com/event/' + m.slug : 'https://polymarket.com');
+    var expiryStr = m.days_until_expiry != null ? (m.days_until_expiry === 0 ? 'Today' : m.days_until_expiry + 'd left') : '';
+
+    return '<div class="story-card' + highEdge + '">' +
+      '<div class="story-card-top">' +
+        '<div class="story-card-meta">' +
+          '<span class="cat-pill cat-' + m.category + '">' + catEmoji + ' ' + (m.category || 'other').toUpperCase() + '</span>' +
+          (expiryStr ? '<span class="story-expiry">' + expiryStr + '</span>' : '') +
+        '</div>' +
+        '<div class="edge-badge ' + edgeClass + '">' + edge + '</div>' +
+      '</div>' +
+      '<h3>' + regionFlag(m.question) + ' ' + escH(m.question) + '</h3>' +
+      (m.ai_hook ? '<div class="story-hook">' + escH(m.ai_hook) + '</div>' : '') +
+      '<ul class="story-evidence">' + bullets.map(function(b) { return '<li>' + escH(b) + '</li>'; }).join('') + '</ul>' +
+      roiHtml +
+      '<div class="story-card-footer">' +
+        '<a href="' + safeUrl + '" target="_blank" rel="noopener" class="story-trade-btn">Trade on Polymarket &rarr;</a>' +
+        (yesPct != null ? '<span style="font-family:var(--mono);font-size:18px;font-weight:800;color:' + (yesPct >= 70 ? 'var(--green)' : yesPct <= 30 ? 'var(--red)' : 'var(--text)') + '">' + yesPct + '%</span>' : '') +
+      '</div>' +
+    '</div>';
+  }).join('');
 }
 
 function renderTable() {
@@ -529,31 +690,31 @@ function setCat(cat) {
   _catFilter = cat;
   _displayCount = 50;
   document.querySelectorAll('[data-cat]').forEach(el => el.classList.toggle('active', el.getAttribute('data-cat') === cat));
-  renderTable();
+  renderView();
 }
 
 function setWhaleFilter(min) {
   _whaleMin = min;
   _displayCount = 50;
   document.querySelectorAll('[data-whales]').forEach(el => el.classList.toggle('active', parseInt(el.getAttribute('data-whales')) === min));
-  renderTable();
+  renderView();
 }
 
 function setVolFilter(min) {
   _volMin = min;
   _displayCount = 50;
   document.querySelectorAll('[data-vol]').forEach(el => el.classList.toggle('active', parseInt(el.getAttribute('data-vol')) === min));
-  renderTable();
+  renderView();
 }
 
 function setSort(s) {
   _sortBy = s;
-  renderTable();
+  renderView();
 }
 
 function loadMore() {
   _displayCount += 50;
-  renderTable();
+  renderView();
 }
 
 // Init
