@@ -20018,6 +20018,104 @@ app.get('/api/ai-trader', async (req, res) => {
   }
 });
 
+// GET /api/ai-trader/history — past AI brief calls with open/closed status + P&L
+app.get('/api/ai-trader/history', async (req, res) => {
+  try {
+    if (!pool) return res.json({ stats: { total_calls: 0, resolved: 0, wins: 0, losses: 0, win_rate: 0, total_wagered_pts: 0, total_pnl_pts: 0 }, calls: [], has_more: false });
+
+    const status = req.query.status || 'all'; // all, open, closed
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(50, parseInt(req.query.limit) || 20);
+    const offset = (page - 1) * limit;
+
+    // Build WHERE clause
+    let where = "source = 'ai_brief'";
+    if (status === 'open') where += ' AND resolved = false';
+    else if (status === 'closed') where += ' AND resolved = true';
+
+    // Get total stats (unfiltered by pagination)
+    const statsRows = await dbQuery(
+      `SELECT
+        COUNT(*) as total_calls,
+        COUNT(*) FILTER (WHERE resolved = true) as resolved,
+        COUNT(*) FILTER (WHERE outcome = 'correct') as wins,
+        COUNT(*) FILTER (WHERE outcome = 'incorrect') as losses
+       FROM prediction_log WHERE source = 'ai_brief'`
+    );
+    const s = statsRows[0] || {};
+    const totalCalls = parseInt(s.total_calls) || 0;
+    const resolved = parseInt(s.resolved) || 0;
+    const wins = parseInt(s.wins) || 0;
+    const losses = parseInt(s.losses) || 0;
+
+    // Get AI trader positions for flex points data
+    let aiPositions = [];
+    try {
+      aiPositions = await dbQuery(
+        `SELECT p.market_id, p.side, p.amount, p.potential_payout, p.won, p.pnl, m.question
+         FROM positions p JOIN markets m ON p.market_id = m.id
+         WHERE p.user_id = $1`,
+        [AI_TRADER_ID]
+      );
+    } catch (e) { /* AI trader may not have positions yet */ }
+
+    const totalWagered = aiPositions.reduce((sum, p) => sum + (parseInt(p.amount) || 0), 0);
+    const totalPnl = aiPositions.filter(p => p.won !== null).reduce((sum, p) => sum + (parseFloat(p.pnl) || 0), 0);
+
+    // Get paginated calls
+    const countRow = await dbQuery(`SELECT COUNT(*) as cnt FROM prediction_log WHERE ${where}`);
+    const totalFiltered = parseInt(countRow[0]?.cnt) || 0;
+
+    const calls = await dbQuery(
+      `SELECT * FROM prediction_log WHERE ${where} ORDER BY detected_at DESC LIMIT $1 OFFSET $2`,
+      [limit, offset]
+    );
+
+    // Match calls to AI trader positions by market question similarity
+    const enriched = (calls || []).map(c => {
+      const q = (c.market_question || '').toLowerCase();
+      const match = aiPositions.find(p => {
+        const pq = (p.question || '').toLowerCase();
+        if (pq === q) return true;
+        if (q.length > 20 && pq.length > 20 && q.substring(0, 25) === pq.substring(0, 25)) return true;
+        return false;
+      });
+      return {
+        id: c.id,
+        market_question: c.market_question,
+        predicted_side: c.predicted_side,
+        predicted_confidence: c.predicted_confidence,
+        market_price_at_prediction: parseFloat(c.market_price_at_prediction) || 0,
+        detected_at: c.detected_at,
+        resolved: c.resolved || false,
+        outcome: c.outcome,
+        pnl_if_followed: parseFloat(c.pnl_if_followed) || 0,
+        resolved_at: c.resolved_at,
+        flex_pts_staked: match ? Math.round((parseInt(match.amount) || 0) / 100) : null,
+        flex_pnl: match && match.won !== null ? Math.round((parseFloat(match.pnl) || 0) / 100) : null,
+        won: match ? match.won : null
+      };
+    });
+
+    res.json({
+      stats: {
+        total_calls: totalCalls,
+        resolved,
+        wins,
+        losses,
+        win_rate: resolved > 0 ? Math.round(wins / resolved * 100) : 0,
+        total_wagered_pts: Math.round(totalWagered / 100),
+        total_pnl_pts: Math.round(totalPnl / 100)
+      },
+      calls: enriched,
+      has_more: offset + limit < totalFiltered
+    });
+  } catch (err) {
+    console.error('[ai-trader/history]', err.message);
+    res.status(500).json({ error: 'Failed to load history' });
+  }
+});
+
 // ════════════════════════════════════════════════════════════
 // CRYSTAL BALL — prediction engine from cached data
 // ════════════════════════════════════════════════════════════

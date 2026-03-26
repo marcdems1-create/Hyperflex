@@ -97,6 +97,23 @@ body { background: var(--ink); color: var(--text); font-family: var(--sans); min
   .call-roi { gap: 10px; padding: 10px 12px; }
   .sub-form input, .sub-form button { min-height: 44px; }
 }
+/* Past AI Trade Calls */
+.past-stats-row { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.past-stat { flex: 1; min-width: 100px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; text-align: center; }
+.past-stat-val { font-family: var(--mono); font-size: 22px; font-weight: 700; color: var(--text); }
+.past-stat-label { font-family: var(--mono); font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
+.past-filter-pills { display: flex; gap: 6px; margin-bottom: 16px; }
+.past-pill { font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border); background: transparent; color: var(--text-soft); cursor: pointer; transition: all 0.2s; }
+.past-pill:hover { border-color: var(--gold); color: var(--text); }
+.past-pill.active { background: var(--gold); color: var(--ink); border-color: var(--gold); }
+.past-badge { display: inline-block; font-family: var(--mono); font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px; }
+.past-badge.open { background: rgba(34,197,94,0.1); color: var(--green); border: 1px solid rgba(34,197,94,0.25); }
+.past-badge.won { background: rgba(34,197,94,0.15); color: var(--green); }
+.past-badge.lost { background: rgba(239,68,68,0.15); color: var(--red); }
+.past-badge.pending { background: rgba(201,146,13,0.1); color: var(--gold); border: 1px solid rgba(201,146,13,0.25); }
+.past-load-more { display: block; width: 100%; padding: 12px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; color: var(--gold); font-family: var(--mono); font-size: 12px; font-weight: 700; cursor: pointer; text-align: center; transition: border-color 0.2s; }
+.past-load-more:hover { border-color: var(--gold); }
+
 @media (max-width: 480px) {
   .brief-container { padding: 20px 12px 60px; }
   .brief-title { font-size: 22px; }
@@ -149,6 +166,24 @@ body { background: var(--ink); color: var(--text); font-family: var(--sans); min
     <div class="section-title"><span class="icon">&#x1F3AF;</span> AI Trade Calls <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--green);background:rgba(34,197,94,0.12);padding:3px 8px;border-radius:4px;border:1px solid rgba(34,197,94,0.25);margin-left:8px;vertical-align:middle">TRACKED &amp; GRADED</span></div>
     <div style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:14px;line-height:1.6">Every call below is logged, bet with Flex Points, and auto-graded when markets resolve. The AI's track record is public at <a href="/accuracy" style="color:var(--gold)">/accuracy</a>.</div>
     <div id="callsContainer"></div>
+  </div>
+
+  <!-- Past AI Trade Calls -->
+  <div id="pastCallsSection" style="margin-bottom:32px">
+    <div class="section-title"><span class="icon">&#x1F4CA;</span> Past AI Trade Calls <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--gold);background:rgba(201,146,13,0.12);padding:3px 8px;border-radius:4px;border:1px solid rgba(201,146,13,0.25);margin-left:8px;vertical-align:middle">TRACK RECORD</span></div>
+    <div class="past-stats-row" id="pastStatsRow">
+      <div class="past-stat"><div class="past-stat-val" id="psCalls">--</div><div class="past-stat-label">Calls Made</div></div>
+      <div class="past-stat"><div class="past-stat-val" id="psWinRate">--</div><div class="past-stat-label">Win Rate</div></div>
+      <div class="past-stat"><div class="past-stat-val" id="psWagered">--</div><div class="past-stat-label">Pts Wagered</div></div>
+      <div class="past-stat"><div class="past-stat-val" id="psPnl">--</div><div class="past-stat-label">P&amp;L (pts)</div></div>
+    </div>
+    <div class="past-filter-pills">
+      <button class="past-pill active" data-status="all" onclick="filterPastCalls('all')">All</button>
+      <button class="past-pill" data-status="open" onclick="filterPastCalls('open')">Open</button>
+      <button class="past-pill" data-status="closed" onclick="filterPastCalls('closed')">Closed</button>
+    </div>
+    <div id="pastCallsContainer"><div style="font-family:var(--mono);font-size:12px;color:var(--dim);padding:20px;text-align:center">Loading past calls...</div></div>
+    <button class="past-load-more" id="pastLoadMore" style="display:none" onclick="loadMorePastCalls()">Load more</button>
   </div>
 
   <!-- Cross-Asset Alerts -->
@@ -376,6 +411,123 @@ var _briefLoaded = false;
 })();
 // Refresh every 10 min once loaded
 setInterval(loadBrief, 10 * 60 * 1000);
+
+// ── Past AI Trade Calls ──
+var _pastCallsPage = 1;
+var _pastCallsStatus = 'all';
+var _pastCallsHasMore = false;
+
+function escAttr(s) { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;'); }
+
+function formatDate(d) {
+  if (!d) return '';
+  var dt = new Date(d);
+  return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function confLabel(n) {
+  if (n >= 80) return 'HIGH';
+  if (n >= 60) return 'MEDIUM';
+  return 'LOW';
+}
+
+async function loadPastCalls(status, page, append) {
+  try {
+    var res = await fetch('/api/ai-trader/history?status=' + status + '&page=' + page + '&limit=20');
+    if (!res.ok) throw new Error('API error');
+    var d = await res.json();
+
+    // Stats (only update on first load, not append)
+    if (!append) {
+      var st = d.stats || {};
+      document.getElementById('psCalls').textContent = st.total_calls || 0;
+      document.getElementById('psWinRate').textContent = st.resolved > 0 ? st.win_rate + '%' : '--';
+      document.getElementById('psWinRate').style.color = st.win_rate >= 50 ? 'var(--green)' : st.resolved > 0 ? 'var(--red)' : 'var(--text)';
+      document.getElementById('psWagered').textContent = st.total_wagered_pts || 0;
+      var pnl = st.total_pnl_pts || 0;
+      document.getElementById('psPnl').textContent = (pnl >= 0 ? '+' : '') + pnl;
+      document.getElementById('psPnl').style.color = pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    }
+
+    // Render cards
+    var html = (d.calls || []).map(function(c) {
+      var side = (c.predicted_side || 'YES').toUpperCase();
+      var sideColor = side === 'YES' ? 'var(--green)' : 'var(--red)';
+      var conf = confLabel(c.predicted_confidence || 65);
+      var entryPrice = Math.round((c.market_price_at_prediction || 0.5) * 100);
+      var pts = c.flex_pts_staked || Math.round(50 * (conf === 'HIGH' ? 2 : conf === 'LOW' ? 0.5 : 1));
+      var dateStr = formatDate(c.detected_at);
+
+      // Status badge
+      var badge = '';
+      if (!c.resolved) {
+        badge = '<span class="past-badge open">OPEN</span>';
+      } else if (c.outcome === 'correct') {
+        badge = '<span class="past-badge won">WON</span>';
+      } else if (c.outcome === 'incorrect') {
+        badge = '<span class="past-badge lost">LOST</span>';
+      } else {
+        badge = '<span class="past-badge pending">' + escHtml(c.outcome || 'PENDING') + '</span>';
+      }
+
+      // P&L line
+      var pnlHtml = '';
+      if (c.resolved && c.outcome === 'correct') {
+        var pnlVal = c.flex_pnl != null ? c.flex_pnl : Math.round((c.pnl_if_followed || 0) * 100);
+        pnlHtml = '<span style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--green)">+' + Math.abs(pnlVal) + ' pts</span>';
+      } else if (c.resolved && c.outcome === 'incorrect') {
+        pnlHtml = '<span style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--red)">-' + pts + ' pts</span>';
+      }
+
+      return '<div class="call-card">' +
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">' +
+          '<div class="call-market" style="margin-bottom:0;flex:1;font-size:13px">' + escHtml(c.market_question || '') + '</div>' +
+          '<div style="display:flex;align-items:center;gap:8px;margin-left:12px;flex-shrink:0">' + badge + '</div>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px">' +
+          '<span style="font-family:var(--mono);font-size:12px;font-weight:700;color:' + sideColor + '">BUY ' + side + '</span>' +
+          '<span style="font-family:var(--mono);font-size:11px;color:var(--dim)">@ ' + entryPrice + '\u00A2</span>' +
+          '<span style="font-family:var(--mono);font-size:11px;color:var(--gold);font-weight:700">' + pts + ' pts</span>' +
+          '<span class="call-conf ' + conf + '">' + conf + '</span>' +
+          (pnlHtml ? '<span style="margin-left:auto">' + pnlHtml + '</span>' : '') +
+        '</div>' +
+        '<div style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:6px">' + dateStr + (c.resolved_at ? ' \u2192 Closed ' + formatDate(c.resolved_at) : '') + '</div>' +
+      '</div>';
+    }).join('');
+
+    if (!append) {
+      if (!html) html = '<div style="font-family:var(--mono);font-size:12px;color:var(--dim);padding:20px;text-align:center">No past calls yet. AI Brief calls will appear here as they are generated.</div>';
+      document.getElementById('pastCallsContainer').innerHTML = html;
+    } else {
+      document.getElementById('pastCallsContainer').insertAdjacentHTML('beforeend', html);
+    }
+
+    _pastCallsHasMore = d.has_more;
+    document.getElementById('pastLoadMore').style.display = d.has_more ? '' : 'none';
+  } catch (err) {
+    console.error('[past-calls]', err);
+    if (!append) {
+      document.getElementById('pastCallsContainer').innerHTML = '<div style="font-family:var(--mono);font-size:12px;color:var(--dim);padding:20px;text-align:center">Past calls loading...</div>';
+    }
+  }
+}
+
+function filterPastCalls(status) {
+  _pastCallsStatus = status;
+  _pastCallsPage = 1;
+  document.querySelectorAll('.past-pill').forEach(function(p) {
+    p.classList.toggle('active', p.getAttribute('data-status') === status);
+  });
+  loadPastCalls(status, 1, false);
+}
+
+function loadMorePastCalls() {
+  _pastCallsPage++;
+  loadPastCalls(_pastCallsStatus, _pastCallsPage, true);
+}
+
+// Load past calls after brief loads (or immediately if brief already loaded)
+setTimeout(function() { loadPastCalls('all', 1, false); }, _briefLoaded ? 0 : 2000);
 </script>
 </body>
 </html>
