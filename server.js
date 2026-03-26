@@ -20108,9 +20108,9 @@ app.get('/api/ai-trader/history', async (req, res) => {
     const statsRows = await dbQuery(
       `SELECT
         COUNT(*) as total_calls,
-        COUNT(*) FILTER (WHERE resolved = true) as resolved,
-        COUNT(*) FILTER (WHERE outcome = 'correct') as wins,
-        COUNT(*) FILTER (WHERE outcome = 'incorrect') as losses
+        SUM(CASE WHEN resolved = true THEN 1 ELSE 0 END) as resolved,
+        SUM(CASE WHEN outcome = 'correct' THEN 1 ELSE 0 END) as wins,
+        SUM(CASE WHEN outcome = 'incorrect' THEN 1 ELSE 0 END) as losses
        FROM prediction_log WHERE source = 'ai_brief'`
     );
     const s = statsRows[0] || {};
