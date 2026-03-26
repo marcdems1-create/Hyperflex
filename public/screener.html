@@ -520,7 +520,10 @@ function renderCards() {
     var roiHtml = '';
     if (m.trade) {
       var t = m.trade;
-      roiHtml = '<div class="story-roi' + (t.side === 'NO' ? ' no-side' : '') + '">' +
+      var sideLabel = t.side === 'YES' ? 'BUY YES' : 'BUY NO';
+      var sideColor = t.side === 'YES' ? '#22c55e' : '#ef4444';
+      roiHtml = '<div style="font-family:var(--mono);font-size:12px;font-weight:700;color:' + sideColor + ';margin-bottom:6px;letter-spacing:0.5px">' + sideLabel + ' at ' + t.entry_cost + '&cent;</div>' +
+      '<div class="story-roi' + (t.side === 'NO' ? ' no-side' : '') + '">' +
         '<div class="story-roi-item"><span class="story-roi-label">You pay</span><span class="story-roi-val cost">' + t.entry_cost + '&cent;</span></div>' +
         '<span class="story-roi-arrow">&rarr;</span>' +
         '<div class="story-roi-item"><span class="story-roi-label">You win</span><span class="story-roi-val profit">+' + t.potential_profit + '&cent;</span></div>' +
@@ -591,7 +594,10 @@ function renderLaneCard(m, signalHtml) {
   var safeUrl = m.url && m.url.startsWith('https://polymarket.com') ? m.url : (m.slug ? 'https://polymarket.com/event/' + m.slug : 'https://polymarket.com');
   var yesPct = m.yes_price != null ? Math.round(m.yes_price * 100) : null;
   var roiLine = '';
-  if (m.trade) roiLine = '<div class="lane-card-roi">Pay ' + m.trade.entry_cost + '\u00A2 \u2192 Win +' + m.trade.potential_profit + '\u00A2 \u2192 <strong>+' + m.trade.roi_pct + '% ROI</strong></div>';
+  if (m.trade) {
+    var sc = m.trade.side === 'YES' ? '#22c55e' : '#ef4444';
+    roiLine = '<div class="lane-card-roi"><span style="color:' + sc + ';font-weight:700">' + (m.trade.side === 'YES' ? 'BUY YES' : 'BUY NO') + '</span> \u2014 Pay ' + m.trade.entry_cost + '\u00A2 \u2192 Win +' + m.trade.potential_profit + '\u00A2 \u2192 <strong>+' + m.trade.roi_pct + '% ROI</strong></div>';
+  }
   return '<div class="lane-card" onclick="window.open(\'' + safeUrl + '\',\'_blank\')">' +
     '<div class="lane-card-q">' + regionFlag(m.question) + ' ' + escH(m.question) + '</div>' +
     '<div class="lane-card-meta">' + (yesPct != null ? yesPct + '% YES' : '') + (m.volume ? ' \u00B7 ' + fmtVol(m.volume) : '') + '</div>' +
