@@ -671,8 +671,10 @@ function renderLanes() {
     // Fallback: show most contested markets (close to 50%) as "ones to watch"
     var contested = all.filter(function(m) { return m.yes_price != null && m.yes_price >= 0.3 && m.yes_price <= 0.7 && m.whale_count >= 1; }).sort(function(a,b) { return (b.whale_count||0) - (a.whale_count||0) || (b.volume||0) - (a.volume||0); }).slice(0, 6);
     if (contested.length) {
-      document.querySelector('#lane-movers').closest('.lane-section').querySelector('.lane-title').textContent = 'Most Contested';
-      document.querySelector('#lane-movers').closest('.lane-section').querySelector('.lane-sub').textContent = 'Close odds with whale activity';
+      try {
+        document.querySelector('#lane-movers').closest('.signal-lane').querySelector('.lane-title').textContent = 'Most Contested';
+        document.querySelector('#lane-movers').closest('.signal-lane').querySelector('.lane-sub').textContent = 'Close odds with whale activity';
+      } catch(e) {}
       mEl.innerHTML = contested.map(function(m) {
         var pct = Math.round(m.yes_price*100);
         return renderLaneCard(m, '<div class="lane-card-signal gold">' + pct + '% YES \u2014 ' + (m.whale_count||0) + ' whale' + (m.whale_count>1?'s':'') + ' watching</div>');
