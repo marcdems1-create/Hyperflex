@@ -23347,60 +23347,59 @@ async function generateAndPostDailyTweet(draftOnly = false) {
     throw new Error('Brief narrative empty — skipping tweet');
   }
 
-  // Build context: pick the SINGLE most interesting market + whale data
-  let bestMarket = null;
-  const calls = briefData.ai_calls || [];
-  if (calls.length > 0) {
-    // Pick the call with highest ROI or most interesting thesis
-    bestMarket = calls[0];
-    for (const c of calls) {
-      if (c.trade && bestMarket.trade && c.trade.roi_pct > bestMarket.trade.roi_pct) bestMarket = c;
-    }
+  // Build whale-first context — find the biggest, most interesting whale move
+  const whalePositions = (_whaleWatchCache && _whaleWatchCache.data && _whaleWatchCache.data.whales) || [];
+  const flowData = _whaleFlowCache && _whaleFlowCache.data ? _whaleFlowCache.data : null;
+  const concentration = (flowData && flowData.concentration) || [];
+
+  // Top whale move by capital
+  let topMove = null;
+  if (concentration.length > 0) {
+    topMove = concentration[0]; // already sorted by whale_count
   }
 
-  let whaleMove = '';
-  try {
-    const whaleData = _whaleIndexCache && _whaleIndexCache.data ? _whaleIndexCache.data : null;
-    if (whaleData && whaleData.picks && whaleData.picks.length > 0) {
-      const topPick = whaleData.picks[0];
-      const cap = topPick.total_capital >= 1000000 ? '$' + (topPick.total_capital/1000000).toFixed(1) + 'M' : '$' + Math.round(topPick.total_capital/1000) + 'K';
-      whaleMove = `${topPick.whale_count} wallets just put ${cap} on "${topPick.market}" — ${topPick.consensus_pct}% ${topPick.consensus_side}`;
-    }
-  } catch(e) {}
-
-  // Calculate potential payout from best market
-  let payoutLine = '';
-  if (bestMarket && bestMarket.trade) {
-    const payout = Math.round((100 / bestMarket.trade.entry_cost) * 100);
-    if (payout > 150) payoutLine = `Potential payout: $${payout.toLocaleString()} on a $100 bet`;
+  // Find biggest single whale position for $ shock value
+  let biggestBet = null;
+  for (const p of whalePositions) {
+    if (!biggestBet || (p.size || 0) > (biggestBet.size || 0)) biggestBet = p;
   }
+
+  // Other notable moves (2nd and 3rd)
+  const otherMoves = concentration.slice(1, 4).map(c => {
+    const cap = c.total_capital >= 1000000 ? '$' + (c.total_capital/1000000).toFixed(1) + 'M' : '$' + Math.round(c.total_capital/1000) + 'K';
+    return `${c.whale_count} whales / ${cap} on "${c.market}" (${c.consensus_pct}% ${c.consensus_side})`;
+  });
+
+  // Build the data block for Claude
+  const bigCap = biggestBet ? (biggestBet.size >= 1000000 ? '$' + (biggestBet.size/1000000).toFixed(1) + 'M' : '$' + Math.round(biggestBet.size/1000) + 'K') : '';
+  const topCap = topMove ? (topMove.total_capital >= 1000000 ? '$' + (topMove.total_capital/1000000).toFixed(1) + 'M' : '$' + Math.round(topMove.total_capital/1000) + 'K') : '';
 
   const anthropic = new Anthropic();
   const tweetRes = await anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 280,
-    system: `You write viral prediction market tweets like @PolymarketStory. Conversational, provocative, slightly unhinged. You pick ONE market and tell ONE story.
+    system: `You write whale alert tweets for a prediction market intelligence account. You sound like a sharp trader sharing alpha with friends — NOT a newsletter, NOT an AI.
 
-STYLE:
-- Sound like a sharp trader talking to friends, not a newsletter
-- Lead with the most shocking number or fact
-- Create tension — "someone is about to lose a LOT of money"
-- Use $ amounts always (e.g. "$2.3M riding on this")
-- Short punchy sentences. No filler words.
-- End with a hook — a question, a dare, or a cliffhanger
+YOUR JOB: Take the whale data below and turn it into a tweet that makes people CLICK. Lead with the biggest, most shocking whale bet.
+
+FORMULA THAT WORKS:
+"The biggest Polymarket whale just put $285K on NO for [market]. Here's what else they're betting on: [link]"
+"Someone just dropped $1.2M on YES for [market] at 34%. Either they know something, or they're about to learn an expensive lesson."
+"$440K says [team] wins. 7 whale wallets, 100% consensus. When was the last time whales were this unanimous?"
 
 HARD RULES:
-- NEVER use bullet points or lines starting with >
+- ALWAYS lead with a specific $ amount — the bigger the better
+- ALWAYS mention the market question or event specifically
+- Sound like a PERSON, not a brand. Conversational. Slightly provocative.
+- End with curiosity — make them want to click
 - NEVER use hashtags or emojis
-- NEVER use cashtags ($BTC, $ETH) — Twitter auto-links them
-- NEVER start with "Good morning" or "Today's"
-- MUST include at least one specific $ amount
-- MUST be under 240 characters total — do NOT go over, do NOT truncate
-- Pick ONE market. Tell ONE story. That's it.
-- Output ONLY the tweet text. No notes, no explanations, no markdown.`,
+- NEVER use cashtags ($BTC etc)
+- NEVER start with "Breaking" or "Alert" or "Good morning"
+- MUST be under 240 characters. Count carefully.
+- Output ONLY the tweet text. Nothing else.`,
     messages: [{
       role: 'user',
-      content: `Write one tweet about the most interesting story here. MUST be under 240 chars. Output ONLY the tweet text.\n\nMarket: ${bestMarket ? bestMarket.market + ' — ' + bestMarket.thesis : 'N/A'}\nFear & Greed: ${briefData.fear_greed?.score || 'N/A'}\nWhale move: ${whaleMove || 'None detected'}\nPayout: ${payoutLine || 'N/A'}\n\nBrief excerpt: ${briefData.narrative.substring(0, 400)}`
+      content: `Write one whale alert tweet. MUST be under 240 chars. Output ONLY the tweet.\n\nBiggest single bet: ${biggestBet ? bigCap + ' on ' + (biggestBet.side||'YES') + ' for "' + biggestBet.market + '"' : 'N/A'}\nTop concentration: ${topMove ? topMove.whale_count + ' whales / ' + topCap + ' on "' + topMove.market + '" (' + topMove.consensus_pct + '% ' + topMove.consensus_side + ')' : 'N/A'}\nOther moves:\n${otherMoves.join('\n') || 'None'}\nFear & Greed: ${briefData.fear_greed?.score || 'N/A'} (${briefData.fear_greed?.label || ''})`
     }]
   });
 
@@ -23425,14 +23424,15 @@ HARD RULES:
       tweet = lastSpace > 100 ? cut.substring(0, lastSpace) : cut;
     }
   }
-  const tweetWithLink = tweet + '\n\nhyperflex.network/brief';
+  const link = '\n\nhyperflex.network/data';
+  const tweetWithLink = tweet + link;
 
   if (tweetWithLink.length > 280) {
-    const maxBody = 280 - '\n\nhyperflex.network/brief'.length;
+    const maxBody = 280 - link.length;
     let cut = tweet.substring(0, maxBody);
     const lastSpace = cut.lastIndexOf(' ');
     if (lastSpace > 80) cut = cut.substring(0, lastSpace);
-    const finalTweet = cut + '\n\nhyperflex.network/brief';
+    const finalTweet = cut + link;
     if (draftOnly) return { text: finalTweet, posted: false };
     return { text: finalTweet, posted: true, ...(await postTweet(finalTweet)) };
   }
