@@ -16798,7 +16798,7 @@ app.get('/api/markets/search', async (req, res) => {
     // Key insight: Kalshi uses generic titles ("Presidential Election") while Polymarket
     // uses specific names ("Will Trump win?"). Expansions must bridge both naming styles.
     const synonyms = {
-      trump: ['trump', 'donald trump', 'president trump', 'presidential', 'republican', 'gop', 'white house', '2028 election', 'maga', 'republican nominee'],
+      trump: ['trump', 'donald trump', 'president trump', 'maga'],
       biden: ['biden', 'joe biden', 'democrat', 'democratic'],
       bitcoin: ['bitcoin', 'btc', 'crypto', 'cryptocurrency', 'digital currency'],
       ethereum: ['ethereum', 'eth', 'ether', 'defi'],
@@ -16809,10 +16809,10 @@ app.get('/api/markets/search', async (req, res) => {
       fed: ['fed', 'federal reserve', 'interest rate', 'rate cut', 'rate hike', 'fomc', 'monetary policy', 'powell'],
       recession: ['recession', 'gdp', 'economic contraction', 'downturn', 'unemployment'],
       ai: ['ai', 'artificial intelligence', 'openai', 'chatgpt', 'deepseek', 'llm', 'machine learning'],
-      war: ['war', 'conflict', 'invasion', 'military', 'strike', 'troops', 'ceasefire'],
+      war: ['war', 'conflict', 'invasion', 'military', 'troops', 'ceasefire'],
       china: ['china', 'chinese', 'xi jinping', 'beijing', 'taiwan', 'prc', 'tariff'],
       russia: ['russia', 'russian', 'putin', 'ukraine', 'moscow', 'kremlin'],
-      iran: ['iran', 'iranian', 'tehran', 'hormuz', 'strike', 'nuclear'],
+      iran: ['iran', 'iranian', 'tehran', 'hormuz'],
       pope: ['pope', 'papal', 'vatican', 'pontiff', 'catholic'],
       nba: ['nba', 'basketball', 'finals', 'playoff'],
       ufc: ['ufc', 'mma', 'fighting', 'fight night'],
@@ -16820,7 +16820,7 @@ app.get('/api/markets/search', async (req, res) => {
       impeach: ['impeach', 'impeachment', 'impeached', 'removed from office', 'conviction', '25th amendment'],
       tariff: ['tariff', 'tariffs', 'trade war', 'import duty', 'customs', 'trade policy'],
       rate: ['rate', 'interest rate', 'rate cut', 'rate hike', 'fed rate', 'fomc'],
-      finance: ['finance', 'financial', 'stock', 'market', 'economy', 'economic', 'gdp', 'inflation', 'fed'],
+      finance: ['finance', 'financial', 'stock', 'economy', 'economic', 'gdp'],
     };
     const qWords = q.split(/\s+/).filter(w => w.length >= 2);
     // Expand query with synonyms
