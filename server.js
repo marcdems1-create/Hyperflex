@@ -16983,8 +16983,8 @@ app.get('/api/markets/search', async (req, res) => {
     if (seriesMatch) {
       try {
         const sRes = await fetchWithTimeout(
-          `https://api.elections.kalshi.com/trade-api/v2/events?limit=5&with_nested_markets=true&series_ticker=${seriesMatch}`,
-          { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }, 8000
+          `https://api.elections.kalshi.com/trade-api/v2/events?limit=3&with_nested_markets=true&series_ticker=${seriesMatch}`,
+          { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }, 15000
         );
         if (sRes.ok) {
           // Read as text first to handle control characters in Kalshi JSON
