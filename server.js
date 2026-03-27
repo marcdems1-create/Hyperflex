@@ -16836,6 +16836,8 @@ app.get('/api/markets/search', async (req, res) => {
       const t = (text || '').toLowerCase();
       // Prefer word boundary match first
       if (qWordBoundaryRe.test(t)) return true;
+      // Substring match for partial typing (e.g. "ira" matches "iran")
+      if (q.length >= 3 && t.includes(q)) return true;
       // Multi-word: all words must appear
       if (qWords.length > 1 && qWords.every(w => t.includes(w))) return true;
       // Synonym word boundary match
