@@ -23890,15 +23890,29 @@ app.get('/api/accuracy/stats', async (req, res) => {
     for (let i = 29; i >= 0; i--) {
       const d = new Date(); d.setDate(d.getDate() - i);
       const dateStr = d.toISOString().slice(0, 10);
-      const dayPreds = resolved.filter(r => (r.detected_at || '').toString().slice(0, 10) === dateStr);
+      const dayPreds = resolved.filter(r => {
+        // Handle both Date objects and ISO strings from DB
+        const dt = r.detected_at;
+        const predDate = dt instanceof Date ? dt.toISOString().slice(0, 10)
+          : typeof dt === 'string' ? dt.slice(0, 10)
+          : '';
+        return predDate === dateStr;
+      });
       const dayCorrect = dayPreds.filter(r => r.outcome === 'correct').length;
-      timeline.push({ date: dateStr, predictions: dayPreds.length, correct: dayCorrect, accuracy: dayPreds.length > 0 ? Math.round(dayCorrect / dayPreds.length * 100) : 0 });
+      timeline.push({ date: dateStr, predictions: dayPreds.length, correct: dayCorrect, accuracy: dayPreds.length > 0 ? Math.round(dayCorrect / dayPreds.length * 100) : null });
     }
 
-    // Simulated P&L
+    // Simulated P&L — if pnl_if_followed not populated, calculate from outcome
     let totalPnl = 0;
     for (const r of resolved) {
-      totalPnl += parseFloat(r.pnl_if_followed || 0);
+      const pnl = parseFloat(r.pnl_if_followed);
+      if (!isNaN(pnl) && pnl !== 0) {
+        totalPnl += pnl;
+      } else {
+        // Fallback: $100 bet, win = +$100 * (1/price - 1), lose = -$100
+        const price = parseFloat(r.market_price_at_prediction) || 0.5;
+        totalPnl += r.outcome === 'correct' ? Math.round(100 * (1 / price - 1)) : -100;
+      }
     }
 
     const stats = {

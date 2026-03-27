@@ -402,48 +402,52 @@ async function loadStats() {
   // Hero stat cards
   const acc = _stats.overall.accuracy;
   const graded = _stats.overall.total;
-  const pending = (_stats.timeline || []).reduce(function(s,t){return s+t.predictions},0) - graded;
+  const correct = _stats.overall.correct;
   const accEl = document.getElementById('stat-accuracy');
-  if (graded < 10) {
-    // Not enough graded data — show "collecting" state
-    accEl.textContent = graded > 0 ? acc + '%' : '--';
-    accEl.style.color = 'var(--gold)';
-    document.getElementById('stat-accuracy-sub').textContent = graded + ' graded' + (pending > 0 ? ' · ' + pending + ' pending' : '') + ' — early data';
-  } else {
+
+  // Always show accuracy if we have graded data — be honest
+  if (graded > 0) {
     accEl.textContent = acc + '%';
     accEl.className = 'stat-value ' + accColor(acc);
     accEl.style.color = '';
-    document.getElementById('stat-accuracy-sub').textContent = _stats.overall.correct + ' correct / ' + graded + ' graded';
+    document.getElementById('stat-accuracy-sub').textContent = correct + ' correct / ' + graded + ' graded';
+  } else {
+    accEl.textContent = '--';
+    accEl.style.color = 'var(--muted)';
+    document.getElementById('stat-accuracy-sub').textContent = 'Collecting data';
   }
 
-  document.getElementById('stat-total').textContent = (graded + Math.max(0, pending)).toLocaleString();
+  // Total predictions — count all rows including unresolved
+  var totalTracked = (_stats.timeline || []).reduce(function(s,t){return s+(t.predictions||0)},0);
+  if (totalTracked < graded) totalTracked = graded; // timeline might undercount
+  document.getElementById('stat-total').textContent = totalTracked > 0 ? totalTracked.toLocaleString() : graded.toLocaleString();
   document.getElementById('stat-total').style.color = '';
   var avgConf = _stats.overall.avg_confidence;
-  document.getElementById('stat-total-sub').textContent = avgConf != null && avgConf > 0 ? 'Avg confidence: ' + avgConf + '%' : graded + ' graded · ' + Math.max(0, pending) + ' pending';
+  document.getElementById('stat-total-sub').textContent = avgConf != null && avgConf > 0 ? 'Avg confidence: ' + Math.round(avgConf) + '%' : graded + ' graded';
 
+  // Streak
   document.getElementById('stat-streak').textContent = _stats.streak.current;
   document.getElementById('stat-streak').style.color = '';
   document.getElementById('stat-streak').className = 'stat-value gold';
   document.getElementById('stat-streak-sub').textContent = 'correct in a row (best: ' + _stats.streak.best + ')';
 
+  // Simulated P&L
   const pnl = _stats.simulated_pnl || 0;
   const pnlEl = document.getElementById('stat-pnl');
-  if (graded < 10) {
-    pnlEl.textContent = 'Early';
-    pnlEl.style.color = 'var(--muted)';
-    document.getElementById('stat-pnl').nextElementSibling.nextElementSibling.textContent = 'Need more graded calls';
-  } else {
-    pnlEl.textContent = (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toLocaleString();
-    pnlEl.className = 'stat-value ' + (pnl >= 0 ? 'green' : 'red');
-    pnlEl.style.color = '';
-  }
+  pnlEl.textContent = (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toLocaleString();
+  pnlEl.className = 'stat-value ' + (pnl >= 0 ? 'green' : 'red');
+  pnlEl.style.color = '';
 
   try { document.getElementById('cta-accuracy').textContent = acc + '%'; } catch(e) {}
 
-  // Charts
-  drawAccuracyChart('accuracyChart', _stats.timeline || []);
-  renderBars(_stats.by_source || {});
-  drawDonutChart('donutChart', _stats.by_confidence || {});
+  // Charts — draw AFTER sections are visible (need offsetWidth > 0)
+  // Filter out null accuracy days for chart
+  var chartTimeline = (_stats.timeline || []).filter(function(t) { return t.accuracy !== null && t.accuracy !== undefined; });
+  setTimeout(function() {
+    drawAccuracyChart('accuracyChart', chartTimeline);
+    renderBars(_stats.by_source || {});
+    drawDonutChart('donutChart', _stats.by_confidence || {});
+  }, 50);
 }
 
 async function loadRecent() {
@@ -781,7 +785,11 @@ let _resizeTimer;
 window.addEventListener('resize', () => {
   clearTimeout(_resizeTimer);
   _resizeTimer = setTimeout(() => {
-    if (_stats && _stats.timeline) drawAccuracyChart('accuracyChart', _stats.timeline);
+    if (_stats) {
+      var ct = (_stats.timeline || []).filter(function(t) { return t.accuracy !== null && t.accuracy !== undefined; });
+      if (ct.length) drawAccuracyChart('accuracyChart', ct);
+      if (_stats.by_confidence) drawDonutChart('donutChart', _stats.by_confidence);
+    }
   }, 200);
 });
 
