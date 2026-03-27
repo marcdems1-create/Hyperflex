@@ -991,6 +991,10 @@ function switchWhalePlatform(platform) {
     if (capFilter) capFilter.style.display = 'none';
     var thead = document.getElementById('whaleTableHead');
     if (thead) thead.innerHTML = '<tr><th onclick="sortBy(\'trader_rank\')">Rank <span class="sort-arrow" id="sort-trader_rank"></span></th><th onclick="sortBy(\'trader\')">Trader <span class="sort-arrow" id="sort-trader"></span></th><th onclick="sortBy(\'market\')">Market <span class="sort-arrow" id="sort-market"></span></th><th onclick="sortBy(\'side\')">Side <span class="sort-arrow" id="sort-side"></span></th><th onclick="sortBy(\'size\')">Size ($) <span class="sort-arrow" id="sort-size"></span></th><th onclick="sortBy(\'current_price\')">Price <span class="sort-arrow" id="sort-current_price"></span></th><th>Link</th><th>Actions</th></tr>';
+    // Clear any error state from other tabs
+    var ls = document.getElementById('loadingState');
+    if (ls) { ls.style.display = 'none'; ls.innerHTML = ''; }
+    document.getElementById('tableWrap').style.display = '';
     if (_whaleData) { renderStats(); applyFilters(); }
     else loadData();
   } else {

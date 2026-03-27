@@ -16515,21 +16515,31 @@ app.get('/api/polymarket/positions/:address/enriched', async (req, res) => {
     // Get whale data for overlap matching
     const whalePositions = (_whaleWatchCache && _whaleWatchCache.data && _whaleWatchCache.data.whales) || [];
 
-    // Build market→whale map
-    const whaleMap = {}; // key: normalized question → { count, capital, yes_count, no_count, yes_capital, no_capital }
+    // Build market→whale map with hedge netting per trader
+    const _enrNetMap = {};
     whalePositions.forEach(w => {
       const q = (w.market || '').toLowerCase().trim();
-      if (!whaleMap[q]) whaleMap[q] = { count: 0, capital: 0, yes_count: 0, no_count: 0, yes_capital: 0, no_capital: 0, wallets: new Set() };
-      const wallet = (w.wallet || w.trader_address || '').toLowerCase();
-      if (whaleMap[q].wallets.has(wallet)) return; // dedupe same whale
-      whaleMap[q].wallets.add(wallet);
-      whaleMap[q].count++;
-      const cap = w.size || 0;
-      whaleMap[q].capital += cap;
+      if (!q) return;
+      const wallet = (w.wallet || w.trader_address || w.name || 'unknown').toLowerCase();
+      const nk = wallet + ':' + q;
+      if (!_enrNetMap[nk]) _enrNetMap[nk] = { yes_cap: 0, no_cap: 0, market: q, wallet };
       const s = (w.side || '').toUpperCase();
-      if (s === 'YES' || s === 'Y') { whaleMap[q].yes_count++; whaleMap[q].yes_capital += cap; }
-      else if (s === 'NO' || s === 'N') { whaleMap[q].no_count++; whaleMap[q].no_capital += cap; }
+      const cap = parseFloat(w.size || 0);
+      if (s === 'YES' || s === 'Y') _enrNetMap[nk].yes_cap += cap;
+      else if (s === 'NO' || s === 'N') _enrNetMap[nk].no_cap += cap;
     });
+    const whaleMap = {};
+    for (const n of Object.values(_enrNetMap)) {
+      const net = n.yes_cap - n.no_cap;
+      if (Math.abs(net) < 10) continue; // fully hedged
+      const side = net > 0 ? 'YES' : 'NO';
+      const size = Math.abs(net);
+      if (!whaleMap[n.market]) whaleMap[n.market] = { count: 0, capital: 0, yes_count: 0, no_count: 0, yes_capital: 0, no_capital: 0 };
+      whaleMap[n.market].count++;
+      whaleMap[n.market].capital += size;
+      if (side === 'YES') { whaleMap[n.market].yes_count++; whaleMap[n.market].yes_capital += size; }
+      else { whaleMap[n.market].no_count++; whaleMap[n.market].no_capital += size; }
+    }
 
     // Enrich each position with whale intel
     const enriched = (posData.positions || []).map(p => {
@@ -19698,12 +19708,24 @@ function computeFearGreed() {
   if (flowData && flowData.sentiment) {
     factors.whale_sentiment = flowData.sentiment.yes_pct || 50;
   } else {
-    // Fallback: compute from whale watch cache
-    const positions = (_whaleWatchCache && _whaleWatchCache.data && _whaleWatchCache.data.whales) || [];
-    let yc = 0, nc = 0;
-    for (const p of positions) {
+    // Fallback: compute from whale watch cache with hedge netting
+    const rawPos = (_whaleWatchCache && _whaleWatchCache.data && _whaleWatchCache.data.whales) || [];
+    const fgNetMap = {};
+    for (const p of rawPos) {
+      const mkt = (p.market || p.question || '').toLowerCase();
+      const wallet = (p.wallet || p.trader_address || p.name || 'unknown').toLowerCase();
+      const nk = wallet + ':' + mkt;
+      if (!fgNetMap[nk]) fgNetMap[nk] = { yes_cap: 0, no_cap: 0 };
       const s = (p.side || '').toUpperCase();
-      if (s === 'YES' || s === 'Y') yc++; else if (s === 'NO' || s === 'N') nc++;
+      const cap = parseFloat(p.size || 0);
+      if (s === 'YES' || s === 'Y') fgNetMap[nk].yes_cap += cap;
+      else if (s === 'NO' || s === 'N') fgNetMap[nk].no_cap += cap;
+    }
+    let yc = 0, nc = 0;
+    for (const n of Object.values(fgNetMap)) {
+      const net = n.yes_cap - n.no_cap;
+      if (Math.abs(net) < 10) continue; // fully hedged
+      if (net > 0) yc++; else nc++;
     }
     const total = yc + nc || 1;
     factors.whale_sentiment = Math.round(yc / total * 100);
@@ -24424,13 +24446,26 @@ app.get('/api/events', async (req, res) => {
     }
 
     const whalePositions = (_whaleWatchCache && _whaleWatchCache.data && _whaleWatchCache.data.whales) ? _whaleWatchCache.data.whales : [];
-    const whaleByMarketLower = {};
+    // Net out hedged positions per trader per market
+    const _evtNetMap = {};
     for (const wp of whalePositions) {
-      const key = (wp.market || wp.position || '').toLowerCase().trim();
-      if (!key) continue;
-      if (!whaleByMarketLower[key]) whaleByMarketLower[key] = { count: 0, capital: 0 };
-      whaleByMarketLower[key].count++;
-      whaleByMarketLower[key].capital += (wp.size || 0);
+      const mkt = (wp.market || wp.position || '').toLowerCase().trim();
+      if (!mkt) continue;
+      const wallet = (wp.wallet || wp.trader_address || wp.name || 'unknown').toLowerCase();
+      const nk = wallet + ':' + mkt;
+      if (!_evtNetMap[nk]) _evtNetMap[nk] = { yes_cap: 0, no_cap: 0, market: mkt };
+      const s = (wp.side || 'YES').toUpperCase();
+      const cap = parseFloat(wp.size || 0);
+      if (s === 'YES' || s === 'Y') _evtNetMap[nk].yes_cap += cap;
+      else _evtNetMap[nk].no_cap += cap;
+    }
+    const whaleByMarketLower = {};
+    for (const n of Object.values(_evtNetMap)) {
+      const net = Math.abs(n.yes_cap - n.no_cap);
+      if (net < 10) continue;
+      if (!whaleByMarketLower[n.market]) whaleByMarketLower[n.market] = { count: 0, capital: 0 };
+      whaleByMarketLower[n.market].count++;
+      whaleByMarketLower[n.market].capital += net;
     }
 
     const events = upcomingEvents.map(event => {
