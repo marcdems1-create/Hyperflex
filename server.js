@@ -23749,7 +23749,7 @@ async function searchAndDraftReplies() {
       });
       if (match) {
         const cap = match.total_capital >= 1000000 ? '$' + (match.total_capital/1000000).toFixed(1) + 'M' : '$' + Math.round(match.total_capital/1000) + 'K';
-        dataPoint = `Our whale tracker shows ${match.whale_count} wallets with ${cap} on this. ${match.consensus_pct}% consensus on ${match.consensus_side}.`;
+        dataPoint = `Market: "${match.market}". ${match.whale_count} whale wallets with ${cap} total capital. ${match.consensus_pct}% consensus on ${match.consensus_side}.`;
       }
     }
     if (!dataPoint && _screenerCache && _screenerCache.data) {
@@ -23761,17 +23761,28 @@ async function searchAndDraftReplies() {
       if (match) {
         const vol = match.volume >= 1000000 ? '$' + (match.volume/1000000).toFixed(1) + 'M' : '$' + Math.round(match.volume/1000) + 'K';
         const pct = match.yes_price != null ? Math.round(match.yes_price * 100) : null;
-        dataPoint = pct ? `Currently at ${pct}% YES with ${vol} volume.` : `${vol} volume on this market.`;
+        dataPoint = pct ? `Market: "${match.question}". Currently at ${pct}% YES with ${vol} volume.` : `Market: "${match.question}". ${vol} volume.`;
       }
     }
-    if (!dataPoint) dataPoint = 'We track whale wallets across Polymarket and Kalshi in real time.';
+    if (!dataPoint) {
+      // Skip this tweet — no relevant data to add
+      console.log(`[reply-bot] Skipping tweet ${target.id} — no matching market data`);
+      return;
+    }
 
     const anthropic = new Anthropic();
     const replyRes = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 200,
-      system: `You write tweets for @HyperFlexapp about prediction markets. You just saw a trending take and want to add your own angle with real data. Sound like a knowledgeable trader sharing alpha, NOT a brand. 1-2 punchy sentences. NEVER say "Check out", never mention @HyperFlexapp, no hashtags, no emojis, no links. Under 240 chars. Output ONLY the tweet text.`,
-      messages: [{ role: 'user', content: `Someone just tweeted this take that's getting engagement:\n\n"${(target.text||'').substring(0, 300)}"\n\nYour data: ${dataPoint}\n\nWrite a standalone tweet (NOT a reply) that riffs on the same topic with your data angle. Under 240 chars:` }]
+      system: `You write tweets for a prediction markets account. Rules:
+1. ALWAYS name the specific market/question (e.g. "Will Bitcoin hit $100K by June?" not "the major contract")
+2. ALWAYS include the exact odds number and dollar amount from your data
+3. Sound like a sharp trader dropping alpha, not a news anchor
+4. 1-2 punchy sentences max
+5. NEVER say "Check out", never mention any account name, no hashtags, no emojis, no links
+6. Under 240 chars
+7. Output ONLY the tweet text, nothing else`,
+      messages: [{ role: 'user', content: `Trending take on X:\n"${(target.text||'').substring(0, 300)}"\n\nYour data: ${dataPoint}\n\nWrite a standalone tweet that names the specific market and uses the exact numbers from your data:` }]
     });
     let reply = (replyRes.content[0]?.text || '').trim().replace(/^["']|["']$/g, '');
     if (reply.length > 200) reply = reply.substring(0, reply.lastIndexOf(' ', 200)) || reply.substring(0, 200);
