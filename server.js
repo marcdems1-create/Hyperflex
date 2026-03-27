@@ -23740,37 +23740,31 @@ async function searchAndDraftReplies() {
     const replyRes = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 200,
-      system: `You write replies on X for @HyperFlexapp. Add genuine VALUE with real data. Sound like a knowledgeable trader, not a brand. 1-2 sentences max. NEVER say "Check out" or any CTA. No hashtags or emojis. Under 200 chars. Output ONLY the reply.`,
-      messages: [{ role: 'user', content: `Reply to this tweet with data:\n\nTweet: "${(target.text||'').substring(0, 300)}"\n\nData: ${dataPoint}\n\nReply (under 200 chars):` }]
+      system: `You write tweets for @HyperFlexapp about prediction markets. You just saw a trending take and want to add your own angle with real data. Sound like a knowledgeable trader sharing alpha, NOT a brand. 1-2 punchy sentences. NEVER say "Check out", never mention @HyperFlexapp, no hashtags, no emojis, no links. Under 240 chars. Output ONLY the tweet text.`,
+      messages: [{ role: 'user', content: `Someone just tweeted this take that's getting engagement:\n\n"${(target.text||'').substring(0, 300)}"\n\nYour data: ${dataPoint}\n\nWrite a standalone tweet (NOT a reply) that riffs on the same topic with your data angle. Under 240 chars:` }]
     });
     let reply = (replyRes.content[0]?.text || '').trim().replace(/^["']|["']$/g, '');
     if (reply.length > 200) reply = reply.substring(0, reply.lastIndexOf(' ', 200)) || reply.substring(0, 200);
 
-    // Auto-post: try reply first, fallback to quote tweet if blocked
+    // Post as standalone tweet — replies/quotes blocked on Basic tier
     let postResult = null;
-    let postType = 'reply';
+    let postType = 'standalone';
     try {
-      postResult = await replyToTweet(target.id, reply);
-      _replyLog.push(target.id);
-      if (_replyLog.length > 200) _replyLog.splice(0, 100);
-      console.log(`[reply-bot] AUTO-POSTED reply to ${target.id}: "${reply.substring(0, 60)}..."`);
+      const tweetUrl = 'https://api.x.com/2/tweets';
+      const tweetBody = JSON.stringify({ text: reply });
+      const tweetAuth = _xOAuthSign('POST', tweetUrl, {});
+      const tweetRes = await fetch(tweetUrl, { method: 'POST', headers: { 'Authorization': tweetAuth, 'Content-Type': 'application/json' }, body: tweetBody });
+      const tweetData = await tweetRes.json();
+      if (tweetRes.ok) {
+        postResult = tweetData;
+        _replyLog.push(target.id);
+        if (_replyLog.length > 200) _replyLog.splice(0, 100);
+        console.log(`[reply-bot] AUTO-POSTED tweet inspired by ${target.id}: "${reply.substring(0, 60)}..."`);
+      } else {
+        _logError('reply-bot/post', `X API ${tweetRes.status}: ${JSON.stringify(tweetData)}`);
+      }
     } catch (postErr) {
-      if (postErr.message && postErr.message.includes('403')) {
-        try {
-          postType = 'quote';
-          const qtUrl = 'https://api.x.com/2/tweets';
-          const qtBody = JSON.stringify({ text: reply, quote_tweet_id: target.id });
-          const qtAuth = _xOAuthSign('POST', qtUrl, {});
-          const qtRes = await fetch(qtUrl, { method: 'POST', headers: { 'Authorization': qtAuth, 'Content-Type': 'application/json' }, body: qtBody });
-          const qtData = await qtRes.json();
-          if (qtRes.ok) {
-            postResult = qtData;
-            _replyLog.push(target.id);
-            if (_replyLog.length > 200) _replyLog.splice(0, 100);
-            console.log(`[reply-bot] AUTO-QUOTED tweet ${target.id}: "${reply.substring(0, 60)}..."`);
-          } else { console.warn('[reply-bot] Quote failed:', JSON.stringify(qtData)); }
-        } catch (qtErr) { console.warn('[reply-bot] Quote error:', qtErr.message); }
-      } else { console.warn('[reply-bot] Reply failed:', postErr.message); }
+      _logError('reply-bot/post', postErr);
     }
 
     _replyDraftQueue.push({
