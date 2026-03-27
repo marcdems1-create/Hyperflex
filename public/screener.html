@@ -471,6 +471,43 @@ function renderView() { renderCards(); }
 
 function escH(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
+// Translate BUY YES/NO into plain English based on market question
+function translateSide(question, side) {
+  var q = (question || '').toLowerCase();
+  var s = (side || 'YES').toUpperCase();
+
+  // "X Up or Down" markets — most common binary crypto/sports
+  if (/up or down/i.test(q)) {
+    return s === 'YES' ? 'Goes UP' : 'Goes DOWN';
+  }
+  // "Will X win" / "X vs Y" — sports/politics
+  if (/\bvs\.?\b|\bversus\b/i.test(q)) {
+    // Extract first team/player name before "vs"
+    var teams = q.split(/\bvs\.?\b|\bversus\b/i);
+    if (teams.length >= 2) {
+      var t1 = teams[0].replace(/^.*?:\s*/, '').trim(); // strip prefix like "Miami Open:"
+      var t2 = teams[1].trim().replace(/\?$/, '');
+      // Capitalize first letters
+      t1 = t1.split(' ').map(function(w){return w.charAt(0).toUpperCase()+w.slice(1)}).join(' ');
+      t2 = t2.split(' ').map(function(w){return w.charAt(0).toUpperCase()+w.slice(1)}).join(' ');
+      // Shorten long names
+      if (t1.length > 20) t1 = t1.substring(0, 18) + '..';
+      if (t2.length > 20) t2 = t2.substring(0, 18) + '..';
+      return s === 'YES' ? t1 + ' wins' : t2 + ' wins';
+    }
+  }
+  // "Will X happen by Y?" — political/event markets
+  if (/^will\b/i.test(q)) {
+    return s === 'YES' ? 'Yes, it happens' : 'No, it doesn\'t';
+  }
+  // Ceasefire / agreement / regime markets
+  if (/ceasefire|agreement|peace|deal\b/i.test(q)) {
+    return s === 'YES' ? 'Yes' : 'No';
+  }
+  // Fallback — just show YES/NO but styled better
+  return s === 'YES' ? 'Yes' : 'No';
+}
+
 function renderCards() {
   var filtered = getFiltered();
   var showing = filtered.slice(0, _displayCount);
@@ -520,9 +557,9 @@ function renderCards() {
     var roiHtml = '';
     if (m.trade) {
       var t = m.trade;
-      var sideLabel = t.side === 'YES' ? 'BUY YES' : 'BUY NO';
+      var plainSide = translateSide(m.question, t.side);
       var sideColor = t.side === 'YES' ? '#22c55e' : '#ef4444';
-      roiHtml = '<div style="font-family:var(--mono);font-size:12px;font-weight:700;color:' + sideColor + ';margin-bottom:6px;letter-spacing:0.5px">' + sideLabel + ' at ' + t.entry_cost + '&cent;</div>' +
+      roiHtml = '<div style="font-family:var(--mono);font-size:12px;font-weight:700;color:' + sideColor + ';margin-bottom:6px;letter-spacing:0.5px">Bet: ' + escH(plainSide) + ' at ' + t.entry_cost + '&cent;</div>' +
       '<div class="story-roi' + (t.side === 'NO' ? ' no-side' : '') + '">' +
         '<div class="story-roi-item"><span class="story-roi-label">You pay</span><span class="story-roi-val cost">' + t.entry_cost + '&cent;</span></div>' +
         '<span class="story-roi-arrow">&rarr;</span>' +
@@ -596,7 +633,8 @@ function renderLaneCard(m, signalHtml) {
   var roiLine = '';
   if (m.trade) {
     var sc = m.trade.side === 'YES' ? '#22c55e' : '#ef4444';
-    roiLine = '<div class="lane-card-roi"><span style="color:' + sc + ';font-weight:700">' + (m.trade.side === 'YES' ? 'BUY YES' : 'BUY NO') + '</span> \u2014 Pay ' + m.trade.entry_cost + '\u00A2 \u2192 Win +' + m.trade.potential_profit + '\u00A2 \u2192 <strong>+' + m.trade.roi_pct + '% ROI</strong></div>';
+    var plainSide = translateSide(m.question, m.trade.side);
+    roiLine = '<div class="lane-card-roi"><span style="color:' + sc + ';font-weight:700">Bet: ' + escH(plainSide) + '</span> \u2014 Pay ' + m.trade.entry_cost + '\u00A2 \u2192 Win +' + m.trade.potential_profit + '\u00A2 \u2192 <strong>+' + m.trade.roi_pct + '% ROI</strong></div>';
   }
   return '<div class="lane-card" onclick="window.open(\'' + safeUrl + '\',\'_blank\')">' +
     '<div class="lane-card-q">' + regionFlag(m.question) + ' ' + escH(m.question) + '</div>' +
