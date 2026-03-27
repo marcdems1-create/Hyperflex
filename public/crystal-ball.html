@@ -25,304 +25,149 @@
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
 <style>
 :root {
-  --bg: #0a0a09;
-  --card: #131311;
-  --card-hover: #1a1a17;
-  --border: #222220;
-  --text: #e8e4d9;
-  --text-soft: #b0ab9f;
-  --muted: #6a6a5e;
-  --gold: #c9920d;
-  --gold-dim: rgba(201,146,13,0.15);
-  --green: #22c55e;
-  --green-dim: rgba(34,197,94,0.12);
-  --red: #ef4444;
-  --red-dim: rgba(239,68,68,0.12);
-  --purple: #a78bfa;
-  --purple-dim: rgba(167,139,250,0.12);
-  --blue: #60a5fa;
-  --blue-dim: rgba(96,165,250,0.12);
-  --sans: 'Syne', sans-serif;
-  --mono: 'Space Mono', monospace;
-  --radius: 10px;
+  --bg:#0a0a09; --card:#111110; --card2:#161614; --border:#1e1e1b; --border2:#2a2a25;
+  --text:#e8e4d9; --soft:#a09d94; --dim:#6b6860; --muted:#4a4744;
+  --gold:#c9920d; --green:#22c55e; --red:#ef4444; --blue:#60a5fa; --purple:#a78bfa; --orange:#f97316;
+  --sans:'Syne',sans-serif; --mono:'Space Mono',monospace;
 }
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; -webkit-font-smoothing: antialiased; }
-a { color: var(--gold); text-decoration: none; }
-a:hover { text-decoration: underline; }
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+a{color:var(--gold);text-decoration:none} a:hover{text-decoration:underline}
 
-/* NAV */
-.topbar { display: flex; align-items: center; justify-content: space-between; padding: 16px 32px; border-bottom: 1px solid var(--border); background: rgba(10,10,9,0.92); backdrop-filter: blur(12px); position: sticky; top: 0; z-index: 100; }
-.topbar-logo { font-family: var(--sans); font-weight: 800; font-size: 18px; letter-spacing: 2px; color: var(--text); text-decoration: none; }
-.topbar-logo span { color: var(--gold); }
-.nav-links { display: flex; gap: 20px; align-items: center; }
-.nav-link { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--text-soft); text-decoration: none; transition: color 0.2s; }
-.nav-link:hover, .nav-link.active { color: var(--text); text-decoration: none; }
+/* HEADER BAR — matches data terminal */
+.cb-header{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:var(--card);border-bottom:1px solid var(--border)}
+.cb-logo{font-family:var(--sans);font-weight:800;font-size:16px;letter-spacing:2px;color:var(--text);text-decoration:none}
+.cb-logo span{color:var(--gold)}
+.cb-title{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--soft);letter-spacing:1px;text-transform:uppercase}
+.cb-live{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--green);letter-spacing:1px;display:flex;align-items:center;gap:6px}
+.cb-live::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 
-/* HERO */
-.hero {
-  text-align: center;
-  padding: 64px 24px 48px;
-  border-bottom: 1px solid var(--border);
-  background: radial-gradient(ellipse at 50% 0%, rgba(201,146,13,0.10) 0%, transparent 60%);
-  position: relative;
-  overflow: hidden;
-}
-.hero::before {
-  content: '';
-  position: absolute;
-  top: 30%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 320px;
-  height: 320px;
-  background: radial-gradient(circle, rgba(201,146,13,0.12) 0%, transparent 70%);
-  border-radius: 50%;
-  animation: heroGlow 4s ease-in-out infinite;
-  pointer-events: none;
-}
-@keyframes heroGlow {
-  0%, 100% { opacity: 0.6; transform: translate(-50%, -50%) scale(1); }
-  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
-}
-.hero-icon { font-size: 64px; margin-bottom: 16px; display: block; filter: drop-shadow(0 0 24px rgba(201,146,13,0.4)); animation: crystalPulse 3s ease-in-out infinite; }
-@keyframes crystalPulse {
-  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 24px rgba(201,146,13,0.4)); }
-  50% { transform: scale(1.05); filter: drop-shadow(0 0 40px rgba(201,146,13,0.7)); }
-}
-.hero h1 {
-  font-family: var(--sans);
-  font-size: 44px;
-  font-weight: 800;
-  margin-bottom: 8px;
-  background: linear-gradient(135deg, var(--gold), #f5d68a, var(--gold));
-  background-size: 200% 200%;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  animation: goldShimmer 4s ease-in-out infinite;
-}
-@keyframes goldShimmer {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
-.hero-sub { font-family: var(--mono); font-size: 13px; color: var(--text-soft); max-width: 520px; margin: 0 auto 8px; line-height: 1.6; }
-.hero-tagline { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 8px; }
-.hero-counter { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 20px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
-.hero-counter .gold { color: var(--gold); font-weight: 700; }
-.hero-counter .sep { color: var(--border); }
+/* STATS BAR */
+.cb-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--border);border-bottom:1px solid var(--border)}
+.cb-stat{background:var(--card);padding:14px 16px;text-align:center}
+.cb-stat-label{font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.cb-stat-val{font-family:var(--sans);font-size:20px;font-weight:800;color:var(--text)}
+.cb-stat-sub{font-family:var(--mono);font-size:9px;color:var(--dim);margin-top:2px}
 
 /* CONTAINER */
-.container { max-width: 960px; margin: 0 auto; padding: 32px 24px 80px; }
+.cb-container{max-width:1100px;margin:0 auto;padding:24px 20px 60px}
 
-/* FILTER TABS */
-.filter-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; flex-wrap: wrap; gap: 12px; }
-.filter-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
-.filter-tab {
-  font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 6px 14px;
-  border-radius: 20px; border: 1px solid var(--border); background: transparent;
-  color: var(--text-soft); cursor: pointer; transition: all 0.2s;
-}
-.filter-tab:hover { border-color: rgba(201,146,13,0.3); color: var(--text); }
-.filter-tab.active { background: var(--gold-dim); color: var(--gold); border-color: rgba(201,146,13,0.4); }
-.sort-select {
-  font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 6px 12px;
-  border-radius: 8px; border: 1px solid var(--border); background: var(--card);
-  color: var(--text-soft); cursor: pointer; outline: none;
-}
-.sort-select:hover { border-color: rgba(201,146,13,0.3); }
+/* FILTER BAR */
+.cb-filters{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px}
+.cb-filter-tabs{display:flex;gap:6px;flex-wrap:wrap}
+.cb-pill{font-family:var(--mono);font-size:10px;font-weight:700;padding:5px 12px;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--dim);cursor:pointer;transition:all .2s}
+.cb-pill:hover{border-color:var(--gold);color:var(--soft)}
+.cb-pill.active{background:var(--gold);color:var(--bg);border-color:var(--gold)}
+.cb-sort{font-family:var(--mono);font-size:10px;font-weight:700;padding:5px 10px;border-radius:4px;border:1px solid var(--border);background:var(--card);color:var(--soft);cursor:pointer;outline:none}
 
-/* PREDICTION CARDS */
-.prediction-list { display: flex; flex-direction: column; gap: 20px; }
-.prediction-card {
-  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
-  display: grid; grid-template-columns: 100px 1fr 160px; gap: 0;
-  transition: all 0.25s; position: relative; overflow: hidden;
-}
-.prediction-card:hover { border-color: rgba(201,146,13,0.35); background: var(--card-hover); transform: translateY(-2px); box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+/* PREDICTION GRID — 2 columns */
+.cb-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 
-/* Confidence gauge (left) */
-.pred-gauge { display: flex; align-items: center; justify-content: center; padding: 24px 16px; border-right: 1px solid var(--border); position: relative; }
-.gauge-circle {
-  width: 72px; height: 72px; border-radius: 50%; position: relative;
-  display: flex; align-items: center; justify-content: center;
-}
-.gauge-circle svg { position: absolute; top: 0; left: 0; width: 72px; height: 72px; transform: rotate(-90deg); }
-.gauge-circle circle { fill: none; stroke-width: 5; stroke-linecap: round; }
-.gauge-bg { stroke: var(--border); }
-.gauge-fill { transition: stroke-dashoffset 1s ease; }
-.gauge-value { font-family: var(--mono); font-size: 18px; font-weight: 700; z-index: 1; }
-.gauge-label { font-family: var(--mono); font-size: 9px; color: var(--muted); position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); white-space: nowrap; }
+/* PREDICTION CARD — compact, data-terminal style */
+.cb-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 18px;position:relative;overflow:hidden;transition:border-color .2s,transform .18s}
+.cb-card:hover{border-color:rgba(201,146,13,.35);transform:translateY(-1px)}
+.cb-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:10px 10px 0 0}
+.cb-card.type-WHALE_CONVERGENCE::before{background:linear-gradient(90deg,#60a5fa,#93c5fd)}
+.cb-card.type-MOMENTUM_BREAKOUT::before{background:linear-gradient(90deg,#22c55e,#4ade80)}
+.cb-card.type-SMART_VS_DUMB::before{background:linear-gradient(90deg,#a78bfa,#c4b5fd)}
+.cb-card.type-LEVERAGE_SIGNAL::before{background:linear-gradient(90deg,#ef4444,#f87171)}
+.cb-card.type-EXPIRY_CONVERGENCE::before{background:linear-gradient(90deg,#c9920d,#e0b340)}
+.cb-card.type-CONTRARIAN::before{background:linear-gradient(90deg,#f97316,#fb923c)}
 
-/* Center content */
-.pred-body { padding: 20px 24px; }
-.pred-type {
-  display: inline-block; font-family: var(--mono); font-size: 10px; font-weight: 700;
-  padding: 3px 10px; border-radius: 12px; margin-bottom: 10px; letter-spacing: 0.5px;
-}
-.pred-type.WHALE_CONVERGENCE { background: var(--blue-dim); color: var(--blue); border: 1px solid rgba(96,165,250,0.25); }
-.pred-type.MOMENTUM_BREAKOUT { background: var(--green-dim); color: var(--green); border: 1px solid rgba(34,197,94,0.25); }
-.pred-type.SMART_VS_DUMB { background: var(--purple-dim); color: var(--purple); border: 1px solid rgba(167,139,250,0.25); }
-.pred-type.LEVERAGE_SIGNAL { background: var(--red-dim); color: var(--red); border: 1px solid rgba(239,68,68,0.25); }
-.pred-type.EXPIRY_CONVERGENCE { background: var(--gold-dim); color: var(--gold); border: 1px solid rgba(201,146,13,0.25); }
-.pred-text { font-family: var(--sans); font-size: 16px; font-weight: 700; line-height: 1.45; margin-bottom: 10px; color: var(--text); }
-.pred-reasoning { list-style: none; padding: 0; margin: 0 0 10px 0; }
-.pred-reasoning li { font-family: var(--mono); font-size: 11px; color: var(--text-soft); line-height: 1.6; padding-left: 14px; position: relative; }
-.pred-reasoning li::before { content: '\2022'; position: absolute; left: 0; color: var(--muted); }
-.pred-market-link { font-family: var(--mono); font-size: 11px; color: var(--gold); }
-.pred-market-link:hover { text-decoration: underline; }
+.cb-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.cb-badge{font-family:var(--mono);font-size:9px;font-weight:700;padding:2px 8px;border-radius:3px;letter-spacing:.3px;white-space:nowrap}
+.cb-badge.WHALE_CONVERGENCE{background:rgba(96,165,250,.12);color:var(--blue)}
+.cb-badge.MOMENTUM_BREAKOUT{background:rgba(34,197,94,.12);color:var(--green)}
+.cb-badge.SMART_VS_DUMB{background:rgba(167,139,250,.12);color:var(--purple)}
+.cb-badge.LEVERAGE_SIGNAL{background:rgba(239,68,68,.12);color:var(--red)}
+.cb-badge.EXPIRY_CONVERGENCE{background:rgba(201,146,13,.12);color:var(--gold)}
+.cb-badge.CONTRARIAN{background:rgba(249,115,22,.12);color:var(--orange)}
 
-/* Right action panel */
-.pred-action { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px 16px; border-left: 1px solid var(--border); gap: 12px; text-align: center; }
-.action-btn {
-  font-family: var(--mono); font-size: 12px; font-weight: 700; padding: 10px 18px;
-  border-radius: 8px; border: none; cursor: pointer; transition: all 0.2s;
-  text-decoration: none; display: inline-block; white-space: nowrap;
-}
-.action-btn.buy { background: rgba(34,197,94,0.15); color: var(--green); border: 1px solid rgba(34,197,94,0.3); }
-.action-btn.buy:hover { background: rgba(34,197,94,0.25); text-decoration: none; }
-.action-btn.sell { background: rgba(239,68,68,0.15); color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
-.action-btn.sell:hover { background: rgba(239,68,68,0.25); text-decoration: none; }
-.action-btn.watch { background: var(--gold-dim); color: var(--gold); border: 1px solid rgba(201,146,13,0.3); }
-.action-btn.watch:hover { background: rgba(201,146,13,0.25); text-decoration: none; }
-.pred-time { font-family: var(--mono); font-size: 10px; color: var(--muted); line-height: 1.5; }
-.pred-score { font-family: var(--mono); font-size: 10px; color: var(--gold); }
+.cb-conf{font-family:var(--mono);font-size:18px;font-weight:800}
+.cb-market{font-family:var(--sans);font-size:14px;font-weight:700;line-height:1.4;color:var(--text);margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cb-market a{color:var(--text);text-decoration:none}
+.cb-market a:hover{color:var(--gold)}
+.cb-reasoning{font-family:var(--mono);font-size:10px;color:var(--dim);line-height:1.5;margin-bottom:10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 
-/* ROI STRIP — the money line */
-.roi-strip {
-  display: flex; align-items: center; gap: 14px; padding: 10px 16px; margin-top: 12px;
-  background: linear-gradient(90deg, rgba(34,197,94,0.06), rgba(34,197,94,0.02));
-  border: 1px solid rgba(34,197,94,0.15); border-radius: 8px; flex-wrap: wrap;
-}
-.roi-strip.sell-side {
-  background: linear-gradient(90deg, rgba(239,68,68,0.06), rgba(239,68,68,0.02));
-  border-color: rgba(239,68,68,0.15);
-}
-.roi-entry { display: flex; flex-direction: column; gap: 1px; }
-.roi-label { font-family: var(--mono); font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
-.roi-value { font-family: var(--mono); font-size: 14px; font-weight: 700; }
-.roi-value.cost { color: var(--text); }
-.roi-value.profit { color: #22c55e; }
-.roi-value.return { color: #22c55e; font-size: 16px; }
-.roi-arrow { color: var(--muted); font-size: 14px; }
-.roi-divider { width: 1px; height: 28px; background: var(--border); }
+/* ROI strip — compact */
+.cb-roi{display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(34,197,94,.04);border:1px solid rgba(34,197,94,.1);border-radius:6px;margin-bottom:10px}
+.cb-roi.sell{background:rgba(239,68,68,.04);border-color:rgba(239,68,68,.1)}
+.cb-roi-item{display:flex;flex-direction:column;gap:0}
+.cb-roi-label{font-family:var(--mono);font-size:8px;color:var(--dim);text-transform:uppercase;letter-spacing:.3px}
+.cb-roi-val{font-family:var(--mono);font-size:13px;font-weight:700}
+.cb-roi-val.cost{color:var(--text)}
+.cb-roi-val.profit{color:var(--green)}
+.cb-roi-val.pct{color:var(--green);font-size:14px}
+.cb-roi-arrow{color:var(--muted);font-size:12px}
+.cb-roi-div{width:1px;height:22px;background:var(--border)}
 
-/* LOADING + EMPTY */
-.loading-state { text-align: center; padding: 80px 20px; color: var(--muted); font-family: var(--mono); font-size: 14px; }
-.loading-state .spinner { font-size: 48px; margin-bottom: 16px; animation: crystalPulse 2s ease-in-out infinite; display: block; }
-.empty-state { text-align: center; padding: 60px 20px; }
-.empty-state p { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+.cb-card-footer{display:flex;align-items:center;justify-content:space-between;padding-top:10px;border-top:1px solid var(--border)}
+.cb-time{font-family:var(--mono);font-size:9px;color:var(--dim)}
+.cb-link{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--gold);text-decoration:none}
+.cb-link:hover{text-decoration:underline}
 
-/* CTA */
-.cta-section {
-  margin-top: 48px; padding: 32px; text-align: center;
-  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
-  background: linear-gradient(135deg, rgba(201,146,13,0.04), rgba(201,146,13,0.01));
-}
-.cta-section h3 { font-family: var(--sans); font-size: 20px; font-weight: 800; margin-bottom: 8px; }
-.cta-section p { font-family: var(--mono); font-size: 12px; color: var(--text-soft); margin-bottom: 20px; }
-.cta-form { display: flex; gap: 8px; max-width: 420px; margin: 0 auto; }
-.cta-form input {
-  flex: 1; font-family: var(--mono); font-size: 13px; padding: 12px 16px;
-  border-radius: 8px; border: 1px solid var(--border); background: var(--bg);
-  color: var(--text); outline: none;
-}
-.cta-form input:focus { border-color: var(--gold); }
-.cta-form button {
-  font-family: var(--mono); font-size: 12px; font-weight: 700; padding: 12px 24px;
-  border-radius: 8px; border: none; background: var(--gold); color: #0a0a09;
-  cursor: pointer; transition: background 0.2s; white-space: nowrap;
-}
-.cta-form button:hover { background: #d9a21f; }
-.cta-note { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 10px; }
-
-/* RESPONSIVE */
-@media (max-width: 768px) {
-  .topbar { padding: 12px 16px; }
-  .nav-links { gap: 12px; overflow-x: auto; }
-  .nav-link { font-size: 11px; white-space: nowrap; min-height: 44px; display: inline-flex; align-items: center; }
-  .hero { padding: 48px 16px 36px; }
-  .hero h1 { font-size: 30px; }
-  .hero-icon { font-size: 48px; }
-  .container { padding: 20px 16px 60px; }
-  .prediction-card { grid-template-columns: 1fr; }
-  .pred-gauge { border-right: none; border-bottom: 1px solid var(--border); padding: 16px; flex-direction: row; gap: 12px; justify-content: flex-start; }
-  .gauge-label { position: static; transform: none; }
-  .pred-action { border-left: none; border-top: 1px solid var(--border); flex-direction: row; padding: 14px 20px; justify-content: space-between; }
-  .action-btn { min-height: 44px; display: inline-flex; align-items: center; }
-  .filter-bar { flex-direction: column; align-items: flex-start; }
-  .filter-tab { min-height: 44px; display: inline-flex; align-items: center; }
-  .cta-form { flex-direction: column; }
-  .roi-strip { gap: 10px; padding: 10px 12px; }
-  .contrarian-score { position: static; margin-bottom: 8px; }
-}
-@media (max-width: 480px) {
-  .hero h1 { font-size: 24px; }
-  .pred-text { font-size: 14px; }
-  .roi-divider { display: none; }
-  .roi-value { font-size: 13px; }
-  .roi-value.return { font-size: 14px; }
-}
+/* SECTION HEADERS */
+.cb-section-head{display:flex;align-items:center;justify-content:space-between;margin:32px 0 16px}
+.cb-section-title{font-family:var(--sans);font-size:16px;font-weight:800;display:flex;align-items:center;gap:8px}
+.cb-section-badge{font-family:var(--mono);font-size:9px;font-weight:700;padding:3px 8px;border-radius:4px}
 
 /* CONTRARIAN CARDS */
-.contrarian-card {
-  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
-  padding: 20px 24px; transition: all 0.2s; position: relative; overflow: hidden;
-  border-left: 4px solid #f97316;
-}
-.contrarian-card:hover { border-color: rgba(249,115,22,0.4); background: var(--card-hover); }
-.contrarian-badge {
-  display: inline-block; font-family: var(--mono); font-size: 10px; font-weight: 700;
-  padding: 3px 10px; border-radius: 12px; margin-bottom: 10px;
-  background: rgba(249,115,22,0.12); color: #f97316; border: 1px solid rgba(249,115,22,0.25);
-}
-.contrarian-market { font-family: var(--sans); font-size: 15px; font-weight: 700; line-height: 1.4; margin-bottom: 12px; }
-.contrarian-stats { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 10px; }
-.contrarian-stat { font-family: var(--mono); font-size: 11px; color: var(--muted); }
-.contrarian-stat .val { color: var(--text-soft); font-weight: 700; }
-.contrarian-suggestion { font-family: var(--mono); font-size: 12px; color: var(--text-soft); line-height: 1.5; padding: 10px 14px; background: rgba(249,115,22,0.05); border-radius: 8px; margin-top: 8px; }
-.contrarian-note { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-top: 6px; font-style: italic; }
-.contrarian-score {
-  position: absolute; top: 16px; right: 16px;
-  font-family: var(--mono); font-size: 20px; font-weight: 800; color: #f97316;
-}
+.cb-contrarian{background:var(--card);border:1px solid var(--border);border-left:3px solid var(--orange);border-radius:8px;padding:14px 16px;transition:border-color .2s}
+.cb-contrarian:hover{border-color:rgba(249,115,22,.4)}
+.cb-contrarian-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.cb-contrarian-score{font-family:var(--mono);font-size:16px;font-weight:800;color:var(--orange)}
+.cb-contrarian-market{font-family:var(--sans);font-size:13px;font-weight:700;line-height:1.4;margin-bottom:8px}
+.cb-contrarian-stats{display:flex;gap:12px;flex-wrap:wrap;font-family:var(--mono);font-size:10px;color:var(--dim);margin-bottom:6px}
+.cb-contrarian-stats .val{color:var(--soft);font-weight:700}
+.cb-contrarian-note{font-family:var(--mono);font-size:10px;color:var(--dim);line-height:1.4}
 
 /* EXPIRING CARDS */
-.expiring-card {
-  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
-  padding: 20px 24px; transition: all 0.2s; position: relative; overflow: hidden;
-  display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center;
-}
-.expiring-card:hover { border-color: rgba(201,146,13,0.4); background: var(--card-hover); }
-.expiring-card.color-green { border-left: 4px solid var(--green); }
-.expiring-card.color-red { border-left: 4px solid var(--red); }
-.expiring-card.color-gold { border-left: 4px solid var(--gold); }
-.expiring-market { font-family: var(--sans); font-size: 14px; font-weight: 700; line-height: 1.4; margin-bottom: 8px; }
-.expiring-meta { display: flex; gap: 14px; flex-wrap: wrap; font-family: var(--mono); font-size: 11px; color: var(--muted); }
-.expiring-meta .val { font-weight: 700; }
-.expiring-insight { font-family: var(--mono); font-size: 11px; color: var(--text-soft); margin-top: 8px; line-height: 1.4; }
-.expiring-countdown {
-  text-align: center; min-width: 90px;
-}
-.expiring-countdown-val {
-  font-family: var(--mono); font-size: 28px; font-weight: 800; line-height: 1;
-}
-.expiring-countdown-label {
-  font-family: var(--mono); font-size: 10px; color: var(--muted); margin-top: 4px;
-}
-.expiring-prob {
-  font-family: var(--mono); font-size: 12px; font-weight: 700; margin-top: 8px;
-  padding: 4px 10px; border-radius: 8px; display: inline-block;
-}
+.cb-expiring{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px 16px;display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;transition:border-color .2s}
+.cb-expiring:hover{border-color:rgba(201,146,13,.4)}
+.cb-expiring.green{border-left:3px solid var(--green)}
+.cb-expiring.red{border-left:3px solid var(--red)}
+.cb-expiring.gold{border-left:3px solid var(--gold)}
+.cb-expiring-market{font-family:var(--sans);font-size:13px;font-weight:700;line-height:1.4;margin-bottom:6px}
+.cb-expiring-meta{display:flex;gap:12px;flex-wrap:wrap;font-family:var(--mono);font-size:10px;color:var(--dim)}
+.cb-expiring-meta .val{font-weight:700;color:var(--soft)}
+.cb-expiring-countdown{text-align:center;min-width:80px}
+.cb-expiring-val{font-family:var(--mono);font-size:24px;font-weight:800;line-height:1}
+.cb-expiring-label{font-family:var(--mono);font-size:9px;color:var(--dim);margin-top:2px}
+.cb-expiring-prob{font-family:var(--mono);font-size:10px;font-weight:700;margin-top:6px;padding:2px 8px;border-radius:4px;display:inline-block}
 
-@media (max-width: 768px) {
-  .expiring-card { grid-template-columns: 1fr; }
-  .expiring-countdown { text-align: left; display: flex; gap: 12px; align-items: center; }
-}
+/* CTA */
+.cb-cta{margin-top:32px;padding:24px;text-align:center;background:var(--card);border:1px solid var(--border);border-radius:10px}
+.cb-cta h3{font-size:16px;font-weight:800;margin-bottom:6px}
+.cb-cta p{font-family:var(--mono);font-size:11px;color:var(--soft);margin-bottom:14px}
+.cb-cta-form{display:flex;gap:8px;max-width:380px;margin:0 auto}
+.cb-cta-form input{flex:1;font-family:var(--mono);font-size:12px;padding:10px 14px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);outline:none}
+.cb-cta-form input:focus{border-color:var(--gold)}
+.cb-cta-form button{font-family:var(--mono);font-size:11px;font-weight:700;padding:10px 20px;border-radius:6px;border:none;background:var(--gold);color:var(--bg);cursor:pointer;white-space:nowrap}
+.cb-cta-form button:hover{background:#d9a21f}
+.cb-cta-note{font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:8px}
 
-/* CONTRARIAN filter tab */
-.pred-type.CONTRARIAN { background: rgba(249,115,22,0.12); color: #f97316; border: 1px solid rgba(249,115,22,0.25); }
+/* EMPTY / LOADING */
+.cb-empty{text-align:center;padding:40px 16px;font-family:var(--mono);font-size:11px;color:var(--dim)}
+.cb-loading{text-align:center;padding:60px 16px;font-family:var(--mono);font-size:12px;color:var(--dim)}
+.cb-loading .spin{font-size:32px;margin-bottom:12px;display:block;animation:pulse 2s ease-in-out infinite}
+
+/* RESPONSIVE */
+@media(max-width:768px){
+  .cb-stats{grid-template-columns:repeat(3,1fr)}
+  .cb-grid{grid-template-columns:1fr}
+  .cb-container{padding:16px 12px 60px}
+  .cb-filters{flex-direction:column;align-items:flex-start}
+  .cb-pill{min-height:44px;display:inline-flex;align-items:center}
+  .cb-cta-form{flex-direction:column}
+  .cb-expiring{grid-template-columns:1fr}
+  .cb-expiring-countdown{text-align:left;display:flex;gap:10px;align-items:center}
+}
+@media(max-width:480px){
+  .cb-stats{grid-template-columns:repeat(2,1fr)}
+  .cb-header{flex-wrap:wrap;gap:8px}
+  .cb-roi-div{display:none}
+}
 </style>
 </head>
 <body>
@@ -331,412 +176,280 @@ a:hover { text-decoration: underline; }
 <div id="nav-root"></div>
 <script src="/nav.js"></script>
 
-<!-- HERO -->
-<section class="hero">
-  <span class="hero-icon">&#x1F52E;</span>
-  <h1>The Crystal Ball</h1>
-  <p class="hero-sub">AI-powered predictions about prediction markets</p>
-  <p class="hero-tagline">What the smart money is telling us right now</p>
-  <div class="hero-counter">
-    <span><span class="gold" id="pred-count">--</span> active predictions</span>
-    <span class="sep">|</span>
-    <span>Updated <span id="update-ago">--</span></span>
-    <span class="sep">|</span>
-    <a href="/accuracy" style="font-family:var(--mono);font-size:12px;color:var(--gold);text-decoration:none;display:inline-flex;align-items:center;gap:4px" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">📊 Track Record →</a>
-  </div>
-</section>
+<!-- HEADER -->
+<div class="cb-header">
+  <a href="/" class="cb-logo">HYPER<span>FLEX</span></a>
+  <div class="cb-title">Crystal Ball</div>
+  <div class="cb-live">LIVE</div>
+</div>
+
+<!-- STATS BAR -->
+<div class="cb-stats" id="statsBar">
+  <div class="cb-stat"><div class="cb-stat-label">Active Signals</div><div class="cb-stat-val" id="stSignals">--</div><div class="cb-stat-sub">predictions</div></div>
+  <div class="cb-stat"><div class="cb-stat-label">Avg Confidence</div><div class="cb-stat-val" id="stConf">--</div><div class="cb-stat-sub">across signals</div></div>
+  <div class="cb-stat"><div class="cb-stat-label">Top Signal</div><div class="cb-stat-val" id="stTop">--</div><div class="cb-stat-sub" id="stTopSub">by count</div></div>
+  <div class="cb-stat"><div class="cb-stat-label">Expiring</div><div class="cb-stat-val" id="stExpiring">--</div><div class="cb-stat-sub">within 24h</div></div>
+  <div class="cb-stat"><div class="cb-stat-label">Updated</div><div class="cb-stat-val" id="stUpdated">--</div><div class="cb-stat-sub"><a href="/accuracy" style="color:var(--gold);font-size:9px">Track Record &rarr;</a></div></div>
+</div>
 
 <!-- MAIN -->
-<div class="container">
+<div class="cb-container">
 
-  <!-- FILTER BAR -->
-  <div class="filter-bar">
-    <div class="filter-tabs">
-      <button class="filter-tab active" data-filter="all">All</button>
-      <button class="filter-tab" data-filter="WHALE_CONVERGENCE">Whale Signals</button>
-      <button class="filter-tab" data-filter="MOMENTUM_BREAKOUT">Momentum</button>
-      <button class="filter-tab" data-filter="SMART_VS_DUMB">Divergence</button>
-      <button class="filter-tab" data-filter="LEVERAGE_SIGNAL">Leverage</button>
-      <button class="filter-tab" data-filter="EXPIRY_CONVERGENCE">Expiry</button>
-      <button class="filter-tab" data-filter="CONTRARIAN" onclick="document.getElementById('contrarian-list').scrollIntoView({behavior:'smooth',block:'start'})">Contrarian</button>
+  <!-- FILTERS -->
+  <div class="cb-filters">
+    <div class="cb-filter-tabs">
+      <button class="cb-pill active" data-filter="all">All</button>
+      <button class="cb-pill" data-filter="WHALE_CONVERGENCE">Whale</button>
+      <button class="cb-pill" data-filter="MOMENTUM_BREAKOUT">Momentum</button>
+      <button class="cb-pill" data-filter="SMART_VS_DUMB">Divergence</button>
+      <button class="cb-pill" data-filter="LEVERAGE_SIGNAL">Leverage</button>
+      <button class="cb-pill" data-filter="EXPIRY_CONVERGENCE">Expiry</button>
     </div>
-    <select class="sort-select" id="sort-select">
-      <option value="score">Sort: Confidence</option>
-      <option value="newest">Sort: Newest</option>
-      <option value="expiring">Sort: Expiring Soon</option>
+    <select class="cb-sort" id="sort-select">
+      <option value="score">Confidence</option>
+      <option value="newest">Newest</option>
+      <option value="expiring">Expiring</option>
     </select>
   </div>
 
-  <!-- PREDICTIONS -->
-  <div class="prediction-list" id="predictions">
-    <div class="loading-state">
-      <span class="spinner">&#x1F52E;</span>
-      <p>Scanning whale activity, momentum, and leverage signals...</p>
-    </div>
+  <!-- PREDICTIONS GRID -->
+  <div class="cb-grid" id="predictions">
+    <div class="cb-loading" style="grid-column:1/-1"><span class="spin">&#x1F52E;</span><p>Scanning signals...</p></div>
   </div>
 
-  <!-- CONTRARIAN SIGNALS -->
-  <div style="margin-top:48px;margin-bottom:40px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
-      <h2 style="font-family:var(--sans);font-size:22px;font-weight:800">&#x1F504; Contrarian Signals</h2>
-      <span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;background:rgba(249,115,22,0.12);color:#f97316;border:1px solid rgba(249,115,22,0.3)">CONTRARIAN</span>
+  <!-- CONTRARIAN -->
+  <div id="contrarianSection" style="display:none">
+    <div class="cb-section-head">
+      <div class="cb-section-title">&#x1F504; Contrarian Signals</div>
+      <span class="cb-section-badge" style="background:rgba(249,115,22,.12);color:#f97316">CONTRARIAN</span>
     </div>
-    <div style="font-family:var(--mono);font-size:12px;color:var(--text-soft);margin-bottom:20px;line-height:1.5">When everyone agrees, they're often wrong. Markets where whale positioning diverges from the crowd.</div>
-    <div id="contrarian-list" style="display:flex;flex-direction:column;gap:16px">
-      <div class="loading-state"><span class="spinner">&#x1F504;</span><p>Scanning for contrarian signals...</p></div>
-    </div>
+    <div id="contrarian-list" style="display:grid;grid-template-columns:1fr 1fr;gap:12px"></div>
   </div>
 
-  <!-- EXPIRING SOON -->
-  <div style="margin-bottom:40px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
-      <h2 style="font-family:var(--sans);font-size:22px;font-weight:800">&#x23F0; Expiring Soon</h2>
-      <span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;background:var(--gold-dim);color:var(--gold);border:1px solid rgba(201,146,13,0.3)">LAST CHANCE</span>
+  <!-- EXPIRING -->
+  <div id="expiringSection" style="display:none">
+    <div class="cb-section-head">
+      <div class="cb-section-title">&#x23F0; Expiring Soon</div>
+      <span class="cb-section-badge" style="background:rgba(201,146,13,.12);color:var(--gold)">LAST CHANCE</span>
     </div>
-    <div style="font-family:var(--mono);font-size:12px;color:var(--text-soft);margin-bottom:20px;line-height:1.5">Markets about to resolve — your last chance to trade before the outcome is locked in.</div>
-    <div id="expiring-list" style="display:flex;flex-direction:column;gap:16px">
-      <div class="loading-state"><span class="spinner">&#x23F0;</span><p>Finding markets near resolution...</p></div>
-    </div>
+    <div id="expiring-list" style="display:grid;grid-template-columns:1fr 1fr;gap:12px"></div>
   </div>
 
   <!-- CTA -->
-  <div class="cta-section">
-    <h3>Get these predictions as they happen</h3>
-    <p>Subscribe to Crystal Ball alerts — delivered to your inbox.</p>
-    <form class="cta-form" id="cta-subscribe" onsubmit="return handleCtaSubscribe(event)">
+  <div class="cb-cta">
+    <h3>Get signals as they fire</h3>
+    <p>Crystal Ball alerts delivered to your inbox.</p>
+    <form class="cb-cta-form" id="cta-subscribe" onsubmit="return handleCtaSubscribe(event)">
       <input type="email" id="cta-email" placeholder="you@example.com" required/>
       <button type="submit" id="cta-btn">Subscribe</button>
     </form>
-    <div class="cta-note" id="cta-note">Free during beta</div>
+    <div class="cb-cta-note" id="cta-note">Free during Early Access</div>
   </div>
 
 </div>
 
 <script>
-const TYPE_LABELS = {
-  WHALE_CONVERGENCE: 'WHALE CONVERGENCE',
-  MOMENTUM_BREAKOUT: 'MOMENTUM',
-  SMART_VS_DUMB: 'SMART vs DUMB',
-  LEVERAGE_SIGNAL: 'LEVERAGE',
-  EXPIRY_CONVERGENCE: 'EXPIRY'
+var TYPE_LABELS = {
+  WHALE_CONVERGENCE:'WHALE',MOMENTUM_BREAKOUT:'MOMENTUM',SMART_VS_DUMB:'DIVERGENCE',
+  LEVERAGE_SIGNAL:'LEVERAGE',EXPIRY_CONVERGENCE:'EXPIRY',CONTRARIAN:'CONTRARIAN'
 };
+var _predictions = [], _activeFilter = 'all', _activeSort = 'score', _lastUpdated = null;
 
-let _predictions = [];
-let _activeFilter = 'all';
-let _activeSort = 'score';
-let _lastUpdated = null;
+function escHtml(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function escAttr(s){return(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 
-async function loadPredictions() {
-  try {
-    const res = await fetch('/api/crystal-ball');
-    if (!res.ok) throw new Error('API error');
-    const data = await res.json();
-    _predictions = (data.predictions || []).map(p => {
-      let c = p.confidence;
-      // Replace suspicious defaults (0 or 100) with signal-type defaults
-      if (c === 0 || c === 100) {
-        const defaults = { momentum: 72, arbitrage: 88, whale_cluster: 81, divergence: 65, expiry: 70 };
-        c = defaults[(p.type || '').toLowerCase()] || 72;
-      }
-      // Cap at 95 — nothing should look 100% certain
-      p.confidence = Math.min(95, c);
-      return p;
-    });
-    _lastUpdated = data.updated_at ? new Date(data.updated_at) : new Date();
-    document.getElementById('pred-count').textContent = _predictions.length;
-    updateTimestamp();
-    renderPredictions();
-  } catch (err) {
-    console.error('[crystal-ball]', err);
-    document.getElementById('predictions').innerHTML = '<div class="empty-state"><p>Unable to load predictions. Data feeds may still be warming up.</p></div>';
-  }
+function confColor(c){return c>=80?'var(--green)':c>=60?'var(--gold)':'var(--red)'}
+
+function timeAgo(iso){
+  var ms=Date.now()-new Date(iso).getTime(),m=Math.round(ms/60000);
+  if(m<1)return'now';if(m<60)return m+'m';var h=Math.round(m/60);if(h<24)return h+'h';return Math.round(h/24)+'d';
+}
+function timeLeft(iso){
+  var ms=new Date(iso).getTime()-Date.now();if(ms<=0)return'expired';
+  var h=Math.round(ms/3600000);if(h<1)return Math.round(ms/60000)+'m';if(h<24)return h+'h';return Math.round(h/24)+'d';
 }
 
-function updateTimestamp() {
-  if (!_lastUpdated) return;
-  const secs = Math.round((Date.now() - _lastUpdated.getTime()) / 1000);
-  let display;
-  if (secs < 60) display = secs + 's ago';
-  else if (secs < 3600) display = Math.round(secs / 60) + 'm ago';
-  else display = Math.round(secs / 3600) + 'h ago';
-  document.getElementById('update-ago').textContent = display;
-}
-
-function getFiltered() {
-  let list = _predictions;
-  if (_activeFilter !== 'all') {
-    list = list.filter(p => p.type === _activeFilter);
-  }
-  // Sort
-  if (_activeSort === 'newest') {
-    list = [...list].sort((a, b) => new Date(b.detected_at) - new Date(a.detected_at));
-  } else if (_activeSort === 'expiring') {
-    list = [...list].sort((a, b) => new Date(a.expires_at) - new Date(b.expires_at));
-  }
-  // default: score (already sorted by API)
+function getFiltered(){
+  var list=_predictions;
+  if(_activeFilter!=='all')list=list.filter(function(p){return p.type===_activeFilter});
+  if(_activeSort==='newest')list=[].concat(list).sort(function(a,b){return new Date(b.detected_at)-new Date(a.detected_at)});
+  else if(_activeSort==='expiring')list=[].concat(list).sort(function(a,b){return new Date(a.expires_at)-new Date(b.expires_at)});
   return list;
 }
 
-function gaugeColor(confidence) {
-  if (confidence >= 80) return 'var(--green)';
-  if (confidence >= 60) return '#c9920d';
-  return 'var(--red)';
+function updateStats(){
+  if(!_predictions.length)return;
+  document.getElementById('stSignals').textContent=_predictions.length;
+  var avg=Math.round(_predictions.reduce(function(s,p){return s+p.confidence},0)/_predictions.length);
+  document.getElementById('stConf').textContent=avg+'%';
+  document.getElementById('stConf').style.color=confColor(avg);
+  // Top signal type
+  var counts={};_predictions.forEach(function(p){counts[p.type]=(counts[p.type]||0)+1});
+  var top=Object.keys(counts).sort(function(a,b){return counts[b]-counts[a]})[0];
+  document.getElementById('stTop').textContent=TYPE_LABELS[top]||top;
+  document.getElementById('stTopSub').textContent=counts[top]+' signals';
+  // Expiring within 24h
+  var exp24=_predictions.filter(function(p){return p.expires_at&&(new Date(p.expires_at).getTime()-Date.now())<86400000}).length;
+  document.getElementById('stExpiring').textContent=exp24;
+  document.getElementById('stExpiring').style.color=exp24>0?'var(--gold)':'var(--text)';
+  // Updated
+  updateTimestamp();
 }
 
-function timeAgo(iso) {
-  const ms = Date.now() - new Date(iso).getTime();
-  const mins = Math.round(ms / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return mins + 'm ago';
-  const hrs = Math.round(mins / 60);
-  if (hrs < 24) return hrs + 'h ago';
-  return Math.round(hrs / 24) + 'd ago';
+function updateTimestamp(){
+  if(!_lastUpdated)return;
+  var s=Math.round((Date.now()-_lastUpdated.getTime())/1000);
+  var d=s<60?s+'s':s<3600?Math.round(s/60)+'m':Math.round(s/3600)+'h';
+  document.getElementById('stUpdated').textContent=d+' ago';
 }
 
-function timeLeft(iso) {
-  const ms = new Date(iso).getTime() - Date.now();
-  if (ms <= 0) return 'expired';
-  const hrs = Math.round(ms / 3600000);
-  if (hrs < 1) return Math.round(ms / 60000) + 'm left';
-  if (hrs < 24) return hrs + 'h left';
-  return Math.round(hrs / 24) + 'd left';
-}
+function renderPredictions(){
+  var list=getFiltered();
+  var el=document.getElementById('predictions');
+  if(!list.length){el.innerHTML='<div class="cb-empty" style="grid-column:1/-1">No signals match this filter.</div>';return}
 
-function actionClass(action) {
-  const a = (action || '').toLowerCase();
-  if (a.startsWith('buy')) return 'buy';
-  if (a.startsWith('sell')) return 'sell';
-  return 'watch';
-}
-
-function renderPredictions() {
-  const list = getFiltered();
-  const container = document.getElementById('predictions');
-
-  if (!list.length) {
-    container.innerHTML = '<div class="empty-state"><p>No predictions match this filter. Try "All" to see everything.</p></div>';
-    return;
-  }
-
-  const circumference = 2 * Math.PI * 33;
-
-  container.innerHTML = list.map(p => {
-    // Cap confidence at 95 — nothing should show 100/100 (looks fake)
-    const conf = Math.min(95, p.confidence || 0);
-    if (conf === 0 || conf === 100) {
-      const defaults = { MOMENTUM_BREAKOUT: 72, WHALE_CONVERGENCE: 81, SMART_VS_DUMB: 65, LEVERAGE_SIGNAL: 78, EXPIRY_CONVERGENCE: 70, NEWS_SENTIMENT: 68 };
-      p.confidence = defaults[p.type] || 72;
-    } else {
-      p.confidence = conf;
+  el.innerHTML=list.map(function(p){
+    var c=p.confidence;
+    if(c===0||c===100){var defs={MOMENTUM_BREAKOUT:72,WHALE_CONVERGENCE:81,SMART_VS_DUMB:65,LEVERAGE_SIGNAL:78,EXPIRY_CONVERGENCE:70};c=defs[p.type]||72}
+    c=Math.min(95,c);p.confidence=c;
+    var color=confColor(c);
+    var url=p.market&&p.market.url?p.market.url:'#';
+    var q=p.market&&p.market.question?p.market.question:'';
+    var roi='';
+    if(p.trade){
+      roi='<div class="cb-roi'+(p.trade.side==='NO'?' sell':'')+'">'+
+        '<div class="cb-roi-item"><span class="cb-roi-label">Pay</span><span class="cb-roi-val cost">'+p.trade.entry_cost+'&cent;</span></div>'+
+        '<span class="cb-roi-arrow">&rarr;</span>'+
+        '<div class="cb-roi-item"><span class="cb-roi-label">Win</span><span class="cb-roi-val profit">+'+p.trade.potential_profit+'&cent;</span></div>'+
+        '<div class="cb-roi-div"></div>'+
+        '<div class="cb-roi-item"><span class="cb-roi-label">ROI</span><span class="cb-roi-val pct">+'+p.trade.roi_pct+'%</span></div>'+
+      '</div>';
     }
-    const color = gaugeColor(p.confidence);
-    const offset = circumference - (p.confidence / 100) * circumference;
-    const actionLabel = 'View on Polymarket \u2192';
-    const btnClass = 'watch';
-    const marketUrl = p.market && p.market.url ? p.market.url : '#';
-    const marketQ = p.market && p.market.question ? p.market.question : '';
+    var reasoning=(p.reasoning||[]).slice(0,2).join(' \u00B7 ');
 
-    return `
-      <div class="prediction-card">
-        <div class="pred-gauge">
-          <div class="gauge-circle">
-            <svg viewBox="0 0 72 72">
-              <circle class="gauge-bg" cx="36" cy="36" r="33"/>
-              <circle class="gauge-fill" cx="36" cy="36" r="33"
-                stroke="${color}" stroke-dasharray="${circumference}" stroke-dashoffset="${offset}"/>
-            </svg>
-            <span class="gauge-value" style="color:${color}">${p.confidence}</span>
-          </div>
-          <span class="gauge-label">confidence</span>
-        </div>
-        <div class="pred-body">
-          <span class="pred-type ${p.type}">${TYPE_LABELS[p.type] || p.type}</span>
-          <div class="pred-text">${escHtml(p.prediction)}</div>
-          <ul class="pred-reasoning">
-            ${(p.reasoning || []).slice(0, 3).map(r => `<li>${escHtml(r)}</li>`).join('')}
-          </ul>
-          ${marketQ ? `<a href="${escAttr(marketUrl)}" target="_blank" rel="noopener" class="pred-market-link">${escHtml(marketQ.substring(0, 80))} &rarr;</a>` : ''}
-          ${p.trade ? `
-            <div class="roi-strip${p.trade.side === 'NO' ? ' sell-side' : ''}">
-              <div class="roi-entry">
-                <span class="roi-label">You pay</span>
-                <span class="roi-value cost">${p.trade.entry_cost}&cent;</span>
-              </div>
-              <span class="roi-arrow">&rarr;</span>
-              <div class="roi-entry">
-                <span class="roi-label">You win</span>
-                <span class="roi-value profit">+${p.trade.potential_profit}&cent;</span>
-              </div>
-              <div class="roi-divider"></div>
-              <div class="roi-entry">
-                <span class="roi-label">ROI if right</span>
-                <span class="roi-value return">+${p.trade.roi_pct}%</span>
-              </div>
-            </div>
-          ` : ''}
-        </div>
-        <div class="pred-action">
-          <a href="${escAttr(marketUrl)}" target="_blank" rel="noopener" class="action-btn ${btnClass}">${escHtml(actionLabel)}</a>
-          <div class="pred-time">
-            Detected ${timeAgo(p.detected_at)}<br/>
-            ${timeLeft(p.expires_at)}
-          </div>
-          ${p.crystal_ball_score ? `<div class="pred-score">Score: ${p.crystal_ball_score}</div>` : ''}
-        </div>
-      </div>
-    `;
+    return '<div class="cb-card type-'+p.type+'">'+
+      '<div class="cb-card-top">'+
+        '<span class="cb-badge '+p.type+'">'+(TYPE_LABELS[p.type]||p.type)+'</span>'+
+        '<span class="cb-conf" style="color:'+color+'">'+c+'</span>'+
+      '</div>'+
+      (q?'<div class="cb-market"><a href="'+escAttr(url)+'" target="_blank" rel="noopener">'+escHtml(q.substring(0,80))+'</a></div>':'<div class="cb-market">'+escHtml(p.prediction)+'</div>')+
+      (reasoning?'<div class="cb-reasoning">'+escHtml(reasoning)+'</div>':'')+
+      roi+
+      '<div class="cb-card-footer">'+
+        '<span class="cb-time">'+timeAgo(p.detected_at)+' \u00B7 '+timeLeft(p.expires_at)+'</span>'+
+        '<a href="'+escAttr(url)+'" target="_blank" rel="noopener" class="cb-link">Polymarket &rarr;</a>'+
+      '</div>'+
+    '</div>';
   }).join('');
 }
 
-function escHtml(s) { return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-function escAttr(s) { return (s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
-
-// Filter tabs
-document.querySelectorAll('.filter-tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
-    tab.classList.add('active');
-    _activeFilter = tab.dataset.filter;
+async function loadPredictions(){
+  try{
+    var res=await fetch('/api/crystal-ball');
+    if(!res.ok)throw new Error('API error');
+    var data=await res.json();
+    _predictions=(data.predictions||[]).map(function(p){
+      var c=p.confidence;
+      if(c===0||c===100){var defs={momentum:72,arbitrage:88,whale_cluster:81,divergence:65,expiry:70};c=defs[(p.type||'').toLowerCase()]||72}
+      p.confidence=Math.min(95,c);return p;
+    });
+    _lastUpdated=data.updated_at?new Date(data.updated_at):new Date();
+    updateStats();
     renderPredictions();
+  }catch(err){
+    console.error('[crystal-ball]',err);
+    document.getElementById('predictions').innerHTML='<div class="cb-empty" style="grid-column:1/-1">Signals loading. Data feeds warming up...</div>';
+  }
+}
+
+// Filters
+document.querySelectorAll('.cb-pill').forEach(function(tab){
+  tab.addEventListener('click',function(){
+    document.querySelectorAll('.cb-pill').forEach(function(t){t.classList.remove('active')});
+    tab.classList.add('active');_activeFilter=tab.getAttribute('data-filter');renderPredictions();
   });
 });
+document.getElementById('sort-select').addEventListener('change',function(e){_activeSort=e.target.value;renderPredictions()});
 
-// Sort select
-document.getElementById('sort-select').addEventListener('change', (e) => {
-  _activeSort = e.target.value;
-  renderPredictions();
-});
-
-// CTA subscribe
-async function handleCtaSubscribe(e) {
-  e.preventDefault();
-  const email = document.getElementById('cta-email').value.trim();
-  const btn = document.getElementById('cta-btn');
-  const note = document.getElementById('cta-note');
-  if (!email) return false;
-  btn.disabled = true;
-  btn.textContent = 'Subscribing...';
-  try {
-    const res = await fetch('/api/subscribe', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email })
-    });
-    if (res.ok) {
-      note.textContent = 'Subscribed! You\'ll get Crystal Ball alerts.';
-      note.style.color = 'var(--green)';
-      btn.textContent = 'Subscribed';
-    } else {
-      const d = await res.json().catch(() => ({}));
-      note.textContent = d.error || 'Something went wrong. Try again.';
-      note.style.color = 'var(--red)';
-      btn.textContent = 'Subscribe';
-      btn.disabled = false;
-    }
-  } catch (err) {
-    note.textContent = 'Network error. Try again.';
-    note.style.color = 'var(--red)';
-    btn.textContent = 'Subscribe';
-    btn.disabled = false;
-  }
+// CTA
+async function handleCtaSubscribe(e){
+  e.preventDefault();var email=document.getElementById('cta-email').value.trim();
+  var btn=document.getElementById('cta-btn'),note=document.getElementById('cta-note');
+  if(!email)return false;btn.disabled=true;btn.textContent='...';
+  try{
+    var r=await fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email})});
+    if(r.ok){note.textContent='Subscribed! Crystal Ball alerts incoming.';note.style.color='var(--green)';btn.textContent='Done'}
+    else{note.textContent='Try again.';note.style.color='var(--red)';btn.textContent='Subscribe';btn.disabled=false}
+  }catch(err){note.textContent='Network error.';note.style.color='var(--red)';btn.textContent='Subscribe';btn.disabled=false}
   return false;
 }
 
-// ── Contrarian Signals ──
-async function loadContrarian() {
-  const el = document.getElementById('contrarian-list');
-  try {
-    const r = await fetch('/api/contrarian');
-    if (!r.ok) throw new Error('API error');
-    const data = await r.json();
-    const signals = data.signals || [];
-
-    if (!signals.length) {
-      el.innerHTML = '<div class="empty-state"><p>No contrarian signals detected. Markets and whales may be in agreement.</p></div>';
-      return;
-    }
-
-    el.innerHTML = signals.map(s => {
-      return '<div class="contrarian-card">' +
-        '<span class="contrarian-badge">&#x1F504; CONTRARIAN</span>' +
-        '<div class="contrarian-score">' + s.contrarian_score + '</div>' +
-        '<div class="contrarian-market">' + escHtml((s.market || '').substring(0, 100)) + '</div>' +
-        '<div class="contrarian-stats">' +
-          '<span class="contrarian-stat">Market: <span class="val">' + s.current_price + '% YES</span></span>' +
-          '<span class="contrarian-stat">Whales: <span class="val">' + escHtml(s.whale_consensus) + '</span></span>' +
-          '<span class="contrarian-stat">Divergence: <span class="val" style="color:#f97316">' + s.divergence + 'pts</span></span>' +
-          '<span class="contrarian-stat">Whales: <span class="val">' + (s.whale_count || 0) + '</span></span>' +
-        '</div>' +
-        '<div class="contrarian-suggestion">' + escHtml(s.suggestion) + '</div>' +
-        '<div class="contrarian-note">' + escHtml(s.historical_note) + '</div>' +
-        (s.url ? '<a href="' + escAttr(s.url.startsWith('https://polymarket.com') ? s.url : 'https://polymarket.com') + '" target="_blank" rel="noopener" style="display:inline-block;margin-top:10px;font-family:var(--mono);font-size:11px;color:var(--gold)">View on Polymarket &rarr;</a>' : '') +
+// Contrarian
+async function loadContrarian(){
+  try{
+    var r=await fetch('/api/contrarian');if(!r.ok)throw new Error();
+    var data=await r.json();var signals=data.signals||[];
+    if(!signals.length)return; // hide section entirely
+    document.getElementById('contrarianSection').style.display='';
+    document.getElementById('contrarian-list').innerHTML=signals.map(function(s){
+      return '<div class="cb-contrarian">'+
+        '<div class="cb-contrarian-head">'+
+          '<span class="cb-badge CONTRARIAN">CONTRARIAN</span>'+
+          '<span class="cb-contrarian-score">'+s.contrarian_score+'</span>'+
+        '</div>'+
+        '<div class="cb-contrarian-market">'+escHtml((s.market||'').substring(0,80))+'</div>'+
+        '<div class="cb-contrarian-stats">'+
+          '<span>Market: <span class="val">'+s.current_price+'%</span></span>'+
+          '<span>Whales: <span class="val">'+escHtml(s.whale_consensus)+'</span></span>'+
+          '<span>Gap: <span class="val" style="color:var(--orange)">'+s.divergence+'pts</span></span>'+
+        '</div>'+
+        (s.suggestion?'<div class="cb-contrarian-note">'+escHtml(s.suggestion)+'</div>':'')+
+        (s.url?'<div style="margin-top:6px"><a href="'+escAttr(s.url.startsWith('https://polymarket.com')?s.url:'https://polymarket.com')+'" target="_blank" rel="noopener" class="cb-link">Polymarket &rarr;</a></div>':'')+
       '</div>';
     }).join('');
-  } catch (err) {
-    el.innerHTML = '<div class="empty-state"><p>Unable to load contrarian signals.</p></div>';
-  }
+  }catch(err){}
 }
 
-// ── Expiring Soon ──
-async function loadExpiring() {
-  const el = document.getElementById('expiring-list');
-  try {
-    const r = await fetch('/api/resolution-probability');
-    if (!r.ok) throw new Error('API error');
-    const data = await r.json();
-    const markets = data.markets || [];
-
-    if (!markets.length) {
-      el.innerHTML = '<div class="empty-state"><p>No markets expiring within 7 days detected.</p></div>';
-      return;
-    }
-
-    el.innerHTML = markets.map(m => {
-      const prob = m.resolution_probability || 50;
-      let colorClass, probColor, probBg;
-      if (prob > 70) { colorClass = 'color-green'; probColor = 'var(--green)'; probBg = 'var(--green-dim)'; }
-      else if (prob < 30) { colorClass = 'color-red'; probColor = 'var(--red)'; probBg = 'var(--red-dim)'; }
-      else { colorClass = 'color-gold'; probColor = 'var(--gold)'; probBg = 'var(--gold-dim)'; }
-
-      // Format countdown
-      const hrs = m.hours_to_expiry || 0;
-      let countdownVal, countdownLabel;
-      if (hrs < 1) { countdownVal = Math.round(hrs * 60) + 'm'; countdownLabel = 'remaining'; }
-      else if (hrs < 24) { countdownVal = Math.round(hrs) + 'h'; countdownLabel = 'remaining'; }
-      else { countdownVal = Math.round(hrs / 24) + 'd'; countdownLabel = Math.round(hrs % 24) + 'h remaining'; }
-
-      return '<div class="expiring-card ' + colorClass + '">' +
-        '<div>' +
-          '<div class="expiring-market">' + escHtml((m.market || '').substring(0, 100)) + '</div>' +
-          '<div class="expiring-meta">' +
-            '<span>Price: <span class="val">' + m.current_price + '% YES</span></span>' +
-            (m.whale_count ? '<span>Whales: <span class="val">' + m.whale_count + '</span></span>' : '') +
-            '<span>Whale agrees: <span class="val">' + (m.whale_agrees ? 'Yes' : 'No') + '</span></span>' +
-          '</div>' +
-          '<div class="expiring-insight">' + escHtml(m.insight || '') + '</div>' +
-          (m.url ? '<a href="' + escAttr(m.url.startsWith('https://polymarket.com') ? m.url : 'https://polymarket.com') + '" target="_blank" rel="noopener" style="display:inline-block;margin-top:8px;font-family:var(--mono);font-size:11px;color:var(--gold)">View on Polymarket &rarr;</a>' : '') +
-        '</div>' +
-        '<div class="expiring-countdown">' +
-          '<div class="expiring-countdown-val" style="color:' + probColor + '">' + countdownVal + '</div>' +
-          '<div class="expiring-countdown-label">' + escHtml(countdownLabel) + '</div>' +
-          '<div class="expiring-prob" style="color:' + probColor + ';background:' + probBg + '">' + prob + '% likely</div>' +
-        '</div>' +
+// Expiring
+async function loadExpiring(){
+  try{
+    var r=await fetch('/api/resolution-probability');if(!r.ok)throw new Error();
+    var data=await r.json();var markets=data.markets||[];
+    if(!markets.length)return;
+    document.getElementById('expiringSection').style.display='';
+    document.getElementById('expiring-list').innerHTML=markets.map(function(m){
+      var prob=m.resolution_probability||50;
+      var cls=prob>70?'green':prob<30?'red':'gold';
+      var pc=prob>70?'var(--green)':prob<30?'var(--red)':'var(--gold)';
+      var pbg=prob>70?'rgba(34,197,94,.12)':prob<30?'rgba(239,68,68,.12)':'rgba(201,146,13,.12)';
+      var hrs=m.hours_to_expiry||0;
+      var cv,cl;
+      if(hrs<1){cv=Math.round(hrs*60)+'m';cl='left'}
+      else if(hrs<24){cv=Math.round(hrs)+'h';cl='left'}
+      else{cv=Math.round(hrs/24)+'d';cl=Math.round(hrs%24)+'h left'}
+      return '<div class="cb-expiring '+cls+'">'+
+        '<div>'+
+          '<div class="cb-expiring-market">'+escHtml((m.market||'').substring(0,80))+'</div>'+
+          '<div class="cb-expiring-meta">'+
+            '<span>Price: <span class="val">'+m.current_price+'%</span></span>'+
+            (m.whale_count?'<span>Whales: <span class="val">'+m.whale_count+'</span></span>':'')+
+          '</div>'+
+          (m.url?'<div style="margin-top:6px"><a href="'+escAttr(m.url.startsWith('https://polymarket.com')?m.url:'https://polymarket.com')+'" target="_blank" rel="noopener" class="cb-link">Polymarket &rarr;</a></div>':'')+
+        '</div>'+
+        '<div class="cb-expiring-countdown">'+
+          '<div class="cb-expiring-val" style="color:'+pc+'">'+cv+'</div>'+
+          '<div class="cb-expiring-label">'+escHtml(cl)+'</div>'+
+          '<div class="cb-expiring-prob" style="color:'+pc+';background:'+pbg+'">'+prob+'%</div>'+
+        '</div>'+
       '</div>';
     }).join('');
-  } catch (err) {
-    el.innerHTML = '<div class="empty-state"><p>Unable to load expiring markets.</p></div>';
-  }
+  }catch(err){}
 }
 
-// Auto-refresh every 2 minutes
-setInterval(loadPredictions, 2 * 60 * 1000);
-// Update timestamp every 10 seconds
-setInterval(updateTimestamp, 10 * 1000);
-
-// Initial load
-loadPredictions();
-loadContrarian();
-loadExpiring();
+// Refresh
+setInterval(loadPredictions,2*60*1000);
+setInterval(updateTimestamp,10*1000);
+loadPredictions();loadContrarian();loadExpiring();
 </script>
 </body>
 </html>
