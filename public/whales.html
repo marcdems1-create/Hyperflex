@@ -236,7 +236,8 @@ td { padding: 12px; font-size: 13px; vertical-align: middle; }
 .loading-state p { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 16px; }
 
 /* MOBILE CARDS */
-.mobile-cards { display: none; }
+.mobile-cards { display: block; padding: 0 24px 40px; max-width: 900px; margin: 0 auto; }
+.mobile-cards.view-hidden { display: none; }
 .whale-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
 .whale-card.highlight-100k { border-left: 3px solid var(--gold); }
 .whale-card.highlight-50k { border-color: rgba(201,146,13,0.3); }
@@ -253,7 +254,8 @@ td { padding: 12px; font-size: 13px; vertical-align: middle; }
   .hero h1 { font-size: 26px; }
   .stats-bar { grid-template-columns: repeat(2, 1fr); padding: 0 16px; }
   .table-wrap table { display: none; }
-  .mobile-cards { display: block; padding: 0 16px 40px; max-width: 700px; margin: 0 auto; }
+  .mobile-cards { padding: 0 16px 40px; max-width: 700px; }
+  .mobile-cards.view-hidden { display: none; }
   .stat-value { font-size: 18px; }
   .filter-pill { min-height: 44px; display: inline-flex; align-items: center; }
   .copy-trade-btn, .follow-btn, .bt-btn, .ac-btn { min-height: 44px; display: inline-flex; align-items: center; padding: 8px 14px; }
@@ -527,6 +529,14 @@ function urlBase64ToUint8Array(base64String) {
   <div class="spinner"></div>
   <p>Fetching positions from top 50 traders...</p>
   <p style="margin-top:4px;font-size:11px;color:var(--muted)">(This may take a moment on first load)</p>
+</div>
+
+<!-- VIEW TOGGLE -->
+<div id="viewToggle" style="display:none;padding:0 24px 12px;text-align:right">
+  <div style="display:inline-flex;gap:0;border:1px solid #2a2a25;border-radius:8px;overflow:hidden">
+    <button id="viewCards" onclick="setWhaleView('cards')" style="padding:6px 14px;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.06em;border:none;cursor:pointer;background:rgba(201,146,13,.15);color:#c9920d">CARDS</button>
+    <button id="viewTable" onclick="setWhaleView('table')" style="padding:6px 14px;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.06em;border:none;border-left:1px solid #2a2a25;cursor:pointer;background:transparent;color:#6b6860">TABLE</button>
+  </div>
 </div>
 
 <!-- TABLE (Polymarket) -->
@@ -812,6 +822,28 @@ function applyFilters() {
   applySorting();
 }
 
+var _whaleView = localStorage.getItem('hfx_whale_view') || 'cards';
+
+function setWhaleView(view) {
+  _whaleView = view;
+  localStorage.setItem('hfx_whale_view', view);
+  var tableWrap = document.getElementById('tableWrap');
+  var cards = document.getElementById('mobileCards');
+  var btnCards = document.getElementById('viewCards');
+  var btnTable = document.getElementById('viewTable');
+  if (view === 'cards') {
+    if (tableWrap) tableWrap.style.display = 'none';
+    if (cards) { cards.style.display = 'block'; cards.classList.remove('view-hidden'); }
+    if (btnCards) { btnCards.style.background = 'rgba(201,146,13,.15)'; btnCards.style.color = '#c9920d'; }
+    if (btnTable) { btnTable.style.background = 'transparent'; btnTable.style.color = '#6b6860'; }
+  } else {
+    if (tableWrap) tableWrap.style.display = '';
+    if (cards) { cards.style.display = 'none'; cards.classList.add('view-hidden'); }
+    if (btnTable) { btnTable.style.background = 'rgba(201,146,13,.15)'; btnTable.style.color = '#c9920d'; }
+    if (btnCards) { btnCards.style.background = 'transparent'; btnCards.style.color = '#6b6860'; }
+  }
+}
+
 function applySorting() {
   _filtered.sort((a, b) => {
     let va = a[_sortField], vb = b[_sortField];
@@ -824,6 +856,10 @@ function applySorting() {
   renderTable();
   renderMobileCards();
   updateSortArrows();
+  // Show view toggle and apply saved preference
+  var toggle = document.getElementById('viewToggle');
+  if (toggle) toggle.style.display = '';
+  setWhaleView(_whaleView);
 }
 
 function sortBy(field) {
