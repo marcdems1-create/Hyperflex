@@ -16782,6 +16782,38 @@ app.get('/api/manifold/positions/:username', async (req, res) => {
 
 // ── CROSS-PLATFORM MARKET SEARCH ────────────────────────────────────────────
 const _mktSearchCache = new Map();
+// --- Kalshi event cache: paginate ALL events, cache for 10 min ---
+let _kalshiAllEvents = { events: [], ts: 0 };
+async function getKalshiEvents() {
+  if (_kalshiAllEvents.events.length > 0 && Date.now() - _kalshiAllEvents.ts < 10 * 60 * 1000) {
+    return _kalshiAllEvents.events;
+  }
+  const allEvents = [];
+  let cursor = '';
+  const headers = { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' };
+  try {
+    for (let page = 0; page < 6; page++) { // max 6 pages = 1200 events
+      const url = `https://api.elections.kalshi.com/trade-api/v2/events?limit=200&status=open&with_nested_markets=true${cursor ? '&cursor=' + cursor : ''}`;
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), 12000);
+      const r = await fetch(url, { headers, signal: ctrl.signal }).finally(() => clearTimeout(tid));
+      if (!r.ok) break;
+      const data = await r.json();
+      const events = data.events || [];
+      allEvents.push(...events);
+      if (events.length < 200 || !data.cursor) break;
+      cursor = data.cursor;
+    }
+    _kalshiAllEvents = { events: allEvents, ts: Date.now() };
+    console.log(`[kalshi-cache] Cached ${allEvents.length} Kalshi events across ${Math.ceil(allEvents.length / 200)} pages`);
+  } catch (e) {
+    console.error('[kalshi-cache] Failed to fetch:', e.message);
+    // Return stale cache if available
+    if (_kalshiAllEvents.events.length > 0) return _kalshiAllEvents.events;
+  }
+  return allEvents;
+}
+
 app.get('/api/markets/search', async (req, res) => {
   const q = (req.query.q || '').trim().toLowerCase();
   if (!q || q.length < 2) return res.status(400).json({ error: 'Query too short (min 2 chars)' });
@@ -16874,11 +16906,11 @@ app.get('/api/markets/search', async (req, res) => {
       if (q.includes(keyword)) matchedSports.add(sportKey);
     }
 
-    const [polyRes, kalshiRes, ...oddsResults] = await Promise.allSettled([
+    const [polyRes, kalshiEventsResult, ...oddsResults] = await Promise.allSettled([
       // Polymarket — use EVENTS endpoint; fetch 200 events (search param is ignored by gamma API)
       fetchWithTimeout(`https://gamma-api.polymarket.com/events?closed=false&limit=200&order=liquidity&ascending=false`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }, 12000),
-      // Kalshi — no text search API, fetch max events and filter locally
-      fetchWithTimeout(`https://api.elections.kalshi.com/trade-api/v2/events?limit=200&status=open&with_nested_markets=true`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }, 12000),
+      // Kalshi — paginated cache of ALL events (10-min TTL)
+      getKalshiEvents(),
       // The Odds API — fetch odds for matched sports (or top sports if no match)
       ...(ODDS_API_KEY ? (matchedSports.size > 0
         ? [...matchedSports].slice(0, 2).map(sport =>
@@ -16919,17 +16951,11 @@ app.get('/api/markets/search', async (req, res) => {
       polyMarkets = polyMarkets.slice(0, 15);
     }
 
-    // --- Parse Kalshi ---
+    // --- Parse Kalshi (from paginated cache) ---
     let kalshiMarkets = [];
-    if (kalshiRes.status === 'fulfilled' && kalshiRes.value.ok) {
-      const raw = await kalshiRes.value.json();
-      const events = raw.events || [];
-      // Debug: log Kalshi match count for commodity queries
-      if (['gold', 'oil', 'silver', 'copper'].includes(q)) {
-        const matchCount = events.filter(e => matchesQuery(e.title) || matchesQuery(e.category)).length;
-        console.log(`[market-search] Kalshi "${q}" query: ${events.length} total events, ${matchCount} matched`);
-      }
-      for (const evt of events) {
+    const kalshiEvents = kalshiEventsResult.status === 'fulfilled' ? kalshiEventsResult.value : [];
+    if (kalshiEvents.length > 0) {
+      for (const evt of kalshiEvents) {
         // Check event title, category, sub_title, AND nested market titles against query
         const evtMatch = matchesQuery(evt.title) || matchesQuery(evt.category) || matchesQuery(evt.sub_title);
         const mkts = evt.markets || [];
@@ -16937,14 +16963,18 @@ app.get('/api/markets/search', async (req, res) => {
           if (m.status !== 'open' && m.status !== 'active') continue;
           // Match on event OR individual market title
           if (!evtMatch && !matchesQuery(m.title)) continue;
-          const _kYesPct = m.yes_ask != null ? Math.round(m.yes_ask * 100) : (m.last_price != null ? Math.round(m.last_price * 100) : (m.yes_bid != null ? Math.round(m.yes_bid * 100) : null));
+          // Kalshi API returns *_dollars fields as strings like "0.0400" (= 4 cents = 4%)
+          const yesAsk = m.yes_ask_dollars != null ? parseFloat(m.yes_ask_dollars) : (m.yes_ask != null ? m.yes_ask : null);
+          const lastPrice = m.last_price_dollars != null ? parseFloat(m.last_price_dollars) : (m.last_price != null ? m.last_price : null);
+          const yesBid = m.yes_bid_dollars != null ? parseFloat(m.yes_bid_dollars) : (m.yes_bid != null ? m.yes_bid : null);
+          const _kYesPct = yesAsk != null ? Math.round(yesAsk * 100) : (lastPrice != null ? Math.round(lastPrice * 100) : (yesBid != null ? Math.round(yesBid * 100) : null));
           if (_kYesPct !== null && (_kYesPct >= 95 || _kYesPct <= 5)) continue; // Skip resolved/dead markets
           kalshiMarkets.push({
-            question: m.title || evt.title || '',
+            question: (m.yes_sub_title && m.title ? m.title + ': ' + m.yes_sub_title : m.title) || evt.title || '',
             yes_pct: _kYesPct,
             close_date: m.close_time || m.expiration_time || null,
             url: m.ticker ? `https://kalshi.com/markets/${(m.event_ticker || m.ticker || '').replace(/-\d+$/, '').toLowerCase()}` : 'https://kalshi.com',
-            volume: m.volume || 0,
+            volume: parseFloat(m.volume_fp || m.volume || 0),
             _ticker: m.ticker || null
           });
           if (kalshiMarkets.length >= 15) break;
