@@ -17340,11 +17340,12 @@ async function fetchWhalePositions() {
     if (_whaleTradeStream.length > 100) _whaleTradeStream.length = 100;
     const _newEvtCount = _whaleTradeStream.filter(e => e.ts === now).length;
     console.log(`[whale-stream] Detected ${_newEvtCount} new whale trade events`);
-    // Tweet the biggest new whale move (if any)
-    if (_newEvtCount > 0) {
-      const biggestMove = _whaleTradeStream.filter(e => e.ts === now).sort((a, b) => (b.size || 0) - (a.size || 0))[0];
-      if (biggestMove && biggestMove.size >= 10000) tweetWhaleAlert(biggestMove).catch(() => {});
-    }
+    // DISABLED: Old auto-tweet on every whale move was spamming the timeline
+    // All tweets now go through the draft queue at /api/tweet-queue
+    // if (_newEvtCount > 0) {
+    //   const biggestMove = _whaleTradeStream.filter(e => e.ts === now).sort((a, b) => (b.size || 0) - (a.size || 0))[0];
+    //   if (biggestMove && biggestMove.size >= 10000) tweetWhaleAlert(biggestMove).catch(() => {});
+    // }
 
     // ── Whale alert notifications: notify subscribed users of trader moves ──
     if (_newEvtCount > 0) {
@@ -23761,63 +23762,18 @@ function canTweet() {
 
 // ── Event-driven tweets (fire-and-forget, rate-limited) ──
 
-async function tweetWhaleAlert(evt) {
-  if (!canTweet()) return;
-  if (evt.size < 10000) return; // Only tweet positions $10K+
-  const tweet = `${evt.trader_name || 'A whale'} just ${evt.action} a ${evt.size_display} position\n\n> ${evt.question}\n> ${evt.side} side at ${Math.round(evt.price * 100)}%\n> Rank #${evt.trader_rank || '?'} trader\n\nhyperflex.network/brief`;
-  if (tweet.length > 280) return;
-  try { await postTweet(tweet); _tweetLog.push(Date.now()); } catch(e) { console.warn('[tweet-whale]', e.message); }
-}
-
-async function tweetOddsShift(market, pctChange) {
-  if (!canTweet()) return;
-  if (Math.abs(pctChange) < 10) return; // Only tweet 10%+ moves
-  const dir = pctChange > 0 ? 'SURGED' : 'CRASHED';
-  const yesPct = market.yes_price != null ? Math.round(market.yes_price * 100) : '?';
-  const tweet = `ODDS JUST ${dir} ${Math.abs(Math.round(pctChange))} POINTS?\n\n> ${market.question}\n> Now at ${yesPct}% YES\n> ${market.volume ? '$' + Math.round(market.volume/1000) + 'K volume' : 'Volume spiking'}\n\nhyperflex.network/screener`;
-  if (tweet.length > 280) return;
-  try { await postTweet(tweet); _tweetLog.push(Date.now()); } catch(e) { console.warn('[tweet-odds]', e.message); }
-}
-
-async function tweetArbAlert(arb) {
-  if (!canTweet()) return;
-  if (arb.edge < 3) return; // Only tweet 3%+ edge
-  const tweet = `SAME MARKET, DIFFERENT PRICES?\n\n> Polymarket: ${arb.poly_pct}%\n> Kalshi: ${arb.kalshi_pct}%\n> ${arb.edge}pt spread — ${arb.direction}\n\n"${arb.market}"\n\nhyperflex.network/odds`;
-  if (tweet.length > 280) return;
-  try { await postTweet(tweet); _tweetLog.push(Date.now()); } catch(e) { console.warn('[tweet-arb]', e.message); }
-}
-
-async function tweetExpiryAlert(market) {
-  if (!canTweet()) return;
-  const yesPct = market.yes_price != null ? Math.round(market.yes_price * 100) : null;
-  if (yesPct == null || yesPct < 20 || yesPct > 80) return; // Only contested markets
-  const vol = market.volume >= 1000000 ? '$' + (market.volume/1000000).toFixed(1) + 'M' : '$' + Math.round(market.volume/1000) + 'K';
-  const tweet = `RESOLVES TODAY AND STILL AT ${yesPct}%?\n\n> ${market.question}\n> ${vol} volume, no consensus\n> Someone is about to be very wrong\n\nhyperflex.network/screener`;
-  if (tweet.length > 280) return;
-  try { await postTweet(tweet); _tweetLog.push(Date.now()); } catch(e) { console.warn('[tweet-expiry]', e.message); }
-}
-
-async function tweetWinRecap(pred, outcome) {
-  if (!canTweet()) return;
-  if (outcome !== 'correct') return;
-  // Get overall track record
-  let record = '';
-  try {
-    const rows = pool
-      ? await dbQuery("SELECT outcome, COUNT(*) as c FROM prediction_log WHERE resolved = true AND outcome IN ('correct','incorrect') GROUP BY outcome")
-      : ((await supabase.from('prediction_log').select('outcome').eq('resolved', true).in('outcome', ['correct','incorrect'])).data || []);
-    if (Array.isArray(rows) && rows.length) {
-      const wins = rows.find(r => r.outcome === 'correct');
-      const losses = rows.find(r => r.outcome === 'incorrect');
-      const w = parseInt(wins?.c || wins?.count || 0);
-      const l = parseInt(losses?.c || losses?.count || 0);
-      if (w + l > 0) record = `\n\nTrack record: ${w}/${w + l} correct`;
-    }
-  } catch(e) {}
-  const tweet = `AI CALLED IT?\n\n> "${pred.market_question}"\n> Predicted ${pred.predicted_side} at ${Math.round((pred.market_price_at_prediction || 0.5) * 100)}%\n> Result: CORRECT${record}\n\nhyperflex.network/brief`;
-  if (tweet.length > 280) return;
-  try { await postTweet(tweet); _tweetLog.push(Date.now()); } catch(e) { console.warn('[tweet-recap]', e.message); }
-}
+// ══════════════════════════════════════════════════════════════════════
+// OLD AUTO-TWEET FUNCTIONS — ALL DISABLED
+// These were auto-posting garbage tweets with wallet hashes, bullet points,
+// and resolved markets. All tweets now go through the draft queue system
+// at /api/tweet-queue. The new generators (generateWhaleAlertTweet, etc.)
+// produce drafts only. See the tweet queue section below.
+// ══════════════════════════════════════════════════════════════════════
+async function tweetWhaleAlert() { /* disabled — use generateWhaleAlertTweet() */ }
+async function tweetOddsShift() { /* disabled — use generateOddsShiftTweet() */ }
+async function tweetArbAlert() { /* disabled — use generateArbAlertTweet() */ }
+async function tweetExpiryAlert() { /* disabled */ }
+async function tweetWinRecap() { /* disabled — use generateResolutionRecapTweet() */ }
 
 async function postTweet(text) {
   const url = 'https://api.x.com/2/tweets';
@@ -24400,6 +24356,196 @@ cron.schedule('45 * * * *', safeCron('tweetArbAlert', generateArbAlertTweet));
 cron.schedule('5 * * * *', safeCron('tweetResolutionRecap', generateResolutionRecapTweet));
 
 console.log('[boot] Tweet pipeline initialized — 4 generators, draft queue, cron schedules active');
+
+// ══════════════════════════════════════════════════════════════════════
+// REPLY-TO-ENGAGEMENT BOT — find prediction market tweets and reply with data
+// ══════════════════════════════════════════════════════════════════════
+const _replyLog = []; // track replied tweet IDs to avoid duplicates
+const _replyDraftQueue = []; // draft replies for admin review
+let _replyDraftId = 0;
+
+async function replyToTweet(tweetId, text) {
+  const url = 'https://api.x.com/2/tweets';
+  const body = JSON.stringify({ text, reply: { in_reply_to_tweet_id: tweetId } });
+  const auth = _xOAuthSign('POST', url, {});
+  if (!auth) throw new Error('X API keys not configured');
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Authorization': auth, 'Content-Type': 'application/json' },
+    body
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(`X API ${res.status}: ${JSON.stringify(data)}`);
+  console.log('[reply-bot] Replied to', tweetId, ':', data.data?.id);
+  return data;
+}
+
+async function searchAndDraftReplies() {
+  const bearer = process.env.X_BEARER_TOKEN;
+  if (!bearer) return;
+  try {
+    // Search for recent tweets about prediction markets (exclude our own + retweets)
+    const queries = [
+      'polymarket odds -is:retweet -from:HyperFlexapp',
+      'kalshi prediction -is:retweet -from:HyperFlexapp',
+      '"prediction market" whale -is:retweet -from:HyperFlexapp',
+    ];
+    const query = queries[Math.floor(Date.now() / 3600000) % queries.length]; // rotate hourly
+    const searchUrl = `https://api.x.com/2/tweets/search/recent?query=${encodeURIComponent(query)}&max_results=10&tweet.fields=public_metrics,author_id,created_at`;
+    const res = await fetch(searchUrl, {
+      headers: { 'Authorization': `Bearer ${bearer}` },
+      signal: AbortSignal.timeout(10000)
+    });
+    if (!res.ok) { console.warn('[reply-bot] Search failed:', res.status); return; }
+    const data = await res.json();
+    const tweets = data.data || [];
+    if (!tweets.length) return;
+
+    // Filter: only reply to tweets with some engagement (5+ likes or 500+ views)
+    const worthy = tweets.filter(t => {
+      const m = t.public_metrics || {};
+      const engagement = (m.like_count || 0) + (m.retweet_count || 0) * 3 + (m.reply_count || 0) * 2;
+      return engagement >= 5 && !_replyLog.includes(t.id);
+    });
+    if (!worthy.length) return;
+
+    // Pick the most engaged tweet
+    const target = worthy.sort((a, b) => {
+      const aE = (a.public_metrics?.like_count || 0) + (a.public_metrics?.retweet_count || 0) * 3;
+      const bE = (b.public_metrics?.like_count || 0) + (b.public_metrics?.retweet_count || 0) * 3;
+      return bE - aE;
+    })[0];
+
+    // Get relevant data from our caches to make the reply valuable
+    const tweetText = target.text || '';
+    let dataPoint = '';
+    // Check whale data
+    if (_whaleIndexCache && _whaleIndexCache.data && _whaleIndexCache.data.picks) {
+      const picks = _whaleIndexCache.data.picks;
+      // Find a whale pick that's relevant to the tweet
+      const tLower = tweetText.toLowerCase();
+      const match = picks.find(p => {
+        const mWords = (p.market || '').toLowerCase().split(/\s+/).filter(w => w.length > 4);
+        return mWords.some(w => tLower.includes(w));
+      });
+      if (match) {
+        const cap = match.total_capital >= 1000000 ? '$' + (match.total_capital/1000000).toFixed(1) + 'M' : '$' + Math.round(match.total_capital/1000) + 'K';
+        dataPoint = `Our whale tracker shows ${match.whale_count} wallets with ${cap} on this. ${match.consensus_pct}% consensus on ${match.consensus_side}.`;
+      }
+    }
+    // Fallback: use screener data
+    if (!dataPoint && _screenerCache && _screenerCache.data) {
+      const tLower = tweetText.toLowerCase();
+      const match = _screenerCache.data.find(m => {
+        const mWords = (m.question || '').toLowerCase().split(/\s+/).filter(w => w.length > 4);
+        return mWords.some(w => tLower.includes(w));
+      });
+      if (match) {
+        const vol = match.volume >= 1000000 ? '$' + (match.volume/1000000).toFixed(1) + 'M' : '$' + Math.round(match.volume/1000) + 'K';
+        const pct = match.yes_price != null ? Math.round(match.yes_price * 100) : null;
+        dataPoint = pct ? `Currently at ${pct}% YES with ${vol} volume.` : `${vol} volume on this market.`;
+      }
+    }
+    if (!dataPoint) {
+      dataPoint = 'We track whale wallets across Polymarket and Kalshi in real time.';
+    }
+
+    // Generate reply using Claude
+    const anthropic = new Anthropic();
+    const replyRes = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 200,
+      system: `You write replies on X/Twitter for @HyperFlexapp, a prediction market intelligence platform. Your replies should:
+- Add genuine VALUE to the conversation with real data
+- Sound like a knowledgeable trader, not a brand account
+- Be conversational and brief (1-2 sentences max)
+- NEVER be self-promotional first — lead with the insight, mention the tool naturally if at all
+- NEVER use "Check out" or "Visit" or any direct CTA language
+- NEVER use hashtags or emojis
+- Must be under 200 characters
+- Output ONLY the reply text`,
+      messages: [{
+        role: 'user',
+        content: `Write a reply to this tweet. Lead with data, not promotion.\n\nTweet: "${tweetText.substring(0, 300)}"\n\nRelevant data we have: ${dataPoint}\n\nReply (under 200 chars, ONLY the text):`
+      }]
+    });
+
+    let reply = (replyRes.content[0]?.text || '').trim().replace(/^["']|["']$/g, '');
+    if (reply.length > 200) reply = reply.substring(0, reply.lastIndexOf(' ', 200)) || reply.substring(0, 200);
+
+    // Add to draft queue — never auto-post replies
+    _replyDraftQueue.push({
+      id: ++_replyDraftId,
+      tweet_id: target.id,
+      tweet_text: tweetText.substring(0, 200),
+      tweet_author: target.author_id,
+      tweet_metrics: target.public_metrics,
+      reply_text: reply,
+      data_used: dataPoint,
+      created_at: new Date().toISOString(),
+      status: 'draft'
+    });
+    // Cap queue at 20
+    if (_replyDraftQueue.length > 20) _replyDraftQueue.shift();
+    console.log(`[reply-bot] Drafted reply to tweet ${target.id}: "${reply.substring(0, 60)}..."`);
+  } catch (e) {
+    console.warn('[reply-bot] Error:', e.message);
+  }
+}
+
+// Reply queue endpoints (admin-gated)
+app.get('/api/reply-queue', (req, res) => {
+  const secret = req.headers['x-admin-secret'];
+  if (secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  res.json({
+    drafts: _replyDraftQueue.filter(r => r.status === 'draft'),
+    posted: _replyDraftQueue.filter(r => r.status === 'posted').slice(-10),
+    total_drafted: _replyDraftQueue.length,
+    replied_today: _replyLog.filter(ts => Date.now() - ts < 86400000).length
+  });
+});
+
+app.post('/api/reply-queue/:id/post', async (req, res) => {
+  const secret = req.headers['x-admin-secret'];
+  if (secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  const entry = _replyDraftQueue.find(r => r.id === parseInt(req.params.id) && r.status === 'draft');
+  if (!entry) return res.status(404).json({ error: 'Draft not found' });
+  try {
+    const result = await replyToTweet(entry.tweet_id, entry.reply_text);
+    entry.status = 'posted';
+    entry.posted_at = new Date().toISOString();
+    _replyLog.push(entry.tweet_id);
+    // Keep log capped
+    if (_replyLog.length > 200) _replyLog.splice(0, 100);
+    res.json({ ok: true, reply_id: result.data?.id, text: entry.reply_text });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/reply-queue/:id/edit', (req, res) => {
+  const secret = req.headers['x-admin-secret'];
+  if (secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  const entry = _replyDraftQueue.find(r => r.id === parseInt(req.params.id) && r.status === 'draft');
+  if (!entry) return res.status(404).json({ error: 'Draft not found' });
+  const newText = (req.body.text || '').trim();
+  if (!newText) return res.status(400).json({ error: 'Text required' });
+  entry.reply_text = newText;
+  res.json({ ok: true, updated: entry });
+});
+
+app.post('/api/reply-queue/:id/delete', (req, res) => {
+  const secret = req.headers['x-admin-secret'];
+  if (secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  const idx = _replyDraftQueue.findIndex(r => r.id === parseInt(req.params.id));
+  if (idx === -1) return res.status(404).json({ error: 'Draft not found' });
+  _replyDraftQueue.splice(idx, 1);
+  res.json({ ok: true });
+});
+
+// Run reply bot every 2 hours (at :30 to offset from other crons)
+cron.schedule('30 */2 * * *', safeCron('replyBot', searchAndDraftReplies));
+console.log('[boot] Reply engagement bot initialized — drafts replies every 2h');
 
 // ════════════════════════════════════════════════════════════
 // ACCURACY TRACKING — the core product
