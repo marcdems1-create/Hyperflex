@@ -16847,13 +16847,33 @@ app.get('/api/markets/search', async (req, res) => {
             yes_pct: _kYesPct,
             close_date: m.close_time || m.expiration_time || null,
             url: m.ticker ? `https://kalshi.com/markets/${(m.event_ticker || m.ticker || '').replace(/-\d+$/, '').toLowerCase()}` : 'https://kalshi.com',
-            volume: m.volume || 0
+            volume: m.volume || 0,
+            _ticker: m.ticker || null
           });
           if (kalshiMarkets.length >= 15) break;
         }
         if (kalshiMarkets.length >= 15) break;
       }
     }
+
+    // --- Backfill Kalshi prices for markets with null yes_pct ---
+    const kalshiNullPrice = kalshiMarkets.filter(m => m.yes_pct == null && m._ticker);
+    if (kalshiNullPrice.length > 0) {
+      const priceFetches = kalshiNullPrice.slice(0, 5).map(async (m) => {
+        try {
+          const r = await fetchWithTimeout(`https://api.elections.kalshi.com/trade-api/v2/markets/${m._ticker}`, { headers: { Accept: 'application/json' } }, 5000);
+          if (r.ok) {
+            const md = await r.json();
+            const mkt = md.market || md;
+            const price = mkt.yes_ask ?? mkt.last_price ?? mkt.yes_bid ?? null;
+            if (price != null) m.yes_pct = Math.round(price * 100);
+          }
+        } catch {}
+      });
+      await Promise.allSettled(priceFetches);
+    }
+    // Clean up internal _ticker field
+    kalshiMarkets.forEach(m => { delete m._ticker; });
 
     // --- Parse Sportsbook odds ---
     let sportsbooks = [];
@@ -17006,28 +17026,38 @@ app.get('/api/markets/search', async (req, res) => {
     } catch (e) { console.warn('[smart-money]', e.message); }
 
     // --- Cross-platform pairing: match Poly ↔ Kalshi markets about the same question ---
+    // Stop words that cause false cross-platform matches
+    const _pairStopWords = new Set(['will','the','before','after','from','this','that','with','have','been','does','would','should','could','about','into','than','them','then','what','when','where','which','their','there','these','those','other','some','more','very','just','only','also','most','next','each','both','during','being','between','2025','2026','2027','2028','2029']);
+    function _significantWords(text) {
+      return (text || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 3 && !_pairStopWords.has(w));
+    }
     const pairs = [];
     const usedKalshi = new Set();
     const usedPoly = new Set();
     for (let pi = 0; pi < polyMarkets.length; pi++) {
-      const pWords = (polyMarkets[pi].question || '').toLowerCase().split(/\s+/).filter(w => w.length > 3);
+      const pWords = _significantWords(polyMarkets[pi].question);
       let bestMatch = -1, bestOverlap = 0;
       for (let ki = 0; ki < kalshiMarkets.length; ki++) {
         if (usedKalshi.has(ki)) continue;
-        const kWords = (kalshiMarkets[ki].question || '').toLowerCase().split(/\s+/).filter(w => w.length > 3);
+        const kWords = _significantWords(kalshiMarkets[ki].question);
         const overlap = pWords.filter(w => kWords.includes(w)).length;
-        if (overlap > bestOverlap) { bestOverlap = overlap; bestMatch = ki; }
+        // Require higher overlap ratio — at least 3 shared meaningful words, or 2 if one is the query term
+        const minOverlap = pWords.some(w => qWords.includes(w) && kWords.includes(w)) ? 2 : 3;
+        if (overlap > bestOverlap && overlap >= minOverlap) { bestOverlap = overlap; bestMatch = ki; }
       }
-      if (bestOverlap >= 2 && bestMatch >= 0) {
+      if (bestMatch >= 0) {
         const pPct = polyMarkets[pi].yes_pct; const kPct = kalshiMarkets[bestMatch].yes_pct;
         const spread = (pPct != null && kPct != null) ? Math.abs(pPct - kPct) : null;
-        pairs.push({ poly: polyMarkets[pi], kalshi: kalshiMarkets[bestMatch], spread });
-        usedPoly.add(pi);
-        usedKalshi.add(bestMatch);
+        // Only pair if at least one side has price data
+        if (pPct != null || kPct != null) {
+          pairs.push({ poly: polyMarkets[pi], kalshi: kalshiMarkets[bestMatch], spread });
+          usedPoly.add(pi);
+          usedKalshi.add(bestMatch);
+        }
       }
     }
-    // Sort pairs by spread descending (biggest arbitrage first)
-    pairs.sort((a, b) => (b.spread || 0) - (a.spread || 0));
+    // Sort pairs by spread descending (biggest arbitrage first), nulls last
+    pairs.sort((a, b) => (b.spread ?? -1) - (a.spread ?? -1));
     const unpairedPoly = polyMarkets.filter((_, i) => !usedPoly.has(i));
     const unpairedKalshi = kalshiMarkets.filter((_, i) => !usedKalshi.has(i));
 
