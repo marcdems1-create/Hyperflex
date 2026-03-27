@@ -231,7 +231,7 @@ async function loadTerminal(){
   var totalCap=cats.reduce(function(s,c){return s+(c.capital||0)},0);
   document.getElementById('stWhale').textContent=fmtCap(totalCap);
   document.getElementById('stWhale').parentElement.querySelector('.t-stat-sub').textContent=(sent.total_positions||0)+' positions';
-  document.getElementById('stMarkets').textContent=stats.markets||'--';
+  document.getElementById('stMarkets').textContent=stats.live_markets||stats.markets||'--';
   var yesPct=sent.yes_pct||50;
   document.getElementById('stSent').textContent=yesPct+'%';
   document.getElementById('stSent').style.color=yesPct>=55?'var(--green)':yesPct<=45?'var(--red)':'var(--gold)';
@@ -245,6 +245,16 @@ async function loadTerminal(){
     var avgChg=moversList.reduce(function(s,m){return s+Math.abs(m.change_pct||0)},0)/moversList.length;
     document.getElementById('stVol').textContent=avgChg.toFixed(1)+'%';
     document.getElementById('stVol').style.color=avgChg>5?'var(--red)':avgChg>2?'var(--orange)':'var(--green)';
+  } else {
+    // Fallback: estimate from whale position spread
+    var prices=(whale.whales||[]).map(function(w){return w.current_price}).filter(function(p){return p!=null&&p>0&&p<1});
+    if(prices.length>5){
+      var avg=prices.reduce(function(s,p){return s+p},0)/prices.length;
+      var spread=prices.reduce(function(s,p){return s+Math.abs(p-avg)},0)/prices.length;
+      document.getElementById('stVol').textContent=(spread*100).toFixed(1)+'%';
+      document.getElementById('stVol').style.color='var(--soft)';
+      document.getElementById('stVol').parentElement.querySelector('.t-stat-sub').textContent='price spread';
+    }
   }
   if(fg.score!=null){
     document.getElementById('stFG').textContent=fg.score;
@@ -290,13 +300,17 @@ async function loadTerminal(){
   }
 
   // ── Live Alerts ──
-  var whales=(whale.whales||[]).slice(0,6);
-  if(whales.length>0){
-    document.getElementById('alertsContainer').innerHTML=whales.map(function(w){
+  // Sort whales by position size for top alerts
+  var sortedWhales=(whale.whales||[]).slice().sort(function(a,b){return(b.size||0)-(a.size||0)}).slice(0,6);
+  if(sortedWhales.length>0){
+    document.getElementById('alertsContainer').innerHTML=sortedWhales.map(function(w){
       var side=(w.side||'YES').toUpperCase();
+      if(side==='NO'||side==='N'){side='NO'} else {side='YES'}
       var sColor=side==='YES'?'var(--green)':'var(--red)';
       var cap=fmtCap(w.size||0);
-      return '<div class="t-alert"><span class="t-alert-icon" style="color:'+sColor+'">'+(side==='YES'?'&#9650;':'&#9660;')+'</span><div><div class="t-alert-text"><span style="color:'+sColor+';font-weight:700">'+side+'</span> '+cap+' on '+E((w.market||'').substring(0,50))+'</div><div class="t-alert-time">Rank #'+(w.rank||'?')+' whale</div></div></div>';
+      var name=w.trader||w.trader_name||(w.proxyWallet||'').substring(0,8)+'...';
+      var rank=w.trader_rank||w.rank||null;
+      return '<div class="t-alert"><span class="t-alert-icon" style="color:'+sColor+'">'+(side==='YES'?'&#9650;':'&#9660;')+'</span><div><div class="t-alert-text"><span style="color:'+sColor+';font-weight:700">'+side+'</span> '+cap+' on '+E((w.market||w.position||'').substring(0,50))+'</div><div class="t-alert-time">'+E(name)+(rank?' · Rank #'+rank:'')+'</div></div></div>';
     }).join('');
   } else {
     document.getElementById('alertsContainer').innerHTML='<div class="t-loading">No whale alerts yet — data warming up</div>';
@@ -313,16 +327,35 @@ async function loadTerminal(){
     }).join('');
   }
 
-  // ── Whale Consensus table ──
-  var conc=(flow.concentration||[]).slice(0,8);
+  // ── Whale Consensus table — group raw whale positions by market ──
+  var mktGroup={};
+  (whale.whales||[]).forEach(function(w){
+    var mkt=w.market||w.position||'';
+    if(!mkt)return;
+    if(!mktGroup[mkt])mktGroup[mkt]={market:mkt,wallets:new Set(),capital:0,yes_cap:0,no_cap:0,url:w.market_url||''};
+    var addr=(w.proxyWallet||w.wallet||w.trader||'').toLowerCase();
+    mktGroup[mkt].wallets.add(addr);
+    var s=(w.side||'').toUpperCase();
+    var cap=w.size||0;
+    mktGroup[mkt].capital+=cap;
+    if(s==='YES'||s==='Y')mktGroup[mkt].yes_cap+=cap;
+    else if(s==='NO'||s==='N')mktGroup[mkt].no_cap+=cap;
+  });
+  var conc=Object.values(mktGroup).map(function(m){
+    var wc=m.wallets.size;
+    var cs=m.yes_cap>=m.no_cap?'YES':'NO';
+    var cp=Math.round(Math.max(m.yes_cap,m.no_cap)/((m.yes_cap+m.no_cap)||1)*100);
+    return{market:m.market,whale_count:wc,total_capital:m.capital,consensus_side:cs,consensus_pct:cp,url:m.url};
+  }).sort(function(a,b){return b.whale_count-a.whale_count||b.total_capital-a.total_capital}).slice(0,8);
   if(conc.length>0){
     var html='';
     conc.forEach(function(m){
       var sColor=m.consensus_side==='YES'?'var(--green)':'var(--red)';
       var cap=fmtCap(m.total_capital||0);
+      var wLabel=m.whale_count===1?'whale':'whales';
       var link=m.url&&m.url!=='https://polymarket.com'?m.url:'';
       var qHtml=link?'<a href="'+link+'" target="_blank" rel="noopener" style="color:var(--text);text-decoration:none">'+E((m.market||'').substring(0,45))+'</a>':E((m.market||'').substring(0,45));
-      html+='<div class="t-row"><div style="min-width:60px"><span style="font-weight:700;color:var(--gold)">'+m.whale_count+'</span> <span style="color:var(--dim)">whales</span></div><div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px">'+qHtml+'</div><div style="min-width:50px;text-align:right;font-weight:700;color:var(--soft)">'+cap+'</div><div style="min-width:70px;text-align:right"><span style="font-weight:700;color:'+sColor+'">'+m.consensus_pct+'% '+m.consensus_side+'</span></div></div>';
+      html+='<div class="t-row"><div style="min-width:60px"><span style="font-weight:700;color:var(--gold)">'+m.whale_count+'</span> <span style="color:var(--dim)">'+wLabel+'</span></div><div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px">'+qHtml+'</div><div style="min-width:50px;text-align:right;font-weight:700;color:var(--soft)">'+cap+'</div><div style="min-width:70px;text-align:right"><span style="font-weight:700;color:'+sColor+'">'+m.consensus_pct+'% '+m.consensus_side+'</span></div></div>';
     });
     document.getElementById('whaleTable').innerHTML=html;
   }
@@ -339,6 +372,19 @@ async function loadTerminal(){
       html2+='<div class="t-row"><div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px">'+qHtml+'</div><div style="min-width:45px;text-align:right;color:var(--soft)">'+price+'&cent;</div><div style="min-width:65px;text-align:right;font-weight:700;color:'+chgColor+'">'+(chg>=0?'+':'')+chg.toFixed(1)+'%</div></div>';
     });
     document.getElementById('moversTable').innerHTML=html2;
+  } else {
+    // Fallback: show top markets by whale capital as "hot markets"
+    var topByCapital=Object.values(mktGroup||{}).sort(function(a,b){return b.capital-a.capital}).slice(0,8);
+    if(topByCapital.length>0){
+      document.getElementById('moversTable').innerHTML=topByCapital.map(function(m){
+        var link=m.url&&m.url!=='https://polymarket.com'?m.url:'';
+        var qHtml=link?'<a href="'+link+'" target="_blank" rel="noopener" style="color:var(--text);text-decoration:none">'+E((m.market||'').substring(0,45))+'</a>':E((m.market||'').substring(0,45));
+        return '<div class="t-row"><div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px">'+qHtml+'</div><div style="min-width:60px;text-align:right;font-weight:700;color:var(--gold)">'+fmtCap(m.capital)+'</div></div>';
+      }).join('');
+      document.querySelector('#moversTable').closest('.t-widget').querySelector('.t-widget-title').textContent='Hot Markets by Capital';
+    } else {
+      document.getElementById('moversTable').innerHTML='<div class="t-loading">Movers data collecting — needs 24h of snapshots</div>';
+    }
   }
 
   // ── Category Sentiment ──
@@ -370,18 +416,24 @@ async function loadTerminal(){
   }
 
   // ── Whale Leaderboard ──
-  if(whales.length>0){
-    // Group by wallet, sum capital
+  var allWhales=whale.whales||[];
+  if(allWhales.length>0){
+    // Group by trader name/wallet, sum capital
     var wMap={};
-    (whale.whales||[]).forEach(function(w){
-      var addr=(w.wallet||w.trader_address||'').toLowerCase();
-      if(!wMap[addr])wMap[addr]={name:w.trader_name||addr.slice(0,8)+'...',rank:w.rank||99,capital:0,positions:0};
-      wMap[addr].capital+=(w.size||0);
-      wMap[addr].positions++;
+    allWhales.forEach(function(w){
+      var key=(w.trader||w.proxyWallet||'unknown').toLowerCase();
+      var name=w.trader||(w.proxyWallet||'').substring(0,10)+'...';
+      var rank=w.trader_rank||w.rank||null;
+      if(!wMap[key])wMap[key]={name:name,rank:rank,capital:0,positions:0,pnl:0};
+      wMap[key].capital+=(w.size||0);
+      wMap[key].positions++;
+      if(w.pnl)wMap[key].pnl+=(w.pnl||0);
     });
-    var leaders=Object.values(wMap).sort(function(a,b){return b.capital-a.capital}).slice(0,5);
+    var leaders=Object.values(wMap).sort(function(a,b){return b.capital-a.capital}).slice(0,6);
     document.getElementById('whaleLeader').innerHTML=leaders.map(function(l,i){
-      return '<div class="t-row"><div style="min-width:20px;color:var(--gold);font-weight:700">#'+(i+1)+'</div><div style="flex:1;color:var(--text);font-size:11px">'+E(l.name)+'</div><div style="min-width:60px;text-align:right;font-weight:700;color:var(--soft)">'+fmtCap(l.capital)+'</div><div style="min-width:40px;text-align:right;color:var(--dim)">'+l.positions+'</div></div>';
+      var pnlColor=l.pnl>=0?'var(--green)':'var(--red)';
+      var pnlStr=l.pnl?((l.pnl>=0?'+':'')+fmtCap(Math.abs(Math.round(l.pnl)))):'';
+      return '<div class="t-row"><div style="min-width:20px;color:var(--gold);font-weight:700">#'+(i+1)+'</div><div style="flex:1;color:var(--text);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+E(l.name)+(l.rank?' <span style="color:var(--dim);font-size:9px">#'+l.rank+'</span>':'')+'</div><div style="min-width:55px;text-align:right;font-weight:700;color:var(--soft)">'+fmtCap(l.capital)+'</div><div style="min-width:45px;text-align:right;color:var(--dim);font-size:10px">'+l.positions+' pos</div></div>';
     }).join('');
   }
 }
