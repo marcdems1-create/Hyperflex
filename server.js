@@ -16722,6 +16722,10 @@ app.get('/api/markets/search', async (req, res) => {
       nba: ['nba', 'basketball', 'finals', 'playoff'],
       ufc: ['ufc', 'mma', 'fighting', 'fight night'],
       inflation: ['inflation', 'cpi', 'consumer price', 'price index'],
+      impeach: ['impeach', 'impeachment', 'impeached', 'removed from office', 'conviction', '25th amendment'],
+      tariff: ['tariff', 'tariffs', 'trade war', 'import duty', 'customs', 'trade policy'],
+      rate: ['rate', 'interest rate', 'rate cut', 'rate hike', 'fed rate', 'fomc'],
+      finance: ['finance', 'financial', 'stock', 'market', 'economy', 'economic', 'gdp', 'inflation', 'fed'],
     };
     const qWords = q.split(/\s+/).filter(w => w.length >= 2);
     // Expand query with synonyms
@@ -16774,10 +16778,10 @@ app.get('/api/markets/search', async (req, res) => {
     }
 
     const [polyRes, kalshiRes, ...oddsResults] = await Promise.allSettled([
-      // Polymarket — use EVENTS endpoint (markets endpoint search is broken, returns random results)
-      fetchWithTimeout(`https://gamma-api.polymarket.com/events?closed=false&limit=50&order=liquidity&ascending=false`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }),
+      // Polymarket — use EVENTS endpoint; fetch 200 events (search param is ignored by gamma API)
+      fetchWithTimeout(`https://gamma-api.polymarket.com/events?closed=false&limit=200&order=liquidity&ascending=false`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }, 12000),
       // Kalshi — no text search API, fetch max events and filter locally
-      fetchWithTimeout(`https://api.elections.kalshi.com/trade-api/v2/events?limit=200&status=open&with_nested_markets=true`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }),
+      fetchWithTimeout(`https://api.elections.kalshi.com/trade-api/v2/events?limit=200&status=open&with_nested_markets=true`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }, 12000),
       // The Odds API — fetch odds for matched sports (or top sports if no match)
       ...(ODDS_API_KEY ? (matchedSports.size > 0
         ? [...matchedSports].slice(0, 2).map(sport =>
@@ -16829,11 +16833,13 @@ app.get('/api/markets/search', async (req, res) => {
         console.log(`[market-search] Kalshi "${q}" query: ${events.length} total events, ${matchCount} matched`);
       }
       for (const evt of events) {
-        // Check event title, category, AND sub_title against query
-        if (!matchesQuery(evt.title) && !matchesQuery(evt.category) && !matchesQuery(evt.sub_title)) continue;
+        // Check event title, category, sub_title, AND nested market titles against query
+        const evtMatch = matchesQuery(evt.title) || matchesQuery(evt.category) || matchesQuery(evt.sub_title);
         const mkts = evt.markets || [];
         for (const m of mkts) {
           if (m.status !== 'open') continue;
+          // Match on event OR individual market title
+          if (!evtMatch && !matchesQuery(m.title)) continue;
           const _kYesPct = m.yes_ask != null ? Math.round(m.yes_ask * 100) : (m.last_price != null ? Math.round(m.last_price * 100) : null);
           if (_kYesPct !== null && (_kYesPct >= 95 || _kYesPct <= 5)) continue; // Skip resolved/dead markets
           kalshiMarkets.push({
