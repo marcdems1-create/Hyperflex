@@ -520,7 +520,9 @@ async function loadPastCalls(status, page, append) {
       if (!html) html = '<div style="font-family:var(--mono);font-size:12px;color:var(--dim);padding:20px;text-align:center">No past calls yet. AI Brief calls will appear here as they are generated.</div>';
       document.getElementById('pastCallsContainer').innerHTML = html;
     } else {
-      document.getElementById('pastCallsContainer').insertAdjacentHTML('beforeend', html);
+      var grid = document.getElementById('pastCallsContainer').querySelector('.past-calls-grid');
+      if (grid) { grid.insertAdjacentHTML('beforeend', cards); }
+      else { document.getElementById('pastCallsContainer').insertAdjacentHTML('beforeend', html); }
     }
 
     _pastCallsHasMore = d.has_more;
