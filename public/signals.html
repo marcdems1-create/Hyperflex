@@ -6,14 +6,12 @@
 <title>Prediction Market Signals — AI-Powered Trade Intelligence | HYPERFLEX</title>
 <meta name="description" content="AI prediction market analysis with actionable trade signals. Whale clustering, price momentum, cross-platform arbitrage, and smart money prediction market signals updated in real time."/>
 <link rel="canonical" href="https://hyperflex.network/signals"/>
-<!-- Open Graph -->
 <meta property="og:type" content="website"/>
 <meta property="og:url" content="https://hyperflex.network/signals"/>
 <meta property="og:title" content="Alpha Signals — HYPERFLEX"/>
 <meta property="og:description" content="Actionable trade signals from whale clustering, price momentum, and cross-platform arbitrage."/>
 <meta property="og:image" content="https://hyperflex.network/og-default.png"/>
 <meta property="og:site_name" content="HYPERFLEX"/>
-<!-- Twitter / X -->
 <meta name="twitter:card" content="summary_large_image"/>
 <meta name="twitter:site" content="@HyperFlexApp"/>
 <meta name="twitter:title" content="Alpha Signals — HYPERFLEX"/>
@@ -24,743 +22,457 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
 <style>
-:root {
-  --bg: #0a0a09;
-  --card: #131311;
-  --card-hover: #1a1a17;
-  --border: #222220;
-  --text: #e8e4d9;
-  --text-soft: #b0ab9f;
-  --muted: #6a6a5e;
-  --gold: #c9920d;
-  --gold-dim: rgba(201,146,13,0.15);
-  --green: #22c55e;
-  --green-dim: rgba(34,197,94,0.12);
-  --red: #ef4444;
-  --red-dim: rgba(239,68,68,0.12);
-  --purple: #a78bfa;
-  --purple-dim: rgba(167,139,250,0.12);
-  --blue: #60a5fa;
-  --blue-dim: rgba(96,165,250,0.12);
-  --sans: 'Syne', sans-serif;
-  --mono: 'Space Mono', monospace;
-  --radius: 10px;
+:root{--bg:#0a0a09;--card:#111110;--card2:#161614;--border:#1e1e1b;--border2:#2a2a25;--text:#e8e4d9;--soft:#a09d94;--dim:#6b6860;--muted:#4a4744;--gold:#c9920d;--green:#22c55e;--red:#ef4444;--blue:#60a5fa;--purple:#a78bfa;--orange:#f97316;--sans:'Syne',sans-serif;--mono:'Space Mono',monospace}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+a{color:var(--gold);text-decoration:none} a:hover{text-decoration:underline}
+
+/* HEADER */
+.s-header{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:var(--card);border-bottom:1px solid var(--border)}
+.s-logo{font-family:var(--sans);font-weight:800;font-size:16px;letter-spacing:2px;color:var(--text);text-decoration:none}
+.s-logo span{color:var(--gold)}
+.s-title{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--soft);letter-spacing:1px;text-transform:uppercase}
+.s-live{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--green);letter-spacing:1px;display:flex;align-items:center;gap:6px}
+.s-live::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* STATS BAR */
+.s-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--border);border-bottom:1px solid var(--border)}
+.s-stat{background:var(--card);padding:12px 16px;text-align:center}
+.s-stat-label{font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}
+.s-stat-val{font-family:var(--sans);font-size:18px;font-weight:800;color:var(--text)}
+.s-stat-sub{font-family:var(--mono);font-size:9px;color:var(--dim);margin-top:2px}
+
+/* MAIN GRID */
+.s-container{max-width:1200px;margin:0 auto;padding:20px}
+
+/* 3-column layout: signals | whale consensus | sidebar */
+.s-layout{display:grid;grid-template-columns:1fr 1fr 320px;gap:1px;background:var(--border);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.s-panel{background:var(--card);padding:0}
+.s-panel-head{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--card)}
+.s-panel-title{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--soft);text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:6px}
+.s-panel-badge{font-family:var(--mono);font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px}
+
+/* FILTER PILLS */
+.s-filters{display:flex;gap:4px;padding:10px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.s-pill{font-family:var(--mono);font-size:9px;font-weight:700;padding:4px 10px;border-radius:3px;border:1px solid var(--border);background:transparent;color:var(--dim);cursor:pointer;transition:all .15s}
+.s-pill:hover{border-color:var(--gold);color:var(--soft)}
+.s-pill.active{background:var(--gold);color:var(--bg);border-color:var(--gold)}
+
+/* SIGNAL ROWS — dense terminal style */
+.s-row{display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);transition:background .15s;cursor:default}
+.s-row:hover{background:var(--card2)}
+.s-row:last-child{border-bottom:none}
+.s-row-side{width:4px;min-height:40px;border-radius:2px;flex-shrink:0;margin-top:2px}
+.s-row-side.yes{background:var(--green)}
+.s-row-side.no{background:var(--red)}
+.s-row-body{flex:1;min-width:0}
+.s-row-top{display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap}
+.s-row-type{font-family:var(--mono);font-size:8px;font-weight:700;padding:2px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:.3px;white-space:nowrap}
+.type-whale_cluster{background:rgba(96,165,250,.12);color:var(--blue)}
+.type-momentum{background:rgba(34,197,94,.12);color:var(--green)}
+.type-new_entry{background:rgba(201,146,13,.12);color:var(--gold)}
+.type-arbitrage{background:rgba(167,139,250,.12);color:var(--purple)}
+.type-volume_surge{background:rgba(255,87,34,.12);color:var(--orange)}
+.s-row-conf{font-family:var(--mono);font-size:9px;font-weight:700;padding:1px 5px;border-radius:2px}
+.conf-HIGH{background:rgba(34,197,94,.12);color:var(--green)}
+.conf-MEDIUM{background:rgba(201,146,13,.12);color:var(--gold)}
+.conf-LOW{background:rgba(107,114,128,.12);color:#888}
+.s-row-market{font-size:13px;font-weight:700;color:var(--text);line-height:1.35;margin-bottom:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.s-row-market a{color:var(--text);text-decoration:none}
+.s-row-market a:hover{color:var(--gold)}
+.s-row-action{font-family:var(--mono);font-size:11px;font-weight:700;margin-bottom:4px}
+.s-row-meta{display:flex;gap:10px;flex-wrap:wrap;font-family:var(--mono);font-size:9px;color:var(--dim)}
+.s-row-meta .val{color:var(--soft);font-weight:700}
+.s-row-right{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0}
+.s-row-time{font-family:var(--mono);font-size:9px;color:var(--dim)}
+.s-row-link{font-family:var(--mono);font-size:9px;font-weight:700;color:var(--gold);text-decoration:none;white-space:nowrap}
+.s-row-link:hover{text-decoration:underline}
+
+/* WHALE CONSENSUS TABLE */
+.s-whale-row{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);transition:background .15s}
+.s-whale-row:hover{background:var(--card2)}
+.s-whale-row:last-child{border-bottom:none}
+.s-whale-rank{font-family:var(--mono);font-size:14px;font-weight:800;color:var(--gold);width:24px;text-align:center}
+.s-whale-info{flex:1;min-width:0}
+.s-whale-q{font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.s-whale-stats{font-family:var(--mono);font-size:9px;color:var(--dim);margin-top:2px}
+.s-whale-side{font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 8px;border-radius:4px}
+.s-whale-side.yes{background:rgba(34,197,94,.1);color:var(--green)}
+.s-whale-side.no{background:rgba(239,68,68,.1);color:var(--red)}
+
+/* SIDEBAR WIDGETS */
+.s-widget{border-bottom:1px solid var(--border)}
+.s-widget:last-child{border-bottom:none}
+.s-widget-head{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--border)}
+.s-widget-title{font-family:var(--mono);font-size:9px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
+.s-fg-wrap{padding:20px 14px;text-align:center}
+.s-fg-score{font-family:var(--sans);font-size:48px;font-weight:800;line-height:1}
+.s-fg-label{font-family:var(--mono);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-top:4px}
+.s-fg-bar{height:6px;background:var(--border);border-radius:3px;overflow:hidden;position:relative;margin-top:12px}
+.s-fg-fill{position:absolute;top:0;left:0;height:100%;background:linear-gradient(90deg,var(--red),#eab308,var(--green));border-radius:3px}
+.s-fg-dot{position:absolute;top:-5px;width:16px;height:16px;border-radius:50%;border:2px solid var(--bg)}
+
+/* WINNER PICKS */
+.s-winner{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--border);transition:background .15s}
+.s-winner:hover{background:var(--card2)}
+.s-winner:last-child{border-bottom:none}
+.s-winner-name{font-size:12px;font-weight:700;color:var(--text);flex:1}
+.s-winner-stats{font-family:var(--mono);font-size:9px;color:var(--dim)}
+.s-winner-score{font-family:var(--mono);font-size:14px;font-weight:800;color:var(--green)}
+.s-winner-pos{font-family:var(--mono);font-size:10px;padding:8px 14px;border-bottom:1px solid var(--border)}
+.s-winner-pos:last-child{border-bottom:none}
+
+/* AI SECTION */
+.s-ai{padding:20px;border-top:1px solid var(--border);margin-top:20px}
+.s-ai-row{display:flex;gap:8px}
+.s-ai-input{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none}
+.s-ai-input:focus{border-color:var(--gold)}
+.s-ai-btn{background:var(--gold);color:var(--bg);border:none;border-radius:6px;padding:10px 18px;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap}
+.s-ai-result{font-family:var(--mono);font-size:11px;color:var(--soft);line-height:1.7;white-space:pre-wrap;margin-top:12px}
+
+/* LOADING / EMPTY */
+.s-empty{text-align:center;padding:40px 16px;font-family:var(--mono);font-size:10px;color:var(--dim)}
+.s-loading{text-align:center;padding:30px;font-family:var(--mono);font-size:10px;color:var(--dim)}
+
+/* RESPONSIVE */
+@media(max-width:1024px){.s-layout{grid-template-columns:1fr 1fr}.s-sidebar{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border)}}
+@media(max-width:768px){
+  .s-layout{grid-template-columns:1fr}
+  .s-sidebar{grid-template-columns:1fr}
+  .s-stats{grid-template-columns:repeat(3,1fr)}
+  .s-container{padding:12px}
+  .s-pill{min-height:44px;display:inline-flex;align-items:center}
+  .s-ai-row{flex-direction:column}
 }
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; -webkit-font-smoothing: antialiased; }
-a { color: var(--gold); text-decoration: none; }
-a:hover { text-decoration: underline; }
-
-.topbar { display: flex; align-items: center; justify-content: space-between; padding: 16px 32px; border-bottom: 1px solid var(--border); background: rgba(10,10,9,0.92); backdrop-filter: blur(12px); position: sticky; top: 0; z-index: 100; }
-.topbar-logo { font-family: var(--sans); font-weight: 800; font-size: 18px; letter-spacing: 2px; color: var(--text); text-decoration: none; }
-.topbar-logo span { color: var(--gold); }
-.nav-links { display: flex; gap: 20px; align-items: center; }
-.nav-link { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--text-soft); text-decoration: none; transition: color 0.2s; }
-.nav-link:hover, .nav-link.active { color: var(--text); text-decoration: none; }
-
-.hero { text-align: center; padding: 56px 24px 40px; border-bottom: 1px solid var(--border); background: radial-gradient(ellipse at 50% 0%, rgba(201,146,13,0.06) 0%, transparent 60%); }
-.hero h1 { font-family: var(--sans); font-size: 40px; font-weight: 800; margin-bottom: 8px; }
-.hero h1 span { color: var(--gold); }
-.hero-sub { font-family: var(--mono); font-size: 13px; color: var(--text-soft); max-width: 560px; margin: 0 auto 16px; line-height: 1.6; }
-.hero-meta { display: flex; align-items: center; justify-content: center; gap: 20px; font-family: var(--mono); font-size: 12px; color: var(--muted); flex-wrap: wrap; }
-.hero-meta .gold { color: var(--gold); font-weight: 700; }
-
-.container { max-width: 1200px; margin: 0 auto; padding: 32px 24px 80px; }
-
-/* SECTIONS */
-.section { margin-bottom: 40px; }
-.section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
-.section-title { font-family: var(--sans); font-size: 22px; font-weight: 800; }
-.section-title .icon { margin-right: 8px; }
-.section-badge { font-family: var(--mono); font-size: 10px; font-weight: 700; padding: 4px 10px; border-radius: 20px; background: var(--gold-dim); color: var(--gold); border: 1px solid rgba(201,146,13,0.3); }
-
-/* SIGNAL CARDS */
-.signal-grid { display: grid; gap: 16px; }
-.signal-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px; transition: all 0.2s; position: relative; overflow: hidden; }
-.signal-card:hover { border-color: rgba(201,146,13,0.3); background: var(--card-hover); }
-.signal-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; }
-.signal-card.type-whale_cluster::before { background: linear-gradient(90deg, var(--blue), var(--purple)); }
-.signal-card.type-momentum::before { background: linear-gradient(90deg, var(--green), var(--gold)); }
-.signal-card.type-new_entry::before { background: linear-gradient(90deg, var(--gold), #f59e0b); }
-.signal-card.type-arbitrage::before { background: linear-gradient(90deg, var(--purple), var(--blue)); }
-.signal-card.type-volume_surge::before { background: linear-gradient(90deg, #ff5722, #ff9800); }
-
-.signal-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 10px; }
-.signal-type-badge { font-family: var(--mono); font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 12px; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
-.badge-whale_cluster { background: var(--blue-dim); color: var(--blue); border: 1px solid rgba(96,165,250,0.3); }
-.badge-momentum { background: var(--green-dim); color: var(--green); border: 1px solid rgba(34,197,94,0.3); }
-.badge-new_entry { background: var(--gold-dim); color: var(--gold); border: 1px solid rgba(201,146,13,0.3); }
-.badge-arbitrage { background: var(--purple-dim); color: var(--purple); border: 1px solid rgba(167,139,250,0.3); }
-.badge-volume_surge { background: rgba(255,87,34,0.15); color: #ff5722; border: 1px solid rgba(255,87,34,0.3); }
-
-.confidence-badge { font-family: var(--mono); font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 6px; }
-.conf-HIGH { background: rgba(34,197,94,0.15); color: var(--green); border: 1px solid rgba(34,197,94,0.3); }
-.conf-MEDIUM { background: rgba(201,146,13,0.15); color: var(--gold); border: 1px solid rgba(201,146,13,0.3); }
-.conf-LOW { background: rgba(107,114,128,0.15); color: #9ca3af; border: 1px solid rgba(107,114,128,0.3); }
-
-.signal-question { font-size: 15px; font-weight: 700; color: var(--text); line-height: 1.5; margin-bottom: 10px; }
-.signal-action { font-family: var(--mono); font-size: 12px; font-weight: 700; padding: 8px 14px; border-radius: 8px; margin-bottom: 12px; display: inline-block; }
-.signal-action.side-YES { background: var(--green-dim); color: var(--green); border: 1px solid rgba(34,197,94,0.2); }
-.signal-action.side-NO { background: var(--red-dim); color: var(--red); border: 1px solid rgba(239,68,68,0.2); }
-
-.signal-meta { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; font-family: var(--mono); font-size: 11px; color: var(--muted); }
-.signal-meta .val { color: var(--text-soft); font-weight: 700; }
-
-.signal-actions { display: flex; gap: 8px; margin-top: 14px; }
-.signal-trade-btn { font-family: var(--sans); font-size: 12px; font-weight: 700; padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; transition: all 0.15s; min-height: 36px; }
-.signal-trade-btn.primary { background: var(--gold); color: #141412; }
-.signal-trade-btn.primary:hover { opacity: 0.88; }
-.signal-trade-btn.secondary { background: none; border: 1px solid var(--border); color: var(--text-soft); }
-.signal-trade-btn.secondary:hover { border-color: var(--gold); color: var(--gold); }
-
-/* WHALE INDEX PICKS */
-.pick-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px; transition: all 0.2s; }
-.pick-card:hover { border-color: rgba(201,146,13,0.3); }
-.pick-rank { font-family: var(--mono); font-size: 18px; font-weight: 800; color: var(--gold); min-width: 28px; }
-.pick-info { flex: 1; min-width: 0; }
-.pick-question { font-size: 13px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pick-stats { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 4px; }
-.pick-consensus { font-family: var(--mono); font-size: 13px; font-weight: 700; padding: 4px 10px; border-radius: 8px; white-space: nowrap; }
-.pick-consensus.yes { background: var(--green-dim); color: var(--green); }
-.pick-consensus.no { background: var(--red-dim); color: var(--red); }
-
-/* FEAR & GREED */
-.fg-card { background: linear-gradient(135deg, var(--card) 0%, rgba(201,146,13,0.04) 100%); border: 1px solid rgba(201,146,13,0.2); border-radius: 14px; padding: 32px; text-align: center; }
-.fg-score { font-family: var(--sans); font-size: 64px; font-weight: 800; line-height: 1; margin-bottom: 8px; }
-.fg-label { font-family: var(--mono); font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px; }
-.fg-change { font-family: var(--mono); font-size: 12px; }
-
-/* AI ANALYSIS */
-.ai-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 24px; }
-.ai-input-row { display: flex; gap: 10px; margin-bottom: 16px; }
-.ai-input { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; font-family: var(--mono); font-size: 13px; color: var(--text); outline: none; }
-.ai-input:focus { border-color: var(--gold); }
-.ai-btn { background: var(--gold); color: #141412; border: none; border-radius: 10px; padding: 12px 20px; font-family: var(--sans); font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; min-height: 44px; }
-.ai-btn:hover { opacity: 0.88; }
-.ai-result { font-family: var(--mono); font-size: 12px; color: var(--text-soft); line-height: 1.8; white-space: pre-wrap; }
-
-/* LOADING */
-.loading { text-align: center; padding: 48px 20px; }
-.loading-spinner { display: inline-block; width: 24px; height: 24px; border: 2px solid var(--border); border-top-color: var(--gold); border-radius: 50%; animation: spin 0.8s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-
-.empty-state { text-align: center; padding: 40px 20px; color: var(--muted); font-family: var(--mono); font-size: 13px; }
-
-/* GRID LAYOUT */
-.two-col { display: grid; grid-template-columns: 2fr 1fr; gap: 32px; }
-
-@media (max-width: 900px) {
-  .two-col { grid-template-columns: 1fr; }
-  .topbar { padding: 12px 16px; }
-  .nav-links { gap: 10px; overflow-x: auto; }
-  .nav-link { font-size: 11px; min-height: 44px; display: inline-flex; align-items: center; }
-  .hero h1 { font-size: 28px; }
-  .hero { padding: 36px 16px 28px; }
-  .container { padding: 20px 16px 60px; }
-  .sig-filter { min-height: 44px; display: inline-flex; align-items: center; }
-  .signal-trade-btn { min-height: 44px; }
-}
-@media (max-width: 480px) {
-  .nav-links { gap: 8px; }
-  .hero h1 { font-size: 24px; }
-  .signal-top { flex-direction: column; align-items: flex-start; }
-  .ai-input-row { flex-direction: column; }
-}
-
-/* CORRELATION PAIRS — simplified */
-.corr-card {
-  background: var(--card); border: 1px solid var(--border); border-radius: 12px;
-  padding: 16px 20px; transition: all 0.2s; margin-bottom: 12px;
-}
-.corr-card:hover { border-color: rgba(201,146,13,0.35); transform: translateY(-1px); }
-.corr-insight {
-  font-size: 13px; color: var(--text); line-height: 1.5; margin-bottom: 12px; font-weight: 500;
-}
-.corr-markets {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-}
-.corr-market-pill {
-  font-family: var(--mono); font-size: 11px; color: var(--text-soft);
-  padding: 6px 12px; background: var(--bg); border: 1px solid var(--border);
-  border-radius: 8px; text-decoration: none; white-space: nowrap;
-  transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px;
-}
-.corr-market-pill:hover { border-color: var(--gold); color: var(--gold); }
-.corr-arrow { color: var(--gold); font-size: 14px; font-weight: 700; }
-.corr-whale-count {
-  font-family: var(--mono); font-size: 10px; font-weight: 700;
-  padding: 2px 8px; border-radius: 10px; background: rgba(201,146,13,0.12);
-  color: var(--gold); margin-left: auto; white-space: nowrap;
-}
-
-@media (max-width: 600px) {
-  .corr-markets { flex-direction: column; gap: 8px; }
-  .corr-whale-count { margin-left: 0; }
-  .corr-connector { width: 100%; height: 40px; flex-direction: row; padding: 8px 16px; }
-  .corr-connector::before { top: 0; left: 50%; width: 3px; height: 100%; right: auto; }
-}
+@media(max-width:480px){.s-stats{grid-template-columns:repeat(2,1fr)}.s-header{flex-wrap:wrap;gap:8px}}
 </style>
 </head>
 <body>
 
-<!-- NAV -->
 <div id="nav-root"></div>
 <script src="/nav.js"></script>
 
-<!-- HERO -->
-<div class="hero">
-  <h1>Alpha <span>Signals</span></h1>
-  <div class="hero-sub">Real-time trading signals aggregated from whale clustering, price momentum, new whale entries, and cross-platform arbitrage. Everything you need to make decisions.</div>
-  <div class="hero-meta">
-    <span>Updated <span class="gold" id="heroUpdatedAt">loading...</span></span>
-    <span>|</span>
-    <span><span class="gold" id="heroSignalCount">0</span> active signals</span>
-    <span>|</span>
-    <a href="/accuracy" style="font-family:var(--mono);font-size:12px;color:var(--gold);text-decoration:none;display:inline-flex;align-items:center;gap:4px" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">📊 Track Record →</a>
-  </div>
+<!-- HEADER -->
+<div class="s-header">
+  <a href="/" class="s-logo">HYPER<span>FLEX</span></a>
+  <div class="s-title">Alpha Signals</div>
+  <div class="s-live">LIVE</div>
 </div>
 
-<!-- CONTENT -->
-<div class="container">
-  <div class="two-col">
-    <!-- LEFT: Main signals + AI -->
-    <div>
-      <!-- Section 1: Active Signals -->
-      <div class="section">
-        <div class="section-header">
-          <div class="section-title"><span class="icon">&#x1F4E1;</span> Active Signals</div>
-          <button onclick="loadSignals()" class="signal-trade-btn secondary" style="font-size:11px;padding:6px 12px">Refresh</button>
-        </div>
+<!-- STATS BAR -->
+<div class="s-stats" id="statsBar">
+  <div class="s-stat"><div class="s-stat-label">Active Signals</div><div class="s-stat-val" id="stCount">--</div><div class="s-stat-sub">across all types</div></div>
+  <div class="s-stat"><div class="s-stat-label">Whale Capital</div><div class="s-stat-val" id="stCapital">--</div><div class="s-stat-sub">in tracked signals</div></div>
+  <div class="s-stat"><div class="s-stat-label">Fear & Greed</div><div class="s-stat-val" id="stFG">--</div><div class="s-stat-sub" id="stFGLabel">loading</div></div>
+  <div class="s-stat"><div class="s-stat-label">Top Signal</div><div class="s-stat-val" id="stTopType">--</div><div class="s-stat-sub" id="stTopSub">--</div></div>
+  <div class="s-stat"><div class="s-stat-label">Updated</div><div class="s-stat-val" id="stUpdated">--</div><div class="s-stat-sub"><a href="/accuracy" style="color:var(--gold);font-size:9px">Track Record &rarr;</a></div></div>
+</div>
 
-        <!-- Filter pills -->
-        <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
-          <button class="sig-filter active" data-filter="all" onclick="filterSignals('all',this)">All</button>
-          <button class="sig-filter" data-filter="whale_cluster" onclick="filterSignals('whale_cluster',this)">Whale Cluster</button>
-          <button class="sig-filter" data-filter="momentum" onclick="filterSignals('momentum',this)">Momentum</button>
-          <button class="sig-filter" data-filter="new_entry" onclick="filterSignals('new_entry',this)">New Entry</button>
-          <button class="sig-filter" data-filter="arbitrage" onclick="filterSignals('arbitrage',this)">Arbitrage</button>
-          <button class="sig-filter" data-filter="volume_surge" onclick="filterSignals('volume_surge',this)">Volume Surge</button>
-        </div>
-        <style>
-          .sig-filter { font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border); background: transparent; color: var(--text-soft); cursor: pointer; transition: all 0.2s; }
-          .sig-filter:hover { border-color: var(--gold); color: var(--text); }
-          .sig-filter.active { background: var(--gold-dim); border-color: var(--gold); color: var(--gold); }
-        </style>
+<!-- MAIN LAYOUT -->
+<div class="s-container">
+<div class="s-layout">
 
-        <div id="signalsGrid" class="signal-grid">
-          <div class="loading"><div class="loading-spinner"></div><div style="margin-top:12px;font-family:var(--mono);font-size:12px;color:var(--muted)">Scanning for alpha...</div></div>
-        </div>
-      </div>
-
-      <!-- Section 4: AI Market Takes -->
-      <div class="section">
-        <div class="section-header">
-          <div class="section-title"><span class="icon">&#x1F916;</span> AI Market Takes</div>
-        </div>
-        <div class="ai-card">
-          <div style="font-size:13px;color:var(--text-soft);margin-bottom:12px">Get AI analysis on any prediction market. Powered by Claude.</div>
-          <div class="ai-input-row">
-            <input type="text" id="aiMarketInput" class="ai-input" placeholder="Enter a market question or topic..." onkeydown="if(event.key==='Enter')runAiAnalysis()"/>
-            <button onclick="runAiAnalysis()" class="ai-btn" id="aiAnalyzeBtn">Analyze</button>
-          </div>
-          <div id="aiResult" style="display:none"></div>
-        </div>
-      </div>
+  <!-- PANEL 1: SIGNAL FEED -->
+  <div class="s-panel">
+    <div class="s-panel-head">
+      <div class="s-panel-title">Signal Feed</div>
+      <span class="s-panel-badge" style="background:rgba(34,197,94,.12);color:var(--green)">LIVE</span>
     </div>
+    <div class="s-filters">
+      <button class="s-pill active" data-filter="all" onclick="filterSig('all',this)">All</button>
+      <button class="s-pill" data-filter="whale_cluster" onclick="filterSig('whale_cluster',this)">Whale</button>
+      <button class="s-pill" data-filter="momentum" onclick="filterSig('momentum',this)">Momentum</button>
+      <button class="s-pill" data-filter="new_entry" onclick="filterSig('new_entry',this)">New Entry</button>
+      <button class="s-pill" data-filter="arbitrage" onclick="filterSig('arbitrage',this)">Arb</button>
+      <button class="s-pill" data-filter="volume_surge" onclick="filterSig('volume_surge',this)">Volume</button>
+    </div>
+    <div id="signalFeed"><div class="s-loading">Scanning for alpha...</div></div>
+  </div>
 
-    <!-- RIGHT: Whale picks + Fear & Greed -->
-    <div>
-      <!-- Section 2: Whale Index Picks -->
-      <div class="section">
-        <div class="section-header">
-          <div class="section-title"><span class="icon">&#x1F40B;</span> Whale Picks</div>
-          <span class="section-badge">TOP 5</span>
-        </div>
-        <div id="whalePicksContainer" style="display:grid;gap:10px">
-          <div class="loading"><div class="loading-spinner"></div></div>
-        </div>
-      </div>
+  <!-- PANEL 2: WHALE CONSENSUS -->
+  <div class="s-panel">
+    <div class="s-panel-head">
+      <div class="s-panel-title">Whale Consensus</div>
+      <span class="s-panel-badge" style="background:rgba(96,165,250,.12);color:var(--blue)">TOP MARKETS</span>
+    </div>
+    <div id="whaleConsensus"><div class="s-loading">Loading whale data...</div></div>
+  </div>
 
-      <!-- Section 3: Fear & Greed -->
-      <div class="section">
-        <div class="section-header">
-          <div class="section-title"><span class="icon">&#x1F4CA;</span> Fear & Greed</div>
-        </div>
-        <div id="fearGreedCard" class="fg-card">
-          <div class="loading"><div class="loading-spinner"></div></div>
-        </div>
+  <!-- PANEL 3: SIDEBAR -->
+  <div class="s-panel s-sidebar">
+    <!-- Fear & Greed -->
+    <div class="s-widget">
+      <div class="s-widget-head">
+        <div class="s-widget-title">Fear & Greed</div>
       </div>
-
-      <!-- Section 5: Consistent Winner Picks -->
-      <div class="section">
-        <div class="section-header">
-          <div class="section-title"><span class="icon">&#x1F525;</span> Winner Picks</div>
-          <span class="section-badge">CONSISTENT</span>
-        </div>
-        <div style="font-size:12px;color:var(--text-soft);margin-bottom:16px;line-height:1.5">These traders win every week — here's what they're betting on now</div>
-        <div id="consistentPicksContainer" style="display:grid;gap:10px">
-          <div class="loading"><div class="loading-spinner"></div></div>
-        </div>
+      <div id="fgWidget" class="s-fg-wrap"><div class="s-loading">--</div></div>
+    </div>
+    <!-- Winner Picks -->
+    <div class="s-widget">
+      <div class="s-widget-head">
+        <div class="s-widget-title">Winner Picks</div>
+        <span class="s-panel-badge" style="background:rgba(34,197,94,.12);color:var(--green)">CONSISTENT</span>
       </div>
+      <div id="winnerPicks"><div class="s-loading">Loading...</div></div>
     </div>
   </div>
 
-  <!-- Section 6: Market Correlations -->
-  <div class="section" id="correlations-section">
-    <div class="section-header">
-      <div class="section-title"><span class="icon">&#x1F517;</span> Market Correlations</div>
-      <span class="section-badge">WHALE OVERLAP</span>
-    </div>
-    <div style="font-size:12px;color:var(--text-soft);margin-bottom:20px;line-height:1.5">Markets that move together — connected by shared whale capital. Gold = positive correlation, Red = inverse.</div>
-    <div id="correlationsContainer" style="display:flex;flex-direction:column;gap:20px">
-      <div class="loading"><div class="loading-spinner"></div></div>
-    </div>
+</div>
+
+<!-- AI ANALYSIS -->
+<div class="s-ai">
+  <div style="font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">AI Market Analysis</div>
+  <div class="s-ai-row">
+    <input type="text" id="aiInput" class="s-ai-input" placeholder="Enter a market question..." onkeydown="if(event.key==='Enter')runAI()"/>
+    <button onclick="runAI()" class="s-ai-btn" id="aiBtn">Analyze</button>
   </div>
+  <div id="aiResult" style="display:none"></div>
+</div>
 </div>
 
 <script>
-let _allSignals = [];
-let _currentFilter = 'all';
+var _signals=[], _filter='all';
 
-// ── Load signals ──
-var _sharpnessLabel = null;
-var _sharpnessColor = null;
+function escH(s){var d=document.createElement('div');d.textContent=s||'';return d.innerHTML}
+function fmtCap(n){return n>=1e6?'$'+(n/1e6).toFixed(1)+'M':n>=1e3?'$'+(n/1e3).toFixed(0)+'K':'$'+Math.round(n)}
+function timeAgo(ts){if(!ts)return'';var d=Date.now()-new Date(ts).getTime(),m=Math.floor(d/60000);if(m<1)return'now';if(m<60)return m+'m';var h=Math.floor(m/60);if(h<24)return h+'h';return Math.floor(h/24)+'d'}
+function regionFlag(q){var t=(q||'').toLowerCase();if(/\bus\b|united states|trump|biden|vance|congress|fed |us forces/i.test(t))return'\uD83C\uDDFA\uD83C\uDDF8';if(/\biran/i.test(t))return'\uD83C\uDDEE\uD83C\uDDF7';if(/\bisrael|gaza|hamas/i.test(t))return'\uD83C\uDDEE\uD83C\uDDF1';if(/bitcoin|btc|eth|crypto|solana|xrp/i.test(t))return'\uD83C\uDF10';if(/nba|nfl|mlb|yankees|mets|dodgers|warriors|lakers|celtics|mavericks|bucks|guardians|rangers|phillies|twins|orioles|rays|cardinals|red sox|reds|giants|mariners|sox|brewers/i.test(t))return'\uD83C\uDDFA\uD83C\uDDF8';if(/miami open|wimbledon|roland garros|us open|atp|wta|tennis/i.test(t))return'\uD83C\uDFBE';return''}
 
-async function loadSignals() {
-  const grid = document.getElementById('signalsGrid');
-  try {
-    const [r, sharpRes] = await Promise.all([
-      fetch('/api/signals'),
-      fetch('/api/agent/sharpness').catch(() => null)
-    ]);
-    const data = await r.json();
-    if (data.error) throw new Error(data.error);
-
-    _allSignals = data.signals || [];
-    document.getElementById('heroSignalCount').textContent = data.total || _allSignals.length;
-    if (data.updated_at) {
-      const d = new Date(data.updated_at);
-      document.getElementById('heroUpdatedAt').textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    }
-
-    // Load sharpness
-    if (sharpRes && sharpRes.ok) {
-      try {
-        const sh = await sharpRes.json();
-        if (sh && sh.last_10_return !== null) {
-          _sharpnessLabel = sh.label;
-          _sharpnessColor = sh.last_10_return >= 0 ? 'var(--green)' : 'var(--red)';
-        }
-      } catch(e) {}
-    }
-
-    renderSignals();
-  } catch (e) {
-    grid.innerHTML = '<div class="empty-state">Failed to load signals. ' + (e.message || '') + '</div>';
-  }
-}
-
-function renderSignals() {
-  const grid = document.getElementById('signalsGrid');
-  const filtered = _currentFilter === 'all' ? _allSignals : _allSignals.filter(s => s.type === _currentFilter);
-
-  if (filtered.length === 0) {
-    const emptyMessages = {
-      new_entry: 'No new whale entries detected in the last hour. Check back soon.',
-      arbitrage: 'No arbitrage opportunities detected right now. Check back soon.',
-      whale_cluster: 'No whale cluster signals detected right now. Check back soon.',
-      momentum: 'No momentum signals detected right now. Check back soon.',
-      volume_surge: 'No volume surges detected right now. Check back soon.'
-    };
-    grid.innerHTML = '<div class="empty-state">' + (emptyMessages[_currentFilter] || 'No signals detected right now. Check back soon.') + '</div>';
-    return;
-  }
-
-  const typeIcons = { whale_cluster: '\uD83D\uDC0B', momentum: '\uD83D\uDCC8', new_entry: '\u26A1', arbitrage: '\uD83D\uDD04', volume_surge: '\uD83D\uDEA8' };
-  const typeLabels = { whale_cluster: 'Whale Cluster', momentum: 'Momentum', new_entry: 'New Entry', arbitrage: 'Arbitrage', volume_surge: 'Volume Surge' };
-
-  grid.innerHTML = filtered.map(s => {
-    const icon = typeIcons[s.type] || '\uD83D\uDCE1';
-    const label = s.badge || typeLabels[s.type] || s.type;
-    const age = getTimeAgo(s.detected_at);
-    const whaleHtml = s.whale_count ? '<span>Whales: <span class="val">' + s.whale_count + '</span></span>' : '';
-    const capHtml = s.capital ? '<span>Capital: <span class="val">$' + formatNum(s.capital) + '</span></span>' : '';
-    let changeHtml = '';
-    if (s.start_price != null && s.odds_price != null) {
-      const priceMoved = (s.odds_price || 0) - (s.start_price || 0);
-      const chgColor = priceMoved >= 0 ? 'var(--green)' : 'var(--red)';
-      const moveSign = priceMoved >= 0 ? '+' : '';
-      // Cap % display at 999% for near-zero starts
-      let pctNote = '';
-      if ((s.start_price || 0) >= 3) {
-        const rawPct = Math.round(((s.odds_price - s.start_price) / s.start_price) * 100);
-        const capped = Math.min(Math.abs(rawPct), 999);
-        pctNote = ' (' + (rawPct >= 0 ? '+' : '-') + capped + '%)';
-      } else if ((s.start_price || 0) < 3 && Math.abs(priceMoved) > 0) {
-        pctNote = ' (from near-zero)';
-      }
-      changeHtml = '<span>Odds: <span class="val" style="color:' + chgColor + '">' + s.start_price + '\u00A2 \u2192 ' + s.odds_price + '\u00A2</span> <span style="font-size:10px;color:' + chgColor + '">' + moveSign + priceMoved + 'pts' + pctNote + '</span></span>';
-    } else if (s.change_pct) {
-      const absPts = Math.abs(Math.round(s.change_pct * (s.price || 0.5)));
-      const chgColor = s.change_pct > 0 ? 'var(--green)' : 'var(--red)';
-      changeHtml = '<span>Move: <span class="val" style="color:' + chgColor + '">' + (s.change_pct > 0 ? '+' : '-') + absPts + 'pts</span></span>';
-    }
-    const diffHtml = s.price_diff ? '<span>Gap: <span class="val" style="color:var(--purple)">' + (s.price_diff * 100).toFixed(1) + '%</span></span>' : '';
-    const volRatioHtml = s.volume_ratio && s.volume_ratio > 1.1 ? '<span>Volume: <span class="val" style="color:#ff5722">' + s.volume_ratio.toFixed(1) + 'x normal</span></span>' : '';
-    // Signal Urgency Score
-    let urgBase = Math.min(100, (s.whale_count || 0) * 10);
-    let tFactor = 1;
-    if (s.close_time) { const hrsLeft = (new Date(s.close_time) - Date.now()) / 3600000; if (hrsLeft < 6) tFactor = 2; else if (hrsLeft < 24) tFactor = 1.5; else if (hrsLeft > 168) tFactor = 0.6; }
-    const cPct = s.yes_pct || 50;
-    const cFactor = cPct > 80 ? 1.3 : cPct < 60 ? 0.7 : 1;
-    const urgency = Math.min(10, Math.max(1, Math.round((urgBase / 10) * tFactor * cFactor * 10) / 10));
-    const urgIcon = urgency >= 8 ? '\uD83D\uDD25' : urgency >= 6 ? '\u26A1' : '\uD83D\uDCCA';
-    const urgColor = urgency >= 8 ? '#ff5722' : urgency >= 5 ? '#c9920d' : '#888';
-    const urgHtml = '<span title="Signal Urgency" style="font-family:var(--mono);font-size:11px;font-weight:700;color:' + urgColor + ';margin-left:8px">' + urgIcon + ' ' + urgency.toFixed(1) + '</span>';
-
-    const safeUrl = s.url && s.url.startsWith('https://polymarket.com') ? s.url : (s.slug ? 'https://polymarket.com/event/' + s.slug : 'https://polymarket.com');
-    const tradeBtn = '<a href="' + escHtml(safeUrl) + '" target="_blank" class="signal-trade-btn primary" style="text-decoration:none;display:inline-block;text-align:center">View on Polymarket &rarr;</a>';
-
-    return '<div class="signal-card type-' + s.type + '">' +
-      '<div class="signal-top">' +
-        '<div style="display:flex;gap:8px;align-items:center">' +
-          '<span class="signal-type-badge badge-' + s.type + '">' + icon + ' ' + escHtml(label) + '</span>' +
-          '<span class="confidence-badge conf-' + s.confidence + '">' + s.confidence + '</span>' + urgHtml +
-          (s._narrative && s._narrative !== 'Other' ? '<span style="font-family:var(--mono);font-size:9px;padding:1px 6px;border-radius:3px;background:#1a1a18;color:#555;border:1px solid #222;letter-spacing:.04em;text-transform:uppercase">' + escHtml(s._narrative) + '</span>' : '') +
-        '</div>' +
-        '<span style="font-family:var(--mono);font-size:10px;color:var(--muted)">' + age + '</span>' +
-      '</div>' +
-      '<div class="signal-question">' + regionFlag(s.market) + (regionFlag(s.market) ? ' ' : '') + escHtml(s.market) + '</div>' +
-      '<div class="signal-catalyst" data-market="' + escHtml(s.market).replace(/"/g, '&quot;') + '" style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:8px;display:none"></div>' +
-      (_sharpnessLabel ? '<div style="font-family:var(--mono);font-size:10px;color:' + _sharpnessColor + ';margin-bottom:8px">If you\'d followed our last 10 signals: ' + _sharpnessLabel + '</div>' : '') +
-      '<div class="signal-action side-' + (s.side || 'YES') + '">' + escHtml(humanizeAction(s.market, s.action, s.side)) + '</div>' +
-      '<div class="signal-meta">' + whaleHtml + capHtml + changeHtml + diffHtml + volRatioHtml + '</div>' +
-      '<div class="signal-actions">' + tradeBtn +
-        '<button class="signal-trade-btn secondary" onclick="analyzeFromSignal(\'' + escHtml(s.market).replace(/'/g, "\\'") + '\')">AI Analysis</button>' +
-      '</div>' +
-      (s._altCount > 0 ? '<div style="margin-top:8px;padding:6px 10px;background:#0e0e0c;border:1px solid #222;border-radius:6px;font-family:var(--mono);font-size:10px;color:#555;display:flex;align-items:center;gap:6px"><span style="color:#444">\uD83D\uDCC5</span><span>+' + s._altCount + ' similar market' + (s._altCount > 1 ? 's' : '') + ' (different deadline)</span></div>' : '') +
-    '</div>';
-  }).join('');
-
-  // Batch fetch catalysts for visible signals
-  var catEls = document.querySelectorAll('.signal-catalyst[data-market]');
-  var markets = [];
-  catEls.forEach(function(el) { var m = el.getAttribute('data-market'); if (m && markets.indexOf(m) === -1) markets.push(m); });
-  if (markets.length > 0) {
-    fetch('/api/catalysts?markets=' + encodeURIComponent(markets.slice(0, 10).join('||')))
-      .then(function(r) { return r.ok ? r.json() : null; })
-      .then(function(d) {
-        if (!d || !d.catalysts) return;
-        catEls.forEach(function(el) {
-          var m = el.getAttribute('data-market');
-          var cat = d.catalysts[m];
-          if (cat) {
-            el.innerHTML = '\uD83D\uDCF0 <span style="color:var(--text)">' + escHtml(cat.source) + '</span> \u00B7 \u201C' + escHtml(cat.headline.length > 70 ? cat.headline.substring(0, 67) + '...' : cat.headline) + '\u201D \u00B7 ' + cat.timeAgo;
-            el.style.display = '';
-          }
-        });
-      }).catch(function() {});
-  }
-}
-
-function filterSignals(type, btn) {
-  _currentFilter = type;
-  document.querySelectorAll('.sig-filter').forEach(b => b.classList.remove('active'));
-  if (btn) btn.classList.add('active');
-  renderSignals();
-}
-
-// ── Whale Index Picks ──
-async function loadWhalePicks() {
-  const el = document.getElementById('whalePicksContainer');
-  try {
-    const r = await fetch('/api/whale-index');
-    const data = await r.json();
-    if (data.error) throw new Error(data.error);
-
-    const markets = (data.markets || data.positions || [])
-      .filter(m => (m.strength || '').toLowerCase() === 'strong' || (m.strength || '').toLowerCase() === 'moderate')
-      .sort((a, b) => (b.whale_count || 0) - (a.whale_count || 0))
-      .slice(0, 5);
-
-    if (markets.length === 0) {
-      el.innerHTML = '<div class="empty-state">No whale consensus picks right now. Check back soon.</div>';
-      return;
-    }
-
-    el.innerHTML = markets.map((m, i) => {
-      const consensus = m.consensus_pct || m.consensus || 0;
-      const side = m.consensus_side || (consensus > 50 ? 'YES' : 'NO');
-      const cap = m.total_capital || m.capital || 0;
-      return '<a href="' + escHtml(m.url || '#') + '" target="_blank" class="pick-card" style="text-decoration:none">' +
-        '<div class="pick-rank">#' + (i + 1) + '</div>' +
-        '<div class="pick-info">' +
-          '<div class="pick-question">' + escHtml(m.market || m.question || 'Unknown') + '</div>' +
-          '<div class="pick-stats">' + (m.whale_count || 0) + ' whales &middot; $' + formatNum(cap) + ' capital</div>' +
-        '</div>' +
-        '<div class="pick-consensus ' + (side === 'YES' ? 'yes' : 'no') + '">' + side + ' ' + consensus + '%</div>' +
-      '</a>';
-    }).join('');
-  } catch (e) {
-    el.innerHTML = '<div class="empty-state">Failed to load whale picks.</div>';
-  }
-}
-
-// ── Fear & Greed ──
-async function loadFearGreed() {
-  const el = document.getElementById('fearGreedCard');
-  try {
-    const r = await fetch('/api/fear-greed');
-    const data = await r.json();
-    if (data.error) throw new Error(data.error);
-
-    const score = data.score || 50;
-    const label = data.label || 'Neutral';
-    const color = data.color || '#eab308';
-    const change = data.change;
-    const changeHtml = change != null
-      ? '<div class="fg-change" style="color:' + (change > 0 ? 'var(--green)' : change < 0 ? 'var(--red)' : 'var(--muted)') + '">' + (change > 0 ? '+' : '') + change + ' from last reading</div>'
-      : '';
-
-    el.innerHTML =
-      '<div class="fg-score" style="color:' + color + '">' + score + '</div>' +
-      '<div class="fg-label" style="color:' + color + '">' + escHtml(label) + '</div>' +
-      changeHtml +
-      '<div style="margin-top:16px;height:8px;background:var(--border);border-radius:4px;overflow:hidden;position:relative">' +
-        '<div style="position:absolute;top:0;left:0;height:100%;width:' + score + '%;background:linear-gradient(90deg,var(--red),#eab308,var(--green));border-radius:4px;transition:width 0.5s"></div>' +
-        '<div style="position:absolute;top:-4px;left:calc(' + score + '% - 8px);width:16px;height:16px;background:' + color + ';border-radius:50%;border:2px solid var(--bg);box-shadow:0 0 8px ' + color + '"></div>' +
-      '</div>' +
-      '<div style="display:flex;justify-content:space-between;margin-top:8px;font-family:var(--mono);font-size:10px;color:var(--muted)">' +
-        '<span>Extreme Fear</span><span>Extreme Greed</span>' +
-      '</div>';
-  } catch (e) {
-    el.innerHTML = '<div class="empty-state">Failed to load Fear & Greed.</div>';
-  }
-}
-
-// ── AI Analysis ──
-async function runAiAnalysis() {
-  const input = document.getElementById('aiMarketInput');
-  const resultEl = document.getElementById('aiResult');
-  const btn = document.getElementById('aiAnalyzeBtn');
-  const question = (input.value || '').trim();
-  if (!question) return;
-
-  btn.disabled = true;
-  btn.textContent = 'Analyzing...';
-  resultEl.style.display = 'block';
-  resultEl.innerHTML = '<div class="loading"><div class="loading-spinner"></div><div style="margin-top:8px;font-family:var(--mono);font-size:11px;color:var(--muted)">Claude is thinking...</div></div>';
-
-  try {
-    const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
-    if (!token) { resultEl.innerHTML = '<div style="color:var(--gold);font-family:var(--mono);font-size:12px"><a href="/creator/login" style="color:var(--gold)">Sign in</a> to use AI analysis.</div>'; btn.disabled = false; btn.textContent = 'Analyze'; return; }
-    const r = await fetch('/api/ai/market-analysis', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-      body: JSON.stringify({ markets: [{ question, yes_pct: 50, volume: 'N/A', platform: 'Polymarket' }] })
-    });
-    const data = await r.json();
-    if (data.error) throw new Error(data.error);
-    const analysisText = data.analysis || data.content || '';
-    if (!analysisText) throw new Error('empty');
-    resultEl.innerHTML = '<div class="ai-result">' + escHtml(analysisText) + '</div>';
-  } catch (e) {
-    const fallback = 'AI analysis temporarily unavailable. Use the whale data and momentum signals above for your edge.';
-    const errMsg = (e.message === 'empty' || /unable|unavailable|failed/i.test(e.message)) ? fallback : escHtml(e.message || fallback);
-    resultEl.innerHTML = '<div style="color:var(--muted);font-family:var(--mono);font-size:12px;line-height:1.5">' + errMsg + '</div>';
-  }
-  btn.disabled = false;
-  btn.textContent = 'Analyze';
-}
-
-function analyzeFromSignal(market) {
-  const input = document.getElementById('aiMarketInput');
-  if (input) { input.value = market; input.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
-  setTimeout(runAiAnalysis, 300);
-}
-
-// ── Helpers ──
-function escHtml(s) {
-  const d = document.createElement('div');
-  d.textContent = s || '';
-  return d.innerHTML;
-}
-
-// Translate BUY YES/NO into plain English
-function translateSide(question, side) {
-  var q = (question || '').toLowerCase();
-  var s = (side || 'YES').toUpperCase();
+function translateSide(q, side) {
+  var s = (side||'YES').toUpperCase();
   if (/up or down/i.test(q)) return s === 'YES' ? 'Goes UP' : 'Goes DOWN';
-  if (/\bvs\.?\b|\bversus\b/i.test(q)) {
-    var teams = q.split(/\bvs\.?\b|\bversus\b/i);
+  if (/\bvs\.?\b/i.test(q)) {
+    var teams = q.split(/\bvs\.?\b/i);
     if (teams.length >= 2) {
       var t1 = teams[0].replace(/^.*?:\s*/, '').trim();
       var t2 = teams[1].trim().replace(/\?$/, '');
       t1 = t1.split(' ').map(function(w){return w.charAt(0).toUpperCase()+w.slice(1)}).join(' ');
       t2 = t2.split(' ').map(function(w){return w.charAt(0).toUpperCase()+w.slice(1)}).join(' ');
-      if (t1.length > 20) t1 = t1.substring(0, 18) + '..';
-      if (t2.length > 20) t2 = t2.substring(0, 18) + '..';
+      if (t1.length > 22) t1 = t1.substring(0,20)+'..';
+      if (t2.length > 22) t2 = t2.substring(0,20)+'..';
       return s === 'YES' ? t1 + ' wins' : t2 + ' wins';
     }
   }
-  if (/^will\b/i.test(q)) return s === 'YES' ? 'Yes, it happens' : 'No, it doesn\'t';
-  if (/ceasefire|agreement|peace|deal\b/i.test(q)) return s === 'YES' ? 'Yes' : 'No';
-  return s === 'YES' ? 'Yes' : 'No';
+  if (/^will\b/i.test(q)) return s === 'YES' ? 'Yes' : 'No';
+  if (/ceasefire|agreement|peace/i.test(q)) return s === 'YES' ? 'Yes' : 'No';
+  return s;
 }
 
-function humanizeAction(market, action, side) {
-  var plain = translateSide(market, side);
-  // Replace "BUY YES" / "BUY NO" with the plain language version
-  return (action || '').replace(/BUY\s+(YES|NO)/i, 'Bet: ' + plain);
-}
-function regionFlag(q){var t=(q||'').toLowerCase();if(/\bus\b|united states|america|trump|biden|vance|congress|senate|fed |federal reserve|us forces/i.test(t))return'\uD83C\uDDFA\uD83C\uDDF8';if(/\biran|iranian|tehran/i.test(t))return'\uD83C\uDDEE\uD83C\uDDF7';if(/\bisrael|israeli|idf|netanyahu|gaza|hamas|hezbollah|lebanon/i.test(t))return'\uD83C\uDDEE\uD83C\uDDF1';if(/\bruss|ukraine|kyiv|kremlin|putin|zelensky/i.test(t))return'\uD83C\uDDFA\uD83C\uDDE6';if(/\bchina|chinese|beijing|jilin|guangdong|zhejiang|liaoning|shandong/i.test(t))return'\uD83C\uDDE8\uD83C\uDDF3';if(/\bindia|modi|ipl|chennai/i.test(t))return'\uD83C\uDDEE\uD83C\uDDF3';if(/\bjapan|japanese|tokyo/i.test(t))return'\uD83C\uDDEF\uD83C\uDDF5';if(/\bkorea|korean|seoul/i.test(t))return'\uD83C\uDDF0\uD83C\uDDF7';if(/\bbrazil|brazilian/i.test(t))return'\uD83C\uDDE7\uD83C\uDDF7';if(/\bcanad|toronto|montreal/i.test(t))return'\uD83C\uDDE8\uD83C\uDDE6';if(/\baustrali|sydney|melbourne/i.test(t))return'\uD83C\uDDE6\uD83C\uDDFA';if(/\bturk|istanbul|erdogan/i.test(t))return'\uD83C\uDDF9\uD83C\uDDF7';if(/\bArgentin|messi/i.test(t))return'\uD83C\uDDE6\uD83C\uDDF7';if(/\buk\b|britain|london|premier league|england/i.test(t))return'\uD83C\uDDEC\uD83C\uDDE7';if(/\bfrance|french|paris|ligue 1/i.test(t))return'\uD83C\uDDEB\uD83C\uDDF7';if(/\bgerman|bundesliga|berlin|bayern/i.test(t))return'\uD83C\uDDE9\uD83C\uDDEA';if(/\bspain|spanish|la liga|madrid|barcelona|atletico/i.test(t))return'\uD83C\uDDEA\uD83C\uDDF8';if(/\bitaly|italian|serie a|milan|juventus|napoli/i.test(t))return'\uD83C\uDDEE\uD83C\uDDF9';if(/\bportug|benfica|porto/i.test(t))return'\uD83C\uDDF5\uD83C\uDDF9';if(/\bcroat|dubrovnik/i.test(t))return'\uD83C\uDDED\uD83C\uDDF7';if(/nba|nfl|mlb|nhl|ncaa|super bowl|march madness/i.test(t))return'\uD83C\uDDFA\uD83C\uDDF8';if(/yankees|mets|dodgers|warriors|lakers|celtics|nets|kings|bulls|thunder|nuggets|cavaliers|clippers|rockets|suns|heat|bucks|knicks|76ers|spurs|hawks|pacers|pistons|grizzlies|blazers|timberwolves|hornets|magic|wizards|pelicans|jazz|mavericks|chiefs|eagles|cowboys|49ers|ravens|bills|bengals|dolphins|lions|steelers|packers|bears|rams|seahawks|saints|texans|jaguars|titans|colts|broncos|raiders|chargers|panthers|falcons|vikings|browns|commanders|cardinals|giants|jets|patriots|buccaneers/i.test(t))return'\uD83C\uDDFA\uD83C\uDDF8';if(/\bufc|boxing/i.test(t))return'\uD83E\uDD4A';if(/bitcoin|btc|eth|crypto|solana|xrp|dogecoin|token|defi|nft|crude oil/i.test(t))return'\uD83C\uDF10';if(/champions league|europa league|uefa/i.test(t))return'\uD83C\uDDEA\uD83C\uDDFA';return'';}
-
-function formatNum(n) {
-  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
-  if (n >= 1000) return (n / 1000).toFixed(0) + 'K';
-  return n.toFixed(0);
-}
-
-function getTimeAgo(ts) {
-  if (!ts) return '';
-  const diff = Date.now() - new Date(ts).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return mins + 'm ago';
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return hrs + 'h ago';
-  return Math.floor(hrs / 24) + 'd ago';
-}
-
-// ── Consistent Winner Picks ──
-async function loadConsistentPicks() {
-  const el = document.getElementById('consistentPicksContainer');
+// ── SIGNALS ──
+async function loadSignals() {
   try {
-    // Fetch consistent traders and whale positions in parallel
-    const [ctRes, whaleRes] = await Promise.allSettled([
-      fetch('/api/consistent-traders'),
-      fetch('/api/whale-watch')
-    ]);
-
-    let traders = [];
-    if (ctRes.status === 'fulfilled' && ctRes.value.ok) {
-      traders = await ctRes.value.json();
+    var r = await fetch('/api/signals');
+    var d = await r.json();
+    _signals = d.signals || [];
+    // Stats bar
+    document.getElementById('stCount').textContent = _signals.length;
+    var totalCap = _signals.reduce(function(s,x){return s+(x.capital||0)},0);
+    document.getElementById('stCapital').textContent = fmtCap(totalCap);
+    if (d.updated_at) {
+      var dt = new Date(d.updated_at);
+      document.getElementById('stUpdated').textContent = dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
     }
-    let positions = [];
-    if (whaleRes.status === 'fulfilled' && whaleRes.value.ok) {
-      const wd = await whaleRes.value.json();
-      positions = wd.whales || [];
-    }
-
-    if (!traders.length) {
-      el.innerHTML = '<div class="empty-state">No consistent trader data yet.</div>';
-      return;
-    }
-
-    // Match consistent traders to their current whale positions — only show those with active positions
-    const tradersWithPositions = traders.map(t => {
-      const traderName = (t.display_name || '').toLowerCase();
-      const traderAddr = (t.address || '').toLowerCase();
-      const myPositions = positions.filter(p => {
-        const pTrader = (p.trader || '').toLowerCase();
-        const pWallet = (p.proxyWallet || '').toLowerCase();
-        return (traderAddr && pWallet === traderAddr) || (traderName && pTrader === traderName);
-      });
-      return { ...t, myPositions };
-    }).filter(t => t.myPositions.length > 0);
-
-    if (!tradersWithPositions.length) {
-      el.innerHTML = '<div class="empty-state">No consistent traders with active positions right now. Check back soon.</div>';
-      return;
-    }
-
-    const top3 = tradersWithPositions.slice(0, 3);
-    const cards = top3.map(t => {
-      const myPositions = t.myPositions;
-      const scoreColor = t.consistency_score >= 80 ? 'var(--green)' : t.consistency_score >= 60 ? 'var(--gold)' : '#9ca3af';
-      const scoreBg = t.consistency_score >= 80 ? 'var(--green-dim)' : t.consistency_score >= 60 ? 'var(--gold-dim)' : 'rgba(107,114,128,0.15)';
-      const confLabel = t.consistency_score >= 80 ? 'HIGH' : t.consistency_score >= 60 ? 'MEDIUM' : 'LOW';
-
-      const topPos = myPositions[0];
-      const side = (topPos.side || '').toUpperCase();
-      const sideColor = side === 'YES' ? 'var(--green)' : 'var(--red)';
-      const sideBg = side === 'YES' ? 'var(--green-dim)' : 'var(--red-dim)';
-      const sizeStr = (topPos.size || 0) >= 1e6 ? '$' + ((topPos.size || 0)/1e6).toFixed(1) + 'M' : (topPos.size || 0) >= 1e3 ? '$' + ((topPos.size || 0)/1e3).toFixed(0) + 'K' : '$' + (topPos.size || 0);
-      const positionHtml = '<div style="margin-top:10px;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px">' +
-        '<div style="font-size:12px;color:var(--text);line-height:1.4;margin-bottom:6px">' + escHtml((topPos.market || '').substring(0, 60)) + '</div>' +
-        '<div style="display:flex;align-items:center;gap:8px">' +
-          '<span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:' + sideBg + ';color:' + sideColor + '">' + side + '</span>' +
-          '<span style="font-family:var(--mono);font-size:11px;color:var(--text-soft)">' + sizeStr + '</span>' +
-          '<span class="confidence-badge conf-' + confLabel + '" style="margin-left:auto">' + confLabel + '</span>' +
-        '</div>' +
-        (myPositions.length > 1 ? '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:6px">+' + (myPositions.length - 1) + ' more position' + (myPositions.length > 2 ? 's' : '') + '</div>' : '') +
-      '</div>';
-
-      return '<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;transition:all 0.2s">' +
-        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">' +
-          '<a href="' + (/^0x[0-9a-fA-F]{10,}$/i.test(t.address||'') ? '/trader/' + escHtml(t.address) : '/p/' + escHtml(t.address || t.display_name)) + '" style="font-size:13px;font-weight:700;color:var(--gold)">' + escHtml(t.display_name) + '</a>' +
-          '<span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 8px;border-radius:10px;background:' + scoreBg + ';color:' + scoreColor + '">' + t.consistency_score + '</span>' +
-        '</div>' +
-        '<div style="font-family:var(--mono);font-size:11px;color:var(--muted)">W: <span style="color:var(--green)">+$' + formatNum(Math.abs(t.pnl_week)) + '</span> &middot; All: +$' + formatNum(Math.abs(t.pnl_all_time)) + '</div>' +
-        positionHtml +
-      '</div>';
-    });
-
-    el.innerHTML = cards.join('');
-  } catch (e) {
-    el.innerHTML = '<div class="empty-state">Failed to load consistent picks.</div>';
+    // Top signal type
+    var counts = {};
+    _signals.forEach(function(s){counts[s.type]=(counts[s.type]||0)+1});
+    var topType = Object.keys(counts).sort(function(a,b){return counts[b]-counts[a]})[0] || '--';
+    var typeLabels = {whale_cluster:'Whale',momentum:'Momentum',new_entry:'New Entry',arbitrage:'Arb',volume_surge:'Volume'};
+    document.getElementById('stTopType').textContent = typeLabels[topType] || topType;
+    document.getElementById('stTopSub').textContent = (counts[topType]||0) + ' signals';
+    renderSignals();
+  } catch(e) {
+    document.getElementById('signalFeed').innerHTML = '<div class="s-empty">Loading signals...</div>';
   }
 }
 
-// ── Correlations ──
-async function loadCorrelations() {
-  const el = document.getElementById('correlationsContainer');
-  try {
-    const r = await fetch('/api/correlations');
-    const data = await r.json();
-    const pairs = (data.pairs || []).slice(0, 5);
+function renderSignals() {
+  var el = document.getElementById('signalFeed');
+  var list = _filter === 'all' ? _signals : _signals.filter(function(s){return s.type===_filter});
+  if (!list.length) { el.innerHTML = '<div class="s-empty">No signals match this filter.</div>'; return; }
 
-    if (!pairs.length) {
-      el.innerHTML = '<div class="empty-state">No correlated market pairs detected yet. Data feeds may still be warming up.</div>';
-      return;
+  el.innerHTML = list.map(function(s) {
+    var sideClass = (s.side||'YES').toUpperCase() === 'YES' ? 'yes' : 'no';
+    var sideColor = sideClass === 'yes' ? 'var(--green)' : 'var(--red)';
+    var typeLabels = {whale_cluster:'WHALE',momentum:'MOMENTUM',new_entry:'NEW ENTRY',arbitrage:'ARB',volume_surge:'VOLUME'};
+    var plain = translateSide(s.market, s.side);
+    var flag = regionFlag(s.market);
+    var url = s.url && s.url.startsWith('https://polymarket.com') ? s.url : 'https://polymarket.com';
+
+    // Build meta items
+    var meta = [];
+    if (s.whale_count) meta.push('<span>' + s.whale_count + ' whales</span>');
+    if (s.capital) meta.push('<span>' + fmtCap(s.capital) + '</span>');
+    if (s.change_pct) {
+      var chg = s.change_pct > 0 ? '+' : '';
+      meta.push('<span style="color:' + (s.change_pct > 0 ? 'var(--green)' : 'var(--red)') + '">' + chg + Math.round(s.change_pct) + '%</span>');
     }
 
-    el.innerHTML = pairs.map(p => {
-      return '<div class="corr-card">' +
-        '<div class="corr-insight">' + escHtml(p.insight || 'These markets move together based on shared whale activity.') + '</div>' +
-        '<div class="corr-markets">' +
-          '<a href="' + escHtml(p.url_a || '#') + '" target="_blank" rel="noopener" class="corr-market-pill">' + escHtml((p.market_a || '').substring(0, 50)) + '</a>' +
-          '<span class="corr-arrow">' + (p.correlation_type === 'negative' ? '&#x2194;' : '&#x2192;') + '</span>' +
-          '<a href="' + escHtml(p.url_b || '#') + '" target="_blank" rel="noopener" class="corr-market-pill">' + escHtml((p.market_b || '').substring(0, 50)) + '</a>' +
-          '<span class="corr-whale-count">' + p.shared_whales + ' whales</span>' +
+    return '<div class="s-row">' +
+      '<div class="s-row-side ' + sideClass + '"></div>' +
+      '<div class="s-row-body">' +
+        '<div class="s-row-top">' +
+          '<span class="s-row-type type-' + s.type + '">' + (typeLabels[s.type]||s.type) + '</span>' +
+          '<span class="s-row-conf conf-' + s.confidence + '">' + s.confidence + '</span>' +
         '</div>' +
+        '<div class="s-row-market"><a href="' + escH(url) + '" target="_blank" rel="noopener">' + (flag ? flag + ' ' : '') + escH(s.market) + '</a></div>' +
+        '<div class="s-row-action" style="color:' + sideColor + '">Bet: ' + escH(plain) + '</div>' +
+        (meta.length ? '<div class="s-row-meta">' + meta.join('<span style="color:var(--muted)">\u00B7</span>') + '</div>' : '') +
+      '</div>' +
+      '<div class="s-row-right">' +
+        '<span class="s-row-time">' + timeAgo(s.detected_at) + '</span>' +
+        '<a href="' + escH(url) + '" target="_blank" rel="noopener" class="s-row-link">Trade &rarr;</a>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function filterSig(type, btn) {
+  _filter = type;
+  document.querySelectorAll('.s-pill').forEach(function(b){b.classList.remove('active')});
+  if (btn) btn.classList.add('active');
+  renderSignals();
+}
+
+// ── WHALE CONSENSUS ──
+async function loadWhaleConsensus() {
+  var el = document.getElementById('whaleConsensus');
+  try {
+    var r = await fetch('/api/whale-index');
+    var d = await r.json();
+    var picks = (d.picks || d.markets || d.positions || [])
+      .sort(function(a,b){return (b.whale_count||0)-(a.whale_count||0)})
+      .slice(0, 12);
+
+    if (!picks.length) {
+      // Fallback: build from signals
+      var mktMap = {};
+      _signals.forEach(function(s) {
+        if (!mktMap[s.market]) mktMap[s.market] = {market:s.market,whale_count:s.whale_count||0,capital:s.capital||0,side:s.side||'YES',url:s.url||'https://polymarket.com'};
+      });
+      picks = Object.values(mktMap).sort(function(a,b){return b.whale_count-a.whale_count}).slice(0,12);
+    }
+
+    if (!picks.length) { el.innerHTML = '<div class="s-empty">No consensus data yet.</div>'; return; }
+
+    el.innerHTML = picks.map(function(m, i) {
+      var side = m.consensus_side || m.side || 'YES';
+      var consensus = m.consensus_pct || 0;
+      var cap = m.total_capital || m.capital || 0;
+      var plain = translateSide(m.market||m.question||'', side);
+      var flag = regionFlag(m.market||m.question||'');
+      return '<div class="s-whale-row">' +
+        '<div class="s-whale-rank">' + (i+1) + '</div>' +
+        '<div class="s-whale-info">' +
+          '<div class="s-whale-q">' + (flag?flag+' ':'') + escH(m.market||m.question||'') + '</div>' +
+          '<div class="s-whale-stats">' + (m.whale_count||0) + ' whales \u00B7 ' + fmtCap(cap) + '</div>' +
+        '</div>' +
+        '<div class="s-whale-side ' + (side==='YES'?'yes':'no') + '">' + escH(plain) + '</div>' +
       '</div>';
     }).join('');
-  } catch (e) {
-    el.innerHTML = '<div class="empty-state">Failed to load correlations.</div>';
-  }
+  } catch(e) { el.innerHTML = '<div class="s-empty">Failed to load.</div>'; }
 }
 
-// ── Init — each loader isolated so one crash never takes down the page ──
-loadSignals();
-try { loadWhalePicks(); } catch(e) { console.warn('[signals] whale picks failed:', e.message); }
-try { loadFearGreed(); } catch(e) { console.warn('[signals] fear greed failed:', e.message); }
-try { loadConsistentPicks(); } catch(e) { console.warn('[signals] consistent picks failed:', e.message); }
-try { loadCorrelations(); } catch(e) { console.warn('[signals] correlations failed:', e.message); }
+// ── FEAR & GREED ──
+async function loadFG() {
+  try {
+    var r = await fetch('/api/fear-greed');
+    var d = await r.json();
+    var score = d.score || 50;
+    var label = d.label || 'Neutral';
+    var color = d.color || '#eab308';
+    document.getElementById('stFG').textContent = score;
+    document.getElementById('stFG').style.color = color;
+    document.getElementById('stFGLabel').textContent = label;
+    document.getElementById('fgWidget').innerHTML =
+      '<div class="s-fg-score" style="color:' + color + '">' + score + '</div>' +
+      '<div class="s-fg-label" style="color:' + color + '">' + escH(label) + '</div>' +
+      '<div class="s-fg-bar"><div class="s-fg-fill" style="width:' + score + '%"></div>' +
+        '<div class="s-fg-dot" style="left:calc(' + score + '% - 8px);background:' + color + ';box-shadow:0 0 8px ' + color + '"></div></div>' +
+      '<div style="display:flex;justify-content:space-between;margin-top:6px;font-family:var(--mono);font-size:8px;color:var(--dim)"><span>Fear</span><span>Greed</span></div>';
+  } catch(e) {}
+}
 
-// Auto-retry after 30s if signals came back empty (cold cache after deploy)
-setTimeout(function() {
-  var grid = document.getElementById('signalGrid');
-  if (grid && grid.querySelector('.empty-state')) {
-    console.log('[signals] Empty on first load — retrying...');
-    loadSignals();
-    try { loadWhalePicks(); } catch(e) {}
-    try { loadConsistentPicks(); } catch(e) {}
+// ── WINNER PICKS ──
+async function loadWinners() {
+  var el = document.getElementById('winnerPicks');
+  try {
+    var [ctRes, whaleRes] = await Promise.allSettled([fetch('/api/consistent-traders'), fetch('/api/whale-watch')]);
+    var traders = [];
+    if (ctRes.status === 'fulfilled' && ctRes.value.ok) traders = await ctRes.value.json();
+    var positions = [];
+    if (whaleRes.status === 'fulfilled' && whaleRes.value.ok) {
+      var wd = await whaleRes.value.json();
+      positions = wd.whales || wd.positions || [];
+    }
+
+    if (!traders.length && !Array.isArray(traders)) { el.innerHTML = '<div class="s-empty">No winner data.</div>'; return; }
+    var traderArr = Array.isArray(traders) ? traders : (traders.traders || []);
+    var top = traderArr.slice(0, 4);
+    if (!top.length) { el.innerHTML = '<div class="s-empty">No consistent winners found.</div>'; return; }
+
+    var html = '';
+    top.forEach(function(t) {
+      var name = t.username || t.name || 'Trader';
+      var winPnl = t.week_profit || t.pnl_7d || 0;
+      var allPnl = t.total_profit || t.pnl_all || 0;
+      var score = t.score || t.consistency_score || 0;
+      html += '<div class="s-winner">' +
+        '<div class="s-winner-name">' + escH(name) + '<div class="s-winner-stats">W: ' + (winPnl >= 0 ? '+' : '') + fmtCap(Math.abs(winPnl)) + ' \u00B7 All: ' + (allPnl >= 0 ? '+' : '') + fmtCap(Math.abs(allPnl)) + '</div></div>' +
+        '<div class="s-winner-score">' + score + '</div>' +
+      '</div>';
+      // Show their top position
+      var traderName = (name || '').toLowerCase();
+      var traderPos = positions.filter(function(p) {
+        return (p.name||p.trader_name||'').toLowerCase() === traderName;
+      }).slice(0, 1);
+      traderPos.forEach(function(p) {
+        var plain = translateSide(p.market||p.question||'', p.side||'YES');
+        html += '<div class="s-winner-pos">' +
+          '<div style="font-size:11px;color:var(--text);margin-bottom:2px">' + escH(p.market||p.question||'') + '</div>' +
+          '<div style="display:flex;gap:8px;align-items:center">' +
+            '<span style="font-family:var(--mono);font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;background:' + ((p.side||'YES')==='YES'?'rgba(34,197,94,.1)':'rgba(239,68,68,.1)') + ';color:' + ((p.side||'YES')==='YES'?'var(--green)':'var(--red)') + '">' + escH(plain) + '</span>' +
+            '<span style="font-family:var(--mono);font-size:9px;color:var(--dim)">' + fmtCap(parseFloat(p.size||0)) + '</span>' +
+          '</div>' +
+        '</div>';
+      });
+    });
+    el.innerHTML = html;
+  } catch(e) { el.innerHTML = '<div class="s-empty">Failed to load.</div>'; }
+}
+
+// ── AI ANALYSIS ──
+async function runAI() {
+  var input = document.getElementById('aiInput');
+  var btn = document.getElementById('aiBtn');
+  var res = document.getElementById('aiResult');
+  var q = (input.value||'').trim();
+  if (!q) return;
+  btn.disabled = true; btn.textContent = '...';
+  res.style.display = 'block';
+  res.innerHTML = '<div class="s-loading">Claude is thinking...</div>';
+  try {
+    var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+    if (!token) { res.innerHTML = '<div style="color:var(--gold)"><a href="/creator/login" style="color:var(--gold)">Sign in</a> to use AI analysis.</div>'; btn.disabled=false; btn.textContent='Analyze'; return; }
+    var r = await fetch('/api/ai/market-analysis', {
+      method: 'POST', headers: {'Content-Type':'application/json', Authorization:'Bearer '+token},
+      body: JSON.stringify({markets:[{question:q,yes_pct:50,volume:'N/A',platform:'Polymarket'}]})
+    });
+    var d = await r.json();
+    if (d.error) throw new Error(d.error);
+    res.innerHTML = '<div class="s-ai-result">' + escH(d.analysis||d.content||'') + '</div>';
+  } catch(e) {
+    res.innerHTML = '<div style="color:var(--dim);font-family:var(--mono);font-size:11px">AI analysis temporarily unavailable.</div>';
   }
-}, 30000);
+  btn.disabled = false; btn.textContent = 'Analyze';
+}
 
-// Auto-refresh every 5 minutes
-setInterval(function() { try { loadSignals(); } catch(e) {} }, 5 * 60 * 1000);
+// ── INIT ──
+loadSignals();
+loadWhaleConsensus();
+loadFG();
+loadWinners();
+setInterval(loadSignals, 2 * 60 * 1000);
 </script>
 </body>
 </html>
