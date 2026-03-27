@@ -16539,7 +16539,7 @@ app.get('/api/polymarket/positions/:address/enriched', async (req, res) => {
     whalePositions.forEach(w => {
       const q = (w.market || '').toLowerCase().trim();
       if (!q) return;
-      const wallet = (w.wallet || w.trader_address || w.name || 'unknown').toLowerCase();
+      const wallet = (w.proxyWallet || w.trader || 'unknown').toLowerCase();
       const nk = wallet + ':' + q;
       if (!_enrNetMap[nk]) _enrNetMap[nk] = { yes_cap: 0, no_cap: 0, market: q, wallet };
       const s = (w.side || '').toUpperCase();
@@ -17756,7 +17756,7 @@ app.get('/api/whale-index', async (req, res) => {
     const wiNetMap = {};
     for (const p of rawPositions) {
       const mkt = p.market || p.position || 'Unknown';
-      const wallet = (p.wallet || p.trader_address || p.name || p.trader_name || 'unknown').toLowerCase();
+      const wallet = (p.proxyWallet || p.trader || 'unknown').toLowerCase();
       const nk = wallet + ':' + mkt.toLowerCase();
       if (!wiNetMap[nk]) wiNetMap[nk] = { yes_cap: 0, no_cap: 0, market: mkt, wallet, url: p.market_url || 'https://polymarket.com', current_price: p.current_price || 0 };
       const side = (p.side || 'YES').toUpperCase();
@@ -17913,7 +17913,7 @@ app.get('/api/screener', async (req, res) => {
     for (const wp of whalePositions) {
       const mkt = (wp.market || wp.position || '').toLowerCase().trim();
       if (!mkt) continue;
-      const wallet = (wp.wallet || wp.trader_address || wp.name || wp.trader_name || 'unknown').toLowerCase();
+      const wallet = (wp.proxyWallet || wp.trader || 'unknown').toLowerCase();
       const nk = wallet + ':' + mkt;
       if (!_scrNetMap[nk]) _scrNetMap[nk] = { yes_cap: 0, no_cap: 0, market: mkt };
       const side = (wp.side || 'YES').toUpperCase();
@@ -18169,7 +18169,7 @@ app.get('/api/whale-flow', async (req, res) => {
     // If a whale has YES and NO on the same market, only count the net side
     const netMap = {}; // key: "wallet:market" → { yes_cap, no_cap, market, wallet, market_url, ... }
     rawPositions.forEach(p => {
-      const wallet = (p.wallet || p.trader_address || '').toLowerCase();
+      const wallet = (p.proxyWallet || p.trader || '').toLowerCase();
       const market = (p.market || '').toLowerCase();
       const key = wallet + ':' + market;
       if (!netMap[key]) netMap[key] = { yes_capital: 0, no_capital: 0, market: p.market, wallet, market_url: p.market_url || '' };
@@ -19759,7 +19759,7 @@ function computeFearGreed() {
     const fgNetMap = {};
     for (const p of rawPos) {
       const mkt = (p.market || p.question || '').toLowerCase();
-      const wallet = (p.wallet || p.trader_address || p.name || 'unknown').toLowerCase();
+      const wallet = (p.proxyWallet || p.trader || 'unknown').toLowerCase();
       const nk = wallet + ':' + mkt;
       if (!fgNetMap[nk]) fgNetMap[nk] = { yes_cap: 0, no_cap: 0 };
       const s = (p.side || '').toUpperCase();
@@ -21380,7 +21380,7 @@ app.get('/api/signals', async (req, res) => {
           for (const w of whales) {
             const mkt = w.market || w.question;
             if (!mkt) continue;
-            const wallet = (w.wallet || w.trader_address || w.name || w.trader_name || 'unknown').toLowerCase();
+            const wallet = (w.proxyWallet || w.trader || 'unknown').toLowerCase();
             const nk = wallet + ':' + mkt.toLowerCase();
             if (!netMap[nk]) netMap[nk] = { yes_cap: 0, no_cap: 0, market: mkt, wallet, url: w.market_url || w.url || '' };
             const side = (w.side || 'YES').toUpperCase();
@@ -21832,7 +21832,7 @@ app.get('/api/signals', async (req, res) => {
         for (const w of whales) {
           const mkt = w.market || w.question;
           if (!mkt) continue;
-          const wallet = (w.wallet || w.trader_address || w.name || w.trader_name || 'unknown').toLowerCase();
+          const wallet = (w.proxyWallet || w.trader || 'unknown').toLowerCase();
           const nk = wallet + ':' + mkt.toLowerCase();
           if (!fbNetMap[nk]) fbNetMap[nk] = { yes_cap: 0, no_cap: 0, market: mkt, wallet, url: w.market_url || w.url || 'https://polymarket.com' };
           const side = (w.side || 'YES').toUpperCase();
@@ -24611,7 +24611,7 @@ app.get('/api/events', async (req, res) => {
     for (const wp of whalePositions) {
       const mkt = (wp.market || wp.position || '').toLowerCase().trim();
       if (!mkt) continue;
-      const wallet = (wp.wallet || wp.trader_address || wp.name || 'unknown').toLowerCase();
+      const wallet = (wp.proxyWallet || wp.trader || 'unknown').toLowerCase();
       const nk = wallet + ':' + mkt;
       if (!_evtNetMap[nk]) _evtNetMap[nk] = { yes_cap: 0, no_cap: 0, market: mkt };
       const s = (wp.side || 'YES').toUpperCase();
