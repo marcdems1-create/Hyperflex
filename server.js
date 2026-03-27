@@ -16812,7 +16812,7 @@ app.get('/api/markets/search', async (req, res) => {
       war: ['war', 'conflict', 'invasion', 'military', 'strike', 'troops', 'ceasefire'],
       china: ['china', 'chinese', 'xi jinping', 'beijing', 'taiwan', 'prc', 'tariff'],
       russia: ['russia', 'russian', 'putin', 'ukraine', 'moscow', 'kremlin'],
-      iran: ['iran', 'iranian', 'tehran', 'hormuz', 'persian gulf'],
+      iran: ['iran', 'iranian', 'tehran', 'hormuz', 'strike', 'nuclear'],
       pope: ['pope', 'papal', 'vatican', 'pontiff', 'catholic'],
       nba: ['nba', 'basketball', 'finals', 'playoff'],
       ufc: ['ufc', 'mma', 'fighting', 'fight night'],
@@ -16958,34 +16958,26 @@ app.get('/api/markets/search', async (req, res) => {
     if (kalshiNullPrice.length > 0) {
       const priceFetches = kalshiNullPrice.slice(0, 8).map(async (m) => {
         try {
-          // Orderbook — use BEST (highest) YES bid as the price
-          // YES bids are sorted ascending by price, so last entry = best bid
-          // Cross-check with NO side: YES ≈ 1 - best NO bid
-          // Average the two for best estimate
+          // Orderbook has real bid/ask data even when market endpoint doesn't
           const r = await fetchWithTimeout(`https://api.elections.kalshi.com/trade-api/v2/markets/${m._ticker}/orderbook`, { headers: { Accept: 'application/json' } }, 5000);
           if (r.ok) {
             const ob = await r.json();
             const book = ob.orderbook_fp || ob.orderbook || {};
             const yesBids = book.yes_dollars || book.yes || [];
             const noBids = book.no_dollars || book.no || [];
-            const bestYesBid = yesBids.length > 0 ? parseFloat(yesBids[yesBids.length - 1][0]) : null;
-            const bestNoBid = noBids.length > 0 ? parseFloat(noBids[noBids.length - 1][0]) : null;
-            // Skip if both sides are at minimum ($0.01-0.03) — no real liquidity
-            if (bestYesBid != null && bestNoBid != null && bestYesBid <= 0.03 && bestNoBid <= 0.03) {
-              // No real price discovery happening
-            } else {
-              let yesPrice = null;
-              if (bestYesBid != null && bestNoBid != null) {
-                // Average of direct YES bid and NO-implied YES
-                yesPrice = (bestYesBid + (1 - bestNoBid)) / 2;
-              } else if (bestYesBid != null) {
-                yesPrice = bestYesBid;
-              } else if (bestNoBid != null) {
-                yesPrice = 1 - bestNoBid;
-              }
-              if (yesPrice != null && yesPrice > 0.03 && yesPrice < 0.97) {
-                m.yes_pct = Math.round(yesPrice * 100);
-              }
+            // Best YES price = lowest yes ask, or infer from NO side (yes = 1 - best_no)
+            let yesPrice = null;
+            if (yesBids.length > 0) {
+              yesPrice = parseFloat(yesBids[0][0]);
+            }
+            if (noBids.length > 0) {
+              const impliedYes = 1 - parseFloat(noBids[0][0]);
+              // Use the midpoint if both sides exist
+              if (yesPrice != null) yesPrice = (yesPrice + impliedYes) / 2;
+              else yesPrice = impliedYes;
+            }
+            if (yesPrice != null) {
+              m.yes_pct = Math.round(yesPrice * 100);
             }
           }
         } catch {}
@@ -17004,10 +16996,8 @@ app.get('/api/markets/search', async (req, res) => {
       }
       delete m._ticker;
     });
-    // Re-filter after price backfill:
-    // - Remove markets still with no price (useless to display)
-    // - Remove markets confirmed resolved (95%+ or 5%-)
-    const kalshiFiltered = kalshiMarkets.filter(m => m.yes_pct != null && m.yes_pct > 5 && m.yes_pct < 95);
+    // Re-filter: remove markets that are now confirmed 95%+ or 5%- after price backfill
+    const kalshiFiltered = kalshiMarkets.filter(m => m.yes_pct == null || (m.yes_pct > 5 && m.yes_pct < 95));
 
     // --- Parse Sportsbook odds ---
     let sportsbooks = [];
@@ -23698,7 +23688,7 @@ async function searchAndDraftReplies() {
       '"prediction market" whale -is:retweet -from:HyperFlexapp',
     ];
     const query = queries[Math.floor(Date.now() / 3600000) % queries.length];
-    const searchUrl = `https://api.x.com/2/tweets/search/recent?query=${encodeURIComponent(query)}&max_results=10&tweet.fields=public_metrics,author_id,created_at`;
+    const searchUrl = `https://api.x.com/2/tweets/search/recent?query=${encodeURIComponent(query)}&max_results=10&tweet.fields=public_metrics,author_id,created_at,reply_settings`;
     // Use Bearer token if available, otherwise fall back to OAuth1
     const authHeader = bearer ? `Bearer ${bearer}` : _xOAuthSign('GET', searchUrl, {});
     if (!authHeader) { console.warn('[reply-bot] No auth available'); return; }
@@ -23709,6 +23699,8 @@ async function searchAndDraftReplies() {
     if (!tweets.length) return;
     const worthy = tweets.filter(t => {
       const m = t.public_metrics || {};
+      // Skip tweets that restrict replies (only mentioned users, only followers, etc)
+      if (t.reply_settings && t.reply_settings !== 'everyone') return false;
       return ((m.like_count || 0) + (m.retweet_count || 0) * 3 + (m.reply_count || 0) * 2) >= 1 && !_replyLog.includes(t.id);
     });
     if (!worthy.length) return;
@@ -23754,13 +23746,26 @@ async function searchAndDraftReplies() {
     let reply = (replyRes.content[0]?.text || '').trim().replace(/^["']|["']$/g, '');
     if (reply.length > 200) reply = reply.substring(0, reply.lastIndexOf(' ', 200)) || reply.substring(0, 200);
 
+    // Auto-post the reply immediately
+    let postResult = null;
+    try {
+      postResult = await replyToTweet(target.id, reply);
+      _replyLog.push(target.id);
+      if (_replyLog.length > 200) _replyLog.splice(0, 100);
+      console.log(`[reply-bot] AUTO-POSTED reply to ${target.id}: "${reply.substring(0, 60)}..."`);
+    } catch (postErr) {
+      console.warn(`[reply-bot] Failed to post reply:`, postErr.message);
+    }
+
     _replyDraftQueue.push({
       id: ++_replyDraftId, tweet_id: target.id, tweet_text: (target.text||'').substring(0, 200),
       tweet_author: target.author_id, tweet_metrics: target.public_metrics,
-      reply_text: reply, data_used: dataPoint, created_at: new Date().toISOString(), status: 'draft'
+      reply_text: reply, data_used: dataPoint, created_at: new Date().toISOString(),
+      status: postResult ? 'posted' : 'failed',
+      posted_at: postResult ? new Date().toISOString() : null,
+      reply_id: postResult?.data?.id || null
     });
-    if (_replyDraftQueue.length > 20) _replyDraftQueue.shift();
-    console.log(`[reply-bot] Drafted reply to ${target.id}: "${reply.substring(0, 60)}..."`);
+    if (_replyDraftQueue.length > 50) _replyDraftQueue.shift();
   } catch (e) { console.warn('[reply-bot]', e.message); }
 }
 
