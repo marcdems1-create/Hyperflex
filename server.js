@@ -17091,30 +17091,58 @@ app.get('/api/markets/search', async (req, res) => {
       smart_money = await Promise.race([smQuery, smTimeout]).catch(() => null);
     } catch (e) { console.warn('[smart-money]', e.message); }
 
-    // --- Cross-platform pairing: match Poly ↔ Kalshi markets about the same question ---
-    // Stop words that cause false cross-platform matches
-    const _pairStopWords = new Set(['will','the','before','after','from','this','that','with','have','been','does','would','should','could','about','into','than','them','then','what','when','where','which','their','there','these','those','other','some','more','very','just','only','also','most','next','each','both','during','being','between','2025','2026','2027','2028','2029']);
-    function _significantWords(text) {
-      return (text || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 3 && !_pairStopWords.has(w));
+    // --- Cross-platform pairing: entity-based matching (scales to any market) ---
+    // Extract entities (proper nouns, key subjects) and actions from market questions
+    const _stopWords = new Set(['will','the','before','after','from','this','that','with','have','been','does','would','should','could','about','into','than','them','then','what','when','where','which','their','there','these','those','other','some','more','very','just','only','also','most','next','each','both','during','being','between','defined','member','2024','2025','2026','2027','2028','2029']);
+    // Semantic equivalence groups — different phrasings for the same concept
+    const _semanticGroups = {
+      'impeach': ['impeach','impeached','impeachment','removed from office','out as president','removal'],
+      'win': ['win','winner','champion','victory','take'],
+      'price': ['price','hit','above','below','reach','exceed','fall'],
+      'election': ['election','elected','vote','nominee','nomination','presidential'],
+      'rate': ['rate','rates','cut','hike','basis points','fomc'],
+      'ceasefire': ['ceasefire','peace','truce','war ends','conflict ends'],
+      'resign': ['resign','resignation','step down','leave office','out as'],
+    };
+    function _extractFingerprint(text) {
+      const t = (text || '').toLowerCase();
+      // Extract entities: capitalized words, numbers, known proper nouns
+      const words = t.replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2 && !_stopWords.has(w));
+      // Map words through semantic groups
+      const normalized = new Set();
+      for (const w of words) {
+        let mapped = false;
+        for (const [group, variants] of Object.entries(_semanticGroups)) {
+          if (variants.some(v => w.includes(v) || v.includes(w))) {
+            normalized.add('~' + group); // prefix ~ = semantic group
+            mapped = true;
+            break;
+          }
+        }
+        if (!mapped) normalized.add(w);
+      }
+      return [...normalized];
     }
     const pairs = [];
     const usedKalshi = new Set();
     const usedPoly = new Set();
     for (let pi = 0; pi < polyMarkets.length; pi++) {
-      const pWords = _significantWords(polyMarkets[pi].question);
-      let bestMatch = -1, bestOverlap = 0;
+      const pFP = _extractFingerprint(polyMarkets[pi].question);
+      let bestMatch = -1, bestScore = 0;
       for (let ki = 0; ki < kalshiMarkets.length; ki++) {
         if (usedKalshi.has(ki)) continue;
-        const kWords = _significantWords(kalshiMarkets[ki].question);
-        const overlap = pWords.filter(w => kWords.includes(w)).length;
-        // Require higher overlap ratio — at least 3 shared meaningful words, or 2 if one is the query term
-        const minOverlap = pWords.some(w => qWords.includes(w) && kWords.includes(w)) ? 2 : 3;
-        if (overlap > bestOverlap && overlap >= minOverlap) { bestOverlap = overlap; bestMatch = ki; }
+        const kFP = _extractFingerprint(kalshiMarkets[ki].question);
+        // Count shared fingerprint tokens (includes semantic groups)
+        const shared = pFP.filter(w => kFP.includes(w));
+        const score = shared.length;
+        // Require: at least 2 shared tokens AND at least one must be a non-semantic entity (proper noun)
+        const hasEntity = shared.some(w => !w.startsWith('~') && w.length > 3);
+        const minScore = hasEntity ? 2 : 3;
+        if (score > bestScore && score >= minScore) { bestScore = score; bestMatch = ki; }
       }
       if (bestMatch >= 0) {
         const pPct = polyMarkets[pi].yes_pct; const kPct = kalshiMarkets[bestMatch].yes_pct;
         const spread = (pPct != null && kPct != null) ? Math.abs(pPct - kPct) : null;
-        // Only pair if at least one side has price data
         if (pPct != null || kPct != null) {
           pairs.push({ poly: polyMarkets[pi], kalshi: kalshiMarkets[bestMatch], spread });
           usedPoly.add(pi);
