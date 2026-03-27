@@ -23660,6 +23660,141 @@ cron.schedule('0 15 * * *', safeCron('expiryTweet', async () => {
   } catch(e) { console.warn('[expiry-tweet]', e.message); }
 }));
 
+// ══════════════════════════════════════════════════════════════════════
+// REPLY-TO-ENGAGEMENT BOT — find prediction market tweets and reply with data
+// ══════════════════════════════════════════════════════════════════════
+const _replyLog = [];
+const _replyDraftQueue = [];
+let _replyDraftId = 0;
+
+async function replyToTweet(tweetId, text) {
+  const url = 'https://api.x.com/2/tweets';
+  const body = JSON.stringify({ text, reply: { in_reply_to_tweet_id: tweetId } });
+  const auth = _xOAuthSign('POST', url, {});
+  if (!auth) throw new Error('X API keys not configured');
+  const res = await fetch(url, { method: 'POST', headers: { 'Authorization': auth, 'Content-Type': 'application/json' }, body });
+  const data = await res.json();
+  if (!res.ok) throw new Error(`X API ${res.status}: ${JSON.stringify(data)}`);
+  console.log('[reply-bot] Replied to', tweetId);
+  return data;
+}
+
+async function searchAndDraftReplies() {
+  const bearer = process.env.X_BEARER_TOKEN;
+  if (!bearer) return;
+  try {
+    const queries = [
+      'polymarket odds -is:retweet -from:HyperFlexapp',
+      'kalshi prediction -is:retweet -from:HyperFlexapp',
+      '"prediction market" whale -is:retweet -from:HyperFlexapp',
+    ];
+    const query = queries[Math.floor(Date.now() / 3600000) % queries.length];
+    const searchUrl = `https://api.x.com/2/tweets/search/recent?query=${encodeURIComponent(query)}&max_results=10&tweet.fields=public_metrics,author_id,created_at`;
+    const res = await fetch(searchUrl, { headers: { 'Authorization': `Bearer ${bearer}` }, signal: AbortSignal.timeout(10000) });
+    if (!res.ok) { console.warn('[reply-bot] Search failed:', res.status); return; }
+    const data = await res.json();
+    const tweets = data.data || [];
+    if (!tweets.length) return;
+    const worthy = tweets.filter(t => {
+      const m = t.public_metrics || {};
+      return ((m.like_count || 0) + (m.retweet_count || 0) * 3 + (m.reply_count || 0) * 2) >= 5 && !_replyLog.includes(t.id);
+    });
+    if (!worthy.length) return;
+    const target = worthy.sort((a, b) => {
+      const aE = (a.public_metrics?.like_count || 0) + (a.public_metrics?.retweet_count || 0) * 3;
+      const bE = (b.public_metrics?.like_count || 0) + (b.public_metrics?.retweet_count || 0) * 3;
+      return bE - aE;
+    })[0];
+
+    let dataPoint = '';
+    if (_whaleIndexCache && _whaleIndexCache.data && _whaleIndexCache.data.picks) {
+      const tLower = (target.text || '').toLowerCase();
+      const match = _whaleIndexCache.data.picks.find(p => {
+        const mWords = (p.market || '').toLowerCase().split(/\s+/).filter(w => w.length > 4);
+        return mWords.some(w => tLower.includes(w));
+      });
+      if (match) {
+        const cap = match.total_capital >= 1000000 ? '$' + (match.total_capital/1000000).toFixed(1) + 'M' : '$' + Math.round(match.total_capital/1000) + 'K';
+        dataPoint = `Our whale tracker shows ${match.whale_count} wallets with ${cap} on this. ${match.consensus_pct}% consensus on ${match.consensus_side}.`;
+      }
+    }
+    if (!dataPoint && _screenerCache && _screenerCache.data) {
+      const tLower = (target.text || '').toLowerCase();
+      const match = _screenerCache.data.find(m => {
+        const mWords = (m.question || '').toLowerCase().split(/\s+/).filter(w => w.length > 4);
+        return mWords.some(w => tLower.includes(w));
+      });
+      if (match) {
+        const vol = match.volume >= 1000000 ? '$' + (match.volume/1000000).toFixed(1) + 'M' : '$' + Math.round(match.volume/1000) + 'K';
+        const pct = match.yes_price != null ? Math.round(match.yes_price * 100) : null;
+        dataPoint = pct ? `Currently at ${pct}% YES with ${vol} volume.` : `${vol} volume on this market.`;
+      }
+    }
+    if (!dataPoint) dataPoint = 'We track whale wallets across Polymarket and Kalshi in real time.';
+
+    const anthropic = new Anthropic();
+    const replyRes = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 200,
+      system: `You write replies on X for @HyperFlexapp. Add genuine VALUE with real data. Sound like a knowledgeable trader, not a brand. 1-2 sentences max. NEVER say "Check out" or any CTA. No hashtags or emojis. Under 200 chars. Output ONLY the reply.`,
+      messages: [{ role: 'user', content: `Reply to this tweet with data:\n\nTweet: "${(target.text||'').substring(0, 300)}"\n\nData: ${dataPoint}\n\nReply (under 200 chars):` }]
+    });
+    let reply = (replyRes.content[0]?.text || '').trim().replace(/^["']|["']$/g, '');
+    if (reply.length > 200) reply = reply.substring(0, reply.lastIndexOf(' ', 200)) || reply.substring(0, 200);
+
+    _replyDraftQueue.push({
+      id: ++_replyDraftId, tweet_id: target.id, tweet_text: (target.text||'').substring(0, 200),
+      tweet_author: target.author_id, tweet_metrics: target.public_metrics,
+      reply_text: reply, data_used: dataPoint, created_at: new Date().toISOString(), status: 'draft'
+    });
+    if (_replyDraftQueue.length > 20) _replyDraftQueue.shift();
+    console.log(`[reply-bot] Drafted reply to ${target.id}: "${reply.substring(0, 60)}..."`);
+  } catch (e) { console.warn('[reply-bot]', e.message); }
+}
+
+app.get('/api/reply-queue', (req, res) => {
+  const secret = req.headers['x-admin-secret'];
+  if (secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  res.json({ drafts: _replyDraftQueue.filter(r => r.status === 'draft'), posted: _replyDraftQueue.filter(r => r.status === 'posted').slice(-10), total: _replyDraftQueue.length });
+});
+app.post('/api/reply-queue/:id/post', async (req, res) => {
+  const secret = req.headers['x-admin-secret'];
+  if (secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  const entry = _replyDraftQueue.find(r => r.id === parseInt(req.params.id) && r.status === 'draft');
+  if (!entry) return res.status(404).json({ error: 'Draft not found' });
+  try {
+    const result = await replyToTweet(entry.tweet_id, entry.reply_text);
+    entry.status = 'posted'; entry.posted_at = new Date().toISOString();
+    _replyLog.push(entry.tweet_id);
+    if (_replyLog.length > 200) _replyLog.splice(0, 100);
+    res.json({ ok: true, reply_id: result.data?.id, text: entry.reply_text });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post('/api/reply-queue/:id/edit', (req, res) => {
+  const secret = req.headers['x-admin-secret'];
+  if (secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  const entry = _replyDraftQueue.find(r => r.id === parseInt(req.params.id) && r.status === 'draft');
+  if (!entry) return res.status(404).json({ error: 'Draft not found' });
+  const newText = (req.body.text || '').trim();
+  if (!newText) return res.status(400).json({ error: 'Text required' });
+  entry.reply_text = newText;
+  res.json({ ok: true, updated: entry });
+});
+app.post('/api/reply-queue/:id/delete', (req, res) => {
+  const secret = req.headers['x-admin-secret'];
+  if (secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  const idx = _replyDraftQueue.findIndex(r => r.id === parseInt(req.params.id));
+  if (idx === -1) return res.status(404).json({ error: 'Draft not found' });
+  _replyDraftQueue.splice(idx, 1);
+  res.json({ ok: true });
+});
+
+// Run reply bot every 2 hours at :30
+cron.schedule('30 */2 * * *', safeCron('replyBot', searchAndDraftReplies));
+// Also run once 2 min after boot to populate queue
+setTimeout(() => searchAndDraftReplies().catch(e => console.warn('[reply-bot] initial run:', e.message)), 120000);
+console.log('[boot] Reply engagement bot initialized');
+
 // ════════════════════════════════════════════════════════════
 // ACCURACY TRACKING — the core product
 // ════════════════════════════════════════════════════════════
