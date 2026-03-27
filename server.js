@@ -23753,6 +23753,33 @@ HARD RULES:
 }
 
 // POST /api/tweet-brief — manual trigger (admin only)
+// Test media upload — generates a simple card and uploads to X
+app.post('/api/test-media-upload', async (req, res) => {
+  const adminSecret = req.headers['x-admin-secret'] || req.query.admin;
+  if (adminSecret !== process.env.ADMIN_SECRET) return res.status(403).json({ error: 'Unauthorized' });
+  try {
+    const sharp = getSharp();
+    if (!sharp) return res.json({ error: 'sharp not available' });
+    const svg = `<svg width="1200" height="628" xmlns="http://www.w3.org/2000/svg">
+      <rect width="1200" height="628" fill="#141412"/>
+      <rect x="40" y="40" width="1120" height="548" rx="24" fill="#1a1a17" stroke="#c9920d" stroke-width="2" stroke-opacity="0.3"/>
+      <text x="80" y="100" font-family="sans-serif" font-size="18" font-weight="700" fill="#c9920d" letter-spacing="3">HYPERFLEX MARKET INTELLIGENCE</text>
+      <text x="80" y="200" font-family="sans-serif" font-size="40" font-weight="700" fill="#ddd8cc">Test Card — Media Upload</text>
+      <text x="80" y="300" font-family="sans-serif" font-size="72" font-weight="800" fill="#22c55e">67%</text>
+      <text x="300" y="300" font-family="sans-serif" font-size="72" font-weight="800" fill="#ef4444">33%</text>
+      <text x="80" y="340" font-family="sans-serif" font-size="20" fill="#7a7870">YES</text>
+      <text x="300" y="340" font-family="sans-serif" font-size="20" fill="#7a7870">NO</text>
+      <text x="80" y="540" font-family="sans-serif" font-size="16" fill="#7a7870">hyperflex.network</text>
+    </svg>`;
+    const imgBuf = await sharp(Buffer.from(svg)).png().toBuffer();
+    const mediaId = await uploadMediaToX(imgBuf);
+    const result = await postTweet('Test tweet with market card image — please ignore, will delete shortly.', mediaId);
+    res.json({ ok: true, mediaId, tweetId: result.data?.id, imageSize: imgBuf.length });
+  } catch (e) {
+    res.json({ error: e.message, stack: e.stack?.split('\n').slice(0, 3) });
+  }
+});
+
 // ?draft=true returns the tweet text without posting
 // Returns immediately in post mode, runs tweet generation in background to avoid Railway timeout
 app.post('/api/tweet-brief', async (req, res) => {
@@ -23945,11 +23972,19 @@ async function searchAndDraftReplies() {
           </svg>`;
           try {
             const imgBuf = await sharp(Buffer.from(svg)).png().toBuffer();
+            console.log(`[reply-bot] Image generated: ${imgBuf.length} bytes`);
             mediaId = await uploadMediaToX(imgBuf);
-          } catch (imgErr) { console.warn('[reply-bot] Image gen/upload failed:', imgErr.message); }
+            console.log(`[reply-bot] Image uploaded: mediaId=${mediaId}`);
+          } catch (imgErr) {
+            _logError('reply-bot/image', imgErr);
+          }
+        } else {
+          _logError('reply-bot/image', 'sharp not available on this server');
         }
+      } else {
+        console.log('[reply-bot] No market name extracted from dataPoint, skipping image');
       }
-    } catch (cardErr) { console.warn('[reply-bot] Card generation error:', cardErr.message); }
+    } catch (cardErr) { _logError('reply-bot/card', cardErr); }
 
     try {
       postResult = await postTweet(reply, mediaId);
