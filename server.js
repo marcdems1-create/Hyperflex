@@ -16812,7 +16812,7 @@ app.get('/api/markets/search', async (req, res) => {
       war: ['war', 'conflict', 'invasion', 'military', 'strike', 'troops', 'ceasefire'],
       china: ['china', 'chinese', 'xi jinping', 'beijing', 'taiwan', 'prc', 'tariff'],
       russia: ['russia', 'russian', 'putin', 'ukraine', 'moscow', 'kremlin'],
-      iran: ['iran', 'iranian', 'tehran', 'hormuz', 'strike', 'nuclear'],
+      iran: ['iran', 'iranian', 'tehran', 'hormuz', 'persian gulf'],
       pope: ['pope', 'papal', 'vatican', 'pontiff', 'catholic'],
       nba: ['nba', 'basketball', 'finals', 'playoff'],
       ufc: ['ufc', 'mma', 'fighting', 'fight night'],
@@ -16956,26 +16956,34 @@ app.get('/api/markets/search', async (req, res) => {
     if (kalshiNullPrice.length > 0) {
       const priceFetches = kalshiNullPrice.slice(0, 8).map(async (m) => {
         try {
-          // Orderbook has real bid/ask data even when market endpoint doesn't
+          // Orderbook — use BEST (highest) YES bid as the price
+          // YES bids are sorted ascending by price, so last entry = best bid
+          // Cross-check with NO side: YES ≈ 1 - best NO bid
+          // Average the two for best estimate
           const r = await fetchWithTimeout(`https://api.elections.kalshi.com/trade-api/v2/markets/${m._ticker}/orderbook`, { headers: { Accept: 'application/json' } }, 5000);
           if (r.ok) {
             const ob = await r.json();
             const book = ob.orderbook_fp || ob.orderbook || {};
             const yesBids = book.yes_dollars || book.yes || [];
             const noBids = book.no_dollars || book.no || [];
-            // Best YES price = lowest yes ask, or infer from NO side (yes = 1 - best_no)
-            let yesPrice = null;
-            if (yesBids.length > 0) {
-              yesPrice = parseFloat(yesBids[0][0]);
-            }
-            if (noBids.length > 0) {
-              const impliedYes = 1 - parseFloat(noBids[0][0]);
-              // Use the midpoint if both sides exist
-              if (yesPrice != null) yesPrice = (yesPrice + impliedYes) / 2;
-              else yesPrice = impliedYes;
-            }
-            if (yesPrice != null) {
-              m.yes_pct = Math.round(yesPrice * 100);
+            const bestYesBid = yesBids.length > 0 ? parseFloat(yesBids[yesBids.length - 1][0]) : null;
+            const bestNoBid = noBids.length > 0 ? parseFloat(noBids[noBids.length - 1][0]) : null;
+            // Skip if both sides are at minimum ($0.01-0.03) — no real liquidity
+            if (bestYesBid != null && bestNoBid != null && bestYesBid <= 0.03 && bestNoBid <= 0.03) {
+              // No real price discovery happening
+            } else {
+              let yesPrice = null;
+              if (bestYesBid != null && bestNoBid != null) {
+                // Average of direct YES bid and NO-implied YES
+                yesPrice = (bestYesBid + (1 - bestNoBid)) / 2;
+              } else if (bestYesBid != null) {
+                yesPrice = bestYesBid;
+              } else if (bestNoBid != null) {
+                yesPrice = 1 - bestNoBid;
+              }
+              if (yesPrice != null && yesPrice > 0.03 && yesPrice < 0.97) {
+                m.yes_pct = Math.round(yesPrice * 100);
+              }
             }
           }
         } catch {}
@@ -16994,8 +17002,10 @@ app.get('/api/markets/search', async (req, res) => {
       }
       delete m._ticker;
     });
-    // Re-filter: remove markets that are now confirmed 95%+ or 5%- after price backfill
-    const kalshiFiltered = kalshiMarkets.filter(m => m.yes_pct == null || (m.yes_pct > 5 && m.yes_pct < 95));
+    // Re-filter after price backfill:
+    // - Remove markets still with no price (useless to display)
+    // - Remove markets confirmed resolved (95%+ or 5%-)
+    const kalshiFiltered = kalshiMarkets.filter(m => m.yes_pct != null && m.yes_pct > 5 && m.yes_pct < 95);
 
     // --- Parse Sportsbook odds ---
     let sportsbooks = [];
