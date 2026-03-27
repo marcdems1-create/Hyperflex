@@ -16987,10 +16987,20 @@ app.get('/api/markets/search', async (req, res) => {
           { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }, 8000
         );
         if (sRes.ok) {
-          const sData = await sRes.json();
+          // Read as text first to handle control characters in Kalshi JSON
+          const sText = await sRes.text();
+          let sData;
+          try {
+            sData = JSON.parse(sText);
+          } catch (jsonErr) {
+            sData = JSON.parse(sText.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, ''));
+          }
           kalshiSupplemental = sData.events || [];
+          console.log(`[kalshi-series] ${seriesMatch}: ${kalshiSupplemental.length} events, ${kalshiSupplemental.reduce((s,e) => s + (e.markets||[]).length, 0)} markets`);
         }
-      } catch (e) { /* non-critical */ }
+      } catch (e) {
+        console.error(`[kalshi-series] ${seriesMatch} failed:`, e.message);
+      }
     }
 
     // --- Parse Kalshi (from paginated cache + supplemental) ---
