@@ -16798,7 +16798,20 @@ async function getKalshiEvents() {
       const tid = setTimeout(() => ctrl.abort(), 12000);
       const r = await fetch(url, { headers, signal: ctrl.signal }).finally(() => clearTimeout(tid));
       if (!r.ok) break;
-      const data = await r.json();
+      // Some Kalshi pages have control chars that break strict JSON parsing
+      let data;
+      try {
+        data = await r.json();
+      } catch (jsonErr) {
+        try {
+          const text = await r.text();
+          // Strip control characters (except newline/tab) before parsing
+          data = JSON.parse(text.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, ''));
+        } catch (e2) {
+          console.error(`[kalshi-cache] JSON parse failed on page ${page}:`, e2.message);
+          break; // Stop pagination but keep what we have
+        }
+      }
       const events = data.events || [];
       allEvents.push(...events);
       if (events.length < 200 || !data.cursor) break;
@@ -16951,11 +16964,49 @@ app.get('/api/markets/search', async (req, res) => {
       polyMarkets = polyMarkets.slice(0, 15);
     }
 
-    // --- Parse Kalshi (from paginated cache) ---
+    // --- Supplement Kalshi cache with targeted series ticker queries ---
+    // Some Kalshi event types (hourly crypto, sports props) don't appear in status=open pagination
+    const kalshiSeriesMap = {
+      bitcoin: 'KXBTC', btc: 'KXBTC', crypto: 'KXBTC',
+      ethereum: 'KXETH', eth: 'KXETH',
+      solana: 'KXSOL', sol: 'KXSOL',
+      xrp: 'KXXRP', ripple: 'KXXRP',
+      dogecoin: 'KXDOGE', doge: 'KXDOGE',
+      gold: 'KXGOLD', silver: 'KXSILVER',
+      oil: 'KXOIL', crude: 'KXOIL',
+      sp500: 'KXSP500', 'spy': 'KXSP500', 'nasdaq': 'KXNASDAQ',
+    };
+    let kalshiSupplemental = [];
+    const seriesMatch = kalshiSeriesMap[q] || kalshiSeriesMap[qWords[0]];
+    if (seriesMatch) {
+      try {
+        const sRes = await fetchWithTimeout(
+          `https://api.elections.kalshi.com/trade-api/v2/events?limit=5&with_nested_markets=true&series_ticker=${seriesMatch}`,
+          { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }, 8000
+        );
+        if (sRes.ok) {
+          const sData = await sRes.json();
+          kalshiSupplemental = sData.events || [];
+        }
+      } catch (e) { /* non-critical */ }
+    }
+
+    // --- Parse Kalshi (from paginated cache + supplemental) ---
     let kalshiMarkets = [];
-    const kalshiEvents = kalshiEventsResult.status === 'fulfilled' ? kalshiEventsResult.value : [];
-    if (kalshiEvents.length > 0) {
-      for (const evt of kalshiEvents) {
+    const kalshiEvents = [
+      ...((kalshiEventsResult.status === 'fulfilled' ? kalshiEventsResult.value : []) || []),
+      ...kalshiSupplemental
+    ];
+    // Deduplicate by event_ticker
+    const seenTickers = new Set();
+    const dedupedEvents = kalshiEvents.filter(e => {
+      const t = e.event_ticker || e.ticker || '';
+      if (seenTickers.has(t)) return false;
+      seenTickers.add(t);
+      return true;
+    });
+    if (dedupedEvents.length > 0) {
+      for (const evt of dedupedEvents) {
         // Check event title, category, sub_title, AND nested market titles against query
         const evtMatch = matchesQuery(evt.title) || matchesQuery(evt.category) || matchesQuery(evt.sub_title);
         const mkts = evt.markets || [];
@@ -23492,9 +23543,37 @@ async function tweetArbAlert() { /* DISABLED */ }
 async function tweetExpiryAlert() { /* DISABLED */ }
 async function tweetWinRecap() { /* DISABLED */ }
 
-async function postTweet(text) {
+async function uploadMediaToX(imageBuffer) {
+  // X API v1.1 media upload — use base64 media_data approach
+  const uploadUrl = 'https://upload.twitter.com/1.1/media/upload.json';
+  const mediaData = imageBuffer.toString('base64');
+
+  // For multipart, OAuth signature must NOT include body params
+  const auth = _xOAuthSign('POST', uploadUrl, {});
+  if (!auth) throw new Error('X API keys not configured for media upload');
+
+  // Use application/x-www-form-urlencoded with media_data (base64)
+  const formBody = `media_data=${encodeURIComponent(mediaData)}`;
+  const res = await fetch(uploadUrl, {
+    method: 'POST',
+    headers: {
+      'Authorization': auth,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: formBody
+  });
+
+  const data = await res.json();
+  if (!res.ok) throw new Error(`X media upload ${res.status}: ${JSON.stringify(data)}`);
+  console.log('[tweet] Media uploaded:', data.media_id_string);
+  return data.media_id_string;
+}
+
+async function postTweet(text, mediaId) {
   const url = 'https://api.x.com/2/tweets';
-  const body = JSON.stringify({ text });
+  const payload = { text };
+  if (mediaId) payload.media = { media_ids: [mediaId] };
+  const body = JSON.stringify(payload);
   const auth = _xOAuthSign('POST', url, {});
   if (!auth) throw new Error('X API keys not configured');
 
@@ -23506,7 +23585,7 @@ async function postTweet(text) {
 
   const data = await res.json();
   if (!res.ok) throw new Error(`X API ${res.status}: ${JSON.stringify(data)}`);
-  console.log('[tweet] Posted successfully:', data.data?.id);
+  console.log('[tweet] Posted successfully:', data.data?.id, mediaId ? '(with image)' : '');
   return data;
 }
 
@@ -23787,23 +23866,50 @@ async function searchAndDraftReplies() {
     let reply = (replyRes.content[0]?.text || '').trim().replace(/^["']|["']$/g, '');
     if (reply.length > 200) reply = reply.substring(0, reply.lastIndexOf(' ', 200)) || reply.substring(0, 200);
 
-    // Post as standalone tweet — replies/quotes blocked on Basic tier
+    // Generate market card image and post with it
     let postResult = null;
     let postType = 'standalone';
+    let mediaId = null;
     try {
-      const tweetUrl = 'https://api.x.com/2/tweets';
-      const tweetBody = JSON.stringify({ text: reply });
-      const tweetAuth = _xOAuthSign('POST', tweetUrl, {});
-      const tweetRes = await fetch(tweetUrl, { method: 'POST', headers: { 'Authorization': tweetAuth, 'Content-Type': 'application/json' }, body: tweetBody });
-      const tweetData = await tweetRes.json();
-      if (tweetRes.ok) {
-        postResult = tweetData;
-        _replyLog.push(target.id);
-        if (_replyLog.length > 200) _replyLog.splice(0, 100);
-        console.log(`[reply-bot] AUTO-POSTED tweet inspired by ${target.id}: "${reply.substring(0, 60)}..."`);
-      } else {
-        _logError('reply-bot/post', `X API ${tweetRes.status}: ${JSON.stringify(tweetData)}`);
+      // Extract market info for the card
+      const marketName = (dataPoint.match(/Market: "([^"]+)"/) || [])[1] || '';
+      const yesPct = (dataPoint.match(/(\d+)% YES/) || [])[1] || '';
+      const volMatch = (dataPoint.match(/\$[\d.]+[MK]\s*volume/) || [])[0] || '';
+      const whaleMatch = (dataPoint.match(/(\d+) whale/) || [])[1] || '';
+
+      if (marketName) {
+        const sharp = await getSharp();
+        if (sharp) {
+          const noPct = yesPct ? (100 - parseInt(yesPct)) : '';
+          const svg = `<svg width="1200" height="628" xmlns="http://www.w3.org/2000/svg">
+            <rect width="1200" height="628" fill="#141412"/>
+            <rect x="40" y="40" width="1120" height="548" rx="24" fill="#1a1a17" stroke="#c9920d" stroke-width="2" stroke-opacity="0.3"/>
+            <text x="80" y="100" font-family="sans-serif" font-size="18" font-weight="700" fill="#c9920d" letter-spacing="3">HYPERFLEX MARKET INTELLIGENCE</text>
+            <text x="80" y="180" font-family="sans-serif" font-size="36" font-weight="700" fill="#ddd8cc" width="1040">
+              ${marketName.length > 60 ? marketName.substring(0, 57) + '...' : marketName}
+            </text>
+            ${marketName.length > 60 ? `<text x="80" y="230" font-family="sans-serif" font-size="36" font-weight="700" fill="#ddd8cc">${marketName.substring(57, 114)}</text>` : ''}
+            <text x="80" y="${marketName.length > 60 ? 310 : 260}" font-family="sans-serif" font-size="72" font-weight="800" fill="#22c55e">${yesPct ? yesPct + '%' : ''}</text>
+            <text x="${80 + (yesPct ? yesPct.length * 44 + 60 : 0)}" y="${marketName.length > 60 ? 310 : 260}" font-family="sans-serif" font-size="72" font-weight="800" fill="#ef4444">${noPct ? noPct + '%' : ''}</text>
+            <text x="80" y="${marketName.length > 60 ? 350 : 300}" font-family="sans-serif" font-size="20" fill="#7a7870">YES</text>
+            <text x="${80 + (yesPct ? yesPct.length * 44 + 60 : 0)}" y="${marketName.length > 60 ? 350 : 300}" font-family="sans-serif" font-size="20" fill="#7a7870">NO</text>
+            ${volMatch ? `<text x="80" y="440" font-family="monospace" font-size="22" fill="#c9920d">${volMatch}</text>` : ''}
+            ${whaleMatch ? `<text x="400" y="440" font-family="monospace" font-size="22" fill="#c9920d">${whaleMatch} whale wallets tracking</text>` : ''}
+            <text x="80" y="540" font-family="sans-serif" font-size="16" fill="#7a7870">hyperflex.network</text>
+          </svg>`;
+          try {
+            const imgBuf = await sharp(Buffer.from(svg)).png().toBuffer();
+            mediaId = await uploadMediaToX(imgBuf);
+          } catch (imgErr) { console.warn('[reply-bot] Image gen/upload failed:', imgErr.message); }
+        }
       }
+    } catch (cardErr) { console.warn('[reply-bot] Card generation error:', cardErr.message); }
+
+    try {
+      postResult = await postTweet(reply, mediaId);
+      _replyLog.push(target.id);
+      if (_replyLog.length > 200) _replyLog.splice(0, 100);
+      console.log(`[reply-bot] AUTO-POSTED tweet inspired by ${target.id}: "${reply.substring(0, 60)}..."${mediaId ? ' (with image)' : ''}`);
     } catch (postErr) {
       _logError('reply-bot/post', postErr);
     }
