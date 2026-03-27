@@ -34,13 +34,6 @@
 body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
 a{color:var(--gold);text-decoration:none} a:hover{text-decoration:underline}
 
-/* HEADER BAR — matches data terminal */
-.cb-header{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:var(--card);border-bottom:1px solid var(--border)}
-.cb-logo{font-family:var(--sans);font-weight:800;font-size:16px;letter-spacing:2px;color:var(--text);text-decoration:none}
-.cb-logo span{color:var(--gold)}
-.cb-title{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--soft);letter-spacing:1px;text-transform:uppercase}
-.cb-live{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--green);letter-spacing:1px;display:flex;align-items:center;gap:6px}
-.cb-live::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 
 /* STATS BAR */
@@ -175,13 +168,6 @@ a{color:var(--gold);text-decoration:none} a:hover{text-decoration:underline}
 <!-- NAV -->
 <div id="nav-root"></div>
 <script src="/nav.js"></script>
-
-<!-- HEADER -->
-<div class="cb-header">
-  <a href="/" class="cb-logo">HYPER<span>FLEX</span></a>
-  <div class="cb-title">Crystal Ball</div>
-  <div class="cb-live">LIVE</div>
-</div>
 
 <!-- STATS BAR -->
 <div class="cb-stats" id="statsBar">
