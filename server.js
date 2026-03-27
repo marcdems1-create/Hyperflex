@@ -16956,46 +16956,45 @@ app.get('/api/markets/search', async (req, res) => {
     if (kalshiNullPrice.length > 0) {
       const priceFetches = kalshiNullPrice.slice(0, 8).map(async (m) => {
         try {
-          // Orderbook has real bid/ask data even when market endpoint doesn't
-          const r = await fetchWithTimeout(`https://api.elections.kalshi.com/trade-api/v2/markets/${m._ticker}/orderbook`, { headers: { Accept: 'application/json' } }, 5000);
+          // Try market endpoint first
+          const r = await fetchWithTimeout(`https://api.elections.kalshi.com/trade-api/v2/markets/${m._ticker}`, { headers: { Accept: 'application/json' } }, 4000);
           if (r.ok) {
-            const ob = await r.json();
+            const md = await r.json();
+            const mkt = md.market || md;
+            const price = mkt.yes_ask ?? mkt.last_price ?? mkt.yes_bid ?? null;
+            if (price != null && price > 0.01 && price < 0.99) { m.yes_pct = Math.round(price * 100); return; }
+          }
+          // Fallback: orderbook — use YES bid as price (what buyers will pay for YES)
+          const obr = await fetchWithTimeout(`https://api.elections.kalshi.com/trade-api/v2/markets/${m._ticker}/orderbook`, { headers: { Accept: 'application/json' } }, 4000);
+          if (obr.ok) {
+            const ob = await obr.json();
             const book = ob.orderbook_fp || ob.orderbook || {};
             const yesBids = book.yes_dollars || book.yes || [];
-            const noBids = book.no_dollars || book.no || [];
-            // Best YES price = lowest yes ask, or infer from NO side (yes = 1 - best_no)
-            let yesPrice = null;
-            if (yesBids.length > 0) {
-              yesPrice = parseFloat(yesBids[0][0]);
+            // Find the highest YES bid with meaningful size (>$100)
+            let bestYes = null;
+            for (const [price, qty] of yesBids) {
+              if (parseFloat(qty) >= 100) { bestYes = parseFloat(price); break; }
             }
-            if (noBids.length > 0) {
-              const impliedYes = 1 - parseFloat(noBids[0][0]);
-              // Use the midpoint if both sides exist
-              if (yesPrice != null) yesPrice = (yesPrice + impliedYes) / 2;
-              else yesPrice = impliedYes;
-            }
-            if (yesPrice != null) {
-              m.yes_pct = Math.round(yesPrice * 100);
+            // If YES bid is very low ($0.01-0.05), this market is probably <5% YES
+            if (bestYes != null) {
+              m.yes_pct = Math.round(bestYes * 100);
             }
           }
         } catch {}
       });
       await Promise.allSettled(priceFetches);
     }
-    // Truncate long Kalshi titles (cabinet definitions etc)
+    // Truncate long Kalshi titles + clean up
     kalshiMarkets.forEach(m => {
       if (m.question && m.question.length > 120) {
-        // Try to cut at a meaningful point
         const cut = m.question.substring(0, 120);
         const lastQ = cut.lastIndexOf('?');
-        const lastParen = cut.lastIndexOf(')');
-        const breakPoint = Math.max(lastQ, lastParen);
-        m.question = breakPoint > 40 ? m.question.substring(0, breakPoint + 1) : cut + '...';
+        m.question = lastQ > 40 ? m.question.substring(0, lastQ + 1) : cut + '...';
       }
       delete m._ticker;
     });
-    // Re-filter: remove markets that are now confirmed 95%+ or 5%- after price backfill
-    const kalshiFiltered = kalshiMarkets.filter(m => m.yes_pct == null || (m.yes_pct > 5 && m.yes_pct < 95));
+    // Re-filter resolved markets after price backfill
+    const _kalshiActive = kalshiMarkets.filter(m => m.yes_pct == null || (m.yes_pct > 5 && m.yes_pct < 95));
 
     // --- Parse Sportsbook odds ---
     let sportsbooks = [];
@@ -17185,9 +17184,9 @@ app.get('/api/markets/search', async (req, res) => {
     for (let pi = 0; pi < polyMarkets.length; pi++) {
       const pFP = _extractFingerprint(polyMarkets[pi].question);
       let bestMatch = -1, bestScore = 0;
-      for (let ki = 0; ki < kalshiFiltered.length; ki++) {
+      for (let ki = 0; ki < kalshiMarkets.length; ki++) {
         if (usedKalshi.has(ki)) continue;
-        const kFP = _extractFingerprint(kalshiFiltered[ki].question);
+        const kFP = _extractFingerprint(kalshiMarkets[ki].question);
         // Count shared fingerprint tokens (includes semantic groups)
         const shared = pFP.filter(w => kFP.includes(w));
         const score = shared.length;
@@ -17197,10 +17196,10 @@ app.get('/api/markets/search', async (req, res) => {
         if (score > bestScore && score >= minScore) { bestScore = score; bestMatch = ki; }
       }
       if (bestMatch >= 0) {
-        const pPct = polyMarkets[pi].yes_pct; const kPct = kalshiFiltered[bestMatch].yes_pct;
+        const pPct = polyMarkets[pi].yes_pct; const kPct = kalshiMarkets[bestMatch].yes_pct;
         const spread = (pPct != null && kPct != null) ? Math.abs(pPct - kPct) : null;
         if (pPct != null || kPct != null) {
-          pairs.push({ poly: polyMarkets[pi], kalshi: kalshiFiltered[bestMatch], spread });
+          pairs.push({ poly: polyMarkets[pi], kalshi: kalshiMarkets[bestMatch], spread });
           usedPoly.add(pi);
           usedKalshi.add(bestMatch);
         }
@@ -17209,7 +17208,7 @@ app.get('/api/markets/search', async (req, res) => {
     // Sort pairs by spread descending (biggest arbitrage first), nulls last
     pairs.sort((a, b) => (b.spread ?? -1) - (a.spread ?? -1));
     const unpairedPoly = polyMarkets.filter((_, i) => !usedPoly.has(i));
-    const unpairedKalshi = kalshiFiltered.filter((_, i) => !usedKalshi.has(i));
+    const unpairedKalshi = kalshiMarkets.filter((_, i) => !usedKalshi.has(i));
 
     const data = { polymarket: unpairedPoly, kalshi: unpairedKalshi, pairs, sportsbooks, smart_money };
     _mktSearchCache.set(cacheKey, { ts: Date.now(), data });
