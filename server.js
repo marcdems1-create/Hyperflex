@@ -16871,7 +16871,9 @@ app.get('/api/markets/search', async (req, res) => {
     // Expand query with synonyms
     const expandedTerms = new Set([q, ...qWords]);
     for (const [key, syns] of Object.entries(synonyms)) {
-      if (q.includes(key) || qWords.some(w => w === key)) {
+      // Match if query contains the key OR if any synonym matches the query
+      if (q.includes(key) || qWords.some(w => w === key) || syns.some(s => q === s || qWords.some(w => w === s))) {
+        expandedTerms.add(key);
         syns.forEach(s => expandedTerms.add(s));
       }
     }
