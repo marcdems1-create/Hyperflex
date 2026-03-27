@@ -23406,63 +23406,13 @@ function canTweet() {
 
 // ── Event-driven tweets (fire-and-forget, rate-limited) ──
 
-async function tweetWhaleAlert(evt) {
-  if (!canTweet()) return;
-  if (evt.size < 10000) return; // Only tweet positions $10K+
-  const tweet = `${evt.trader_name || 'A whale'} just ${evt.action} a ${evt.size_display} position\n\n> ${evt.question}\n> ${evt.side} side at ${Math.round(evt.price * 100)}%\n> Rank #${evt.trader_rank || '?'} trader\n\nhyperflex.network/brief`;
-  if (tweet.length > 280) return;
-  try { await postTweet(tweet); _tweetLog.push(Date.now()); } catch(e) { console.warn('[tweet-whale]', e.message); }
-}
+async function tweetWhaleAlert() { /* DISABLED — was posting garbage tweets with wallet hashes */ }
 
-async function tweetOddsShift(market, pctChange) {
-  if (!canTweet()) return;
-  if (Math.abs(pctChange) < 10) return; // Only tweet 10%+ moves
-  const dir = pctChange > 0 ? 'SURGED' : 'CRASHED';
-  const yesPct = market.yes_price != null ? Math.round(market.yes_price * 100) : '?';
-  const tweet = `ODDS JUST ${dir} ${Math.abs(Math.round(pctChange))} POINTS?\n\n> ${market.question}\n> Now at ${yesPct}% YES\n> ${market.volume ? '$' + Math.round(market.volume/1000) + 'K volume' : 'Volume spiking'}\n\nhyperflex.network/screener`;
-  if (tweet.length > 280) return;
-  try { await postTweet(tweet); _tweetLog.push(Date.now()); } catch(e) { console.warn('[tweet-odds]', e.message); }
-}
+async function tweetOddsShift() { /* DISABLED */ }
 
-async function tweetArbAlert(arb) {
-  if (!canTweet()) return;
-  if (arb.edge < 3) return; // Only tweet 3%+ edge
-  const tweet = `SAME MARKET, DIFFERENT PRICES?\n\n> Polymarket: ${arb.poly_pct}%\n> Kalshi: ${arb.kalshi_pct}%\n> ${arb.edge}pt spread — ${arb.direction}\n\n"${arb.market}"\n\nhyperflex.network/odds`;
-  if (tweet.length > 280) return;
-  try { await postTweet(tweet); _tweetLog.push(Date.now()); } catch(e) { console.warn('[tweet-arb]', e.message); }
-}
-
-async function tweetExpiryAlert(market) {
-  if (!canTweet()) return;
-  const yesPct = market.yes_price != null ? Math.round(market.yes_price * 100) : null;
-  if (yesPct == null || yesPct < 20 || yesPct > 80) return; // Only contested markets
-  const vol = market.volume >= 1000000 ? '$' + (market.volume/1000000).toFixed(1) + 'M' : '$' + Math.round(market.volume/1000) + 'K';
-  const tweet = `RESOLVES TODAY AND STILL AT ${yesPct}%?\n\n> ${market.question}\n> ${vol} volume, no consensus\n> Someone is about to be very wrong\n\nhyperflex.network/screener`;
-  if (tweet.length > 280) return;
-  try { await postTweet(tweet); _tweetLog.push(Date.now()); } catch(e) { console.warn('[tweet-expiry]', e.message); }
-}
-
-async function tweetWinRecap(pred, outcome) {
-  if (!canTweet()) return;
-  if (outcome !== 'correct') return;
-  // Get overall track record
-  let record = '';
-  try {
-    const rows = pool
-      ? await dbQuery("SELECT outcome, COUNT(*) as c FROM prediction_log WHERE resolved = true AND outcome IN ('correct','incorrect') GROUP BY outcome")
-      : ((await supabase.from('prediction_log').select('outcome').eq('resolved', true).in('outcome', ['correct','incorrect'])).data || []);
-    if (Array.isArray(rows) && rows.length) {
-      const wins = rows.find(r => r.outcome === 'correct');
-      const losses = rows.find(r => r.outcome === 'incorrect');
-      const w = parseInt(wins?.c || wins?.count || 0);
-      const l = parseInt(losses?.c || losses?.count || 0);
-      if (w + l > 0) record = `\n\nTrack record: ${w}/${w + l} correct`;
-    }
-  } catch(e) {}
-  const tweet = `AI CALLED IT?\n\n> "${pred.market_question}"\n> Predicted ${pred.predicted_side} at ${Math.round((pred.market_price_at_prediction || 0.5) * 100)}%\n> Result: CORRECT${record}\n\nhyperflex.network/brief`;
-  if (tweet.length > 280) return;
-  try { await postTweet(tweet); _tweetLog.push(Date.now()); } catch(e) { console.warn('[tweet-recap]', e.message); }
-}
+async function tweetArbAlert() { /* DISABLED */ }
+async function tweetExpiryAlert() { /* DISABLED */ }
+async function tweetWinRecap() { /* DISABLED */ }
 
 async function postTweet(text) {
   const url = 'https://api.x.com/2/tweets';
@@ -23681,7 +23631,8 @@ async function replyToTweet(tweetId, text) {
 
 async function searchAndDraftReplies() {
   const bearer = process.env.X_BEARER_TOKEN;
-  if (!bearer) return;
+  // Don't bail if no bearer — we can use OAuth1 as fallback
+  if (!bearer && !_xOAuthSign) return;
   try {
     const queries = [
       'polymarket odds -is:retweet -from:HyperFlexapp',
@@ -23690,7 +23641,10 @@ async function searchAndDraftReplies() {
     ];
     const query = queries[Math.floor(Date.now() / 3600000) % queries.length];
     const searchUrl = `https://api.x.com/2/tweets/search/recent?query=${encodeURIComponent(query)}&max_results=10&tweet.fields=public_metrics,author_id,created_at`;
-    const res = await fetch(searchUrl, { headers: { 'Authorization': `Bearer ${bearer}` }, signal: AbortSignal.timeout(10000) });
+    // Use Bearer token if available, otherwise fall back to OAuth1
+    const authHeader = bearer ? `Bearer ${bearer}` : _xOAuthSign('GET', searchUrl, {});
+    if (!authHeader) { console.warn('[reply-bot] No auth available'); return; }
+    const res = await fetch(searchUrl, { headers: { 'Authorization': authHeader }, signal: AbortSignal.timeout(10000) });
     if (!res.ok) { console.warn('[reply-bot] Search failed:', res.status); return; }
     const data = await res.json();
     const tweets = data.data || [];
