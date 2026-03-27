@@ -17009,28 +17009,55 @@ app.get('/api/markets/search', async (req, res) => {
     });
     if (dedupedEvents.length > 0) {
       for (const evt of dedupedEvents) {
-        // Check event title, category, sub_title, AND nested market titles against query
         const evtMatch = matchesQuery(evt.title) || matchesQuery(evt.category) || matchesQuery(evt.sub_title);
-        const mkts = evt.markets || [];
-        for (const m of mkts) {
-          if (m.status !== 'open' && m.status !== 'active') continue;
-          // Match on event OR individual market title
-          if (!evtMatch && !matchesQuery(m.title)) continue;
-          // Kalshi API returns *_dollars fields as strings like "0.0400" (= 4 cents = 4%)
-          const yesAsk = m.yes_ask_dollars != null ? parseFloat(m.yes_ask_dollars) : (m.yes_ask != null ? m.yes_ask : null);
-          const lastPrice = m.last_price_dollars != null ? parseFloat(m.last_price_dollars) : (m.last_price != null ? m.last_price : null);
-          const yesBid = m.yes_bid_dollars != null ? parseFloat(m.yes_bid_dollars) : (m.yes_bid != null ? m.yes_bid : null);
-          const _kYesPct = yesAsk != null ? Math.round(yesAsk * 100) : (lastPrice != null ? Math.round(lastPrice * 100) : (yesBid != null ? Math.round(yesBid * 100) : null));
-          if (_kYesPct !== null && (_kYesPct >= 95 || _kYesPct <= 5)) continue; // Skip resolved/dead markets
-          kalshiMarkets.push({
-            question: (m.yes_sub_title && m.title ? m.title + ': ' + m.yes_sub_title : m.title) || evt.title || '',
-            yes_pct: _kYesPct,
-            close_date: m.close_time || m.expiration_time || null,
-            url: m.ticker ? `https://kalshi.com/markets/${(m.event_ticker || m.ticker || '').replace(/-\d+$/, '').toLowerCase()}` : 'https://kalshi.com',
-            volume: parseFloat(m.volume_fp || m.volume || 0),
-            _ticker: m.ticker || null
-          });
-          if (kalshiMarkets.length >= 15) break;
+        const mkts = (evt.markets || []).filter(m => m.status === 'open' || m.status === 'active');
+        if (mkts.length === 0) continue;
+
+        // Detect range/multi-outcome events (10+ markets = likely price ranges or multi-option)
+        const isRangeEvent = mkts.length >= 10;
+
+        if (isRangeEvent && evtMatch) {
+          // Collapse into single card showing the most likely outcome
+          let bestMarket = null;
+          let bestPct = 0;
+          for (const m of mkts) {
+            const lp = m.last_price_dollars != null ? parseFloat(m.last_price_dollars) : (m.yes_ask_dollars != null ? parseFloat(m.yes_ask_dollars) : 0);
+            const pct = Math.round(lp * 100);
+            if (pct > bestPct) { bestPct = pct; bestMarket = m; }
+          }
+          if (bestMarket && bestPct > 0) {
+            const subTitle = bestMarket.yes_sub_title || bestMarket.no_sub_title || '';
+            const question = subTitle
+              ? `${evt.title || bestMarket.title}: Most likely ${subTitle} (${bestPct}%)`
+              : evt.title || bestMarket.title || '';
+            kalshiMarkets.push({
+              question,
+              yes_pct: bestPct,
+              close_date: bestMarket.close_time || bestMarket.expiration_time || null,
+              url: `https://kalshi.com/markets/${(evt.event_ticker || bestMarket.event_ticker || '').replace(/-\d+$/, '').toLowerCase()}`,
+              volume: mkts.reduce((sum, m) => sum + parseFloat(m.volume_fp || m.volume || 0), 0),
+              _ticker: bestMarket.ticker || null
+            });
+          }
+        } else {
+          // Standard per-market processing for binary events
+          for (const m of mkts) {
+            if (!evtMatch && !matchesQuery(m.title)) continue;
+            const yesAsk = m.yes_ask_dollars != null ? parseFloat(m.yes_ask_dollars) : (m.yes_ask != null ? m.yes_ask : null);
+            const lastPrice = m.last_price_dollars != null ? parseFloat(m.last_price_dollars) : (m.last_price != null ? m.last_price : null);
+            const yesBid = m.yes_bid_dollars != null ? parseFloat(m.yes_bid_dollars) : (m.yes_bid != null ? m.yes_bid : null);
+            const _kYesPct = yesAsk != null ? Math.round(yesAsk * 100) : (lastPrice != null ? Math.round(lastPrice * 100) : (yesBid != null ? Math.round(yesBid * 100) : null));
+            if (_kYesPct !== null && (_kYesPct >= 95 || _kYesPct <= 5)) continue;
+            kalshiMarkets.push({
+              question: (m.yes_sub_title && m.title ? m.title + ': ' + m.yes_sub_title : m.title) || evt.title || '',
+              yes_pct: _kYesPct,
+              close_date: m.close_time || m.expiration_time || null,
+              url: m.ticker ? `https://kalshi.com/markets/${(m.event_ticker || m.ticker || '').replace(/-\d+$/, '').toLowerCase()}` : 'https://kalshi.com',
+              volume: parseFloat(m.volume_fp || m.volume || 0),
+              _ticker: m.ticker || null
+            });
+            if (kalshiMarkets.length >= 15) break;
+          }
         }
         if (kalshiMarkets.length >= 15) break;
       }
