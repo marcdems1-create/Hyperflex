@@ -23746,15 +23746,31 @@ async function searchAndDraftReplies() {
     let reply = (replyRes.content[0]?.text || '').trim().replace(/^["']|["']$/g, '');
     if (reply.length > 200) reply = reply.substring(0, reply.lastIndexOf(' ', 200)) || reply.substring(0, 200);
 
-    // Auto-post the reply immediately
+    // Auto-post: try reply first, fallback to quote tweet if blocked
     let postResult = null;
+    let postType = 'reply';
     try {
       postResult = await replyToTweet(target.id, reply);
       _replyLog.push(target.id);
       if (_replyLog.length > 200) _replyLog.splice(0, 100);
       console.log(`[reply-bot] AUTO-POSTED reply to ${target.id}: "${reply.substring(0, 60)}..."`);
     } catch (postErr) {
-      console.warn(`[reply-bot] Failed to post reply:`, postErr.message);
+      if (postErr.message && postErr.message.includes('403')) {
+        try {
+          postType = 'quote';
+          const qtUrl = 'https://api.x.com/2/tweets';
+          const qtBody = JSON.stringify({ text: reply, quote_tweet_id: target.id });
+          const qtAuth = _xOAuthSign('POST', qtUrl, {});
+          const qtRes = await fetch(qtUrl, { method: 'POST', headers: { 'Authorization': qtAuth, 'Content-Type': 'application/json' }, body: qtBody });
+          const qtData = await qtRes.json();
+          if (qtRes.ok) {
+            postResult = qtData;
+            _replyLog.push(target.id);
+            if (_replyLog.length > 200) _replyLog.splice(0, 100);
+            console.log(`[reply-bot] AUTO-QUOTED tweet ${target.id}: "${reply.substring(0, 60)}..."`);
+          } else { console.warn('[reply-bot] Quote failed:', JSON.stringify(qtData)); }
+        } catch (qtErr) { console.warn('[reply-bot] Quote error:', qtErr.message); }
+      } else { console.warn('[reply-bot] Reply failed:', postErr.message); }
     }
 
     _replyDraftQueue.push({
@@ -23772,7 +23788,7 @@ async function searchAndDraftReplies() {
 app.get('/api/reply-queue', (req, res) => {
   const secret = req.headers['x-admin-secret'];
   if (secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
-  res.json({ drafts: _replyDraftQueue.filter(r => r.status === 'draft'), posted: _replyDraftQueue.filter(r => r.status === 'posted').slice(-10), total: _replyDraftQueue.length });
+  res.json({ drafts: _replyDraftQueue.filter(r => r.status === 'draft'), posted: _replyDraftQueue.filter(r => r.status === 'posted').slice(-10), failed: _replyDraftQueue.filter(r => r.status === 'failed').slice(-10), total: _replyDraftQueue.length });
 });
 app.post('/api/reply-queue/:id/post', async (req, res) => {
   const secret = req.headers['x-admin-secret'];
