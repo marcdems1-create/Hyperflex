@@ -365,6 +365,18 @@ app.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (re
 app.use(express.json({ limit: '10mb' }));
 app.use(require("express").static("public"));
 
+// ══════════════════════════════════════════════════════════════════════
+// SEO — robots.txt
+// ══════════════════════════════════════════════════════════════════════
+app.get('/robots.txt', (req, res) => {
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.send(`User-agent: *
+Allow: /
+Sitemap: https://hyperflex.network/sitemap.xml
+Sitemap: https://hyperflex.network/sitemap-markets.xml
+`);
+});
+
 // Tenant: subdomain from host (e.g. acme.hyperflex.io → req.tenant.subdomain = 'acme')
 app.use((req, res, next) => {
   const host = req.headers.host || '';
@@ -21183,7 +21195,8 @@ app.get('/market/:slug', async (req, res) => {
       .replace(/<!--SSR_CANONICAL-->/g, canonicalUrl)
       .replace(/<!--SSR_SLUG-->/g, slug.replace(/</g, '&lt;').replace(/"/g, '&quot;'))
       .replace(/<!--SSR_YES_PRICE-->/g, String(yesPrice))
-      .replace(/<!--SSR_NO_PRICE-->/g, String(noPrice));
+      .replace(/<!--SSR_NO_PRICE-->/g, String(noPrice))
+      .replace(/<!--SSR_DATE-->/g, new Date().toISOString().split('T')[0]);
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(html);
@@ -21197,13 +21210,165 @@ app.get('/market/:slug', async (req, res) => {
       .replace(/<!--SSR_CANONICAL-->/g, `https://hyperflex.network/market/${encodeURIComponent(slug)}`)
       .replace(/<!--SSR_SLUG-->/g, slug.replace(/</g, '&lt;').replace(/"/g, '&quot;'))
       .replace(/<!--SSR_YES_PRICE-->/g, '50')
-      .replace(/<!--SSR_NO_PRICE-->/g, '50');
+      .replace(/<!--SSR_NO_PRICE-->/g, '50')
+      .replace(/<!--SSR_DATE-->/g, new Date().toISOString().split('T')[0]);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(html);
   }
 });
 
-// GET /sitemap-markets.xml — XML sitemap for top 50 markets by volume
+// GET /api/seo/generate-pages — returns top 200 Polymarket event slugs for SEO indexing
+let _seoPageListCache = null;
+app.get('/api/seo/generate-pages', async (req, res) => {
+  try {
+    // 5-min cache
+    if (_seoPageListCache && Date.now() - _seoPageListCache.ts < 5 * 60 * 1000) {
+      return res.json(_seoPageListCache.data);
+    }
+
+    let events = [];
+
+    // Try screener cache first
+    if (_screenerCache && _screenerCache.data && Array.isArray(_screenerCache.data)) {
+      const seen = new Set();
+      for (const m of _screenerCache.data) {
+        const slug = m.event_slug || m.slug || '';
+        const title = m.question || m.title || '';
+        if (slug && !seen.has(slug)) {
+          seen.add(slug);
+          events.push({
+            slug,
+            title,
+            url: `/market/${slug}`,
+            full_url: `https://hyperflex.network/market/${slug}`,
+            volume: m.volume || 0,
+            liquidity: m.liquidity || 0,
+          });
+        }
+        if (events.length >= 200) break;
+      }
+    }
+
+    // Fallback/supplement from Gamma API
+    if (events.length < 200) {
+      try {
+        const ctrl = new AbortController();
+        const tid = setTimeout(() => ctrl.abort(), 15000);
+        const evtRes = await fetch('https://gamma-api.polymarket.com/events?closed=false&limit=200&order=liquidity&ascending=false', {
+          signal: ctrl.signal,
+          headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+        });
+        clearTimeout(tid);
+        if (evtRes.ok) {
+          const allEvents = await evtRes.json();
+          const arr = Array.isArray(allEvents) ? allEvents : [];
+          const seen = new Set(events.map(e => e.slug));
+          for (const evt of arr) {
+            const slug = evt.slug || '';
+            if (slug && !seen.has(slug)) {
+              seen.add(slug);
+              events.push({
+                slug,
+                title: evt.title || '',
+                url: `/market/${slug}`,
+                full_url: `https://hyperflex.network/market/${slug}`,
+                volume: parseFloat(evt.volume || 0),
+                liquidity: parseFloat(evt.liquidity || 0),
+              });
+            }
+            if (events.length >= 200) break;
+          }
+        }
+      } catch (e) {
+        console.warn('[seo/generate-pages] Gamma fallback failed:', e.message);
+      }
+    }
+
+    const result = { count: events.length, pages: events };
+    _seoPageListCache = { ts: Date.now(), data: result };
+    res.json(result);
+  } catch (err) {
+    console.error('[seo/generate-pages]', err.message);
+    if (_seoPageListCache) return res.json(_seoPageListCache.data);
+    res.status(500).json({ error: 'Failed to generate page list' });
+  }
+});
+
+// GET /sitemap.xml — master sitemap index (static pages + market sitemap ref)
+let _sitemapIndexCache = null;
+app.get('/sitemap.xml', (req, res) => {
+  try {
+    if (_sitemapIndexCache && Date.now() - _sitemapIndexCache.ts < 5 * 60 * 1000) {
+      res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+      return res.send(_sitemapIndexCache.data);
+    }
+
+    const now = new Date().toISOString().split('T')[0];
+    const staticPages = [
+      { loc: '/', changefreq: 'weekly', priority: '1.0' },
+      { loc: '/odds', changefreq: 'daily', priority: '0.9' },
+      { loc: '/whales', changefreq: 'daily', priority: '0.9' },
+      { loc: '/screener', changefreq: 'daily', priority: '0.9' },
+      { loc: '/signals', changefreq: 'daily', priority: '0.9' },
+      { loc: '/brief', changefreq: 'daily', priority: '0.8' },
+      { loc: '/predictors', changefreq: 'daily', priority: '0.8' },
+      { loc: '/data', changefreq: 'daily', priority: '0.8' },
+      { loc: '/crystal-ball', changefreq: 'daily', priority: '0.8' },
+      { loc: '/explore', changefreq: 'daily', priority: '0.7' },
+      { loc: '/whale-index', changefreq: 'daily', priority: '0.7' },
+      { loc: '/accuracy', changefreq: 'weekly', priority: '0.6' },
+      { loc: '/events', changefreq: 'daily', priority: '0.7' },
+      { loc: '/fear-greed', changefreq: 'daily', priority: '0.6' },
+      { loc: '/templates', changefreq: 'weekly', priority: '0.5' },
+      { loc: '/api-docs', changefreq: 'monthly', priority: '0.4' },
+    ];
+
+    let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
+    xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
+
+    // Static pages
+    for (const p of staticPages) {
+      xml += `  <url>\n`;
+      xml += `    <loc>https://hyperflex.network${p.loc}</loc>\n`;
+      xml += `    <lastmod>${now}</lastmod>\n`;
+      xml += `    <changefreq>${p.changefreq}</changefreq>\n`;
+      xml += `    <priority>${p.priority}</priority>\n`;
+      xml += `  </url>\n`;
+    }
+
+    // Top 100 market pages from screener cache
+    if (_screenerCache && _screenerCache.data && Array.isArray(_screenerCache.data)) {
+      const seen = new Set();
+      for (const m of _screenerCache.data) {
+        const s = m.event_slug || m.slug || '';
+        if (s && !seen.has(s)) {
+          seen.add(s);
+          xml += `  <url>\n`;
+          xml += `    <loc>https://hyperflex.network/market/${encodeURIComponent(s)}</loc>\n`;
+          xml += `    <lastmod>${now}</lastmod>\n`;
+          xml += `    <changefreq>daily</changefreq>\n`;
+          xml += `    <priority>0.8</priority>\n`;
+          xml += `  </url>\n`;
+        }
+        if (seen.size >= 100) break;
+      }
+    }
+
+    xml += '</urlset>\n';
+    _sitemapIndexCache = { ts: Date.now(), data: xml };
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.send(xml);
+  } catch (err) {
+    console.error('[sitemap.xml]', err.message);
+    if (_sitemapIndexCache) {
+      res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+      return res.send(_sitemapIndexCache.data);
+    }
+    res.status(500).send('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>');
+  }
+});
+
+// GET /sitemap-markets.xml — XML sitemap for top 100 markets by volume
 let _sitemapMarketsCache = null;
 
 app.get('/sitemap-markets.xml', async (req, res) => {
@@ -21223,7 +21388,7 @@ app.get('/sitemap-markets.xml', async (req, res) => {
       for (const m of _screenerCache.data) {
         const s = m.event_slug || m.slug || '';
         if (s && !seen.has(s)) { seen.add(s); slugs.push(s); }
-        if (slugs.length >= 50) break;
+        if (slugs.length >= 100) break;
       }
     }
 
@@ -21232,7 +21397,7 @@ app.get('/sitemap-markets.xml', async (req, res) => {
       try {
         const ctrl = new AbortController();
         const tid = setTimeout(() => ctrl.abort(), 12000);
-        const evtRes = await fetch('https://gamma-api.polymarket.com/events?closed=false&limit=50&order=liquidity&ascending=false', {
+        const evtRes = await fetch('https://gamma-api.polymarket.com/events?closed=false&limit=100&order=liquidity&ascending=false', {
           signal: ctrl.signal,
           headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
         });
@@ -21244,7 +21409,7 @@ app.get('/sitemap-markets.xml', async (req, res) => {
           for (const evt of arr) {
             const s = evt.slug || '';
             if (s && !seen.has(s)) { seen.add(s); slugs.push(s); }
-            if (slugs.length >= 50) break;
+            if (slugs.length >= 100) break;
           }
         }
       } catch (e) {

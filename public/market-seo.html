@@ -19,14 +19,58 @@
 <meta name="twitter:title" content="<!--SSR_TITLE-->"/>
 <meta name="twitter:description" content="<!--SSR_DESCRIPTION-->"/>
 <meta name="twitter:image" content="<!--SSR_OG_IMAGE-->"/>
-<!-- Structured data -->
+<!-- Structured data: WebPage -->
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@type": "WebPage",
   "name": "<!--SSR_TITLE-->",
   "description": "<!--SSR_DESCRIPTION-->",
-  "url": "<!--SSR_CANONICAL-->"
+  "url": "<!--SSR_CANONICAL-->",
+  "dateModified": "<!--SSR_DATE-->",
+  "publisher": {
+    "@type": "Organization",
+    "name": "HYPERFLEX",
+    "url": "https://hyperflex.network"
+  },
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "HYPERFLEX",
+    "url": "https://hyperflex.network"
+  }
+}
+</script>
+<!-- Structured data: FAQPage — helps Google show rich snippets -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "What are the current odds for this prediction market?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "The current prediction market odds are YES <!--SSR_YES_PRICE-->% / NO <!--SSR_NO_PRICE-->%. These odds are sourced from Polymarket and updated in real time on HYPERFLEX."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Where can I trade this prediction market?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "You can trade this market on Polymarket. HYPERFLEX also compares odds across Kalshi and other platforms so you can find the best price."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What are whale traders betting on this market?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "HYPERFLEX tracks the top 50 Polymarket whale wallets in real time. Visit the market page to see whale consensus, capital flow, and smart money positioning."
+      }
+    }
+  ]
 }
 </script>
 <meta name="slug" content="<!--SSR_SLUG-->"/>
@@ -352,6 +396,30 @@ body::before {
   100% { background-position: -200% 0; }
 }
 
+/* RELATED MARKETS */
+.related-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+}
+.related-card {
+  background: var(--paper); border: 1px solid var(--border);
+  border-radius: 10px; padding: 16px;
+  text-decoration: none; color: var(--text);
+  transition: border-color 0.2s, box-shadow 0.2s;
+  display: block;
+}
+.related-card:hover { border-color: var(--gold); box-shadow: 0 0 16px rgba(201,146,13,0.08); }
+.related-q {
+  font-size: 13px; font-weight: 600; line-height: 1.4;
+  margin-bottom: 8px; color: var(--text);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.related-odds {
+  display: flex; gap: 10px; font-family: var(--mono); font-size: 11px;
+}
+.related-yes { color: var(--green); font-weight: 700; }
+.related-no  { color: var(--red); font-weight: 700; }
+.related-vol { color: var(--dim); font-size: 10px; margin-top: 4px; font-family: var(--mono); }
+
 /* MOBILE */
 @media (max-width: 768px) {
   .mkt-hero { padding: 80px 16px 36px; }
@@ -368,6 +436,7 @@ body::before {
   .mkt-question { font-size: 22px; }
   .odds-value { font-size: 32px; }
   .odds-card { min-width: 140px; }
+  .related-grid { grid-template-columns: 1fr; }
 }
 </style>
 </head>
@@ -496,6 +565,19 @@ body::before {
     </div>
   </aside>
 </div>
+
+<!-- RELATED MARKETS — internal linking for SEO -->
+<section class="related-markets" id="relatedMarketsSection" style="display:none">
+  <div style="max-width:880px;margin:0 auto;padding:0 24px 48px;position:relative;z-index:1">
+    <div class="section-card">
+      <div class="section-title">Related Markets</div>
+      <div class="related-grid" id="relatedGrid"></div>
+      <div style="text-align:center;margin-top:16px">
+        <a href="/screener" style="font-family:var(--mono);font-size:11px;color:var(--gold);text-decoration:none">Browse all prediction markets &rarr;</a>
+      </div>
+    </div>
+  </div>
+</section>
 
 <!-- FOOTER -->
 <footer class="mkt-footer">
@@ -728,6 +810,33 @@ async function subscribeBrief(e) {
     btn.disabled = false;
   }
 }
+
+// ── RELATED MARKETS (internal linking for SEO) ──
+async function loadRelatedMarkets() {
+  try {
+    const res = await fetch('/api/seo/generate-pages');
+    if (!res.ok) return;
+    const data = await res.json();
+    const pages = data.pages || [];
+    // Filter out current market and pick up to 6 related
+    const currentSlug = SLUG.toLowerCase();
+    const related = pages.filter(p => (p.slug || '').toLowerCase() !== currentSlug).slice(0, 6);
+    if (related.length === 0) return;
+
+    const grid = document.getElementById('relatedGrid');
+    grid.innerHTML = related.map(function(p) {
+      var title = esc(p.title || p.slug);
+      var vol = p.volume ? 'Vol: $' + formatNum(p.volume) : '';
+      return '<a class="related-card" href="/market/' + encodeURIComponent(p.slug) + '">' +
+        '<div class="related-q">' + title + '</div>' +
+        (vol ? '<div class="related-vol">' + vol + '</div>' : '') +
+      '</a>';
+    }).join('');
+    document.getElementById('relatedMarketsSection').style.display = '';
+  } catch (e) { /* silent */ }
+}
+// Fire after main data loads
+setTimeout(loadRelatedMarkets, 500);
 
 // ── HELPERS ──
 function formatNum(n) {

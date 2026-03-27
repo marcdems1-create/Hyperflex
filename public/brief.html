@@ -3,8 +3,9 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
-<title>AI Morning Brief — HYPERFLEX</title>
-<meta name="description" content="AI-generated market intelligence. What prediction markets are telling us today — and what it means for your portfolio."/>
+<title>AI Morning Brief — Daily Prediction Market Intelligence | HYPERFLEX</title>
+<meta name="description" content="Daily AI-generated prediction market brief. What Polymarket odds, Kalshi markets, and whale positions are telling us today — smart money prediction market analysis delivered free."/>
+<link rel="canonical" href="https://hyperflex.network/brief"/>
 <meta property="og:title" content="AI Morning Brief — HYPERFLEX"/>
 <meta property="og:description" content="AI-generated market intelligence. What prediction markets are telling us today."/>
 <meta property="og:url" content="https://hyperflex.network/brief"/>
@@ -99,20 +100,31 @@ body { background: var(--ink); color: var(--text); font-family: var(--sans); min
 }
 /* Past AI Trade Calls */
 .past-stats-row { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
-.past-stat { flex: 1; min-width: 100px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; text-align: center; }
+.past-stat { flex: 1; min-width: 100px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; text-align: center; box-shadow: 0 2px 12px rgba(0,0,0,0.3); }
 .past-stat-val { font-family: var(--mono); font-size: 22px; font-weight: 700; color: var(--text); }
 .past-stat-label { font-family: var(--mono); font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
 .past-filter-pills { display: flex; gap: 6px; margin-bottom: 16px; }
 .past-pill { font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border); background: transparent; color: var(--text-soft); cursor: pointer; transition: all 0.2s; }
 .past-pill:hover { border-color: var(--gold); color: var(--text); }
 .past-pill.active { background: var(--gold); color: var(--ink); border-color: var(--gold); }
+.past-calls-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.past-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 20px 20px 16px; position: relative; overflow: hidden; box-shadow: 0 2px 16px rgba(0,0,0,0.38); transition: border-color 0.2s, transform 0.18s; }
+.past-card:hover { border-color: var(--gold); transform: translateY(-2px); }
+.past-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; border-radius: 16px 16px 0 0; }
+.past-card.status-open::before { background: linear-gradient(90deg, #22c55e, #4ade80); }
+.past-card.status-won::before { background: linear-gradient(90deg, #22c55e, #4ade80); }
+.past-card.status-lost::before { background: linear-gradient(90deg, #ef4444, #f87171); }
+.past-card.status-pending::before { background: linear-gradient(90deg, #c9920d, #e0b340); }
+.past-card-question { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.4; margin-bottom: 12px; min-height: 36px; }
+.past-card-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .past-badge { display: inline-block; font-family: var(--mono); font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px; }
 .past-badge.open { background: rgba(34,197,94,0.1); color: var(--green); border: 1px solid rgba(34,197,94,0.25); }
 .past-badge.won { background: rgba(34,197,94,0.15); color: var(--green); }
 .past-badge.lost { background: rgba(239,68,68,0.15); color: var(--red); }
 .past-badge.pending { background: rgba(201,146,13,0.1); color: var(--gold); border: 1px solid rgba(201,146,13,0.25); }
-.past-load-more { display: block; width: 100%; padding: 12px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; color: var(--gold); font-family: var(--mono); font-size: 12px; font-weight: 700; cursor: pointer; text-align: center; transition: border-color 0.2s; }
+.past-load-more { display: block; width: 100%; padding: 12px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; color: var(--gold); font-family: var(--mono); font-size: 12px; font-weight: 700; cursor: pointer; text-align: center; transition: border-color 0.2s; box-shadow: 0 2px 12px rgba(0,0,0,0.3); }
 .past-load-more:hover { border-color: var(--gold); }
+@media (max-width: 640px) { .past-calls-grid { grid-template-columns: 1fr; } }
 
 @media (max-width: 480px) {
   .brief-container { padding: 20px 12px 60px; }
@@ -173,7 +185,7 @@ body { background: var(--ink); color: var(--text); font-family: var(--sans); min
 
   <!-- Past AI Trade Calls -->
   <div id="pastCallsSection" style="margin-bottom:32px">
-    <div class="section-title"><span class="icon">&#x1F4CA;</span> Past AI Trade Calls <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--gold);background:rgba(201,146,13,0.12);padding:3px 8px;border-radius:4px;border:1px solid rgba(201,146,13,0.25);margin-left:8px;vertical-align:middle">TRACK RECORD</span></div>
+    <div class="section-title"><span class="icon">&#x1F4CA;</span> Past AI Trade Calls <a href="/accuracy" style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--gold);background:rgba(201,146,13,0.12);padding:3px 8px;border-radius:4px;border:1px solid rgba(201,146,13,0.25);margin-left:8px;vertical-align:middle;text-decoration:none;transition:background 0.2s" onmouseenter="this.style.background='rgba(201,146,13,0.25)'" onmouseleave="this.style.background='rgba(201,146,13,0.12)'">TRACK RECORD</a></div>
     <div class="past-stats-row" id="pastStatsRow">
       <div class="past-stat"><div class="past-stat-val" id="psCalls">--</div><div class="past-stat-label">Calls Made</div></div>
       <div class="past-stat"><div class="past-stat-val" id="psWinRate">--</div><div class="past-stat-label">Win Rate</div></div>
@@ -284,7 +296,9 @@ async function loadBrief() {
       document.getElementById('fgLabel').style.color = d.fear_greed.color || '#eab308';
       if (d.fear_greed.change != null && d.fear_greed.change !== 0) {
         var sign = d.fear_greed.change > 0 ? '+' : '';
-        document.getElementById('fgChange').textContent = sign + d.fear_greed.change + ' pts from yesterday';
+        var fgChangeEl = document.getElementById('fgChange');
+        fgChangeEl.textContent = sign + d.fear_greed.change + ' pts from yesterday';
+        fgChangeEl.style.color = d.fear_greed.change > 0 ? 'var(--green)' : 'var(--red)';
       }
     }
 
@@ -452,8 +466,8 @@ async function loadPastCalls(status, page, append) {
       document.getElementById('psPnl').style.color = pnl >= 0 ? 'var(--green)' : 'var(--red)';
     }
 
-    // Render cards
-    var html = (d.calls || []).map(function(c) {
+    // Render cards (grid view)
+    var cards = (d.calls || []).map(function(c) {
       var side = (c.predicted_side || 'YES').toUpperCase();
       var sideColor = side === 'YES' ? 'var(--green)' : 'var(--red)';
       var conf = confLabel(c.predicted_confidence || 65);
@@ -461,15 +475,17 @@ async function loadPastCalls(status, page, append) {
       var pts = c.flex_pts_staked || Math.round(50 * (conf === 'HIGH' ? 2 : conf === 'LOW' ? 0.5 : 1));
       var dateStr = formatDate(c.detected_at);
 
-      // Status badge
-      var badge = '';
-      if (!c.resolved) {
-        badge = '<span class="past-badge open">OPEN</span>';
-      } else if (c.outcome === 'correct') {
+      // Status class + badge
+      var statusClass = 'status-open';
+      var badge = '<span class="past-badge open">OPEN</span>';
+      if (c.resolved && c.outcome === 'correct') {
+        statusClass = 'status-won';
         badge = '<span class="past-badge won">WON</span>';
-      } else if (c.outcome === 'incorrect') {
+      } else if (c.resolved && c.outcome === 'incorrect') {
+        statusClass = 'status-lost';
         badge = '<span class="past-badge lost">LOST</span>';
-      } else {
+      } else if (c.resolved) {
+        statusClass = 'status-pending';
         badge = '<span class="past-badge pending">' + escHtml(c.outcome || 'PENDING') + '</span>';
       }
 
@@ -477,26 +493,28 @@ async function loadPastCalls(status, page, append) {
       var pnlHtml = '';
       if (c.resolved && c.outcome === 'correct') {
         var pnlVal = c.flex_pnl != null ? c.flex_pnl : Math.round((c.pnl_if_followed || 0) * 100);
-        pnlHtml = '<span style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--green)">+' + Math.abs(pnlVal) + ' pts</span>';
+        pnlHtml = '<div style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--green);margin-top:8px">+' + Math.abs(pnlVal) + ' pts</div>';
       } else if (c.resolved && c.outcome === 'incorrect') {
-        pnlHtml = '<span style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--red)">-' + pts + ' pts</span>';
+        pnlHtml = '<div style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--red);margin-top:8px">-' + pts + ' pts</div>';
       }
 
-      return '<div class="call-card">' +
-        '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">' +
-          '<div class="call-market" style="margin-bottom:0;flex:1;font-size:13px">' + escHtml(c.market_question || '') + '</div>' +
-          '<div style="display:flex;align-items:center;gap:8px;margin-left:12px;flex-shrink:0">' + badge + '</div>' +
-        '</div>' +
-        '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px">' +
+      return '<div class="past-card ' + statusClass + '">' +
+        '<div class="past-card-question">' + escHtml(c.market_question || '') + '</div>' +
+        '<div class="past-card-meta">' +
           '<span style="font-family:var(--mono);font-size:12px;font-weight:700;color:' + sideColor + '">BUY ' + side + '</span>' +
           '<span style="font-family:var(--mono);font-size:11px;color:var(--dim)">@ ' + entryPrice + '\u00A2</span>' +
           '<span style="font-family:var(--mono);font-size:11px;color:var(--gold);font-weight:700">' + pts + ' pts</span>' +
           '<span class="call-conf ' + conf + '">' + conf + '</span>' +
-          (pnlHtml ? '<span style="margin-left:auto">' + pnlHtml + '</span>' : '') +
         '</div>' +
-        '<div style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:6px">' + dateStr + (c.resolved_at ? ' \u2192 Closed ' + formatDate(c.resolved_at) : '') + '</div>' +
+        pnlHtml +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">' +
+          '<span style="font-family:var(--mono);font-size:10px;color:var(--dim)">' + dateStr + (c.resolved_at ? ' \u2192 ' + formatDate(c.resolved_at) : '') + '</span>' +
+          badge +
+        '</div>' +
       '</div>';
     }).join('');
+
+    var html = cards ? '<div class="past-calls-grid">' + cards + '</div>' : '';
 
     if (!append) {
       if (!html) html = '<div style="font-family:var(--mono);font-size:12px;color:var(--dim);padding:20px;text-align:center">No past calls yet. AI Brief calls will appear here as they are generated.</div>';
