@@ -23544,29 +23544,45 @@ async function tweetExpiryAlert() { /* DISABLED */ }
 async function tweetWinRecap() { /* DISABLED */ }
 
 async function uploadMediaToX(imageBuffer) {
-  // X API v1.1 media upload — use base64 media_data approach
-  const uploadUrl = 'https://upload.twitter.com/1.1/media/upload.json';
+  // Try v1.1 first (still works for some accounts), fall back to v2
+  const endpoints = [
+    'https://upload.twitter.com/1.1/media/upload.json',
+    'https://api.x.com/2/media/upload'
+  ];
   const mediaData = imageBuffer.toString('base64');
 
-  // For multipart, OAuth signature must NOT include body params
-  const auth = _xOAuthSign('POST', uploadUrl, {});
-  if (!auth) throw new Error('X API keys not configured for media upload');
+  for (const uploadUrl of endpoints) {
+    const auth = _xOAuthSign('POST', uploadUrl, {});
+    if (!auth) throw new Error('X API keys not configured for media upload');
 
-  // Use application/x-www-form-urlencoded with media_data (base64)
-  const formBody = `media_data=${encodeURIComponent(mediaData)}`;
-  const res = await fetch(uploadUrl, {
-    method: 'POST',
-    headers: {
-      'Authorization': auth,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: formBody
-  });
+    const formBody = `media_data=${encodeURIComponent(mediaData)}`;
+    try {
+      const res = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': auth,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: formBody,
+        signal: AbortSignal.timeout(15000)
+      });
 
-  const data = await res.json();
-  if (!res.ok) throw new Error(`X media upload ${res.status}: ${JSON.stringify(data)}`);
-  console.log('[tweet] Media uploaded:', data.media_id_string);
-  return data.media_id_string;
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        console.warn(`[tweet] Media upload to ${uploadUrl} failed ${res.status}: ${errText.substring(0, 200)}`);
+        continue; // try next endpoint
+      }
+
+      const data = await res.json();
+      const mediaId = data.media_id_string || data.id;
+      console.log(`[tweet] Media uploaded via ${uploadUrl}: ${mediaId}`);
+      return mediaId;
+    } catch (e) {
+      console.warn(`[tweet] Media upload to ${uploadUrl} error: ${e.message}`);
+      continue;
+    }
+  }
+  throw new Error('All media upload endpoints failed');
 }
 
 async function postTweet(text, mediaId) {
@@ -23877,8 +23893,9 @@ async function searchAndDraftReplies() {
       const volMatch = (dataPoint.match(/\$[\d.]+[MK]\s*volume/) || [])[0] || '';
       const whaleMatch = (dataPoint.match(/(\d+) whale/) || [])[1] || '';
 
+      console.log(`[reply-bot] Card data — market: "${marketName}", yes: ${yesPct}%, vol: ${volMatch}, whales: ${whaleMatch}`);
       if (marketName) {
-        const sharp = await getSharp();
+        const sharp = getSharp();
         if (sharp) {
           const noPct = yesPct ? (100 - parseInt(yesPct)) : '';
           const svg = `<svg width="1200" height="628" xmlns="http://www.w3.org/2000/svg">
