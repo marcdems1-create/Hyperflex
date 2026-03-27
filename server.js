@@ -21002,6 +21002,7 @@ app.get('/api/market-seo/:slug', async (req, res) => {
   if (cached && Date.now() - cached.ts < 10 * 60 * 1000) return res.json(cached.data);
 
   try {
+    // Try exact slug match first
     const ctrl = new AbortController();
     const tid = setTimeout(() => ctrl.abort(), 12000);
     const evtRes = await fetch(`https://gamma-api.polymarket.com/events?slug=${encodeURIComponent(slug)}`, {
@@ -21011,8 +21012,33 @@ app.get('/api/market-seo/:slug', async (req, res) => {
     clearTimeout(tid);
 
     if (!evtRes.ok) throw new Error('Gamma API returned ' + evtRes.status);
-    const events = await evtRes.json();
-    const evt = Array.isArray(events) ? events[0] : events;
+    let events = await evtRes.json();
+    let evt = Array.isArray(events) ? events[0] : events;
+
+    // Fuzzy fallback: if exact slug not found, search top 200 events by keyword
+    if (!evt) {
+      const keywords = slug.replace(/[-_]/g, ' ').toLowerCase().split(/\s+/).filter(w => w.length > 2);
+      const ctrl2 = new AbortController();
+      const tid2 = setTimeout(() => ctrl2.abort(), 12000);
+      const fallbackRes = await fetch('https://gamma-api.polymarket.com/events?closed=false&limit=200&order=liquidity&ascending=false', {
+        signal: ctrl2.signal,
+        headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+      });
+      clearTimeout(tid2);
+      if (fallbackRes.ok) {
+        const allEvents = await fallbackRes.json();
+        // Score each event by keyword overlap
+        let bestEvt = null, bestScore = 0;
+        for (const e of (Array.isArray(allEvents) ? allEvents : [])) {
+          const text = ((e.title || '') + ' ' + (e.description || '') + ' ' + (e.slug || '')).toLowerCase();
+          const score = keywords.filter(k => text.includes(k)).length;
+          if (score > bestScore) { bestScore = score; bestEvt = e; }
+        }
+        if (bestEvt && bestScore >= Math.max(1, Math.floor(keywords.length * 0.4))) {
+          evt = bestEvt;
+        }
+      }
+    }
     if (!evt) return res.status(404).json({ error: 'Event not found' });
 
     // Extract nested markets
@@ -21089,7 +21115,7 @@ app.get('/market/:slug', async (req, res) => {
   if (!slug) return res.status(404).send('Not found');
 
   try {
-    // Fetch event data for SSR meta tags
+    // Fetch event data for SSR meta tags — try exact slug, then fuzzy
     const ctrl = new AbortController();
     const tid = setTimeout(() => ctrl.abort(), 8000);
     const evtRes = await fetch(`https://gamma-api.polymarket.com/events?slug=${encodeURIComponent(slug)}`, {
@@ -21104,10 +21130,34 @@ app.get('/market/:slug', async (req, res) => {
     let yesPrice = 50;
     let noPrice = 50;
 
+    let evt = null;
     if (evtRes.ok) {
       const events = await evtRes.json();
-      const evt = Array.isArray(events) ? events[0] : events;
-      if (evt) {
+      evt = Array.isArray(events) ? events[0] : events;
+    }
+    // Fuzzy fallback
+    if (!evt) {
+      try {
+        const keywords = slug.replace(/[-_]/g, ' ').toLowerCase().split(/\s+/).filter(w => w.length > 2);
+        const ctrl2 = new AbortController();
+        const tid2 = setTimeout(() => ctrl2.abort(), 8000);
+        const fbRes = await fetch('https://gamma-api.polymarket.com/events?closed=false&limit=200&order=liquidity&ascending=false', {
+          signal: ctrl2.signal, headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+        });
+        clearTimeout(tid2);
+        if (fbRes.ok) {
+          const all = await fbRes.json();
+          let bestEvt = null, bestScore = 0;
+          for (const e of (Array.isArray(all) ? all : [])) {
+            const text = ((e.title || '') + ' ' + (e.slug || '')).toLowerCase();
+            const score = keywords.filter(k => text.includes(k)).length;
+            if (score > bestScore) { bestScore = score; bestEvt = e; }
+          }
+          if (bestEvt && bestScore >= Math.max(1, Math.floor(keywords.length * 0.4))) evt = bestEvt;
+        }
+      } catch (e) { /* fuzzy fallback failed, continue with defaults */ }
+    }
+    if (evt) {
         const q = evt.title || evt.question || '';
         // Get primary market prices
         const mkts = evt.markets || [];
@@ -21121,7 +21171,6 @@ app.get('/market/:slug', async (req, res) => {
         title = `${q} — YES ${yesPrice}% | HYPERFLEX`;
         description = `Current odds: YES ${yesPrice}% / NO ${noPrice}%. Whale positions, AI analysis, and ROI calculator for "${q}" on Polymarket.`;
         if (evt.image) ogImage = evt.image;
-      }
     }
 
     const canonicalUrl = `https://hyperflex.network/market/${encodeURIComponent(slug)}`;
