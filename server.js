@@ -25825,3 +25825,29 @@ app.listen(PORT, () => {
     console.log('[boot] Cache pre-warm complete');
   }, 5000); // Wait 5s for DB connections to establish
 });
+
+// TEMP DEBUG: test Kalshi series fetch
+app.get('/api/debug/kalshi-series', async (req, res) => {
+  const ticker = req.query.t || 'KXBTC';
+  try {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 15000);
+    const r = await fetch(`https://api.elections.kalshi.com/trade-api/v2/events?limit=2&with_nested_markets=true&series_ticker=${ticker}`, {
+      headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' },
+      signal: ctrl.signal
+    }).finally(() => clearTimeout(tid));
+    const text = await r.text();
+    let data;
+    try { data = JSON.parse(text); } catch { data = JSON.parse(text.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '')); }
+    const events = data.events || [];
+    res.json({
+      status: r.status,
+      events: events.length,
+      textLen: text.length,
+      firstTitle: events[0]?.title,
+      firstMarketsCount: events[0]?.markets?.length
+    });
+  } catch (e) {
+    res.json({ error: e.message, name: e.name });
+  }
+});
