@@ -294,11 +294,11 @@ async function loadBrief() {
       document.getElementById('fgScore').style.color = d.fear_greed.color || '#eab308';
       document.getElementById('fgLabel').textContent = d.fear_greed.label || 'Neutral';
       document.getElementById('fgLabel').style.color = d.fear_greed.color || '#eab308';
-      if (d.fear_greed.change != null && d.fear_greed.change !== 0) {
+      if (d.fear_greed.change != null) {
         var sign = d.fear_greed.change > 0 ? '+' : '';
         var fgChangeEl = document.getElementById('fgChange');
         fgChangeEl.textContent = sign + d.fear_greed.change + ' pts from yesterday';
-        fgChangeEl.style.color = d.fear_greed.change > 0 ? 'var(--green)' : 'var(--red)';
+        fgChangeEl.style.color = d.fear_greed.change > 0 ? 'var(--green)' : d.fear_greed.change < 0 ? 'var(--red)' : 'var(--dim)';
       }
     }
 
