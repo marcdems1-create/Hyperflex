@@ -16837,10 +16837,10 @@ app.get('/api/markets/search', async (req, res) => {
         const evtMatch = matchesQuery(evt.title) || matchesQuery(evt.category) || matchesQuery(evt.sub_title);
         const mkts = evt.markets || [];
         for (const m of mkts) {
-          if (m.status !== 'open') continue;
+          if (m.status !== 'open' && m.status !== 'active') continue;
           // Match on event OR individual market title
           if (!evtMatch && !matchesQuery(m.title)) continue;
-          const _kYesPct = m.yes_ask != null ? Math.round(m.yes_ask * 100) : (m.last_price != null ? Math.round(m.last_price * 100) : null);
+          const _kYesPct = m.yes_ask != null ? Math.round(m.yes_ask * 100) : (m.last_price != null ? Math.round(m.last_price * 100) : (m.yes_bid != null ? Math.round(m.yes_bid * 100) : null));
           if (_kYesPct !== null && (_kYesPct >= 95 || _kYesPct <= 5)) continue; // Skip resolved/dead markets
           kalshiMarkets.push({
             question: m.title || evt.title || '',
