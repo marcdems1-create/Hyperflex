@@ -23651,7 +23651,7 @@ async function searchAndDraftReplies() {
     if (!tweets.length) return;
     const worthy = tweets.filter(t => {
       const m = t.public_metrics || {};
-      return ((m.like_count || 0) + (m.retweet_count || 0) * 3 + (m.reply_count || 0) * 2) >= 5 && !_replyLog.includes(t.id);
+      return ((m.like_count || 0) + (m.retweet_count || 0) * 3 + (m.reply_count || 0) * 2) >= 1 && !_replyLog.includes(t.id);
     });
     if (!worthy.length) return;
     const target = worthy.sort((a, b) => {
@@ -23741,6 +23741,17 @@ app.post('/api/reply-queue/:id/delete', (req, res) => {
   if (idx === -1) return res.status(404).json({ error: 'Draft not found' });
   _replyDraftQueue.splice(idx, 1);
   res.json({ ok: true });
+});
+
+// Manual trigger for reply bot
+app.post('/api/reply-queue/trigger', async (req, res) => {
+  const secret = req.headers['x-admin-secret'];
+  if (secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    await searchAndDraftReplies();
+    const drafts = _replyDraftQueue.filter(r => r.status === 'draft');
+    res.json({ ok: true, drafts_generated: drafts.length, drafts });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // Run reply bot every 2 hours at :30
