@@ -17691,15 +17691,34 @@ app.get('/api/whale-index', async (req, res) => {
       _whaleWatchCache = { ts: Date.now(), data: whaleData };
     }
 
-    const positions = whaleData.whales || [];
-    if (!positions.length) {
+    const rawPositions = whaleData.whales || [];
+    if (!rawPositions.length) {
       return res.json({ picks: [], summary: { total_picks: 0, total_capital_tracked: 0, avg_whale_count: 0, strong_picks: 0, simulated_value: 0 }, updated_at: new Date().toISOString() });
     }
+
+    // Net out hedged positions: per trader per market, only count net side
+    const wiNetMap = {};
+    for (const p of rawPositions) {
+      const mkt = p.market || p.position || 'Unknown';
+      const wallet = (p.wallet || p.trader_address || p.name || p.trader_name || 'unknown').toLowerCase();
+      const nk = wallet + ':' + mkt.toLowerCase();
+      if (!wiNetMap[nk]) wiNetMap[nk] = { yes_cap: 0, no_cap: 0, market: mkt, wallet, url: p.market_url || 'https://polymarket.com', current_price: p.current_price || 0 };
+      const side = (p.side || 'YES').toUpperCase();
+      const cap = parseFloat(p.size || 0);
+      if (side === 'YES' || side === 'Y') wiNetMap[nk].yes_cap += cap;
+      else wiNetMap[nk].no_cap += cap;
+      if (p.current_price > 0) wiNetMap[nk].current_price = p.current_price;
+    }
+    const positions = Object.values(wiNetMap).map(n => {
+      const net = n.yes_cap - n.no_cap;
+      if (Math.abs(net) < 10) return null; // fully hedged — skip
+      return { market: n.market, side: net >= 0 ? 'YES' : 'NO', size: Math.abs(net), market_url: n.url, current_price: n.current_price };
+    }).filter(Boolean);
 
     // Group positions by market
     const marketMap = {};
     for (const p of positions) {
-      const key = p.market || p.position || 'Unknown';
+      const key = p.market;
       if (!marketMap[key]) {
         marketMap[key] = { market: key, positions: [], url: p.market_url || 'https://polymarket.com' };
       }
@@ -17718,8 +17737,7 @@ app.get('/api/whale-index', async (req, res) => {
       let priceSum = 0;
       let priceCount = 0;
       for (const p of data.positions) {
-        const side = (p.side || 'Unknown').toUpperCase();
-        const normSide = (side === 'YES' || side === 'Y') ? 'YES' : (side === 'NO' || side === 'N') ? 'NO' : side;
+        const normSide = p.side || 'YES';
         if (!sideCap[normSide]) sideCap[normSide] = 0;
         sideCap[normSide] += (p.size || 0);
         totalCapital += (p.size || 0);
@@ -17833,15 +17851,27 @@ app.get('/api/screener', async (req, res) => {
     if (!mktRes.ok) throw new Error('Gamma API returned ' + mktRes.status);
     const rawMarkets = await mktRes.json();
 
-    // Build whale lookup from cached whale data
+    // Build whale lookup from cached whale data — net out hedged positions
     const whalePositions = (_whaleWatchCache && _whaleWatchCache.data && _whaleWatchCache.data.whales) ? _whaleWatchCache.data.whales : [];
-    const whaleByMarket = {};
+    const _scrNetMap = {};
     for (const wp of whalePositions) {
-      const key = (wp.market || wp.position || '').toLowerCase().trim();
-      if (!key) continue;
-      if (!whaleByMarket[key]) whaleByMarket[key] = { count: 0, capital: 0 };
-      whaleByMarket[key].count++;
-      whaleByMarket[key].capital += (wp.size || 0);
+      const mkt = (wp.market || wp.position || '').toLowerCase().trim();
+      if (!mkt) continue;
+      const wallet = (wp.wallet || wp.trader_address || wp.name || wp.trader_name || 'unknown').toLowerCase();
+      const nk = wallet + ':' + mkt;
+      if (!_scrNetMap[nk]) _scrNetMap[nk] = { yes_cap: 0, no_cap: 0, market: mkt };
+      const side = (wp.side || 'YES').toUpperCase();
+      const cap = parseFloat(wp.size || 0);
+      if (side === 'YES' || side === 'Y') _scrNetMap[nk].yes_cap += cap;
+      else _scrNetMap[nk].no_cap += cap;
+    }
+    const whaleByMarket = {};
+    for (const n of Object.values(_scrNetMap)) {
+      const net = Math.abs(n.yes_cap - n.no_cap);
+      if (net < 10) continue; // fully hedged
+      if (!whaleByMarket[n.market]) whaleByMarket[n.market] = { count: 0, capital: 0 };
+      whaleByMarket[n.market].count++;
+      whaleByMarket[n.market].capital += net;
     }
 
     // Auto-detect category
@@ -21277,17 +21307,36 @@ app.get('/api/signals', async (req, res) => {
       if (_whaleWatchCache && _whaleWatchCache.data) {
         try {
           const whales = _whaleWatchCache.data.whales || [];
-          const marketMap = {};
+          // Step 1: Net out hedged positions per trader per market
+          const netMap = {}; // key: "wallet:market" → { yes_cap, no_cap, ... }
           for (const w of whales) {
-            const key = w.market || w.question;
-            if (!key) continue;
-            if (!marketMap[key]) marketMap[key] = { market: key, sides: {}, total_capital: 0, url: w.market_url || w.url || '', whale_count: 0 };
-            const side = w.side || 'YES';
-            if (!marketMap[key].sides[side]) marketMap[key].sides[side] = { capital: 0, count: 0 };
-            marketMap[key].sides[side].capital += parseFloat(w.size || 0);
-            marketMap[key].sides[side].count++;
-            marketMap[key].total_capital += parseFloat(w.size || 0);
-            marketMap[key].whale_count++;
+            const mkt = w.market || w.question;
+            if (!mkt) continue;
+            const wallet = (w.wallet || w.trader_address || w.name || w.trader_name || 'unknown').toLowerCase();
+            const nk = wallet + ':' + mkt.toLowerCase();
+            if (!netMap[nk]) netMap[nk] = { yes_cap: 0, no_cap: 0, market: mkt, wallet, url: w.market_url || w.url || '' };
+            const side = (w.side || 'YES').toUpperCase();
+            const cap = parseFloat(w.size || 0);
+            if (side === 'YES' || side === 'Y') netMap[nk].yes_cap += cap;
+            else netMap[nk].no_cap += cap;
+          }
+          // Step 2: Convert to net positions, skip fully hedged
+          const netPositions = Object.values(netMap).map(n => {
+            const net = n.yes_cap - n.no_cap;
+            const side = net >= 0 ? 'YES' : 'NO';
+            const size = Math.abs(net);
+            if (size < 10) return null; // fully hedged
+            return { market: n.market, side, size, url: n.url, wallet: n.wallet };
+          }).filter(Boolean);
+          // Step 3: Group by market
+          const marketMap = {};
+          for (const p of netPositions) {
+            if (!marketMap[p.market]) marketMap[p.market] = { market: p.market, sides: {}, total_capital: 0, url: p.url, whale_count: 0 };
+            if (!marketMap[p.market].sides[p.side]) marketMap[p.market].sides[p.side] = { capital: 0, count: 0 };
+            marketMap[p.market].sides[p.side].capital += p.size;
+            marketMap[p.market].sides[p.side].count++;
+            marketMap[p.market].total_capital += p.size;
+            marketMap[p.market].whale_count++;
           }
           const picks = Object.values(marketMap).filter(m => m.whale_count >= 3).map(m => {
             const sides = Object.entries(m.sides).sort((a,b) => b[1].capital - a[1].capital);
@@ -21710,21 +21759,34 @@ app.get('/api/signals', async (req, res) => {
     if (diversified.length === 0 && _whaleWatchCache && _whaleWatchCache.data) {
       try {
         const whales = _whaleWatchCache.data.whales || [];
+        // Net out hedged positions per trader per market
+        const fbNetMap = {};
+        for (const w of whales) {
+          const mkt = w.market || w.question;
+          if (!mkt) continue;
+          const wallet = (w.wallet || w.trader_address || w.name || w.trader_name || 'unknown').toLowerCase();
+          const nk = wallet + ':' + mkt.toLowerCase();
+          if (!fbNetMap[nk]) fbNetMap[nk] = { yes_cap: 0, no_cap: 0, market: mkt, wallet, url: w.market_url || w.url || 'https://polymarket.com' };
+          const side = (w.side || 'YES').toUpperCase();
+          const cap = parseFloat(w.size || 0);
+          if (side === 'YES' || side === 'Y') fbNetMap[nk].yes_cap += cap;
+          else fbNetMap[nk].no_cap += cap;
+        }
+        const fbNet = Object.values(fbNetMap).map(n => {
+          const net = n.yes_cap - n.no_cap;
+          if (Math.abs(net) < 10) return null;
+          return { market: n.market, side: net >= 0 ? 'YES' : 'NO', size: Math.abs(net), url: n.url, wallet: n.wallet };
+        }).filter(Boolean);
         // Group by market
         const mktMap = {};
-        for (const w of whales) {
-          const key = w.market || w.question;
-          if (!key) continue;
-          if (!mktMap[key]) mktMap[key] = { market: key, sides: {}, total_capital: 0, whale_count: 0, url: w.market_url || w.url || 'https://polymarket.com', whales: [] };
-          const side = w.side || 'YES';
-          if (!mktMap[key].sides[side]) mktMap[key].sides[side] = { capital: 0, count: 0 };
-          mktMap[key].sides[side].capital += parseFloat(w.size || 0);
-          mktMap[key].sides[side].count++;
-          mktMap[key].total_capital += parseFloat(w.size || 0);
-          mktMap[key].whale_count++;
-          mktMap[key].whales.push(w.name || w.trader_name || 'Whale');
+        for (const p of fbNet) {
+          if (!mktMap[p.market]) mktMap[p.market] = { market: p.market, sides: {}, total_capital: 0, whale_count: 0, url: p.url };
+          if (!mktMap[p.market].sides[p.side]) mktMap[p.market].sides[p.side] = { capital: 0, count: 0 };
+          mktMap[p.market].sides[p.side].capital += p.size;
+          mktMap[p.market].sides[p.side].count++;
+          mktMap[p.market].total_capital += p.size;
+          mktMap[p.market].whale_count++;
         }
-        // Take top markets by whale count, then capital
         const fallbackMarkets = Object.values(mktMap)
           .filter(m => m.whale_count >= 2)
           .sort((a, b) => b.whale_count - a.whale_count || b.total_capital - a.total_capital)
