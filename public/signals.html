@@ -27,13 +27,6 @@
 body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
 a{color:var(--gold);text-decoration:none} a:hover{text-decoration:underline}
 
-/* HEADER */
-.s-header{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:var(--card);border-bottom:1px solid var(--border)}
-.s-logo{font-family:var(--sans);font-weight:800;font-size:16px;letter-spacing:2px;color:var(--text);text-decoration:none}
-.s-logo span{color:var(--gold)}
-.s-title{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--soft);letter-spacing:1px;text-transform:uppercase}
-.s-live{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--green);letter-spacing:1px;display:flex;align-items:center;gap:6px}
-.s-live::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 
 /* STATS BAR */
@@ -153,12 +146,7 @@ a{color:var(--gold);text-decoration:none} a:hover{text-decoration:underline}
 <div id="nav-root"></div>
 <script src="/nav.js"></script>
 
-<!-- HEADER -->
-<div class="s-header">
-  <a href="/" class="s-logo">HYPER<span>FLEX</span></a>
-  <div class="s-title">Alpha Signals</div>
-  <div class="s-live">LIVE</div>
-</div>
+<!-- stats bar sits directly below shared nav -->
 
 <!-- STATS BAR -->
 <div class="s-stats" id="statsBar">
@@ -243,10 +231,10 @@ function translateSide(q, side) {
   var s = (side||'YES').toUpperCase();
   if (/up or down/i.test(q)) return s === 'YES' ? 'Goes UP' : 'Goes DOWN';
   if (/\bvs\.?\b/i.test(q)) {
-    var teams = q.split(/\bvs\.?\b/i);
+    var teams = q.split(/\bvs\.?\s*/i);
     if (teams.length >= 2) {
-      var t1 = teams[0].replace(/^.*?:\s*/, '').trim();
-      var t2 = teams[1].trim().replace(/\?$/, '');
+      var t1 = teams[0].replace(/^.*?:\s*/, '').replace(/[.\s]+$/, '').trim();
+      var t2 = teams[1].replace(/^[.\s]+/, '').replace(/\?$/, '').trim();
       t1 = t1.split(' ').map(function(w){return w.charAt(0).toUpperCase()+w.slice(1)}).join(' ');
       t2 = t2.split(' ').map(function(w){return w.charAt(0).toUpperCase()+w.slice(1)}).join(' ');
       if (t1.length > 22) t1 = t1.substring(0,20)+'..';
@@ -254,9 +242,9 @@ function translateSide(q, side) {
       return s === 'YES' ? t1 + ' wins' : t2 + ' wins';
     }
   }
-  if (/^will\b/i.test(q)) return s === 'YES' ? 'Yes' : 'No';
-  if (/ceasefire|agreement|peace/i.test(q)) return s === 'YES' ? 'Yes' : 'No';
-  return s;
+  if (/^will\b/i.test(q)) return s === 'YES' ? 'Yes, it happens' : 'No, it doesn\'t';
+  if (/ceasefire|agreement|peace|enter.*by|forces.*by/i.test(q)) return s === 'YES' ? 'Yes' : 'No';
+  return s === 'YES' ? 'Yes' : 'No';
 }
 
 // ── SIGNALS ──
@@ -413,18 +401,26 @@ async function loadWinners() {
 
     var html = '';
     top.forEach(function(t) {
-      var name = t.username || t.name || 'Trader';
-      var winPnl = t.week_profit || t.pnl_7d || 0;
-      var allPnl = t.total_profit || t.pnl_all || 0;
-      var score = t.score || t.consistency_score || 0;
+      var name = t.display_name || t.username || t.name || t.address || 'Trader';
+      var winPnl = t.pnl_week || t.week_profit || t.pnl_7d || 0;
+      var allPnl = t.pnl_all_time || t.total_profit || t.pnl_all || 0;
+      var score = t.consistency_score || t.score || 0;
+      // Format PnL — API returns in cents, convert to dollars
+      var winDollars = Math.round(winPnl / 100);
+      var allDollars = Math.round(allPnl / 100);
       html += '<div class="s-winner">' +
-        '<div class="s-winner-name">' + escH(name) + '<div class="s-winner-stats">W: ' + (winPnl >= 0 ? '+' : '') + fmtCap(Math.abs(winPnl)) + ' \u00B7 All: ' + (allPnl >= 0 ? '+' : '') + fmtCap(Math.abs(allPnl)) + '</div></div>' +
+        '<div class="s-winner-name">' + escH(name) + '<div class="s-winner-stats">W: ' + (winDollars >= 0 ? '+' : '') + fmtCap(Math.abs(winDollars)) + ' \u00B7 All: ' + (allDollars >= 0 ? '+' : '') + fmtCap(Math.abs(allDollars)) + '</div></div>' +
         '<div class="s-winner-score">' + score + '</div>' +
       '</div>';
-      // Show their top position
+      // Show their top position — match by address or display name
+      var traderAddr = (t.address || '').toLowerCase();
       var traderName = (name || '').toLowerCase();
       var traderPos = positions.filter(function(p) {
-        return (p.name||p.trader_name||'').toLowerCase() === traderName;
+        var pWallet = (p.wallet || p.trader_address || '').toLowerCase();
+        var pName = (p.name || p.trader_name || '').toLowerCase();
+        if (traderAddr && pWallet && pWallet === traderAddr) return true;
+        if (traderName && pName && pName === traderName) return true;
+        return false;
       }).slice(0, 1);
       traderPos.forEach(function(p) {
         var plain = translateSide(p.market||p.question||'', p.side||'YES');

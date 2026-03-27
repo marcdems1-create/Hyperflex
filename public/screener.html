@@ -483,10 +483,10 @@ function translateSide(question, side) {
   // "Will X win" / "X vs Y" — sports/politics
   if (/\bvs\.?\b|\bversus\b/i.test(q)) {
     // Extract first team/player name before "vs"
-    var teams = q.split(/\bvs\.?\b|\bversus\b/i);
+    var teams = q.split(/\bvs\.?\s*|\bversus\s*/i);
     if (teams.length >= 2) {
-      var t1 = teams[0].replace(/^.*?:\s*/, '').trim(); // strip prefix like "Miami Open:"
-      var t2 = teams[1].trim().replace(/\?$/, '');
+      var t1 = teams[0].replace(/^.*?:\s*/, '').replace(/[.\s]+$/, '').trim();
+      var t2 = teams[1].replace(/^[.\s]+/, '').replace(/\?$/, '').trim();
       // Capitalize first letters
       t1 = t1.split(' ').map(function(w){return w.charAt(0).toUpperCase()+w.slice(1)}).join(' ');
       t2 = t2.split(' ').map(function(w){return w.charAt(0).toUpperCase()+w.slice(1)}).join(' ');
