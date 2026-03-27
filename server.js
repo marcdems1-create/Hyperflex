@@ -11695,6 +11695,16 @@ app.get('/api/activity', async (req, res) => {
       activities.push(wt);
     }
 
+    // ── Filter mode: if ?feed=whale, strip community-only items ──
+    const feedMode = (req.query.feed || '').toLowerCase();
+    if (feedMode === 'whale') {
+      // Remove community market activities — keep only whale/external/trending
+      const communityTypes = new Set(['bet', 'market_created', 'resolution', 'win', 'comment', 'reward_unlock']);
+      for (let i = activities.length - 1; i >= 0; i--) {
+        if (communityTypes.has(activities[i].type)) activities.splice(i, 1);
+      }
+    }
+
     // ── Trending external markets (Polymarket + Kalshi top volume) ──
     try {
       const fetchExt = (url, ms = 10000) => {
@@ -11722,10 +11732,15 @@ app.get('/api/activity', async (req, res) => {
             if (posResults[i].status !== 'fulfilled' || !posResults[i].value.ok) continue;
             const positions = await posResults[i].value.json();
             const trader = top5[i];
+            // Clean trader name — Polymarket sometimes returns conditionId or hex as userName
+            let traderName = trader.userName || trader.name || '';
+            if (!traderName || /^0x[0-9a-fA-F]{10,}/.test(traderName) || traderName.length > 40) {
+              traderName = 'Whale #' + (trader.rank || (i+1));
+            }
             (Array.isArray(positions) ? positions : [])
               .filter(p => (parseFloat(p.size) || 0) >= 10000)
               .slice(0, 3)
-              .forEach(p => whalePositions.push({ ...p, _trader: trader.userName || 'Whale #' + (i+1), _traderPnl: trader.pnl || 0, _traderRank: trader.rank || (i+1) }));
+              .forEach(p => whalePositions.push({ ...p, _trader: traderName, _traderPnl: trader.pnl || 0, _traderRank: trader.rank || (i+1) }));
           }
           // Dedupe by market title and shuffle
           const seen = new Set();
@@ -11736,7 +11751,11 @@ app.get('/api/activity', async (req, res) => {
             return true;
           });
           uniqueWhale.sort(() => Math.random() - 0.5);
-          uniqueWhale.slice(0, 6).forEach((p, i) => {
+          uniqueWhale.filter(p => {
+            // Skip expired/resolved markets (price at 0% or 100%)
+            const price = parseFloat(p.curPrice) || 0;
+            return price > 0.02 && price < 0.98;
+          }).slice(0, 6).forEach((p, i) => {
             const question = p.title || p.market || 'Unknown market';
             const vol = parseFloat(p.size) || 0;
             const side = p.outcome || p.side || '';

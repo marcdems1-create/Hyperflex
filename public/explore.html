@@ -1825,7 +1825,7 @@ async function loadActivityFeed(append) {
   _activityLoading = true;
   try {
     const limit = 40;
-    const r = await fetch(`/api/activity?limit=${limit}&page=${_activityPage}`);
+    const r = await fetch(`/api/activity?limit=${limit}&page=${_activityPage}&feed=whale`);
     if (!r.ok) { _activityLoading = false; return; }
     const data = await r.json();
     const items = data.activities || [];
@@ -1895,7 +1895,7 @@ window.addEventListener('scroll', () => {
 async function pollNewActivity() {
   if (!activityLatestTs) return;
   try {
-    const r = await fetch(`/api/activity?since=${encodeURIComponent(activityLatestTs)}&limit=25`);
+    const r = await fetch(`/api/activity?since=${encodeURIComponent(activityLatestTs)}&limit=25&feed=whale`);
     if (!r.ok) return;
     const data = await r.json();
     const newItems = data.activities || [];
