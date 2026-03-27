@@ -16500,6 +16500,72 @@ app.get('/api/polymarket/positions/:address', async (req, res) => {
   }
 });
 
+// GET /api/polymarket/positions/:address/enriched — positions + whale overlap intel
+app.get('/api/polymarket/positions/:address/enriched', async (req, res) => {
+  try {
+    // Get base positions (reuse existing endpoint logic via internal fetch)
+    const address = req.params.address.trim();
+    if (!address || !/^0x[0-9a-fA-F]{40}$/.test(address)) return res.status(400).json({ error: 'Invalid address' });
+
+    // Fetch positions
+    const posRes = await fetch(`http://localhost:${PORT}/api/polymarket/positions/${address}`);
+    if (!posRes.ok) return res.status(posRes.status).json({ error: 'Failed to fetch positions' });
+    const posData = await posRes.json();
+
+    // Get whale data for overlap matching
+    const whalePositions = (_whaleWatchCache && _whaleWatchCache.data && _whaleWatchCache.data.whales) || [];
+
+    // Build market→whale map
+    const whaleMap = {}; // key: normalized question → { count, capital, yes_count, no_count, yes_capital, no_capital }
+    whalePositions.forEach(w => {
+      const q = (w.market || '').toLowerCase().trim();
+      if (!whaleMap[q]) whaleMap[q] = { count: 0, capital: 0, yes_count: 0, no_count: 0, yes_capital: 0, no_capital: 0, wallets: new Set() };
+      const wallet = (w.wallet || w.trader_address || '').toLowerCase();
+      if (whaleMap[q].wallets.has(wallet)) return; // dedupe same whale
+      whaleMap[q].wallets.add(wallet);
+      whaleMap[q].count++;
+      const cap = w.size || 0;
+      whaleMap[q].capital += cap;
+      const s = (w.side || '').toUpperCase();
+      if (s === 'YES' || s === 'Y') { whaleMap[q].yes_count++; whaleMap[q].yes_capital += cap; }
+      else if (s === 'NO' || s === 'N') { whaleMap[q].no_count++; whaleMap[q].no_capital += cap; }
+    });
+
+    // Enrich each position with whale intel
+    const enriched = (posData.positions || []).map(p => {
+      const q = (p.question || '').toLowerCase().trim();
+      // Try exact match, then prefix match
+      let wData = whaleMap[q];
+      if (!wData) {
+        for (const [k, v] of Object.entries(whaleMap)) {
+          if (q.length > 20 && k.length > 20 && (q.startsWith(k.substring(0, 25)) || k.startsWith(q.substring(0, 25)))) {
+            wData = v; break;
+          }
+        }
+      }
+
+      const whale = wData ? {
+        count: wData.count,
+        capital: Math.round(wData.capital),
+        consensus_side: wData.yes_capital >= wData.no_capital ? 'YES' : 'NO',
+        consensus_pct: Math.round(Math.max(wData.yes_capital, wData.no_capital) / ((wData.yes_capital + wData.no_capital) || 1) * 100),
+        aligned: wData ? ((p.side === 'YES' && wData.yes_capital >= wData.no_capital) || (p.side === 'NO' && wData.no_capital > wData.yes_capital)) : false,
+        edge: p.current_price > 0 ? Math.round(((wData.yes_capital >= wData.no_capital ? 1 : 0) - p.current_price) * 100) : null
+      } : null;
+
+      // Avg cost per share
+      const avg_cost = p.shares > 0 ? Math.round((p.cost_basis / p.shares) * 100) / 100 : 0;
+
+      return { ...p, avg_cost, whale };
+    });
+
+    res.json({ positions: enriched, address, fetched_at: posData.fetched_at });
+  } catch (err) {
+    console.error('[polymarket/enriched]', err.message);
+    res.status(500).json({ error: 'Failed to enrich positions' });
+  }
+});
+
 // ── POLYMARKET ORDERBOOK PROXY (10s cache) ────────────────────────────────
 // token_id = the `asset` field from positions API (long numeric string)
 const _orderbookCache = new Map();
@@ -17983,7 +18049,30 @@ app.get('/api/whale-flow', async (req, res) => {
       _whaleWatchCache = { ts: Date.now(), data: whaleData };
     }
 
-    const positions = whaleData.whales || [];
+    const rawPositions = whaleData.whales || [];
+
+    // ── Net position calculation — deduplicate whale×market hedges ──
+    // If a whale has YES and NO on the same market, only count the net side
+    const netMap = {}; // key: "wallet:market" → { yes_cap, no_cap, market, wallet, market_url, ... }
+    rawPositions.forEach(p => {
+      const wallet = (p.wallet || p.trader_address || '').toLowerCase();
+      const market = (p.market || '').toLowerCase();
+      const key = wallet + ':' + market;
+      if (!netMap[key]) netMap[key] = { yes_capital: 0, no_capital: 0, market: p.market, wallet, market_url: p.market_url || '' };
+      const s = (p.side || '').toUpperCase();
+      const cap = p.size || 0;
+      if (s === 'YES' || s === 'Y') netMap[key].yes_capital += cap;
+      else if (s === 'NO' || s === 'N') netMap[key].no_capital += cap;
+    });
+    // Convert net map back to position-like objects with net side + net size
+    const positions = Object.values(netMap).map(n => {
+      const netYes = n.yes_capital - n.no_capital;
+      const side = netYes >= 0 ? 'YES' : 'NO';
+      const size = Math.abs(netYes);
+      // Skip fully hedged positions (net ~0)
+      if (size < 10) return null;
+      return { market: n.market, side, size, market_url: n.market_url, wallet: n.wallet };
+    }).filter(Boolean);
 
     // ── Category breakdown ──
     const categoryKeywords = {
