@@ -19327,8 +19327,8 @@ async function snapshotPolymarketPrices() {
   }
 }
 
-// Run every 6 hours — wrapped to prevent unhandled rejections
-cron.schedule('0 */6 * * *', () => { snapshotPolymarketPrices().catch(err => console.error('[snapshot] Cron error:', err.message)); });
+// Run every hour — need frequent snapshots for movers/momentum signals
+cron.schedule('0 * * * *', () => { snapshotPolymarketPrices().catch(err => console.error('[snapshot] Cron error:', err.message)); });
 
 // Seed initial data 30 seconds after boot
 setTimeout(snapshotPolymarketPrices, 30000);
