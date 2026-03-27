@@ -9453,7 +9453,7 @@ const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
   'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u', 'win',
-  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed', 'market-intel'
+  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed', 'market-intel', 'market', 'sitemap-markets.xml'
 ]);
 
 // GET /my — private member dashboard
@@ -20986,6 +20986,278 @@ app.get('/brief', (req, res) => res.sendFile(path.join(__dirname, 'public', 'bri
 app.get('/fear-greed', (req, res) => res.sendFile(path.join(__dirname, 'public', 'fear-greed.html')));
 
 // ════════════════════════════════════════════════════════════
+// SEO LANDING PAGES — /market/:slug auto-generated pages
+// ════════════════════════════════════════════════════════════
+
+// Cache for market SEO data (10-min TTL)
+const _marketSeoCache = new Map();
+
+// GET /api/market-seo/:slug — fetch event data from Gamma API for SEO pages
+app.get('/api/market-seo/:slug', async (req, res) => {
+  const slug = (req.params.slug || '').trim();
+  if (!slug) return res.status(400).json({ error: 'Slug required' });
+
+  const cacheKey = `mseo_${slug}`;
+  const cached = _marketSeoCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < 10 * 60 * 1000) return res.json(cached.data);
+
+  try {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 12000);
+    const evtRes = await fetch(`https://gamma-api.polymarket.com/events?slug=${encodeURIComponent(slug)}`, {
+      signal: ctrl.signal,
+      headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+    });
+    clearTimeout(tid);
+
+    if (!evtRes.ok) throw new Error('Gamma API returned ' + evtRes.status);
+    const events = await evtRes.json();
+    const evt = Array.isArray(events) ? events[0] : events;
+    if (!evt) return res.status(404).json({ error: 'Event not found' });
+
+    // Extract nested markets
+    const markets = (evt.markets || []).map(m => ({
+      question: m.question || '',
+      yes_price: parseFloat(m.outcomePrices ? JSON.parse(m.outcomePrices)[0] : m.yes_price || 0.5),
+      no_price: parseFloat(m.outcomePrices ? JSON.parse(m.outcomePrices)[1] : m.no_price || 0.5),
+      volume: parseFloat(m.volume || m.volumeNum || 0),
+      liquidity: parseFloat(m.liquidity || m.liquidityNum || 0),
+      market_id: m.id || m.conditionId || '',
+      slug: m.slug || '',
+      end_date: m.endDate || m.end_date_iso || null,
+      closed: m.closed || false,
+    }));
+
+    // Primary market = highest volume nested market, or event-level data
+    const primary = markets.length > 0
+      ? markets.reduce((a, b) => (b.volume > a.volume ? b : a), markets[0])
+      : null;
+
+    const result = {
+      title: evt.title || evt.question || '',
+      slug: evt.slug || slug,
+      description: evt.description || '',
+      yes_price: primary ? primary.yes_price : 0.5,
+      no_price: primary ? primary.no_price : 0.5,
+      volume: primary ? primary.volume : parseFloat(evt.volume || 0),
+      liquidity: primary ? primary.liquidity : parseFloat(evt.liquidity || 0),
+      end_date: primary ? primary.end_date : (evt.endDate || null),
+      image: evt.image || null,
+      markets,
+      polymarket_url: `https://polymarket.com/event/${encodeURIComponent(slug)}`,
+    };
+
+    // Enrich with whale data if available
+    if (_whaleIndexCache && _whaleIndexCache.data && _whaleIndexCache.data.picks) {
+      const titleLower = result.title.toLowerCase();
+      const whalePicks = _whaleIndexCache.data.picks.filter(p =>
+        titleLower.includes((p.market || '').toLowerCase().substring(0, 30)) ||
+        (p.market || '').toLowerCase().includes(titleLower.substring(0, 30))
+      );
+      if (whalePicks.length > 0) {
+        result.whale_data = whalePicks.map(w => ({
+          market: w.market,
+          whale_count: w.whale_count,
+          consensus_side: w.consensus_side,
+          consensus_pct: w.consensus_pct,
+          total_capital: w.total_capital,
+          strength: w.strength,
+        }));
+      }
+    }
+
+    _marketSeoCache.set(cacheKey, { ts: Date.now(), data: result });
+    // Prune cache if too large
+    if (_marketSeoCache.size > 500) {
+      const keys = [..._marketSeoCache.keys()];
+      keys.slice(0, 250).forEach(k => _marketSeoCache.delete(k));
+    }
+    res.json(result);
+  } catch (err) {
+    console.error('[market-seo]', err.message);
+    // Return stale cache if available
+    if (cached) return res.json(cached.data);
+    res.status(502).json({ error: 'Failed to fetch market data', detail: err.message });
+  }
+});
+
+// GET /market/:slug — SSR meta tags + serve market-seo.html
+const MARKET_SEO_HTML = fs.readFileSync(path.join(__dirname, 'public', 'market-seo.html'), 'utf8');
+
+app.get('/market/:slug', async (req, res) => {
+  const slug = (req.params.slug || '').trim();
+  if (!slug) return res.status(404).send('Not found');
+
+  try {
+    // Fetch event data for SSR meta tags
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 8000);
+    const evtRes = await fetch(`https://gamma-api.polymarket.com/events?slug=${encodeURIComponent(slug)}`, {
+      signal: ctrl.signal,
+      headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+    });
+    clearTimeout(tid);
+
+    let title = 'Market Analysis — HYPERFLEX';
+    let description = 'AI-powered prediction market analysis with whale tracking, odds comparison, and ROI calculator.';
+    let ogImage = 'https://hyperflex.network/og-default.png';
+    let yesPrice = 50;
+    let noPrice = 50;
+
+    if (evtRes.ok) {
+      const events = await evtRes.json();
+      const evt = Array.isArray(events) ? events[0] : events;
+      if (evt) {
+        const q = evt.title || evt.question || '';
+        // Get primary market prices
+        const mkts = evt.markets || [];
+        const primary = mkts.length > 0
+          ? mkts.reduce((a, b) => (parseFloat(b.volume || 0) > parseFloat(a.volume || 0) ? b : a), mkts[0])
+          : null;
+        if (primary) {
+          yesPrice = Math.round(parseFloat(primary.outcomePrices ? JSON.parse(primary.outcomePrices)[0] : primary.yes_price || 0.5) * 100);
+          noPrice = 100 - yesPrice;
+        }
+        title = `${q} — YES ${yesPrice}% | HYPERFLEX`;
+        description = `Current odds: YES ${yesPrice}% / NO ${noPrice}%. Whale positions, AI analysis, and ROI calculator for "${q}" on Polymarket.`;
+        if (evt.image) ogImage = evt.image;
+      }
+    }
+
+    const canonicalUrl = `https://hyperflex.network/market/${encodeURIComponent(slug)}`;
+
+    // Inject SSR meta tags into the HTML
+    const html = MARKET_SEO_HTML
+      .replace(/<!--SSR_TITLE-->/g, title.replace(/</g, '&lt;').replace(/"/g, '&quot;'))
+      .replace(/<!--SSR_DESCRIPTION-->/g, description.replace(/</g, '&lt;').replace(/"/g, '&quot;'))
+      .replace(/<!--SSR_OG_IMAGE-->/g, ogImage)
+      .replace(/<!--SSR_CANONICAL-->/g, canonicalUrl)
+      .replace(/<!--SSR_SLUG-->/g, slug.replace(/</g, '&lt;').replace(/"/g, '&quot;'))
+      .replace(/<!--SSR_YES_PRICE-->/g, String(yesPrice))
+      .replace(/<!--SSR_NO_PRICE-->/g, String(noPrice));
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  } catch (err) {
+    console.error('[market-page]', err.message);
+    // Fallback: serve the page with generic meta tags
+    const html = MARKET_SEO_HTML
+      .replace(/<!--SSR_TITLE-->/g, 'Market Analysis — HYPERFLEX')
+      .replace(/<!--SSR_DESCRIPTION-->/g, 'AI-powered prediction market analysis with whale tracking and odds comparison.')
+      .replace(/<!--SSR_OG_IMAGE-->/g, 'https://hyperflex.network/og-default.png')
+      .replace(/<!--SSR_CANONICAL-->/g, `https://hyperflex.network/market/${encodeURIComponent(slug)}`)
+      .replace(/<!--SSR_SLUG-->/g, slug.replace(/</g, '&lt;').replace(/"/g, '&quot;'))
+      .replace(/<!--SSR_YES_PRICE-->/g, '50')
+      .replace(/<!--SSR_NO_PRICE-->/g, '50');
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  }
+});
+
+// GET /sitemap-markets.xml — XML sitemap for top 50 markets by volume
+let _sitemapMarketsCache = null;
+
+app.get('/sitemap-markets.xml', async (req, res) => {
+  try {
+    // 5-min cache
+    if (_sitemapMarketsCache && Date.now() - _sitemapMarketsCache.ts < 5 * 60 * 1000) {
+      res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+      return res.send(_sitemapMarketsCache.data);
+    }
+
+    let slugs = [];
+
+    // Try screener cache first
+    if (_screenerCache && _screenerCache.data && Array.isArray(_screenerCache.data)) {
+      // Screener has market-level data; extract event slugs
+      const seen = new Set();
+      for (const m of _screenerCache.data) {
+        const s = m.event_slug || m.slug || '';
+        if (s && !seen.has(s)) { seen.add(s); slugs.push(s); }
+        if (slugs.length >= 50) break;
+      }
+    }
+
+    // Fallback: fetch from Gamma API events endpoint
+    if (slugs.length < 10) {
+      try {
+        const ctrl = new AbortController();
+        const tid = setTimeout(() => ctrl.abort(), 12000);
+        const evtRes = await fetch('https://gamma-api.polymarket.com/events?closed=false&limit=50&order=liquidity&ascending=false', {
+          signal: ctrl.signal,
+          headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+        });
+        clearTimeout(tid);
+        if (evtRes.ok) {
+          const events = await evtRes.json();
+          const arr = Array.isArray(events) ? events : [];
+          const seen = new Set(slugs);
+          for (const evt of arr) {
+            const s = evt.slug || '';
+            if (s && !seen.has(s)) { seen.add(s); slugs.push(s); }
+            if (slugs.length >= 50) break;
+          }
+        }
+      } catch (e) {
+        console.warn('[sitemap-markets] Gamma fallback failed:', e.message);
+      }
+    }
+
+    const now = new Date().toISOString().split('T')[0];
+    let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
+    xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
+    for (const s of slugs) {
+      xml += `  <url>\n`;
+      xml += `    <loc>https://hyperflex.network/market/${encodeURIComponent(s)}</loc>\n`;
+      xml += `    <lastmod>${now}</lastmod>\n`;
+      xml += `    <changefreq>hourly</changefreq>\n`;
+      xml += `    <priority>0.8</priority>\n`;
+      xml += `  </url>\n`;
+    }
+    xml += '</urlset>\n';
+
+    _sitemapMarketsCache = { ts: Date.now(), data: xml };
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.send(xml);
+  } catch (err) {
+    console.error('[sitemap-markets]', err.message);
+    if (_sitemapMarketsCache) {
+      res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+      return res.send(_sitemapMarketsCache.data);
+    }
+    res.status(500).send('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>');
+  }
+});
+
+// POST /api/subscribe-brief — email capture for AI Morning Brief
+app.post('/api/subscribe-brief', async (req, res) => {
+  const { email } = req.body || {};
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: 'Valid email required' });
+  }
+  try {
+    if (pool) {
+      await dbQuery(
+        'INSERT INTO brief_subscribers (email) VALUES ($1) ON CONFLICT (email) DO NOTHING',
+        [email]
+      );
+    } else {
+      await supabase.from('brief_subscribers').insert({ email }).select();
+    }
+    res.json({ ok: true, message: 'Subscribed to AI Morning Brief!' });
+  } catch (err) {
+    // If table doesn't exist yet, still return success (graceful degradation)
+    if (err.message && (err.message.includes('does not exist') || err.message.includes('relation'))) {
+      console.warn('[subscribe-brief] brief_subscribers table not yet created — storing skipped');
+      res.json({ ok: true, message: 'Subscribed to AI Morning Brief!' });
+    } else {
+      console.error('[subscribe-brief]', err.message);
+      res.status(500).json({ error: 'Failed to subscribe' });
+    }
+  }
+});
+
+// ════════════════════════════════════════════════════════════
 // EMAIL SUBSCRIBERS — daily briefing signup
 // ════════════════════════════════════════════════════════════
 app.post('/api/subscribe', async (req, res) => {
@@ -23528,6 +23800,392 @@ cron.schedule('0 15 * * *', safeCron('expiryTweet', async () => {
     }
   } catch(e) { console.warn('[expiry-tweet]', e.message); }
 }));
+
+// ════════════════════════════════════════════════════════════
+// AUTOMATED TWEET PIPELINE — draft queue + 4 tweet generators
+// ════════════════════════════════════════════════════════════
+
+// Tweet queue: all generated tweets go here as drafts by default
+const _tweetQueue = []; // { id, type, text, created_at, status: 'draft'|'posted'|'deleted' }
+let _tweetQueueIdCounter = 1;
+
+// Dedup tracking: market questions tweeted in last 24h per type
+const _tweetedMarkets = {}; // { type: { marketKey: timestamp } }
+function _wasTweetedRecently(type, marketKey) {
+  if (!_tweetedMarkets[type]) _tweetedMarkets[type] = {};
+  const ts = _tweetedMarkets[type][marketKey];
+  if (ts && Date.now() - ts < 24 * 60 * 60 * 1000) return true;
+  return false;
+}
+function _markTweeted(type, marketKey) {
+  if (!_tweetedMarkets[type]) _tweetedMarkets[type] = {};
+  _tweetedMarkets[type][marketKey] = Date.now();
+  // Cleanup old entries
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+  for (const key of Object.keys(_tweetedMarkets[type])) {
+    if (_tweetedMarkets[type][key] < cutoff) delete _tweetedMarkets[type][key];
+  }
+}
+
+// Queue rate limiting: max 1 post per hour, max 5 per day (separate from manual posts)
+const _queuePostLog = []; // timestamps of queue-posted tweets
+function _canQueuePost() {
+  const now = Date.now();
+  // Remove entries older than 24h
+  while (_queuePostLog.length && now - _queuePostLog[0] > 24 * 60 * 60 * 1000) _queuePostLog.shift();
+  if (_queuePostLog.length >= 5) return false; // max 5/day
+  if (_queuePostLog.length && now - _queuePostLog[_queuePostLog.length - 1] < 60 * 60 * 1000) return false; // 1h gap
+  return true;
+}
+
+function _addToQueue(type, text) {
+  const id = _tweetQueueIdCounter++;
+  const entry = { id, type, text, created_at: new Date().toISOString(), status: 'draft' };
+  _tweetQueue.push(entry);
+  console.log(`[tweet-queue] Added ${type} draft #${id}: ${text.substring(0, 60)}...`);
+  return entry;
+}
+
+// Helper: format capital amounts
+function _fmtCap(amount) {
+  if (amount >= 1000000) return '$' + (amount / 1000000).toFixed(1) + 'M';
+  if (amount >= 1000) return '$' + Math.round(amount / 1000) + 'K';
+  return '$' + Math.round(amount);
+}
+
+// Helper: hard cap tweet at 240 chars, cut cleanly
+function _capTweet(text, maxLen = 240) {
+  if (text.length <= maxLen) return text;
+  let cut = text.substring(0, maxLen);
+  const lastPeriod = cut.lastIndexOf('.');
+  const lastQuestion = cut.lastIndexOf('?');
+  const lastBreak = Math.max(lastPeriod, lastQuestion);
+  if (lastBreak > maxLen * 0.6) return cut.substring(0, lastBreak + 1);
+  const lastSpace = cut.lastIndexOf(' ');
+  return lastSpace > maxLen * 0.4 ? cut.substring(0, lastSpace) : cut;
+}
+
+// ── GENERATOR 1: Whale Alert ──
+// Triggered every 30 min — markets with 3+ whales AND $100K+ total capital
+async function generateWhaleAlertTweet() {
+  try {
+    const indexData = _whaleIndexCache && _whaleIndexCache.data ? _whaleIndexCache.data : null;
+    if (!indexData) { console.log('[tweet-whale-alert] No whale index data'); return; }
+
+    const picks = indexData.picks || [];
+    // Filter: 3+ whales AND $100K+ capital
+    const eligible = picks.filter(p =>
+      (p.whale_count || 0) >= 3 &&
+      (p.total_capital || 0) >= 100000 &&
+      !_wasTweetedRecently('whale_alert', (p.market || '').toLowerCase().substring(0, 50))
+    );
+
+    if (eligible.length === 0) { console.log('[tweet-whale-alert] No eligible markets'); return; }
+
+    // Pick top by capital
+    const top = eligible.sort((a, b) => (b.total_capital || 0) - (a.total_capital || 0))[0];
+    const cap = _fmtCap(top.total_capital || 0);
+    const whales = top.whale_count || 0;
+    const market = top.market || 'Unknown';
+    const odds = top.consensus_pct || 50;
+
+    // Tension lines for variety
+    const tensions = [
+      'Either they know something, or they\'re about to learn an expensive lesson.',
+      'That\'s not a bet. That\'s a conviction.',
+      'When whales agree, pay attention.',
+      'The smart money is picking a side.',
+      'Someone has conviction. Do you?'
+    ];
+    const tension = tensions[Math.floor(Math.random() * tensions.length)];
+
+    const body = `${whales} whales just put ${cap} on "${market}". Currently at ${odds}%. ${tension}`;
+    const link = '\n\nhyperflex.network/whales';
+    let tweet = _capTweet(body, 240 - link.length) + link;
+    if (tweet.length > 280) tweet = _capTweet(body, 280 - link.length - 5) + link;
+
+    _markTweeted('whale_alert', market.toLowerCase().substring(0, 50));
+    _addToQueue('whale_alert', tweet);
+  } catch (e) {
+    console.error('[tweet-whale-alert]', e.message);
+  }
+}
+
+// ── GENERATOR 2: Odds Shift ──
+// Triggered every 2 hours — biggest mover with 10%+ 24h change
+async function generateOddsShiftTweet() {
+  try {
+    const screenerData = _screenerCache && _screenerCache.data ? _screenerCache.data : null;
+    if (!screenerData || !Array.isArray(screenerData) || screenerData.length === 0) {
+      console.log('[tweet-odds-shift] No screener data');
+      return;
+    }
+
+    // Find biggest mover by absolute price_change_24h
+    const movers = screenerData
+      .filter(m => m.price_change_24h != null && Math.abs(m.price_change_24h) >= 10)
+      .filter(m => !_wasTweetedRecently('odds_shift', (m.question || '').toLowerCase().substring(0, 50)))
+      .sort((a, b) => Math.abs(b.price_change_24h) - Math.abs(a.price_change_24h));
+
+    if (movers.length === 0) { console.log('[tweet-odds-shift] No 10%+ movers'); return; }
+
+    const top = movers[0];
+    const question = top.question || 'Unknown';
+    const change = Math.round(Math.abs(top.price_change_24h));
+    const currentOdds = top.yes_price != null ? Math.round(top.yes_price * 100) : null;
+    const dir = top.price_change_24h > 0 ? 'up' : 'down';
+
+    // Contextual closer
+    const closers = [
+      'What changed?',
+      'Someone knows something.',
+      'The market is repricing fast.',
+      'This wasn\'t priced in.',
+      'Big move. Bigger question: is it right?'
+    ];
+    const closer = closers[Math.floor(Math.random() * closers.length)];
+
+    const body = `"${question}" just moved ${change} points ${dir} in 24 hours.${currentOdds != null ? ' Now at ' + currentOdds + '%.' : ''} ${closer}`;
+    const link = '\n\nhyperflex.network/screener';
+    let tweet = _capTweet(body, 240 - link.length) + link;
+    if (tweet.length > 280) tweet = _capTweet(body, 280 - link.length - 5) + link;
+
+    _markTweeted('odds_shift', question.toLowerCase().substring(0, 50));
+    _addToQueue('odds_shift', tweet);
+  } catch (e) {
+    console.error('[tweet-odds-shift]', e.message);
+  }
+}
+
+// ── GENERATOR 3: Arbitrage Alert ──
+// Triggered every hour — Poly vs Kalshi spread > 5%
+async function generateArbAlertTweet() {
+  try {
+    const signalData = _signalsCache && _signalsCache.data ? _signalsCache.data : null;
+    if (!signalData) { console.log('[tweet-arb-alert] No signal data'); return; }
+
+    const signals = Array.isArray(signalData) ? signalData : (signalData.signals || []);
+    const arbs = signals
+      .filter(s => s.type === 'arbitrage' && (s.price_diff || 0) > 0.05)
+      .filter(s => !_wasTweetedRecently('arb_alert', (s.market || '').toLowerCase().substring(0, 50)))
+      .sort((a, b) => (b.price_diff || 0) - (a.price_diff || 0));
+
+    if (arbs.length === 0) { console.log('[tweet-arb-alert] No 5%+ arb opportunities'); return; }
+
+    const top = arbs[0];
+    const market = top.market || 'Unknown';
+    const spread = Math.round((top.price_diff || 0) * 100);
+
+    // Parse platform prices from the action string or estimate from price_diff
+    let polyPct = '?', kalshiPct = '?';
+    const actionMatch = (top.action || '').match(/buy YES on (\w+) at (\d+)%/i);
+    if (actionMatch) {
+      const cheaperPlatform = actionMatch[1];
+      const cheaperPrice = parseInt(actionMatch[2]);
+      if (cheaperPlatform === 'Polymarket') {
+        polyPct = cheaperPrice;
+        kalshiPct = cheaperPrice + spread;
+      } else {
+        kalshiPct = cheaperPrice;
+        polyPct = cheaperPrice + spread;
+      }
+    }
+
+    const body = `Same question, different prices. "${market}" is ${polyPct}% on Polymarket and ${kalshiPct}% on Kalshi. ${spread}% gap.`;
+    const link = '\n\nhyperflex.network/odds';
+    let tweet = _capTweet(body, 240 - link.length) + link;
+    if (tweet.length > 280) tweet = _capTweet(body, 280 - link.length - 5) + link;
+
+    _markTweeted('arb_alert', market.toLowerCase().substring(0, 50));
+    _addToQueue('arb_alert', tweet);
+  } catch (e) {
+    console.error('[tweet-arb-alert]', e.message);
+  }
+}
+
+// ── GENERATOR 4: Resolution Recap ──
+// Triggered after settlement cron — tweet about AI calls that resolved
+async function generateResolutionRecapTweet() {
+  try {
+    // Find recently resolved predictions from prediction_log where AI made a call
+    let recentResolved = [];
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    if (pool) {
+      recentResolved = await dbQuery(
+        "SELECT * FROM prediction_log WHERE resolved = true AND resolved_at >= $1 AND source = 'ai_brief' AND outcome IN ('correct', 'incorrect') ORDER BY resolved_at DESC LIMIT 10",
+        [oneHourAgo]
+      );
+    } else {
+      const { data } = await supabase.from('prediction_log')
+        .select('*')
+        .eq('resolved', true)
+        .gte('resolved_at', oneHourAgo)
+        .eq('source', 'ai_brief')
+        .in('outcome', ['correct', 'incorrect'])
+        .order('resolved_at', { ascending: false })
+        .limit(10);
+      recentResolved = data || [];
+    }
+
+    if (recentResolved.length === 0) { console.log('[tweet-recap-auto] No recent resolutions'); return; }
+
+    // Get weekly W/L record
+    let weekWins = 0, weekLosses = 0;
+    try {
+      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      let weekRows = [];
+      if (pool) {
+        weekRows = await dbQuery(
+          "SELECT outcome, COUNT(*) as c FROM prediction_log WHERE resolved = true AND resolved_at >= $1 AND source = 'ai_brief' AND outcome IN ('correct', 'incorrect') GROUP BY outcome",
+          [weekAgo]
+        );
+      } else {
+        const { data } = await supabase.from('prediction_log')
+          .select('outcome')
+          .eq('resolved', true)
+          .gte('resolved_at', weekAgo)
+          .eq('source', 'ai_brief')
+          .in('outcome', ['correct', 'incorrect']);
+        // Count manually
+        weekRows = [];
+        const counts = {};
+        for (const r of (data || [])) { counts[r.outcome] = (counts[r.outcome] || 0) + 1; }
+        for (const [outcome, c] of Object.entries(counts)) weekRows.push({ outcome, c });
+      }
+      for (const r of weekRows) {
+        if (r.outcome === 'correct') weekWins = parseInt(r.c || r.count || 0);
+        if (r.outcome === 'incorrect') weekLosses = parseInt(r.c || r.count || 0);
+      }
+    } catch (e) { console.warn('[tweet-recap-auto] Week record fetch failed:', e.message); }
+
+    for (const pred of recentResolved) {
+      const marketQ = pred.market_question || 'Unknown';
+      if (_wasTweetedRecently('resolution_recap', marketQ.toLowerCase().substring(0, 50))) continue;
+
+      const outcome = pred.outcome === 'correct' ? 'CORRECT' : 'WRONG';
+      const resolvedSide = pred.predicted_side === 'YES' ? 'YES' : 'NO';
+      const confPct = pred.predicted_confidence ? Math.round(pred.predicted_confidence * 100) : Math.round((pred.market_price_at_prediction || 0.5) * 100);
+      const record = (weekWins + weekLosses > 0) ? ` Track record: ${weekWins}W/${weekLosses}L this week.` : '';
+
+      const body = `RESULT: "${marketQ}" resolved ${resolvedSide}. Our AI called it at ${confPct}% — ${outcome}.${record}`;
+      const link = '\n\nhyperflex.network/brief';
+      let tweet = _capTweet(body, 240 - link.length) + link;
+      if (tweet.length > 280) tweet = _capTweet(body, 280 - link.length - 5) + link;
+
+      _markTweeted('resolution_recap', marketQ.toLowerCase().substring(0, 50));
+      _addToQueue('resolution_recap', tweet);
+      break; // Only one recap tweet per cron run
+    }
+  } catch (e) {
+    console.error('[tweet-recap-auto]', e.message);
+  }
+}
+
+// ── TWEET QUEUE API ENDPOINTS ──
+
+// GET /api/tweet-queue — view all drafts (admin only)
+app.get('/api/tweet-queue', (req, res) => {
+  const adminSecret = req.headers['x-admin-secret'] || req.query.admin;
+  if (adminSecret !== process.env.ADMIN_SECRET) return res.status(403).json({ error: 'Unauthorized' });
+
+  const drafts = _tweetQueue.filter(t => t.status === 'draft');
+  const posted = _tweetQueue.filter(t => t.status === 'posted').slice(-20);
+  const stats = {
+    drafts_count: drafts.length,
+    posted_today: _queuePostLog.filter(ts => Date.now() - ts < 24 * 60 * 60 * 1000).length,
+    can_post_now: _canQueuePost(),
+    next_post_available: _queuePostLog.length > 0
+      ? new Date(_queuePostLog[_queuePostLog.length - 1] + 60 * 60 * 1000).toISOString()
+      : 'now'
+  };
+
+  res.json({ stats, drafts, recent_posted: posted });
+});
+
+// POST /api/tweet-queue/:id/post — post a specific draft (admin only)
+app.post('/api/tweet-queue/:id/post', async (req, res) => {
+  const adminSecret = req.headers['x-admin-secret'] || req.query.admin;
+  if (adminSecret !== process.env.ADMIN_SECRET) return res.status(403).json({ error: 'Unauthorized' });
+
+  const id = parseInt(req.params.id);
+  const entry = _tweetQueue.find(t => t.id === id && t.status === 'draft');
+  if (!entry) return res.status(404).json({ error: 'Draft not found' });
+
+  if (!_canQueuePost()) return res.status(429).json({ error: 'Rate limited — max 1 tweet/hour, 5/day from queue' });
+
+  try {
+    const result = await postTweet(entry.text);
+    entry.status = 'posted';
+    entry.posted_at = new Date().toISOString();
+    _queuePostLog.push(Date.now());
+    _tweetLog.push(Date.now()); // Also track in global tweet log
+    res.json({ ok: true, tweet_id: result?.data?.id, text: entry.text });
+  } catch (e) {
+    console.error('[tweet-queue/post]', e.message);
+    res.status(500).json({ error: 'Failed to post tweet', detail: e.message });
+  }
+});
+
+// POST /api/tweet-queue/:id/delete — remove without posting (admin only)
+app.post('/api/tweet-queue/:id/delete', (req, res) => {
+  const adminSecret = req.headers['x-admin-secret'] || req.query.admin;
+  if (adminSecret !== process.env.ADMIN_SECRET) return res.status(403).json({ error: 'Unauthorized' });
+
+  const id = parseInt(req.params.id);
+  const entry = _tweetQueue.find(t => t.id === id && t.status === 'draft');
+  if (!entry) return res.status(404).json({ error: 'Draft not found' });
+
+  entry.status = 'deleted';
+  entry.deleted_at = new Date().toISOString();
+  res.json({ ok: true, deleted: id });
+});
+
+// POST /api/tweet-queue/post-all — post all drafts (respects rate limits) (admin only)
+app.post('/api/tweet-queue/post-all', async (req, res) => {
+  const adminSecret = req.headers['x-admin-secret'] || req.query.admin;
+  if (adminSecret !== process.env.ADMIN_SECRET) return res.status(403).json({ error: 'Unauthorized' });
+
+  const drafts = _tweetQueue.filter(t => t.status === 'draft');
+  if (drafts.length === 0) return res.json({ ok: true, posted: 0, message: 'No drafts to post' });
+
+  if (!_canQueuePost()) return res.status(429).json({ error: 'Rate limited — try again later' });
+
+  // Post only the first draft (rate limit: 1/hour)
+  const entry = drafts[0];
+  try {
+    const result = await postTweet(entry.text);
+    entry.status = 'posted';
+    entry.posted_at = new Date().toISOString();
+    _queuePostLog.push(Date.now());
+    _tweetLog.push(Date.now());
+    res.json({
+      ok: true,
+      posted: 1,
+      remaining: drafts.length - 1,
+      tweet_id: result?.data?.id,
+      message: drafts.length > 1 ? `Posted 1 tweet. ${drafts.length - 1} remaining — rate limited to 1/hour.` : 'Posted 1 tweet. Queue empty.'
+    });
+  } catch (e) {
+    console.error('[tweet-queue/post-all]', e.message);
+    res.status(500).json({ error: 'Failed to post tweet', detail: e.message });
+  }
+});
+
+// ── TWEET PIPELINE CRON SCHEDULES ──
+
+// Whale alerts: every 30 minutes
+cron.schedule('*/30 * * * *', safeCron('tweetWhaleAlert', generateWhaleAlertTweet));
+
+// Odds shifts: every 2 hours (at :15 to offset from other crons)
+cron.schedule('15 */2 * * *', safeCron('tweetOddsShift', generateOddsShiftTweet));
+
+// Arbitrage alerts: every hour (at :45)
+cron.schedule('45 * * * *', safeCron('tweetArbAlert', generateArbAlertTweet));
+
+// Resolution recaps: after settlement cron — run 5 min after the hourly settlement
+cron.schedule('5 * * * *', safeCron('tweetResolutionRecap', generateResolutionRecapTweet));
+
+console.log('[boot] Tweet pipeline initialized — 4 generators, draft queue, cron schedules active');
 
 // ════════════════════════════════════════════════════════════
 // ACCURACY TRACKING — the core product

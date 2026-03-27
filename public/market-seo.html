@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title><!--SSR_TITLE--></title>
+<meta name="description" content="<!--SSR_DESCRIPTION-->"/>
+<link rel="canonical" href="<!--SSR_CANONICAL-->"/>
+<!-- Open Graph -->
+<meta property="og:type" content="website"/>
+<meta property="og:url" content="<!--SSR_CANONICAL-->"/>
+<meta property="og:title" content="<!--SSR_TITLE-->"/>
+<meta property="og:description" content="<!--SSR_DESCRIPTION-->"/>
+<meta property="og:image" content="<!--SSR_OG_IMAGE-->"/>
+<meta property="og:site_name" content="HYPERFLEX"/>
+<!-- Twitter / X -->
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:site" content="@HyperFlexApp"/>
+<meta name="twitter:title" content="<!--SSR_TITLE-->"/>
+<meta name="twitter:description" content="<!--SSR_DESCRIPTION-->"/>
+<meta name="twitter:image" content="<!--SSR_OG_IMAGE-->"/>
+<!-- Structured data -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "<!--SSR_TITLE-->",
+  "description": "<!--SSR_DESCRIPTION-->",
+  "url": "<!--SSR_CANONICAL-->"
+}
+</script>
+<meta name="slug" content="<!--SSR_SLUG-->"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --ink: #0e0e0c;
+  --paper: #141412;
+  --cream: #1c1c19;
+  --card: #191917;
+  --text: #ddd8cc;
+  --gold: #c9920d;
+  --gold-lt: #e0a820;
+  --border: #2a2a26;
+  --dim: #7a7870;
+  --muted: #5a5854;
+  --green: #22c55e;
+  --red: #ef4444;
+  --sans: 'Syne', sans-serif;
+  --mono: 'Space Mono', monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--paper);
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(201,146,13,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(201,146,13,0.03) 1px, transparent 1px);
+  background-size: 48px 48px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* HERO */
+.mkt-hero {
+  position: relative; z-index: 1;
+  padding: 100px 24px 48px;
+  max-width: 880px; margin: 0 auto;
+  text-align: center;
+}
+.mkt-eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase; color: var(--gold);
+  margin-bottom: 20px;
+}
+.mkt-eyebrow .live-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--green);
+  animation: livePulse 2s ease-in-out infinite;
+}
+@keyframes livePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.4); }
+  50%      { box-shadow: 0 0 0 6px rgba(34,197,94,0); }
+}
+.mkt-question {
+  font-size: clamp(24px, 4.5vw, 40px); font-weight: 800;
+  line-height: 1.15; letter-spacing: -0.03em; color: var(--text);
+  margin-bottom: 16px; word-break: break-word;
+}
+.mkt-desc {
+  font-size: 14px; color: var(--dim); line-height: 1.6;
+  max-width: 640px; margin: 0 auto 32px;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.mkt-meta {
+  display: flex; gap: 20px; justify-content: center; flex-wrap: wrap;
+  font-family: var(--mono); font-size: 11px; color: var(--dim);
+  margin-bottom: 32px;
+}
+.mkt-meta span { display: inline-flex; align-items: center; gap: 5px; }
+
+/* ODDS DISPLAY */
+.odds-hero {
+  display: flex; gap: 24px; justify-content: center; align-items: stretch;
+  max-width: 520px; margin: 0 auto 40px; flex-wrap: wrap;
+}
+.odds-card {
+  flex: 1; min-width: 180px; max-width: 240px;
+  background: var(--card); border: 1.5px solid var(--border);
+  border-radius: 16px; padding: 28px 24px; text-align: center;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.odds-card.yes { border-color: rgba(34,197,94,0.3); }
+.odds-card.no  { border-color: rgba(239,68,68,0.3); }
+.odds-card:hover { box-shadow: 0 0 24px rgba(201,146,13,0.08); }
+.odds-label {
+  font-family: var(--mono); font-size: 12px; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 12px;
+}
+.odds-card.yes .odds-label { color: var(--green); }
+.odds-card.no  .odds-label { color: var(--red); }
+.odds-value {
+  font-family: var(--mono); font-size: 52px; font-weight: 700;
+  line-height: 1; color: var(--text); margin-bottom: 4px;
+}
+.odds-card.yes .odds-value { color: var(--green); }
+.odds-card.no  .odds-value { color: var(--red); }
+.odds-sub {
+  font-family: var(--mono); font-size: 11px; color: var(--muted);
+}
+
+/* ROI STRIP */
+.roi-strip {
+  max-width: 640px; margin: 0 auto 48px;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 12px; padding: 20px 24px;
+}
+.roi-title {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  color: var(--gold); text-transform: uppercase; letter-spacing: 0.1em;
+  margin-bottom: 14px;
+}
+.roi-row {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  font-family: var(--mono); font-size: 13px; color: var(--text);
+}
+.roi-arrow { color: var(--dim); }
+.roi-highlight { color: var(--green); font-weight: 700; font-size: 15px; }
+
+/* CONTENT SECTIONS */
+.mkt-content {
+  max-width: 880px; margin: 0 auto; padding: 0 24px 80px;
+  position: relative; z-index: 1;
+  display: grid; grid-template-columns: 1fr 320px; gap: 32px;
+}
+@media (max-width: 860px) { .mkt-content { grid-template-columns: 1fr; } }
+
+.section-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 14px; padding: 24px; margin-bottom: 20px;
+}
+.section-title {
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  color: var(--gold); text-transform: uppercase; letter-spacing: 0.1em;
+  margin-bottom: 16px; display: flex; align-items: center; gap: 8px;
+}
+
+/* WHALE POSITIONS */
+.whale-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.whale-row:last-child { border-bottom: none; }
+.whale-side {
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  padding: 3px 8px; border-radius: 4px;
+}
+.whale-side.yes { background: rgba(34,197,94,0.15); color: var(--green); }
+.whale-side.no  { background: rgba(239,68,68,0.15); color: var(--red); }
+.whale-info { flex: 1; }
+.whale-market { font-size: 12px; color: var(--text); line-height: 1.4; }
+.whale-capital { font-family: var(--mono); font-size: 11px; color: var(--dim); }
+
+/* AI ANALYSIS */
+.ai-card {
+  background: var(--ink); border: 1px solid var(--border);
+  border-top: 3px solid var(--gold); border-radius: 12px;
+  padding: 20px 24px; margin-bottom: 20px;
+}
+.ai-label {
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  color: var(--gold); text-transform: uppercase; letter-spacing: 0.1em;
+  margin-bottom: 12px; display: flex; align-items: center; gap: 6px;
+}
+.ai-text {
+  font-family: var(--mono); font-size: 12px; color: var(--text);
+  line-height: 1.7; white-space: pre-wrap; word-break: break-word;
+}
+.ai-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 12px; font-weight: 700;
+  padding: 10px 20px; border-radius: 8px;
+  border: 1px solid rgba(201,146,13,0.4); background: rgba(201,146,13,0.08);
+  color: var(--gold); cursor: pointer; transition: all 0.15s;
+}
+.ai-btn:hover { background: rgba(201,146,13,0.18); border-color: var(--gold); }
+.ai-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.ai-spinner {
+  display: inline-block; width: 14px; height: 14px;
+  border: 2px solid var(--border); border-top-color: var(--gold);
+  border-radius: 50%; animation: aiSpin 0.6s linear infinite;
+}
+@keyframes aiSpin { to { transform: rotate(360deg); } }
+
+/* COMPARE PLATFORMS */
+.compare-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+}
+.compare-col {
+  background: var(--paper); border: 1px solid var(--border);
+  border-radius: 10px; padding: 16px; text-align: center;
+}
+.compare-badge {
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  padding: 3px 8px; border-radius: 10px; letter-spacing: 0.05em;
+  display: inline-block; margin-bottom: 10px;
+}
+.compare-badge.poly { background: rgba(124,58,237,0.15); color: #a78bfa; }
+.compare-badge.kalshi { background: rgba(217,119,6,0.15); color: #fbbf24; }
+.compare-price {
+  font-family: var(--mono); font-size: 28px; font-weight: 700;
+  color: var(--text); line-height: 1; margin-bottom: 4px;
+}
+.compare-label { font-family: var(--mono); font-size: 11px; color: var(--dim); }
+.compare-cta {
+  display: block; width: 100%; text-align: center;
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  padding: 8px; border-radius: 6px; text-decoration: none;
+  border: 1px solid var(--border); color: var(--dim);
+  transition: all 0.15s; margin-top: 12px; min-height: 44px;
+  display: flex; align-items: center; justify-content: center;
+}
+.compare-cta:hover { border-color: var(--gold); color: var(--gold); }
+
+/* NESTED MARKETS */
+.nested-market {
+  padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.nested-market:last-child { border-bottom: none; }
+.nested-q { font-size: 13px; color: var(--text); line-height: 1.4; margin-bottom: 6px; }
+.nested-odds {
+  display: flex; gap: 12px; font-family: var(--mono); font-size: 12px;
+}
+.nested-yes { color: var(--green); font-weight: 700; }
+.nested-no  { color: var(--red); font-weight: 700; }
+.nested-vol { color: var(--dim); font-size: 11px; }
+
+/* CTA BUTTONS */
+.cta-row {
+  display: flex; gap: 12px; flex-wrap: wrap;
+  max-width: 640px; margin: 0 auto 48px;
+  justify-content: center;
+}
+.cta-primary {
+  font-family: var(--sans); font-weight: 700; font-size: 14px;
+  color: var(--ink); background: var(--gold); padding: 14px 28px;
+  border-radius: 8px; text-decoration: none; transition: opacity 0.15s;
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.cta-primary:hover { opacity: 0.88; }
+.cta-secondary {
+  font-family: var(--mono); font-size: 12px; font-weight: 700;
+  color: var(--dim); border: 1.5px solid var(--border); padding: 14px 24px;
+  border-radius: 8px; text-decoration: none; transition: all 0.15s;
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.cta-secondary:hover { border-color: var(--gold); color: var(--gold); }
+
+/* EMAIL CAPTURE */
+.email-card {
+  background: linear-gradient(135deg, rgba(201,146,13,0.08), rgba(201,146,13,0.02));
+  border: 1.5px solid rgba(201,146,13,0.25);
+  border-radius: 14px; padding: 28px 24px; text-align: center;
+  margin-bottom: 20px;
+}
+.email-title {
+  font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 6px;
+}
+.email-sub {
+  font-size: 12px; color: var(--dim); margin-bottom: 16px; line-height: 1.5;
+}
+.email-form {
+  display: flex; gap: 8px; max-width: 400px; margin: 0 auto;
+}
+.email-input {
+  flex: 1; background: var(--card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px 14px;
+  font-family: var(--mono); font-size: 13px; color: var(--text);
+  outline: none; transition: border-color 0.2s;
+}
+.email-input::placeholder { color: var(--muted); }
+.email-input:focus { border-color: var(--gold); }
+.email-submit {
+  background: var(--gold); color: var(--ink);
+  font-family: var(--sans); font-weight: 700; font-size: 13px;
+  padding: 12px 20px; border-radius: 8px; border: none;
+  cursor: pointer; transition: opacity 0.15s; white-space: nowrap;
+}
+.email-submit:hover { opacity: 0.88; }
+.email-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+.email-success {
+  font-family: var(--mono); font-size: 12px; color: var(--green);
+  margin-top: 10px; display: none;
+}
+
+/* FOOTER */
+.mkt-footer {
+  border-top: 1px solid var(--border);
+  padding: 40px 24px; text-align: center;
+  position: relative; z-index: 1;
+}
+.footer-links {
+  display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.footer-link {
+  font-family: var(--mono); font-size: 11px; color: var(--dim);
+  text-decoration: none; transition: color 0.15s;
+}
+.footer-link:hover { color: var(--text); }
+.footer-copy {
+  font-family: var(--mono); font-size: 10px; color: var(--muted);
+}
+
+/* LOADING */
+.loading-skeleton {
+  background: linear-gradient(90deg, var(--card) 25%, rgba(201,146,13,0.06) 50%, var(--card) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 8px;
+}
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* MOBILE */
+@media (max-width: 768px) {
+  .mkt-hero { padding: 80px 16px 36px; }
+  .odds-hero { gap: 12px; }
+  .odds-card { padding: 20px 16px; }
+  .odds-value { font-size: 40px; }
+  .mkt-content { padding: 0 16px 60px; }
+  .roi-strip { margin: 0 16px 36px; }
+  .cta-row { padding: 0 16px; }
+  .compare-grid { grid-template-columns: 1fr; }
+  .email-form { flex-direction: column; }
+}
+@media (max-width: 480px) {
+  .mkt-question { font-size: 22px; }
+  .odds-value { font-size: 32px; }
+  .odds-card { min-width: 140px; }
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<div id="nav-root"></div>
+<script src="/nav.js"></script>
+
+<!-- HERO -->
+<section class="mkt-hero">
+  <div class="mkt-eyebrow"><span class="live-dot"></span> LIVE MARKET ANALYSIS</div>
+  <h1 class="mkt-question" id="mktQuestion">Loading market data...</h1>
+  <p class="mkt-desc" id="mktDesc"></p>
+  <div class="mkt-meta" id="mktMeta"></div>
+
+  <!-- BIG ODDS -->
+  <div class="odds-hero" id="oddsHero">
+    <div class="odds-card yes">
+      <div class="odds-label">YES</div>
+      <div class="odds-value" id="yesPrice"><!--SSR_YES_PRICE-->%</div>
+      <div class="odds-sub">probability</div>
+    </div>
+    <div class="odds-card no">
+      <div class="odds-label">NO</div>
+      <div class="odds-value" id="noPrice"><!--SSR_NO_PRICE-->%</div>
+      <div class="odds-sub">probability</div>
+    </div>
+  </div>
+
+  <!-- ROI STRIP -->
+  <div class="roi-strip" id="roiStrip">
+    <div class="roi-title">ROI Calculator</div>
+    <div class="roi-row" id="roiRow">
+      <span>Pay <strong id="roiPay">$0.<!--SSR_YES_PRICE--></strong></span>
+      <span class="roi-arrow">&rarr;</span>
+      <span>Win <strong>$1.00</strong> if YES</span>
+      <span class="roi-arrow">&rarr;</span>
+      <span class="roi-highlight" id="roiPct">ROI: calculating...</span>
+    </div>
+  </div>
+
+  <!-- CTAs -->
+  <div class="cta-row">
+    <a id="ctaPoly" href="https://polymarket.com" target="_blank" rel="noopener" class="cta-primary">
+      Trade on Polymarket &rarr;
+    </a>
+    <a href="/odds" class="cta-secondary">
+      Compare odds on HYPERFLEX &rarr;
+    </a>
+  </div>
+</section>
+
+<!-- MAIN CONTENT -->
+<div class="mkt-content">
+  <!-- LEFT COLUMN -->
+  <div>
+    <!-- AI ANALYSIS -->
+    <div class="section-card" id="aiSection">
+      <div class="section-title">AI Analysis</div>
+      <button class="ai-btn" id="aiBtn" onclick="requestAiAnalysis()">
+        Generate AI Analysis
+      </button>
+      <div id="aiResult" style="display:none">
+        <div class="ai-card">
+          <div class="ai-label">HYPERFLEX AI</div>
+          <div class="ai-text" id="aiText"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- WHALE POSITIONS -->
+    <div class="section-card" id="whaleSection" style="display:none">
+      <div class="section-title">Whale Positions</div>
+      <div id="whaleList"></div>
+    </div>
+
+    <!-- NESTED MARKETS -->
+    <div class="section-card" id="nestedSection" style="display:none">
+      <div class="section-title">Related Markets in This Event</div>
+      <div id="nestedList"></div>
+    </div>
+  </div>
+
+  <!-- RIGHT COLUMN / SIDEBAR -->
+  <aside>
+    <!-- COMPARE PLATFORMS -->
+    <div class="section-card" id="compareSection">
+      <div class="section-title">Compare Across Platforms</div>
+      <div class="compare-grid" id="compareGrid">
+        <div class="compare-col">
+          <div class="compare-badge poly">POLYMARKET</div>
+          <div class="compare-price" id="polyYes">--</div>
+          <div class="compare-label">YES</div>
+          <a id="polyLink" href="#" target="_blank" rel="noopener" class="compare-cta">Trade &rarr;</a>
+        </div>
+        <div class="compare-col" id="kalshiCol" style="display:none">
+          <div class="compare-badge kalshi">KALSHI</div>
+          <div class="compare-price" id="kalshiYes">--</div>
+          <div class="compare-label">YES</div>
+          <a id="kalshiLink" href="https://kalshi.com" target="_blank" rel="noopener" class="compare-cta">Trade &rarr;</a>
+        </div>
+      </div>
+      <div style="text-align:center;margin-top:12px">
+        <a href="/odds" style="font-family:var(--mono);font-size:11px;color:var(--gold);text-decoration:none">See all odds comparisons &rarr;</a>
+      </div>
+    </div>
+
+    <!-- EMAIL CAPTURE -->
+    <div class="email-card">
+      <div class="email-title">Get the AI Morning Brief</div>
+      <div class="email-sub">Daily market intelligence, whale moves, and AI predictions. Free.</div>
+      <form class="email-form" onsubmit="subscribeBrief(event)">
+        <input type="email" class="email-input" id="briefEmail" placeholder="your@email.com" required/>
+        <button type="submit" class="email-submit" id="briefBtn">Subscribe</button>
+      </form>
+      <div class="email-success" id="briefSuccess">Subscribed! Check your inbox.</div>
+    </div>
+
+    <!-- MARKET STATS -->
+    <div class="section-card" id="statsCard">
+      <div class="section-title">Market Stats</div>
+      <div id="statsBody" style="font-family:var(--mono);font-size:12px;color:var(--dim);line-height:2">
+        Loading...
+      </div>
+    </div>
+  </aside>
+</div>
+
+<!-- FOOTER -->
+<footer class="mkt-footer">
+  <div class="footer-links">
+    <a href="/odds" class="footer-link">Odds</a>
+    <a href="/whales" class="footer-link">Market Intel</a>
+    <a href="/screener" class="footer-link">Screener</a>
+    <a href="/signals" class="footer-link">Signals</a>
+    <a href="/brief" class="footer-link">AI Brief</a>
+    <a href="/predictors" class="footer-link">Predictors</a>
+    <a href="/data" class="footer-link">Data</a>
+  </div>
+  <div class="footer-copy">&copy; 2026 HYPERFLEX. All rights reserved.</div>
+</footer>
+
+<script>
+// ── STATE ──
+const SLUG = document.querySelector('meta[name="slug"]')?.content || window.location.pathname.split('/market/')[1] || '';
+let _marketData = null;
+
+// ── INIT ──
+(async function init() {
+  if (!SLUG) return;
+  try {
+    const res = await fetch('/api/market-seo/' + encodeURIComponent(SLUG));
+    if (!res.ok) throw new Error('API returned ' + res.status);
+    _marketData = await res.json();
+    renderMarket(_marketData);
+  } catch (e) {
+    console.error('[market-seo]', e);
+    document.getElementById('mktQuestion').textContent = 'Market data unavailable';
+  }
+})();
+
+function renderMarket(d) {
+  // Question
+  document.getElementById('mktQuestion').textContent = d.title || 'Untitled Market';
+
+  // Description
+  if (d.description) {
+    document.getElementById('mktDesc').textContent = d.description.substring(0, 300) + (d.description.length > 300 ? '...' : '');
+  }
+
+  // YES/NO prices
+  const yesP = Math.round((d.yes_price || 0.5) * 100);
+  const noP = 100 - yesP;
+  document.getElementById('yesPrice').textContent = yesP + '%';
+  document.getElementById('noPrice').textContent = noP + '%';
+
+  // Meta
+  const meta = [];
+  if (d.volume) meta.push('<span>Vol: $' + formatNum(d.volume) + '</span>');
+  if (d.liquidity) meta.push('<span>Liq: $' + formatNum(d.liquidity) + '</span>');
+  if (d.end_date) {
+    const dt = new Date(d.end_date);
+    if (!isNaN(dt)) meta.push('<span>Expires: ' + dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + '</span>');
+  }
+  if (d.markets && d.markets.length > 1) meta.push('<span>' + d.markets.length + ' sub-markets</span>');
+  document.getElementById('mktMeta').innerHTML = meta.join('');
+
+  // ROI strip
+  const cost = (d.yes_price || 0.5).toFixed(2);
+  const roi = d.yes_price > 0 ? Math.round(((1 / d.yes_price) - 1) * 100) : 0;
+  document.getElementById('roiPay').textContent = '$' + cost;
+  document.getElementById('roiPct').textContent = 'ROI: ' + roi + '%';
+
+  // CTAs
+  document.getElementById('ctaPoly').href = d.polymarket_url || ('https://polymarket.com/event/' + encodeURIComponent(SLUG));
+
+  // Compare section
+  document.getElementById('polyYes').textContent = yesP + '%';
+  document.getElementById('polyLink').href = d.polymarket_url || '#';
+
+  // Try Kalshi match
+  searchKalshi(d.title);
+
+  // Whale data
+  if (d.whale_data && d.whale_data.length > 0) {
+    renderWhales(d.whale_data);
+  }
+
+  // Nested markets
+  if (d.markets && d.markets.length > 1) {
+    renderNested(d.markets);
+  }
+
+  // Stats card
+  renderStats(d);
+}
+
+function renderWhales(whales) {
+  const sec = document.getElementById('whaleSection');
+  sec.style.display = '';
+  const list = document.getElementById('whaleList');
+  list.innerHTML = whales.map(w => {
+    const sideClass = (w.consensus_side || 'YES').toUpperCase() === 'YES' ? 'yes' : 'no';
+    return '<div class="whale-row">' +
+      '<span class="whale-side ' + sideClass + '">' + (w.consensus_side || 'YES') + '</span>' +
+      '<div class="whale-info">' +
+        '<div class="whale-market">' + esc(w.market || '') + '</div>' +
+        '<div class="whale-capital">' + w.whale_count + ' whales &middot; $' + formatNum(w.total_capital) + ' &middot; ' + w.consensus_pct + '% consensus &middot; ' + (w.strength || '') + '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function renderNested(markets) {
+  const sec = document.getElementById('nestedSection');
+  sec.style.display = '';
+  const list = document.getElementById('nestedList');
+  list.innerHTML = markets.map(m => {
+    const yp = Math.round((m.yes_price || 0.5) * 100);
+    const np = 100 - yp;
+    return '<div class="nested-market">' +
+      '<div class="nested-q">' + esc(m.question) + '</div>' +
+      '<div class="nested-odds">' +
+        '<span class="nested-yes">YES ' + yp + '%</span>' +
+        '<span class="nested-no">NO ' + np + '%</span>' +
+        (m.volume ? '<span class="nested-vol">Vol: $' + formatNum(m.volume) + '</span>' : '') +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function renderStats(d) {
+  const body = document.getElementById('statsBody');
+  const lines = [];
+  if (d.volume) lines.push('Volume: <strong style="color:var(--text)">$' + formatNum(d.volume) + '</strong>');
+  if (d.liquidity) lines.push('Liquidity: <strong style="color:var(--text)">$' + formatNum(d.liquidity) + '</strong>');
+  if (d.end_date) {
+    const dt = new Date(d.end_date);
+    if (!isNaN(dt)) {
+      const daysLeft = Math.max(0, Math.ceil((dt - Date.now()) / 86400000));
+      lines.push('Expires: <strong style="color:var(--text)">' + dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + '</strong>');
+      lines.push('Days left: <strong style="color:var(--text)">' + daysLeft + '</strong>');
+    }
+  }
+  if (d.markets) lines.push('Sub-markets: <strong style="color:var(--text)">' + d.markets.length + '</strong>');
+  if (d.whale_data) lines.push('Whale signals: <strong style="color:var(--gold)">' + d.whale_data.length + '</strong>');
+  body.innerHTML = lines.join('<br>') || 'No stats available';
+}
+
+// ── KALSHI SEARCH ──
+async function searchKalshi(question) {
+  if (!question) return;
+  try {
+    const res = await fetch('/api/markets/search?q=' + encodeURIComponent(question.substring(0, 60)));
+    if (!res.ok) return;
+    const data = await res.json();
+    // Find Kalshi results
+    const kalshi = (data.results || data || []).filter(r => r.platform === 'kalshi' || r.source === 'kalshi');
+    if (kalshi.length > 0) {
+      const k = kalshi[0];
+      const kYes = k.yes_price || k.yes_prob || 0;
+      const kPct = kYes > 1 ? Math.round(kYes) : Math.round(kYes * 100);
+      document.getElementById('kalshiCol').style.display = '';
+      document.getElementById('kalshiYes').textContent = kPct + '%';
+      if (k.url || k.market_url) document.getElementById('kalshiLink').href = k.url || k.market_url;
+    }
+  } catch (e) { /* silent */ }
+}
+
+// ── AI ANALYSIS ──
+async function requestAiAnalysis() {
+  const btn = document.getElementById('aiBtn');
+  const result = document.getElementById('aiResult');
+  const textEl = document.getElementById('aiText');
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="ai-spinner"></span> Analyzing...';
+
+  try {
+    // Try the signals/crystal-ball endpoint with market context
+    const q = _marketData ? _marketData.title : SLUG;
+    const res = await fetch('/api/crystal-ball', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: q })
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const analysis = data.analysis || data.prediction || data.text || JSON.stringify(data);
+      textEl.textContent = analysis;
+      result.style.display = '';
+      btn.style.display = 'none';
+    } else {
+      // Fallback: show a placeholder
+      textEl.textContent = 'AI analysis is processing. This market has ' +
+        (_marketData ? 'YES at ' + Math.round((_marketData.yes_price || 0.5) * 100) + '% probability' : 'active trading') +
+        '. Check back soon for a full AI breakdown including sentiment analysis, whale positioning, and probability assessment.';
+      result.style.display = '';
+      btn.style.display = 'none';
+    }
+  } catch (e) {
+    textEl.textContent = 'AI analysis is temporarily unavailable. The market is currently trading at ' +
+      (_marketData ? 'YES ' + Math.round((_marketData.yes_price || 0.5) * 100) + '%' : 'active levels') +
+      '. Try again shortly.';
+    result.style.display = '';
+    btn.style.display = 'none';
+  }
+}
+
+// ── EMAIL SUBSCRIBE ──
+async function subscribeBrief(e) {
+  e.preventDefault();
+  const email = document.getElementById('briefEmail').value.trim();
+  const btn = document.getElementById('briefBtn');
+  if (!email) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Subscribing...';
+
+  try {
+    const res = await fetch('/api/subscribe-brief', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    const data = await res.json();
+    if (data.ok || res.ok) {
+      document.getElementById('briefSuccess').style.display = '';
+      btn.textContent = 'Subscribed!';
+    } else {
+      btn.textContent = 'Try again';
+      btn.disabled = false;
+    }
+  } catch (e) {
+    btn.textContent = 'Try again';
+    btn.disabled = false;
+  }
+}
+
+// ── HELPERS ──
+function formatNum(n) {
+  n = parseFloat(n) || 0;
+  if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+  return n.toFixed(0);
+}
+
+function esc(s) {
+  var d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+</script>
+</body>
+</html>
