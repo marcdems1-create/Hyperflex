@@ -25453,7 +25453,7 @@ setTimeout(() => {
 setInterval(() => {
   try {
     const now = Date.now();
-    const staleMs = 20 * 60 * 1000; // 20 min threshold
+    const staleMs = 10 * 60 * 1000; // 10 min threshold (health check flags at 15 min, so trigger well before)
 
     // Check whale cache
     if (_whaleWatchCache && _whaleWatchCache.ts && (now - _whaleWatchCache.ts > staleMs)) {
