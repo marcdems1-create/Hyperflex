@@ -222,15 +222,8 @@ a:hover { text-decoration: underline; }
 <script src="/nav.js"></script>
 
 <header class="hero">
-  <h1>Prediction <span>Accuracy</span></h1>
-  <p class="hero-sub">Every signal. Every outcome. Tracked, graded, and published. No hiding — we show our real hit rate.</p>
-  <div id="seed-notice" class="seed-notice" style="display:none">
-    Live accuracy from graded AI predictions. Every AI Brief call, Crystal Ball prediction, and signal is tracked and scored.
-  </div>
-  <div style="margin-top:20px;padding:16px 28px;border:2px solid var(--gold);background:rgba(19,19,17,0.85);border-radius:12px;display:inline-block;max-width:640px">
-    <div style="font-family:var(--sans);font-size:16px;font-weight:700;color:var(--gold);margin-bottom:6px">&#x1F9E0; AI Accountability</div>
-    <div style="font-family:var(--mono);font-size:13px;color:var(--text-soft);line-height:1.6">Every AI Brief call is logged, graded when markets resolve, and feeds back into signal weights. The system self-corrects — sources that perform well get ranked higher, sources that miss get downweighted.</div>
-  </div>
+  <h1>Signal <span>Track Record</span></h1>
+  <p class="hero-sub">Every call logged. Every outcome graded. Full transparency — the system learns from its mistakes.</p>
 </header>
 
 <div class="container">
@@ -408,15 +401,25 @@ async function loadStats() {
 
   // Hero stat cards
   const acc = _stats.overall.accuracy;
+  const graded = _stats.overall.total;
+  const pending = (_stats.timeline || []).reduce(function(s,t){return s+t.predictions},0) - graded;
   const accEl = document.getElementById('stat-accuracy');
-  accEl.textContent = acc + '%';
-  accEl.className = 'stat-value ' + accColor(acc);
-  accEl.style.color = '';
-  document.getElementById('stat-accuracy-sub').textContent = _stats.overall.correct + ' correct / ' + _stats.overall.total + ' graded';
+  if (graded < 10) {
+    // Not enough graded data — show "collecting" state
+    accEl.textContent = graded > 0 ? acc + '%' : '--';
+    accEl.style.color = 'var(--gold)';
+    document.getElementById('stat-accuracy-sub').textContent = graded + ' graded' + (pending > 0 ? ' · ' + pending + ' pending' : '') + ' — early data';
+  } else {
+    accEl.textContent = acc + '%';
+    accEl.className = 'stat-value ' + accColor(acc);
+    accEl.style.color = '';
+    document.getElementById('stat-accuracy-sub').textContent = _stats.overall.correct + ' correct / ' + graded + ' graded';
+  }
 
-  document.getElementById('stat-total').textContent = _stats.overall.total.toLocaleString();
+  document.getElementById('stat-total').textContent = (graded + Math.max(0, pending)).toLocaleString();
   document.getElementById('stat-total').style.color = '';
-  document.getElementById('stat-total-sub').textContent = 'Avg confidence: ' + _stats.overall.avg_confidence + '%';
+  var avgConf = _stats.overall.avg_confidence;
+  document.getElementById('stat-total-sub').textContent = avgConf != null && avgConf > 0 ? 'Avg confidence: ' + avgConf + '%' : graded + ' graded · ' + Math.max(0, pending) + ' pending';
 
   document.getElementById('stat-streak').textContent = _stats.streak.current;
   document.getElementById('stat-streak').style.color = '';
@@ -425,11 +428,17 @@ async function loadStats() {
 
   const pnl = _stats.simulated_pnl || 0;
   const pnlEl = document.getElementById('stat-pnl');
-  pnlEl.textContent = (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toLocaleString();
-  pnlEl.className = 'stat-value ' + (pnl >= 0 ? 'green' : 'red');
-  pnlEl.style.color = '';
+  if (graded < 10) {
+    pnlEl.textContent = 'Early';
+    pnlEl.style.color = 'var(--muted)';
+    document.getElementById('stat-pnl').nextElementSibling.nextElementSibling.textContent = 'Need more graded calls';
+  } else {
+    pnlEl.textContent = (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toLocaleString();
+    pnlEl.className = 'stat-value ' + (pnl >= 0 ? 'green' : 'red');
+    pnlEl.style.color = '';
+  }
 
-  document.getElementById('cta-accuracy').textContent = acc + '%';
+  try { document.getElementById('cta-accuracy').textContent = acc + '%'; } catch(e) {}
 
   // Charts
   drawAccuracyChart('accuracyChart', _stats.timeline || []);
@@ -604,7 +613,8 @@ function drawAccuracyChart(canvasId, timeline) {
 // ── HORIZONTAL BARS (by signal type) ──
 function renderBars(bySource) {
   const container = document.getElementById('bars-container');
-  const entries = Object.entries(bySource).sort((a, b) => b[1].accuracy - a[1].accuracy);
+  const testSources = new Set(['test', 'debug_test', 'debug_test_2', 'debug3', 'schema_test']);
+  const entries = Object.entries(bySource).filter(function(e) { return !testSources.has(e[0]); }).sort((a, b) => b[1].accuracy - a[1].accuracy);
   if (entries.length === 0) {
     container.innerHTML = '<div style="text-align:center;padding:24px;color:var(--muted);font-family:var(--mono);font-size:12px;">No signal data yet</div>';
     return;

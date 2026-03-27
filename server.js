@@ -24617,6 +24617,10 @@ app.get('/api/accuracy/stats', async (req, res) => {
       console.warn('[accuracy/stats] table may not exist yet:', e.message);
     }
 
+    // Filter out test/debug entries
+    const testSources = new Set(['test', 'debug_test', 'debug_test_2', 'debug3', 'schema_test']);
+    rows = (rows || []).filter(r => !testSources.has(r.source));
+
     // If empty, return zeros — no fake data
     if (!rows || rows.length === 0) {
       const empty = { overall: { total: 0, correct: 0, incorrect: 0, accuracy: 0, avg_confidence: 0 }, by_source: {}, by_confidence: {}, recent_30d: { total: 0, correct: 0, accuracy: 0 }, streak: { current: 0, best: 0 }, timeline: [], simulated_pnl: 0, updated_at: new Date().toISOString(), note: 'No predictions tracked yet. Crystal Ball predictions will appear here as they are generated and graded.' };
