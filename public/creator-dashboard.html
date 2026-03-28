@@ -5193,40 +5193,68 @@ body.nav-open .sidebar-backdrop {
       <!-- ═══════════════════════════════════ QUICK TRADE TAB ════════════════════════════ -->
       <div id="tab-quicktrade" style="display:none">
         <div class="section">
-          <div style="max-width:900px">
+          <div style="max-width:1000px">
 
-            <!-- 1. Top Crystal Ball Pick -->
-            <div id="qtCrystalBall" style="margin-bottom:28px">
-              <div style="font-family:var(--mono);font-size:10px;color:var(--gold);text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px">Top Crystal Ball Pick</div>
-              <div id="qtCrystalBallCard" style="background:linear-gradient(135deg,#1a1916 0%,#0f0e0c 100%);border:2px solid rgba(201,146,13,0.4);border-radius:16px;padding:28px 24px;position:relative;overflow:hidden">
-                <div style="position:absolute;top:0;right:0;width:120px;height:120px;background:radial-gradient(circle at top right,rgba(201,146,13,0.08) 0%,transparent 70%)"></div>
-                <div style="text-align:center;padding:32px;color:var(--dim);font-size:13px">Loading crystal ball...</div>
+            <!-- Search + Category Pills -->
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap">
+              <div style="position:relative;flex:1;min-width:200px">
+                <input type="text" id="qtSearchInput" placeholder="Search any market..." oninput="onQuickTradeSearch()" style="width:100%;background:#0f0e0c;border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;padding:10px 14px 10px 36px;outline:none;box-sizing:border-box;transition:border-color .2s" onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='var(--border)'"/>
+                <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:14px;color:var(--dim);pointer-events:none">&#128269;</span>
+              </div>
+              <div id="qtCategoryPills" style="display:flex;gap:6px;flex-wrap:wrap">
+                <button onclick="qtFilterCat('all',this)" class="qt-pill active" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:6px 14px;border-radius:20px;border:1px solid var(--gold);background:var(--gold);color:var(--bg);cursor:pointer;transition:all .15s">All</button>
+                <button onclick="qtFilterCat('sports',this)" class="qt-pill" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--dim);cursor:pointer;transition:all .15s">Sports</button>
+                <button onclick="qtFilterCat('crypto',this)" class="qt-pill" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--dim);cursor:pointer;transition:all .15s">Crypto</button>
+                <button onclick="qtFilterCat('politics',this)" class="qt-pill" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--dim);cursor:pointer;transition:all .15s">Politics</button>
+                <button onclick="qtFilterCat('entertainment',this)" class="qt-pill" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--dim);cursor:pointer;transition:all .15s">Entertainment</button>
               </div>
             </div>
+            <div id="qtSearchResults" style="display:none;margin-bottom:20px"></div>
 
-            <!-- 2. Quick Search -->
-            <div style="margin-bottom:28px">
-              <div style="font-family:var(--mono);font-size:10px;color:var(--gold);text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px">Quick Search</div>
-              <div style="position:relative;margin-bottom:16px">
-                <input type="text" id="qtSearchInput" placeholder="Search any market..." oninput="onQuickTradeSearch()" style="width:100%;background:#0f0e0c;border:1px solid var(--border);border-radius:12px;color:var(--text);font-family:var(--sans);font-size:14px;padding:14px 18px 14px 44px;outline:none;box-sizing:border-box;transition:border-color .2s" onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='var(--border)'"/>
-                <span style="position:absolute;left:16px;top:50%;transform:translateY(-50%);font-size:16px;color:var(--dim);pointer-events:none">🔍</span>
+            <!-- 2-col layout: Main content + Sidebar -->
+            <div style="display:grid;grid-template-columns:1fr 320px;gap:20px">
+              <div>
+                <!-- AI Top Pick -->
+                <div id="qtCrystalBall" style="margin-bottom:20px">
+                  <div style="font-family:var(--mono);font-size:10px;color:var(--gold);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">AI Top Pick</div>
+                  <div id="qtCrystalBallCard" style="background:#0f0e0c;border:1px solid rgba(201,146,13,0.3);border-radius:10px;padding:18px;position:relative;overflow:hidden">
+                    <div style="text-align:center;padding:20px;color:var(--dim);font-size:13px">Loading...</div>
+                  </div>
+                </div>
+
+                <!-- Hot Markets -->
+                <div id="qtHotMarkets" style="margin-bottom:20px">
+                  <div style="font-family:var(--mono);font-size:10px;color:var(--gold);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">Hot Markets</div>
+                  <div id="qtHotGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                    <div style="text-align:center;padding:20px;color:var(--dim);font-size:13px;grid-column:1/-1">Loading markets...</div>
+                  </div>
+                </div>
+
+                <!-- Expiring Soon -->
+                <div id="qtExpiring" style="margin-bottom:20px">
+                  <div style="font-family:var(--mono);font-size:10px;color:var(--gold);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">Expiring Soon</div>
+                  <div id="qtExpiringCards" style="display:grid;gap:8px">
+                    <div style="text-align:center;padding:20px;color:var(--dim);font-size:13px">Loading...</div>
+                  </div>
+                </div>
               </div>
-              <div id="qtSearchResults" style="display:none"></div>
-            </div>
 
-            <!-- 3. Whale Index Top Picks -->
-            <div id="qtWhaleIndex" style="margin-bottom:28px">
-              <div style="font-family:var(--mono);font-size:10px;color:var(--gold);text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px">Whale Index Top Picks</div>
-              <div id="qtWhaleCards" style="display:grid;gap:10px">
-                <div style="text-align:center;padding:32px;color:var(--dim);font-size:13px">Loading whale picks...</div>
-              </div>
-            </div>
+              <!-- Sidebar -->
+              <div>
+                <!-- Whale Moves -->
+                <div style="margin-bottom:20px">
+                  <div style="font-family:var(--mono);font-size:10px;color:var(--gold);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">Whale Moves</div>
+                  <div id="qtWhaleCards" style="display:grid;gap:8px">
+                    <div style="text-align:center;padding:20px;color:var(--dim);font-size:13px">Loading...</div>
+                  </div>
+                </div>
 
-            <!-- 4. Expiring Soon -->
-            <div id="qtExpiring" style="margin-bottom:28px">
-              <div style="font-family:var(--mono);font-size:10px;color:var(--gold);text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px">Expiring Soon</div>
-              <div id="qtExpiringCards" style="display:grid;gap:10px">
-                <div style="text-align:center;padding:32px;color:var(--dim);font-size:13px">Loading expiring markets...</div>
+                <!-- Fear & Greed mini -->
+                <div style="background:#0f0e0c;border:1px solid var(--border);border-radius:10px;padding:16px;text-align:center">
+                  <div style="font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Fear & Greed</div>
+                  <div id="qtFearGreed" style="font-family:var(--mono);font-size:32px;font-weight:900;color:var(--gold)">--</div>
+                  <div id="qtFearGreedLabel" style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:4px">Loading...</div>
+                </div>
               </div>
             </div>
 
@@ -12844,16 +12872,85 @@ function qtTradeBtn(url, label, color) {
   // Only allow real Polymarket URLs with a slug path, not bare domain
   if (!url.startsWith('https://polymarket.com')) return '';
   if (url === 'https://polymarket.com' || url === 'https://polymarket.com/') return '';
-  const btnLabel = 'View on Polymarket \u2192';
+  const btnLabel = label || 'Trade \u2192';
   const bg = color || '#c9920d';
   const fg = (bg === 'var(--gold)' || color === '#c9920d') ? '#141412' : '#fff';
-  return `<button onclick="window.open('${url.replace(/'/g,"\\'")}','_blank')" style="background:${bg};color:${fg};border:none;border-radius:8px;padding:10px 18px;font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer;min-height:44px;white-space:nowrap">${btnLabel}</button>`;
+  return `<button onclick="window.open('${url.replace(/'/g,"\\'")}','_blank')" style="background:${bg};color:${fg};border:none;border-radius:6px;padding:7px 14px;font-family:var(--mono);font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap">${btnLabel}</button>`;
 }
 
+var _qtCategory = 'all';
+var _qtScreenerData = [];
+function qtFilterCat(cat, btn) {
+  _qtCategory = cat;
+  document.querySelectorAll('.qt-pill').forEach(function(p) {
+    p.style.background = 'transparent'; p.style.color = 'var(--dim)'; p.style.borderColor = 'var(--border)';
+  });
+  if (btn) { btn.style.background = 'var(--gold)'; btn.style.color = 'var(--bg)'; btn.style.borderColor = 'var(--gold)'; }
+  renderHotMarkets();
+}
+function renderHotMarkets() {
+  var grid = document.getElementById('qtHotGrid');
+  if (!grid || !_qtScreenerData.length) return;
+  var filtered = _qtCategory === 'all' ? _qtScreenerData : _qtScreenerData.filter(function(m) { return (m.category || '').toLowerCase() === _qtCategory; });
+  var top = filtered.slice(0, 8);
+  if (!top.length) { grid.innerHTML = '<div style="text-align:center;padding:20px;color:var(--dim);font-size:13px;grid-column:1/-1">No markets in this category.</div>'; return; }
+  grid.innerHTML = top.map(function(m) {
+    var price = Math.round((m.yes_price || 0.5) * 100);
+    var url = m.url || 'https://polymarket.com';
+    var cat = (m.category || 'other').toUpperCase();
+    var vol = m.volume >= 1e6 ? '$' + (m.volume / 1e6).toFixed(1) + 'M' : m.volume >= 1e3 ? '$' + Math.round(m.volume / 1e3) + 'K' : '$' + (m.volume || 0);
+    var whales = m.whale_count || 0;
+    var entry = price < 50 ? price : (100 - price);
+    var profit = 100 - entry;
+    var roi = entry > 0 && entry < 95 ? Math.round((profit / entry) * 100) : 0;
+    var side = price < 50 ? 'YES' : 'NO';
+    var sideColor = side === 'YES' ? '#22c55e' : '#ef4444';
+    return '<div style="background:#0f0e0c;border:1px solid var(--border);border-radius:10px;padding:14px;transition:border-color .15s;cursor:pointer" onclick="window.open(\'' + url.replace(/'/g,"\\'") + '\',\'_blank\')" onmouseenter="this.style.borderColor=\'var(--gold)\'" onmouseleave="this.style.borderColor=\'var(--border)\'">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
+        '<span style="font-family:var(--mono);font-size:8px;padding:2px 6px;border-radius:3px;background:rgba(201,146,13,.1);color:var(--gold);font-weight:700">' + escHtmlDash(cat) + '</span>' +
+        '<span style="font-family:var(--mono);font-size:18px;font-weight:900;color:' + (price >= 50 ? '#22c55e' : 'var(--text)') + '">' + price + '%</span>' +
+      '</div>' +
+      '<div style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;font-size:13px;font-weight:600;color:#fff;line-height:1.35;margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">' + escHtmlDash(m.question || '') + '</div>' +
+      '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">' +
+        '<span style="font-family:var(--mono);font-size:9px;color:var(--dim)">' + vol + ' vol</span>' +
+        (whales ? '<span style="font-family:var(--mono);font-size:9px;color:var(--gold)">' + whales + ' whales</span>' : '') +
+      '</div>' +
+      (roi > 10 ? '<div style="display:flex;gap:6px;align-items:center;padding:5px 8px;background:rgba(34,197,94,.06);border-radius:5px">' +
+        '<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:' + sideColor + '">' + side + '</span>' +
+        '<span style="font-family:var(--mono);font-size:10px;color:var(--text)">' + entry + '¢ → +' + profit + '¢</span>' +
+        '<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:#22c55e">+' + roi + '%</span>' +
+      '</div>' : '') +
+    '</div>';
+  }).join('');
+}
+async function loadHotMarkets() {
+  try {
+    var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+    var r = await fetch('/api/screener', { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) throw new Error('Failed');
+    var d = await r.json();
+    _qtScreenerData = (Array.isArray(d) ? d : (d.markets || d.data || [])).filter(function(m) { return !m.resolved && m.yes_price > 0.05 && m.yes_price < 0.95; }).sort(function(a,b) { return (b.volume||0) - (a.volume||0); }).slice(0, 40);
+    renderHotMarkets();
+  } catch(e) { var g = document.getElementById('qtHotGrid'); if (g) g.innerHTML = '<div style="text-align:center;padding:20px;color:var(--dim);font-size:13px;grid-column:1/-1">Markets unavailable.</div>'; }
+}
+async function loadQtFearGreed() {
+  try {
+    var r = await fetch('/api/fear-greed');
+    if (!r.ok) return;
+    var d = await r.json();
+    var score = d.score || d.value || 50;
+    var label = score >= 75 ? 'Extreme Greed' : score >= 60 ? 'Greed' : score >= 40 ? 'Neutral' : score >= 25 ? 'Fear' : 'Extreme Fear';
+    var color = score >= 75 ? '#22c55e' : score >= 60 ? '#86efac' : score >= 40 ? 'var(--gold)' : score >= 25 ? '#f59e0b' : '#ef4444';
+    var el = document.getElementById('qtFearGreed'); if (el) { el.textContent = score; el.style.color = color; }
+    var lbl = document.getElementById('qtFearGreedLabel'); if (lbl) lbl.textContent = label;
+  } catch(e) {}
+}
 async function loadQuickTrade() {
   loadCrystalBallPick();
   loadWhaleIndexPicks();
   loadExpiringMarkets();
+  loadHotMarkets();
+  loadQtFearGreed();
 }
 
 async function loadCrystalBallPick() {
