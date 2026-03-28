@@ -12156,9 +12156,28 @@ async function loadPerfPlatformAnalytics() {
     const userId = localStorage.getItem('hf_user_id');
     if (!userId || !token) return;
     const r = await fetch('/api/predictors/' + userId + '/analytics', { headers: { Authorization: 'Bearer ' + token } });
-    if (!r.ok) { if (empty) empty.style.display = 'block'; return; }
-    const data = await r.json();
-    if (!data.platforms || data.platforms.length === 0) { if (empty) empty.style.display = 'block'; return; }
+    let data = null;
+    if (r.ok) data = await r.json();
+    // Fallback: compute analytics from local position data if API returns empty
+    if (!data || !data.platforms || data.platforms.length === 0) {
+      const positions = getAllPositionsFlat();
+      if (positions.length > 0) {
+        const byPlatform = {};
+        positions.forEach(p => {
+          const plat = p._platform || p.platform || 'polymarket';
+          if (!byPlatform[plat]) byPlatform[plat] = { platform: plat, wins: 0, losses: 0, pnl: 0, total: 0, resolved: 0 };
+          byPlatform[plat].total++;
+          if (p._isResolved) {
+            byPlatform[plat].resolved++;
+            if (p._won) byPlatform[plat].wins++;
+            else byPlatform[plat].losses++;
+          }
+          if (p.pnl != null) byPlatform[plat].pnl += p.pnl;
+        });
+        data = { platforms: Object.values(byPlatform).map(p => ({ ...p, win_rate: p.resolved > 0 ? Math.round(p.wins / p.resolved * 100) : 0 })) };
+      }
+    }
+    if (!data || !data.platforms || data.platforms.length === 0) { if (empty) empty.style.display = 'block'; return; }
     if (empty) empty.style.display = 'none';
     const platformColors = { polymarket: '#a78bfa', kalshi: '#fbbf24', manifold: '#34d399', hfx: '#c9920d' };
     grid.innerHTML = data.platforms.map(p => {
@@ -13174,20 +13193,19 @@ function getAllPositionsFlat() {
 function computePortfolioStats(positions) {
   let totalValue = 0, totalPnl = 0, totalCost = 0, openCount = 0, resolvedCount = 0, wins = 0;
   positions.forEach(p => {
-    const shares = p.shares || 0;
-    const price = p.current_price || p.curPrice || p.probability || 0;
-    totalValue += shares * price;
+    // Use cash_value (actual dollar value) if available, fall back to shares × price
+    const value = p.cash_value || p.currentValue || ((p.shares || 0) * (p.current_price || p.curPrice || 0));
+    totalValue += value;
     if (p.pnl != null) totalPnl += p.pnl;
+    // Use cost_basis (actual dollars spent) if available
+    const cost = p.cost_basis || p.initialValue || 0;
     if (p._isResolved) {
       resolvedCount++;
       if (p._won) wins++;
-      // Estimate cost for resolved
-      if (p.cost_basis != null) totalCost += p.cost_basis;
-      else if (p.pnl != null) totalCost += Math.max(0, (shares * price) - p.pnl);
-      else totalCost += shares * 0.5; // fallback
+      totalCost += cost > 0 ? cost : Math.max(0, value - (p.pnl || 0));
     } else {
       openCount++;
-      totalCost += shares * 0.5; // rough cost estimate for open
+      totalCost += cost > 0 ? cost : value; // use actual cost, not shares × 0.5
     }
   });
   const winRate = resolvedCount > 0 ? Math.round((wins / resolvedCount) * 100) : 0;
