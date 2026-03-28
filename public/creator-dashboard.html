@@ -12091,7 +12091,8 @@ function shareCommunityPage(anchorEl) {
 let _portfolioLoaded = false;
 let _kalshiConnected = false;
 let _manifoldUsername = '';
-let _polyWalletAddress = '';
+// Persist wallet address in localStorage as backup
+let _polyWalletAddress = localStorage.getItem('hf_poly_wallet') || '';
 
 async function loadPortfolio() {
   if (_portfolioLoaded) return;
@@ -12103,10 +12104,13 @@ async function loadPortfolio() {
     const data = await r.json();
     _kalshiConnected = data.kalshi_api_key_set;
     _manifoldUsername = data.manifold_username || '';
-    // Only update _polyWalletAddress from DB if not already set in-session
+    // Load wallet from DB, fallback to localStorage
     if (!_polyWalletAddress) {
-      _polyWalletAddress = data.polymarket_address || '';
+      _polyWalletAddress = data.polymarket_address || localStorage.getItem('hf_poly_wallet') || '';
+    } else if (data.polymarket_address && data.polymarket_address !== _polyWalletAddress) {
+      _polyWalletAddress = data.polymarket_address; // DB takes precedence
     }
+    if (_polyWalletAddress) localStorage.setItem('hf_poly_wallet', _polyWalletAddress);
     // Show welcome state if nothing connected, otherwise show main
     const hasAny = _kalshiConnected || _manifoldUsername || _polyWalletAddress;
     const welcomeEl = document.getElementById('portfolioWelcome');
@@ -12772,6 +12776,7 @@ async function connectPolymarket() {
     const d = await r.json();
     if (!r.ok) { showToast(d.error || 'Failed to connect', 'error'); btn.disabled = false; btn.textContent = 'Connect Polymarket →'; return; }
     _polyWalletAddress = address;
+    localStorage.setItem('hf_poly_wallet', address);
     renderPolymarketConnectState();
     showToast('Polymarket connected!', 'success');
     loadPolymarketPositions(false);
@@ -12791,6 +12796,7 @@ async function disconnectPolymarket() {
       body: JSON.stringify({ polymarket_address: '' })
     });
     _polyWalletAddress = '';
+    localStorage.removeItem('hf_poly_wallet');
     _portfolioLoaded = false;
     renderPolymarketConnectState();
     showToast('Polymarket disconnected', 'success');
