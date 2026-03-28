@@ -23587,45 +23587,77 @@ async function tweetExpiryAlert() { /* DISABLED */ }
 async function tweetWinRecap() { /* DISABLED */ }
 
 async function uploadMediaToX(imageBuffer) {
-  // Try v1.1 first (still works for some accounts), fall back to v2
-  const endpoints = [
-    'https://upload.twitter.com/1.1/media/upload.json',
-    'https://api.x.com/2/media/upload'
-  ];
-  const mediaData = imageBuffer.toString('base64');
+  const errors = [];
 
-  for (const uploadUrl of endpoints) {
-    const auth = _xOAuthSign('POST', uploadUrl, {});
-    if (!auth) throw new Error('X API keys not configured for media upload');
-
-    const formBody = `media_data=${encodeURIComponent(mediaData)}`;
-    try {
-      const res = await fetch(uploadUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': auth,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: formBody,
-        signal: AbortSignal.timeout(15000)
-      });
-
-      if (!res.ok) {
-        const errText = await res.text().catch(() => '');
-        console.warn(`[tweet] Media upload to ${uploadUrl} failed ${res.status}: ${errText.substring(0, 200)}`);
-        continue; // try next endpoint
-      }
-
+  // Attempt 1: v1.1 with application/x-www-form-urlencoded + media_data (base64)
+  try {
+    const url1 = 'https://upload.twitter.com/1.1/media/upload.json';
+    const auth1 = _xOAuthSign('POST', url1, {});
+    if (!auth1) throw new Error('X API keys not configured');
+    const mediaData = imageBuffer.toString('base64');
+    const res = await fetch(url1, {
+      method: 'POST',
+      headers: { 'Authorization': auth1, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `media_data=${encodeURIComponent(mediaData)}`,
+      signal: AbortSignal.timeout(20000)
+    });
+    if (res.ok) {
       const data = await res.json();
-      const mediaId = data.media_id_string || data.id;
-      console.log(`[tweet] Media uploaded via ${uploadUrl}: ${mediaId}`);
-      return mediaId;
-    } catch (e) {
-      console.warn(`[tweet] Media upload to ${uploadUrl} error: ${e.message}`);
-      continue;
+      console.log('[tweet] Media uploaded via v1.1:', data.media_id_string);
+      return data.media_id_string;
     }
-  }
-  throw new Error('All media upload endpoints failed');
+    const err1 = await res.text().catch(() => '');
+    errors.push(`v1.1: ${res.status} ${err1.substring(0, 150)}`);
+  } catch (e) { errors.push(`v1.1: ${e.message}`); }
+
+  // Attempt 2: v1.1 with multipart/form-data (binary media field)
+  try {
+    const url2 = 'https://upload.twitter.com/1.1/media/upload.json';
+    const auth2 = _xOAuthSign('POST', url2, {});
+    const { FormData, Blob } = await import('node:buffer').then(() => ({ FormData: globalThis.FormData, Blob: globalThis.Blob }));
+    if (FormData && Blob) {
+      const form = new FormData();
+      form.append('media', new Blob([imageBuffer], { type: 'image/png' }), 'card.png');
+      const res = await fetch(url2, {
+        method: 'POST',
+        headers: { 'Authorization': auth2 },
+        body: form,
+        signal: AbortSignal.timeout(20000)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        console.log('[tweet] Media uploaded via v1.1 multipart:', data.media_id_string);
+        return data.media_id_string;
+      }
+      const err2 = await res.text().catch(() => '');
+      errors.push(`v1.1-multipart: ${res.status} ${err2.substring(0, 150)}`);
+    } else {
+      errors.push('v1.1-multipart: FormData not available');
+    }
+  } catch (e) { errors.push(`v1.1-multipart: ${e.message}`); }
+
+  // Attempt 3: v2 media upload
+  try {
+    const url3 = 'https://api.x.com/2/media/upload';
+    const auth3 = _xOAuthSign('POST', url3, {});
+    const mediaData = imageBuffer.toString('base64');
+    const res = await fetch(url3, {
+      method: 'POST',
+      headers: { 'Authorization': auth3, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `media_data=${encodeURIComponent(mediaData)}`,
+      signal: AbortSignal.timeout(20000)
+    });
+    if (res.ok) {
+      const data = await res.json();
+      console.log('[tweet] Media uploaded via v2:', data.id || data.media_id_string);
+      return data.id || data.media_id_string;
+    }
+    const err3 = await res.text().catch(() => '');
+    errors.push(`v2: ${res.status} ${err3.substring(0, 150)}`);
+  } catch (e) { errors.push(`v2: ${e.message}`); }
+
+  console.error('[tweet] All media upload attempts failed:', errors.join(' | '));
+  throw new Error('Media upload failed: ' + errors.join(' | '));
 }
 
 async function postTweet(text, mediaId) {
