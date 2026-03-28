@@ -17815,6 +17815,60 @@ app.get('/api/whale-scores', async (req, res) => {
   }
 });
 
+// ══════════════════════════════════════════════════════════
+// ELITE WHALES — Top 0.5% most profitable, grade A+ and A only
+// ══════════════════════════════════════════════════════════
+const _gradeMultiplier = { 'A+': 1.0, 'A': 0.9, 'B': 0.75, 'C': 0.55, 'D': 0.35 };
+
+function getEliteWhales() {
+  const whaleData = _whaleWatchCache && _whaleWatchCache.data ? _whaleWatchCache.data : null;
+  if (!whaleData || !whaleData.whales) return { whales: [], scores: new Map() };
+
+  // Get or compute alpha scores
+  let scores = _whaleAlphaCache && (Date.now() - _whaleAlphaCache.ts < 30 * 60 * 1000)
+    ? _whaleAlphaCache.scores : computeWhaleAlphaScores();
+  if (!(_whaleAlphaCache && (Date.now() - _whaleAlphaCache.ts < 30 * 60 * 1000))) {
+    _whaleAlphaCache = { ts: Date.now(), scores };
+  }
+
+  // Filter to grade A+ and A only (top ~10% of tracked whales = top 0.5% of all traders)
+  const eliteWallets = new Set();
+  for (const [wallet, s] of scores) {
+    if (s.grade === 'A+' || s.grade === 'A') eliteWallets.add(wallet);
+  }
+
+  const elitePositions = whaleData.whales.filter(w => eliteWallets.has(w.proxyWallet));
+  return { whales: elitePositions, scores, eliteWallets };
+}
+
+// Compute Alpha Score (0-10) for a market based on elite whale consensus
+function computeMarketAlphaScore(market, whaleIndex, eliteScores) {
+  if (!whaleIndex || !market) return 0;
+  const idx = whaleIndex.find(w => w.market === market.question || w.market === market.market || w.market_id === market.market_id);
+  if (!idx || !idx.whale_count || idx.whale_count < 2) return 0;
+
+  const marketPrice = market.yes_price || market.price || 0.5;
+  const whaleConsensus = idx.consensus_side === 'YES' ? (idx.consensus_pct / 100) : (1 - idx.consensus_pct / 100);
+  const divergence = Math.abs(whaleConsensus - marketPrice) * 100; // 0-100 pts
+
+  // Average alpha grade of whales in this market
+  const wallets = idx.wallets || [];
+  let gradeSum = 0, gradeCount = 0;
+  for (const w of wallets) {
+    const s = eliteScores.get(w);
+    if (s) { gradeSum += (_gradeMultiplier[s.grade] || 0.5); gradeCount++; }
+  }
+  const avgGrade = gradeCount > 0 ? gradeSum / gradeCount : 0.5;
+
+  // Capital weight: log10($100K)=5, log10($1M)=6, normalized 0-1.2
+  const totalCapital = idx.total_capital || 10000;
+  const capitalWeight = Math.min(1.2, Math.log10(Math.max(1, totalCapital)) / 5.5);
+
+  // Alpha Score = divergence scaled by whale quality and capital
+  const raw = (divergence / 10) * avgGrade * capitalWeight;
+  return Math.round(Math.min(10, Math.max(0, raw)) * 10) / 10; // 0.0 - 10.0
+}
+
 app.get('/api/whale-watch', async (req, res) => {
   try {
     // Check cache (10 minute TTL)
@@ -18207,6 +18261,7 @@ app.get('/api/screener', async (req, res) => {
         url: marketUrl,
         slug: eventSlug,
         edge_score: edgeScore,
+        alpha_score: 0, // populated after whale index is ready
         trade,
         ai_hook: aiHook || null
       });
@@ -18230,6 +18285,20 @@ app.get('/api/screener', async (req, res) => {
         }
       }
     }
+
+    // Compute Alpha Score for each market
+    try {
+      const eliteData = getEliteWhales();
+      const whaleIdx = (_whaleIndexCache && _whaleIndexCache.data) ? _whaleIndexCache.data.picks || [] : [];
+      const allWhales = (_whaleWatchCache && _whaleWatchCache.data) ? _whaleWatchCache.data.whales || [] : [];
+      for (const m of markets) {
+        const idxEntry = whaleIdx.find(w => w.market === m.question);
+        if (idxEntry && !idxEntry.wallets) {
+          idxEntry.wallets = [...new Set(allWhales.filter(w => w.market === m.question).map(w => w.proxyWallet).filter(Boolean))];
+        }
+        m.alpha_score = computeMarketAlphaScore(m, whaleIdx, eliteData.scores);
+      }
+    } catch (e) { console.warn('[screener] alpha score computation:', e.message); }
 
     _screenerCache = { ts: Date.now(), data: markets };
     _healthTimestamps.lastScreenerFetch = new Date().toISOString();
@@ -22016,6 +22085,21 @@ app.get('/api/signals', async (req, res) => {
 
     const finalSignals = diversified.slice(0, 20);
 
+    // Enrich every signal with Alpha Score (0-10)
+    const eliteData = getEliteWhales();
+    const whaleIdx = (_whaleIndexCache && _whaleIndexCache.data) ? _whaleIndexCache.data.picks || [] : [];
+    for (const sig of finalSignals) {
+      const mkt = { question: sig.market, market: sig.market, yes_price: sig.price || 0.5 };
+      // Add wallets to whale index entries for alpha score computation
+      const idxEntry = whaleIdx.find(w => w.market === sig.market);
+      if (idxEntry && !idxEntry.wallets) {
+        // Collect wallets from raw positions for this market
+        const allWhales = (_whaleWatchCache && _whaleWatchCache.data) ? _whaleWatchCache.data.whales || [] : [];
+        idxEntry.wallets = [...new Set(allWhales.filter(w => w.market === sig.market).map(w => w.proxyWallet).filter(Boolean))];
+      }
+      sig.alpha_score = computeMarketAlphaScore(mkt, whaleIdx, eliteData.scores);
+    }
+
     // Intelligence feedback loop: log every signal for outcome tracking
     for (const sig of finalSignals) { logSignalOutcome(sig); }
 
@@ -24246,6 +24330,37 @@ app.get('/api/accuracy/stats', async (req, res) => {
   } catch (err) {
     console.error('[accuracy/stats]', err.message);
     res.status(500).json({ error: 'Failed to load accuracy stats' });
+  }
+});
+
+// GET /api/accuracy/elite-stats — accuracy of elite whale-backed predictions only
+let _eliteAccuracyCache = null;
+app.get('/api/accuracy/elite-stats', async (req, res) => {
+  try {
+    if (_eliteAccuracyCache && (Date.now() - _eliteAccuracyCache.ts < 10 * 60 * 1000)) {
+      return res.json(_eliteAccuracyCache.data);
+    }
+    let rows = [];
+    try {
+      if (pool) {
+        rows = await dbQuery(`SELECT * FROM prediction_log WHERE resolved = true AND source IN ('whale_consensus','crystal_ball','divergence') AND detected_at > NOW() - INTERVAL '30 days' ORDER BY detected_at DESC`);
+      } else {
+        const cutoff = new Date(Date.now() - 30 * 86400000).toISOString();
+        const { data } = await supabase.from('prediction_log').select('*').eq('resolved', true).in('source', ['whale_consensus','crystal_ball','divergence']).gte('detected_at', cutoff).order('detected_at', { ascending: false });
+        rows = data || [];
+      }
+    } catch (e) { rows = []; }
+
+    const total = rows.length;
+    const correct = rows.filter(r => r.outcome === 'correct').length;
+    const accuracy = total > 0 ? Math.round(correct / total * 100) : null;
+    const avgPnl = total > 0 ? Math.round(rows.reduce((s, r) => s + (parseFloat(r.pnl_if_followed) || 0), 0)) : 0;
+
+    const result = { total, correct, accuracy, avg_pnl: avgPnl, period: '30d', updated_at: new Date().toISOString() };
+    _eliteAccuracyCache = { ts: Date.now(), data: result };
+    res.json(result);
+  } catch (e) {
+    res.json({ total: 0, correct: 0, accuracy: null, period: '30d' });
   }
 });
 

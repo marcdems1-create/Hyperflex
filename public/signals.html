@@ -296,18 +296,45 @@ function renderSignals() {
       meta.push('<span style="color:' + (s.change_pct > 0 ? 'var(--green)' : 'var(--red)') + '">' + chg + Math.round(s.change_pct) + '%</span>');
     }
 
-    return '<div class="s-row">' +
+    // Alpha Score badge (0-10)
+    var alpha = s.alpha_score || 0;
+    var alphaColor = alpha >= 7 ? 'var(--green)' : alpha >= 4 ? 'var(--gold)' : 'var(--dim)';
+    var alphaBadge = alpha > 0 ? '<div style="display:flex;flex-direction:column;align-items:center;min-width:38px"><span style="font-family:var(--mono);font-size:16px;font-weight:900;color:' + alphaColor + '">' + alpha.toFixed(1) + '</span><span style="font-family:var(--mono);font-size:8px;letter-spacing:.5px;color:var(--dim);text-transform:uppercase">Alpha</span></div>' : '';
+
+    // Trade context strip: Pay → Win → ROI
+    var tradeCtx = '';
+    if (s.price && s.price > 0.01 && s.price < 0.99) {
+      var pay = Math.round(s.price * 100);
+      var win = 100 - pay;
+      var roi = Math.round((win / pay) * 100);
+      tradeCtx = '<div style="display:flex;gap:8px;align-items:center;margin-top:4px;padding:4px 8px;background:rgba(201,146,13,.06);border-radius:4px;font-family:var(--mono);font-size:10px;color:var(--dim)">' +
+        '<span>Pay <strong style="color:var(--text)">' + pay + '\u00A2</strong></span>' +
+        '<span style="color:var(--muted)">\u2192</span>' +
+        '<span>Win <strong style="color:var(--green)">+' + win + '\u00A2</strong></span>' +
+        '<span style="color:var(--muted)">\u2192</span>' +
+        '<span>ROI <strong style="color:var(--green)">+' + roi + '%</strong></span>' +
+      '</div>';
+    }
+
+    // Signal aging — dim if stale (>4h)
+    var ageMs = s.detected_at ? Date.now() - new Date(s.detected_at).getTime() : 0;
+    var isStale = ageMs > 4 * 60 * 60 * 1000;
+
+    return '<div class="s-row" style="' + (isStale ? 'opacity:.55;' : '') + '">' +
       '<div class="s-row-side ' + sideClass + '"></div>' +
       '<div class="s-row-body">' +
         '<div class="s-row-top">' +
           '<span class="s-row-type type-' + s.type + '">' + (typeLabels[s.type]||s.type) + '</span>' +
           '<span class="s-row-conf conf-' + s.confidence + '">' + s.confidence + '</span>' +
+          (isStale ? '<span style="font-family:var(--mono);font-size:8px;color:var(--red);letter-spacing:.5px">STALE</span>' : '') +
         '</div>' +
         '<div class="s-row-market"><a href="' + escH(url) + '" target="_blank" rel="noopener">' + (flag ? flag + ' ' : '') + escH(s.market) + '</a></div>' +
         '<div class="s-row-action" style="color:' + sideColor + '">Bet: ' + escH(plain) + '</div>' +
+        tradeCtx +
         (meta.length ? '<div class="s-row-meta">' + meta.join('<span style="color:var(--muted)">\u00B7</span>') + '</div>' : '') +
       '</div>' +
-      '<div class="s-row-right">' +
+      '<div class="s-row-right" style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">' +
+        alphaBadge +
         '<span class="s-row-time">' + timeAgo(s.detected_at) + '</span>' +
         '<a href="' + escH(url) + '" target="_blank" rel="noopener" class="s-row-link">Trade &rarr;</a>' +
       '</div>' +
