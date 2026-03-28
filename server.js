@@ -23810,11 +23810,11 @@ app.post('/api/test-media-upload', async (req, res) => {
     const imgBuf = await sharp({ create: { width: 1200, height: 628, channels: 4, background: { r: 20, g: 20, b: 18, alpha: 1 } } })
       .composite([
         { input: borderSvg, top: 0, left: 0 },
-        { input: { text: { text: 'HYPERFLEX MARKET INTELLIGENCE', dpi: 144, rgba: true, width: 900, height: 40 } }, top: 70, left: 80 },
-        { input: { text: { text: 'Test Card — Media Upload Working', dpi: 200, rgba: true, width: 1040, height: 80 } }, top: 150, left: 80 },
-        { input: { text: { text: '67% YES', dpi: 350, rgba: true, width: 500, height: 100 } }, top: 300, left: 80 },
-        { input: { text: { text: '33% NO', dpi: 350, rgba: true, width: 500, height: 100 } }, top: 300, left: 500 },
-        { input: { text: { text: 'hyperflex.network', dpi: 100, rgba: true, width: 400, height: 30 } }, top: 530, left: 80 },
+        { input: { text: { text: 'HYPERFLEX MARKET INTELLIGENCE', dpi: 144, rgba: true } }, top: 70, left: 80 },
+        { input: { text: { text: 'Test Card — Media Upload Working', dpi: 200, rgba: true, width: 1040 } }, top: 150, left: 80 },
+        { input: { text: { text: '67% YES', dpi: 350, rgba: true } }, top: 300, left: 80 },
+        { input: { text: { text: '33% NO', dpi: 350, rgba: true } }, top: 300, left: 500 },
+        { input: { text: { text: 'hyperflex.network', dpi: 100, rgba: true } }, top: 530, left: 80 },
       ]).png().toBuffer();
     const mediaId = await uploadMediaToX(imgBuf);
     const result = await postTweet('Test tweet with market card image — please ignore, will delete shortly.', mediaId);
@@ -24009,20 +24009,20 @@ async function searchAndDraftReplies() {
             const borderSvg = Buffer.from(`<svg width="1200" height="628"><rect x="40" y="40" width="1120" height="548" rx="24" fill="#1a1a17" stroke="#c9920d" stroke-width="2" stroke-opacity="0.3"/></svg>`);
             const composites = [
               { input: borderSvg, top: 0, left: 0 },
-              { input: { text: { text: 'HYPERFLEX MARKET INTELLIGENCE', font: 'sans-serif', fontfile: '', dpi: 144, rgba: true, width: 900, height: 40 } }, top: 70, left: 80 },
-              { input: { text: { text: truncName, font: 'sans-serif', fontfile: '', dpi: 200, rgba: true, width: 1040, height: 120 } }, top: 130, left: 80 },
+              { input: { text: { text: 'HYPERFLEX MARKET INTELLIGENCE', font: 'sans-serif', fontfile: '', dpi: 144, rgba: true } }, top: 70, left: 80 },
+              { input: { text: { text: truncName, font: 'sans-serif', fontfile: '', dpi: 200, rgba: true, width: 1040 } }, top: 130, left: 80 },
             ];
             if (yesPct) {
-              composites.push({ input: { text: { text: `${yesPct}% YES`, font: 'sans-serif', fontfile: '', dpi: 350, rgba: true, width: 500, height: 100 } }, top: 300, left: 80 });
+              composites.push({ input: { text: { text: `${yesPct}% YES`, font: 'sans-serif', fontfile: '', dpi: 350, rgba: true } }, top: 300, left: 80 });
             }
             if (noPct) {
-              composites.push({ input: { text: { text: `${noPct}% NO`, font: 'sans-serif', fontfile: '', dpi: 350, rgba: true, width: 500, height: 100 } }, top: 300, left: 500 });
+              composites.push({ input: { text: { text: `${noPct}% NO`, font: 'sans-serif', fontfile: '', dpi: 350, rgba: true } }, top: 300, left: 500 });
             }
             const metaLine = [volMatch, whaleMatch ? `${whaleMatch} whale wallets` : ''].filter(Boolean).join('  ·  ');
             if (metaLine) {
-              composites.push({ input: { text: { text: metaLine, font: 'sans-serif', fontfile: '', dpi: 144, rgba: true, width: 900, height: 40 } }, top: 440, left: 80 });
+              composites.push({ input: { text: { text: metaLine, font: 'sans-serif', fontfile: '', dpi: 144, rgba: true } }, top: 440, left: 80 });
             }
-            composites.push({ input: { text: { text: 'hyperflex.network', font: 'sans-serif', fontfile: '', dpi: 100, rgba: true, width: 400, height: 30 } }, top: 530, left: 80 });
+            composites.push({ input: { text: { text: 'hyperflex.network', font: 'sans-serif', fontfile: '', dpi: 100, rgba: true } }, top: 530, left: 80 });
             const imgBuf = await card.composite(composites).png().toBuffer();
             console.log(`[reply-bot] Image generated: ${imgBuf.length} bytes`);
             mediaId = await uploadMediaToX(imgBuf);
