@@ -23804,18 +23804,8 @@ app.post('/api/test-media-upload', async (req, res) => {
   const adminSecret = req.headers['x-admin-secret'] || req.query.admin;
   if (adminSecret !== process.env.ADMIN_SECRET) return res.status(403).json({ error: 'Unauthorized' });
   try {
-    const sharp = getSharp();
-    if (!sharp) return res.json({ error: 'sharp not available' });
-    const borderSvg = Buffer.from(`<svg width="1200" height="628"><rect x="40" y="40" width="1120" height="548" rx="24" fill="#1a1a17" stroke="#c9920d" stroke-width="2" stroke-opacity="0.3"/></svg>`);
-    const imgBuf = await sharp({ create: { width: 1200, height: 628, channels: 4, background: { r: 20, g: 20, b: 18, alpha: 1 } } })
-      .composite([
-        { input: borderSvg, top: 0, left: 0 },
-        { input: { text: { text: 'HYPERFLEX MARKET INTELLIGENCE', dpi: 144, rgba: true } }, top: 70, left: 80 },
-        { input: { text: { text: 'Test Card — Media Upload Working', dpi: 200, rgba: true, width: 1040 } }, top: 150, left: 80 },
-        { input: { text: { text: '67% YES', dpi: 350, rgba: true } }, top: 300, left: 80 },
-        { input: { text: { text: '33% NO', dpi: 350, rgba: true } }, top: 300, left: 500 },
-        { input: { text: { text: 'hyperflex.network', dpi: 100, rgba: true } }, top: 530, left: 80 },
-      ]).png().toBuffer();
+    const fs = require('fs');
+    const imgBuf = fs.readFileSync(require('path').join(__dirname, 'public', 'og-home.png'));
     const mediaId = await uploadMediaToX(imgBuf);
     const result = await postTweet('Test tweet with market card image — please ignore, will delete shortly.', mediaId);
     res.json({ ok: true, mediaId, tweetId: result.data?.id, imageSize: imgBuf.length });
@@ -23985,61 +23975,18 @@ async function searchAndDraftReplies() {
     let reply = (replyRes.content[0]?.text || '').trim().replace(/^["']|["']$/g, '');
     if (reply.length > 200) reply = reply.substring(0, reply.lastIndexOf(' ', 200)) || reply.substring(0, 200);
 
-    // Generate market card image and post with it
+    // Attach branded image to tweet
     let postResult = null;
     let postType = 'standalone';
     let mediaId = null;
     try {
-      // Extract market info for the card
-      const marketName = (dataPoint.match(/Market: "([^"]+)"/) || [])[1] || '';
-      const yesPct = (dataPoint.match(/(\d+)% YES/) || [])[1] || '';
-      const volMatch = (dataPoint.match(/\$[\d.]+[MK]\s*volume/) || [])[0] || '';
-      const whaleMatch = (dataPoint.match(/(\d+) whale/) || [])[1] || '';
-
-      console.log(`[reply-bot] Card data — market: "${marketName}", yes: ${yesPct}%, vol: ${volMatch}, whales: ${whaleMatch}`);
-      if (marketName) {
-        const sharp = getSharp();
-        if (sharp) {
-          const noPct = yesPct ? (100 - parseInt(yesPct)) : '';
-          const truncName = marketName.length > 55 ? marketName.substring(0, 52) + '...' : marketName;
-          // Use sharp text overlay instead of SVG text (no system fonts needed)
-          const textSvg = (text, size, color, bold) =>
-            Buffer.from(`<svg><text font-size="${size}" font-weight="${bold?'bold':'normal'}" fill="${color}">${text.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</text></svg>`);
-          try {
-            // Build card with colored rectangles + text overlays
-            let card = sharp({ create: { width: 1200, height: 628, channels: 4, background: { r: 20, g: 20, b: 18, alpha: 1 } } });
-            // Create border box as overlay
-            const borderSvg = Buffer.from(`<svg width="1200" height="628"><rect x="40" y="40" width="1120" height="548" rx="24" fill="#1a1a17" stroke="#c9920d" stroke-width="2" stroke-opacity="0.3"/></svg>`);
-            const composites = [
-              { input: borderSvg, top: 0, left: 0 },
-              { input: { text: { text: 'HYPERFLEX MARKET INTELLIGENCE', font: 'sans-serif', fontfile: '', dpi: 144, rgba: true } }, top: 70, left: 80 },
-              { input: { text: { text: truncName, font: 'sans-serif', fontfile: '', dpi: 200, rgba: true, width: 1040 } }, top: 130, left: 80 },
-            ];
-            if (yesPct) {
-              composites.push({ input: { text: { text: `${yesPct}% YES`, font: 'sans-serif', fontfile: '', dpi: 350, rgba: true } }, top: 300, left: 80 });
-            }
-            if (noPct) {
-              composites.push({ input: { text: { text: `${noPct}% NO`, font: 'sans-serif', fontfile: '', dpi: 350, rgba: true } }, top: 300, left: 500 });
-            }
-            const metaLine = [volMatch, whaleMatch ? `${whaleMatch} whale wallets` : ''].filter(Boolean).join('  ·  ');
-            if (metaLine) {
-              composites.push({ input: { text: { text: metaLine, font: 'sans-serif', fontfile: '', dpi: 144, rgba: true } }, top: 440, left: 80 });
-            }
-            composites.push({ input: { text: { text: 'hyperflex.network', font: 'sans-serif', fontfile: '', dpi: 100, rgba: true } }, top: 530, left: 80 });
-            const imgBuf = await card.composite(composites).png().toBuffer();
-            console.log(`[reply-bot] Image generated: ${imgBuf.length} bytes`);
-            mediaId = await uploadMediaToX(imgBuf);
-            console.log(`[reply-bot] Image uploaded: mediaId=${mediaId}`);
-          } catch (imgErr) {
-            _logError('reply-bot/image', imgErr);
-          }
-        } else {
-          _logError('reply-bot/image', 'sharp not available on this server');
-        }
-      } else {
-        console.log('[reply-bot] No market name extracted from dataPoint, skipping image');
-      }
-    } catch (cardErr) { _logError('reply-bot/card', cardErr); }
+      const fs = require('fs');
+      const imgPath = require('path').join(__dirname, 'public', 'og-home.png');
+      const imgBuf = fs.readFileSync(imgPath);
+      mediaId = await uploadMediaToX(imgBuf);
+    } catch (imgErr) {
+      console.warn('[reply-bot] Image upload failed, posting text-only:', imgErr.message);
+    }
 
     try {
       // Try quote tweet first (more engagement), fall back to standalone
