@@ -23939,6 +23939,8 @@ async function searchAndDraftReplies() {
     if (_whaleIndexCache && _whaleIndexCache.data && _whaleIndexCache.data.picks) {
       const tLower = (target.text || '').toLowerCase();
       const match = _whaleIndexCache.data.picks.find(p => {
+        if ((p.total_capital || 0) < 50000) return false; // Skip low-capital markets
+        if ((p.whale_count || 0) < 2) return false; // Need real whale consensus
         const mWords = (p.market || '').toLowerCase().split(/\s+/).filter(w => w.length > 4);
         return mWords.some(w => tLower.includes(w));
       });
@@ -23950,6 +23952,7 @@ async function searchAndDraftReplies() {
     if (!dataPoint && _screenerCache && _screenerCache.data) {
       const tLower = (target.text || '').toLowerCase();
       const match = _screenerCache.data.find(m => {
+        if ((m.volume || 0) < 50000) return false; // Skip low-volume markets ($50K+ only)
         const mWords = (m.question || '').toLowerCase().split(/\s+/).filter(w => w.length > 4);
         return mWords.some(w => tLower.includes(w));
       });
