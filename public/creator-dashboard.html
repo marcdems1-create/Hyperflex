@@ -12846,35 +12846,40 @@ async function loadCrystalBallPick() {
     if (!r.ok) throw new Error('Failed to load');
     const d = await r.json();
     const picks = Array.isArray(d) ? d : (d.predictions || d.picks || d.data || []);
-    if (!picks.length) { card.innerHTML = '<div style="text-align:center;padding:32px;color:var(--dim);font-size:13px">No crystal ball predictions available right now.</div>'; return; }
+    if (!picks.length) { card.innerHTML = '<div style="text-align:center;padding:32px;color:var(--dim);font-size:13px">No predictions available right now.</div>'; return; }
     const top = picks[0];
     let conf = top.confidence || top.confidence_score || 0;
     let confPct = Math.round(conf * (conf <= 1 ? 100 : 1));
     if (confPct === 0 || confPct === 100) confPct = 72;
     confPct = Math.min(95, confPct);
     const confColor = confPct >= 80 ? '#22c55e' : confPct >= 60 ? '#c9920d' : '#ef4444';
-    // Extract market URL — prefer nested market.url, skip bare domain fallbacks
+    const confLabel = confPct >= 80 ? 'HIGH' : confPct >= 60 ? 'MEDIUM' : 'LOW';
     let url = top.market_url || (top.market && top.market.url) || top.url || top.polymarket_url || '';
-    // If URL is just the bare domain with no slug, it's useless — try to build from question
     if (url === 'https://polymarket.com' || url === 'https://polymarket.com/') {
       const q = (top.market && top.market.question) || top.prediction || '';
-      if (q) {
-        const slug = q.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').substring(0, 80);
-        url = 'https://polymarket.com/event/' + slug;
-      }
+      if (q) { url = 'https://polymarket.com/event/' + q.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').substring(0, 80); }
     }
+    const marketName = top.market_name || (top.market && top.market.question) || top.question || '';
+    const typeBadge = top.type || 'DIVERGENCE';
+    const trade = top.trade || {};
+    const hasTrade = trade.entry_cost && trade.entry_cost < 95;
     card.innerHTML = `
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-        <div style="width:56px;height:56px;border-radius:50%;border:3px solid ${confColor};display:flex;align-items:center;justify-content:center;flex-shrink:0">
-          <span style="font-family:var(--mono);font-size:18px;font-weight:900;color:${confColor}">${confPct}%</span>
-        </div>
-        <div style="flex:1;min-width:0">
-          <div style="font-family:var(--mono);font-size:10px;color:${confColor};text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">CONFIDENCE</div>
-          <div style="background:rgba(255,255,255,0.05);border-radius:6px;height:8px;overflow:hidden"><div style="height:100%;width:${confPct}%;background:${confColor};border-radius:6px;transition:width .6s ease"></div></div>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px">
+        <span style="font-family:var(--mono);font-size:9px;padding:3px 10px;border-radius:4px;background:rgba(139,92,246,.12);color:#a78bfa;font-weight:700;text-transform:uppercase;letter-spacing:.5px">${escHtmlDash(typeBadge)}</span>
+        <div style="display:flex;flex-direction:column;align-items:center;padding:4px 12px;border-radius:8px;background:rgba(201,146,13,.06);border:1px solid rgba(201,146,13,.12)">
+          <span style="font-family:var(--mono);font-size:22px;font-weight:900;color:${confColor};line-height:1">${confPct}</span>
+          <span style="font-family:var(--mono);font-size:8px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">${confLabel}</span>
         </div>
       </div>
-      <div style="font-size:17px;font-weight:700;color:var(--text);margin-bottom:8px;line-height:1.4">${escHtmlDash(top.prediction || top.question || top.title || '')}</div>
-      <div style="font-size:13px;color:var(--dim);margin-bottom:16px;line-height:1.5">${escHtmlDash(top.reasoning || top.rationale || '')}</div>
+      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:18px;font-weight:600;color:#fff;margin-bottom:6px;line-height:1.35;letter-spacing:-0.2px">${escHtmlDash(marketName || top.prediction || '')}</div>
+      <div style="font-size:12px;color:var(--dim);margin-bottom:14px;line-height:1.5">${escHtmlDash((top.reasoning || top.rationale || '').substring(0, 120))}</div>
+      ${hasTrade ? `<div style="display:flex;gap:16px;align-items:center;padding:10px 14px;background:rgba(255,255,255,.03);border:1px solid #2a2825;border-radius:8px;margin-bottom:14px">
+        <div><span style="font-family:var(--mono);font-size:9px;color:var(--dim);display:block">PAY</span><span style="font-family:var(--mono);font-size:15px;font-weight:700;color:var(--text)">${trade.entry_cost}\u00A2</span></div>
+        <span style="color:var(--dim)">\u2192</span>
+        <div><span style="font-family:var(--mono);font-size:9px;color:var(--dim);display:block">WIN</span><span style="font-family:var(--mono);font-size:15px;font-weight:700;color:#22c55e">+${trade.potential_profit}\u00A2</span></div>
+        <div style="width:1px;height:24px;background:#2a2825"></div>
+        <div><span style="font-family:var(--mono);font-size:9px;color:var(--dim);display:block">ROI</span><span style="font-family:var(--mono);font-size:15px;font-weight:700;color:#22c55e">+${trade.roi_pct}%</span></div>
+      </div>` : ''}
       ${url ? `<div>${qtTradeBtn(url, 'View on Polymarket \u2192', '#c9920d')}</div>` : ''}
     `;
   } catch (e) {
@@ -12973,26 +12978,32 @@ async function loadWhaleIndexPicks() {
     const picks = (Array.isArray(d) ? d : (d.picks || d.whales || d.data || [])).slice(0, 5);
     if (!picks.length) { container.innerHTML = '<div style="text-align:center;padding:32px;color:var(--dim);font-size:13px">Whale index unavailable.</div>'; return; }
     container.innerHTML = picks.map((p, i) => {
-      const border = i === 0 ? 'border:2px solid var(--gold)' : 'border:1px solid #2a2825';
       const url = p.market_url || p.url || p.polymarket_url || '';
       const whaleCount = p.whale_count || p.whales || 0;
       const side = (p.consensus_side || p.side || 'YES').toUpperCase();
       const pct = Math.round(p.consensus_pct || p.probability || p.pct || 0);
       const sideColor = side === 'YES' ? '#22c55e' : '#ef4444';
-      return `<div style="background:#0f0e0c;${border};border-radius:12px;padding:16px;${i === 0 ? 'position:relative;overflow:hidden' : ''}">
+      const price = p.yes_price || p.price || 0;
+      const pricePct = Math.round(price * 100) || pct;
+      const entry = side === 'YES' ? pricePct : (100 - pricePct);
+      const profit = 100 - entry;
+      const roi = entry > 0 && entry < 95 ? Math.round((profit / entry) * 100) : 0;
+      const capital = p.total_capital || p.capital || 0;
+      const capStr = capital >= 1e6 ? '$' + (capital / 1e6).toFixed(1) + 'M' : capital >= 1e3 ? '$' + Math.round(capital / 1e3) + 'K' : '';
+      return `<div style="background:#0f0e0c;border:1px solid ${i === 0 ? 'var(--gold)' : '#2a2825'};border-radius:10px;padding:14px 16px;${i === 0 ? 'position:relative;overflow:hidden' : ''}">
         ${i === 0 ? '<div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--gold),transparent)"></div>' : ''}
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-          <div style="flex:1;min-width:0">
-            <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px;line-height:1.4">${escHtmlDash(p.market || p.question || p.title || '')}</div>
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-              <span style="font-family:var(--mono);font-size:10px;padding:3px 10px;border-radius:20px;background:rgba(201,146,13,0.12);color:var(--gold);border:1px solid rgba(201,146,13,0.3);font-weight:700">${whaleCount} whale${whaleCount !== 1 ? 's' : ''}</span>
-              <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:${sideColor}">${side} ${pct}%</span>
-            </div>
-          </div>
-          <div style="flex-shrink:0">
-            ${url ? qtTradeBtn(url, 'View on Polymarket \u2192', '#c9920d') : ''}
-          </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+          <span style="font-family:var(--mono);font-size:9px;padding:2px 8px;border-radius:4px;background:rgba(201,146,13,0.12);color:var(--gold);font-weight:700">${whaleCount} whale${whaleCount !== 1 ? 's' : ''}${capStr ? ' \u00B7 ' + capStr : ''}</span>
+          <span style="font-family:var(--mono);font-size:11px;font-weight:800;color:${sideColor}">${side}</span>
         </div>
+        <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;font-weight:600;color:#fff;margin-bottom:8px;line-height:1.35">${escHtmlDash(p.market || p.question || p.title || '')}</div>
+        ${roi > 5 ? `<div style="display:flex;gap:12px;align-items:center;padding:6px 10px;background:rgba(255,255,255,.03);border-radius:6px;margin-bottom:10px">
+          <span style="font-family:var(--mono);font-size:12px;color:var(--text)">${entry}\u00A2</span>
+          <span style="color:var(--dim);font-size:10px">\u2192</span>
+          <span style="font-family:var(--mono);font-size:12px;color:#22c55e">+${profit}\u00A2</span>
+          <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:#22c55e">+${roi}% ROI</span>
+        </div>` : ''}
+        ${url ? `<div>${qtTradeBtn(url, 'Trade \u2192', '#c9920d')}</div>` : ''}
       </div>`;
     }).join('');
   } catch (e) {
