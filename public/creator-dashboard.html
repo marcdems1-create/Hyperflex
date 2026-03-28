@@ -5049,6 +5049,9 @@ body.nav-open .sidebar-backdrop {
               </button>
             </div>
             <!-- Premium Portfolio Summary Bar -->
+            <div id="noRealPositionsMsg" style="display:none;background:rgba(201,146,13,0.04);border:1px solid rgba(201,146,13,0.15);border-radius:10px;padding:14px 20px;margin-bottom:16px;font-family:var(--mono);font-size:12px;color:var(--dim);line-height:1.6">
+              <strong style="color:var(--gold)">No open positions on Polymarket.</strong> Your previous positions may have resolved. The stats below reflect your USDC wallet balance. Visit <a href="https://polymarket.com" target="_blank" style="color:#a78bfa">polymarket.com</a> to open new positions.
+            </div>
             <div id="portfolioSummaryBar" style="display:none;background:#0f0e0c;border:1px solid #2a2825;border-radius:14px;overflow:hidden;margin-bottom:20px">
               <div style="height:2px;background:linear-gradient(90deg,transparent,var(--gold),transparent)"></div>
               <div style="padding:24px 28px">
@@ -13293,28 +13296,35 @@ function classifyPosition(p) {
   return { isResolved, won };
 }
 
-function getAllPositionsFlat() {
-  // Gather all positions from all platforms into a unified array
+function getAllPositionsFlat(includeHFX) {
+  // Gather all REAL platform positions into a unified array
   const all = [];
   if (_polyWalletAddress && window._polyPositionsData) {
     (window._polyPositionsData || []).forEach(p => {
       const cls = classifyPosition(p);
-      all.push({ ...p, _platform: 'polymarket', _accentColor: '#7c3aed', _isResolved: cls.isResolved, _won: cls.won });
+      all.push({ ...p, _platform: 'polymarket', _accentColor: '#7c3aed', _isResolved: cls.isResolved, _won: cls.won, _isReal: true });
     });
   }
   if (_kalshiConnected && window._kalshiPositionsData) {
     (window._kalshiPositionsData || []).forEach(p => {
       const cls = classifyPosition(p);
-      all.push({ ...p, _platform: 'kalshi', _accentColor: '#d97706', _isResolved: cls.isResolved, _won: cls.won });
+      all.push({ ...p, _platform: 'kalshi', _accentColor: '#d97706', _isResolved: cls.isResolved, _won: cls.won, _isReal: true });
     });
   }
   if (_manifoldUsername && window._manifoldPositionsData) {
     (window._manifoldPositionsData || []).forEach(p => {
       const cls = classifyPosition(p);
-      all.push({ ...p, _platform: 'manifold', _accentColor: '#34d399', _isResolved: cls.isResolved, _won: cls.won });
+      all.push({ ...p, _platform: 'manifold', _accentColor: '#34d399', _isResolved: cls.isResolved, _won: cls.won, _isReal: true });
     });
   }
   return all;
+}
+
+// Get HFX community bets separately (play money — not real portfolio)
+function getHFXBetsFlat() {
+  // HFX bets are loaded via loadHFXPositions → stored in the DOM, not in a global array
+  // We return empty here — HFX bets are rendered separately in their own tab
+  return [];
 }
 
 function computePortfolioStats(positions) {
@@ -13349,13 +13359,18 @@ function updatePortfolioSummary() {
 
   const positions = getAllPositionsFlat();
   const hasAnyPlatform = _polyWalletAddress || _kalshiConnected || _manifoldUsername;
+  const noRealMsg = document.getElementById('noRealPositionsMsg');
 
   if (positions.length === 0 && !hasAnyPlatform) {
     bar.style.display = 'none';
     if (shareBar) shareBar.style.display = 'none';
     if (chartEl) chartEl.style.display = 'none';
+    if (noRealMsg) noRealMsg.style.display = 'none';
     return;
   }
+
+  // Show message when wallet is connected but no positions found
+  if (noRealMsg) noRealMsg.style.display = (hasAnyPlatform && positions.length === 0) ? 'block' : 'none';
 
   const stats = computePortfolioStats(positions);
   window._portfolioStats = stats; // for share button
