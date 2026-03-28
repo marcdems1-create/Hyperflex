@@ -10,14 +10,14 @@
 <meta property="og:type" content="website"/>
 <meta property="og:url" content="https://hyperflex.network/predictors"/>
 <meta property="og:title" content="Prediction Market Leaderboard — HYPERFLEX"/>
-<meta property="og:description" content="The most profitable traders across Polymarket & Hyperliquid, ranked by verified track record."/>
+<meta property="og:description" content="The most profitable traders across Polymarket, ranked by verified track record."/>
 <meta property="og:image" content="https://hyperflex.network/og-default.png"/>
 <meta property="og:site_name" content="HYPERFLEX"/>
 <!-- Twitter / X -->
 <meta name="twitter:card" content="summary_large_image"/>
 <meta name="twitter:site" content="@HyperFlexApp"/>
 <meta name="twitter:title" content="Prediction Market Leaderboard — HYPERFLEX"/>
-<meta name="twitter:description" content="The most profitable traders across Polymarket & Hyperliquid, ranked by verified track record."/>
+<meta name="twitter:description" content="The most profitable traders across Polymarket, ranked by verified track record."/>
 <meta name="twitter:image" content="https://hyperflex.network/og-default.png"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
@@ -225,7 +225,7 @@ body{background:var(--paper);color:var(--text);font-family:var(--sans);min-heigh
   <div class="hero-stage-inner">
     <div class="hero-trophy">&#127942;</div>
     <h1>The Prediction Market Elite</h1>
-    <p class="hero-sub">The most profitable traders across Polymarket &amp; Hyperliquid</p>
+    <p class="hero-sub">The most profitable traders across Polymarket</p>
     <div class="hero-stat" id="heroStat">Loading traders...</div>
   </div>
 </section>
@@ -246,7 +246,6 @@ body{background:var(--paper);color:var(--text);font-family:var(--sans);min-heigh
   <div class="filter-group" id="platformFilters">
     <button class="filter-pill active" data-platform="all" onclick="setPlatform('all')">All</button>
     <button class="filter-pill" data-platform="POLY" onclick="setPlatform('POLY')">Polymarket</button>
-    <button class="filter-pill" data-platform="HL" onclick="setPlatform('HL')">Hyperliquid</button>
   </div>
 </div>
 
@@ -339,19 +338,13 @@ async function loadLeaderboard(){
   body.innerHTML='<tr><td colspan="8"><div class="state-msg">Loading the elite...</div></td></tr>';
   document.getElementById('podiumSection').style.display='none';
   try{
-    var[hfxRes,hlRes,alphaRes]=await Promise.allSettled([fetch('/api/leaderboard?period='+currentPeriod),fetch('/api/hyperliquid/whales'),fetch('/api/whale-scores')]);
+    var[hfxRes,alphaRes]=await Promise.allSettled([fetch('/api/leaderboard?period='+currentPeriod),fetch('/api/whale-scores')]);
     if(alphaRes.status==='fulfilled'&&alphaRes.value.ok){try{var ad=await alphaRes.value.json();_alphaScores=ad.scores||{}}catch(e){}}
     var hfxData=[];
     if(hfxRes.status==='fulfilled'&&hfxRes.value.ok)hfxData=await hfxRes.value.json();
-    var hlTraders=[];
-    if(hlRes.status==='fulfilled'&&hlRes.value.ok){
-      var hlData=await hlRes.value.json();
-      hlTraders=(hlData.traders||[]).slice(0,50).map(function(t,i){var name=t.display_name||t.userName||t.name||(t.address?whaleNickname(t.address):'HL Trader');var pnl=t.total_pnl||t.pnl_all_time||t.pnl||0;var vol=t.account_value||t.accountValue||0;return{rank:0,user_id:'hl_'+(t.address||i),display_name:name,win_rate:0,total_pnl:pnl,sharp_score:0,trade_count:0,volume:vol,platforms:['HL'],account_value:vol,_isHL:true}});
-    }
     var merged=[].concat(Array.isArray(hfxData)?hfxData:[]);
     merged.forEach(function(r){if(!r.platforms)r.platforms=['HFX']});
-    hlTraders.forEach(function(hl){merged.push(hl)});
-    merged.sort(function(a,b){var aVal=a._isHL?Math.abs(a.total_pnl||0):(a.account_value||Math.abs(a.total_pnl||0));var bVal=b._isHL?Math.abs(b.total_pnl||0):(b.account_value||Math.abs(b.total_pnl||0));return bVal-aVal});
+    merged.sort(function(a,b){var aVal=a.account_value||Math.abs(a.total_pnl||0);var bVal=b.account_value||Math.abs(b.total_pnl||0);return bVal-aVal});
     merged.forEach(function(r,i){r.rank=i+1});
     lbData=merged;
     if(!allTimeData&&currentPeriod!=='all'){
@@ -372,8 +365,6 @@ function renderAll(){
   var data=getFilteredData();
   data.forEach(function(r,i){r._displayRank=i+1});
   var totalCapital=data.reduce(function(s,r){
-    // For HL traders use PnL (account_value inflates to $billions); for Polymarket use volume
-    if(r._isHL)return s+Math.abs(r.total_pnl||0);
     return s+(r.volume||Math.abs(r.total_pnl||0));
   },0);
   document.getElementById('heroStat').textContent=formatMoney(totalCapital)+' tracked across '+data.length+' traders';

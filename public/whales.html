@@ -354,7 +354,6 @@ td { padding: 12px; font-size: 13px; vertical-align: middle; }
 <div style="display:flex;justify-content:center;padding:24px 24px 0">
   <div id="platformToggle" style="display:inline-flex;background:#1a1a17;border:1px solid #2a2a24;border-radius:10px;overflow:hidden">
     <button id="togglePoly" onclick="switchWhalePlatform('polymarket')" style="padding:10px 24px;font-family:'Space Mono',monospace;font-size:12px;font-weight:700;border:none;cursor:pointer;transition:all .15s;background:rgba(201,146,13,0.15);color:#c9920d;letter-spacing:.04em;min-height:44px">Polymarket</button>
-    <button id="toggleHL" onclick="switchWhalePlatform('hyperliquid')" style="padding:10px 24px;font-family:'Space Mono',monospace;font-size:12px;font-weight:700;border:none;cursor:pointer;transition:all .15s;background:transparent;color:#6a6a5e;letter-spacing:.04em;min-height:44px">Hyperliquid</button>
     <button id="toggleMyWhales" onclick="switchWhalePlatform('my-whales')" style="padding:10px 24px;font-family:'Space Mono',monospace;font-size:12px;font-weight:700;border:none;cursor:pointer;transition:all .15s;background:transparent;color:#6a6a5e;letter-spacing:.04em;min-height:44px">&#x1F4CC; My Whales</button>
   </div>
 </div>
@@ -888,8 +887,7 @@ function sortBy(field) {
     _sortDir = field === 'size' || field === 'size_usd' || field === 'current_price' || field === 'trader_rank' || field === 'unrealized_pnl' || field === 'leverage' || field === 'entry_price' || field === 'mark_price' ? -1 : 1;
     if (field === 'trader_rank') _sortDir = 1;
   }
-  if (_activePlatform === 'hyperliquid') applyHlFilters();
-  else applySorting();
+  applySorting();
 }
 
 function updateSortArrows() {
@@ -956,22 +954,19 @@ function renderMobileCards() {
   }).join('');
 }
 
-// ── HYPERLIQUID WHALE DATA ──────────────────────────────
-let _hlWhaleData = null;
-let _hlFiltered = [];
 let _activePlatform = 'polymarket';
 
 var _followedWhales = new Set(JSON.parse(localStorage.getItem('hfx_whale_follows') || '[]'));
 
 function switchWhalePlatform(platform) {
+  if (platform === 'hyperliquid') return; // HL removed
   _activePlatform = platform;
   var polyBtn = document.getElementById('togglePoly');
-  var hlBtn = document.getElementById('toggleHL');
   var myBtn = document.getElementById('toggleMyWhales');
   var heroSub = document.getElementById('heroSub');
   var flowSection = document.getElementById('whaleFlowSection');
 
-  [polyBtn, hlBtn, myBtn].forEach(function(b) { if(b){b.style.background='transparent';b.style.color='#6a6a5e'} });
+  [polyBtn, myBtn].forEach(function(b) { if(b){b.style.background='transparent';b.style.color='#6a6a5e'} });
 
   if (platform === 'my-whales') {
     if(myBtn){myBtn.style.background='rgba(201,146,13,0.15)';myBtn.style.color='#c9920d'}
@@ -997,32 +992,6 @@ function switchWhalePlatform(platform) {
     document.getElementById('tableWrap').style.display = '';
     if (_whaleData) { renderStats(); applyFilters(); }
     else loadData();
-  } else {
-    if(hlBtn){hlBtn.style.background='rgba(119,185,0,0.15)';hlBtn.style.color='#77b900'}
-    if (heroSub) heroSub.textContent = 'What the top Hyperliquid traders are holding right now';
-    if (flowSection) flowSection.style.display = 'none';
-    var thead = document.getElementById('whaleTableHead');
-    if (thead) thead.innerHTML = '<tr><th onclick="sortBy(\'trader_rank\')">Rank</th><th onclick="sortBy(\'trader\')">Trader</th><th onclick="sortBy(\'coin\')">Coin</th><th onclick="sortBy(\'side\')">Side</th><th onclick="sortBy(\'size_usd\')">Size ($)</th><th onclick="sortBy(\'entry_price\')">Entry</th><th onclick="sortBy(\'mark_price\')">Mark</th><th onclick="sortBy(\'unrealized_pnl\')">uPnL</th><th onclick="sortBy(\'leverage\')">Lev</th><th>Actions</th></tr>';
-    // Add cap filter pills
-    var filterWrap = document.getElementById('hl-cap-filter');
-    if (!filterWrap) {
-      filterWrap = document.createElement('div');
-      filterWrap.id = 'hl-cap-filter';
-      filterWrap.style.cssText = 'display:flex;gap:8px;margin:12px 0 8px;align-items:center;flex-wrap:wrap';
-      filterWrap.innerHTML = '<span style="font-size:11px;color:#888;font-family:var(--mono);text-transform:uppercase;letter-spacing:.05em">Filter:</span>' +
-        '<button class="hl-filter-pill active" data-filter="large" onclick="setHLFilter(\'large\')" style="background:transparent;border:1px solid #c9920d;color:#c9920d;padding:4px 10px;border-radius:20px;font-size:11px;cursor:pointer;font-family:var(--mono)">Large Cap</button>' +
-        '<button class="hl-filter-pill" data-filter="mid" onclick="setHLFilter(\'mid\')" style="background:transparent;border:1px solid #333;color:#888;padding:4px 10px;border-radius:20px;font-size:11px;cursor:pointer;font-family:var(--mono)">Mid Cap</button>' +
-        '<button class="hl-filter-pill" data-filter="small" onclick="setHLFilter(\'small\')" style="background:transparent;border:1px solid #333;color:#888;padding:4px 10px;border-radius:20px;font-size:11px;cursor:pointer;font-family:var(--mono)">Small Cap</button>' +
-        '<button class="hl-filter-pill" data-filter="all" onclick="setHLFilter(\'all\')" style="background:transparent;border:1px solid #333;color:#888;padding:4px 10px;border-radius:20px;font-size:11px;cursor:pointer;font-family:var(--mono)">All</button>' +
-        '<span id="hl-filter-count" style="font-size:11px;color:#888;margin-left:4px"></span>';
-      var tableWrap = document.getElementById('tableWrap');
-      if (tableWrap) tableWrap.insertBefore(filterWrap, tableWrap.firstChild);
-    }
-    filterWrap.style.display = '';
-    _hlCapFilter = 'large';
-    filterWrap.querySelectorAll('.hl-filter-pill').forEach(function(p) { p.classList.toggle('active', p.dataset.filter === 'large'); p.style.borderColor = p.dataset.filter === 'large' ? '#c9920d' : '#333'; p.style.color = p.dataset.filter === 'large' ? '#c9920d' : '#888'; });
-    if (_hlWhaleData) { renderHlStats(); applyHlFilters(); }
-    else loadHlData();
   }
 }
 
@@ -1077,174 +1046,6 @@ function unfollowWhale(wallet, btn) {
   } catch(e) {}
 })()
 
-function renderHlStats() {
-  if (!_hlWhaleData) return;
-  const positions = _hlWhaleData.positions || [];
-  const totalCap = positions.reduce((s, p) => s + (p.size_usd || 0), 0);
-  const avgSize = positions.length ? totalCap / positions.length : 0;
-  document.getElementById('statCapital').textContent = fmt$(totalCap);
-  document.getElementById('statAvgSize').textContent = fmt$(avgSize);
-  document.getElementById('heroCapital').textContent = 'Tracking ' + fmt$(totalCap) + ' across ' + _hlWhaleData.total_whales + ' HL whales';
-
-  // Largest
-  const largest = positions.length ? positions.reduce((a, b) => (a.size_usd || 0) > (b.size_usd || 0) ? a : b) : null;
-  const largestEl = document.getElementById('statLargest');
-  if (largest && largestEl) {
-    largestEl.innerHTML = '<span style="color:#77b900">' + fmtFull$(largest.size_usd || 0) + '</span><div style="font-size:10px;color:var(--dim);margin-top:4px">' + (largest.trader || '').substring(0, 15) + ' \u2192 ' + (largest.coin || '') + '</div>';
-  }
-
-  // Most popular coin
-  var coinCounts = {};
-  positions.forEach(function(p) { coinCounts[p.coin] = (coinCounts[p.coin] || 0) + 1; });
-  var popCoin = Object.entries(coinCounts).sort(function(a, b) { return b[1] - a[1]; })[0];
-  var popEl = document.getElementById('statPopular');
-  if (popCoin && popEl) popEl.innerHTML = '<span style="color:var(--text)">' + popCoin[0] + '</span> <span style="color:var(--dim);font-size:11px">(' + popCoin[1] + ' positions)</span>';
-
-  // Long/Short ratio
-  var longs = 0, shorts = 0;
-  positions.forEach(function(p) { if (p.side === 'LONG') longs++; else shorts++; });
-  var tot = longs + shorts || 1;
-  var longPct = Math.round(longs / tot * 100);
-  var shortPct = 100 - longPct;
-  document.getElementById('statRatio').innerHTML =
-    '<span style="color:#22c55e">' + longPct + '% LONG</span> <span style="color:var(--muted)">/</span> <span style="color:#ef4444">' + shortPct + '% SHORT</span>' +
-    '<div style="margin-top:6px;height:6px;border-radius:3px;background:#ef4444;overflow:hidden"><div style="height:100%;width:' + longPct + '%;background:#22c55e;border-radius:3px"></div></div>';
-
-  document.getElementById('updatedAt').textContent = 'Updated ' + timeAgo(_hlWhaleData.updated_at);
-}
-
-// HL cap tier system
-var HL_LARGE_CAP = new Set(['BTC','ETH','SOL','BNB','XRP','DOGE','ADA','AVAX','TRX','LINK','DOT','MATIC','UNI','LTC','BCH','SUI','ARB','OP','APT','ATOM','NEAR','FIL','ICP','INJ','WLD','MKR','AAVE','SNX','CRV','GMX','PENDLE','WIF','PEPE','SHIB','TON','STX','RUNE','SEI','TIA','JUP']);
-var HL_MID_CAP = new Set(['BLUR','ENS','DYDX','LDO','COMP','BAL','YFI','SUSHI','1INCH','CAKE','ZRX','BAND','API3','UMA','BADGER','PERP','IMX','BOBA','MAGIC','HFT','HOOK','RDNT','VELA','UMAMI']);
-var _hlCapFilter = 'large';
-function getHLTier(coin) { if (HL_LARGE_CAP.has(coin)) return 'large'; if (HL_MID_CAP.has(coin)) return 'mid'; return 'small'; }
-function getHLTierBadge(coin) {
-  var t = getHLTier(coin);
-  if (t === 'large') return ' <span style="font-size:9px;padding:1px 5px;border-radius:3px;background:rgba(59,130,246,0.15);color:#3b82f6;font-family:var(--mono)">L</span>';
-  if (t === 'mid') return ' <span style="font-size:9px;padding:1px 5px;border-radius:3px;background:rgba(234,179,8,0.15);color:#eab308;font-family:var(--mono)">M</span>';
-  return ' <span style="font-size:9px;padding:1px 5px;border-radius:3px;background:rgba(239,68,68,0.15);color:#ef4444;font-family:var(--mono)">S</span>';
-}
-function setHLFilter(f) {
-  _hlCapFilter = f;
-  document.querySelectorAll('.hl-filter-pill').forEach(function(p) {
-    var isActive = p.dataset.filter === f;
-    p.classList.toggle('active', isActive);
-    p.style.borderColor = isActive ? '#c9920d' : '#333';
-    p.style.color = isActive ? '#c9920d' : '#888';
-  });
-  applyHlFilters();
-}
-
-function applyHlFilters() {
-  _hlFiltered = (_hlWhaleData ? _hlWhaleData.positions : []).filter(function(p) {
-    if ((p.size_usd || 0) < _minSize) return false;
-    if (_hlCapFilter !== 'all' && getHLTier(p.coin) !== _hlCapFilter) return false;
-    return true;
-  });
-  _hlFiltered.sort(function(a, b) {
-    var va = a[_sortField], vb = b[_sortField];
-    if (typeof va === 'string') va = va.toLowerCase();
-    if (typeof vb === 'string') vb = vb.toLowerCase();
-    if (va < vb) return -1 * _sortDir;
-    if (va > vb) return 1 * _sortDir;
-    return 0;
-  });
-  var countEl = document.getElementById('hl-filter-count');
-  if (countEl) countEl.textContent = _hlFiltered.length + ' positions';
-  renderHlTable();
-  renderHlMobileCards();
-}
-
-function hlSideBadge(side) {
-  var cls = side === 'LONG' ? 'side-yes' : 'side-no';
-  return '<span class="side-badge ' + cls + '">' + side + '</span>';
-}
-
-function renderHlTable() {
-  var tbody = document.getElementById('whaleTableBody');
-  if (!tbody) return;
-  if (!_hlFiltered.length) {
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--muted);font-family:var(--mono);font-size:13px">No positions match the current filter.</td></tr>';
-    return;
-  }
-  tbody.innerHTML = _hlFiltered.map(function(p) {
-    var hl = (p.size_usd || 0) >= 100000 ? 'highlight-100k' : (p.size_usd || 0) >= 50000 ? 'highlight-50k' : '';
-    var pnlColor = (p.unrealized_pnl || 0) >= 0 ? 'var(--green)' : 'var(--red)';
-    var pnlStr = (p.unrealized_pnl >= 0 ? '+' : '') + '$' + Math.abs(p.unrealized_pnl || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
-    return '<tr class="' + hl + '" style="border-left:3px solid #77b900">' +
-      '<td>' + rankBadge(p.trader_rank) + '</td>' +
-      '<td><div class="trader-name">' + truncate(p.trader || '', 18) + '</div><div class="trader-pnl">PnL: ' + fmtPnl(p.trader_pnl || 0) + '</div></td>' +
-      '<td style="font-family:var(--mono);font-weight:700;color:#77b900">' + (p.coin || '') + getHLTierBadge(p.coin || '') + '</td>' +
-      '<td>' + hlSideBadge(p.side) + '</td>' +
-      '<td class="size-cell">' + fmtFull$(p.size_usd || 0) + '</td>' +
-      '<td style="font-family:var(--mono);font-size:12px">' + (p.entry_price && p.entry_price > 0 ? '$' + p.entry_price.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '\u2014') + '</td>' +
-      '<td style="font-family:var(--mono);font-size:12px">' + (p.mark_price && p.mark_price > 0 ? '$' + p.mark_price.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '\u2014') + '</td>' +
-      '<td style="font-family:var(--mono);font-weight:700;color:' + pnlColor + '">' + pnlStr + '</td>' +
-      '<td style="font-family:var(--mono);font-size:12px;color:var(--text-soft)">' + (p.leverage || 1) + 'x</td>' +
-      '<td><div class="action-btns" style="gap:4px">' +
-        '<a href="/trader/' + escAttr(p.trader_address || '') + '" onclick="event.stopPropagation()" style="font-size:10px;font-family:var(--mono);color:#7c3aed;border:1px solid rgba(124,58,237,0.4);border-radius:6px;padding:3px 8px;text-decoration:none;white-space:nowrap">\uD83D\uDD17 Profile</a>' +
-        '<button class="copy-trade-btn" style="font-size:10px;padding:3px 8px" onclick="event.stopPropagation();copyHlTrade(\'' + escAttr(p.trader || '') + '\',\'' + escAttr(p.coin || '') + '\',\'' + escAttr(p.side || '') + '\',' + (p.size_usd || 0) + ',' + (p.leverage || 1) + ')">Copy</button>' +
-        '<button class="ac-btn" style="font-size:10px;padding:3px 8px" title="Mirror all future trades from this HL trader" onclick="event.stopPropagation();openAutoCopy(\'' + escAttr(p.trader_address || '') + '\',\'' + escAttr(p.trader || '') + '\')">\uD83E\uDD16</button>' +
-      '</div></td>' +
-    '</tr>';
-  }).join('');
-}
-
-// Copy HL trade with play money (Flex Points)
-function copyHlTrade(trader, coin, side, sizeUsd, leverage) {
-  if (!getToken()) { document.getElementById('loginOverlay').classList.add('open'); return; }
-  var alloc = prompt('Copy ' + trader + ' ' + coin + ' ' + side + ' position (' + leverage + 'x)\n\nHow many Flex Points to allocate? (play money)', '1000');
-  if (!alloc) return;
-  var pts = parseInt(alloc);
-  if (isNaN(pts) || pts < 100) { alert('Minimum 100 Flex Points'); return; }
-  // Log the copy trade
-  fetch('/api/copy-trade', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + getToken() },
-    body: JSON.stringify({ trader: trader, asset: coin, side: side, size_usd: sizeUsd, leverage: leverage, allocation_pts: pts, platform: 'hyperliquid' })
-  }).then(function(r) { return r.json(); }).then(function(d) {
-    if (d.ok) {
-      showToast('\u2705 Copied ' + trader + '\u2019s ' + coin + ' ' + side + ' with ' + pts + ' Flex Points');
-    } else {
-      alert(d.error || 'Copy failed');
-    }
-  }).catch(function() { alert('Network error'); });
-}
-
-function renderHlMobileCards() {
-  var container = document.getElementById('mobileCards');
-  if (!container) return;
-  if (!_hlFiltered.length) { container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-family:var(--mono);font-size:13px">No positions match the current filter.</div>'; return; }
-  container.innerHTML = _hlFiltered.map(function(p) {
-    var pnlColor = (p.unrealized_pnl || 0) >= 0 ? 'var(--green)' : 'var(--red)';
-    var pnlStr = (p.unrealized_pnl >= 0 ? '+' : '') + '$' + Math.abs(p.unrealized_pnl || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
-    return '<div class="whale-card" style="border-left:3px solid #77b900">' +
-      '<div class="whale-card-header"><div class="whale-card-trader">' + rankBadge(p.trader_rank) + ' <span class="trader-name">' + truncate(p.trader || '', 15) + '</span></div><div class="whale-card-size">' + fmt$(p.size_usd || 0) + '</div></div>' +
-      '<div class="whale-card-market" style="color:#77b900;font-weight:700">' + (p.coin || '') + '/USD ' + (p.leverage || 1) + 'x</div>' +
-      '<div class="whale-card-meta">' + hlSideBadge(p.side) + ' <span style="font-family:var(--mono);font-size:12px;color:' + pnlColor + '">' + pnlStr + '</span></div>' +
-    '</div>';
-  }).join('');
-}
-
-async function loadHlData() {
-  try {
-    document.getElementById('loadingState').style.display = '';
-    document.getElementById('tableWrap').style.display = 'none';
-    document.getElementById('refreshBtn').disabled = true;
-    var res = await fetch('/api/hyperliquid/whale-positions');
-    if (!res.ok) throw new Error('API returned ' + res.status);
-    _hlWhaleData = await res.json();
-    renderHlStats();
-    applyHlFilters();
-    document.getElementById('loadingState').style.display = 'none';
-    document.getElementById('tableWrap').style.display = '';
-  } catch (err) {
-    console.error('[hl-whale-watch]', err);
-    document.getElementById('loadingState').innerHTML = '<p style="color:var(--red);font-family:var(--mono);font-size:13px">Failed to load Hyperliquid whale data. Try refreshing.</p><button class="refresh-btn" onclick="loadHlData()" style="margin-top:12px">Try again</button>';
-  } finally {
-    document.getElementById('refreshBtn').disabled = false;
-  }
-}
 
 function renderWhaleFlow() {
   if (!_whaleData) return;
@@ -1383,16 +1184,14 @@ async function loadData() {
 }
 
 function refreshData() {
-  if (_activePlatform === 'hyperliquid') loadHlData();
-  else loadData();
+  loadData();
 }
 
 function setFilter(el, min) {
   _minSize = min;
   document.querySelectorAll('.filter-pill').forEach(function(p) { p.classList.remove('active'); });
   el.classList.add('active');
-  if (_activePlatform === 'hyperliquid') applyHlFilters();
-  else applyFilters();
+  applyFilters();
 }
 
 // Init

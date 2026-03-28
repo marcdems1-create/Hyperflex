@@ -4,7 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
 <title>Trader Profile | HYPERFLEX</title>
-<meta name="description" content="Multi-platform trader profile — Polymarket + Hyperliquid positions, P&L, and analytics."/>
+<meta name="description" content="Multi-platform trader profile — Polymarket positions, P&L, and analytics."/>
 <link rel="icon" href="/hyperflex-logo.png"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -28,7 +28,6 @@ a{color:var(--gold);text-decoration:none}
 .badges{display:flex;gap:6px;flex-wrap:wrap}
 .badge{font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 10px;border-radius:4px;letter-spacing:.05em}
 .badge-poly{background:rgba(0,102,255,0.15);color:var(--blue);border:1px solid rgba(0,102,255,0.3)}
-.badge-hl{background:rgba(124,58,237,0.15);color:var(--purple);border:1px solid rgba(124,58,237,0.3)}
 .badge-hfx{background:rgba(201,146,13,0.15);color:var(--gold);border:1px solid rgba(201,146,13,0.3)}
 .follow-btn{font-family:var(--mono);font-size:11px;padding:6px 16px;border-radius:6px;border:1px solid var(--gold);color:var(--gold);background:none;cursor:pointer;transition:all .15s;margin-left:auto}
 .follow-btn:hover{background:rgba(201,146,13,0.1)}
@@ -66,15 +65,6 @@ tr:hover{background:rgba(201,146,13,0.03)}
 .mkt-link{color:var(--text);text-decoration:none;border-bottom:1px dashed rgba(201,146,13,0.3)}
 .mkt-link:hover{color:var(--gold)}
 
-/* HL account bar */
-.hl-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:16px}
-.hl-stat{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center}
-.hl-stat .label{font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
-.hl-stat .val{font-family:var(--mono);font-size:15px;font-weight:700;margin-top:2px}
-
-/* Two-col layout */
-.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-
 /* CTA */
 .cta-section{text-align:center;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:40px 20px;margin-top:16px}
 .cta-section h3{font-size:18px;font-weight:700;margin-bottom:6px}
@@ -95,7 +85,6 @@ tr:hover{background:rgba(201,146,13,0.03)}
   .hero-top{gap:10px}
   .avatar{width:40px;height:40px;font-size:14px}
   .stat-val{font-size:18px}
-  .two-col{grid-template-columns:1fr}
   .follow-btn{margin-left:0}
   td{padding:8px 6px;font-size:11px}
   th{font-size:9px;padding:6px}
@@ -163,7 +152,6 @@ function render(){
   // Badges
   var badgesHtml='';
   if(d.polymarket&&d.polymarket.active)badgesHtml+='<span class="badge badge-poly">POLY</span>';
-  if(d.hyperliquid&&d.hyperliquid.active)badgesHtml+='<span class="badge badge-hl">HL</span>';
   if(d.has_hfx_account)badgesHtml+='<span class="badge badge-hfx">HFX</span>';
 
   // Follow button
@@ -175,9 +163,6 @@ function render(){
   // Stats
   var pnlColor=d.summary.total_pnl>=0?'var(--green)':'var(--red)';
   var statsHtml='<div class="stat-pill"><div class="stat-label">Total P&L</div><div class="stat-val" style="color:'+pnlColor+'">'+(d.summary.total_pnl>=0?'+':'')+fmt$(d.summary.total_pnl)+'</div></div>';
-  if(d.hyperliquid&&d.hyperliquid.active){
-    statsHtml+='<div class="stat-pill"><div class="stat-label">HL Account</div><div class="stat-val">'+fmt$(d.hyperliquid.account_value)+'</div></div>';
-  }
   if(d.polymarket&&d.polymarket.active&&d.polymarket.roi_pct){
     statsHtml+='<div class="stat-pill"><div class="stat-label">Poly ROI</div><div class="stat-val" style="color:'+(d.polymarket.roi_pct>=0?'var(--green)':'var(--red)') +'">'+(d.polymarket.roi_pct>=0?'+':'')+d.polymarket.roi_pct+'%</div></div>';
   }
@@ -185,8 +170,8 @@ function render(){
   statsHtml+='<div class="stat-pill"><div class="stat-label">Platforms</div><div class="stat-val">'+d.summary.platforms_active+'</div></div>';
 
   // No activity
-  if(!d.polymarket.active&&!d.hyperliquid.active){
-    el.innerHTML='<div class="hero-card"><div class="hero-top"><div class="avatar">'+avatarChars+'</div><span class="addr" onclick="copyAddr()">'+shortAddr+'</span></div></div><div class="empty" style="padding:60px">No activity found for this address on Polymarket or Hyperliquid.<br><a href="/predictors" style="color:var(--gold);margin-top:12px;display:inline-block">Browse active traders &rarr;</a></div>';
+  if(!d.polymarket.active){
+    el.innerHTML='<div class="hero-card"><div class="hero-top"><div class="avatar">'+avatarChars+'</div><span class="addr" onclick="copyAddr()">'+shortAddr+'</span></div></div><div class="empty" style="padding:60px">No activity found for this address on Polymarket.<br><a href="/predictors" style="color:var(--gold);margin-top:12px;display:inline-block">Browse active traders &rarr;</a></div>';
     return;
   }
 
@@ -194,7 +179,6 @@ function render(){
 
   // Hero
   var extLinksHtml='<div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">'+
-    (d.hyperliquid&&d.hyperliquid.active?'<a href="https://app.hyperliquid.xyz/explorer/address/'+d.address+'" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:11px;color:#77b900;border:1px solid rgba(119,185,0,0.35);border-radius:8px;padding:6px 14px;text-decoration:none;background:rgba(119,185,0,0.06);transition:all .15s" onmouseover="this.style.background=\'rgba(119,185,0,0.12)\'" onmouseout="this.style.background=\'rgba(119,185,0,0.06)\'">&#x26A1; Hyperliquid Explorer</a>':'')+
     (d.polymarket&&d.polymarket.active?'<a href="https://polymarket.com/profile/'+d.address+'" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:11px;color:var(--blue);border:1px solid rgba(0,102,255,0.35);border-radius:8px;padding:6px 14px;text-decoration:none;background:rgba(0,102,255,0.06);transition:all .15s" onmouseover="this.style.background=\'rgba(0,102,255,0.12)\'" onmouseout="this.style.background=\'rgba(0,102,255,0.06)\'">&#x1F50D; Polymarket Profile</a>':'')+
   '</div>';
   html+='<div class="hero-card"><div class="hero-top"><div class="avatar">'+avatarChars+'</div><span class="addr" onclick="copyAddr()">'+shortAddr+'</span><div class="badges">'+badgesHtml+'</div>'+followHtml+'</div><div class="stats-grid">'+statsHtml+'</div>'+extLinksHtml+'</div>';
@@ -202,9 +186,6 @@ function render(){
   // Chart
   html+='<div class="chart-wrap" id="chartWrap"><div class="chart-title">Cumulative P&amp;L (30d)</div><canvas id="pnlChart"></canvas></div>';
 
-  // Determine layout
-  var bothActive=d.polymarket.active&&d.hyperliquid.active;
-  if(bothActive)html+='<div class="two-col">';
 
   // Polymarket section
   if(d.polymarket.active){
@@ -242,55 +223,6 @@ function render(){
     html+='</div>';
   }
 
-  // Hyperliquid section
-  if(d.hyperliquid.active){
-    html+='<div class="section"><div class="section-header"><span class="section-title">\u26A1 Hyperliquid Perps</span><span class="badge badge-hl">HL</span></div>';
-    // Account bar
-    html+='<div class="hl-bar">';
-    html+='<div class="hl-stat"><div class="label">Account Value</div><div class="val">'+fmt$(d.hyperliquid.account_value)+'</div></div>';
-    html+='<div class="hl-stat"><div class="label">Margin Used</div><div class="val">'+fmt$(d.hyperliquid.margin_used)+'</div></div>';
-    html+='<div class="hl-stat"><div class="label">Withdrawable</div><div class="val">'+fmt$(d.hyperliquid.withdrawable)+'</div></div>';
-    var hlUpnl=d.hyperliquid.unrealized_pnl;
-    html+='<div class="hl-stat"><div class="label">Unrealized P&L</div><div class="val" style="color:'+(hlUpnl>=0?'var(--green)':'var(--red)') +'">'+(hlUpnl>=0?'+':'')+fmt$(hlUpnl)+'</div></div>';
-    html+='</div>';
-    // Open positions
-    if(d.hyperliquid.open_positions.length){
-      html+='<table><thead><tr><th>Asset</th><th>Side</th><th>Size</th><th>Entry</th><th>Liq Price</th><th>Value</th><th>Unr. P&L</th></tr></thead><tbody>';
-      d.hyperliquid.open_positions.forEach(function(p){
-        var sideClass=p.side==='LONG'?'side-long':'side-short';
-        html+='<tr><td style="font-weight:700">'+p.coin+'</td>';
-        html+='<td><span class="'+sideClass+'">'+p.side+'</span></td>';
-        html+='<td>'+p.size.toFixed(p.size<1?4:2)+'</td>';
-        html+='<td>$'+p.entry_price.toLocaleString()+'</td>';
-        html+='<td style="color:var(--dim)">$'+p.liquidation_price.toLocaleString()+'</td>';
-        html+='<td>'+fmt$(p.position_value)+'</td>';
-        html+='<td>'+fmtPnl(p.unrealized_pnl)+'</td></tr>';
-      });
-      html+='</tbody></table>';
-    }else{html+='<div class="empty">No open perps positions</div>';}
-    // Recent fills
-    if(d.hyperliquid.recent_fills.length){
-      html+='<div style="margin-top:16px;font-family:var(--mono);font-size:10px;color:var(--purple);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Recent Trades (7d)</div>';
-      d.hyperliquid.recent_fills.slice(0,10).forEach(function(f){
-        var pnlHtml='';
-        if(f.closed_pnl!==null){
-          var badge=f.closed_pnl>=0?'win-badge':'loss-badge';
-          var label=f.closed_pnl>=0?'WIN':'LOSS';
-          pnlHtml='<span class="'+badge+'">'+label+'</span> '+fmtPnl(f.closed_pnl);
-        }
-        html+='<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(42,42,36,0.3);font-family:var(--mono);font-size:11px;flex-wrap:wrap">';
-        html+='<span style="font-weight:700;min-width:35px">'+f.coin+'</span>';
-        html+='<span style="color:var(--dim);min-width:80px">'+escH(f.dir||f.side)+'</span>';
-        html+='<span>'+f.size.toFixed(f.size<1?4:2)+' @ $'+f.price.toLocaleString()+'</span>';
-        if(pnlHtml)html+='<span style="margin-left:auto">'+pnlHtml+'</span>';
-        html+='<span style="color:var(--dim);font-size:10px">'+timeAgo(f.time)+'</span>';
-        html+='</div>';
-      });
-    }
-    html+='</div>';
-  }
-
-  if(bothActive)html+='</div>';
 
   // CTA
   html+='<div class="cta-section"><h3>Track your own portfolio</h3><p>HYPERFLEX syncs Polymarket + Kalshi + Manifold in one dashboard.</p><a href="/creator/signup" class="cta-btn">Get Started Free &rarr;</a></div>';
@@ -312,12 +244,7 @@ function drawPnlChart(){
   var canvas=document.getElementById('pnlChart');
   if(!canvas||!_data)return;
   var points=[];
-  // Build timeline from HL fills + Poly wins
-  if(_data.hyperliquid&&_data.hyperliquid.recent_fills){
-    _data.hyperliquid.recent_fills.forEach(function(f){
-      if(f.closed_pnl!==null)points.push({t:f.time||0,pnl:f.closed_pnl});
-    });
-  }
+  // Build timeline from Poly wins
   if(_data.polymarket&&_data.polymarket.won_positions){
     _data.polymarket.won_positions.forEach(function(w){
       if(w.end_date)points.push({t:new Date(w.end_date).getTime(),pnl:w.payout});

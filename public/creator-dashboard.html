@@ -3354,15 +3354,6 @@ body.nav-open .sidebar-backdrop {
               <div id="socialPolyStatus" style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:12px;min-height:18px">Checking...</div>
               <button id="socialPolyBtn" class="social-connect-btn" onclick="socialConnectPoly()">Connect</button>
             </div>
-            <!-- Hyperliquid -->
-            <div class="social-account-card" id="socialCardHL">
-              <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-                <span style="font-size:20px">&#x1F7E2;</span>
-                <span style="font-weight:700;font-size:14px">Hyperliquid</span>
-              </div>
-              <div id="socialHLStatus" style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:12px;min-height:18px">Checking...</div>
-              <button id="socialHLBtn" class="social-connect-btn" onclick="socialConnectHL()">Connect</button>
-            </div>
             <!-- X / Twitter -->
             <div class="social-account-card" id="socialCardTwitter">
               <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
@@ -4886,18 +4877,6 @@ body.nav-open .sidebar-backdrop {
                     <button onclick="document.getElementById('manifold-username-input').focus();document.getElementById('portfolioWelcome').style.display='none';document.getElementById('portfolioMain').style.display='block'" style="width:100%;background:var(--gold);color:#141412;font-family:var(--sans);font-weight:700;font-size:13px;padding:11px;border:none;border-radius:8px;cursor:pointer;transition:opacity 0.15s;min-height:44px" onmouseover="this.style.opacity='0.88'" onmouseout="this.style.opacity='1'">Connect Manifold</button>
                   </div>
 
-                  <!-- Hyperliquid welcome card -->
-                  <div style="background:var(--cream);border:1px solid var(--border);border-radius:14px;padding:24px;transition:border-color 0.2s,box-shadow 0.2s" onmouseover="this.style.borderColor='rgba(119,185,0,0.5)';this.style.boxShadow='0 0 20px rgba(119,185,0,0.08)'" onmouseout="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
-                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
-                      <div style="width:40px;height:40px;border-radius:10px;background:rgba(119,185,0,0.12);display:flex;align-items:center;justify-content:center;font-size:20px">&#x1F7E2;</div>
-                      <div>
-                        <div style="font-weight:700;font-size:15px;color:var(--text)">Hyperliquid</div>
-                        <span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:rgba(45,155,95,0.1);color:#2d9b5f;border:1px solid rgba(45,155,95,0.3)">LIVE</span>
-                      </div>
-                    </div>
-                    <p style="font-size:13px;color:var(--dim);line-height:1.5;margin-bottom:16px">Paste your wallet address to track perp positions, leverage, and P&amp;L. Fully public API.</p>
-                    <button onclick="document.getElementById('hl-wallet-input').focus();document.getElementById('portfolioWelcome').style.display='none';document.getElementById('portfolioMain').style.display='block';switchPortfolioTab('hl')" style="width:100%;background:#77b900;color:#fff;font-family:var(--sans);font-weight:700;font-size:13px;padding:11px;border:none;border-radius:8px;cursor:pointer;transition:opacity 0.15s;min-height:44px" onmouseover="this.style.opacity='0.88'" onmouseout="this.style.opacity='1'">Connect Hyperliquid</button>
-                  </div>
                 </div>
 
                 <p style="text-align:center;font-size:11px;color:#5a5854;margin-top:24px;font-family:var(--mono)">All connections are free during Early Access. Your data stays private.</p>
@@ -4923,10 +4902,6 @@ body.nav-open .sidebar-backdrop {
               <!-- Manifold hidden — play money, not useful for real traders -->
               <button id="ptab-manifold" onclick="switchPortfolioTab('manifold')" style="display:none">
                 <span id="ptab-manifold-dot"></span>Manifold
-              </button>
-              <button id="ptab-hl" onclick="switchPortfolioTab('hl')"
-                style="background:none;border:none;border-bottom:2px solid transparent;color:var(--dim);padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s;margin-bottom:-1px;display:flex;align-items:center;gap:7px">
-                <span id="ptab-hl-dot" style="width:7px;height:7px;border-radius:50%;background:#444;flex-shrink:0"></span>Hyperliquid
               </button>
               <button id="ptab-hfx" onclick="switchPortfolioTab('hfx')"
                 style="background:none;border:none;border-bottom:2px solid transparent;color:var(--dim);padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s;margin-bottom:-1px;display:flex;align-items:center;gap:7px">
@@ -4968,7 +4943,6 @@ body.nav-open .sidebar-backdrop {
                   <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
                     <button onclick="switchPortfolioTab('poly')" style="background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.3);color:#a78bfa;border-radius:10px;padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:8px">&#x1F7E3; Connect Polymarket</button>
                     <button onclick="switchPortfolioTab('kalshi')" style="background:rgba(217,119,6,0.12);border:1px solid rgba(217,119,6,0.3);color:#fbbf24;border-radius:10px;padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:8px">&#x1F7E1; Connect Kalshi</button>
-                    <button onclick="switchPortfolioTab('hl')" style="background:rgba(119,185,0,0.12);border:1px solid rgba(119,185,0,0.3);color:#77b900;border-radius:10px;padding:12px 20px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:8px">&#x1F7E2; Connect Hyperliquid</button>
                   </div>
                 </div>
               </div>
@@ -5038,48 +5012,6 @@ body.nav-open .sidebar-backdrop {
                 <button onclick="disconnectManifold()" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:11px;color:var(--muted);cursor:pointer;font-family:var(--mono)">Disconnect</button>
               </div>
               <div id="manifoldPositions"></div>
-            </div>
-            <!-- HYPERLIQUID -->
-            <div id="ptabContent-hl" style="display:none">
-              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
-                <div style="display:flex;align-items:center;gap:12px">
-                  <div style="width:38px;height:38px;border-radius:10px;background:rgba(119,185,0,0.15);border:1px solid rgba(119,185,0,0.3);display:flex;align-items:center;justify-content:center;font-size:20px">&#x1F7E2;</div>
-                  <div><div style="font-size:16px;font-weight:800;color:var(--text)">Hyperliquid</div><div style="font-size:11px;color:var(--dim);font-family:var(--mono)">Perpetual futures DEX</div></div>
-                </div><div id="hlStatusBadge"></div>
-              </div>
-              <div id="hlConnectForm" style="background:var(--cream);border:1px solid var(--border);border-radius:14px;padding:28px">
-                <div style="font-size:13px;color:var(--dim);margin-bottom:16px;line-height:1.6">Paste your EVM wallet address to import all open perp positions, leverage, and P&amp;L instantly. No API key needed.</div>
-                <input type="text" id="hl-wallet-input" placeholder="0x... your wallet address" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:10px;padding:13px 16px;font-family:var(--mono);font-size:13px;color:var(--text);outline:none;margin-bottom:8px;box-sizing:border-box" onfocus="this.style.borderColor='rgba(119,185,0,0.6)'" onblur="this.style.borderColor='var(--border)'"/>
-                <div style="font-size:11px;color:var(--dim);margin-bottom:20px">All positions are public on Hyperliquid. Find your address at <a href="https://app.hyperliquid.xyz" target="_blank" style="color:#77b900">app.hyperliquid.xyz</a></div>
-                <button id="hlConnectBtn" onclick="connectHyperliquid()" style="background:rgba(119,185,0,0.9);color:#fff;border:none;border-radius:10px;padding:12px 24px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;min-height:44px">Connect Hyperliquid &#x2192;</button>
-              </div>
-              <div id="hlConnectedRow" style="display:none;align-items:center;gap:10px;margin-bottom:16px;padding:12px 16px;background:rgba(119,185,0,0.06);border:1px solid rgba(119,185,0,0.2);border-radius:10px">
-                <span style="width:8px;height:8px;border-radius:50%;background:#77b900;flex-shrink:0"></span>
-                <div style="font-size:13px;color:var(--text);font-weight:600;flex:1">Wallet: <span id="hlWalletDisplay" style="font-family:var(--mono);font-size:12px;color:#77b900"></span></div>
-                <button onclick="loadHyperliquidPositions(true)" style="background:none;border:1px solid rgba(119,185,0,0.3);border-radius:6px;padding:5px 12px;font-size:11px;color:#77b900;cursor:pointer;font-family:var(--mono)">&#x21BA; Sync</button>
-                <button onclick="disconnectHyperliquid()" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:11px;color:var(--muted);cursor:pointer;font-family:var(--mono)">Disconnect</button>
-              </div>
-              <!-- Account summary bar -->
-              <div id="hlAccountSummary" style="display:none;margin-bottom:16px;padding:16px 20px;background:#0f0e0c;border:1px solid #2a2825;border-radius:12px">
-                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;text-align:center">
-                  <div>
-                    <div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752;margin-bottom:4px">ACCOUNT VALUE</div>
-                    <div id="hlAccountValue" style="font-family:var(--mono);font-size:22px;font-weight:900;color:#77b900">--</div>
-                  </div>
-                  <div>
-                    <div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752;margin-bottom:4px">MARGIN USED</div>
-                    <div id="hlMarginUsed" style="font-family:var(--mono);font-size:22px;font-weight:900;color:var(--text)">--</div>
-                  </div>
-                  <div>
-                    <div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752;margin-bottom:4px">UNREALIZED P&amp;L</div>
-                    <div id="hlTotalUpnl" style="font-family:var(--mono);font-size:22px;font-weight:900;color:#5a5752">--</div>
-                  </div>
-                </div>
-              </div>
-              <div id="hlDashLink" style="display:none;margin-bottom:12px;text-align:right">
-                <a id="hlDashLinkA" href="#" style="font-family:var(--mono);font-size:11px;color:#77b900;border:1px solid rgba(119,185,0,0.3);border-radius:8px;padding:6px 16px;text-decoration:none;display:inline-flex;align-items:center;gap:6px;transition:all .15s" onmouseover="this.style.background='rgba(119,185,0,0.1)'" onmouseout="this.style.background='none'">&#x1F4C8; Full P&amp;L &amp; Trade History &#x2192;</a>
-              </div>
-              <div id="hlPositions"></div>
             </div>
             <!-- HFX COMMUNITY tab -->
             <div id="ptabContent-hfx" style="display:none">
@@ -6379,7 +6311,7 @@ function renderDashboard(data) {
 // ── SMART SIDEBAR ─────────────────────────────────────────────────────────────
 // Adapts sidebar layout based on whether user is a trader, creator, both, or neither.
 function adaptSidebar(data) {
-  const isTrader = !!(window._polyWalletAddress || window._hlWalletAddress || window._connectedWallet);
+  const isTrader = !!(window._polyWalletAddress || window._connectedWallet);
   const isCreator = !!(data && data.markets && data.markets.length > 0);
 
   const tradingLabel = document.getElementById('navSectionTrading');
@@ -6468,7 +6400,7 @@ let _defaultTabSet = false;
 function setDefaultTab() {
   if (_defaultTabSet) return;
   _defaultTabSet = true;
-  const isTrader = !!(window._polyWalletAddress || window._hlWalletAddress || window._connectedWallet);
+  const isTrader = !!(window._polyWalletAddress || window._connectedWallet);
   const isCreator = !!(creatorData && creatorData.markets && creatorData.markets.length > 0);
   if (isTrader && !isCreator) {
     showTab('portfolio');
@@ -6841,25 +6773,6 @@ function refreshSocialCards() {
     polyCardEl.classList.remove('social-account-card--connected');
   }
 
-  // Hyperliquid
-  var hlAddr = _hlWalletAddress || '';
-  var hlStatusEl = document.getElementById('socialHLStatus');
-  var hlBtnEl = document.getElementById('socialHLBtn');
-  var hlCardEl = document.getElementById('socialCardHL');
-  if (hlAddr) {
-    hlStatusEl.innerHTML = '<span style="color:var(--green)">Connected</span> <span style="color:var(--dim)">' + hlAddr.slice(0,6) + '...' + hlAddr.slice(-4) + '</span>';
-    hlBtnEl.textContent = 'Connected';
-    hlBtnEl.className = 'social-connect-btn social-connect-btn--connected';
-    hlBtnEl.onclick = null;
-    hlCardEl.classList.add('social-account-card--connected');
-  } else {
-    hlStatusEl.textContent = 'Not connected';
-    hlBtnEl.textContent = 'Connect';
-    hlBtnEl.className = 'social-connect-btn';
-    hlBtnEl.onclick = socialConnectHL;
-    hlCardEl.classList.remove('social-account-card--connected');
-  }
-
   // Twitter
   var twId = (creatorData && creatorData.creator && creatorData.creator.twitter_id) || '';
   var twUser = (creatorData && creatorData.creator && creatorData.creator.twitter_username) || '';
@@ -6905,10 +6818,6 @@ function socialConnectPoly() {
   showTab('portfolio');
   setTimeout(function() { switchPortfolioTab('poly'); }, 100);
 }
-function socialConnectHL() {
-  showTab('portfolio');
-  setTimeout(function() { switchPortfolioTab('hl'); }, 100);
-}
 function socialConnectTwitter() {
   window.location.href = '/auth/twitter';
 }
@@ -6941,7 +6850,6 @@ async function loadFollowingList() {
       var initials = name.split(' ').map(function(w) { return w[0]; }).join('').slice(0,2).toUpperCase();
       var badge = '';
       if (u.polymarket_address) badge += '<span class="social-follow-badge social-follow-badge--poly">POLY</span> ';
-      if (u.hyperliquid_address) badge += '<span class="social-follow-badge social-follow-badge--hl">HL</span> ';
       var lastAct = u.last_active ? timeAgo(u.last_active) : '';
       var uid = u.followed_id || u.user_id || u.id || '';
       return '<div class="social-follow-row">' +
@@ -12171,13 +12079,8 @@ async function loadPortfolio() {
     if (!_polyWalletAddress) {
       _polyWalletAddress = data.polymarket_address || '';
     }
-    // Hyperliquid wallet — check DB response first, then localStorage fallback
-    if (!_hlWalletAddress) {
-      _hlWalletAddress = data.hyperliquid_address || localStorage.getItem('hf_hl_wallet') || '';
-    }
-
     // Show welcome state if nothing connected, otherwise show main
-    const hasAny = _kalshiConnected || _manifoldUsername || _polyWalletAddress || _hlWalletAddress;
+    const hasAny = _kalshiConnected || _manifoldUsername || _polyWalletAddress;
     const welcomeEl = document.getElementById('portfolioWelcome');
     const mainEl = document.getElementById('portfolioMain');
     if (welcomeEl) welcomeEl.style.display = hasAny ? 'none' : 'block';
@@ -12186,12 +12089,10 @@ async function loadPortfolio() {
     renderKalshiConnectState();
     renderManifoldConnectState();
     renderPolymarketConnectState();
-    renderHlConnectState();
     const fetches = [];
     if (_kalshiConnected) fetches.push(loadKalshiPositions(false));
     if (_manifoldUsername) fetches.push(loadManifoldPositions(false));
     if (_polyWalletAddress) fetches.push(loadPolymarketPositions(false));
-    if (_hlWalletAddress) fetches.push(loadHyperliquidPositions(false));
     fetches.push(loadHFXPositions(false));
     Promise.allSettled(fetches).then(() => { if (_activePortfolioTab === 'all') updateAllPositionsTab(); updatePortfolioSummary(); });
   } catch (e) {
@@ -12207,7 +12108,7 @@ async function loadPerformanceTab() {
     await loadPortfolio();
   }
   // Show/hide empty state vs content
-  const hasAny = _polyWalletAddress || _kalshiConnected || _manifoldUsername || _hlWalletAddress;
+  const hasAny = _polyWalletAddress || _kalshiConnected || _manifoldUsername;
   const emptyEl = document.getElementById('performanceEmpty');
   const shareBar = document.getElementById('portfolioShareBar');
   const summaryBar = document.getElementById('portfolioSummaryBar');
@@ -12899,8 +12800,8 @@ async function loadPolymarketPositions(forceRefresh) {
 let _activePortfolioTab = 'all';
 function switchPortfolioTab(tab) {
   _activePortfolioTab = tab;
-  const tabs = ['all','poly','kalshi','manifold','hl','hfx'];
-  const colors = {all:'var(--gold)',poly:'#a78bfa',kalshi:'#fbbf24',manifold:'#34d399',hl:'#77b900',hfx:'var(--gold)'};
+  const tabs = ['all','poly','kalshi','manifold','hfx'];
+  const colors = {all:'var(--gold)',poly:'#a78bfa',kalshi:'#fbbf24',manifold:'#34d399',hfx:'var(--gold)'};
   tabs.forEach(t => {
     const btn = document.getElementById('ptab-'+t);
     const content = document.getElementById('ptabContent-'+t);
@@ -12909,7 +12810,6 @@ function switchPortfolioTab(tab) {
   });
   if (tab === 'all') updateAllPositionsTab();
   if (tab === 'hfx') loadHFXPositions(false);
-  if (tab === 'hl') loadHyperliquidPositions(false);
 }
 
 // ── MANUAL BET TRACKER ──────────────────────────────────────────────────────
@@ -13257,22 +13157,6 @@ function getAllPositionsFlat() {
       all.push({ ...p, _platform: 'manifold', _accentColor: '#34d399', _isResolved: cls.isResolved, _won: cls.won });
     });
   }
-  if (_hlWalletAddress && window._hlPositionsData) {
-    (window._hlPositionsData || []).forEach(p => {
-      all.push({
-        question: p.coin + '/USD Perpetual',
-        side: p.side,
-        shares: p.size,
-        current_price: p.mark_price,
-        pnl: p.unrealized_pnl,
-        market_url: 'https://app.hyperliquid.xyz/trade/' + p.coin,
-        _platform: 'hyperliquid',
-        _accentColor: '#77b900',
-        _isResolved: false,
-        _won: false
-      });
-    });
-  }
   return all;
 }
 
@@ -13308,7 +13192,7 @@ function updatePortfolioSummary() {
   if (!bar) return;
 
   const positions = getAllPositionsFlat();
-  const hasAnyPlatform = _polyWalletAddress || _kalshiConnected || _manifoldUsername || _hlWalletAddress;
+  const hasAnyPlatform = _polyWalletAddress || _kalshiConnected || _manifoldUsername;
 
   if (positions.length === 0 && !hasAnyPlatform) {
     bar.style.display = 'none';
@@ -13460,7 +13344,7 @@ function shareRecordOnX() {
 
 function updateAllPositionsTab() {
   const positions = getAllPositionsFlat();
-  const hasAnyPlatform = _polyWalletAddress || _kalshiConnected || _manifoldUsername || _hlWalletAddress;
+  const hasAnyPlatform = _polyWalletAddress || _kalshiConnected || _manifoldUsername;
 
   const emptyEl = document.getElementById('allPositionsEmpty');
   const openSec = document.getElementById('openPositionsSection');
@@ -13518,165 +13402,6 @@ function updateAllPositionsTab() {
     }
   }
 }
-// ── HYPERLIQUID INTEGRATION ──────────────────────────────────────────────────
-let _hlWalletAddress = '';
-let _hlPositionsLoaded = false;
-
-function renderHlConnectState() {
-  const form = document.getElementById('hlConnectForm');
-  const row = document.getElementById('hlConnectedRow');
-  const dot = document.getElementById('ptab-hl-dot');
-  if (_hlWalletAddress) {
-    if (form) form.style.display = 'none';
-    if (row) { row.style.display = 'flex'; document.getElementById('hlWalletDisplay').textContent = _hlWalletAddress.slice(0,8) + '...' + _hlWalletAddress.slice(-6); }
-    if (dot) dot.style.background = '#77b900';
-  } else {
-    if (form) form.style.display = 'block';
-    if (row) row.style.display = 'none';
-    if (dot) dot.style.background = '#444';
-  }
-}
-
-async function connectHyperliquid() {
-  const address = (document.getElementById('hl-wallet-input').value || '').trim();
-  if (!address) return showToast('Enter your EVM wallet address', 'error');
-  if (!/^0x[a-fA-F0-9]{40}$/.test(address)) return showToast('Invalid wallet address format (must start with 0x)', 'error');
-  const btn = document.getElementById('hlConnectBtn');
-  btn.disabled = true; btn.textContent = 'Verifying...';
-  try {
-    const check = await fetch('/api/hyperliquid/positions/' + encodeURIComponent(address));
-    if (check.status === 400) { showToast('Invalid address format', 'error'); btn.disabled = false; btn.textContent = 'Connect Hyperliquid \u2192'; return; }
-    if (!check.ok) { showToast('Hyperliquid API error. Try again.', 'error'); btn.disabled = false; btn.textContent = 'Connect Hyperliquid \u2192'; return; }
-    // Save to user wallets
-    const token = localStorage.getItem('hf_token');
-    await fetch('/api/user/wallets', {
-      method: 'PUT',
-      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ hyperliquid_address: address })
-    });
-    _hlWalletAddress = address;
-    localStorage.setItem('hf_hl_wallet', address);
-    renderHlConnectState();
-    showToast('Hyperliquid connected!', 'success');
-    loadHyperliquidPositions(false);
-    // Show main content
-    const welcomeEl = document.getElementById('portfolioWelcome');
-    const mainEl = document.getElementById('portfolioMain');
-    if (welcomeEl) welcomeEl.style.display = 'none';
-    if (mainEl) mainEl.style.display = 'block';
-  } catch (e) {
-    showToast('Connection failed', 'error');
-    btn.disabled = false; btn.textContent = 'Connect Hyperliquid \u2192';
-  }
-}
-
-function disconnectHyperliquid() {
-  if (!confirm('Disconnect Hyperliquid? Your wallet address will be removed.')) return;
-  _hlWalletAddress = '';
-  localStorage.removeItem('hf_hl_wallet');
-  _hlPositionsLoaded = false;
-  window._hlPositionsData = null;
-  document.getElementById('hlAccountSummary').style.display = 'none';
-  document.getElementById('hlPositions').innerHTML = '';
-  renderHlConnectState();
-  const token = localStorage.getItem('hf_token');
-  if (token) {
-    fetch('/api/user/wallets', {
-      method: 'PUT',
-      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ hyperliquid_address: '' })
-    }).catch(() => {});
-  }
-  showToast('Hyperliquid disconnected', 'success');
-}
-
-function renderHlPositionCard(p) {
-  const isLong = p.side === 'LONG';
-  const sideColor = isLong ? '#22c55e' : '#f87171';
-  const sideBg = isLong ? 'rgba(34,197,94,0.12)' : 'rgba(248,113,113,0.12)';
-  const sideBorder = isLong ? 'rgba(34,197,94,0.3)' : 'rgba(248,113,113,0.3)';
-  const pnlColor = p.unrealized_pnl >= 0 ? '#22c55e' : '#f87171';
-  const pnlStr = (p.unrealized_pnl >= 0 ? '+' : '') + '$' + Math.abs(p.unrealized_pnl).toFixed(2);
-  const sizeStr = '$' + (p.size_usd || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
-  return '<div style="background:#0f0e0c;border:1px solid #2a2825;border-left:3px solid #77b900;border-radius:12px;overflow:hidden;margin-bottom:8px;transition:border-color .15s,box-shadow .15s" onmouseover="this.style.borderColor=\'rgba(119,185,0,0.5)\';this.style.boxShadow=\'0 0 0 1px rgba(119,185,0,0.15)\'" onmouseout="this.style.borderColor=\'#2a2825\';this.style.borderLeft=\'3px solid #77b900\';this.style.boxShadow=\'none\'">' +
-    '<div style="padding:16px 18px">' +
-      '<div style="display:flex;align-items:flex-start;gap:12px">' +
-        '<span style="flex-shrink:0;margin-top:1px;font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 9px;border-radius:5px;background:' + sideBg + ';color:' + sideColor + ';border:1px solid ' + sideBorder + '">' + p.side + '</span>' +
-        '<div style="flex:1;min-width:0">' +
-          '<div style="font-size:15px;font-weight:700;color:#e8e4de;margin-bottom:6px">' + escHtmlDash(p.coin) + '/USD</div>' +
-          '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:6px">' +
-            '<div><div style="font-family:var(--mono);font-size:9px;color:#5a5752;text-transform:uppercase;letter-spacing:.08em">Size</div><div style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--text)">' + sizeStr + '</div></div>' +
-            '<div><div style="font-family:var(--mono);font-size:9px;color:#5a5752;text-transform:uppercase;letter-spacing:.08em">Entry</div><div style="font-family:var(--mono);font-size:13px;color:var(--text)">$' + (p.entry_price || 0).toLocaleString('en-US', { maximumFractionDigits: 2 }) + '</div></div>' +
-            '<div><div style="font-family:var(--mono);font-size:9px;color:#5a5752;text-transform:uppercase;letter-spacing:.08em">Mark</div><div style="font-family:var(--mono);font-size:13px;color:var(--text)">$' + (p.mark_price || 0).toLocaleString('en-US', { maximumFractionDigits: 2 }) + '</div></div>' +
-          '</div>' +
-          '<div style="font-family:var(--mono);font-size:11px;color:#6b6560">' + (p.size || 0).toFixed(4) + ' ' + p.coin + ' · ' + p.leverage + 'x leverage</div>' +
-        '</div>' +
-        '<div style="flex-shrink:0;text-align:right">' +
-          '<div style="font-family:var(--mono);font-size:15px;font-weight:800;color:' + pnlColor + '">' + pnlStr + '</div>' +
-          '<div style="font-family:var(--mono);font-size:10px;color:#5a5752;margin-top:2px">' + p.leverage + 'x</div>' +
-        '</div>' +
-      '</div>' +
-      '<div style="margin-top:10px;padding-top:8px;border-top:1px solid #1e1c19;display:flex;align-items:center;gap:8px">' +
-        (_hlWalletAddress ? '<a href="/trader/' + encodeURIComponent(_hlWalletAddress) + '" style="font-family:var(--mono);font-size:10px;color:#77b900;border:1px solid rgba(119,185,0,0.3);border-radius:6px;padding:4px 10px;text-decoration:none;transition:all .15s" onmouseover="this.style.background=\'rgba(119,185,0,0.1)\'" onmouseout="this.style.background=\'none\'">&#x1F4C8; Full Profile</a>' : '') +
-      '</div>' +
-    '</div>' +
-  '</div>';
-}
-
-async function loadHyperliquidPositions(forceRefresh) {
-  if (_hlPositionsLoaded && !forceRefresh) return;
-  _hlPositionsLoaded = true;
-  const el = document.getElementById('hlPositions');
-  const summaryEl = document.getElementById('hlAccountSummary');
-  if (!el || !_hlWalletAddress) return;
-  el.innerHTML = '<div style="padding:16px 0;font-size:13px;color:var(--muted);font-family:var(--mono)">Loading positions...</div>';
-  try {
-    const r = await fetch('/api/hyperliquid/positions/' + encodeURIComponent(_hlWalletAddress));
-    if (!r.ok) {
-      const d = await r.json().catch(() => ({}));
-      el.innerHTML = '<div style="color:#c0392b;font-size:13px;padding:8px 0">' + (d.error || 'Failed to load positions') + '</div>';
-      return;
-    }
-    const data = await r.json();
-    const positions = data.positions || [];
-    window._hlPositionsData = positions;
-    window._hlAccountValue = data.account_value || 0;
-
-    // Update account summary
-    if (summaryEl) {
-      summaryEl.style.display = 'block';
-      document.getElementById('hlAccountValue').textContent = '$' + (data.account_value || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
-      document.getElementById('hlMarginUsed').textContent = '$' + (data.margin_used || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
-      const totalUpnl = positions.reduce((s, p) => s + (p.unrealized_pnl || 0), 0);
-      const upnlEl = document.getElementById('hlTotalUpnl');
-      upnlEl.textContent = (totalUpnl >= 0 ? '+' : '') + '$' + Math.abs(totalUpnl).toLocaleString('en-US', { maximumFractionDigits: 2 });
-      upnlEl.style.color = totalUpnl >= 0 ? '#22c55e' : '#ef4444';
-    }
-
-    // Show full profile link
-    var hdLink = document.getElementById('hlDashLink');
-    var hdLinkA = document.getElementById('hlDashLinkA');
-    if (hdLink && hdLinkA && _hlWalletAddress) {
-      hdLinkA.href = '/trader/' + encodeURIComponent(_hlWalletAddress);
-      hdLink.style.display = 'block';
-    }
-
-    setTimeout(updatePortfolioSummary, 100);
-
-    if (!positions.length) {
-      el.innerHTML = '<div style="padding:20px;text-align:center"><div style="font-size:13px;color:var(--muted);margin-bottom:12px">No open positions found for this wallet.</div><div style="font-size:12px;color:var(--dim)">Connected: <span style="font-family:var(--mono);color:#77b900">' + _hlWalletAddress.slice(0,8) + '...' + _hlWalletAddress.slice(-6) + '</span></div></div>';
-      return;
-    }
-
-    el.innerHTML = positions.map(p => renderHlPositionCard(p)).join('');
-    const ts = new Date(data.fetched_at || Date.now()).toLocaleTimeString();
-    el.insertAdjacentHTML('beforeend', '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);text-align:right;margin-top:4px">Fetched ' + ts + ' \u00B7 60s cache</div>');
-  } catch (e) {
-    console.error('[hyperliquid positions]', e);
-    el.innerHTML = '<div style="color:#c0392b;font-size:13px;padding:8px 0">Failed to load positions</div>';
-  }
-}
-
 // ── POSITION CARD RENDERER ──────────────────────────────────────────────────
 function renderPositionCard({question,side,pct,meta,pnl,pnlLabel,pnlIsPercent,url,accentColor,posData}){
   const isYes=side==='YES';
