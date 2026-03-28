@@ -22049,10 +22049,7 @@ async function detectArbitrageOpportunities() {
     const polyRes = await fetch('https://gamma-api.polymarket.com/events?closed=false&limit=50&order=liquidity&ascending=false', {
       headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
     }).catch(() => null);
-    // Fetch Kalshi events
-    const kalshiRes = await fetch('https://api.elections.kalshi.com/trade-api/v2/events?limit=100&status=open&with_nested_markets=true', {
-      headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
-    }).catch(() => null);
+    // Kalshi events come from the paginated cache (getKalshiEvents)
 
     const polyMarkets = [];
     if (polyRes && polyRes.ok) {
@@ -22068,26 +22065,33 @@ async function detectArbitrageOpportunities() {
     }
 
     const kalshiMarkets = [];
-    if (kalshiRes && kalshiRes.ok) {
-      const raw = await kalshiRes.json();
-      for (const evt of (raw.events || [])) {
-        for (const m of (evt.markets || [])) {
-          if (m.status !== 'active') continue;
-          const yp = (m.yes_ask || m.last_price || 50) / 100;
-          kalshiMarkets.push({ question: (m.title || evt.title || '').toLowerCase(), yes: yp, url: `https://kalshi.com/markets/${m.ticker || ''}`, title: m.title || evt.title || '' });
-        }
+    // Use the cached paginated Kalshi events instead of a separate fetch
+    const kalshiEvts = await getKalshiEvents();
+    for (const evt of kalshiEvts) {
+      for (const m of (evt.markets || [])) {
+        if (m.status !== 'active' && m.status !== 'open') continue;
+        // Use correct dollar-denominated fields
+        const yAsk = m.yes_ask_dollars != null ? parseFloat(m.yes_ask_dollars) : null;
+        const lPrice = m.last_price_dollars != null ? parseFloat(m.last_price_dollars) : null;
+        const yBid = m.yes_bid_dollars != null ? parseFloat(m.yes_bid_dollars) : null;
+        const yp = yAsk || lPrice || yBid;
+        if (yp == null || yp <= 0.01 || yp >= 0.99) continue; // Skip markets with no real price
+        kalshiMarkets.push({ question: (m.title || evt.title || '').toLowerCase(), yes: yp, url: `https://kalshi.com/markets/${(m.event_ticker || m.ticker || '').replace(/-\d+$/, '').toLowerCase()}`, title: m.title || evt.title || '' });
       }
     }
 
     // Match markets across platforms by keyword overlap
+    const arbStopWords = new Set(['will','before','after','this','that','what','when','where','which','with','from','have','been','does','price','range','more','than','least','year','2026','2027','2028','march','april','january','february']);
     const arbs = [];
     for (const pm of polyMarkets) {
-      const pWords = pm.question.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+      const pWords = pm.question.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2 && !arbStopWords.has(w));
       if (pWords.length < 2) continue;
       for (const km of kalshiMarkets) {
-        const kWords = km.question.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+        const kWords = km.question.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2 && !arbStopWords.has(w));
         const overlap = pWords.filter(w => kWords.includes(w)).length;
-        if (overlap < 2) continue;
+        const overlapRatio = overlap / Math.min(pWords.length, kWords.length);
+        // Require 3+ shared meaningful words AND >40% overlap ratio
+        if (overlap < 3 || overlapRatio < 0.4) continue;
         // Check for arb: if poly_yes + kalshi_no < 1.0 (buy YES on poly, buy NO on kalshi)
         const kalshiNo = 1 - km.yes;
         const arbEdge1 = 1 - (pm.yes + kalshiNo); // positive = arb exists
