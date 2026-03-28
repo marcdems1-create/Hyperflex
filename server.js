@@ -23975,18 +23975,10 @@ async function searchAndDraftReplies() {
     let reply = (replyRes.content[0]?.text || '').trim().replace(/^["']|["']$/g, '');
     if (reply.length > 200) reply = reply.substring(0, reply.lastIndexOf(' ', 200)) || reply.substring(0, 200);
 
-    // Attach branded image to tweet
+    // Text-only tweets until we have proper market card images
     let postResult = null;
     let postType = 'standalone';
-    let mediaId = null;
-    try {
-      const fs = require('fs');
-      const imgPath = require('path').join(__dirname, 'public', 'og-home.png');
-      const imgBuf = fs.readFileSync(imgPath);
-      mediaId = await uploadMediaToX(imgBuf);
-    } catch (imgErr) {
-      console.warn('[reply-bot] Image upload failed, posting text-only:', imgErr.message);
-    }
+    const mediaId = null;
 
     try {
       // Try quote tweet first (more engagement), fall back to standalone
