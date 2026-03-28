@@ -22898,8 +22898,15 @@ async function resolveAgentOutcomes() {
 // Run outcome resolution every 30 minutes
 cron.schedule('*/30 * * * *', safeCron('resolveAgentOutcomes', resolveAgentOutcomes));
 
-app.get('/api/arbitrage', (req, res) => {
+app.get('/api/arbitrage', async (req, res) => {
   if (_arbCache && (Date.now() - _arbCache.ts < 6 * 60 * 1000)) {
+    return res.json({ opportunities: _arbCache.data, updated_at: new Date(_arbCache.ts).toISOString() });
+  }
+  // Cache cold — run detection now instead of returning empty
+  try {
+    await detectArbitrageOpportunities();
+  } catch(e) { console.warn('[arbitrage] on-demand detection failed:', e.message); }
+  if (_arbCache && _arbCache.data) {
     return res.json({ opportunities: _arbCache.data, updated_at: new Date(_arbCache.ts).toISOString() });
   }
   res.json({ opportunities: [], updated_at: null });
