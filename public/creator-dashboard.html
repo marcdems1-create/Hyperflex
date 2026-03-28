@@ -12184,21 +12184,44 @@ async function loadPerfPlatformAnalytics() {
     const userId = localStorage.getItem('hf_user_id');
     if (!userId || !token) return;
     const r = await fetch('/api/predictors/' + userId + '/analytics', { headers: { Authorization: 'Bearer ' + token } });
-    if (!r.ok) { if (empty) empty.style.display = 'block'; return; }
-    const data = await r.json();
-    if (!data.platforms || data.platforms.length === 0) { if (empty) empty.style.display = 'block'; return; }
+    let data = null;
+    if (r.ok) data = await r.json();
+    // Fallback: compute from local positions when API is empty
+    if (!data || !data.platforms || data.platforms.length === 0) {
+      const positions = getAllPositionsFlat();
+      if (positions.length > 0) {
+        const byPlatform = {};
+        positions.forEach(p => {
+          const plat = p._platform || p.platform || 'polymarket';
+          if (!byPlatform[plat]) byPlatform[plat] = { platform: plat, wins: 0, losses: 0, pnl: 0, total: 0, resolved: 0 };
+          byPlatform[plat].total++;
+          if (p._isResolved) { byPlatform[plat].resolved++; if (p._won) byPlatform[plat].wins++; else byPlatform[plat].losses++; }
+          if (p.pnl != null) byPlatform[plat].pnl += parseFloat(p.pnl);
+        });
+        data = { platforms: Object.values(byPlatform).map(p => ({ ...p, win_rate: p.resolved > 0 ? Math.round(p.wins / p.resolved * 100) : 0 })) };
+      }
+    }
+    if (!data || !data.platforms || data.platforms.length === 0) { if (empty) empty.style.display = 'block'; return; }
     if (empty) empty.style.display = 'none';
     const platformColors = { polymarket: '#a78bfa', kalshi: '#fbbf24', manifold: '#34d399', hfx: '#c9920d' };
     grid.innerHTML = data.platforms.map(p => {
       const c = platformColors[p.platform] || '#888';
       const sign = p.pnl >= 0 ? '+' : '';
-      return '<div style="background:var(--ink);border:1px solid var(--border);border-radius:12px;padding:16px;border-top:2px solid ' + c + '">' +
-        '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:10px;text-transform:capitalize">' + p.platform + '</div>' +
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
-          '<div><div style="font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em">WINS</div><div style="font-family:var(--mono);font-size:16px;font-weight:900;color:#22c55e">' + (p.wins || 0) + '</div></div>' +
-          '<div><div style="font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em">LOSSES</div><div style="font-family:var(--mono);font-size:16px;font-weight:900;color:#ef4444">' + (p.losses || 0) + '</div></div>' +
-          '<div><div style="font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em">P&L</div><div style="font-family:var(--mono);font-size:14px;font-weight:900;color:' + (p.pnl >= 0 ? '#22c55e' : '#ef4444') + '">' + sign + '$' + Math.abs(p.pnl || 0).toFixed(2) + '</div></div>' +
-          '<div><div style="font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em">WIN RATE</div><div style="font-family:var(--mono);font-size:14px;font-weight:900;color:var(--text)">' + (p.win_rate || 0) + '%</div></div>' +
+      const totalPos = p.total || (p.wins + p.losses) || 0;
+      const resolvedCount = p.resolved || (p.wins + p.losses) || 0;
+      return '<div style="background:#0f0e0c;border:1px solid #2a2825;border-radius:12px;overflow:hidden">' +
+        '<div style="height:2px;background:' + c + ';opacity:0.6"></div>' +
+        '<div style="padding:16px 18px">' +
+          '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">' +
+            '<span style="font-size:14px;font-weight:800;color:var(--text);text-transform:capitalize">' + p.platform + '</span>' +
+            '<span style="font-family:var(--mono);font-size:10px;color:#4a4744">' + totalPos + ' position' + (totalPos!==1?'s':'') + '</span>' +
+          '</div>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#1a1917;border-radius:8px;overflow:hidden">' +
+            '<div style="background:#0f0e0c;padding:10px 12px;text-align:center"><div style="font-family:var(--mono);font-size:8px;color:#4a4744;text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px">Wins</div><div style="font-family:var(--mono);font-size:18px;font-weight:900;color:#22c55e">' + (p.wins || 0) + '</div></div>' +
+            '<div style="background:#0f0e0c;padding:10px 12px;text-align:center"><div style="font-family:var(--mono);font-size:8px;color:#4a4744;text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px">Losses</div><div style="font-family:var(--mono);font-size:18px;font-weight:900;color:#ef4444">' + (p.losses || 0) + '</div></div>' +
+            '<div style="background:#0f0e0c;padding:10px 12px;text-align:center"><div style="font-family:var(--mono);font-size:8px;color:#4a4744;text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px">P&L</div><div style="font-family:var(--mono);font-size:16px;font-weight:900;color:' + (p.pnl >= 0 ? '#22c55e' : '#ef4444') + '">' + sign + '$' + Math.abs(p.pnl || 0).toFixed(2) + '</div></div>' +
+            '<div style="background:#0f0e0c;padding:10px 12px;text-align:center"><div style="font-family:var(--mono);font-size:8px;color:#4a4744;text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px">Win Rate</div><div style="font-family:var(--mono);font-size:16px;font-weight:900;color:' + (p.win_rate >= 60 ? '#22c55e' : p.win_rate >= 40 ? 'var(--gold)' : '#ef4444') + '">' + (resolvedCount > 0 ? p.win_rate + '%' : '—') + '</div></div>' +
+          '</div>' +
         '</div></div>';
     }).join('');
   } catch (e) {
@@ -13577,23 +13600,33 @@ function renderPositionCard({question,side,pct,meta,pnl,pnlLabel,pnlIsPercent,ur
         </div>`:''}
       </div>
 
-      <!-- Stats row: Avg Cost / Current / Shares / Value -->
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#1e1c19;border-radius:8px;overflow:hidden;margin-bottom:10px">
+      <!-- Stats grid: Entry / Current / ROI / Shares / Cost / Value -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:#1a1917;border-radius:8px;overflow:hidden;margin-bottom:4px">
         <div style="background:#0f0e0c;padding:10px 12px;text-align:center">
-          <div style="font-family:var(--mono);font-size:9px;color:#4a4744;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Avg Cost</div>
-          <div style="font-family:var(--mono);font-size:14px;font-weight:700;color:#a09d94">${fmtPrice(avgCost)}</div>
+          <div style="font-family:var(--mono);font-size:8px;color:#4a4744;text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px">Entry Price</div>
+          <div style="font-family:var(--mono);font-size:15px;font-weight:800;color:#a09d94">${fmtPrice(avgCost)}</div>
         </div>
         <div style="background:#0f0e0c;padding:10px 12px;text-align:center">
-          <div style="font-family:var(--mono);font-size:9px;color:#4a4744;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Current</div>
-          <div style="font-family:var(--mono);font-size:14px;font-weight:700;color:${dirColor}">${fmtPrice(curPrice)} <span style="font-size:10px">${dirArrow}</span></div>
+          <div style="font-family:var(--mono);font-size:8px;color:#4a4744;text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px">Current Price</div>
+          <div style="font-family:var(--mono);font-size:15px;font-weight:800;color:${dirColor}">${fmtPrice(curPrice)} <span style="font-size:9px">${dirArrow}</span></div>
         </div>
         <div style="background:#0f0e0c;padding:10px 12px;text-align:center">
-          <div style="font-family:var(--mono);font-size:9px;color:#4a4744;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Shares</div>
-          <div style="font-family:var(--mono);font-size:14px;font-weight:700;color:#e8e4de">${shares>0?shares.toFixed(1):'—'}</div>
+          <div style="font-family:var(--mono);font-size:8px;color:#4a4744;text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px">Current ROI</div>
+          <div style="font-family:var(--mono);font-size:15px;font-weight:800;color:${pnlColor||'#6b6560'}">${costBasis>0?((pnl||0)>=0?'+':'')+((pnl||0)/costBasis*100).toFixed(1)+'%':'—'}</div>
         </div>
-        <div style="background:#0f0e0c;padding:10px 12px;text-align:center">
-          <div style="font-family:var(--mono);font-size:9px;color:#4a4744;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Value</div>
-          <div style="font-family:var(--mono);font-size:14px;font-weight:700;color:#e8e4de">${fmtVal(cashValue)}</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:#1a1917;border-radius:8px;overflow:hidden;margin-bottom:10px">
+        <div style="background:#0f0e0c;padding:8px 12px;text-align:center">
+          <div style="font-family:var(--mono);font-size:8px;color:#3a3834;text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px">Shares</div>
+          <div style="font-family:var(--mono);font-size:13px;font-weight:700;color:#7a7870">${shares>0?shares.toFixed(1):'—'}</div>
+        </div>
+        <div style="background:#0f0e0c;padding:8px 12px;text-align:center">
+          <div style="font-family:var(--mono);font-size:8px;color:#3a3834;text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px">Cost Basis</div>
+          <div style="font-family:var(--mono);font-size:13px;font-weight:700;color:#7a7870">${fmtVal(costBasis)}</div>
+        </div>
+        <div style="background:#0f0e0c;padding:8px 12px;text-align:center">
+          <div style="font-family:var(--mono);font-size:8px;color:#3a3834;text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px">Market Value</div>
+          <div style="font-family:var(--mono);font-size:13px;font-weight:700;color:#e8e4de">${fmtVal(cashValue)}</div>
         </div>
       </div>
 
