@@ -22248,6 +22248,12 @@ async function detectArbitrageOpportunities() {
       }
     }
 
+    // Deduplicate kalshiMarkets by question (Kalshi pagination can produce dupes)
+    const kSeen = new Set();
+    const dedupedKalshi = kalshiMarkets.filter(m => kSeen.has(m.question) ? false : (kSeen.add(m.question), true));
+    kalshiMarkets.length = 0;
+    kalshiMarkets.push(...dedupedKalshi);
+
     // Match markets across platforms by keyword overlap
     const arbStopWords = new Set(['will','before','after','this','that','what','when','where','which','with','from','have','been','does','price','range','more','than','least','year','2026','2027','2028','march','april','january','february']);
     const arbs = [];
@@ -22282,12 +22288,15 @@ async function detectArbitrageOpportunities() {
         }
       }
     }
-    arbs.sort((a, b) => b.edge_pct - a.edge_pct);
+    // Deduplicate by id (same Poly+Kalshi pair can match multiple times from Kalshi pagination dupes)
+    const arbSeen = new Set();
+    const uniqueArbs = arbs.filter(a => arbSeen.has(a.id) ? false : (arbSeen.add(a.id), true));
+    uniqueArbs.sort((a, b) => b.edge_pct - a.edge_pct);
 
     // Push notify for new arbs >= 3%
-    const newArbIds = new Set(arbs.map(a => a.id));
+    const newArbIds = new Set(uniqueArbs.map(a => a.id));
     if (webpush) {
-      const freshArbs = arbs.filter(a => a.edge_pct >= 3 && !_prevArbIds.has(a.id));
+      const freshArbs = uniqueArbs.filter(a => a.edge_pct >= 3 && !_prevArbIds.has(a.id));
       for (const arb of freshArbs.slice(0, 3)) {
         // Fire to all push subscribers
         let subs;
@@ -22312,11 +22321,11 @@ async function detectArbitrageOpportunities() {
       }
     }
     _prevArbIds = newArbIds;
-    _arbCache = { ts: Date.now(), data: arbs.slice(0, 20) };
-    if (arbs.length) {
-      console.log(`[arb] Detected ${arbs.length} arb opportunities, best edge: ${arbs[0].edge_pct}%`);
+    _arbCache = { ts: Date.now(), data: uniqueArbs.slice(0, 20) };
+    if (uniqueArbs.length) {
+      console.log(`[arb] Detected ${uniqueArbs.length} unique arb opportunities, best edge: ${uniqueArbs[0].edge_pct}%`);
       // Tweet the biggest arb opportunity
-      const topArb = arbs[0];
+      const topArb = uniqueArbs[0];
       if (topArb.edge_pct >= 3) {
         tweetArbAlert({ market: topArb.market, poly_pct: topArb.poly_yes, kalshi_pct: topArb.kalshi_yes, edge: Math.round(topArb.edge_pct), direction: topArb.direction }).catch(() => {});
       }
