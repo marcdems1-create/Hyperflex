@@ -1143,10 +1143,12 @@ function logTradeIntent() {
     <div class="ticker-item"><span class="num" id="tk-volume">$161M</span> tracked <span class="ticker-sep">&#10022;</span></div>
     <div class="ticker-item"><span class="num" id="tk-traders">32,837</span> traders <span class="ticker-sep">&#10022;</span></div>
     <div class="ticker-item"><span class="num" id="tk-markets">200+</span> markets <span class="ticker-sep">&#10022;</span></div>
+    <div class="ticker-item">Elite whale accuracy: <span class="num" id="tk-accuracy" style="color:#22c55e">--</span> <span class="ticker-sep">&#10022;</span></div>
     <div class="ticker-item">Updated <span class="num">30s</span> ago <span class="ticker-sep">&#10022;</span></div>
     <div class="ticker-item"><span class="num" id="tk-volume2">$161M</span> tracked <span class="ticker-sep">&#10022;</span></div>
     <div class="ticker-item"><span class="num" id="tk-traders2">32,837</span> traders <span class="ticker-sep">&#10022;</span></div>
     <div class="ticker-item"><span class="num" id="tk-markets2">200+</span> markets <span class="ticker-sep">&#10022;</span></div>
+    <div class="ticker-item">Elite whale accuracy: <span class="num" id="tk-accuracy2" style="color:#22c55e">--</span> <span class="ticker-sep">&#10022;</span></div>
     <div class="ticker-item">Updated <span class="num">30s</span> ago <span class="ticker-sep">&#10022;</span></div>
   </div>
 </div>
@@ -1418,6 +1420,19 @@ function logTradeIntent() {
       ['tk-markets','tk-markets2'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.textContent = markets > 200 ? fmt(markets) : markets + '+';
+      });
+    }
+  } catch(e) {}
+})();
+
+// Fetch elite whale accuracy for ticker
+(async function loadEliteAccuracy() {
+  try {
+    const d = await fetch('/api/accuracy/elite-stats').then(r => r.json());
+    if (d.accuracy != null && d.total > 0) {
+      ['tk-accuracy','tk-accuracy2'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = d.accuracy + '%';
       });
     }
   } catch(e) {}

@@ -58,10 +58,12 @@ body{background:var(--paper);color:var(--text);font-family:var(--sans);min-heigh
 .hero-sub{font-size:clamp(13px,1.6vw,15px);color:var(--dim);line-height:1.6;max-width:520px;margin:0 auto 20px;font-family:var(--mono)}
 .hero-stat{display:inline-block;font-family:var(--mono);font-size:13px;color:var(--gold);background:rgba(201,146,13,.08);border:1px solid rgba(201,146,13,.2);padding:8px 20px;border-radius:20px;letter-spacing:.3px}
 
-/* PODIUM — TOP 3 */
-.podium-section{position:relative;z-index:1;max-width:1100px;margin:48px auto 0;padding:0 40px}
+/* PODIUM — TOP 10 CAROUSEL */
+.podium-section{position:relative;z-index:1;max-width:1200px;margin:48px auto 0;padding:0 20px}
 .podium-title{text-align:center;font-family:var(--mono);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--muted);margin-bottom:28px}
-.podium-grid{display:grid;grid-template-columns:1fr 1.15fr 1fr;gap:20px;align-items:end}
+.podium-grid{display:flex;gap:16px;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;padding:20px 4px 24px;scrollbar-width:none}
+.podium-grid::-webkit-scrollbar{display:none}
+.podium-grid .podium-card{scroll-snap-align:start;min-width:260px;max-width:280px;flex-shrink:0}
 .podium-card{position:relative;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:32px 24px 28px;text-align:center;transition:box-shadow .3s,transform .3s;overflow:hidden}
 .podium-card:hover{box-shadow:0 0 30px rgba(201,146,13,.15);transform:translateY(-4px)}
 .podium-card.podium-1{background:linear-gradient(180deg,rgba(201,146,13,.08) 0%,var(--card) 60%);border-color:rgba(201,146,13,.4);transform:translateY(-20px);padding:40px 24px 32px}
@@ -171,10 +173,9 @@ body{background:var(--paper);color:var(--text);font-family:var(--sans);min-heigh
   .hero-trophy{font-size:40px}
   .podium-section{padding:0 16px}
   .podium-grid{grid-template-columns:1fr;gap:16px}
-  .podium-card.podium-1{order:-1;transform:none}
+  .podium-grid .podium-card{min-width:240px}
+  .podium-card.podium-1{transform:none}
   .podium-card.podium-1:hover{transform:translateY(-4px)}
-  .podium-card.podium-2{order:0}
-  .podium-card.podium-3{order:1}
   .filter-bar{padding:0 16px;flex-direction:column;align-items:flex-start}
   .filter-group{flex-wrap:wrap}
   .rankings-section{padding:0 12px 120px}
@@ -376,24 +377,20 @@ function renderAll(){
     return s+(r.volume||Math.abs(r.total_pnl||0));
   },0);
   document.getElementById('heroStat').textContent=formatMoney(totalCapital)+' tracked across '+data.length+' traders';
-  renderPodium(data.slice(0,3));
-  renderTable(data.slice(3,50));
+  renderPodium(data.slice(0,10));
+  renderTable(data.slice(10,50));
   renderHallOfFame();
   showStickyBar();
 }
 
-function renderPodium(top3){
+function renderPodium(topN){
   var section=document.getElementById('podiumSection');
   var grid=document.getElementById('podiumGrid');
-  if(top3.length<3){section.style.display='none';return}
+  if(!topN.length){section.style.display='none';return}
   section.style.display='';
-  var medals=['&#129351;','&#129352;','&#129353;'];
-  var classes=['podium-2','podium-1','podium-3'];
-  var order=[1,0,2];
-  grid.innerHTML=order.map(function(idx){
-    var r=top3[idx];
+  var medals=['&#129351;','&#129352;','&#129353;','4','5','6','7','8','9','10'];
+  grid.innerHTML=topN.map(function(r,idx){
     var dname=r.display_name||r.userName||r.name||'';
-    // If display_name is a raw hex address, use whale nickname instead
     if(dname&&/^0x[0-9a-fA-F]{6,}/.test(dname))dname=whaleNickname(dname);
     if(!dname&&r.user_id&&String(r.user_id).startsWith('hl_')){var addr=String(r.user_id).replace('hl_','');dname=addr.length>10?whaleNickname(addr):addr}
     if(!dname)dname=r.user_id?whaleNickname(r.user_id):'Trader';
@@ -408,8 +405,11 @@ function renderPodium(top3){
       var cls={POLY:'pp-poly',HL:'pp-hl',HFX:'pp-hfx',KALSHI:'pp-kalshi',MANIFOLD:'pp-manifold'}[p]||'pp-hfx';
       return'<span class="platform-pill '+cls+'">'+p+'</span>';
     }).join(' ');
-    return'<div class="podium-card '+classes[idx]+'">'+
-      '<div class="podium-rank-badge">'+medals[idx]+'</div>'+
+    // Card style — #1 gold, #2 silver, #3 bronze, rest default
+    var cardClass=idx===0?'podium-1':idx===1?'podium-2':idx===2?'podium-3':'';
+    var rankBadge=idx<3?medals[idx]:'<span style="font-family:var(--mono);font-size:14px;font-weight:800;color:var(--dim)">#'+medals[idx]+'</span>';
+    return'<div class="podium-card '+cardClass+'">'+
+      '<div class="podium-rank-badge">'+rankBadge+'</div>'+
       '<div class="podium-avatar">'+initial+'</div>'+
       '<div class="podium-name">'+escHtml(dname)+alphaGradeBadge(r.wallet||r.address||(r.user_id&&String(r.user_id).startsWith('hl_')?String(r.user_id).replace('hl_',''):'')||'')+'</div>'+
       '<div class="podium-pnl'+pnlClass+'">'+formatPnl(pnl)+'</div>'+

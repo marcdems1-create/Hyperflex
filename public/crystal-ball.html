@@ -313,10 +313,15 @@ function renderPredictions(){
     }
     var reasoning=(p.reasoning||[]).slice(0,2).join(' \u00B7 ');
 
+    // Alpha Score
+    var alpha = p.alpha_score || 0;
+    var alphaColor = alpha >= 7 ? '#22c55e' : alpha >= 4 ? 'var(--gold)' : 'var(--dim)';
+    var alphaBadge = alpha > 0 ? '<div style="display:flex;flex-direction:column;align-items:center;padding:3px 8px;border-radius:6px;background:rgba(201,146,13,.08);border:1px solid rgba(201,146,13,.15)"><span style="font-family:var(--mono);font-size:14px;font-weight:900;color:'+alphaColor+';line-height:1">'+alpha.toFixed(1)+'</span><span style="font-family:var(--mono);font-size:7px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">Alpha</span></div>' : '';
+
     return '<div class="cb-card type-'+p.type+'">'+
       '<div class="cb-card-top">'+
         '<span class="cb-badge '+p.type+'">'+(TYPE_LABELS[p.type]||p.type)+'</span>'+
-        '<span class="cb-conf" style="color:'+color+'">'+c+'</span>'+
+        '<div style="display:flex;align-items:center;gap:8px">'+alphaBadge+'<span class="cb-conf" style="color:'+color+'">'+c+'</span></div>'+
       '</div>'+
       (q?'<div class="cb-market"><a href="'+escAttr(url)+'" target="_blank" rel="noopener">'+escHtml(q.substring(0,80))+'</a></div>':'<div class="cb-market">'+escHtml(p.prediction)+'</div>')+
       (reasoning?'<div class="cb-reasoning">'+escHtml(reasoning)+'</div>':'')+

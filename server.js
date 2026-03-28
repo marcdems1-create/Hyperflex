@@ -21261,6 +21261,23 @@ app.get('/api/crystal-ball', async (req, res) => {
       }
     }
 
+    // Enrich predictions with Alpha Score
+    if (data && data.predictions) {
+      try {
+        const eliteData = getEliteWhales();
+        const whaleIdx = (_whaleIndexCache && _whaleIndexCache.data) ? _whaleIndexCache.data.picks || [] : [];
+        const allWhales = (_whaleWatchCache && _whaleWatchCache.data) ? _whaleWatchCache.data.whales || [] : [];
+        for (const pred of data.predictions) {
+          const mkt = { question: pred.market && pred.market.question ? pred.market.question : pred.prediction, yes_price: pred.market && pred.market.yes_price ? pred.market.yes_price : 0.5 };
+          const idxEntry = whaleIdx.find(w => w.market === mkt.question);
+          if (idxEntry && !idxEntry.wallets) {
+            idxEntry.wallets = [...new Set(allWhales.filter(w => w.market === mkt.question).map(w => w.proxyWallet).filter(Boolean))];
+          }
+          pred.alpha_score = computeMarketAlphaScore(mkt, whaleIdx, eliteData.scores);
+        }
+      } catch (e) { console.warn('[crystal-ball] alpha enrichment:', e.message); }
+    }
+
     res.json(data);
   } catch (err) {
     console.error('[crystal-ball]', err.message);
