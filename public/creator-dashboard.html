@@ -12980,7 +12980,15 @@ async function loadCrystalBallPick() {
       ${url ? `<div>${qtTradeBtn(url, 'View on Polymarket \u2192', '#c9920d')}</div>` : ''}
     `;
   } catch (e) {
-    card.innerHTML = '<div style="text-align:center;padding:32px;color:var(--dim);font-size:13px">Crystal ball unavailable right now.</div>';
+    console.warn('[qt crystal-ball]', e.message);
+    // Fallback: show top market from hot markets if already loaded
+    const hotEl = document.getElementById('qtHotGrid');
+    const firstCard = hotEl && hotEl.querySelector('.qt-mkt-card');
+    if (firstCard) {
+      card.innerHTML = '<div style="text-align:center;padding:20px;color:var(--dim);font-size:12px">Crystal Ball loading — check top hot markets below</div>';
+    } else {
+      card.innerHTML = '<div style="text-align:center;padding:20px;color:var(--dim);font-size:12px">No AI picks right now — refresh in a few minutes</div>';
+    }
   }
 }
 
