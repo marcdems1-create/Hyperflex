@@ -6346,6 +6346,7 @@ function renderDashboard(data) {
 // ── SMART SIDEBAR ─────────────────────────────────────────────────────────────
 // Adapts sidebar layout based on whether user is a trader, creator, both, or neither.
 function adaptSidebar(data) {
+  if (!window._polyWalletAddress) window._polyWalletAddress = localStorage.getItem('hf_poly_wallet') || '';
   const isTrader = !!(window._polyWalletAddress || window._connectedWallet);
   const isCreator = !!(data && data.markets && data.markets.length > 0);
 
@@ -12744,6 +12745,7 @@ async function loadManifoldPositions(forceRefresh) {
 // ── POLYMARKET INTEGRATION ────────────────────────────────────────────────────
 
 function renderPolymarketConnectState() {
+  if (!_polyWalletAddress) _polyWalletAddress = localStorage.getItem('hf_poly_wallet') || '';
   const form   = document.getElementById('polyConnectForm');
   const row    = document.getElementById('polyConnectedRow');
   const badge  = document.getElementById('polyStatusBadge');
@@ -12822,6 +12824,8 @@ async function disconnectPolymarket() {
 
 async function loadPolymarketPositions(forceRefresh) {
   const el = document.getElementById('polyPositions');
+  // Ensure wallet address is loaded from localStorage if not set yet
+  if (!_polyWalletAddress) _polyWalletAddress = localStorage.getItem('hf_poly_wallet') || '';
   if (!el || !_polyWalletAddress) return;
   el.innerHTML = '<div style="padding:16px 0;font-size:13px;color:var(--muted);font-family:var(--mono)">Loading positions…</div>';
   try {
