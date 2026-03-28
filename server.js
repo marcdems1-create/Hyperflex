@@ -23809,13 +23809,13 @@ app.post('/api/test-media-upload', async (req, res) => {
     const svg = `<svg width="1200" height="628" xmlns="http://www.w3.org/2000/svg">
       <rect width="1200" height="628" fill="#141412"/>
       <rect x="40" y="40" width="1120" height="548" rx="24" fill="#1a1a17" stroke="#c9920d" stroke-width="2" stroke-opacity="0.3"/>
-      <text x="80" y="100" font-family="sans-serif" font-size="18" font-weight="700" fill="#c9920d" letter-spacing="3">HYPERFLEX MARKET INTELLIGENCE</text>
-      <text x="80" y="200" font-family="sans-serif" font-size="40" font-weight="700" fill="#ddd8cc">Test Card — Media Upload</text>
-      <text x="80" y="300" font-family="sans-serif" font-size="72" font-weight="800" fill="#22c55e">67%</text>
-      <text x="300" y="300" font-family="sans-serif" font-size="72" font-weight="800" fill="#ef4444">33%</text>
-      <text x="80" y="340" font-family="sans-serif" font-size="20" fill="#7a7870">YES</text>
-      <text x="300" y="340" font-family="sans-serif" font-size="20" fill="#7a7870">NO</text>
-      <text x="80" y="540" font-family="sans-serif" font-size="16" fill="#7a7870">hyperflex.network</text>
+      <text x="80" y="100" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif" font-size="18" font-weight="700" fill="#c9920d" letter-spacing="3">HYPERFLEX MARKET INTELLIGENCE</text>
+      <text x="80" y="200" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif" font-size="40" font-weight="700" fill="#ddd8cc">Test Card — Media Upload</text>
+      <text x="80" y="300" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif" font-size="72" font-weight="800" fill="#22c55e">67%</text>
+      <text x="300" y="300" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif" font-size="72" font-weight="800" fill="#ef4444">33%</text>
+      <text x="80" y="340" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif" font-size="20" fill="#7a7870">YES</text>
+      <text x="300" y="340" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif" font-size="20" fill="#7a7870">NO</text>
+      <text x="80" y="540" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif" font-size="16" fill="#7a7870">hyperflex.network</text>
     </svg>`;
     const imgBuf = await sharp(Buffer.from(svg)).png().toBuffer();
     const mediaId = await uploadMediaToX(imgBuf);
@@ -24003,18 +24003,18 @@ async function searchAndDraftReplies() {
           const svg = `<svg width="1200" height="628" xmlns="http://www.w3.org/2000/svg">
             <rect width="1200" height="628" fill="#141412"/>
             <rect x="40" y="40" width="1120" height="548" rx="24" fill="#1a1a17" stroke="#c9920d" stroke-width="2" stroke-opacity="0.3"/>
-            <text x="80" y="100" font-family="sans-serif" font-size="18" font-weight="700" fill="#c9920d" letter-spacing="3">HYPERFLEX MARKET INTELLIGENCE</text>
-            <text x="80" y="180" font-family="sans-serif" font-size="36" font-weight="700" fill="#ddd8cc" width="1040">
+            <text x="80" y="100" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif" font-size="18" font-weight="700" fill="#c9920d" letter-spacing="3">HYPERFLEX MARKET INTELLIGENCE</text>
+            <text x="80" y="180" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif" font-size="36" font-weight="700" fill="#ddd8cc" width="1040">
               ${marketName.length > 60 ? marketName.substring(0, 57) + '...' : marketName}
             </text>
-            ${marketName.length > 60 ? `<text x="80" y="230" font-family="sans-serif" font-size="36" font-weight="700" fill="#ddd8cc">${marketName.substring(57, 114)}</text>` : ''}
-            <text x="80" y="${marketName.length > 60 ? 310 : 260}" font-family="sans-serif" font-size="72" font-weight="800" fill="#22c55e">${yesPct ? yesPct + '%' : ''}</text>
-            <text x="${80 + (yesPct ? yesPct.length * 44 + 60 : 0)}" y="${marketName.length > 60 ? 310 : 260}" font-family="sans-serif" font-size="72" font-weight="800" fill="#ef4444">${noPct ? noPct + '%' : ''}</text>
-            <text x="80" y="${marketName.length > 60 ? 350 : 300}" font-family="sans-serif" font-size="20" fill="#7a7870">YES</text>
-            <text x="${80 + (yesPct ? yesPct.length * 44 + 60 : 0)}" y="${marketName.length > 60 ? 350 : 300}" font-family="sans-serif" font-size="20" fill="#7a7870">NO</text>
+            ${marketName.length > 60 ? `<text x="80" y="230" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif" font-size="36" font-weight="700" fill="#ddd8cc">${marketName.substring(57, 114)}</text>` : ''}
+            <text x="80" y="${marketName.length > 60 ? 310 : 260}" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif" font-size="72" font-weight="800" fill="#22c55e">${yesPct ? yesPct + '%' : ''}</text>
+            <text x="${80 + (yesPct ? yesPct.length * 44 + 60 : 0)}" y="${marketName.length > 60 ? 310 : 260}" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif" font-size="72" font-weight="800" fill="#ef4444">${noPct ? noPct + '%' : ''}</text>
+            <text x="80" y="${marketName.length > 60 ? 350 : 300}" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif" font-size="20" fill="#7a7870">YES</text>
+            <text x="${80 + (yesPct ? yesPct.length * 44 + 60 : 0)}" y="${marketName.length > 60 ? 350 : 300}" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif" font-size="20" fill="#7a7870">NO</text>
             ${volMatch ? `<text x="80" y="440" font-family="monospace" font-size="22" fill="#c9920d">${volMatch}</text>` : ''}
             ${whaleMatch ? `<text x="400" y="440" font-family="monospace" font-size="22" fill="#c9920d">${whaleMatch} whale wallets tracking</text>` : ''}
-            <text x="80" y="540" font-family="sans-serif" font-size="16" fill="#7a7870">hyperflex.network</text>
+            <text x="80" y="540" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif" font-size="16" fill="#7a7870">hyperflex.network</text>
           </svg>`;
           try {
             const imgBuf = await sharp(Buffer.from(svg)).png().toBuffer();
@@ -24033,10 +24033,29 @@ async function searchAndDraftReplies() {
     } catch (cardErr) { _logError('reply-bot/card', cardErr); }
 
     try {
-      postResult = await postTweet(reply, mediaId);
+      // Try quote tweet first (more engagement), fall back to standalone
+      const tweetUrl = 'https://api.x.com/2/tweets';
+      const quotePayload = { text: reply, quote_tweet_id: target.id };
+      if (mediaId) quotePayload.media = { media_ids: [mediaId] };
+      const quoteAuth = _xOAuthSign('POST', tweetUrl, {});
+      const quoteRes = await fetch(tweetUrl, {
+        method: 'POST',
+        headers: { 'Authorization': quoteAuth, 'Content-Type': 'application/json' },
+        body: JSON.stringify(quotePayload)
+      });
+      const quoteData = await quoteRes.json();
+      if (quoteRes.ok) {
+        postResult = quoteData;
+        postType = 'quote';
+        console.log(`[reply-bot] QUOTE-TWEETED ${target.id}: "${reply.substring(0, 60)}..."${mediaId ? ' (with image)' : ''}`);
+      } else {
+        // Quote tweet failed (maybe Basic tier limitation), fall back to standalone
+        console.warn(`[reply-bot] Quote tweet failed (${quoteRes.status}), falling back to standalone`);
+        postResult = await postTweet(reply, mediaId);
+        console.log(`[reply-bot] STANDALONE tweet inspired by ${target.id}: "${reply.substring(0, 60)}..."${mediaId ? ' (with image)' : ''}`);
+      }
       _replyLog.push(target.id);
       if (_replyLog.length > 200) _replyLog.splice(0, 100);
-      console.log(`[reply-bot] AUTO-POSTED tweet inspired by ${target.id}: "${reply.substring(0, 60)}..."${mediaId ? ' (with image)' : ''}`);
     } catch (postErr) {
       _logError('reply-bot/post', postErr);
     }
@@ -24102,7 +24121,7 @@ app.post('/api/reply-queue/trigger', async (req, res) => {
 });
 
 // Run reply bot every 2 hours at :30
-cron.schedule('30 */2 * * *', safeCron('replyBot', searchAndDraftReplies));
+cron.schedule('15 */4 * * *', safeCron('replyBot', searchAndDraftReplies));
 // Also run once 2 min after boot to populate queue
 setTimeout(() => searchAndDraftReplies().catch(e => console.warn('[reply-bot] initial run:', e.message)), 120000);
 console.log('[boot] Reply engagement bot initialized');
