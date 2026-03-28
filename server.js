@@ -16487,13 +16487,29 @@ app.get('/api/polymarket/positions/:address', async (req, res) => {
   const cached = _polyCache?.get(cacheKey);
   if (cached) return res.json(cached);
   try {
-    const upstream = await fetch(`https://data-api.polymarket.com/positions?user=${address}&limit=50&sortBy=CURRENT&winning=false`, {
-      headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+    // Fetch BOTH winning and non-winning positions in parallel
+    const [upstreamLosing, upstreamWinning] = await Promise.all([
+      fetch(`https://data-api.polymarket.com/positions?user=${address}&limit=50&sortBy=CURRENT&winning=false`, {
+        headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+      }),
+      fetch(`https://data-api.polymarket.com/positions?user=${address}&limit=50&sortBy=CURRENT&winning=true`, {
+        headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+      }).catch(() => null)
+    ]);
+    if (upstreamLosing.status === 400) return res.status(400).json({ error: 'Polymarket rejected this address. Double-check your wallet address on polymarket.com' });
+    if (!upstreamLosing.ok) throw new Error('Polymarket API ' + upstreamLosing.status);
+    const rawLosing = await upstreamLosing.json();
+    const rawWinning = upstreamWinning && upstreamWinning.ok ? await upstreamWinning.json() : [];
+    // Merge and deduplicate by conditionId+outcome
+    const seen = new Set();
+    const allRaw = [...(Array.isArray(rawLosing) ? rawLosing : []), ...(Array.isArray(rawWinning) ? rawWinning : [])];
+    const raw = allRaw.filter(p => {
+      const key = (p.conditionId || '') + ':' + (p.outcome || '');
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
     });
-    if (upstream.status === 400) return res.status(400).json({ error: 'Polymarket rejected this address. Double-check your wallet address on polymarket.com' });
-    if (!upstream.ok) throw new Error('Polymarket API ' + upstream.status);
-    const raw = await upstream.json();
-    const positions = (Array.isArray(raw) ? raw : []).map(p => ({
+    const positions = raw.map(p => ({
       id: p.conditionId,
       token_id: p.asset || null,
       condition_id: p.conditionId || null,
