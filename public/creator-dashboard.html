@@ -4958,7 +4958,11 @@ body.nav-open .sidebar-backdrop {
               <div id="polyConnectForm" style="background:var(--cream);border:1px solid var(--border);border-radius:14px;padding:28px">
                 <div style="font-size:13px;color:var(--dim);margin-bottom:16px;line-height:1.6">Paste your Polygon wallet address to import all open positions and P&L instantly.</div>
                 <input type="text" id="poly-wallet-input" placeholder="0x... your wallet address" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:10px;padding:13px 16px;font-family:var(--mono);font-size:13px;color:var(--text);outline:none;margin-bottom:8px;box-sizing:border-box" onfocus="this.style.borderColor='rgba(124,58,237,0.6)'" onblur="this.style.borderColor='var(--border)'"/>
-                <div style="font-size:11px;color:var(--dim);margin-bottom:20px">Find at <a href="https://polymarket.com" target="_blank" style="color:#a78bfa">polymarket.com</a> → your profile → copy address</div>
+                <div style="font-size:11px;color:var(--dim);margin-bottom:16px">Find at <a href="https://polymarket.com" target="_blank" style="color:#a78bfa">polymarket.com</a> → your profile → copy address</div>
+                <label style="display:flex;align-items:center;gap:10px;margin-bottom:20px;cursor:pointer;user-select:none">
+                  <input type="checkbox" id="polyStaySignedIn" checked style="width:16px;height:16px;accent-color:#a78bfa;cursor:pointer;flex-shrink:0"/>
+                  <span style="font-size:12px;color:var(--soft)">Stay signed in to Polymarket on this device</span>
+                </label>
                 <button id="polyConnectBtn" onclick="connectPolymarket()" style="background:rgba(124,58,237,0.9);color:#fff;border:none;border-radius:10px;padding:12px 24px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;min-height:44px">Connect Polymarket →</button>
               </div>
               <div id="polyConnectedRow" style="display:none;align-items:center;gap:10px;margin-bottom:16px;padding:12px 16px;background:rgba(124,58,237,0.06);border:1px solid rgba(124,58,237,0.2);border-radius:10px">
@@ -12092,7 +12096,7 @@ let _portfolioLoaded = false;
 let _kalshiConnected = false;
 let _manifoldUsername = '';
 // Persist wallet address in localStorage as backup
-let _polyWalletAddress = localStorage.getItem('hf_poly_wallet') || '';
+let _polyWalletAddress = localStorage.getItem('hf_poly_wallet') || sessionStorage.getItem('hf_poly_wallet_session') || '';
 
 async function loadPortfolio() {
   if (_portfolioLoaded) return;
@@ -12776,7 +12780,14 @@ async function connectPolymarket() {
     const d = await r.json();
     if (!r.ok) { showToast(d.error || 'Failed to connect', 'error'); btn.disabled = false; btn.textContent = 'Connect Polymarket →'; return; }
     _polyWalletAddress = address;
-    localStorage.setItem('hf_poly_wallet', address);
+    const stayIn = document.getElementById('polyStaySignedIn');
+    if (stayIn && stayIn.checked) {
+      localStorage.setItem('hf_poly_wallet', address);
+      sessionStorage.removeItem('hf_poly_wallet_session');
+    } else {
+      sessionStorage.setItem('hf_poly_wallet_session', address);
+      localStorage.removeItem('hf_poly_wallet');
+    }
     renderPolymarketConnectState();
     showToast('Polymarket connected!', 'success');
     loadPolymarketPositions(false);
@@ -12797,6 +12808,7 @@ async function disconnectPolymarket() {
     });
     _polyWalletAddress = '';
     localStorage.removeItem('hf_poly_wallet');
+    sessionStorage.removeItem('hf_poly_wallet_session');
     _portfolioLoaded = false;
     renderPolymarketConnectState();
     showToast('Polymarket disconnected', 'success');
