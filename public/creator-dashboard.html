@@ -13349,20 +13349,24 @@ function updatePortfolioSummary() {
   window._portfolioStats = stats; // for share button
 
   bar.style.display = 'block';
-  if (shareBar) shareBar.style.display = positions.length > 0 ? 'block' : 'none';
+  // Only show share button when there's something worth sharing
+  if (shareBar) shareBar.style.display = (stats.resolvedCount >= 3 && stats.wins > 0) ? 'block' : 'none';
 
-  // Total Value (include USDC wallet balance if available)
+  // Format dollars nicely
+  function fmtD(n) { if (Math.abs(n)>=1e6) return '$'+(n/1e6).toFixed(1)+'M'; if (Math.abs(n)>=1e3) return '$'+(n/1e3).toFixed(1)+'K'; return '$'+n.toFixed(2); }
+
+  // Total Value
   const usdcBal = window._walletBalanceUSDC || 0;
   const totalWithUsdc = stats.totalValue + usdcBal;
   const valEl = document.getElementById('psSummaryValue');
-  if (valEl) valEl.textContent = '$' + totalWithUsdc.toFixed(2);
+  if (valEl) valEl.textContent = fmtD(totalWithUsdc);
 
   // Total P&L
   const pnlEl = document.getElementById('psSummaryPnl');
   const pnlPctEl = document.getElementById('psSummaryPnlPct');
   if (pnlEl) {
     const sign = stats.totalPnl >= 0 ? '+' : '';
-    pnlEl.textContent = sign + '$' + Math.abs(stats.totalPnl).toFixed(2);
+    pnlEl.textContent = sign + fmtD(Math.abs(stats.totalPnl));
     pnlEl.style.color = stats.totalPnl >= 0 ? '#22c55e' : '#ef4444';
   }
   if (pnlPctEl && stats.totalCost > 0) {
@@ -13372,35 +13376,44 @@ function updatePortfolioSummary() {
     pnlPctEl.style.color = pnlPct >= 0 ? '#22c55e' : '#ef4444';
   }
 
-  // Win Rate Ring
+  // Win Rate Ring — dim when no resolved trades
   const ringEl = document.getElementById('psWinRateRing');
   const wrVal = document.getElementById('psWinRateVal');
   if (ringEl) {
-    const wr = stats.winRate;
-    ringEl.style.background = `conic-gradient(#22c55e ${wr}%, #333 0)`;
+    if (stats.resolvedCount > 0) {
+      const wrColor = stats.winRate >= 60 ? '#22c55e' : stats.winRate >= 40 ? '#c9920d' : '#ef4444';
+      ringEl.style.background = `conic-gradient(${wrColor} ${stats.winRate}%, #222 0)`;
+    } else {
+      ringEl.style.background = 'conic-gradient(#222 100%, #222 100%)';
+    }
   }
   if (wrVal) {
-    wrVal.textContent = stats.winRate + '%';
-    wrVal.style.color = stats.resolvedCount > 0 ? '#e8e4de' : '#5a5752';
+    wrVal.textContent = stats.resolvedCount > 0 ? stats.winRate + '%' : '—';
+    wrVal.style.color = stats.resolvedCount > 0 ? (stats.winRate >= 60 ? '#22c55e' : stats.winRate >= 40 ? '#c9920d' : '#ef4444') : '#5a5752';
   }
 
-  // Sharp Score
+  // Sharp Score — show dash when no resolved trades
   const sharpVal = document.getElementById('psSharpVal');
   const sharpBadge = document.getElementById('psSharpBadge');
-  if (sharpVal) sharpVal.textContent = stats.sharpScore;
+  if (sharpVal) sharpVal.textContent = stats.resolvedCount > 0 ? stats.sharpScore : '—';
   if (sharpBadge) {
-    const s = stats.sharpScore;
-    if (s >= 70) { sharpBadge.style.background = 'rgba(34,197,94,0.12)'; sharpBadge.style.borderColor = 'rgba(34,197,94,0.3)'; sharpVal.style.color = '#22c55e'; }
-    else if (s >= 40) { sharpBadge.style.background = 'rgba(201,146,13,0.08)'; sharpBadge.style.borderColor = 'rgba(201,146,13,0.2)'; sharpVal.style.color = 'var(--gold)'; }
-    else { sharpBadge.style.background = 'rgba(239,68,68,0.08)'; sharpBadge.style.borderColor = 'rgba(239,68,68,0.2)'; sharpVal.style.color = '#ef4444'; }
+    if (stats.resolvedCount === 0) { sharpBadge.style.background = 'rgba(100,100,90,0.06)'; sharpBadge.style.borderColor = '#2a2825'; if (sharpVal) sharpVal.style.color = '#5a5752'; }
+    else if (stats.sharpScore >= 70) { sharpBadge.style.background = 'rgba(34,197,94,0.12)'; sharpBadge.style.borderColor = 'rgba(34,197,94,0.3)'; if (sharpVal) sharpVal.style.color = '#22c55e'; }
+    else if (stats.sharpScore >= 40) { sharpBadge.style.background = 'rgba(201,146,13,0.08)'; sharpBadge.style.borderColor = 'rgba(201,146,13,0.2)'; if (sharpVal) sharpVal.style.color = 'var(--gold)'; }
+    else { sharpBadge.style.background = 'rgba(239,68,68,0.08)'; sharpBadge.style.borderColor = 'rgba(239,68,68,0.2)'; if (sharpVal) sharpVal.style.color = '#ef4444'; }
   }
 
   // ROI
   const roiEl = document.getElementById('psSummaryROI');
   if (roiEl) {
-    const sign = stats.roi >= 0 ? '+' : '';
-    roiEl.textContent = sign + stats.roi.toFixed(1) + '%';
-    roiEl.style.color = stats.roi >= 0 ? '#22c55e' : '#ef4444';
+    if (stats.totalCost > 0) {
+      const sign = stats.roi >= 0 ? '+' : '';
+      roiEl.textContent = sign + stats.roi.toFixed(1) + '%';
+      roiEl.style.color = stats.roi >= 0 ? '#22c55e' : '#ef4444';
+    } else {
+      roiEl.textContent = '—';
+      roiEl.style.color = '#5a5752';
+    }
   }
 
   // P&L Over Time Chart
