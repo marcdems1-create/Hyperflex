@@ -656,7 +656,20 @@ function renderLanes() {
       return renderLaneCard(m, '<div class="lane-card-signal gold">' + m.whale_count + ' whale' + (m.whale_count>1?'s':'') + ' \u00B7 ' + cap + ' positioned</div>');
     }).join('');
   } else {
-    wEl.innerHTML = '<div class="lane-empty">No whale activity detected right now</div>';
+    // Fallback: top markets by volume when whale cache is warming
+    var topByVol = all.filter(function(m) { return (m.volume||0) >= 50000 && m.yes_price != null; }).sort(function(a,b) { return (b.volume||0) - (a.volume||0); }).slice(0, 8);
+    if (topByVol.length) {
+      try {
+        document.querySelector('#lane-whales').closest('.signal-lane').querySelector('.lane-title').textContent = 'High Volume';
+        document.querySelector('#lane-whales').closest('.signal-lane').querySelector('.lane-sub').textContent = 'Most active markets right now';
+      } catch(e) {}
+      wEl.innerHTML = topByVol.map(function(m) {
+        var vol = m.volume >= 1000000 ? '$' + (m.volume/1000000).toFixed(1) + 'M' : '$' + Math.round(m.volume/1000) + 'K';
+        return renderLaneCard(m, '<div class="lane-card-signal gold">' + vol + ' volume</div>');
+      }).join('');
+    } else {
+      wEl.innerHTML = '<div class="lane-empty">Whale data loading\u2026</div>';
+    }
   }
 
   // Odds Shifting: biggest absolute price_change_24h
@@ -669,16 +682,18 @@ function renderLanes() {
       return renderLaneCard(m, '<div class="lane-card-signal ' + cls + '">' + (chg > 0 ? '\u2191 +' : '\u2193 ') + Math.abs(chg).toFixed(1) + '% in 24h</div>');
     }).join('');
   } else {
-    // Fallback: show most contested markets (close to 50%) as "ones to watch"
-    var contested = all.filter(function(m) { return m.yes_price != null && m.yes_price >= 0.3 && m.yes_price <= 0.7 && m.whale_count >= 1; }).sort(function(a,b) { return (b.whale_count||0) - (a.whale_count||0) || (b.volume||0) - (a.volume||0); }).slice(0, 6);
+    // Fallback: show most contested high-volume markets (no whale_count requirement)
+    var contested = all.filter(function(m) { return m.yes_price != null && m.yes_price >= 0.25 && m.yes_price <= 0.75 && (m.volume||0) >= 5000; }).sort(function(a,b) { return (b.volume||0) - (a.volume||0); }).slice(0, 8);
     if (contested.length) {
       try {
         document.querySelector('#lane-movers').closest('.signal-lane').querySelector('.lane-title').textContent = 'Most Contested';
-        document.querySelector('#lane-movers').closest('.signal-lane').querySelector('.lane-sub').textContent = 'Close odds with whale activity';
+        document.querySelector('#lane-movers').closest('.signal-lane').querySelector('.lane-sub').textContent = 'High-volume markets still in play';
       } catch(e) {}
       mEl.innerHTML = contested.map(function(m) {
         var pct = Math.round(m.yes_price*100);
-        return renderLaneCard(m, '<div class="lane-card-signal gold">' + pct + '% YES \u2014 ' + (m.whale_count||0) + ' whale' + (m.whale_count>1?'s':'') + ' watching</div>');
+        var dist = Math.abs(pct - 50);
+        var tag = dist <= 5 ? 'Too close to call' : dist <= 15 ? 'Slightly favors ' + (pct > 50 ? 'YES' : 'NO') : 'Leans ' + (pct > 50 ? 'YES' : 'NO');
+        return renderLaneCard(m, '<div class="lane-card-signal gold">' + pct + '% YES \u2014 ' + tag + '</div>');
       }).join('');
     } else {
       mEl.innerHTML = '<div class="lane-empty">Price snapshots collecting \u2014 movers will appear within 1 hour</div>';

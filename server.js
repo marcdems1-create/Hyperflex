@@ -18099,6 +18099,15 @@ app.get('/api/screener', async (req, res) => {
     if (!mktRes.ok) throw new Error('Gamma API returned ' + mktRes.status);
     const rawMarkets = await mktRes.json();
 
+    // Warm whale cache if empty (so Whale Moves lane always has data)
+    if (!_whaleWatchCache || !_whaleWatchCache.data) {
+      try {
+        const whaleData = await fetchWhalePositions();
+        _whaleWatchCache = { ts: Date.now(), data: whaleData };
+        console.log('[screener] Warmed whale cache:', (whaleData.whales || []).length, 'positions');
+      } catch(e) { console.warn('[screener] whale warm failed:', e.message); }
+    }
+
     // Build whale lookup from cached whale data — net out hedged positions
     const whalePositions = (_whaleWatchCache && _whaleWatchCache.data && _whaleWatchCache.data.whales) ? _whaleWatchCache.data.whales : [];
     const _scrNetMap = {};
