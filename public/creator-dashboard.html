@@ -12825,17 +12825,43 @@ async function loadPolymarketPositions(forceRefresh) {
   if (!el || !_polyWalletAddress) return;
   el.innerHTML = '<div style="padding:16px 0;font-size:13px;color:var(--muted);font-family:var(--mono)">Loading positions…</div>';
   try {
-    const token = localStorage.getItem('hf_token');
-    const r = await fetch(`/api/polymarket/positions/${encodeURIComponent(_polyWalletAddress)}/enriched`, {
-      headers: { Authorization: 'Bearer ' + token }
-    });
-    if (!r.ok) {
-      const d = await r.json().catch(() => ({}));
-      el.innerHTML = `<div style="color:#c0392b;font-size:13px;padding:8px 0">${d.error || 'Failed to load positions'}</div>`;
-      return;
+    let positions = [];
+    // Fetch directly from Polymarket client-side (avoids geo/IP restrictions on server)
+    try {
+      const [rLosing, rWinning] = await Promise.all([
+        fetch(`https://data-api.polymarket.com/positions?user=${_polyWalletAddress.toLowerCase()}&limit=100&sortBy=CURRENT&winning=false`),
+        fetch(`https://data-api.polymarket.com/positions?user=${_polyWalletAddress.toLowerCase()}&limit=100&sortBy=CURRENT&winning=true`).catch(() => null)
+      ]);
+      const rawLosing = rLosing.ok ? await rLosing.json() : [];
+      const rawWinning = rWinning && rWinning.ok ? await rWinning.json() : [];
+      const seen = new Set();
+      const allRaw = [...(Array.isArray(rawLosing)?rawLosing:[]), ...(Array.isArray(rawWinning)?rawWinning:[])];
+      const deduped = allRaw.filter(p => { const k=(p.conditionId||'')+':'+(p.outcome||''); if(seen.has(k)) return false; seen.add(k); return true; });
+      positions = deduped.map(p => ({
+        id: p.conditionId, token_id: p.asset||null, condition_id: p.conditionId||null,
+        question: p.title||p.question||'Unknown market', side: p.outcome||'YES',
+        shares: parseFloat(p.size)||0, current_price: parseFloat(p.curPrice)||0,
+        cash_value: parseFloat(p.currentValue)||0, cost_basis: parseFloat(p.initialValue)||0,
+        pnl: parseFloat(p.cashPnl)||0, pnl_pct: parseFloat(p.percentPnl)||0,
+        market_url: p.slug ? 'https://polymarket.com/event/'+(p.eventSlug||p.slug) : 'https://polymarket.com',
+        icon: p.icon||null, end_date: p.endDateIso||p.endDate||null, platform: 'polymarket',
+        avg_cost: parseFloat(p.size)>0 ? Math.round(parseFloat(p.initialValue)/parseFloat(p.size)*100)/100 : null
+      }));
+      console.log('[poly-positions] Client-side fetch:', positions.length, 'positions');
+    } catch (clientErr) {
+      console.warn('[poly-positions] Client-side fetch failed, falling back to proxy:', clientErr.message);
     }
-    const data = await r.json();
-    const positions = data.positions || [];
+    // Fallback to server proxy if client-side returned nothing
+    if (positions.length === 0) {
+      const token = localStorage.getItem('hf_token');
+      const r = await fetch(`/api/polymarket/positions/${encodeURIComponent(_polyWalletAddress)}/enriched`, {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      if (r.ok) {
+        const data = await r.json();
+        positions = data.positions || [];
+      }
+    }
     window._polyPositionsData = positions;
     setTimeout(updatePortfolioSummary, 100);
 
