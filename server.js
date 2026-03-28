@@ -23806,18 +23806,16 @@ app.post('/api/test-media-upload', async (req, res) => {
   try {
     const sharp = getSharp();
     if (!sharp) return res.json({ error: 'sharp not available' });
-    const svg = `<svg width="1200" height="628" xmlns="http://www.w3.org/2000/svg">
-      <rect width="1200" height="628" fill="#141412"/>
-      <rect x="40" y="40" width="1120" height="548" rx="24" fill="#1a1a17" stroke="#c9920d" stroke-width="2" stroke-opacity="0.3"/>
-      <text x="80" y="100" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif" font-size="18" font-weight="700" fill="#c9920d" letter-spacing="3">HYPERFLEX MARKET INTELLIGENCE</text>
-      <text x="80" y="200" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif" font-size="40" font-weight="700" fill="#ddd8cc">Test Card — Media Upload</text>
-      <text x="80" y="300" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif" font-size="72" font-weight="800" fill="#22c55e">67%</text>
-      <text x="300" y="300" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif" font-size="72" font-weight="800" fill="#ef4444">33%</text>
-      <text x="80" y="340" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif" font-size="20" fill="#7a7870">YES</text>
-      <text x="300" y="340" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif" font-size="20" fill="#7a7870">NO</text>
-      <text x="80" y="540" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif" font-size="16" fill="#7a7870">hyperflex.network</text>
-    </svg>`;
-    const imgBuf = await sharp(Buffer.from(svg)).png().toBuffer();
+    const borderSvg = Buffer.from(`<svg width="1200" height="628"><rect x="40" y="40" width="1120" height="548" rx="24" fill="#1a1a17" stroke="#c9920d" stroke-width="2" stroke-opacity="0.3"/></svg>`);
+    const imgBuf = await sharp({ create: { width: 1200, height: 628, channels: 4, background: { r: 20, g: 20, b: 18, alpha: 1 } } })
+      .composite([
+        { input: borderSvg, top: 0, left: 0 },
+        { input: { text: { text: 'HYPERFLEX MARKET INTELLIGENCE', dpi: 144, rgba: true, width: 900, height: 40 } }, top: 70, left: 80 },
+        { input: { text: { text: 'Test Card — Media Upload Working', dpi: 200, rgba: true, width: 1040, height: 80 } }, top: 150, left: 80 },
+        { input: { text: { text: '67% YES', dpi: 350, rgba: true, width: 500, height: 100 } }, top: 300, left: 80 },
+        { input: { text: { text: '33% NO', dpi: 350, rgba: true, width: 500, height: 100 } }, top: 300, left: 500 },
+        { input: { text: { text: 'hyperflex.network', dpi: 100, rgba: true, width: 400, height: 30 } }, top: 530, left: 80 },
+      ]).png().toBuffer();
     const mediaId = await uploadMediaToX(imgBuf);
     const result = await postTweet('Test tweet with market card image — please ignore, will delete shortly.', mediaId);
     res.json({ ok: true, mediaId, tweetId: result.data?.id, imageSize: imgBuf.length });
@@ -24000,24 +23998,32 @@ async function searchAndDraftReplies() {
         const sharp = getSharp();
         if (sharp) {
           const noPct = yesPct ? (100 - parseInt(yesPct)) : '';
-          const svg = `<svg width="1200" height="628" xmlns="http://www.w3.org/2000/svg">
-            <rect width="1200" height="628" fill="#141412"/>
-            <rect x="40" y="40" width="1120" height="548" rx="24" fill="#1a1a17" stroke="#c9920d" stroke-width="2" stroke-opacity="0.3"/>
-            <text x="80" y="100" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif" font-size="18" font-weight="700" fill="#c9920d" letter-spacing="3">HYPERFLEX MARKET INTELLIGENCE</text>
-            <text x="80" y="180" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif" font-size="36" font-weight="700" fill="#ddd8cc" width="1040">
-              ${marketName.length > 60 ? marketName.substring(0, 57) + '...' : marketName}
-            </text>
-            ${marketName.length > 60 ? `<text x="80" y="230" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif" font-size="36" font-weight="700" fill="#ddd8cc">${marketName.substring(57, 114)}</text>` : ''}
-            <text x="80" y="${marketName.length > 60 ? 310 : 260}" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif" font-size="72" font-weight="800" fill="#22c55e">${yesPct ? yesPct + '%' : ''}</text>
-            <text x="${80 + (yesPct ? yesPct.length * 44 + 60 : 0)}" y="${marketName.length > 60 ? 310 : 260}" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif" font-size="72" font-weight="800" fill="#ef4444">${noPct ? noPct + '%' : ''}</text>
-            <text x="80" y="${marketName.length > 60 ? 350 : 300}" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif" font-size="20" fill="#7a7870">YES</text>
-            <text x="${80 + (yesPct ? yesPct.length * 44 + 60 : 0)}" y="${marketName.length > 60 ? 350 : 300}" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif" font-size="20" fill="#7a7870">NO</text>
-            ${volMatch ? `<text x="80" y="440" font-family="monospace" font-size="22" fill="#c9920d">${volMatch}</text>` : ''}
-            ${whaleMatch ? `<text x="400" y="440" font-family="monospace" font-size="22" fill="#c9920d">${whaleMatch} whale wallets tracking</text>` : ''}
-            <text x="80" y="540" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif" font-size="16" fill="#7a7870">hyperflex.network</text>
-          </svg>`;
+          const truncName = marketName.length > 55 ? marketName.substring(0, 52) + '...' : marketName;
+          // Use sharp text overlay instead of SVG text (no system fonts needed)
+          const textSvg = (text, size, color, bold) =>
+            Buffer.from(`<svg><text font-size="${size}" font-weight="${bold?'bold':'normal'}" fill="${color}">${text.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</text></svg>`);
           try {
-            const imgBuf = await sharp(Buffer.from(svg)).png().toBuffer();
+            // Build card with colored rectangles + text overlays
+            let card = sharp({ create: { width: 1200, height: 628, channels: 4, background: { r: 20, g: 20, b: 18, alpha: 1 } } });
+            // Create border box as overlay
+            const borderSvg = Buffer.from(`<svg width="1200" height="628"><rect x="40" y="40" width="1120" height="548" rx="24" fill="#1a1a17" stroke="#c9920d" stroke-width="2" stroke-opacity="0.3"/></svg>`);
+            const composites = [
+              { input: borderSvg, top: 0, left: 0 },
+              { input: { text: { text: 'HYPERFLEX MARKET INTELLIGENCE', font: 'sans-serif', fontfile: '', dpi: 144, rgba: true, width: 900, height: 40 } }, top: 70, left: 80 },
+              { input: { text: { text: truncName, font: 'sans-serif', fontfile: '', dpi: 200, rgba: true, width: 1040, height: 120 } }, top: 130, left: 80 },
+            ];
+            if (yesPct) {
+              composites.push({ input: { text: { text: `${yesPct}% YES`, font: 'sans-serif', fontfile: '', dpi: 350, rgba: true, width: 500, height: 100 } }, top: 300, left: 80 });
+            }
+            if (noPct) {
+              composites.push({ input: { text: { text: `${noPct}% NO`, font: 'sans-serif', fontfile: '', dpi: 350, rgba: true, width: 500, height: 100 } }, top: 300, left: 500 });
+            }
+            const metaLine = [volMatch, whaleMatch ? `${whaleMatch} whale wallets` : ''].filter(Boolean).join('  ·  ');
+            if (metaLine) {
+              composites.push({ input: { text: { text: metaLine, font: 'sans-serif', fontfile: '', dpi: 144, rgba: true, width: 900, height: 40 } }, top: 440, left: 80 });
+            }
+            composites.push({ input: { text: { text: 'hyperflex.network', font: 'sans-serif', fontfile: '', dpi: 100, rgba: true, width: 400, height: 30 } }, top: 530, left: 80 });
+            const imgBuf = await card.composite(composites).png().toBuffer();
             console.log(`[reply-bot] Image generated: ${imgBuf.length} bytes`);
             mediaId = await uploadMediaToX(imgBuf);
             console.log(`[reply-bot] Image uploaded: mediaId=${mediaId}`);
