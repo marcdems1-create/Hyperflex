@@ -20300,14 +20300,29 @@ app.get('/api/daily-brief', async (req, res) => {
           if (k.startsWith(mKey.substring(0, 30)) || mKey.startsWith(k.substring(0, 30))) { c.url = v; break; }
         }
       }
-      // Parse trade ROI from thesis: "BUY YES at 22%", "BUY NO at ~95%+", "BUY YES at ~85-89%"
-      const tm = (c.thesis || '').match(/BUY\s+(YES|NO)\s+(?:\([^)]*\)\s+)?(?:at\s+)?[~]?(?:current\s+)?(?:market\s+)?(?:\d+-)?(\d+)%/i);
+      // Parse trade side from thesis, then use REAL market price from screener cache
+      const tm = (c.thesis || '').match(/BUY\s+(YES|NO)/i);
       if (tm) {
         const side = tm[1].toUpperCase();
-        const pct = parseInt(tm[2]);
-        const entry = side === 'YES' ? pct : (100 - pct);
-        const profit = 100 - entry;
-        c.trade = { side, entry_cost: entry, potential_profit: profit, roi_pct: entry > 0 ? Math.round((profit / entry) * 100) : 0 };
+        // Look up real market price from screener cache
+        let realPricePct = null;
+        for (const s of screenerMkts) {
+          const sq = (s.question || '').toLowerCase().trim();
+          if (sq === mKey || sq.startsWith(mKey.substring(0, 30)) || mKey.startsWith(sq.substring(0, 30))) {
+            realPricePct = Math.round((s.yes_price || 0.5) * 100);
+            break;
+          }
+        }
+        // Fallback: parse price from thesis text
+        if (realPricePct == null) {
+          const priceTm = (c.thesis || '').match(/at\s+[~]?(\d+)%/i);
+          realPricePct = priceTm ? parseInt(priceTm[1]) : null;
+        }
+        if (realPricePct != null && realPricePct > 0 && realPricePct < 100) {
+          const entry = side === 'YES' ? realPricePct : (100 - realPricePct);
+          const profit = 100 - entry;
+          c.trade = { side, entry_cost: entry, potential_profit: profit, roi_pct: entry > 0 ? Math.round((profit / entry) * 100) : 0 };
+        }
       }
     });
 

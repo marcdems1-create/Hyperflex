@@ -78,7 +78,7 @@ a{color:var(--gold);text-decoration:none} a:hover{text-decoration:underline}
 .cb-badge.CONTRARIAN{background:rgba(249,115,22,.12);color:var(--orange)}
 
 .cb-conf{font-family:var(--mono);font-size:18px;font-weight:800}
-.cb-market{font-family:var(--sans);font-size:14px;font-weight:700;line-height:1.4;color:var(--text);margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cb-market{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:15px;font-weight:600;line-height:1.4;color:#fff;letter-spacing:-0.2px;margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .cb-market a{color:var(--text);text-decoration:none}
 .cb-market a:hover{color:var(--gold)}
 .cb-reasoning{font-family:var(--mono);font-size:10px;color:var(--dim);line-height:1.5;margin-bottom:10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
@@ -313,15 +313,16 @@ function renderPredictions(){
     }
     var reasoning=(p.reasoning||[]).slice(0,2).join(' \u00B7 ');
 
-    // Alpha Score
+    // Single combined score: weighted blend of confidence (70%) + alpha (30%), capped at 100
     var alpha = p.alpha_score || 0;
-    var alphaColor = alpha >= 7 ? '#22c55e' : alpha >= 4 ? 'var(--gold)' : 'var(--dim)';
-    var alphaBadge = alpha > 0 ? '<div style="display:flex;flex-direction:column;align-items:center;padding:3px 8px;border-radius:6px;background:rgba(201,146,13,.08);border:1px solid rgba(201,146,13,.15)"><span style="font-family:var(--mono);font-size:14px;font-weight:900;color:'+alphaColor+';line-height:1">'+alpha.toFixed(1)+'</span><span style="font-family:var(--mono);font-size:7px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">Alpha</span></div>' : '';
+    var combined = Math.min(100, Math.round(c * 0.7 + (alpha * 10) * 0.3));
+    var scoreColor = combined >= 80 ? '#22c55e' : combined >= 60 ? 'var(--gold)' : combined >= 40 ? '#f59e0b' : '#ef4444';
+    var scoreLabel = combined >= 80 ? 'HIGH' : combined >= 60 ? 'MEDIUM' : combined >= 40 ? 'LOW' : 'WEAK';
 
     return '<div class="cb-card type-'+p.type+'">'+
       '<div class="cb-card-top">'+
         '<span class="cb-badge '+p.type+'">'+(TYPE_LABELS[p.type]||p.type)+'</span>'+
-        '<div style="display:flex;align-items:center;gap:8px">'+alphaBadge+'<span class="cb-conf" style="color:'+color+'">'+c+'</span></div>'+
+        '<div style="display:flex;flex-direction:column;align-items:center;padding:4px 10px;border-radius:8px;background:rgba(201,146,13,.06);border:1px solid rgba(201,146,13,.12)"><span style="font-family:var(--mono);font-size:20px;font-weight:900;color:'+scoreColor+';line-height:1">'+combined+'</span><span style="font-family:var(--mono);font-size:8px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">'+scoreLabel+'</span></div>'+
       '</div>'+
       (q?'<div class="cb-market"><a href="'+escAttr(url)+'" target="_blank" rel="noopener">'+escHtml(q.substring(0,80))+'</a></div>':'<div class="cb-market">'+escHtml(p.prediction)+'</div>')+
       (reasoning?'<div class="cb-reasoning">'+escHtml(reasoning)+'</div>':'')+
