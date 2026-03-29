@@ -22273,14 +22273,16 @@ async function detectArbitrageOpportunities() {
         const kWords = km.question.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2 && !arbStopWords.has(w));
         const overlap = pWords.filter(w => kWords.includes(w)).length;
         const overlapRatio = overlap / Math.min(pWords.length, kWords.length);
-        // Require 3+ shared meaningful words AND >40% overlap ratio
-        if (overlap < 3 || overlapRatio < 0.4) continue;
+        // Require 3+ shared meaningful words AND >50% overlap ratio (tighter to avoid false matches)
+        if (overlap < 3 || overlapRatio < 0.5) continue;
+        // Skip if either side has near-zero/near-100 price (likely bad match)
+        if (pm.yes < 0.02 || pm.yes > 0.98 || km.yes < 0.02 || km.yes > 0.98) continue;
         // Check for arb: if poly_yes + kalshi_no < 1.0 (buy YES on poly, buy NO on kalshi)
         const kalshiNo = 1 - km.yes;
         const arbEdge1 = 1 - (pm.yes + kalshiNo); // positive = arb exists
         const arbEdge2 = 1 - (km.yes + (1 - pm.yes)); // reverse direction
         const bestEdge = Math.max(arbEdge1, arbEdge2);
-        if (bestEdge > 0.005) { // > 0.5% edge
+        if (bestEdge > 0.005 && bestEdge < 0.50) { // > 0.5% edge, < 50% (sanity cap — anything above 50% is a bad match)
           const edgePct = Math.round(bestEdge * 10000) / 100;
           const direction = arbEdge1 >= arbEdge2 ? 'Buy YES Poly + NO Kalshi' : 'Buy YES Kalshi + NO Poly';
           arbs.push({
