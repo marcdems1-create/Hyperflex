@@ -228,6 +228,33 @@ a:hover { text-decoration: underline; }
 
 <div class="container">
 
+  <!-- AI ACCOUNTABILITY CALLOUT -->
+  <div id="ai-learning-section" style="background:linear-gradient(135deg,rgba(201,146,13,0.08),rgba(34,197,94,0.04));border:1px solid rgba(201,146,13,0.2);border-radius:14px;padding:24px 28px;margin-bottom:32px;display:none">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <span style="font-size:22px">🧠</span>
+      <span style="font-family:var(--sans);font-size:16px;font-weight:800;color:var(--gold)">How the AI Learns</span>
+    </div>
+    <p style="font-family:var(--mono);font-size:12px;color:var(--text-soft);line-height:1.7;margin-bottom:16px">
+      Every signal source is weighted by its track record. Sources that hit get amplified. Sources that miss get downweighted. The system self-corrects after every resolved market.
+    </p>
+    <div id="source-weights-display" style="display:flex;flex-wrap:wrap;gap:10px">
+      <!-- filled by JS -->
+    </div>
+    <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(201,146,13,0.15)">
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+        <div style="flex:1;min-width:200px">
+          <div style="font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Key Insight</div>
+          <div style="font-family:var(--mono);font-size:12px;color:var(--text)" id="ai-insight-text">Loading...</div>
+        </div>
+        <div style="flex-shrink:0;text-align:center;padding:8px 16px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);border-radius:8px">
+          <div style="font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em">High-Conf Accuracy</div>
+          <div style="font-family:var(--sans);font-size:28px;font-weight:800;color:var(--green)" id="high-conf-accuracy">—</div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--muted)" id="high-conf-sub">90%+ confidence calls</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- HERO STAT CARDS -->
   <div class="stat-row">
     <div class="stat-card">
@@ -448,6 +475,74 @@ async function loadStats() {
     renderBars(_stats.by_source || {});
     drawDonutChart('donutChart', _stats.by_confidence || {});
   }, 50);
+
+  // ── AI LEARNING SECTION ──
+  renderAILearningSection(_stats);
+}
+
+function renderAILearningSection(stats) {
+  var section = document.getElementById('ai-learning-section');
+  if (!section) return;
+  section.style.display = '';
+
+  var byConf = stats.by_confidence || {};
+  var highConf = byConf['90+'] || { total: 0, correct: 0, accuracy: 0 };
+
+  // High-confidence accuracy
+  var hcEl = document.getElementById('high-conf-accuracy');
+  if (hcEl) {
+    hcEl.textContent = highConf.total > 0 ? highConf.accuracy + '%' : '—';
+    hcEl.style.color = highConf.accuracy >= 40 ? 'var(--green)' : highConf.accuracy >= 25 ? 'var(--gold)' : 'var(--red)';
+  }
+  var hcSub = document.getElementById('high-conf-sub');
+  if (hcSub) hcSub.textContent = highConf.total + ' calls at 90%+ confidence';
+
+  // Key insight text
+  var insightEl = document.getElementById('ai-insight-text');
+  if (insightEl) {
+    var overall = stats.overall || {};
+    var lowConf = byConf['70-89'] || { total: 0, accuracy: 0 };
+    if (highConf.total > 0 && highConf.accuracy > overall.accuracy) {
+      insightEl.textContent = 'High-confidence calls hit ' + highConf.accuracy + '% vs ' + overall.accuracy + '% overall. The AI performs ' + Math.round(highConf.accuracy / Math.max(1, overall.accuracy) * 100 - 100) + '% better when it is confident. ' + lowConf.total + ' low-confidence calls at ' + lowConf.accuracy + '% drag the average down.';
+    } else {
+      insightEl.textContent = overall.total + ' predictions graded. The system tracks every call and adjusts source weights based on results.';
+    }
+  }
+
+  // Source weight pills
+  var weightsEl = document.getElementById('source-weights-display');
+  if (weightsEl) {
+    var bySource = stats.by_source || {};
+    var sourceNames = {
+      divergence: { name: 'Edge Score', icon: '⚡' },
+      ai_brief: { name: 'AI Brief', icon: '🧠' },
+      whale_consensus: { name: 'Smart Money', icon: '🐋' },
+      news_sentiment: { name: 'News', icon: '📰' },
+      expiry: { name: 'Expiry', icon: '⏳' },
+      whale_cluster: { name: 'Whale Cluster', icon: '🐋' }
+    };
+    var pills = [];
+    Object.entries(bySource).forEach(function(entry) {
+      var key = entry[0], data = entry[1];
+      if (data.total === 0) return;
+      var info = sourceNames[key] || { name: key, icon: '📊' };
+      var acc = data.accuracy || 0;
+      var color = acc >= 40 ? 'rgba(34,197,94,0.15)' : acc >= 20 ? 'rgba(201,146,13,0.15)' : 'rgba(239,68,68,0.15)';
+      var borderColor = acc >= 40 ? 'rgba(34,197,94,0.3)' : acc >= 20 ? 'rgba(201,146,13,0.3)' : 'rgba(239,68,68,0.3)';
+      var textColor = acc >= 40 ? '#22c55e' : acc >= 20 ? '#c9920d' : '#ef4444';
+      var arrow = acc >= 30 ? '↑' : acc >= 15 ? '→' : '↓';
+      pills.push(
+        '<div style="background:' + color + ';border:1px solid ' + borderColor + ';border-radius:8px;padding:8px 12px;display:flex;align-items:center;gap:6px">' +
+          '<span style="font-size:14px">' + info.icon + '</span>' +
+          '<div>' +
+            '<div style="font-family:var(--mono);font-size:11px;font-weight:700;color:' + textColor + '">' + info.name + ' ' + arrow + '</div>' +
+            '<div style="font-family:var(--mono);font-size:9px;color:var(--muted)">' + acc + '% on ' + data.total + ' calls</div>' +
+          '</div>' +
+        '</div>'
+      );
+    });
+    weightsEl.innerHTML = pills.join('');
+  }
 }
 
 async function loadRecent() {
