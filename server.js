@@ -17450,13 +17450,16 @@ async function fetchWhalePositions() {
   if (!lbRes.ok) throw new Error(`Leaderboard API returned ${lbRes.status}`);
   const leaderboard = await lbRes.json();
 
-  const traders = (leaderboard || []).slice(0, 50).map((t, i) => ({
+  // Filter to profitable traders only (positive PnL + minimum volume for signal quality)
+  const allTraders = (leaderboard || []).map((t, i) => ({
     rank: i + 1,
     userName: (() => { const n = t.userName || t.username || ''; return (!n || /^0x[0-9a-fA-F]{6,}/.test(n)) ? getWhaleNickname(t.proxyWallet || t.proxy_wallet || n || `trader_${i + 1}`) : n; })(),
     proxyWallet: t.proxyWallet || t.proxy_wallet || '',
     pnl: parseFloat(t.pnl || t.profit || 0),
     vol: parseFloat(t.vol || t.volume || 0)
   })).filter(t => t.proxyWallet);
+  // Only track profitable whales — the top 0.5% who actually make money
+  const traders = allTraders.filter(t => t.pnl > 0 && t.vol >= 10000).slice(0, 50);
 
   // 2. Fetch positions with concurrency limit (batches of 10, 500ms delay)
   const BATCH_SIZE = 10;
