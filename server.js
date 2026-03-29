@@ -22310,7 +22310,7 @@ async function detectArbitrageOpportunities() {
     kalshiMarkets.push(...dedupedKalshi);
 
     // Match markets across platforms by keyword overlap
-    const arbStopWords = new Set(['will','before','after','this','that','what','when','where','which','with','from','have','been','does','price','range','more','than','least','year','2026','2027','2028','march','april','january','february']);
+    const arbStopWords = new Set(['will','before','after','this','that','what','when','where','which','with','from','have','been','does','price','range','more','than','least','year','2026','2027','2028','2029','march','april','january','february','may','june','july','august','september','october','november','december','the','win','presidential','election','president']);
     const arbs = [];
     for (const pm of polyMarkets) {
       const pWords = pm.question.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2 && !arbStopWords.has(w));
@@ -22319,8 +22319,8 @@ async function detectArbitrageOpportunities() {
         const kWords = km.question.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2 && !arbStopWords.has(w));
         const overlap = pWords.filter(w => kWords.includes(w)).length;
         const overlapRatio = overlap / Math.min(pWords.length, kWords.length);
-        // Require 3+ shared meaningful words AND >50% overlap ratio (tighter to avoid false matches)
-        if (overlap < 3 || overlapRatio < 0.5) continue;
+        // Require 3+ shared meaningful words AND >60% overlap ratio (tight to avoid false matches)
+        if (overlap < 3 || overlapRatio < 0.6) continue;
         // Skip if either side has near-zero/near-100 price (likely bad match)
         if (pm.yes < 0.02 || pm.yes > 0.98 || km.yes < 0.02 || km.yes > 0.98) continue;
         // Check for arb: if poly_yes + kalshi_no < 1.0 (buy YES on poly, buy NO on kalshi)
@@ -22353,7 +22353,7 @@ async function detectArbitrageOpportunities() {
         // Fetch upcoming sports events with h2h odds
         const sportKeys = ['basketball_nba', 'baseball_mlb', 'americanfootball_nfl', 'icehockey_nhl', 'mma_mixed_martial_arts', 'soccer_epl'];
         const sportFetches = await Promise.allSettled(
-          sportKeys.map(sk => fetchWithTimeout(`https://api.the-odds-api.com/v4/sports/${sk}/odds/?apiKey=${ODDS_KEY}&regions=us&markets=h2h&oddsFormat=decimal`, { headers: { Accept: 'application/json' } }, 8000).then(r => r.ok ? r.json() : []).catch(() => []))
+          sportKeys.map(sk => fetch(`https://api.the-odds-api.com/v4/sports/${sk}/odds/?apiKey=${ODDS_KEY}&regions=us&markets=h2h&oddsFormat=decimal`, { headers: { Accept: 'application/json' } }).then(r => r.ok ? r.json() : []).catch(() => []))
         );
         const sbEvents = [];
         for (const r of sportFetches) {
