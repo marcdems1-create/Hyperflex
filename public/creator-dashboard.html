@@ -13618,7 +13618,7 @@ function updateAllPositionsTab() {
             pnl: p.pnl != null ? p.pnl : null,
             url: p.market_url || '#',
             accentColor: p._accentColor || 'var(--gold)',
-            posData: { question: p.question, side: p.side, platform: p._platform, current_price: p.current_price || p.probability, pnl: p.pnl, shares: p.shares, market_url: p.market_url, token_id: p.token_id || null, condition_id: p.condition_id || p.id || null, id: p.id }
+            posData: { ...p, platform: p._platform }
           });
         }).join('');
       }
