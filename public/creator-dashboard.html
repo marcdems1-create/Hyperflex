@@ -5058,7 +5058,7 @@ body.nav-open .sidebar-backdrop {
                 <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:20px;align-items:center">
                   <!-- Total Value -->
                   <div>
-                    <div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752;margin-bottom:6px">POSITIONS VALUE</div>
+                    <div id="psSummaryValueLabel" style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752;margin-bottom:6px">PORTFOLIO VALUE</div>
                     <div id="psSummaryValue" style="font-family:var(--mono);font-size:28px;font-weight:900;color:#f5f0e8;letter-spacing:-0.02em">—</div>
                   </div>
                   <!-- Total P&L -->
@@ -9362,9 +9362,9 @@ async function loadAnalytics() {
 let _platformAnalyticsLoaded = false;
 let _platformAnalyticsData = null;
 async function loadPlatformAnalytics(force) {
-  const section = document.getElementById('platformAnalyticsSection');
-  const grid = document.getElementById('platformAnalyticsGrid');
-  const empty = document.getElementById('platformAnalyticsEmpty');
+  const section = document.getElementById('perfPlatformAnalyticsSection');
+  const grid = document.getElementById('perfPlatformGrid');
+  const empty = document.getElementById('perfPlatformEmpty');
   if (!section || !grid) return;
   const userId = creatorData?.creator?.id;
   if (!userId) return;
@@ -12203,7 +12203,8 @@ async function loadPerfPlatformAnalytics() {
     let data = null;
     if (r.ok) data = await r.json();
     // Fallback: compute from local positions when API is empty
-    if (!data || !data.platforms || data.platforms.length === 0) {
+    const _pKeys = data && data.platforms ? (Array.isArray(data.platforms) ? data.platforms.length : Object.keys(data.platforms).length) : 0;
+    if (!data || _pKeys === 0) {
       const positions = getAllPositionsFlat();
       if (positions.length > 0) {
         const byPlatform = {};
@@ -12217,10 +12218,16 @@ async function loadPerfPlatformAnalytics() {
         data = { platforms: Object.values(byPlatform).map(p => ({ ...p, win_rate: p.resolved > 0 ? Math.round(p.wins / p.resolved * 100) : 0 })) };
       }
     }
-    if (!data || !data.platforms || data.platforms.length === 0) { if (empty) empty.style.display = 'block'; return; }
+    // Normalize platforms to array
+    let platformArr = [];
+    if (data && data.platforms) {
+      if (Array.isArray(data.platforms)) platformArr = data.platforms;
+      else platformArr = Object.entries(data.platforms).map(([k,v]) => ({ platform: k, ...v }));
+    }
+    if (platformArr.length === 0) { if (empty) empty.style.display = 'block'; return; }
     if (empty) empty.style.display = 'none';
     const platformColors = { polymarket: '#a78bfa', kalshi: '#fbbf24', manifold: '#34d399', hfx: '#c9920d' };
-    grid.innerHTML = data.platforms.map(p => {
+    grid.innerHTML = platformArr.map(p => {
       const c = platformColors[p.platform] || '#888';
       const sign = p.pnl >= 0 ? '+' : '';
       const totalPos = p.total || (p.wins + p.losses) || 0;
@@ -13365,12 +13372,12 @@ function getHFXBetsFlat() {
 async function fetchUSDCBalance(address) {
   if (!address || window._walletBalanceUSDC != null) return; // already have it
   try {
-    // USDC on Polygon: 0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359
-    const usdcContract = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
+    // USDC.e on Polygon (bridged — used by Polymarket)
+    const usdcContract = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
     // ERC-20 balanceOf(address) selector: 0x70a08231 + padded address
     const paddedAddr = '000000000000000000000000' + address.toLowerCase().replace('0x','');
     const callData = '0x70a08231' + paddedAddr;
-    const r = await fetch('https://polygon-rpc.com', {
+    const r = await fetch('https://polygon-bor-rpc.publicnode.com', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:usdcContract,data:callData},'latest'],id:1})
     });
@@ -13404,7 +13411,10 @@ function computePortfolioStats(positions) {
   const winRate = resolvedCount > 0 ? Math.round((wins / resolvedCount) * 100) : 0;
   const roi = totalCost > 0 ? ((totalPnl / totalCost) * 100) : 0;
   const sharpScore = Math.min(100, Math.round(winRate * 1.2 + (totalPnl > 0 ? 20 : 0)));
-  return { totalValue, totalPnl, totalCost, openCount, resolvedCount, wins, winRate, roi, sharpScore, total: positions.length };
+  // Add USDC cash balance to portfolio value
+  const cashBalance = window._walletBalanceUSDC || 0;
+  const portfolioValue = totalValue + cashBalance;
+  return { totalValue, portfolioValue, cashBalance, totalPnl, totalCost, openCount, resolvedCount, wins, winRate, roi, sharpScore, total: positions.length };
 }
 
 function updatePortfolioSummary() {
@@ -13438,9 +13448,12 @@ function updatePortfolioSummary() {
   // Format dollars nicely
   function fmtD(n) { if (Math.abs(n)>=1e6) return '$'+(n/1e6).toFixed(1)+'M'; if (Math.abs(n)>=1e3) return '$'+(n/1e3).toFixed(1)+'K'; return '$'+n.toFixed(2); }
 
-  // Positions Value (no USDC balance — Polymarket holds cash internally, not accessible via API)
+  // Portfolio Value = positions + USDC cash balance
   const valEl = document.getElementById('psSummaryValue');
-  if (valEl) valEl.textContent = fmtD(stats.totalValue);
+  if (valEl) valEl.textContent = fmtD(stats.portfolioValue);
+  // Update label to "PORTFOLIO VALUE"
+  const valLabel = document.getElementById('psSummaryValueLabel');
+  if (valLabel) valLabel.textContent = 'PORTFOLIO VALUE';
 
   // Total P&L
   const pnlEl = document.getElementById('psSummaryPnl');
@@ -13506,9 +13519,9 @@ function renderPnlChart(positions) {
   const barsEl = document.getElementById('pnlChartBars');
   if (!chartEl || !barsEl) return;
 
-  // Build daily P&L from resolved positions
-  const resolved = positions.filter(p => p._isResolved && p.pnl != null);
-  if (resolved.length < 2) { chartEl.style.display = 'none'; return; }
+  // Build daily P&L from ALL positions (not just resolved)
+  const withPnl = positions.filter(p => p.pnl != null);
+  if (withPnl.length < 1) { chartEl.style.display = 'none'; return; }
   chartEl.style.display = 'block';
 
   // Group by date
@@ -13518,23 +13531,61 @@ function renderPnlChart(positions) {
     const d = new Date(now); d.setDate(d.getDate() - i);
     dailyPnl[d.toISOString().slice(0, 10)] = 0;
   }
-  resolved.forEach(p => {
+  withPnl.forEach(p => {
     const date = (p.end_date || p.resolved_at || p.created_at || '').slice(0, 10);
     if (date && dailyPnl[date] !== undefined) dailyPnl[date] += p.pnl;
   });
 
-  // Cumulative
+  // Cumulative P&L
   const dates = Object.keys(dailyPnl).sort();
   let cumulative = 0;
-  const cumulativeArr = dates.map(d => { cumulative += dailyPnl[d]; return { date: d, val: cumulative }; });
-  const maxAbs = Math.max(1, ...cumulativeArr.map(c => Math.abs(c.val)));
+  const points = dates.map(d => { cumulative += dailyPnl[d]; return { date: d, val: cumulative }; });
 
-  barsEl.innerHTML = cumulativeArr.map(c => {
-    const pct = Math.max(4, Math.abs(c.val) / maxAbs * 100);
-    const color = c.val >= 0 ? 'rgba(34,197,94,0.5)' : 'rgba(239,68,68,0.5)';
-    const hoverColor = c.val >= 0 ? '#22c55e' : '#ef4444';
-    const sign = c.val >= 0 ? '+' : '';
-    return `<div class="activity-bar" style="height:${pct}%;background:${color}" data-tip="${c.date.slice(5)}: ${sign}$${Math.abs(c.val).toFixed(2)}" onmouseover="this.style.background='${hoverColor}'" onmouseout="this.style.background='${color}'"></div>`;
+  // Render as SVG line chart (Polymarket style)
+  const W = barsEl.offsetWidth || 600;
+  const H = 120;
+  const maxAbs = Math.max(1, ...points.map(p => Math.abs(p.val)));
+  const padding = 8;
+
+  const xStep = (W - padding * 2) / Math.max(1, points.length - 1);
+  const pathPoints = points.map((p, i) => {
+    const x = padding + i * xStep;
+    const y = H / 2 - (p.val / maxAbs) * (H / 2 - padding);
+    return { x, y, val: p.val, date: p.date };
+  });
+
+  // Build SVG path
+  let pathD = '';
+  pathPoints.forEach((pt, i) => { pathD += (i === 0 ? 'M' : 'L') + pt.x.toFixed(1) + ',' + pt.y.toFixed(1) + ' '; });
+
+  // Gradient fill path
+  const lastPt = pathPoints[pathPoints.length - 1] || { x: W, y: H/2 };
+  const firstPt = pathPoints[0] || { x: 0, y: H/2 };
+  const fillD = pathD + `L${lastPt.x.toFixed(1)},${H} L${firstPt.x.toFixed(1)},${H} Z`;
+  const lineColor = lastPt.val >= 0 ? '#22c55e' : '#ef4444';
+  const fillColor = lastPt.val >= 0 ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)';
+
+  // Value labels
+  const lastVal = lastPt.val;
+  const sign = lastVal >= 0 ? '+' : '';
+
+  barsEl.innerHTML = `
+    <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="display:block">
+      <defs>
+        <linearGradient id="pnlGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${lineColor}" stop-opacity="0.3"/>
+          <stop offset="100%" stop-color="${lineColor}" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <line x1="${padding}" y1="${H/2}" x2="${W-padding}" y2="${H/2}" stroke="#2a2825" stroke-width="1" stroke-dasharray="4,4"/>
+      <path d="${fillD}" fill="url(#pnlGrad)"/>
+      <path d="${pathD}" fill="none" stroke="${lineColor}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="${lastPt.x.toFixed(1)}" cy="${lastPt.y.toFixed(1)}" r="4" fill="${lineColor}" stroke="#141412" stroke-width="2"/>
+      <text x="${W-padding}" y="14" text-anchor="end" fill="${lineColor}" font-family="var(--mono)" font-size="12" font-weight="700">${sign}$${Math.abs(lastVal).toFixed(2)}</text>
+      <text x="${padding}" y="${H-4}" fill="#5a5752" font-family="var(--mono)" font-size="9">${dates[0] ? dates[0].slice(5) : ''}</text>
+      <text x="${W-padding}" y="${H-4}" text-anchor="end" fill="#5a5752" font-family="var(--mono)" font-size="9">${dates[dates.length-1] ? dates[dates.length-1].slice(5) : ''}</text>
+    </svg>`;
+  return; // skip old bar rendering below
   }).join('');
 }
 
