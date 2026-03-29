@@ -12151,6 +12151,8 @@ async function loadPerformanceTab() {
   if (!_portfolioLoaded) {
     await loadPortfolio();
   }
+  // Fetch USDC balance for portfolio value calculation
+  if (_polyWalletAddress) await fetchUSDCBalance(_polyWalletAddress);
   // Show/hide empty state vs content
   const hasAny = _polyWalletAddress || _kalshiConnected || _manifoldUsername;
   const emptyEl = document.getElementById('performanceEmpty');
@@ -12872,6 +12874,8 @@ async function loadPolymarketPositions(forceRefresh) {
       }
     }
     window._polyPositionsData = positions;
+    // Fetch USDC balance in parallel for portfolio value
+    fetchUSDCBalance(_polyWalletAddress).then(() => updatePortfolioSummary());
     setTimeout(updatePortfolioSummary, 100);
 
     if (!positions.length) {
