@@ -13518,6 +13518,7 @@ function computePortfolioStats(positions) {
 }
 
 function updatePortfolioSummary() {
+  try {
   const bar = document.getElementById('portfolioSummaryBar');
   const shareBar = document.getElementById('portfolioShareBar');
   const chartEl = document.getElementById('portfolioPnlChart');
@@ -13612,6 +13613,7 @@ function updatePortfolioSummary() {
 
   // P&L Over Time Chart
   renderPnlChart(positions);
+  } catch(e) { console.error('[updatePortfolioSummary]', e); }
 }
 
 function renderPnlChart(positions) {
