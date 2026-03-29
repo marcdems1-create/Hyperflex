@@ -12198,13 +12198,16 @@ async function loadPerfPlatformAnalytics() {
   const empty = document.getElementById('perfPlatformEmpty');
   if (!grid) return;
   try {
+    let data = null;
     const token = localStorage.getItem('hf_token');
     const userId = localStorage.getItem('hf_user_id');
-    if (!userId || !token) return;
-    const r = await fetch('/api/predictors/' + userId + '/analytics', { headers: { Authorization: 'Bearer ' + token } });
-    let data = null;
-    if (r.ok) data = await r.json();
-    // Fallback: compute from local positions when API is empty
+    if (userId && token) {
+      try {
+        const r = await fetch('/api/predictors/' + userId + '/analytics', { headers: { Authorization: 'Bearer ' + token } });
+        if (r.ok) data = await r.json();
+      } catch(e) { /* API failed, will use fallback */ }
+    }
+    // Fallback: compute from local positions when API is empty or unavailable
     const _pKeys = data && data.platforms ? (Array.isArray(data.platforms) ? data.platforms.length : Object.keys(data.platforms).length) : 0;
     if (!data || _pKeys === 0) {
       const positions = getAllPositionsFlat();
@@ -13325,11 +13328,19 @@ function classifyPosition(p) {
   const endDate = p.end_date ? new Date(p.end_date) : null;
   const isExpired = endDate && endDate < new Date();
   const priceNearTerminal = price <= 0.03 || price >= 0.97;
-  const isResolved = p.resolved || p.settled || (isExpired && priceNearTerminal);
+  const cashValue = parseFloat(p.cash_value) || parseFloat(p.currentValue) || 0;
+  const shares = parseFloat(p.shares) || parseFloat(p.size) || 0;
+  // A position is resolved if:
+  // - explicitly marked resolved/settled
+  // - expired AND price near 0 or 1
+  // - has shares but currentValue is 0 (total loss — resolved at 0)
+  // - cashPnl exists AND currentValue is 0 (closed position)
+  const zeroedOut = shares > 0 && cashValue === 0;
+  const isResolved = p.resolved || p.settled || (isExpired && priceNearTerminal) || zeroedOut;
   let won = false;
   if (isResolved) {
     if (p.won != null) won = p.won;
-    else if (p.pnl != null) won = p.pnl > 0;
+    else if (p.pnl != null) won = parseFloat(p.pnl) > 0;
     else if (priceNearTerminal) {
       won = (p.side === 'YES' && price >= 0.97) || (p.side === 'NO' && price <= 0.03);
     }
@@ -13399,13 +13410,12 @@ function computePortfolioStats(positions) {
     if (p.pnl != null) totalPnl += parseFloat(p.pnl);
     // Use cost_basis (actual USD spent) from API
     const cost = parseFloat(p.cost_basis) || parseFloat(p.initialValue) || 0;
+    totalCost += cost;
     if (p._isResolved) {
       resolvedCount++;
       if (p._won) wins++;
-      totalCost += cost > 0 ? cost : Math.max(0, value - (parseFloat(p.pnl) || 0));
     } else {
       openCount++;
-      totalCost += cost > 0 ? cost : value;
     }
   });
   const winRate = resolvedCount > 0 ? Math.round((wins / resolvedCount) * 100) : 0;
