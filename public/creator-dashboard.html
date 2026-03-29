@@ -12889,8 +12889,8 @@ async function loadPolymarketPositions(forceRefresh) {
       posData:{question:p.question,side:p.side,platform:'polymarket',probability:p.current_price,current_price:p.current_price,pnl:p.pnl||null,pnl_pct:p.pnl_pct||null,shares:p.shares,cost_basis:p.cost_basis||0,cash_value:p.cash_value||0,avg_cost:p.avg_cost||null,icon:p.icon||null,end_date:p.end_date||null,whale:p.whale||null,market_url:p.market_url,token_id:p.token_id||null,condition_id:p.condition_id||p.id||null,id:p.id}
     });}).join('');
 
-    const ts = new Date(data.fetched_at || Date.now()).toLocaleTimeString();
-    el.insertAdjacentHTML('beforeend', `<div style="font-family:var(--mono);font-size:10px;color:var(--muted);text-align:right;margin-top:4px">Fetched ${ts} · 5 min cache</div>`);
+    const ts = new Date().toLocaleTimeString();
+    el.insertAdjacentHTML('beforeend', `<div style="font-family:var(--mono);font-size:10px;color:var(--muted);text-align:right;margin-top:4px">Fetched ${ts} · live from Polymarket</div>`);
   } catch (e) {
     console.error('[polymarket positions]', e);
     el.innerHTML = '<div style="color:#c0392b;font-size:13px;padding:8px 0">Failed to load positions</div>';
