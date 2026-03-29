@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Spread Scanner — Live Crypto Window Arbitrage | HYPERFLEX</title>
+<meta name="description" content="Real-time spread scanner for Polymarket crypto windows. Detect when YES + NO pair cost drops below $1.00 for guaranteed profit opportunities.">
+<link rel="icon" href="/favicon.ico">
+<style>
+:root{--bg:#0a0908;--card:#0f0e0c;--border:#1a1916;--text:#e8e4de;--dim:#5a5752;--muted:#4a4744;--gold:#c9920d;--green:#22c55e;--red:#ef4444;--purple:#a78bfa;--sans:'Syne',system-ui,sans-serif;--mono:'Space Mono','Courier New',monospace}
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh}
+a{color:inherit;text-decoration:none}
+
+/* HEADER */
+.ss-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:0}
+.ss-stat{background:var(--bg);padding:14px 16px;text-align:center}
+.ss-stat-label{font-family:var(--mono);font-size:9px;font-weight:700;color:var(--dim);letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px}
+.ss-stat-value{font-family:var(--mono);font-size:22px;font-weight:700;color:var(--text)}
+.ss-stat-value.green{color:var(--green)}
+.ss-stat-value.red{color:var(--red)}
+.ss-stat-value.gold{color:var(--gold)}
+.ss-stat-sub{font-family:var(--mono);font-size:9px;color:var(--dim);margin-top:3px}
+
+/* FILTERS */
+.ss-filters{display:flex;align-items:center;gap:8px;padding:16px 20px;flex-wrap:wrap}
+.ss-pill{font-family:var(--mono);font-size:11px;font-weight:700;padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--dim);cursor:pointer;transition:all .15s}
+.ss-pill:hover{border-color:var(--gold);color:var(--gold)}
+.ss-pill.active{background:var(--gold);color:#0a0908;border-color:var(--gold)}
+.ss-live{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--green);display:flex;align-items:center;gap:6px;margin-left:auto}
+.ss-live::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* TABLE */
+.ss-table{width:100%;border-collapse:collapse}
+.ss-table th{font-family:var(--mono);font-size:9px;font-weight:700;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;padding:10px 12px;text-align:left;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg);z-index:2}
+.ss-table th.right,.ss-table td.right{text-align:right}
+.ss-table th.center,.ss-table td.center{text-align:center}
+.ss-row{border-bottom:1px solid var(--border);transition:background .1s}
+.ss-row:hover{background:rgba(201,146,13,0.03)}
+.ss-row.arb{background:rgba(34,197,94,0.04);border-left:3px solid var(--green)}
+.ss-row td{padding:12px 12px;font-family:var(--mono);font-size:12px;vertical-align:middle}
+.ss-market{display:flex;flex-direction:column;gap:3px}
+.ss-market-q{font-family:var(--sans);font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:320px}
+.ss-market-meta{font-size:10px;color:var(--dim)}
+.ss-asset{font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;display:inline-block}
+.ss-asset-BTC{background:rgba(247,147,26,0.12);color:#f7931a}
+.ss-asset-ETH{background:rgba(98,126,234,0.12);color:#627eea}
+.ss-asset-SOL{background:rgba(0,255,163,0.12);color:#00ffa3}
+.ss-asset-XRP{background:rgba(35,41,47,0.3);color:#fff}
+.ss-asset-DOGE{background:rgba(186,160,51,0.12);color:#baa033}
+.ss-asset-BNB{background:rgba(243,186,47,0.12);color:#f3ba2f}
+.ss-asset-HYPE{background:rgba(167,139,250,0.12);color:#a78bfa}
+
+.ss-pair-cost{font-size:16px;font-weight:800}
+.ss-pair-cost.profitable{color:var(--green)}
+.ss-pair-cost.neutral{color:var(--text)}
+.ss-pair-cost.overpriced{color:var(--red)}
+
+.ss-spread-badge{font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;display:inline-block}
+.ss-spread-badge.arb{background:rgba(34,197,94,0.15);color:var(--green);border:1px solid rgba(34,197,94,0.3)}
+.ss-spread-badge.neutral{background:rgba(100,100,90,0.1);color:var(--dim);border:1px solid var(--border)}
+.ss-spread-badge.negative{background:rgba(239,68,68,0.08);color:var(--red);border:1px solid rgba(239,68,68,0.2)}
+
+.ss-profit{font-weight:700}
+.ss-timer{font-family:var(--mono);font-size:11px;font-weight:700}
+.ss-timer.imminent{color:var(--red);animation:blink 1s infinite}
+.ss-timer.soon{color:var(--gold)}
+.ss-timer.upcoming{color:var(--dim)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.4}}
+
+.ss-depth-bar{height:4px;border-radius:2px;background:var(--border);overflow:hidden;margin-top:3px;width:80px}
+.ss-depth-fill{height:100%;border-radius:2px}
+
+/* HERO */
+.ss-hero{padding:30px 20px 0;text-align:center}
+.ss-hero h1{font-family:var(--sans);font-size:32px;font-weight:800;margin-bottom:6px}
+.ss-hero h1 span{color:var(--gold)}
+.ss-hero p{font-family:var(--mono);font-size:12px;color:var(--dim);max-width:600px;margin:0 auto 8px}
+.ss-formula{font-family:var(--mono);font-size:11px;color:var(--muted);background:var(--card);border:1px solid var(--border);padding:10px 20px;border-radius:8px;display:inline-block;margin-top:10px}
+.ss-formula span{color:var(--green);font-weight:700}
+
+/* EMPTY */
+.ss-empty{text-align:center;padding:60px 20px;color:var(--dim)}
+.ss-empty-icon{font-size:40px;margin-bottom:12px}
+.ss-empty-title{font-family:var(--sans);font-size:18px;font-weight:700;color:var(--text);margin-bottom:8px}
+
+/* RESPONSIVE */
+@media(max-width:768px){
+  .ss-stats{grid-template-columns:repeat(3,1fr)}
+  .ss-market-q{max-width:180px}
+  .ss-table{font-size:11px}
+}
+@media(max-width:480px){
+  .ss-stats{grid-template-columns:repeat(2,1fr)}
+  .ss-hero h1{font-size:24px}
+}
+</style>
+</head>
+<body>
+<div id="nav-root"></div>
+<script src="/nav.js"></script>
+
+<div class="ss-hero">
+  <h1>Spread <span>Scanner</span></h1>
+  <p>Live orderbook monitoring across crypto prediction windows. Detect when YES + NO pair cost drops below $1.00 for guaranteed profit.</p>
+  <div class="ss-formula">Profit = min(YES shares, NO shares) × <span>(1.00 − pair cost)</span></div>
+</div>
+
+<!-- STATS BAR -->
+<div style="padding:16px 20px 0">
+<div class="ss-stats" id="ssStats">
+  <div class="ss-stat"><div class="ss-stat-label">Markets Scanned</div><div class="ss-stat-value" id="ssTotalMarkets">—</div><div class="ss-stat-sub">crypto windows</div></div>
+  <div class="ss-stat"><div class="ss-stat-label">Active Arbs</div><div class="ss-stat-value green" id="ssArbCount">—</div><div class="ss-stat-sub">pair cost &lt; $1.00</div></div>
+  <div class="ss-stat"><div class="ss-stat-label">Best Spread</div><div class="ss-stat-value gold" id="ssBestSpread">—</div><div class="ss-stat-sub">guaranteed profit</div></div>
+  <div class="ss-stat"><div class="ss-stat-label">Total Available</div><div class="ss-stat-value green" id="ssTotalProfit">—</div><div class="ss-stat-sub">across all arbs</div></div>
+  <div class="ss-stat"><div class="ss-stat-label">Updated</div><div class="ss-stat-value" id="ssUpdated" style="font-size:16px">—</div><div class="ss-stat-sub" id="ssRefreshIn">auto-refresh 15s</div></div>
+</div>
+</div>
+
+<!-- FILTERS -->
+<div class="ss-filters">
+  <button class="ss-pill active" onclick="filterAsset('all')">All</button>
+  <button class="ss-pill" onclick="filterAsset('BTC')">₿ BTC</button>
+  <button class="ss-pill" onclick="filterAsset('ETH')">Ξ ETH</button>
+  <button class="ss-pill" onclick="filterAsset('SOL')">◎ SOL</button>
+  <button class="ss-pill" onclick="filterAsset('XRP')">XRP</button>
+  <button class="ss-pill" onclick="filterAsset('DOGE')">🐕 DOGE</button>
+  <button class="ss-pill" onclick="filterAsset('BNB')">BNB</button>
+  <div class="ss-live" id="ssLive">SCANNING</div>
+</div>
+
+<!-- TABLE -->
+<div style="padding:0 20px 40px;overflow-x:auto">
+<table class="ss-table">
+  <thead>
+    <tr>
+      <th>Market</th>
+      <th class="center">Asset</th>
+      <th class="center">YES Ask</th>
+      <th class="center">NO Ask</th>
+      <th class="center">Pair Cost</th>
+      <th class="center">Spread</th>
+      <th class="right">Max Pairs</th>
+      <th class="right">Profit</th>
+      <th class="center">Expires</th>
+      <th class="center">Trade</th>
+    </tr>
+  </thead>
+  <tbody id="ssBody">
+    <tr><td colspan="10" style="text-align:center;padding:40px;color:var(--dim)">Loading spread data...</td></tr>
+  </tbody>
+</table>
+</div>
+
+<script>
+var _allMarkets = [];
+var _activeFilter = 'all';
+var _refreshTimer = null;
+
+function escH(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
+
+function filterAsset(asset) {
+  _activeFilter = asset;
+  document.querySelectorAll('.ss-pill').forEach(function(p) {
+    p.classList.toggle('active', p.textContent.includes(asset === 'all' ? 'All' : asset));
+  });
+  renderTable();
+}
+
+function formatTime(hours) {
+  if (hours < 0) return 'Expired';
+  if (hours < 1/60) return '<1m';
+  if (hours < 1) return Math.round(hours * 60) + 'm';
+  if (hours < 24) return Math.round(hours * 10) / 10 + 'h';
+  return Math.round(hours / 24) + 'd';
+}
+
+function renderTable() {
+  var filtered = _activeFilter === 'all' ? _allMarkets : _allMarkets.filter(function(m) { return m.asset === _activeFilter; });
+  var body = document.getElementById('ssBody');
+  if (!filtered.length) {
+    body.innerHTML = '<tr><td colspan="10"><div class="ss-empty"><div class="ss-empty-icon">📡</div><div class="ss-empty-title">No markets found</div><p style="color:var(--dim);font-size:12px">Crypto windows refresh every few hours. Check back soon.</p></div></td></tr>';
+    return;
+  }
+
+  body.innerHTML = filtered.map(function(m) {
+    var pairClass = m.isArb ? 'profitable' : m.pairCost > 1.005 ? 'overpriced' : 'neutral';
+    var spreadClass = m.isArb ? 'arb' : m.spread < -0.005 ? 'negative' : 'neutral';
+    var timerClass = m.status === 'IMMINENT' ? 'imminent' : m.status === 'SOON' ? 'soon' : 'upcoming';
+    var rowClass = m.isArb ? 'ss-row arb' : 'ss-row';
+    var profitStr = m.isArb ? '+$' + m.totalProfit.toFixed(2) : '—';
+    var profitColor = m.isArb ? 'var(--green)' : 'var(--dim)';
+    var spreadStr = m.isArb ? '+' + m.spreadPct.toFixed(2) + '%' : m.spreadPct.toFixed(2) + '%';
+    var polyUrl = 'https://polymarket.com/event/' + (m.slug || m.conditionId);
+
+    // Depth bars (relative to max 1000 shares)
+    var yesDepthPct = Math.min(100, m.yesAskSize / 10);
+    var noDepthPct = Math.min(100, m.noAskSize / 10);
+
+    return '<tr class="' + rowClass + '">' +
+      '<td><div class="ss-market"><div class="ss-market-q">' + escH(m.question) + '</div></div></td>' +
+      '<td class="center"><span class="ss-asset ss-asset-' + m.asset + '">' + m.asset + '</span></td>' +
+      '<td class="center"><div style="font-weight:700">' + (m.yesAsk * 100).toFixed(1) + '¢</div><div style="font-size:9px;color:var(--dim)">' + m.yesAskSize.toLocaleString() + ' shares</div></td>' +
+      '<td class="center"><div style="font-weight:700">' + (m.noAsk * 100).toFixed(1) + '¢</div><div style="font-size:9px;color:var(--dim)">' + m.noAskSize.toLocaleString() + ' shares</div></td>' +
+      '<td class="center"><div class="ss-pair-cost ' + pairClass + '">' + (m.pairCost * 100).toFixed(1) + '¢</div></td>' +
+      '<td class="center"><span class="ss-spread-badge ' + spreadClass + '">' + spreadStr + '</span></td>' +
+      '<td class="right" style="font-weight:700">' + (m.isArb ? m.maxPairs.toLocaleString() : '—') + '</td>' +
+      '<td class="right"><span class="ss-profit" style="color:' + profitColor + '">' + profitStr + '</span></td>' +
+      '<td class="center"><span class="ss-timer ' + timerClass + '">' + formatTime(m.hoursToEnd) + '</span></td>' +
+      '<td class="center"><a href="' + polyUrl + '" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:10px;padding:5px 10px;border:1px solid var(--border);border-radius:6px;color:var(--gold);display:inline-block">Trade →</a></td>' +
+    '</tr>';
+  }).join('');
+}
+
+function updateStats() {
+  var arbs = _allMarkets.filter(function(m) { return m.isArb; });
+  var totalProfit = arbs.reduce(function(s, m) { return s + m.totalProfit; }, 0);
+  var bestSpread = arbs.length ? Math.max.apply(null, arbs.map(function(m) { return m.spreadPct; })) : 0;
+
+  document.getElementById('ssTotalMarkets').textContent = _allMarkets.length;
+  var arbEl = document.getElementById('ssArbCount');
+  arbEl.textContent = arbs.length;
+  arbEl.className = 'ss-stat-value ' + (arbs.length > 0 ? 'green' : '');
+
+  var bestEl = document.getElementById('ssBestSpread');
+  bestEl.textContent = arbs.length ? '+' + bestSpread.toFixed(2) + '%' : 'None';
+  bestEl.className = 'ss-stat-value ' + (arbs.length > 0 ? 'gold' : '');
+
+  var profEl = document.getElementById('ssTotalProfit');
+  profEl.textContent = arbs.length ? '$' + totalProfit.toFixed(2) : '$0';
+  profEl.className = 'ss-stat-value ' + (arbs.length > 0 ? 'green' : '');
+
+  document.getElementById('ssUpdated').textContent = new Date().toLocaleTimeString();
+}
+
+function fetchData() {
+  fetch('/api/spread-scanner')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      _allMarkets = d.markets || [];
+      updateStats();
+      renderTable();
+    })
+    .catch(function(e) {
+      console.error('[spread-scanner]', e);
+      document.getElementById('ssBody').innerHTML = '<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--red)">Failed to load spread data. Retrying...</td></tr>';
+    });
+}
+
+// Initial fetch + auto-refresh every 15s
+fetchData();
+_refreshTimer = setInterval(fetchData, 15000);
+</script>
+</body>
+</html>

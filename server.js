@@ -17968,6 +17968,7 @@ app.get('/whale-index', (req, res) => res.sendFile(path.join(__dirname, 'public'
 
 // GET /screener — market screener page
 app.get('/screener', (req, res) => res.sendFile(path.join(__dirname, 'public', 'screener.html')));
+app.get('/spread-scanner', (req, res) => res.sendFile(path.join(__dirname, 'public', 'spread-scanner.html')));
 
 // GET /data — premium data dashboard
 app.get('/data', (req, res) => res.sendFile(path.join(__dirname, 'public', 'data.html')));
@@ -23112,6 +23113,178 @@ app.get('/api/arbitrage', async (req, res) => {
     return res.json({ opportunities: _arbCache.data, updated_at: new Date(_arbCache.ts).toISOString() });
   }
   res.json({ opportunities: [], updated_at: null });
+});
+
+// ════════════════════════════════════════════════════════════
+// SPREAD SCANNER — Live orderbook pair cost monitoring
+// ════════════════════════════════════════════════════════════
+let _spreadCache = { ts: 0, data: [] };
+
+app.get('/api/spread-scanner', async (req, res) => {
+  // Return cached data if fresh (< 15s old)
+  if (_spreadCache.data.length && Date.now() - _spreadCache.ts < 15000) {
+    return res.json({ markets: _spreadCache.data, updated_at: new Date(_spreadCache.ts).toISOString() });
+  }
+  try {
+    // 1. Fetch all open "Up or Down" crypto window markets from gamma API
+    const gammaRes = await fetch('https://gamma-api.polymarket.com/events?closed=false&limit=200&order=startDate&ascending=true', {
+      headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+    });
+    const gammaData = await gammaRes.json();
+    const events = Array.isArray(gammaData) ? gammaData : [];
+
+    const windowMarkets = [];
+    const now = Date.now();
+    for (const evt of events) {
+      for (const m of (evt.markets || [])) {
+        const q = (m.question || '').toLowerCase();
+        // Only short-duration crypto "Up or Down" markets
+        if (!q.includes('up or down')) continue;
+        const isCrypto = /bitcoin|btc|ethereum|eth|solana|sol|xrp|dogecoin|doge|bnb|hype|hyperliquid/i.test(q);
+        if (!isCrypto) continue;
+
+        let tids = m.clobTokenIds || '[]';
+        if (typeof tids === 'string') tids = JSON.parse(tids);
+        if (tids.length < 2) continue;
+
+        // Parse end date to filter near-term only (within 24h)
+        const endDate = new Date(m.endDate || m.close_time || '');
+        const hoursToEnd = (endDate.getTime() - now) / 3600000;
+        if (hoursToEnd < -1 || hoursToEnd > 24) continue; // skip expired or far-future
+
+        // Extract asset name
+        let asset = 'BTC';
+        if (/ethereum|eth\b/i.test(q)) asset = 'ETH';
+        else if (/solana|sol\b/i.test(q)) asset = 'SOL';
+        else if (/xrp/i.test(q)) asset = 'XRP';
+        else if (/dogecoin|doge/i.test(q)) asset = 'DOGE';
+        else if (/bnb/i.test(q)) asset = 'BNB';
+        else if (/hype|hyperliquid/i.test(q)) asset = 'HYPE';
+
+        windowMarkets.push({
+          question: m.question,
+          asset,
+          endDate: endDate.toISOString(),
+          hoursToEnd: Math.max(0, hoursToEnd),
+          yesTokenId: tids[0],
+          noTokenId: tids[1],
+          conditionId: m.conditionId,
+          slug: m.market_slug || m.slug || '',
+          volume: m.volumeNum || m.volume || 0
+        });
+      }
+    }
+
+    // 2. Fetch orderbooks for the nearest markets (limit to 30 to avoid rate limiting)
+    const nearest = windowMarkets
+      .filter(m => m.hoursToEnd >= 0)
+      .sort((a, b) => a.hoursToEnd - b.hoursToEnd)
+      .slice(0, 30);
+
+    const results = [];
+    const fetchBook = async (tokenId) => {
+      try {
+        const r = await fetch(`https://clob.polymarket.com/book?token_id=${tokenId}`, {
+          headers: { Accept: 'application/json' }
+        });
+        if (!r.ok) return { bids: [], asks: [] };
+        return await r.json();
+      } catch { return { bids: [], asks: [] }; }
+    };
+
+    // Fetch in batches of 6 (12 requests = 6 markets at a time)
+    for (let i = 0; i < nearest.length; i += 6) {
+      const batch = nearest.slice(i, i + 6);
+      const bookPromises = batch.flatMap(m => [
+        fetchBook(m.yesTokenId).then(b => ({ market: m, side: 'yes', book: b })),
+        fetchBook(m.noTokenId).then(b => ({ market: m, side: 'no', book: b }))
+      ]);
+      const books = await Promise.allSettled(bookPromises);
+
+      // Pair YES+NO books per market
+      const marketBooks = {};
+      for (const result of books) {
+        if (result.status !== 'fulfilled') continue;
+        const { market, side, book } = result.value;
+        const key = market.conditionId;
+        if (!marketBooks[key]) marketBooks[key] = { market, yes: null, no: null };
+        marketBooks[key][side] = book;
+      }
+
+      for (const { market, yes, no } of Object.values(marketBooks)) {
+        if (!yes || !no) continue;
+        const yesAsks = (yes.asks || []).sort((a, b) => parseFloat(a.price) - parseFloat(b.price));
+        const noAsks = (no.asks || []).sort((a, b) => parseFloat(a.price) - parseFloat(b.price));
+        const yesBids = (yes.bids || []).sort((a, b) => parseFloat(b.price) - parseFloat(a.price));
+        const noBids = (no.bids || []).sort((a, b) => parseFloat(b.price) - parseFloat(a.price));
+
+        if (!yesAsks.length || !noAsks.length) continue;
+
+        const yesAsk = parseFloat(yesAsks[0].price);
+        const noAsk = parseFloat(noAsks[0].price);
+        const yesAskSize = parseFloat(yesAsks[0].size);
+        const noAskSize = parseFloat(noAsks[0].size);
+        const yesBid = yesBids.length ? parseFloat(yesBids[0].price) : 0;
+        const noBid = noBids.length ? parseFloat(noBids[0].price) : 0;
+
+        const pairCost = yesAsk + noAsk;
+        const spread = 1.0 - pairCost;
+        const maxPairs = Math.min(yesAskSize, noAskSize);
+        const profitPerPair = Math.max(0, spread);
+        const totalProfit = maxPairs * profitPerPair;
+        const isArb = spread > 0.001; // > 0.1% spread
+
+        // Calculate depth — how much liquidity at each price level
+        const yesDepth = yesAsks.slice(0, 5).reduce((s, a) => s + parseFloat(a.size), 0);
+        const noDepth = noAsks.slice(0, 5).reduce((s, a) => s + parseFloat(a.size), 0);
+
+        results.push({
+          question: market.question,
+          asset: market.asset,
+          endDate: market.endDate,
+          hoursToEnd: market.hoursToEnd,
+          minutesToEnd: Math.round(market.hoursToEnd * 60),
+          slug: market.slug,
+          conditionId: market.conditionId,
+          volume: market.volume,
+          // Orderbook data
+          yesAsk, noAsk, yesBid, noBid,
+          yesAskSize: Math.round(yesAskSize),
+          noAskSize: Math.round(noAskSize),
+          yesDepth: Math.round(yesDepth),
+          noDepth: Math.round(noDepth),
+          // Spread analysis
+          pairCost: Math.round(pairCost * 10000) / 10000,
+          spread: Math.round(spread * 10000) / 10000,
+          spreadPct: Math.round(spread * 10000) / 100,
+          maxPairs: Math.round(maxPairs),
+          profitPerPair: Math.round(profitPerPair * 10000) / 10000,
+          totalProfit: Math.round(totalProfit * 100) / 100,
+          isArb,
+          // Status
+          status: market.hoursToEnd < 0.083 ? 'IMMINENT' : market.hoursToEnd < 1 ? 'SOON' : 'UPCOMING'
+        });
+      }
+    }
+
+    // Sort: arbs first (by spread desc), then by time to end
+    results.sort((a, b) => {
+      if (a.isArb && !b.isArb) return -1;
+      if (!a.isArb && b.isArb) return 1;
+      if (a.isArb && b.isArb) return b.spread - a.spread;
+      return a.hoursToEnd - b.hoursToEnd;
+    });
+
+    _spreadCache = { ts: Date.now(), data: results };
+    res.json({ markets: results, updated_at: new Date().toISOString() });
+  } catch (e) {
+    console.error('[spread-scanner]', e.message);
+    // Return stale cache on error
+    if (_spreadCache.data.length) {
+      return res.json({ markets: _spreadCache.data, updated_at: new Date(_spreadCache.ts).toISOString(), stale: true });
+    }
+    res.status(500).json({ error: 'Failed to scan spreads', markets: [] });
+  }
 });
 
 // ════════════════════════════════════════════════════════════

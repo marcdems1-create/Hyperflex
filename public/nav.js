@@ -28,6 +28,7 @@
     { href: '/signals', label: 'Signals' },
     { href: '/whales', label: 'Market Intel' },
     { href: '/screener', label: 'Screener' },
+    { href: '/spread-scanner', label: 'Spreads', gold: true },
     { href: '/predictors', label: 'Predictors' },
     { href: '/odds', label: 'Odds' },
     { href: '/data', label: 'Data' },
