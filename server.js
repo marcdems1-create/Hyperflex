@@ -23049,6 +23049,49 @@ async function resolveAgentOutcomes() {
 // Run outcome resolution every 30 minutes
 cron.schedule('*/30 * * * *', safeCron('resolveAgentOutcomes', resolveAgentOutcomes));
 
+// ── ORDERBOOK API — real-time bid/ask/spread from Polymarket CLOB ──
+const _clobBookCache = new Map();
+app.get('/api/orderbook/:tokenId', async (req, res) => {
+  try {
+    const tokenId = req.params.tokenId;
+    if (!tokenId || tokenId.length < 10) return res.status(400).json({ error: 'Invalid token ID' });
+    const cached = _clobBookCache.get(tokenId);
+    if (cached && Date.now() - cached.ts < 15000) return res.json(cached.data); // 15s cache
+    const r = await _nodeFetch(`https://clob.polymarket.com/book?token_id=${tokenId}`, { headers: { Accept: 'application/json' } });
+    if (!r.ok) return res.status(502).json({ error: 'CLOB API error' });
+    const raw = await r.json();
+    const bids = (raw.bids || []).sort((a,b) => parseFloat(b.price) - parseFloat(a.price));
+    const asks = (raw.asks || []).sort((a,b) => parseFloat(a.price) - parseFloat(b.price));
+    const bestBid = bids[0] ? parseFloat(bids[0].price) : 0;
+    const bestAsk = asks[0] ? parseFloat(asks[0].price) : 1;
+    const bidSize = bids[0] ? parseFloat(bids[0].size) : 0;
+    const askSize = asks[0] ? parseFloat(asks[0].size) : 0;
+    const mid = (bestBid + bestAsk) / 2;
+    const spread = bestAsk - bestBid;
+    const spreadPct = mid > 0 ? (spread / mid * 100) : 0;
+    // Depth: sum of top 5 levels
+    const bidDepth = bids.slice(0,5).reduce((s,b) => s + parseFloat(b.size) * parseFloat(b.price), 0);
+    const askDepth = asks.slice(0,5).reduce((s,a) => s + parseFloat(a.size) * parseFloat(a.price), 0);
+    const result = {
+      token_id: tokenId,
+      best_bid: bestBid, best_ask: bestAsk,
+      bid_size: Math.round(bidSize), ask_size: Math.round(askSize),
+      mid: Math.round(mid * 10000) / 10000,
+      spread: Math.round(spread * 10000) / 10000,
+      spread_pct: Math.round(spreadPct * 100) / 100,
+      bid_depth_usd: Math.round(bidDepth * 100) / 100,
+      ask_depth_usd: Math.round(askDepth * 100) / 100,
+      levels: { bids: bids.slice(0,10).map(b => ({ price: parseFloat(b.price), size: Math.round(parseFloat(b.size)) })), asks: asks.slice(0,10).map(a => ({ price: parseFloat(a.price), size: Math.round(parseFloat(a.size)) })) },
+      fetched_at: new Date().toISOString()
+    };
+    _clobBookCache.set(tokenId, { ts: Date.now(), data: result });
+    if (_clobBookCache.size > 200) { const oldest = _clobBookCache.keys().next().value; _clobBookCache.delete(oldest); }
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/arbitrage', async (req, res) => {
   if (_arbCache && (Date.now() - _arbCache.ts < 6 * 60 * 1000)) {
     return res.json({ opportunities: _arbCache.data, updated_at: new Date(_arbCache.ts).toISOString() });
