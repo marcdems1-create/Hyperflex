@@ -13796,8 +13796,8 @@ app.post('/api/admin/email-creator', requireAdmin, async (req, res) => {
     const { email, name, subject, body } = req.body;
     if (!email || !subject || !body) return res.status(400).json({ error: 'email, subject, body required' });
     const transport = createMailTransport();
-    if (!transport) return res.status(503).json({ error: 'SMTP not configured on this server' });
-    await transport.sendMail({
+    if (!transport) return res.status(503).json({ error: 'SMTP not configured on this server — add SMTP_HOST to Railway env vars' });
+    const sendPromise = transport.sendMail({
       from: process.env.SMTP_FROM || 'HYPERFLEX <noreply@hyperflex.network>',
       replyTo: process.env.SMTP_REPLY_TO || process.env.SMTP_FROM,
       to: `${name || ''} <${email}>`.trim(),
@@ -13810,6 +13810,8 @@ app.post('/api/admin/email-creator', requireAdmin, async (req, res) => {
       </div>`,
       text: body,
     });
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('SMTP timeout — check Railway SMTP_HOST env var')), 12000));
+    await Promise.race([sendPromise, timeoutPromise]);
     console.log(`[admin] sent email to ${email} — subject: ${subject}`);
     res.json({ ok: true });
   } catch (err) {
@@ -14369,6 +14371,9 @@ function createMailTransport() {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
     },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
   });
 }
 
