@@ -13040,7 +13040,7 @@ async function loadCrystalBallPick() {
       if (q) { url = 'https://polymarket.com/event/' + q.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').substring(0, 80); }
     }
     const marketName = top.market_name || (top.market && top.market.question) || top.question || '';
-    const typeBadge = top.type || 'DIVERGENCE';
+    const typeBadge = top.type || 'EDGE SCORE';
     const trade = top.trade || {};
     const hasTrade = trade.entry_cost && trade.entry_cost < 95;
     card.innerHTML = `

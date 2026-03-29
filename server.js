@@ -21047,8 +21047,8 @@ async function generateCrystalBallPredictions() {
         reasoning: [
           `Current price: ${mktPrice}%`,
           `Whale consensus: ${pick.consensus_pct}% (${pick.consensus_side}) — ${pick.whale_count} whales`,
-          `Divergence: ${divergence} points`,
-          'When divergence >20pts, whale side wins ~73% historically'
+          `Edge Score: ${divergence} points`,
+          'When edge score >20pts, whale side wins ~73% historically'
         ],
         action: pick.consensus_side === 'YES' ? `BUY YES at current ${mktPrice}%` : `BUY NO at current ${100 - mktPrice}%`,
         market: { question: pick.market, url: pick.url || 'https://polymarket.com' },

@@ -187,7 +187,7 @@ a{color:var(--gold);text-decoration:none} a:hover{text-decoration:underline}
       <button class="cb-pill active" data-filter="all">All</button>
       <button class="cb-pill" data-filter="WHALE_CONVERGENCE">Whale</button>
       <button class="cb-pill" data-filter="MOMENTUM_BREAKOUT">Momentum</button>
-      <button class="cb-pill" data-filter="SMART_VS_DUMB">Divergence</button>
+      <button class="cb-pill" data-filter="SMART_VS_DUMB">Edge Score</button>
       <button class="cb-pill" data-filter="LEVERAGE_SIGNAL">Leverage</button>
       <button class="cb-pill" data-filter="EXPIRY_CONVERGENCE">Expiry</button>
     </div>
@@ -236,7 +236,7 @@ a{color:var(--gold);text-decoration:none} a:hover{text-decoration:underline}
 
 <script>
 var TYPE_LABELS = {
-  WHALE_CONVERGENCE:'WHALE',MOMENTUM_BREAKOUT:'MOMENTUM',SMART_VS_DUMB:'DIVERGENCE',
+  WHALE_CONVERGENCE:'WHALE',MOMENTUM_BREAKOUT:'MOMENTUM',SMART_VS_DUMB:'EDGE SCORE',
   LEVERAGE_SIGNAL:'LEVERAGE',EXPIRY_CONVERGENCE:'EXPIRY',CONTRARIAN:'CONTRARIAN'
 };
 var _predictions = [], _activeFilter = 'all', _activeSort = 'score', _lastUpdated = null;
