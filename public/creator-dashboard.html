@@ -12879,8 +12879,9 @@ async function loadPolymarketPositions(forceRefresh) {
       }
     }
     window._polyPositionsData = positions;
-    // Fetch USDC balance in parallel for portfolio value
+    // Fetch USDC balance + activity for realized P&L from sold positions
     fetchUSDCBalance(_polyWalletAddress).then(() => updatePortfolioSummary());
+    fetchRealizedPnL(_polyWalletAddress).then(() => updatePortfolioSummary());
     setTimeout(updatePortfolioSummary, 100);
 
     if (!positions.length) {
@@ -13379,6 +13380,45 @@ function getHFXBetsFlat() {
   return [];
 }
 
+// Fetch realized P&L from sold positions via activity endpoint
+async function fetchRealizedPnL(address) {
+  if (!address || window._realizedPnLFromActivity != null) return;
+  try {
+    const r = await fetch(`https://data-api.polymarket.com/activity?user=${address.toLowerCase()}&limit=200&offset=0`);
+    if (!r.ok) return;
+    const items = await r.json();
+    if (!Array.isArray(items)) return;
+    // Group by conditionId: sum buys vs sells
+    const markets = {};
+    for (const i of items) {
+      const cid = i.conditionId || i.assetId || 'unknown';
+      if (!markets[cid]) markets[cid] = { buys: 0, sells: 0, redeems: 0 };
+      const size = parseFloat(i.usdcSize || 0);
+      if (i.type === 'TRADE') {
+        if (i.side === 'BUY') markets[cid].buys += size;
+        else if (i.side === 'SELL') markets[cid].sells += size;
+      } else if (i.type === 'REDEEM') {
+        markets[cid].redeems += size;
+      }
+    }
+    // Find positions that were fully sold (sells > 0 but not in current positions)
+    const currentIds = new Set((window._polyPositionsData || []).map(p => p.condition_id || p.id || ''));
+    let soldProfit = 0;
+    for (const [cid, m] of Object.entries(markets)) {
+      if (m.sells > 0 || m.redeems > 0) {
+        const net = (m.sells + m.redeems) - m.buys;
+        // Only count profits from positions no longer in the positions API
+        // (positions still open have their P&L in cashPnl already)
+        if (!currentIds.has(cid) && net > 0) {
+          soldProfit += net;
+        }
+      }
+    }
+    window._realizedPnLFromActivity = soldProfit;
+    console.log('[realized-pnl] Sold position profits:', soldProfit.toFixed(2));
+  } catch (e) { console.warn('[realized-pnl]', e.message); }
+}
+
 // Fetch USDC balance from Polygon RPC (no MetaMask needed)
 async function fetchUSDCBalance(address) {
   if (!address || window._walletBalanceUSDC != null) return; // already have it
@@ -13424,7 +13464,11 @@ function computePortfolioStats(positions) {
   // Add USDC cash balance to portfolio value
   const cashBalance = window._walletBalanceUSDC || 0;
   const portfolioValue = totalValue + cashBalance;
-  return { totalValue, portfolioValue, cashBalance, totalPnl, totalCost, openCount, resolvedCount, wins, winRate, roi, sharpScore, total: positions.length };
+  // Add realized P&L from fully-sold positions (not in positions API anymore)
+  const soldPnl = window._realizedPnLFromActivity || 0;
+  const adjustedPnl = totalPnl + soldPnl;
+  const adjustedRoi = totalCost > 0 ? ((adjustedPnl / totalCost) * 100) : 0;
+  return { totalValue, portfolioValue, cashBalance, totalPnl: adjustedPnl, totalCost, openCount, resolvedCount, wins, winRate, roi: adjustedRoi, sharpScore, total: positions.length, soldPnl };
 }
 
 function updatePortfolioSummary() {
