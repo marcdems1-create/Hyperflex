@@ -19110,6 +19110,85 @@ app.get('/api/screener/narrative-lifecycle', async (req, res) => {
   }
 });
 
+// ── MARKET MISPRICING DETECTOR — whale consensus vs market price gaps ─────
+const _mispricingCache = { data: null, ts: 0 };
+app.get('/api/mispricings', async (req, res) => {
+  try {
+    if (_mispricingCache.data && Date.now() - _mispricingCache.ts < 5 * 60 * 1000) {
+      return res.json(_mispricingCache.data);
+    }
+
+    // Get whale positions
+    const whaleData = _whaleCache || {};
+    const whales = whaleData.whales || [];
+    if (!whales.length) return res.json([]);
+
+    // Group by market
+    const markets = {};
+    for (const w of whales) {
+      const m = w.market || '';
+      if (!m) continue;
+      if (!markets[m]) markets[m] = { question: m, yes_capital: 0, no_capital: 0, whale_count: 0, yes_prices: [], no_prices: [], whales: [], market_url: w.market_url || '' };
+      const side = (w.side || '').toLowerCase();
+      const val = parseFloat(w.current_value || 0);
+      const price = parseFloat(w.current_price || 0);
+      const avg = parseFloat(w.avg_price || 0);
+      markets[m].whale_count++;
+      markets[m].whales.push({ trader: (w.trader || '').slice(0, 15), side, value: val, avg_price: avg, pnl: parseFloat(w.pnl || 0) });
+      if (side === 'yes') { markets[m].yes_capital += val; markets[m].yes_prices.push(price); }
+      else { markets[m].no_capital += val; markets[m].no_prices.push(price); }
+    }
+
+    // Calculate mispricings
+    const mispricings = [];
+    for (const [mkt, data] of Object.entries(markets)) {
+      if (data.whale_count < 3) continue;
+      const totalCap = data.yes_capital + data.no_capital;
+      if (totalCap < 5000) continue;
+
+      // Market YES% from token prices
+      let marketYes;
+      if (data.yes_prices.length) marketYes = data.yes_prices.reduce((a, b) => a + b, 0) / data.yes_prices.length;
+      else if (data.no_prices.length) marketYes = 1 - (data.no_prices.reduce((a, b) => a + b, 0) / data.no_prices.length);
+      else continue;
+
+      // Whale conviction
+      const whaleYesPct = data.yes_capital / totalCap;
+      const gap = Math.round((whaleYesPct - marketYes) * 100);
+
+      if (Math.abs(gap) < 10) continue; // Only surface significant mispricings
+
+      const direction = gap > 0 ? 'UNDERPRICED' : 'OVERPRICED';
+      const action = gap > 0 ? 'BUY YES' : 'BUY NO';
+      const fairValue = Math.round(whaleYesPct * 100);
+      const currentPrice = Math.round(marketYes * 100);
+
+      mispricings.push({
+        question: data.question,
+        market_url: data.market_url,
+        current_yes_pct: currentPrice,
+        whale_fair_value: fairValue,
+        gap_pts: Math.abs(gap),
+        direction,
+        action,
+        whale_capital: Math.round(totalCap),
+        whale_count: data.whale_count,
+        conviction: Math.round(Math.max(whaleYesPct, 1 - whaleYesPct) * 100),
+        top_whales: data.whales.sort((a, b) => b.value - a.value).slice(0, 3).map(w => ({ trader: w.trader, side: w.side, value: Math.round(w.value), pnl: Math.round(w.pnl) }))
+      });
+    }
+
+    mispricings.sort((a, b) => b.gap_pts - a.gap_pts);
+    const result = mispricings.slice(0, 20);
+    _mispricingCache.data = result;
+    _mispricingCache.ts = Date.now();
+    res.json(result);
+  } catch (err) {
+    console.error('[mispricings]', err.message);
+    res.json([]);
+  }
+});
+
 // ── MARKET MOVERS — biggest price changes in last 24h ─────────────────────
 let _marketMoversCache = null;
 

@@ -290,6 +290,19 @@ td { padding: 12px 14px; font-size: 13px; vertical-align: middle; }
   <p class="hero-sub">What should you bet on right now — and why</p>
 </header>
 
+<!-- MISPRICING DETECTOR -->
+<div id="mispricing-section" style="margin-bottom:40px;display:none">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div>
+      <span style="font-size:22px">🎯</span>
+      <span style="font-family:var(--sans);font-size:22px;font-weight:800;color:var(--text)"> Mispriced Markets</span>
+      <span style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-left:8px">Whale consensus disagrees with market price</span>
+    </div>
+    <span style="font-family:var(--mono);font-size:10px;padding:4px 10px;border-radius:20px;background:rgba(34,197,94,0.1);color:#22c55e;border:1px solid rgba(34,197,94,0.3)">EDGE FINDER</span>
+  </div>
+  <div id="mispricing-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px"></div>
+</div>
+
 <!-- SIGNAL LANES -->
 <div class="signal-lanes" id="signal-lanes">
   <div class="signal-lane">
@@ -714,9 +727,63 @@ function renderLanes() {
 
 // Init
 loadScreener();
+loadMispricings();
 
 // Auto-refresh every 5 minutes
 setInterval(loadScreener, 5 * 60 * 1000);
+setInterval(loadMispricings, 5 * 60 * 1000);
+
+async function loadMispricings() {
+  try {
+    var res = await fetch('/api/mispricings');
+    var data = await res.json();
+    var section = document.getElementById('mispricing-section');
+    var grid = document.getElementById('mispricing-grid');
+    if (!section || !grid) return;
+    if (!data || !data.length) { section.style.display = 'none'; return; }
+    section.style.display = '';
+
+    grid.innerHTML = data.slice(0, 8).map(function(m) {
+      var gapColor = m.direction === 'UNDERPRICED' ? '#22c55e' : '#ef4444';
+      var actionBg = m.direction === 'UNDERPRICED' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)';
+      var actionBorder = m.direction === 'UNDERPRICED' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)';
+      var arrow = m.direction === 'UNDERPRICED' ? '↑' : '↓';
+
+      var whaleList = (m.top_whales || []).map(function(w) {
+        return '<span style="font-family:var(--mono);font-size:9px;color:var(--dim)">' + w.trader + ' (' + w.side + ' $' + (w.value >= 1000 ? Math.round(w.value/1000) + 'K' : w.value) + ')</span>';
+      }).join(' · ');
+
+      return '<div style="background:#0f0e0c;border:1px solid #2a2825;border-left:3px solid ' + gapColor + ';border-radius:10px;padding:16px 18px">' +
+        '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px">' +
+          '<div style="flex:1;min-width:0">' +
+            '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;line-height:1.4">' + (m.question || '').slice(0, 60) + '</div>' +
+            '<div style="font-family:var(--mono);font-size:10px;color:var(--dim)">' + m.whale_count + ' whales · $' + (m.whale_capital >= 1000 ? Math.round(m.whale_capital/1000) + 'K' : m.whale_capital) + ' capital</div>' +
+          '</div>' +
+          '<div style="flex-shrink:0;text-align:center">' +
+            '<div style="font-family:var(--sans);font-size:28px;font-weight:800;color:' + gapColor + '">' + m.gap_pts + '</div>' +
+            '<div style="font-family:var(--mono);font-size:9px;color:' + gapColor + '">pt gap</div>' +
+          '</div>' +
+        '</div>' +
+        '<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">' +
+          '<div style="flex:1;background:#1a1917;border-radius:6px;padding:8px 10px;text-align:center">' +
+            '<div style="font-family:var(--mono);font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Market Price</div>' +
+            '<div style="font-family:var(--mono);font-size:16px;font-weight:700;color:var(--text)">' + m.current_yes_pct + '%</div>' +
+          '</div>' +
+          '<div style="font-size:16px;color:var(--dim)">' + arrow + '</div>' +
+          '<div style="flex:1;background:#1a1917;border-radius:6px;padding:8px 10px;text-align:center">' +
+            '<div style="font-family:var(--mono);font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Whale Fair Value</div>' +
+            '<div style="font-family:var(--mono);font-size:16px;font-weight:700;color:' + gapColor + '">' + m.whale_fair_value + '%</div>' +
+          '</div>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;justify-content:space-between">' +
+          '<span style="font-family:var(--mono);font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;background:' + actionBg + ';color:' + gapColor + ';border:1px solid ' + actionBorder + '">' + m.action + '</span>' +
+          (m.market_url ? '<a href="' + m.market_url + '" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:10px;color:var(--gold);text-decoration:none">Trade →</a>' : '') +
+        '</div>' +
+        (whaleList ? '<div style="margin-top:8px;padding-top:8px;border-top:1px solid #1a1917">' + whaleList + '</div>' : '') +
+      '</div>';
+    }).join('');
+  } catch(e) { console.warn('[mispricings]', e.message); }
+}
 </script>
 </body>
 </html>
