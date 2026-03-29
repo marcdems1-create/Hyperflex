@@ -23125,53 +23125,62 @@ app.get('/api/spread-scanner', async (req, res) => {
     return res.json({ markets: _spreadCache.data, updated_at: new Date(_spreadCache.ts).toISOString() });
   }
   try {
-    // 1. Fetch all open "Up or Down" crypto window markets from gamma API
-    const gammaRes = await fetch('https://gamma-api.polymarket.com/events?closed=false&limit=200&order=startDate&ascending=true', {
-      headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
-    });
-    const gammaData = await gammaRes.json();
-    const events = Array.isArray(gammaData) ? gammaData : [];
+    // 1. Fetch all open "Up or Down" crypto window markets from gamma markets API
+    // Note: these are under /markets not /events on gamma
+    const allWindowMarkets = [];
+    const now = Date.now();
+
+    // Fetch multiple pages to get all crypto windows
+    for (let offset = 0; offset < 400; offset += 100) {
+      try {
+        const gammaRes = await fetch(`https://gamma-api.polymarket.com/markets?closed=false&limit=100&offset=${offset}&order=endDate&ascending=true`, {
+          headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+        });
+        if (!gammaRes.ok) break;
+        const gammaData = await gammaRes.json();
+        const markets = Array.isArray(gammaData) ? gammaData : [];
+        if (!markets.length) break;
+        allWindowMarkets.push(...markets);
+      } catch { break; }
+    }
 
     const windowMarkets = [];
-    const now = Date.now();
-    for (const evt of events) {
-      for (const m of (evt.markets || [])) {
-        const q = (m.question || '').toLowerCase();
-        // Only short-duration crypto "Up or Down" markets
-        if (!q.includes('up or down')) continue;
-        const isCrypto = /bitcoin|btc|ethereum|eth|solana|sol|xrp|dogecoin|doge|bnb|hype|hyperliquid/i.test(q);
-        if (!isCrypto) continue;
+    for (const m of allWindowMarkets) {
+      const q = (m.question || '').toLowerCase();
+      // Only short-duration crypto "Up or Down" markets
+      if (!q.includes('up or down')) continue;
+      const isCrypto = /bitcoin|btc|ethereum|eth|solana|sol|xrp|dogecoin|doge|bnb|hype|hyperliquid/i.test(q);
+      if (!isCrypto) continue;
 
-        let tids = m.clobTokenIds || '[]';
-        if (typeof tids === 'string') tids = JSON.parse(tids);
-        if (tids.length < 2) continue;
+      let tids = m.clobTokenIds || '[]';
+      if (typeof tids === 'string') try { tids = JSON.parse(tids); } catch { tids = []; }
+      if (tids.length < 2) continue;
 
-        // Parse end date to filter near-term only (within 24h)
-        const endDate = new Date(m.endDate || m.close_time || '');
-        const hoursToEnd = (endDate.getTime() - now) / 3600000;
-        if (hoursToEnd < -1 || hoursToEnd > 24) continue; // skip expired or far-future
+      // Parse end date to filter near-term only (within 24h)
+      const endDate = new Date(m.endDate || m.close_time || '');
+      const hoursToEnd = (endDate.getTime() - now) / 3600000;
+      if (hoursToEnd < -1 || hoursToEnd > 24) continue;
 
-        // Extract asset name
-        let asset = 'BTC';
-        if (/ethereum|eth\b/i.test(q)) asset = 'ETH';
-        else if (/solana|sol\b/i.test(q)) asset = 'SOL';
-        else if (/xrp/i.test(q)) asset = 'XRP';
-        else if (/dogecoin|doge/i.test(q)) asset = 'DOGE';
-        else if (/bnb/i.test(q)) asset = 'BNB';
-        else if (/hype|hyperliquid/i.test(q)) asset = 'HYPE';
+      // Extract asset name
+      let asset = 'BTC';
+      if (/ethereum|eth\b/i.test(q)) asset = 'ETH';
+      else if (/solana|sol\b/i.test(q)) asset = 'SOL';
+      else if (/xrp/i.test(q)) asset = 'XRP';
+      else if (/dogecoin|doge/i.test(q)) asset = 'DOGE';
+      else if (/bnb/i.test(q)) asset = 'BNB';
+      else if (/hype|hyperliquid/i.test(q)) asset = 'HYPE';
 
-        windowMarkets.push({
-          question: m.question,
-          asset,
-          endDate: endDate.toISOString(),
-          hoursToEnd: Math.max(0, hoursToEnd),
-          yesTokenId: tids[0],
-          noTokenId: tids[1],
-          conditionId: m.conditionId,
-          slug: m.market_slug || m.slug || '',
-          volume: m.volumeNum || m.volume || 0
-        });
-      }
+      windowMarkets.push({
+        question: m.question,
+        asset,
+        endDate: endDate.toISOString(),
+        hoursToEnd: Math.max(0, hoursToEnd),
+        yesTokenId: tids[0],
+        noTokenId: tids[1],
+        conditionId: m.conditionId,
+        slug: m.market_slug || m.slug || '',
+        volume: m.volumeNum || m.volume || 0
+      });
     }
 
     // 2. Fetch orderbooks for the nearest markets (limit to 30 to avoid rate limiting)
