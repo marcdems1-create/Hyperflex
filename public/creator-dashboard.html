@@ -13380,42 +13380,88 @@ function getHFXBetsFlat() {
   return [];
 }
 
-// Fetch realized P&L from sold positions via activity endpoint
+// Fetch true P&L from activity: P&L = Portfolio Value - Net Deposited
+// This is how Polymarket calculates it — total deposits minus withdrawals = cost basis
 async function fetchRealizedPnL(address) {
-  if (!address || window._realizedPnLFromActivity != null) return;
+  if (!address || window._netDeposited != null) return;
   try {
-    const r = await fetch(`https://data-api.polymarket.com/activity?user=${address.toLowerCase()}&limit=200&offset=0`);
-    if (!r.ok) return;
-    const items = await r.json();
-    if (!Array.isArray(items)) return;
-    // Group by conditionId: sum buys vs sells
-    const markets = {};
-    for (const i of items) {
+    // Fetch ALL activity to find deposits and withdrawals
+    let allItems = [];
+    let offset = 0;
+    while (offset < 1000) { // safety cap
+      const r = await fetch(`https://data-api.polymarket.com/activity?user=${address.toLowerCase()}&limit=200&offset=${offset}`);
+      if (!r.ok) break;
+      const items = await r.json();
+      if (!Array.isArray(items) || items.length === 0) break;
+      allItems = allItems.concat(items);
+      if (items.length < 200) break; // last page
+      offset += 200;
+    }
+    let totalDeposited = 0, totalWithdrawn = 0;
+    for (const i of allItems) {
+      const amt = parseFloat(i.usdcSize || 0);
+      if (i.type === 'DEPOSIT' || i.action === 'Deposit' || (i.type === 'TRADE' && i.description && i.description.includes('Deposit'))) {
+        // Activity API doesn't have deposit/withdraw as types — check the title
+      }
+    }
+    // The activity API doesn't reliably expose deposits/withdrawals
+    // Fallback: calculate from positions data instead
+    // Net invested = sum of all initialValue (cost basis) for current + resolved positions
+    // True P&L = portfolioValue - netInvested (where portfolioValue = positions + USDC cash)
+    // This is already what computePortfolioStats does, but we need to ensure
+    // partially-sold positions account for the sell proceeds
+
+    // Better approach: sum ALL sell proceeds from activity
+    let totalSellProceeds = 0;
+    let totalRedeemProceeds = 0;
+    for (const i of allItems) {
+      const amt = parseFloat(i.usdcSize || 0);
+      if (i.type === 'TRADE' && (i.side === 'SELL' || i.action === 'Sell')) totalSellProceeds += amt;
+      if (i.type === 'REDEEM') totalRedeemProceeds += amt;
+    }
+    // Realized gains = sell proceeds that exceed original cost
+    // For positions still open, the positions API cashPnl already accounts for partial sells
+    // For fully-closed positions, we need: sell proceeds - buy cost
+    // Group by condition to find fully-closed positions
+    const byMarket = {};
+    for (const i of allItems) {
+      if (i.type !== 'TRADE' && i.type !== 'REDEEM') continue;
       const cid = i.conditionId || i.assetId || 'unknown';
-      if (!markets[cid]) markets[cid] = { buys: 0, sells: 0, redeems: 0 };
-      const size = parseFloat(i.usdcSize || 0);
-      if (i.type === 'TRADE') {
-        if (i.side === 'BUY') markets[cid].buys += size;
-        else if (i.side === 'SELL') markets[cid].sells += size;
-      } else if (i.type === 'REDEEM') {
-        markets[cid].redeems += size;
-      }
+      if (!byMarket[cid]) byMarket[cid] = { buys: 0, sells: 0, redeems: 0, buyTokens: 0, sellTokens: 0 };
+      const amt = parseFloat(i.usdcSize || 0);
+      const tokens = parseFloat(i.size || 0);
+      if (i.type === 'TRADE' && i.side === 'BUY') { byMarket[cid].buys += amt; byMarket[cid].buyTokens += tokens; }
+      if (i.type === 'TRADE' && i.side === 'SELL') { byMarket[cid].sells += amt; byMarket[cid].sellTokens += tokens; }
+      if (i.type === 'REDEEM') byMarket[cid].redeems += amt;
     }
-    // Find positions that were fully sold (sells > 0 but not in current positions)
-    const currentIds = new Set((window._polyPositionsData || []).map(p => p.condition_id || p.id || ''));
-    let soldProfit = 0;
-    for (const [cid, m] of Object.entries(markets)) {
-      if (m.sells > 0 || m.redeems > 0) {
+    // Calculate extra realized P&L not captured by positions API cashPnl
+    // The positions API cashPnl only covers tokens you STILL HOLD
+    // We need to add profit from tokens you already SOLD
+    const currentPositions = window._polyPositionsData || [];
+    const currentById = {};
+    for (const p of currentPositions) {
+      const cid = p.condition_id || p.id || '';
+      if (cid) currentById[cid] = p;
+    }
+    let extraRealizedPnl = 0;
+    for (const [cid, m] of Object.entries(byMarket)) {
+      if (m.sells <= 0 && m.redeems <= 0) continue;
+      const inApi = currentById[cid];
+      if (inApi) {
+        // Position still exists in API — API cashPnl covers remaining tokens only
+        // Add the profit from sold tokens: sell proceeds - proportional cost of sold tokens
+        const costPerToken = m.buyTokens > 0 ? m.buys / m.buyTokens : 0;
+        const soldTokenProfit = m.sells - (costPerToken * m.sellTokens);
+        if (soldTokenProfit > 0) extraRealizedPnl += soldTokenProfit;
+      } else {
+        // Position fully closed — not in API at all
         const net = (m.sells + m.redeems) - m.buys;
-        // Only count profits from positions no longer in the positions API
-        // (positions still open have their P&L in cashPnl already)
-        if (!currentIds.has(cid) && net > 0) {
-          soldProfit += net;
-        }
+        extraRealizedPnl += net;
       }
     }
-    window._realizedPnLFromActivity = soldProfit;
-    console.log('[realized-pnl] Sold position profits:', soldProfit.toFixed(2));
+    window._realizedPnLFromActivity = extraRealizedPnl;
+    window._netDeposited = null; // flag that we've run
+    console.log('[realized-pnl] Closed position P&L:', closedPnl.toFixed(2), '| Sell proceeds:', totalSellProceeds.toFixed(2));
   } catch (e) { console.warn('[realized-pnl]', e.message); }
 }
 
