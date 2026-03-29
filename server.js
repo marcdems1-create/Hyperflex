@@ -22325,7 +22325,7 @@ async function detectArbitrageOpportunities() {
         const arbEdge1 = 1 - (pm.yes + kalshiNo); // positive = arb exists
         const arbEdge2 = 1 - (km.yes + (1 - pm.yes)); // reverse direction
         const bestEdge = Math.max(arbEdge1, arbEdge2);
-        if (bestEdge > 0.005 && bestEdge < 0.15) { // > 0.5% edge, < 15% (anything above 15% is almost certainly a bad cross-platform match)
+        if (bestEdge > 0.005 && bestEdge < 0.10) { // > 0.5% edge, < 10% (real arbs are 0.5-5%, above 10% = likely mismatched markets)
           const edgePct = Math.round(bestEdge * 10000) / 100;
           const direction = arbEdge1 >= arbEdge2 ? 'Buy YES Poly + NO Kalshi' : 'Buy YES Kalshi + NO Poly';
           arbs.push({
