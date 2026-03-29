@@ -22404,7 +22404,7 @@ async function detectArbitrageOpportunities() {
             // Compare implied probability vs Polymarket price
             const polyPct = Math.round(pm.yes * 100);
             const gap = Math.abs(polyPct - sb.impliedPct);
-            if (gap >= 5 && gap < 40) { // 5%+ discrepancy, cap at 40% for sanity
+            if (gap >= 5 && gap < 20) { // 5-20% discrepancy (above 20% = different market mechanics, not real edge)
               const direction = polyPct < sb.impliedPct
                 ? `Poly ${polyPct}% vs Books ${sb.impliedPct}% — Poly undervalued`
                 : `Poly ${polyPct}% vs Books ${sb.impliedPct}% — Poly overvalued`;
