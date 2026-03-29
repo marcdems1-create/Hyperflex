@@ -245,10 +245,11 @@
     background: var(--cream);
     border: 1px solid var(--border);
     border-radius: 12px;
-    overflow: hidden;
+    overflow-x: auto;
   }
   table {
     width: 100%;
+    min-width: 1140px;
     border-collapse: collapse;
   }
   thead tr {
@@ -384,7 +385,7 @@
   .trial-badge.expired { background: rgba(192,57,43,0.1); border-color: rgba(192,57,43,0.3); color: var(--red); }
 
   /* Action button group in creator row */
-  .row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .row-actions { display: flex; gap: 5px; flex-wrap: nowrap; align-items: center; }
   .action-btn {
     font-family: 'Space Mono', monospace;
     font-size: 10px;
@@ -402,6 +403,22 @@
   .action-btn.gift:hover { background: rgba(45,155,95,0.1); }
   .action-btn.transfer { border-color: rgba(59,130,246,0.4); color: var(--blue); }
   .action-btn.transfer:hover { background: rgba(59,130,246,0.1); }
+  .action-btn.email { border-color: rgba(124,58,237,0.4); color: #a78bfa; }
+  .action-btn.email:hover { background: rgba(124,58,237,0.1); }
+  .action-btn.danger { border-color: rgba(239,68,68,0.4); color: #ef4444; }
+  .action-btn.danger:hover { background: rgba(239,68,68,0.08); }
+
+  /* Email compose modal */
+  #emailModal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:999; align-items:center; justify-content:center; }
+  #emailModal.open { display:flex; }
+  .email-modal-box { background:var(--cream); border:1px solid var(--border); border-radius:16px; padding:32px; width:520px; max-width:95vw; max-height:90vh; overflow-y:auto; }
+  .email-modal-label { font-size:11px; color:var(--dim); letter-spacing:.07em; text-transform:uppercase; margin-bottom:6px; margin-top:16px; }
+  .email-modal-input { width:100%; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:8px; color:var(--text); font-family:'Space Mono',monospace; font-size:13px; padding:10px 14px; outline:none; box-sizing:border-box; }
+  .email-modal-input:focus { border-color:var(--gold); }
+  textarea.email-modal-input { resize:vertical; min-height:140px; font-family:'Syne',sans-serif; font-size:13px; line-height:1.6; }
+
+  /* Stat pill on rows */
+  .stat-pill { display:inline-flex; align-items:center; gap:4px; font-size:11px; color:var(--dim); font-family:'Space Mono',monospace; }
 </style>
 </head>
 <body>
@@ -518,8 +535,10 @@
               <th>Email</th>
               <th style="text-align:center">Markets</th>
               <th style="text-align:center">Members</th>
+              <th style="text-align:center">Bets</th>
               <th>Plan</th>
               <th>Joined</th>
+              <th>Last Active</th>
               <th>Set Plan</th>
               <th></th>
             </tr>
@@ -623,6 +642,27 @@
     </div>
 
   </main>
+</div>
+
+<!-- Email Creator Modal -->
+<div id="emailModal">
+  <div class="email-modal-box">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <div style="font-size:16px;font-weight:800;color:#fff">📧 Send Email</div>
+      <button onclick="closeEmailModal()" style="background:none;border:none;color:var(--dim);font-size:20px;cursor:pointer;line-height:1">×</button>
+    </div>
+    <div class="email-modal-label">To</div>
+    <input id="emailTo" class="email-modal-input" type="email" readonly/>
+    <div class="email-modal-label">Subject</div>
+    <input id="emailSubject" class="email-modal-input" type="text" placeholder="e.g. Welcome to HYPERFLEX!"/>
+    <div class="email-modal-label">Message</div>
+    <textarea id="emailBody" class="email-modal-input" placeholder="Write your message here…"></textarea>
+    <div style="display:flex;gap:10px;margin-top:20px;align-items:center">
+      <button onclick="sendCreatorEmail()" style="flex:1;background:#a78bfa;border:none;border-radius:8px;color:#fff;font-weight:700;font-size:13px;padding:12px;cursor:pointer">Send →</button>
+      <button onclick="closeEmailModal()" style="padding:12px 18px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--dim);font-size:13px;cursor:pointer">Cancel</button>
+    </div>
+    <div id="emailStatus" style="font-size:12px;color:var(--dim);text-align:center;margin-top:12px;min-height:18px"></div>
+  </div>
 </div>
 
 <!-- Transfer Ownership Modal -->
@@ -938,6 +978,9 @@ function renderTable(rows) {
     const nameDisplay = c.name
       ? esc(c.name)
       : `<span style="color:var(--dim);font-style:italic;font-size:11px">no display name</span>`;
+    const lastActive = c.last_active
+      ? timeSince(new Date(c.last_active))
+      : '—';
     return `
       <tr id="creator-row-${esc(c.slug)}">
         <td class="td-name">${nameDisplay}</td>
@@ -945,8 +988,10 @@ function renderTable(rows) {
         <td class="td-email">${esc(c.email)}</td>
         <td class="td-markets">${c.markets}</td>
         <td class="td-markets">${c.members || 0}</td>
+        <td class="td-markets">${c.total_bets || 0}</td>
         <td><span class="plan-badge ${plan}">${plan === 'platinum' ? 'Premium' : plan}</span>${trialBadge ? '<br>' + trialBadge : ''}</td>
         <td class="td-date">${joined}</td>
+        <td class="td-date">${lastActive}</td>
         <td>
           <select class="plan-select" id="sel-${esc(c.slug)}">
             <option value="free"     ${plan==='free'     ?'selected':''}>Free</option>
@@ -957,10 +1002,11 @@ function renderTable(rows) {
         </td>
         <td>
           <div class="row-actions">
-            <button class="action-btn gift" onclick="giftTrial('${esc(c.slug)}', '${esc(c.name || c.slug)}')">🎁 Gift 30d</button>
+            ${c.email && c.email !== '—' ? `<button class="action-btn email" onclick="openEmailModal('${esc(c.email)}','${esc(c.name||c.slug)}')">📧</button>` : ''}
+            <button class="action-btn gift" onclick="giftTrial('${esc(c.slug)}', '${esc(c.name || c.slug)}')">🎁 Trial</button>
             <button class="action-btn transfer" onclick="openTransferModal('${esc(c.slug)}')">→ Transfer</button>
-            ${c.email ? `<button class="action-btn" style="background:transparent;border:1px solid #444;color:#888" onclick="adminSendReset('${esc(c.email)}')" onmouseover="this.style.borderColor='#c9920d';this.style.color='#c9920d'" onmouseout="this.style.borderColor='#444';this.style.color='#888'" title="Send password reset email">🔑 Reset</button>` : ''}
-            <button class="set-plan-btn" style="background:rgba(239,68,68,0.15);border-color:#ef4444;color:#ef4444" onclick="deleteCreatorBySlug('${esc(c.slug)}', '${esc(c.name || c.slug)}')">Delete</button>
+            ${c.email && c.email !== '—' ? `<button class="action-btn" title="Send password reset" onclick="adminSendReset('${esc(c.email)}')">🔑</button>` : ''}
+            <button class="action-btn danger" onclick="deleteCreatorBySlug('${esc(c.slug)}', '${esc(c.name || c.slug)}')">✕</button>
           </div>
         </td>
       </tr>`;
@@ -1128,6 +1174,54 @@ async function giftTrial(slug, name) {
   } catch (err) {
     showToast('Error: ' + err.message, 'error');
   }
+}
+
+// ── Email Creator ──────────────────────────────────────────
+function openEmailModal(email, name) {
+  document.getElementById('emailTo').value = email;
+  document.getElementById('emailSubject').value = '';
+  document.getElementById('emailBody').value = `Hey ${name},\n\n`;
+  document.getElementById('emailStatus').textContent = '';
+  document.getElementById('emailModal').classList.add('open');
+  setTimeout(() => document.getElementById('emailSubject').focus(), 60);
+}
+function closeEmailModal() {
+  document.getElementById('emailModal').classList.remove('open');
+}
+async function sendCreatorEmail() {
+  const email   = document.getElementById('emailTo').value;
+  const subject = document.getElementById('emailSubject').value.trim();
+  const body    = document.getElementById('emailBody').value.trim();
+  const status  = document.getElementById('emailStatus');
+  if (!subject) { status.textContent = '⚠ Subject required'; status.style.color='#ef4444'; return; }
+  if (!body)    { status.textContent = '⚠ Message required'; status.style.color='#ef4444'; return; }
+  status.textContent = 'Sending…'; status.style.color = 'var(--dim)';
+  try {
+    const r = await fetch(API + '/api/admin/email-creator?secret=' + encodeURIComponent(adminSecret), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, subject, body })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Failed');
+    status.textContent = '✓ Sent!'; status.style.color = '#22c55e';
+    setTimeout(closeEmailModal, 1400);
+    showToast('📧 Email sent to ' + email);
+  } catch(e) {
+    status.textContent = '✗ ' + e.message; status.style.color = '#ef4444';
+  }
+}
+
+// ── Time since helper ──────────────────────────────────────
+function timeSince(date) {
+  const s = Math.floor((Date.now() - date) / 1000);
+  if (s < 60)    return s + 's ago';
+  if (s < 3600)  return Math.floor(s/60) + 'm ago';
+  if (s < 86400) return Math.floor(s/3600) + 'h ago';
+  const d = Math.floor(s/86400);
+  if (d < 30)    return d + 'd ago';
+  if (d < 365)   return Math.floor(d/30) + 'mo ago';
+  return Math.floor(d/365) + 'y ago';
 }
 
 // ── Transfer Ownership ─────────────────────────────────────

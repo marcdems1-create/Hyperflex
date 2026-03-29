@@ -13204,19 +13204,31 @@ app.get('/api/admin/creators', requireAdmin, async (req, res) => {
     const slugs      = settings.map(s => s.slug);
     const creatorIds = settings.map(s => s.creator_id).filter(Boolean);
 
-    const [usersData, marketData, memberData] = await Promise.all([
-      creatorIds.length ? dbQuery('SELECT id, email FROM users WHERE id = ANY($1)', [creatorIds]) : [],
+    const [usersData, marketData, memberData, betsData, lastMktData] = await Promise.all([
+      creatorIds.length ? dbQuery('SELECT id, email, created_at FROM users WHERE id = ANY($1)', [creatorIds]) : [],
       dbQuery('SELECT tenant_slug FROM markets WHERE tenant_slug = ANY($1)', [slugs]),
       dbQuery('SELECT creator_slug FROM community_balances WHERE creator_slug = ANY($1)', [slugs]),
+      slugs.length ? dbQuery(`SELECT m.tenant_slug, COUNT(p.id) as bet_count
+        FROM positions p JOIN markets m ON p.market_id = m.id
+        WHERE m.tenant_slug = ANY($1) GROUP BY m.tenant_slug`, [slugs]) : [],
+      slugs.length ? dbQuery(`SELECT tenant_slug, MAX(created_at) as last_at
+        FROM markets WHERE tenant_slug = ANY($1) GROUP BY tenant_slug`, [slugs]) : [],
     ]);
 
-    const emailMap = Object.fromEntries((usersData || []).map(u => [u.id, u.email]));
+    const emailMap  = Object.fromEntries((usersData || []).map(u => [u.id, u.email]));
+    const loginMap  = Object.fromEntries((usersData || []).map(u => [u.id, u.created_at])); // best proxy until last_login_at col exists
 
     const mktMap = {};
     (marketData || []).forEach(m => { mktMap[m.tenant_slug] = (mktMap[m.tenant_slug] || 0) + 1; });
 
     const memMap = {};
     (memberData || []).forEach(b => { memMap[b.creator_slug] = (memMap[b.creator_slug] || 0) + 1; });
+
+    const betsMap = {};
+    (betsData || []).forEach(b => { betsMap[b.tenant_slug] = parseInt(b.bet_count) || 0; });
+
+    const lastMktMap = {};
+    (lastMktData || []).forEach(m => { lastMktMap[m.tenant_slug] = m.last_at; });
 
     const rows = settings.map(s => ({
       creator_id:       s.creator_id,
@@ -13226,6 +13238,8 @@ app.get('/api/admin/creators', requireAdmin, async (req, res) => {
       plan:             s.plan || 'free',
       markets:          mktMap[s.slug] || 0,
       members:          memMap[s.slug] || 0,
+      total_bets:       betsMap[s.slug] || 0,
+      last_active:      lastMktMap[s.slug] || loginMap[s.creator_id] || null,
       joined:           s.created_at,
       trial_expires_at: s.plan_trial_expires_at || null,
     }));
@@ -13768,6 +13782,35 @@ app.post('/api/admin/gift-trial', requireAdmin, async (req, res) => {
     res.json({ ok: true, expires_at: expiresAt });
   } catch (err) {
     console.error('[admin] gift-trial error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/email-creator — send a direct email from admin to a creator
+// Body: { email, name, subject, body }
+app.post('/api/admin/email-creator', requireAdmin, async (req, res) => {
+  try {
+    const { email, name, subject, body } = req.body;
+    if (!email || !subject || !body) return res.status(400).json({ error: 'email, subject, body required' });
+    const transport = createMailTransport();
+    if (!transport) return res.status(503).json({ error: 'SMTP not configured on this server' });
+    await transport.sendMail({
+      from: process.env.SMTP_FROM || 'HYPERFLEX <noreply@hyperflex.network>',
+      replyTo: process.env.SMTP_REPLY_TO || process.env.SMTP_FROM,
+      to: `${name || ''} <${email}>`.trim(),
+      subject,
+      html: `<div style="font-family:sans-serif;max-width:600px;margin:auto;padding:40px 20px;background:#141412;color:#ddd8cc">
+        <div style="font-size:22px;font-weight:800;letter-spacing:0.1em;color:#c9920d;margin-bottom:24px">HYPERFLEX</div>
+        <div style="font-size:15px;line-height:1.7;white-space:pre-wrap">${body.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+        <hr style="border:none;border-top:1px solid rgba(255,255,255,0.08);margin:32px 0"/>
+        <div style="font-size:12px;color:#7a7870">HYPERFLEX · hyperflex.network</div>
+      </div>`,
+      text: body,
+    });
+    console.log(`[admin] sent email to ${email} — subject: ${subject}`);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[admin] email-creator error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
