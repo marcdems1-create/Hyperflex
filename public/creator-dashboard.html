@@ -12107,18 +12107,22 @@ async function loadPortfolio() {
   _portfolioLoaded = true;
   try {
     const token = localStorage.getItem('hf_token');
-    const r = await fetch('/api/user/wallets', { headers: { Authorization: 'Bearer ' + token } });
-    if (!r.ok) return;
-    const data = await r.json();
-    _kalshiConnected = data.kalshi_api_key_set;
+    let data = {};
+    try {
+      const r = await fetch('/api/user/wallets', { headers: { Authorization: 'Bearer ' + token } });
+      if (r.ok) data = await r.json();
+    } catch (e) { console.warn('[loadPortfolio] wallets API failed:', e.message); }
+
+    _kalshiConnected = data.kalshi_api_key_set || false;
     _manifoldUsername = data.manifold_username || '';
-    // Load wallet from DB, fallback to localStorage
-    if (!_polyWalletAddress) {
-      _polyWalletAddress = data.polymarket_address || localStorage.getItem('hf_poly_wallet') || '';
-    } else if (data.polymarket_address && data.polymarket_address !== _polyWalletAddress) {
-      _polyWalletAddress = data.polymarket_address; // DB takes precedence
+    // Load wallet: DB first, then localStorage fallback
+    if (data.polymarket_address) {
+      _polyWalletAddress = data.polymarket_address;
+    } else if (!_polyWalletAddress) {
+      _polyWalletAddress = localStorage.getItem('hf_poly_wallet') || '';
     }
     if (_polyWalletAddress) localStorage.setItem('hf_poly_wallet', _polyWalletAddress);
+
     // Show welcome state if nothing connected, otherwise show main
     const hasAny = _kalshiConnected || _manifoldUsername || _polyWalletAddress;
     const welcomeEl = document.getElementById('portfolioWelcome');
