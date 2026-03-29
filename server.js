@@ -17530,6 +17530,7 @@ async function fetchWhalePositions() {
   // ── Whale trade stream: diff positions vs previous snapshot ──
   const isFirstSnapshot = _whalePositionSnapshot.size === 0;
   const newSnapshot = new Map();
+  const now = new Date().toISOString();
   // Group allPositions by proxyWallet for snapshot
   for (const pos of allPositions) {
     if (!pos.proxyWallet) continue;
@@ -17538,7 +17539,6 @@ async function fetchWhalePositions() {
   }
 
   if (!isFirstSnapshot) {
-    const now = new Date().toISOString();
     // Diff each trader's positions
     const allWallets = new Set([..._whalePositionSnapshot.keys(), ...newSnapshot.keys()]);
     for (const wallet of allWallets) {
