@@ -17575,6 +17575,37 @@ async function fetchWhalePositions() {
     if (_whaleTradeStream.length > 100) _whaleTradeStream.length = 100;
     const _newEvtCount = _whaleTradeStream.filter(e => e.ts === now).length;
     console.log(`[whale-stream] Detected ${_newEvtCount} new whale trade events`);
+    // Persist whale trades to DB for historical tracking
+    if (_newEvtCount > 0 && pool) {
+      const newEvents = _whaleTradeStream.filter(e => e.ts === now);
+      (async () => {
+        try {
+          await dbQuery(`CREATE TABLE IF NOT EXISTS whale_trade_history (
+            id SERIAL PRIMARY KEY,
+            action TEXT NOT NULL,
+            trader_name TEXT,
+            trader_rank INTEGER,
+            trader_pnl NUMERIC,
+            question TEXT,
+            side TEXT,
+            size NUMERIC,
+            old_size NUMERIC,
+            new_size NUMERIC,
+            price NUMERIC,
+            market_url TEXT,
+            wallet TEXT,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          )`);
+          for (const evt of newEvents.slice(0, 20)) {
+            await dbQuery(
+              `INSERT INTO whale_trade_history (action, trader_name, trader_rank, trader_pnl, question, side, size, old_size, new_size, price, market_url)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+              [evt.action, evt.trader_name, evt.trader_rank, evt.trader_pnl, evt.question, evt.side, evt.size, evt.old_size, evt.new_size, evt.price, evt.url]
+            ).catch(() => {});
+          }
+        } catch (e) { console.warn('[whale-history-persist]', e.message); }
+      })();
+    }
     // Tweet the biggest new whale move (if any)
     if (_newEvtCount > 0) {
       const biggestMove = _whaleTradeStream.filter(e => e.ts === now).sort((a, b) => (b.size || 0) - (a.size || 0))[0];
@@ -17954,6 +17985,149 @@ app.get('/api/whale-watch', async (req, res) => {
     // If we have stale cache, return it on error
     if (_whaleWatchCache) return res.json(_whaleWatchCache.data);
     res.status(502).json({ error: 'Failed to fetch whale data', detail: err.message });
+  }
+});
+
+// GET /api/whale-profile/:name — whale position history + current positions + stats
+app.get('/api/whale-profile/:name', async (req, res) => {
+  try {
+    const name = decodeURIComponent(req.params.name);
+
+    // Get current positions from whale-watch cache
+    const whaleData = _whaleWatchCache ? _whaleWatchCache.data : await fetchWhalePositions();
+    const positions = (whaleData.whales || []).filter(p => p.trader === name);
+
+    // Get historical trades from DB
+    let history = [];
+    if (pool) {
+      history = await dbQuery(
+        `SELECT action, question, side, size, old_size, new_size, price, market_url, created_at
+         FROM whale_trade_history WHERE trader_name = $1 ORDER BY created_at DESC LIMIT 100`, [name]
+      ).catch(() => []);
+    }
+
+    // Calculate stats
+    const totalPositions = positions.length;
+    const totalCapital = positions.reduce((s, p) => s + (parseFloat(p.size) || 0), 0);
+    const avgPrice = positions.length > 0 ? positions.reduce((s, p) => s + (parseFloat(p.avg_price) || 0), 0) / positions.length : 0;
+    const totalPnl = positions.reduce((s, p) => s + (parseFloat(p.pnl) || 0), 0);
+    const winningPositions = positions.filter(p => (parseFloat(p.pnl) || 0) > 0).length;
+    const losingPositions = positions.filter(p => (parseFloat(p.pnl) || 0) < 0).length;
+    const winRate = (winningPositions + losingPositions) > 0 ? Math.round(winningPositions / (winningPositions + losingPositions) * 100) : 0;
+
+    // Categorize positions
+    const categories = {};
+    positions.forEach(p => {
+      const q = (p.market || '').toLowerCase();
+      let cat = 'other';
+      if (/bitcoin|btc|eth|crypto|solana|xrp|doge|bnb/i.test(q)) cat = 'crypto';
+      else if (/nba|nfl|mlb|nhl|ufc|soccer|football|tennis|match|vs\./i.test(q)) cat = 'sports';
+      else if (/trump|biden|election|vote|congress|senate|president/i.test(q)) cat = 'politics';
+      else if (/iran|ukraine|russia|war|ceasefire|military|israel/i.test(q)) cat = 'geopolitics';
+      else if (/fed|rate|inflation|gdp|oil|gold|crude|silver/i.test(q)) cat = 'macro';
+      if (!categories[cat]) categories[cat] = { count: 0, capital: 0 };
+      categories[cat].count++;
+      categories[cat].capital += parseFloat(p.size) || 0;
+    });
+
+    // Determine trader style
+    let style = 'Balanced';
+    const topCat = Object.entries(categories).sort((a, b) => b[1].capital - a[1].capital)[0];
+    if (topCat && topCat[1].capital / totalCapital > 0.6) {
+      style = topCat[0].charAt(0).toUpperCase() + topCat[0].slice(1) + ' Specialist';
+    }
+    if (totalPositions >= 15) style = 'High-Volume ' + style;
+
+    const rank = positions[0]?.trader_rank || null;
+    const traderPnl = positions[0]?.trader_pnl || null;
+
+    res.json({
+      name,
+      rank,
+      trader_pnl: traderPnl,
+      style,
+      stats: {
+        total_positions: totalPositions,
+        total_capital: totalCapital,
+        total_pnl: totalPnl,
+        win_rate: winRate,
+        winning: winningPositions,
+        losing: losingPositions,
+        avg_entry_price: avgPrice,
+      },
+      categories,
+      positions: positions.map(p => ({
+        market: p.market,
+        side: p.side,
+        size: parseFloat(p.size) || 0,
+        avg_price: parseFloat(p.avg_price) || 0,
+        current_price: parseFloat(p.current_price) || 0,
+        pnl: parseFloat(p.pnl) || 0,
+        current_value: parseFloat(p.current_value) || 0,
+        initial_value: parseFloat(p.initial_value) || 0,
+        market_url: p.market_url,
+        end_date: p.end_date,
+      })),
+      history: history.map(h => ({
+        action: h.action,
+        question: h.question,
+        side: h.side,
+        size: parseFloat(h.size) || 0,
+        old_size: h.old_size ? parseFloat(h.old_size) : null,
+        new_size: h.new_size ? parseFloat(h.new_size) : null,
+        price: parseFloat(h.price) || 0,
+        market_url: h.market_url,
+        timestamp: h.created_at,
+      })),
+    });
+  } catch (e) {
+    console.error('[whale-profile]', e.message);
+    res.status(500).json({ error: 'Failed to load whale profile' });
+  }
+});
+
+// GET /api/smart-money-leaderboard — top whales ranked by profitability
+app.get('/api/smart-money-leaderboard', async (req, res) => {
+  try {
+    const whaleData = _whaleWatchCache ? _whaleWatchCache.data : await fetchWhalePositions();
+    const positions = whaleData.whales || [];
+
+    // Group by trader
+    const traders = {};
+    positions.forEach(p => {
+      const name = p.trader;
+      if (!name) return;
+      if (!traders[name]) traders[name] = { name, rank: p.trader_rank, trader_pnl: p.trader_pnl, positions: 0, capital: 0, pnl: 0, winning: 0, losing: 0, markets: [] };
+      traders[name].positions++;
+      traders[name].capital += parseFloat(p.size) || 0;
+      traders[name].pnl += parseFloat(p.pnl) || 0;
+      if ((parseFloat(p.pnl) || 0) > 0) traders[name].winning++;
+      else if ((parseFloat(p.pnl) || 0) < 0) traders[name].losing++;
+      traders[name].markets.push({ market: (p.market || '').substring(0, 50), side: p.side, pnl: parseFloat(p.pnl) || 0 });
+    });
+
+    // Sort by PnL (most profitable first)
+    const sorted = Object.values(traders)
+      .map(t => ({
+        ...t,
+        win_rate: (t.winning + t.losing) > 0 ? Math.round(t.winning / (t.winning + t.losing) * 100) : 0,
+        roi: t.capital > 0 ? Math.round(t.pnl / t.capital * 10000) / 100 : 0,
+        top_market: t.markets.sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl))[0] || null,
+      }))
+      .sort((a, b) => b.pnl - a.pnl);
+
+    // Top 0.5% = most profitable
+    const top = sorted.slice(0, Math.max(3, Math.ceil(sorted.length * 0.005)));
+
+    res.json({
+      total_traders: sorted.length,
+      top_traders: top,
+      all_traders: sorted.slice(0, 50), // top 50
+      updated_at: _whaleWatchCache ? new Date(_whaleWatchCache.ts).toISOString() : new Date().toISOString(),
+    });
+  } catch (e) {
+    console.error('[smart-money-leaderboard]', e.message);
+    res.status(500).json({ error: 'Failed to load leaderboard' });
   }
 });
 
