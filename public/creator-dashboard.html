@@ -12839,14 +12839,16 @@ async function loadPolymarketPositions(forceRefresh) {
     let positions = [];
     // Fetch directly from Polymarket client-side (avoids geo/IP restrictions on server)
     try {
-      const [rLosing, rWinning] = await Promise.all([
+      const [rLosing, rWinning, rAll] = await Promise.all([
         fetch(`https://data-api.polymarket.com/positions?user=${_polyWalletAddress.toLowerCase()}&limit=100&sortBy=CURRENT&winning=false`),
-        fetch(`https://data-api.polymarket.com/positions?user=${_polyWalletAddress.toLowerCase()}&limit=100&sortBy=CURRENT&winning=true`).catch(() => null)
+        fetch(`https://data-api.polymarket.com/positions?user=${_polyWalletAddress.toLowerCase()}&limit=100&sortBy=CURRENT&winning=true`).catch(() => null),
+        fetch(`https://data-api.polymarket.com/positions?user=${_polyWalletAddress.toLowerCase()}&limit=100&sortBy=CASHPNL`).catch(() => null)
       ]);
       const rawLosing = rLosing.ok ? await rLosing.json() : [];
       const rawWinning = rWinning && rWinning.ok ? await rWinning.json() : [];
+      const rawAll = rAll && rAll.ok ? await rAll.json() : [];
       const seen = new Set();
-      const allRaw = [...(Array.isArray(rawLosing)?rawLosing:[]), ...(Array.isArray(rawWinning)?rawWinning:[])];
+      const allRaw = [...(Array.isArray(rawLosing)?rawLosing:[]), ...(Array.isArray(rawWinning)?rawWinning:[]), ...(Array.isArray(rawAll)?rawAll:[])];
       const deduped = allRaw.filter(p => { const k=(p.conditionId||'')+':'+(p.outcome||''); if(seen.has(k)) return false; seen.add(k); return true; });
       positions = deduped.map(p => ({
         id: p.conditionId, token_id: p.asset||null, condition_id: p.conditionId||null,
