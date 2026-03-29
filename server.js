@@ -22345,6 +22345,90 @@ async function detectArbitrageOpportunities() {
         }
       }
     }
+    // ── SPORTSBOOK vs POLYMARKET arb detection ──
+    // Convert decimal odds to implied probability: implied% = 1/decimalOdds
+    const ODDS_KEY = process.env.ODDS_API_KEY;
+    if (ODDS_KEY) {
+      try {
+        // Fetch upcoming sports events with h2h odds
+        const sportKeys = ['basketball_nba', 'baseball_mlb', 'americanfootball_nfl', 'icehockey_nhl', 'mma_mixed_martial_arts', 'soccer_epl'];
+        const sportFetches = await Promise.allSettled(
+          sportKeys.map(sk => fetchWithTimeout(`https://api.the-odds-api.com/v4/sports/${sk}/odds/?apiKey=${ODDS_KEY}&regions=us&markets=h2h&oddsFormat=decimal`, { headers: { Accept: 'application/json' } }, 8000).then(r => r.ok ? r.json() : []).catch(() => []))
+        );
+        const sbEvents = [];
+        for (const r of sportFetches) {
+          if (r.status === 'fulfilled' && Array.isArray(r.value)) {
+            for (const game of r.value) {
+              if (!game.bookmakers || !game.bookmakers.length) continue;
+              // Average odds across bookmakers for each outcome
+              const outcomeOdds = {};
+              let bookCount = 0;
+              for (const bk of game.bookmakers.slice(0, 5)) {
+                const h2h = (bk.markets || []).find(m => m.key === 'h2h');
+                if (!h2h) continue;
+                bookCount++;
+                for (const o of (h2h.outcomes || [])) {
+                  if (!outcomeOdds[o.name]) outcomeOdds[o.name] = [];
+                  outcomeOdds[o.name].push(parseFloat(o.price));
+                }
+              }
+              if (bookCount < 2) continue; // need 2+ bookmakers for reliable odds
+              for (const [name, prices] of Object.entries(outcomeOdds)) {
+                const avgDecimal = prices.reduce((a, b) => a + b, 0) / prices.length;
+                const impliedPct = Math.round((1 / avgDecimal) * 100); // e.g. 2.5 odds = 40%
+                if (impliedPct < 5 || impliedPct > 95) continue;
+                sbEvents.push({
+                  question: `${game.home_team} vs ${game.away_team}`.toLowerCase(),
+                  outcome: name,
+                  impliedPct,
+                  avgDecimal: Math.round(avgDecimal * 100) / 100,
+                  bookmakers: bookCount,
+                  sport: game.sport_title || '',
+                  commence: game.commence_time
+                });
+              }
+            }
+          }
+        }
+        // Match sportsbook events to Polymarket markets
+        for (const sb of sbEvents) {
+          const sbWords = sb.question.replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2 && !arbStopWords.has(w));
+          if (sbWords.length < 2) continue;
+          for (const pm of polyMarkets) {
+            const pWords = pm.question.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2 && !arbStopWords.has(w));
+            const overlap = sbWords.filter(w => pWords.includes(w)).length;
+            if (overlap < 2) continue;
+            const overlapRatio = overlap / Math.min(sbWords.length, pWords.length);
+            if (overlapRatio < 0.4) continue;
+            if (pm.yes < 0.02 || pm.yes > 0.98) continue;
+            // Compare implied probability vs Polymarket price
+            const polyPct = Math.round(pm.yes * 100);
+            const gap = Math.abs(polyPct - sb.impliedPct);
+            if (gap >= 5 && gap < 40) { // 5%+ discrepancy, cap at 40% for sanity
+              const direction = polyPct < sb.impliedPct
+                ? `Poly ${polyPct}% vs Books ${sb.impliedPct}% — Poly undervalued`
+                : `Poly ${polyPct}% vs Books ${sb.impliedPct}% — Poly overvalued`;
+              arbs.push({
+                id: 'sb_' + pm.question.slice(0, 20) + '_' + sb.outcome.slice(0, 15),
+                market: pm.title + ' (' + sb.outcome + ')',
+                polymarket_yes: polyPct,
+                kalshi_yes: sb.impliedPct,
+                edge_pct: Math.round(gap * 100) / 100,
+                direction,
+                poly_url: pm.url,
+                kalshi_url: '', // no direct sportsbook link
+                type: 'sportsbook',
+                bookmakers: sb.bookmakers,
+                decimal_odds: sb.avgDecimal,
+                detected_at: new Date().toISOString()
+              });
+            }
+          }
+        }
+        console.log(`[arb] Sportsbook scan: ${sbEvents.length} outcomes checked, ${arbs.filter(a => a.type === 'sportsbook').length} discrepancies found`);
+      } catch (e) { console.warn('[arb] sportsbook scan error:', e.message); }
+    }
+
     // Deduplicate by id (same Poly+Kalshi pair can match multiple times from Kalshi pagination dupes)
     const arbSeen = new Set();
     const uniqueArbs = arbs.filter(a => arbSeen.has(a.id) ? false : (arbSeen.add(a.id), true));
