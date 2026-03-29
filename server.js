@@ -22404,10 +22404,10 @@ async function detectArbitrageOpportunities() {
             // Compare implied probability vs Polymarket price
             const polyPct = Math.round(pm.yes * 100);
             const gap = Math.abs(polyPct - sb.impliedPct);
-            if (gap >= 5 && gap < 20) { // 5-20% discrepancy (above 20% = different market mechanics, not real edge)
+            if (gap >= 5) { // 5%+ discrepancy — show all real edges, let users decide
               const direction = polyPct < sb.impliedPct
-                ? `Poly ${polyPct}% vs Books ${sb.impliedPct}% — Poly undervalued`
-                : `Poly ${polyPct}% vs Books ${sb.impliedPct}% — Poly overvalued`;
+                ? `Buy YES on Polymarket at ${polyPct}¢ — sportsbooks price this at ${sb.impliedPct}%. ${gap}pt discount.`
+                : `Buy NO on Polymarket at ${100-polyPct}¢ — sportsbooks only give this ${sb.impliedPct}% chance. ${gap}pt edge.`;
               arbs.push({
                 id: 'sb_' + pm.question.slice(0, 20) + '_' + sb.outcome.slice(0, 15),
                 market: pm.title + ' (' + sb.outcome + ')',
