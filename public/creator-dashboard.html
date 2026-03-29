@@ -13460,8 +13460,27 @@ async function fetchRealizedPnL(address) {
       }
     }
     window._realizedPnLFromActivity = extraRealizedPnl;
+    // Count wins/losses from closed trades (positions no longer in API)
+    let closedWins = 0, closedLosses = 0;
+    for (const [cid, m] of Object.entries(byMarket)) {
+      if (m.sells <= 0 && m.redeems <= 0) continue;
+      const inApi = currentById[cid];
+      if (!inApi) {
+        // Fully closed position — count as win or loss
+        const net = (m.sells + m.redeems) - m.buys;
+        if (net > 0) closedWins++;
+        else if (net < -0.5) closedLosses++; // ignore tiny rounding losses
+      } else if (m.sells > 0) {
+        // Partially sold — count the sold portion as a trade
+        const costPerToken = m.buyTokens > 0 ? m.buys / m.buyTokens : 0;
+        const soldProfit = m.sells - (costPerToken * m.sellTokens);
+        if (soldProfit > 0.5) closedWins++;
+      }
+    }
+    window._closedTradeWins = closedWins;
+    window._closedTradeLosses = closedLosses;
     window._netDeposited = null; // flag that we've run
-    console.log('[realized-pnl] Closed position P&L:', closedPnl.toFixed(2), '| Sell proceeds:', totalSellProceeds.toFixed(2));
+    console.log('[realized-pnl] Extra P&L:', extraRealizedPnl.toFixed(2), '| Closed wins:', closedWins, '| Closed losses:', closedLosses);
   } catch (e) { console.warn('[realized-pnl]', e.message); }
 }
 
@@ -13510,11 +13529,17 @@ function computePortfolioStats(positions) {
   // Add USDC cash balance to portfolio value
   const cashBalance = window._walletBalanceUSDC || 0;
   const portfolioValue = totalValue + cashBalance;
-  // Add realized P&L from fully-sold positions (not in positions API anymore)
+  // Add realized P&L + wins from fully-sold positions (not in positions API anymore)
   const soldPnl = window._realizedPnLFromActivity || 0;
+  const closedWins = window._closedTradeWins || 0;
+  const closedLosses = window._closedTradeLosses || 0;
   const adjustedPnl = totalPnl + soldPnl;
+  const adjustedWins = wins + closedWins;
+  const adjustedResolved = resolvedCount + closedWins + closedLosses;
+  const adjustedWinRate = adjustedResolved > 0 ? Math.round((adjustedWins / adjustedResolved) * 100) : 0;
   const adjustedRoi = totalCost > 0 ? ((adjustedPnl / totalCost) * 100) : 0;
-  return { totalValue, portfolioValue, cashBalance, totalPnl: adjustedPnl, totalCost, openCount, resolvedCount, wins, winRate, roi: adjustedRoi, sharpScore, total: positions.length, soldPnl };
+  const adjustedSharp = Math.min(100, Math.round(adjustedWinRate * 1.2 + (adjustedPnl > 0 ? 20 : 0)));
+  return { totalValue, portfolioValue, cashBalance, totalPnl: adjustedPnl, totalCost, openCount, resolvedCount: adjustedResolved, wins: adjustedWins, winRate: adjustedWinRate, roi: adjustedRoi, sharpScore: adjustedSharp, total: positions.length + closedWins + closedLosses, soldPnl };
 }
 
 function updatePortfolioSummary() {
