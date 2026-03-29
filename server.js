@@ -26285,6 +26285,16 @@ setInterval(() => {
       }
     }
 
+    // _marketNewsCache — prune query-based cache
+    if (typeof _marketNewsCache !== 'undefined' && typeof _marketNewsCache === 'object') {
+      const keys = Object.keys(_marketNewsCache);
+      if (keys.length > 500) {
+        const toDelete = keys.slice(0, keys.length - 250);
+        toDelete.forEach(k => delete _marketNewsCache[k]);
+        console.log(`[cleanup] _marketNewsCache: pruned ${toDelete.length} stale keys`);
+      }
+    }
+
     _healthTimestamps.lastCacheCleanup = new Date().toISOString();
   } catch (e) {
     _logError('cacheCleanup', e);
