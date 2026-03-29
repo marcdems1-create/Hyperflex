@@ -22406,8 +22406,8 @@ async function detectArbitrageOpportunities() {
             const gap = Math.abs(polyPct - sb.impliedPct);
             if (gap >= 5) { // 5%+ discrepancy — show all real edges, let users decide
               const direction = polyPct < sb.impliedPct
-                ? `Buy YES on Polymarket at ${polyPct}¢ — sportsbooks price this at ${sb.impliedPct}%. ${gap}pt discount.`
-                : `Buy NO on Polymarket at ${100-polyPct}¢ — sportsbooks only give this ${sb.impliedPct}% chance. ${gap}pt edge.`;
+                ? `Buy YES on Polymarket at ${polyPct}¢ — books price at ${sb.impliedPct}¢. Sell when Poly catches up to lock ${gap}¢ profit, or hold to resolution for ${100-polyPct}¢ upside.`
+                : `Buy NO on Polymarket at ${100-polyPct}¢ — books only give ${sb.impliedPct}% chance. Sell when Poly corrects down for ${gap}¢ profit, or hold to resolution.`;
               arbs.push({
                 id: 'sb_' + pm.question.slice(0, 20) + '_' + sb.outcome.slice(0, 15),
                 market: pm.title + ' (' + sb.outcome + ')',
