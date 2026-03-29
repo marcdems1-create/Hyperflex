@@ -4848,7 +4848,7 @@ body.nav-open .sidebar-backdrop {
                       </div>
                     </div>
                     <p style="font-size:13px;color:var(--dim);line-height:1.5;margin-bottom:16px">Paste your wallet address to import all open positions and P&L instantly.</p>
-                    <button onclick="document.getElementById('poly-wallet-input').focus();document.getElementById('portfolioWelcome').style.display='none';document.getElementById('portfolioMain').style.display='block'" style="width:100%;background:var(--gold);color:#141412;font-family:var(--sans);font-weight:700;font-size:13px;padding:11px;border:none;border-radius:8px;cursor:pointer;transition:opacity 0.15s;min-height:44px" onmouseover="this.style.opacity='0.88'" onmouseout="this.style.opacity='1'">Connect Polymarket</button>
+                    <button onclick="document.getElementById('portfolioWelcome').style.display='none';document.getElementById('portfolioMain').style.display='block';switchPortfolioTab('poly');setTimeout(function(){var el=document.getElementById('poly-wallet-input');if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.focus();}},200)" style="width:100%;background:var(--gold);color:#141412;font-family:var(--sans);font-weight:700;font-size:13px;padding:11px;border:none;border-radius:8px;cursor:pointer;transition:opacity 0.15s;min-height:44px" onmouseover="this.style.opacity='0.88'" onmouseout="this.style.opacity='1'">Connect Polymarket</button>
                   </div>
 
                   <!-- Kalshi welcome card -->
@@ -12796,14 +12796,8 @@ async function connectPolymarket() {
     const d = await r.json();
     if (!r.ok) { showToast(d.error || 'Failed to connect', 'error'); btn.disabled = false; btn.textContent = 'Connect Polymarket →'; return; }
     _polyWalletAddress = address;
-    const stayIn = document.getElementById('polyStaySignedIn');
-    if (stayIn && stayIn.checked) {
-      localStorage.setItem('hf_poly_wallet', address);
-      sessionStorage.removeItem('hf_poly_wallet_session');
-    } else {
-      sessionStorage.setItem('hf_poly_wallet_session', address);
-      localStorage.removeItem('hf_poly_wallet');
-    }
+    // Always persist to localStorage so wallet stays connected across refreshes
+    localStorage.setItem('hf_poly_wallet', address);
     renderPolymarketConnectState();
     showToast('Polymarket connected!', 'success');
     loadPolymarketPositions(false);
