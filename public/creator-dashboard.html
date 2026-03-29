@@ -5058,7 +5058,7 @@ body.nav-open .sidebar-backdrop {
                 <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:20px;align-items:center">
                   <!-- Total Value -->
                   <div>
-                    <div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752;margin-bottom:6px">PORTFOLIO VALUE</div>
+                    <div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752;margin-bottom:6px">POSITIONS VALUE</div>
                     <div id="psSummaryValue" style="font-family:var(--mono);font-size:28px;font-weight:900;color:#f5f0e8;letter-spacing:-0.02em">—</div>
                   </div>
                   <!-- Total P&L -->
@@ -12132,10 +12132,7 @@ async function loadPortfolio() {
     const fetches = [];
     if (_kalshiConnected) fetches.push(loadKalshiPositions(false));
     if (_manifoldUsername) fetches.push(loadManifoldPositions(false));
-    if (_polyWalletAddress) {
-      fetches.push(loadPolymarketPositions(false));
-      fetches.push(fetchUSDCBalance(_polyWalletAddress));
-    }
+    if (_polyWalletAddress) fetches.push(loadPolymarketPositions(false));
     fetches.push(loadHFXPositions(false));
     Promise.allSettled(fetches).then(() => { if (_activePortfolioTab === 'all') updateAllPositionsTab(); updatePortfolioSummary(); });
   } catch (e) {
@@ -13437,11 +13434,9 @@ function updatePortfolioSummary() {
   // Format dollars nicely
   function fmtD(n) { if (Math.abs(n)>=1e6) return '$'+(n/1e6).toFixed(1)+'M'; if (Math.abs(n)>=1e3) return '$'+(n/1e3).toFixed(1)+'K'; return '$'+n.toFixed(2); }
 
-  // Total Value
-  const usdcBal = window._walletBalanceUSDC || 0;
-  const totalWithUsdc = stats.totalValue + usdcBal;
+  // Positions Value (no USDC balance — Polymarket holds cash internally, not accessible via API)
   const valEl = document.getElementById('psSummaryValue');
-  if (valEl) valEl.textContent = fmtD(totalWithUsdc);
+  if (valEl) valEl.textContent = fmtD(stats.totalValue);
 
   // Total P&L
   const pnlEl = document.getElementById('psSummaryPnl');
