@@ -12132,7 +12132,10 @@ async function loadPortfolio() {
     const fetches = [];
     if (_kalshiConnected) fetches.push(loadKalshiPositions(false));
     if (_manifoldUsername) fetches.push(loadManifoldPositions(false));
-    if (_polyWalletAddress) fetches.push(loadPolymarketPositions(false));
+    if (_polyWalletAddress) {
+      fetches.push(loadPolymarketPositions(false));
+      fetches.push(fetchUSDCBalance(_polyWalletAddress));
+    }
     fetches.push(loadHFXPositions(false));
     Promise.allSettled(fetches).then(() => { if (_activePortfolioTab === 'all') updateAllPositionsTab(); updatePortfolioSummary(); });
   } catch (e) {
@@ -13355,6 +13358,28 @@ function getHFXBetsFlat() {
   // HFX bets are loaded via loadHFXPositions → stored in the DOM, not in a global array
   // We return empty here — HFX bets are rendered separately in their own tab
   return [];
+}
+
+// Fetch USDC balance from Polygon RPC (no MetaMask needed)
+async function fetchUSDCBalance(address) {
+  if (!address || window._walletBalanceUSDC != null) return; // already have it
+  try {
+    // USDC on Polygon: 0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359
+    const usdcContract = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
+    // ERC-20 balanceOf(address) selector: 0x70a08231 + padded address
+    const paddedAddr = '000000000000000000000000' + address.toLowerCase().replace('0x','');
+    const callData = '0x70a08231' + paddedAddr;
+    const r = await fetch('https://polygon-rpc.com', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:usdcContract,data:callData},'latest'],id:1})
+    });
+    const d = await r.json();
+    if (d.result) {
+      const raw = parseInt(d.result, 16);
+      window._walletBalanceUSDC = raw / 1e6; // USDC has 6 decimals
+      console.log('[usdc-balance] Fetched:', window._walletBalanceUSDC.toFixed(2), 'USDC for', address.slice(0,8));
+    }
+  } catch(e) { console.warn('[usdc-balance]', e.message); }
 }
 
 function computePortfolioStats(positions) {
