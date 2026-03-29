@@ -333,7 +333,7 @@ td { padding: 12px 14px; font-size: 13px; vertical-align: middle; }
       <button class="filter-pill" data-vol="1000000" onclick="setVolFilter(1000000)">$1M+</button>
     </div>
     <select class="sort-select" id="sort-select" onchange="setSort(this.value)">
-      <option value="edge_score">Sort: Alpha Score</option>
+      <option value="edge_score">Sort: Edge Score</option>
       <option value="whale_count">Sort: Whale Count</option>
       <option value="volume">Sort: Volume</option>
       <option value="price_change">Sort: Price Change</option>
@@ -528,10 +528,9 @@ function renderCards() {
   loadMoreWrap.style.display = filtered.length > _displayCount ? 'block' : 'none';
 
   grid.innerHTML = showing.map(function(m) {
-    // Alpha Score (0-10) — replaces old edge score
-    var alpha = m.alpha_score || (m.edge_score ? Math.round(m.edge_score / 10 * 10) / 10 : 0);
-    var edgeClass = alpha >= 7 ? 'high' : alpha >= 4 ? 'mid' : 'low';
-    var highEdge = alpha >= 7 ? ' high-edge' : '';
+    var edge = m.edge_score || 0;
+    var edgeClass = edge >= 60 ? 'high' : edge >= 35 ? 'mid' : 'low';
+    var highEdge = edge >= 60 ? ' high-edge' : '';
     // Row tint
     var hasConsensus = m.whale_count >= 3 && m.trade && m.trade.roi_pct >= 50;
     var hasMomentum = m.price_change_24h != null && Math.abs(m.price_change_24h) >= 5;
@@ -583,7 +582,7 @@ function renderCards() {
           '<span class="cat-pill cat-' + m.category + '">' + catEmoji + ' ' + (m.category || 'other').toUpperCase() + '</span>' +
           (expiryStr ? '<span class="story-expiry">' + expiryStr + '</span>' : '') +
         '</div>' +
-        '<div class="edge-badge ' + edgeClass + '"><span class="edge-num">' + alpha.toFixed(1) + '</span><span class="edge-label">Alpha</span></div>' +
+        '<div class="edge-badge ' + edgeClass + '"><span class="edge-num">' + edge + '</span><span class="edge-label">' + (edge >= 60 ? 'Hot' : edge >= 35 ? 'Edge' : 'Low') + '</span></div>' +
       '</div>' +
       '<h3>' + regionFlag(m.question) + ' ' + escH(m.question) + '</h3>' +
       (m.ai_hook ? '<div class="story-hook">' + escH(m.ai_hook) + '</div>' : '') +

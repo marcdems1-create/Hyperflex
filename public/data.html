@@ -130,12 +130,12 @@ a:hover{text-decoration:underline}
 
 <!-- Stats Bar -->
 <div class="t-stats" id="statsBar">
-  <div class="t-stat"><div class="t-stat-label">Whale Capital</div><div class="t-stat-val" id="stWhale">--</div><div class="t-stat-sub">tracked positions</div></div>
-  <div class="t-stat"><div class="t-stat-label">Markets Tracked</div><div class="t-stat-val" id="stMarkets">--</div><div class="t-stat-sub">across platforms</div></div>
-  <div class="t-stat"><div class="t-stat-label">Whale Sentiment</div><div class="t-stat-val" id="stSent">--</div><div class="t-stat-sub" id="stSentSub">capital-weighted</div></div>
-  <div class="t-stat"><div class="t-stat-label">Top Category</div><div class="t-stat-val" id="stCat">--</div><div class="t-stat-sub" id="stCatSub"></div></div>
-  <div class="t-stat"><div class="t-stat-label">Volatility</div><div class="t-stat-val" id="stVol">--</div><div class="t-stat-sub">avg 24h change</div></div>
-  <div class="t-stat"><div class="t-stat-label">Fear & Greed</div><div class="t-stat-val" id="stFG">--</div><div class="t-stat-sub" id="stFGLabel">loading</div></div>
+  <div class="t-stat"><div class="t-stat-label">Whale Capital</div><div class="t-stat-val" id="stWhale" style="animation:pulse 1.5s ease-in-out infinite">···</div><div class="t-stat-sub">tracked positions</div></div>
+  <div class="t-stat"><div class="t-stat-label">Markets Tracked</div><div class="t-stat-val" id="stMarkets" style="animation:pulse 1.5s ease-in-out infinite">···</div><div class="t-stat-sub">across platforms</div></div>
+  <div class="t-stat"><div class="t-stat-label">Whale Sentiment</div><div class="t-stat-val" id="stSent" style="animation:pulse 1.5s ease-in-out infinite">···</div><div class="t-stat-sub" id="stSentSub">capital-weighted</div></div>
+  <div class="t-stat"><div class="t-stat-label">Top Category</div><div class="t-stat-val" id="stCat" style="animation:pulse 1.5s ease-in-out infinite">···</div><div class="t-stat-sub" id="stCatSub"></div></div>
+  <div class="t-stat"><div class="t-stat-label">Volatility</div><div class="t-stat-val" id="stVol" style="animation:pulse 1.5s ease-in-out infinite">···</div><div class="t-stat-sub">price spread</div></div>
+  <div class="t-stat"><div class="t-stat-label">Fear & Greed</div><div class="t-stat-val" id="stFG" style="animation:pulse 1.5s ease-in-out infinite">···</div><div class="t-stat-sub" id="stFGLabel">loading</div></div>
 </div>
 
 <!-- Row 2: Sentiment Trend / Live Alerts / Volume by Category -->
@@ -225,7 +225,8 @@ async function loadTerminal(){
   var stats=statsR.status==='fulfilled'?statsR.value:{};
   var whale=whaleR.status==='fulfilled'?whaleR.value:{};
 
-  // ── Stats bar ──
+  // ── Stats bar — stop loading pulse on all stat values ──
+  document.querySelectorAll('.t-stat-val').forEach(function(el){el.style.animation='none'});
   var sent=flow.sentiment||{};
   var cats=flow.category_breakdown||[];
   var totalCap=cats.reduce(function(s,c){return s+(c.capital||0)},0);

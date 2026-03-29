@@ -270,7 +270,7 @@ async function loadSignals() {
     document.getElementById('stTopSub').textContent = (counts[topType]||0) + ' signals';
     renderSignals();
   } catch(e) {
-    document.getElementById('signalFeed').innerHTML = '<div class="s-empty">Loading signals...</div>';
+    document.getElementById('signalFeed').innerHTML = '<div class="s-empty" style="text-align:center;padding:32px"><div style="font-size:24px;margin-bottom:8px">📡</div>Signal feed unavailable. <button onclick="loadSignals()" style="background:var(--gold);color:#141412;border:none;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer;margin-left:8px;font-family:var(--mono)">Retry</button></div>';
   }
 }
 
