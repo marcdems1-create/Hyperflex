@@ -891,7 +891,7 @@ footer {
 
   // PANEL 1: RIGHT NOW
   function loadRightNow(){
-    fetch('/api/signals').then(function(r){return r.ok?r.json():null}).then(function(d){
+    fetch('/api/signals').then(function(r){return r.ok?r.json():null}).catch(function(){return null}).then(function(d){
       if(!d||!d.signals)return;
       var sig=null;
       for(var i=0;i<d.signals.length;i++){
@@ -960,7 +960,7 @@ footer {
 
   // PANEL 2: LAST HOUR
   function loadLastHour(){
-    fetch('/api/whale-watch').then(function(r){return r.ok?r.json():null}).then(function(d){
+    fetch('/api/whale-watch').then(function(r){return r.ok?r.json():null}).catch(function(){return null}).then(function(d){
       if(!d)return;
       var whales=(d.whales||d.positions||[]).slice();
       whales.sort(function(a,b){return new Date(b.fetched_at||0)-new Date(a.fetched_at||0)});
@@ -990,7 +990,7 @@ footer {
 
   // PANEL 3: WATCHLIST
   function loadWatchlist(){
-    fetch('/api/whale-index').then(function(r){return r.ok?r.json():null}).then(function(d){
+    fetch('/api/whale-index').then(function(r){return r.ok?r.json():null}).catch(function(){return null}).then(function(d){
       if(!d)return;
       var picks=(d.picks||[]).slice(0,3);
       var panel=document.getElementById('wl-panel');

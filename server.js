@@ -2470,10 +2470,13 @@ app.get('/api/prices', async (req, res) => {
       XAG: silver,
       WTI: oil,
     };
-    pricesCache = { data, ts: now };
-    res.json(data);
+    // Only cache if we got at least one real price — don't poison cache with all nulls
+    const hasAnyPrice = Object.values(data).some(v => v != null && v > 0);
+    if (hasAnyPrice) pricesCache = { data, ts: now };
+    res.json(hasAnyPrice ? data : (pricesCache.data || data));
   } catch (err) {
     console.warn('GET /api/prices error:', err.message);
+    // Return last good cached data, never all-nulls
     res.json(pricesCache.data || { BTC: null, ETH: null, XAU: null, XAG: null, WTI: null });
   }
 });
@@ -26225,6 +26228,37 @@ setInterval(() => {
     // _predictorFollowCache — prune to max size
     if (typeof _predictorFollowCache !== 'undefined' && _predictorFollowCache instanceof Map && _predictorFollowCache.size > MAX_CACHE_SIZE) {
       _predictorFollowCache.clear();
+    }
+
+    // _polyCache — wallet position lookups, unbounded
+    if (typeof _polyCache !== 'undefined' && _polyCache instanceof Map && _polyCache.size > MAX_CACHE_SIZE) {
+      console.log(`[cleanup] _polyCache: ${_polyCache.size} → clearing`);
+      _polyCache.clear();
+    }
+
+    // _kalshiCache — Kalshi position lookups
+    if (typeof _kalshiCache !== 'undefined' && _kalshiCache instanceof Map && _kalshiCache.size > MAX_CACHE_SIZE) {
+      _kalshiCache.clear();
+    }
+
+    // _manifoldCache
+    if (typeof _manifoldCache !== 'undefined' && _manifoldCache instanceof Map && _manifoldCache.size > MAX_CACHE_SIZE) {
+      _manifoldCache.clear();
+    }
+
+    // _mktSearchCache — market search results
+    if (typeof _mktSearchCache !== 'undefined' && _mktSearchCache instanceof Map && _mktSearchCache.size > MAX_CACHE_SIZE) {
+      _mktSearchCache.clear();
+    }
+
+    // _clobBookCache — orderbook data
+    if (typeof _clobBookCache !== 'undefined' && _clobBookCache instanceof Map && _clobBookCache.size > 200) {
+      _clobBookCache.clear();
+    }
+
+    // _factCheckRL — rate limiting
+    if (typeof _factCheckRL !== 'undefined' && _factCheckRL instanceof Map && _factCheckRL.size > MAX_CACHE_SIZE) {
+      _factCheckRL.clear();
     }
 
     // _volumeTracker — prune old market keys (object, not Map)
