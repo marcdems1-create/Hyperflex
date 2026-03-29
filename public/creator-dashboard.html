@@ -13579,8 +13579,6 @@ function renderPnlChart(positions) {
       <text x="${padding}" y="${H-4}" fill="#5a5752" font-family="var(--mono)" font-size="9">${dates[0] ? dates[0].slice(5) : ''}</text>
       <text x="${W-padding}" y="${H-4}" text-anchor="end" fill="#5a5752" font-family="var(--mono)" font-size="9">${dates[dates.length-1] ? dates[dates.length-1].slice(5) : ''}</text>
     </svg>`;
-  return; // skip old bar rendering below
-  }).join('');
 }
 
 function renderResolvedCard(p) {
