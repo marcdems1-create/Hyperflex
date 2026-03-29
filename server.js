@@ -23133,7 +23133,7 @@ app.get('/api/spread-scanner', async (req, res) => {
     // Fetch multiple pages to get all crypto windows
     for (let offset = 0; offset < 400; offset += 100) {
       try {
-        const gammaRes = await fetch(`https://gamma-api.polymarket.com/markets?closed=false&limit=100&offset=${offset}&order=endDate&ascending=true`, {
+        const gammaRes = await fetch(`https://gamma-api.polymarket.com/markets?closed=false&limit=100&offset=${offset}&order=startDate&ascending=false`, {
           headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
         });
         if (!gammaRes.ok) break;
