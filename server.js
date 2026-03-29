@@ -13795,24 +13795,23 @@ app.post('/api/admin/email-creator', requireAdmin, async (req, res) => {
   try {
     const { email, name, subject, body } = req.body;
     if (!email || !subject || !body) return res.status(400).json({ error: 'email, subject, body required' });
-    const transport = createMailTransport();
-    if (!transport) return res.status(503).json({ error: 'SMTP not configured on this server — add SMTP_HOST to Railway env vars' });
-    const sendPromise = transport.sendMail({
-      from: process.env.SMTP_FROM || 'HYPERFLEX <noreply@hyperflex.network>',
-      replyTo: process.env.SMTP_REPLY_TO || process.env.SMTP_FROM,
-      to: `${name || ''} <${email}>`.trim(),
-      subject,
-      html: `<div style="font-family:sans-serif;max-width:600px;margin:auto;padding:40px 20px;background:#141412;color:#ddd8cc">
-        <div style="font-size:22px;font-weight:800;letter-spacing:0.1em;color:#c9920d;margin-bottom:24px">HYPERFLEX</div>
-        <div style="font-size:15px;line-height:1.7;white-space:pre-wrap">${body.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
-        <hr style="border:none;border-top:1px solid rgba(255,255,255,0.08);margin:32px 0"/>
-        <div style="font-size:12px;color:#7a7870">HYPERFLEX · hyperflex.network</div>
-      </div>`,
-      text: body,
+    const apiKey = process.env.SMTP_PASS || process.env.RESEND_API_KEY;
+    if (!apiKey) return res.status(503).json({ error: 'RESEND_API_KEY not configured in Railway env vars' });
+    const from = process.env.SMTP_FROM || 'HYPERFLEX <contact@hyperflex.network>';
+    const html = `<div style="font-family:sans-serif;max-width:600px;margin:auto;padding:40px 20px;background:#141412;color:#ddd8cc">
+      <div style="font-size:22px;font-weight:800;letter-spacing:0.1em;color:#c9920d;margin-bottom:24px">HYPERFLEX</div>
+      <div style="font-size:15px;line-height:1.7;white-space:pre-wrap">${body.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+      <hr style="border:none;border-top:1px solid rgba(255,255,255,0.08);margin:32px 0"/>
+      <div style="font-size:12px;color:#7a7870">HYPERFLEX · hyperflex.network</div>
+    </div>`;
+    const r = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from, to: [email], subject, html, text: body, reply_to: from }),
     });
-    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('SMTP timeout — check Railway SMTP_HOST env var')), 12000));
-    await Promise.race([sendPromise, timeoutPromise]);
-    console.log(`[admin] sent email to ${email} — subject: ${subject}`);
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.message || JSON.stringify(d));
+    console.log(`[admin] sent email to ${email} via Resend API — subject: ${subject}`);
     res.json({ ok: true });
   } catch (err) {
     console.error('[admin] email-creator error:', err.message);
