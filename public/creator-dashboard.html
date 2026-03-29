@@ -12211,8 +12211,9 @@ async function loadPerfPlatformAnalytics() {
     const _pKeys = data && data.platforms ? (Array.isArray(data.platforms) ? data.platforms.length : Object.keys(data.platforms).length) : 0;
     if (!data || _pKeys === 0) {
       const positions = getAllPositionsFlat();
-      if (positions.length > 0) {
+      if (positions.length > 0 || _polyWalletAddress) {
         const byPlatform = {};
+        // Count from positions API
         positions.forEach(p => {
           const plat = p._platform || p.platform || 'polymarket';
           if (!byPlatform[plat]) byPlatform[plat] = { platform: plat, wins: 0, losses: 0, pnl: 0, total: 0, resolved: 0 };
@@ -12220,6 +12221,18 @@ async function loadPerfPlatformAnalytics() {
           if (p._isResolved) { byPlatform[plat].resolved++; if (p._won) byPlatform[plat].wins++; else byPlatform[plat].losses++; }
           if (p.pnl != null) byPlatform[plat].pnl += parseFloat(p.pnl);
         });
+        // Add wins/losses from closed trades (activity-based)
+        const closedW = window._closedTradeWins || 0;
+        const closedL = window._closedTradeLosses || 0;
+        const soldPnl = window._realizedPnLFromActivity || 0;
+        if (closedW > 0 || closedL > 0 || soldPnl > 0) {
+          if (!byPlatform['polymarket']) byPlatform['polymarket'] = { platform: 'polymarket', wins: 0, losses: 0, pnl: 0, total: 0, resolved: 0 };
+          byPlatform['polymarket'].wins += closedW;
+          byPlatform['polymarket'].losses += closedL;
+          byPlatform['polymarket'].resolved += closedW + closedL;
+          byPlatform['polymarket'].total += closedW + closedL;
+          byPlatform['polymarket'].pnl += soldPnl;
+        }
         data = { platforms: Object.values(byPlatform).map(p => ({ ...p, win_rate: p.resolved > 0 ? Math.round(p.wins / p.resolved * 100) : 0 })) };
       }
     }
