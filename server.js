@@ -22470,6 +22470,25 @@ async function detectArbitrageOpportunities() {
       if (topArb.edge_pct >= 3) {
         tweetArbAlert({ market: topArb.market, poly_pct: topArb.poly_yes, kalshi_pct: topArb.kalshi_yes, edge: Math.round(topArb.edge_pct), direction: topArb.direction }).catch(() => {});
       }
+      // Telegram alert for fresh edges ≥5%
+      const TG_ALERT_CHAT = process.env.TELEGRAM_ALERT_CHAT_ID;
+      if (TELEGRAM_BOT_TOKEN && TG_ALERT_CHAT) {
+        const freshForTg = uniqueArbs.filter(a => a.edge_pct >= 5 && !_prevArbIds.has(a.id));
+        if (freshForTg.length > 0) {
+          const top3 = freshForTg.slice(0, 3);
+          const lines = top3.map(a => {
+            const isSB = a.type === 'sportsbook';
+            const platform = isSB ? 'Sportsbooks' : 'Kalshi';
+            return `⚡ <b>${a.edge_pct}% edge</b> ${isSB ? '📊' : '🔄'}\n` +
+              `${(a.market || '').substring(0, 60)}\n` +
+              `Poly: ${a.polymarket_yes}% | ${platform}: ${a.kalshi_yes}%\n` +
+              `${a.direction}\n` +
+              (a.poly_url ? `<a href="${a.poly_url}">Trade →</a>` : '');
+          });
+          const msg = `🔔 <b>HYPERFLEX Edge Scanner</b>\n${freshForTg.length} new discrepanc${freshForTg.length === 1 ? 'y' : 'ies'} detected\n\n${lines.join('\n\n')}\n\n<a href="https://hyperflex.network/odds#arb">View all →</a>`;
+          sendTelegramAlert(TG_ALERT_CHAT, msg);
+        }
+      }
     }
   } catch (e) {
     console.warn('[arb] detection error:', e.message);
