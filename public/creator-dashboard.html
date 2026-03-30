@@ -12864,14 +12864,31 @@ async function connectMetaMask() {
   }
 }
 
-// Auto-reconnect if wallet was previously connected
-(function() {
-  const savedWallet = localStorage.getItem('hf_connected_wallet');
-  if (savedWallet && window.ethereum) {
-    window._connectedWallet = savedWallet;
-    // Update the browser wallet status
-    const walletStatus = document.querySelector('[data-wallet-status]');
-    if (walletStatus) walletStatus.textContent = savedWallet.slice(0, 6) + '...' + savedWallet.slice(-4);
+// Auto-reconnect wallet + signer on page load
+(async function() {
+  const savedWallet = localStorage.getItem('hf_connected_wallet') || localStorage.getItem('hf_wallet_address');
+  if (savedWallet && window.ethereum && typeof ethers !== 'undefined') {
+    try {
+      // Silently reconnect — don't show popup, just check if already authorized
+      const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+      if (accounts && accounts.length > 0) {
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        const signer = await provider.getSigner();
+        const address = await signer.getAddress();
+        window._connectedWallet = address;
+        window._walletSigner = signer;
+        window._walletProvider = provider;
+        localStorage.setItem('hf_connected_wallet', address);
+        fetchWalletBalance(provider, address);
+        console.log('[wallet] Auto-reconnected signer for', address.slice(0, 8));
+      } else {
+        window._connectedWallet = savedWallet;
+      }
+    } catch (e) {
+      window._connectedWallet = savedWallet;
+      console.warn('[wallet] Auto-reconnect failed:', e.message);
+    }
+    updateWalletUI();
   }
 })();
 
