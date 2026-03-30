@@ -19313,6 +19313,130 @@ edge_direction = if ai_probability differs from market by 10+ pts, recommend BUY
   }
 });
 
+// ── NEWS-TO-TRADE PIPELINE — score breaking news impact on markets ────────
+const _newsTradeCache = { data: null, ts: 0 };
+const NEWS_TRADE_TTL = 15 * 60 * 1000; // 15 min
+
+app.get('/api/news-impact', async (req, res) => {
+  try {
+    if (_newsTradeCache.data && Date.now() - _newsTradeCache.ts < NEWS_TRADE_TTL) {
+      return res.json(_newsTradeCache.data);
+    }
+
+    // Fetch news from Google News RSS (parsed via regex, no xml2js needed)
+    const topics = ['prediction+market+polymarket', 'iran+war', 'trump+tariff', 'bitcoin+crypto', 'fed+interest+rate', 'ukraine+ceasefire'];
+    const newsItems = [];
+
+    for (const topic of topics.slice(0, 3)) { // limit to 3 topics to avoid rate limiting
+      try {
+        const newsRes = await fetchWithTimeout(`https://news.google.com/rss/search?q=${topic}&hl=en-US&gl=US&ceid=US:en&num=5`, { headers: { 'User-Agent': 'Hyperflex/1.0' } }, 8000);
+        if (newsRes.ok) {
+          const xmlText = await newsRes.text();
+          const titleMatches = xmlText.match(/<title>(.*?)<\/title>/g) || [];
+          const dateMatches = xmlText.match(/<pubDate>(.*?)<\/pubDate>/g) || [];
+          titleMatches.slice(2, 7).forEach((t, i) => { // skip first 2 (feed title + description)
+            const title = t.replace(/<\/?title>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;/g, "'");
+            const date = dateMatches[i] ? dateMatches[i].replace(/<\/?pubDate>/g, '') : '';
+            if (title && title.length > 10) newsItems.push({ title, date, topic });
+          });
+        }
+      } catch (e) { /* skip failed topic */ }
+    }
+
+    if (newsItems.length === 0) {
+      _newsTradeCache.data = [];
+      _newsTradeCache.ts = Date.now();
+      return res.json([]);
+    }
+
+    // Get active markets for matching
+    const whaleData = (_whaleWatchCache && _whaleWatchCache.data) ? _whaleWatchCache.data : {};
+    const whales = whaleData.whales || [];
+    const marketQuestions = [...new Set(whales.map(w => w.market).filter(Boolean))].slice(0, 30);
+
+    if (marketQuestions.length === 0 || !process.env.ANTHROPIC_API_KEY) {
+      _newsTradeCache.data = newsItems.map(n => ({ ...n, markets: [], impact: 'unknown' }));
+      _newsTradeCache.ts = Date.now();
+      return res.json(_newsTradeCache.data);
+    }
+
+    // Ask Claude to match news to markets and score impact
+    const headlineList = newsItems.slice(0, 10).map((n, i) => `${i + 1}. "${n.title}"`).join('\n');
+    const marketList = marketQuestions.slice(0, 20).map((q, i) => `M${i + 1}. "${q}"`).join('\n');
+
+    const aiResponse = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1200,
+      messages: [{
+        role: 'user',
+        content: `You are a prediction market analyst. Match these breaking news headlines to the prediction markets below. For each headline, identify which markets are affected and estimate the impact.
+
+HEADLINES:
+${headlineList}
+
+ACTIVE MARKETS:
+${marketList}
+
+Respond in JSON array ONLY:
+[{"headline_index":1,"affected_markets":["M3","M7"],"impact":"high","direction":"Increases YES probability","summary":"Brief explanation of how this news affects the markets"}]
+
+impact = "high" (>10% probability shift), "medium" (5-10%), "low" (<5%), "none"
+Only include headlines that actually affect a market. Skip irrelevant ones.`
+      }]
+    });
+
+    let aiMatches = [];
+    try {
+      const text = aiResponse.content[0].text.trim();
+      const jsonMatch = text.match(/\[[\s\S]*\]/);
+      if (jsonMatch) aiMatches = JSON.parse(jsonMatch[0]);
+    } catch (e) {
+      console.warn('[news-impact] Failed to parse Claude response:', e.message);
+    }
+
+    // Build result
+    const result = aiMatches.map(match => {
+      const headline = newsItems[match.headline_index - 1];
+      if (!headline) return null;
+      const affectedMarkets = (match.affected_markets || []).map(mRef => {
+        const idx = parseInt(mRef.replace('M', '')) - 1;
+        return marketQuestions[idx] || null;
+      }).filter(Boolean);
+
+      return {
+        headline: headline.title,
+        published: headline.date,
+        topic: headline.topic,
+        impact: match.impact || 'low',
+        direction: match.direction || '',
+        summary: match.summary || '',
+        affected_markets: affectedMarkets.map(q => {
+          const whalePos = whales.filter(w => w.market === q);
+          return {
+            question: q,
+            market_url: whalePos[0]?.market_url || '',
+            whale_count: whalePos.length,
+            current_price: whalePos[0] ? Math.round((parseFloat(whalePos[0].current_price) || 0.5) * 100) : null
+          };
+        })
+      };
+    }).filter(Boolean).filter(r => r.affected_markets.length > 0);
+
+    result.sort((a, b) => {
+      const impactOrder = { high: 3, medium: 2, low: 1, none: 0 };
+      return (impactOrder[b.impact] || 0) - (impactOrder[a.impact] || 0);
+    });
+
+    _newsTradeCache.data = result;
+    _newsTradeCache.ts = Date.now();
+    console.log(`[news-impact] Matched ${result.length} news items to markets, ${result.filter(r => r.impact === 'high').length} high-impact`);
+    res.json(result);
+  } catch (err) {
+    console.error('[news-impact]', err.message);
+    res.json(_newsTradeCache.data || []);
+  }
+});
+
 // ── MARKET MOVERS — biggest price changes in last 24h ─────────────────────
 let _marketMoversCache = null;
 
