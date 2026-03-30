@@ -22342,8 +22342,37 @@ app.post('/api/polymarket/derive-api-key', requireAuth, async (req, res) => {
         detail: data
       });
     }
-    const proxyAddress = data.proxyAddress || data.proxy_address || data.polyAddress || null;
-    console.log(`[polymarket derive-api-key] user=${req.userId} address=${address.slice(0,8)}... proxy=${(proxyAddress||'none').slice(0,8)}... status=ok`);
+    let proxyAddress = data.proxyAddress || data.proxy_address || data.polyAddress || null;
+    const apiKey = data.apiKey || data.api_key || null;
+    const secret = data.secret || data.apiSecret || null;
+    const passphrase = data.passphrase || null;
+
+    // If derive-api-key didn't return proxy, fetch it from GET /auth/api-keys
+    if (!proxyAddress && apiKey && secret && passphrase) {
+      try {
+        const keysRes = await fetch('https://clob.polymarket.com/auth/api-keys', {
+          headers: {
+            'POLY_ADDRESS': address,
+            'POLY_API_KEY': apiKey,
+            'POLY_API_SECRET': secret,
+            'POLY_PASSPHRASE': passphrase,
+            'Accept': 'application/json',
+            'User-Agent': 'Hyperflex/1.0'
+          }
+        });
+        if (keysRes.ok) {
+          const keysData = await keysRes.json();
+          // Response is array of api keys — each has a proxyAddress or polyAddress
+          const keys = Array.isArray(keysData) ? keysData : [keysData];
+          for (const k of keys) {
+            const pa = k.proxyAddress || k.proxy_address || k.polyAddress || null;
+            if (pa) { proxyAddress = pa; break; }
+          }
+        }
+      } catch(e) { console.warn('[derive-api-key] api-keys lookup failed:', e.message); }
+    }
+
+    console.log(`[polymarket derive-api-key] user=${req.userId} address=${address.slice(0,8)}... proxy=${(proxyAddress||'none').slice(0,8)}... keys: ${JSON.stringify(Object.keys(data))}`);
 
     // Save proxy address to user profile if we got one
     if (proxyAddress && req.userId && pool) {
@@ -22354,9 +22383,9 @@ app.post('/api/polymarket/derive-api-key', requireAuth, async (req, res) => {
     }
 
     res.json({
-      apiKey: data.apiKey || data.api_key || null,
-      secret: data.secret || data.apiSecret || null,
-      passphrase: data.passphrase || null,
+      apiKey: apiKey,
+      secret: secret,
+      passphrase: passphrase,
       proxyAddress: proxyAddress
     });
   } catch (err) {
