@@ -22342,11 +22342,22 @@ app.post('/api/polymarket/derive-api-key', requireAuth, async (req, res) => {
         detail: data
       });
     }
-    console.log(`[polymarket derive-api-key] user=${req.userId} address=${address.slice(0,8)}... status=ok`);
+    const proxyAddress = data.proxyAddress || data.proxy_address || data.polyAddress || null;
+    console.log(`[polymarket derive-api-key] user=${req.userId} address=${address.slice(0,8)}... proxy=${(proxyAddress||'none').slice(0,8)}... status=ok`);
+
+    // Save proxy address to user profile if we got one
+    if (proxyAddress && req.userId && pool) {
+      try {
+        await dbQuery('UPDATE users SET polymarket_address = $1 WHERE id = $2 AND (polymarket_address IS NULL OR polymarket_address = $3)', [proxyAddress.toLowerCase(), req.userId, '']);
+        await dbQuery('UPDATE creator_settings SET polymarket_address = $1 WHERE id = $2 AND (polymarket_address IS NULL OR polymarket_address = $3)', [proxyAddress.toLowerCase(), req.userId, '']);
+      } catch(e) { /* silent */ }
+    }
+
     res.json({
       apiKey: data.apiKey || data.api_key || null,
       secret: data.secret || data.apiSecret || null,
-      passphrase: data.passphrase || null
+      passphrase: data.passphrase || null,
+      proxyAddress: proxyAddress
     });
   } catch (err) {
     console.error('[polymarket derive-api-key]', err.message);

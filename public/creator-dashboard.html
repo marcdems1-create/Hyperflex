@@ -14299,33 +14299,9 @@ async function connectBrowserWallet() {
         }
       }
 
-      // Still no positions? Prompt for Polymarket proxy address
+      // Still no positions? Auto-derive proxy via "Enable Trading" flow
       if (!found) {
-        const proxyAddr = prompt(
-          'Your MetaMask wallet doesn\'t have Polymarket positions.\n\n' +
-          'Polymarket uses a separate deposit address.\n' +
-          'Find it at: polymarket.com → Profile → Deposit Address\n\n' +
-          'Paste your Polymarket deposit address:'
-        );
-        if (proxyAddr && proxyAddr.startsWith('0x') && proxyAddr.length >= 40) {
-          // Verify it has positions
-          try {
-            const vCheck = await fetch('https://data-api.polymarket.com/positions?user=' + encodeURIComponent(proxyAddr.toLowerCase()) + '&limit=3&sortBy=CURRENT');
-            const vPos = await vCheck.json();
-            if (Array.isArray(vPos) && vPos.length > 0) {
-              _polyWalletAddress = proxyAddr.toLowerCase();
-              localStorage.setItem('hf_poly_wallet', _polyWalletAddress);
-              found = true;
-              showToast('Polymarket address verified! ' + vPos.length + '+ positions found.', 'success');
-            } else {
-              showToast('No positions found for that address. Try your deposit address from polymarket.com', 'error');
-            }
-          } catch(e) {
-            _polyWalletAddress = proxyAddr.toLowerCase();
-            localStorage.setItem('hf_poly_wallet', _polyWalletAddress);
-            found = true;
-          }
-        }
+        showToast('Click "Enable Trading" to connect your Polymarket account and load positions.', 'info');
       }
 
       if (found && _polyWalletAddress) {
@@ -14495,7 +14471,22 @@ async function derivePolymarketApiKey() {
       localStorage.setItem('poly_api_key', data.apiKey);
       localStorage.setItem('poly_api_secret', data.secret);
       localStorage.setItem('poly_api_passphrase', data.passphrase);
-      showToast('Trading enabled! You can now place orders directly.', 'success');
+
+      // Save proxy address — this is the REAL Polymarket wallet
+      if (data.proxyAddress) {
+        _polyWalletAddress = data.proxyAddress.toLowerCase();
+        localStorage.setItem('hf_poly_wallet', _polyWalletAddress);
+        console.log('[wallet] Polymarket proxy address:', _polyWalletAddress);
+        // Trigger portfolio load with the correct address
+        renderPolymarketConnectState();
+        loadPolymarketPositions(true);
+        const welcomeEl = document.getElementById('portfolioWelcome');
+        const mainEl = document.getElementById('portfolioMain');
+        if (welcomeEl) welcomeEl.style.display = 'none';
+        if (mainEl) mainEl.style.display = 'block';
+      }
+
+      showToast('Trading enabled! Polymarket wallet connected.', 'success');
       updateWalletUI();
     } else {
       throw new Error('No API key returned');
