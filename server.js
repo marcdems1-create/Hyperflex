@@ -454,7 +454,8 @@ if (pool) {
 //   /api/consistent-traders, /api/daily-briefing, /api/whale-flow, /api/live-feed
 // API key access ($500/mo): all endpoints via X-API-Key header
 
-const PRO_ENDPOINTS = new Set(['/api/signals', '/api/crystal-ball', '/api/whale-index', '/api/screener', '/api/fear-greed', '/api/whale-watch', '/api/odds/search', '/api/arbitrage']);
+// EARLY ACCESS: All endpoints free until 1K users. Re-enable Pro gating when ready.
+const PRO_ENDPOINTS = new Set([/* '/api/signals', '/api/crystal-ball', '/api/whale-index', '/api/screener', '/api/fear-greed', '/api/whale-watch', '/api/odds/search', '/api/arbitrage' */]);
 const PREMIUM_ENDPOINTS = new Set(['/api/correlations', '/api/contrarian', '/api/resolution-probability', '/api/whale-patterns', '/api/news-impact', '/api/market-intelligence', '/api/consistent-traders', '/api/daily-briefing', '/api/whale-flow', '/api/live-feed']);
 const BACKTEST_PREFIX = '/api/backtest/';
 
