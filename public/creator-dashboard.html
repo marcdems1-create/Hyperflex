@@ -14293,9 +14293,38 @@ async function connectBrowserWallet() {
       // If browser wallet has no positions, check localStorage for previously saved Polymarket address
       if (!found) {
         const saved = localStorage.getItem('hf_poly_wallet');
-        if (saved && saved !== address) {
+        if (saved && saved.startsWith('0x') && saved !== address) {
           _polyWalletAddress = saved;
           found = true;
+        }
+      }
+
+      // Still no positions? Prompt for Polymarket proxy address
+      if (!found) {
+        const proxyAddr = prompt(
+          'Your MetaMask wallet doesn\'t have Polymarket positions.\n\n' +
+          'Polymarket uses a separate deposit address.\n' +
+          'Find it at: polymarket.com → Profile → Deposit Address\n\n' +
+          'Paste your Polymarket deposit address:'
+        );
+        if (proxyAddr && proxyAddr.startsWith('0x') && proxyAddr.length >= 40) {
+          // Verify it has positions
+          try {
+            const vCheck = await fetch('https://data-api.polymarket.com/positions?user=' + encodeURIComponent(proxyAddr.toLowerCase()) + '&limit=3&sortBy=CURRENT');
+            const vPos = await vCheck.json();
+            if (Array.isArray(vPos) && vPos.length > 0) {
+              _polyWalletAddress = proxyAddr.toLowerCase();
+              localStorage.setItem('hf_poly_wallet', _polyWalletAddress);
+              found = true;
+              showToast('Polymarket address verified! ' + vPos.length + '+ positions found.', 'success');
+            } else {
+              showToast('No positions found for that address. Try your deposit address from polymarket.com', 'error');
+            }
+          } catch(e) {
+            _polyWalletAddress = proxyAddr.toLowerCase();
+            localStorage.setItem('hf_poly_wallet', _polyWalletAddress);
+            found = true;
+          }
         }
       }
 
