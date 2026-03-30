@@ -14551,39 +14551,86 @@ async function derivePolymarketApiKey() {
 
     if (btn) btn.textContent = 'Deriving key...';
 
-    const token = localStorage.getItem('hf_token');
-    const res = await fetch('/api/polymarket/derive-api-key', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-      body: JSON.stringify({ address, signature, timestamp, nonce })
+    // Call CLOB directly from browser (avoids server proxy issues)
+    const res = await fetch('https://clob.polymarket.com/auth/derive-api-key', {
+      method: 'GET',
+      headers: {
+        'POLY_ADDRESS': address,
+        'POLY_SIGNATURE': signature,
+        'POLY_TIMESTAMP': timestamp,
+        'POLY_NONCE': nonce
+      }
     });
     const data = await res.json();
+    console.log('[derive-api-key] response:', JSON.stringify(data));
     if (!res.ok) {
-      throw new Error(data.error || 'Failed to derive API key');
+      throw new Error(data.error || data.message || 'CLOB returned ' + res.status);
     }
-    if (data.apiKey) {
-      localStorage.setItem('poly_api_key', data.apiKey);
-      localStorage.setItem('poly_api_secret', data.secret);
-      localStorage.setItem('poly_api_passphrase', data.passphrase);
+    // Response fields vary: { apiKey, key, secret, passphrase }
+    var apiKey = data.apiKey || data.key || '';
+    var secret = data.secret || '';
+    var passphrase = data.passphrase || '';
+    console.log('[derive-api-key] keys:', { apiKey: !!apiKey, secret: !!secret, passphrase: !!passphrase, allKeys: Object.keys(data) });
 
-      // Save proxy address — this is the REAL Polymarket wallet
-      if (data.proxyAddress) {
-        _polyWalletAddress = data.proxyAddress.toLowerCase();
-        localStorage.setItem('hf_poly_wallet', _polyWalletAddress);
-        console.log('[wallet] Polymarket proxy address:', _polyWalletAddress);
-        // Trigger portfolio load with the correct address
-        renderPolymarketConnectState();
-        loadPolymarketPositions(true);
-        const welcomeEl = document.getElementById('portfolioWelcome');
-        const mainEl = document.getElementById('portfolioMain');
-        if (welcomeEl) welcomeEl.style.display = 'none';
-        if (mainEl) mainEl.style.display = 'block';
+    if (apiKey) {
+      localStorage.setItem('poly_api_key', apiKey);
+      localStorage.setItem('poly_api_secret', secret);
+      localStorage.setItem('poly_api_passphrase', passphrase);
+
+      // Save proxy address if returned directly
+      var proxyAddr = data.proxyAddress || data.proxy_address || data.polyAddress || '';
+
+      // If no proxy in response, try GET /auth/api-keys with the new creds
+      if (!proxyAddr) {
+        try {
+          if (btn) btn.textContent = 'Getting proxy address...';
+          var keysRes = await fetch('https://clob.polymarket.com/auth/api-keys', {
+            method: 'GET',
+            headers: {
+              'POLY_ADDRESS': address,
+              'POLY_SIGNATURE': signature,
+              'POLY_TIMESTAMP': timestamp,
+              'POLY_NONCE': nonce
+            }
+          });
+          var keysData = await keysRes.json();
+          console.log('[api-keys] response:', JSON.stringify(keysData));
+          // Response is array of keys, each might have proxyAddress
+          if (Array.isArray(keysData)) {
+            for (var k of keysData) {
+              if (k.proxyAddress || k.proxy_address) {
+                proxyAddr = (k.proxyAddress || k.proxy_address).toLowerCase();
+                break;
+              }
+            }
+          } else if (keysData.proxyAddress || keysData.proxy_address) {
+            proxyAddr = (keysData.proxyAddress || keysData.proxy_address).toLowerCase();
+          }
+        } catch(e) { console.warn('[api-keys] lookup failed:', e.message); }
       }
 
-      showToast('Trading enabled! Polymarket wallet connected.', 'success');
+      if (proxyAddr) {
+        _polyWalletAddress = proxyAddr.toLowerCase();
+        localStorage.setItem('hf_poly_wallet', _polyWalletAddress);
+        console.log('[wallet] Polymarket proxy address:', _polyWalletAddress);
+        renderPolymarketConnectState();
+        loadPolymarketPositions(true);
+        var welcomeEl = document.getElementById('portfolioWelcome');
+        var mainEl = document.getElementById('portfolioMain');
+        if (welcomeEl) welcomeEl.style.display = 'none';
+        if (mainEl) mainEl.style.display = 'block';
+        setTimeout(updatePortfolioSummary, 500);
+        showToast('Trading enabled! Polymarket wallet connected.', 'success');
+      } else {
+        // Keys work but couldn't find proxy — show inline input as fallback
+        showToast('Trading enabled! Now enter your Polymarket deposit address below.', 'info');
+        showInlinePolyConnect();
+      }
       updateWalletUI();
     } else {
-      throw new Error('No API key returned');
+      // No keys returned — show inline input
+      showToast('Could not auto-detect wallet. Enter your Polymarket deposit address below.', 'info');
+      showInlinePolyConnect();
     }
   } catch (e) {
     if (e.code === 'ACTION_REJECTED' || e.code === 4001) {
