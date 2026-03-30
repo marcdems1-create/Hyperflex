@@ -19329,7 +19329,10 @@ app.get('/api/news-impact', async (req, res) => {
 
     for (const topic of topics.slice(0, 3)) { // limit to 3 topics to avoid rate limiting
       try {
-        const newsRes = await fetchWithTimeout(`https://news.google.com/rss/search?q=${topic}&hl=en-US&gl=US&ceid=US:en&num=5`, { headers: { 'User-Agent': 'Hyperflex/1.0' } }, 8000);
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
+        const newsRes = await fetch(`https://news.google.com/rss/search?q=${topic}&hl=en-US&gl=US&ceid=US:en&num=5`, { headers: { 'User-Agent': 'Hyperflex/1.0' }, signal: controller.signal });
+        clearTimeout(timeout);
         if (newsRes.ok) {
           const xmlText = await newsRes.text();
           const titleMatches = xmlText.match(/<title>(.*?)<\/title>/g) || [];
