@@ -13049,14 +13049,19 @@ let _betsData = [];
 // ── QUICK TRADE TAB ─────────────────────────────────────────────────────────
 let _qtSearchTimer = null;
 
-function qtTradeBtn(url, label, color) {
+function qtTradeBtn(url, label, color, posData) {
   if (!url) return '';
-  // Only allow real Polymarket URLs with a slug path, not bare domain
   if (!url.startsWith('https://polymarket.com')) return '';
   if (url === 'https://polymarket.com' || url === 'https://polymarket.com/') return '';
   const btnLabel = label || 'Trade \u2192';
   const bg = color || '#c9920d';
   const fg = (bg === 'var(--gold)' || color === '#c9920d') ? '#141412' : '#fff';
+  // If wallet connected + trading enabled, open our trade modal
+  if (window._connectedWallet && posData) {
+    const posJson = JSON.stringify(posData).replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+    return `<button onclick="openTradeModal(JSON.parse(this.getAttribute('data-pos')),'buy')" data-pos="${posJson}" style="background:${bg};color:${fg};border:none;border-radius:6px;padding:7px 14px;font-family:var(--mono);font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap">${btnLabel}</button>`;
+  }
+  // Fallback: open on Polymarket
   return `<button onclick="window.open('${url.replace(/'/g,"\\'")}','_blank')" style="background:${bg};color:${fg};border:none;border-radius:6px;padding:7px 14px;font-family:var(--mono);font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap">${btnLabel}</button>`;
 }
 
