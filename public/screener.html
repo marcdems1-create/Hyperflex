@@ -602,7 +602,7 @@ function renderCards() {
       '<div class="story-bullets">' + bullets.map(function(b) { return '<div class="story-bullet">' + escH(b) + '</div>'; }).join('') + '</div>' +
       roiHtml +
       '<div class="story-card-footer">' +
-        '<a href="' + safeUrl + '" target="_blank" rel="noopener" class="story-trade-btn">Trade &rarr;</a>' +
+        '<a href="/creator/dashboard?tab=quicktrade&market=' + encodeURIComponent(m.question || '') + '" class="story-trade-btn">Trade &rarr;</a>' +
         (yesPct != null ? '<span class="story-odds-big" style="color:' + (yesPct >= 70 ? 'var(--green)' : yesPct <= 30 ? 'var(--red)' : 'var(--text)') + '">' + yesPct + '%</span>' : '') +
       '</div>' +
     '</div>';
@@ -777,7 +777,7 @@ async function loadMispricings() {
         '</div>' +
         '<div style="display:flex;align-items:center;justify-content:space-between">' +
           '<span style="font-family:var(--mono);font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;background:' + actionBg + ';color:' + gapColor + ';border:1px solid ' + actionBorder + '">' + m.action + '</span>' +
-          (m.market_url ? '<a href="' + m.market_url + '" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:10px;color:var(--gold);text-decoration:none">Trade →</a>' : '') +
+          (m.question ? '<a href="/creator/dashboard?tab=quicktrade&market=' + encodeURIComponent(m.question) + '" style="font-family:var(--mono);font-size:10px;color:var(--gold);text-decoration:none">Trade →</a>' : '') +
         '</div>' +
         (whaleList ? '<div style="margin-top:8px;padding-top:8px;border-top:1px solid #1a1917">' + whaleList + '</div>' : '') +
       '</div>';
