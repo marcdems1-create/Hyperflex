@@ -14322,9 +14322,30 @@ async function connectBrowserWallet() {
         }
       }
 
-      // Still no positions? Auto-derive proxy via "Enable Trading" flow
+      // Still no positions? Show inline address input
       if (!found) {
-        showToast('Click "Enable Trading" to connect your Polymarket account and load positions.', 'info');
+        const mainArea = document.getElementById('portfolioMain') || document.querySelector('[id^="tab-portfolio"]');
+        const welcomeEl = document.getElementById('portfolioWelcome');
+        if (welcomeEl) welcomeEl.style.display = 'none';
+        if (mainArea) mainArea.style.display = 'block';
+
+        // Inject address input card
+        const container = document.getElementById('polyPositions') || document.getElementById('allPositions');
+        if (container) {
+          container.innerHTML = '<div style="background:rgba(201,146,13,0.06);border:1px solid rgba(201,146,13,0.2);border-radius:14px;padding:24px;text-align:center;max-width:500px;margin:32px auto">' +
+            '<div style="font-size:24px;margin-bottom:12px">🔗</div>' +
+            '<div style="font-family:var(--sans);font-size:16px;font-weight:700;color:var(--text);margin-bottom:8px">Connect Polymarket</div>' +
+            '<div style="font-family:var(--mono);font-size:12px;color:var(--dim);line-height:1.6;margin-bottom:16px">' +
+              'Your MetaMask address differs from your Polymarket deposit address.<br>' +
+              'Find it at <a href="https://polymarket.com/portfolio" target="_blank" style="color:var(--gold)">polymarket.com/portfolio</a> → click your address at top right → copy.' +
+            '</div>' +
+            '<div style="display:flex;gap:8px;max-width:400px;margin:0 auto">' +
+              '<input id="proxyAddrInput" type="text" placeholder="0x..." style="flex:1;padding:12px;background:#0f0e0c;border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:12px">' +
+              '<button onclick="saveProxyAddr()" style="padding:12px 20px;background:var(--gold);color:#141412;border:none;border-radius:8px;font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">Connect</button>' +
+            '</div>' +
+            '<div id="proxyAddrStatus" style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:8px"></div>' +
+          '</div>';
+        }
       }
 
       if (found && _polyWalletAddress) {
@@ -14356,6 +14377,43 @@ async function connectBrowserWallet() {
   } catch (e) {
     showToast('Wallet connection failed: ' + (e.message || 'User rejected'), 'error');
     if (btn) { btn.disabled = false; btn.innerHTML = '&#x1F517; Connect Wallet'; }
+  }
+}
+
+async function saveProxyAddr() {
+  const input = document.getElementById('proxyAddrInput');
+  const status = document.getElementById('proxyAddrStatus');
+  const addr = (input ? input.value : '').trim().toLowerCase();
+  if (!addr || !addr.startsWith('0x') || addr.length < 40) {
+    if (status) { status.textContent = 'Enter a valid 0x address'; status.style.color = '#ef4444'; }
+    return;
+  }
+  if (status) { status.textContent = 'Verifying...'; status.style.color = 'var(--gold)'; }
+  try {
+    const check = await fetch('https://data-api.polymarket.com/positions?user=' + encodeURIComponent(addr) + '&limit=3&sortBy=CURRENT');
+    const positions = await check.json();
+    const count = Array.isArray(positions) ? positions.length : 0;
+
+    _polyWalletAddress = addr;
+    localStorage.setItem('hf_poly_wallet', addr);
+    const token = localStorage.getItem('hf_token');
+    if (token) {
+      try { await fetch('/api/user/wallets', { method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify({ polymarket_address: addr }) }); } catch(e) {}
+    }
+    renderPolymarketConnectState();
+    loadPolymarketPositions(true);
+    const welcomeEl = document.getElementById('portfolioWelcome');
+    const mainEl = document.getElementById('portfolioMain');
+    if (welcomeEl) welcomeEl.style.display = 'none';
+    if (mainEl) mainEl.style.display = 'block';
+    setTimeout(updatePortfolioSummary, 500);
+    showToast(count > 0 ? 'Connected! ' + count + '+ positions found.' : 'Address saved. Loading positions...', 'success');
+  } catch(e) {
+    // Save anyway even if verification fails
+    _polyWalletAddress = addr;
+    localStorage.setItem('hf_poly_wallet', addr);
+    loadPolymarketPositions(true);
+    if (status) { status.textContent = 'Saved (could not verify)'; status.style.color = 'var(--gold)'; }
   }
 }
 
