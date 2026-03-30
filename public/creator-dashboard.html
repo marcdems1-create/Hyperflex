@@ -12864,12 +12864,16 @@ async function connectMetaMask() {
   }
 }
 
-// Auto-reconnect wallet + signer on page load
-(async function() {
+// Auto-reconnect wallet + signer on page load (delayed for MetaMask injection)
+setTimeout(async function() {
   const savedWallet = localStorage.getItem('hf_connected_wallet') || localStorage.getItem('hf_wallet_address');
-  if (savedWallet && window.ethereum && typeof ethers !== 'undefined') {
+  if (!savedWallet) return;
+  // Set address immediately so UI shows connected state
+  window._connectedWallet = savedWallet;
+  if (typeof updateWalletUI === 'function') updateWalletUI();
+  // Then try to establish signer (needs ethereum provider)
+  if (window.ethereum && typeof ethers !== 'undefined') {
     try {
-      // Silently reconnect — don't show popup, just check if already authorized
       const accounts = await window.ethereum.request({ method: 'eth_accounts' });
       if (accounts && accounts.length > 0) {
         const provider = new ethers.BrowserProvider(window.ethereum);
@@ -12880,17 +12884,14 @@ async function connectMetaMask() {
         window._walletProvider = provider;
         localStorage.setItem('hf_connected_wallet', address);
         fetchWalletBalance(provider, address);
+        if (typeof updateWalletUI === 'function') updateWalletUI();
         console.log('[wallet] Auto-reconnected signer for', address.slice(0, 8));
-      } else {
-        window._connectedWallet = savedWallet;
       }
     } catch (e) {
-      window._connectedWallet = savedWallet;
-      console.warn('[wallet] Auto-reconnect failed:', e.message);
+      console.warn('[wallet] Auto-reconnect signer failed:', e.message);
     }
-    updateWalletUI();
   }
-})();
+}, 500);
 
 async function connectPolymarket() {
   const address = (document.getElementById('poly-wallet-input').value || '').trim();
