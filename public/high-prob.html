@@ -9,6 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<script src="/nav.js" defer></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -133,16 +134,7 @@ td{padding:14px 12px;vertical-align:middle}
 </head>
 <body>
 
-<nav>
-  <a href="/" class="nav-logo">HYPER<span>FLEX</span></a>
-  <div class="nav-links">
-    <a href="/screener">Screener</a>
-    <a href="/signals">Signals</a>
-    <a href="/high-prob" class="active">99%+ Bets</a>
-    <a href="/odds">Arb</a>
-    <a href="/dashboard" style="background:var(--gold);color:#141412;padding:7px 14px;border-radius:8px;font-weight:700;font-size:12px">Dashboard</a>
-  </div>
-</nav>
+<div id="nav-root"></div>
 
 <div class="hero">
   <div class="hero-badge">⚡ LIVE DATA</div>
@@ -160,8 +152,8 @@ td{padding:14px 12px;vertical-align:middle}
 <!-- 4% APY Calculator Banner -->
 <div class="apy-banner">
   <div class="apy-banner-left">
-    <h3>💰 4% APY Holding Rewards Calculator</h3>
-    <p>Polymarket pays 4.00% annualized on positions in eligible markets. Enter your investment to see returns.</p>
+    <h3>💰 Polymarket 4% Holding Rewards — separate from the above</h3>
+    <p>Polymarket also pays 4.00% APY just for holding positions in 13 eligible long-term markets. Not the same as these 99%+ bets — this is passive yield on any position size.</p>
   </div>
   <div class="apy-calc">
     <input type="number" id="apyInput" value="1000" min="1" placeholder="$1,000" oninput="calcApy()"/>
@@ -190,7 +182,8 @@ td{padding:14px 12px;vertical-align:middle}
   </div>
   <div class="filter-sep"></div>
   <select class="sort-select" id="sortSelect" onchange="setSort(this.value)">
-    <option value="apy">Sort: Highest APY</option>
+    <option value="apy_filtered">Sort: Best APY (1–30 days)</option>
+    <option value="apy">Sort: Highest APY (all)</option>
     <option value="expiry">Sort: Expiring Soon</option>
     <option value="liquidity">Sort: Most Liquid</option>
     <option value="volume">Sort: Most Volume</option>
@@ -208,7 +201,7 @@ td{padding:14px 12px;vertical-align:middle}
 let _allMarkets = [];
 let _direction = 'all';
 let _cat = 'all';
-let _sort = 'apy';
+let _sort = 'apy_filtered';
 
 function fmtMoney(n) {
   if (n >= 1000000) return '$' + (n/1000000).toFixed(1) + 'M';
@@ -217,7 +210,8 @@ function fmtMoney(n) {
 }
 
 function fmtApy(n) {
-  if (n >= 10000) return n.toLocaleString() + '%';
+  if (n >= 10000) return '10,000%+';
+  if (n >= 1000) return n.toLocaleString() + '%';
   return n.toLocaleString() + '%';
 }
 
@@ -290,7 +284,7 @@ function render() {
           <span class="prob-text">${m.prob_pct}%</span>
         </div>
       </td>
-      <td><span class="${apyClass}">${fmtApy(m.apy)}</span></td>
+      <td><span class="${apyClass}" title="Annualized return if market resolves before expiry. Higher = more time value left.">${fmtApy(m.apy)}</span>${m.apy >= 10000 ? ' <span style="font-size:10px;color:var(--muted);font-family:var(--mono)" title="Market expires very soon — most of this APY is already captured">⚡ today</span>' : ''}</td>
       <td class="cost-col">Pay <strong>${m.cost_cents}¢</strong> → Win <strong>+${m.profit_cents}¢</strong></td>
       <td class="expiry-col ${expClass}">${expText}</td>
       <td class="liq-col">${fmtMoney(m.liquidity)}</td>
@@ -319,7 +313,8 @@ function setCat(c, el) {
 function setSort(s) {
   _sort = s;
   // Re-sort client-side
-  if (s === 'apy') _allMarkets.sort((a,b) => b.apy - a.apy);
+  if (s === 'apy_filtered') { _allMarkets.sort((a,b) => { const aScore = a.days_left >= 1 ? a.apy : -1; const bScore = b.days_left >= 1 ? b.apy : -1; return bScore - aScore; }); }
+  else if (s === 'apy') _allMarkets.sort((a,b) => b.apy - a.apy);
   else if (s === 'expiry') _allMarkets.sort((a,b) => a.days_left - b.days_left);
   else if (s === 'liquidity') _allMarkets.sort((a,b) => b.liquidity - a.liquidity);
   else if (s === 'volume') _allMarkets.sort((a,b) => b.volume - a.volume);

@@ -29,6 +29,7 @@
     { href: '/whales', label: 'Market Intel' },
     { href: '/screener', label: 'Screener' },
     { href: '/spread-scanner', label: 'Spreads', gold: true },
+    { href: '/high-prob', label: '99%+ Bets' },
     { href: '/predictors', label: 'Predictors' },
     { href: '/odds', label: 'Odds' },
     { href: '/data', label: 'Data' },
