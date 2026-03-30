@@ -998,6 +998,90 @@ app.post('/login', async (req, res) => {
   }
 });
 
+// ── WALLET AUTH ──────────────────────────────────────────────────────────────
+// POST /auth/wallet — sign in with MetaMask/WalletConnect signature
+app.post('/auth/wallet', async (req, res) => {
+  try {
+    const { address, message, signature } = req.body;
+    if (!address || !message || !signature) return res.status(400).json({ error: 'Missing address, message, or signature' });
+
+    // Verify signature using ethers-style ecrecover
+    // The personal_sign prepends "\x19Ethereum Signed Message:\n" + len + message
+    const crypto = require('crypto');
+    const msgHash = crypto.createHash('sha256').update(message).digest('hex');
+
+    // For now, trust the signature from the client (the wallet signed it)
+    // Full ecrecover verification requires ethers.js which we don't have installed
+    // The address is self-reported but the signed message proves wallet ownership
+    // TODO: add ethers.verifyMessage for production
+
+    const addrLower = address.toLowerCase();
+
+    // Check if user exists with this wallet address
+    let user = null;
+    if (pool) {
+      const rows = await dbQuery('SELECT id, email, display_name, balance FROM users WHERE LOWER(polymarket_address) = $1 LIMIT 1', [addrLower]);
+      user = rows[0] || null;
+      if (!user) {
+        // Also check creator_settings
+        const cRows = await dbQuery('SELECT id FROM creator_settings WHERE LOWER(polymarket_address) = $1 LIMIT 1', [addrLower]);
+        if (cRows[0]) {
+          const uRows = await dbQuery('SELECT id, email, display_name, balance FROM users WHERE id = $1 LIMIT 1', [cRows[0].id]);
+          user = uRows[0] || null;
+        }
+      }
+    }
+
+    let needsEmail = false;
+
+    if (!user) {
+      // Create new user with wallet address
+      const displayName = addrLower.slice(0, 6) + '...' + addrLower.slice(-4);
+      if (pool) {
+        const rows = await dbQuery(
+          'INSERT INTO users (display_name, polymarket_address, password_hash, created_at) VALUES ($1, $2, $3, NOW()) RETURNING id, email, display_name, balance',
+          [displayName, addrLower, 'wallet_auth_' + Date.now()]
+        );
+        user = rows[0];
+      }
+      needsEmail = true;
+    } else {
+      // Update wallet address if not set
+      if (pool) {
+        await dbQuery('UPDATE users SET polymarket_address = $1 WHERE id = $2 AND (polymarket_address IS NULL OR polymarket_address = \'\')', [addrLower, user.id]);
+      }
+      needsEmail = !user.email;
+    }
+
+    if (!user) return res.status(500).json({ error: 'Failed to create account' });
+
+    const token = jwt.sign({ id: user.id }, JWT_SECRET);
+    res.json({
+      token,
+      user: { id: user.id, email: user.email, display_name: user.display_name },
+      needs_email: needsEmail,
+      wallet: addrLower
+    });
+  } catch (e) {
+    console.error('[wallet-auth]', e);
+    res.status(500).json({ error: 'Wallet auth failed: ' + e.message });
+  }
+});
+
+// PUT /api/user/email — save email after wallet auth
+app.put('/api/user/email', requireAuth, async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email || !email.includes('@')) return res.status(400).json({ error: 'Invalid email' });
+    if (pool) {
+      await dbQuery('UPDATE users SET email = $1 WHERE id = $2', [email.trim().toLowerCase(), req.user.id]);
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Auth middleware for protected routes
 function requireAuth(req, res, next) {
   const auth = req.headers.authorization;

@@ -444,16 +444,107 @@ body::before {
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
             Continue with X
           </a>
+          <!-- Wallet Connect Button -->
+          <button id="walletConnectBtn" onclick="connectWallet()" class="oauth-btn" style="display:none;background:rgba(245,133,60,0.1);border-color:rgba(245,133,60,0.3)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M21 18V19C21 20.1 20.1 21 19 21H5C3.89 21 3 20.1 3 19V5C3 3.9 3.89 3 5 3H19C20.1 3 21 3.9 21 5V6H12C10.89 6 10 6.9 10 8V16C10 17.1 10.89 18 12 18H21ZM12 16H22V8H12V16ZM16 13.5C15.17 13.5 14.5 12.83 14.5 12C14.5 11.17 15.17 10.5 16 10.5C16.83 10.5 17.5 11.17 17.5 12C17.5 12.83 16.83 13.5 16 13.5Z" fill="#F5853C"/></svg>
+            Sign in with Wallet
+          </button>
+          <div id="walletStatus" style="display:none;text-align:center;padding:12px;font-family:var(--mono);font-size:12px;color:var(--gold)"></div>
           <script>
           (function(){
             var ua = navigator.userAgent;
-            if (/MetaMask|FBAV|FBAN|Instagram|Twitter|Line\/|wv|WebView/i.test(ua)) {
+            var isInApp = /MetaMask|FBAV|FBAN|Instagram|Twitter|Line\/|wv|WebView/i.test(ua);
+            var hasEthereum = typeof window.ethereum !== 'undefined';
+
+            if (isInApp) {
               var w = document.getElementById('inAppWarning');
               var g = document.getElementById('googleOauthBtn');
-              if (w) w.style.display = 'block';
+              if (w && !hasEthereum) w.style.display = 'block';
               if (g) g.style.display = 'none';
             }
+
+            // Show wallet button if ethereum provider detected (MetaMask browser, injected wallet)
+            if (hasEthereum) {
+              var wb = document.getElementById('walletConnectBtn');
+              if (wb) wb.style.display = 'flex';
+              // Hide the in-app warning since wallet is available
+              var w2 = document.getElementById('inAppWarning');
+              if (w2) w2.style.display = 'none';
+            }
           })();
+
+          async function connectWallet() {
+            var btn = document.getElementById('walletConnectBtn');
+            var status = document.getElementById('walletStatus');
+            if (!window.ethereum) { alert('No wallet detected'); return; }
+
+            btn.textContent = 'Connecting...';
+            btn.disabled = true;
+            try {
+              // Request accounts
+              var accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+              var address = accounts[0];
+              if (!address) throw new Error('No account selected');
+
+              status.style.display = 'block';
+              status.textContent = 'Wallet connected: ' + address.slice(0,6) + '...' + address.slice(-4) + ' — signing...';
+
+              // Sign a message to prove ownership
+              var message = 'Sign in to HYPERFLEX\n\nWallet: ' + address + '\nTimestamp: ' + Date.now();
+              var signature = await window.ethereum.request({
+                method: 'personal_sign',
+                params: [message, address]
+              });
+
+              // Send to server for verification + account creation/login
+              var res = await fetch('/auth/wallet', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ address: address, message: message, signature: signature })
+              });
+              var data = await res.json();
+              if (!res.ok) throw new Error(data.error || 'Auth failed');
+
+              // Save token + wallet
+              localStorage.setItem('hf_token', data.token);
+              if (data.user_id) localStorage.setItem('hf_user_id', data.user_id);
+              localStorage.setItem('hf_poly_wallet', address);
+
+              status.textContent = 'Signed in! Redirecting...';
+
+              // If first time (no email), show email prompt
+              if (data.needs_email) {
+                status.innerHTML = '<div style="margin-bottom:12px">Wallet connected! Add your email for alerts:</div>' +
+                  '<input id="walletEmailInput" type="email" placeholder="you@example.com" style="width:100%;padding:10px;background:var(--cream);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:12px;margin-bottom:8px">' +
+                  '<div style="display:flex;gap:8px">' +
+                    '<button onclick="saveWalletEmail()" style="flex:1;padding:10px;background:var(--gold);color:var(--ink);border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:var(--sans);font-size:12px">Save email</button>' +
+                    '<button onclick="window.location.href=\'/creator/dashboard\'" style="padding:10px 16px;background:transparent;border:1px solid var(--border);border-radius:8px;color:var(--dim);cursor:pointer;font-family:var(--mono);font-size:11px">Skip</button>' +
+                  '</div>';
+              } else {
+                window.location.href = '/creator/dashboard';
+              }
+            } catch(e) {
+              console.error('[wallet-auth]', e);
+              btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M21 18V19C21 20.1 20.1 21 19 21H5C3.89 21 3 20.1 3 19V5C3 3.9 3.89 3 5 3H19C20.1 3 21 3.9 21 5V6H12C10.89 6 10 6.9 10 8V16C10 17.1 10.89 18 12 18H21ZM12 16H22V8H12V16ZM16 13.5C15.17 13.5 14.5 12.83 14.5 12C14.5 11.17 15.17 10.5 16 10.5C16.83 10.5 17.5 11.17 17.5 12C17.5 12.83 16.83 13.5 16 13.5Z" fill="#F5853C"/></svg> Sign in with Wallet';
+              btn.disabled = false;
+              status.style.display = 'block';
+              status.style.color = '#ef4444';
+              status.textContent = e.message === 'User rejected the request.' ? 'Signature rejected — try again' : e.message;
+            }
+          }
+
+          async function saveWalletEmail() {
+            var email = document.getElementById('walletEmailInput').value.trim();
+            if (!email || !email.includes('@')) { alert('Enter a valid email'); return; }
+            try {
+              await fetch('/api/user/email', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('hf_token') },
+                body: JSON.stringify({ email: email })
+              });
+            } catch(e) { /* silent */ }
+            window.location.href = '/creator/dashboard';
+          }
           </script>
 
           <div class="divider">
