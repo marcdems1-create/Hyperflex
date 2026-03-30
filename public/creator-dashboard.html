@@ -13096,7 +13096,10 @@ function renderHotMarkets() {
     var roi = entry > 0 && entry < 95 ? Math.round((profit / entry) * 100) : 0;
     var side = price < 50 ? 'YES' : 'NO';
     var sideColor = side === 'YES' ? '#22c55e' : '#ef4444';
-    return '<div style="background:#0f0e0c;border:1px solid var(--border);border-radius:10px;padding:14px;transition:border-color .15s;cursor:pointer" onclick="window.open(\'' + url.replace(/'/g,"\\'") + '\',\'_blank\')" onmouseenter="this.style.borderColor=\'var(--gold)\'" onmouseleave="this.style.borderColor=\'var(--border)\'">' +
+    var cardId = '_qtc_' + Math.random().toString(36).slice(2,8);
+    window[cardId] = {question: m.question||'', side: side, current_price: (m.yes_price||0.5), market_url: url, token_id: m.token_id||m.conditionId||''};
+    var cardClick = (window._connectedWallet && typeof isClobTradingEnabled==='function' && isClobTradingEnabled()) ? "openTradeModal(window['" + cardId + "'],'buy')" : "window.open('" + url.replace(/'/g,"\\'") + "','_blank')";
+    return '<div style="background:#0f0e0c;border:1px solid var(--border);border-radius:10px;padding:14px;transition:border-color .15s;cursor:pointer" onclick="' + cardClick + '" onmouseenter="this.style.borderColor=\'var(--gold)\'" onmouseleave="this.style.borderColor=\'var(--border)\'">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
         '<span style="font-family:var(--mono);font-size:8px;padding:2px 6px;border-radius:3px;background:rgba(201,146,13,.1);color:var(--gold);font-weight:700">' + escHtmlDash(cat) + '</span>' +
         '<span style="font-family:var(--mono);font-size:18px;font-weight:900;color:' + (price >= 50 ? '#22c55e' : 'var(--text)') + '">' + price + '%</span>' +
