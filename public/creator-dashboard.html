@@ -14462,19 +14462,42 @@ function openTradeModal(posDataJson, mode) {
   if (!modal) return;
 
   document.getElementById('tradeModalQuestion').textContent = pos.question || 'Unknown market';
-  document.getElementById('tradeModalSide').textContent = pos.side || '—';
-  document.getElementById('tradeModalSide').style.color = pos.side === 'YES' ? '#22c55e' : '#f87171';
-  document.getElementById('tradeModalShares').textContent = (pos.shares || 0).toFixed(2) + ' shares';
-  const price = pos.probability || pos.current_price || 0;
-  document.getElementById('tradeModalPrice').textContent = (price * 100).toFixed(1) + '\u00A2';
+
+  // Set prices
+  const price = pos.probability || pos.current_price || 0.5;
+  const yesPrice = Math.round(price * 1000) / 10;
+  const noPrice = Math.round((1 - price) * 1000) / 10;
+  document.getElementById('tradeYesPrice').textContent = yesPrice.toFixed(1) + '¢';
+  document.getElementById('tradeNoPrice').textContent = noPrice.toFixed(1) + '¢';
+
+  // Set initial limit price
+  _tradeModalData._limitPrice = pos.side === 'NO' ? (1 - price) : price;
+  const limitEl = document.getElementById('tradeLimitPrice');
+  if (limitEl) limitEl.textContent = (_tradeModalData._limitPrice * 100).toFixed(1) + '¢';
+
+  // Balance
+  const balEl = document.getElementById('tradeBalance');
+  if (balEl) balEl.textContent = 'Balance $' + (window._walletBalanceUSDC || 0).toFixed(2);
+
+  // Icon
+  const iconEl = document.getElementById('tradeModalIcon');
+  if (iconEl && pos.icon) iconEl.innerHTML = '<img src="' + pos.icon + '" style="width:36px;height:36px;border-radius:8px;object-fit:cover" onerror="this.parentElement.textContent=\'📊\'">';
+
+  // Set side
+  setTradeSide(pos.side || 'YES');
 
   // Set mode
   setTradeMode(mode || 'buy');
-  document.getElementById('tradeAmount').value = '';
-  document.getElementById('tradeEstimate').textContent = '—';
+  document.getElementById('tradeAmount').value = '0';
   document.getElementById('tradeModalError').style.display = 'none';
   document.getElementById('tradeConfirmBtn').disabled = false;
-  document.getElementById('tradeConfirmBtn').textContent = 'Confirm Trade';
+  updateTradeConfirmBtn();
+
+  // Update totals
+  const totalEl = document.getElementById('tradeTotal');
+  const toWinEl = document.getElementById('tradeToWin');
+  if (totalEl) totalEl.textContent = '$0';
+  if (toWinEl) toWinEl.textContent = '$0';
 
   // Fetch orderbook
   loadOrderbook(pos);
@@ -14486,6 +14509,59 @@ function closeTradeModal() {
   const modal = document.getElementById('tradeModal');
   if (modal) modal.style.display = 'none';
   _tradeModalData = null;
+}
+
+function setTradeSide(side) {
+  if (!_tradeModalData) return;
+  _tradeModalData.side = side;
+  const yesBtn = document.getElementById('tradeYesBtn');
+  const noBtn = document.getElementById('tradeNoBtn');
+  if (yesBtn) { yesBtn.style.background = side === 'YES' ? '#22c55e' : '#2d2d44'; yesBtn.style.border = side === 'YES' ? 'none' : '1px solid #3d3d54'; }
+  if (noBtn) { noBtn.style.background = side === 'NO' ? '#ef4444' : '#2d2d44'; noBtn.style.border = side === 'NO' ? 'none' : '1px solid #3d3d54'; }
+  updateTradeEstimate();
+  updateTradeConfirmBtn();
+}
+
+function adjustPrice(delta) {
+  if (!_tradeModalData) return;
+  const current = _tradeModalData._limitPrice || 0;
+  _tradeModalData._limitPrice = Math.max(0.01, Math.min(0.99, current + delta));
+  const el = document.getElementById('tradeLimitPrice');
+  if (el) el.textContent = (_tradeModalData._limitPrice * 100).toFixed(1) + '¢';
+  updateTradeEstimate();
+}
+
+function adjustShares(delta) {
+  const input = document.getElementById('tradeAmount');
+  if (!input) return;
+  const current = parseInt(input.value) || 0;
+  input.value = Math.max(0, current + delta);
+  updateTradeEstimate();
+}
+
+function setMaxShares() {
+  if (!_tradeModalData) return;
+  const balance = window._walletBalanceUSDC || 0;
+  const price = _tradeModalData._limitPrice || (_tradeModalData.current_price || 0.5);
+  if (price > 0) {
+    const maxShares = Math.floor(balance / price);
+    const input = document.getElementById('tradeAmount');
+    if (input) { input.value = maxShares; updateTradeEstimate(); }
+  }
+}
+
+function updateTradeConfirmBtn() {
+  const btn = document.getElementById('tradeConfirmBtn');
+  if (!btn || !_tradeModalData) return;
+  const mode = _tradeModalData.mode || 'buy';
+  const side = _tradeModalData.side || 'YES';
+  if (mode === 'buy') {
+    btn.textContent = 'Buy ' + side;
+    btn.style.background = side === 'YES' ? '#3b82f6' : '#ef4444';
+  } else {
+    btn.textContent = 'Sell ' + side;
+    btn.style.background = '#ef4444';
+  }
 }
 
 function setTradeMode(mode) {
@@ -14528,20 +14604,26 @@ async function loadOrderbook(pos) {
 }
 
 function updateTradeEstimate() {
-  const el = document.getElementById('tradeEstimate');
-  if (!el || !_tradeModalData) return;
-  const amount = parseFloat(document.getElementById('tradeAmount')?.value) || 0;
-  if (!amount) { el.textContent = '—'; return; }
-  const ob = _tradeModalData._orderbook;
-  const mode = _tradeModalData.mode;
+  if (!_tradeModalData) return;
+  const shares = parseInt(document.getElementById('tradeAmount')?.value) || 0;
+  const price = _tradeModalData._limitPrice || (_tradeModalData.current_price || 0.5);
+  const mode = _tradeModalData.mode || 'buy';
+
+  const totalEl = document.getElementById('tradeTotal');
+  const toWinEl = document.getElementById('tradeToWin');
+  const estEl = document.getElementById('tradeEstimate');
+
   if (mode === 'buy') {
-    const price = ob?.best_ask || (_tradeModalData.probability || _tradeModalData.current_price || 0.5);
-    const shares = price > 0 ? (amount / price).toFixed(2) : '0';
-    el.innerHTML = '<span style="color:#22c55e;font-weight:700">~' + shares + ' shares</span> at ' + (price * 100).toFixed(1) + '\u00A2 each<br><span style="font-size:10px;color:var(--dim)">Cost: $' + amount.toFixed(2) + '</span>';
+    const total = shares * price;
+    const toWin = shares * (1 - price);
+    if (totalEl) totalEl.textContent = '$' + total.toFixed(2);
+    if (toWinEl) toWinEl.textContent = '$' + toWin.toFixed(2);
+    if (estEl) estEl.textContent = shares + ' shares @ ' + (price * 100).toFixed(1) + '¢ = $' + total.toFixed(2);
   } else {
-    const price = ob?.best_bid || (_tradeModalData.probability || _tradeModalData.current_price || 0.5);
-    const proceeds = (amount * price).toFixed(2);
-    el.innerHTML = '<span style="color:#f87171;font-weight:700">~$' + proceeds + ' proceeds</span> at ' + (price * 100).toFixed(1) + '\u00A2 each<br><span style="font-size:10px;color:var(--dim)">Selling ' + amount + ' shares</span>';
+    const proceeds = shares * price;
+    if (totalEl) totalEl.textContent = '$' + proceeds.toFixed(2);
+    if (toWinEl) toWinEl.textContent = '$' + proceeds.toFixed(2);
+    if (estEl) estEl.textContent = 'Sell ' + shares + ' shares @ ' + (price * 100).toFixed(1) + '¢ = $' + proceeds.toFixed(2);
   }
 }
 
@@ -14739,55 +14821,96 @@ function closePositionAll(posDataJson) {
 
 <!-- Trade Modal -->
 <div id="tradeModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:center;justify-content:center;backdrop-filter:blur(4px)" onclick="if(event.target===this)closeTradeModal()">
-  <div style="background:var(--cream);border:1px solid var(--border);border-radius:16px;width:95%;max-width:480px;overflow:hidden;box-shadow:0 24px 48px rgba(0,0,0,0.4)">
-    <div style="height:2px;background:linear-gradient(90deg,#7c3aed,var(--gold),#7c3aed)"></div>
-    <div style="padding:28px">
-      <!-- Header -->
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
-        <div style="font-size:16px;font-weight:800;color:var(--text)">Trade Position</div>
-        <button onclick="closeTradeModal()" style="background:none;border:none;font-size:20px;color:var(--dim);cursor:pointer;padding:4px">&times;</button>
+  <div style="background:#1a1a2e;border:1px solid #2d2d44;border-radius:16px;width:95%;max-width:380px;overflow:hidden;box-shadow:0 24px 48px rgba(0,0,0,0.5)">
+    <div style="padding:24px 24px 20px">
+      <!-- Market name + close -->
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px">
+        <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
+          <div id="tradeModalIcon" style="width:36px;height:36px;border-radius:8px;background:#2d2d44;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">📊</div>
+          <div id="tradeModalQuestion" style="font-size:14px;font-weight:700;color:#fff;line-height:1.4;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">—</div>
+        </div>
+        <button onclick="closeTradeModal()" style="background:none;border:none;font-size:18px;color:#666;cursor:pointer;padding:4px;margin-left:8px">&times;</button>
       </div>
-      <!-- Market question -->
-      <div id="tradeModalQuestion" style="font-size:14px;font-weight:600;color:var(--text);line-height:1.5;margin-bottom:16px;padding:12px 14px;background:rgba(124,58,237,0.06);border:1px solid rgba(124,58,237,0.15);border-radius:10px">—</div>
-      <!-- Current position info -->
-      <div style="display:flex;gap:16px;margin-bottom:20px">
-        <div style="flex:1;background:var(--ink);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
-          <div style="font-family:var(--mono);font-size:9px;color:var(--dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px">Side</div>
-          <div id="tradeModalSide" style="font-family:var(--mono);font-size:14px;font-weight:700">—</div>
-        </div>
-        <div style="flex:1;background:var(--ink);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
-          <div style="font-family:var(--mono);font-size:9px;color:var(--dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px">Shares</div>
-          <div id="tradeModalShares" style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--text)">—</div>
-        </div>
-        <div style="flex:1;background:var(--ink);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
-          <div style="font-family:var(--mono);font-size:9px;color:var(--dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px">Price</div>
-          <div id="tradeModalPrice" style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--gold)">—</div>
+
+      <!-- Buy / Sell tab -->
+      <div style="display:flex;gap:0;margin-bottom:20px;border-bottom:2px solid #2d2d44">
+        <button id="tradeBuyBtn" onclick="setTradeMode('buy')" style="flex:1;background:none;border:none;padding:10px;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;color:#fff;border-bottom:2px solid #fff;margin-bottom:-2px">Buy</button>
+        <button id="tradeSellBtn" onclick="setTradeMode('sell')" style="flex:1;background:none;border:none;padding:10px;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;color:#666;border-bottom:2px solid transparent;margin-bottom:-2px">Sell</button>
+        <div style="flex:1;display:flex;align-items:center;justify-content:flex-end;padding-right:4px">
+          <span style="font-family:var(--mono);font-size:11px;color:#888">Limit ▾</span>
         </div>
       </div>
-      <!-- Orderbook info -->
-      <div id="tradeOrderbookInfo" style="margin-bottom:16px;padding:10px 14px;background:rgba(201,146,13,0.04);border:1px solid rgba(201,146,13,0.12);border-radius:8px">
-        <span style="color:var(--dim);font-family:var(--mono);font-size:11px">Loading orderbook...</span>
+
+      <!-- YES / NO price buttons -->
+      <div style="display:flex;gap:8px;margin-bottom:20px">
+        <button id="tradeYesBtn" onclick="setTradeSide('YES')" style="flex:1;background:#22c55e;border:none;border-radius:10px;padding:12px;text-align:center;cursor:pointer;min-height:44px">
+          <span style="font-family:var(--sans);font-size:14px;font-weight:700;color:#fff">Yes <span id="tradeYesPrice">—</span></span>
+        </button>
+        <button id="tradeNoBtn" onclick="setTradeSide('NO')" style="flex:1;background:#2d2d44;border:1px solid #3d3d54;border-radius:10px;padding:12px;text-align:center;cursor:pointer;min-height:44px">
+          <span style="font-family:var(--sans);font-size:14px;font-weight:700;color:#ccc">No <span id="tradeNoPrice">—</span></span>
+        </button>
       </div>
-      <!-- BUY / SELL toggle -->
-      <div style="display:flex;gap:8px;margin-bottom:16px">
-        <button id="tradeBuyBtn" onclick="setTradeMode('buy')" style="flex:1;background:#22c55e;color:#fff;border:1px solid #22c55e;border-radius:8px;padding:10px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;min-height:44px">BUY</button>
-        <button id="tradeSellBtn" onclick="setTradeMode('sell')" style="flex:1;background:transparent;color:#f87171;border:1px solid #2a2825;border-radius:8px;padding:10px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;min-height:44px">SELL</button>
+
+      <!-- Limit Price with stepper -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <div>
+          <div style="font-size:14px;font-weight:600;color:#fff">Limit Price</div>
+          <div id="tradeBalance" style="font-family:var(--mono);font-size:11px;color:#888">Balance $0.00</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:0;background:#2d2d44;border-radius:8px;overflow:hidden">
+          <button onclick="adjustPrice(-0.01)" style="background:none;border:none;color:#fff;font-size:16px;padding:8px 12px;cursor:pointer;font-weight:700">−</button>
+          <span id="tradeLimitPrice" style="font-family:var(--mono);font-size:15px;font-weight:700;color:#fff;min-width:60px;text-align:center">0.0¢</span>
+          <button onclick="adjustPrice(0.01)" style="background:none;border:none;color:#fff;font-size:16px;padding:8px 12px;cursor:pointer;font-weight:700">+</button>
+        </div>
       </div>
-      <!-- Amount input -->
-      <div style="margin-bottom:12px">
-        <label style="font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.08em;text-transform:uppercase;display:block;margin-bottom:6px">Amount (shares for sell, $ for buy)</label>
-        <input id="tradeAmount" type="number" step="0.01" min="0" placeholder="0.00" oninput="updateTradeEstimate()" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:10px;padding:13px 16px;font-family:var(--mono);font-size:15px;font-weight:700;color:var(--text);outline:none;box-sizing:border-box" onfocus="this.style.borderColor='var(--gold)'" onblur="this.style.borderColor='var(--border)'"/>
+
+      <div style="height:1px;background:#2d2d44;margin:16px 0"></div>
+
+      <!-- Shares input -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <div>
+          <div style="font-size:14px;font-weight:600;color:#fff">Shares</div>
+          <div style="font-family:var(--mono);font-size:11px;color:#22c55e;cursor:pointer" onclick="setMaxShares()">Max</div>
+        </div>
+        <input id="tradeAmount" type="number" step="1" min="0" value="0" oninput="updateTradeEstimate()" style="width:100px;background:#2d2d44;border:1px solid #3d3d54;border-radius:8px;padding:10px 14px;font-family:var(--mono);font-size:16px;font-weight:700;color:#fff;outline:none;text-align:right;box-sizing:border-box" onfocus="this.style.borderColor='#22c55e'" onblur="this.style.borderColor='#3d3d54'"/>
       </div>
-      <!-- Estimated cost/proceeds -->
-      <div style="margin-bottom:20px;padding:12px 14px;background:var(--ink);border:1px solid var(--border);border-radius:8px">
-        <div style="font-family:var(--mono);font-size:9px;color:var(--dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px">Estimate</div>
-        <div id="tradeEstimate" style="font-family:var(--mono);font-size:13px;color:var(--text);line-height:1.6">—</div>
+      <!-- Quick amount buttons -->
+      <div style="display:flex;gap:6px;margin:10px 0 16px;justify-content:flex-end">
+        <button onclick="adjustShares(-100)" style="background:#2d2d44;border:1px solid #3d3d54;border-radius:6px;padding:5px 10px;font-family:var(--mono);font-size:11px;color:#ccc;cursor:pointer">-100</button>
+        <button onclick="adjustShares(-10)" style="background:#2d2d44;border:1px solid #3d3d54;border-radius:6px;padding:5px 10px;font-family:var(--mono);font-size:11px;color:#ccc;cursor:pointer">-10</button>
+        <button onclick="adjustShares(10)" style="background:#2d2d44;border:1px solid #3d3d54;border-radius:6px;padding:5px 10px;font-family:var(--mono);font-size:11px;color:#ccc;cursor:pointer">+10</button>
+        <button onclick="adjustShares(100)" style="background:#2d2d44;border:1px solid #3d3d54;border-radius:6px;padding:5px 10px;font-family:var(--mono);font-size:11px;color:#ccc;cursor:pointer">+100</button>
       </div>
+
+      <div style="height:1px;background:#2d2d44;margin:0 0 16px"></div>
+
+      <!-- Total + To Win -->
+      <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+        <span style="font-size:14px;color:#fff">Total</span>
+        <span id="tradeTotal" style="font-family:var(--mono);font-size:14px;font-weight:700;color:#22c55e">$0</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:20px">
+        <span style="font-size:14px;color:#fff">To win 🪙</span>
+        <span id="tradeToWin" style="font-family:var(--mono);font-size:14px;font-weight:700;color:#22c55e">$0</span>
+      </div>
+
       <!-- Error -->
       <div id="tradeModalError" style="display:none;color:#f87171;font-size:12px;font-family:var(--mono);padding:8px 12px;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);border-radius:8px;margin-bottom:12px"></div>
-      <!-- Confirm button -->
-      <button id="tradeConfirmBtn" onclick="confirmTrade()" style="width:100%;background:var(--gold);color:#141412;border:none;border-radius:10px;padding:14px;font-family:var(--sans);font-size:14px;font-weight:800;cursor:pointer;min-height:48px;transition:opacity .15s" onmouseover="this.style.opacity='0.88'" onmouseout="this.style.opacity='1'">Confirm Trade</button>
-      <div style="text-align:center;margin-top:10px;font-family:var(--mono);font-size:10px;color:var(--dim)">Orders signed via HMAC or your wallet. We never store your keys.</div>
+
+      <!-- Buy button -->
+      <button id="tradeConfirmBtn" onclick="confirmTrade()" style="width:100%;background:#3b82f6;color:#fff;border:none;border-radius:12px;padding:16px;font-family:var(--sans);font-size:15px;font-weight:800;cursor:pointer;min-height:52px;transition:opacity .15s" onmouseover="this.style.opacity='0.88'" onmouseout="this.style.opacity='1'">Buy Yes</button>
+      <div style="text-align:center;margin-top:10px;font-family:var(--mono);font-size:10px;color:#555">Orders signed via HMAC. We never store your keys.</div>
+
+      <!-- Orderbook info (collapsed) -->
+      <div id="tradeOrderbookInfo" style="margin-top:12px;padding:8px 12px;background:rgba(255,255,255,0.03);border-radius:8px">
+        <span style="color:#555;font-family:var(--mono);font-size:10px">Loading orderbook...</span>
+      </div>
+
+      <!-- Hidden fields for compatibility -->
+      <div id="tradeModalSide" style="display:none">—</div>
+      <div id="tradeModalShares" style="display:none">—</div>
+      <div id="tradeModalPrice" style="display:none">—</div>
+      <div id="tradeEstimate" style="display:none">—</div>
     </div>
   </div>
 </div>
