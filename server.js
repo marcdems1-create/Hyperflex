@@ -19206,7 +19206,7 @@ app.get('/api/ai-edge', async (req, res) => {
     }
 
     // Get top markets by whale capital + volume
-    const whaleData = _whaleWatchCache || {};
+    const whaleData = (_whaleWatchCache && _whaleWatchCache.data) ? _whaleWatchCache.data : {};
     const whales = whaleData.whales || [];
     const marketMap = {};
     for (const w of whales) {
