@@ -1235,87 +1235,8 @@ function copyShareLink(btn) {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// GET /og-default.png — branded OG image (1200×630) for social sharing
-// Embeds Syne + Space Mono fonts as base64 so Sharp renders them correctly
-// Also supports ?page= param for per-page OG images
-// ════════════════════════════════════════════════════════════════════════════
-const _ogFontCache = {};
-function getOgFontBase64(name) {
-  if (_ogFontCache[name]) return _ogFontCache[name];
-  try {
-    const p = require('path').join(__dirname, 'public', 'fonts', name);
-    _ogFontCache[name] = require('fs').readFileSync(p).toString('base64');
-    return _ogFontCache[name];
-  } catch { return null; }
-}
-
-const OG_PAGE_META = {
-  default:      { title: 'HYPERFLEX', subtitle: 'Prediction market intelligence.', stats: 'WHALE TRACKING  ·  AI SIGNALS  ·  CRYSTAL BALL  ·  SCREENER' },
-  signals:      { title: 'LIVE SIGNALS', subtitle: 'Whale clusters, momentum breakouts & arb alerts — updated every 10 min.', stats: 'WHALE  ·  MOMENTUM  ·  NEW ENTRY  ·  ARB  ·  VOLUME' },
-  'crystal-ball':{ title: 'CRYSTAL BALL', subtitle: 'AI predictions where whale consensus diverges from market price.', stats: '79% AVG CONFIDENCE  ·  EDGE SCORE  ·  CONTRARIAN  ·  EXPIRY' },
-  screener:     { title: 'SCREENER', subtitle: 'Filter 242+ markets by whale activity, volume, momentum & expiry.', stats: 'WHALE COUNT  ·  VOLUME  ·  ODDS  ·  CATEGORY  ·  EXPIRY' },
-  whales:       { title: 'WHALE TRACKER', subtitle: '$161M+ in tracked positions. See every move the second it happens.', stats: 'REAL-TIME FEED  ·  WALLET NAMES  ·  AMOUNTS  ·  YES/NO' },
-  predictors:   { title: 'TOP PREDICTORS', subtitle: 'Ranked leaderboard of the sharpest forecasters across Polymarket.', stats: 'SHARP SCORE  ·  WIN RATE  ·  P&L  ·  CALIBRATION' },
-  odds:         { title: 'LIVE ODDS', subtitle: 'Real-time prediction market odds across every active market.', stats: 'POLYMARKET  ·  POLITICS  ·  SPORTS  ·  CRYPTO  ·  OTHER' },
-  data:         { title: 'MARKET DATA', subtitle: 'Deep analytics and historical data for every prediction market.', stats: 'VOLUME  ·  TRADERS  ·  PRICE HISTORY  ·  WHALE FLOW' },
-};
-
-app.get('/og-default.png', async (req, res) => {
-  const page = req.query.page || 'default';
-  const meta = OG_PAGE_META[page] || OG_PAGE_META.default;
-  const syneB64 = getOgFontBase64('Syne-Variable.ttf');
-  const monoB64 = getOgFontBase64('SpaceMono-Bold.ttf');
-
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
-  <defs>
-    <style>
-      @font-face { font-family: 'Syne'; font-weight: 800; src: url('data:font/truetype;base64,${syneB64 || ''}') format('truetype'); }
-      @font-face { font-family: 'SpaceMono'; font-weight: 700; src: url('data:font/truetype;base64,${monoB64 || ''}') format('truetype'); }
-    </style>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#1a1a17"/>
-      <stop offset="100%" stop-color="#141412"/>
-    </linearGradient>
-    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#e0a820"/>
-      <stop offset="100%" stop-color="#c9920d"/>
-    </linearGradient>
-  </defs>
-  <rect width="1200" height="630" fill="url(#bg)"/>
-  <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
-    <path d="M 48 0 L 0 0 0 48" fill="none" stroke="rgba(201,146,13,0.06)" stroke-width="1"/>
-  </pattern>
-  <rect width="1200" height="630" fill="url(#grid)"/>
-  <rect x="0" y="0" width="1200" height="3" fill="url(#gold)"/>
-  <rect x="0" y="627" width="1200" height="3" fill="url(#gold)"/>
-  <!-- HF logo mark -->
-  <rect x="540" y="80" width="120" height="120" rx="16" fill="none" stroke="#c9920d" stroke-width="3"/>
-  <text x="600" y="158" text-anchor="middle" font-family="Syne, Arial, sans-serif" font-weight="800" font-size="52" fill="#c9920d">HF</text>
-  <!-- Page title -->
-  <text x="600" y="270" text-anchor="middle" font-family="Syne, Arial, sans-serif" font-weight="800" font-size="64" letter-spacing="6" fill="#c9920d">${meta.title}</text>
-  <!-- Subtitle -->
-  <text x="600" y="330" text-anchor="middle" font-family="SpaceMono, monospace" font-weight="700" font-size="20" fill="#7a7870">${meta.subtitle}</text>
-  <!-- Stats bar -->
-  <rect x="100" y="390" width="1000" height="1" fill="rgba(201,146,13,0.15)"/>
-  <text x="600" y="430" text-anchor="middle" font-family="SpaceMono, monospace" font-weight="700" font-size="14" letter-spacing="2" fill="rgba(201,146,13,0.5)">${meta.stats}</text>
-  <rect x="100" y="450" width="1000" height="1" fill="rgba(201,146,13,0.15)"/>
-  <!-- Domain -->
-  <text x="600" y="560" text-anchor="middle" font-family="SpaceMono, monospace" font-weight="700" font-size="16" letter-spacing="3" fill="#5a5854">hyperflex.network</text>
-</svg>`;
-
-  const sharp = getSharp();
-  if (sharp) {
-    try {
-      const png = await sharp(Buffer.from(svg)).png({ quality: 90 }).toBuffer();
-      res.set({ 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' });
-      return res.send(png);
-    } catch (e) {
-      console.error('og-default sharp error:', e.message);
-    }
-  }
-  res.set({ 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' });
-  res.send(svg);
-});
+// OG images are pre-rendered static PNGs in /public (og-default.png, og-signals.png, etc.)
+// Served by Express static middleware — no dynamic generation needed
 
 // GET /og/home.png — redirect to static pre-rendered OG image
 app.get('/og/home.png', (req, res) => res.redirect('/og-home.png'));
