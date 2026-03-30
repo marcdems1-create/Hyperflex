@@ -822,30 +822,8 @@ nav {
 </head>
 <body>
 
-<nav>
-  <a href="/" class="nav-logo">
-    <svg viewBox="0 0 32 32" fill="none" style="width:24px;height:24px;margin-right:8px;vertical-align:middle">
-      <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="#c9920d" stroke-width="1.5" fill="rgba(201,146,13,0.1)"/>
-      <path d="M16 8L22 11.5V18.5L16 22L10 18.5V11.5L16 8Z" fill="#c9920d" opacity="0.6"/>
-    </svg>HYPERFLEX
-  </a>
-  <div class="nav-links">
-    <a href="/predictors">Predictors</a>
-    <a href="/explore" style="color:var(--text-soft)">Explore</a>
-    <a href="/odds">Odds</a>
-    <a href="/crystal-ball" style="color:#c9920d">&#x1F52E; Crystal Ball</a>
-    <a href="/whales">Market Intel</a>
-    <a href="/data">Data</a>
-    <a href="/templates">Templates</a>
-    <a href="/api-docs">API</a>
-    <!-- logged-in state -->
-    <a href="/creator/dashboard" id="navDashboardLink" style="display:none;color:var(--gold)">Dashboard</a>
-    <button id="navSignOutBtn" onclick="memberSignOut()" style="display:none;background:none;border:1px solid rgba(255,255,255,.15);color:#aaa8a0;font-size:13px;padding:6px 14px;border-radius:6px;cursor:pointer;font-family:inherit">Sign out</button>
-    <!-- logged-out state -->
-    <button id="navMemberSignIn" onclick="openMemberAuth('login')" style="background:none;border:1px solid rgba(255,255,255,.15);color:#aaa8a0;font-size:13px;padding:6px 14px;border-radius:6px;cursor:pointer;font-family:inherit">Sign in</button>
-    <a href="/creator/signup" class="nav-cta" id="navStartFree">Get started free</a>
-  </div>
-</nav>
+<div id="nav-root"></div>
+<script src="/nav.js"></script>
 
 <!-- Member Auth Modal -->
 <div id="memberAuthOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeMemberAuth()">
