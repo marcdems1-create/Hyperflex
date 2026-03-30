@@ -18449,18 +18449,24 @@ app.get('/api/screener', async (req, res) => {
       // Skip resolved markets (95%+ or 5%-)
       if (yesPrice != null && (yesPrice >= 0.95 || yesPrice <= 0.05)) continue;
 
+      // Skip micro-resolution noise (Bitcoin 15-min Up/Down windows — not real trading signals)
+      const qLow = question.toLowerCase();
+      if (/\d+(:\d+)?(am|pm)\s*(et|utc|gmt)/.test(qLow) && qLow.includes('up or down')) continue;
+
       const wCount = whaleInfo ? whaleInfo.count : 0;
       const wCapital = whaleInfo ? Math.round(whaleInfo.capital) : 0;
       const pChange = priceChanges[marketId] || null;
       const oddsChg = pChange != null && yesPrice != null ? Math.round((yesPrice - yesPrice / (1 + pChange / 100)) * 100) : null;
 
-      // ── Edge Score (1–100) ──
-      const edgeWhale = Math.min(40, wCount * 8);
-      const edgeMomentum = Math.min(20, Math.abs(pChange || 0) * 2);
-      const edgeVolume = volume >= 1000000 ? 15 : volume >= 100000 ? 10 : volume >= 10000 ? 5 : 0;
-      const edgeExpiry = (daysUntilExpiry != null && daysUntilExpiry <= 7) ? 15 : (daysUntilExpiry != null && daysUntilExpiry <= 30) ? 5 : 0;
-      const edgeDivergence = (wCount >= 3 && yesPrice != null) ? Math.min(10, Math.abs(50 - Math.round(yesPrice * 100)) * 0.3) : 0;
-      const edgeScore = Math.min(100, Math.round(edgeWhale + edgeMomentum + edgeVolume + edgeExpiry + edgeDivergence));
+      // ── Edge Score (1–100) — weighted to create real differentiation ──
+      const edgeWhale = Math.min(35, wCount * 7);                                         // 3 whales=21, 5=35
+      const edgeCapital = wCapital >= 1000000 ? 15 : wCapital >= 500000 ? 10 : wCapital >= 100000 ? 5 : 0; // capital weight
+      const edgeMomentum = Math.min(20, Math.abs(pChange || 0) * 2);                     // price movement
+      const edgeVolume = volume >= 1000000 ? 12 : volume >= 500000 ? 8 : volume >= 100000 ? 5 : volume >= 10000 ? 2 : 0;
+      const edgeExpiry = (daysUntilExpiry != null && daysUntilExpiry <= 3) ? 15 : (daysUntilExpiry != null && daysUntilExpiry <= 7) ? 10 : (daysUntilExpiry != null && daysUntilExpiry <= 30) ? 3 : 0;
+      const yesPct = yesPrice != null ? Math.round(yesPrice * 100) : 50;
+      const edgeDivergence = (wCount >= 3 && yesPrice != null) ? Math.min(15, Math.abs(50 - yesPct) * 0.4) : 0; // price far from 50%
+      const edgeScore = Math.min(99, Math.round(edgeWhale + edgeCapital + edgeMomentum + edgeVolume + edgeExpiry + edgeDivergence));
 
       // ── Trade ROI ──
       let trade = null;
@@ -25494,12 +25500,19 @@ app.get('/api/contrarian', (req, res) => {
       if (pick.whale_count < 3) continue;
 
       const marketPrice = Math.round((pick.current_price || 0.5) * 100); // YES probability 0-100
+
+      // Skip resolved or near-resolved markets — no edge left to trade
+      if (marketPrice >= 95 || marketPrice <= 5) continue;
+
+      // Skip micro-resolution noise (Bitcoin 15-min windows etc.) — check question
+      const q = (pick.market || '').toLowerCase();
+      const isMicroExpiry = /\d+(:\d+)?(am|pm)\s*(et|utc|gmt)/.test(q) && q.includes('up or down');
+      if (isMicroExpiry) continue;
+
       const whaleConsensusSide = pick.consensus_side || 'YES';
       const whaleConsensusPct = pick.consensus_pct || 50;
 
       // Whale consensus direction as a price-equivalent
-      // If whales say YES at 80% consensus, their "implied price" is high
-      // If whales say NO at 80% consensus, their "implied price" for YES is low
       const whaleImpliedYes = whaleConsensusSide === 'YES' ? whaleConsensusPct : (100 - whaleConsensusPct);
       const divergence = Math.abs(whaleImpliedYes - marketPrice);
 
@@ -25510,14 +25523,24 @@ app.get('/api/contrarian', (req, res) => {
         isContrarian = true;
       }
 
-      // Case 2: Market price is >80% one way (extreme consensus) — historically mean-reverts
-      if (marketPrice > 80 || marketPrice < 20) {
+      // Case 2: Market price is between 20-80% but extreme whale divergence (>40pts)
+      if (divergence >= 40 && marketPrice > 20 && marketPrice < 80) {
+        isContrarian = true;
+      }
+
+      // Case 3: Market price is 80-95% (strong but NOT resolved) — mean reversion possible
+      if ((marketPrice > 80 && marketPrice < 95) || (marketPrice > 5 && marketPrice < 20)) {
         isContrarian = true;
       }
 
       if (!isContrarian) continue;
 
-      const contrarianScore = Math.min(100, Math.round(divergence * 2 + (pick.whale_count * 3)));
+      // More nuanced score: weight by whale count, divergence magnitude, and capital
+      const capitalBonus = pick.total_capital > 500000 ? 15 : pick.total_capital > 100000 ? 8 : 0;
+      const whaleBonus = Math.min(25, (pick.whale_count - 3) * 5); // extra whales beyond minimum
+      const divergenceScore = Math.min(50, Math.round(divergence * 0.6)); // cap at 50
+      const extremeBonus = (marketPrice > 85 && marketPrice < 95) || (marketPrice > 5 && marketPrice < 15) ? 10 : 0;
+      const contrarianScore = Math.min(99, divergenceScore + whaleBonus + capitalBonus + extremeBonus + 10);
 
       // Determine suggestion
       let suggestion, historicalNote;
