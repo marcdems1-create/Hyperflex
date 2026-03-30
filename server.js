@@ -19189,6 +19189,124 @@ app.get('/api/mispricings', async (req, res) => {
   }
 });
 
+// ── AI EDGE DETECTOR — Claude estimates true probability vs market price ──
+const _aiEdgeCache = { data: null, ts: 0 };
+const AI_EDGE_TTL = 30 * 60 * 1000; // 30 min cache
+
+app.get('/api/ai-edge', async (req, res) => {
+  try {
+    if (_aiEdgeCache.data && Date.now() - _aiEdgeCache.ts < AI_EDGE_TTL) {
+      return res.json(_aiEdgeCache.data);
+    }
+
+    // Get top markets by whale capital + volume
+    const whaleData = _whaleWatchCache || {};
+    const whales = whaleData.whales || [];
+    const marketMap = {};
+    for (const w of whales) {
+      const m = w.market || '';
+      if (!m) continue;
+      if (!marketMap[m]) marketMap[m] = { question: m, url: w.market_url || '', yes_cap: 0, no_cap: 0, whale_count: 0, prices: [], sides: [] };
+      marketMap[m].whale_count++;
+      const val = parseFloat(w.current_value) || 0;
+      const price = parseFloat(w.current_price) || 0;
+      const side = (w.side || '').toLowerCase();
+      if (side === 'yes') { marketMap[m].yes_cap += val; marketMap[m].prices.push(price); }
+      else { marketMap[m].no_cap += val; marketMap[m].prices.push(1 - price); }
+      marketMap[m].sides.push(side);
+    }
+
+    // Pick top 8 markets by total whale capital
+    const candidates = Object.values(marketMap)
+      .filter(m => m.whale_count >= 3 && (m.yes_cap + m.no_cap) >= 10000)
+      .sort((a, b) => (b.yes_cap + b.no_cap) - (a.yes_cap + a.no_cap))
+      .slice(0, 8);
+
+    if (candidates.length === 0) {
+      _aiEdgeCache.data = [];
+      _aiEdgeCache.ts = Date.now();
+      return res.json([]);
+    }
+
+    // Build prompt for Claude
+    const marketList = candidates.map((m, i) => {
+      const total = m.yes_cap + m.no_cap;
+      const whaleYes = Math.round(m.yes_cap / total * 100);
+      const marketPrice = m.prices.length > 0 ? Math.round(m.prices.reduce((a, b) => a + b, 0) / m.prices.length * 100) : 50;
+      return `${i + 1}. "${m.question}" — Current market: ${marketPrice}% YES, Whale consensus: ${whaleYes}% YES (${m.whale_count} whales, $${Math.round(total / 1000)}K)`;
+    }).join('\n');
+
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return res.json(_aiEdgeCache.data || []);
+    }
+
+    const aiResponse = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1500,
+      messages: [{
+        role: 'user',
+        content: `You are a prediction market analyst. For each market below, estimate the TRUE probability (0-100%) that it resolves YES. Consider current events, historical patterns, and the whale consensus signal. Be calibrated — don't just agree with whales.
+
+${marketList}
+
+Respond in JSON array format ONLY — no other text:
+[{"index":1,"ai_probability":65,"confidence":"high","reasoning":"Brief 1-sentence explanation","edge_direction":"BUY YES or BUY NO or FAIR"}]
+
+confidence = "high" (80%+ sure), "medium" (60-80%), "low" (<60%)
+edge_direction = if ai_probability differs from market by 10+ pts, recommend BUY YES or BUY NO. If within 10 pts, say FAIR.`
+      }]
+    });
+
+    let aiResults = [];
+    try {
+      const text = aiResponse.content[0].text.trim();
+      const jsonMatch = text.match(/\[[\s\S]*\]/);
+      if (jsonMatch) aiResults = JSON.parse(jsonMatch[0]);
+    } catch (e) {
+      console.warn('[ai-edge] Failed to parse Claude response:', e.message);
+    }
+
+    // Merge AI results with market data
+    const edges = candidates.map((m, i) => {
+      const total = m.yes_cap + m.no_cap;
+      const whaleYes = Math.round(m.yes_cap / total * 100);
+      const marketPrice = m.prices.length > 0 ? Math.round(m.prices.reduce((a, b) => a + b, 0) / m.prices.length * 100) : 50;
+      const ai = aiResults.find(r => r.index === i + 1) || {};
+      const aiProb = ai.ai_probability || marketPrice;
+      const aiGap = aiProb - marketPrice;
+
+      return {
+        question: m.question,
+        market_url: m.url,
+        current_yes_pct: marketPrice,
+        whale_consensus_pct: whaleYes,
+        ai_probability: aiProb,
+        ai_confidence: ai.confidence || 'low',
+        ai_reasoning: ai.reasoning || '',
+        edge_direction: ai.edge_direction || 'FAIR',
+        ai_gap_pts: Math.abs(aiGap),
+        whale_gap_pts: Math.abs(whaleYes - marketPrice),
+        combined_edge: Math.round((Math.abs(aiGap) + Math.abs(whaleYes - marketPrice)) / 2),
+        whale_capital: Math.round(total),
+        whale_count: m.whale_count,
+        sources: {
+          whale_signal: whaleYes > marketPrice ? 'UNDERPRICED' : whaleYes < marketPrice ? 'OVERPRICED' : 'FAIR',
+          ai_signal: aiGap > 10 ? 'UNDERPRICED' : aiGap < -10 ? 'OVERPRICED' : 'FAIR'
+        }
+      };
+    });
+
+    edges.sort((a, b) => b.combined_edge - a.combined_edge);
+    _aiEdgeCache.data = edges;
+    _aiEdgeCache.ts = Date.now();
+    console.log(`[ai-edge] Generated ${edges.length} AI edge signals, top edge: ${edges[0]?.combined_edge || 0}pts`);
+    res.json(edges);
+  } catch (err) {
+    console.error('[ai-edge]', err.message);
+    res.json(_aiEdgeCache.data || []);
+  }
+});
+
 // ── MARKET MOVERS — biggest price changes in last 24h ─────────────────────
 let _marketMoversCache = null;
 
