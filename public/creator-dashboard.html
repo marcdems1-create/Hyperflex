@@ -14354,17 +14354,40 @@ async function derivePolymarketApiKey() {
     return;
   }
   const btn = document.getElementById('enableTradingBtn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Signing...'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Switching to Polygon...'; }
   try {
-    const address = window._connectedWallet;
+    // Switch MetaMask to Polygon (required for CLOB auth)
+    try {
+      await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x89' }] });
+    } catch (switchErr) {
+      if (switchErr.code === 4902) {
+        // Polygon not added — add it
+        await window.ethereum.request({
+          method: 'wallet_addEthereumChain',
+          params: [{ chainId: '0x89', chainName: 'Polygon', nativeCurrency: { name: 'MATIC', symbol: 'POL', decimals: 18 }, rpcUrls: ['https://polygon-rpc.com'], blockExplorerUrls: ['https://polygonscan.com'] }]
+        });
+      } else if (switchErr.code !== 4001) {
+        // Ignore user rejection, throw everything else
+        console.warn('[wallet] Chain switch error:', switchErr);
+      }
+    }
+
+    // Re-establish signer on the new chain
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const signer = await provider.getSigner();
+    window._walletSigner = signer;
+    window._walletProvider = provider;
+
+    if (btn) btn.textContent = 'Signing...';
+    const address = await signer.getAddress();
     const timestamp = Math.floor(Date.now() / 1000).toString();
     const nonce = '0';
 
-    // EIP-712 domain and types for CLOB auth
+    // EIP-712 domain and types for CLOB auth (Polygon chainId 137)
     const domain = {
       name: 'ClobAuthDomain',
       version: '1',
-      chainId: 10
+      chainId: 137
     };
     const types = {
       ClobAuth: [
@@ -14600,7 +14623,7 @@ async function confirmTrade() {
     const domain = {
       name: 'Polymarket CTF Exchange',
       version: '1',
-      chainId: 10
+      chainId: 137
     };
     const types = {
       Order: [
