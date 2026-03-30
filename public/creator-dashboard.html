@@ -13049,7 +13049,7 @@ let _betsData = [];
 // ── QUICK TRADE TAB ─────────────────────────────────────────────────────────
 let _qtSearchTimer = null;
 
-function qtTradeBtn(url, label, color, posData) {
+function qtTradeBtn(url, label, color, extraData) {
   if (!url) return '';
   if (!url.startsWith('https://polymarket.com')) return '';
   if (url === 'https://polymarket.com' || url === 'https://polymarket.com/') return '';
@@ -13057,7 +13057,15 @@ function qtTradeBtn(url, label, color, posData) {
   const bg = color || '#c9920d';
   const fg = (bg === 'var(--gold)' || color === '#c9920d') ? '#141412' : '#fff';
   const safeUrl = url.replace(/'/g, "\\'");
-  // Always open on Polymarket — in-app trading requires CLOB API key setup
+  // If wallet + CLOB trading enabled, open in-app trade modal
+  if (window._connectedWallet && typeof isClobTradingEnabled === 'function' && isClobTradingEnabled()) {
+    const posData = Object.assign({ market_url: url, question: '' }, extraData || {});
+    // Use data attribute to avoid JSON escaping issues in onclick
+    const dataId = '_qt_' + Math.random().toString(36).slice(2, 8);
+    window[dataId] = posData;
+    return `<button onclick="openTradeModal(window['${dataId}'],'buy')" style="background:${bg};color:${fg};border:none;border-radius:6px;padding:7px 14px;font-family:var(--mono);font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap">${btnLabel}</button>`;
+  }
+  // Fallback: open on Polymarket
   return `<button onclick="window.open('${safeUrl}','_blank')" style="background:${bg};color:${fg};border:none;border-radius:6px;padding:7px 14px;font-family:var(--mono);font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap">${btnLabel}</button>`;
 }
 
@@ -13310,7 +13318,7 @@ async function loadWhaleIndexPicks() {
           <span style="font-family:var(--mono);font-size:12px;color:#22c55e">+${profit}\u00A2</span>
           <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:#22c55e">+${roi}% ROI</span>
         </div>` : ''}
-        ${url ? `<div>${qtTradeBtn(url, 'Trade \u2192', '#c9920d')}</div>` : ''}
+        ${url ? `<div>${qtTradeBtn(url, 'Trade \u2192', '#c9920d', {question: p.market||p.question||p.title||'', side: side, current_price: pricePct/100, market_url: url, token_id: p.token_id||p.conditionId||''})}</div>` : ''}
       </div>`;
     }).join('');
   } catch (e) {
