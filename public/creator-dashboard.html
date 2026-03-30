@@ -12127,11 +12127,11 @@ async function loadPortfolio() {
 
     _kalshiConnected = data.kalshi_api_key_set || false;
     _manifoldUsername = data.manifold_username || '';
-    // Load wallet: DB first, then localStorage fallback
+    // Load wallet: DB first, then localStorage, then connected browser wallet
     if (data.polymarket_address) {
       _polyWalletAddress = data.polymarket_address;
     } else if (!_polyWalletAddress) {
-      _polyWalletAddress = localStorage.getItem('hf_poly_wallet') || '';
+      _polyWalletAddress = localStorage.getItem('hf_poly_wallet') || localStorage.getItem('hf_connected_wallet') || localStorage.getItem('hf_wallet_address') || '';
     }
     if (_polyWalletAddress) localStorage.setItem('hf_poly_wallet', _polyWalletAddress);
 
@@ -14276,25 +14276,53 @@ async function connectBrowserWallet() {
     updateWalletUI();
     fetchWalletBalance(provider, address);
 
-    // Auto-connect to Polymarket if no address is set yet
+    // Auto-connect to Polymarket — try browser wallet first, then saved address
     if (!_polyWalletAddress) {
+      let found = false;
+      // Try browser wallet address directly
       try {
-        const check = await fetch('/api/polymarket/positions/' + encodeURIComponent(address));
-        const posData = await check.json();
-        const positions = posData && posData.positions ? posData.positions : [];
-        if (positions.length > 0) {
+        const check = await fetch('https://data-api.polymarket.com/positions?user=' + encodeURIComponent(address.toLowerCase()) + '&limit=5&sortBy=CURRENT');
+        const positions = await check.json();
+        if (Array.isArray(positions) && positions.length > 0) {
           _polyWalletAddress = address;
           localStorage.setItem('hf_poly_wallet', address);
-          const token = localStorage.getItem('hf_token');
-          if (token) {
-            try { await fetch('/api/user/wallets', { method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify({ polymarket_address: address }) }); } catch(e) {}
-          }
-          renderPolymarketConnectState();
-          loadPolymarketPositions(false);
-          showToast('Wallet connected! ' + positions.length + ' Polymarket positions found.', 'success');
-          return;
+          found = true;
         }
-      } catch(e) { /* fallthrough to normal toast */ }
+      } catch(e) {}
+
+      // If browser wallet has no positions, check localStorage for previously saved Polymarket address
+      if (!found) {
+        const saved = localStorage.getItem('hf_poly_wallet');
+        if (saved && saved !== address) {
+          _polyWalletAddress = saved;
+          found = true;
+        }
+      }
+
+      if (found && _polyWalletAddress) {
+        const token = localStorage.getItem('hf_token');
+        if (token) {
+          try { await fetch('/api/user/wallets', { method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify({ polymarket_address: _polyWalletAddress }) }); } catch(e) {}
+        }
+        renderPolymarketConnectState();
+        loadPolymarketPositions(false);
+
+        // Also show portfolio sections
+        const welcomeEl = document.getElementById('portfolioWelcome');
+        const mainEl = document.getElementById('portfolioMain');
+        if (welcomeEl) welcomeEl.style.display = 'none';
+        if (mainEl) mainEl.style.display = 'block';
+
+        showToast('Wallet connected! Loading Polymarket positions...', 'success');
+        return;
+      }
+    } else {
+      // Wallet already connected — make sure portfolio loads
+      const welcomeEl = document.getElementById('portfolioWelcome');
+      const mainEl = document.getElementById('portfolioMain');
+      if (welcomeEl) welcomeEl.style.display = 'none';
+      if (mainEl) mainEl.style.display = 'block';
+      loadPolymarketPositions(false);
     }
     showToast('Wallet connected: ' + address.slice(0,6) + '...' + address.slice(-4), 'success');
   } catch (e) {
