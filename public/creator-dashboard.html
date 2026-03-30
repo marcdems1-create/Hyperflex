@@ -14290,17 +14290,23 @@ async function connectBrowserWallet() {
         const computedProxy = ethers.getCreate2Address(safeFactory, safeSalt, safeInitCodeHash);
         console.log('[wallet] CREATE2 derived proxy:', computedProxy);
 
-        // Verify this proxy has Polymarket positions
-        const checkRes = await fetch('https://data-api.polymarket.com/positions?user=' + computedProxy.toLowerCase() + '&limit=1&sortBy=CURRENT');
+        // Verify this proxy has Polymarket positions (use our server proxy to avoid CORS)
+        const checkRes = await fetch('/api/polymarket/positions/' + computedProxy.toLowerCase());
         const checkData = await checkRes.json();
-        if (Array.isArray(checkData) && checkData.length > 0) {
+        const checkPositions = checkData.positions || [];
+        if (checkPositions.length > 0) {
           _polyWalletAddress = computedProxy.toLowerCase();
           localStorage.setItem('hf_poly_wallet', _polyWalletAddress);
           found = true;
           console.log('[wallet] CREATE2 proxy confirmed with positions:', _polyWalletAddress);
-          showToast('Polymarket account found! Loading ' + checkData.length + '+ positions...', 'success');
+          showToast('Polymarket account found! Loading ' + checkPositions.length + '+ positions...', 'success');
         } else {
-          console.log('[wallet] CREATE2 proxy has no positions, trying other methods...');
+          // Even if no positions right now, the proxy IS the derived address — save it anyway
+          // The user may have closed all positions or just deposited
+          _polyWalletAddress = computedProxy.toLowerCase();
+          localStorage.setItem('hf_poly_wallet', _polyWalletAddress);
+          found = true;
+          console.log('[wallet] CREATE2 proxy saved (no current positions):', _polyWalletAddress);
         }
       } catch(e) { console.warn('[wallet] CREATE2 derivation failed:', e.message); }
 
