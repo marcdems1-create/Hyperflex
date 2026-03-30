@@ -22372,6 +22372,71 @@ app.post('/api/polymarket/derive-api-key', requireAuth, async (req, res) => {
       } catch(e) { console.warn('[derive-api-key] api-keys lookup failed:', e.message); }
     }
 
+    // Fallback: try L1-auth GET /auth/api-keys with original signature headers
+    if (!proxyAddress) {
+      try {
+        const keysRes2 = await fetch('https://clob.polymarket.com/auth/api-keys', {
+          headers: {
+            'POLY_ADDRESS': address,
+            'POLY_SIGNATURE': signature,
+            'POLY_TIMESTAMP': timestamp,
+            'POLY_NONCE': nonce || '0',
+            'Accept': 'application/json'
+          }
+        });
+        if (keysRes2.ok) {
+          const keysData2 = await keysRes2.json();
+          console.log('[derive-api-key] L1 api-keys response:', JSON.stringify(keysData2).slice(0, 300));
+          const keys2 = Array.isArray(keysData2) ? keysData2 : [keysData2];
+          for (const k of keys2) {
+            const pa = k.proxyAddress || k.proxy_address || k.polyAddress || null;
+            if (pa) { proxyAddress = pa; break; }
+          }
+        }
+      } catch(e) { console.warn('[derive-api-key] L1 api-keys lookup failed:', e.message); }
+    }
+
+    // Fallback: compute proxy address using CREATE2 (both Safe and ProxyWallet factories)
+    if (!proxyAddress) {
+      try {
+        const { createHash } = require('crypto');
+        // Keccak-256 using ethers or crypto (Node.js doesn't have native keccak)
+        // Use a simple approach: try both derived addresses and check which has positions
+        const ethers = require('ethers');
+        const addrLower = address.toLowerCase();
+
+        // deriveSafe: encodeAbiParameters([{type:'address'}], [address])
+        const safeFactory = '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b';
+        const safeInitCodeHash = '0x2bce2127ff07fb632d16c8347c4ebf501f4841168bed00d9e6ef715ddb6fcecf';
+        const abiEncoded = ethers.AbiCoder.defaultAbiCoder().encode(['address'], [addrLower]);
+        const safeSalt = ethers.keccak256(abiEncoded);
+        const safeAddr = ethers.getCreate2Address(safeFactory, safeSalt, safeInitCodeHash);
+
+        // deriveProxyWallet: encodePacked([address])
+        const proxyFactory = '0xaB45c5A4B0c941a2F231C04C3f49182e1A254052';
+        const proxyInitCodeHash = '0xd21df8dc65880a8606f09fe0ce3df9b8869287ab0b058be05aa9e8af6330a00b';
+        const proxySalt = ethers.keccak256(ethers.solidityPacked(['address'], [addrLower]));
+        const proxyAddr = ethers.getCreate2Address(proxyFactory, proxySalt, proxyInitCodeHash);
+
+        console.log(`[derive-api-key] CREATE2 derivation: safe=${safeAddr.slice(0,10)}... proxy=${proxyAddr.slice(0,10)}...`);
+
+        // Check which one has positions
+        for (const candidate of [safeAddr, proxyAddr]) {
+          try {
+            const checkRes = await fetch(`https://data-api.polymarket.com/positions?user=${candidate.toLowerCase()}&limit=1&sortBy=CURRENT`, {
+              headers: { Accept: 'application/json' }
+            });
+            const checkData = await checkRes.json();
+            if (Array.isArray(checkData) && checkData.length > 0) {
+              proxyAddress = candidate.toLowerCase();
+              console.log(`[derive-api-key] Found positions at ${candidate.slice(0,10)}...`);
+              break;
+            }
+          } catch(e) {}
+        }
+      } catch(e) { console.warn('[derive-api-key] CREATE2 derivation failed:', e.message); }
+    }
+
     console.log(`[polymarket derive-api-key] user=${req.userId} address=${address.slice(0,8)}... proxy=${(proxyAddress||'none').slice(0,8)}... keys: ${JSON.stringify(Object.keys(data))}`);
 
     // Save proxy address to user profile if we got one
