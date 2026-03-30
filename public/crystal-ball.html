@@ -329,7 +329,7 @@ function renderPredictions(){
       roi+
       '<div class="cb-card-footer">'+
         '<span class="cb-time">'+timeAgo(p.detected_at)+' \u00B7 '+timeLeft(p.expires_at)+'</span>'+
-        '<a href="'+escAttr(url)+'" class="cb-link" onclick="window.location.href='/creator/dashboard?tab=quicktrade';return false">Trade &rarr;</a>'+
+        '<a href="'+escAttr(url)+'" target="_blank" rel="noopener" class="cb-link">Polymarket &rarr;</a>'+
       '</div>'+
     '</div>';
   }).join('');
@@ -396,7 +396,7 @@ async function loadContrarian(){
           '<span>Gap: <span class="val" style="color:var(--orange)">'+s.divergence+'pts</span></span>'+
         '</div>'+
         (s.suggestion?'<div class="cb-contrarian-note">'+escHtml(s.suggestion)+'</div>':'')+
-        (s.url?'<div style="margin-top:6px"><a href="'+escAttr(s.url.startsWith('https://polymarket.com')?s.url:'https://polymarket.com')+'" class="cb-link" onclick="window.location.href='/creator/dashboard?tab=quicktrade';return false">Trade &rarr;</a></div>':'')+
+        (s.url?'<div style="margin-top:6px"><a href="'+escAttr(s.url.startsWith('https://polymarket.com')?s.url:'https://polymarket.com')+'" class="cb-link" target="_blank" rel="noopener">Polymarket &rarr;</a></div>':'')+
       '</div>';
     }).join('');
   }catch(err){}
@@ -426,7 +426,7 @@ async function loadExpiring(){
             '<span>Price: <span class="val">'+m.current_price+'%</span></span>'+
             (m.whale_count?'<span>Whales: <span class="val">'+m.whale_count+'</span></span>':'')+
           '</div>'+
-          (m.url?'<div style="margin-top:6px"><a href="'+escAttr(m.url.startsWith('https://polymarket.com')?m.url:'https://polymarket.com')+'" class="cb-link" onclick="window.location.href='/creator/dashboard?tab=quicktrade';return false">Trade &rarr;</a></div>':'')+
+          (m.url?'<div style="margin-top:6px"><a href="'+escAttr(m.url.startsWith('https://polymarket.com')?m.url:'https://polymarket.com')+'" class="cb-link" target="_blank" rel="noopener">Polymarket &rarr;</a></div>':'')+
         '</div>'+
         '<div class="cb-expiring-countdown">'+
           '<div class="cb-expiring-val" style="color:'+pc+'">'+cv+'</div>'+
