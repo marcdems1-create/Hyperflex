@@ -4956,14 +4956,26 @@ body.nav-open .sidebar-backdrop {
                 </div><div id="polyStatusBadge"></div>
               </div>
               <div id="polyConnectForm" style="background:var(--cream);border:1px solid var(--border);border-radius:14px;padding:28px">
-                <div style="font-size:13px;color:var(--dim);margin-bottom:16px;line-height:1.6">Paste your Polygon wallet address to import all open positions and P&L instantly.</div>
-                <input type="text" id="poly-wallet-input" placeholder="0x... your wallet address" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:10px;padding:13px 16px;font-family:var(--mono);font-size:13px;color:var(--text);outline:none;margin-bottom:8px;box-sizing:border-box" onfocus="this.style.borderColor='rgba(124,58,237,0.6)'" onblur="this.style.borderColor='var(--border)'"/>
-                <div style="font-size:11px;color:var(--dim);margin-bottom:16px">Find at <a href="https://polymarket.com" target="_blank" style="color:#a78bfa">polymarket.com</a> → your profile → copy address</div>
-                <label style="display:flex;align-items:center;gap:10px;margin-bottom:20px;cursor:pointer;user-select:none">
-                  <input type="checkbox" id="polyStaySignedIn" checked style="width:16px;height:16px;accent-color:#a78bfa;cursor:pointer;flex-shrink:0"/>
-                  <span style="font-size:12px;color:var(--soft)">Stay signed in to Polymarket on this device</span>
-                </label>
-                <button id="polyConnectBtn" onclick="connectPolymarket()" style="background:rgba(124,58,237,0.9);color:#fff;border:none;border-radius:10px;padding:12px 24px;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;min-height:44px">Connect Polymarket →</button>
+                <!-- MetaMask Auto-Connect (primary) -->
+                <div id="metamask-connect" style="margin-bottom:20px">
+                  <button id="metamaskBtn" onclick="connectMetaMask()" style="width:100%;background:linear-gradient(135deg,rgba(124,58,237,0.9),rgba(99,46,190,0.9));color:#fff;border:none;border-radius:12px;padding:16px 24px;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;min-height:50px;display:flex;align-items:center;justify-content:center;gap:10px;transition:transform 0.15s">
+                    <svg width="20" height="20" viewBox="0 0 318 318" fill="none"><path d="M274.1 35.5l-99.5 73.9L193 65.8z" fill="#E2761B" stroke="#E2761B"/><path d="M44.4 35.5l98.7 74.6-17.5-44.3zm187.9 174.5l-26.5 40.6 56.7 15.6 16.3-55.3zm-213.1.9l16.2 55.3 56.7-15.6-26.5-40.6z" fill="#E4761B" stroke="#E4761B"/></svg>
+                    Connect Wallet
+                  </button>
+                  <div style="font-size:11px;color:var(--dim);text-align:center;margin-top:8px">MetaMask, Coinbase Wallet, or any browser wallet</div>
+                </div>
+
+                <!-- Divider -->
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+                  <div style="flex:1;height:1px;background:var(--border)"></div>
+                  <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">OR PASTE ADDRESS</span>
+                  <div style="flex:1;height:1px;background:var(--border)"></div>
+                </div>
+
+                <!-- Manual paste (fallback) -->
+                <input type="text" id="poly-wallet-input" placeholder="0x... your Polymarket deposit address" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:10px;padding:13px 16px;font-family:var(--mono);font-size:13px;color:var(--text);outline:none;margin-bottom:8px;box-sizing:border-box" onfocus="this.style.borderColor='rgba(124,58,237,0.6)'" onblur="this.style.borderColor='var(--border)'"/>
+                <div style="font-size:11px;color:var(--dim);margin-bottom:16px">Your Polymarket deposit address is different from your MetaMask address. Find it at <a href="https://polymarket.com" target="_blank" style="color:#a78bfa">polymarket.com</a> → Profile → Deposit Address.</div>
+                <button id="polyConnectBtn" onclick="connectPolymarket()" style="background:rgba(124,58,237,0.15);color:#a78bfa;border:1px solid rgba(124,58,237,0.3);border-radius:10px;padding:10px 24px;font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer;min-height:40px;width:100%">Connect with Address →</button>
               </div>
               <div id="polyConnectedRow" style="display:none;align-items:center;gap:10px;margin-bottom:16px;padding:12px 16px;background:rgba(124,58,237,0.06);border:1px solid rgba(124,58,237,0.2);border-radius:10px">
                 <span style="width:8px;height:8px;border-radius:50%;background:#a78bfa;flex-shrink:0"></span>
@@ -12794,6 +12806,75 @@ function renderPolymarketConnectState() {
   updatePortfolioTabDots();
 }
 
+async function connectMetaMask() {
+  const btn = document.getElementById('metamaskBtn');
+  if (!window.ethereum) {
+    showToast('No wallet detected. Install MetaMask or use the paste address option below.', 'error');
+    return;
+  }
+  btn.disabled = true;
+  btn.innerHTML = '<span style="display:flex;align-items:center;gap:8px">Connecting...</span>';
+  try {
+    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    if (!accounts || accounts.length === 0) {
+      showToast('No accounts found. Please unlock your wallet.', 'error');
+      btn.disabled = false; btn.textContent = 'Connect Wallet';
+      return;
+    }
+    const address = accounts[0];
+    window._connectedWallet = address;
+    localStorage.setItem('hf_connected_wallet', address);
+
+    // Auto-fill the manual input too
+    const input = document.getElementById('poly-wallet-input');
+    if (input) input.value = address;
+
+    // Try to find the Polymarket proxy address from the wallet
+    // First try the connected address directly
+    btn.innerHTML = '<span style="display:flex;align-items:center;gap:8px">Verifying positions...</span>';
+    const check = await fetch(`/api/polymarket/positions/${encodeURIComponent(address)}`);
+    let posData = null;
+    try { posData = await check.json(); } catch(e) {}
+    const positions = posData && posData.positions ? posData.positions : [];
+
+    if (positions.length > 0) {
+      // This address has positions — use it directly
+      _polyWalletAddress = address;
+      localStorage.setItem('hf_poly_wallet', address);
+      const token = localStorage.getItem('hf_token');
+      if (token) {
+        try { await fetch('/api/user/wallets', { method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify({ polymarket_address: address }) }); } catch(e) {}
+      }
+      renderPolymarketConnectState();
+      showToast('Wallet connected! ' + positions.length + ' positions found.', 'success');
+      loadPolymarketPositions(false);
+    } else {
+      // No positions on this address — might need the Polymarket proxy address
+      showToast('Connected! No positions found on this address. Your Polymarket deposit address may be different — check polymarket.com → Profile → Deposit Address.', 'info');
+      btn.disabled = false;
+      btn.innerHTML = 'Connect Wallet';
+    }
+  } catch (e) {
+    if (e.code === 4001) {
+      showToast('Connection rejected by wallet', 'error');
+    } else {
+      showToast('Wallet connection failed: ' + e.message, 'error');
+    }
+    btn.disabled = false; btn.innerHTML = 'Connect Wallet';
+  }
+}
+
+// Auto-reconnect if wallet was previously connected
+(function() {
+  const savedWallet = localStorage.getItem('hf_connected_wallet');
+  if (savedWallet && window.ethereum) {
+    window._connectedWallet = savedWallet;
+    // Update the browser wallet status
+    const walletStatus = document.querySelector('[data-wallet-status]');
+    if (walletStatus) walletStatus.textContent = savedWallet.slice(0, 6) + '...' + savedWallet.slice(-4);
+  }
+})();
+
 async function connectPolymarket() {
   const address = (document.getElementById('poly-wallet-input').value || '').trim();
   if (!address) return showToast('Enter your Polygon wallet address', 'error');
@@ -14157,10 +14238,30 @@ async function connectBrowserWallet() {
     window._walletSigner = signer;
     window._walletProvider = provider;
     localStorage.setItem('hf_wallet_address', address);
+    localStorage.setItem('hf_connected_wallet', address);
     updateWalletUI();
     fetchWalletBalance(provider, address);
-    // Browser wallet is for SIGNING trades only — never overwrite polymarket_address
-    // Users must manually enter their Polymarket deposit address in the Polymarket tab
+
+    // Auto-connect to Polymarket if no address is set yet
+    if (!_polyWalletAddress) {
+      try {
+        const check = await fetch('/api/polymarket/positions/' + encodeURIComponent(address));
+        const posData = await check.json();
+        const positions = posData && posData.positions ? posData.positions : [];
+        if (positions.length > 0) {
+          _polyWalletAddress = address;
+          localStorage.setItem('hf_poly_wallet', address);
+          const token = localStorage.getItem('hf_token');
+          if (token) {
+            try { await fetch('/api/user/wallets', { method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify({ polymarket_address: address }) }); } catch(e) {}
+          }
+          renderPolymarketConnectState();
+          loadPolymarketPositions(false);
+          showToast('Wallet connected! ' + positions.length + ' Polymarket positions found.', 'success');
+          return;
+        }
+      } catch(e) { /* fallthrough to normal toast */ }
+    }
     showToast('Wallet connected: ' + address.slice(0,6) + '...' + address.slice(-4), 'success');
   } catch (e) {
     showToast('Wallet connection failed: ' + (e.message || 'User rejected'), 'error');
