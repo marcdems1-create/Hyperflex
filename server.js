@@ -19313,6 +19313,191 @@ edge_direction = if ai_probability differs from market by 10+ pts, recommend BUY
   }
 });
 
+// ── RISK MANAGEMENT ENGINE — Kelly sizing, exposure analysis, correlation ──
+
+// Kelly Criterion position sizer
+app.get('/api/risk/kelly', (req, res) => {
+  try {
+    const bankroll = parseFloat(req.query.bankroll) || 1000;
+    const marketPrice = parseFloat(req.query.market_price) || 50; // current YES price in %
+    const fairValue = parseFloat(req.query.fair_value) || 50; // your estimated true probability in %
+    const confidence = parseFloat(req.query.confidence) || 70; // how sure you are (0-100)
+    const side = (req.query.side || 'YES').toUpperCase();
+
+    // Convert to decimals
+    const p = fairValue / 100; // probability of winning
+    const q = 1 - p;
+    const price = marketPrice / 100; // cost per share
+
+    // Edge calculation
+    let edge, odds, kellyFraction;
+    if (side === 'YES') {
+      // Buying YES at price, pays $1 if correct
+      odds = (1 - price) / price; // net odds (profit / risk)
+      edge = p - price; // expected edge
+      kellyFraction = edge > 0 ? (p * (1 + odds) - 1) / odds : 0;
+    } else {
+      // Buying NO at (1-price), pays $1 if correct
+      const noPrice = 1 - price;
+      odds = (1 - noPrice) / noPrice;
+      edge = q - noPrice;
+      kellyFraction = edge > 0 ? (q * (1 + odds) - 1) / odds : 0;
+    }
+
+    // Apply confidence scaling (fractional Kelly)
+    const confMultiplier = Math.max(0.1, Math.min(1, confidence / 100));
+    const fractionalKelly = kellyFraction * confMultiplier;
+
+    // Safety caps
+    const maxBetPct = 0.15; // never bet more than 15% of bankroll
+    const safeFraction = Math.max(0, Math.min(maxBetPct, fractionalKelly));
+    const betSize = Math.round(bankroll * safeFraction * 100) / 100;
+
+    // Expected value per dollar bet
+    const ev = edge > 0 ? Math.round(edge * 100) : 0;
+
+    // Risk metrics
+    const potentialWin = side === 'YES'
+      ? Math.round(betSize / price * (1 - price) * 100) / 100
+      : Math.round(betSize / (1 - price) * price * 100) / 100;
+    const riskReward = betSize > 0 ? Math.round(potentialWin / betSize * 100) / 100 : 0;
+
+    res.json({
+      recommendation: {
+        action: edge > 0.02 ? `BUY ${side}` : edge > 0 ? `SMALL BUY ${side}` : 'SKIP — NO EDGE',
+        bet_size: betSize,
+        bet_pct: Math.round(safeFraction * 10000) / 100,
+        potential_win: potentialWin,
+        risk_reward: riskReward + ':1'
+      },
+      analysis: {
+        edge_pct: Math.round(edge * 10000) / 100,
+        kelly_full: Math.round(kellyFraction * 10000) / 100,
+        kelly_fractional: Math.round(fractionalKelly * 10000) / 100,
+        ev_per_dollar: ev + '¢',
+        confidence_applied: confidence + '%'
+      },
+      inputs: { bankroll, market_price: marketPrice, fair_value: fairValue, confidence, side },
+      warnings: [
+        ...(safeFraction >= maxBetPct ? ['Position capped at 15% of bankroll (max Kelly safety)'] : []),
+        ...(edge <= 0 ? ['No mathematical edge detected — this bet has negative expected value'] : []),
+        ...(edge > 0 && edge < 0.03 ? ['Edge is thin (<3%) — fees and slippage may eat profits'] : []),
+        ...(confidence < 50 ? ['Low confidence — consider reducing position or skipping'] : [])
+      ]
+    });
+  } catch (err) {
+    console.error('[risk/kelly]', err.message);
+    res.status(500).json({ error: 'Position sizing failed' });
+  }
+});
+
+// Portfolio risk analysis
+app.get('/api/risk/portfolio', async (req, res) => {
+  try {
+    const address = req.query.address || '';
+    if (!address) return res.json({ error: 'address required' });
+
+    // Fetch positions client-side already has this data, but for API users:
+    const posRes = await fetch(`https://data-api.polymarket.com/positions?user=${address.toLowerCase()}&limit=100&sortBy=CASHPNL`, {
+      headers: { Accept: 'application/json' }
+    });
+    const positions = await posRes.json();
+    if (!Array.isArray(positions) || positions.length === 0) {
+      return res.json({ error: 'No positions found', positions: 0 });
+    }
+
+    // Categorize
+    const catMap = { crypto: [], sports: [], politics: [], commodities: [], other: [] };
+    const categorize = (q) => {
+      const ql = (q || '').toLowerCase();
+      if (/bitcoin|btc|eth|crypto|solana|xrp|doge|bnb|defi/i.test(ql)) return 'crypto';
+      if (/nba|nfl|mlb|nhl|ufc|tennis|soccer|football|basketball|baseball|hockey|match|vs\./i.test(ql)) return 'sports';
+      if (/trump|biden|election|president|congress|senate|governor|democrat|republican|vote/i.test(ql)) return 'politics';
+      if (/oil|gold|silver|crude|wheat|commodity|natural gas/i.test(ql)) return 'commodities';
+      return 'other';
+    };
+
+    let totalValue = 0, totalCost = 0, maxPosition = 0, maxPositionName = '';
+    const correlationGroups = {};
+
+    positions.forEach(p => {
+      const cv = parseFloat(p.currentValue) || 0;
+      const iv = parseFloat(p.initialValue) || 0;
+      const title = p.title || '';
+      const cat = categorize(title);
+      catMap[cat].push({ title, value: cv, cost: iv, pnl: parseFloat(p.cashPnl) || 0 });
+      totalValue += cv;
+      totalCost += iv;
+      if (cv > maxPosition) { maxPosition = cv; maxPositionName = title; }
+
+      // Group correlated positions (same keywords)
+      const keywords = title.toLowerCase().match(/\b(iran|trump|bitcoin|ceasefire|ukraine|russia|fed|rate|oil|election)\b/g) || [];
+      keywords.forEach(kw => {
+        if (!correlationGroups[kw]) correlationGroups[kw] = [];
+        correlationGroups[kw].push({ title: title.substring(0, 50), value: cv, side: p.side });
+      });
+    });
+
+    // Concentration risk
+    const maxPct = totalValue > 0 ? Math.round(maxPosition / totalValue * 100) : 0;
+    const catBreakdown = {};
+    Object.entries(catMap).forEach(([cat, items]) => {
+      const catValue = items.reduce((s, i) => s + i.value, 0);
+      catBreakdown[cat] = {
+        positions: items.length,
+        value: Math.round(catValue * 100) / 100,
+        pct: totalValue > 0 ? Math.round(catValue / totalValue * 100) : 0,
+        pnl: Math.round(items.reduce((s, i) => s + i.pnl, 0) * 100) / 100
+      };
+    });
+
+    // Correlated positions warnings
+    const correlationWarnings = Object.entries(correlationGroups)
+      .filter(([, items]) => items.length >= 2)
+      .map(([keyword, items]) => ({
+        theme: keyword,
+        positions: items.length,
+        total_exposure: Math.round(items.reduce((s, i) => s + i.value, 0) * 100) / 100,
+        items: items.slice(0, 5)
+      }))
+      .sort((a, b) => b.total_exposure - a.total_exposure)
+      .slice(0, 5);
+
+    // Risk score (0-100, lower = safer)
+    let riskScore = 0;
+    if (maxPct > 40) riskScore += 30; else if (maxPct > 25) riskScore += 15;
+    if (Object.values(catBreakdown).some(c => c.pct > 50)) riskScore += 20;
+    if (correlationWarnings.length > 2) riskScore += 15;
+    if (totalCost > 0 && (totalValue - totalCost) / totalCost < -0.2) riskScore += 20;
+    riskScore = Math.min(100, riskScore);
+
+    const riskLevel = riskScore >= 60 ? 'HIGH' : riskScore >= 30 ? 'MEDIUM' : 'LOW';
+
+    res.json({
+      risk_score: riskScore,
+      risk_level: riskLevel,
+      portfolio: {
+        total_value: Math.round(totalValue * 100) / 100,
+        total_cost: Math.round(totalCost * 100) / 100,
+        total_pnl: Math.round((totalValue - totalCost) * 100) / 100,
+        positions: positions.length,
+        max_position: { name: maxPositionName.substring(0, 60), value: Math.round(maxPosition * 100) / 100, pct: maxPct }
+      },
+      category_breakdown: catBreakdown,
+      correlation_warnings: correlationWarnings,
+      recommendations: [
+        ...(maxPct > 30 ? [`Largest position (${maxPositionName.substring(0, 30)}...) is ${maxPct}% of portfolio — consider reducing to <25%`] : []),
+        ...(Object.values(catBreakdown).filter(c => c.pct > 50).map(c => `Over 50% concentrated in one category — diversify to reduce sector risk`)),
+        ...(correlationWarnings.filter(w => w.positions >= 3).map(w => `${w.positions} positions correlated on "${w.theme}" ($${w.total_exposure} exposure) — if ${w.theme} goes wrong, multiple positions lose`)),
+        ...(riskScore < 20 ? ['Portfolio risk is well-managed'] : [])
+      ]
+    });
+  } catch (err) {
+    console.error('[risk/portfolio]', err.message);
+    res.status(500).json({ error: 'Risk analysis failed' });
+  }
+});
+
 // ── NEWS-TO-TRADE PIPELINE — score breaking news impact on markets ────────
 const _newsTradeCache = { data: null, ts: 0 };
 const NEWS_TRADE_TTL = 15 * 60 * 1000; // 15 min
