@@ -14276,9 +14276,33 @@ async function connectBrowserWallet() {
     updateWalletUI();
     fetchWalletBalance(provider, address);
 
-    // Auto-connect to Polymarket — try saved address, then API key lookup, then direct check
+    // Auto-connect to Polymarket — try CREATE2 derivation first (instant, no signing)
     if (!_polyWalletAddress) {
       let found = false;
+
+      // CREATE2 derivation: compute Polymarket Safe proxy from EOA (same method as Polynter)
+      try {
+        const addrLower = address.toLowerCase();
+        const safeFactory = '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b';
+        const safeInitCodeHash = '0x2bce2127ff07fb632d16c8347c4ebf501f4841168bed00d9e6ef715ddb6fcecf';
+        const abiEncoded = ethers.AbiCoder.defaultAbiCoder().encode(['address'], [addrLower]);
+        const safeSalt = ethers.keccak256(abiEncoded);
+        const computedProxy = ethers.getCreate2Address(safeFactory, safeSalt, safeInitCodeHash);
+        console.log('[wallet] CREATE2 derived proxy:', computedProxy);
+
+        // Verify this proxy has Polymarket positions
+        const checkRes = await fetch('https://data-api.polymarket.com/positions?user=' + computedProxy.toLowerCase() + '&limit=1&sortBy=CURRENT');
+        const checkData = await checkRes.json();
+        if (Array.isArray(checkData) && checkData.length > 0) {
+          _polyWalletAddress = computedProxy.toLowerCase();
+          localStorage.setItem('hf_poly_wallet', _polyWalletAddress);
+          found = true;
+          console.log('[wallet] CREATE2 proxy confirmed with positions:', _polyWalletAddress);
+          showToast('Polymarket account found! Loading ' + checkData.length + '+ positions...', 'success');
+        } else {
+          console.log('[wallet] CREATE2 proxy has no positions, trying other methods...');
+        }
+      } catch(e) { console.warn('[wallet] CREATE2 derivation failed:', e.message); }
 
       // If trading is already enabled, use API key to look up proxy address
       const existingKey = localStorage.getItem('poly_api_key');
