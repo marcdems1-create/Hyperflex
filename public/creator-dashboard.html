@@ -14407,33 +14407,27 @@ async function saveProxyAddr() {
     if (status) { status.textContent = 'Enter a valid 0x address'; status.style.color = '#ef4444'; }
     return;
   }
-  if (status) { status.textContent = 'Verifying...'; status.style.color = 'var(--gold)'; }
-  try {
-    const check = await fetch('https://data-api.polymarket.com/positions?user=' + encodeURIComponent(addr) + '&limit=3&sortBy=CURRENT');
-    const positions = await check.json();
-    const count = Array.isArray(positions) ? positions.length : 0;
+  // Save immediately — no server-side verification (Polymarket API is geo-restricted from server)
+  // Client-side fetch in loadPolymarketPositions will load positions directly from user's browser
+  _polyWalletAddress = addr;
+  localStorage.setItem('hf_poly_wallet', addr);
 
-    _polyWalletAddress = addr;
-    localStorage.setItem('hf_poly_wallet', addr);
-    const token = localStorage.getItem('hf_token');
-    if (token) {
-      try { await fetch('/api/user/wallets', { method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify({ polymarket_address: addr }) }); } catch(e) {}
-    }
-    renderPolymarketConnectState();
-    loadPolymarketPositions(true);
-    const welcomeEl = document.getElementById('portfolioWelcome');
-    const mainEl = document.getElementById('portfolioMain');
-    if (welcomeEl) welcomeEl.style.display = 'none';
-    if (mainEl) mainEl.style.display = 'block';
-    setTimeout(updatePortfolioSummary, 500);
-    showToast(count > 0 ? 'Connected! ' + count + '+ positions found.' : 'Address saved. Loading positions...', 'success');
-  } catch(e) {
-    // Save anyway even if verification fails
-    _polyWalletAddress = addr;
-    localStorage.setItem('hf_poly_wallet', addr);
-    loadPolymarketPositions(true);
-    if (status) { status.textContent = 'Saved (could not verify)'; status.style.color = 'var(--gold)'; }
+  // Save to DB
+  const token = localStorage.getItem('hf_token');
+  if (token) {
+    try { await fetch('/api/user/wallets', { method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify({ polymarket_address: addr }) }); } catch(e) {}
   }
+
+  // Hide welcome, show portfolio, load positions
+  const welcomeEl = document.getElementById('portfolioWelcome');
+  const mainEl = document.getElementById('portfolioMain');
+  if (welcomeEl) welcomeEl.style.display = 'none';
+  if (mainEl) mainEl.style.display = 'block';
+  renderPolymarketConnectState();
+  loadPolymarketPositions(true);
+  setTimeout(updatePortfolioSummary, 500);
+  setTimeout(function() { if (_activePortfolioTab === 'all') updateAllPositionsTab(); }, 1000);
+  showToast('Connected! Loading positions...', 'success');
 }
 
 function disconnectBrowserWallet() {
