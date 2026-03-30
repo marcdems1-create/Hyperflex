@@ -14276,11 +14276,34 @@ async function connectBrowserWallet() {
     updateWalletUI();
     fetchWalletBalance(provider, address);
 
-    // Auto-connect to Polymarket — try browser wallet first, then saved address
+    // Auto-connect to Polymarket — try saved address, then API key lookup, then direct check
     if (!_polyWalletAddress) {
       let found = false;
-      // Try browser wallet address directly
-      try {
+
+      // If trading is already enabled, use API key to look up proxy address
+      const existingKey = localStorage.getItem('poly_api_key');
+      const existingSecret = localStorage.getItem('poly_api_secret');
+      const existingPass = localStorage.getItem('poly_api_passphrase');
+      if (existingKey && existingSecret && existingPass && !found) {
+        try {
+          const token = localStorage.getItem('hf_token');
+          const lookupRes = await fetch('/api/polymarket/lookup-proxy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ address: address, apiKey: existingKey, secret: existingSecret, passphrase: existingPass })
+          });
+          const lookupData = await lookupRes.json();
+          if (lookupData.proxyAddress) {
+            _polyWalletAddress = lookupData.proxyAddress.toLowerCase();
+            localStorage.setItem('hf_poly_wallet', _polyWalletAddress);
+            found = true;
+            console.log('[wallet] Proxy address from API key lookup:', _polyWalletAddress);
+          }
+        } catch(e) { console.warn('[wallet] proxy lookup failed:', e.message); }
+      }
+
+      // Try browser wallet address directly (might be the proxy itself)
+      if (!found) try {
         const check = await fetch('https://data-api.polymarket.com/positions?user=' + encodeURIComponent(address.toLowerCase()) + '&limit=5&sortBy=CURRENT');
         const positions = await check.json();
         if (Array.isArray(positions) && positions.length > 0) {

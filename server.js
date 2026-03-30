@@ -22394,6 +22394,53 @@ app.post('/api/polymarket/derive-api-key', requireAuth, async (req, res) => {
   }
 });
 
+// POST /api/polymarket/lookup-proxy — use existing API key to find proxy address
+app.post('/api/polymarket/lookup-proxy', requireAuth, async (req, res) => {
+  const { address, apiKey, secret, passphrase } = req.body;
+  if (!address || !apiKey) return res.status(400).json({ error: 'Missing address or apiKey' });
+  try {
+    const keysRes = await fetch('https://clob.polymarket.com/auth/api-keys', {
+      headers: {
+        'POLY_ADDRESS': address,
+        'POLY_API_KEY': apiKey,
+        'POLY_API_SECRET': secret || '',
+        'POLY_PASSPHRASE': passphrase || '',
+        'Accept': 'application/json',
+        'User-Agent': 'Hyperflex/1.0'
+      }
+    });
+    if (!keysRes.ok) {
+      const errText = await keysRes.text().catch(() => '');
+      console.log(`[lookup-proxy] CLOB /auth/api-keys ${keysRes.status}: ${errText.slice(0, 200)}`);
+      return res.json({ proxyAddress: null, error: 'CLOB returned ' + keysRes.status });
+    }
+    const keysData = await keysRes.json();
+    console.log(`[lookup-proxy] CLOB response type=${typeof keysData} keys=${JSON.stringify(Array.isArray(keysData) ? keysData.map(k => Object.keys(k)) : Object.keys(keysData)).slice(0, 300)}`);
+
+    let proxyAddress = null;
+    const keys = Array.isArray(keysData) ? keysData : [keysData];
+    for (const k of keys) {
+      const pa = k.proxyAddress || k.proxy_address || k.polyAddress || k.address || null;
+      if (pa && pa.toLowerCase() !== address.toLowerCase()) {
+        proxyAddress = pa;
+        break;
+      }
+    }
+
+    // Save to DB
+    if (proxyAddress && req.userId && pool) {
+      try {
+        await dbQuery('UPDATE users SET polymarket_address = $1 WHERE id = $2', [proxyAddress.toLowerCase(), req.userId]);
+      } catch(e) { /* silent */ }
+    }
+
+    res.json({ proxyAddress });
+  } catch (e) {
+    console.error('[lookup-proxy]', e.message);
+    res.json({ proxyAddress: null, error: e.message });
+  }
+});
+
 // POST /api/polymarket/clob-order — submit order with HMAC-signed headers (no wallet signature needed)
 app.post('/api/polymarket/clob-order', requireAuth, async (req, res) => {
   const { token_id, side, size, price, api_key, api_secret, api_passphrase } = req.body;
