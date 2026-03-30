@@ -13056,13 +13056,9 @@ function qtTradeBtn(url, label, color, posData) {
   const btnLabel = label || 'Trade \u2192';
   const bg = color || '#c9920d';
   const fg = (bg === 'var(--gold)' || color === '#c9920d') ? '#141412' : '#fff';
-  // If wallet connected + trading enabled, open our trade modal
-  if (window._connectedWallet && posData) {
-    const posJson = JSON.stringify(posData).replace(/'/g, '&#39;').replace(/"/g, '&quot;');
-    return `<button onclick="openTradeModal(JSON.parse(this.getAttribute('data-pos')),'buy')" data-pos="${posJson}" style="background:${bg};color:${fg};border:none;border-radius:6px;padding:7px 14px;font-family:var(--mono);font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap">${btnLabel}</button>`;
-  }
-  // Fallback: open on Polymarket
-  return `<button onclick="window.open('${url.replace(/'/g,"\\'")}','_blank')" style="background:${bg};color:${fg};border:none;border-radius:6px;padding:7px 14px;font-family:var(--mono);font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap">${btnLabel}</button>`;
+  const safeUrl = url.replace(/'/g, "\\'");
+  // Always open on Polymarket — in-app trading requires CLOB API key setup
+  return `<button onclick="window.open('${safeUrl}','_blank')" style="background:${bg};color:${fg};border:none;border-radius:6px;padding:7px 14px;font-family:var(--mono);font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap">${btnLabel}</button>`;
 }
 
 var _qtCategory = 'all';
@@ -13183,7 +13179,7 @@ async function loadCrystalBallPick() {
         <div style="width:1px;height:24px;background:#2a2825"></div>
         <div><span style="font-family:var(--mono);font-size:9px;color:var(--dim);display:block">ROI</span><span style="font-family:var(--mono);font-size:15px;font-weight:700;color:#22c55e">+${trade.roi_pct}%</span></div>
       </div>` : ''}
-      ${url ? `<div>${qtTradeBtn(url, 'View on Polymarket \u2192', '#c9920d')}</div>` : ''}
+      ${url ? `<div>${qtTradeBtn(url, 'Trade \u2192', '#c9920d')}</div>` : ''}
     `;
   } catch (e) {
     console.warn('[qt crystal-ball]', e.message);
@@ -13269,7 +13265,7 @@ async function doQuickTradeSearch() {
           <span style="font-family:var(--mono);font-size:11px;color:#ef4444;font-weight:700">${noPct}%</span>
         </div>` : `<div style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:12px">Odds not available</div>`}
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          ${url ? qtTradeBtn(url, 'View on Polymarket \u2192', '#c9920d') : ''}
+          ${url ? qtTradeBtn(url, 'Trade \u2192', '#c9920d') : ''}
         </div>
       </div>`;
     }).join('');
@@ -13356,7 +13352,7 @@ async function loadExpiringMarkets() {
             </div>
           </div>
           <div style="flex-shrink:0">
-            ${url ? qtTradeBtn(url, 'View on Polymarket \u2192', '#c9920d') : ''}
+            ${url ? qtTradeBtn(url, 'Trade \u2192', '#c9920d') : ''}
           </div>
         </div>
       </div>`;

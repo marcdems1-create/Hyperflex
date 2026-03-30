@@ -602,7 +602,7 @@ function renderCards() {
       '<div class="story-bullets">' + bullets.map(function(b) { return '<div class="story-bullet">' + escH(b) + '</div>'; }).join('') + '</div>' +
       roiHtml +
       '<div class="story-card-footer">' +
-        '<a href="' + safeUrl + '" target="_blank" rel="noopener" class="story-trade-btn">Trade on Polymarket &rarr;</a>' +
+        '<a href="' + safeUrl + '" target="_blank" rel="noopener" class="story-trade-btn">Trade &rarr;</a>' +
         (yesPct != null ? '<span class="story-odds-big" style="color:' + (yesPct >= 70 ? 'var(--green)' : yesPct <= 30 ? 'var(--red)' : 'var(--text)') + '">' + yesPct + '%</span>' : '') +
       '</div>' +
     '</div>';
