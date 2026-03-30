@@ -18180,6 +18180,7 @@ app.get('/whale-index', (req, res) => res.sendFile(path.join(__dirname, 'public'
 // GET /screener — market screener page
 app.get('/screener', (req, res) => res.sendFile(path.join(__dirname, 'public', 'screener.html')));
 app.get('/spread-scanner', (req, res) => res.sendFile(path.join(__dirname, 'public', 'spread-scanner.html')));
+app.get('/high-prob', (req, res) => res.sendFile(path.join(__dirname, 'public', 'high-prob.html')));
 
 // GET /data — premium data dashboard
 app.get('/data', (req, res) => res.sendFile(path.join(__dirname, 'public', 'data.html')));
@@ -18909,6 +18910,132 @@ async function getNarrativeWeeklyDeltas() {
     return map;
   } catch(e) { return {}; }
 }
+
+// ── /api/high-prob — 99%+ probability markets with implied APY ──────────────
+let _highProbCache = null;
+app.get('/api/high-prob', async (req, res) => {
+  try {
+    const minLiq = parseFloat(req.query.min_liq) || 100;
+    const direction = req.query.direction || 'all'; // 'all' | 'yes' | 'no'
+    const sort = req.query.sort || 'apy';
+
+    // Use screener cache if warm, otherwise fetch fresh
+    let rawMarkets = [];
+    if (_screenerCache && _screenerCache.data) {
+      // screener filters out ≥95%, so fetch separately for 99%+ markets
+    }
+
+    // Fetch from Gamma — need separate call since screener strips these out
+    if (!_highProbCache || Date.now() - _highProbCache.ts > 5 * 60 * 1000) {
+      const fetch = _nodeFetch;
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), 15000);
+      const r = await fetch('https://gamma-api.polymarket.com/markets?closed=false&limit=500&order=volume&ascending=false', {
+        signal: ctrl.signal, headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+      });
+      clearTimeout(tid);
+      if (!r.ok) throw new Error('Gamma API ' + r.status);
+      rawMarkets = await r.json();
+      _highProbCache = { ts: Date.now(), raw: rawMarkets };
+    } else {
+      rawMarkets = _highProbCache.raw;
+    }
+
+    const now = Date.now();
+    const results = [];
+
+    for (const m of (rawMarkets || [])) {
+      const question = m.question || m.title || '';
+      if (!question) continue;
+
+      // Skip expired
+      const endDateRaw = m.endDate || m.end_date_iso;
+      if (!endDateRaw) continue;
+      const endDate = new Date(endDateRaw);
+      if (endDate < now) continue;
+
+      let yesPrice = null;
+      try {
+        const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
+        if (Array.isArray(prices) && prices[0] != null) yesPrice = parseFloat(prices[0]);
+      } catch {}
+      if (yesPrice == null) continue;
+
+      const noPrice = 1 - yesPrice;
+      const liquidity = parseFloat(m.liquidityNum || m.liquidity || 0);
+      const volume = parseFloat(m.volume) || 0;
+
+      // Filter: one side must be ≥99%
+      const yesHighProb = yesPrice >= 0.99;
+      const noHighProb = noPrice >= 0.99;
+      if (!yesHighProb && !noHighProb) continue;
+
+      // Liquidity gate
+      if (liquidity < minLiq) continue;
+
+      // Skip micro-resolution noise (Bitcoin 15-min windows)
+      const qLow = question.toLowerCase();
+      if (/\d+(:\d+)?(am|pm)\s*(et|utc|gmt)/.test(qLow) && qLow.includes('up or down')) continue;
+
+      // Direction filter
+      if (direction === 'yes' && !yesHighProb) continue;
+      if (direction === 'no' && !noHighProb) continue;
+
+      // Days until expiry
+      const daysLeft = Math.max(0.001, (endDate - now) / (1000 * 60 * 60 * 24));
+      const hoursLeft = Math.round(daysLeft * 24);
+
+      // Determine the high-prob side
+      const side = yesHighProb ? 'YES' : 'NO';
+      const prob = yesHighProb ? yesPrice : noPrice;
+      const cost = Math.round(prob * 100); // cents
+      const profit = 100 - cost; // cents gained per $1
+      if (profit <= 0) continue;
+
+      // Implied APY: annualized return on cost
+      const returnPct = profit / cost;
+      const apy = Math.round(returnPct * (365 / daysLeft) * 100);
+
+      // Category
+      const t = question.toLowerCase();
+      let category = 'other';
+      if (/bitcoin|btc|eth|crypto|solana|sol |xrp|doge|token|defi/i.test(t)) category = 'crypto';
+      else if (/nba|nfl|mlb|nhl|soccer|football|basketball|baseball|ufc|sport|game |match|playoff|championship/i.test(t)) category = 'sports';
+      else if (/trump|biden|president|congress|senate|election|democrat|republican|governor/i.test(t)) category = 'politics';
+      else if (/movie|oscar|grammy|netflix|spotify|celebrity|film|music/i.test(t)) category = 'entertainment';
+      else if (/ai |openai|apple|google|microsoft|tesla|nvidia|tech|iphone/i.test(t)) category = 'tech';
+
+      const eventSlug = (m.events && m.events[0] && m.events[0].slug) || m.eventSlug || '';
+      const marketUrl = eventSlug ? `https://polymarket.com/event/${eventSlug}` : 'https://polymarket.com';
+
+      results.push({
+        question,
+        side,
+        prob_pct: Math.round(prob * 100),
+        cost_cents: cost,
+        profit_cents: profit,
+        apy,
+        days_left: Math.round(daysLeft),
+        hours_left: hoursLeft,
+        liquidity: Math.round(liquidity),
+        volume: Math.round(volume),
+        category,
+        market_url: marketUrl
+      });
+    }
+
+    // Sort
+    if (sort === 'apy') results.sort((a, b) => b.apy - a.apy);
+    else if (sort === 'liquidity') results.sort((a, b) => b.liquidity - a.liquidity);
+    else if (sort === 'expiry') results.sort((a, b) => a.days_left - b.days_left);
+    else if (sort === 'volume') results.sort((a, b) => b.volume - a.volume);
+
+    res.json({ count: results.length, markets: results.slice(0, 200) });
+  } catch (e) {
+    console.error('[high-prob]', e.message);
+    res.status(500).json({ error: 'Failed to fetch high-prob markets', detail: e.message });
+  }
+});
 
 const _narrativeCache = { data: null, ts: 0 };
 app.get('/api/screener/narratives', async (req, res) => {

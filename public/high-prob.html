@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>99%+ Bets — HYPERFLEX</title>
+<meta name="description" content="High-probability Polymarket positions with implied APY. Near-certain outcomes still paying yield."/>
+<link rel="icon" href="/favicon.ico"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#141412;--ink:#1a1a17;--cream:#1f1f1c;--border:#2a2a27;
+  --text:#f5f5f0;--soft:#ddd8cc;--dim:#aaa8a0;--muted:#888880;
+  --gold:#c9920d;--gold-dim:rgba(201,146,13,0.15);
+  --green:#22c55e;--green-dim:rgba(34,197,94,0.12);
+  --red:#ef4444;--red-dim:rgba(239,68,68,0.12);
+  --sans:'Syne',sans-serif;--mono:'Space Mono',monospace;
+}
+html,body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh}
+
+/* NAV */
+nav{display:flex;align-items:center;justify-content:space-between;padding:14px 32px;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100;background:rgba(20,20,18,0.95);backdrop-filter:blur(8px)}
+.nav-logo{font-size:17px;font-weight:800;letter-spacing:-0.5px;text-decoration:none;color:var(--text)}
+.nav-logo span{color:var(--gold)}
+.nav-links{display:flex;gap:24px;align-items:center}
+.nav-links a{font-size:13px;color:var(--dim);text-decoration:none;font-family:var(--mono);transition:color 0.15s}
+.nav-links a:hover{color:var(--text)}
+.nav-links a.active{color:var(--gold)}
+
+/* HERO */
+.hero{padding:48px 32px 32px;max-width:1100px;margin:0 auto}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;background:var(--gold-dim);border:1px solid rgba(201,146,13,0.3);border-radius:20px;padding:5px 12px;font-size:11px;font-family:var(--mono);color:var(--gold);letter-spacing:0.5px;margin-bottom:16px}
+.hero h1{font-size:clamp(28px,4vw,42px);font-weight:800;line-height:1.1;margin-bottom:12px}
+.hero h1 span{color:var(--gold)}
+.hero p{font-size:14px;color:var(--dim);line-height:1.6;max-width:560px}
+
+/* STATS BAR */
+.stats-bar{display:flex;gap:24px;padding:20px 32px;max-width:1100px;margin:0 auto;flex-wrap:wrap}
+.stat-card{background:var(--cream);border:1px solid var(--border);border-radius:12px;padding:16px 20px;flex:1;min-width:140px}
+.stat-label{font-size:11px;color:var(--muted);font-family:var(--mono);letter-spacing:0.5px;margin-bottom:6px}
+.stat-value{font-size:22px;font-weight:800;color:var(--text)}
+.stat-value.gold{color:var(--gold)}
+.stat-value.green{color:var(--green)}
+
+/* 4% APY BANNER */
+.apy-banner{margin:0 32px 24px;max-width:1036px;background:linear-gradient(135deg,rgba(201,146,13,0.08),rgba(201,146,13,0.04));border:1px solid rgba(201,146,13,0.25);border-radius:16px;padding:20px 24px;display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap}
+.apy-banner-left h3{font-size:15px;font-weight:700;margin-bottom:4px}
+.apy-banner-left p{font-size:12px;color:var(--dim);line-height:1.5}
+.apy-calc{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.apy-calc input{background:var(--ink);border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-family:var(--mono);font-size:13px;color:var(--text);width:120px;outline:none}
+.apy-calc input:focus{border-color:rgba(201,146,13,0.5)}
+.apy-result{font-family:var(--mono);font-size:12px;color:var(--dim)}
+.apy-result strong{color:var(--gold)}
+
+/* FILTERS */
+.filters{padding:0 32px 20px;max-width:1100px;margin:0 auto;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.filter-group{display:flex;gap:6px}
+.filter-pill{background:var(--cream);border:1px solid var(--border);border-radius:20px;padding:7px 14px;font-size:12px;font-family:var(--mono);color:var(--dim);cursor:pointer;transition:all 0.15s;white-space:nowrap}
+.filter-pill:hover{border-color:rgba(201,146,13,0.4);color:var(--text)}
+.filter-pill.active{background:var(--gold-dim);border-color:rgba(201,146,13,0.5);color:var(--gold)}
+.filter-sep{width:1px;height:28px;background:var(--border);margin:0 4px}
+.sort-select{background:var(--cream);border:1px solid var(--border);border-radius:8px;padding:7px 12px;font-family:var(--mono);font-size:12px;color:var(--dim);cursor:pointer;outline:none}
+.sort-select:focus{border-color:rgba(201,146,13,0.4)}
+.results-count{font-size:12px;color:var(--muted);font-family:var(--mono);margin-left:auto}
+
+/* MARKET TABLE */
+.table-wrap{max-width:1100px;margin:0 auto;padding:0 32px 60px;overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+thead tr{border-bottom:1px solid var(--border)}
+th{font-size:10px;font-family:var(--mono);color:var(--muted);letter-spacing:0.8px;text-transform:uppercase;padding:10px 12px;text-align:left;white-space:nowrap;cursor:pointer;user-select:none}
+th:hover{color:var(--dim)}
+th.sorted{color:var(--gold)}
+tbody tr{border-bottom:1px solid rgba(42,42,39,0.6);transition:background 0.1s;cursor:pointer}
+tbody tr:hover{background:rgba(255,255,255,0.02)}
+td{padding:14px 12px;vertical-align:middle}
+
+.market-name{font-size:13px;font-weight:600;color:var(--text);line-height:1.4;max-width:400px}
+.market-meta{font-size:11px;color:var(--muted);font-family:var(--mono);margin-top:3px}
+
+.side-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:4px;font-size:10px;font-family:var(--mono);font-weight:700;letter-spacing:0.5px}
+.side-badge.yes{background:var(--green-dim);color:var(--green);border:1px solid rgba(34,197,94,0.2)}
+.side-badge.no{background:var(--red-dim);color:var(--red);border:1px solid rgba(239,68,68,0.2)}
+
+.prob-bar{display:flex;align-items:center;gap:8px}
+.prob-track{width:50px;height:4px;background:var(--border);border-radius:2px;overflow:hidden}
+.prob-fill{height:100%;border-radius:2px;background:var(--green)}
+.prob-fill.no{background:var(--red)}
+.prob-text{font-size:13px;font-family:var(--mono);font-weight:700}
+
+.apy-value{font-size:14px;font-family:var(--mono);font-weight:700;color:var(--gold)}
+.apy-value.high{color:#22c55e}
+
+.cost-col{font-family:var(--mono);font-size:12px;color:var(--dim);white-space:nowrap}
+.cost-col strong{color:var(--text)}
+
+.expiry-col{font-family:var(--mono);font-size:11px;color:var(--dim);white-space:nowrap}
+.expiry-urgent{color:#f59e0b}
+.expiry-soon{color:var(--dim)}
+
+.liq-col{font-family:var(--mono);font-size:12px;color:var(--dim)}
+
+.trade-btn{background:var(--gold);color:#141412;border:none;border-radius:6px;padding:6px 12px;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block;transition:opacity 0.15s;white-space:nowrap}
+.trade-btn:hover{opacity:0.85}
+
+.cat-badge{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-family:var(--mono);letter-spacing:0.3px;text-transform:capitalize}
+.cat-sports{background:rgba(59,130,246,0.12);color:#60a5fa;border:1px solid rgba(59,130,246,0.2)}
+.cat-crypto{background:rgba(168,85,247,0.12);color:#c084fc;border:1px solid rgba(168,85,247,0.2)}
+.cat-politics{background:rgba(239,68,68,0.12);color:#f87171;border:1px solid rgba(239,68,68,0.2)}
+.cat-entertainment{background:rgba(236,72,153,0.12);color:#f472b6;border:1px solid rgba(236,72,153,0.2)}
+.cat-tech{background:rgba(20,184,166,0.12);color:#2dd4bf;border:1px solid rgba(20,184,166,0.2)}
+.cat-other{background:var(--cream);color:var(--muted);border:1px solid var(--border)}
+
+/* LOADING / EMPTY */
+.loading-state{text-align:center;padding:60px 20px;color:var(--muted);font-family:var(--mono);font-size:13px}
+.spinner{width:24px;height:24px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 16px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.empty-state{text-align:center;padding:60px 20px}
+.empty-icon{font-size:40px;margin-bottom:16px}
+.empty-title{font-size:16px;font-weight:700;margin-bottom:8px}
+.empty-sub{font-size:13px;color:var(--muted)}
+
+@media(max-width:768px){
+  nav{padding:12px 16px}
+  .hero,.stats-bar,.filters,.table-wrap{padding-left:16px;padding-right:16px}
+  .apy-banner{margin:0 16px 20px}
+  .market-name{max-width:200px}
+  th:nth-child(5),td:nth-child(5),th:nth-child(7),td:nth-child(7){display:none}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="/" class="nav-logo">HYPER<span>FLEX</span></a>
+  <div class="nav-links">
+    <a href="/screener">Screener</a>
+    <a href="/signals">Signals</a>
+    <a href="/high-prob" class="active">99%+ Bets</a>
+    <a href="/odds">Arb</a>
+    <a href="/dashboard" style="background:var(--gold);color:#141412;padding:7px 14px;border-radius:8px;font-weight:700;font-size:12px">Dashboard</a>
+  </div>
+</nav>
+
+<div class="hero">
+  <div class="hero-badge">⚡ LIVE DATA</div>
+  <h1>Near-Certain Bets<br/><span>Still Paying Yield</span></h1>
+  <p>Markets where one side is ≥99% likely — but time value creates real APY. Lock in guaranteed money before expiry.</p>
+</div>
+
+<div class="stats-bar" id="statsBar">
+  <div class="stat-card"><div class="stat-label">MARKETS FOUND</div><div class="stat-value" id="statCount">—</div></div>
+  <div class="stat-card"><div class="stat-label">HIGHEST APY</div><div class="stat-value gold" id="statTopApy">—</div></div>
+  <div class="stat-card"><div class="stat-label">AVG APY</div><div class="stat-value green" id="statAvgApy">—</div></div>
+  <div class="stat-card"><div class="stat-label">EXPIRING TODAY</div><div class="stat-value" id="statExpToday">—</div></div>
+</div>
+
+<!-- 4% APY Calculator Banner -->
+<div class="apy-banner">
+  <div class="apy-banner-left">
+    <h3>💰 4% APY Holding Rewards Calculator</h3>
+    <p>Polymarket pays 4.00% annualized on positions in eligible markets. Enter your investment to see returns.</p>
+  </div>
+  <div class="apy-calc">
+    <input type="number" id="apyInput" value="1000" min="1" placeholder="$1,000" oninput="calcApy()"/>
+    <div class="apy-result">
+      Daily: <strong id="apyDaily">$0.11</strong> &nbsp;·&nbsp;
+      Monthly: <strong id="apyMonthly">$3.29</strong> &nbsp;·&nbsp;
+      Yearly: <strong id="apyYearly">$40.00</strong>
+    </div>
+  </div>
+</div>
+
+<div class="filters">
+  <div class="filter-group" id="directionFilter">
+    <div class="filter-pill active" data-direction="all" onclick="setDirection('all',this)">All</div>
+    <div class="filter-pill" data-direction="yes" onclick="setDirection('yes',this)">YES ≥99%</div>
+    <div class="filter-pill" data-direction="no" onclick="setDirection('no',this)">NO ≥99%</div>
+  </div>
+  <div class="filter-sep"></div>
+  <div class="filter-group" id="catFilter">
+    <div class="filter-pill active" data-cat="all" onclick="setCat('all',this)">All</div>
+    <div class="filter-pill" data-cat="sports" onclick="setCat('sports',this)">Sports</div>
+    <div class="filter-pill" data-cat="politics" onclick="setCat('politics',this)">Politics</div>
+    <div class="filter-pill" data-cat="crypto" onclick="setCat('crypto',this)">Crypto</div>
+    <div class="filter-pill" data-cat="entertainment" onclick="setCat('entertainment',this)">Entertainment</div>
+    <div class="filter-pill" data-cat="tech" onclick="setCat('tech',this)">Tech</div>
+  </div>
+  <div class="filter-sep"></div>
+  <select class="sort-select" id="sortSelect" onchange="setSort(this.value)">
+    <option value="apy">Sort: Highest APY</option>
+    <option value="expiry">Sort: Expiring Soon</option>
+    <option value="liquidity">Sort: Most Liquid</option>
+    <option value="volume">Sort: Most Volume</option>
+  </select>
+  <span class="results-count" id="resultsCount"></span>
+</div>
+
+<div class="table-wrap">
+  <div id="tableArea">
+    <div class="loading-state"><div class="spinner"></div>Loading high-probability markets…</div>
+  </div>
+</div>
+
+<script>
+let _allMarkets = [];
+let _direction = 'all';
+let _cat = 'all';
+let _sort = 'apy';
+
+function fmtMoney(n) {
+  if (n >= 1000000) return '$' + (n/1000000).toFixed(1) + 'M';
+  if (n >= 1000) return '$' + Math.round(n/1000) + 'K';
+  return '$' + n;
+}
+
+function fmtApy(n) {
+  if (n >= 10000) return n.toLocaleString() + '%';
+  return n.toLocaleString() + '%';
+}
+
+async function loadData() {
+  try {
+    const params = new URLSearchParams({ direction: _direction, sort: _sort, min_liq: 100 });
+    const r = await fetch('/api/high-prob?' + params);
+    const d = await r.json();
+    _allMarkets = d.markets || [];
+    updateStats();
+    render();
+  } catch(e) {
+    document.getElementById('tableArea').innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">Failed to load</div><div class="empty-sub">${e.message}</div></div>`;
+  }
+}
+
+function updateStats() {
+  const markets = _allMarkets;
+  document.getElementById('statCount').textContent = markets.length;
+  const apys = markets.map(m => m.apy).filter(a => isFinite(a) && a > 0);
+  document.getElementById('statTopApy').textContent = apys.length ? fmtApy(Math.max(...apys)) : '—';
+  document.getElementById('statAvgApy').textContent = apys.length ? fmtApy(Math.round(apys.reduce((a,b)=>a+b,0)/apys.length)) : '—';
+  document.getElementById('statExpToday').textContent = markets.filter(m => m.days_left === 0).length;
+}
+
+function getFiltered() {
+  return _allMarkets.filter(m => {
+    if (_direction !== 'all' && m.side.toLowerCase() !== _direction) return false;
+    if (_cat !== 'all' && m.category !== _cat) return false;
+    return true;
+  });
+}
+
+function render() {
+  const markets = getFiltered();
+  document.getElementById('resultsCount').textContent = markets.length + ' markets';
+
+  if (!markets.length) {
+    document.getElementById('tableArea').innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">No markets found</div><div class="empty-sub">Try a different filter or check back soon</div></div>`;
+    return;
+  }
+
+  let html = `<table>
+    <thead><tr>
+      <th>Market</th>
+      <th>Side</th>
+      <th>Probability</th>
+      <th>Implied APY</th>
+      <th>Cost → Win</th>
+      <th>Expires</th>
+      <th>Liquidity</th>
+      <th></th>
+    </tr></thead><tbody>`;
+
+  for (const m of markets) {
+    const expClass = m.days_left === 0 ? 'expiry-urgent' : m.days_left <= 3 ? 'expiry-urgent' : 'expiry-soon';
+    const expText = m.days_left === 0 ? `${m.hours_left}h` : m.days_left === 1 ? '1 day' : `${m.days_left}d`;
+    const apyClass = m.apy >= 1000 ? 'apy-value high' : 'apy-value';
+    const fillClass = m.side === 'NO' ? 'prob-fill no' : 'prob-fill';
+
+    html += `<tr onclick="window.open('${m.market_url}','_blank')">
+      <td>
+        <div class="market-name">${m.question}</div>
+        <div class="market-meta"><span class="cat-badge cat-${m.category}">${m.category}</span></div>
+      </td>
+      <td><span class="side-badge ${m.side === 'YES' ? 'yes' : 'no'}">${m.side}</span></td>
+      <td>
+        <div class="prob-bar">
+          <div class="prob-track"><div class="${fillClass}" style="width:${m.prob_pct}%"></div></div>
+          <span class="prob-text">${m.prob_pct}%</span>
+        </div>
+      </td>
+      <td><span class="${apyClass}">${fmtApy(m.apy)}</span></td>
+      <td class="cost-col">Pay <strong>${m.cost_cents}¢</strong> → Win <strong>+${m.profit_cents}¢</strong></td>
+      <td class="expiry-col ${expClass}">${expText}</td>
+      <td class="liq-col">${fmtMoney(m.liquidity)}</td>
+      <td><a href="${m.market_url}" target="_blank" class="trade-btn" onclick="event.stopPropagation()">Trade →</a></td>
+    </tr>`;
+  }
+
+  html += '</tbody></table>';
+  document.getElementById('tableArea').innerHTML = html;
+}
+
+function setDirection(d, el) {
+  _direction = d;
+  document.querySelectorAll('#directionFilter .filter-pill').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  render();
+}
+
+function setCat(c, el) {
+  _cat = c;
+  document.querySelectorAll('#catFilter .filter-pill').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  render();
+}
+
+function setSort(s) {
+  _sort = s;
+  // Re-sort client-side
+  if (s === 'apy') _allMarkets.sort((a,b) => b.apy - a.apy);
+  else if (s === 'expiry') _allMarkets.sort((a,b) => a.days_left - b.days_left);
+  else if (s === 'liquidity') _allMarkets.sort((a,b) => b.liquidity - a.liquidity);
+  else if (s === 'volume') _allMarkets.sort((a,b) => b.volume - a.volume);
+  render();
+}
+
+function calcApy() {
+  const amount = parseFloat(document.getElementById('apyInput').value) || 0;
+  const rate = 0.04;
+  const daily = (amount * rate / 365).toFixed(2);
+  const monthly = (amount * rate / 12).toFixed(2);
+  const yearly = (amount * rate).toFixed(2);
+  document.getElementById('apyDaily').textContent = '$' + daily;
+  document.getElementById('apyMonthly').textContent = '$' + monthly;
+  document.getElementById('apyYearly').textContent = '$' + yearly;
+}
+
+calcApy();
+loadData();
+</script>
+</body>
+</html>
