@@ -18918,6 +18918,8 @@ app.get('/api/high-prob', async (req, res) => {
     const minLiq = parseFloat(req.query.min_liq) || 100;
     const direction = req.query.direction || 'all'; // 'all' | 'yes' | 'no'
     const sort = req.query.sort || 'apy';
+    const maxDays = parseInt(req.query.max_days) || 0; // 0 = no limit
+    const minApy = parseFloat(req.query.min_apy) || 0;
 
     // Use screener cache if warm, otherwise fetch fresh
     let rawMarkets = [];
@@ -18996,14 +18998,25 @@ app.get('/api/high-prob', async (req, res) => {
       const returnPct = profit / cost;
       const apy = Math.round(returnPct * (365 / daysLeft) * 100);
 
-      // Category
+      // Category — use Polymarket tags first, then regex fallback
       const t = question.toLowerCase();
+      const polyTags = (m.tags || []).map(tg => (tg.label || tg.slug || '').toLowerCase());
       let category = 'other';
-      if (/bitcoin|btc|eth|crypto|solana|sol |xrp|doge|token|defi/i.test(t)) category = 'crypto';
-      else if (/nba|nfl|mlb|nhl|soccer|football|basketball|baseball|ufc|sport|game |match|playoff|championship/i.test(t)) category = 'sports';
-      else if (/trump|biden|president|congress|senate|election|democrat|republican|governor/i.test(t)) category = 'politics';
-      else if (/movie|oscar|grammy|netflix|spotify|celebrity|film|music/i.test(t)) category = 'entertainment';
-      else if (/ai |openai|apple|google|microsoft|tesla|nvidia|tech|iphone/i.test(t)) category = 'tech';
+      if (polyTags.some(tg => /crypto|bitcoin|ethereum|defi/.test(tg)) ||
+          /bitcoin|btc|eth\b|crypto|solana|sol\b|xrp|doge|token|defi|blockchain|coinbase|binance|altcoin/i.test(t)) category = 'crypto';
+      else if (polyTags.some(tg => /sport|nba|nfl|soccer|football|tennis|golf|f1|formula|baseball|hockey|cricket|rugby|esport/.test(tg)) ||
+          /\bnba\b|\bnfl\b|\bmlb\b|\bnhl\b|soccer|basketball|baseball|ufc|mma|formula.?1|grand.?prix|f1\b|champions.?league|premier.?league|la.?liga|bundesliga|serie.?a|wimbledon|us.?open|roland.?garros|australian.?open|pga\b|golf|nascar|tennis|cricket|rugby|esport|world.?cup|euros\b|euro.?202|copa|ligue\b|eredivisie|constructor|driver.?champion|superbowl|super.?bowl|playoffs\b|ncaa|march.?madness|olympics|fifa\b/i.test(t)) category = 'sports';
+      else if (polyTags.some(tg => /politic|election|government|president|senate|congress/.test(tg)) ||
+          /\belection\b|prime.?minister|president\b|parliament|senate\b|congress\b|democrat|republican|governor|chancellor|minister\b|vote\b|ballot|referendum|administration|white.?house|supreme.?court|labour|tory|conservative|liberal.?party|coalition|orbán|orban|trump|biden|harris|modi|macron|sunak|scholz|meloni/i.test(t)) category = 'politics';
+      else if (polyTags.some(tg => /entertainment|music|film|celebrity|tv/.test(tg)) ||
+          /eurovision|oscar|grammy|emmy|bafta|golden.?globe|billboard|netflix|spotify|celebrity|film\b|movie\b|\balbum\b|box.?office|award.?show|music.?chart|pop.?star|actor|actress|tv.?show|streaming/i.test(t)) category = 'entertainment';
+      else if (polyTags.some(tg => /tech|ai|software|hardware/.test(tg)) ||
+          /\bai\b|openai|chatgpt|apple\b|google\b|microsoft\b|tesla\b|nvidia\b|\biphone\b|android|spacex|meta\b|amazon\b|startup|ipo\b|antitrust|regulation.*tech/i.test(t)) category = 'tech';
+
+      // Max days filter
+      if (maxDays > 0 && Math.round(daysLeft) > maxDays) continue;
+      // Min APY filter
+      if (minApy > 0 && apy < minApy) continue;
 
       const eventSlug = (m.events && m.events[0] && m.events[0].slug) || m.eventSlug || '';
       const marketUrl = eventSlug ? `https://polymarket.com/event/${eventSlug}` : 'https://polymarket.com';
