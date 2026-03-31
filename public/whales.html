@@ -1018,8 +1018,8 @@ function switchWhalePlatform(platform) {
     // Clear any error state from other tabs
     var ls = document.getElementById('loadingState');
     if (ls) { ls.style.display = 'none'; ls.innerHTML = ''; }
-    document.getElementById('tableWrap').style.display = '';
-    if (_whaleData) { renderStats(); applyFilters(); }
+    // Table is inside <details> — don't force-show it
+    if (_whaleData) { renderStats(); applyFilters(); renderSmartVsDumb(); renderMispricings(); }
     else loadData();
   }
 }
