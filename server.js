@@ -23527,6 +23527,7 @@ cron.schedule('*/10 * * * *', safeCron('refreshWhaleData', async () => {
   try {
     const data = await fetchWhalePositions();
     _whaleWatchCache = { ts: Date.now(), data };
+    _healthTimestamps.lastWhaleFetch = new Date().toISOString();
     console.log('[whale-refresh] Updated whale cache:', (data.whales || []).length, 'positions');
   } catch (e) { console.warn('[whale-refresh]', e.message); }
 }));
