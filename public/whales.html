@@ -530,35 +530,64 @@ function urlBase64ToUint8Array(base64String) {
   <p style="margin-top:4px;font-size:11px;color:var(--muted)">(This may take a moment on first load)</p>
 </div>
 
-<!-- VIEW TOGGLE -->
-<div id="viewToggle" style="display:none;padding:0 24px 12px;text-align:right">
-  <div style="display:inline-flex;gap:0;border:1px solid #2a2a25;border-radius:8px;overflow:hidden">
-    <button id="viewCards" onclick="setWhaleView('cards')" style="padding:6px 14px;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.06em;border:none;cursor:pointer;background:rgba(201,146,13,.15);color:#c9920d">CARDS</button>
-    <button id="viewTable" onclick="setWhaleView('table')" style="padding:6px 14px;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.06em;border:none;border-left:1px solid #2a2a25;cursor:pointer;background:transparent;color:#6b6860">TABLE</button>
+<!-- SMART MONEY vs DUMB MONEY -->
+<div id="smartVsDumbSection" style="padding:0 24px 24px">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+    <span style="font-size:20px">🧠</span>
+    <h3 style="font-family:var(--sans);font-size:18px;font-weight:800;color:var(--text);margin:0">Smart Money vs Dumb Money</h3>
+    <span style="font-family:var(--mono);font-size:9px;color:var(--gold);padding:3px 8px;border:1px solid rgba(201,146,13,.2);border-radius:4px;background:rgba(201,146,13,.06)">LIVE</span>
+  </div>
+  <p style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:16px;line-height:1.6">
+    Top 0.5% profitable whales (60%+ win rate) vs the rest. When smart money disagrees with dumb money, follow the smart money.
+  </p>
+  <div id="smartVsDumbGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div style="text-align:center;padding:20px;color:var(--muted)">Loading...</div>
   </div>
 </div>
 
-<!-- TABLE (Polymarket) -->
-<div class="table-wrap" id="tableWrap" style="display:none">
-  <table>
-    <thead id="whaleTableHead">
-      <tr>
-        <th onclick="sortBy('trader_rank')">Rank <span class="sort-arrow" id="sort-trader_rank"></span></th>
-        <th onclick="sortBy('trader')">Trader <span class="sort-arrow" id="sort-trader"></span></th>
-        <th onclick="sortBy('market')">Market <span class="sort-arrow" id="sort-market"></span></th>
-        <th onclick="sortBy('side')">Side <span class="sort-arrow" id="sort-side"></span></th>
-        <th onclick="sortBy('size')">Size ($) <span class="sort-arrow" id="sort-size"></span></th>
-        <th onclick="sortBy('current_price')">Price <span class="sort-arrow" id="sort-current_price"></span></th>
-        <th>Link</th>
-        <th>Actions</th>
-      </tr>
-    </thead>
-    <tbody id="whaleTableBody"></tbody>
-  </table>
+<!-- MISPRICING DETECTOR -->
+<div id="mispricingSection" style="padding:0 24px 24px">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+    <span style="font-size:20px">🎯</span>
+    <h3 style="font-family:var(--sans);font-size:18px;font-weight:800;color:var(--text);margin:0">Mispricing Detector</h3>
+    <span style="font-family:var(--mono);font-size:9px;color:#22c55e;padding:3px 8px;border:1px solid rgba(34,197,94,.2);border-radius:4px;background:rgba(34,197,94,.06)">AI</span>
+  </div>
+  <p style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:16px;line-height:1.6">
+    Markets where whale consensus disagrees with the current price. Larger gaps = bigger potential edge.
+  </p>
+  <div id="mispricingGrid" style="display:grid;gap:12px">
+    <div style="text-align:center;padding:20px;color:var(--muted)">Loading...</div>
+  </div>
 </div>
 
-<!-- MOBILE CARDS -->
-<div class="mobile-cards" id="mobileCards"></div>
+<!-- WHALE POSITIONS (collapsed, for users who want raw data) -->
+<details id="rawWhaleDetails" style="padding:0 24px 24px">
+  <summary style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--muted);cursor:pointer;padding:12px 0;letter-spacing:.06em;text-transform:uppercase">Show Raw Whale Positions ▾</summary>
+  <div id="viewToggle" style="padding:8px 0;text-align:right">
+    <div style="display:inline-flex;gap:0;border:1px solid #2a2a25;border-radius:8px;overflow:hidden">
+      <button id="viewCards" onclick="setWhaleView('cards')" style="padding:6px 14px;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.06em;border:none;cursor:pointer;background:rgba(201,146,13,.15);color:#c9920d">CARDS</button>
+      <button id="viewTable" onclick="setWhaleView('table')" style="padding:6px 14px;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.06em;border:none;border-left:1px solid #2a2a25;cursor:pointer;background:transparent;color:#6b6860">TABLE</button>
+    </div>
+  </div>
+  <div class="table-wrap" id="tableWrap" style="display:none">
+    <table>
+      <thead id="whaleTableHead">
+        <tr>
+          <th onclick="sortBy('trader_rank')">Rank</th>
+          <th onclick="sortBy('trader')">Trader</th>
+          <th onclick="sortBy('market')">Market</th>
+          <th onclick="sortBy('side')">Side</th>
+          <th onclick="sortBy('size')">Size ($)</th>
+          <th onclick="sortBy('current_price')">Price</th>
+          <th>Link</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="whaleTableBody"></tbody>
+    </table>
+  </div>
+  <div class="mobile-cards" id="mobileCards"></div>
+</details>
 
 <!-- COPY TRADE MODAL -->
 <div class="ct-overlay" id="ctOverlay" onclick="if(event.target===this)closeCopyTrade()">
@@ -1169,9 +1198,10 @@ async function loadData() {
     try { renderStats(); } catch(e) { console.error('[whale-watch] renderStats failed:', e); }
     try { renderWhaleFlow(); } catch(e) { console.error('[whale-watch] renderWhaleFlow failed:', e); }
     try { applyFilters(); } catch(e) { console.error('[whale-watch] applyFilters failed:', e); }
+    try { renderSmartVsDumb(); } catch(e) { console.error('[whale-watch] smartVsDumb failed:', e); }
+    try { renderMispricings(); } catch(e) { console.error('[whale-watch] mispricings failed:', e); }
 
     document.getElementById('loadingState').style.display = 'none';
-    document.getElementById('tableWrap').style.display = '';
   } catch (err) {
     console.error('[whale-watch]', err);
     document.getElementById('loadingState').innerHTML =
@@ -1395,6 +1425,149 @@ function drawVolumeChart(canvasId, history) {
     ctx.fillStyle = 'rgba(201,146,13,0.4)';
     ctx.fillRect(x, pad.top + ch - barH, barW, barH);
   }
+}
+
+// ── SMART MONEY vs DUMB MONEY ──
+function renderSmartVsDumb() {
+  var grid = document.getElementById('smartVsDumbGrid');
+  if (!grid || !_whaleData || !_whaleData.whales) return;
+  var whales = _whaleData.whales;
+
+  // Group by market, split by smart (consistent trader score >= 90) vs dumb
+  var markets = {};
+  whales.forEach(function(w) {
+    var m = w.market || '';
+    if (!markets[m]) markets[m] = { market: m, url: w.market_url || '', smart_yes: 0, smart_no: 0, dumb_yes: 0, dumb_no: 0, total: 0, smart_count: 0, dumb_count: 0 };
+    var addr = (w.proxyWallet || '').toLowerCase();
+    var score = _consistentTraderMap[addr] ? _consistentTraderMap[addr].score : 0;
+    var isSmart = score >= 90;
+    var val = parseFloat(w.current_value || w.size || 0);
+    var side = (w.side || '').toLowerCase();
+    if (isSmart) {
+      markets[m].smart_count++;
+      if (side === 'yes') markets[m].smart_yes += val; else markets[m].smart_no += val;
+    } else {
+      markets[m].dumb_count++;
+      if (side === 'yes') markets[m].dumb_yes += val; else markets[m].dumb_no += val;
+    }
+    markets[m].total += val;
+  });
+
+  // Find markets where smart and dumb disagree
+  var disagreements = [];
+  Object.values(markets).forEach(function(m) {
+    if (m.smart_count < 1 || m.dumb_count < 1) return;
+    var smartTotal = m.smart_yes + m.smart_no;
+    var dumbTotal = m.dumb_yes + m.dumb_no;
+    if (smartTotal < 1000 || dumbTotal < 1000) return;
+    var smartYesPct = smartTotal > 0 ? Math.round(m.smart_yes / smartTotal * 100) : 50;
+    var dumbYesPct = dumbTotal > 0 ? Math.round(m.dumb_yes / dumbTotal * 100) : 50;
+    var gap = Math.abs(smartYesPct - dumbYesPct);
+    if (gap < 10) return;
+    disagreements.push({ market: m.market, url: m.url, smartYes: smartYesPct, dumbYes: dumbYesPct, gap: gap, smartCount: m.smart_count, dumbCount: m.dumb_count, smartTotal: smartTotal, dumbTotal: dumbTotal, smartSide: smartYesPct > 50 ? 'YES' : 'NO', dumbSide: dumbYesPct > 50 ? 'YES' : 'NO' });
+  });
+  disagreements.sort(function(a, b) { return b.gap - a.gap; });
+
+  if (disagreements.length === 0) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:24px"><div style="font-size:20px;margin-bottom:8px">🤝</div><div style="font-family:var(--mono);font-size:12px;color:var(--muted)">Smart money and dumb money agree right now. No major disagreements detected.</div></div>';
+    return;
+  }
+
+  function fmtCap(n) { return n >= 1e6 ? '$' + (n/1e6).toFixed(1) + 'M' : n >= 1e3 ? '$' + (n/1e3).toFixed(0) + 'K' : '$' + n.toFixed(0); }
+
+  grid.innerHTML = disagreements.slice(0, 6).map(function(d) {
+    var smartColor = d.smartSide === 'YES' ? '#22c55e' : '#ef4444';
+    var dumbColor = d.dumbSide === 'YES' ? '#22c55e' : '#ef4444';
+    return '<div style="background:#0f0e0c;border:1px solid #2a2825;border-radius:12px;padding:16px">' +
+      '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:10px;line-height:1.4">' + (d.url ? '<a href="' + d.url + '" target="_blank" rel="noopener" style="color:var(--text);text-decoration:none">' + d.market.substring(0, 60) + '</a>' : d.market.substring(0, 60)) + '</div>' +
+      '<div style="display:flex;gap:12px;margin-bottom:10px">' +
+        '<div style="flex:1;padding:8px;background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.15);border-radius:8px;text-align:center">' +
+          '<div style="font-family:var(--mono);font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Smart Money</div>' +
+          '<div style="font-family:var(--mono);font-size:16px;font-weight:900;color:' + smartColor + '">' + d.smartSide + '</div>' +
+          '<div style="font-family:var(--mono);font-size:9px;color:var(--muted)">' + d.smartCount + ' whales · ' + fmtCap(d.smartTotal) + '</div>' +
+        '</div>' +
+        '<div style="flex:1;padding:8px;background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.15);border-radius:8px;text-align:center">' +
+          '<div style="font-family:var(--mono);font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Dumb Money</div>' +
+          '<div style="font-family:var(--mono);font-size:16px;font-weight:900;color:' + dumbColor + '">' + d.dumbSide + '</div>' +
+          '<div style="font-family:var(--mono);font-size:9px;color:var(--muted)">' + d.dumbCount + ' whales · ' + fmtCap(d.dumbTotal) + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="display:flex;align-items:center;justify-content:space-between">' +
+        '<span style="font-family:var(--mono);font-size:10px;color:var(--gold)">Gap: ' + d.gap + 'pts — follow the smart money</span>' +
+        (d.url ? '<a href="' + d.url + '" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:10px;color:var(--gold);text-decoration:none">Polymarket →</a>' : '') +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+// ── MISPRICING DETECTOR ──
+function renderMispricings() {
+  var grid = document.getElementById('mispricingGrid');
+  if (!grid || !_whaleData || !_whaleData.whales) return;
+  var whales = _whaleData.whales;
+
+  var markets = {};
+  whales.forEach(function(w) {
+    var m = w.market || '';
+    if (!markets[m]) markets[m] = { market: m, url: w.market_url || '', yes_cap: 0, no_cap: 0, whale_count: 0, prices_yes: [], prices_no: [] };
+    var val = parseFloat(w.current_value || w.size || 0);
+    var price = parseFloat(w.current_price || 0);
+    var side = (w.side || '').toLowerCase();
+    markets[m].whale_count++;
+    if (side === 'yes') { markets[m].yes_cap += val; markets[m].prices_yes.push(price); }
+    else { markets[m].no_cap += val; markets[m].prices_no.push(price); }
+  });
+
+  var mispricings = [];
+  Object.values(markets).forEach(function(m) {
+    if (m.whale_count < 3) return;
+    var total = m.yes_cap + m.no_cap;
+    if (total < 5000) return;
+    var marketYes;
+    if (m.prices_yes.length) marketYes = m.prices_yes.reduce(function(a,b){return a+b},0) / m.prices_yes.length;
+    else if (m.prices_no.length) marketYes = 1 - m.prices_no.reduce(function(a,b){return a+b},0) / m.prices_no.length;
+    else return;
+    var whaleYes = m.yes_cap / total;
+    var gap = Math.round((whaleYes - marketYes) * 100);
+    if (Math.abs(gap) < 15) return;
+    var direction = gap > 0 ? 'UNDERPRICED' : 'OVERPRICED';
+    var action = gap > 0 ? 'BUY YES' : 'BUY NO';
+    var roi = gap > 0 ? Math.round((1 / marketYes - 1) * 100) : Math.round((1 / (1 - marketYes) - 1) * 100);
+    mispricings.push({ market: m.market, url: m.url, marketYes: Math.round(marketYes * 100), whaleYes: Math.round(whaleYes * 100), gap: Math.abs(gap), direction: direction, action: action, roi: roi, whales: m.whale_count, capital: total });
+  });
+  mispricings.sort(function(a, b) { return b.gap - a.gap; });
+
+  if (mispricings.length === 0) {
+    grid.innerHTML = '<div style="text-align:center;padding:24px"><div style="font-size:20px;margin-bottom:8px">✅</div><div style="font-family:var(--mono);font-size:12px;color:var(--muted)">No significant mispricings detected. Markets are efficiently priced right now.</div></div>';
+    return;
+  }
+
+  function fmtCap(n) { return n >= 1e6 ? '$' + (n/1e6).toFixed(1) + 'M' : n >= 1e3 ? '$' + (n/1e3).toFixed(0) + 'K' : '$' + n.toFixed(0); }
+
+  grid.innerHTML = mispricings.slice(0, 8).map(function(m) {
+    var dirColor = m.direction === 'UNDERPRICED' ? '#22c55e' : '#ef4444';
+    var actionColor = m.action === 'BUY YES' ? '#22c55e' : '#ef4444';
+    return '<div style="background:#0f0e0c;border:1px solid #2a2825;border-left:3px solid ' + dirColor + ';border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">' +
+      '<div style="flex:1;min-width:200px">' +
+        '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;line-height:1.3">' + (m.url ? '<a href="' + m.url + '" target="_blank" rel="noopener" style="color:var(--text);text-decoration:none">' + m.market.substring(0, 55) + '</a>' : m.market.substring(0, 55)) + '</div>' +
+        '<div style="display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:10px;color:var(--muted)">' +
+          '<span>Market: ' + m.marketYes + '% YES</span>' +
+          '<span>Whales: ' + m.whaleYes + '% YES</span>' +
+          '<span>' + m.whales + ' whales · ' + fmtCap(m.capital) + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<div style="display:flex;align-items:center;gap:12px;flex-shrink:0">' +
+        '<div style="text-align:center">' +
+          '<div style="font-family:var(--mono);font-size:18px;font-weight:900;color:' + dirColor + '">' + m.gap + 'pts</div>' +
+          '<div style="font-family:var(--mono);font-size:8px;color:' + dirColor + ';text-transform:uppercase;letter-spacing:.08em">' + m.direction + '</div>' +
+        '</div>' +
+        '<div style="padding:6px 12px;background:' + actionColor + '22;border:1px solid ' + actionColor + '44;border-radius:6px;text-align:center">' +
+          '<div style="font-family:var(--mono);font-size:11px;font-weight:700;color:' + actionColor + '">' + m.action + '</div>' +
+          '<div style="font-family:var(--mono);font-size:9px;color:var(--muted)">+' + m.roi + '% ROI</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
 }
 </script>
 
