@@ -145,16 +145,14 @@ function getWhaleNickname(address) {
 const JWT_SECRET = process.env.JWT_SECRET || 'hyperflex-dev-secret-change-in-prod';
 if (!process.env.JWT_SECRET) console.warn('[SECURITY] JWT_SECRET not set — using insecure default. Set JWT_SECRET env var in production!');
 
+// ── Extracted modules (testable) ──
+const _libUtils = require('./lib/utils');
+const _libAuth = require('./lib/auth');
+const _libTrading = require('./lib/trading');
+
 // ── Rate limiting helpers ──
-const _rateLimits = {};
-function rateLimit(key, identifier, maxAttempts, windowMs) {
-  const bucket = key + ':' + identifier;
-  if (!_rateLimits[bucket] || Date.now() > _rateLimits[bucket].resetAt) {
-    _rateLimits[bucket] = { count: 0, resetAt: Date.now() + windowMs };
-  }
-  _rateLimits[bucket].count++;
-  return _rateLimits[bucket].count <= maxAttempts;
-}
+const _rateLimits = _libUtils._rateLimits;
+const rateLimit = _libUtils.rateLimit;
 // Cleanup stale entries every 10 min
 setInterval(() => { const now = Date.now(); for (const k of Object.keys(_rateLimits)) { if (now > _rateLimits[k].resetAt) delete _rateLimits[k]; } }, 600000);
 
@@ -1083,32 +1081,8 @@ app.put('/api/user/email', requireAuth, async (req, res) => {
 });
 
 // Auth middleware for protected routes
-function requireAuth(req, res, next) {
-  const auth = req.headers.authorization;
-  const token = auth && auth.startsWith('Bearer ') ? auth.slice(7) : null;
-  if (!token) return res.status(401).json({ error: 'Auth required' });
-  try {
-    const payload = jwt.verify(token, JWT_SECRET);
-    req.userId = payload.id;
-    req.user   = { id: payload.id };
-    next();
-  } catch (e) {
-    return res.status(401).json({ error: 'Invalid token' });
-  }
-}
-
-function optionalAuth(req, res, next) {
-  const auth = req.headers.authorization;
-  const token = auth && auth.startsWith('Bearer ') ? auth.slice(7) : null;
-  if (token) {
-    try {
-      const payload = jwt.verify(token, JWT_SECRET);
-      req.userId = payload.id;
-      req.user   = { id: payload.id };
-    } catch {}
-  }
-  next();
-}
+const requireAuth = _libAuth.requireAuth(JWT_SECRET);
+const optionalAuth = _libAuth.optionalAuth(JWT_SECRET);
 
 // ── EXTERNAL API CACHES ───────────────────────────
 const _kalshiCache = new Map();
@@ -2733,11 +2707,7 @@ async function getUserStreak(userId, excludeMarketId = null) {
 }
 
 // Multiplier tiers: 3 consecutive wins → 1.5×, 5+ → 2×
-function getStreakMultiplier(streak) {
-  if (streak >= 5) return 2.0;
-  if (streak >= 3) return 1.5;
-  return 1.0;
-}
+const getStreakMultiplier = _libUtils.getStreakMultiplier;
 
 // Batch-compute current streak for an array of userIds across a set of marketIds.
 // Returns { userId: streakCount } map.
@@ -2953,14 +2923,8 @@ cron.schedule('15 * * * *', safeCron('processPendingEmails', processPendingEmail
 // ── WEEKLY REFILLS ────────────────────────────────
 
 // Returns the most recent Monday at 00:00:00 UTC
-function getWeekStart(date = new Date()) {
-  const d = new Date(date);
-  const day = d.getUTCDay(); // 0=Sun, 1=Mon…6=Sat
-  const diff = day === 0 ? -6 : 1 - day; // roll back to Monday
-  d.setUTCDate(d.getUTCDate() + diff);
-  d.setUTCHours(0, 0, 0, 0);
-  return d;
-}
+// getWeekStart imported from lib/utils — returns Date object
+const getWeekStart = _libUtils.getWeekStart;
 
 // Process refills for one creator's community (or all creators if creatorSlug is null).
 // Called by the weekly cron and by the manual trigger endpoint.
@@ -4248,26 +4212,11 @@ const PROHIBITED_PATTERNS = [
 ];
 
 // ─── MIDDLEWARE: Auth guard ──────────────────────────────────
-function requireCreator(req, res, next) {
-  const auth = req.headers.authorization || '';
-  const token = auth.replace('Bearer ', '').trim();
-  if (!token) return res.status(401).json({ error: 'No token provided' });
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.creator = decoded;
-    next();
-  } catch {
-    return res.status(401).json({ error: 'Invalid or expired token' });
-  }
-}
+const requireCreator = _libAuth.requireCreator(JWT_SECRET);
 
 // ─── HELPER: Generate JWT ────────────────────────────────────
 function makeToken(user) {
-  return jwt.sign(
-    { id: user.id, email: user.email, slug: user.slug, is_creator: true },
-    JWT_SECRET,
-    { expiresIn: '30d' }
-  );
+  return _libAuth.makeToken(user, JWT_SECRET);
 }
 
 // ════════════════════════════════════════════════════════════
@@ -7970,14 +7919,8 @@ async function getChallengeProgress(settings) {
   };
 }
 
-function getWeekStart() {
-  const now = new Date();
-  const day = now.getUTCDay(); // 0=Sun
-  const diff = (day === 0 ? -6 : 1 - day);
-  const mon = new Date(now);
-  mon.setUTCDate(now.getUTCDate() + diff);
-  mon.setUTCHours(0, 0, 0, 0);
-  return mon.toISOString();
+function getWeekStartISO() {
+  return _libUtils.getWeekStart().toISOString();
 }
 
 // PUT /api/creator/challenge — set or clear active challenge
@@ -13221,13 +13164,7 @@ app.get('/:slug', async (req, res, next) => {
 // Protected by ADMIN_SECRET env var (sent as ?secret=... or Authorization header)
 // ════════════════════════════════════════════════════════════
 
-function requireAdmin(req, res, next) {
-  const secret = process.env.ADMIN_SECRET;
-  if (!secret) return res.status(503).json({ error: 'Admin not configured (set ADMIN_SECRET)' });
-  const provided = req.query.secret || (req.headers.authorization || '').replace('Bearer ', '').trim() || (req.body && req.body.secret) || '';
-  if (provided !== secret) return res.status(403).json({ error: 'Forbidden' });
-  next();
-}
+const requireAdmin = _libAuth.requireAdmin(process.env.ADMIN_SECRET);
 
 // Serve admin HTML
 app.get('/admin', (req, res) => {
@@ -17454,38 +17391,7 @@ let _whaleWatchCache = null;
 let _whalePositionSnapshot = new Map(); // wallet → positions array
 let _whaleTradeStream = []; // max 100 items, newest first
 
-function diffWhalePositions(oldPositions, newPositions, trader) {
-  const changes = [];
-  const oldMap = new Map((oldPositions || []).map(p => [p.title || p.market, p]));
-  const newMap = new Map((newPositions || []).map(p => [p.title || p.market, p]));
-
-  // New positions (opened)
-  for (const [title, p] of newMap) {
-    if (!oldMap.has(title) && (parseFloat(p.size) || 0) >= 1000) {
-      changes.push({ type: 'opened', trader, position: p });
-    }
-  }
-
-  // Removed positions (closed)
-  for (const [title, p] of oldMap) {
-    if (!newMap.has(title) && (parseFloat(p.size) || 0) >= 1000) {
-      changes.push({ type: 'closed', trader, position: p });
-    }
-  }
-
-  // Size changes > 20%
-  for (const [title, newP] of newMap) {
-    const oldP = oldMap.get(title);
-    if (oldP) {
-      const oldSize = parseFloat(oldP.size) || 0;
-      const newSize = parseFloat(newP.size) || 0;
-      if (oldSize > 0 && Math.abs(newSize - oldSize) / oldSize > 0.2 && newSize >= 1000) {
-        changes.push({ type: newSize > oldSize ? 'increased' : 'decreased', trader, position: newP, oldSize, newSize });
-      }
-    }
-  }
-  return changes;
-}
+const diffWhalePositions = _libTrading.diffWhalePositions;
 
 async function fetchWhalePositions() {
   const fetch = _nodeFetch;
@@ -17833,105 +17739,7 @@ let _whaleAlphaCache = null; // { ts, scores: Map<wallet, { score, grade, breakd
 
 function computeWhaleAlphaScores() {
   const whaleData = _whaleWatchCache && _whaleWatchCache.data ? _whaleWatchCache.data : null;
-  if (!whaleData || !whaleData.whales) return new Map();
-
-  // Group positions by trader wallet
-  const byWallet = new Map();
-  for (const w of whaleData.whales) {
-    if (!w.proxyWallet) continue;
-    if (!byWallet.has(w.proxyWallet)) {
-      byWallet.set(w.proxyWallet, { name: w.trader, rank: w.trader_rank, pnl: w.trader_pnl, positions: [] });
-    }
-    byWallet.get(w.proxyWallet).positions.push(w);
-  }
-
-  const scores = new Map();
-  const now = Date.now();
-
-  for (const [wallet, data] of byWallet) {
-    const positions = data.positions;
-    const totalPos = positions.length;
-
-    // 1. Win rate proxy (30% weight) — use PnL as proxy (positive PnL = higher win rate estimate)
-    const pnl = data.pnl || 0;
-    // Normalize: $0 PnL → 50, $1M+ → 95, negative → 20-50
-    let winRateScore;
-    if (pnl >= 1000000) winRateScore = 95;
-    else if (pnl >= 500000) winRateScore = 85;
-    else if (pnl >= 100000) winRateScore = 75;
-    else if (pnl >= 10000) winRateScore = 65;
-    else if (pnl >= 0) winRateScore = 50;
-    else if (pnl >= -50000) winRateScore = 35;
-    else winRateScore = 20;
-
-    // 2. Category diversification (20% weight) — more categories = higher score
-    const categories = new Set();
-    for (const p of positions) {
-      const q = (p.market || '').toLowerCase();
-      if (/nba|nfl|mlb|soccer|football|vs\.|match|game|win on/.test(q)) categories.add('sports');
-      else if (/bitcoin|ethereum|crypto|btc|eth|solana/.test(q)) categories.add('crypto');
-      else if (/president|election|trump|biden|congress/.test(q)) categories.add('politics');
-      else if (/youtube|tiktok|twitter|views|subscribers/.test(q)) categories.add('entertainment');
-      else categories.add('other');
-    }
-    const catScore = Math.min(95, categories.size * 25);
-
-    // 3. Early entry score (25% weight) — positions with favorable current price vs entry
-    let earlySum = 0;
-    let earlyCount = 0;
-    for (const p of positions) {
-      const price = p.current_price || 0;
-      const side = (p.side || '').toUpperCase();
-      // If YES and price went up, or NO and price went down = early entry
-      if (side === 'YES' && price > 0.5) { earlySum += Math.min(95, price * 100); earlyCount++; }
-      else if (side === 'NO' && price < 0.5) { earlySum += Math.min(95, (1 - price) * 100); earlyCount++; }
-      else { earlySum += 40; earlyCount++; }
-    }
-    const earlyScore = earlyCount > 0 ? Math.round(earlySum / earlyCount) : 50;
-
-    // 4. Sizing discipline (15% weight) — consistent sizing = higher score
-    const sizes = positions.map(p => p.size).filter(s => s > 0);
-    let sizingScore = 50;
-    if (sizes.length >= 3) {
-      const avg = sizes.reduce((a, b) => a + b, 0) / sizes.length;
-      const stddev = Math.sqrt(sizes.reduce((s, v) => s + (v - avg) ** 2, 0) / sizes.length);
-      const cv = avg > 0 ? stddev / avg : 1; // coefficient of variation
-      sizingScore = cv < 0.3 ? 90 : cv < 0.6 ? 75 : cv < 1 ? 60 : 40;
-    }
-
-    // 5. Recency (10% weight) — penalize inactive traders
-    let recencyScore = 50;
-    if (data.rank <= 10) recencyScore = 90; // Top 10 by definition active
-    else if (data.rank <= 25) recencyScore = 75;
-    else if (data.rank <= 40) recencyScore = 60;
-    else recencyScore = 45;
-    if (totalPos >= 5) recencyScore = Math.min(95, recencyScore + 15);
-
-    // Composite
-    const composite = Math.round(
-      winRateScore * 0.30 +
-      catScore * 0.20 +
-      earlyScore * 0.25 +
-      sizingScore * 0.15 +
-      recencyScore * 0.10
-    );
-    const score = Math.min(99, Math.max(1, composite));
-
-    // Letter grade
-    let grade;
-    if (score >= 90) grade = 'A+';
-    else if (score >= 80) grade = 'A';
-    else if (score >= 70) grade = 'B';
-    else if (score >= 55) grade = 'C';
-    else grade = 'D';
-
-    scores.set(wallet, {
-      score, grade, name: data.name, rank: data.rank,
-      breakdown: { win_rate: winRateScore, category: catScore, early_entry: earlyScore, sizing: sizingScore, recency: recencyScore }
-    });
-  }
-
-  return scores;
+  return _libTrading.computeWhaleAlphaScores(whaleData);
 }
 
 // GET /api/whale-scores — public, cached 30 min
@@ -17956,7 +17764,7 @@ app.get('/api/whale-scores', async (req, res) => {
 // ══════════════════════════════════════════════════════════
 // ELITE WHALES — Top 0.5% most profitable, grade A+ and A only
 // ══════════════════════════════════════════════════════════
-const _gradeMultiplier = { 'A+': 1.0, 'A': 0.9, 'B': 0.75, 'C': 0.55, 'D': 0.35 };
+const _gradeMultiplier = _libTrading._gradeMultiplier;
 
 function getEliteWhales() {
   const whaleData = _whaleWatchCache && _whaleWatchCache.data ? _whaleWatchCache.data : null;
@@ -17980,32 +17788,7 @@ function getEliteWhales() {
 }
 
 // Compute Alpha Score (0-10) for a market based on elite whale consensus
-function computeMarketAlphaScore(market, whaleIndex, eliteScores) {
-  if (!whaleIndex || !market) return 0;
-  const idx = whaleIndex.find(w => w.market === market.question || w.market === market.market || w.market_id === market.market_id);
-  if (!idx || !idx.whale_count || idx.whale_count < 2) return 0;
-
-  const marketPrice = market.yes_price || market.price || 0.5;
-  const whaleConsensus = idx.consensus_side === 'YES' ? (idx.consensus_pct / 100) : (1 - idx.consensus_pct / 100);
-  const divergence = Math.abs(whaleConsensus - marketPrice) * 100; // 0-100 pts
-
-  // Average alpha grade of whales in this market
-  const wallets = idx.wallets || [];
-  let gradeSum = 0, gradeCount = 0;
-  for (const w of wallets) {
-    const s = eliteScores.get(w);
-    if (s) { gradeSum += (_gradeMultiplier[s.grade] || 0.5); gradeCount++; }
-  }
-  const avgGrade = gradeCount > 0 ? gradeSum / gradeCount : 0.5;
-
-  // Capital weight: log10($100K)=5, log10($1M)=6, normalized 0-1.2
-  const totalCapital = idx.total_capital || 10000;
-  const capitalWeight = Math.min(1.2, Math.log10(Math.max(1, totalCapital)) / 5.5);
-
-  // Alpha Score = divergence scaled by whale quality and capital
-  const raw = (divergence / 10) * avgGrade * capitalWeight;
-  return Math.round(Math.min(10, Math.max(0, raw)) * 10) / 10; // 0.0 - 10.0
-}
+const computeMarketAlphaScore = _libTrading.computeMarketAlphaScore;
 
 app.get('/api/whale-watch', async (req, res) => {
   try {
@@ -18608,29 +18391,7 @@ app.get('/api/screener', async (req, res) => {
   }
 });
 
-function filterScreenerResults(markets, query) {
-  let filtered = [...markets];
-  const minWhales = parseInt(query.min_whales) || 0;
-  const category = (query.category || '').toLowerCase();
-  const minVolume = parseInt(query.min_volume) || 0;
-  const sort = query.sort || 'edge_score';
-
-  if (minWhales > 0) filtered = filtered.filter(m => m.whale_count >= minWhales);
-  if (category && category !== 'all') filtered = filtered.filter(m => m.category === category);
-  if (minVolume > 0) filtered = filtered.filter(m => m.volume >= minVolume);
-
-  // Sort
-  switch (sort) {
-    case 'volume': filtered.sort((a, b) => b.volume - a.volume); break;
-    case 'price_change': filtered.sort((a, b) => Math.abs(b.price_change_24h || 0) - Math.abs(a.price_change_24h || 0)); break;
-    case 'newest': filtered.sort((a, b) => (b.days_until_expiry || 999) - (a.days_until_expiry || 999)); break;
-    case 'edge_score': filtered.sort((a, b) => (b.edge_score || 0) - (a.edge_score || 0)); break;
-    case 'whale_count': filtered.sort((a, b) => b.whale_count - a.whale_count || b.volume - a.volume); break;
-    default: filtered.sort((a, b) => (b.edge_score || 0) - (a.edge_score || 0)); break;
-  }
-
-  return filtered;
-}
+const filterScreenerResults = _libTrading.filterScreenerResults;
 
 // ── WHALE FLOW INDEX — aggregated whale insights ──────────────────────────
 let _whaleFlowCache = null;
@@ -18776,13 +18537,7 @@ app.get('/api/whale-flow', async (req, res) => {
 const _catalystCache = new Map(); // key: normalized question → { headline, source, url, publishedAt, ts }
 const CATALYST_TTL = 30 * 60 * 1000; // 30 min
 
-function extractKeywords(question) {
-  // Extract 2-4 meaningful keywords from a market question
-  const stop = new Set(['will','the','a','an','in','on','at','by','for','of','to','is','be','and','or','not','this','that','it','its','has','have','had','do','does','did','win','vs','vs.','above','below','before','after','end','next','last','first','over','under','hit','reach','get','would','should','could','from','with','than','more','most','less','new','old','2024','2025','2026','2027','2028','march','april','may','june','july','august','september','october','november','december','january','february']);
-  const words = (question || '').replace(/[?!.,;:'"()\[\]{}]/g, '').split(/\s+/).filter(w => w.length > 2 && !stop.has(w.toLowerCase()));
-  // Take first 3-4 meaningful words
-  return words.slice(0, 4).join(' ');
-}
+const extractKeywords = _libUtils.extractKeywords;
 
 async function fetchMarketCatalyst(question) {
   const key = (question || '').toLowerCase().trim();
@@ -18821,13 +18576,7 @@ async function fetchMarketCatalyst(question) {
   }
 }
 
-function _timeAgoStr(iso) {
-  const d = Date.now() - new Date(iso).getTime();
-  if (d < 60000) return '<1m ago';
-  if (d < 3600000) return Math.floor(d / 60000) + 'm ago';
-  if (d < 86400000) return Math.floor(d / 3600000) + 'h ago';
-  return Math.floor(d / 86400000) + 'd ago';
-}
+const _timeAgoStr = _libUtils.timeAgoStr;
 
 // GET /api/catalyst?q=market question text — returns news catalyst for a market
 app.get('/api/catalyst', async (req, res) => {
@@ -18849,30 +18598,8 @@ app.get('/api/catalysts', async (req, res) => {
 });
 
 // ── NARRATIVE INTELLIGENCE — group markets into dominant themes ────────────
-const NARRATIVE_KEYWORDS = {
-  'Trump & US Politics':   ['trump','president','democrat','republican','congress','senate','maga','white house','tariff','executive order','vance','gop','biden','kamala','rnc','dnc','impeach','scotus','supreme court'],
-  'Crypto & DeFi':         ['bitcoin','btc','ethereum','eth','crypto','solana','sol','defi','nft','coinbase','stablecoin','altcoin','xrp','dogecoin','doge','memecoin','binance','token','blockchain','web3','polygon','avalanche','cardano','chainlink','uniswap','aave','backpack'],
-  'Middle East & War':     ['israel','iran','gaza','hamas','hezbollah','ceasefire','hormuz','middle east','lebanon','netanyahu','strike','invasion','military','pentagon','troops','bomb','missile','airstrike','war ','warfare','conflict','idf','tehran','syria','yemen','houthi'],
-  'AI & Big Tech':         ['ai ','openai','gpt','artificial intelligence','nvidia','apple','microsoft','google','meta ','anthropic','chatgpt','claude','gemini','llm','machine learning','deepseek','tesla','spacex','elon musk','robot','autonomous'],
-  'Macro & Economy':       ['fed ','federal reserve','interest rate','inflation','recession','gdp','cpi','unemployment','rate cut','yield','crude oil','gold price','tariff','s&p','nasdaq','dow','stock market','treasury','bond','commodity','forex','oil price','copper','silver'],
-  'Ukraine & Russia':      ['ukraine','russia','zelensky','putin','nato','kyiv','donbas','crimea','moscow','sanctions'],
-  'NBA & Basketball':      ['nba','basketball','finals','playoff','lakers','celtics','warriors','nuggets','cavaliers','thunder','knicks','bucks','76ers','rockets','heat','suns','nets','kings','clippers','bulls','pacers','timberwolves','grizzlies','hawks','pistons','hornets','magic','wizards','pelicans','raptors','jazz','mavericks','spurs','blazers'],
-  'NFL & American Sports': ['nfl','super bowl','mlb','world series','nhl','stanley cup','ncaa','march madness','yankees','dodgers','mets','cubs','red sox','chiefs','eagles','cowboys','49ers','ravens','bills','bengals','dolphins','lions','steelers','packers','bears','rams','seahawks','saints','ufc','boxing','fight night'],
-  'Soccer & Football':     ['premier league','champions league','la liga','serie a','bundesliga','ligue 1','uefa','fifa','world cup','epl','manchester','liverpool','arsenal','chelsea','barcelona','real madrid','psg','bayern','juventus','napoli','inter milan','tottenham','man city','man united','mls','soccer'],
-  'Health & Science':      ['measles','vaccine','fda','covid','pandemic','virus','disease','outbreak','drug','pharma','clinical trial','cdc','who ','health','cancer','obesity','bird flu','monkeypox','treatment','epidemic'],
-  'Pop Culture':           ['oscar','grammy','emmy','movie','film','album','celebrity','kardashian','taylor swift','drake','beyonce','kanye','netflix','disney','tiktok','youtube','spotify','concert','box office','award','super bowl halftime'],
-  'Weather & Climate':     ['temperature','hurricane','wildfire','flood','earthquake','tornado','climate','weather','heat wave','cold snap','storm','drought','el nino','la nina','celsius','fahrenheit'],
-  'Global Elections':      ['election','vote','ballot','candidate','prime minister','chancellor','parliament','referendum','runoff','polling','constituency'],
-  'Other':                 []
-};
-function classifyNarrative(question) {
-  const q = (question || '').toLowerCase();
-  for (const [narrative, keywords] of Object.entries(NARRATIVE_KEYWORDS)) {
-    if (narrative === 'Other') continue;
-    if (keywords.some(kw => q.includes(kw))) return narrative;
-  }
-  return 'Other';
-}
+const NARRATIVE_KEYWORDS = _libUtils.NARRATIVE_KEYWORDS;
+const classifyNarrative = _libUtils.classifyNarrative;
 
 async function snapshotNarratives(narrativeData) {
   try {
@@ -25117,9 +24844,7 @@ async function sendDailyBriefingEmail() {
 }
 
 // Helper for email HTML escaping (used in email templates)
-function _escHtmlStr(s) {
-  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
+const _escHtmlStr = _libUtils.escHtmlStr;
 
 // Daily briefing email cron — 8am UTC daily
 cron.schedule('0 8 * * *', () => { console.log('[daily-briefing-email] Cron triggered'); sendDailyBriefingEmail().catch(err => console.error('[daily-briefing-email] Cron error:', err.message)); });
@@ -26592,18 +26317,9 @@ app.get('/events', (req, res) => res.sendFile(path.join(__dirname, 'public', 'ev
 // NEWS SENTIMENT PIPELINE — match headlines to markets
 // ════════════════════════════════════════════════════════════
 
-const BULLISH_WORDS = ['surge', 'rally', 'win', 'approve', 'pass', 'gain', 'soar', 'rise', 'boost', 'record', 'breakthrough', 'success', 'launch', 'bullish', 'up', 'jumps', 'climbs'];
-const BEARISH_WORDS = ['crash', 'fall', 'lose', 'reject', 'fail', 'drop', 'plunge', 'decline', 'crisis', 'risk', 'down', 'slump', 'bearish', 'cut', 'layoff', 'ban', 'collapse'];
-
-function detectSentiment(text) {
-  const lower = (text || '').toLowerCase();
-  let bull = 0, bear = 0;
-  for (const w of BULLISH_WORDS) { if (lower.includes(w)) bull++; }
-  for (const w of BEARISH_WORDS) { if (lower.includes(w)) bear++; }
-  if (bull > bear) return 'bullish';
-  if (bear > bull) return 'bearish';
-  return 'neutral';
-}
+const BULLISH_WORDS = _libUtils.BULLISH_WORDS;
+const BEARISH_WORDS = _libUtils.BEARISH_WORDS;
+const detectSentiment = _libUtils.detectSentiment;
 
 let _newsImpactCache = null;
 
