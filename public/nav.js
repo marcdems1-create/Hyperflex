@@ -44,7 +44,7 @@
   var nav = document.createElement('nav');
   nav.className = 'topbar';
   nav.innerHTML =
-    '<a href="/" class="topbar-logo">HYPER<span>FLEX</span></a>' +
+    '<a href="/explore" class="topbar-logo">HYPER<span>FLEX</span></a>' +
     '<div class="nav-links">' +
       links.map(function(l) {
         var isActive = path === l.href;
