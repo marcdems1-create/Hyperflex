@@ -1438,7 +1438,7 @@ function renderSmartVsDumb() {
     if (!markets[m]) markets[m] = { market: m, url: w.market_url || '', smart_yes: 0, smart_no: 0, dumb_yes: 0, dumb_no: 0, total: 0, smart_count: 0, dumb_count: 0 };
     var addr = (w.proxyWallet || '').toLowerCase();
     var score = _consistentTraderMap[addr] ? _consistentTraderMap[addr].score : 0;
-    var isSmart = score >= 90;
+    var isSmart = score >= 60;
     var val = parseFloat(w.current_value || w.size || 0);
     var side = (w.side || '').toLowerCase();
     if (isSmart) {
@@ -1457,11 +1457,11 @@ function renderSmartVsDumb() {
     if (m.smart_count < 1 || m.dumb_count < 1) return;
     var smartTotal = m.smart_yes + m.smart_no;
     var dumbTotal = m.dumb_yes + m.dumb_no;
-    if (smartTotal < 1000 || dumbTotal < 1000) return;
+    if (smartTotal < 100 || dumbTotal < 100) return;
     var smartYesPct = smartTotal > 0 ? Math.round(m.smart_yes / smartTotal * 100) : 50;
     var dumbYesPct = dumbTotal > 0 ? Math.round(m.dumb_yes / dumbTotal * 100) : 50;
     var gap = Math.abs(smartYesPct - dumbYesPct);
-    if (gap < 10) return;
+    if (gap < 5) return;
     disagreements.push({ market: m.market, url: m.url, smartYes: smartYesPct, dumbYes: dumbYesPct, gap: gap, smartCount: m.smart_count, dumbCount: m.dumb_count, smartTotal: smartTotal, dumbTotal: dumbTotal, smartSide: smartYesPct > 50 ? 'YES' : 'NO', dumbSide: dumbYesPct > 50 ? 'YES' : 'NO' });
   });
   disagreements.sort(function(a, b) { return b.gap - a.gap; });
