@@ -102,6 +102,15 @@
       if (href.indexOf('via=') !== -1) return;
       var sep = href.indexOf('?') !== -1 ? '&' : '?';
       a.setAttribute('href', href + sep + 'via=' + code);
+      // Track clickthrough for reward points (non-blocking)
+      var token = localStorage.getItem('hf_token');
+      if (token) {
+        fetch('/api/rewards/track-click', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+          body: JSON.stringify({ url: href.substring(0, 200) })
+        }).catch(function() {});
+      }
     }, true);
   }
 })();

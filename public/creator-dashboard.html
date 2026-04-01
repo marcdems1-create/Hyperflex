@@ -4812,6 +4812,61 @@ body.nav-open .sidebar-backdrop {
         <div class="section">
           <div style="max-width:860px">
 
+            <!-- TRADING REWARDS BANNER -->
+            <div id="rewardsBanner" style="display:none;margin-bottom:20px;padding:20px 24px;background:linear-gradient(135deg,rgba(201,146,13,0.08),rgba(201,146,13,0.02));border:1px solid rgba(201,146,13,0.25);border-radius:14px">
+              <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+                <div style="display:flex;align-items:center;gap:14px">
+                  <div style="width:44px;height:44px;border-radius:12px;background:rgba(201,146,13,0.15);display:flex;align-items:center;justify-content:center;font-size:22px">&#x1F381;</div>
+                  <div>
+                    <div style="font-family:var(--sans);font-weight:800;font-size:15px;color:var(--text)">Trading Rewards</div>
+                    <div style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:2px">Trade through HYPERFLEX, earn subscription credits</div>
+                  </div>
+                </div>
+                <div style="display:flex;align-items:center;gap:16px">
+                  <div style="text-align:center">
+                    <div id="rewardsBalance" style="font-family:var(--sans);font-weight:800;font-size:22px;color:var(--gold)">0</div>
+                    <div style="font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:0.05em">POINTS</div>
+                  </div>
+                  <button onclick="openRewardsModal()" style="background:var(--gold);color:#141412;border:none;border-radius:8px;padding:10px 18px;font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer;min-height:44px;transition:opacity 0.15s" onmouseover="this.style.opacity='0.88'" onmouseout="this.style.opacity='1'">Redeem</button>
+                </div>
+              </div>
+              <!-- How it works row -->
+              <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:16px;padding-top:14px;border-top:1px solid rgba(201,146,13,0.15)">
+                <div style="display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;color:var(--dim)">
+                  <span style="color:var(--gold)">&#x1F517;</span> Click to Polymarket = <span style="color:var(--gold);font-weight:700">10 pts</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;color:var(--dim)">
+                  <span style="color:#a78bfa">&#x1F7E3;</span> Synced Polymarket position = <span style="color:var(--gold);font-weight:700">25 pts</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;color:var(--dim)">
+                  <span style="color:#8b5cf6">&#x1F7E1;</span> Synced Kalshi = <span style="color:var(--gold);font-weight:700">50 pts</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;color:var(--dim)">
+                  <span style="color:#10b981">&#x1F7E2;</span> Synced Manifold = <span style="color:var(--gold);font-weight:700">15 pts</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- REWARDS REDEMPTION MODAL -->
+            <div id="rewardsModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:999;display:none;align-items:center;justify-content:center" onclick="if(event.target===this)this.style.display='none'">
+              <div style="background:var(--bg);border:1px solid var(--border);border-radius:16px;padding:28px;max-width:440px;width:90%;max-height:80vh;overflow-y:auto" onclick="event.stopPropagation()">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+                  <h3 style="font-family:var(--sans);font-weight:800;font-size:18px;color:var(--text);margin:0">Redeem Points</h3>
+                  <button onclick="document.getElementById('rewardsModal').style.display='none'" style="background:none;border:none;color:var(--dim);font-size:20px;cursor:pointer;padding:4px 8px;min-height:44px">&times;</button>
+                </div>
+                <div style="text-align:center;margin-bottom:20px">
+                  <div style="font-family:var(--sans);font-weight:800;font-size:32px;color:var(--gold)" id="rewardsModalBalance">0</div>
+                  <div style="font-family:var(--mono);font-size:11px;color:var(--dim)">available points</div>
+                </div>
+                <div id="rewardsModalTiers" style="display:flex;flex-direction:column;gap:10px"></div>
+                <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border)">
+                  <div style="font-family:var(--mono);font-size:10px;color:var(--dim);line-height:1.6">
+                    Credits are applied to your next subscription payment. Funded by our Polymarket partnership &mdash; we earn referral fees when you trade through HYPERFLEX and pass savings back to you.
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- Browser Wallet Connect Bar -->
             <div id="walletConnectBar" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;padding:14px 20px;background:var(--cream);border:1px solid var(--border);border-radius:12px">
               <div style="display:flex;align-items:center;gap:10px">
@@ -7308,6 +7363,7 @@ function showTab(tab) {
     if (kitSection) kitSection.style.display = (plan === 'pro' || plan === 'platinum') ? '' : 'none';
   }
   if (tab === 'resolve') loadDisputes();
+  if (tab === 'portfolio') loadRewards();
   // Re-render markets from cache so tab is never stuck on "Loading…"
   if (tab === 'markets') {
     if (communityMarkets && communityMarkets.length >= 0) {
@@ -13027,6 +13083,71 @@ async function loadPolymarketPositions(forceRefresh) {
 
 // ── PORTFOLIO TAB SWITCHER ──────────────────────────────────────────────────
 let _activePortfolioTab = 'all';
+// ── Trading Rewards ──────────────────────────────────────
+var _rewardsData = null;
+function loadRewards() {
+  var token = localStorage.getItem('hf_token');
+  if (!token) return;
+  fetch('/api/rewards/balance', { headers: { Authorization: 'Bearer ' + token } })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      _rewardsData = d;
+      var banner = document.getElementById('rewardsBanner');
+      if (banner) { banner.style.display = 'block'; }
+      var balEl = document.getElementById('rewardsBalance');
+      if (balEl) balEl.textContent = (d.points_balance || 0).toLocaleString();
+    })
+    .catch(function() {});
+}
+
+function openRewardsModal() {
+  var modal = document.getElementById('rewardsModal');
+  modal.style.display = 'flex';
+  var balEl = document.getElementById('rewardsModalBalance');
+  var tiersEl = document.getElementById('rewardsModalTiers');
+  var bal = _rewardsData ? _rewardsData.points_balance || 0 : 0;
+  balEl.textContent = bal.toLocaleString();
+  var tiers = _rewardsData ? _rewardsData.tiers || [] : [];
+  tiersEl.innerHTML = '';
+  tiers.forEach(function(tier, i) {
+    var canRedeem = bal >= tier.points;
+    var div = document.createElement('div');
+    div.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:var(--cream);border:1px solid ' + (canRedeem ? 'rgba(201,146,13,0.4)' : 'var(--border)') + ';border-radius:10px;transition:border-color 0.2s';
+    div.innerHTML =
+      '<div>' +
+        '<div style="font-family:var(--sans);font-weight:700;font-size:13px;color:var(--text)">' + tier.label + '</div>' +
+        '<div style="font-family:var(--mono);font-size:11px;color:var(--dim)">' + tier.points.toLocaleString() + ' points</div>' +
+      '</div>' +
+      '<button onclick="redeemReward(' + i + ')" style="background:' + (canRedeem ? 'var(--gold)' : 'var(--border)') + ';color:' + (canRedeem ? '#141412' : 'var(--dim)') + ';border:none;border-radius:8px;padding:8px 16px;font-family:var(--sans);font-size:12px;font-weight:700;cursor:' + (canRedeem ? 'pointer' : 'default') + ';min-height:44px;opacity:' + (canRedeem ? '1' : '0.5') + '" ' + (canRedeem ? '' : 'disabled') + '>' + (canRedeem ? 'Redeem' : (tier.points - bal).toLocaleString() + ' more') + '</button>';
+    tiersEl.appendChild(div);
+  });
+}
+
+function redeemReward(tierIndex) {
+  var token = localStorage.getItem('hf_token');
+  if (!token) return;
+  if (!confirm('Redeem these points for a subscription credit?')) return;
+  fetch('/api/rewards/redeem', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({ tier_index: tierIndex })
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.ok) {
+        showToast('Redeemed! ' + d.redeemed + ' applied to your account', 'success');
+        document.getElementById('rewardsModal').style.display = 'none';
+        loadRewards();
+      } else {
+        showToast(d.error || 'Redemption failed', 'error');
+      }
+    })
+    .catch(function() { showToast('Redemption failed', 'error'); });
+}
+
+// Load rewards when portfolio tab opens
+var _origShowTab = typeof showTab === 'function' ? showTab : null;
+
 function switchPortfolioTab(tab) {
   _activePortfolioTab = tab;
   const tabs = ['all','poly','kalshi','manifold','hfx'];

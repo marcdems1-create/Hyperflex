@@ -11,6 +11,10 @@ const {
   classifyNarrative,
   detectSentiment,
   polyRef,
+  REWARD_POINTS,
+  REDEMPTION_TIERS,
+  calcSyncRewardPoints,
+  canRedeemTier,
 } = require('../../lib/utils');
 
 // ── rateLimit ─────────────────────────────────────────────
@@ -300,5 +304,79 @@ describe('polyRef', () => {
   test('tags profile URLs', () => {
     expect(polyRef('https://polymarket.com/profile/0xabc', REF))
       .toBe('https://polymarket.com/profile/0xabc?via=hyperflex');
+  });
+});
+
+// ── calcSyncRewardPoints ──────────────────────────────────
+describe('calcSyncRewardPoints', () => {
+  test('calculates points for mixed platform positions', () => {
+    const positions = [
+      { platform: 'polymarket', external_id: '1' },
+      { platform: 'polymarket', external_id: '2' },
+      { platform: 'kalshi', external_id: '3' },
+      { platform: 'manifold', external_id: '4' },
+    ];
+    const result = calcSyncRewardPoints(positions);
+    expect(result.total).toBe(25 * 2 + 50 * 1 + 15 * 1); // 115
+    expect(result.breakdown.polymarket).toBe(2);
+    expect(result.breakdown.kalshi).toBe(1);
+    expect(result.breakdown.manifold).toBe(1);
+  });
+
+  test('returns 0 for empty input', () => {
+    expect(calcSyncRewardPoints([]).total).toBe(0);
+    expect(calcSyncRewardPoints(null).total).toBe(0);
+  });
+
+  test('handles polymarket-only positions', () => {
+    const positions = [
+      { platform: 'polymarket' },
+      { platform: 'polymarket' },
+      { platform: 'polymarket' },
+    ];
+    expect(calcSyncRewardPoints(positions).total).toBe(75);
+  });
+
+  test('kalshi earns highest per position', () => {
+    expect(REWARD_POINTS.sync_kalshi).toBeGreaterThan(REWARD_POINTS.sync_polymarket);
+    expect(REWARD_POINTS.sync_kalshi).toBeGreaterThan(REWARD_POINTS.sync_manifold);
+  });
+
+  test('ignores unknown platforms', () => {
+    const positions = [{ platform: 'unknown_exchange' }];
+    expect(calcSyncRewardPoints(positions).total).toBe(0);
+  });
+});
+
+// ── canRedeemTier ─────────────────────────────────────────
+describe('canRedeemTier', () => {
+  test('returns true when balance meets tier', () => {
+    expect(canRedeemTier(3000, 0)).toBe(true);
+    expect(canRedeemTier(5000, 0)).toBe(true);
+  });
+
+  test('returns false when balance is insufficient', () => {
+    expect(canRedeemTier(2999, 0)).toBe(false);
+    expect(canRedeemTier(0, 0)).toBe(false);
+  });
+
+  test('returns false for invalid tier index', () => {
+    expect(canRedeemTier(100000, 99)).toBe(false);
+    expect(canRedeemTier(100000, -1)).toBe(false);
+  });
+
+  test('tier 0 is cheapest, tier 3 is most expensive', () => {
+    expect(REDEMPTION_TIERS[0].points).toBeLessThan(REDEMPTION_TIERS[3].points);
+    expect(REDEMPTION_TIERS[0].credit_cents).toBeLessThan(REDEMPTION_TIERS[3].credit_cents);
+  });
+
+  test('all tiers have required fields', () => {
+    REDEMPTION_TIERS.forEach(tier => {
+      expect(tier).toHaveProperty('points');
+      expect(tier).toHaveProperty('credit_cents');
+      expect(tier).toHaveProperty('label');
+      expect(tier.points).toBeGreaterThan(0);
+      expect(tier.credit_cents).toBeGreaterThan(0);
+    });
   });
 });

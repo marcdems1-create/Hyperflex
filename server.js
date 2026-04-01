@@ -12125,8 +12125,26 @@ async function syncUserPositions(user) {
     }
     console.log(`[auto-sync] Synced ${upserts.length} positions for user ${user.id}`);
 
-    // Copy trade notifications for new positions
+    // Award trading reward points for synced positions (deduped: only new positions)
     const newPositions = upserts.filter(u => !oldIds.has(`${u.platform}:${u.external_id}`));
+    if (newPositions.length > 0) {
+      try {
+        const byPlatform = { polymarket: 0, kalshi: 0, manifold: 0 };
+        for (const p of newPositions) { if (byPlatform[p.platform] !== undefined) byPlatform[p.platform]++; }
+        const totalPoints =
+          byPlatform.polymarket * REWARD_POINTS.sync_polymarket +
+          byPlatform.kalshi * REWARD_POINTS.sync_kalshi +
+          byPlatform.manifold * REWARD_POINTS.sync_manifold;
+        if (totalPoints > 0) {
+          awardRewardPoints(user.id, 'position_sync', totalPoints, {
+            polymarket: byPlatform.polymarket, kalshi: byPlatform.kalshi, manifold: byPlatform.manifold,
+            new_positions: newPositions.length
+          }).catch(() => {}); // fire-and-forget
+        }
+      } catch (e) { /* rewards are non-critical */ }
+    }
+
+    // Copy trade notifications for new positions
     if (newPositions.length > 0) {
       try {
         let subs;
@@ -16412,6 +16430,165 @@ app.put('/api/user/wallets', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[wallets PUT]', err.message);
     res.status(500).json({ error: 'Failed to update wallet info' });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+// TRADING REWARDS — points from Polymarket referral partnership
+// Users earn points for clickthroughs + synced trades, redeem for subscription credits
+// ════════════════════════════════════════════════════════════
+
+const REWARD_POINTS = _libUtils.REWARD_POINTS;
+const REDEMPTION_TIERS = _libUtils.REDEMPTION_TIERS;
+
+// Helper: get or create rewards record for user
+async function getOrCreateRewards(userId) {
+  let row;
+  if (pool) {
+    const rows = await dbQuery('SELECT * FROM trading_rewards WHERE user_id = $1 LIMIT 1', [userId]);
+    row = rows[0];
+    if (!row) {
+      await dbQuery('INSERT INTO trading_rewards (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING', [userId]);
+      const rows2 = await dbQuery('SELECT * FROM trading_rewards WHERE user_id = $1 LIMIT 1', [userId]);
+      row = rows2[0];
+    }
+  } else {
+    const { data } = await supabase.from('trading_rewards').select('*').eq('user_id', userId).maybeSingle();
+    row = data;
+    if (!row) {
+      await supabase.from('trading_rewards').insert({ user_id: userId });
+      const { data: d2 } = await supabase.from('trading_rewards').select('*').eq('user_id', userId).maybeSingle();
+      row = d2;
+    }
+  }
+  return row;
+}
+
+// Helper: award points to a user (non-blocking, fire-and-forget safe)
+async function awardRewardPoints(userId, eventType, points, metadata = {}) {
+  if (!points || points <= 0) return;
+  try {
+    if (pool) {
+      await dbQuery(
+        'INSERT INTO trading_rewards (user_id, points_balance, points_earned) VALUES ($1, $2, $2) ON CONFLICT (user_id) DO UPDATE SET points_balance = trading_rewards.points_balance + $2, points_earned = trading_rewards.points_earned + $2, updated_at = now()',
+        [userId, points]
+      );
+      await dbQuery(
+        'INSERT INTO trading_reward_events (user_id, event_type, points, metadata) VALUES ($1, $2, $3, $4)',
+        [userId, eventType, points, JSON.stringify(metadata)]
+      );
+    } else {
+      const { data: existing } = await supabase.from('trading_rewards').select('points_balance, points_earned').eq('user_id', userId).maybeSingle();
+      if (existing) {
+        await supabase.from('trading_rewards').update({
+          points_balance: existing.points_balance + points,
+          points_earned: existing.points_earned + points,
+          updated_at: new Date().toISOString()
+        }).eq('user_id', userId);
+      } else {
+        await supabase.from('trading_rewards').insert({ user_id: userId, points_balance: points, points_earned: points });
+      }
+      await supabase.from('trading_reward_events').insert({ user_id: userId, event_type: eventType, points, metadata });
+    }
+  } catch (e) {
+    console.warn('[rewards] award error:', e.message);
+  }
+}
+
+// GET /api/rewards/balance — user's reward points + available tiers
+app.get('/api/rewards/balance', requireAuth, async (req, res) => {
+  try {
+    const rewards = await getOrCreateRewards(req.userId);
+    // Recent events
+    let events = [];
+    if (pool) {
+      events = await dbQuery('SELECT event_type, points, metadata, created_at FROM trading_reward_events WHERE user_id = $1 ORDER BY created_at DESC LIMIT 20', [req.userId]);
+    } else {
+      const { data } = await supabase.from('trading_reward_events').select('event_type, points, metadata, created_at').eq('user_id', req.userId).order('created_at', { ascending: false }).limit(20);
+      events = data || [];
+    }
+    res.json({
+      points_balance: rewards.points_balance || 0,
+      points_earned: rewards.points_earned || 0,
+      points_redeemed: rewards.points_redeemed || 0,
+      tiers: REDEMPTION_TIERS,
+      reward_rates: REWARD_POINTS,
+      recent_events: events,
+    });
+  } catch (err) {
+    console.error('[rewards balance]', err.message);
+    res.status(500).json({ error: 'Failed to fetch rewards' });
+  }
+});
+
+// POST /api/rewards/track-click — log a Polymarket clickthrough (auth optional, deduped per hour)
+app.post('/api/rewards/track-click', optionalAuth, async (req, res) => {
+  if (!req.userId) return res.json({ ok: false, reason: 'not_logged_in' });
+  try {
+    // Dedupe: max 1 clickthrough reward per user per hour
+    const dedupeKey = 'reward_click:' + req.userId;
+    if (!rateLimit(dedupeKey, req.userId, 6, 3600000)) {
+      return res.json({ ok: true, points: 0, reason: 'rate_limited' });
+    }
+    await awardRewardPoints(req.userId, 'clickthrough', REWARD_POINTS.clickthrough, {
+      url: (req.body.url || '').substring(0, 200),
+    });
+    res.json({ ok: true, points: REWARD_POINTS.clickthrough });
+  } catch (err) {
+    console.error('[rewards track-click]', err.message);
+    res.status(500).json({ error: 'Failed to track click' });
+  }
+});
+
+// POST /api/rewards/redeem — redeem points for subscription credit
+app.post('/api/rewards/redeem', requireAuth, async (req, res) => {
+  const { tier_index } = req.body;
+  const tier = REDEMPTION_TIERS[tier_index];
+  if (!tier) return res.status(400).json({ error: 'Invalid redemption tier' });
+
+  try {
+    const rewards = await getOrCreateRewards(req.userId);
+    if ((rewards.points_balance || 0) < tier.points) {
+      return res.status(400).json({ error: 'Not enough points', balance: rewards.points_balance, required: tier.points });
+    }
+
+    // Deduct points
+    if (pool) {
+      await dbQuery(
+        'UPDATE trading_rewards SET points_balance = points_balance - $1, points_redeemed = points_redeemed + $1, updated_at = now() WHERE user_id = $2',
+        [tier.points, req.userId]
+      );
+      // Add subscription credit
+      await dbQuery(
+        'UPDATE creator_settings SET subscription_credit_cents = COALESCE(subscription_credit_cents, 0) + $1 WHERE creator_id = $2',
+        [tier.credit_cents, req.userId]
+      );
+      // Log event
+      await dbQuery(
+        'INSERT INTO trading_reward_events (user_id, event_type, points, metadata) VALUES ($1, $2, $3, $4)',
+        [req.userId, 'redemption', -tier.points, JSON.stringify({ tier: tier.label, credit_cents: tier.credit_cents })]
+      );
+    } else {
+      await supabase.from('trading_rewards').update({
+        points_balance: rewards.points_balance - tier.points,
+        points_redeemed: (rewards.points_redeemed || 0) + tier.points,
+        updated_at: new Date().toISOString()
+      }).eq('user_id', req.userId);
+      // Subscription credit
+      const { data: cs } = await supabase.from('creator_settings').select('subscription_credit_cents').eq('creator_id', req.userId).maybeSingle();
+      await supabase.from('creator_settings').update({
+        subscription_credit_cents: ((cs && cs.subscription_credit_cents) || 0) + tier.credit_cents
+      }).eq('creator_id', req.userId);
+      await supabase.from('trading_reward_events').insert({
+        user_id: req.userId, event_type: 'redemption', points: -tier.points,
+        metadata: { tier: tier.label, credit_cents: tier.credit_cents }
+      });
+    }
+
+    res.json({ ok: true, redeemed: tier.label, credit_added_cents: tier.credit_cents });
+  } catch (err) {
+    console.error('[rewards redeem]', err.message);
+    res.status(500).json({ error: 'Failed to redeem' });
   }
 });
 
