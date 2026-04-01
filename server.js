@@ -4845,7 +4845,18 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
     if (pool) {
       const sRows = await dbQuery('SELECT * FROM creator_settings WHERE creator_id = $1 LIMIT 1', [creatorId]);
       settings = sRows[0] || null;
-      if (!settings) return res.status(404).json({ error: 'Creator not found' });
+      if (!settings) {
+        // Wallet-only user — return minimal dashboard data (portfolio mode)
+        const uRows2 = await dbQuery('SELECT id, display_name, email, polymarket_address FROM users WHERE id = $1 LIMIT 1', [creatorId]);
+        const walletUser = uRows2[0] || null;
+        clearTimeout(dashTimeout);
+        return res.json({
+          wallet_only: true,
+          creator: { id: creatorId, display_name: walletUser?.display_name || 'Trader', email: walletUser?.email || null },
+          settings: { plan: 'free', community_name: 'My Portfolio', slug: null },
+          markets: [], stats: { total_markets: 0, active_markets: 0, total_predictions: 0, total_members: 0 }
+        });
+      }
       markets = await dbQuery(
         'SELECT * FROM markets WHERE creator_id = $1 OR tenant_slug = $2 ORDER BY created_at DESC',
         [creatorId, settings.slug]

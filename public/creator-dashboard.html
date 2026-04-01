@@ -6014,7 +6014,12 @@ async function init() {
     }
     renderDashboard(data);
     loadNotifications();
-    setDefaultTab();
+    // Wallet-only users go straight to portfolio tab
+    if (data.wallet_only) {
+      showTab('portfolio');
+    } else {
+      setDefaultTab();
+    }
   } catch (e) {
     showToast('Could not load dashboard. Check your connection.', 'error');
   }
