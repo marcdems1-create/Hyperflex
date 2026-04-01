@@ -18259,6 +18259,91 @@ app.get('/high-prob', (req, res) => res.sendFile(path.join(__dirname, 'public', 
 app.get('/data', (req, res) => res.sendFile(path.join(__dirname, 'public', 'data.html')));
 
 // ════════════════════════════════════════════════════════════
+// POLYMARKET MARKET DETAIL PAGE
+// ════════════════════════════════════════════════════════════
+app.get('/market/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'market.html')));
+
+const _marketDetailCache = new Map();
+const MARKET_DETAIL_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+app.get('/api/market/:slug', async (req, res) => {
+  const { slug } = req.params;
+  if (!slug) return res.status(400).json({ error: 'Missing slug' });
+
+  const cacheKey = `market_detail_${slug}`;
+  const cached = _marketDetailCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < MARKET_DETAIL_CACHE_TTL) {
+    return res.json(cached.data);
+  }
+
+  try {
+    // 1. Fetch market data from Gamma API
+    const gammaRes = await fetch(`https://gamma-api.polymarket.com/markets?slug=${encodeURIComponent(slug)}`, {
+      headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+    });
+    if (!gammaRes.ok) throw new Error(`Gamma API error: ${gammaRes.status}`);
+    const gammaData = await gammaRes.json();
+    if (!gammaData || !gammaData.length) {
+      return res.status(404).json({ error: 'Market not found' });
+    }
+    const market = gammaData[0];
+
+    // 2. Parse YES token ID from clobTokenIds
+    let tokenId = null;
+    try {
+      const tokenIds = typeof market.clobTokenIds === 'string'
+        ? JSON.parse(market.clobTokenIds)
+        : market.clobTokenIds;
+      if (Array.isArray(tokenIds) && tokenIds.length > 0) {
+        tokenId = tokenIds[0]; // First token = YES outcome
+      }
+    } catch (e) {
+      // clobTokenIds may not be parseable — continue without price history/orderbook
+    }
+
+    // 3. Fetch price history and orderbook in parallel (if we have a token ID)
+    let priceHistory = null;
+    let orderbook = null;
+
+    if (tokenId) {
+      const [priceRes, bookRes] = await Promise.allSettled([
+        fetch(`https://clob.polymarket.com/prices-history?market=${encodeURIComponent(tokenId)}&interval=all&fidelity=60`, {
+          headers: { Accept: 'application/json' }
+        }),
+        fetch(`https://clob.polymarket.com/book?token_id=${encodeURIComponent(tokenId)}`, {
+          headers: { Accept: 'application/json' }
+        })
+      ]);
+
+      if (priceRes.status === 'fulfilled' && priceRes.value.ok) {
+        priceHistory = await priceRes.value.json();
+      }
+      if (bookRes.status === 'fulfilled' && bookRes.value.ok) {
+        orderbook = await bookRes.value.json();
+      }
+    }
+
+    const result = { market, priceHistory, orderbook };
+
+    // Cache the result
+    _marketDetailCache.set(cacheKey, { data: result, ts: Date.now() });
+
+    // Evict old cache entries periodically
+    if (_marketDetailCache.size > 200) {
+      const now = Date.now();
+      for (const [k, v] of _marketDetailCache) {
+        if (now - v.ts > MARKET_DETAIL_CACHE_TTL) _marketDetailCache.delete(k);
+      }
+    }
+
+    res.json(result);
+  } catch (err) {
+    console.error('[/api/market/:slug] Error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch market data' });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
 // WHALE INDEX — auto-generated portfolio from top whale positions
 // ════════════════════════════════════════════════════════════
 let _whaleIndexCache = null;

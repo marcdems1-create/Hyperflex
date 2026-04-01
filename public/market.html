@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Loading Market... | HYPERFLEX</title>
+<link rel="icon" href="/hyperflex-logo.png"/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<style>
+:root{--bg:#0a0a09;--card:#131311;--border:#222220;--text:#e8e4d9;--soft:#b0ab9f;--dim:#5a5752;--gold:#c9920d;--green:#22c55e;--red:#ef4444;--sans:'Syne',sans-serif;--mono:'Space Mono',monospace}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased}
+a{color:var(--gold);text-decoration:none}
+
+.mkt-layout{display:grid;grid-template-columns:1fr 380px;gap:24px;max-width:1400px;margin:0 auto;padding:24px}
+.mkt-main{min-width:0}
+.mkt-sidebar{position:sticky;top:80px;height:fit-content}
+
+/* Back button */
+.mkt-back{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:12px;color:var(--dim);margin-bottom:16px;cursor:pointer;transition:color .15s}
+.mkt-back:hover{color:var(--text)}
+
+/* Title section */
+.mkt-title{font-size:24px;font-weight:800;line-height:1.3;margin-bottom:16px}
+.mkt-title img{width:40px;height:40px;border-radius:8px;margin-right:12px;vertical-align:middle}
+
+/* Stats bar */
+.mkt-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+.mkt-stat{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+.mkt-stat-label{font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;display:flex;align-items:center;gap:4px}
+.mkt-stat-val{font-family:var(--mono);font-size:18px;font-weight:700}
+
+/* Chart */
+.mkt-chart-wrap{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:24px;position:relative}
+.mkt-chart-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.mkt-chart-title{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--soft)}
+.mkt-chart-tabs{display:flex;gap:0;border:1px solid var(--border);border-radius:6px;overflow:hidden}
+.mkt-chart-tab{padding:6px 12px;font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);background:transparent;border:none;cursor:pointer;transition:all .15s}
+.mkt-chart-tab.active{background:var(--gold);color:#141412}
+.mkt-chart-tab:hover:not(.active){color:var(--text)}
+canvas{display:block;width:100%!important}
+
+/* Description */
+.mkt-desc{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:24px}
+.mkt-desc h3{font-size:14px;font-weight:700;margin-bottom:12px}
+.mkt-desc p{font-family:var(--mono);font-size:12px;color:var(--soft);line-height:1.7}
+.mkt-desc-toggle{font-family:var(--mono);font-size:11px;color:var(--gold);cursor:pointer;margin-top:8px;display:inline-block}
+
+/* Outcomes table */
+.mkt-outcomes{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:24px}
+.mkt-outcomes h3{font-size:14px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.mkt-outcomes-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
+.mkt-outcomes-row:last-child{border-bottom:none}
+
+/* Orderbook */
+.mkt-orderbook{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:24px}
+.mkt-orderbook h3{font-size:14px;font-weight:700;margin-bottom:12px}
+.mkt-ob-row{display:flex;font-family:var(--mono);font-size:11px;padding:3px 0}
+.mkt-ob-bid{color:var(--green)}
+.mkt-ob-ask{color:var(--red)}
+.mkt-ob-size{color:var(--dim);text-align:right;flex:1}
+
+/* TRADE WIDGET (sidebar) */
+.trade-widget{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;position:relative}
+.trade-header{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.trade-header img{width:32px;height:32px;border-radius:6px}
+.trade-header-title{font-size:14px;font-weight:700;flex:1}
+.trade-tabs{display:flex;gap:0;margin-bottom:16px}
+.trade-tab{flex:1;padding:10px;font-family:var(--sans);font-size:13px;font-weight:700;text-align:center;cursor:pointer;transition:all .15s;border:none;background:transparent;color:var(--dim)}
+.trade-tab.active{color:var(--text);border-bottom:2px solid var(--text)}
+.trade-sides{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.trade-side{padding:12px;border-radius:10px;text-align:center;cursor:pointer;font-family:var(--sans);font-size:14px;font-weight:700;transition:all .15s;border:2px solid transparent}
+.trade-side.yes{background:rgba(34,197,94,.1);color:var(--green);border-color:rgba(34,197,94,.3)}
+.trade-side.yes.active{background:var(--green);color:#fff;border-color:var(--green)}
+.trade-side.no{background:rgba(239,68,68,.1);color:var(--red);border-color:rgba(239,68,68,.3)}
+.trade-side.no.active{background:var(--red);color:#fff;border-color:var(--red)}
+.trade-field{margin-bottom:14px}
+.trade-field-label{font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;display:flex;justify-content:space-between}
+.trade-input{width:100%;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:14px;text-align:center}
+.trade-input:focus{outline:none;border-color:var(--gold)}
+.trade-quick-btns{display:flex;gap:6px;margin-bottom:14px;justify-content:center}
+.trade-quick-btn{padding:6px 14px;font-family:var(--mono);font-size:10px;font-weight:700;border:1px solid var(--border);border-radius:20px;background:transparent;color:var(--soft);cursor:pointer;transition:all .15s}
+.trade-quick-btn:hover,.trade-quick-btn.active{background:var(--gold);color:#141412;border-color:var(--gold)}
+.trade-summary{border-top:1px solid var(--border);padding-top:14px;margin-bottom:16px}
+.trade-summary-row{display:flex;justify-content:space-between;font-family:var(--mono);font-size:12px;margin-bottom:6px}
+.trade-summary-row .label{color:var(--dim)}
+.trade-summary-row .val{font-weight:700}
+.trade-cta{width:100%;padding:14px;border:none;border-radius:10px;font-family:var(--sans);font-size:15px;font-weight:700;cursor:pointer;transition:all .15s}
+.trade-cta.buy-yes{background:var(--green);color:#fff}
+.trade-cta.buy-no{background:var(--red);color:#fff}
+.trade-cta:hover{opacity:.9}
+.trade-disclaimer{font-family:var(--mono);font-size:9px;color:var(--dim);text-align:center;margin-top:10px}
+
+/* View on Polymarket link */
+.mkt-poly-link{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;color:var(--gold);padding:10px 0;justify-content:center}
+
+/* Loading */
+.mkt-loading{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;gap:16px}
+.mkt-loading .spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Mobile */
+@media(max-width:900px){
+  .mkt-layout{grid-template-columns:1fr;padding:16px}
+  .mkt-sidebar{position:static}
+  .mkt-stats{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+
+<div id="nav-root"></div>
+<script src="/nav.js?v=3"></script>
+
+<div id="marketContent" style="display:none">
+  <div class="mkt-layout">
+    <!-- MAIN COLUMN -->
+    <div class="mkt-main">
+      <div class="mkt-back" onclick="history.back()">← Back</div>
+      <h1 class="mkt-title" id="mktTitle">Loading...</h1>
+
+      <!-- Stats -->
+      <div class="mkt-stats">
+        <div class="mkt-stat">
+          <div class="mkt-stat-label">💰 Volume</div>
+          <div class="mkt-stat-val" id="mktVolume">—</div>
+        </div>
+        <div class="mkt-stat">
+          <div class="mkt-stat-label">📊 24h Vol</div>
+          <div class="mkt-stat-val" id="mkt24hVol">—</div>
+        </div>
+        <div class="mkt-stat">
+          <div class="mkt-stat-label">💧 Liquidity</div>
+          <div class="mkt-stat-val" id="mktLiquidity">—</div>
+        </div>
+        <div class="mkt-stat">
+          <div class="mkt-stat-label">⏰ Ends In</div>
+          <div class="mkt-stat-val" id="mktExpiry">—</div>
+        </div>
+      </div>
+
+      <!-- Price Chart -->
+      <div class="mkt-chart-wrap">
+        <div class="mkt-chart-header">
+          <div class="mkt-chart-title">Price History — <span id="chartOutcome">YES</span></div>
+          <div class="mkt-chart-tabs" id="chartTabs">
+            <button class="mkt-chart-tab" data-interval="1h">1H</button>
+            <button class="mkt-chart-tab" data-interval="6h">6H</button>
+            <button class="mkt-chart-tab" data-interval="1d">1D</button>
+            <button class="mkt-chart-tab" data-interval="1w">1W</button>
+            <button class="mkt-chart-tab" data-interval="1m">1M</button>
+            <button class="mkt-chart-tab active" data-interval="all">ALL</button>
+          </div>
+        </div>
+        <canvas id="priceChart" height="280"></canvas>
+      </div>
+
+      <!-- Description -->
+      <div class="mkt-desc" id="mktDescSection">
+        <h3>📋 Rules</h3>
+        <p id="mktDesc">Loading...</p>
+        <span class="mkt-desc-toggle" id="mktDescToggle" onclick="toggleDesc()" style="display:none">Read more</span>
+      </div>
+
+      <!-- Outcomes -->
+      <div class="mkt-outcomes" id="mktOutcomesSection">
+        <h3>Outcomes <span style="font-family:var(--mono);font-size:10px;color:var(--dim);font-weight:400">(1)</span></h3>
+        <div id="mktOutcomes">Loading...</div>
+      </div>
+
+      <!-- Orderbook -->
+      <div class="mkt-orderbook">
+        <h3>Order Book</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--green);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Bids (Buy)</div>
+            <div id="obBids">—</div>
+          </div>
+          <div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--red);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Asks (Sell)</div>
+            <div id="obAsks">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SIDEBAR: Trade Widget -->
+    <div class="mkt-sidebar">
+      <div class="trade-widget">
+        <div class="trade-header">
+          <img id="tradeIcon" src="" alt="" style="display:none"/>
+          <div class="trade-header-title" id="tradeTitle">Trade</div>
+        </div>
+
+        <div class="trade-tabs">
+          <button class="trade-tab active" onclick="setTradeMode('buy')">Buy</button>
+          <button class="trade-tab" onclick="setTradeMode('sell')">Sell</button>
+          <div style="margin-left:auto;display:flex;align-items:center">
+            <select id="tradeOrderType" style="background:transparent;border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-family:var(--mono);font-size:10px;color:var(--soft)">
+              <option value="limit">Limit</option>
+              <option value="market">Market</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="trade-sides">
+          <div class="trade-side yes active" id="sideYes" onclick="setTradeSide('yes')">
+            <span>↗ YES</span>
+            <div style="font-family:var(--mono);font-size:11px;margin-top:2px" id="yesPrice">—</div>
+          </div>
+          <div class="trade-side no" id="sideNo" onclick="setTradeSide('no')">
+            <span>↘ NO</span>
+            <div style="font-family:var(--mono);font-size:11px;margin-top:2px" id="noPrice">—</div>
+          </div>
+        </div>
+
+        <div class="trade-field">
+          <div class="trade-field-label">
+            <span>Limit Price (0.01-99.99¢)</span>
+            <span id="tradeBalance" style="color:var(--gold)">Balance: —</span>
+          </div>
+          <input type="number" class="trade-input" id="tradePrice" value="50" min="1" max="99" step="1" oninput="updateTradeCalc()"/>
+        </div>
+
+        <div class="trade-quick-btns">
+          <button class="trade-quick-btn" onclick="setPrice(10)">10¢</button>
+          <button class="trade-quick-btn" onclick="setPrice(25)">25¢</button>
+          <button class="trade-quick-btn active" onclick="setPrice(50)">50¢</button>
+          <button class="trade-quick-btn" onclick="setPrice(75)">75¢</button>
+          <button class="trade-quick-btn" onclick="setPrice(90)">90¢</button>
+        </div>
+
+        <div class="trade-field">
+          <div class="trade-field-label"><span>Amount (USD)</span></div>
+          <input type="number" class="trade-input" id="tradeAmount" value="10" min="1" step="1" oninput="updateTradeCalc()"/>
+        </div>
+
+        <div class="trade-quick-btns">
+          <button class="trade-quick-btn" onclick="setAmount(50)">+$50</button>
+          <button class="trade-quick-btn" onclick="setAmount(100)">+$100</button>
+          <button class="trade-quick-btn" onclick="setAmount(250)">+$250</button>
+          <button class="trade-quick-btn" onclick="setAmount(500)">+$500</button>
+        </div>
+
+        <div class="trade-summary">
+          <div class="trade-summary-row"><span class="label">Price</span><span class="val" id="summaryPrice">50.00¢</span></div>
+          <div class="trade-summary-row"><span class="label">Shares</span><span class="val" id="summaryShares">20.00</span></div>
+          <div class="trade-summary-row"><span class="label">Potential Payout</span><span class="val" style="color:var(--green)" id="summaryPayout">$20.00</span></div>
+        </div>
+
+        <button class="trade-cta buy-yes" id="tradeCta" onclick="executeTrade()">Buy Yes</button>
+        <div class="trade-disclaimer">Click "Enable Trading" to connect to Polymarket</div>
+      </div>
+
+      <div class="mkt-poly-link">
+        <a id="polyLink" href="#" target="_blank" rel="noopener">↗ View on Polymarket</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Loading state -->
+<div class="mkt-loading" id="mktLoading">
+  <div class="spinner"></div>
+  <div style="font-family:var(--mono);font-size:12px;color:var(--dim)">Loading market data...</div>
+</div>
+
+<script>
+var _market = null;
+var _priceHistory = [];
+var _orderbook = { bids: [], asks: [] };
+var _tradeSide = 'yes';
+var _tradeMode = 'buy';
+var _chartInterval = 'all';
+
+function escH(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function fmtCap(n) { if (n >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M'; if (n >= 1e3) return '$' + (n/1e3).toFixed(1) + 'K'; return '$' + n.toFixed(0); }
+
+// Get slug from URL
+var slug = window.location.pathname.split('/market/')[1] || '';
+if (slug.endsWith('/')) slug = slug.slice(0, -1);
+
+async function loadMarket() {
+  if (!slug) { document.getElementById('mktLoading').innerHTML = '<div style="color:var(--red);font-family:var(--mono);font-size:13px">No market slug provided</div>'; return; }
+
+  try {
+    var res = await fetch('/api/market/' + encodeURIComponent(slug));
+    if (!res.ok) throw new Error('Market not found');
+    var data = await res.json();
+    _market = data.market;
+    _priceHistory = (data.priceHistory || {}).history || [];
+    _orderbook = data.orderbook || { bids: [], asks: [] };
+
+    renderMarket();
+    document.getElementById('mktLoading').style.display = 'none';
+    document.getElementById('marketContent').style.display = 'block';
+    document.title = (_market.question || 'Market') + ' | HYPERFLEX';
+  } catch (e) {
+    document.getElementById('mktLoading').innerHTML = '<div style="color:var(--red);font-family:var(--mono);font-size:13px">Failed to load market: ' + escH(e.message) + '</div><div style="margin-top:12px"><a href="/" style="color:var(--gold)">← Back to home</a></div>';
+  }
+}
+
+function renderMarket() {
+  var m = _market;
+  var prices = m.outcomePrices || '[]';
+  if (typeof prices === 'string') prices = JSON.parse(prices);
+  var yesPrice = prices[0] ? parseFloat(prices[0]) : 0.5;
+  var noPrice = prices[1] ? parseFloat(prices[1]) : 1 - yesPrice;
+  var icon = m.icon || m.image || '';
+
+  // Title
+  document.getElementById('mktTitle').innerHTML = (icon ? '<img src="' + escH(icon) + '" onerror="this.style.display=\'none\'"/>' : '') + escH(m.question || 'Unknown Market');
+
+  // Stats
+  document.getElementById('mktVolume').textContent = fmtCap(m.volumeNum || m.volume || 0);
+  document.getElementById('mkt24hVol').textContent = fmtCap(m.volume24hr || 0);
+  document.getElementById('mktLiquidity').textContent = fmtCap(m.liquidityNum || m.liquidity || 0);
+
+  // Expiry
+  var endDate = m.endDate || m.end_date_iso;
+  if (endDate) {
+    var diff = new Date(endDate) - new Date();
+    if (diff > 0) {
+      var days = Math.floor(diff / 86400000);
+      var hrs = Math.floor((diff % 86400000) / 3600000);
+      document.getElementById('mktExpiry').textContent = days > 0 ? days + 'd ' + hrs + 'h' : hrs + 'h';
+    } else {
+      document.getElementById('mktExpiry').textContent = 'Ended';
+      document.getElementById('mktExpiry').style.color = 'var(--red)';
+    }
+  }
+
+  // Description
+  var desc = m.description || 'No description available.';
+  var descEl = document.getElementById('mktDesc');
+  if (desc.length > 300) {
+    descEl.textContent = desc.substring(0, 300) + '...';
+    document.getElementById('mktDescToggle').style.display = '';
+    descEl.setAttribute('data-full', desc);
+  } else {
+    descEl.textContent = desc;
+  }
+
+  // Outcomes
+  document.getElementById('mktOutcomes').innerHTML =
+    '<div class="mkt-outcomes-row">' +
+      '<div style="flex:1;display:flex;align-items:center;gap:8px">' +
+        (icon ? '<img src="' + escH(icon) + '" style="width:24px;height:24px;border-radius:4px" onerror="this.style.display=\'none\'"/>' : '') +
+        '<span style="font-size:13px;font-weight:700">' + escH(m.question || '').substring(0, 60) + '</span>' +
+      '</div>' +
+      '<div style="display:flex;gap:16px;flex-shrink:0">' +
+        '<div style="text-align:center"><div style="font-family:var(--mono);font-size:9px;color:var(--dim)">Yes</div><div style="font-family:var(--mono);font-size:16px;font-weight:700;color:var(--green)">' + Math.round(yesPrice * 100) + '%</div></div>' +
+        '<div style="text-align:center"><div style="font-family:var(--mono);font-size:9px;color:var(--dim)">No</div><div style="font-family:var(--mono);font-size:16px;font-weight:700;color:var(--red)">' + Math.round(noPrice * 100) + '%</div></div>' +
+      '</div>' +
+    '</div>';
+
+  // Trade widget
+  document.getElementById('yesPrice').textContent = Math.round(yesPrice * 100) + '¢';
+  document.getElementById('noPrice').textContent = Math.round(noPrice * 100) + '¢';
+  document.getElementById('tradePrice').value = Math.round(yesPrice * 100);
+  if (icon) { var ti = document.getElementById('tradeIcon'); ti.src = icon; ti.style.display = ''; }
+  document.getElementById('tradeTitle').textContent = (m.question || '').substring(0, 40);
+  document.getElementById('polyLink').href = 'https://polymarket.com/event/' + (m.slug || slug);
+
+  updateTradeCalc();
+  drawChart(_priceHistory);
+  renderOrderbook();
+}
+
+function toggleDesc() {
+  var el = document.getElementById('mktDesc');
+  var full = el.getAttribute('data-full');
+  if (full) { el.textContent = full; document.getElementById('mktDescToggle').style.display = 'none'; }
+}
+
+// Chart
+function drawChart(history) {
+  var canvas = document.getElementById('priceChart');
+  var ctx = canvas.getContext('2d');
+  var w = canvas.parentElement.offsetWidth - 40;
+  canvas.width = w * 2; canvas.height = 560;
+  canvas.style.width = w + 'px'; canvas.style.height = '280px';
+  ctx.scale(2, 2);
+
+  if (!history || history.length < 2) {
+    ctx.fillStyle = '#5a5752';
+    ctx.font = '12px Space Mono';
+    ctx.textAlign = 'center';
+    ctx.fillText('Not enough price data yet', w / 2, 140);
+    return;
+  }
+
+  var pad = { top: 20, right: 20, bottom: 30, left: 50 };
+  var cw = w - pad.left - pad.right;
+  var ch = 280 - pad.top - pad.bottom;
+
+  var prices = history.map(function(h) { return h.p; });
+  var times = history.map(function(h) { return h.t; });
+  var minP = Math.min.apply(null, prices) * 0.95;
+  var maxP = Math.max.apply(null, prices) * 1.05;
+  if (maxP - minP < 0.01) { minP -= 0.05; maxP += 0.05; }
+
+  // Grid lines
+  ctx.strokeStyle = '#222220';
+  ctx.lineWidth = 0.5;
+  for (var i = 0; i <= 4; i++) {
+    var y = pad.top + (ch / 4) * i;
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + cw, y); ctx.stroke();
+    var pLabel = Math.round((maxP - (maxP - minP) * (i / 4)) * 100);
+    ctx.fillStyle = '#5a5752';
+    ctx.font = '10px Space Mono';
+    ctx.textAlign = 'right';
+    ctx.fillText(pLabel + '%', pad.left - 6, y + 4);
+  }
+
+  // Price line
+  ctx.beginPath();
+  ctx.strokeStyle = var_green();
+  ctx.lineWidth = 2;
+  for (var j = 0; j < prices.length; j++) {
+    var x = pad.left + (j / (prices.length - 1)) * cw;
+    var y2 = pad.top + ch - ((prices[j] - minP) / (maxP - minP)) * ch;
+    if (j === 0) ctx.moveTo(x, y2); else ctx.lineTo(x, y2);
+  }
+  ctx.stroke();
+
+  // Gradient fill
+  ctx.lineTo(pad.left + cw, pad.top + ch);
+  ctx.lineTo(pad.left, pad.top + ch);
+  ctx.closePath();
+  var grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
+  grad.addColorStop(0, 'rgba(34,197,94,0.15)');
+  grad.addColorStop(1, 'rgba(34,197,94,0)');
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // X-axis dates
+  ctx.fillStyle = '#5a5752';
+  ctx.font = '9px Space Mono';
+  ctx.textAlign = 'center';
+  var step = Math.max(1, Math.floor(times.length / 6));
+  for (var k = 0; k < times.length; k += step) {
+    var xd = pad.left + (k / (times.length - 1)) * cw;
+    var d = new Date(times[k] * 1000);
+    ctx.fillText((d.getMonth()+1) + '/' + d.getDate(), xd, pad.top + ch + 18);
+  }
+}
+
+function var_green() { return '#22c55e'; }
+
+// Chart tab switching
+document.querySelectorAll('.mkt-chart-tab').forEach(function(tab) {
+  tab.addEventListener('click', function() {
+    document.querySelectorAll('.mkt-chart-tab').forEach(function(t) { t.classList.remove('active'); });
+    tab.classList.add('active');
+    _chartInterval = tab.getAttribute('data-interval');
+    // Re-fetch with new interval
+    var tids = _market.clobTokenIds || '[]';
+    if (typeof tids === 'string') tids = JSON.parse(tids);
+    if (tids[0]) {
+      fetch('https://clob.polymarket.com/prices-history?market=' + tids[0] + '&interval=' + _chartInterval + '&fidelity=60')
+        .then(function(r) { return r.json(); })
+        .then(function(d) { _priceHistory = (d.history || []); drawChart(_priceHistory); })
+        .catch(function() {});
+    }
+  });
+});
+
+// Orderbook
+function renderOrderbook() {
+  var bids = (_orderbook.bids || []).sort(function(a, b) { return parseFloat(b.price) - parseFloat(a.price); }).slice(0, 8);
+  var asks = (_orderbook.asks || []).sort(function(a, b) { return parseFloat(a.price) - parseFloat(b.price); }).slice(0, 8);
+
+  document.getElementById('obBids').innerHTML = bids.length > 0 ? bids.map(function(b) {
+    return '<div class="mkt-ob-row"><span class="mkt-ob-bid">' + parseFloat(b.price).toFixed(2) + '¢</span><span class="mkt-ob-size">' + Math.round(parseFloat(b.size)).toLocaleString() + '</span></div>';
+  }).join('') : '<div style="font-family:var(--mono);font-size:11px;color:var(--dim)">No bids</div>';
+
+  document.getElementById('obAsks').innerHTML = asks.length > 0 ? asks.map(function(a) {
+    return '<div class="mkt-ob-row"><span class="mkt-ob-ask">' + parseFloat(a.price).toFixed(2) + '¢</span><span class="mkt-ob-size">' + Math.round(parseFloat(a.size)).toLocaleString() + '</span></div>';
+  }).join('') : '<div style="font-family:var(--mono);font-size:11px;color:var(--dim)">No asks</div>';
+}
+
+// Trade widget
+function setTradeSide(side) {
+  _tradeSide = side;
+  document.getElementById('sideYes').classList.toggle('active', side === 'yes');
+  document.getElementById('sideNo').classList.toggle('active', side === 'no');
+  var prices = _market.outcomePrices || '[]';
+  if (typeof prices === 'string') prices = JSON.parse(prices);
+  var p = side === 'yes' ? parseFloat(prices[0] || 0.5) : parseFloat(prices[1] || 0.5);
+  document.getElementById('tradePrice').value = Math.round(p * 100);
+  updateTradeCalc();
+  updateCtaButton();
+}
+
+function setTradeMode(mode) {
+  _tradeMode = mode;
+  document.querySelectorAll('.trade-tab').forEach(function(t) { t.classList.remove('active'); });
+  event.target.classList.add('active');
+  updateCtaButton();
+}
+
+function setPrice(p) {
+  document.getElementById('tradePrice').value = p;
+  document.querySelectorAll('.trade-quick-btns .trade-quick-btn').forEach(function(b) { b.classList.remove('active'); });
+  if (event && event.target) event.target.classList.add('active');
+  updateTradeCalc();
+}
+
+function setAmount(a) {
+  var cur = parseFloat(document.getElementById('tradeAmount').value) || 0;
+  document.getElementById('tradeAmount').value = cur + a;
+  updateTradeCalc();
+}
+
+function updateTradeCalc() {
+  var price = parseFloat(document.getElementById('tradePrice').value) || 50;
+  var amount = parseFloat(document.getElementById('tradeAmount').value) || 0;
+  var priceFrac = price / 100;
+  var shares = priceFrac > 0 ? amount / priceFrac : 0;
+  var payout = shares; // Each share pays $1 if it wins
+
+  document.getElementById('summaryPrice').textContent = price.toFixed(2) + '¢';
+  document.getElementById('summaryShares').textContent = shares.toFixed(2);
+  document.getElementById('summaryPayout').textContent = '$' + payout.toFixed(2);
+}
+
+function updateCtaButton() {
+  var cta = document.getElementById('tradeCta');
+  var label = (_tradeMode === 'buy' ? 'Buy ' : 'Sell ') + (_tradeSide === 'yes' ? 'Yes' : 'No');
+  cta.textContent = label;
+  cta.className = 'trade-cta ' + (_tradeSide === 'yes' ? 'buy-yes' : 'buy-no');
+}
+
+function executeTrade() {
+  // Check if trading is enabled
+  var polyAddr = localStorage.getItem('hf_poly_wallet');
+  if (!polyAddr) {
+    alert('Connect your Polymarket wallet first. Go to Dashboard → My Positions → Enable Trading.');
+    return;
+  }
+  alert('Trading coming soon. For now, trade on Polymarket: ' + document.getElementById('polyLink').href);
+}
+
+// Init
+loadMarket();
+</script>
+</body>
+</html>
