@@ -22848,6 +22848,23 @@ app.post('/api/polymarket/clob-order', requireAuth, async (req, res) => {
     const message = ts + method + requestPath + orderBody;
     const hmacSignature = crypto.createHmac('sha256', api_secret).update(message).digest('base64');
 
+    // Builder attribution headers — gasless + volume tracking
+    const builderHeaders = {};
+    const builderKey = process.env.POLY_BUILDER_API_KEY;
+    const builderSecret = process.env.POLY_BUILDER_SECRET;
+    const builderPassphrase = process.env.POLY_BUILDER_PASSPHRASE;
+    if (builderKey && builderSecret && builderPassphrase) {
+      const builderTs = ts;
+      const builderMessage = builderTs + method + requestPath + orderBody;
+      const secretBuf = Buffer.from(builderSecret, 'base64');
+      const builderSig = crypto.createHmac('sha256', secretBuf).update(builderMessage).digest('base64');
+      builderHeaders['POLY_BUILDER_API_KEY'] = builderKey;
+      builderHeaders['POLY_BUILDER_TIMESTAMP'] = builderTs;
+      builderHeaders['POLY_BUILDER_PASSPHRASE'] = builderPassphrase;
+      builderHeaders['POLY_BUILDER_SIGNATURE'] = builderSig;
+      console.log('[builder] Attribution headers attached for order');
+    }
+
     const upstream = await fetch('https://clob.polymarket.com/order', {
       method: 'POST',
       headers: {
@@ -22857,7 +22874,8 @@ app.post('/api/polymarket/clob-order', requireAuth, async (req, res) => {
         'POLY_API_KEY': api_key,
         'POLY_PASSPHRASE': api_passphrase,
         'POLY_TIMESTAMP': ts,
-        'POLY_SIGNATURE': hmacSignature
+        'POLY_SIGNATURE': hmacSignature,
+        ...builderHeaders
       },
       body: orderBody
     });
@@ -22880,6 +22898,36 @@ app.post('/api/polymarket/clob-order', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[polymarket clob-order]', err.message);
     res.status(502).json({ error: 'Failed to submit CLOB order', detail: err.message });
+  }
+});
+
+// POST /api/polymarket/builder-sign — remote signing endpoint
+// Client sends { method, path, body } → server returns builder HMAC headers
+app.post('/api/polymarket/builder-sign', requireAuth, async (req, res) => {
+  const builderKey = process.env.POLY_BUILDER_API_KEY;
+  const builderSecret = process.env.POLY_BUILDER_SECRET;
+  const builderPassphrase = process.env.POLY_BUILDER_PASSPHRASE;
+  if (!builderKey || !builderSecret || !builderPassphrase) {
+    return res.status(503).json({ error: 'Builder credentials not configured' });
+  }
+  const { method, path, body } = req.body;
+  if (!method || !path) {
+    return res.status(400).json({ error: 'method and path required' });
+  }
+  try {
+    const ts = Math.floor(Date.now() / 1000).toString();
+    const message = ts + (method || 'GET').toUpperCase() + path + (body || '');
+    const secretBuf = Buffer.from(builderSecret, 'base64');
+    const signature = crypto.createHmac('sha256', secretBuf).update(message).digest('base64');
+    res.json({
+      POLY_BUILDER_API_KEY: builderKey,
+      POLY_BUILDER_TIMESTAMP: ts,
+      POLY_BUILDER_PASSPHRASE: builderPassphrase,
+      POLY_BUILDER_SIGNATURE: signature
+    });
+  } catch (err) {
+    console.error('[builder-sign]', err.message);
+    res.status(500).json({ error: 'Failed to generate builder signature' });
   }
 });
 
