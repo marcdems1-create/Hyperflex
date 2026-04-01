@@ -16466,8 +16466,15 @@ async function fireWhaleAlerts(newPositions) {
 // PUT /api/user/wallets — update connected wallet/platform info
 app.put('/api/user/wallets', requireAuth, async (req, res) => {
   try {
-    const { polymarket_address, kalshi_api_key, kalshi_username, manifold_username } = req.body;
+    const { polymarket_address, kalshi_api_key, kalshi_username, manifold_username, email } = req.body;
     const updates = {};
+
+    if (email !== undefined) {
+      const e = (email || '').trim().toLowerCase();
+      if (e && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))
+        return res.status(400).json({ error: 'Invalid email format' });
+      if (e) updates.email = e;
+    }
 
     if (polymarket_address !== undefined) {
       const addr = (polymarket_address || '').trim();
