@@ -49,16 +49,50 @@ canvas{display:block;width:100%!important}
 /* Outcomes table */
 .mkt-outcomes{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:24px}
 .mkt-outcomes h3{font-size:14px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px}
-.mkt-outcomes-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
-.mkt-outcomes-row:last-child{border-bottom:none}
+.mkt-outcomes-table{width:100%;border-collapse:collapse}
+.mkt-outcomes-table thead th{font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;padding:0 10px 10px;text-align:left;border-bottom:1px solid var(--border)}
+.mkt-outcomes-table thead th:not(:first-child){text-align:center}
+.mkt-outcomes-table tbody tr{cursor:pointer;transition:background .12s;border-bottom:1px solid var(--border)}
+.mkt-outcomes-table tbody tr:last-child{border-bottom:none}
+.mkt-outcomes-table tbody tr:hover{background:rgba(255,255,255,.03)}
+.mkt-outcomes-table tbody tr.active-outcome{background:rgba(201,146,13,.06);border-left:2px solid var(--gold)}
+.mkt-outcomes-table tbody td{padding:12px 10px;font-size:13px}
+.mkt-outcomes-table tbody td:not(:first-child){text-align:center;font-family:var(--mono)}
+.outcome-name{display:flex;align-items:center;gap:8px;font-weight:700}
+.outcome-btn{display:inline-block;padding:4px 10px;border-radius:5px;font-family:var(--mono);font-size:11px;font-weight:700;min-width:54px;text-align:center}
+.outcome-btn-yes{background:rgba(34,197,94,.12);color:var(--green);border:1px solid rgba(34,197,94,.25)}
+.outcome-btn-no{background:rgba(239,68,68,.12);color:var(--red);border:1px solid rgba(239,68,68,.25)}
+
+/* Holders section */
+.mkt-holders{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:24px}
+.mkt-holders h3{font-size:14px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.holders-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.holders-col-header{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.holders-col-header.yes{color:var(--green)}
+.holders-col-header.no{color:var(--red)}
+.holder-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(34,34,32,.5);transition:background .1s}
+.holder-row:last-child{border-bottom:none}
+.holder-row a{font-family:var(--mono);font-size:11px;color:var(--soft);transition:color .12s}
+.holder-row a:hover{color:var(--text)}
+.holder-shares{font-family:var(--mono);font-size:11px;color:var(--dim)}
 
 /* Orderbook */
 .mkt-orderbook{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:24px}
-.mkt-orderbook h3{font-size:14px;font-weight:700;margin-bottom:12px}
-.mkt-ob-row{display:flex;font-family:var(--mono);font-size:11px;padding:3px 0}
+.mkt-orderbook-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.mkt-orderbook-header h3{font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px}
+.ob-timestamp{font-family:var(--mono);font-size:9px;color:var(--dim)}
+.ob-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.ob-col-label{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.ob-col-label.bids{color:var(--green)}
+.ob-col-label.asks{color:var(--red)}
+.ob-col-head{display:grid;grid-template-columns:2fr 2fr 3fr;font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;padding:3px 0 6px;border-bottom:1px solid var(--border)}
+.ob-col-head span:not(:first-child){text-align:right}
+.mkt-ob-row{display:grid;grid-template-columns:2fr 2fr 3fr;font-family:var(--mono);font-size:11px;padding:3px 0}
+.mkt-ob-row span:not(:first-child){text-align:right}
 .mkt-ob-bid{color:var(--green)}
 .mkt-ob-ask{color:var(--red)}
-.mkt-ob-size{color:var(--dim);text-align:right;flex:1}
+.mkt-ob-size{color:var(--dim)}
+.mkt-ob-total{color:var(--soft)}
 
 /* TRADE WIDGET (sidebar) */
 .trade-widget{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;position:relative}
@@ -98,12 +132,15 @@ canvas{display:block;width:100%!important}
 .mkt-loading{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;gap:16px}
 .mkt-loading .spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 
 /* Mobile */
 @media(max-width:900px){
   .mkt-layout{grid-template-columns:1fr;padding:16px}
   .mkt-sidebar{position:static}
   .mkt-stats{grid-template-columns:repeat(2,1fr)}
+  .holders-grid{grid-template-columns:1fr}
+  .ob-grid{grid-template-columns:1fr}
 }
 </style>
 </head>
@@ -164,20 +201,40 @@ canvas{display:block;width:100%!important}
 
       <!-- Outcomes -->
       <div class="mkt-outcomes" id="mktOutcomesSection">
-        <h3>Outcomes <span style="font-family:var(--mono);font-size:10px;color:var(--dim);font-weight:400">(1)</span></h3>
+        <h3>Outcomes <span id="outcomesCount" style="font-family:var(--mono);font-size:10px;color:var(--dim);font-weight:400"></span></h3>
         <div id="mktOutcomes">Loading...</div>
+      </div>
+
+      <!-- Top Holders -->
+      <div class="mkt-holders" id="mktHoldersSection" style="display:none">
+        <h3>Top Holders</h3>
+        <div class="holders-grid">
+          <div>
+            <div class="holders-col-header yes">YES Holders</div>
+            <div id="holdersYes"><div style="font-family:var(--mono);font-size:11px;color:var(--dim)">Loading...</div></div>
+          </div>
+          <div>
+            <div class="holders-col-header no">NO Holders</div>
+            <div id="holdersNo"><div style="font-family:var(--mono);font-size:11px;color:var(--dim)">Loading...</div></div>
+          </div>
+        </div>
       </div>
 
       <!-- Orderbook -->
       <div class="mkt-orderbook">
-        <h3>Order Book</h3>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div class="mkt-orderbook-header">
+          <h3>Order Book <span style="width:6px;height:6px;background:var(--green);border-radius:50%;display:inline-block;animation:pulse 2s infinite"></span></h3>
+          <div class="ob-timestamp" id="obTimestamp">—</div>
+        </div>
+        <div class="ob-grid">
           <div>
-            <div style="font-family:var(--mono);font-size:10px;color:var(--green);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Bids (Buy)</div>
+            <div class="ob-col-label bids">Bids (Buy)</div>
+            <div class="ob-col-head"><span>Price</span><span>Size</span><span>Total ($)</span></div>
             <div id="obBids">—</div>
           </div>
           <div>
-            <div style="font-family:var(--mono);font-size:10px;color:var(--red);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Asks (Sell)</div>
+            <div class="ob-col-label asks">Asks (Sell)</div>
+            <div class="ob-col-head"><span>Price</span><span>Size</span><span>Total ($)</span></div>
             <div id="obAsks">—</div>
           </div>
         </div>
@@ -272,9 +329,12 @@ var _orderbook = { bids: [], asks: [] };
 var _tradeSide = 'yes';
 var _tradeMode = 'buy';
 var _chartInterval = 'all';
+var _activeOutcomeIndex = 0;
 
 function escH(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 function fmtCap(n) { if (n >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M'; if (n >= 1e3) return '$' + (n/1e3).toFixed(1) + 'K'; return '$' + n.toFixed(0); }
+function fmtNum(n) { return Math.round(n).toLocaleString(); }
+function truncAddr(a) { if (!a || a.length < 12) return a || '—'; return a.substring(0, 8) + '...' + a.slice(-4); }
 
 // Get slug from URL
 var slug = window.location.pathname.split('/market/')[1] || '';
@@ -295,8 +355,9 @@ async function loadMarket() {
     document.getElementById('mktLoading').style.display = 'none';
     document.getElementById('marketContent').style.display = 'block';
     document.title = (_market.question || 'Market') + ' | HYPERFLEX';
+    loadTopHolders(_market);
   } catch (e) {
-    document.getElementById('mktLoading').innerHTML = '<div style="color:var(--red);font-family:var(--mono);font-size:13px">Failed to load market: ' + escH(e.message) + '</div><div style="margin-top:12px"><a href="/" style="color:var(--gold)">← Back to home</a></div>';
+    document.getElementById('mktLoading').innerHTML = '<div style="color:var(--red);font-family:var(--mono);font-size:13px">Failed to load market: ' + escH(e.message) + '</div><div style="margin-top:12px"><a href="/" style="color:var(--gold)">&#x2190; Back to home</a></div>';
   }
 }
 
@@ -341,19 +402,6 @@ function renderMarket() {
     descEl.textContent = desc;
   }
 
-  // Outcomes
-  document.getElementById('mktOutcomes').innerHTML =
-    '<div class="mkt-outcomes-row">' +
-      '<div style="flex:1;display:flex;align-items:center;gap:8px">' +
-        (icon ? '<img src="' + escH(icon) + '" style="width:24px;height:24px;border-radius:4px" onerror="this.style.display=\'none\'"/>' : '') +
-        '<span style="font-size:13px;font-weight:700">' + escH(m.question || '').substring(0, 60) + '</span>' +
-      '</div>' +
-      '<div style="display:flex;gap:16px;flex-shrink:0">' +
-        '<div style="text-align:center"><div style="font-family:var(--mono);font-size:9px;color:var(--dim)">Yes</div><div style="font-family:var(--mono);font-size:16px;font-weight:700;color:var(--green)">' + Math.round(yesPrice * 100) + '%</div></div>' +
-        '<div style="text-align:center"><div style="font-family:var(--mono);font-size:9px;color:var(--dim)">No</div><div style="font-family:var(--mono);font-size:16px;font-weight:700;color:var(--red)">' + Math.round(noPrice * 100) + '%</div></div>' +
-      '</div>' +
-    '</div>';
-
   // Trade widget
   document.getElementById('yesPrice').textContent = Math.round(yesPrice * 100) + '¢';
   document.getElementById('noPrice').textContent = Math.round(noPrice * 100) + '¢';
@@ -363,8 +411,138 @@ function renderMarket() {
   document.getElementById('polyLink').href = 'https://polymarket.com/event/' + (m.slug || slug);
 
   updateTradeCalc();
+  renderOutcomes(m);
   drawChart(_priceHistory);
   renderOrderbook();
+}
+
+// ── Outcomes Table ────────────────────────────────────────────────────────────
+function renderOutcomes(m) {
+  var outcomes = m.outcomes;
+  if (typeof outcomes === 'string') {
+    try { outcomes = JSON.parse(outcomes); } catch(e) { outcomes = null; }
+  }
+  var prices = m.outcomePrices || '[]';
+  if (typeof prices === 'string') { try { prices = JSON.parse(prices); } catch(e) { prices = []; } }
+
+  // Build rows array
+  var rows = [];
+  if (outcomes && Array.isArray(outcomes) && outcomes.length > 1) {
+    document.getElementById('outcomesCount').textContent = '(' + outcomes.length + ')';
+    for (var i = 0; i < outcomes.length; i++) {
+      var yp = prices[i*2] !== undefined ? parseFloat(prices[i*2]) : (prices[i] !== undefined ? parseFloat(prices[i]) : 0.5);
+      var np = 1 - yp;
+      rows.push({ name: outcomes[i], yesP: yp, noP: np, idx: i });
+    }
+  } else {
+    // Binary market — single row
+    document.getElementById('outcomesCount').textContent = '(1)';
+    var yesPrice = prices[0] ? parseFloat(prices[0]) : 0.5;
+    var noPrice = prices[1] ? parseFloat(prices[1]) : 1 - yesPrice;
+    rows.push({ name: m.question || 'YES / NO', yesP: yesPrice, noP: noPrice, idx: 0 });
+  }
+
+  var vol = fmtCap(m.volumeNum || m.volume || 0);
+  var liq = fmtCap(m.liquidityNum || m.liquidity || 0);
+
+  var html = '<table class="mkt-outcomes-table"><thead><tr>' +
+    '<th>Outcome</th><th>YES</th><th>NO</th><th>Vol</th><th>Liq</th>' +
+    '</tr></thead><tbody>';
+
+  for (var r = 0; r < rows.length; r++) {
+    var row = rows[r];
+    var activeClass = (row.idx === _activeOutcomeIndex) ? ' active-outcome' : '';
+    html += '<tr class="outcome-row' + activeClass + '" onclick="switchOutcome(' + row.idx + ')" data-idx="' + row.idx + '">' +
+      '<td><div class="outcome-name">' + escH(row.name) + '</div></td>' +
+      '<td><span class="outcome-btn outcome-btn-yes">' + Math.round(row.yesP * 100) + '%</span></td>' +
+      '<td><span class="outcome-btn outcome-btn-no">' + Math.round(row.noP * 100) + '%</span></td>' +
+      '<td style="color:var(--soft);font-size:11px">' + vol + '</td>' +
+      '<td style="color:var(--soft);font-size:11px">' + liq + '</td>' +
+      '</tr>';
+  }
+
+  html += '</tbody></table>';
+  document.getElementById('mktOutcomes').innerHTML = html;
+}
+
+// ── switchOutcome ─────────────────────────────────────────────────────────────
+function switchOutcome(index) {
+  _activeOutcomeIndex = index;
+
+  // Highlight row
+  document.querySelectorAll('.outcome-row').forEach(function(r) {
+    r.classList.toggle('active-outcome', parseInt(r.getAttribute('data-idx')) === index);
+  });
+
+  // Get token IDs
+  var tids = _market.clobTokenIds || '[]';
+  if (typeof tids === 'string') { try { tids = JSON.parse(tids); } catch(e) { tids = []; } }
+
+  var outcomes = _market.outcomes;
+  if (typeof outcomes === 'string') { try { outcomes = JSON.parse(outcomes); } catch(e) { outcomes = null; } }
+
+  var outcomeName = (outcomes && outcomes[index]) ? outcomes[index] : 'YES';
+  document.getElementById('chartOutcome').textContent = outcomeName;
+
+  // Update trade widget prices for this outcome
+  var prices = _market.outcomePrices || '[]';
+  if (typeof prices === 'string') { try { prices = JSON.parse(prices); } catch(e) { prices = []; } }
+  var yp = prices[index*2] !== undefined ? parseFloat(prices[index*2]) : (prices[index] !== undefined ? parseFloat(prices[index]) : 0.5);
+  var np = 1 - yp;
+  document.getElementById('yesPrice').textContent = Math.round(yp * 100) + '¢';
+  document.getElementById('noPrice').textContent = Math.round(np * 100) + '¢';
+  document.getElementById('tradePrice').value = Math.round(yp * 100);
+  updateTradeCalc();
+
+  // Re-fetch price history for this token
+  var tokenId = tids[index] || tids[0];
+  if (tokenId) {
+    fetch('https://clob.polymarket.com/prices-history?market=' + tokenId + '&interval=' + _chartInterval + '&fidelity=60')
+      .then(function(r) { return r.json(); })
+      .then(function(d) { _priceHistory = (d.history || []); drawChart(_priceHistory); })
+      .catch(function() {});
+  }
+}
+
+// ── Top Holders ───────────────────────────────────────────────────────────────
+async function loadTopHolders(m) {
+  var conditionId = m.conditionId;
+  if (!conditionId) return;
+
+  var section = document.getElementById('mktHoldersSection');
+  section.style.display = '';
+
+  try {
+    var res = await fetch('https://data-api.polymarket.com/positions?market=' + conditionId + '&limit=30&sortBy=CURRENT');
+    if (!res.ok) throw new Error('fetch failed');
+    var data = await res.json();
+    if (!Array.isArray(data) || data.length === 0) { section.style.display = 'none'; return; }
+
+    var yesHolders = [], noHolders = [];
+    data.forEach(function(pos) {
+      var isYes = (pos.outcome === 'YES') || (pos.winning === true) || (pos.outcomeIndex === 0);
+      var entry = { address: pos.proxyWallet || pos.address || pos.user || '', shares: pos.size || pos.currentValue || 0, name: pos.name || pos.username || '' };
+      if (isYes) yesHolders.push(entry);
+      else noHolders.push(entry);
+    });
+
+    function renderHolderList(list, limit) {
+      if (!list.length) return '<div style="font-family:var(--mono);font-size:11px;color:var(--dim)">No data</div>';
+      return list.slice(0, limit).map(function(h) {
+        var display = h.name ? escH(h.name) : truncAddr(h.address);
+        var link = h.address ? 'https://polymarket.com/profile/' + encodeURIComponent(h.address) : '#';
+        return '<div class="holder-row">' +
+          '<a href="' + escH(link) + '" target="_blank" rel="noopener">' + display + '</a>' +
+          '<span class="holder-shares">' + fmtNum(h.shares) + '</span>' +
+          '</div>';
+      }).join('');
+    }
+
+    document.getElementById('holdersYes').innerHTML = renderHolderList(yesHolders, 10);
+    document.getElementById('holdersNo').innerHTML = renderHolderList(noHolders, 10);
+  } catch (e) {
+    section.style.display = 'none';
+  }
 }
 
 function toggleDesc() {
@@ -373,7 +551,7 @@ function toggleDesc() {
   if (full) { el.textContent = full; document.getElementById('mktDescToggle').style.display = 'none'; }
 }
 
-// Chart
+// ── Chart ─────────────────────────────────────────────────────────────────────
 function drawChart(history) {
   var canvas = document.getElementById('priceChart');
   var ctx = canvas.getContext('2d');
@@ -425,9 +603,6 @@ function drawChart(history) {
   var cw  = w - pad.left - pad.right;
   var ch  = H - pad.top - pad.bottom;
 
-  var pad = { top: 16, right: 16, bottom: 28, left: 46 };
-  var cw  = w - pad.left - pad.right;
-  var ch  = H - pad.top - pad.bottom;
   var gridCount = 4;
   var isUp = prices[prices.length - 1] >= prices[0];
 
@@ -439,7 +614,7 @@ function drawChart(history) {
     };
   });
 
-  // 1. Grid lines (drawn first, under everything)
+  // 1. Grid lines
   ctx.strokeStyle = 'rgba(255,255,255,0.06)';
   ctx.lineWidth = 0.5;
   for (var i = 0; i <= gridCount; i++) {
@@ -476,7 +651,7 @@ function drawChart(history) {
   ctx.fillStyle = isUp ? '#22c55e' : '#ef4444';
   ctx.fill();
 
-  // 5. Y-axis labels ON TOP (with opaque bg to cut through gradient)
+  // 5. Y-axis labels
   ctx.font = '10px Space Mono';
   ctx.textAlign = 'right';
   for (var i2 = 0; i2 <= gridCount; i2++) {
@@ -484,7 +659,6 @@ function drawChart(history) {
     var gv  = maxP - (maxP - minP) * (i2 / gridCount);
     var lbl = Math.round(gv * 100) + '¢';
     var tw  = ctx.measureText(lbl).width;
-    // Clear bg behind label
     ctx.fillStyle = '#111110';
     ctx.fillRect(pad.left - tw - 12, gy2 - 7, tw + 8, 13);
     ctx.fillStyle = '#8a8780';
@@ -496,15 +670,13 @@ function drawChart(history) {
   ctx.font = '9px Space Mono';
   ctx.textAlign = 'center';
   var labelCount = Math.min(5, smoothed.length);
-  for (var m = 0; m < labelCount; m++) {
-    var idx2 = Math.round(m / (labelCount - 1) * (smoothed.length - 1));
+  for (var m2 = 0; m2 < labelCount; m2++) {
+    var idx2 = Math.round(m2 / (labelCount - 1) * (smoothed.length - 1));
     var xd = pad.left + (idx2 / (smoothed.length - 1)) * cw;
     var d = new Date(times[idx2] * 1000);
     ctx.fillText((d.getMonth()+1) + '/' + d.getDate(), xd, pad.top + ch + 18);
   }
 }
-
-function var_green() { return '#22c55e'; }
 
 // Chart tab switching
 document.querySelectorAll('.mkt-chart-tab').forEach(function(tab) {
@@ -512,11 +684,11 @@ document.querySelectorAll('.mkt-chart-tab').forEach(function(tab) {
     document.querySelectorAll('.mkt-chart-tab').forEach(function(t) { t.classList.remove('active'); });
     tab.classList.add('active');
     _chartInterval = tab.getAttribute('data-interval');
-    // Re-fetch with new interval
     var tids = _market.clobTokenIds || '[]';
     if (typeof tids === 'string') tids = JSON.parse(tids);
-    if (tids[0]) {
-      fetch('https://clob.polymarket.com/prices-history?market=' + tids[0] + '&interval=' + _chartInterval + '&fidelity=60')
+    var tokenId = tids[_activeOutcomeIndex] || tids[0];
+    if (tokenId) {
+      fetch('https://clob.polymarket.com/prices-history?market=' + tokenId + '&interval=' + _chartInterval + '&fidelity=60')
         .then(function(r) { return r.json(); })
         .then(function(d) { _priceHistory = (d.history || []); drawChart(_priceHistory); })
         .catch(function() {});
@@ -524,21 +696,36 @@ document.querySelectorAll('.mkt-chart-tab').forEach(function(tab) {
   });
 });
 
-// Orderbook
+// ── Orderbook ─────────────────────────────────────────────────────────────────
 function renderOrderbook() {
   var bids = (_orderbook.bids || []).sort(function(a, b) { return parseFloat(b.price) - parseFloat(a.price); }).slice(0, 8);
   var asks = (_orderbook.asks || []).sort(function(a, b) { return parseFloat(a.price) - parseFloat(b.price); }).slice(0, 8);
 
-  document.getElementById('obBids').innerHTML = bids.length > 0 ? bids.map(function(b) {
-    return '<div class="mkt-ob-row"><span class="mkt-ob-bid">' + parseFloat(b.price).toFixed(2) + '¢</span><span class="mkt-ob-size">' + Math.round(parseFloat(b.size)).toLocaleString() + '</span></div>';
-  }).join('') : '<div style="font-family:var(--mono);font-size:11px;color:var(--dim)">No bids</div>';
+  // Timestamp
+  var now = new Date();
+  document.getElementById('obTimestamp').textContent = 'Updated ' + now.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
 
-  document.getElementById('obAsks').innerHTML = asks.length > 0 ? asks.map(function(a) {
-    return '<div class="mkt-ob-row"><span class="mkt-ob-ask">' + parseFloat(a.price).toFixed(2) + '¢</span><span class="mkt-ob-size">' + Math.round(parseFloat(a.size)).toLocaleString() + '</span></div>';
-  }).join('') : '<div style="font-family:var(--mono);font-size:11px;color:var(--dim)">No asks</div>';
+  function buildRow(entry, colorClass) {
+    var price = parseFloat(entry.price);
+    var size = parseFloat(entry.size);
+    var total = (price * size / 100).toFixed(2);
+    return '<div class="mkt-ob-row">' +
+      '<span class="' + colorClass + '">' + price.toFixed(2) + '¢</span>' +
+      '<span class="mkt-ob-size">' + Math.round(size).toLocaleString() + '</span>' +
+      '<span class="mkt-ob-total">$' + parseFloat(total).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) + '</span>' +
+      '</div>';
+  }
+
+  document.getElementById('obBids').innerHTML = bids.length > 0
+    ? bids.map(function(b) { return buildRow(b, 'mkt-ob-bid'); }).join('')
+    : '<div style="font-family:var(--mono);font-size:11px;color:var(--dim)">No bids</div>';
+
+  document.getElementById('obAsks').innerHTML = asks.length > 0
+    ? asks.map(function(a) { return buildRow(a, 'mkt-ob-ask'); }).join('')
+    : '<div style="font-family:var(--mono);font-size:11px;color:var(--dim)">No asks</div>';
 }
 
-// Trade widget
+// ── Trade widget ──────────────────────────────────────────────────────────────
 function setTradeSide(side) {
   _tradeSide = side;
   document.getElementById('sideYes').classList.toggle('active', side === 'yes');
@@ -591,10 +778,9 @@ function updateCtaButton() {
 }
 
 function executeTrade() {
-  // Check if trading is enabled
   var polyAddr = localStorage.getItem('hf_poly_wallet');
   if (!polyAddr) {
-    alert('Connect your Polymarket wallet first. Go to Dashboard → My Positions → Enable Trading.');
+    alert('Connect your Polymarket wallet first. Go to Dashboard \u2192 My Positions \u2192 Enable Trading.');
     return;
   }
   alert('Trading coming soon. For now, trade on Polymarket: ' + document.getElementById('polyLink').href);
