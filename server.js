@@ -363,7 +363,14 @@ app.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (re
 });
 
 app.use(express.json({ limit: '10mb' }));
-app.use(require("express").static("public"));
+app.use(require("express").static("public", {
+  setHeaders: function(res, filePath) {
+    // Prevent caching of HTML files so users always get latest version
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
+  }
+}));
 
 // Tenant: subdomain from host (e.g. acme.hyperflex.io → req.tenant.subdomain = 'acme')
 app.use((req, res, next) => {

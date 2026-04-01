@@ -399,6 +399,9 @@ function renderMarket() {
     } else {
       document.getElementById('mktExpiry').textContent = 'Ended';
       document.getElementById('mktExpiry').style.color = 'var(--red)';
+      // Hide trade widget for ended markets
+      var tradeWidget = document.querySelector('.trade-widget');
+      if (tradeWidget) tradeWidget.style.display = 'none';
     }
   }
 
@@ -419,7 +422,9 @@ function renderMarket() {
   document.getElementById('tradePrice').value = Math.round(yesPrice * 100);
   if (icon) { var ti = document.getElementById('tradeIcon'); ti.src = icon; ti.style.display = ''; }
   document.getElementById('tradeTitle').textContent = (m.question || '').substring(0, 40);
-  document.getElementById('polyLink').href = 'https://polymarket.com/event/' + (m.slug || slug);
+  // Use event slug for Polymarket link (market slugs 404 on polymarket.com)
+  var eventSlug = m._eventSlug || (m.events && m.events[0] && m.events[0].slug) || slug;
+  document.getElementById('polyLink').href = 'https://polymarket.com/event/' + eventSlug;
 
   updateTradeCalc();
   renderOutcomes(m);
