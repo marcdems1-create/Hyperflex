@@ -425,21 +425,13 @@ function drawChart(history) {
   var cw  = w - pad.left - pad.right;
   var ch  = H - pad.top - pad.bottom;
 
-  // Grid lines + Y labels
+  var pad = { top: 16, right: 16, bottom: 28, left: 46 };
+  var cw  = w - pad.left - pad.right;
+  var ch  = H - pad.top - pad.bottom;
   var gridCount = 4;
-  for (var i = 0; i <= gridCount; i++) {
-    var gy = pad.top + (ch / gridCount) * i;
-    var gv = maxP - (maxP - minP) * (i / gridCount);
-    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-    ctx.lineWidth = 0.5;
-    ctx.beginPath(); ctx.moveTo(pad.left, gy); ctx.lineTo(pad.left + cw, gy); ctx.stroke();
-    ctx.fillStyle = '#6b6860';
-    ctx.font = '10px Space Mono';
-    ctx.textAlign = 'right';
-    ctx.fillText(Math.round(gv * 100) + '¢', pad.left - 6, gy + 3.5);
-  }
+  var isUp = prices[prices.length - 1] >= prices[0];
 
-  // Build path
+  // Build point coords
   var pts = prices.map(function(p, idx) {
     return {
       x: pad.left + (idx / (prices.length - 1)) * cw,
@@ -447,7 +439,15 @@ function drawChart(history) {
     };
   });
 
-  // Gradient fill under line
+  // 1. Grid lines (drawn first, under everything)
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.lineWidth = 0.5;
+  for (var i = 0; i <= gridCount; i++) {
+    var gy = pad.top + (ch / gridCount) * i;
+    ctx.beginPath(); ctx.moveTo(pad.left, gy); ctx.lineTo(pad.left + cw, gy); ctx.stroke();
+  }
+
+  // 2. Gradient fill
   ctx.beginPath();
   ctx.moveTo(pts[0].x, pts[0].y);
   for (var j = 1; j < pts.length; j++) ctx.lineTo(pts[j].x, pts[j].y);
@@ -455,13 +455,12 @@ function drawChart(history) {
   ctx.lineTo(pts[0].x, pad.top + ch);
   ctx.closePath();
   var grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
-  var isUp = prices[prices.length - 1] >= prices[0];
-  grad.addColorStop(0, isUp ? 'rgba(34,197,94,0.18)' : 'rgba(239,68,68,0.18)');
+  grad.addColorStop(0, isUp ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)');
   grad.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = grad;
   ctx.fill();
 
-  // Price line
+  // 3. Price line
   ctx.beginPath();
   ctx.strokeStyle = isUp ? '#22c55e' : '#ef4444';
   ctx.lineWidth = 1.5;
@@ -470,18 +469,33 @@ function drawChart(history) {
   for (var k = 1; k < pts.length; k++) ctx.lineTo(pts[k].x, pts[k].y);
   ctx.stroke();
 
-  // End dot
+  // 4. End dot
   var lp = pts[pts.length - 1];
   ctx.beginPath();
   ctx.arc(lp.x, lp.y, 3, 0, Math.PI * 2);
   ctx.fillStyle = isUp ? '#22c55e' : '#ef4444';
   ctx.fill();
 
-  // X-axis date labels (max 6, no overlap)
+  // 5. Y-axis labels ON TOP (with opaque bg to cut through gradient)
+  ctx.font = '10px Space Mono';
+  ctx.textAlign = 'right';
+  for (var i2 = 0; i2 <= gridCount; i2++) {
+    var gy2 = pad.top + (ch / gridCount) * i2;
+    var gv  = maxP - (maxP - minP) * (i2 / gridCount);
+    var lbl = Math.round(gv * 100) + '¢';
+    var tw  = ctx.measureText(lbl).width;
+    // Clear bg behind label
+    ctx.fillStyle = '#111110';
+    ctx.fillRect(pad.left - tw - 12, gy2 - 7, tw + 8, 13);
+    ctx.fillStyle = '#8a8780';
+    ctx.fillText(lbl, pad.left - 6, gy2 + 3.5);
+  }
+
+  // 6. X-axis date labels
   ctx.fillStyle = '#6b6860';
   ctx.font = '9px Space Mono';
   ctx.textAlign = 'center';
-  var labelCount = Math.min(6, smoothed.length);
+  var labelCount = Math.min(5, smoothed.length);
   for (var m = 0; m < labelCount; m++) {
     var idx2 = Math.round(m / (labelCount - 1) * (smoothed.length - 1));
     var xd = pad.left + (idx2 / (smoothed.length - 1)) * cw;
