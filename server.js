@@ -18491,16 +18491,47 @@ app.get('/api/market/:slug', async (req, res) => {
   }
 
   try {
-    // 1. Fetch market data from Gamma API
-    const gammaRes = await fetch(`https://gamma-api.polymarket.com/markets?slug=${encodeURIComponent(slug)}`, {
-      headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
-    });
-    if (!gammaRes.ok) throw new Error(`Gamma API error: ${gammaRes.status}`);
-    const gammaData = await gammaRes.json();
-    if (!gammaData || !gammaData.length) {
+    // 1. Fetch market data from Gamma API — try markets endpoint first, then events
+    const _gammaHeaders = { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' };
+    let market = null;
+    let eventMarkets = null; // populated if this is a multi-outcome event
+
+    // Try direct market slug first
+    const gammaRes = await fetch(`https://gamma-api.polymarket.com/markets?slug=${encodeURIComponent(slug)}`, { headers: _gammaHeaders });
+    if (gammaRes.ok) {
+      const gammaData = await gammaRes.json();
+      if (gammaData && gammaData.length) market = gammaData[0];
+    }
+
+    // If no market found, try as an event slug (e.g. "2026-nba-champion" is an event with multiple markets)
+    if (!market) {
+      const eventRes = await fetch(`https://gamma-api.polymarket.com/events?slug=${encodeURIComponent(slug)}`, { headers: _gammaHeaders });
+      if (eventRes.ok) {
+        const eventData = await eventRes.json();
+        if (eventData && eventData.length && eventData[0].markets && eventData[0].markets.length) {
+          const evt = eventData[0];
+          // Use the first active market as the primary, pass all markets as outcomes
+          const activeMarkets = evt.markets.filter(m => m.active !== false && !m.closed);
+          market = activeMarkets[0] || evt.markets[0];
+          // Attach event-level info
+          market._eventTitle = evt.title || market.question;
+          market._eventSlug = evt.slug;
+          eventMarkets = evt.markets.map(m => ({
+            question: m.question,
+            slug: m.slug,
+            outcomePrices: m.outcomePrices,
+            clobTokenIds: m.clobTokenIds,
+            active: m.active,
+            closed: m.closed,
+            conditionId: m.conditionId
+          }));
+        }
+      }
+    }
+
+    if (!market) {
       return res.status(404).json({ error: 'Market not found' });
     }
-    const market = gammaData[0];
 
     // 2. Parse YES token ID from clobTokenIds
     let tokenId = null;
@@ -18538,6 +18569,7 @@ app.get('/api/market/:slug', async (req, res) => {
     }
 
     const result = { market, priceHistory, orderbook };
+    if (eventMarkets) result.eventMarkets = eventMarkets;
 
     // Cache the result
     _marketDetailCache.set(cacheKey, { data: result, ts: Date.now() });

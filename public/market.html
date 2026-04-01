@@ -333,6 +333,7 @@ var _tradeSide = 'yes';
 var _tradeMode = 'buy';
 var _chartInterval = 'all';
 var _activeOutcomeIndex = 0;
+var _eventMarkets = null;
 
 function escH(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 function fmtCap(n) { if (n >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M'; if (n >= 1e3) return '$' + (n/1e3).toFixed(1) + 'K'; return '$' + n.toFixed(0); }
@@ -353,11 +354,17 @@ async function loadMarket() {
     _market = data.market;
     _priceHistory = (data.priceHistory || {}).history || [];
     _orderbook = data.orderbook || { bids: [], asks: [] };
+    _eventMarkets = data.eventMarkets || null;
+
+    // Use event title if this is a multi-outcome event
+    if (_market._eventTitle) {
+      _market._displayTitle = _market._eventTitle;
+    }
 
     renderMarket();
     document.getElementById('mktLoading').style.display = 'none';
     document.getElementById('marketContent').style.display = 'block';
-    document.title = (_market.question || 'Market') + ' | HYPERFLEX';
+    document.title = (_market._displayTitle || _market.question || 'Market') + ' | HYPERFLEX';
     loadTopHolders(_market);
   } catch (e) {
     document.getElementById('mktLoading').innerHTML = '<div style="color:var(--red);font-family:var(--mono);font-size:13px">Failed to load market: ' + escH(e.message) + '</div><div style="margin-top:12px"><a href="/" style="color:var(--gold)">&#x2190; Back to home</a></div>';
@@ -372,8 +379,9 @@ function renderMarket() {
   var noPrice = prices[1] ? parseFloat(prices[1]) : 1 - yesPrice;
   var icon = m.icon || m.image || '';
 
-  // Title
-  document.getElementById('mktTitle').innerHTML = (icon ? '<img src="' + escH(icon) + '" onerror="this.style.display=\'none\'"/>' : '') + escH(m.question || 'Unknown Market');
+  // Title — use event title for multi-outcome events
+  var displayTitle = m._displayTitle || m.question || 'Unknown Market';
+  document.getElementById('mktTitle').innerHTML = (icon ? '<img src="' + escH(icon) + '" onerror="this.style.display=\'none\'"/>' : '') + escH(displayTitle);
 
   // Stats
   document.getElementById('mktVolume').textContent = fmtCap(m.volumeNum || m.volume || 0);
@@ -421,28 +429,50 @@ function renderMarket() {
 
 // ── Outcomes Table ────────────────────────────────────────────────────────────
 function renderOutcomes(m) {
-  var outcomes = m.outcomes;
-  if (typeof outcomes === 'string') {
-    try { outcomes = JSON.parse(outcomes); } catch(e) { outcomes = null; }
-  }
-  var prices = m.outcomePrices || '[]';
-  if (typeof prices === 'string') { try { prices = JSON.parse(prices); } catch(e) { prices = []; } }
-
-  // Build rows array
   var rows = [];
-  if (outcomes && Array.isArray(outcomes) && outcomes.length > 1) {
-    document.getElementById('outcomesCount').textContent = '(' + outcomes.length + ')';
-    for (var i = 0; i < outcomes.length; i++) {
-      var yp = prices[i*2] !== undefined ? parseFloat(prices[i*2]) : (prices[i] !== undefined ? parseFloat(prices[i]) : 0.5);
-      var np = 1 - yp;
-      rows.push({ name: outcomes[i], yesP: yp, noP: np, idx: i });
+
+  // If this is a multi-outcome event (e.g. "2026 NBA Champion"), use eventMarkets
+  if (_eventMarkets && _eventMarkets.length > 1) {
+    document.getElementById('outcomesCount').textContent = '(' + _eventMarkets.length + ')';
+    for (var i = 0; i < _eventMarkets.length; i++) {
+      var em = _eventMarkets[i];
+      var emPrices = em.outcomePrices || '[]';
+      if (typeof emPrices === 'string') { try { emPrices = JSON.parse(emPrices); } catch(e) { emPrices = []; } }
+      var yp = emPrices[0] ? parseFloat(emPrices[0]) : 0;
+      var np = emPrices[1] ? parseFloat(emPrices[1]) : 1 - yp;
+      // Extract short name from question (e.g. "Will the Thunder win..." → "Thunder")
+      var shortName = em.question || '';
+      var teamMatch = shortName.match(/Will (?:the )?(.+?) win/i);
+      if (teamMatch) shortName = teamMatch[1];
+      else if (shortName.length > 40) shortName = shortName.substring(0, 37) + '...';
+      rows.push({ name: shortName, yesP: yp, noP: np, idx: i, slug: em.slug, conditionId: em.conditionId });
     }
+    // Sort by YES price descending (favorites first)
+    rows.sort(function(a, b) { return b.yesP - a.yesP; });
+    // Re-index after sort
+    for (var j = 0; j < rows.length; j++) rows[j].idx = j;
   } else {
-    // Binary market — single row
-    document.getElementById('outcomesCount').textContent = '(1)';
-    var yesPrice = prices[0] ? parseFloat(prices[0]) : 0.5;
-    var noPrice = prices[1] ? parseFloat(prices[1]) : 1 - yesPrice;
-    rows.push({ name: m.question || 'YES / NO', yesP: yesPrice, noP: noPrice, idx: 0 });
+    // Standard single-market or binary market
+    var outcomes = m.outcomes;
+    if (typeof outcomes === 'string') {
+      try { outcomes = JSON.parse(outcomes); } catch(e) { outcomes = null; }
+    }
+    var prices = m.outcomePrices || '[]';
+    if (typeof prices === 'string') { try { prices = JSON.parse(prices); } catch(e) { prices = []; } }
+
+    if (outcomes && Array.isArray(outcomes) && outcomes.length > 1) {
+      document.getElementById('outcomesCount').textContent = '(' + outcomes.length + ')';
+      for (var i = 0; i < outcomes.length; i++) {
+        var yp = prices[i*2] !== undefined ? parseFloat(prices[i*2]) : (prices[i] !== undefined ? parseFloat(prices[i]) : 0.5);
+        var np = 1 - yp;
+        rows.push({ name: outcomes[i], yesP: yp, noP: np, idx: i });
+      }
+    } else {
+      document.getElementById('outcomesCount').textContent = '(1)';
+      var yesPrice = prices[0] ? parseFloat(prices[0]) : 0.5;
+      var noPrice = prices[1] ? parseFloat(prices[1]) : 1 - yesPrice;
+      rows.push({ name: m.question || 'YES / NO', yesP: yesPrice, noP: noPrice, idx: 0 });
+    }
   }
 
   var vol = fmtCap(m.volumeNum || m.volume || 0);
