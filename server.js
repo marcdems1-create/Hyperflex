@@ -13338,14 +13338,17 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
     });
 
     const allUserIds = allUsers.map(u => u.id);
-    const [positions, balances] = await Promise.all([
+    const [positions, balances, lastActivity] = await Promise.all([
       dbQuery('SELECT user_id FROM positions WHERE user_id = ANY($1)', [allUserIds]),
-      dbQuery('SELECT user_id, balance FROM community_balances WHERE user_id = ANY($1)', [allUserIds])
+      dbQuery('SELECT user_id, balance FROM community_balances WHERE user_id = ANY($1)', [allUserIds]),
+      dbQuery('SELECT user_id, MAX(created_at) as last_active FROM positions WHERE user_id = ANY($1) GROUP BY user_id', [allUserIds])
     ]);
     const tradeMap = {};
     (positions || []).forEach(p => { tradeMap[p.user_id] = (tradeMap[p.user_id] || 0) + 1; });
     const balMap = {};
     (balances || []).forEach(b => { balMap[b.user_id] = (balMap[b.user_id] || 0) + (b.balance || 0); });
+    const activityMap = {};
+    (lastActivity || []).forEach(a => { activityMap[a.user_id] = a.last_active; });
 
     const rows = allUsers.map(u => ({
       id:                 u.id,
@@ -13356,6 +13359,7 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
       trades:             tradeMap[u.id] || 0,
       total_balance:      balMap[u.id] || 0,
       joined:             u.created_at,
+      last_active:        activityMap[u.id] || null,
       plan:               creatorPlanMap[u.id] || 'free',
       trial_expires_at:   creatorTrialMap[u.id] || null
     }));

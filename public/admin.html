@@ -574,6 +574,7 @@
               <th style="text-align:right">Balance (pts)</th>
               <th>Plan</th>
               <th>Joined</th>
+              <th>Last Active</th>
               <th>Set Plan</th>
               <th>Actions</th>
             </tr>
@@ -894,6 +895,7 @@ function renderUsersTable(rows) {
   tbl.style.display = 'table';
   tbody.innerHTML = rows.map(u => {
     const joined = u.joined ? new Date(u.joined).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : '—';
+    const lastActive = u.last_active ? new Date(u.last_active).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : '—';
     const typeLabel = u.is_creator
       ? `<span class="plan-badge pro" style="font-size:10px">creator</span>`
       : `<span style="font-size:11px;color:var(--dim)">member</span>`;
@@ -923,6 +925,7 @@ function renderUsersTable(rows) {
         <td style="text-align:right;font-family:monospace;font-size:12px">${pts}</td>
         <td><span class="plan-badge ${plan}">${plan === 'platinum' ? 'Premium' : plan}</span>${trialBadge ? '<br>' + trialBadge : ''}</td>
         <td class="td-date">${joined}</td>
+        <td class="td-date">${lastActive}</td>
         <td>
           <select class="plan-select" id="usel-${uid}">
             <option value="free"     ${plan==='free'     ?'selected':''}>Free</option>
