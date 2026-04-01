@@ -636,6 +636,7 @@ function drawChart(history) {
   window.addEventListener('resize', function() {
     if (_lwChart) _lwChart.applyOptions({ width: container.offsetWidth });
   });
+  }); // end requestAnimationFrame
 }
 
 // Chart tab switching
