@@ -18466,7 +18466,7 @@ app.get('/whale-index', (req, res) => res.sendFile(path.join(__dirname, 'public'
 
 // GET /screener — market screener page
 app.get('/screener', (req, res) => res.sendFile(path.join(__dirname, 'public', 'screener.html')));
-app.get('/spread-scanner', (req, res) => res.sendFile(path.join(__dirname, 'public', 'spread-scanner.html')));
+app.get('/spread-scanner', (req, res) => res.redirect(301, '/odds'));
 app.get('/high-prob', (req, res) => res.sendFile(path.join(__dirname, 'public', 'high-prob.html')));
 
 // GET /data — premium data dashboard

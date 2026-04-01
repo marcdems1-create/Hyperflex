@@ -30,9 +30,9 @@
     { href: '/signals', label: 'Signals' },
     { href: '/whales', label: 'Market Intel' },
     { href: '/screener', label: 'Screener' },
-    { href: '/spread-scanner', label: 'Spreads', gold: true },
     { href: '/predictors', label: 'Predictors' },
     { href: '/odds', label: 'Odds' },
+    { href: '/high-prob', label: '99% Bets', gold: true },
     { href: '/data', label: 'Data' },
     { href: '/api-docs', label: 'API' }
   ];
