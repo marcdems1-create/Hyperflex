@@ -363,6 +363,13 @@ app.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (re
 });
 
 app.use(express.json({ limit: '10mb' }));
+
+// Serve explore.html as the homepage — explore IS the hub
+app.get('/', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(require('path').join(__dirname, 'public', 'explore.html'));
+});
+
 app.use(require("express").static("public", {
   setHeaders: function(res, filePath) {
     // Prevent caching of HTML files so users always get latest version
@@ -15458,7 +15465,10 @@ app.get('/api/explore', async (req, res) => {
   }
 });
 
-app.get('/explore', (req, res) => res.sendFile(path.join(__dirname, 'public', 'explore.html')));
+app.get('/explore', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(__dirname, 'public', 'explore.html'));
+});
 
 // ════════════════════════════════════════════════════════════
 // FEATURE 2 — PUT /api/user/display-name
