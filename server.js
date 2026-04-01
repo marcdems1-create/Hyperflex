@@ -15255,7 +15255,7 @@ app.get('/api/explore', async (req, res) => {
   }
 });
 
-app.get('/explore', (req, res) => res.redirect(301, '/'));
+app.get('/explore', (req, res) => res.sendFile(path.join(__dirname, 'public', 'explore.html')));
 
 // ════════════════════════════════════════════════════════════
 // FEATURE 2 — PUT /api/user/display-name

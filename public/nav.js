@@ -24,6 +24,7 @@
 
   var links = [
     { href: '/brief', label: '\uD83E\uDDE0 AI Brief', gold: true },
+    { href: '/explore', label: 'Explore' },
     { href: '/crystal-ball', label: 'Crystal Ball' },
     { href: '/signals', label: 'Signals' },
     { href: '/whales', label: 'Market Intel' },
