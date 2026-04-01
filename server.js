@@ -6775,9 +6775,9 @@ app.get('/api/explore/smart-money-divergence', async (req, res) => {
             const wr = (parseInt(b.total_bets) || 0) > 0 ? (parseInt(b.wins) || 0) / parseInt(b.total_bets) : 0;
             const amt = parseFloat(b.amount) || 0;
             const isYes = (b.side || '').toUpperCase() === 'YES';
-            if (wr >= 0.65 && (parseInt(b.total_bets) || 0) >= 10) {
+            if (wr >= 0.55 && (parseInt(b.total_bets) || 0) >= 3) {
               if (isYes) sharpYes += amt; else sharpNo += amt;
-            } else if (wr < 0.50 || (parseInt(b.total_bets) || 0) < 5) {
+            } else if (wr < 0.45 || (parseInt(b.total_bets) || 0) < 3) {
               if (isYes) retailYes += amt; else retailNo += amt;
             }
           }
@@ -6786,7 +6786,7 @@ app.get('/api/explore/smart-money-divergence', async (req, res) => {
           const sharpPct = Math.round(sharpYes / sharpTotal * 100);
           const retailPct = Math.round(retailYes / retailTotal * 100);
           const gap = sharpPct - retailPct;
-          if (Math.abs(gap) < 10) continue; // Only show meaningful divergence
+          if (Math.abs(gap) < 5) continue; // Only show meaningful divergence
 
           results.push({
             market_id: m.id,
