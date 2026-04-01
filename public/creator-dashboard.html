@@ -14307,24 +14307,21 @@ async function connectBrowserWallet() {
         const computedProxy = ethers.getCreate2Address(safeFactory, safeSalt, safeInitCodeHash);
         console.log('[wallet] CREATE2 derived proxy:', computedProxy);
 
-        // Verify this proxy has Polymarket positions (use our server proxy to avoid CORS)
-        const checkRes = await fetch('/api/polymarket/positions/' + computedProxy.toLowerCase());
-        const checkData = await checkRes.json();
-        const checkPositions = checkData.positions || [];
-        if (checkPositions.length > 0) {
-          _polyWalletAddress = computedProxy.toLowerCase();
-          localStorage.setItem('hf_poly_wallet', _polyWalletAddress);
-          found = true;
-          console.log('[wallet] CREATE2 proxy confirmed with positions:', _polyWalletAddress);
-          showToast('Polymarket account found! Loading ' + checkPositions.length + '+ positions...', 'success');
-        } else {
-          // Even if no positions right now, the proxy IS the derived address — save it anyway
-          // The user may have closed all positions or just deposited
-          _polyWalletAddress = computedProxy.toLowerCase();
-          localStorage.setItem('hf_poly_wallet', _polyWalletAddress);
-          found = true;
-          console.log('[wallet] CREATE2 proxy saved (no current positions):', _polyWalletAddress);
-        }
+        // Always save the CREATE2 proxy — it IS the Polymarket address for this EOA
+        _polyWalletAddress = computedProxy.toLowerCase();
+        localStorage.setItem('hf_poly_wallet', _polyWalletAddress);
+        found = true;
+        console.log('[wallet] CREATE2 proxy saved:', _polyWalletAddress);
+
+        // Verify positions client-side (browser can reach data-api directly)
+        try {
+          const checkRes = await fetch('https://data-api.polymarket.com/positions?user=' + _polyWalletAddress + '&limit=3&sortBy=CURRENT');
+          const checkPositions = await checkRes.json();
+          if (Array.isArray(checkPositions) && checkPositions.length > 0) {
+            showToast('Polymarket account found! Loading ' + checkPositions.length + '+ positions...', 'success');
+          }
+        } catch(e) { /* client-side check is best-effort */ }
+
       } catch(e) { console.warn('[wallet] CREATE2 derivation failed:', e.message); }
 
       // If trading is already enabled, use API key to look up proxy address
