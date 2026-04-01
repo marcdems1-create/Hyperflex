@@ -16473,7 +16473,22 @@ app.put('/api/user/wallets', requireAuth, async (req, res) => {
       const e = (email || '').trim().toLowerCase();
       if (e && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))
         return res.status(400).json({ error: 'Invalid email format' });
-      if (e) updates.email = e;
+      if (e) {
+        updates.email = e;
+        // Auto-gift 30 days Premium for providing email (only if not already premium)
+        const existing = await dbQuery('SELECT plan, plan_trial_expires_at FROM creator_settings WHERE creator_id = $1', [req.userId]);
+        const currentPlan = existing?.[0]?.plan || 'free';
+        if (currentPlan === 'free') {
+          const expiresAt = new Date(Date.now() + 30 * 86400000).toISOString();
+          await dbQuery(
+            `INSERT INTO creator_settings (creator_id, plan, plan_trial_expires_at)
+             VALUES ($1, 'platinum', $2)
+             ON CONFLICT (creator_id) DO UPDATE SET plan = 'platinum', plan_trial_expires_at = $2`,
+            [req.userId, expiresAt]
+          );
+          req._giftedPremium = true;
+        }
+      }
     }
 
     if (polymarket_address !== undefined) {
@@ -16519,7 +16534,7 @@ app.put('/api/user/wallets', requireAuth, async (req, res) => {
       }
     }
     if (error) throw error;
-    res.json({ ok: true });
+    res.json({ ok: true, gifted_premium: req._giftedPremium || false });
   } catch (err) {
     console.error('[wallets PUT]', err.message);
     res.status(500).json({ error: 'Failed to update wallet info' });

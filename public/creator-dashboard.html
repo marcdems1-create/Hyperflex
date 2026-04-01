@@ -4975,7 +4975,11 @@ body.nav-open .sidebar-backdrop {
                 <!-- Manual paste (fallback) -->
                 <input type="text" id="poly-wallet-input" placeholder="0x... your Polymarket deposit address" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:10px;padding:13px 16px;font-family:var(--mono);font-size:13px;color:var(--text);outline:none;margin-bottom:8px;box-sizing:border-box" onfocus="this.style.borderColor='rgba(124,58,237,0.6)'" onblur="this.style.borderColor='var(--border)'"/>
                 <div style="font-size:11px;color:var(--dim);margin-bottom:16px">Your Polymarket deposit address is different from your MetaMask address. Find it at <a href="https://polymarket.com" target="_blank" style="color:#a78bfa">polymarket.com</a> → Profile → Deposit Address.</div>
-                <input type="email" id="poly-email-input" placeholder="Email (optional — for notifications &amp; updates)" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:10px;padding:13px 16px;font-family:var(--mono);font-size:13px;color:var(--text);outline:none;margin-bottom:16px;box-sizing:border-box" onfocus="this.style.borderColor='rgba(124,58,237,0.6)'" onblur="this.style.borderColor='var(--border)'"/>
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:10px 14px;background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.25);border-radius:10px">
+                  <span style="font-size:16px">🎁</span>
+                  <span style="font-family:var(--mono);font-size:11px;color:var(--gold)">Add your email → get <strong>30 days Premium free</strong></span>
+                </div>
+                <input type="email" id="poly-email-input" placeholder="your@email.com (optional)" style="width:100%;background:var(--ink);border:1px solid var(--border);border-radius:10px;padding:13px 16px;font-family:var(--mono);font-size:13px;color:var(--text);outline:none;margin-bottom:16px;box-sizing:border-box" onfocus="this.style.borderColor='rgba(201,146,13,0.6)'" onblur="this.style.borderColor='var(--border)'"/>
                 <button id="polyConnectBtn" onclick="connectPolymarket()" style="background:rgba(124,58,237,0.15);color:#a78bfa;border:1px solid rgba(124,58,237,0.3);border-radius:10px;padding:10px 24px;font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer;min-height:40px;width:100%">Connect with Address →</button>
               </div>
               <div id="polyConnectedRow" style="display:none;align-items:center;gap:10px;margin-bottom:16px;padding:12px 16px;background:rgba(124,58,237,0.06);border:1px solid rgba(124,58,237,0.2);border-radius:10px">
@@ -12920,7 +12924,11 @@ async function connectPolymarket() {
     // Always persist to localStorage so wallet stays connected across refreshes
     localStorage.setItem('hf_poly_wallet', address);
     renderPolymarketConnectState();
-    showToast('Polymarket connected!', 'success');
+    if (d.gifted_premium) {
+      showToast('🎁 Polymarket connected! 30 days Premium unlocked — enjoy!', 'success');
+    } else {
+      showToast('Polymarket connected!', 'success');
+    }
     loadPolymarketPositions(false);
   } catch (e) {
     showToast('Connection failed', 'error');
