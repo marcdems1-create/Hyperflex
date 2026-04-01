@@ -17812,6 +17812,9 @@ async function fetchWhalePositions() {
               // Filter expired/resolved markets
               const endDate = p.endDate || p.end_date_iso || p.expirationDate;
               if (endDate && new Date(endDate) < new Date()) return false;
+              // Filter resolved tokens: curPrice at 0 or 1 means market is settled
+              const cp = parseFloat(p.curPrice || p.cur_price || -1);
+              if (cp >= 0 && (cp <= 0.005 || cp >= 0.995)) return false;
               return true;
             })
             .map(p => ({
@@ -18660,7 +18663,7 @@ app.get('/api/whale-index', async (req, res) => {
         if (!sideCap[normSide]) sideCap[normSide] = 0;
         sideCap[normSide] += (p.size || 0);
         totalCapital += (p.size || 0);
-        if (p.current_price > 0) { priceSum += p.current_price; priceCount++; }
+        if (p.current_price > 0.005 && p.current_price < 0.995) { priceSum += p.current_price; priceCount++; }
       }
 
       // Find consensus side
@@ -18670,7 +18673,9 @@ app.get('/api/whale-index', async (req, res) => {
         if (cap > maxCap) { maxCap = cap; consensusSide = side; }
       }
       const consensusPct = totalCapital > 0 ? Math.round((maxCap / totalCapital) * 100) : 50;
-      const avgPrice = priceCount > 0 ? parseFloat((priceSum / priceCount).toFixed(3)) : 0.5;
+      const avgPrice = priceCount > 0 ? parseFloat((priceSum / priceCount).toFixed(3)) : null;
+      // Skip markets with no real price (all positions resolved or stale)
+      if (avgPrice === null) continue;
 
       // Strength classification
       let strength = 'EMERGING';
@@ -22206,30 +22211,47 @@ async function generateCrystalBallPredictions() {
             : (m.url && m.url !== 'https://polymarket.com' ? m.url : 'https://polymarket.com');
           // Use whale position avg price as market price proxy when screener match fails
           // (whale positions have current_price from the positions API)
-          let bestPrice = 0.5;
+          let bestPrice = null; // null = no real price found (don't default to 0.5)
+          let hasRealPrice = false;
           if (screenerMatch && screenerMatch.yes_price != null) {
             bestPrice = screenerMatch.yes_price;
+            hasRealPrice = true;
           } else {
             // Calculate YES price from whale positions
             // IMPORTANT: curPrice from Polymarket positions API is the price of the TOKEN the whale holds
             // If whale holds NO tokens, curPrice = NO price, so YES price = 1 - curPrice
             const mktWhales = whales.filter(w => (w.market || w.question || '').toLowerCase() === mktLower);
-            const yesPrices = mktWhales.map(w => {
+            // Check if market is resolved: if ALL positions have curPrice at 0 or 1, market is settled
+            const allResolved = mktWhales.length > 0 && mktWhales.every(w => {
               const p = parseFloat(w.current_price) || 0;
-              if (p <= 0 || p >= 1) return null;
-              const wSide = (w.side || '').toUpperCase();
-              // NO token price = probability of NO, so YES = 1 - p
-              return wSide === 'NO' ? (1 - p) : p;
-            }).filter(p => p !== null);
-            if (yesPrices.length > 0) bestPrice = yesPrices.reduce((s, p) => s + p, 0) / yesPrices.length;
+              return p <= 0.005 || p >= 0.995; // curPrice ≈ 0 or ≈ 1 = resolved
+            });
+            if (allResolved) {
+              bestPrice = null; // market is resolved, skip it
+            } else {
+              const yesPrices = mktWhales.map(w => {
+                const p = parseFloat(w.current_price) || 0;
+                if (p <= 0.005 || p >= 0.995) return null; // skip resolved tokens
+                const wSide = (w.side || '').toUpperCase();
+                // NO token price = probability of NO, so YES = 1 - p
+                return wSide === 'NO' ? (1 - p) : p;
+              }).filter(p => p !== null);
+              if (yesPrices.length > 0) {
+                bestPrice = yesPrices.reduce((s, p) => s + p, 0) / yesPrices.length;
+                hasRealPrice = true;
+              }
+            }
           }
+          // If no real price found, market is likely resolved or stale — skip
+          if (bestPrice === null) return null;
           return {
             market: m.market, whale_count: m.whale_count, total_capital: m.total_capital,
             consensus_side: topSide[0], consensus_pct: consensusPct,
-            current_price: bestPrice, url: bestUrl,
+            current_price: bestPrice, url: bestUrl, _hasRealPrice: hasRealPrice,
             strength: m.whale_count >= 10 ? 'STRONG' : m.whale_count >= 5 ? 'MODERATE' : 'EMERGING'
           };
         })
+        .filter(p => p !== null) // remove resolved/stale markets
         .sort((a,b) => b.whale_count - a.whale_count);
       indexData = { picks };
       console.log(`[crystal-ball] Built inline index: ${picks.length} picks`);
@@ -22240,6 +22262,8 @@ async function generateCrystalBallPredictions() {
   if (indexData && indexData.picks) {
     for (const pick of indexData.picks) {
       if (pick.whale_count < 5) continue;
+      // Skip markets without real price data
+      if (!pick._hasRealPrice) continue;
       const rawConf = pick.whale_count * 8 + pick.consensus_pct * 0.3;
       const confidence = Math.max(1, Math.min(95, rawConf >= 100 ? 81 + (pick.whale_count > 15 ? 10 : pick.whale_count > 10 ? 5 : 0) : rawConf));
       const priceDisplay = Math.round((pick.current_price || 0.5) * 100);
@@ -22312,6 +22336,8 @@ async function generateCrystalBallPredictions() {
   if (indexData && indexData.picks) {
     for (const pick of indexData.picks) {
       if (pick.whale_count < 3) continue;
+      // Skip markets without real price data (no screener match + no valid whale curPrice)
+      if (!pick._hasRealPrice) continue;
       // Skip already-resolved markets (price at or near 0% or 100%)
       const rawPrice = pick.current_price || 0.5;
       if (rawPrice >= 0.95 || rawPrice <= 0.05) continue;
