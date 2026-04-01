@@ -69,3 +69,19 @@
 
   // Dashboard link visibility already handled by isLoggedIn above
 })();
+
+// Global helper: convert Polymarket URL to our market page URL
+// Usage: hfxMarketUrl('https://polymarket.com/event/us-x-iran-ceasefire-by-march-31')
+// Returns: '/market/us-x-iran-ceasefire-by-march-31'
+window.hfxMarketUrl = function(polyUrl) {
+  if (!polyUrl || typeof polyUrl !== 'string') return '#';
+  // Already our URL
+  if (polyUrl.startsWith('/market/')) return polyUrl;
+  // Extract slug from polymarket.com/event/SLUG or polymarket.com/event/SLUG/SUBMARKET
+  var match = polyUrl.match(/polymarket\.com\/event\/([a-z0-9\-]+)/i);
+  if (match) return '/market/' + match[1].toLowerCase();
+  // Try extracting from any URL-like slug
+  var parts = polyUrl.split('/').filter(function(p) { return p && p !== 'https:' && p !== 'http:' && !p.includes('.'); });
+  if (parts.length) return '/market/' + parts[parts.length - 1].toLowerCase();
+  return '#';
+};

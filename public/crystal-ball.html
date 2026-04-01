@@ -324,12 +324,12 @@ function renderPredictions(){
         '<span class="cb-badge '+p.type+'">'+(TYPE_LABELS[p.type]||p.type)+'</span>'+
         '<div style="display:flex;flex-direction:column;align-items:center;padding:4px 10px;border-radius:8px;background:rgba(201,146,13,.06);border:1px solid rgba(201,146,13,.12)"><span style="font-family:var(--mono);font-size:20px;font-weight:900;color:'+scoreColor+';line-height:1">'+combined+'</span><span style="font-family:var(--mono);font-size:8px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">'+scoreLabel+'</span></div>'+
       '</div>'+
-      (q?'<div class="cb-market"><a href="'+escAttr(url)+'" target="_blank" rel="noopener">'+escHtml(q.substring(0,80))+'</a></div>':'<div class="cb-market">'+escHtml(p.prediction)+'</div>')+
+      (q?'<div class="cb-market"><a href="'+(typeof hfxMarketUrl==='function'?hfxMarketUrl(url):url)+'">'+escHtml(q.substring(0,80))+'</a></div>':'<div class="cb-market">'+escHtml(p.prediction)+'</div>')+
       (reasoning?'<div class="cb-reasoning">'+escHtml(reasoning)+'</div>':'')+
       roi+
       '<div class="cb-card-footer">'+
         '<span class="cb-time">'+timeAgo(p.detected_at)+' \u00B7 '+timeLeft(p.expires_at)+'</span>'+
-        '<a href="'+escAttr(url)+'" target="_blank" rel="noopener" class="cb-link">Polymarket &rarr;</a>'+
+        '<a href="'+(typeof hfxMarketUrl==='function'?hfxMarketUrl(url):url)+'" class="cb-link">Trade &rarr;</a>'+
       '</div>'+
     '</div>';
   }).join('');
@@ -396,7 +396,7 @@ async function loadContrarian(){
           '<span>Gap: <span class="val" style="color:var(--orange)">'+s.divergence+'pts</span></span>'+
         '</div>'+
         (s.suggestion?'<div class="cb-contrarian-note">'+escHtml(s.suggestion)+'</div>':'')+
-        (s.url?'<div style="margin-top:6px"><a href="'+escAttr(s.url.startsWith('https://polymarket.com')?s.url:'https://polymarket.com')+'" class="cb-link" target="_blank" rel="noopener">Polymarket &rarr;</a></div>':'')+
+        (s.url?'<div style="margin-top:6px"><a href="'+(typeof hfxMarketUrl==='function'?hfxMarketUrl(s.url):s.url)+'" class="cb-link">Trade &rarr;</a></div>':'')+
       '</div>';
     }).join('');
   }catch(err){}
@@ -426,7 +426,7 @@ async function loadExpiring(){
             '<span>Price: <span class="val">'+m.current_price+'%</span></span>'+
             (m.whale_count?'<span>Whales: <span class="val">'+m.whale_count+'</span></span>':'')+
           '</div>'+
-          (m.url?'<div style="margin-top:6px"><a href="'+escAttr(m.url.startsWith('https://polymarket.com')?m.url:'https://polymarket.com')+'" class="cb-link" target="_blank" rel="noopener">Polymarket &rarr;</a></div>':'')+
+          (m.url?'<div style="margin-top:6px"><a href="'+(typeof hfxMarketUrl==='function'?hfxMarketUrl(m.url):m.url)+'" class="cb-link">Trade &rarr;</a></div>':'')+
         '</div>'+
         '<div class="cb-expiring-countdown">'+
           '<div class="cb-expiring-val" style="color:'+pc+'">'+cv+'</div>'+
