@@ -204,6 +204,10 @@ nav {
   .stat-pill-value { font-size: 22px; }
   .creator-cta-strip { padding: 14px 16px; flex-direction: column; align-items: flex-start; gap: 12px; }
   .cta-btn { width: 100%; text-align: center; }
+  #hubSignalCards, #hubScreenerCards { grid-template-columns: 1fr 1fr !important; }
+}
+@media (max-width: 600px) {
+  #hubSignalCards, #hubScreenerCards { grid-template-columns: 1fr !important; }
 }
 @media (max-width: 960px) {
   /* Tabs scroll horizontally on mobile */
@@ -1002,85 +1006,84 @@ nav {
 })();
 </script>
 
-<div class="explore-search-wrap" id="exploreSearchWrap">
-  <input type="search" id="exploreSearchInput" placeholder="🔍 Search markets, communities…" oninput="onExploreSearch(this.value)" style="width:100%;box-sizing:border-box;padding:11px 16px;border-radius:12px;border:1.5px solid #2a2a27;background:#1c1c19;color:#e8e3d5;font-size:14px;font-family:inherit;outline:none;max-width:680px;display:block;margin:0 auto;" />
+<!-- ═══ INTELLIGENCE HUB — FULL WIDTH ═══ -->
+<div style="max-width:1200px;margin:0 auto;padding:0 40px 24px">
+
+  <!-- TOP SIGNALS -->
+  <div style="margin-bottom:28px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse-dot 2s infinite"></span>
+        <span style="font-family:'Space Mono',monospace;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">Top Signals</span>
+        <span style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted)">Live</span>
+      </div>
+      <a href="/signals" style="font-family:'Space Mono',monospace;font-size:11px;color:var(--gold);text-decoration:none">View all →</a>
+    </div>
+    <div id="hubSignalCards" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+      <div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--muted);font-size:12px">Loading signals...</div>
+    </div>
+  </div>
+
+  <!-- SCREENER PICKS -->
+  <div style="margin-bottom:28px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:15px">📊</span>
+        <span style="font-family:'Space Mono',monospace;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">Screener Picks</span>
+      </div>
+      <a href="/screener" style="font-family:'Space Mono',monospace;font-size:11px;color:var(--gold);text-decoration:none">Full screener →</a>
+    </div>
+    <div id="hubScreenerCards" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+      <div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--muted);font-size:12px">Loading screener...</div>
+    </div>
+  </div>
+
+  <!-- CRYSTAL BALL + AI EDGE — 2 col -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:28px">
+    <div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:15px">🔮</span>
+          <span style="font-family:'Space Mono',monospace;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">Crystal Ball</span>
+        </div>
+        <a href="/crystal-ball" style="font-family:'Space Mono',monospace;font-size:11px;color:var(--gold);text-decoration:none">All →</a>
+      </div>
+      <div id="hubCrystalCards" style="display:flex;flex-direction:column;gap:10px">
+        <div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Loading predictions...</div>
+      </div>
+    </div>
+    <div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:15px">🧠</span>
+          <span style="font-family:'Space Mono',monospace;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">AI Edge Detector</span>
+        </div>
+        <a href="/screener" style="font-family:'Space Mono',monospace;font-size:11px;color:var(--gold);text-decoration:none">All →</a>
+      </div>
+      <div id="aiEdgeCards" style="display:flex;flex-direction:column;gap:10px">
+        <div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Loading AI edge...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CTA -->
+  <div class="creator-cta-strip" id="creatorCta" style="margin-bottom:28px">
+    <div class="cta-text">
+      <strong>Trade directly from Hyperflex</strong> — Connect your wallet and execute trades without leaving the site.
+    </div>
+    <a href="/creator/signup" class="cta-btn">Get started free →</a>
+  </div>
 </div>
-<!-- Category filter pills -->
-<div style="display:flex;justify-content:center;gap:8px;padding:8px 16px 16px;flex-wrap:wrap;max-width:680px;margin:0 auto">
-  <button class="feed-filter active" onclick="setFeedFilter('all')" data-filter="all" style="background:rgba(201,146,13,0.15);color:#c9920d;border:1px solid rgba(201,146,13,0.3);border-radius:20px;padding:7px 16px;font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer;transition:all .15s">All</button>
-  <button class="feed-filter" onclick="setFeedFilter('finance')" data-filter="finance" style="background:transparent;color:var(--dim);border:1px solid var(--border);border-radius:20px;padding:7px 16px;font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">💰 Finance</button>
-  <button class="feed-filter" onclick="setFeedFilter('crypto')" data-filter="crypto" style="background:transparent;color:var(--dim);border:1px solid var(--border);border-radius:20px;padding:7px 16px;font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">₿ Crypto</button>
-  <button class="feed-filter" onclick="setFeedFilter('sports')" data-filter="sports" style="background:transparent;color:var(--dim);border:1px solid var(--border);border-radius:20px;padding:7px 16px;font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">🏆 Sports</button>
-  <button class="feed-filter" onclick="setFeedFilter('politics')" data-filter="politics" style="background:transparent;color:var(--dim);border:1px solid var(--border);border-radius:20px;padding:7px 16px;font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">🏛 Politics</button>
-  <button class="feed-filter" onclick="setFeedFilter('entertainment')" data-filter="entertainment" style="background:transparent;color:var(--dim);border:1px solid var(--border);border-radius:20px;padding:7px 16px;font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s">🎬 Entertainment</button>
+
+<!-- ═══ COMMUNITY ACTIVITY — 2-COL LAYOUT ═══ -->
+<div style="max-width:1200px;margin:0 auto;padding:0 40px">
+  <div class="explore-search-wrap" id="exploreSearchWrap" style="padding:0;margin-bottom:12px">
+    <input type="search" id="exploreSearchInput" placeholder="Search markets, communities..." oninput="onExploreSearch(this.value)" style="width:100%;box-sizing:border-box;padding:11px 16px;border-radius:12px;border:1.5px solid #2a2a27;background:#1c1c19;color:#e8e3d5;font-size:14px;font-family:inherit;outline:none" />
+  </div>
 </div>
 
 <div class="explore-layout">
   <div class="main-col">
-
-    <!-- AI EDGE SIGNALS -->
-    <div id="aiEdgeSection" style="margin-bottom:20px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:16px">🧠</span>
-          <span style="font-family:'Space Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">AI Edge Detector</span>
-        </div>
-        <a href="/screener" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);text-decoration:none">View all →</a>
-      </div>
-      <div id="aiEdgeCards" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div style="grid-column:1/-1;text-align:center;padding:16px;color:var(--muted);font-size:12px">Loading AI edge signals...</div>
-      </div>
-    </div>
-
-    <!-- TOP SIGNALS PREVIEW -->
-    <div id="hubSignalsSection" style="margin-bottom:20px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse-dot 2s infinite"></span>
-          <span style="font-family:'Space Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">Top Signals</span>
-        </div>
-        <a href="/signals" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);text-decoration:none">View all →</a>
-      </div>
-      <div id="hubSignalCards" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
-        <div style="grid-column:1/-1;text-align:center;padding:16px;color:var(--muted);font-size:12px">Loading signals...</div>
-      </div>
-    </div>
-
-    <!-- SCREENER PICKS PREVIEW -->
-    <div id="hubScreenerSection" style="margin-bottom:20px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:16px">📊</span>
-          <span style="font-family:'Space Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">Screener Picks</span>
-        </div>
-        <a href="/screener" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);text-decoration:none">Full screener →</a>
-      </div>
-      <div id="hubScreenerCards" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
-        <div style="grid-column:1/-1;text-align:center;padding:16px;color:var(--muted);font-size:12px">Loading screener...</div>
-      </div>
-    </div>
-
-    <!-- CRYSTAL BALL PREVIEW -->
-    <div id="hubCrystalSection" style="margin-bottom:20px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:16px">🔮</span>
-          <span style="font-family:'Space Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">Crystal Ball Predictions</span>
-        </div>
-        <a href="/crystal-ball" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);text-decoration:none">All predictions →</a>
-      </div>
-      <div id="hubCrystalCards" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div style="grid-column:1/-1;text-align:center;padding:16px;color:var(--muted);font-size:12px">Loading predictions...</div>
-      </div>
-    </div>
-
-    <!-- WALLET CONNECT CTA STRIP -->
-    <div class="creator-cta-strip" id="creatorCta">
-      <div class="cta-text">
-        <strong>Start trading from Hyperflex</strong> — Connect your wallet, track positions, and execute trades directly. Free during beta.
-      </div>
-      <a href="/creator/signup" class="cta-btn">Get started free →</a>
-    </div>
 
     <!-- Page tabs -->
     <div class="tabs-wrap" id="tabs-wrap" style="margin-bottom:0">
