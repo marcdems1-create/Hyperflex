@@ -14344,7 +14344,26 @@ async function connectBrowserWallet() {
             _polyWalletAddress = lookupData.proxyAddress.toLowerCase();
             localStorage.setItem('hf_poly_wallet', _polyWalletAddress);
             found = true;
-            console.log('[wallet] Proxy address from API key lookup:', _polyWalletAddress);
+            console.log('[wallet] Proxy address from server:', _polyWalletAddress);
+          }
+          // Server couldn't verify (geo-blocked) but returned derived addresses — check client-side
+          if (!found && lookupData.derivedAddresses && lookupData.derivedAddresses.length > 0) {
+            console.log('[wallet] Server returned derived addresses, checking client-side...');
+            for (const candidate of lookupData.derivedAddresses) {
+              try {
+                const checkRes = await fetch('https://data-api.polymarket.com/positions?user=' + encodeURIComponent(candidate) + '&limit=1&sortBy=CURRENT');
+                const checkData = await checkRes.json();
+                if (Array.isArray(checkData) && checkData.length > 0) {
+                  _polyWalletAddress = candidate.toLowerCase();
+                  localStorage.setItem('hf_poly_wallet', _polyWalletAddress);
+                  found = true;
+                  console.log('[wallet] Found positions at derived address:', _polyWalletAddress);
+                  // Save to server DB too
+                  try { await fetch('/api/user/wallets', { method: 'PUT', headers: { Authorization: 'Bearer ' + localStorage.getItem('hf_token'), 'Content-Type': 'application/json' }, body: JSON.stringify({ polymarket_address: _polyWalletAddress }) }); } catch(e) {}
+                  break;
+                }
+              } catch(e) { console.warn('[wallet] client-side check failed for', candidate.slice(0,10)); }
+            }
           }
         } catch(e) { console.warn('[wallet] proxy lookup failed:', e.message); }
       }

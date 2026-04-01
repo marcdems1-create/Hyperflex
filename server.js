@@ -22710,6 +22710,7 @@ app.post('/api/polymarket/derive-api-key', requireAuth, async (req, res) => {
     }
 
     // Fallback: compute proxy address using CREATE2 (both Safe and ProxyWallet factories)
+    let _derivedAddresses = [];
     if (!proxyAddress) {
       try {
         const { createHash } = require('crypto');
@@ -22732,16 +22733,17 @@ app.post('/api/polymarket/derive-api-key', requireAuth, async (req, res) => {
         const proxyAddr = ethers.getCreate2Address(proxyFactory, proxySalt, proxyInitCodeHash);
 
         console.log(`[derive-api-key] CREATE2 derivation: safe=${safeAddr.slice(0,10)}... proxy=${proxyAddr.slice(0,10)}...`);
+        _derivedAddresses = [safeAddr.toLowerCase(), proxyAddr.toLowerCase()];
 
-        // Check which one has positions
-        for (const candidate of [safeAddr, proxyAddr]) {
+        // Try server-side position check (may fail due to geo-blocking)
+        for (const candidate of _derivedAddresses) {
           try {
-            const checkRes = await fetch(`https://data-api.polymarket.com/positions?user=${candidate.toLowerCase()}&limit=1&sortBy=CURRENT`, {
+            const checkRes = await fetch(`https://data-api.polymarket.com/positions?user=${candidate}&limit=1&sortBy=CURRENT`, {
               headers: { Accept: 'application/json' }
             });
             const checkData = await checkRes.json();
             if (Array.isArray(checkData) && checkData.length > 0) {
-              proxyAddress = candidate.toLowerCase();
+              proxyAddress = candidate;
               console.log(`[derive-api-key] Found positions at ${candidate.slice(0,10)}...`);
               break;
             }
@@ -22750,7 +22752,7 @@ app.post('/api/polymarket/derive-api-key', requireAuth, async (req, res) => {
       } catch(e) { console.warn('[derive-api-key] CREATE2 derivation failed:', e.message); }
     }
 
-    console.log(`[polymarket derive-api-key] user=${req.userId} address=${address.slice(0,8)}... proxy=${(proxyAddress||'none').slice(0,8)}... keys: ${JSON.stringify(Object.keys(data))}`);
+    console.log(`[polymarket derive-api-key] user=${req.userId} address=${address.slice(0,8)}... proxy=${(proxyAddress||'none').slice(0,8)}... derived=${_derivedAddresses.length} keys: ${JSON.stringify(Object.keys(data))}`);
 
     // Save proxy address to user profile if we got one
     if (proxyAddress && req.userId && pool) {
@@ -22764,7 +22766,8 @@ app.post('/api/polymarket/derive-api-key', requireAuth, async (req, res) => {
       apiKey: apiKey,
       secret: secret,
       passphrase: passphrase,
-      proxyAddress: proxyAddress
+      proxyAddress: proxyAddress,
+      derivedAddresses: _derivedAddresses
     });
   } catch (err) {
     console.error('[polymarket derive-api-key]', err.message);
