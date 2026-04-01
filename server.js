@@ -13356,12 +13356,17 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
   }
 });
 
-// POST /api/admin/set-user-plan — set plan for any user by ID
+// POST /api/admin/set-user-plan — set plan for any user by ID (upserts creator_settings for non-creators)
 app.post('/api/admin/set-user-plan', requireAdmin, async (req, res) => {
   try {
     const { userId, plan } = req.body;
     if (!userId || !['free','pro','platinum'].includes(plan)) return res.status(400).json({ error: 'userId and valid plan required' });
-    await dbQuery('UPDATE creator_settings SET plan = $1, plan_trial_expires_at = NULL WHERE creator_id = $2', [plan, userId]);
+    await dbQuery(
+      `INSERT INTO creator_settings (creator_id, plan, plan_trial_expires_at)
+       VALUES ($1, $2, NULL)
+       ON CONFLICT (creator_id) DO UPDATE SET plan = $2, plan_trial_expires_at = NULL`,
+      [userId, plan]
+    );
     console.log(`[admin] set user ${userId} → ${plan}`);
     res.json({ ok: true });
   } catch (err) {
@@ -13370,14 +13375,19 @@ app.post('/api/admin/set-user-plan', requireAdmin, async (req, res) => {
   }
 });
 
-// POST /api/admin/gift-user-trial — gift N days of Premium to any user by ID
+// POST /api/admin/gift-user-trial — gift N days of Premium to any user by ID (upserts creator_settings for non-creators)
 app.post('/api/admin/gift-user-trial', requireAdmin, async (req, res) => {
   try {
     const { userId, days = 30 } = req.body;
     if (!userId) return res.status(400).json({ error: 'userId required' });
     const n = Math.min(Math.max(parseInt(days) || 30, 1), 365);
     const expiresAt = new Date(Date.now() + n * 86400000).toISOString();
-    await dbQuery('UPDATE creator_settings SET plan = $1, plan_trial_expires_at = $2 WHERE creator_id = $3', ['platinum', expiresAt, userId]);
+    await dbQuery(
+      `INSERT INTO creator_settings (creator_id, plan, plan_trial_expires_at)
+       VALUES ($1, 'platinum', $2)
+       ON CONFLICT (creator_id) DO UPDATE SET plan = 'platinum', plan_trial_expires_at = $2`,
+      [userId, expiresAt]
+    );
     console.log(`[admin] gifted ${n}d Premium trial to user ${userId}, expires ${expiresAt}`);
     res.json({ ok: true, expires_at: expiresAt });
   } catch (err) {
