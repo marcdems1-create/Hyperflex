@@ -569,8 +569,11 @@ function drawChart(history) {
 
   container.innerHTML = '';
 
+  requestAnimationFrame(function() {
+  var _w = container.offsetWidth || container.parentElement.offsetWidth || 760;
+
   _lwChart = LightweightCharts.createChart(container, {
-    width: container.offsetWidth,
+    width: _w,
     height: 260,
     layout: {
       background: { color: '#131311' },
