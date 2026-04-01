@@ -377,71 +377,107 @@ function toggleDesc() {
 function drawChart(history) {
   var canvas = document.getElementById('priceChart');
   var ctx = canvas.getContext('2d');
-  var w = canvas.parentElement.offsetWidth - 40;
-  canvas.width = w * 2; canvas.height = 560;
-  canvas.style.width = w + 'px'; canvas.style.height = '280px';
+  var w = canvas.parentElement.offsetWidth - 32;
+  var H = 240;
+  canvas.width = w * 2; canvas.height = H * 2;
+  canvas.style.width = w + 'px'; canvas.style.height = H + 'px';
   ctx.scale(2, 2);
+  ctx.clearRect(0, 0, w, H);
 
   if (!history || history.length < 2) {
     ctx.fillStyle = '#5a5752';
     ctx.font = '12px Space Mono';
     ctx.textAlign = 'center';
-    ctx.fillText('Not enough price data yet', w / 2, 140);
+    ctx.fillText('Not enough price data yet', w / 2, H / 2);
     return;
   }
 
-  var pad = { top: 20, right: 20, bottom: 30, left: 50 };
-  var cw = w - pad.left - pad.right;
-  var ch = 280 - pad.top - pad.bottom;
+  // Downsample to max 300 points for smooth rendering
+  var data = history;
+  if (data.length > 300) {
+    var step = Math.ceil(data.length / 300);
+    var sampled = [];
+    for (var s = 0; s < data.length; s += step) sampled.push(data[s]);
+    if (sampled[sampled.length - 1] !== data[data.length - 1]) sampled.push(data[data.length - 1]);
+    data = sampled;
+  }
 
-  var prices = history.map(function(h) { return h.p; });
-  var times = history.map(function(h) { return h.t; });
-  var minP = Math.min.apply(null, prices) * 0.95;
-  var maxP = Math.max.apply(null, prices) * 1.05;
-  if (maxP - minP < 0.01) { minP -= 0.05; maxP += 0.05; }
+  var prices = data.map(function(h) { return h.p; });
+  var times  = data.map(function(h) { return h.t; });
 
-  // Grid lines
-  ctx.strokeStyle = '#222220';
-  ctx.lineWidth = 0.5;
-  for (var i = 0; i <= 4; i++) {
-    var y = pad.top + (ch / 4) * i;
-    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + cw, y); ctx.stroke();
-    var pLabel = Math.round((maxP - (maxP - minP) * (i / 4)) * 100);
-    ctx.fillStyle = '#5a5752';
+  var rawMin = Math.min.apply(null, prices);
+  var rawMax = Math.max.apply(null, prices);
+  var range  = rawMax - rawMin;
+  var pad_p  = Math.max(range * 0.15, 0.02);
+  var minP   = Math.max(0, rawMin - pad_p);
+  var maxP   = Math.min(1, rawMax + pad_p);
+  if (maxP - minP < 0.05) { var mid = (maxP + minP) / 2; minP = Math.max(0, mid - 0.025); maxP = Math.min(1, mid + 0.025); }
+
+  var pad = { top: 16, right: 16, bottom: 28, left: 46 };
+  var cw  = w - pad.left - pad.right;
+  var ch  = H - pad.top - pad.bottom;
+
+  // Grid lines + Y labels
+  var gridCount = 4;
+  for (var i = 0; i <= gridCount; i++) {
+    var gy = pad.top + (ch / gridCount) * i;
+    var gv = maxP - (maxP - minP) * (i / gridCount);
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(pad.left, gy); ctx.lineTo(pad.left + cw, gy); ctx.stroke();
+    ctx.fillStyle = '#6b6860';
     ctx.font = '10px Space Mono';
     ctx.textAlign = 'right';
-    ctx.fillText(pLabel + '%', pad.left - 6, y + 4);
+    ctx.fillText(Math.round(gv * 100) + '¢', pad.left - 6, gy + 3.5);
   }
 
-  // Price line
+  // Build path
+  var pts = prices.map(function(p, idx) {
+    return {
+      x: pad.left + (idx / (prices.length - 1)) * cw,
+      y: pad.top + ch - ((p - minP) / (maxP - minP)) * ch
+    };
+  });
+
+  // Gradient fill under line
   ctx.beginPath();
-  ctx.strokeStyle = var_green();
-  ctx.lineWidth = 2;
-  for (var j = 0; j < prices.length; j++) {
-    var x = pad.left + (j / (prices.length - 1)) * cw;
-    var y2 = pad.top + ch - ((prices[j] - minP) / (maxP - minP)) * ch;
-    if (j === 0) ctx.moveTo(x, y2); else ctx.lineTo(x, y2);
-  }
-  ctx.stroke();
-
-  // Gradient fill
-  ctx.lineTo(pad.left + cw, pad.top + ch);
-  ctx.lineTo(pad.left, pad.top + ch);
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (var j = 1; j < pts.length; j++) ctx.lineTo(pts[j].x, pts[j].y);
+  ctx.lineTo(pts[pts.length - 1].x, pad.top + ch);
+  ctx.lineTo(pts[0].x, pad.top + ch);
   ctx.closePath();
   var grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
-  grad.addColorStop(0, 'rgba(34,197,94,0.15)');
-  grad.addColorStop(1, 'rgba(34,197,94,0)');
+  var isUp = prices[prices.length - 1] >= prices[0];
+  grad.addColorStop(0, isUp ? 'rgba(34,197,94,0.18)' : 'rgba(239,68,68,0.18)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = grad;
   ctx.fill();
 
-  // X-axis dates
-  ctx.fillStyle = '#5a5752';
+  // Price line
+  ctx.beginPath();
+  ctx.strokeStyle = isUp ? '#22c55e' : '#ef4444';
+  ctx.lineWidth = 1.5;
+  ctx.lineJoin = 'round';
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (var k = 1; k < pts.length; k++) ctx.lineTo(pts[k].x, pts[k].y);
+  ctx.stroke();
+
+  // End dot
+  var lp = pts[pts.length - 1];
+  ctx.beginPath();
+  ctx.arc(lp.x, lp.y, 3, 0, Math.PI * 2);
+  ctx.fillStyle = isUp ? '#22c55e' : '#ef4444';
+  ctx.fill();
+
+  // X-axis date labels (max 6, no overlap)
+  ctx.fillStyle = '#6b6860';
   ctx.font = '9px Space Mono';
   ctx.textAlign = 'center';
-  var step = Math.max(1, Math.floor(times.length / 6));
-  for (var k = 0; k < times.length; k += step) {
-    var xd = pad.left + (k / (times.length - 1)) * cw;
-    var d = new Date(times[k] * 1000);
+  var labelCount = Math.min(6, data.length);
+  for (var m = 0; m < labelCount; m++) {
+    var idx2 = Math.round(m / (labelCount - 1) * (data.length - 1));
+    var xd = pad.left + (idx2 / (data.length - 1)) * cw;
+    var d = new Date(times[idx2] * 1000);
     ctx.fillText((d.getMonth()+1) + '/' + d.getDate(), xd, pad.top + ch + 18);
   }
 }
