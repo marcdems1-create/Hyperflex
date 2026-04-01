@@ -19,6 +19,16 @@
 <meta name="twitter:title" content="Prediction Market Leaderboard — HYPERFLEX"/>
 <meta name="twitter:description" content="The most profitable traders across Polymarket, ranked by verified track record."/>
 <meta name="twitter:image" content="https://hyperflex.network/og-predictors.png"/>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "ItemList",
+  "name": "Top Prediction Market Traders — HYPERFLEX Leaderboard",
+  "description": "Ranked leaderboard of the most profitable prediction market traders across Polymarket, Kalshi, and Manifold, scored by the HYPERFLEX Sharp Score.",
+  "url": "https://hyperflex.network/predictors",
+  "itemListElement": []
+}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
 <style>
@@ -150,6 +160,55 @@ body{background:var(--paper);color:var(--text);font-family:var(--sans);min-heigh
 .hof-pnl{font-family:var(--mono);font-size:16px;font-weight:700;color:var(--green);margin-bottom:4px}
 .hof-vol{font-family:var(--mono);font-size:11px;color:var(--muted)}
 
+/* RISING STARS */
+.rising-section{position:relative;z-index:1;max-width:1100px;margin:48px auto 0;padding:0 40px}
+.rising-header{display:flex;align-items:center;gap:10px;margin-bottom:20px}
+.rising-title{font-family:var(--sans);font-size:18px;font-weight:800;color:var(--text)}
+.rising-badge{font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 10px;background:rgba(201,146,13,.12);border:1px solid rgba(201,146,13,.3);border-radius:12px;color:var(--gold);letter-spacing:.5px}
+.rising-grid{display:flex;gap:14px;overflow-x:auto;padding-bottom:8px;scrollbar-width:none}
+.rising-grid::-webkit-scrollbar{display:none}
+.rising-card{flex:0 0 200px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 16px;transition:box-shadow .2s}
+.rising-card:hover{box-shadow:0 0 20px rgba(201,146,13,.1);border-color:rgba(201,146,13,.3)}
+.rising-avatar{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,rgba(201,146,13,.2),rgba(201,146,13,.05));border:1px solid rgba(201,146,13,.25);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:16px;font-weight:700;color:var(--gold);margin-bottom:10px}
+.rising-name{font-weight:700;font-size:13px;color:var(--text);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rising-streak{font-family:var(--mono);font-size:11px;color:#ff6b35;margin-bottom:10px}
+.rising-winrate{font-family:var(--mono);font-size:12px;color:var(--green);margin-bottom:10px}
+.rising-follow{font-family:var(--mono);font-size:10px;font-weight:700;padding:5px 12px;border-radius:16px;border:1px solid var(--gold);background:transparent;color:var(--gold);cursor:pointer;transition:all .15s;width:100%}
+.rising-follow:hover{background:rgba(201,146,13,.12)}
+
+/* CATEGORY TABS */
+.cat-tabs{position:relative;z-index:1;max-width:1100px;margin:20px auto 0;padding:0 40px}
+.cat-tab-row{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.cat-tab-row::-webkit-scrollbar{display:none}
+.cat-tab{font-family:var(--mono);font-size:11px;font-weight:700;padding:7px 16px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--dim);cursor:pointer;transition:all .2s;white-space:nowrap;letter-spacing:.3px}
+.cat-tab:hover{color:var(--text);border-color:var(--dim)}
+.cat-tab.active{background:rgba(201,146,13,.12);border-color:rgba(201,146,13,.5);color:var(--gold)}
+
+/* SHARP SCORE MODAL */
+.ss-modal-overlay{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;padding:20px}
+.ss-modal-overlay.open{display:flex}
+.ss-modal{background:#1c1c19;border:1px solid var(--border);border-radius:16px;padding:32px;max-width:480px;width:100%;position:relative}
+.ss-modal-close{position:absolute;top:16px;right:16px;background:none;border:none;color:var(--dim);font-size:20px;cursor:pointer;padding:4px 8px;border-radius:6px;transition:color .15s}
+.ss-modal-close:hover{color:var(--text)}
+.ss-modal h3{font-family:var(--sans);font-size:20px;font-weight:800;color:var(--gold);margin-bottom:16px}
+.ss-formula{background:rgba(201,146,13,.06);border:1px solid rgba(201,146,13,.2);border-radius:10px;padding:16px;margin-bottom:20px;font-family:var(--mono);font-size:12px;color:var(--text);line-height:2}
+.ss-tip{display:flex;gap:10px;margin-bottom:12px;font-family:var(--mono);font-size:12px;color:var(--dim)}
+.ss-tip-icon{color:var(--gold);flex-shrink:0}
+
+/* SHARE CARD MODAL */
+.share-modal-overlay{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;padding:20px}
+.share-modal-overlay.open{display:flex}
+.share-modal{background:#1c1c19;border:1px solid var(--border);border-radius:16px;padding:28px;max-width:460px;width:100%;position:relative;text-align:center}
+.share-modal canvas{border-radius:10px;max-width:100%}
+.share-modal-actions{display:flex;gap:10px;justify-content:center;margin-top:18px;flex-wrap:wrap}
+.share-btn{font-family:var(--mono);font-size:11px;font-weight:700;padding:8px 18px;border-radius:20px;cursor:pointer;transition:all .15s;text-decoration:none;border:none}
+.share-btn-x{background:#000;color:#fff;border:1px solid #333}
+.share-btn-x:hover{background:#111}
+.share-btn-dl{background:var(--gold);color:var(--ink)}
+.share-btn-dl:hover{background:var(--gold-lt)}
+.share-btn-cancel{background:transparent;border:1px solid var(--border);color:var(--dim)}
+.share-btn-cancel:hover{color:var(--text)}
+
 /* STICKY BOTTOM BAR */
 .sticky-bar{position:fixed;bottom:0;left:0;right:0;z-index:90;background:rgba(10,10,8,.95);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--border);padding:12px 40px;display:flex;align-items:center;justify-content:center;gap:24px;font-family:var(--mono);font-size:13px;transform:translateY(100%);transition:transform .3s}
 .sticky-bar.visible{transform:translateY(0)}
@@ -236,6 +295,27 @@ body{background:var(--paper);color:var(--text);font-family:var(--sans);min-heigh
   <div class="podium-grid" id="podiumGrid"></div>
 </section>
 
+<!-- RISING STARS -->
+<section class="rising-section" id="risingSection" style="display:none">
+  <div class="rising-header">
+    <div class="rising-title">⚡ Rising Stars</div>
+    <div class="rising-badge">NEW THIS MONTH</div>
+  </div>
+  <div class="rising-grid" id="risingGrid"></div>
+</section>
+
+<!-- CATEGORY TABS -->
+<div class="cat-tabs">
+  <div class="cat-tab-row">
+    <button class="cat-tab active" data-cat="all" onclick="setCategory('all')">🏆 All Traders</button>
+    <button class="cat-tab" data-cat="crypto" onclick="setCategory('crypto')">₿ Crypto</button>
+    <button class="cat-tab" data-cat="sports" onclick="setCategory('sports')">🏈 Sports</button>
+    <button class="cat-tab" data-cat="politics" onclick="setCategory('politics')">🗳️ Politics</button>
+    <button class="cat-tab" data-cat="finance" onclick="setCategory('finance')">📈 Finance</button>
+    <button class="cat-tab" data-cat="entertainment" onclick="setCategory('entertainment')">🎬 Entertainment</button>
+  </div>
+</div>
+
 <!-- FILTER BAR -->
 <div class="filter-bar">
   <div class="filter-group" id="periodFilters">
@@ -261,6 +341,7 @@ body{background:var(--paper);color:var(--text);font-family:var(--sans);min-heigh
         <th>ROI</th>
         <th>Streak</th>
         <th>Platform</th>
+        <th><span id="sharpScoreHeader" style="cursor:pointer;color:var(--dim);white-space:nowrap" onclick="openSharpModal()">Sharp Score <span style="color:var(--gold);font-size:10px">ⓘ</span></span></th>
         <th></th>
       </tr>
     </thead>
@@ -275,6 +356,40 @@ body{background:var(--paper);color:var(--text);font-family:var(--sans);min-heigh
   <div class="hof-title">&#127942; Hall of Fame &mdash; All-Time Legends</div>
   <div class="hof-grid" id="hofGrid"></div>
 </section>
+
+<!-- SHARP SCORE MODAL -->
+<div class="ss-modal-overlay" id="ssModalOverlay" onclick="if(event.target===this)closeSharpModal()">
+  <div class="ss-modal">
+    <button class="ss-modal-close" onclick="closeSharpModal()">✕</button>
+    <h3>What is Sharp Score?</h3>
+    <p style="font-family:var(--mono);font-size:12px;color:var(--dim);line-height:1.8;margin-bottom:20px">A composite score (0–100) measuring prediction skill — not just luck. Higher = more reliable signal.</p>
+    <div class="ss-formula">
+      <div><span style="color:var(--gold)">Win Rate Component</span> &nbsp;→ win_rate × 80 pts max</div>
+      <div><span style="color:var(--gold)">Volume Bonus</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ up to +20 pts (more trades = more signal)</div>
+      <div><span style="color:var(--gold)">Profitability</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;→ +15 pts if net P&L is positive</div>
+      <div><span style="color:var(--gold)">Cross-Platform</span> &nbsp;&nbsp;&nbsp;→ +5 pts if active on 2+ platforms</div>
+    </div>
+    <div class="ss-tip"><span class="ss-tip-icon">📈</span><span>Trade more markets. The score penalises low sample sizes — 10 trades means nothing, 100 means a lot.</span></div>
+    <div class="ss-tip"><span class="ss-tip-icon">🔗</span><span>Connect multiple platforms (Polymarket + Kalshi + Manifold) for the cross-platform bonus.</span></div>
+    <div class="ss-tip"><span class="ss-tip-icon">🎯</span><span>Stay profitable. A positive P&L over your trade history unlocks the profitability bonus.</span></div>
+    <div style="margin-top:20px;text-align:center">
+      <a href="/creator/login#signup" style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gold);text-decoration:none;border:1px solid rgba(201,146,13,.4);padding:8px 20px;border-radius:20px;transition:all .15s" onmouseover="this.style.background='rgba(201,146,13,.1)'" onmouseout="this.style.background='transparent'">Get your Sharp Score &rarr;</a>
+    </div>
+  </div>
+</div>
+
+<!-- SHARE SCORE MODAL -->
+<div class="share-modal-overlay" id="shareModalOverlay" onclick="if(event.target===this)closeShareModal()">
+  <div class="share-modal">
+    <button class="ss-modal-close" onclick="closeShareModal()">✕</button>
+    <canvas id="shareScoreCanvas" width="400" height="210"></canvas>
+    <div class="share-modal-actions">
+      <a class="share-btn share-btn-x" id="shareScoreTweetBtn" href="#" target="_blank" rel="noopener">Post on X</a>
+      <button class="share-btn share-btn-dl" onclick="downloadShareScore()">Download PNG</button>
+      <button class="share-btn share-btn-cancel" onclick="closeShareModal()">Cancel</button>
+    </div>
+  </div>
+</div>
 
 <!-- STICKY BOTTOM BAR -->
 <div class="sticky-bar" id="stickyBar">
@@ -301,8 +416,10 @@ body{background:var(--paper);color:var(--text);font-family:var(--sans);min-heigh
 
 var currentPeriod='30d';
 var currentPlatform='all';
+var currentCategory='all';
 var lbData=[];
 var allTimeData=null;
+var _mySharpData=null;
 
 function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 function formatMoney(n){var a=Math.abs(n);if(a>=1e6)return'$'+(a/1e6).toFixed(1)+'M';if(a>=1e3)return'$'+(a/1e3).toFixed(a>=1e5?0:1)+'K';return'$'+a.toLocaleString()}
@@ -324,6 +441,83 @@ function setPlatform(platform){
   document.querySelectorAll('#platformFilters .filter-pill').forEach(function(t){t.classList.toggle('active',t.dataset.platform===platform)});
   renderAll();
 }
+function setCategory(cat){
+  currentCategory=cat;
+  document.querySelectorAll('.cat-tab').forEach(function(t){t.classList.toggle('active',t.dataset.cat===cat)});
+  var catLabels={all:'Prediction Market Leaderboard — Top Polymarket Traders Ranked',crypto:'Best Crypto Prediction Market Traders',sports:'Best Sports Prediction Market Traders',politics:'Best Politics Prediction Market Traders',finance:'Best Finance Prediction Market Traders',entertainment:'Best Entertainment Prediction Market Traders'};
+  document.title=(catLabels[cat]||catLabels['all'])+' | HYPERFLEX';
+  if(cat==='all'){renderAll();}else{loadCategoryLeaderboard(cat);}
+}
+async function loadCategoryLeaderboard(cat){
+  var body=document.getElementById('lbBody');
+  body.innerHTML='<tr><td colspan="9"><div class="state-msg">Loading '+cat+' specialists...</div></td></tr>';
+  document.getElementById('podiumSection').style.display='none';
+  try{
+    var r=await fetch('/api/predictors?category='+cat+'&limit=50');
+    var data=r.ok?await r.json():[];
+    if(!data.length){body.innerHTML='<tr><td colspan="9"><div class="state-msg">No '+cat+' specialists found yet. Be the first.</div></td></tr>';return;}
+    lbData=data;
+    data.forEach(function(r,i){r._displayRank=i+1;r.platforms=r.platforms||['HFX'];r.total_pnl=r.pnl_pts||0;r.volume=r.total_predictions||0});
+    var topN=data.slice(0,10);
+    document.getElementById('heroStat').textContent=data.length+' '+cat+' specialists ranked';
+    renderPodium(topN);
+    renderTable(data.slice(10,50));
+  }catch(e){body.innerHTML='<tr><td colspan="9"><div class="state-msg">Could not load. Try again.</div></td></tr>';}
+}
+
+// Sharp score modal
+function openSharpModal(){document.getElementById('ssModalOverlay').classList.add('open')}
+function closeSharpModal(){document.getElementById('ssModalOverlay').classList.remove('open')}
+
+// Share score card
+function openShareScore(data){
+  _mySharpData=data;
+  var canvas=document.getElementById('shareScoreCanvas');
+  var ctx=canvas.getContext('2d');
+  var W=canvas.width,H=canvas.height;
+  ctx.clearRect(0,0,W,H);
+  // Background
+  var bg=ctx.createLinearGradient(0,0,W,H);
+  bg.addColorStop(0,'#0e0e0c');bg.addColorStop(1,'#1c1c18');
+  ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+  // Gold border
+  ctx.strokeStyle='rgba(201,146,13,0.5)';ctx.lineWidth=1.5;ctx.strokeRect(1,1,W-2,H-2);
+  // Top glow
+  var glow=ctx.createLinearGradient(0,0,0,60);
+  glow.addColorStop(0,'rgba(201,146,13,0.1)');glow.addColorStop(1,'rgba(201,146,13,0)');
+  ctx.fillStyle=glow;ctx.fillRect(0,0,W,60);
+  // HYPERFLEX watermark
+  ctx.font='700 11px "Courier New",monospace';ctx.fillStyle='rgba(201,146,13,0.5)';ctx.fillText('HYPERFLEX',W-90,18);
+  // Sharp score big number
+  var score=data.sharp_score||0;
+  ctx.font='800 56px "Courier New",monospace';
+  ctx.fillStyle=score>=70?'#2d9b5f':score>=40?'#c9920d':'#c0392b';
+  ctx.fillText(score,32,90);
+  ctx.font='700 13px "Courier New",monospace';ctx.fillStyle='#7a7870';ctx.fillText('SHARP SCORE',32,110);
+  // Percentile
+  var pct=score>=90?'Top 1%':score>=80?'Top 5%':score>=70?'Top 10%':score>=50?'Top 25%':'Top 50%';
+  ctx.font='700 13px "Courier New",monospace';ctx.fillStyle='#c9920d';ctx.fillText(pct+' of all predictors',32,140);
+  // Stats row
+  ctx.font='700 12px "Courier New",monospace';ctx.fillStyle='#5a5854';
+  ctx.fillText('WIN RATE',32,168);ctx.fillText('PREDICTIONS',160,168);ctx.fillText('STREAK',300,168);
+  ctx.font='700 14px "Courier New",monospace';ctx.fillStyle='#ddd8cc';
+  ctx.fillText(Math.round((data.win_rate||0)*100)+'%',32,186);
+  ctx.fillText(data.total_predictions||0,160,186);
+  ctx.fillText((data.win_streak||0)+'🔥',300,186);
+  // Footer
+  ctx.font='11px "Courier New",monospace';ctx.fillStyle='rgba(201,146,13,0.4)';
+  ctx.fillText('hyperflex.network/predictors',32,207);
+  // Tweet btn
+  var name=data.display_name||'I';
+  var tweet=name+' scored '+score+' on the HYPERFLEX Sharp Score — '+pct+' of prediction market traders.\n\nCheck the full leaderboard 👇\nhyperflex.network/predictors';
+  document.getElementById('shareScoreTweetBtn').href='https://twitter.com/intent/tweet?text='+encodeURIComponent(tweet);
+  document.getElementById('shareModalOverlay').classList.add('open');
+}
+function closeShareModal(){document.getElementById('shareModalOverlay').classList.remove('open')}
+function downloadShareScore(){
+  var canvas=document.getElementById('shareScoreCanvas');
+  var a=document.createElement('a');a.download='my-sharp-score.png';a.href=canvas.toDataURL('image/png');a.click();
+}
 
 var _alphaScores={};
 function alphaGradeBadge(wallet){
@@ -335,7 +529,7 @@ function alphaGradeBadge(wallet){
 
 async function loadLeaderboard(){
   var body=document.getElementById('lbBody');
-  body.innerHTML='<tr><td colspan="8"><div class="state-msg">Loading the elite...</div></td></tr>';
+  body.innerHTML='<tr><td colspan="9"><div class="state-msg">Loading the elite...</div></td></tr>';
   document.getElementById('podiumSection').style.display='none';
   try{
     var[hfxRes,alphaRes]=await Promise.allSettled([fetch('/api/leaderboard?period='+currentPeriod),fetch('/api/whale-scores')]);
@@ -351,9 +545,59 @@ async function loadLeaderboard(){
       fetch('/api/leaderboard?period=all').then(function(r){return r.ok?r.json():[]}).then(function(d){allTimeData=Array.isArray(d)?d:[];renderHallOfFame()}).catch(function(){});
     }else if(currentPeriod==='all'){allTimeData=merged}
     renderAll();
+    loadRisingStars();
+    loadMyScore();
   }catch(e){
-    body.innerHTML='<tr><td colspan="8"><div class="state-msg">Could not load leaderboard. Try again later.</div></td></tr>';
+    body.innerHTML='<tr><td colspan="9"><div class="state-msg">Could not load leaderboard. Try again later.</div></td></tr>';
   }
+}
+
+async function loadRisingStars(){
+  try{
+    var r=await fetch('/api/predictors?filter=rising&limit=8');
+    if(!r.ok)return;
+    var data=await r.json();
+    if(!data||!data.length)return;
+    var section=document.getElementById('risingSection');
+    var grid=document.getElementById('risingGrid');
+    section.style.display='';
+    var token=localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token')||localStorage.getItem('hf_member_token');
+    grid.innerHTML=data.map(function(r){
+      var name=r.display_name||'Trader';
+      var initial=name.charAt(0).toUpperCase();
+      var streak=r.win_streak||r.streak||0;
+      var wr=Math.round((r.win_rate||0)*100);
+      var uid=r.user_id||'';
+      return'<div class="rising-card">'+
+        '<div class="rising-avatar">'+initial+'</div>'+
+        '<div class="rising-name">'+escHtml(name)+'</div>'+
+        '<div class="rising-streak">🔥 '+streak+' win streak</div>'+
+        '<div class="rising-winrate">'+wr+'% win rate</div>'+
+        (token?'<button class="rising-follow" id="rfollow-'+escHtml(uid)+'" onclick="toggleFollow(\''+escHtml(uid)+'\',this)">Follow</button>':'<a href="/creator/login" class="rising-follow" style="display:block;text-align:center;text-decoration:none">Follow</a>')+
+      '</div>';
+    }).join('');
+  }catch(e){}
+}
+
+async function loadMyScore(){
+  var token=localStorage.getItem('hf_token')||localStorage.getItem('hf_creator_token')||localStorage.getItem('hf_member_token');
+  if(!token)return;
+  try{
+    var r=await fetch('/api/predictors/me/score',{headers:{Authorization:'Bearer '+token}});
+    if(!r.ok)return;
+    _mySharpData=await r.json();
+    // Show share button in sticky bar
+    var bar=document.getElementById('stickyBar');
+    var existing=bar.querySelector('.share-score-btn');
+    if(!existing&&_mySharpData&&_mySharpData.sharp_score){
+      var btn=document.createElement('button');
+      btn.className='share-score-btn';
+      btn.style.cssText='font-family:var(--mono);font-size:11px;font-weight:700;padding:6px 16px;border-radius:20px;border:1px solid rgba(201,146,13,.5);background:rgba(201,146,13,.1);color:var(--gold);cursor:pointer';
+      btn.textContent='Share my score ('+_mySharpData.sharp_score+')';
+      btn.onclick=function(){openShareScore(_mySharpData)};
+      bar.appendChild(btn);
+    }
+  }catch(e){}
 }
 
 function getFilteredData(){
@@ -443,6 +687,9 @@ function renderTable(data){
     var isTop10=rank<=10;
     var isSep=rank%10===0;
     var trClass=(isTop10?' rank-top10':'')+(isSep?' rank-separator':'');
+    var sharpScore=r.sharp_score||0;
+    var sharpColor=sharpScore>=70?'var(--green)':sharpScore>=40?'var(--gold)':'var(--muted)';
+    var sharpHtml=sharpScore?'<span style="font-family:var(--mono);font-size:12px;font-weight:700;color:'+sharpColor+'">'+sharpScore+'</span>':'<span style="color:var(--muted);font-family:var(--mono);font-size:11px)">—</span>';
     return'<tr class="'+trClass+'" onclick="window.location=\''+profileUrl+'\'">'+
       '<td><span class="rank-num">'+rank+'</span></td>'+
       '<td class="td-trader">'+
@@ -460,6 +707,7 @@ function renderTable(data){
       '<td class="td-roi"><span class="roi-val '+roiCls+'">'+(pnl>=0?'+':'')+roi+'%</span></td>'+
       '<td class="td-streak">'+streakHtml+'</td>'+
       '<td class="td-platform">'+platformHtml+'</td>'+
+      '<td class="td-sharp">'+sharpHtml+'</td>'+
       '<td class="td-actions">'+
         (/^0x[0-9a-fA-F]{10,}$/i.test(profileId)?'<a href="/trader/'+escHtml(profileId)+'" onclick="event.stopPropagation()" style="font-size:10px;font-family:var(--mono);color:var(--gold);border:1px solid rgba(201,146,13,0.4);border-radius:12px;padding:3px 10px;text-decoration:none;background:rgba(201,146,13,0.06);margin-right:6px;white-space:nowrap">\uD83D\uDCC8 Track Record</a>':'')+
         '<button class="follow-btn" id="follow-'+uid+'" onclick="event.stopPropagation();toggleFollow(\''+uid+'\',this)">Follow</button>'+

@@ -4519,6 +4519,39 @@ app.post('/api/creator/signup', async (req, res) => {
       }
     }
 
+    // Notify fans who nominated a creator with a matching name (fire-and-forget)
+    ;(async () => {
+      try {
+        const nameNorm = (display_name || '').toLowerCase().trim();
+        let nominations = [];
+        if (pool) {
+          nominations = await dbQuery(`SELECT fan_email, fan_name FROM creator_nominations WHERE notified = false AND LOWER(creator_name) LIKE $1 LIMIT 10`, [`%${nameNorm.slice(0,20)}%`]).catch(() => []);
+        } else {
+          const { data } = await supabase.from('creator_nominations').select('fan_email, fan_name').eq('notified', false).ilike('creator_name', `%${nameNorm.slice(0,20)}%`).limit(10);
+          nominations = data || [];
+        }
+        if (nominations.length > 0) {
+          const transporter = createMailTransport();
+          for (const nom of nominations) {
+            if (!nom.fan_email) continue;
+            const fanGreeting = nom.fan_name ? `Hey ${nom.fan_name},` : 'Hey,';
+            transporter && transporter.sendMail({
+              from: process.env.SMTP_FROM || 'HYPERFLEX <noreply@hyperflex.network>',
+              to: nom.fan_email,
+              subject: `🎉 Good news — ${display_name} just joined HYPERFLEX!`,
+              html: `<div style="background:#141412;padding:40px;font-family:'Courier New',monospace;color:#ddd8cc;max-width:560px;margin:0 auto;border-radius:12px;"><div style="font-size:22px;font-weight:800;color:#c9920d;margin-bottom:24px;">HYPERFLEX</div><h2 style="font-size:20px;color:#f5f5f0;margin:0 0 16px;">${fanGreeting} your nomination worked! 🎉</h2><p style="color:#aaa8a0;font-size:14px;line-height:1.6;margin:0 0 20px;"><strong style="color:#e8e4d9;">${display_name}</strong> just launched their prediction market community on HYPERFLEX — and you helped make it happen.</p><p style="color:#aaa8a0;font-size:14px;line-height:1.6;margin:0 0 24px;">Head over to their community, join, and be the first to predict on their markets.</p><a href="https://hyperflex.network/${slug}" style="display:inline-block;background:#c9920d;color:#141412;padding:12px 24px;border-radius:6px;font-weight:700;font-size:14px;text-decoration:none;">Visit ${display_name}'s community →</a><p style="color:#555;font-size:11px;margin:24px 0 0;">HYPERFLEX · hyperflex.network</p></div>`,
+            }).catch(() => {});
+          }
+          // Mark them as notified
+          if (pool) {
+            dbQuery(`UPDATE creator_nominations SET notified = true WHERE notified = false AND LOWER(creator_name) LIKE $1`, [`%${nameNorm.slice(0,20)}%`]).catch(() => {});
+          } else {
+            supabase.from('creator_nominations').update({ notified: true }).eq('notified', false).ilike('creator_name', `%${nameNorm.slice(0,20)}%`).then(() => {}).catch(() => {});
+          }
+        }
+      } catch (e) { /* silent */ }
+    })();
+
     // Record creator referral if signup came via a /ref/:slug link
     if (referred_by && referred_by !== slug) {
       if (pool) {
@@ -10596,24 +10629,91 @@ app.get('/nominate', (req, res) => res.sendFile(path.join(__dirname, 'public', '
 app.get('/predictors', (req, res) => res.sendFile(path.join(__dirname, 'public', 'predictors.html')));
 app.get('/odds', (req, res) => res.sendFile(path.join(__dirname, 'public', 'odds.html')));
 
+// GET /api/predictors/me/score — return the authenticated user's sharp score + stats
+app.get('/api/predictors/me/score', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    let rows;
+    if (pool) {
+      rows = await dbQuery('SELECT amount, potential_payout, won, created_at FROM positions WHERE user_id = $1 AND settled = true', [userId]);
+    } else {
+      const { data } = await supabase.from('positions').select('amount, potential_payout, won, created_at').eq('user_id', userId).eq('settled', true);
+      rows = data || [];
+    }
+    const total = rows.length;
+    const wins = rows.filter(r => r.won).length;
+    const win_rate = total > 0 ? wins / total : 0;
+    const pnl = rows.reduce((s, r) => s + (r.won ? (r.potential_payout || 0) - (r.amount || 0) : -(r.amount || 0)), 0);
+    const sorted = [...rows].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    let streak = 0; for (const p of sorted) { if (p.won) streak++; else break; }
+    // Sharp score: win_rate*80 + volume_bonus (up to 20) + pnl_bonus (15) + no cross-platform bonus here (need wallets)
+    const vol_bonus = Math.min(20, Math.floor(total * 0.5));
+    const pnl_bonus = pnl > 0 ? 15 : 0;
+    const sharp_score = Math.min(99, Math.round(win_rate * 80 + vol_bonus + pnl_bonus));
+    let userRow;
+    if (pool) {
+      const r = await dbQuery('SELECT display_name FROM users WHERE id = $1', [userId]);
+      userRow = r[0];
+    } else {
+      const { data } = await supabase.from('users').select('display_name').eq('id', userId).maybeSingle();
+      userRow = data;
+    }
+    res.json({ user_id: userId, display_name: userRow?.display_name || 'You', sharp_score, win_rate, total_predictions: total, win_streak: streak, pnl_pts: Math.round(pnl / 100) });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed' });
+  }
+});
+
 // GET /api/predictors — top predictors leaderboard
 app.get('/api/predictors', async (req, res) => {
   try {
-    const { sort = 'win_rate', q = '', limit = 100 } = req.query;
+    const { sort = 'win_rate', q = '', limit = 100, filter = '', category = '' } = req.query;
     const lim = Math.min(parseInt(limit) || 100, 200);
 
-    // Aggregate settled positions per user (limit to 5000 for perf)
+    // Aggregate settled positions per user — join markets for category filter
     let rows;
-    if (pool) {
-      rows = await dbQuery('SELECT user_id, amount, potential_payout, settled, won, created_at FROM positions WHERE settled = true LIMIT 5000');
+    if (category) {
+      // Category filter: join with markets table to filter by category
+      if (pool) {
+        rows = await dbQuery(
+          'SELECT p.user_id, p.amount, p.potential_payout, p.won, p.created_at FROM positions p JOIN markets m ON p.market_id = m.id WHERE p.settled = true AND LOWER(m.category) = $1 LIMIT 5000',
+          [category.toLowerCase()]
+        );
+      } else {
+        const { data } = await supabase.from('positions').select('user_id, amount, potential_payout, won, created_at, markets!inner(category)').eq('settled', true).ilike('markets.category', category).limit(5000);
+        rows = data || [];
+      }
+    } else if (filter === 'rising') {
+      // Rising stars: users who joined in last 30 days — get their positions
+      let recentUserIds;
+      const cutoff = new Date(Date.now() - 30 * 86400000).toISOString();
+      if (pool) {
+        const urows = await dbQuery('SELECT id FROM users WHERE created_at > $1', [cutoff]);
+        recentUserIds = urows.map(r => r.id);
+      } else {
+        const { data } = await supabase.from('users').select('id').gt('created_at', cutoff);
+        recentUserIds = (data || []).map(r => r.id);
+      }
+      if (!recentUserIds.length) return res.json([]);
+      if (pool) {
+        rows = await dbQuery('SELECT user_id, amount, potential_payout, won, created_at FROM positions WHERE settled = true AND user_id = ANY($1) LIMIT 2000', [recentUserIds]);
+      } else {
+        const { data } = await supabase.from('positions').select('user_id, amount, potential_payout, won, created_at').eq('settled', true).in('user_id', recentUserIds).limit(2000);
+        rows = data || [];
+      }
     } else {
-      const { data, error } = await supabase
-        .from('positions')
-        .select('user_id, amount, potential_payout, settled, won, created_at')
-        .eq('settled', true)
-        .limit(5000);
-      if (error) throw error;
-      rows = data;
+      // Default: all settled positions
+      if (pool) {
+        rows = await dbQuery('SELECT user_id, amount, potential_payout, settled, won, created_at FROM positions WHERE settled = true LIMIT 5000');
+      } else {
+        const { data, error } = await supabase
+          .from('positions')
+          .select('user_id, amount, potential_payout, settled, won, created_at')
+          .eq('settled', true)
+          .limit(5000);
+        if (error) throw error;
+        rows = data;
+      }
     }
 
     if (!rows || !rows.length) return res.json([]);
@@ -10669,20 +10769,33 @@ app.get('/api/predictors', async (req, res) => {
     // Build result
     let result = userIds.map(uid => {
       const u = byUser[uid];
-      const win_rate = u.total > 0 ? Math.round((u.wins / u.total) * 100) : 0;
+      const wr = u.total > 0 ? u.wins / u.total : 0;
+      const win_rate = Math.round(wr * 100);
       const platforms = ['HFX'];
       if (polyMap[uid]) platforms.push('POLY');
+      // Sharp score
+      const vol_bonus = Math.min(20, Math.floor(u.total * 0.5));
+      const pnl_bonus = u.pnl > 0 ? 15 : 0;
+      const sharp_score = Math.min(99, Math.round(wr * 80 + vol_bonus + pnl_bonus + (polyMap[uid] ? 5 : 0)));
       return {
         user_id: uid,
         display_name: nameMap[uid] || 'Anonymous',
         win_rate,
         total_predictions: u.total,
+        win_streak: u.streak,
         streak: u.streak,
-        pnl_pts: Math.round(u.pnl / 100), // centpoints → pts
+        pnl_pts: Math.round(u.pnl / 100),
+        sharp_score,
         polymarket_address: polyMap[uid] || null,
         platforms
       };
     });
+
+    // Rising stars filter: streak ≥ 5
+    if (filter === 'rising') {
+      result = result.filter(r => r.win_streak >= 5);
+      result.sort((a, b) => b.win_streak - a.win_streak);
+    }
 
     // Search filter
     if (q) {
@@ -10690,14 +10803,17 @@ app.get('/api/predictors', async (req, res) => {
       result = result.filter(r => r.display_name.toLowerCase().includes(ql));
     }
 
-    // Sort
-    const sortFns = {
-      win_rate: (a, b) => b.win_rate - a.win_rate,
-      predictions: (a, b) => b.total_predictions - a.total_predictions,
-      streak: (a, b) => b.streak - a.streak,
-      pnl: (a, b) => b.pnl_pts - a.pnl_pts
-    };
-    result.sort(sortFns[sort] || sortFns.win_rate);
+    // Sort (skip if rising — already sorted by streak)
+    if (filter !== 'rising') {
+      const sortFns = {
+        win_rate: (a, b) => b.win_rate - a.win_rate,
+        predictions: (a, b) => b.total_predictions - a.total_predictions,
+        streak: (a, b) => b.win_streak - a.win_streak,
+        pnl: (a, b) => b.pnl_pts - a.pnl_pts,
+        sharp_score: (a, b) => b.sharp_score - a.sharp_score
+      };
+      result.sort(sortFns[sort] || sortFns.win_rate);
+    }
 
     res.json(result.slice(0, lim));
   } catch (err) {
@@ -11497,8 +11613,17 @@ app.post('/api/nominate', async (req, res) => {
     const { creator_name, creator_url, fan_name, fan_email, message } = req.body;
     if (!creator_name) return res.status(400).json({ error: 'Creator name required' });
 
-    // Store in a simple table (if it doesn't exist this is a no-op insert that will fail gracefully)
-    // Also fire an email to admin if SMTP configured
+    // Store nomination so we can notify the fan when the creator signs up
+    if (fan_email) {
+      const nomRow = { creator_name, creator_url: creator_url || null, fan_name: fan_name || null, fan_email: fan_email.toLowerCase(), message: message || null, notified: false, created_at: new Date().toISOString() };
+      if (pool) {
+        dbQuery(`INSERT INTO creator_nominations (creator_name, creator_url, fan_name, fan_email, message, notified, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`, [nomRow.creator_name, nomRow.creator_url, nomRow.fan_name, nomRow.fan_email, nomRow.message, false, nomRow.created_at]).catch(() => {});
+      } else {
+        supabase.from('creator_nominations').insert([nomRow]).then(() => {}).catch(() => {});
+      }
+    }
+
+    // Email admin
     const transporter = createMailTransport();
     if (transporter && process.env.ADMIN_EMAIL) {
       await transporter.sendMail({
@@ -14789,6 +14914,52 @@ app.post('/api/creator/digest/send', requireCreator, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
+// PUT /api/creator/markets/:marketId/feature — toggle featured (Editor's Picks)
+// Max 3 featured markets per community at a time.
+// ════════════════════════════════════════════════════════════
+app.put('/api/creator/markets/:marketId/feature', requireCreator, async (req, res) => {
+  try {
+    const { marketId } = req.params;
+    const creatorId = req.user.id;
+    // Verify ownership
+    let mkt;
+    if (pool) {
+      const rows = await dbQuery('SELECT id, featured, tenant_slug FROM markets WHERE id = $1 AND creator_id = $2', [marketId, creatorId]);
+      mkt = rows[0];
+    } else {
+      const { data } = await supabase.from('markets').select('id, featured, tenant_slug').eq('id', marketId).eq('creator_id', creatorId).maybeSingle();
+      mkt = data;
+    }
+    if (!mkt) return res.status(404).json({ error: 'Market not found' });
+
+    const newFeatured = !mkt.featured;
+
+    // Enforce max 3 featured per community
+    if (newFeatured) {
+      let count = 0;
+      if (pool) {
+        const rows = await dbQuery('SELECT COUNT(*) as c FROM markets WHERE tenant_slug = $1 AND featured = true', [mkt.tenant_slug]);
+        count = parseInt(rows[0]?.c || 0);
+      } else {
+        const { count: c } = await supabase.from('markets').select('id', { count: 'exact', head: true }).eq('tenant_slug', mkt.tenant_slug).eq('featured', true);
+        count = c || 0;
+      }
+      if (count >= 3) return res.status(400).json({ error: 'Max 3 featured markets allowed. Unfeature one first.' });
+    }
+
+    if (pool) {
+      await dbQuery('UPDATE markets SET featured = $1 WHERE id = $2', [newFeatured, marketId]);
+    } else {
+      await supabase.from('markets').update({ featured: newFeatured }).eq('id', marketId);
+    }
+    res.json({ ok: true, featured: newFeatured });
+  } catch (err) {
+    console.error('[feature-market]', err);
+    res.status(500).json({ error: 'Failed' });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
 // POST /api/creator/markets/:marketId/blast
 // Send a focused "new market" email to all community members right now.
 // Rate-limited: one blast per market ever (stored in markets.blasted_at).
@@ -16136,6 +16307,34 @@ app.post('/api/creator/seasons/:id/markets', requireCreator, async (req, res) =>
   } catch (err) {
     console.error('[seasons markets POST]', err.message);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/community/:slug/my-challenge-progress — rolling 7-day prediction challenge
+app.get('/api/community/:slug/my-challenge-progress', requireAuth, async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const userId = req.user.id;
+    const goal = 3;
+    const since = new Date(Date.now() - 7 * 86400000).toISOString();
+    // Count distinct markets the user has bet on in this community in the last 7 days
+    let count = 0;
+    if (pool) {
+      const rows = await dbQuery(
+        `SELECT COUNT(DISTINCT p.market_id) as c FROM positions p
+         JOIN markets m ON p.market_id = m.id
+         WHERE p.user_id = $1 AND m.tenant_slug = $2 AND p.created_at > $3`,
+        [userId, slug, since]
+      );
+      count = parseInt(rows[0]?.c || 0);
+    } else {
+      const { data } = await supabase.from('positions').select('market_id, markets!inner(tenant_slug)').eq('user_id', userId).eq('markets.tenant_slug', slug).gt('created_at', since);
+      const distinct = new Set((data || []).map(r => r.market_id));
+      count = distinct.size;
+    }
+    res.json({ count: Math.min(count, goal), goal, completed: count >= goal });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed' });
   }
 });
 

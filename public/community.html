@@ -2040,6 +2040,15 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
     </div>
   </div>
 
+  <!-- Editor's Picks (featured markets) -->
+  <div id="editorPicksSection" style="display:none;margin-bottom:28px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <div style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold)">📌 Editor's Picks</div>
+      <div style="flex:1;height:1px;background:rgba(201,146,13,0.15)"></div>
+    </div>
+    <div id="editorPicksGrid" class="markets-grid"></div>
+  </div>
+
   <!-- Markets grid -->
   <div class="markets-grid" id="marketsGrid">
     <div class="skeleton-card">
@@ -2077,11 +2086,37 @@ button.hero-mini-stat.leaderboard-jump-pill:hover { background: rgba(201,146,13,
   <!-- Activity Feed -->
   <div id="activityFeedSection" style="display:none;margin-bottom:24px"></div>
 
+  <!-- Weekly Challenge -->
+  <div id="weeklyChallenge" style="display:none;margin-bottom:20px;background:rgba(201,146,13,0.05);border:1px solid rgba(201,146,13,0.2);border-radius:12px;padding:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#c9920d">⚡ This Week's Challenge</div>
+      <div id="challengeCompletedBadge" style="display:none;font-family:'Space Mono',monospace;font-size:9px;font-weight:700;padding:2px 8px;background:rgba(45,155,95,0.15);border:1px solid rgba(45,155,95,0.4);border-radius:10px;color:#2d9b5f">DONE ✓</div>
+    </div>
+    <div style="font-family:'Space Mono',monospace;font-size:12px;color:#ddd8cc;margin-bottom:10px">Predict on <strong>3 different markets</strong> this week</div>
+    <div style="background:rgba(0,0,0,0.3);border-radius:6px;height:6px;overflow:hidden;margin-bottom:8px">
+      <div id="challengeProgressBar" style="height:100%;background:#c9920d;border-radius:6px;transition:width .4s ease;width:0%"></div>
+    </div>
+    <div style="font-family:'Space Mono',monospace;font-size:11px;color:#7a7870"><span id="challengeCount">0</span>/3 markets predicted this week</div>
+  </div>
+
   <!-- Leaderboard -->
   <div id="leaderboardSection" class="leaderboard-wrap" style="display:none">
     <div class="section-label">Leaderboard</div>
     <div id="yourRankBar" style="display:none" class="your-rank-bar">
       <span>Your rank:</span> <strong id="yourRankNum"></strong> <span id="yourRankScore"></span>
+      <button onclick="openRankShareCard()" style="margin-left:auto;font-family:'Space Mono',monospace;font-size:10px;font-weight:700;padding:5px 12px;border-radius:14px;border:1px solid rgba(201,146,13,0.4);background:rgba(201,146,13,0.08);color:#c9920d;cursor:pointer;transition:all .15s" onmouseover="this.style.background='rgba(201,146,13,0.16)'" onmouseout="this.style.background='rgba(201,146,13,0.08)'">Share my rank 📤</button>
+    </div>
+    <!-- Rank share card modal -->
+    <div id="rankShareModal" style="display:none;position:fixed;inset:0;z-index:300;background:rgba(0,0,0,0.75);backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeRankShareCard()">
+      <div style="background:#1c1c19;border:1px solid #2a2a26;border-radius:16px;padding:28px;max-width:440px;width:100%;text-align:center;position:relative">
+        <button onclick="closeRankShareCard()" style="position:absolute;top:12px;right:12px;background:none;border:none;color:#7a7870;font-size:18px;cursor:pointer">✕</button>
+        <canvas id="rankShareCanvas" width="380" height="200" style="border-radius:10px;max-width:100%"></canvas>
+        <div style="display:flex;gap:10px;justify-content:center;margin-top:16px;flex-wrap:wrap">
+          <a id="rankShareTweetBtn" href="#" target="_blank" rel="noopener" style="font-family:'Space Mono',monospace;font-size:11px;font-weight:700;padding:8px 18px;border-radius:20px;background:#000;color:#fff;text-decoration:none;border:1px solid #333">Post on X</a>
+          <button onclick="downloadRankCard()" style="font-family:'Space Mono',monospace;font-size:11px;font-weight:700;padding:8px 18px;border-radius:20px;background:#c9920d;color:#141412;border:none;cursor:pointer">Download PNG</button>
+          <button onclick="closeRankShareCard()" style="font-family:'Space Mono',monospace;font-size:11px;font-weight:700;padding:8px 18px;border-radius:20px;background:transparent;color:#7a7870;border:1px solid #2a2a26;cursor:pointer">Cancel</button>
+        </div>
+      </div>
     </div>
     <div id="lbAccuracyCallout" style="display:none;align-items:center;gap:6px;padding:8px 14px;margin-bottom:10px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;flex-wrap:wrap"></div>
     <div class="leaderboard-card">
@@ -2377,6 +2412,7 @@ async function loadCommunity() {
     if (!r.ok) { showCommunityError(); return; }
     const data = await r.json();
     community = data.community;
+    window._communityData = community;
     markets   = data.markets || [];
     allRewards = data.rewards || [];
 
@@ -2387,6 +2423,7 @@ async function loadCommunity() {
     // never takes down the entire page
     safeLoad(() => renderRewards(allRewards), 'rewards');
     safeLoad(() => loadLeaderboard(), 'leaderboard');
+    if (currentUser) safeLoad(() => loadWeeklyChallenge(), 'challenge');
     safeLoad(() => loadCrowdWisdom(), 'crowd-wisdom');
     safeLoad(() => loadPredictorScores(), 'predictor-scores');
     // safeLoad(() => loadRecentFactChecks(), 'fact-checks'); // disabled until Twitter API
@@ -3053,6 +3090,18 @@ function renderFilteredMarkets() {
     }
   } else {
     const sorted = [...filtered].sort(sortFn);
+
+    // Editor's Picks — render featured markets above main grid (only on "all" filter, no search/category)
+    const picksSection = document.getElementById('editorPicksSection');
+    const picksGrid = document.getElementById('editorPicksGrid');
+    const featuredMarkets = markets.filter(m => m.featured && !m.resolved && !m.archived);
+    if (picksSection && picksGrid && featuredMarkets.length > 0 && !activeCategoryFilter && !_marketSearchQuery && currentFilter === 'all') {
+      picksGrid.innerHTML = featuredMarkets.map(m => marketCardHTML(m, false, false)).join('');
+      picksSection.style.display = '';
+    } else if (picksSection) {
+      picksSection.style.display = 'none';
+    }
+
     // Featured card: most contested (or highest truth score) gets hero spot
     const featuredId = sorted[0]?.id;
     const featuredCards = sorted.filter(m => m.id === featuredId).map(m => marketCardHTML(m, false, true));
@@ -3518,12 +3567,84 @@ async function loadLeaderboard(period = 'all') {
   } catch {}
 }
 
+async function loadWeeklyChallenge() {
+  const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_member_token') || localStorage.getItem('hf_creator_token');
+  if (!token) return;
+  try {
+    const r = await fetch(`/api/community/${slug}/my-challenge-progress`, { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) return;
+    const d = await r.json();
+    const widget = document.getElementById('weeklyChallenge');
+    const bar = document.getElementById('challengeProgressBar');
+    const countEl = document.getElementById('challengeCount');
+    const badge = document.getElementById('challengeCompletedBadge');
+    if (!widget) return;
+    widget.style.display = '';
+    countEl.textContent = d.count;
+    bar.style.width = Math.round((d.count / d.goal) * 100) + '%';
+    if (d.completed) {
+      bar.style.background = '#2d9b5f';
+      badge.style.display = '';
+    }
+  } catch(e) {}
+}
+
 function switchLbTab(period) {
   lbPeriod = period;
   document.getElementById('lbTabAllTime').classList.toggle('active', period === 'all');
   document.getElementById('lbTabWeek').classList.toggle('active', period === 'week');
   document.getElementById('lbTabAccuracy').classList.toggle('active', period === 'accuracy');
   loadLeaderboard(period);
+}
+
+function openRankShareCard() {
+  var modal = document.getElementById('rankShareModal');
+  var canvas = document.getElementById('rankShareCanvas');
+  var rankNum = document.getElementById('yourRankNum').textContent;
+  var rankScore = document.getElementById('yourRankScore').textContent;
+  var communityName = (window._communityData && window._communityData.display_name) || 'HYPERFLEX';
+  var ctx = canvas.getContext('2d');
+  var W = canvas.width, H = canvas.height;
+  ctx.clearRect(0,0,W,H);
+  // Background
+  var bg = ctx.createLinearGradient(0,0,W,H);
+  bg.addColorStop(0,'#0e0e0c'); bg.addColorStop(1,'#1a1a17');
+  ctx.fillStyle = bg; ctx.fillRect(0,0,W,H);
+  // Gold border
+  ctx.strokeStyle = 'rgba(201,146,13,0.5)'; ctx.lineWidth = 1.5; ctx.strokeRect(1,1,W-2,H-2);
+  // Top accent line
+  ctx.fillStyle = 'rgba(201,146,13,0.15)'; ctx.fillRect(0,0,W,3);
+  // Community label
+  ctx.font = '700 11px "Courier New",monospace'; ctx.fillStyle = 'rgba(201,146,13,0.6)';
+  ctx.fillText(communityName.toUpperCase(), 24, 28);
+  // HYPERFLEX watermark right
+  ctx.font = '700 10px "Courier New",monospace'; ctx.fillStyle = 'rgba(201,146,13,0.35)';
+  ctx.fillText('HYPERFLEX', W-82, 28);
+  // Rank number
+  ctx.font = '800 64px "Courier New",monospace'; ctx.fillStyle = '#f5c842';
+  ctx.fillText(rankNum, 20, 110);
+  // "on the leaderboard" label
+  ctx.font = '700 13px "Courier New",monospace'; ctx.fillStyle = '#7a7870';
+  ctx.fillText('on the leaderboard', 24, 132);
+  // Score
+  if (rankScore && rankScore.trim()) {
+    ctx.font = '700 13px "Courier New",monospace'; ctx.fillStyle = '#2d9b5f';
+    ctx.fillText(rankScore.trim(), 24, 155);
+  }
+  // CTA
+  ctx.font = '11px "Courier New",monospace'; ctx.fillStyle = 'rgba(201,146,13,0.4)';
+  ctx.fillText('hyperflex.network', 24, 188);
+  // Tweet intent
+  var tweet = 'I\'m ranked ' + rankNum + ' on the ' + communityName + ' prediction market leaderboard ' + rankScore + '\n\nPrediction markets on HYPERFLEX 👇\nhyperflex.network';
+  document.getElementById('rankShareTweetBtn').href = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(tweet);
+  modal.style.display = 'flex';
+}
+function closeRankShareCard() {
+  document.getElementById('rankShareModal').style.display = 'none';
+}
+function downloadRankCard() {
+  var canvas = document.getElementById('rankShareCanvas');
+  var a = document.createElement('a'); a.download = 'my-rank.png'; a.href = canvas.toDataURL('image/png'); a.click();
 }
 
 // ── REWARDS ───────────────────────────────────────────────────
