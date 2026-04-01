@@ -382,7 +382,9 @@ function drawChart(history) {
   canvas.width = w * 2; canvas.height = H * 2;
   canvas.style.width = w + 'px'; canvas.style.height = H + 'px';
   ctx.scale(2, 2);
-  ctx.clearRect(0, 0, w, H);
+  // Background
+  ctx.fillStyle = '#111110';
+  ctx.fillRect(0, 0, w, H);
 
   if (!history || history.length < 2) {
     ctx.fillStyle = '#5a5752';
@@ -392,18 +394,24 @@ function drawChart(history) {
     return;
   }
 
-  // Downsample to max 300 points for smooth rendering
+  // Downsample to max 120 points
   var data = history;
-  if (data.length > 300) {
-    var step = Math.ceil(data.length / 300);
+  if (data.length > 120) {
+    var step = Math.ceil(data.length / 120);
     var sampled = [];
     for (var s = 0; s < data.length; s += step) sampled.push(data[s]);
     if (sampled[sampled.length - 1] !== data[data.length - 1]) sampled.push(data[data.length - 1]);
     data = sampled;
   }
 
-  var prices = data.map(function(h) { return h.p; });
-  var times  = data.map(function(h) { return h.t; });
+  // Apply light smoothing (3-point moving average)
+  var smoothed = data.map(function(d, i) {
+    if (i === 0 || i === data.length - 1) return d;
+    return { t: d.t, p: (data[i-1].p + d.p + data[i+1].p) / 3 };
+  });
+
+  var prices = smoothed.map(function(h) { return h.p; });
+  var times  = smoothed.map(function(h) { return h.t; });
 
   var rawMin = Math.min.apply(null, prices);
   var rawMax = Math.max.apply(null, prices);
@@ -473,10 +481,10 @@ function drawChart(history) {
   ctx.fillStyle = '#6b6860';
   ctx.font = '9px Space Mono';
   ctx.textAlign = 'center';
-  var labelCount = Math.min(6, data.length);
+  var labelCount = Math.min(6, smoothed.length);
   for (var m = 0; m < labelCount; m++) {
-    var idx2 = Math.round(m / (labelCount - 1) * (data.length - 1));
-    var xd = pad.left + (idx2 / (data.length - 1)) * cw;
+    var idx2 = Math.round(m / (labelCount - 1) * (smoothed.length - 1));
+    var xd = pad.left + (idx2 / (smoothed.length - 1)) * cw;
     var d = new Date(times[idx2] * 1000);
     ctx.fillText((d.getMonth()+1) + '/' + d.getDate(), xd, pad.top + ch + 18);
   }
