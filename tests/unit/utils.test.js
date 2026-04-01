@@ -10,6 +10,7 @@ const {
   extractKeywords,
   classifyNarrative,
   detectSentiment,
+  polyRef,
 } = require('../../lib/utils');
 
 // ── rateLimit ─────────────────────────────────────────────
@@ -234,5 +235,70 @@ describe('detectSentiment', () => {
 
   test('is case-insensitive', () => {
     expect(detectSentiment('SURGE RALLY BOOST')).toBe('bullish');
+  });
+});
+
+// ── polyRef ───────────────────────────────────────────────
+describe('polyRef', () => {
+  const REF = 'hyperflex';
+
+  test('appends ?via= to polymarket.com URLs', () => {
+    expect(polyRef('https://polymarket.com', REF)).toBe('https://polymarket.com?via=hyperflex');
+  });
+
+  test('appends ?via= to event URLs', () => {
+    expect(polyRef('https://polymarket.com/event/btc-100k', REF))
+      .toBe('https://polymarket.com/event/btc-100k?via=hyperflex');
+  });
+
+  test('uses &via= when URL already has query params', () => {
+    expect(polyRef('https://polymarket.com/event/btc?tab=chart', REF))
+      .toBe('https://polymarket.com/event/btc?tab=chart&via=hyperflex');
+  });
+
+  test('does not double-tag URLs that already have via=', () => {
+    const tagged = 'https://polymarket.com/event/btc?via=someone';
+    expect(polyRef(tagged, REF)).toBe(tagged);
+  });
+
+  test('skips data-api.polymarket.com', () => {
+    const api = 'https://data-api.polymarket.com/v1/leaderboard';
+    expect(polyRef(api, REF)).toBe(api);
+  });
+
+  test('skips clob.polymarket.com', () => {
+    const clob = 'https://clob.polymarket.com/auth/derive-api-key';
+    expect(polyRef(clob, REF)).toBe(clob);
+  });
+
+  test('skips gamma-api.polymarket.com', () => {
+    const gamma = 'https://gamma-api.polymarket.com/events';
+    expect(polyRef(gamma, REF)).toBe(gamma);
+  });
+
+  test('skips docs.polymarket.com', () => {
+    const docs = 'https://docs.polymarket.com/trading/fees';
+    expect(polyRef(docs, REF)).toBe(docs);
+  });
+
+  test('skips non-polymarket URLs', () => {
+    expect(polyRef('https://kalshi.com/market/xyz', REF)).toBe('https://kalshi.com/market/xyz');
+    expect(polyRef('https://manifold.markets/q', REF)).toBe('https://manifold.markets/q');
+  });
+
+  test('returns empty string for null/undefined/empty input', () => {
+    expect(polyRef(null, REF)).toBe('');
+    expect(polyRef(undefined, REF)).toBe('');
+    expect(polyRef('', REF)).toBe('');
+  });
+
+  test('returns URL unchanged when no ref code', () => {
+    expect(polyRef('https://polymarket.com/event/btc', '')).toBe('https://polymarket.com/event/btc');
+    expect(polyRef('https://polymarket.com/event/btc', null)).toBe('https://polymarket.com/event/btc');
+  });
+
+  test('tags profile URLs', () => {
+    expect(polyRef('https://polymarket.com/profile/0xabc', REF))
+      .toBe('https://polymarket.com/profile/0xabc?via=hyperflex');
   });
 });

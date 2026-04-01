@@ -680,7 +680,7 @@ function openCopyTrade(trader, market, side, size, marketUrl, proxyWallet) {
 
   // Set CTA link
   const ctaEl = document.getElementById('ctCta');
-  ctaEl.href = marketUrl || 'https://polymarket.com';
+  ctaEl.href = (window.polyRef||function(u){return u})(marketUrl || 'https://polymarket.com');
   ctaEl.onclick = function() { handleCopyTradeCta(); };
 
   document.getElementById('ctOverlay').classList.add('open');
@@ -1238,7 +1238,7 @@ function openMarketDetail(question, yesPct, url, marketId) {
   document.getElementById('mdYesPrice').style.color = '#22c55e';
   document.getElementById('mdNoPrice').textContent = noPct != null ? noPct + '%' : '--';
   document.getElementById('mdNoPrice').style.color = '#ef4444';
-  document.getElementById('mdTradeLink').href = url || 'https://polymarket.com';
+  document.getElementById('mdTradeLink').href = (window.polyRef||function(u){return u})(url || 'https://polymarket.com');
   document.getElementById('mdChartArea').innerHTML = '<div class="md-no-data">Loading price history...</div>';
   document.getElementById('mdNewsArea').innerHTML = '';
   overlay.classList.add('open');

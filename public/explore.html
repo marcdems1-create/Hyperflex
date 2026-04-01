@@ -2708,7 +2708,7 @@ function openWhaleCopyTrade(trader, market, side, size, marketUrl, proxyWallet) 
   document.getElementById('ect-size').textContent = fmtSize;
   document.getElementById('ect-amount').value = '';
   document.getElementById('ect-alert').checked = false;
-  document.getElementById('ect-cta').href = marketUrl || 'https://polymarket.com';
+  document.getElementById('ect-cta').href = (window.polyRef||function(u){return u})(marketUrl || 'https://polymarket.com');
   modal.style.display = 'flex';
 }
 function closeExploreCopy() {

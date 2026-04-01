@@ -67,4 +67,41 @@
   }
 
   // Dashboard link visibility already handled by isLoggedIn above
+
+  // ── Polymarket referral link tagging ──────────────────────
+  // Fetches referral code once, then intercepts all clicks on polymarket.com links
+  (function initPolyRef() {
+    var code = sessionStorage.getItem('hfx_poly_ref');
+    if (code !== null) { attachPolyRefListener(code); return; }
+    fetch('/api/poly-ref').then(function(r) { return r.json(); }).then(function(d) {
+      var c = d && d.code || '';
+      sessionStorage.setItem('hfx_poly_ref', c);
+      attachPolyRefListener(c);
+    }).catch(function() { sessionStorage.setItem('hfx_poly_ref', ''); });
+  })();
+
+  function attachPolyRefListener(code) {
+    if (!code) return;
+    window._hfxPolyRef = code;
+    // Global helper for dynamic URL construction
+    window.polyRef = function(url) {
+      if (!url || !code) return url || '';
+      var s = String(url);
+      if (s.indexOf('polymarket.com') === -1) return s;
+      if (s.indexOf('data-api.') !== -1 || s.indexOf('clob.') !== -1 || s.indexOf('gamma-api.') !== -1 || s.indexOf('docs.polymarket') !== -1) return s;
+      if (s.indexOf('via=') !== -1) return s;
+      var sep = s.indexOf('?') !== -1 ? '&' : '?';
+      return s + sep + 'via=' + code;
+    };
+    // Click interceptor for all anchor tags pointing to polymarket.com
+    document.addEventListener('click', function(e) {
+      var a = e.target.closest ? e.target.closest('a[href*="polymarket.com"]') : null;
+      if (!a) return;
+      var href = a.getAttribute('href') || '';
+      if (href.indexOf('data-api.') !== -1 || href.indexOf('clob.') !== -1 || href.indexOf('gamma-api.') !== -1 || href.indexOf('docs.polymarket') !== -1) return;
+      if (href.indexOf('via=') !== -1) return;
+      var sep = href.indexOf('?') !== -1 ? '&' : '?';
+      a.setAttribute('href', href + sep + 'via=' + code);
+    }, true);
+  }
 })();

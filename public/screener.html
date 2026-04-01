@@ -586,7 +586,8 @@ function renderCards() {
       }
     }
 
-    var safeUrl = m.url && m.url.startsWith('https://polymarket.com') ? m.url : (m.slug ? 'https://polymarket.com/event/' + m.slug : 'https://polymarket.com');
+    var _pr = window.polyRef || function(u){return u};
+    var safeUrl = _pr(m.url && m.url.startsWith('https://polymarket.com') ? m.url : (m.slug ? 'https://polymarket.com/event/' + m.slug : 'https://polymarket.com'));
     var expiryStr = m.days_until_expiry != null ? (m.days_until_expiry === 0 ? 'Today' : m.days_until_expiry + 'd left') : '';
 
     return '<div class="story-card' + highEdge + tintClass + '">' +

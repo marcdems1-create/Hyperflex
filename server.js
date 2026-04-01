@@ -150,6 +150,11 @@ const _libUtils = require('./lib/utils');
 const _libAuth = require('./lib/auth');
 const _libTrading = require('./lib/trading');
 
+// ── Polymarket referral tag — wraps all outbound polymarket.com URLs ──
+const polyRef = _libUtils.polyRef;
+const _polyRefCode = process.env.POLYMARKET_REF || '';
+function pRef(url) { return polyRef(url, _polyRefCode); }
+
 // ── Rate limiting helpers ──
 const _rateLimits = _libUtils._rateLimits;
 const rateLimit = _libUtils.rateLimit;
@@ -876,6 +881,11 @@ app.get('/api/debug-fetch', async (req, res) => {
     testFetch('httpbin', 'https://httpbin.org/get'),
   ]);
   res.json(results);
+});
+
+// Polymarket referral code for frontend link tagging
+app.get('/api/poly-ref', (req, res) => {
+  res.json({ code: _polyRefCode });
 });
 
 app.get('/api/health', async (req, res) => {
@@ -10403,7 +10413,7 @@ app.get('/api/trader/:address/profile', async (req, res) => {
           cur_price: parseFloat(p.curPrice) || 0,
           pnl: parseFloat(p.cashPnl) || 0,
           value: parseFloat(p.currentValue) || parseFloat(p.size) || 0,
-          market_url: p.eventSlug ? `https://polymarket.com/event/${p.eventSlug}` : (p.slug ? `https://polymarket.com/event/${p.slug}` : 'https://polymarket.com')
+          market_url: p.eventSlug ? pRef(`https://polymarket.com/event/${p.eventSlug}`) : (p.slug ? pRef(`https://polymarket.com/event/${p.slug}`) : pRef('https://polymarket.com'))
         }));
         polyData.won_positions = wonPos.slice(0, 20).map(p => ({
           question: p.title || p.question || '',
@@ -11757,7 +11767,7 @@ app.get('/api/activity', async (req, res) => {
               platform: 'polymarket', question,
               category, yes_pct: yesPct, volume: vol,
               volume_display: vol >= 1000000 ? '$' + (vol/1000000).toFixed(1) + 'M' : vol >= 1000 ? '$' + (vol/1000).toFixed(0) + 'K' : '$' + vol.toFixed(0),
-              url: p.marketUrl || 'https://polymarket.com',
+              url: p.marketUrl || pRef('https://polymarket.com'),
               end_date: p.endDate || null,
               whale_trader: p._trader, whale_rank: p._traderRank,
             });
@@ -11796,7 +11806,7 @@ app.get('/api/activity', async (req, res) => {
             yes_pct: yesPct,
             volume: vol,
             volume_display: vol >= 1000000 ? '$' + (vol / 1000000).toFixed(1) + 'M' : vol >= 1000 ? '$' + (vol / 1000).toFixed(0) + 'K' : '$' + vol.toFixed(0),
-            url: (m.events && m.events[0] && m.events[0].slug) ? `https://polymarket.com/event/${m.events[0].slug}` : (m.slug ? `https://polymarket.com/event/${m.slug}` : 'https://polymarket.com'),
+            url: (m.events && m.events[0] && m.events[0].slug) ? pRef(`https://polymarket.com/event/${m.events[0].slug}`) : (m.slug ? pRef(`https://polymarket.com/event/${m.slug}`) : pRef('https://polymarket.com')),
             end_date: m.endDate || null,
           });
         });
@@ -11829,7 +11839,7 @@ app.get('/api/activity', async (req, res) => {
               : 'other';
             const id = `tpoly_${m.id || ('extra' + i)}`;
             seenPolyIds.add(id);
-            activities.push({ type: 'trending_external', id, ts: new Date().toISOString(), platform: 'polymarket', question: m.question || m.title || '', category, yes_pct: yesPct, volume: vol, volume_display: vol >= 1000000 ? '$' + (vol/1000000).toFixed(1) + 'M' : vol >= 1000 ? '$' + (vol/1000).toFixed(0) + 'K' : '$' + vol.toFixed(0), url: (m.events && m.events[0] && m.events[0].slug) ? `https://polymarket.com/event/${m.events[0].slug}` : (m.slug ? `https://polymarket.com/event/${m.slug}` : 'https://polymarket.com'), end_date: m.endDate || null });
+            activities.push({ type: 'trending_external', id, ts: new Date().toISOString(), platform: 'polymarket', question: m.question || m.title || '', category, yes_pct: yesPct, volume: vol, volume_display: vol >= 1000000 ? '$' + (vol/1000000).toFixed(1) + 'M' : vol >= 1000 ? '$' + (vol/1000).toFixed(0) + 'K' : '$' + vol.toFixed(0), url: (m.events && m.events[0] && m.events[0].slug) ? pRef(`https://polymarket.com/event/${m.events[0].slug}`) : (m.slug ? pRef(`https://polymarket.com/event/${m.slug}`) : pRef('https://polymarket.com')), end_date: m.endDate || null });
           });
         } catch (e) { console.warn('[poly extra feed]', e.message); }
       };
@@ -12014,7 +12024,7 @@ async function syncUserPositions(user) {
           shares: parseFloat(p.size) || 0,
           pnl: parseFloat(p.cashPnl) || 0,
           probability: parseFloat(p.curPrice) || 0,
-          market_url: p.slug ? `https://polymarket.com/event/${p.eventSlug || p.slug}` : `https://polymarket.com`,
+          market_url: p.slug ? pRef(`https://polymarket.com/event/${p.eventSlug || p.slug}`) : pRef(`https://polymarket.com`),
           updated_at: new Date().toISOString()
         });
       });
@@ -16546,7 +16556,7 @@ app.get('/api/polymarket/positions/:address', async (req, res) => {
       cost_basis: parseFloat(p.initialValue) || 0,
       pnl: parseFloat(p.cashPnl) || 0,
       pnl_pct: parseFloat(p.percentPnl) || 0,
-      market_url: p.slug ? `https://polymarket.com/event/${p.eventSlug || p.slug}` : `https://polymarket.com`,
+      market_url: p.slug ? pRef(`https://polymarket.com/event/${p.eventSlug || p.slug}`) : pRef(`https://polymarket.com`),
       icon: p.icon || null,
       end_date: p.endDateIso || p.endDate || null,
       platform: 'polymarket'
@@ -16998,7 +17008,7 @@ app.get('/api/markets/search', async (req, res) => {
             question: mTitle,
             yes_pct: yesPct,
             close_date: m.endDate || m.endDateIso || evt.endDate || null,
-            url: evtSlug ? `https://polymarket.com/event/${evtSlug}` : 'https://polymarket.com',
+            url: evtSlug ? pRef(`https://polymarket.com/event/${evtSlug}`) : pRef('https://polymarket.com'),
             volume: parseFloat(m.volume || m.volumeNum) || 0
           });
         }
@@ -17443,7 +17453,7 @@ async function fetchWhalePositions() {
               side: p.outcome || p.side || 'Unknown',
               size: parseFloat(p.size || 0),
               current_price: parseFloat(p.curPrice || p.cur_price || 0),
-              market_url: p.eventSlug ? `https://polymarket.com/event/${p.eventSlug}` : (p.slug ? `https://polymarket.com/event/${p.slug}` : 'https://polymarket.com'),
+              market_url: p.eventSlug ? pRef(`https://polymarket.com/event/${p.eventSlug}`) : (p.slug ? pRef(`https://polymarket.com/event/${p.slug}`) : pRef('https://polymarket.com')),
               pnl: parseFloat(p.cashPnl || p.pnl || 0),
               avg_price: parseFloat(p.avgPrice || 0),
               initial_value: parseFloat(p.initialValue || 0),
@@ -17510,7 +17520,7 @@ async function fetchWhalePositions() {
           new_size: change.newSize || null,
           new_size_display: change.newSize ? (change.newSize >= 1000000 ? '$' + (change.newSize / 1000000).toFixed(1) + 'M' : change.newSize >= 1000 ? '$' + (change.newSize / 1000).toFixed(0) + 'K' : '$' + change.newSize.toFixed(0)) : null,
           price: p.current_price || 0,
-          url: p.market_url || 'https://polymarket.com',
+          url: p.market_url || pRef('https://polymarket.com'),
           ts: now,
         });
       }
@@ -18000,7 +18010,7 @@ app.get('/api/whale-index', async (req, res) => {
       const mkt = p.market || p.position || 'Unknown';
       const wallet = (p.proxyWallet || p.trader || 'unknown').toLowerCase();
       const nk = wallet + ':' + mkt.toLowerCase();
-      if (!wiNetMap[nk]) wiNetMap[nk] = { yes_cap: 0, no_cap: 0, market: mkt, wallet, url: p.market_url || 'https://polymarket.com', current_price: p.current_price || 0 };
+      if (!wiNetMap[nk]) wiNetMap[nk] = { yes_cap: 0, no_cap: 0, market: mkt, wallet, url: p.market_url || pRef('https://polymarket.com'), current_price: p.current_price || 0 };
       const side = (p.side || 'YES').toUpperCase();
       const cap = parseFloat(p.size || 0);
       if (side === 'YES' || side === 'Y') wiNetMap[nk].yes_cap += cap;
@@ -18018,7 +18028,7 @@ app.get('/api/whale-index', async (req, res) => {
     for (const p of positions) {
       const key = p.market;
       if (!marketMap[key]) {
-        marketMap[key] = { market: key, positions: [], url: p.market_url || 'https://polymarket.com' };
+        marketMap[key] = { market: key, positions: [], url: p.market_url || pRef('https://polymarket.com') };
       }
       marketMap[key].positions.push(p);
     }
@@ -18266,7 +18276,7 @@ app.get('/api/screener', async (req, res) => {
 
       // Build Polymarket URL — use event slug from events array (market slug 404s)
       const eventSlug = (m.events && m.events[0] && m.events[0].slug) || m.eventSlug || '';
-      const marketUrl = eventSlug ? `https://polymarket.com/event/${eventSlug}` : 'https://polymarket.com';
+      const marketUrl = eventSlug ? pRef(`https://polymarket.com/event/${eventSlug}`) : pRef('https://polymarket.com');
 
       // Skip resolved markets (95%+ or 5%-)
       if (yesPrice != null && (yesPrice >= 0.95 || yesPrice <= 0.05)) continue;
@@ -18746,7 +18756,7 @@ app.get('/api/high-prob', async (req, res) => {
       if (minApy > 0 && apy < minApy) continue;
 
       const eventSlug = (m.events && m.events[0] && m.events[0].slug) || m.eventSlug || '';
-      const marketUrl = eventSlug ? `https://polymarket.com/event/${eventSlug}` : 'https://polymarket.com';
+      const marketUrl = eventSlug ? pRef(`https://polymarket.com/event/${eventSlug}`) : pRef('https://polymarket.com');
 
       results.push({
         question,
@@ -19575,11 +19585,11 @@ app.get('/api/market-movers', async (req, res) => {
         const change = lastPrice - firstPrice;
         const change_pct = firstPrice > 0 ? Math.round(change / firstPrice * 10000) / 100 : 0;
         // Cross-reference with screener cache to get slug/URL
-        let url = 'https://polymarket.com';
+        let url = pRef('https://polymarket.com');
         if (_screenerCache && _screenerCache.data) {
           const match = _screenerCache.data.find(sm => sm.market_id === market_id || sm.slug === market_id);
           if (match && match.url) url = match.url;
-          else if (match && match.slug) url = 'https://polymarket.com/event/' + match.slug;
+          else if (match && match.slug) url = pRef('https://polymarket.com/event/' + match.slug);
         }
         return { market_id, question: d.question || 'Unknown', current_price: Math.round(lastPrice * 100), start_price: Math.round(firstPrice * 100), change_pct, abs_change: Math.abs(change_pct), odds_change_pts: Math.round((lastPrice - firstPrice) * 100), url };
       })
@@ -21477,7 +21487,7 @@ async function generateCrystalBallPredictions() {
           let yesPrice = null;
           try { const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices; if (Array.isArray(prices) && prices[0] != null) yesPrice = parseFloat(prices[0]); } catch {}
           const evtSlug = (m.events && m.events[0] && m.events[0].slug) || m.slug || '';
-          return { market_id: m.conditionId || evtSlug || m.id || '', question: m.question, yes_price: yesPrice, volume: parseFloat(m.volume) || 0, end_date: (m.endDate || m.end_date_iso) ? new Date(m.endDate || m.end_date_iso).toISOString() : null, url: evtSlug ? `https://polymarket.com/event/${evtSlug}` : 'https://polymarket.com', slug: evtSlug };
+          return { market_id: m.conditionId || evtSlug || m.id || '', question: m.question, yes_price: yesPrice, volume: parseFloat(m.volume) || 0, end_date: (m.endDate || m.end_date_iso) ? new Date(m.endDate || m.end_date_iso).toISOString() : null, url: evtSlug ? pRef(`https://polymarket.com/event/${evtSlug}`) : pRef('https://polymarket.com'), slug: evtSlug };
         });
         _screenerCache = { ts: Date.now(), data: markets };
         console.log('[crystal-ball] Warmed screener cache:', markets.length, 'markets');
@@ -21524,9 +21534,9 @@ async function generateCrystalBallPredictions() {
               if (sq.startsWith(prefix) || prefix.startsWith(sq.substring(0, 30))) { screenerMatch = sm; break; }
             }
           }
-          const bestUrl = (screenerMatch && screenerMatch.url && screenerMatch.url !== 'https://polymarket.com')
+          const bestUrl = (screenerMatch && screenerMatch.url && screenerMatch.url !== pRef('https://polymarket.com'))
             ? screenerMatch.url
-            : (m.url && m.url !== 'https://polymarket.com' ? m.url : 'https://polymarket.com');
+            : (m.url && m.url !== pRef('https://polymarket.com') ? m.url : pRef('https://polymarket.com'));
           // Use whale position avg price as market price proxy when screener match fails
           // (whale positions have current_price from the positions API)
           let bestPrice = 0.5;
@@ -21576,7 +21586,7 @@ async function generateCrystalBallPredictions() {
           'Historical whale consensus accuracy: ~73%'
         ],
         action: pick.consensus_side === 'YES' ? `BUY YES at current ${priceDisplay}%` : `SELL NO at current ${100 - priceDisplay}%`,
-        market: { question: pick.market, url: pick.url || 'https://polymarket.com' },
+        market: { question: pick.market, url: pick.url || pRef('https://polymarket.com') },
         yes_pct: priceDisplay,
         detected_at: now.toISOString(),
         expires_at: new Date(now.getTime() + 6 * 60 * 60 * 1000).toISOString(),
@@ -21620,7 +21630,7 @@ async function generateCrystalBallPredictions() {
           `Similar moves historically continued ~65% of the time`
         ],
         action: direction === 'up' ? `BUY YES at current ${m.current_price}%` : `SELL NO at current ${m.current_price}%`,
-        market: { question: m.question, url: m.url || 'https://polymarket.com' },
+        market: { question: m.question, url: m.url || pRef('https://polymarket.com') },
         detected_at: now.toISOString(),
         expires_at: new Date(now.getTime() + 4 * 60 * 60 * 1000).toISOString(),
         _whale_count: 0,
@@ -21656,7 +21666,7 @@ async function generateCrystalBallPredictions() {
           'When edge score >20pts, whale side wins ~73% historically'
         ],
         action: pick.consensus_side === 'YES' ? `BUY YES at current ${mktPrice}%` : `BUY NO at current ${100 - mktPrice}%`,
-        market: { question: pick.market, url: pick.url || 'https://polymarket.com' },
+        market: { question: pick.market, url: pick.url || pRef('https://polymarket.com') },
         yes_pct: mktPrice,
         detected_at: now.toISOString(),
         expires_at: new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString(),
@@ -21704,7 +21714,7 @@ async function generateCrystalBallPredictions() {
         const confidence = Math.max(1, Math.min(95, rawConf >= 100 ? 78 + Math.min(12, (hlPos.leverage || 1) * 0.3) : rawConf));
         const side = hlPos.side || 'LONG';
         const marketQ = matchedPick ? matchedPick.market : `${coin} price movement`;
-        const marketUrl = matchedPick ? (matchedPick.url || 'https://polymarket.com') : 'https://polymarket.com';
+        const marketUrl = matchedPick ? (matchedPick.url || pRef('https://polymarket.com')) : pRef('https://polymarket.com');
 
         predictions.push({
           type: 'LEVERAGE_SIGNAL',
@@ -21771,7 +21781,7 @@ async function generateCrystalBallPredictions() {
           whaleCount > 0 ? `${whaleCount} whales positioned ${whaleSide}` : 'No strong whale positioning detected'
         ],
         action: whaleSide ? `BUY ${whaleSide} at current ${whaleSide === 'YES' ? price : (100 - price)}%` : `WATCH — price at ${price}%`,
-        market: { question: mkt.question, url: mkt.url || 'https://polymarket.com' },
+        market: { question: mkt.question, url: mkt.url || pRef('https://polymarket.com') },
         detected_at: now.toISOString(),
         expires_at: endDate.toISOString(),
         _whale_count: whaleCount,
@@ -21807,7 +21817,7 @@ async function generateCrystalBallPredictions() {
             'News-price disagreements often correct within 24h'
           ],
           action: ni.sentiment === 'bullish' ? `BUY YES at current ${mkt.yes_pct}%` : `SELL YES at current ${mkt.yes_pct}%`,
-          market: { question: mkt.question, url: mkt.url || 'https://polymarket.com' },
+          market: { question: mkt.question, url: mkt.url || pRef('https://polymarket.com') },
           detected_at: now.toISOString(),
           expires_at: new Date(now.getTime() + 12 * 60 * 60 * 1000).toISOString(),
           _whale_count: 0,
@@ -21891,7 +21901,7 @@ async function generateCrystalBallPredictions() {
 
     // Ensure dashboard-friendly fields
     if (!clean.market_name) clean.market_name = (clean.market && clean.market.question) || clean.prediction || '';
-    if (!clean.market_url) clean.market_url = (clean.market && clean.market.url) || 'https://polymarket.com';
+    if (!clean.market_url) clean.market_url = (clean.market && clean.market.url) || pRef('https://polymarket.com');
 
     return clean;
   });
@@ -21917,7 +21927,7 @@ async function generateCrystalBallPredictions() {
             'Volume indicates significant market interest'
           ],
           action: `BUY ${side} at current ${side === 'YES' ? pricePct : (100 - pricePct)}%`,
-          market: { question: m.question, url: m.url || 'https://polymarket.com' },
+          market: { question: m.question, url: m.url || pRef('https://polymarket.com') },
           market_name: m.question,
           yes_pct: pricePct,
           trade: entry > 0 && entry < 100 ? { side, entry_cost: entry, potential_profit: profit, roi_pct: Math.round((profit / entry) * 100) } : null,
@@ -22519,7 +22529,7 @@ app.get('/api/signals', async (req, res) => {
           if (fp < 0.03) return null; // near-zero start = noise
           if (Math.abs(lp - fp) < 0.03) return null; // less than 3¢ move
           if (lp >= 0.99 || lp <= 0.01) return null; // resolved market
-          return { market_id, question: d.question||'Unknown', current_price: Math.round(lp*100), start_price: Math.round(fp*100), change_pct: cp, abs_change: Math.abs(cp), odds_change_pts: Math.round((lp-fp)*100), url: 'https://polymarket.com' };
+          return { market_id, question: d.question||'Unknown', current_price: Math.round(lp*100), start_price: Math.round(fp*100), change_pct: cp, abs_change: Math.abs(cp), odds_change_pts: Math.round((lp-fp)*100), url: pRef('https://polymarket.com') };
         }).filter(Boolean).sort((a,b) => b.abs_change - a.abs_change).slice(0, 10).map(({abs_change,...rest}) => rest);
         _marketMoversCache = { ts: Date.now(), data: { movers, updated_at: new Date().toISOString() } };
         console.log('[signals] Warmed movers cache:', movers.length, 'movers');
@@ -22593,7 +22603,7 @@ app.get('/api/signals', async (req, res) => {
               yes_pct: yesPct,
               end_date: endDate,
               detected_at: now,
-              url: m.url || 'https://polymarket.com'
+              url: m.url || pRef('https://polymarket.com')
             });
           }
         }
@@ -22629,7 +22639,7 @@ app.get('/api/signals', async (req, res) => {
               start_price: m.start_price || null,
               odds_price: m.current_price || null,
               detected_at: now,
-              url: m.url || 'https://polymarket.com'
+              url: m.url || pRef('https://polymarket.com')
             });
           }
         }
@@ -22657,7 +22667,7 @@ app.get('/api/signals', async (req, res) => {
           whale_count: 1,
           capital: parseFloat(p.size) || 0,
           detected_at: t.ts || now,
-          url: p.market_url || 'https://polymarket.com'
+          url: p.market_url || pRef('https://polymarket.com')
         });
       }
     } catch (e) { console.warn('[signals] whale-stream source error:', e.message); }
@@ -22695,7 +22705,7 @@ app.get('/api/signals', async (req, res) => {
                   whale_count: 0,
                   price_diff: diff,
                   detected_at: now,
-                  url: pm.url || 'https://polymarket.com'
+                  url: pm.url || pRef('https://polymarket.com')
                 });
               }
             }
@@ -22822,7 +22832,7 @@ app.get('/api/signals', async (req, res) => {
           yes_pct: yesPct,
           end_date: m.end_date || null,
           detected_at: now,
-          url: m.url || 'https://polymarket.com',
+          url: m.url || pRef('https://polymarket.com'),
           slug: m.slug || ''
         });
       }
@@ -22918,7 +22928,7 @@ app.get('/api/signals', async (req, res) => {
           if (!mkt) continue;
           const wallet = (w.proxyWallet || w.trader || 'unknown').toLowerCase();
           const nk = wallet + ':' + mkt.toLowerCase();
-          if (!fbNetMap[nk]) fbNetMap[nk] = { yes_cap: 0, no_cap: 0, market: mkt, wallet, url: w.market_url || w.url || 'https://polymarket.com' };
+          if (!fbNetMap[nk]) fbNetMap[nk] = { yes_cap: 0, no_cap: 0, market: mkt, wallet, url: w.market_url || w.url || pRef('https://polymarket.com') };
           const side = (w.side || 'YES').toUpperCase();
           const cap = parseFloat(w.size || 0);
           if (side === 'YES' || side === 'Y') fbNetMap[nk].yes_cap += cap;
@@ -23036,7 +23046,7 @@ async function detectArbitrageOpportunities() {
           if (m.closed) continue;
           let yp = 0.5;
           try { const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices; if (Array.isArray(prices) && prices[0] != null) yp = parseFloat(prices[0]); } catch {}
-          polyMarkets.push({ question: (m.question || m.groupItemTitle || evt.title || '').toLowerCase(), yes: yp, url: evt.slug ? `https://polymarket.com/event/${evt.slug}` : 'https://polymarket.com', title: m.question || m.groupItemTitle || evt.title || '' });
+          polyMarkets.push({ question: (m.question || m.groupItemTitle || evt.title || '').toLowerCase(), yes: yp, url: evt.slug ? pRef(`https://polymarket.com/event/${evt.slug}`) : pRef('https://polymarket.com'), title: m.question || m.groupItemTitle || evt.title || '' });
         }
       }
     }
@@ -24252,7 +24262,7 @@ app.get('/api/live-feed', async (req, res) => {
               size: size,
               price: parseFloat(t.price || 0),
               timestamp: t.timestamp ? new Date(t.timestamp * 1000).toISOString() : new Date().toISOString(),
-              url: 'https://polymarket.com/event/' + (t.eventSlug || t.slug || ''),
+              url: pRef('https://polymarket.com/event/' + (t.eventSlug || t.slug || '')),
               icon: t.icon || null,
               tx: t.transactionHash || null,
               is_whale: false
@@ -24278,7 +24288,7 @@ app.get('/api/live-feed', async (req, res) => {
           size: wt.size || 0,
           price: wt.price || 0,
           timestamp: wt.ts || new Date().toISOString(),
-          url: wt.url || 'https://polymarket.com',
+          url: wt.url || pRef('https://polymarket.com'),
           icon: wt.icon || null,
           tx: wt.tx || null,
           is_whale: true
@@ -24332,7 +24342,7 @@ app.get('/api/market-trades/:conditionId', async (req, res) => {
               size: parseFloat(t.size || 0),
               price: parseFloat(t.price || 0),
               timestamp: t.timestamp ? new Date(t.timestamp * 1000).toISOString() : new Date().toISOString(),
-              url: 'https://polymarket.com/event/' + (t.eventSlug || t.slug || ''),
+              url: pRef('https://polymarket.com/event/' + (t.eventSlug || t.slug || '')),
               icon: t.icon || null,
               tx: t.transactionHash || null
             });
@@ -25759,7 +25769,7 @@ app.get('/api/correlations', (req, res) => {
         market: p.market || p.position || 'Unknown',
         side: normSide,
         size: p.size || 0,
-        url: p.market_url || 'https://polymarket.com'
+        url: p.market_url || pRef('https://polymarket.com')
       });
     }
 
@@ -25928,7 +25938,7 @@ app.get('/api/contrarian', (req, res) => {
 
       signals.push({
         market: pick.market,
-        url: pick.url || 'https://polymarket.com',
+        url: pick.url || pRef('https://polymarket.com'),
         current_price: marketPrice,
         whale_consensus: `${whaleConsensusPct}% ${whaleConsensusSide}`,
         whale_count: pick.whale_count,
@@ -26051,7 +26061,7 @@ app.get('/api/resolution-probability', (req, res) => {
 
       results.push({
         market: mkt.question,
-        url: mkt.url || 'https://polymarket.com',
+        url: mkt.url || pRef('https://polymarket.com'),
         current_price: pricePct,
         hours_to_expiry: Math.round(hoursToExpiry * 10) / 10,
         end_date: mkt.end_date,
@@ -26236,7 +26246,7 @@ app.get('/api/events', async (req, res) => {
               if (Array.isArray(prices) && prices[0] != null) yesPrice = parseFloat(prices[0]);
             } catch {}
             const evtSlug = (m.events && m.events[0] && m.events[0].slug) || m.slug || '';
-            return { question: m.question || m.title || '', yes_price: yesPrice, whale_count: 0, total_whale_capital: 0, url: evtSlug ? 'https://polymarket.com/event/' + evtSlug : 'https://polymarket.com', volume: parseFloat(m.volume) || 0 };
+            return { question: m.question || m.title || '', yes_price: yesPrice, whale_count: 0, total_whale_capital: 0, url: evtSlug ? pRef('https://polymarket.com/event/' + evtSlug) : pRef('https://polymarket.com'), volume: parseFloat(m.volume) || 0 };
           });
         }
       } catch (e) { console.warn('[events] Gamma fetch failed:', e.message); }
@@ -26285,7 +26295,7 @@ app.get('/api/events', async (req, res) => {
           yes_pct: mkt.yes_price != null ? Math.round(mkt.yes_price * 100) : null,
           whale_count: whaleInfo ? whaleInfo.count : (mkt.whale_count || 0),
           whale_capital: whaleInfo ? Math.round(whaleInfo.capital) : (mkt.total_whale_capital || 0),
-          url: mkt.url || 'https://polymarket.com'
+          url: mkt.url || pRef('https://polymarket.com')
         });
       }
 
@@ -26385,7 +26395,7 @@ app.get('/api/news-impact', async (req, res) => {
         const qLower = (mkt.question || '').toLowerCase();
         const matched = (headline.keywords || []).some(kw => qLower.includes(kw));
         if (!matched) continue;
-        relatedMarkets.push({ question: mkt.question, yes_pct: mkt.yes_price != null ? Math.round(mkt.yes_price * 100) : null, url: mkt.url || 'https://polymarket.com' });
+        relatedMarkets.push({ question: mkt.question, yes_pct: mkt.yes_price != null ? Math.round(mkt.yes_price * 100) : null, url: mkt.url || pRef('https://polymarket.com') });
         if (relatedMarkets.length >= 3) break;
       }
 
