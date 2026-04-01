@@ -12121,8 +12121,40 @@ function shareCommunityPage(anchorEl) {
 let _portfolioLoaded = false;
 let _kalshiConnected = false;
 let _manifoldUsername = '';
-// Persist wallet address in localStorage as backup
+// Persist wallet address in localStorage as backup — TRIPLE redundancy
+// This is the most critical variable on the site. Check every possible source.
 let _polyWalletAddress = localStorage.getItem('hf_poly_wallet') || sessionStorage.getItem('hf_poly_wallet_session') || '';
+
+// Auto-reconnect: if we have a saved wallet in localStorage but _polyWalletAddress is empty somehow
+if (!_polyWalletAddress) {
+  var _savedWallet = localStorage.getItem('hf_poly_wallet') || localStorage.getItem('hf_connected_wallet') || localStorage.getItem('hf_wallet_address') || '';
+  if (_savedWallet && _savedWallet.startsWith('0x') && _savedWallet.length >= 40) {
+    _polyWalletAddress = _savedWallet;
+    console.log('[wallet-recovery] Recovered wallet from localStorage:', _polyWalletAddress.slice(0,10) + '...');
+  }
+}
+
+// Also try to auto-derive CREATE2 proxy on page load if MetaMask is available
+// This runs BEFORE loadPortfolio so positions load immediately
+(async function autoDerivProxy() {
+  if (_polyWalletAddress) return; // already have it
+  if (typeof window.ethereum === 'undefined') return;
+  if (typeof ethers === 'undefined') return;
+  try {
+    var accounts = await window.ethereum.request({ method: 'eth_accounts' }); // silent, no popup
+    if (!accounts || !accounts.length) return;
+    var address = accounts[0];
+    var addrLower = address.toLowerCase();
+    var safeFactory = '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b';
+    var safeInitCodeHash = '0x2bce2127ff07fb632d16c8347c4ebf501f4841168bed00d9e6ef715ddb6fcecf';
+    var abiEncoded = ethers.AbiCoder.defaultAbiCoder().encode(['address'], [addrLower]);
+    var safeSalt = ethers.keccak256(abiEncoded);
+    var computedProxy = ethers.getCreate2Address(safeFactory, safeSalt, safeInitCodeHash);
+    _polyWalletAddress = computedProxy.toLowerCase();
+    localStorage.setItem('hf_poly_wallet', _polyWalletAddress);
+    console.log('[auto-derive] CREATE2 proxy on page load:', _polyWalletAddress.slice(0,10) + '...');
+  } catch(e) { /* silent — ethers might not be loaded yet */ }
+})();
 
 async function loadPortfolio() {
   if (_portfolioLoaded) return;
@@ -12143,7 +12175,25 @@ async function loadPortfolio() {
     } else if (!_polyWalletAddress) {
       _polyWalletAddress = localStorage.getItem('hf_poly_wallet') || localStorage.getItem('hf_connected_wallet') || localStorage.getItem('hf_wallet_address') || '';
     }
-    if (_polyWalletAddress) localStorage.setItem('hf_poly_wallet', _polyWalletAddress);
+    // Last resort: if MetaMask is connected but no proxy, derive it now
+    if (!_polyWalletAddress && typeof window.ethereum !== 'undefined' && typeof ethers !== 'undefined') {
+      try {
+        var accts = await window.ethereum.request({ method: 'eth_accounts' });
+        if (accts && accts.length) {
+          var al = accts[0].toLowerCase();
+          var sf = '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b';
+          var sh = '0x2bce2127ff07fb632d16c8347c4ebf501f4841168bed00d9e6ef715ddb6fcecf';
+          var ae = ethers.AbiCoder.defaultAbiCoder().encode(['address'], [al]);
+          var ss = ethers.keccak256(ae);
+          _polyWalletAddress = ethers.getCreate2Address(sf, ss, sh).toLowerCase();
+          console.log('[loadPortfolio] Last-resort CREATE2:', _polyWalletAddress.slice(0,10));
+        }
+      } catch(e) {}
+    }
+    if (_polyWalletAddress) {
+      localStorage.setItem('hf_poly_wallet', _polyWalletAddress);
+      sessionStorage.setItem('hf_poly_wallet_session', _polyWalletAddress);
+    }
 
     // Show welcome state if nothing connected, otherwise show main
     const hasAny = _kalshiConnected || _manifoldUsername || _polyWalletAddress;
