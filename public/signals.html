@@ -330,7 +330,7 @@ function renderSignals() {
           '<span class="s-row-type type-' + s.type + '">' + (typeLabels[s.type]||s.type) + '</span>' +
           (isStale ? '<span style="font-family:var(--mono);font-size:8px;color:var(--red);letter-spacing:.5px">STALE</span>' : '') +
         '</div>' +
-        '<div class="s-row-market"><a href="' + escH(url) + '" target="_blank" rel="noopener">' + (flag ? flag + ' ' : '') + escH(s.market) + '</a></div>' +
+        '<div class="s-row-market"><a href="' + (typeof hfxMarketUrl === 'function' ? hfxMarketUrl(url) : url) + '">' + (flag ? flag + ' ' : '') + escH(s.market) + '</a></div>' +
         '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:2px">' +
           '<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:' + sideColor + '">' + (s.side||'YES').toUpperCase() + '</span>' +
           (meta.length ? meta.join('<span style="color:var(--muted);font-family:var(--mono);font-size:9px">\u00B7</span>') : '') +

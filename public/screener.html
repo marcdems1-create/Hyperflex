@@ -602,7 +602,7 @@ function renderCards() {
       '<div class="story-bullets">' + bullets.map(function(b) { return '<div class="story-bullet">' + escH(b) + '</div>'; }).join('') + '</div>' +
       roiHtml +
       '<div class="story-card-footer">' +
-        '<a href="/creator/dashboard?tab=quicktrade&market=' + encodeURIComponent(m.question || '') + '" class="story-trade-btn">Trade &rarr;</a>' +
+        '<a href="' + (m.slug ? '/market/' + m.slug : (typeof hfxMarketUrl === 'function' ? hfxMarketUrl(safeUrl) : safeUrl)) + '" class="story-trade-btn">Trade &rarr;</a>' +
         (yesPct != null ? '<span class="story-odds-big" style="color:' + (yesPct >= 70 ? 'var(--green)' : yesPct <= 30 ? 'var(--red)' : 'var(--text)') + '">' + yesPct + '%</span>' : '') +
       '</div>' +
     '</div>';
@@ -649,7 +649,8 @@ function renderLaneCard(m, signalHtml) {
     var plainSide = translateSide(m.question, m.trade.side);
     roiLine = '<div class="lane-card-roi"><span style="color:' + sc + ';font-weight:700">Bet: ' + escH(plainSide) + '</span> \u2014 Pay ' + m.trade.entry_cost + '\u00A2 \u2192 Win +' + m.trade.potential_profit + '\u00A2 \u2192 <strong>+' + m.trade.roi_pct + '% ROI</strong></div>';
   }
-  return '<div class="lane-card" onclick="window.open(\'' + safeUrl + '\',\'_blank\')">' +
+  var internalUrl = m.slug ? '/market/' + m.slug : (typeof hfxMarketUrl === 'function' ? hfxMarketUrl(safeUrl) : safeUrl);
+  return '<div class="lane-card" onclick="window.location.href=\'' + internalUrl + '\'">' +
     '<div class="lane-card-q">' + regionFlag(m.question) + ' ' + escH(m.question) + '</div>' +
     '<div class="lane-card-meta">' + (yesPct != null ? yesPct + '% YES' : '') + (m.volume ? ' \u00B7 ' + fmtVol(m.volume) : '') + '</div>' +
     signalHtml +
@@ -777,7 +778,7 @@ async function loadMispricings() {
         '</div>' +
         '<div style="display:flex;align-items:center;justify-content:space-between">' +
           '<span style="font-family:var(--mono);font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;background:' + actionBg + ';color:' + gapColor + ';border:1px solid ' + actionBorder + '">' + m.action + '</span>' +
-          (m.question ? '<a href="/creator/dashboard?tab=quicktrade&market=' + encodeURIComponent(m.question) + '" style="font-family:var(--mono);font-size:10px;color:var(--gold);text-decoration:none">Trade →</a>' : '') +
+          (m.slug ? '<a href="/market/' + m.slug + '" style="font-family:var(--mono);font-size:10px;color:var(--gold);text-decoration:none">Trade →</a>' : (m.question ? '<a href="' + (typeof hfxMarketUrl === 'function' ? hfxMarketUrl(safeUrl) : '#') + '" style="font-family:var(--mono);font-size:10px;color:var(--gold);text-decoration:none">Trade →</a>' : '')) +
         '</div>' +
         (whaleList ? '<div style="margin-top:8px;padding-top:8px;border-top:1px solid #1a1917">' + whaleList + '</div>' : '') +
       '</div>';

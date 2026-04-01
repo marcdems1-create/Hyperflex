@@ -1032,6 +1032,48 @@ nav {
       </div>
     </div>
 
+    <!-- TOP SIGNALS PREVIEW -->
+    <div id="hubSignalsSection" style="margin-bottom:20px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse-dot 2s infinite"></span>
+          <span style="font-family:'Space Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">Top Signals</span>
+        </div>
+        <a href="/signals" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);text-decoration:none">View all →</a>
+      </div>
+      <div id="hubSignalCards" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+        <div style="grid-column:1/-1;text-align:center;padding:16px;color:var(--muted);font-size:12px">Loading signals...</div>
+      </div>
+    </div>
+
+    <!-- SCREENER PICKS PREVIEW -->
+    <div id="hubScreenerSection" style="margin-bottom:20px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:16px">📊</span>
+          <span style="font-family:'Space Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">Screener Picks</span>
+        </div>
+        <a href="/screener" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);text-decoration:none">Full screener →</a>
+      </div>
+      <div id="hubScreenerCards" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+        <div style="grid-column:1/-1;text-align:center;padding:16px;color:var(--muted);font-size:12px">Loading screener...</div>
+      </div>
+    </div>
+
+    <!-- CRYSTAL BALL PREVIEW -->
+    <div id="hubCrystalSection" style="margin-bottom:20px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:16px">🔮</span>
+          <span style="font-family:'Space Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">Crystal Ball Predictions</span>
+        </div>
+        <a href="/crystal-ball" style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);text-decoration:none">All predictions →</a>
+      </div>
+      <div id="hubCrystalCards" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div style="grid-column:1/-1;text-align:center;padding:16px;color:var(--muted);font-size:12px">Loading predictions...</div>
+      </div>
+    </div>
+
     <!-- WALLET CONNECT CTA STRIP -->
     <div class="creator-cta-strip" id="creatorCta">
       <div class="cta-text">
@@ -1329,6 +1371,144 @@ try { loadExploreInsights(); } catch(e) { console.warn('[explore] insights faile
       '</div>';
     }).join('');
   } catch(e) { console.warn('[ai-edge]', e.message); }
+})();
+
+// ── HUB: TOP SIGNALS ──
+(async function loadHubSignals() {
+  try {
+    var r = await fetch('/api/signals');
+    if (!r.ok) return;
+    var d = await r.json();
+    var list = (d.signals || d || []).slice(0, 6);
+    var el = document.getElementById('hubSignalCards');
+    if (!el) return;
+    if (!list.length) { el.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:16px;color:var(--muted);font-size:12px">No signals right now</div>'; return; }
+    function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+    function fmtC(n) { if (n >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M'; if (n >= 1e3) return '$' + Math.round(n / 1e3) + 'K'; return '$' + Math.round(n); }
+    function tAgo(ts) { if (!ts) return ''; var ms = Date.now() - new Date(ts).getTime(); if (ms < 60000) return 'now'; if (ms < 3600000) return Math.floor(ms / 60000) + 'm'; if (ms < 86400000) return Math.floor(ms / 3600000) + 'h'; return Math.floor(ms / 86400000) + 'd'; }
+    var typeColors = { whale_cluster: 'rgba(96,165,250,.12)', momentum: 'rgba(34,197,94,.12)', arbitrage: 'rgba(167,139,250,.12)', volume_surge: 'rgba(249,115,22,.12)', new_entry: 'rgba(201,146,13,.12)' };
+    var typeTextColors = { whale_cluster: '#60a5fa', momentum: '#22c55e', arbitrage: '#a78bfa', volume_surge: '#f97316', new_entry: '#c9920d' };
+    var typeLabels = { whale_cluster: 'WHALE', momentum: 'MOMENTUM', arbitrage: 'ARB', volume_surge: 'VOLUME', new_entry: 'NEW ENTRY' };
+    el.innerHTML = list.map(function(s) {
+      var alpha = s.alpha_score || 0;
+      var confVal = s.confidence === 'HIGH' ? 85 : s.confidence === 'MEDIUM' ? 65 : 40;
+      var combined = Math.min(100, Math.round(confVal * 0.7 + (alpha * 10) * 0.3));
+      var scoreColor = combined >= 75 ? '#22c55e' : combined >= 55 ? '#c9920d' : '#6b6860';
+      var sideUp = (s.side || 'YES').toUpperCase();
+      var sideColor = sideUp === 'YES' ? '#22c55e' : '#ef4444';
+      var sideBg = sideUp === 'YES' ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)';
+      var url = s.url && s.url.startsWith('https://polymarket.com') ? s.url : '#';
+      var tradeUrl = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(url) : url;
+      var meta = [];
+      if (s.whale_count) meta.push(s.whale_count + ' whales');
+      if (s.capital) meta.push(fmtC(s.capital));
+      var ageMs = s.detected_at ? Date.now() - new Date(s.detected_at).getTime() : 0;
+      var stale = ageMs > 4 * 3600000;
+      return '<a href="' + esc(tradeUrl) + '" style="text-decoration:none;display:block;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;transition:border-color .15s' + (stale ? ';opacity:.55' : '') + '" onmouseenter="this.style.borderColor=\'var(--gold)\'" onmouseleave="this.style.borderColor=\'var(--border)\'">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">' +
+          '<span style="font-family:\'Space Mono\',monospace;font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;background:' + (typeColors[s.type] || 'rgba(201,146,13,.12)') + ';color:' + (typeTextColors[s.type] || '#c9920d') + '">' + (typeLabels[s.type] || s.type) + '</span>' +
+          '<span style="font-family:\'Space Mono\',monospace;font-size:14px;font-weight:900;color:' + scoreColor + '">' + combined + '</span>' +
+        '</div>' +
+        '<div style="font-size:13px;font-weight:600;color:var(--text);line-height:1.3;margin-bottom:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">' + esc(s.market || '') + '</div>' +
+        '<div style="display:flex;align-items:center;justify-content:space-between">' +
+          '<div style="display:flex;align-items:center;gap:6px">' +
+            '<span style="font-family:\'Space Mono\',monospace;font-size:10px;font-weight:700;padding:2px 8px;border-radius:3px;background:' + sideBg + ';color:' + sideColor + '">' + sideUp + '</span>' +
+            (meta.length ? '<span style="font-family:\'Space Mono\',monospace;font-size:10px;color:var(--dim)">' + meta.join(' · ') + '</span>' : '') +
+          '</div>' +
+          '<span style="font-family:\'Space Mono\',monospace;font-size:9px;color:var(--muted)">' + tAgo(s.detected_at) + '</span>' +
+        '</div>' +
+      '</a>';
+    }).join('');
+  } catch(e) { console.warn('[hub-signals]', e.message); }
+})();
+
+// ── HUB: SCREENER PICKS ──
+(async function loadHubScreener() {
+  try {
+    var r = await fetch('/api/screener');
+    if (!r.ok) return;
+    var d = await r.json();
+    var list = (d.markets || d || []).sort(function(a, b) { return (b.alpha_score || b.edge_score || 0) - (a.alpha_score || a.edge_score || 0); }).slice(0, 6);
+    var el = document.getElementById('hubScreenerCards');
+    if (!el) return;
+    if (!list.length) { el.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:16px;color:var(--muted);font-size:12px">No screener picks</div>'; return; }
+    function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+    var catEmoji = { crypto: '\uD83D\uDCB0', sports: '\u26BD', politics: '\uD83C\uDFDB', entertainment: '\uD83C\uDFAC', tech: '\uD83D\uDCBB', other: '\uD83D\uDCCA' };
+    el.innerHTML = list.map(function(m) {
+      var alpha = m.alpha_score || 0;
+      var edge = m.edge_score || 0;
+      var score = alpha > 0 ? alpha.toFixed(1) : edge;
+      var scoreLabel = alpha > 0 ? '/10' : '';
+      var scoreColor = alpha >= 7 ? '#22c55e' : alpha >= 4 ? '#c9920d' : edge >= 60 ? '#22c55e' : edge >= 35 ? '#c9920d' : '#6b6860';
+      var slug = m.slug || '';
+      var tradeUrl = slug ? '/market/' + slug : '#';
+      var yesPct = m.yes_price != null ? Math.round(m.yes_price * 100) : null;
+      var roi = '';
+      if (m.trade) {
+        roi = '<div style="display:flex;align-items:center;gap:6px;font-family:\'Space Mono\',monospace;font-size:10px;padding:4px 8px;background:rgba(34,197,94,.06);border-radius:4px;margin-top:4px">' +
+          '<span style="color:var(--text);font-weight:700">' + m.trade.entry_cost + '\u00A2</span>' +
+          '<span style="color:var(--muted)">\u2192</span>' +
+          '<span style="color:#22c55e;font-weight:700">+' + m.trade.potential_profit + '\u00A2</span>' +
+          '<span style="color:var(--muted)">|</span>' +
+          '<span style="color:#22c55e;font-weight:700">+' + m.trade.roi_pct + '%</span>' +
+        '</div>';
+      }
+      return '<a href="' + esc(tradeUrl) + '" style="text-decoration:none;display:block;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;transition:border-color .15s" onmouseenter="this.style.borderColor=\'var(--gold)\'" onmouseleave="this.style.borderColor=\'var(--border)\'">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">' +
+          '<span style="font-family:\'Space Mono\',monospace;font-size:9px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">' + (catEmoji[m.category] || '\uD83D\uDCCA') + ' ' + (m.category || 'other').toUpperCase() + '</span>' +
+          '<span style="font-family:\'Space Mono\',monospace;font-size:14px;font-weight:900;color:' + scoreColor + '">' + score + '<span style="font-size:9px;color:var(--dim)">' + scoreLabel + '</span></span>' +
+        '</div>' +
+        '<div style="font-size:13px;font-weight:600;color:var(--text);line-height:1.3;margin-bottom:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">' + esc(m.question || '') + '</div>' +
+        '<div style="display:flex;align-items:center;gap:8px;font-family:\'Space Mono\',monospace;font-size:10px;color:var(--dim)">' +
+          (m.whale_count ? '<span>' + m.whale_count + ' whales</span>' : '') +
+          (yesPct != null ? '<span>' + yesPct + '% YES</span>' : '') +
+        '</div>' +
+        roi +
+      '</a>';
+    }).join('');
+  } catch(e) { console.warn('[hub-screener]', e.message); }
+})();
+
+// ── HUB: CRYSTAL BALL PREDICTIONS ──
+(async function loadHubCrystal() {
+  try {
+    var r = await fetch('/api/crystal-ball');
+    if (!r.ok) return;
+    var d = await r.json();
+    var list = (d.predictions || d || []).slice(0, 4);
+    var el = document.getElementById('hubCrystalCards');
+    if (!el) return;
+    if (!list.length) { el.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:16px;color:var(--muted);font-size:12px">No predictions right now</div>'; return; }
+    function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+    function tAgo(ts) { if (!ts) return ''; var ms = Date.now() - new Date(ts).getTime(); if (ms < 60000) return 'now'; if (ms < 3600000) return Math.floor(ms / 60000) + 'm ago'; if (ms < 86400000) return Math.floor(ms / 3600000) + 'h ago'; return Math.floor(ms / 86400000) + 'd ago'; }
+    var TYPE_LABELS = { WHALE_CONVERGENCE: 'WHALE', MOMENTUM_BREAKOUT: 'MOMENTUM', SMART_VS_DUMB: 'SMART $', LEVERAGE_SIGNAL: 'LEVERAGE', EXPIRY_CONVERGENCE: 'EXPIRY', NEWS_SENTIMENT: 'NEWS' };
+    el.innerHTML = list.map(function(p) {
+      var c = p.confidence || 70;
+      if (c === 0 || c === 100) c = 72;
+      c = Math.min(95, c);
+      var alpha = p.alpha_score || 0;
+      var combined = Math.min(100, Math.round(c * 0.7 + (alpha * 10) * 0.3));
+      var scoreColor = combined >= 80 ? '#22c55e' : combined >= 60 ? '#c9920d' : '#6b6860';
+      var q = p.market && p.market.question ? p.market.question : '';
+      var url = p.market && p.market.url ? p.market.url : '#';
+      var tradeUrl = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(url) : url;
+      var actionColor = p.action && p.action.includes('NO') ? '#ef4444' : '#22c55e';
+      var reasoning = (p.reasoning || []).slice(0, 2).join(' \u00B7 ');
+      return '<a href="' + esc(tradeUrl) + '" style="text-decoration:none;display:block;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;transition:border-color .15s" onmouseenter="this.style.borderColor=\'var(--gold)\'" onmouseleave="this.style.borderColor=\'var(--border)\'">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">' +
+          '<span style="font-family:\'Space Mono\',monospace;font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;background:rgba(201,146,13,.1);color:#c9920d">' + (TYPE_LABELS[p.type] || p.type) + '</span>' +
+          '<span style="font-family:\'Space Mono\',monospace;font-size:14px;font-weight:900;color:' + scoreColor + '">' + combined + '</span>' +
+        '</div>' +
+        (q ? '<div style="font-size:13px;font-weight:600;color:var(--text);line-height:1.3;margin-bottom:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">' + esc(q.substring(0, 80)) + '</div>' : '') +
+        (p.action ? '<div style="font-family:\'Space Mono\',monospace;font-size:10px;font-weight:700;color:' + actionColor + ';margin-bottom:4px">' + esc(p.action) + '</div>' : '') +
+        (reasoning ? '<div style="font-family:\'Space Mono\',monospace;font-size:10px;color:var(--dim);line-height:1.4;margin-bottom:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">' + esc(reasoning) + '</div>' : '') +
+        '<div style="display:flex;align-items:center;justify-content:space-between">' +
+          '<span style="font-family:\'Space Mono\',monospace;font-size:9px;color:var(--muted)">' + tAgo(p.detected_at) + '</span>' +
+          '<span style="font-family:\'Space Mono\',monospace;font-size:10px;font-weight:700;color:#c9920d">Trade \u2192</span>' +
+        '</div>' +
+      '</a>';
+    }).join('');
+  } catch(e) { console.warn('[hub-crystal]', e.message); }
 })();
 
 // ── SMART MONEY DIVERGENCE ──

@@ -375,7 +375,7 @@ function renderTable() {
       '<td class="whale-count"><span class="icon">&#x1F40B;</span> ' + p.whale_count + '</td>' +
       '<td class="capital-val">' + fmtCap(p.total_capital) + '</td>' +
       '<td class="price-val">' + priceDisplay + '</td>' +
-      '<td><a href="' + p.url + '" target="_blank" rel="noopener" class="trade-link">Trade \u2192</a></td>' +
+      '<td><a href="' + (typeof hfxMarketUrl === 'function' ? hfxMarketUrl(p.url || '') : (p.url || '#')) + '" class="trade-link">Trade \u2192</a></td>' +
     '</tr>';
   }).join('');
 }

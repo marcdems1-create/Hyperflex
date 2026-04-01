@@ -306,7 +306,7 @@ function render() {
       <td class="cost-col">Pay <strong>${m.cost_cents}¢</strong> → Win <strong>+${m.profit_cents}¢</strong></td>
       <td class="expiry-col ${expClass}">${expText}</td>
       <td class="liq-col">${fmtMoney(m.liquidity)}</td>
-      <td><a href="${m.market_url}" target="_blank" class="trade-btn" onclick="event.stopPropagation()">Trade →</a></td>
+      <td><a href="${typeof hfxMarketUrl === 'function' ? hfxMarketUrl(m.market_url || '') : m.market_url}" class="trade-btn" onclick="event.stopPropagation()">Trade →</a></td>
     </tr>`;
   }
 

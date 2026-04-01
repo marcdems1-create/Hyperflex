@@ -972,7 +972,7 @@ function renderMobileCards() {
       '<div class="whale-card-meta">' +
         sideBadge(p.side) +
         '<div class="price-bar-wrap"><div class="price-bar"><div class="price-bar-fill" style="width:' + pricePct + '%"></div></div><span class="price-pct">' + pricePct + '%</span></div>' +
-        '<a href="' + p.market_url + '" target="_blank" rel="noopener" class="view-link">View \u2192</a>' +
+        '<a href="' + (typeof hfxMarketUrl === 'function' ? hfxMarketUrl(p.market_url || '') : (p.market_url || '#')) + '" class="view-link">View \u2192</a>' +
         '<button class="copy-trade-btn" onclick="openCopyTrade(\'' + escAttr(p.trader) + '\',\'' + escAttr(p.market) + '\',\'' + escAttr(p.side) + '\',' + p.size + ',\'' + escAttr(p.market_url) + '\',\'' + escAttr(p.proxyWallet || '') + '\')">Copy Trade</button>' +
         '<button class="bt-btn" onclick="event.stopPropagation();openBacktest(\'' + escAttr(p.proxyWallet || p.trader || '') + '\',\'' + escAttr(p.trader || '') + '\')">Backtest</button>' +
         '<button class="ac-btn" title="Mirror all future trades from this wallet automatically" onclick="event.stopPropagation();openAutoCopy(\'' + escAttr(p.proxyWallet || '') + '\',\'' + escAttr(p.trader || '') + '\')">\uD83E\uDD16 Auto-Mirror</button>' +
@@ -1236,7 +1236,7 @@ function openMarketDetail(question, yesPct, url, marketId) {
   document.getElementById('mdYesPrice').style.color = '#22c55e';
   document.getElementById('mdNoPrice').textContent = noPct != null ? noPct + '%' : '--';
   document.getElementById('mdNoPrice').style.color = '#ef4444';
-  document.getElementById('mdTradeLink').href = url || 'https://polymarket.com';
+  document.getElementById('mdTradeLink').href = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(url || '') : (url || 'https://polymarket.com');
   document.getElementById('mdChartArea').innerHTML = '<div class="md-no-data">Loading price history...</div>';
   document.getElementById('mdNewsArea').innerHTML = '';
   overlay.classList.add('open');
@@ -1581,7 +1581,7 @@ function renderMispricings() {
     <div id="mdChartArea"></div>
     <div id="mdNewsArea"></div>
     <div class="md-links">
-      <a id="mdTradeLink" href="https://polymarket.com" target="_blank" rel="noopener" class="md-link md-link-primary">Trade &rarr;</a>
+      <a id="mdTradeLink" href="#" class="md-link md-link-primary">Trade &rarr;</a>
       <button class="md-link" onclick="alert('Price alerts coming soon! Stay tuned.')">Set price alert &#x1F514;</button>
     </div>
   </div>
