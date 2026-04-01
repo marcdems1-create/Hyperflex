@@ -338,7 +338,7 @@ function renderSignals() {
       '</div>' +
       '<div class="s-row-right" style="display:flex;align-items:center;gap:8px;flex-shrink:0">' +
         alphaBadge +
-        '<a href="' + (typeof hfxMarketUrl === 'function' ? hfxMarketUrl(url) : url) + '" class="s-row-link">Trade &rarr;</a>' +
+        '<a href="' + (typeof hfxMarketUrl === 'function' ? hfxMarketUrl(url) : url) + '" class="s-row-link" target="_blank" rel="noopener">Trade &rarr;</a>' +
       '</div>' +
     '</div>';
   }).join('');
