@@ -6,6 +6,7 @@
 <title>Loading Market... | HYPERFLEX</title>
 <link rel="icon" href="/hyperflex-logo.png"/>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 <style>
 :root{--bg:#0a0a09;--card:#131311;--border:#222220;--text:#e8e4d9;--soft:#b0ab9f;--dim:#5a5752;--gold:#c9920d;--green:#22c55e;--red:#ef4444;--sans:'Syne',sans-serif;--mono:'Space Mono',monospace}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -189,7 +190,7 @@ canvas{display:block;width:100%!important}
             <button class="mkt-chart-tab active" data-interval="all">ALL</button>
           </div>
         </div>
-        <canvas id="priceChart" height="280"></canvas>
+        <div id="priceChart" style="height:260px;width:100%"></div>
       </div>
 
       <!-- Description -->
@@ -551,131 +552,87 @@ function toggleDesc() {
   if (full) { el.textContent = full; document.getElementById('mktDescToggle').style.display = 'none'; }
 }
 
-// ── Chart ─────────────────────────────────────────────────────────────────────
+// ── Chart (Lightweight Charts by TradingView) ──────────────────────────────────
+var _lwChart = null;
+var _lwSeries = null;
+
 function drawChart(history) {
-  var canvas = document.getElementById('priceChart');
-  var ctx = canvas.getContext('2d');
-  var w = canvas.parentElement.offsetWidth - 32;
-  var H = 240;
-  canvas.width = w * 2; canvas.height = H * 2;
-  canvas.style.width = w + 'px'; canvas.style.height = H + 'px';
-  ctx.scale(2, 2);
-  // Background
-  ctx.fillStyle = '#111110';
-  ctx.fillRect(0, 0, w, H);
+  var container = document.getElementById('priceChart');
+
+  // Destroy previous chart instance
+  if (_lwChart) { _lwChart.remove(); _lwChart = null; _lwSeries = null; }
 
   if (!history || history.length < 2) {
-    ctx.fillStyle = '#5a5752';
-    ctx.font = '12px Space Mono';
-    ctx.textAlign = 'center';
-    ctx.fillText('Not enough price data yet', w / 2, H / 2);
+    container.innerHTML = '<div style="height:260px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:12px;color:var(--dim)">Not enough price data yet</div>';
     return;
   }
 
-  // Downsample to max 120 points
-  var data = history;
-  if (data.length > 120) {
-    var step = Math.ceil(data.length / 120);
-    var sampled = [];
-    for (var s = 0; s < data.length; s += step) sampled.push(data[s]);
-    if (sampled[sampled.length - 1] !== data[data.length - 1]) sampled.push(data[data.length - 1]);
-    data = sampled;
-  }
+  container.innerHTML = '';
 
-  // Apply light smoothing (3-point moving average)
-  var smoothed = data.map(function(d, i) {
-    if (i === 0 || i === data.length - 1) return d;
-    return { t: d.t, p: (data[i-1].p + d.p + data[i+1].p) / 3 };
+  _lwChart = LightweightCharts.createChart(container, {
+    width: container.offsetWidth,
+    height: 260,
+    layout: {
+      background: { color: '#131311' },
+      textColor: '#8a8780',
+      fontFamily: "'Space Mono', monospace",
+      fontSize: 11,
+    },
+    grid: {
+      vertLines: { color: 'rgba(255,255,255,0.04)' },
+      horzLines: { color: 'rgba(255,255,255,0.04)' },
+    },
+    crosshair: {
+      mode: LightweightCharts.CrosshairMode.Normal,
+      vertLine: { color: '#5a5752', labelBackgroundColor: '#1a1a18' },
+      horzLine: { color: '#5a5752', labelBackgroundColor: '#1a1a18' },
+    },
+    rightPriceScale: {
+      borderColor: '#222220',
+      scaleMargins: { top: 0.1, bottom: 0.1 },
+    },
+    timeScale: {
+      borderColor: '#222220',
+      timeVisible: true,
+      secondsVisible: false,
+    },
+    handleScroll: true,
+    handleScale: true,
   });
 
-  var prices = smoothed.map(function(h) { return h.p; });
-  var times  = smoothed.map(function(h) { return h.t; });
+  var isUp = history[history.length - 1].p >= history[0].p;
+  var lineColor = isUp ? '#22c55e' : '#ef4444';
+  var areaTop   = isUp ? 'rgba(34,197,94,0.2)'  : 'rgba(239,68,68,0.2)';
+  var areaBot   = isUp ? 'rgba(34,197,94,0.0)'  : 'rgba(239,68,68,0.0)';
 
-  var rawMin = Math.min.apply(null, prices);
-  var rawMax = Math.max.apply(null, prices);
-  var range  = rawMax - rawMin;
-  var pad_p  = Math.max(range * 0.15, 0.02);
-  var minP   = Math.max(0, rawMin - pad_p);
-  var maxP   = Math.min(1, rawMax + pad_p);
-  if (maxP - minP < 0.05) { var mid = (maxP + minP) / 2; minP = Math.max(0, mid - 0.025); maxP = Math.min(1, mid + 0.025); }
-
-  var pad = { top: 16, right: 16, bottom: 28, left: 46 };
-  var cw  = w - pad.left - pad.right;
-  var ch  = H - pad.top - pad.bottom;
-
-  var gridCount = 4;
-  var isUp = prices[prices.length - 1] >= prices[0];
-
-  // Build point coords
-  var pts = prices.map(function(p, idx) {
-    return {
-      x: pad.left + (idx / (prices.length - 1)) * cw,
-      y: pad.top + ch - ((p - minP) / (maxP - minP)) * ch
-    };
+  _lwSeries = _lwChart.addAreaSeries({
+    lineColor: lineColor,
+    topColor: areaTop,
+    bottomColor: areaBot,
+    lineWidth: 2,
+    priceFormat: {
+      type: 'custom',
+      formatter: function(p) { return Math.round(p * 100) + '¢'; },
+      minMove: 0.001,
+    },
   });
 
-  // 1. Grid lines
-  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-  ctx.lineWidth = 0.5;
-  for (var i = 0; i <= gridCount; i++) {
-    var gy = pad.top + (ch / gridCount) * i;
-    ctx.beginPath(); ctx.moveTo(pad.left, gy); ctx.lineTo(pad.left + cw, gy); ctx.stroke();
-  }
+  // Dedupe timestamps (Lightweight Charts requires strictly ascending)
+  var seen = {};
+  var seriesData = [];
+  history.forEach(function(h) {
+    var t = Math.floor(h.t);
+    if (!seen[t]) { seen[t] = true; seriesData.push({ time: t, value: h.p }); }
+  });
+  seriesData.sort(function(a, b) { return a.time - b.time; });
 
-  // 2. Gradient fill
-  ctx.beginPath();
-  ctx.moveTo(pts[0].x, pts[0].y);
-  for (var j = 1; j < pts.length; j++) ctx.lineTo(pts[j].x, pts[j].y);
-  ctx.lineTo(pts[pts.length - 1].x, pad.top + ch);
-  ctx.lineTo(pts[0].x, pad.top + ch);
-  ctx.closePath();
-  var grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
-  grad.addColorStop(0, isUp ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)');
-  grad.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = grad;
-  ctx.fill();
+  _lwSeries.setData(seriesData);
+  _lwChart.timeScale().fitContent();
 
-  // 3. Price line
-  ctx.beginPath();
-  ctx.strokeStyle = isUp ? '#22c55e' : '#ef4444';
-  ctx.lineWidth = 1.5;
-  ctx.lineJoin = 'round';
-  ctx.moveTo(pts[0].x, pts[0].y);
-  for (var k = 1; k < pts.length; k++) ctx.lineTo(pts[k].x, pts[k].y);
-  ctx.stroke();
-
-  // 4. End dot
-  var lp = pts[pts.length - 1];
-  ctx.beginPath();
-  ctx.arc(lp.x, lp.y, 3, 0, Math.PI * 2);
-  ctx.fillStyle = isUp ? '#22c55e' : '#ef4444';
-  ctx.fill();
-
-  // 5. Y-axis labels
-  ctx.font = '10px Space Mono';
-  ctx.textAlign = 'right';
-  for (var i2 = 0; i2 <= gridCount; i2++) {
-    var gy2 = pad.top + (ch / gridCount) * i2;
-    var gv  = maxP - (maxP - minP) * (i2 / gridCount);
-    var lbl = Math.round(gv * 100) + '¢';
-    var tw  = ctx.measureText(lbl).width;
-    ctx.fillStyle = '#111110';
-    ctx.fillRect(pad.left - tw - 12, gy2 - 7, tw + 8, 13);
-    ctx.fillStyle = '#8a8780';
-    ctx.fillText(lbl, pad.left - 6, gy2 + 3.5);
-  }
-
-  // 6. X-axis date labels
-  ctx.fillStyle = '#6b6860';
-  ctx.font = '9px Space Mono';
-  ctx.textAlign = 'center';
-  var labelCount = Math.min(5, smoothed.length);
-  for (var m2 = 0; m2 < labelCount; m2++) {
-    var idx2 = Math.round(m2 / (labelCount - 1) * (smoothed.length - 1));
-    var xd = pad.left + (idx2 / (smoothed.length - 1)) * cw;
-    var d = new Date(times[idx2] * 1000);
-    ctx.fillText((d.getMonth()+1) + '/' + d.getDate(), xd, pad.top + ch + 18);
-  }
+  // Resize on window resize
+  window.addEventListener('resize', function() {
+    if (_lwChart) _lwChart.applyOptions({ width: container.offsetWidth });
+  });
 }
 
 // Chart tab switching
