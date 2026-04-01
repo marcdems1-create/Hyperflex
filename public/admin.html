@@ -571,9 +571,11 @@
               <th>Email</th>
               <th>Type</th>
               <th style="text-align:center">Trades</th>
-              <th style="text-align:right">Total Balance (pts)</th>
+              <th style="text-align:right">Balance (pts)</th>
+              <th>Plan</th>
               <th>Joined</th>
-              <th></th>
+              <th>Set Plan</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody id="usersBody"></tbody>
@@ -893,20 +895,91 @@ function renderUsersTable(rows) {
   tbody.innerHTML = rows.map(u => {
     const joined = u.joined ? new Date(u.joined).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : '—';
     const typeLabel = u.is_creator
-      ? '<span class="plan-badge pro" style="font-size:10px">creator</span>'
-      : '<span style="font-size:11px;color:var(--dim)">member</span>';
+      ? `<span class="plan-badge pro" style="font-size:10px">creator</span>`
+      : `<span style="font-size:11px;color:var(--dim)">member</span>`;
     const pts = Math.round((u.total_balance || 0) / 100).toLocaleString();
+    const plan = u.plan || 'free';
+
+    // Trial badge
+    let trialBadge = '';
+    if (u.trial_expires_at) {
+      const exp = new Date(u.trial_expires_at);
+      const daysLeft = Math.ceil((exp - Date.now()) / 86400000);
+      const isExpired = daysLeft <= 0;
+      const label = isExpired ? 'Trial expired' : `Trial: ${daysLeft}d left`;
+      trialBadge = `<span class="trial-badge${isExpired ? ' expired' : ''}">${label}</span>`;
+    }
+
+    const uid = esc(u.id);
+    const uname = esc(u.display_name || u.email || u.id);
+    const hasEmail = u.email && u.email !== '—';
+
     return `
-      <tr>
+      <tr id="user-row-${uid}">
         <td class="td-name">${esc(u.display_name || '—')}</td>
         <td class="td-email">${esc(u.email)}</td>
         <td>${typeLabel}</td>
         <td class="td-markets">${u.trades}</td>
         <td style="text-align:right;font-family:monospace;font-size:12px">${pts}</td>
+        <td><span class="plan-badge ${plan}">${plan === 'platinum' ? 'Premium' : plan}</span>${trialBadge ? '<br>' + trialBadge : ''}</td>
         <td class="td-date">${joined}</td>
-        <td><button class="set-plan-btn" style="background:rgba(239,68,68,0.15);border-color:#ef4444;color:#ef4444" onclick="adminDeleteUser('${esc(u.id)}', '${esc(u.display_name || u.email)}')">Delete</button></td>
+        <td>
+          <select class="plan-select" id="usel-${uid}">
+            <option value="free"     ${plan==='free'     ?'selected':''}>Free</option>
+            <option value="pro"      ${plan==='pro'      ?'selected':''}>Pro</option>
+            <option value="platinum" ${plan==='platinum' ?'selected':''}>Premium</option>
+          </select>
+          <button class="set-plan-btn" id="ubtn-${uid}" onclick="setUserPlan('${uid}')">Set</button>
+        </td>
+        <td>
+          <div class="row-actions">
+            ${hasEmail ? `<button class="action-btn email" onclick="openEmailModal('${esc(u.email)}','${uname}')">📧</button>` : ''}
+            <button class="action-btn gift" onclick="giftUserTrial('${uid}', '${uname}')">🎁 Trial</button>
+            <button class="action-btn danger" onclick="adminDeleteUser('${uid}', '${uname}')">✕</button>
+          </div>
+        </td>
       </tr>`;
   }).join('');
+}
+
+async function setUserPlan(userId) {
+  const select = document.getElementById('usel-' + userId);
+  const btn    = document.getElementById('ubtn-' + userId);
+  const plan   = select.value;
+  btn.textContent = '…'; btn.classList.add('saving');
+  try {
+    const r = await fetch(API + '/api/admin/set-user-plan?secret=' + encodeURIComponent(adminSecret), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, plan })
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Failed');
+    const u = allUsers.find(u => u.id === userId);
+    if (u) u.plan = plan;
+    btn.textContent = '✓'; btn.classList.remove('saving'); btn.classList.add('saved');
+    setTimeout(() => { btn.textContent = 'Set'; btn.classList.remove('saved'); }, 2000);
+    showToast('Plan updated to ' + (plan === 'platinum' ? 'Premium' : plan));
+  } catch (err) {
+    btn.textContent = 'Set'; btn.classList.remove('saving');
+    showToast(err.message, 'error');
+  }
+}
+
+async function giftUserTrial(userId, name) {
+  const days = prompt(`Gift Premium trial to "${name}".\nHow many days? (default: 30)`, '30');
+  if (!days) return;
+  try {
+    const r = await fetch(API + '/api/admin/gift-user-trial?secret=' + encodeURIComponent(adminSecret), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, days: parseInt(days) || 30 })
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Failed');
+    showToast(`✓ Gifted ${days}d Premium to ${name}`);
+    loadUsers();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
 }
 
 async function adminDeleteUser(userId, name) {
