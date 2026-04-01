@@ -13312,13 +13312,19 @@ app.post('/api/admin/set-plan', requireAdmin, async (req, res) => {
 // GET /api/admin/users — all members with activity stats + plan info
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   try {
-    const allUsers = await dbQuery('SELECT id, email, display_name, created_at, plan, plan_trial_expires_at FROM users ORDER BY created_at DESC');
+    const allUsers = await dbQuery('SELECT id, email, display_name, created_at FROM users ORDER BY created_at DESC');
     if (!allUsers?.length) return res.json([]);
 
-    const creatorSettings = await dbQuery('SELECT creator_id, slug FROM creator_settings');
+    const creatorSettings = await dbQuery('SELECT creator_id, slug, plan, plan_trial_expires_at FROM creator_settings');
     const creatorIdSet = new Set((creatorSettings || []).map(s => s.creator_id));
     const creatorSlugMap = {};
-    (creatorSettings || []).forEach(s => { creatorSlugMap[s.creator_id] = s.slug; });
+    const creatorPlanMap = {};
+    const creatorTrialMap = {};
+    (creatorSettings || []).forEach(s => {
+      creatorSlugMap[s.creator_id] = s.slug;
+      creatorPlanMap[s.creator_id] = s.plan;
+      creatorTrialMap[s.creator_id] = s.plan_trial_expires_at;
+    });
 
     const allUserIds = allUsers.map(u => u.id);
     const [positions, balances] = await Promise.all([
@@ -13339,8 +13345,8 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
       trades:             tradeMap[u.id] || 0,
       total_balance:      balMap[u.id] || 0,
       joined:             u.created_at,
-      plan:               u.plan || 'free',
-      trial_expires_at:   u.plan_trial_expires_at || null
+      plan:               creatorPlanMap[u.id] || 'free',
+      trial_expires_at:   creatorTrialMap[u.id] || null
     }));
 
     res.json(rows);
@@ -13355,7 +13361,7 @@ app.post('/api/admin/set-user-plan', requireAdmin, async (req, res) => {
   try {
     const { userId, plan } = req.body;
     if (!userId || !['free','pro','platinum'].includes(plan)) return res.status(400).json({ error: 'userId and valid plan required' });
-    await dbQuery('UPDATE users SET plan = $1, plan_trial_expires_at = NULL WHERE id = $2', [plan, userId]);
+    await dbQuery('UPDATE creator_settings SET plan = $1, plan_trial_expires_at = NULL WHERE creator_id = $2', [plan, userId]);
     console.log(`[admin] set user ${userId} → ${plan}`);
     res.json({ ok: true });
   } catch (err) {
@@ -13371,7 +13377,7 @@ app.post('/api/admin/gift-user-trial', requireAdmin, async (req, res) => {
     if (!userId) return res.status(400).json({ error: 'userId required' });
     const n = Math.min(Math.max(parseInt(days) || 30, 1), 365);
     const expiresAt = new Date(Date.now() + n * 86400000).toISOString();
-    await dbQuery('UPDATE users SET plan = $1, plan_trial_expires_at = $2 WHERE id = $3', ['platinum', expiresAt, userId]);
+    await dbQuery('UPDATE creator_settings SET plan = $1, plan_trial_expires_at = $2 WHERE creator_id = $3', ['platinum', expiresAt, userId]);
     console.log(`[admin] gifted ${n}d Premium trial to user ${userId}, expires ${expiresAt}`);
     res.json({ ok: true, expires_at: expiresAt });
   } catch (err) {
