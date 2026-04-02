@@ -12808,6 +12808,7 @@ async function disconnectPolymarket() {
   }
 }
 
+let _polyRecoveryAttempted = false;
 async function loadPolymarketPositions(forceRefresh) {
   const el = document.getElementById('polyPositions');
   // Ensure wallet address is loaded from localStorage if not set yet
@@ -12854,6 +12855,49 @@ async function loadPolymarketPositions(forceRefresh) {
         positions = data.positions || [];
       }
     }
+    // AUTO-RECOVERY: if 0 positions, try alternative addresses before giving up
+    if (positions.length === 0 && !_polyRecoveryAttempted && typeof ethers !== 'undefined' && typeof window.ethereum !== 'undefined') {
+      _polyRecoveryAttempted = true;
+      try {
+        const accts = await window.ethereum.request({ method: 'eth_accounts' });
+        const eoa = accts && accts.length ? accts[0].toLowerCase() : null;
+        if (eoa) {
+          const candidates = [];
+          // Try multiple CREATE2 derivations
+          const factories = [
+            { f: '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b', h: '0x2bce2127ff07fb632d16c8347c4ebf501f4841168bed00d9e6ef715ddb6fcecf' },
+            { f: '0xa6B71E26C5e0845f74c812102Ca7114b6a896AB2', h: '0xaacbb47e7a4604d8c6853ced7bb9505060a3458e770b213e1e5a62cf8c33d8e6' },
+          ];
+          for (const d of factories) {
+            try {
+              const enc = ethers.AbiCoder.defaultAbiCoder().encode(['address'], [eoa]);
+              const salt = ethers.keccak256(enc);
+              const proxy = ethers.getCreate2Address(d.f, salt, d.h).toLowerCase();
+              if (proxy !== _polyWalletAddress.toLowerCase()) candidates.push(proxy);
+            } catch(e) {}
+          }
+          // Also try EOA directly
+          if (eoa !== _polyWalletAddress.toLowerCase()) candidates.push(eoa);
+          console.log('[poly-recovery] Trying', candidates.length, 'alternative addresses...');
+          for (const addr of candidates) {
+            try {
+              const r = await fetch('https://data-api.polymarket.com/positions?user=' + addr + '&limit=5&sortBy=CURRENT');
+              const raw = await r.json();
+              if (Array.isArray(raw) && raw.length > 0) {
+                console.log('[poly-recovery] Found positions at:', addr, '(' + raw.length + ')');
+                _polyWalletAddress = addr;
+                localStorage.setItem('hf_poly_wallet', addr);
+                try { fetch('/api/user/wallets', { method: 'PUT', headers: { Authorization: 'Bearer ' + localStorage.getItem('hf_token'), 'Content-Type': 'application/json' }, body: JSON.stringify({ polymarket_address: addr }) }); } catch(e) {}
+                showToast('Found your Polymarket positions!', 'success');
+                // Re-fetch full positions with correct address
+                return loadPolymarketPositions(true);
+              }
+            } catch(e) {}
+          }
+        }
+      } catch(e) { console.warn('[poly-recovery]', e.message); }
+    }
+
     window._polyPositionsData = positions;
     // Fetch USDC balance + activity for realized P&L from sold positions
     fetchUSDCBalance(_polyWalletAddress).then(() => updatePortfolioSummary());
