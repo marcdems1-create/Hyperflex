@@ -2800,13 +2800,13 @@ body.nav-open .sidebar-backdrop {
 @media (max-width: 768px) {
   body { overflow-x: hidden; }
   input, textarea, select { font-size: 16px !important; }
-  #portfolioSummaryBar > div > div { grid-template-columns: repeat(2, 1fr) !important; gap: 16px !important; }
-  #portfolioSummaryBar [style*="font-size:28px"] { font-size: 22px !important; }
+  #portfolioSummaryBar > div > div { grid-template-columns: 1fr !important; gap: 12px !important; }
+  #portfolioSummaryBar [style*="font-size:32px"] { font-size: 24px !important; }
   #perfBestWorstCalls > div { grid-template-columns: 1fr !important; }
   .perf-whale-bars { grid-template-columns: 1fr !important; }
 }
 @media (max-width: 480px) {
-  #portfolioSummaryBar > div > div { grid-template-columns: 1fr 1fr !important; }
+  #portfolioSummaryBar > div > div { grid-template-columns: 1fr !important; }
 }
 
 /* ══ Social Tab ══ */
@@ -5020,51 +5020,61 @@ body.nav-open .sidebar-backdrop {
             <div id="noRealPositionsMsg" style="display:none;background:rgba(201,146,13,0.04);border:1px solid rgba(201,146,13,0.15);border-radius:10px;padding:14px 20px;margin-bottom:16px;font-family:var(--mono);font-size:12px;color:var(--dim);line-height:1.6">
               <strong style="color:var(--gold)">No open positions on Polymarket.</strong> Your previous positions may have resolved. The stats below reflect your USDC wallet balance. Visit <a href="https://polymarket.com" target="_blank" style="color:#a78bfa">polymarket.com</a> to open new positions.
             </div>
-            <div id="portfolioSummaryBar" style="display:none;background:#0f0e0c;border:1px solid #2a2825;border-radius:14px;overflow:hidden;margin-bottom:20px">
-              <div style="height:2px;background:linear-gradient(90deg,transparent,var(--gold),transparent)"></div>
-              <div style="padding:24px 28px">
-                <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:20px;align-items:center">
-                  <!-- Total Value -->
-                  <div>
-                    <div id="psSummaryValueLabel" style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752;margin-bottom:6px">PORTFOLIO VALUE</div>
-                    <div id="psSummaryValue" style="font-family:var(--mono);font-size:28px;font-weight:900;color:#f5f0e8;letter-spacing:-0.02em">—</div>
+            <div id="portfolioSummaryBar" style="display:none;margin-bottom:20px">
+              <!-- Two-card Polymarket-style layout -->
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+                <!-- LEFT CARD: Portfolio Value + Available Balance -->
+                <div style="background:#0f0e0c;border:1px solid #2a2825;border-radius:14px;padding:24px 28px;position:relative;overflow:hidden">
+                  <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--gold),transparent)"></div>
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+                    <div id="psSummaryValueLabel" style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752">Portfolio</div>
+                    <div style="font-family:var(--mono);font-size:10px;color:#5a5752">Available to trade <span id="psAvailBalance" style="font-weight:700;color:var(--text)">—</span></div>
                   </div>
-                  <!-- Total P&L -->
-                  <div>
-                    <div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752;margin-bottom:6px">TOTAL P&L</div>
-                    <div id="psSummaryPnl" style="font-family:var(--mono);font-size:28px;font-weight:900;color:#5a5752;letter-spacing:-0.02em">—</div>
-                    <div id="psSummaryPnlPct" style="font-family:var(--mono);font-size:11px;font-weight:700;color:#5a5752;margin-top:2px"></div>
-                  </div>
-                  <!-- Win Rate Ring -->
-                  <div style="text-align:center">
-                    <div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752;margin-bottom:8px">WIN RATE</div>
-                    <div id="psWinRateRing" style="width:56px;height:56px;border-radius:50%;background:conic-gradient(#333 0%,#333 100%);display:flex;align-items:center;justify-content:center;margin:0 auto">
-                      <div style="width:40px;height:40px;border-radius:50%;background:#0f0e0c;display:flex;align-items:center;justify-content:center">
-                        <span id="psWinRateVal" style="font-family:var(--mono);font-size:13px;font-weight:900;color:#5a5752">—</span>
+                  <div id="psSummaryValue" style="font-family:var(--mono);font-size:32px;font-weight:900;color:#f5f0e8;letter-spacing:-0.02em;margin-bottom:6px">—</div>
+                  <div id="psSummaryPnlPct" style="font-family:var(--mono);font-size:12px;font-weight:700;color:#5a5752;margin-bottom:20px"></div>
+                  <!-- Win Rate + Sharp Score + ROI row -->
+                  <div style="display:flex;gap:16px;border-top:1px solid #2a2825;padding-top:16px">
+                    <div style="flex:1">
+                      <div style="font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#5a5752;margin-bottom:4px">Win Rate</div>
+                      <div style="display:flex;align-items:center;gap:6px">
+                        <div id="psWinRateRing" style="width:28px;height:28px;border-radius:50%;background:conic-gradient(#333 0%,#333 100%);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                          <div style="width:20px;height:20px;border-radius:50%;background:#0f0e0c;display:flex;align-items:center;justify-content:center">
+                            <span id="psWinRateVal" style="font-family:var(--mono);font-size:8px;font-weight:900;color:#5a5752">—</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <!-- Sharp Score -->
-                  <div style="text-align:center">
-                    <div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752;margin-bottom:8px">SHARP SCORE</div>
-                    <div id="psSharpBadge" style="display:inline-flex;align-items:center;justify-content:center;min-width:48px;padding:8px 14px;border-radius:10px;background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.2)">
-                      <span id="psSharpVal" style="font-family:var(--mono);font-size:20px;font-weight:900;color:var(--gold)">—</span>
+                    <div style="flex:1">
+                      <div style="font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#5a5752;margin-bottom:4px">Sharp</div>
+                      <div id="psSharpBadge" style="display:inline-flex;align-items:center;justify-content:center;min-width:32px;padding:4px 8px;border-radius:6px;background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.2)">
+                        <span id="psSharpVal" style="font-family:var(--mono);font-size:13px;font-weight:900;color:var(--gold)">—</span>
+                      </div>
+                    </div>
+                    <div style="flex:1;text-align:right">
+                      <div style="font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#5a5752;margin-bottom:4px">ROI</div>
+                      <div id="psSummaryROI" style="font-family:var(--mono);font-size:16px;font-weight:900;color:#5a5752">—</div>
                     </div>
                   </div>
-                  <!-- ROI -->
-                  <div style="text-align:right">
-                    <div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752;margin-bottom:6px">ROI</div>
-                    <div id="psSummaryROI" style="font-family:var(--mono);font-size:28px;font-weight:900;color:#5a5752;letter-spacing:-0.02em">—</div>
+                </div>
+                <!-- RIGHT CARD: Profit/Loss + Chart -->
+                <div style="background:#0f0e0c;border:1px solid #2a2825;border-radius:14px;padding:24px 28px;display:flex;flex-direction:column">
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+                    <div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752">Profit / Loss</div>
+                    <div style="display:flex;gap:0;border:1px solid #2a2825;border-radius:6px;overflow:hidden">
+                      <button onclick="setPnlPeriod('1d')" class="pnl-tab" id="pnlTab1d" style="padding:4px 10px;font-family:var(--mono);font-size:9px;font-weight:700;color:#5a5752;background:transparent;border:none;cursor:pointer">1D</button>
+                      <button onclick="setPnlPeriod('1w')" class="pnl-tab" id="pnlTab1w" style="padding:4px 10px;font-family:var(--mono);font-size:9px;font-weight:700;color:#5a5752;background:transparent;border:none;cursor:pointer">1W</button>
+                      <button onclick="setPnlPeriod('1m')" class="pnl-tab" id="pnlTab1m" style="padding:4px 10px;font-family:var(--mono);font-size:9px;font-weight:700;color:var(--text);background:var(--gold);border:none;cursor:pointer">1M</button>
+                      <button onclick="setPnlPeriod('all')" class="pnl-tab" id="pnlTaball" style="padding:4px 10px;font-family:var(--mono);font-size:9px;font-weight:700;color:#5a5752;background:transparent;border:none;cursor:pointer">ALL</button>
+                    </div>
+                  </div>
+                  <div id="psSummaryPnl" style="font-family:var(--mono);font-size:32px;font-weight:900;color:#5a5752;letter-spacing:-0.02em;margin-bottom:4px">—</div>
+                  <div id="psPnlPeriodLabel" style="font-family:var(--mono);font-size:10px;color:#5a5752;margin-bottom:12px">Past Month</div>
+                  <!-- Inline P&L chart -->
+                  <div id="portfolioPnlChart" style="flex:1;min-height:60px;display:flex;align-items:flex-end">
+                    <div id="pnlChartBars" style="display:flex;align-items:flex-end;gap:3px;height:100%;width:100%;padding:0"></div>
                   </div>
                 </div>
               </div>
-            </div>
-            <!-- P&L Over Time Chart -->
-            <div id="portfolioPnlChart" style="display:none;background:#0f0e0c;border:1px solid #2a2825;border-radius:14px;overflow:hidden;margin-bottom:20px">
-              <div style="padding:20px 24px 8px">
-                <div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#5a5752">P&L OVER TIME — LAST 30 DAYS</div>
-              </div>
-              <div id="pnlChartBars" style="display:flex;align-items:flex-end;gap:3px;height:80px;padding:8px 24px 20px"></div>
             </div>
             <!-- Best Calls Section -->
             <div id="bestCallsSection" style="display:none;margin-bottom:20px">
@@ -14093,6 +14103,9 @@ function updatePortfolioSummary() {
   // Update label to "PORTFOLIO VALUE"
   const valLabel = document.getElementById('psSummaryValueLabel');
   if (valLabel) valLabel.textContent = 'PORTFOLIO VALUE';
+  // Available to trade (USDC cash balance)
+  const availEl = document.getElementById('psAvailBalance');
+  if (availEl) availEl.textContent = fmtD(stats.cashBalance);
 
   // Total P&L
   const pnlEl = document.getElementById('psSummaryPnl');
@@ -14162,7 +14175,7 @@ function renderPnlChart(positions) {
   // Build daily P&L from ALL positions (not just resolved)
   const withPnl = positions.filter(p => p.pnl != null);
   if (withPnl.length < 1) { chartEl.style.display = 'none'; return; }
-  chartEl.style.display = 'block';
+  chartEl.style.display = 'flex';
 
   // Group by date
   const dailyPnl = {};
@@ -14222,6 +14235,117 @@ function renderPnlChart(positions) {
       <path d="${pathD}" fill="none" stroke="${lineColor}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
       <circle cx="${lastPt.x.toFixed(1)}" cy="${lastPt.y.toFixed(1)}" r="4" fill="${lineColor}" stroke="#141412" stroke-width="2"/>
       <text x="${W-padding}" y="14" text-anchor="end" fill="${lineColor}" font-family="var(--mono)" font-size="12" font-weight="700">${sign}$${Math.abs(lastVal).toFixed(2)}</text>
+      <text x="${padding}" y="${H-4}" fill="#5a5752" font-family="var(--mono)" font-size="9">${dates[0] ? dates[0].slice(5) : ''}</text>
+      <text x="${W-padding}" y="${H-4}" text-anchor="end" fill="#5a5752" font-family="var(--mono)" font-size="9">${dates[dates.length-1] ? dates[dates.length-1].slice(5) : ''}</text>
+    </svg>`;
+}
+
+/* ── P&L Period Tabs (1D / 1W / 1M / ALL) ── */
+let _pnlPeriod = '1m';
+function setPnlPeriod(period) {
+  _pnlPeriod = period;
+  // Update tab active states
+  ['1d','1w','1m','all'].forEach(p => {
+    const tab = document.getElementById('pnlTab' + p);
+    if (!tab) return;
+    if (p === period) { tab.style.background = 'var(--gold)'; tab.style.color = 'var(--text)'; }
+    else { tab.style.background = 'transparent'; tab.style.color = '#5a5752'; }
+  });
+  // Update period label
+  const labelEl = document.getElementById('psPnlPeriodLabel');
+  if (labelEl) {
+    const labels = { '1d': 'Past Day', '1w': 'Past Week', '1m': 'Past Month', 'all': 'All Time' };
+    labelEl.textContent = labels[period] || 'Past Month';
+  }
+  // Re-render chart + P&L for this period
+  const positions = getAllPositionsFlat();
+  if (!positions.length) return;
+
+  const dayMap = { '1d': 1, '1w': 7, '1m': 30, 'all': 9999 };
+  const days = dayMap[period] || 30;
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - days);
+  const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+  // Filter positions by period for P&L recalc
+  const filtered = period === 'all' ? positions : positions.filter(p => {
+    const d = (p.end_date || p.resolved_at || p.created_at || '').slice(0, 10);
+    return d >= cutoffStr;
+  });
+
+  // Recalc period P&L
+  let periodPnl = 0;
+  filtered.forEach(p => { if (p.pnl != null) periodPnl += p.pnl; });
+
+  const pnlEl = document.getElementById('psSummaryPnl');
+  if (pnlEl) {
+    function fmtD(n) { if (Math.abs(n)>=1e6) return '$'+(n/1e6).toFixed(1)+'M'; if (Math.abs(n)>=1e3) return '$'+(n/1e3).toFixed(1)+'K'; return '$'+n.toFixed(2); }
+    const sign = periodPnl >= 0 ? '+' : '';
+    pnlEl.textContent = sign + fmtD(Math.abs(periodPnl));
+    pnlEl.style.color = periodPnl >= 0 ? '#22c55e' : '#ef4444';
+  }
+
+  // Re-render chart with period-specific data
+  renderPnlChartForPeriod(positions, days);
+}
+
+function renderPnlChartForPeriod(positions, days) {
+  const chartEl = document.getElementById('portfolioPnlChart');
+  const barsEl = document.getElementById('pnlChartBars');
+  if (!chartEl || !barsEl) return;
+
+  const withPnl = positions.filter(p => p.pnl != null);
+  if (withPnl.length < 1) { chartEl.style.display = 'none'; return; }
+  chartEl.style.display = 'flex';
+
+  const numDays = Math.min(days, 365);
+  const dailyPnl = {};
+  const now = new Date();
+  for (let i = numDays - 1; i >= 0; i--) {
+    const d = new Date(now); d.setDate(d.getDate() - i);
+    dailyPnl[d.toISOString().slice(0, 10)] = 0;
+  }
+  withPnl.forEach(p => {
+    const date = (p.end_date || p.resolved_at || p.created_at || '').slice(0, 10);
+    if (date && dailyPnl[date] !== undefined) dailyPnl[date] += p.pnl;
+  });
+
+  const dates = Object.keys(dailyPnl).sort();
+  let cumulative = 0;
+  const points = dates.map(d => { cumulative += dailyPnl[d]; return { date: d, val: cumulative }; });
+
+  const W = barsEl.offsetWidth || 600;
+  const H = 120;
+  const maxAbs = Math.max(1, ...points.map(p => Math.abs(p.val)));
+  const padding = 8;
+  const xStep = (W - padding * 2) / Math.max(1, points.length - 1);
+  const pathPoints = points.map((p, i) => {
+    const x = padding + i * xStep;
+    const y = H / 2 - (p.val / maxAbs) * (H / 2 - padding);
+    return { x, y, val: p.val, date: p.date };
+  });
+
+  let pathD = '';
+  pathPoints.forEach((pt, i) => { pathD += (i === 0 ? 'M' : 'L') + pt.x.toFixed(1) + ',' + pt.y.toFixed(1) + ' '; });
+
+  const lastPt = pathPoints[pathPoints.length - 1] || { x: W, y: H/2 };
+  const firstPt = pathPoints[0] || { x: 0, y: H/2 };
+  const fillD = pathD + `L${lastPt.x.toFixed(1)},${H} L${firstPt.x.toFixed(1)},${H} Z`;
+  const lineColor = lastPt.val >= 0 ? '#22c55e' : '#ef4444';
+  const sign = lastPt.val >= 0 ? '+' : '';
+
+  barsEl.innerHTML = `
+    <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="display:block">
+      <defs>
+        <linearGradient id="pnlGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${lineColor}" stop-opacity="0.3"/>
+          <stop offset="100%" stop-color="${lineColor}" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <line x1="${padding}" y1="${H/2}" x2="${W-padding}" y2="${H/2}" stroke="#2a2825" stroke-width="1" stroke-dasharray="4,4"/>
+      <path d="${fillD}" fill="url(#pnlGrad)"/>
+      <path d="${pathD}" fill="none" stroke="${lineColor}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="${lastPt.x.toFixed(1)}" cy="${lastPt.y.toFixed(1)}" r="4" fill="${lineColor}" stroke="#141412" stroke-width="2"/>
+      <text x="${W-padding}" y="14" text-anchor="end" fill="${lineColor}" font-family="var(--mono)" font-size="12" font-weight="700">${sign}$${Math.abs(lastPt.val).toFixed(2)}</text>
       <text x="${padding}" y="${H-4}" fill="#5a5752" font-family="var(--mono)" font-size="9">${dates[0] ? dates[0].slice(5) : ''}</text>
       <text x="${W-padding}" y="${H-4}" text-anchor="end" fill="#5a5752" font-family="var(--mono)" font-size="9">${dates[dates.length-1] ? dates[dates.length-1].slice(5) : ''}</text>
     </svg>`;
