@@ -183,6 +183,7 @@ canvas{display:block;width:100%!important}
       <div class="mkt-chart-wrap">
         <div class="mkt-chart-header">
           <div class="mkt-chart-title">Price History — <span id="chartOutcome">YES</span></div>
+          <div id="chartLegend" style="display:none;flex-wrap:wrap;gap:8px 14px;font-family:var(--mono);font-size:11px;margin-top:4px"></div>
           <div class="mkt-chart-tabs" id="chartTabs">
             <button class="mkt-chart-tab" data-interval="1h">1H</button>
             <button class="mkt-chart-tab" data-interval="6h">6H</button>
@@ -430,7 +431,41 @@ function renderMarket() {
 
   updateTradeCalc();
   renderOutcomes(m);
-  drawChart(_priceHistory);
+  // Multi-outcome chart: fetch history for top outcomes and draw colored lines
+  if (_eventMarkets && _eventMarkets.length > 1) {
+    document.getElementById('chartOutcome').textContent = 'All Outcomes';
+    var tids = m.clobTokenIds || '[]';
+    if (typeof tids === 'string') { try { tids = JSON.parse(tids); } catch(e) { tids = []; } }
+    // Sort event markets by YES price descending, take top 6 for chart
+    var sorted = _eventMarkets.slice().map(function(em, i) {
+      var ep = em.outcomePrices || '[]';
+      if (typeof ep === 'string') { try { ep = JSON.parse(ep); } catch(e) { ep = []; } }
+      var yp = ep[0] ? parseFloat(ep[0]) : 0;
+      var label = em.groupItemTitle || em.question || '';
+      // Extract short label like "$580-$590"
+      var rm = label.match(/(?:at |between |close (?:at )?)(\$[\d,.]+\s*[-–]\s*\$[\d,.]+|\<\s*\$[\d,.]+|\>\s*\$[\d,.]+)/i);
+      if (rm) label = rm[1];
+      else { var tm = label.match(/Will (?:the )?(.+?) win/i); if (tm) label = tm[1]; }
+      if (label.length > 25) label = label.substring(0, 22) + '...';
+      return { em: em, yp: yp, label: label, tokenId: em.clobTokenIds ? JSON.parse(em.clobTokenIds)[0] : null };
+    }).filter(function(x) { return x.tokenId && x.yp > 0.01; });
+    sorted.sort(function(a, b) { return b.yp - a.yp; });
+    var top = sorted.slice(0, 6);
+    if (top.length > 1) {
+      Promise.all(top.map(function(x) {
+        return fetch('https://clob.polymarket.com/prices-history?market=' + x.tokenId + '&interval=' + _chartInterval + '&fidelity=60')
+          .then(function(r) { return r.json(); })
+          .then(function(d) { return { label: x.label, history: d.history || [] }; })
+          .catch(function() { return { label: x.label, history: [] }; });
+      })).then(function(multiData) {
+        drawChart(null, multiData);
+      });
+    } else {
+      drawChart(_priceHistory);
+    }
+  } else {
+    drawChart(_priceHistory);
+  }
   renderOrderbook();
 }
 
@@ -447,11 +482,17 @@ function renderOutcomes(m) {
       if (typeof emPrices === 'string') { try { emPrices = JSON.parse(emPrices); } catch(e) { emPrices = []; } }
       var yp = emPrices[0] ? parseFloat(emPrices[0]) : 0;
       var np = emPrices[1] ? parseFloat(emPrices[1]) : 1 - yp;
-      // Extract short name from question (e.g. "Will the Thunder win..." → "Thunder")
-      var shortName = em.question || '';
-      var teamMatch = shortName.match(/Will (?:the )?(.+?) win/i);
-      if (teamMatch) shortName = teamMatch[1];
-      else if (shortName.length > 40) shortName = shortName.substring(0, 37) + '...';
+      // Extract short outcome label from question
+      var shortName = em.groupItemTitle || em.question || '';
+      // Price range: "Will Meta close at $580-$590?" → "$580-$590"
+      var rangeMatch = shortName.match(/(?:at |between |close (?:at )?)(\$[\d,.]+\s*[-–]\s*\$[\d,.]+|\<\s*\$[\d,.]+|\>\s*\$[\d,.]+)/i);
+      if (rangeMatch) { shortName = rangeMatch[1]; }
+      // Percentage range: "above 5%?" → ">5%"
+      else if ((rangeMatch = shortName.match(/([\d.]+%?\s*[-–]\s*[\d.]+%|[<>≤≥]\s*[\d.]+%)/))) { shortName = rangeMatch[1]; }
+      // Team/person: "Will the Thunder win..." → "Thunder"
+      else { var teamMatch = shortName.match(/Will (?:the )?(.+?) win/i); if (teamMatch) shortName = teamMatch[1]; }
+      // Truncate if still long
+      if (shortName.length > 35) shortName = shortName.substring(0, 32) + '...';
       rows.push({ name: shortName, yesP: yp, noP: np, idx: i, slug: em.slug, conditionId: em.conditionId });
     }
     // Sort by YES price descending (favorites first)
@@ -595,11 +636,59 @@ function toggleDesc() {
 var _lwChart = null;
 var _lwSeries = null;
 
-function drawChart(history) {
+// Multi-line chart colors (matches Polymarket palette)
+var _chartColors = ['#f59e0b','#3b82f6','#22c55e','#ef4444','#a855f7','#ec4899','#06b6d4','#84cc16','#f97316','#6366f1'];
+var _multiSeries = [];
+
+function drawChart(history, multiData) {
   var container = document.getElementById('priceChart');
+  var legendEl = document.getElementById('chartLegend');
 
   // Destroy previous chart instance
-  if (_lwChart) { _lwChart.remove(); _lwChart = null; _lwSeries = null; }
+  if (_lwChart) { _lwChart.remove(); _lwChart = null; _lwSeries = null; _multiSeries = []; }
+
+  // Multi-outcome mode
+  if (multiData && multiData.length > 0) {
+    var hasAny = multiData.some(function(d) { return d.history && d.history.length >= 2; });
+    if (!hasAny) {
+      container.innerHTML = '<div style="height:260px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:12px;color:var(--dim)">Not enough price data yet</div>';
+      return;
+    }
+    container.innerHTML = '';
+    legendEl.style.display = 'flex';
+    legendEl.innerHTML = multiData.map(function(d, i) {
+      var c = _chartColors[i % _chartColors.length];
+      var pct = d.history && d.history.length > 0 ? Math.round(d.history[d.history.length - 1].p * 100) + '%' : '';
+      return '<span style="color:' + c + '">● ' + escH(d.label) + ' <span style="opacity:.7">' + pct + '</span></span>';
+    }).join('');
+
+    requestAnimationFrame(function() {
+      var _w = container.offsetWidth || container.parentElement.offsetWidth || 760;
+      _lwChart = LightweightCharts.createChart(container, _chartOpts(_w));
+
+      multiData.forEach(function(d, i) {
+        if (!d.history || d.history.length < 2) return;
+        var c = _chartColors[i % _chartColors.length];
+        var s = _lwChart.addLineSeries({
+          color: c, lineWidth: 2,
+          priceFormat: { type: 'custom', formatter: function(p) { return Math.round(p * 100) + '%'; }, minMove: 0.001 },
+          lastValueVisible: true, priceLineVisible: false,
+        });
+        var seen = {}, sd = [];
+        d.history.forEach(function(h) { var t = Math.floor(h.t); if (!seen[t]) { seen[t] = true; sd.push({ time: t, value: h.p }); } });
+        sd.sort(function(a, b) { return a.time - b.time; });
+        s.setData(sd);
+        _multiSeries.push(s);
+      });
+      _lwChart.timeScale().fitContent();
+      window.addEventListener('resize', function() { if (_lwChart) _lwChart.applyOptions({ width: container.offsetWidth }); });
+    });
+    return;
+  }
+
+  // Single-line mode (binary or single selected outcome)
+  legendEl.style.display = 'none';
+  legendEl.innerHTML = '';
 
   if (!history || history.length < 2) {
     container.innerHTML = '<div style="height:260px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:12px;color:var(--dim)">Not enough price data yet</div>';
@@ -610,37 +699,7 @@ function drawChart(history) {
 
   requestAnimationFrame(function() {
   var _w = container.offsetWidth || container.parentElement.offsetWidth || 760;
-
-  _lwChart = LightweightCharts.createChart(container, {
-    width: _w,
-    height: 260,
-    layout: {
-      background: { color: '#131311' },
-      textColor: '#8a8780',
-      fontFamily: "'Space Mono', monospace",
-      fontSize: 11,
-    },
-    grid: {
-      vertLines: { color: 'rgba(255,255,255,0.04)' },
-      horzLines: { color: 'rgba(255,255,255,0.04)' },
-    },
-    crosshair: {
-      mode: LightweightCharts.CrosshairMode.Normal,
-      vertLine: { color: '#5a5752', labelBackgroundColor: '#1a1a18' },
-      horzLine: { color: '#5a5752', labelBackgroundColor: '#1a1a18' },
-    },
-    rightPriceScale: {
-      borderColor: '#222220',
-      scaleMargins: { top: 0.1, bottom: 0.1 },
-    },
-    timeScale: {
-      borderColor: '#222220',
-      timeVisible: true,
-      secondsVisible: false,
-    },
-    handleScroll: true,
-    handleScale: true,
-  });
+  _lwChart = LightweightCharts.createChart(container, _chartOpts(_w));
 
   var isUp = history[history.length - 1].p >= history[0].p;
   var lineColor = isUp ? '#22c55e' : '#ef4444';
@@ -659,7 +718,6 @@ function drawChart(history) {
     },
   });
 
-  // Dedupe timestamps (Lightweight Charts requires strictly ascending)
   var seen = {};
   var seriesData = [];
   history.forEach(function(h) {
@@ -671,11 +729,22 @@ function drawChart(history) {
   _lwSeries.setData(seriesData);
   _lwChart.timeScale().fitContent();
 
-  // Resize on window resize
   window.addEventListener('resize', function() {
     if (_lwChart) _lwChart.applyOptions({ width: container.offsetWidth });
   });
   }); // end requestAnimationFrame
+}
+
+function _chartOpts(w) {
+  return {
+    width: w, height: 260,
+    layout: { background: { color: '#131311' }, textColor: '#8a8780', fontFamily: "'Space Mono', monospace", fontSize: 11 },
+    grid: { vertLines: { color: 'rgba(255,255,255,0.04)' }, horzLines: { color: 'rgba(255,255,255,0.04)' } },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal, vertLine: { color: '#5a5752', labelBackgroundColor: '#1a1a18' }, horzLine: { color: '#5a5752', labelBackgroundColor: '#1a1a18' } },
+    rightPriceScale: { borderColor: '#222220', scaleMargins: { top: 0.1, bottom: 0.1 } },
+    timeScale: { borderColor: '#222220', timeVisible: true, secondsVisible: false },
+    handleScroll: true, handleScale: true
+  };
 }
 
 // Chart tab switching
@@ -1014,11 +1083,23 @@ async function executeTrade() {
     });
 
     // HMAC-SHA256 sign: timestamp + method + path + body (done in browser to avoid geo-block)
-    // Secret from Polymarket is base64-encoded — must decode before using as HMAC key
+    // Secret may be base64-encoded, hex-encoded, or raw — detect and handle all formats
     var ts = Math.floor(Date.now() / 1000).toString();
     var message = ts + 'POST' + '/order' + orderBody;
     var enc = new TextEncoder();
-    var secretBytes = Uint8Array.from(atob(apiSecret), function(c) { return c.charCodeAt(0); });
+    var secretBytes;
+    try {
+      // Try base64 first (standard Polymarket CLOB format)
+      secretBytes = Uint8Array.from(atob(apiSecret), function(c) { return c.charCodeAt(0); });
+    } catch (b64err) {
+      // Not valid base64 — check if hex string (all hex chars, even length)
+      if (/^[0-9a-fA-F]+$/.test(apiSecret) && apiSecret.length % 2 === 0) {
+        secretBytes = new Uint8Array(apiSecret.match(/.{2}/g).map(function(b) { return parseInt(b, 16); }));
+      } else {
+        // Fallback: use raw UTF-8 bytes
+        secretBytes = enc.encode(apiSecret);
+      }
+    }
     var cryptoKey = await crypto.subtle.importKey('raw', secretBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
     var sigBuf = await crypto.subtle.sign('HMAC', cryptoKey, enc.encode(message));
     var hmacSignature = btoa(String.fromCharCode.apply(null, new Uint8Array(sigBuf)));

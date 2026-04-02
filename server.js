@@ -17223,6 +17223,7 @@ app.get('/api/markets/search', async (req, res) => {
       bitcoin: ['bitcoin', 'btc', 'crypto', 'cryptocurrency', 'digital currency'],
       ethereum: ['ethereum', 'eth', 'ether', 'defi'],
       gold: ['gold', 'xau', 'gold price', 'precious metal', 'bullion'],
+      silver: ['silver', 'xag', 'silver price', 'precious metal'],
       oil: ['oil', 'crude', 'wti', 'brent', 'opec', 'petroleum', 'barrel'],
       stocks: ['stocks', 'stock market', 's&p', 'sp500', 'nasdaq', 'dow', 'equity', 'index'],
       election: ['election', 'vote', 'presidential', 'midterm', 'nominee', 'candidate', 'electoral', 'ballot'],
@@ -17258,8 +17259,8 @@ app.get('/api/markets/search', async (req, res) => {
       const t = (text || '').toLowerCase();
       // Prefer word boundary match first
       if (qWordBoundaryRe.test(t)) return true;
-      // Substring match for partial typing (e.g. "ira" matches "iran")
-      if (q.length >= 3 && t.includes(q)) return true;
+      // Substring match for partial typing (e.g. "si" matches "silver", "ira" matches "iran")
+      if (q.length >= 2 && t.includes(q)) return true;
       // Multi-word: all words must appear
       if (qWords.length > 1 && qWords.every(w => t.includes(w))) return true;
       // Synonym word boundary match
@@ -17296,9 +17297,21 @@ app.get('/api/markets/search', async (req, res) => {
       if (q.includes(keyword)) matchedSports.add(sportKey);
     }
 
-    const [polyRes, kalshiEventsResult, ...oddsResults] = await Promise.allSettled([
-      // Polymarket — use EVENTS endpoint; fetch 200 events (search param is ignored by gamma API)
+    // Build targeted Polymarket title searches — query + top synonym expansions
+    const polyTitleSearches = [q];
+    for (const term of expandedTerms) {
+      if (term !== q && term.length >= 3 && !term.includes(' ')) polyTitleSearches.push(term);
+    }
+    // Cap at 4 targeted searches to avoid rate limiting
+    const polyTargeted = [...new Set(polyTitleSearches)].slice(0, 4).map(term =>
+      fetchWithTimeout(`https://gamma-api.polymarket.com/events?closed=false&limit=20&title=${encodeURIComponent(term)}`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }, 10000)
+    );
+
+    const allResults = await Promise.allSettled([
+      // Polymarket — broad top-200 by liquidity
       fetchWithTimeout(`https://gamma-api.polymarket.com/events?closed=false&limit=200&order=liquidity&ascending=false`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }, 12000),
+      // Polymarket — targeted title searches (catches niche markets not in top 200)
+      ...polyTargeted,
       // Kalshi — paginated cache of ALL events (10-min TTL)
       getKalshiEvents(),
       // The Odds API — fetch odds for matched sports (or top sports if no match)
@@ -17310,10 +17323,19 @@ app.get('/api/markets/search', async (req, res) => {
       ) : [])
     ]);
 
+    // Split results: [broadPoly, ...targetedPoly(N), kalshi, ...odds]
+    const polyRes = allResults[0];
+    const polyTargetedResults = allResults.slice(1, 1 + polyTargeted.length);
+    const kalshiEventsResult = allResults[1 + polyTargeted.length];
+    const oddsResults = allResults.slice(2 + polyTargeted.length);
+
     // --- Parse Polymarket (events endpoint returns events with nested markets) ---
     let polyMarkets = [];
-    if (polyRes.status === 'fulfilled' && polyRes.value.ok) {
-      const raw = await polyRes.value.json();
+    const seenPolyQuestions = new Set();
+    // Merge broad + all targeted search results
+    const polyResponses = [polyRes, ...polyTargetedResults].filter(r => r.status === 'fulfilled' && r.value.ok);
+    for (const pRes of polyResponses) {
+      const raw = await pRes.value.json();
       const events = Array.isArray(raw) ? raw : [];
       for (const evt of events) {
         const evtTitle = evt.title || '';
@@ -17325,6 +17347,9 @@ app.get('/api/markets/search', async (req, res) => {
           if (m.closed) continue;
           const mTitle = m.question || m.groupItemTitle || m.title || evtTitle;
           if (!evtMatch && !matchesQuery(mTitle)) continue;
+          const dedupKey = mTitle.toLowerCase().trim();
+          if (seenPolyQuestions.has(dedupKey)) continue;
+          seenPolyQuestions.add(dedupKey);
           let yesPct = null;
           try { if (m.outcomePrices) yesPct = Math.round(JSON.parse(m.outcomePrices)[0] * 100); } catch {}
           if (yesPct !== null && (yesPct >= 95 || yesPct <= 5)) continue; // Skip resolved/dead markets
@@ -17337,9 +17362,9 @@ app.get('/api/markets/search', async (req, res) => {
           });
         }
       }
-      polyMarkets.sort((a, b) => b.volume - a.volume);
-      polyMarkets = polyMarkets.slice(0, 15);
     }
+    polyMarkets.sort((a, b) => b.volume - a.volume);
+    polyMarkets = polyMarkets.slice(0, 20);
 
     // --- Supplement Kalshi cache with targeted series ticker queries ---
     // Some Kalshi event types (hourly crypto, sports props) don't appear in status=open pagination
@@ -18855,7 +18880,10 @@ app.get('/api/screener', async (req, res) => {
     for (const m of (rawMarkets || [])) {
       const question = m.question || m.title || '';
       if (!question) continue;
-      // Skip expired/resolved markets
+      // Skip closed/expired/resolved markets
+      if (m.closed === true || m.closed === 'true') continue;
+      if (m.active === false || m.active === 'false') continue;
+      if (m.resolved === true || m.resolved === 'true') continue;
       const mEndDate = m.endDate || m.end_date_iso;
       if (mEndDate && new Date(mEndDate) < now) continue;
 
