@@ -12029,8 +12029,7 @@ async function loadPerformanceTab() {
   const hasAny = _polyWalletAddress || _kalshiConnected || _manifoldUsername;
   const emptyEl = document.getElementById('performanceEmpty');
   const shareBar = document.getElementById('portfolioShareBar');
-  const summaryBar = document.getElementById('portfolioSummaryBar');
-  const chartEl = document.getElementById('portfolioPnlChart');
+  // portfolioSummaryBar + portfolioPnlChart now live in tab-portfolio, not here
   const bestEl = document.getElementById('bestCallsSection');
   const perfPlatform = document.getElementById('perfPlatformAnalyticsSection');
   const catBreakdown = document.getElementById('perfCategoryBreakdown');
@@ -12040,8 +12039,6 @@ async function loadPerformanceTab() {
   if (!hasAny) {
     if (emptyEl) emptyEl.style.display = 'block';
     if (shareBar) shareBar.style.display = 'none';
-    if (summaryBar) summaryBar.style.display = 'none';
-    if (chartEl) chartEl.style.display = 'none';
     if (bestEl) bestEl.style.display = 'none';
     if (perfPlatform) perfPlatform.style.display = 'none';
     if (catBreakdown) catBreakdown.style.display = 'none';
@@ -14840,6 +14837,8 @@ async function connectBrowserWallet() {
         localStorage.setItem('hf_poly_wallet', _polyWalletAddress);
         found = true;
         console.log('[wallet] CREATE2 proxy saved:', _polyWalletAddress);
+        // Persist to DB so it survives localStorage clears / device switches
+        try { fetch('/api/user/wallets', { method: 'PUT', headers: { Authorization: 'Bearer ' + localStorage.getItem('hf_token'), 'Content-Type': 'application/json' }, body: JSON.stringify({ polymarket_address: _polyWalletAddress }) }); } catch(e) {}
 
         // Verify positions client-side (browser can reach data-api directly)
         try {
