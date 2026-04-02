@@ -4348,10 +4348,10 @@ app.post('/api/creator/signup', async (req, res) => {
       if (pool) {
         await dbQuery(
           'INSERT INTO creator_settings (creator_id, slug, display_name, custom_points_name, primary_color, community_description, is_active, plan, created_at) VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8)',
-          [newUser.id, slug, display_name, custom_points_name, primary_color, community_description, 'free', new Date().toISOString()]
+          [newUser.id, slug, display_name, custom_points_name, primary_color, community_description, 'platinum', new Date().toISOString()]
         );
       } else {
-        const { error: settingsErr } = await supabase.from('creator_settings').insert({ creator_id: newUser.id, slug, display_name, custom_points_name, primary_color, community_description, is_active: true, plan: 'free', created_at: new Date().toISOString() });
+        const { error: settingsErr } = await supabase.from('creator_settings').insert({ creator_id: newUser.id, slug, display_name, custom_points_name, primary_color, community_description, is_active: true, plan: 'platinum', created_at: new Date().toISOString() });
         if (settingsErr) throw settingsErr;
       }
     } catch (settingsErr) {
@@ -27425,6 +27425,19 @@ setInterval(() => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`HYPERFLEX server running on port ${PORT}`);
+
+  // Upgrade all accounts to Premium — monetization now via Polymarket referral fees
+  setTimeout(async () => {
+    try {
+      if (pool) {
+        const result = await dbQuery("UPDATE creator_settings SET plan = 'platinum' WHERE plan != 'platinum'", []);
+        console.log('[boot] All accounts upgraded to Premium (Polymarket referral model)');
+      } else {
+        await supabase.from('creator_settings').update({ plan: 'platinum' }).neq('plan', 'platinum');
+        console.log('[boot] All accounts upgraded to Premium (Polymarket referral model)');
+      }
+    } catch (e) { console.warn('[boot] Plan upgrade:', e.message); }
+  }, 2000);
 
   // Pre-warm critical data caches on startup (non-blocking)
   setTimeout(async () => {
