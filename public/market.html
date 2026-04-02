@@ -310,7 +310,7 @@ canvas{display:block;width:100%!important}
 
         <button class="trade-cta buy-yes" id="tradeCta" onclick="executeTrade()">Buy Yes</button>
         <div id="tradeStatus" style="display:none;font-family:var(--mono);font-size:11px;text-align:center;padding:6px 0"></div>
-        <div class="trade-disclaimer">Click "Enable Trading" to connect to Polymarket</div>
+        <div class="trade-disclaimer">Click "Connect Wallet" to connect to Polymarket</div>
       </div>
 
       <div class="mkt-poly-link">
@@ -776,7 +776,7 @@ function updateCtaButton() {
   cta.className = 'trade-cta ' + (_tradeSide === 'yes' ? 'buy-yes' : 'buy-no');
 }
 
-// ── Enable Trading (derive CLOB API keys via MetaMask EIP-712) ───────────────
+// ── Connect Wallet (derive CLOB API keys via MetaMask EIP-712) ───────────────
 async function enableTrading() {
   if (!window.ethereum) {
     showTradeStatus('Install MetaMask to trade', 'error');
@@ -900,7 +900,7 @@ function updateTradingUI() {
 }
 
 async function executeTrade() {
-  // Check if trading is enabled — if not, run Enable Trading flow
+  // Check if trading is enabled — if not, run Connect Wallet flow
   if (!isTradingEnabled()) {
     var enabled = await enableTrading();
     if (!enabled) return;
@@ -1016,7 +1016,7 @@ async function executeTrade() {
         localStorage.removeItem('poly_api_secret');
         localStorage.removeItem('poly_api_passphrase');
         updateTradingUI();
-        showTradeStatus('API key expired \u2014 click Enable Trading to reconnect', 'error');
+        showTradeStatus('API key expired \u2014 click Connect Wallet to reconnect', 'error');
       } else {
         showTradeStatus(data.error || data.message || 'Order rejected', 'error');
       }
