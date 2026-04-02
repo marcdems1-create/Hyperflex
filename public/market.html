@@ -980,20 +980,36 @@ async function executeTrade() {
     var hmacSignature = btoa(String.fromCharCode.apply(null, new Uint8Array(sigBuf)));
 
     // Direct browser → CLOB (user's IP, avoids server geo-block)
-    var res = await fetch('https://clob.polymarket.com/order', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'POLY_API_KEY': apiKey,
-        'POLY_PASSPHRASE': apiPassphrase,
-        'POLY_TIMESTAMP': ts,
-        'POLY_SIGNATURE': hmacSignature
-      },
-      body: orderBody
-    });
+    // Try direct first; fall back to server proxy if CORS blocks
+    var clobHeaders = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'POLY_API_KEY': apiKey,
+      'POLY_PASSPHRASE': apiPassphrase,
+      'POLY_TIMESTAMP': ts,
+      'POLY_SIGNATURE': hmacSignature
+    };
 
-    var data = await res.json().catch(function() { return {}; });
+    var res, data, usedProxy = false;
+    try {
+      res = await fetch('https://clob.polymarket.com/order', {
+        method: 'POST',
+        headers: clobHeaders,
+        body: orderBody
+      });
+      data = await res.json().catch(function() { return {}; });
+    } catch (corsErr) {
+      // CORS blocked — fall back to server proxy
+      console.log('[trade] Direct CLOB blocked by CORS, falling back to server proxy');
+      usedProxy = true;
+      res = await fetch('/api/polymarket/clob-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ token_id: tokenId, side: clobSide, size: shares.toFixed(4), price: clobPrice, api_key: apiKey, api_secret: apiSecret, api_passphrase: apiPassphrase })
+      });
+      data = await res.json().catch(function() { return {}; });
+    }
+
     if (!res.ok) {
       if (res.status === 400 && (JSON.stringify(data)).toLowerCase().includes('api')) {
         localStorage.removeItem('poly_api_key');
