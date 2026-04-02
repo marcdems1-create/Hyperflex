@@ -424,7 +424,7 @@ function renderMarket() {
   document.getElementById('tradeTitle').textContent = (m.question || '').substring(0, 40);
   // Use event slug for Polymarket link (market slugs 404 on polymarket.com)
   var eventSlug = m._eventSlug || (m.events && m.events[0] && m.events[0].slug) || slug;
-  document.getElementById('polyLink').href = 'https://polymarket.com/event/' + eventSlug;
+  document.getElementById('polyLink').href = polyRef('https://polymarket.com/event/' + eventSlug);
 
   updateTradeCalc();
   renderOutcomes(m);
@@ -568,7 +568,7 @@ async function loadTopHolders(m) {
       if (!list.length) return '<div style="font-family:var(--mono);font-size:11px;color:var(--dim)">No data</div>';
       return list.slice(0, limit).map(function(h) {
         var display = h.name ? escH(h.name) : truncAddr(h.address);
-        var link = h.address ? 'https://polymarket.com/profile/' + encodeURIComponent(h.address) : '#';
+        var link = h.address ? polyRef('https://polymarket.com/profile/' + encodeURIComponent(h.address)) : '#';
         return '<div class="holder-row">' +
           '<a href="' + escH(link) + '" target="_blank" rel="noopener">' + display + '</a>' +
           '<span class="holder-shares">' + fmtNum(h.shares) + '</span>' +

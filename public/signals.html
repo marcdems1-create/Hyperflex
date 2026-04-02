@@ -158,6 +158,16 @@ a{color:var(--gold);text-decoration:none} a:hover{text-decoration:underline}
   <div class="s-stat"><div class="s-stat-label">Updated</div><div class="s-stat-val" id="stUpdated">--</div><div class="s-stat-sub"><a href="/accuracy" style="color:var(--gold);font-size:9px">Track Record &rarr;</a></div></div>
 </div>
 
+<!-- REWARDS CTA BANNER -->
+<div class="s-container" style="padding-bottom:0;margin-bottom:-8px">
+  <a href="/rewards" style="display:flex;align-items:center;gap:10px;padding:10px 16px;background:linear-gradient(90deg,rgba(201,146,13,0.08),rgba(201,146,13,0.02));border:1px solid rgba(201,146,13,0.15);border-radius:10px;text-decoration:none;transition:border-color 0.2s" onmouseover="this.style.borderColor='rgba(201,146,13,0.4)'" onmouseout="this.style.borderColor='rgba(201,146,13,0.15)'">
+    <span style="font-size:18px">&#x1F4B0;</span>
+    <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--gold)">Earn USDC on every trade</span>
+    <span style="font-family:var(--mono);font-size:11px;color:var(--dim)">Use signals to find alpha, trade on Polymarket, earn rewards</span>
+    <span style="margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--gold);white-space:nowrap">Learn more &rarr;</span>
+  </a>
+</div>
+
 <!-- MAIN LAYOUT -->
 <div class="s-container">
 <div class="s-layout">
@@ -286,7 +296,7 @@ function renderSignals() {
     var typeLabels = {whale_cluster:'WHALE',momentum:'MOMENTUM',new_entry:'NEW ENTRY',arbitrage:'ARB',volume_surge:'VOLUME'};
     var plain = translateSide(s.market, s.side);
     var flag = regionFlag(s.market);
-    var url = s.url && s.url.startsWith('https://polymarket.com') ? s.url : 'https://polymarket.com';
+    var url = polyRef(s.url && s.url.startsWith('https://polymarket.com') ? s.url : 'https://polymarket.com');
 
     // Build meta items
     var meta = [];
@@ -365,7 +375,7 @@ async function loadWhaleConsensus() {
       // Fallback: build from signals
       var mktMap = {};
       _signals.forEach(function(s) {
-        if (!mktMap[s.market]) mktMap[s.market] = {market:s.market,whale_count:s.whale_count||0,capital:s.capital||0,side:s.side||'YES',url:s.url||'https://polymarket.com'};
+        if (!mktMap[s.market]) mktMap[s.market] = {market:s.market,whale_count:s.whale_count||0,capital:s.capital||0,side:s.side||'YES',url:polyRef(s.url||'https://polymarket.com')};
       });
       picks = Object.values(mktMap).sort(function(a,b){return b.whale_count-a.whale_count}).slice(0,12);
     }

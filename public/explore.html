@@ -978,7 +978,7 @@ nav {
         if (trader.length > 14) trader = trader.substring(0, 12) + '..';
         var market = (t.market || 'Unknown');
         if (market.length > 40) market = market.substring(0, 37) + '...';
-        return '<a class="lf-item" href="' + (t.url || 'https://polymarket.com') + '" target="_blank" rel="noopener">' +
+        return '<a class="lf-item" href="' + polyRef(t.url || 'https://polymarket.com') + '" target="_blank" rel="noopener">' +
           '<span style="font-family:\'Space Mono\',monospace;font-size:11px;color:var(--dim)">' + whalePrefix + trader + '</span>' +
           '<span class="lf-size">' + sizeStr + '</span>' +
           '<span class="lf-side ' + sideClass + '">' + sideUp + '</span>' +
@@ -1073,6 +1073,16 @@ nav {
     </div>
     <a href="/creator/signup" class="cta-btn">Get started free →</a>
   </div>
+</div>
+
+<!-- REWARDS CTA BANNER -->
+<div style="max-width:1200px;margin:0 auto;padding:0 40px">
+  <a href="/rewards" style="display:flex;align-items:center;gap:10px;padding:10px 16px;margin-bottom:12px;background:linear-gradient(90deg,rgba(201,146,13,0.08),rgba(201,146,13,0.02));border:1px solid rgba(201,146,13,0.15);border-radius:10px;text-decoration:none;transition:border-color 0.2s" onmouseover="this.style.borderColor='rgba(201,146,13,0.4)'" onmouseout="this.style.borderColor='rgba(201,146,13,0.15)'">
+    <span style="font-size:18px">&#x1F4B0;</span>
+    <span style="font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:#c9920d">Earn USDC on every trade</span>
+    <span style="font-family:'Space Mono',monospace;font-size:11px;color:#7a7870">Trade through HYPERFLEX and get rewarded weekly</span>
+    <span style="margin-left:auto;font-family:'Space Mono',monospace;font-size:11px;color:#c9920d;white-space:nowrap">Learn more &rarr;</span>
+  </a>
 </div>
 
 <!-- ═══ COMMUNITY ACTIVITY — 2-COL LAYOUT ═══ -->
@@ -1401,7 +1411,7 @@ try { loadExploreInsights(); } catch(e) { console.warn('[explore] insights faile
       var sideColor = sideUp === 'YES' ? '#22c55e' : '#ef4444';
       var sideBg = sideUp === 'YES' ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)';
       var url = s.url && s.url.startsWith('https://polymarket.com') ? s.url : '#';
-      var tradeUrl = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(url) : url;
+      var tradeUrl = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(url) : polyRef(url);
       var meta = [];
       if (s.whale_count) meta.push(s.whale_count + ' whales');
       if (s.capital) meta.push(fmtC(s.capital));
@@ -1954,7 +1964,7 @@ function activityCard(a) {
     const sizeChange = (a.action === 'increased' || a.action === 'decreased') && a.old_size_display && a.new_size_display
       ? ` from ${a.old_size_display} → ${a.new_size_display}`
       : '';
-    const dest = a.url || 'https://polymarket.com';
+    const dest = polyRef(a.url || 'https://polymarket.com');
     const isExt = dest.startsWith('http');
     const _ctTrader = escHtml(a.trader_name || 'Whale');
     const _ctQuestion = escHtml(a.question || '');
@@ -2891,7 +2901,7 @@ function openWhaleCopyTrade(trader, market, side, size, marketUrl, proxyWallet) 
   document.getElementById('ect-size').textContent = fmtSize;
   document.getElementById('ect-amount').value = '';
   document.getElementById('ect-alert').checked = false;
-  document.getElementById('ect-cta').href = marketUrl || 'https://polymarket.com';
+  document.getElementById('ect-cta').href = polyRef(marketUrl || 'https://polymarket.com');
   modal.style.display = 'flex';
 }
 function closeExploreCopy() {

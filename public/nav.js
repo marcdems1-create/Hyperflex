@@ -25,6 +25,7 @@
   var links = [
     { href: '/brief', label: '\uD83E\uDDE0 AI Brief', gold: true },
     { href: '/explore', label: 'Explore' },
+    { href: '/rewards', label: '\uD83D\uDCB0 Rewards', gold: true },
     { href: '/nominate', label: '+ Nominate a Creator', gold: true },
     { href: '/crystal-ball', label: 'Crystal Ball' },
     { href: '/signals', label: 'Signals' },
@@ -69,6 +70,39 @@
   }
 
   // Dashboard link visibility already handled by isLoggedIn above
+})();
+
+// ── Polymarket referral tag — appends ?via=CODE to all outbound polymarket.com links ──
+// Revenue engine: 30% of trading fees from referred users
+(function() {
+  var REF_CODE = window.__POLY_REF || '';
+  // Fetch ref code from server config endpoint (fire-and-forget, cached in sessionStorage)
+  if (!REF_CODE) {
+    var cached = sessionStorage.getItem('hfx_poly_ref');
+    if (cached) {
+      REF_CODE = cached;
+      window.__POLY_REF = cached;
+    } else {
+      fetch('/api/config/ref').then(function(r) { return r.json(); }).then(function(d) {
+        if (d && d.ref) { REF_CODE = d.ref; window.__POLY_REF = d.ref; sessionStorage.setItem('hfx_poly_ref', d.ref); }
+      }).catch(function() {});
+    }
+  }
+  window.polyRef = function(url) {
+    if (!REF_CODE || typeof url !== 'string') return url;
+    if (!/^https?:\/\/polymarket\.com(\/|$|\?)/.test(url)) return url;
+    if (url.indexOf('via=') !== -1) return url;
+    return url + (url.indexOf('?') !== -1 ? '&' : '?') + 'via=' + REF_CODE;
+  };
+  // Click interceptor — tag any <a href="polymarket.com/..."> on the page
+  document.addEventListener('click', function(e) {
+    var a = e.target.closest ? e.target.closest('a[href]') : null;
+    if (!a) return;
+    var href = a.getAttribute('href') || '';
+    if (/^https?:\/\/polymarket\.com(\/|$|\?)/.test(href) && href.indexOf('via=') === -1 && REF_CODE) {
+      a.setAttribute('href', href + (href.indexOf('?') !== -1 ? '&' : '?') + 'via=' + REF_CODE);
+    }
+  }, true);
 })();
 
 // Global helper: convert Polymarket URL to our market page URL

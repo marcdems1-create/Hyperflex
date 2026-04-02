@@ -511,163 +511,7 @@ section { position: relative; z-index: 1; }
 }
 .pv-badge.live { background: rgba(45,155,95,0.12); color: var(--green); }
 
-/* ── PRICING ── */
-.pricing {
-  padding: 100px 40px;
-  max-width: 1100px;
-  margin: 0 auto;
-}
-.pricing-title {
-  font-size: clamp(28px, 4vw, 44px);
-  font-weight: 800;
-  letter-spacing: -0.025em;
-  color: var(--text);
-  margin-bottom: 48px;
-}
-.pricing-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
-}
-.p-card {
-  background: var(--cream);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 32px;
-  display: flex;
-  flex-direction: column;
-  position: relative;
-}
-.p-card.pro {
-  background: linear-gradient(var(--cream), var(--cream)) padding-box,
-              linear-gradient(145deg, rgba(201,146,13,0.5) 0%, rgba(201,146,13,0.12) 55%, transparent 100%) border-box;
-  border: 1px solid transparent;
-}
-.p-card.premium {
-  background: linear-gradient(160deg, #1e1c15 0%, #1a1812 100%) padding-box,
-              linear-gradient(145deg, rgba(255,220,100,0.9) 0%, rgba(201,146,13,0.6) 40%, rgba(140,100,10,0.3) 100%) border-box;
-  border: 1px solid transparent;
-  box-shadow: 0 0 40px rgba(201,146,13,0.08), 0 8px 32px rgba(0,0,0,0.4);
-}
-.p-popular {
-  position: absolute;
-  top: -12px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  background: var(--gold);
-  color: var(--ink);
-  padding: 4px 12px;
-  border-radius: 20px;
-  white-space: nowrap;
-}
-.p-popular-premium {
-  position: absolute;
-  top: -12px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  background: linear-gradient(135deg, #ffe57a, var(--gold));
-  color: var(--ink);
-  padding: 4px 14px;
-  border-radius: 20px;
-  white-space: nowrap;
-}
-.p-tier {
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  margin-bottom: 16px;
-}
-.p-tier.free { color: var(--dim); }
-.p-tier.pro { color: var(--gold); }
-.p-tier.premium-tier {
-  background: linear-gradient(90deg, #ffe57a, var(--gold-bright), #c9920d);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  letter-spacing: 0.18em;
-}
-.p-price {
-  font-size: 48px;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  line-height: 1;
-  color: var(--text);
-  margin-bottom: 4px;
-}
-.p-card.premium .p-price {
-  background: linear-gradient(90deg, #ffe57a, var(--gold-bright));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-.p-per {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--dim);
-  margin-bottom: 16px;
-}
-.p-desc {
-  font-size: 13px;
-  color: var(--dim);
-  line-height: 1.65;
-  margin-bottom: 24px;
-  min-height: 42px;
-}
-.p-divider { height: 1px; background: var(--border); margin-bottom: 22px; }
-.p-features {
-  list-style: none;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 28px;
-}
-.p-feat {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  font-size: 13px;
-  line-height: 1.35;
-  color: var(--text);
-}
-.p-check { font-size: 12px; flex-shrink: 0; margin-top: 1px; color: var(--green); }
-.btn-p {
-  width: 100%;
-  padding: 14px;
-  border-radius: 8px;
-  font-family: var(--sans);
-  font-weight: 700;
-  font-size: 14px;
-  text-align: center;
-  text-decoration: none;
-  display: block;
-  transition: all 0.2s;
-  cursor: pointer;
-  border: none;
-}
-.btn-p.free { background: transparent; border: 1px solid var(--border); color: var(--dim); }
-.btn-p.free:hover { border-color: var(--text); color: var(--text); }
-.btn-p.pro { background: var(--gold); color: var(--ink); }
-.btn-p.pro:hover { background: var(--gold-bright); transform: translateY(-1px); }
-.btn-p.platinum {
-  background: linear-gradient(135deg, #ffe57a, var(--gold-bright), var(--gold));
-  color: var(--ink);
-  box-shadow: 0 2px 20px rgba(201,146,13,0.35);
-  font-weight: 800;
-}
-.btn-p.platinum:hover { filter: brightness(1.1); transform: translateY(-2px); }
+/* ── PRICING (removed — platform is 100% free) ── */
 
 /* ── FOOTER ── */
 footer {
@@ -743,8 +587,7 @@ footer {
   .product-block { grid-template-columns: 1fr; gap: 40px; }
   .product-block.reverse .product-copy { order: 1; }
   .product-block.reverse .product-visual { order: 2; }
-  .pricing-grid { grid-template-columns: 1fr; }
-  .pricing, .product-section { padding-left: 20px; padding-right: 20px; }
+  .product-section { padding-left: 20px; padding-right: 20px; }
   .footer-top { flex-direction: column; }
 }
 @media (max-width: 640px) {
@@ -1089,7 +932,7 @@ function openKelly(question, side, marketPct, whalePct, url, whaleCount, capital
     edgeEl.style.border = '1px solid rgba(239,68,68,0.3)';
     edgeEl.innerHTML = '<span style="color:#ef4444">\u26A0\uFE0F Edge may be gone</span> \u2014 market (' + marketPct + '%) already priced in whale consensus (' + whalePct + '%)';
   }
-  document.getElementById('kellyTradeLink').href = url || '#';
+  document.getElementById('kellyTradeLink').href = polyRef(url || '#');
   var saved = localStorage.getItem('hfx_bankroll');
   if (saved) document.getElementById('kellyBankroll').value = saved;
   calcKelly();
@@ -1300,67 +1143,10 @@ function logTradeIntent() {
 
 </section>
 
-<!-- PRICING -->
-<section class="pricing" id="pricing">
-  <div class="section-eyebrow" style="justify-content:flex-start">Pricing</div>
-  <h2 class="pricing-title">Start free. Upgrade for alpha.</h2>
-  <div class="pricing-grid">
-
-    <!-- FREE -->
-    <div class="p-card">
-      <div class="p-tier free">Free</div>
-      <div class="p-price">$0</div>
-      <div class="p-per">forever</div>
-      <div class="p-desc">Whale Watch (delayed), basic search, public profile.</div>
-      <div class="p-divider"></div>
-      <ul class="p-features">
-        <li class="p-feat"><span class="p-check">&#10003;</span> Whale Watch (15-min delay)</li>
-        <li class="p-feat"><span class="p-check">&#10003;</span> Basic market search</li>
-        <li class="p-feat"><span class="p-check">&#10003;</span> Public trader profile</li>
-        <li class="p-feat"><span class="p-check">&#10003;</span> Leaderboard access</li>
-      </ul>
-      <a href="/creator/login#signup" class="btn-p free">Get started free &rarr;</a>
-    </div>
-
-    <!-- PRO -->
-    <div class="p-card pro" style="position:relative">
-      <div class="p-popular">Most Popular</div>
-      <div class="p-tier pro">Pro</div>
-      <div class="p-price">$29</div>
-      <div class="p-per">per month</div>
-      <div class="p-desc">Real-time signals, screener, AI analysis, full trade history.</div>
-      <div class="p-divider"></div>
-      <ul class="p-features">
-        <li class="p-feat"><span class="p-check">&#10003;</span> Everything in Free</li>
-        <li class="p-feat"><span class="p-check">&#10003;</span> <strong>Real-time</strong> whale alerts</li>
-        <li class="p-feat"><span class="p-check">&#10003;</span> Signal feed + screener</li>
-        <li class="p-feat"><span class="p-check">&#10003;</span> AI market analysis</li>
-        <li class="p-feat"><span class="p-check">&#10003;</span> Full trade history</li>
-        <li class="p-feat"><span class="p-check">&#10003;</span> Daily whale briefing email</li>
-      </ul>
-      <a href="/creator/login#signup" class="btn-p pro">Start Pro &rarr;</a>
-    </div>
-
-    <!-- PREMIUM -->
-    <div class="p-card premium" style="position:relative">
-      <div class="p-popular-premium">Full Access</div>
-      <div class="p-tier premium-tier">Premium</div>
-      <div class="p-price">$99</div>
-      <div class="p-per">per month</div>
-      <div class="p-desc">Copy bot, whale index, backtester, API access, priority alerts.</div>
-      <div class="p-divider"></div>
-      <ul class="p-features">
-        <li class="p-feat"><span class="p-check">&#10003;</span> Everything in Pro</li>
-        <li class="p-feat"><span class="p-check">&#10003;</span> <strong>Copy bot</strong> — auto-mirror whale trades</li>
-        <li class="p-feat"><span class="p-check">&#10003;</span> Whale Index aggregate tracker</li>
-        <li class="p-feat"><span class="p-check">&#10003;</span> Backtester — test any strategy</li>
-        <li class="p-feat"><span class="p-check">&#10003;</span> Full API access</li>
-        <li class="p-feat"><span class="p-check">&#10003;</span> Priority alerts + Telegram bot</li>
-      </ul>
-      <a href="/creator/login#signup" class="btn-p platinum">Get Premium &rarr;</a>
-    </div>
-
-  </div>
+<!-- PRICING — 100% FREE -->
+<section class="pricing-section" id="pricing" style="text-align:center;padding:60px 20px">
+  <h2 style="font-family:'Syne',sans-serif;font-size:32px;color:#e8e4d9;margin-bottom:12px">100% Free. No Limits.</h2>
+  <p style="font-family:'Space Mono',monospace;font-size:14px;color:#7a7870;max-width:500px;margin:0 auto">Every feature. Every signal. Every tool. Completely free — no credit card, no catch.</p>
 </section>
 
 <!-- CREATOR CTA -->

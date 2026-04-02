@@ -586,7 +586,7 @@ function renderCards() {
       }
     }
 
-    var safeUrl = m.url && m.url.startsWith('https://polymarket.com') ? m.url : (m.slug ? 'https://polymarket.com/event/' + m.slug : 'https://polymarket.com');
+    var safeUrl = polyRef(m.url && m.url.startsWith('https://polymarket.com') ? m.url : (m.slug ? 'https://polymarket.com/event/' + m.slug : 'https://polymarket.com'));
     var expiryStr = m.days_until_expiry != null ? (m.days_until_expiry === 0 ? 'Today' : m.days_until_expiry + 'd left') : '';
 
     return '<div class="story-card' + highEdge + tintClass + '">' +
@@ -641,7 +641,7 @@ function loadMore() {
 }
 
 function renderLaneCard(m, signalHtml) {
-  var safeUrl = m.url && m.url.startsWith('https://polymarket.com') ? m.url : (m.slug ? 'https://polymarket.com/event/' + m.slug : 'https://polymarket.com');
+  var safeUrl = polyRef(m.url && m.url.startsWith('https://polymarket.com') ? m.url : (m.slug ? 'https://polymarket.com/event/' + m.slug : 'https://polymarket.com'));
   var yesPct = m.yes_price != null ? Math.round(m.yes_price * 100) : null;
   var roiLine = '';
   if (m.trade) {

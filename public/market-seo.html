@@ -645,7 +645,7 @@ function renderMarket(d) {
   document.getElementById('roiPct').textContent = 'ROI: ' + roi + '%';
 
   // CTAs
-  document.getElementById('ctaPoly').href = d.polymarket_url || ('https://polymarket.com/event/' + encodeURIComponent(SLUG));
+  document.getElementById('ctaPoly').href = polyRef(d.polymarket_url || ('https://polymarket.com/event/' + encodeURIComponent(SLUG)));
 
   // Compare section
   document.getElementById('polyYes').textContent = yesP + '%';

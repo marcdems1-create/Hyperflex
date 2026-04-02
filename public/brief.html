@@ -354,7 +354,7 @@ async function loadBrief() {
         var diff = cp - sp;
         var color = diff >= 0 ? 'var(--green)' : 'var(--red)';
         var sign = diff >= 0 ? '+' : '';
-        var link = m.url && m.url.startsWith('https://') && m.url !== 'https://polymarket.com' ? m.url : '';
+        var link = m.url && m.url.startsWith('https://') && m.url !== 'https://polymarket.com' ? polyRef(m.url) : '';
         var qHtml = link
           ? '<a href="' + escAttr(link) + '" target="_blank" rel="noopener" class="mover-q" style="color:var(--text);text-decoration:none">' + escHtml((m.question||'').substring(0,60)) + ' <span style="font-size:11px;color:var(--gold)">&rarr;</span></a>'
           : '<div class="mover-q">' + escHtml((m.question||'').substring(0,60)) + '</div>';

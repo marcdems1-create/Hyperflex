@@ -2901,7 +2901,7 @@ body.nav-open .sidebar-backdrop {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.9.0/dist/ethers.umd.min.js"></script>
 </head>
-<body>
+<body class="plan-premium">
 <div class="layout">
 
   <!-- Sidebar -->
@@ -2922,7 +2922,7 @@ body.nav-open .sidebar-backdrop {
         <div class="community-url" id="sidebarCommunityUrl"></div>
         <button class="sidebar-copy-btn" onclick="copyLink()" title="Copy link">📋</button>
       </div>
-      <div class="plan-pill platinum" id="sidebarPlanPill" onclick="handlePlanPillClick()" title="View plans">✦ Premium</div>
+      <!-- Plan pills removed — platform is free for everyone -->
     </div>
 
     <nav class="sidebar-nav">
@@ -2976,14 +2976,14 @@ body.nav-open .sidebar-backdrop {
         <a class="nav-item" onclick="showTab('branding')">
           <span class="nav-icon">🎨</span><span class="nav-label">Branding</span>
         </a>
-        <a class="nav-item" id="ideasNavItem" onclick="showTab('ideas')" style="display:none">
+        <a class="nav-item" id="ideasNavItem" onclick="showTab('ideas')">
           <span class="nav-icon">💡</span><span class="nav-label">Market Ideas</span>
           <span class="nav-badge" style="background:var(--gold);color:#000;font-size:10px;padding:1px 5px">AI</span>
         </a>
         <a class="nav-item" onclick="showTab('share')">
           <span class="nav-icon">📣</span><span class="nav-label">Share & Grow</span>
         </a>
-        <a class="nav-item" id="flexbotNavItem" onclick="showTab('flexbot')" style="display:none">
+        <a class="nav-item" id="flexbotNavItem" onclick="showTab('flexbot')">
           <span class="nav-icon">🤖</span><span class="nav-label">FLEX BOT</span>
           <span class="nav-badge" style="background:var(--gold);color:#fff;font-size:10px;padding:1px 5px">AI</span>
         </a>
@@ -2998,12 +2998,7 @@ body.nav-open .sidebar-backdrop {
     </nav>
 
     <div class="sidebar-footer">
-      <button class="btn-upgrade" onclick="showUpgrade()" style="display:none">⚡ Upgrade to Pro</button><!-- BETA: hidden during free premium -->
-      <div id="trial-btn-wrap" style="display:none;margin-bottom:8px;">
-        <button onclick="startTrial()" style="width:100%;background:rgba(201,146,13,0.12);border:1px solid rgba(201,146,13,0.35);color:#c9920d;padding:10px;border-radius:8px;font-size:12px;font-family:'Space Mono',monospace;cursor:pointer;font-weight:700;transition:all 0.2s;">
-          🎁 Try Pro free for 7 days
-        </button>
-      </div>
+      <!-- Upgrade + trial buttons removed — platform is free -->
       <button class="signout-btn" onclick="signOut()">← Sign out</button>
     </div>
   </aside>
@@ -3042,12 +3037,7 @@ body.nav-open .sidebar-backdrop {
 
     <div class="content">
 
-      <!-- Plan change notice — shown when a Stripe plan change is pending -->
-      <div class="plan-notice" id="planNotice" style="display:none">
-        <div class="plan-notice-icon">ℹ️</div>
-        <div class="plan-notice-text" id="planNoticeText"></div>
-        <button class="plan-notice-dismiss" onclick="document.getElementById('planNotice').style.display='none'" title="Dismiss">✕</button>
-      </div>
+      <!-- Plan change notice removed — platform is free -->
 
       <!-- Overview Tab -->
       <div id="tab-overview" style="display:none">
@@ -3255,14 +3245,7 @@ body.nav-open .sidebar-backdrop {
 
       <!-- Markets Tab -->
       <div id="tab-markets" style="display:none">
-        <!-- Free plan limit banner — shown when at/near 5-market cap -->
-        <div id="marketLimitBanner" style="display:none;margin-bottom:16px;background:rgba(201,146,13,.1);border:1px solid rgba(201,146,13,.35);border-radius:12px;padding:14px 18px;display:none;align-items:center;gap:14px;flex-wrap:wrap">
-          <div style="flex:1;min-width:180px">
-            <div style="font-size:13px;font-weight:800;color:#f0ede8;margin-bottom:3px" id="marketLimitTitle">You're at your market limit</div>
-            <div style="font-size:12px;color:rgba(240,237,232,.6)" id="marketLimitSub">Free plan allows 5 active markets. Upgrade to publish unlimited markets.</div>
-          </div>
-          <button onclick="handlePlanPillClick()" style="background:#c9920d;color:#141412;border:none;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap;font-family:inherit">Upgrade to Pro →</button>
-        </div>
+        <!-- Free plan limit banner removed — no market limits -->
         <div class="section">
           <div style="margin-bottom:14px">
             <input type="search" id="dashMktSearchInput" placeholder="🔍 Search your markets…" oninput="onDashMarketSearch(this.value)" style="width:100%;box-sizing:border-box;padding:10px 14px;border-radius:10px;border:1.5px solid #2a2a27;background:#1c1c19;color:#e8e3d5;font-size:14px;font-family:inherit;outline:none" />
@@ -3486,10 +3469,7 @@ body.nav-open .sidebar-backdrop {
               </table>
             </div>
 
-            <!-- Pro gate for email column -->
-            <div id="membersEmailGate" style="display:none;padding:16px 20px;border-top:1px solid var(--border);background:rgba(201,146,13,0.04)">
-              <span style="font-size:12px;font-family:var(--mono);color:var(--dim)">🔒 Member email addresses are visible on <strong style="color:var(--gold)">Pro</strong> and above — <a href="#" onclick="showUpgrade()" style="color:var(--gold);text-decoration:none">upgrade to unlock →</a></span>
-            </div>
+            <!-- Email gate removed — platform is free -->
           </div>
         </div>
       </div>
@@ -3525,11 +3505,7 @@ body.nav-open .sidebar-backdrop {
             </div>
           </div>
           <div class="gamification-panel" id="powerPredictorPanel">
-            <div class="gate-overlay" id="powerPredictorGate" style="display:none">
-              <strong>Pro Feature</strong>
-              <span>Spotlight your weekly top predictors and drive competition</span>
-              <button class="btn-upgrade-sm" onclick="showUpgrade()">Upgrade to Pro →</button>
-            </div>
+            <!-- Power predictor gate removed — platform is free -->
             <div id="powerPredictorList"></div>
           </div>
         </div>
@@ -3543,11 +3519,7 @@ body.nav-open .sidebar-backdrop {
             </div>
           </div>
           <div class="gamification-panel" id="innerCirclePanel">
-            <div class="gate-overlay" id="innerCircleGate" style="display:none">
-              <strong>Premium Feature</strong>
-              <span>Identify your power users and offer them exclusive access</span>
-              <button class="btn-upgrade-sm" onclick="showUpgrade()">Upgrade to Premium →</button>
-            </div>
+            <!-- Inner circle gate removed — platform is free -->
             <div id="innerCircleList"></div>
           </div>
         </div>
@@ -3857,15 +3829,7 @@ body.nav-open .sidebar-backdrop {
       <!-- ═══════════════════════════════════ ANALYTICS TAB ═══════════════════════════ -->
       <div id="tab-analytics" style="display:none">
 
-        <!-- Free plan gate -->
-        <div id="analyticsGate" style="display:none" class="section">
-          <div class="plan-gate">
-            <div class="plan-gate-icon">📈</div>
-            <div class="plan-gate-title">Analytics Dashboard</div>
-            <div class="plan-gate-sub">Upgrade to Pro or Premium to see how your community is performing — top markets, trade activity, and more.</div>
-            <button class="btn-primary" onclick="showTab('settings')">Upgrade Plan</button>
-          </div>
-        </div>
+        <!-- Analytics gate removed — platform is free -->
 
         <!-- Pro + Premium analytics -->
         <div id="analyticsContent">
@@ -4122,23 +4086,7 @@ body.nav-open .sidebar-backdrop {
             </div>
           </div>
 
-          <!-- Premium gate for economy health (shown to Pro only) -->
-          <div id="analyticsEconGate" style="display:none" class="section">
-            <div class="plan-gate" style="padding:28px 24px">
-              <div class="plan-gate-title" style="font-size:14px">⚡ Economy Health</div>
-              <div class="plan-gate-sub" style="margin-bottom:12px">Upgrade to Premium for deeper economy insights — points in circulation, avg member balance, and refill history.</div>
-              <button class="btn-secondary" onclick="showTab('settings')" style="font-size:13px">Upgrade to Premium</button>
-            </div>
-          </div>
-
-          <!-- Free gate for all economy + referral analytics -->
-          <div id="analyticsAllGate" style="display:none" class="section">
-            <div class="plan-gate" style="padding:28px 24px">
-              <div class="plan-gate-title" style="font-size:14px">Economy & Referral Analytics</div>
-              <div class="plan-gate-sub" style="margin-bottom:12px">Upgrade to Pro or Premium to track your referral performance and community economy.</div>
-              <button class="btn-primary" onclick="showTab('settings')">Upgrade Plan</button>
-            </div>
-          </div>
+          <!-- Economy/referral analytics gates removed — platform is free -->
 
           <div id="platformAnalyticsSection" style="margin-bottom:20px">
             <div class="section" style="margin-bottom:0">
@@ -4232,15 +4180,7 @@ body.nav-open .sidebar-backdrop {
       <!-- ══════════════════════════════════ SEASONS TAB ══════════════════════════════ -->
       <div id="tab-seasons" style="display:none">
 
-        <!-- Pro gate -->
-        <div id="seasonsGate" style="display:none" class="section">
-          <div style="text-align:center;padding:40px 20px">
-            <div style="font-size:32px;margin-bottom:12px">🏆</div>
-            <div style="font-size:17px;font-weight:800;margin-bottom:8px">Seasons &amp; Tournaments</div>
-            <div style="font-size:13px;color:var(--muted);max-width:360px;margin:0 auto 20px;line-height:1.6">Run a structured prediction contest — name it, set an end date, assign markets, and crown a champion. Upgrade to Pro to launch your first season.</div>
-            <button class="btn-primary" onclick="showUpgrade()">Upgrade to Pro →</button>
-          </div>
-        </div>
+        <!-- Seasons gate removed — platform is free -->
 
         <!-- Active content (Pro+) -->
         <div id="seasonsContent" style="display:none">
@@ -4529,15 +4469,7 @@ body.nav-open .sidebar-backdrop {
       <!-- ════════════════════════ MARKET IDEAS TAB ════════════════════════ -->
       <div id="tab-ideas" style="display:none">
 
-        <!-- Free plan gate -->
-        <div id="ideasGate" class="section" style="display:none">
-          <div class="plan-gate">
-            <div class="plan-gate-icon">💡</div>
-            <div class="plan-gate-title">AI Market Ideas</div>
-            <div class="plan-gate-sub">Upgrade to Pro or Premium to get AI-powered market ideas tailored to your community's niche — powered by live trends, upcoming events, and viral topics.</div>
-            <button class="btn-primary" onclick="showTab('settings')">Upgrade Plan</button>
-          </div>
-        </div>
+        <!-- Ideas gate removed — platform is free -->
 
         <!-- Ideas content (Pro/Premium) -->
         <div id="ideasContent" style="display:none">
@@ -5346,14 +5278,7 @@ body.nav-open .sidebar-backdrop {
               </div>
             </div>
 
-            <!-- Plan -->
-            <div>
-              <div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:10px">Plan</div>
-              <div style="display:flex;align-items:center;gap:12px">
-                <div class="plan-pill free" id="accountPlanPill" onclick="handlePlanPillClick()" style="cursor:pointer">Free</div>
-                <button onclick="handlePlanPillClick()" style="background:var(--gold);color:var(--ink);border:none;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">⚡ Upgrade to Pro</button>
-              </div>
-            </div>
+            <!-- Plan section removed — platform is free for everyone -->
 
             <!-- Change Password -->
             <div style="margin-top:28px">
@@ -5477,9 +5402,7 @@ body.nav-open .sidebar-backdrop {
       <div class="field" id="sponsorField">
         <label>Sponsored by <span style="font-weight:400;text-transform:none;font-size:11px;color:var(--dim)">(optional — brand name shown on card)</span></label>
         <input type="text" id="newSponsor" placeholder="e.g. Nike, Coinbase…" style="font-size:13px"/>
-        <div id="sponsorUpgradeHint" style="display:none;margin-top:6px;font-size:11px;font-family:var(--mono);color:var(--gold)">
-          ✦ Pro/Premium only — <a href="#" onclick="showUpgrade();return false;" style="color:var(--gold)">upgrade to charge brands for sponsored markets</a>
-        </div>
+        <!-- Sponsor upgrade hint removed — platform is free -->
       </div>
       <div class="field">
         <label>Resolution Sources <span style="font-weight:400;text-transform:none;font-size:11px">(min 3 required)</span></label>
@@ -5711,124 +5634,7 @@ body.nav-open .sidebar-backdrop {
   </div>
 </div>
 
-<!-- Upgrade Modal (Free / Pro / Platinum) -->
-<div class="modal-overlay" id="upgradeModal">
-  <div class="modal" style="max-width:900px">
-    <div class="modal-header" style="flex-direction:column;align-items:flex-start;gap:0;padding:28px 28px 20px;position:relative">
-      <div class="upgrade-header-badge">⚡ HYPERFLEX Plans</div>
-      <div class="upgrade-modal-title">Choose your plan</div>
-      <div class="upgrade-modal-sub">All plans include Flex Points and community leaderboard. Upgrade anytime.</div>
-      <button class="modal-close" onclick="closeUpgradeModal()" style="position:absolute;top:20px;right:20px">×</button>
-    </div>
-
-    <div class="modal-body" style="padding:0 28px 28px">
-
-      <div class="plan-grid">
-
-        <!-- FREE -->
-        <div class="plan-card">
-          <div class="plan-badge free">Free</div>
-          <div class="plan-price-row">
-            <span class="plan-price">$0</span>
-            <span class="plan-period">/month</span>
-          </div>
-          <div class="plan-desc">Get started and test prediction markets with your community.</div>
-          <div class="plan-divider"></div>
-          <ul class="plan-features">
-            <li class="plan-feature included"><span class="feature-check yes">✓</span> Up to 5 active markets</li>
-            <li class="plan-feature included"><span class="feature-check yes">✓</span> Community leaderboard</li>
-            <li class="plan-feature included"><span class="feature-check yes">✓</span> Basic analytics</li>
-            <li class="plan-feature included"><span class="feature-check yes">✓</span> Flex Points system</li>
-            <li class="plan-feature excluded"><span class="feature-check no">×</span> AI scanner (YouTube, Twitch, Reddit…)</li>
-            <li class="plan-feature excluded"><span class="feature-check no">×</span> Rewards system</li>
-            <li class="plan-feature excluded"><span class="feature-check no">×</span> Full analytics</li>
-            <li class="plan-feature excluded"><span class="feature-check no">×</span> Remove watermark</li>
-            <li class="plan-feature excluded"><span class="feature-check no">×</span> Custom domain</li>
-          </ul>
-          <div class="plan-cta">
-            <div class="btn-plan-free">Current Plan</div>
-          </div>
-        </div>
-
-        <!-- PRO -->
-        <div class="plan-card pro" style="position:relative">
-          <div class="plan-recommended">Most Popular</div>
-          <div class="plan-badge pro">Pro</div>
-          <div class="plan-price-row">
-            <span class="plan-price">$29</span>
-            <span class="plan-period">/month</span>
-          </div>
-          <div class="plan-desc">For serious creators growing an engaged prediction community.</div>
-          <div class="plan-divider"></div>
-          <ul class="plan-features">
-            <li class="plan-feature included"><span class="feature-check yes">✓</span> <strong>Unlimited</strong> active markets</li>
-            <li class="plan-feature included"><span class="feature-check yes">✓</span> Full analytics dashboard</li>
-            <li class="plan-feature included"><span class="feature-check yes">✓</span> Flex Points + Rewards system</li>
-            <li class="plan-feature included"><span class="feature-check yes">✓</span> AI scanner (YouTube, Twitch, Reddit, and more)</li>
-            <li class="plan-feature included"><span class="feature-check yes">✓</span> AI market generation &amp; resolution</li>
-            <li class="plan-feature included"><span class="feature-check yes">✓</span> Custom community branding</li>
-            <li class="plan-feature excluded"><span class="feature-check no">×</span> Remove watermark entirely</li>
-            <li class="plan-feature excluded"><span class="feature-check no">×</span> Custom domain</li>
-          </ul>
-          <div class="plan-cta">
-            <button class="btn-plan-pro" id="proCtaBtn" onclick="startCheckout('pro')">
-              Upgrade to Pro →
-            </button>
-          </div>
-        </div>
-
-        <!-- PREMIUM -->
-        <div class="plan-card platinum" style="position:relative">
-          <div class="plan-badge platinum">✦ Premium</div>
-          <div class="plan-price-row">
-            <span class="plan-price">$99</span>
-            <span class="plan-period">/month</span>
-          </div>
-          <div class="plan-desc">White-label solution for professional creators and brands.</div>
-          <div class="plan-divider"></div>
-          <ul class="plan-features">
-            <li class="plan-feature included"><span class="feature-check yes">✓</span> Everything in Pro</li>
-            <li class="plan-feature included"><span class="feature-check yes">✓</span> <strong>No watermark</strong> — fully white-label</li>
-            <li class="plan-feature included"><span class="feature-check yes">✓</span> Custom domain support</li>
-            <li class="plan-feature included"><span class="feature-check yes">✓</span> Dedicated support</li>
-            <li class="plan-feature included"><span class="feature-check yes">✓</span> Early access to new features</li>
-            <li class="plan-feature included"><span class="feature-check yes">✓</span> SLA uptime guarantee</li>
-            <li class="plan-feature included"><span class="feature-check yes">✓</span> Onboarding call</li>
-            <li class="plan-feature included"><span class="feature-check yes">✓</span> Volume pricing for large communities</li>
-            <li class="plan-feature included" style="opacity:0;pointer-events:none"><span class="feature-check"></span> &nbsp;</li>
-          </ul>
-          <div class="plan-cta">
-            <button class="btn-plan-platinum" id="platCtaBtn" onclick="startCheckout('platinum')">
-              Get Premium →
-            </button>
-          </div>
-        </div>
-
-      </div>
-
-      <!-- Waitlist form (shown after clicking any paid CTA) -->
-      <div class="waitlist-section" id="waitlistSection">
-        <div id="waitlistFormView">
-          <div class="waitlist-title" id="waitlistTitle">🚀 Be first in line when Pro launches</div>
-          <div class="waitlist-sub" id="waitlistSubText">We're putting the finishing touches on paid plans. Drop your email and we'll notify you the moment it's live — plus an early-bird discount.</div>
-          <div class="waitlist-row">
-            <input type="email" class="waitlist-input" id="waitlistEmail" placeholder="your@email.com" autocomplete="email"/>
-            <button class="btn-waitlist-submit" id="waitlistSubmitBtn" onclick="submitWaitlist()">
-              Notify Me →
-            </button>
-          </div>
-          <div class="waitlist-error" id="waitlistError"></div>
-        </div>
-        <div class="waitlist-success" id="waitlistSuccess">
-          <div class="waitlist-success-icon">🎉</div>
-          <div class="waitlist-success-title">You're on the list!</div>
-          <div class="waitlist-success-sub" id="waitlistSuccessSub">We'll email you the moment it goes live.<br/>Early-bird pricing locked in for waitlist members.</div>
-        </div>
-      </div>
-
-    </div>
-  </div>
-</div>
+<!-- Upgrade modal removed — platform is free for everyone -->
 
 <!-- AI Content Scanner Modal -->
 <div class="modal-overlay" id="youtubeModal">
@@ -6158,10 +5964,10 @@ function renderDashboard(data) {
   renderLeaderboard(leaderboard || [], 'overviewLeaderboard', 5, creator.custom_points_name, true);
   renderLeaderboard(leaderboard || [], 'fullLeaderboard', 20, creator.custom_points_name, true);
 
-  // Gamification: Power Predictor + Inner Circle
-  const planNow = creator.plan || 'free';
-  const isProPlan = planNow === 'pro' || planNow === 'platinum';
-  const isPremiumPlan = planNow === 'platinum';
+  // Gamification: Power Predictor + Inner Circle — all features free
+  const planNow = 'platinum'; // Platform is free — treat all as premium
+  const isProPlan = true;
+  const isPremiumPlan = true;
   renderPowerPredictor(data.power_predictor, planNow, creator.custom_points_name);
   renderInnerCircle(data.inner_circle, planNow, creator.custom_points_name);
 
@@ -6263,102 +6069,19 @@ function renderDashboard(data) {
   prefillBranding(creator);
 
   // ── Plan state ───────────────────────────────────────────
-  const plan = 'platinum'; // BETA: force all users to platinum — revert when billing goes live
-  window._creatorPlan = plan;  // expose for portfolio gates
+  // Platform is free for everyone — all features unlocked
+  const plan = 'platinum';
+  window._creatorPlan = plan;
 
-  // Apply plan class to body for CSS-driven premium UI
+  // Apply premium class to body for CSS-driven premium UI
   document.body.classList.remove('plan-free', 'plan-pro', 'plan-premium');
-  document.body.classList.add(plan === 'platinum' ? 'plan-premium' : 'plan-' + plan);
+  document.body.classList.add('plan-premium');
 
-  // Sidebar plan pill
-  const pill = document.getElementById('sidebarPlanPill');
-  if (pill) {
-    pill.className = 'plan-pill ' + (plan === 'platinum' ? 'platinum' : plan);
-    pill.textContent = plan === 'platinum' ? '✦ Premium' : plan === 'pro' ? '⚡ Pro' : 'Free';
-  }
-
-  // Show trial button only if: free plan AND trial has never been used (plan_trial_expires_at is null AND plan is still free)
-  const trialAlreadyUsed = !!(creator.plan_trial_expires_at);
-  updateUpgradeBtn(plan, trialAlreadyUsed);
-
-  // Free limit banner — show when free plan AND at/near 5-market cap
-  const limitBanner = document.getElementById('marketLimitBanner');
-  if (limitBanner && plan === 'free') {
-    const liveCount = (markets || []).filter(m => !m.resolved && !m.archived).length;
-    if (liveCount >= 4) { // show at 4/5 (one away) and 5/5 (at limit)
-      const atLimit = liveCount >= 5;
-      document.getElementById('marketLimitTitle').textContent = atLimit
-        ? `You've hit the 5-market limit on the Free plan.`
-        : `You're at ${liveCount}/5 markets on the Free plan.`;
-      document.getElementById('marketLimitSub').textContent = atLimit
-        ? 'Archive a market or upgrade to Pro to publish more.'
-        : 'One more slot remaining. Upgrade to Pro for unlimited markets.';
-      limitBanner.style.display = 'flex';
-    }
-  } else if (limitBanner) {
-    limitBanner.style.display = 'none';
-  }
-
-  // Plan change notice
-  const noticeEl  = document.getElementById('planNotice');
-  const noticeText = document.getElementById('planNoticeText');
-  if (noticeEl && creator.plan_scheduled_change && creator.plan_change_date) {
-    const changeDate = new Date(creator.plan_change_date);
-    const dateStr    = changeDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-    const changeTo   = creator.plan_scheduled_change;
-    const labelMap   = { pro: 'Pro', free: 'Free', platinum: 'Premium' };
-    const toLabel    = labelMap[changeTo] || changeTo;
-    if (changeTo === 'free') {
-      noticeText.innerHTML = `Your subscription <strong>cancels on ${dateStr}</strong>. You'll retain access to your current plan until then.`;
-    } else {
-      const currentLabel = labelMap[plan] || plan;
-      noticeText.innerHTML = `Your plan is scheduled to change from <strong>${currentLabel}</strong> to <strong>${toLabel}</strong> on <strong>${dateStr}</strong>. You'll retain current access until then.`;
-    }
-    noticeEl.style.display = 'flex';
-  } else if (noticeEl) {
-    noticeEl.style.display = 'none';
-  }
-
-  // Show FLEX BOT nav item for Premium only
-  const flexbotNav = document.getElementById('flexbotNavItem');
-  if (flexbotNav) flexbotNav.style.display = plan === 'platinum' ? 'flex' : 'none';
-
-  // Show Custom Domain panel for Premium only
+  // Show Custom Domain panel (available to everyone now)
   const cdSection = document.getElementById('customDomainSection');
   if (cdSection) {
-    cdSection.style.display = plan === 'platinum' ? 'block' : 'none';
-    if (plan === 'platinum') loadCdStatus();
-  }
-
-  // Show Market Ideas nav item for Pro + Premium
-  const ideasNav = document.getElementById('ideasNavItem');
-  if (ideasNav) ideasNav.style.display = (plan === 'pro' || plan === 'platinum') ? 'flex' : 'none';
-
-  // Mark current plan in upgrade modal cards
-  ['free','pro','platinum'].forEach(p => {
-    const ctaEl = p === 'free'
-      ? document.querySelector('.btn-plan-free')
-      : document.getElementById(p === 'pro' ? 'proCtaBtn' : 'platCtaBtn');
-    if (!ctaEl) return;
-    if (p === plan) {
-      ctaEl.textContent = '✓ Current Plan';
-      ctaEl.disabled = true;
-    } else if (p !== 'free') {
-      ctaEl.disabled = false;
-      ctaEl.textContent = p === 'pro' ? 'Upgrade to Pro →' : 'Get Premium →';
-    }
-  });
-
-  // Post-checkout success toast
-  if (window._showUpgradeSuccess) {
-    window._showUpgradeSuccess = false;
-    const tier = plan === 'platinum' ? 'Premium' : 'Pro';
-    showToast(`✦ Welcome to ${tier}! Your plan is now active.`, 6000);
-  }
-
-  // Pre-fill waitlist email with creator's account email (kept for fallback)
-  if (creator.email && document.getElementById('waitlistEmail')) {
-    document.getElementById('waitlistEmail').value = creator.email;
+    cdSection.style.display = 'block';
+    loadCdStatus();
   }
 
   // ── Smart Sidebar: adapt based on user type ──────────────────────────────
@@ -7008,7 +6731,7 @@ function toggleCommunityMembers() {
 let _membersData    = [];   // full roster from API
 let _membersFiltered = [];  // after search/sort
 let _membersPtsName  = 'Flex Points';
-let _membersPlan     = 'free';
+let _membersPlan     = 'platinum'; // Platform is free — treat all as premium
 
 async function loadMembers() {
   if (_membersData.length) { renderMembersTable(); return; } // cached
@@ -7021,7 +6744,7 @@ async function loadMembers() {
     _membersData    = data.members || [];
     _membersFiltered = [..._membersData];
     _membersPtsName  = data.pts_name || 'Flex Points';
-    _membersPlan     = data.plan || 'free';
+    _membersPlan     = 'platinum'; // Platform is free — treat all as premium
 
     // ROI summary
     const s = data.summary || {};
@@ -7033,10 +6756,7 @@ async function loadMembers() {
     document.getElementById('mbrStatValue').textContent   = '$' + (s.engagement_value || 0).toLocaleString();
     document.getElementById('membersRoiBar').style.display = 'block';
 
-    // Show email gate for free plan
-    if (_membersPlan === 'free') {
-      document.getElementById('membersEmailGate').style.display = 'block';
-    }
+    // Email gate removed — platform is free
 
     renderMembersTable();
   } catch (err) {
@@ -7201,15 +6921,8 @@ function renderLeaderboard(leaders, containerId, limit, pointsName, showReward) 
 }
 
 function renderPowerPredictor(data, plan, pointsName) {
-  const isPro = plan === 'pro' || plan === 'platinum';
-  const gate = document.getElementById('powerPredictorGate');
+  // No plan gate — platform is free
   const list = document.getElementById('powerPredictorList');
-  if (!isPro) {
-    gate.style.display = 'flex';
-    list.innerHTML = '';
-    return;
-  }
-  gate.style.display = 'none';
   if (!data || data.length === 0) {
     list.innerHTML = '<div class="gam-empty">No predictions settled this week yet — check back soon.</div>';
     return;
@@ -7226,15 +6939,8 @@ function renderPowerPredictor(data, plan, pointsName) {
 }
 
 function renderInnerCircle(data, plan, pointsName) {
-  const isPremium = plan === 'platinum';
-  const gate = document.getElementById('innerCircleGate');
+  // No plan gate — platform is free
   const list = document.getElementById('innerCircleList');
-  if (!isPremium) {
-    gate.style.display = 'flex';
-    list.innerHTML = '';
-    return;
-  }
-  gate.style.display = 'none';
   if (!data || data.length === 0) {
     list.innerHTML = `<div class="gam-empty">No members have reached 2,000 ${pointsName || 'Flex Points'} yet.<br>Keep your community active!</div>`;
     return;
@@ -7314,9 +7020,9 @@ function showTab(tab) {
   if (tab === 'ideas' && !ideasLoaded) loadMarketIdeas(false);
   if (tab === 'share') {
     loadCreatorReferralStats();
-    const plan = creatorData?.creator?.plan || 'free';
+    // Sponsor kit visible to all — platform is free
     const kitSection = document.getElementById('sponsorKitSection');
-    if (kitSection) kitSection.style.display = (plan === 'pro' || plan === 'platinum') ? '' : 'none';
+    if (kitSection) kitSection.style.display = '';
   }
   if (tab === 'resolve') loadDisputes();
   // Re-render markets from cache so tab is never stuck on "Loading…"
@@ -7366,15 +7072,8 @@ let editingSeasonId = null;
 
 async function loadSeasons() {
   seasonsLoaded = true;
-  const plan = creatorData?.creator?.plan || 'free';
-  const gate = document.getElementById('seasonsGate');
+  // All features free — no plan gate
   const content = document.getElementById('seasonsContent');
-  if (plan === 'free') {
-    if (gate) gate.style.display = '';
-    if (content) content.style.display = 'none';
-    return;
-  }
-  if (gate) gate.style.display = 'none';
   if (content) content.style.display = '';
 
   const token = localStorage.getItem('hf_creator_token');
@@ -7665,17 +7364,7 @@ function getOptionsFromBuilder() {
 }
 
 function openCreateModal() {
-  // Free plan gate: max 5 active markets
-  const plan = creatorData?.creator?.plan || 'free';
-  if (plan === 'free') {
-    const now = new Date();
-    const live = (communityMarkets || []).filter(m => !m.archived && !m.resolved && new Date(m.expiry_date) >= now).length;
-    if (live >= 5) {
-      showToast('Free plan allows up to 5 active markets. Upgrade to Pro for unlimited.', 'error');
-      setTimeout(() => showTab('settings'), 1200);
-      return;
-    }
-  }
+  // No market limits — platform is free
   const d = new Date();
   d.setDate(d.getDate() + 30);
   document.getElementById('newDate').value = _toDatetimeLocal(d);
@@ -7688,17 +7377,14 @@ function openCreateModal() {
   setMarketType('binary');
   document.getElementById('optionRows').innerHTML = '';
   clearQuestionSuggestions();
-  // Sponsor field: disabled + upgrade hint on free plan
-  const isFree = (creatorData?.creator?.plan || 'free') === 'free';
+  // Sponsor field — always enabled (platform is free)
   const sponsorInput = document.getElementById('newSponsor');
-  const sponsorHint  = document.getElementById('sponsorUpgradeHint');
   if (sponsorInput) {
     sponsorInput.value = '';
-    sponsorInput.disabled = isFree;
-    sponsorInput.placeholder = isFree ? 'Upgrade to Pro to add sponsors' : 'e.g. Nike, Coinbase…';
-    sponsorInput.style.opacity = isFree ? '0.4' : '1';
+    sponsorInput.disabled = false;
+    sponsorInput.placeholder = 'e.g. Nike, Coinbase…';
+    sponsorInput.style.opacity = '1';
   }
-  if (sponsorHint) sponsorHint.style.display = isFree ? 'block' : 'none';
   document.getElementById('createModal').classList.add('show');
 }
 function closeCreateModal() {
@@ -7882,20 +7568,7 @@ async function createMarket() {
       })
     });
     const data = await r.json();
-    if (r.status === 403 && data.upgrade_required) {
-      closeCreateModal();
-      showToast(`You've hit the ${data.limit}-market free limit. Upgrade to Pro for unlimited markets.`, 'error');
-      // Show the inline banner in the markets tab
-      const lb = document.getElementById('marketLimitBanner');
-      if (lb) {
-        document.getElementById('marketLimitTitle').textContent = `You've hit the ${data.limit}-market limit on the Free plan.`;
-        document.getElementById('marketLimitSub').textContent = 'Archive a market or upgrade to Pro to publish more.';
-        lb.style.display = 'flex';
-      }
-      showTab('markets');
-      setTimeout(() => showUpgrade(), 600);
-      return;
-    }
+    // Market limit gate removed — platform is free, no limits
     if (data.id || data.market) {
       closeCreateModal();
       showToast('Market published! 🎯', 'success');
@@ -8137,11 +7810,7 @@ document.getElementById('settingColor').addEventListener('input', function() {
 async function loadApiAccess() {
   const el = document.getElementById('apiAccessContent');
   if (!el) return;
-  // Check plan from the global plan variable
-  if (typeof plan !== 'undefined' && plan === 'free') {
-    el.innerHTML = '<div style="text-align:center;padding:20px"><div style="font-size:28px;margin-bottom:12px">🔒</div><div style="font-size:14px;color:var(--text);margin-bottom:8px">API access requires Pro or Premium</div><div style="font-size:12px;color:var(--dim);margin-bottom:16px">Get programmatic access to whale data, signals, and market intelligence.</div><div style="display:flex;gap:8px;justify-content:center"><a href="/api-docs" style="color:var(--gold);font-family:var(--mono);font-size:12px;text-decoration:none">View API docs →</a></div></div>';
-    return;
-  }
+  // API access gate removed — platform is free, all features unlocked
   try {
     const r = await fetch(API + '/api/user/api-key', { headers: { Authorization: 'Bearer ' + token } });
     const d = await r.json();
@@ -8642,13 +8311,9 @@ async function confirmDeleteAccount() {
 let ideasLoaded = false;
 
 async function loadMarketIdeas(force = false) {
-  const plan = creatorData?.creator?.plan || 'free';
-  const isPro = plan === 'pro' || plan === 'platinum';
-
-  // Gate check
-  document.getElementById('ideasGate').style.display    = isPro ? 'none'  : 'block';
-  document.getElementById('ideasContent').style.display = isPro ? 'block' : 'none';
-  if (!isPro) return;
+  // No plan gate — platform is free, all features unlocked
+  const ideasContentEl = document.getElementById('ideasContent');
+  if (ideasContentEl) ideasContentEl.style.display = 'block';
 
   if (ideasLoaded && !force) return;
 
@@ -9262,16 +8927,7 @@ async function loadAnalytics() {
       return;
     }
 
-    const plan = data.plan || 'free';
-
-    // Gate check — free users see upgrade gate; pro + platinum (beta override) pass through
-    const hasPaidPlan = plan === 'pro' || plan === 'platinum';
-    if (!hasPaidPlan) {
-      document.getElementById('analyticsGate').style.display = '';
-      document.getElementById('analyticsContent').style.display = 'none';
-      return;
-    }
-    document.getElementById('analyticsGate').style.display = 'none';
+    const plan = data.plan || 'platinum'; // Platform is free — treat all as premium
 
     // Store for toggle
     window._analyticsData = data;
@@ -9355,13 +9011,11 @@ async function loadAnalytics() {
         <div class="bar-track"><div class="bar-fill" style="width:${bkTotal ? Math.round((b.count / bkTotal) * 100) : 0}%;background:${b.color}"></div></div>
       </div>`).join('');
 
-    // Referral stats — Pro + Premium
-    const isPro = plan === 'pro' || plan === 'platinum';
-    const isPremium = plan === 'platinum';
-    document.getElementById('analyticsReferralSection').style.display  = isPro ? '' : 'none';
-    document.getElementById('analyticsEconHealthSection').style.display = isPremium ? '' : 'none';
-    document.getElementById('analyticsEconGate').style.display          = isPro && !isPremium ? '' : 'none';
-    document.getElementById('analyticsAllGate').style.display           = !isPro ? '' : 'none';
+    // All analytics sections visible — platform is free
+    const isPro = true;
+    const isPremium = true;
+    document.getElementById('analyticsReferralSection').style.display  = '';
+    document.getElementById('analyticsEconHealthSection').style.display = '';
 
     if (isPro) {
       const ref = data.referral_stats || {};
@@ -9916,8 +9570,7 @@ function copyTwitterWidgetUrl() {
   navigator.clipboard.writeText(el.value).then(() => showToast('Widget link copied — paste it in your tweet! 𝕏', 'success'));
 }
 async function downloadSponsorKit() {
-  const plan = creatorData?.creator?.plan || 'free';
-  if (plan === 'free') { showUpgrade(); return; }
+  // No plan gate — platform is free
   const btn = document.getElementById('downloadKitBtn');
   if (btn) { btn.textContent = '⏳ Generating…'; btn.disabled = true; }
   try {
@@ -9926,7 +9579,7 @@ async function downloadSponsorKit() {
     });
     if (!r.ok) {
       const d = await r.json().catch(() => ({}));
-      if (d.upgrade_required) { showUpgrade(); return; }
+      if (d.upgrade_required) { showToast(d.error || 'Failed to generate kit', 'error'); return; }
       showToast(d.error || 'Failed to generate kit', 'error');
       return;
     }
@@ -9984,107 +9637,16 @@ function copyEmbed() {
   copyText(embed);
 }
 
-// ── Upgrade / Stripe checkout ─────────────────────────────
-function handlePlanPillClick() {
-  // Premium users are already on the top tier — nothing to upgrade to
-  const plan = creatorData?.creator?.plan;
-  if (plan === 'platinum') return;
-  showUpgrade();
-}
-function showUpgrade() {
-  document.getElementById('upgradeModal').classList.add('show');
-}
-function closeUpgradeModal() {
-  document.getElementById('upgradeModal').classList.remove('show');
-}
-
-async function startCheckout(tier) {
-  const btnId = tier === 'platinum' ? 'platCtaBtn' : 'proCtaBtn';
-  const btn = document.getElementById(btnId);
-  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Redirecting…'; }
-  try {
-    const r = await fetch(API + '/api/creator/create-checkout-session', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-      body: JSON.stringify({ tier })
-    });
-    const data = await r.json();
-    if (!r.ok || !data.url) throw new Error(data.error || 'Failed to start checkout');
-    window.location.href = data.url;
-  } catch (err) {
-    alert('Could not start checkout: ' + err.message);
-    if (btn) { btn.disabled = false; btn.innerHTML = tier === 'platinum' ? 'Upgrade to Platinum →' : 'Upgrade to Pro →'; }
-  }
-}
-
-async function openBillingPortal() {
-  try {
-    const r = await fetch(API + '/api/creator/billing-portal', {
-      headers: { 'Authorization': 'Bearer ' + token }
-    });
-    const data = await r.json();
-    if (!r.ok || !data.url) throw new Error(data.error || 'Could not open billing portal');
-    window.location.href = data.url;
-  } catch (err) {
-    alert(err.message);
-  }
-}
-
-// ── Sidebar upgrade button — reflects current plan ────────
-function updateUpgradeBtn(plan, trialUsed) {
-  const btn = document.querySelector('.btn-upgrade');
-  const trialWrap = document.getElementById('trial-btn-wrap');
-  if (!btn) return;
-  if (plan === 'pro') {
-    btn.textContent = '⚡ Pro — Manage Billing';
-    btn.onclick = openBillingPortal;
-    if (trialWrap) trialWrap.style.display = 'none';
-  } else if (plan === 'platinum') {
-    btn.textContent = '✦ Premium — Manage Billing';
-    btn.style.background = '';
-    btn.style.borderColor = '';
-    btn.onclick = openBillingPortal;
-    if (trialWrap) trialWrap.style.display = 'none';
-  } else {
-    btn.textContent = '⚡ Upgrade to Pro';
-    btn.onclick = showUpgrade;
-    // Show trial button only if trial hasn't been used
-    if (trialWrap) trialWrap.style.display = trialUsed ? 'none' : 'block';
-  }
-}
-
-// ── Self-serve 7-day Pro trial ─────────────────────────────
-async function startTrial() {
-  const btn = document.querySelector('#trial-btn-wrap button');
-  if (btn) { btn.textContent = 'Starting trial...'; btn.disabled = true; }
-  try {
-    const r = await fetch(API + '/api/creator/start-trial', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + token }
-    });
-    const data = await r.json();
-    if (data.ok) {
-      showToast('🎉 7-day Pro trial started! Enjoy unlimited markets + AI scanner.', 'success');
-      setTimeout(() => init(), 800);
-    } else {
-      showToast(data.error || 'Could not start trial.', 'error');
-      if (btn) { btn.textContent = '🎁 Try Pro free for 7 days'; btn.disabled = false; }
-    }
-  } catch {
-    showToast('Network error. Try again.', 'error');
-    if (btn) { btn.textContent = '🎁 Try Pro free for 7 days'; btn.disabled = false; }
-  }
-}
-
-// ── Handle post-checkout redirect (?upgraded=1) ───────────
-(function() {
-  const params = new URLSearchParams(location.search);
-  if (params.get('upgraded') === '1') {
-    history.replaceState(null, '', '/creator/dashboard');
-    // Show success toast after dashboard renders
-    window._showUpgradeSuccess = true;
-  }
-})();
+// ── Upgrade / Stripe — REMOVED (platform is free) ────────
+// All upgrade, checkout, billing, and trial functions removed.
+// Stub functions kept to prevent runtime errors from any remaining references.
+function handlePlanPillClick() {}
+function showUpgrade() {}
+function closeUpgradeModal() {}
+function startCheckout() {}
+function openBillingPortal() {}
+function updateUpgradeBtn() {}
+function startTrial() {}
 
 function signOut() {
   localStorage.removeItem('hf_token');
@@ -10184,13 +9746,7 @@ function populateAccountTab() {
   if (el2) el2.textContent = profileUrl;
   if (link1) link1.href = 'https://' + communityUrl;
   if (link2) link2.href = 'https://' + profileUrl;
-  // Sync plan pill
-  const plan = creatorData?.creator?.plan || 'free';
-  const pill = document.getElementById('accountPlanPill');
-  if (pill) {
-    pill.className = 'plan-pill ' + plan;
-    pill.textContent = plan === 'platinum' ? 'Premium' : plan.charAt(0).toUpperCase() + plan.slice(1);
-  }
+  // Plan pill sync removed — platform is free
 }
 
 function goToMemberView(e) {
@@ -10572,46 +10128,7 @@ async function runYoutubeScan() {
   const url = document.getElementById('youtubeUrl').value.trim();
   if (!url) { showToast('Paste a YouTube URL first.', 'error'); return; }
 
-  // ── FREE PLAN DEMO MODE ──────────────────────────────────
-  const planNowForScan = creatorData?.creator?.plan || 'free';
-  if (planNowForScan === 'free') {
-    btn.disabled = true;
-    document.getElementById('ytError').style.display = 'none';
-    document.getElementById('ytScanResult').style.display = 'none';
-
-    // Extract video ID for real stats fetch + thumbnail
-    let _demoVid = null;
-    try {
-      const m1 = url.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
-      const m2 = url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
-      const m3 = url.match(/shorts\/([a-zA-Z0-9_-]{11})/);
-      _demoVid = (m1 || m2 || m3)?.[1] || null;
-    } catch {}
-
-    // Fetch real video stats in parallel with the animation
-    let _realMeta = null;
-    const metaFetch = _demoVid
-      ? fetch(`${API}/api/public/youtube-meta/${_demoVid}`, { headers: { Authorization: 'Bearer ' + token } })
-          .then(r => r.ok ? r.json() : null).then(d => { _realMeta = d; }).catch(() => {})
-      : Promise.resolve();
-
-    // Multi-step scanning animation that mirrors the real flow
-    const steps = [
-      { label: '⏳ Fetching video transcript…', ms: 800 },
-      { label: '💬 Analyzing comments…',         ms: 700 },
-      { label: '🧠 Identifying key debates…',    ms: 650 },
-      { label: '✨ Generating markets…',          ms: 900 },
-    ];
-    for (const step of steps) {
-      btn.innerHTML = `<span class="spinner"></span> ${step.label}`;
-      await new Promise(r => setTimeout(r, step.ms));
-    }
-    await metaFetch; // ensure meta fetch done before render
-
-    btn.disabled = false; btn.textContent = cfg.btn;
-    renderYtDemoResults(url, _realMeta);
-    return;
-  }
+  // Free plan demo mode removed — all users get the real AI scanner
 
   btn.disabled = true;
   btn.innerHTML = `<span class="spinner"></span> ${cfg.scanning}`;
@@ -13056,7 +12573,7 @@ async function loadPolymarketPositions(forceRefresh) {
         shares: parseFloat(p.size)||0, current_price: parseFloat(p.curPrice)||0,
         cash_value: parseFloat(p.currentValue)||0, cost_basis: parseFloat(p.initialValue)||0,
         pnl: parseFloat(p.cashPnl)||0, pnl_pct: parseFloat(p.percentPnl)||0,
-        market_url: p.slug ? 'https://polymarket.com/event/'+(p.eventSlug||p.slug) : 'https://polymarket.com',
+        market_url: (typeof polyRef==='function'?polyRef:function(u){return u})(p.slug ? 'https://polymarket.com/event/'+(p.eventSlug||p.slug) : 'https://polymarket.com'),
         icon: p.icon||null, end_date: p.endDateIso||p.endDate||null, platform: 'polymarket',
         avg_cost: parseFloat(p.size)>0 ? Math.round(parseFloat(p.initialValue)/parseFloat(p.size)*100)/100 : null
       }));
@@ -13151,7 +12668,8 @@ function qtTradeBtn(url, label, color, extraData) {
     return `<button onclick="openTradeModal(window['${dataId}'],'buy')" style="background:${bg};color:${fg};border:none;border-radius:6px;padding:7px 14px;font-family:var(--mono);font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap">${btnLabel}</button>`;
   }
   // Fallback: open on Polymarket
-  return `<button onclick="window.open('${safeUrl}','_blank')" style="background:${bg};color:${fg};border:none;border-radius:6px;padding:7px 14px;font-family:var(--mono);font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap">${btnLabel}</button>`;
+  const refUrl = (typeof polyRef === 'function' ? polyRef(safeUrl) : safeUrl).replace(/'/g, "\\'");
+  return `<button onclick="window.open('${refUrl}','_blank')" style="background:${bg};color:${fg};border:none;border-radius:6px;padding:7px 14px;font-family:var(--mono);font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap">${btnLabel}</button>`;
 }
 
 var _qtCategory = 'all';
@@ -13172,7 +12690,7 @@ function renderHotMarkets() {
   if (!top.length) { grid.innerHTML = '<div style="text-align:center;padding:20px;color:var(--dim);font-size:13px;grid-column:1/-1">No markets in this category.</div>'; return; }
   grid.innerHTML = top.map(function(m) {
     var price = Math.round((m.yes_price || 0.5) * 100);
-    var url = m.url || 'https://polymarket.com';
+    var url = (typeof polyRef==='function'?polyRef:function(u){return u})(m.url || 'https://polymarket.com');
     var cat = (m.category || 'other').toUpperCase();
     var vol = m.volume >= 1e6 ? '$' + (m.volume / 1e6).toFixed(1) + 'M' : m.volume >= 1e3 ? '$' + Math.round(m.volume / 1e3) + 'K' : '$' + (m.volume || 0);
     var whales = m.whale_count || 0;

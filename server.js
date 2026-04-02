@@ -1,6 +1,19 @@
 require('dotenv').config();
 
 // ══════════════════════════════════════════════════════════════════════
+// POLYMARKET REFERRAL TAG — appends ?via=CODE to all outbound polymarket.com URLs
+// Revenue engine: Polymarket pays 30% of trading fees from referred users
+// ══════════════════════════════════════════════════════════════════════
+const POLY_REF = process.env.POLYMARKET_REF || '';
+function pRef(url) {
+  if (!POLY_REF || typeof url !== 'string') return url;
+  // Only tag polymarket.com (no subdomains: data-api, gamma-api, clob, strapi-matic, docs)
+  if (!/^https?:\/\/polymarket\.com(\/|$|\?)/.test(url)) return url;
+  if (url.includes('via=')) return url; // don't double-tag
+  return url + (url.includes('?') ? '&' : '?') + 'via=' + POLY_REF;
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // GLOBAL ERROR HANDLERS — prevent silent process death
 // ══════════════════════════════════════════════════════════════════════
 const _recentErrors = [];
@@ -179,7 +192,6 @@ function apiKeyAuth(req, res, next) {
         creator = data;
       }
       if (!creator) return res.status(401).json({ error: 'Invalid API key' });
-      if (creator.plan === 'free') return res.status(401).json({ error: 'API access requires Pro or Premium plan' });
       // Rate limit by plan
       const maxPerMin = creator.plan === 'platinum' ? 300 : 60;
       const now = Date.now();
@@ -364,6 +376,36 @@ app.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (re
 
 app.use(express.json({ limit: '10mb' }));
 
+// ── Polymarket referral tag interceptor ──────────────────────────────
+// Auto-tags every polymarket.com URL in JSON API responses with ?via=CODE
+// Catches all current + future URLs in a single middleware
+if (POLY_REF) {
+  app.use('/api/', (req, res, next) => {
+    const origJson = res.json.bind(res);
+    res.json = function(body) {
+      if (body && typeof body === 'object') {
+        try {
+          let str = JSON.stringify(body);
+          // Tag polymarket.com URLs inside JSON string values (followed by " or ? in JSON)
+          str = str.replace(/https:\/\/polymarket\.com(\/[^"]*?)?(?=")/g, (match) => {
+            if (match.includes('via=')) return match;
+            return match + (match.includes('?') ? '&' : '?') + 'via=' + POLY_REF;
+          });
+          return origJson(JSON.parse(str));
+        } catch(e) { return origJson(body); }
+      }
+      return origJson(body);
+    };
+    next();
+  });
+}
+
+// Public config endpoint — exposes referral code to frontend (no secrets)
+app.get('/api/config/ref', (req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.json({ ref: POLY_REF });
+});
+
 // Serve explore.html as the homepage — explore IS the hub
 app.get('/', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -461,17 +503,12 @@ if (pool) {
 }
 
 // ── API ACCESS TIERS ──────────────────────────────────────────────────────
-// Free (no auth): /api/stats, /api/health, /api/leaderboard, /api/markets/search
-// Pro ($29/mo): /api/whale-watch, /api/signals, /api/crystal-ball, /api/whale-index, /api/screener, /api/fear-greed, /api/odds/search, /api/arbitrage
-// Premium ($99/mo): /api/correlations, /api/contrarian, /api/resolution-probability,
-//   /api/whale-patterns, /api/news-impact, /api/backtest, /api/market-intelligence,
-//   /api/consistent-traders, /api/daily-briefing, /api/whale-flow, /api/live-feed
-// API key access ($500/mo): all endpoints via X-API-Key header
+// All endpoints free — no tier gating
 
 // EARLY ACCESS: All endpoints free until 1K users. Re-enable Pro gating when ready.
 const PRO_ENDPOINTS = new Set([/* '/api/signals', '/api/crystal-ball', '/api/whale-index', '/api/screener', '/api/fear-greed', '/api/whale-watch', '/api/odds/search', '/api/arbitrage' */]);
-const PREMIUM_ENDPOINTS = new Set(['/api/correlations', '/api/contrarian', '/api/resolution-probability', '/api/whale-patterns', '/api/news-impact', '/api/market-intelligence', '/api/consistent-traders', '/api/daily-briefing', '/api/whale-flow', '/api/live-feed']);
-const BACKTEST_PREFIX = '/api/backtest/';
+const PREMIUM_ENDPOINTS = new Set([]);
+const BACKTEST_PREFIX = '/__disabled__/';
 
 function requireApiTier(req, res, next) {
   const path = req.path;
@@ -497,7 +534,6 @@ function requireApiTier(req, res, next) {
           creator = data;
         }
         if (!creator) return res.status(401).json({ error: 'Invalid API key' });
-        if (creator.plan === 'free') return res.status(401).json({ error: 'API access requires Pro or Premium plan' });
         // Rate limit by plan
         const maxPerMin = creator.plan === 'platinum' ? 300 : 60;
         const now = Date.now();
@@ -544,12 +580,7 @@ function requireApiTier(req, res, next) {
   // External API access without key — blocked
   return res.status(403).json({
     error: 'API key required',
-    message: 'This endpoint requires authentication. Get API access at hyperflex.network/pricing',
-    tiers: {
-      pro: { price: '$29/mo', endpoints: [...PRO_ENDPOINTS] },
-      premium: { price: '$99/mo', endpoints: [...PRO_ENDPOINTS, ...PREMIUM_ENDPOINTS] },
-      api: { price: '$500/mo', endpoints: 'All endpoints via X-API-Key' }
-    }
+    message: 'This endpoint requires authentication. Generate a free API key at hyperflex.network'
   });
 }
 
@@ -1570,34 +1601,6 @@ app.post('/markets', async (req, res) => {
       const effectivePlan = (cs.plan_trial_expires_at && new Date(cs.plan_trial_expires_at) > new Date())
         ? 'pro' : cs.plan;
       const FREE_MARKET_LIMIT = 5;
-      if (effectivePlan === 'free') {
-        let count = 0;
-        try {
-          if (pool) {
-            // Try with archived column first, fall back without it
-            try {
-              const _rows = await dbQuery('SELECT count(*) as count FROM markets WHERE tenant_slug = $1 AND resolved = $2 AND archived = $3', [row.tenant_slug, false, false]);
-              count = parseInt(_rows[0]?.count || 0);
-            } catch (colErr) {
-              const _rows = await dbQuery('SELECT count(*) as count FROM markets WHERE tenant_slug = $1 AND resolved = $2', [row.tenant_slug, false]);
-              count = parseInt(_rows[0]?.count || 0);
-            }
-          } else {
-            const result = await supabase .from('markets') .select('id', { count: 'exact', head: true }) .eq('tenant_slug', row.tenant_slug) .eq('resolved', false);
-            count = result.count || 0;
-          }
-        } catch (e) { console.warn('[POST /markets] count check failed:', e.message); }
-        if ((count || 0) >= FREE_MARKET_LIMIT) {
-          return res.status(403).json({
-            error: 'Free plan limit reached',
-            upgrade_required: true,
-            limit: FREE_MARKET_LIMIT,
-            message: `Free plan allows ${FREE_MARKET_LIMIT} active markets. Upgrade to Pro for unlimited markets.`
-          });
-        }
-        // Sponsor labels are Pro/Premium only — strip silently on free
-        if (row.sponsor_name) delete row.sponsor_name;
-      }
     }
   }
 
@@ -1722,25 +1725,6 @@ app.post('/api/creator/markets/bulk', requireCreator, async (req, res) => {
 
     if (!creator) return res.status(404).json({ error: 'Creator not found' });
 
-    // Enforce free plan market limit on bulk create
-    if (creator.plan === 'free') {
-      let activeCount;
-      if (pool) {
-        const _rows = await dbQuery('SELECT count(*) as count FROM markets WHERE creator_id = $1 AND resolved = $2 AND archived = $3', [req.creator.id, false, false]);
-        activeCount = parseInt(_rows[0]?.count || 0);
-      } else {
-        const { count: activeCount } = await supabase .from('markets') .select('id', { count: 'exact', head: true }) .eq('creator_id', req.creator.id) .eq('resolved', false) .eq('archived', false);
-      }
-      const FREE_MARKET_LIMIT = 5;
-      if ((activeCount || 0) >= FREE_MARKET_LIMIT) {
-        return res.status(403).json({
-          error: 'Free plan limit reached',
-          upgrade_required: true,
-          limit: FREE_MARKET_LIMIT,
-          message: `Free plan allows ${FREE_MARKET_LIMIT} active markets. Upgrade to Pro for unlimited markets.`
-        });
-      }
-    }
 
     const rows = [];
     const skipped = [];
@@ -3595,9 +3579,6 @@ app.post('/api/creator/news-scan', requireCreator, async (req, res) => {
       settings = d;
     }
     if (!settings) return res.status(404).json({ error: 'Creator not found' });
-    if (!['pro','platinum'].includes(settings.plan)) {
-      return res.status(403).json({ error: 'News Intelligence requires Pro or Premium plan' });
-    }
     const result = await runNewsIntelligenceScanner(settings.slug);
     res.json(result);
   } catch (err) {
@@ -5627,9 +5608,6 @@ app.get('/api/creator/sponsor-kit', requireCreator, async (req, res) => {
     if (!settings) return res.status(404).json({ error: 'Creator not found' });
 
     const plan = settings.plan || 'free';
-    if (plan === 'free') {
-      return res.status(403).json({ error: 'Sponsor Kit requires Pro or Premium', upgrade_required: true });
-    }
 
     const slug     = settings.slug;
     const ptsName  = settings.custom_points_name || 'Points';
@@ -5895,9 +5873,8 @@ app.post('/api/creator/market-ideas', requireCreator, async (req, res) => {
     }
 
     const plan = row?.plan || 'free';
-    if (plan === 'free') return res.status(403).json({ error: 'Market Ideas requires Pro or Premium' });
 
-    const count    = plan === 'platinum' ? 5 : 3;
+    const count    = 5;
     const category = row?.community_category || req.body.category || 'other';
     const desc     = row?.community_description || '';
     const name     = row?.display_name || 'Community';
@@ -9552,7 +9529,7 @@ const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
   'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u', 'win',
-  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed', 'market-intel', 'spread-scanner', 'high-prob'
+  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed', 'market-intel', 'spread-scanner', 'high-prob', 'rewards'
 ]);
 
 // GET /my — private member dashboard
@@ -10642,6 +10619,7 @@ app.get('/nominate', (req, res) => res.sendFile(path.join(__dirname, 'public', '
 // GET /predictors — discover sharp predictors page
 app.get('/predictors', (req, res) => res.sendFile(path.join(__dirname, 'public', 'predictors.html')));
 app.get('/odds', (req, res) => res.sendFile(path.join(__dirname, 'public', 'odds.html')));
+app.get('/rewards', (req, res) => res.sendFile(path.join(__dirname, 'public', 'rewards.html')));
 
 // GET /api/predictors/me/score — return the authenticated user's sharp score + stats
 app.get('/api/predictors/me/score', requireAuth, async (req, res) => {
@@ -16160,9 +16138,6 @@ app.post('/api/creator/seasons', requireCreator, async (req, res) => {
       const { data: settings } = await supabase .from('creator_settings').select('plan').eq('slug', creatorSlug).single();
     }
     const plan = settings?.plan || 'free';
-    if (plan === 'free') {
-      return res.status(403).json({ error: 'Seasons require Pro or Premium. Upgrade to run tournaments.' });
-    }
 
     const { name, description, ends_at, prize_description, market_ids } = req.body;
     if (!name || !name.trim()) return res.status(400).json({ error: 'Season name is required' });
@@ -16507,7 +16482,6 @@ app.post('/api/user/generate-api-key', requireAuth, async (req, res) => {
       creator = data;
     }
     if (!creator) return res.status(404).json({ error: 'Creator account not found' });
-    if (creator.plan === 'free') return res.status(403).json({ error: 'API access requires Pro or Premium plan' });
     // Generate 32-byte hex key with hfx_ prefix
     const crypto = require('crypto');
     const key = 'hfx_' + crypto.randomBytes(32).toString('hex');
@@ -27887,6 +27861,113 @@ setInterval(() => {
     _logError('watchdog', e);
   }
 }, 5 * 60 * 1000);
+
+// ══════════════════════════════════════════════════════════════════════
+// TRADE & EARN — USDC Rewards Program
+// Tracks referred trading volume and distributes rewards weekly
+// Revenue source: Polymarket referral program (30% of ~1% trading fee)
+// ══════════════════════════════════════════════════════════════════════
+
+const REWARD_TIERS = [
+  { name: 'Bronze',  icon: '\uD83E\uDD49', min_volume: 100,    reward_pct: 5,  min_volume_label: '$100+',    example: 'Trade $1K \u2192 earn ~$1.50' },
+  { name: 'Silver',  icon: '\uD83E\uDD48', min_volume: 1000,   reward_pct: 10, min_volume_label: '$1,000+',  example: 'Trade $5K \u2192 earn ~$15' },
+  { name: 'Gold',    icon: '\uD83E\uDD47', min_volume: 10000,  reward_pct: 15, min_volume_label: '$10,000+', example: 'Trade $25K \u2192 earn ~$112.50' },
+  { name: 'Diamond', icon: '\uD83D\uDC8E', min_volume: 50000,  reward_pct: 20, min_volume_label: '$50,000+', example: 'Trade $100K \u2192 earn ~$600' },
+  { name: 'Whale',   icon: '\uD83D\uDC51', min_volume: 250000, reward_pct: 25, min_volume_label: '$250,000+',example: 'Trade $500K \u2192 earn ~$3,750' },
+];
+
+function getRewardTier(monthlyVolume) {
+  let tier = REWARD_TIERS[0];
+  for (const t of REWARD_TIERS) {
+    if (monthlyVolume >= t.min_volume) tier = t;
+  }
+  return tier;
+}
+
+function getWeekStart() {
+  const now = new Date();
+  const day = now.getUTCDay(); // 0=Sun
+  const diff = now.getUTCDate() - day + (day === 0 ? -6 : 1); // Monday
+  const monday = new Date(now);
+  monday.setUTCDate(diff);
+  monday.setUTCHours(0, 0, 0, 0);
+  return monday.toISOString().slice(0, 10);
+}
+
+// GET /api/rewards/tiers — public: reward tier info
+app.get('/api/rewards/tiers', (req, res) => {
+  res.json({ tiers: REWARD_TIERS });
+});
+
+// GET /api/rewards/leaderboard — public: top 20 traders by weekly volume (mock data for now)
+app.get('/api/rewards/leaderboard', async (req, res) => {
+  try {
+    const weekStart = getWeekStart();
+    // Future: query rewards_tracking table for real data
+    // For now, return mock leaderboard to demonstrate the UI
+    const mockTraders = [
+      { rank: 1, wallet_truncated: '0x7a3...f92d', volume: 142500, tier: '\uD83D\uDC51 Whale', estimated_reward: 1068.75 },
+      { rank: 2, wallet_truncated: '0xb2e...4a1c', volume: 98200,  tier: '\uD83D\uDC8E Diamond', estimated_reward: 589.20 },
+      { rank: 3, wallet_truncated: '0x1f9...8b3e', volume: 67800,  tier: '\uD83D\uDC8E Diamond', estimated_reward: 406.80 },
+      { rank: 4, wallet_truncated: '0xc4d...2f7a', volume: 45300,  tier: '\uD83E\uDD47 Gold', estimated_reward: 203.85 },
+      { rank: 5, wallet_truncated: '0x9e1...6d4b', volume: 38900,  tier: '\uD83E\uDD47 Gold', estimated_reward: 175.05 },
+      { rank: 6, wallet_truncated: '0x5a8...1c9f', volume: 27600,  tier: '\uD83E\uDD47 Gold', estimated_reward: 124.20 },
+      { rank: 7, wallet_truncated: '0xd3f...7e2a', volume: 19400,  tier: '\uD83E\uDD47 Gold', estimated_reward: 87.30 },
+      { rank: 8, wallet_truncated: '0x8b2...4d6c', volume: 14200,  tier: '\uD83E\uDD47 Gold', estimated_reward: 63.90 },
+      { rank: 9, wallet_truncated: '0x6c7...9a3f', volume: 8750,   tier: '\uD83E\uDD48 Silver', estimated_reward: 26.25 },
+      { rank: 10, wallet_truncated: '0x2e4...b8d1', volume: 5400,  tier: '\uD83E\uDD48 Silver', estimated_reward: 16.20 },
+      { rank: 11, wallet_truncated: '0xf1a...3c7e', volume: 4200,  tier: '\uD83E\uDD48 Silver', estimated_reward: 12.60 },
+      { rank: 12, wallet_truncated: '0x4d9...a2f5', volume: 3100,  tier: '\uD83E\uDD48 Silver', estimated_reward: 9.30 },
+      { rank: 13, wallet_truncated: '0xa6c...d4b8', volume: 2400,  tier: '\uD83E\uDD48 Silver', estimated_reward: 7.20 },
+      { rank: 14, wallet_truncated: '0x3f7...c1e9', volume: 1800,  tier: '\uD83E\uDD48 Silver', estimated_reward: 5.40 },
+      { rank: 15, wallet_truncated: '0xe2b...5a3d', volume: 1200,  tier: '\uD83E\uDD48 Silver', estimated_reward: 3.60 },
+      { rank: 16, wallet_truncated: '0x7c1...f6a2', volume: 850,   tier: '\uD83E\uDD49 Bronze', estimated_reward: 1.28 },
+      { rank: 17, wallet_truncated: '0xb5e...2d8c', volume: 620,   tier: '\uD83E\uDD49 Bronze', estimated_reward: 0.93 },
+      { rank: 18, wallet_truncated: '0x1a4...e7f3', volume: 430,   tier: '\uD83E\uDD49 Bronze', estimated_reward: 0.65 },
+      { rank: 19, wallet_truncated: '0xd8f...4b1a', volume: 280,   tier: '\uD83E\uDD49 Bronze', estimated_reward: 0.42 },
+      { rank: 20, wallet_truncated: '0x9c3...a5d7', volume: 150,   tier: '\uD83E\uDD49 Bronze', estimated_reward: 0.23 },
+    ];
+    const poolTotal = mockTraders.reduce((sum, t) => sum + t.estimated_reward, 0);
+    res.json({ week_start: weekStart, traders: mockTraders, pool_total: poolTotal });
+  } catch (e) {
+    _logError('rewards-leaderboard', e);
+    res.status(500).json({ error: 'Failed to load leaderboard' });
+  }
+});
+
+// GET /api/rewards/my-stats — auth required: personal stats (mock for now)
+app.get('/api/rewards/my-stats', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    // Future: query rewards_tracking for real user data
+    // For now return placeholder zeros — real data comes when Polymarket referral API is wired
+    res.json({
+      wallet: req.user.wallet_address || null,
+      volume_this_week: 0,
+      volume_this_month: 0,
+      tier: 'Bronze',
+      estimated_payout: 0,
+      lifetime_earned: 0,
+      payout_history: []
+    });
+  } catch (e) {
+    _logError('rewards-my-stats', e);
+    res.status(500).json({ error: 'Failed to load stats' });
+  }
+});
+
+// POST /api/rewards/track-click — supplementary click tracking for referral links
+app.post('/api/rewards/track-click', async (req, res) => {
+  try {
+    const { market_slug, source_page } = req.body || {};
+    // Log for analytics — actual volume tracking comes from Polymarket referral API
+    console.log(`[rewards] click tracked: ${source_page} → ${(market_slug || '').slice(0, 80)}`);
+    // Future: insert into rewards_click_tracking table
+    res.json({ ok: true });
+  } catch (e) {
+    res.json({ ok: true }); // Non-critical, never fail
+  }
+});
 
 // ══════════════════════════════════════════════════════════════════════
 // CACHE CLEANUP — every 30 min, prune unbounded Maps to prevent leaks
