@@ -893,8 +893,8 @@ function updateTradingUI() {
       disclaimer.innerHTML = '\u2705 Trading enabled' + (addr ? ' \u00b7 <span style="font-family:var(--mono);font-size:10px;color:var(--dim)">' + addr.substring(0, 8) + '...' + addr.slice(-4) + '</span>' : '');
       disclaimer.style.color = 'var(--green)';
     } else {
-      disclaimer.innerHTML = '<a href="#" onclick="enableTrading();return false" style="color:var(--gold);text-decoration:underline">Enable Trading</a> to place orders via Polymarket';
-      disclaimer.style.color = '';
+      disclaimer.innerHTML = 'Click Buy/Sell to connect wallet &amp; trade on Polymarket';
+      disclaimer.style.color = 'var(--dim)';
     }
   }
 }
