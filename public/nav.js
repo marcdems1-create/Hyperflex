@@ -58,8 +58,7 @@
     '<div class="nav-auth">' +
       (isLoggedIn
         ? ''
-        : '<a href="/creator/login" class="nav-signin">Sign in</a>' +
-          '<a href="/creator/login#signup" class="nav-cta">Get started free</a>') +
+        : '<a href="/creator/login" class="nav-signin">Sign in</a>') +
     '</div>';
 
   var root = document.getElementById('nav-root');
