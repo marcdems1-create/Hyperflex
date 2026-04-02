@@ -349,7 +349,7 @@ function renderSignals() {
       '</div>' +
       '<div class="s-row-right" style="display:flex;align-items:center;gap:8px;flex-shrink:0">' +
         alphaBadge +
-        '<a href="' + (typeof hfxMarketUrl === 'function' ? hfxMarketUrl(url) : url) + '" class="s-row-link" target="_blank" rel="noopener">Trade &rarr;</a>' +
+        '<a href="' + (typeof hfxMarketUrl === 'function' ? hfxMarketUrl(url) : url) + '" class="s-row-link">Trade &rarr;</a>' +
       '</div>' +
     '</div>';
   }).join('');
@@ -389,14 +389,16 @@ async function loadWhaleConsensus() {
       var cap = m.total_capital || m.capital || 0;
       var plain = translateSide(m.market||m.question||'', side);
       var flag = regionFlag(m.market||m.question||'');
-      return '<div class="s-whale-row">' +
+      var mUrl = m.url || m.market_url || '';
+      var hfxLink = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(mUrl) : '#';
+      return '<a href="' + hfxLink + '" class="s-whale-row" style="text-decoration:none;color:inherit;display:flex">' +
         '<div class="s-whale-rank">' + (i+1) + '</div>' +
         '<div class="s-whale-info">' +
           '<div class="s-whale-q">' + (flag?flag+' ':'') + escH(m.market||m.question||'') + '</div>' +
           '<div class="s-whale-stats">' + (m.whale_count||0) + ' whales \u00B7 ' + fmtCap(cap) + '</div>' +
         '</div>' +
         '<div class="s-whale-side ' + (side==='YES'?'yes':'no') + '">' + escH(plain) + '</div>' +
-      '</div>';
+      '</a>';
     }).join('');
   } catch(e) { el.innerHTML = '<div class="s-empty">Failed to load.</div>'; }
 }
