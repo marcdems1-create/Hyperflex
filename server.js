@@ -24455,8 +24455,8 @@ app.get('/api/signals', async (req, res) => {
 // GET /signals — alpha signals page
 app.get('/signals', (req, res) => res.sendFile(path.join(__dirname, 'public', 'signals.html')));
 
-// ── ARBITRAGE DETECTION ──────────────────────────────────────────────────
-let _arbCache = null; // { ts, data: [...] }
+// ── ARBITRAGE DETECTION (legacy — used by detectArbitrageOpportunities) ──
+// _arbCache declared earlier in /api/arbitrage section
 let _prevArbIds = new Set();
 
 async function detectArbitrageOpportunities() {
