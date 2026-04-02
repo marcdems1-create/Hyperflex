@@ -23766,31 +23766,30 @@ app.post('/api/polymarket/lookup-proxy', requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/polymarket/clob-order — submit order with HMAC-signed headers (no wallet signature needed)
+// POST /api/polymarket/clob-order — proxy for pre-signed orders (client sends full signed order body)
+// The client handles EIP-712 order signing + HMAC signing; this proxy just forwards to CLOB
+// Used as CORS fallback when browser can't reach clob.polymarket.com directly
 app.post('/api/polymarket/clob-order', requireAuth, async (req, res) => {
-  const { token_id, side, size, price, api_key, api_secret, api_passphrase } = req.body;
-  if (!token_id || !side || !size || !price) {
-    return res.status(400).json({ error: 'token_id, side, size, and price required' });
+  const { signed_body, api_key, api_secret, api_passphrase, eoa_address } = req.body;
+
+  // Legacy format check — reject old-format requests
+  if (req.body.token_id && !signed_body) {
+    return res.status(400).json({ error: 'Order format updated. Please refresh the page and try again.' });
   }
-  if (!api_key || !api_secret || !api_passphrase) {
-    return res.status(400).json({ error: 'API credentials required. Enable trading first.' });
+
+  if (!signed_body || !api_key || !api_secret || !api_passphrase || !eoa_address) {
+    return res.status(400).json({ error: 'signed_body, api credentials, and eoa_address required' });
   }
 
   try {
     const ts = Math.floor(Date.now() / 1000).toString();
     const method = 'POST';
     const requestPath = '/order';
-    const orderBody = JSON.stringify({
-      tokenID: token_id,
-      side: side.toUpperCase(),
-      size: parseFloat(size).toString(),
-      price: parseFloat(price).toString(),
-      type: 'GTC'
-    });
 
-    // Create HMAC-SHA256 signature: timestamp + method + path + body
-    const message = ts + method + requestPath + orderBody;
-    const hmacSignature = crypto.createHmac('sha256', api_secret).update(message).digest('base64');
+    // HMAC-SHA256 sign: timestamp + method + path + body (base64url encoding)
+    const message = ts + method + requestPath + signed_body;
+    const secretBuf = Buffer.from(api_secret.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+    const hmacSig = crypto.createHmac('sha256', secretBuf).update(message).digest('base64url');
 
     // Builder attribution headers — gasless + volume tracking
     const builderHeaders = {};
@@ -23798,12 +23797,11 @@ app.post('/api/polymarket/clob-order', requireAuth, async (req, res) => {
     const builderSecret = process.env.POLY_BUILDER_SECRET;
     const builderPassphrase = process.env.POLY_BUILDER_PASSPHRASE;
     if (builderKey && builderSecret && builderPassphrase) {
-      const builderTs = ts;
-      const builderMessage = builderTs + method + requestPath + orderBody;
-      const secretBuf = Buffer.from(builderSecret, 'base64');
-      const builderSig = crypto.createHmac('sha256', secretBuf).update(builderMessage).digest('base64');
+      const builderMessage = ts + method + requestPath + signed_body;
+      const bSecretBuf = Buffer.from(builderSecret.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+      const builderSig = crypto.createHmac('sha256', bSecretBuf).update(builderMessage).digest('base64url');
       builderHeaders['POLY_BUILDER_API_KEY'] = builderKey;
-      builderHeaders['POLY_BUILDER_TIMESTAMP'] = builderTs;
+      builderHeaders['POLY_BUILDER_TIMESTAMP'] = ts;
       builderHeaders['POLY_BUILDER_PASSPHRASE'] = builderPassphrase;
       builderHeaders['POLY_BUILDER_SIGNATURE'] = builderSig;
       console.log('[builder] Attribution headers attached for order');
@@ -23815,13 +23813,14 @@ app.post('/api/polymarket/clob-order', requireAuth, async (req, res) => {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         'User-Agent': 'Hyperflex/1.0',
+        'POLY_ADDRESS': eoa_address,
         'POLY_API_KEY': api_key,
         'POLY_PASSPHRASE': api_passphrase,
         'POLY_TIMESTAMP': ts,
-        'POLY_SIGNATURE': hmacSignature,
+        'POLY_SIGNATURE': hmacSig,
         ...builderHeaders
       },
-      body: orderBody
+      body: signed_body
     });
 
     const data = await upstream.json().catch(() => ({}));
@@ -23833,7 +23832,7 @@ app.post('/api/polymarket/clob-order', requireAuth, async (req, res) => {
       });
     }
 
-    console.log(`[polymarket clob-order] user=${req.userId} side=${side} size=${size} price=${price} token=${token_id.slice(0,12)}... status=ok`);
+    console.log(`[polymarket clob-order] user=${req.userId} status=ok`);
     res.json({
       success: true,
       order_id: data.orderID || data.order_id || data.id || null,
