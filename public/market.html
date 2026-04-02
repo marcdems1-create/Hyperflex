@@ -288,6 +288,7 @@ canvas{display:block;width:100%!important}
           <button class="trade-quick-btn active" onclick="setPrice(50)">50¢</button>
           <button class="trade-quick-btn" onclick="setPrice(75)">75¢</button>
           <button class="trade-quick-btn" onclick="setPrice(90)">90¢</button>
+          <button class="trade-quick-btn" id="currentPriceBtn" onclick="setCurrentPrice()" style="background:rgba(201,146,13,0.12);border-color:rgba(201,146,13,0.3);color:var(--gold);font-weight:700">Mkt</button>
         </div>
 
         <div class="trade-field">
@@ -735,6 +736,7 @@ function setTradeSide(side) {
   document.getElementById('tradePrice').value = Math.round(p * 100);
   updateTradeCalc();
   updateCtaButton();
+  updateCurrentPriceBtn();
 }
 
 function setTradeMode(mode) {
@@ -749,6 +751,28 @@ function setPrice(p) {
   document.querySelectorAll('.trade-quick-btns .trade-quick-btn').forEach(function(b) { b.classList.remove('active'); });
   if (event && event.target) event.target.classList.add('active');
   updateTradeCalc();
+}
+
+function setCurrentPrice() {
+  if (!_market) return;
+  var prices = _market.outcomePrices || '[]';
+  if (typeof prices === 'string') try { prices = JSON.parse(prices); } catch(e) { prices = []; }
+  var p = _tradeSide === 'yes' ? parseFloat(prices[0] || 0.5) : parseFloat(prices[1] || 0.5);
+  var cents = Math.round(p * 100);
+  document.getElementById('tradePrice').value = cents;
+  document.querySelectorAll('.trade-quick-btns .trade-quick-btn').forEach(function(b) { b.classList.remove('active'); });
+  var btn = document.getElementById('currentPriceBtn');
+  if (btn) btn.classList.add('active');
+  updateTradeCalc();
+}
+
+function updateCurrentPriceBtn() {
+  if (!_market) return;
+  var prices = _market.outcomePrices || '[]';
+  if (typeof prices === 'string') try { prices = JSON.parse(prices); } catch(e) { prices = []; }
+  var p = _tradeSide === 'yes' ? parseFloat(prices[0] || 0.5) : parseFloat(prices[1] || 0.5);
+  var btn = document.getElementById('currentPriceBtn');
+  if (btn) btn.textContent = Math.round(p * 100) + '¢ Mkt';
 }
 
 function setAmount(a) {
@@ -767,6 +791,25 @@ function updateTradeCalc() {
   document.getElementById('summaryPrice').textContent = price.toFixed(2) + '¢';
   document.getElementById('summaryShares').textContent = shares.toFixed(2);
   document.getElementById('summaryPayout').textContent = '$' + payout.toFixed(2);
+}
+
+// ── Fetch USDC balance from Polygon ──────────────────────────────────────────
+async function fetchTradeBalance() {
+  var wallet = localStorage.getItem('hf_poly_wallet');
+  if (!wallet || !window.ethereum) return;
+  try {
+    var provider = new ethers.BrowserProvider(window.ethereum);
+    // USDC on Polygon
+    var usdcAddress = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
+    var abi = ['function balanceOf(address) view returns (uint256)'];
+    var contract = new ethers.Contract(usdcAddress, abi, provider);
+    var raw = await contract.balanceOf(wallet);
+    var balance = parseFloat(ethers.formatUnits(raw, 6));
+    var el = document.getElementById('tradeBalance');
+    if (el) el.textContent = 'Balance: $' + balance.toFixed(2);
+  } catch (e) {
+    console.warn('[balance]', e.message);
+  }
 }
 
 function updateCtaButton() {
@@ -971,11 +1014,12 @@ async function executeTrade() {
     });
 
     // HMAC-SHA256 sign: timestamp + method + path + body (done in browser to avoid geo-block)
+    // Secret from Polymarket is base64-encoded — must decode before using as HMAC key
     var ts = Math.floor(Date.now() / 1000).toString();
     var message = ts + 'POST' + '/order' + orderBody;
     var enc = new TextEncoder();
-    var keyData = enc.encode(apiSecret);
-    var cryptoKey = await crypto.subtle.importKey('raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    var secretBytes = Uint8Array.from(atob(apiSecret), function(c) { return c.charCodeAt(0); });
+    var cryptoKey = await crypto.subtle.importKey('raw', secretBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
     var sigBuf = await crypto.subtle.sign('HMAC', cryptoKey, enc.encode(message));
     var hmacSignature = btoa(String.fromCharCode.apply(null, new Uint8Array(sigBuf)));
 
@@ -1034,7 +1078,7 @@ async function executeTrade() {
 }
 
 // Init
-loadMarket();
+loadMarket().then(function() { updateCurrentPriceBtn(); fetchTradeBalance(); });
 updateTradingUI();
 </script>
 </body>
