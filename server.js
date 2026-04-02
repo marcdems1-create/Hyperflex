@@ -19105,12 +19105,13 @@ function filterScreenerResults(markets, query) {
 
 // ── ARBITRAGE SCANNER — cross-platform price discrepancies ────────────────
 let _arbCache = null;
+let _arbScannerCache = null; // separate cache for the scanner endpoint (different format from legacy cron)
 
 app.get('/api/arbitrage', async (req, res) => {
   try {
-    // 5-min cache
-    if (_arbCache && (Date.now() - _arbCache.ts < 5 * 60 * 1000)) {
-      return res.json(_arbCache.data);
+    // 5-min cache (use dedicated scanner cache, not the legacy cron cache)
+    if (_arbScannerCache && (Date.now() - _arbScannerCache.ts < 5 * 60 * 1000)) {
+      return res.json(_arbScannerCache.data);
     }
 
     const fetch = _nodeFetch;
@@ -19219,11 +19220,11 @@ app.get('/api/arbitrage', async (req, res) => {
       updated_at: new Date().toISOString()
     };
 
-    _arbCache = { ts: Date.now(), data: result };
+    _arbScannerCache = { ts: Date.now(), data: result };
     res.json(result);
   } catch (err) {
     console.error('[arbitrage]', err.message);
-    if (_arbCache) return res.json(_arbCache.data);
+    if (_arbScannerCache) return res.json(_arbScannerCache.data);
     res.status(500).json({ error: 'Failed to compute arbitrage', detail: err.message });
   }
 });
@@ -25287,19 +25288,7 @@ app.get('/api/orderbook/:tokenId', async (req, res) => {
   }
 });
 
-app.get('/api/arbitrage', async (req, res) => {
-  if (_arbCache && (Date.now() - _arbCache.ts < 6 * 60 * 1000)) {
-    return res.json({ opportunities: _arbCache.data, updated_at: new Date(_arbCache.ts).toISOString() });
-  }
-  // Cache cold — run detection now instead of returning empty
-  try {
-    await detectArbitrageOpportunities();
-  } catch(e) { console.warn('[arbitrage] on-demand detection failed:', e.message); }
-  if (_arbCache && _arbCache.data) {
-    return res.json({ opportunities: _arbCache.data, updated_at: new Date(_arbCache.ts).toISOString() });
-  }
-  res.json({ opportunities: [], updated_at: null });
-});
+// Legacy /api/arbitrage endpoint removed — consolidated into the scanner endpoint above (line ~19109)
 
 // ════════════════════════════════════════════════════════════
 // SPREAD SCANNER — Live orderbook pair cost monitoring
