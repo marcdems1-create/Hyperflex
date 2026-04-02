@@ -1779,6 +1779,10 @@ input[type="date"].form-input { color-scheme:dark; }
   0%, 100% { box-shadow: 0 0 0 0 rgba(45,155,95,0.7); }
   50% { box-shadow: 0 0 0 5px rgba(45,155,95,0); }
 }
+@keyframes brkPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
 .status-dot.live {
   background: var(--green);
   animation: pulse-live 2.2s ease-in-out infinite;
@@ -2932,6 +2936,9 @@ body.nav-open .sidebar-backdrop {
       </a>
       <a class="nav-item" data-nav-section="trading" onclick="showTab('performance')">
         <span class="nav-icon">📈</span><span class="nav-label">Performance</span>
+      </a>
+      <a class="nav-item" data-nav-section="trading" onclick="showTab('breaking')">
+        <span class="nav-icon">🔥</span><span class="nav-label">Breaking</span>
       </a>
       <a class="nav-item" data-nav-section="trading" onclick="showTab('quicktrade')">
         <span class="nav-icon">⚡</span><span class="nav-label">Quick Trade</span>
@@ -5147,6 +5154,46 @@ body.nav-open .sidebar-backdrop {
       </div><!-- /tab-performance -->
 
       <!-- ═══════════════════════════════════ QUICK TRADE TAB ════════════════════════════ -->
+      <!-- ═══════════════════════════════════ BREAKING TAB ════════════════════════════ -->
+      <div id="tab-breaking" style="display:none">
+        <div class="section">
+          <div style="max-width:1000px">
+            <!-- Hero banner -->
+            <div style="background:linear-gradient(135deg,#141210 0%,#1a1610 50%,#141210 100%);border:1px solid rgba(201,146,13,0.15);border-radius:14px;padding:28px 32px;margin-bottom:24px;position:relative;overflow:hidden">
+              <div style="position:absolute;top:0;right:0;width:200px;height:100%;background:radial-gradient(ellipse at 80% 50%,rgba(201,146,13,0.06) 0%,transparent 70%);pointer-events:none"></div>
+              <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+                <div>
+                  <div style="font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.15em;margin-bottom:6px" id="brkDate"></div>
+                  <div style="font-family:var(--sans);font-size:24px;font-weight:900;color:var(--text);letter-spacing:-0.5px">Breaking News</div>
+                  <div style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:4px">Markets that moved the most in the last 24 hours</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#22c55e;animation:brkPulse 2s infinite"></span>
+                  <span style="font-family:var(--mono);font-size:9px;color:#22c55e;text-transform:uppercase;letter-spacing:.1em">Live</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Category filter pills -->
+            <div style="display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap">
+              <button onclick="brkFilter('all',this)" class="brk-pill active" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:6px 16px;border-radius:20px;border:1px solid var(--gold);background:var(--gold);color:var(--bg);cursor:pointer;transition:all .15s;min-height:36px">All</button>
+              <button onclick="brkFilter('politics',this)" class="brk-pill" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:6px 16px;border-radius:20px;border:1px solid #2a2825;background:transparent;color:var(--dim);cursor:pointer;transition:all .15s;min-height:36px">Politics</button>
+              <button onclick="brkFilter('crypto',this)" class="brk-pill" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:6px 16px;border-radius:20px;border:1px solid #2a2825;background:transparent;color:var(--dim);cursor:pointer;transition:all .15s;min-height:36px">Crypto</button>
+              <button onclick="brkFilter('sports',this)" class="brk-pill" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:6px 16px;border-radius:20px;border:1px solid #2a2825;background:transparent;color:var(--dim);cursor:pointer;transition:all .15s;min-height:36px">Sports</button>
+              <button onclick="brkFilter('world',this)" class="brk-pill" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:6px 16px;border-radius:20px;border:1px solid #2a2825;background:transparent;color:var(--dim);cursor:pointer;transition:all .15s;min-height:36px">World</button>
+              <button onclick="brkFilter('finance',this)" class="brk-pill" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:6px 16px;border-radius:20px;border:1px solid #2a2825;background:transparent;color:var(--dim);cursor:pointer;transition:all .15s;min-height:36px">Finance</button>
+              <button onclick="brkFilter('tech',this)" class="brk-pill" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:6px 16px;border-radius:20px;border:1px solid #2a2825;background:transparent;color:var(--dim);cursor:pointer;transition:all .15s;min-height:36px">Tech</button>
+            </div>
+
+            <!-- Movers list -->
+            <div id="brkMoversList" style="display:flex;flex-direction:column;gap:0">
+              <div style="text-align:center;padding:48px 20px;color:var(--dim);font-size:13px">Loading breaking markets…</div>
+            </div>
+
+          </div>
+        </div>
+      </div><!-- /tab-breaking -->
+
       <div id="tab-quicktrade" style="display:none">
         <div class="section">
           <div style="max-width:1000px">
@@ -7071,7 +7118,7 @@ function showTab(tab) {
   document.querySelectorAll('.nav-item').forEach(n => {
     if (n.getAttribute('onclick') && n.getAttribute('onclick').includes(`'${tab}'`)) n.classList.add('active');
   });
-  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Social', portfolio:'My Positions', account:'My Account', performance:'Performance', quicktrade:'Quick Trade', findmarkets:'Find Markets' };
+  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Social', portfolio:'My Positions', account:'My Account', performance:'Performance', breaking:'Breaking', quicktrade:'Quick Trade', findmarkets:'Find Markets' };
   document.getElementById('topbarTitle').textContent = titles[tab] || tab;
   if (tab === 'analytics' && !analyticsLoaded) loadAnalytics();
   if (tab === 'members') { loadSocialTab(); loadMembers(); }
@@ -7113,6 +7160,7 @@ function showTab(tab) {
   if (tab === 'account') loadUsdcRewards();
   if (tab === 'portfolio') loadPortfolio();
   if (tab === 'performance') loadPerformanceTab();
+  if (tab === 'breaking') { loadBreakingTab(); }
   if (tab === 'quicktrade') { loadQuickTrade(); }
   if (tab === 'account') populateAccountTab();
   if (tab === 'seasons' && !seasonsLoaded) loadSeasons();
@@ -12740,7 +12788,172 @@ const PLATFORM_COLORS = {draftkings:'#00694b',fanduel:'#1493ff',betmgm:'#c9920d'
 let _betsFilter = 'all';
 let _betsData = [];
 
-// ── QUICK TRADE TAB ─────────────────────────────────────────────────────────
+// ── BREAKING TAB ────────────────────────────────────────────────────────────
+let _brkData = [];
+let _brkFilter = 'all';
+
+async function loadBreakingTab() {
+  // Set date
+  const dateEl = document.getElementById('brkDate');
+  if (dateEl) dateEl.textContent = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+  const list = document.getElementById('brkMoversList');
+  if (!list) return;
+  list.innerHTML = '<div style="text-align:center;padding:48px 20px;color:var(--dim);font-size:13px">Loading breaking markets…</div>';
+
+  try {
+    const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+    const headers = { Authorization: 'Bearer ' + token };
+
+    // Fetch movers + screener in parallel for richer data
+    const [moversRes, screenerRes] = await Promise.all([
+      fetch('/api/market-movers', { headers }).then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch('/api/screener?sort=price_change&limit=30', { headers }).then(r => r.ok ? r.json() : null).catch(() => null)
+    ]);
+
+    let items = [];
+
+    // Market movers — primary source
+    if (moversRes && moversRes.movers && moversRes.movers.length) {
+      items = moversRes.movers.map((m, i) => ({
+        rank: i + 1,
+        question: m.question,
+        current_price: m.current_price,
+        change_pct: m.change_pct,
+        change_pts: m.odds_change_pts,
+        url: m.url,
+        volume: null,
+        category: guessCategory(m.question)
+      }));
+    }
+
+    // Enrich with screener data (volume, icons)
+    if (screenerRes) {
+      const screenerArr = Array.isArray(screenerRes) ? screenerRes : (screenerRes.markets || screenerRes.data || []);
+      const screenerMap = {};
+      for (const s of screenerArr) {
+        const q = (s.question || '').toLowerCase();
+        screenerMap[q] = s;
+      }
+      for (const item of items) {
+        const match = screenerMap[(item.question || '').toLowerCase()];
+        if (match) {
+          item.volume = match.volume || match.total_volume || null;
+          item.icon = match.icon || match.image || null;
+        }
+      }
+      // Add screener markets with big price changes that aren't in movers
+      if (items.length < 20) {
+        const existingQs = new Set(items.map(i => (i.question || '').toLowerCase()));
+        for (const s of screenerArr) {
+          if (items.length >= 20) break;
+          const q = (s.question || '').toLowerCase();
+          if (existingQs.has(q)) continue;
+          const pChange = s.price_change_24h || 0;
+          if (Math.abs(pChange) < 3) continue;
+          items.push({
+            rank: items.length + 1,
+            question: s.question,
+            current_price: s.yes_price != null ? Math.round(s.yes_price * 100) : null,
+            change_pct: pChange,
+            change_pts: Math.round(pChange),
+            url: s.url || s.market_url || '#',
+            volume: s.volume || s.total_volume || null,
+            icon: s.icon || s.image || null,
+            category: guessCategory(s.question)
+          });
+        }
+      }
+    }
+
+    // Re-sort by absolute change
+    items.sort((a, b) => Math.abs(b.change_pct) - Math.abs(a.change_pct));
+    items.forEach((m, i) => m.rank = i + 1);
+
+    _brkData = items;
+    renderBreakingList();
+  } catch (e) {
+    console.warn('[breaking]', e);
+    list.innerHTML = '<div style="text-align:center;padding:48px 20px;color:var(--dim);font-size:13px">Failed to load breaking markets — try refreshing</div>';
+  }
+}
+
+function guessCategory(q) {
+  if (!q) return 'other';
+  const ql = q.toLowerCase();
+  if (/trump|biden|election|republican|democrat|senate|congress|house seat|governor|party|vote|president/i.test(ql)) return 'politics';
+  if (/bitcoin|btc|eth|crypto|solana|token|defi|nft/i.test(ql)) return 'crypto';
+  if (/nba|nfl|mlb|nhl|premier league|champions league|win.*game|world cup|tennis|boxing|ufc|match|playoff|series/i.test(ql)) return 'sports';
+  if (/ceasefire|ukraine|russia|iran|china|nato|war|invasion|military|force|missile/i.test(ql)) return 'world';
+  if (/fed|rate|gdp|stock|s&p|dow|nasdaq|inflation|recession|ipo|earnings/i.test(ql)) return 'finance';
+  if (/ai|openai|google|apple|meta|spacex|tesla|tech|chip|semiconductor/i.test(ql)) return 'tech';
+  return 'other';
+}
+
+function brkFilter(cat, btn) {
+  _brkFilter = cat;
+  document.querySelectorAll('.brk-pill').forEach(p => {
+    p.style.background = 'transparent';
+    p.style.color = 'var(--dim)';
+    p.style.borderColor = '#2a2825';
+  });
+  if (btn) {
+    btn.style.background = 'var(--gold)';
+    btn.style.color = 'var(--bg)';
+    btn.style.borderColor = 'var(--gold)';
+  }
+  renderBreakingList();
+}
+
+function renderBreakingList() {
+  const list = document.getElementById('brkMoversList');
+  if (!list) return;
+
+  let items = _brkData;
+  if (_brkFilter !== 'all') {
+    items = items.filter(m => m.category === _brkFilter);
+  }
+
+  if (!items.length) {
+    list.innerHTML = '<div style="text-align:center;padding:48px 20px"><div style="font-size:32px;margin-bottom:12px;opacity:0.3">📊</div><div style="font-family:var(--sans);font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px">No breaking markets</div><div style="font-family:var(--mono);font-size:11px;color:var(--dim)">' + (_brkFilter !== 'all' ? 'No major moves in this category — try "All"' : 'Check back soon for market-moving events') + '</div></div>';
+    return;
+  }
+
+  list.innerHTML = items.map((m, i) => {
+    const isUp = m.change_pct > 0;
+    const changeColor = isUp ? '#22c55e' : '#ef4444';
+    const arrow = isUp ? '↗' : '↘';
+    const changePts = Math.abs(m.change_pts || 0);
+    const changePct = Math.abs(m.change_pct || 0).toFixed(0);
+    const price = m.current_price != null ? m.current_price + '%' : '—';
+    const vol = m.volume ? (m.volume >= 1000000 ? '$' + (m.volume / 1000000).toFixed(1) + 'M' : m.volume >= 1000 ? '$' + Math.round(m.volume / 1000) + 'K' : '$' + Math.round(m.volume)) : '';
+    const mktUrl = window.hfxMarketUrl ? window.hfxMarketUrl(m.url) : m.url;
+    const polyUrl = typeof polyRef === 'function' ? polyRef(m.url) : m.url;
+    const catPill = m.category && m.category !== 'other' ? '<span style="font-family:var(--mono);font-size:8px;font-weight:700;padding:2px 6px;border-radius:3px;background:rgba(201,146,13,0.08);color:var(--gold);text-transform:uppercase;letter-spacing:.05em">' + m.category + '</span>' : '';
+
+    return `<a href="${mktUrl}" style="text-decoration:none;display:flex;align-items:center;gap:14px;padding:16px 18px;border-bottom:1px solid #1a1917;transition:background .15s;cursor:pointer" onmouseover="this.style.background='rgba(201,146,13,0.03)'" onmouseout="this.style.background='transparent'">
+      <div style="font-family:var(--mono);font-size:16px;font-weight:900;color:#2a2825;width:28px;text-align:center;flex-shrink:0">${m.rank}</div>
+      ${m.icon ? '<img src="' + m.icon + '" alt="" style="width:36px;height:36px;border-radius:8px;border:1px solid #1e1e1c;flex-shrink:0;object-fit:cover" onerror="this.style.display=\'none\'">' : ''}
+      <div style="flex:1;min-width:0">
+        <div style="font-family:var(--sans);font-size:14px;font-weight:700;color:var(--text);line-height:1.35;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtmlDash(m.question)}</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          ${catPill}
+          ${vol ? '<span style="font-family:var(--mono);font-size:9px;color:#4a4744">' + vol + ' vol</span>' : ''}
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:16px;flex-shrink:0">
+        <div style="text-align:right">
+          <div style="font-family:var(--mono);font-size:18px;font-weight:900;color:var(--text);line-height:1">${price}</div>
+        </div>
+        <div style="min-width:72px;text-align:right">
+          <div style="font-family:var(--mono);font-size:14px;font-weight:900;color:${changeColor};line-height:1">${arrow} ${changePct}%</div>
+          ${changePts ? '<div style="font-family:var(--mono);font-size:9px;color:' + changeColor + ';opacity:0.7">' + (isUp ? '+' : '-') + changePts + ' pts</div>' : ''}
+        </div>
+        <svg width="48" height="24" viewBox="0 0 48 24" fill="none" style="flex-shrink:0;opacity:0.6"><path d="${isUp ? 'M2 20 L12 16 L22 18 L32 10 L42 4 L46 2' : 'M2 4 L12 8 L22 6 L32 14 L42 20 L46 22'}" stroke="${changeColor}" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+      </div>
+    </a>`;
+  }).join('');
+}
 let _qtSearchTimer = null;
 
 function qtTradeBtn(url, label, color, extraData) {
