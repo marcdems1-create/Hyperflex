@@ -13118,7 +13118,9 @@ function renderHotMarkets() {
   if (!top.length) { grid.innerHTML = '<div style="text-align:center;padding:20px;color:var(--dim);font-size:13px;grid-column:1/-1">No markets in this category.</div>'; return; }
   grid.innerHTML = top.map(function(m) {
     var price = Math.round((m.yes_price || 0.5) * 100);
-    var url = (typeof polyRef==='function'?polyRef:function(u){return u})(m.url || 'https://polymarket.com');
+    var rawUrl = (typeof polyRef==='function'?polyRef:function(u){return u})(m.url || 'https://polymarket.com');
+    var hfxUrl = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(rawUrl) : '#';
+    var cardLink = hfxUrl && hfxUrl !== '#' ? hfxUrl : rawUrl;
     var cat = (m.category || 'other').toUpperCase();
     var vol = m.volume >= 1e6 ? '$' + (m.volume / 1e6).toFixed(1) + 'M' : m.volume >= 1e3 ? '$' + Math.round(m.volume / 1e3) + 'K' : '$' + (m.volume || 0);
     var whales = m.whale_count || 0;
@@ -13128,8 +13130,8 @@ function renderHotMarkets() {
     var side = price < 50 ? 'YES' : 'NO';
     var sideColor = side === 'YES' ? '#22c55e' : '#ef4444';
     var cardId = '_qtc_' + Math.random().toString(36).slice(2,8);
-    window[cardId] = {question: m.question||'', side: side, current_price: (m.yes_price||0.5), market_url: url, token_id: m.token_id||m.conditionId||''};
-    return '<div style="background:#0f0e0c;border:1px solid var(--border);border-radius:10px;padding:14px;transition:border-color .15s;cursor:pointer" onclick="window.open(\'' + url.replace(/'/g,"\\'") + '\',\'_blank\')" onmouseenter="this.style.borderColor=\'var(--gold)\'" onmouseleave="this.style.borderColor=\'var(--border)\'">' +
+    window[cardId] = {question: m.question||'', side: side, current_price: (m.yes_price||0.5), market_url: rawUrl, token_id: m.token_id||m.conditionId||''};
+    return '<a href="' + cardLink + '" style="display:block;text-decoration:none;background:#0f0e0c;border:1px solid var(--border);border-radius:10px;padding:14px;transition:border-color .15s;cursor:pointer" onmouseenter="this.style.borderColor=\'var(--gold)\'" onmouseleave="this.style.borderColor=\'var(--border)\'">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
         '<span style="font-family:var(--mono);font-size:8px;padding:2px 6px;border-radius:3px;background:rgba(201,146,13,.1);color:var(--gold);font-weight:700">' + escHtmlDash(cat) + '</span>' +
         '<span style="font-family:var(--mono);font-size:18px;font-weight:900;color:' + (price >= 50 ? '#22c55e' : 'var(--text)') + '">' + price + '%</span>' +
@@ -13144,10 +13146,10 @@ function renderHotMarkets() {
         '<span style="font-family:var(--mono);font-size:10px;color:var(--text)">' + entry + '¢ → +' + profit + '¢</span>' +
         '<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:#22c55e">+' + roi + '%</span>' +
       '</div>' : '') +
-      '<div onclick="event.stopPropagation();openTradeModal(window[\'' + cardId + '\'],\'buy\')">' +
+      '<div onclick="event.stopPropagation();event.preventDefault();openTradeModal(window[\'' + cardId + '\'],\'buy\')">' +
         '<button style="background:var(--gold);color:#141412;border:none;border-radius:6px;padding:7px 14px;font-family:var(--mono);font-size:10px;font-weight:700;cursor:pointer">Trade →</button>' +
       '</div>' +
-    '</div>';
+    '</a>';
   }).join('');
 }
 async function loadHotMarkets() {
@@ -14689,11 +14691,18 @@ function renderMarketSearchResults(data, el) {
     const label = platform === 'polymarket' ? '🟣 Polymarket' : '🟡 Kalshi';
     const exp = fmtDate(m.close_date || m.end_date);
     const bestBadge = isBest ? '<span style="font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:8px;background:rgba(201,146,13,0.15);color:#c9920d;border:1px solid rgba(201,146,13,0.3);font-weight:700">★ BEST ODDS</span>' : '';
-    return `<a href="${m.url}" target="_blank" rel="noopener" style="display:block;text-decoration:none;background:#0f0e0c;border:1px solid #2a2825;border-radius:10px;padding:14px 16px;margin-bottom:6px;transition:border-color .15s" onmouseover="this.style.borderColor='${color}44'" onmouseout="this.style.borderColor='#2a2825'">
+    const hfxUrl = platform === 'polymarket' && typeof hfxMarketUrl === 'function' ? hfxMarketUrl(m.url) : '#';
+    const hasHfxPage = hfxUrl && hfxUrl !== '#';
+    const cardHref = hasHfxPage ? hfxUrl : (m.url || '#');
+    const cardTarget = hasHfxPage ? '' : ' target="_blank" rel="noopener"';
+    return `<a href="${cardHref}"${cardTarget} style="display:block;text-decoration:none;background:#0f0e0c;border:1px solid #2a2825;border-radius:10px;padding:14px 16px;margin-bottom:6px;transition:border-color .15s" onmouseover="this.style.borderColor='${color}44'" onmouseout="this.style.borderColor='#2a2825'">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
         <span style="font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:8px;background:${color}15;color:${color};border:1px solid ${color}30">${label}</span>
         ${exp ? `<span style="font-family:var(--mono);font-size:10px;color:#4a4744">Exp ${exp}</span>` : ''}
         ${bestBadge}
+        <span style="margin-left:auto;display:flex;align-items:center;gap:6px">
+          ${m.url ? `<a href="${m.url}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="font-family:var(--mono);font-size:9px;padding:3px 8px;border-radius:6px;background:${color}10;color:${color};border:1px solid ${color}25;text-decoration:none;opacity:0.7;transition:opacity .15s" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'">${platform === 'polymarket' ? 'Polymarket ↗' : 'Kalshi ↗'}</a>` : ''}
+        </span>
       </div>
       <div style="font-size:13px;font-weight:600;color:#e8e4de;line-height:1.5;margin-bottom:6px">${escHtmlDash(m.question || m.title)}</div>
       <div style="font-family:var(--mono);font-size:12px;font-weight:700;color:${color}">${m.yes_pct != null ? m.yes_pct + '% YES' : ''}</div>
