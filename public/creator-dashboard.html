@@ -5155,38 +5155,40 @@ body.nav-open .sidebar-backdrop {
 
       <!-- ═══════════════════════════════════ QUICK TRADE TAB ════════════════════════════ -->
       <!-- ═══════════════════════════════════ BREAKING TAB ════════════════════════════ -->
+      <!-- ═══════════════════════════════════ BREAKING TAB ════════════════════════════ -->
       <div id="tab-breaking" style="display:none">
         <div class="section">
-          <div style="max-width:1000px">
+          <div style="max-width:1040px">
             <!-- Hero banner -->
-            <div style="background:linear-gradient(135deg,#141210 0%,#1a1610 50%,#141210 100%);border:1px solid rgba(201,146,13,0.15);border-radius:14px;padding:28px 32px;margin-bottom:24px;position:relative;overflow:hidden">
-              <div style="position:absolute;top:0;right:0;width:200px;height:100%;background:radial-gradient(ellipse at 80% 50%,rgba(201,146,13,0.06) 0%,transparent 70%);pointer-events:none"></div>
-              <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+            <div style="background:linear-gradient(135deg,#0e0d0b 0%,#16140f 40%,#1a160e 70%,#0e0d0b 100%);border:1px solid rgba(201,146,13,0.12);border-radius:16px;padding:32px 36px;margin-bottom:28px;position:relative;overflow:hidden">
+              <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 75% 30%,rgba(201,146,13,0.05) 0%,transparent 60%);pointer-events:none"></div>
+              <div style="position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(201,146,13,0.2),transparent)"></div>
+              <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;position:relative">
                 <div>
-                  <div style="font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.15em;margin-bottom:6px" id="brkDate"></div>
-                  <div style="font-family:var(--sans);font-size:24px;font-weight:900;color:var(--text);letter-spacing:-0.5px">Breaking News</div>
-                  <div style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:4px">Markets that moved the most in the last 24 hours</div>
+                  <div style="font-family:var(--mono);font-size:9px;color:#4a4744;text-transform:uppercase;letter-spacing:.2em;margin-bottom:8px" id="brkDate"></div>
+                  <div style="font-family:var(--sans);font-size:28px;font-weight:900;color:#fff;letter-spacing:-0.5px;line-height:1.1">Breaking News</div>
+                  <div style="font-family:var(--mono);font-size:11px;color:#6b6560;margin-top:6px">See the polymarkets that moved the most in the last 24 hours</div>
                 </div>
-                <div style="display:flex;align-items:center;gap:6px">
-                  <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#22c55e;animation:brkPulse 2s infinite"></span>
-                  <span style="font-family:var(--mono);font-size:9px;color:#22c55e;text-transform:uppercase;letter-spacing:.1em">Live</span>
+                <div style="display:flex;align-items:center;gap:8px;padding:8px 16px;background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.15);border-radius:20px">
+                  <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#22c55e;animation:brkPulse 2s infinite"></span>
+                  <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:#22c55e;text-transform:uppercase;letter-spacing:.1em">Live</span>
                 </div>
               </div>
             </div>
 
             <!-- Category filter pills -->
-            <div style="display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap">
-              <button onclick="brkFilter('all',this)" class="brk-pill active" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:6px 16px;border-radius:20px;border:1px solid var(--gold);background:var(--gold);color:var(--bg);cursor:pointer;transition:all .15s;min-height:36px">All</button>
-              <button onclick="brkFilter('politics',this)" class="brk-pill" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:6px 16px;border-radius:20px;border:1px solid #2a2825;background:transparent;color:var(--dim);cursor:pointer;transition:all .15s;min-height:36px">Politics</button>
-              <button onclick="brkFilter('crypto',this)" class="brk-pill" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:6px 16px;border-radius:20px;border:1px solid #2a2825;background:transparent;color:var(--dim);cursor:pointer;transition:all .15s;min-height:36px">Crypto</button>
-              <button onclick="brkFilter('sports',this)" class="brk-pill" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:6px 16px;border-radius:20px;border:1px solid #2a2825;background:transparent;color:var(--dim);cursor:pointer;transition:all .15s;min-height:36px">Sports</button>
-              <button onclick="brkFilter('world',this)" class="brk-pill" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:6px 16px;border-radius:20px;border:1px solid #2a2825;background:transparent;color:var(--dim);cursor:pointer;transition:all .15s;min-height:36px">World</button>
-              <button onclick="brkFilter('finance',this)" class="brk-pill" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:6px 16px;border-radius:20px;border:1px solid #2a2825;background:transparent;color:var(--dim);cursor:pointer;transition:all .15s;min-height:36px">Finance</button>
-              <button onclick="brkFilter('tech',this)" class="brk-pill" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:6px 16px;border-radius:20px;border:1px solid #2a2825;background:transparent;color:var(--dim);cursor:pointer;transition:all .15s;min-height:36px">Tech</button>
+            <div style="display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap">
+              <button onclick="brkFilter('all',this)" class="brk-pill active" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:8px 18px;border-radius:8px;border:1px solid var(--gold);background:var(--gold);color:var(--bg);cursor:pointer;transition:all .15s;min-height:36px">All</button>
+              <button onclick="brkFilter('politics',this)" class="brk-pill" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:8px 18px;border-radius:8px;border:1px solid #222;background:rgba(255,255,255,0.02);color:var(--dim);cursor:pointer;transition:all .15s;min-height:36px">Politics</button>
+              <button onclick="brkFilter('world',this)" class="brk-pill" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:8px 18px;border-radius:8px;border:1px solid #222;background:rgba(255,255,255,0.02);color:var(--dim);cursor:pointer;transition:all .15s;min-height:36px">World</button>
+              <button onclick="brkFilter('sports',this)" class="brk-pill" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:8px 18px;border-radius:8px;border:1px solid #222;background:rgba(255,255,255,0.02);color:var(--dim);cursor:pointer;transition:all .15s;min-height:36px">Sports</button>
+              <button onclick="brkFilter('crypto',this)" class="brk-pill" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:8px 18px;border-radius:8px;border:1px solid #222;background:rgba(255,255,255,0.02);color:var(--dim);cursor:pointer;transition:all .15s;min-height:36px">Crypto</button>
+              <button onclick="brkFilter('finance',this)" class="brk-pill" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:8px 18px;border-radius:8px;border:1px solid #222;background:rgba(255,255,255,0.02);color:var(--dim);cursor:pointer;transition:all .15s;min-height:36px">Finance</button>
+              <button onclick="brkFilter('tech',this)" class="brk-pill" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:8px 18px;border-radius:8px;border:1px solid #222;background:rgba(255,255,255,0.02);color:var(--dim);cursor:pointer;transition:all .15s;min-height:36px">Tech</button>
             </div>
 
             <!-- Movers list -->
-            <div id="brkMoversList" style="display:flex;flex-direction:column;gap:0">
+            <div id="brkMoversList" style="display:flex;flex-direction:column;gap:0;background:#0c0c0b;border:1px solid #1a1917;border-radius:12px;overflow:hidden">
               <div style="text-align:center;padding:48px 20px;color:var(--dim);font-size:13px">Loading breaking markets…</div>
             </div>
 
@@ -12883,9 +12885,9 @@ function guessCategory(q) {
 function brkFilter(cat, btn) {
   _brkFilter = cat;
   document.querySelectorAll('.brk-pill').forEach(p => {
-    p.style.background = 'transparent';
+    p.style.background = 'rgba(255,255,255,0.02)';
     p.style.color = 'var(--dim)';
-    p.style.borderColor = '#2a2825';
+    p.style.borderColor = '#222';
   });
   if (btn) {
     btn.style.background = 'var(--gold)';
@@ -12912,41 +12914,45 @@ function renderBreakingList() {
   list.innerHTML = items.map((m, i) => {
     const hasChange = Math.abs(m.change_pct || 0) > 0;
     const isUp = m.change_pct > 0;
-    const changeColor = hasChange ? (isUp ? '#22c55e' : '#ef4444') : 'var(--dim)';
-    const arrow = hasChange ? (isUp ? '↗' : '↘') : '';
-    const changePct = Math.abs(m.change_pct || 0).toFixed(0);
+    const changeColor = isUp ? '#22c55e' : '#ef4444';
+    const changeBg = isUp ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)';
+    const changePct = Math.abs(m.change_pct || 0);
+    const changeFmt = changePct >= 10 ? changePct.toFixed(0) : changePct.toFixed(1);
     const price = m.current_price != null ? m.current_price + '%' : '—';
     const vol = m.volume ? (m.volume >= 1000000 ? '$' + (m.volume / 1000000).toFixed(1) + 'M' : m.volume >= 1000 ? '$' + Math.round(m.volume / 1000) + 'K' : '$' + Math.round(m.volume)) : '';
     const mktUrl = m.slug ? '/market/' + m.slug : (window.hfxMarketUrl ? window.hfxMarketUrl(m.url) : m.url);
-    const catPill = m.category && m.category !== 'other' ? '<span style="font-family:var(--mono);font-size:8px;font-weight:700;padding:2px 6px;border-radius:3px;background:rgba(201,146,13,0.08);color:var(--gold);text-transform:uppercase;letter-spacing:.05em">' + m.category + '</span>' : '';
-    const whalePill = m.whale_count >= 3 ? '<span style="font-family:var(--mono);font-size:8px;font-weight:700;padding:2px 6px;border-radius:3px;background:rgba(96,165,250,0.08);color:#60a5fa">🐋 ' + m.whale_count + '</span>' : '';
+    const catColors = { politics:'#a78bfa', crypto:'#f59e0b', sports:'#22c55e', world:'#60a5fa', finance:'#10b981', tech:'#818cf8' };
+    const catColor = catColors[m.category] || 'var(--gold)';
+    const catPill = m.category && m.category !== 'other' ? `<span style="font-family:var(--mono);font-size:8px;font-weight:700;padding:2px 8px;border-radius:3px;background:${catColor}15;color:${catColor};text-transform:uppercase;letter-spacing:.06em">${m.category}</span>` : '';
 
-    // Right side: show price change if available, otherwise volume
-    const rightHtml = hasChange
-      ? `<div style="min-width:72px;text-align:right">
-          <div style="font-family:var(--mono);font-size:14px;font-weight:900;color:${changeColor};line-height:1">${arrow} ${changePct}%</div>
-        </div>
-        <svg width="48" height="24" viewBox="0 0 48 24" fill="none" style="flex-shrink:0;opacity:0.6"><path d="${isUp ? 'M2 20 L12 16 L22 18 L32 10 L42 4 L46 2' : 'M2 4 L12 8 L22 6 L32 14 L42 20 L46 22'}" stroke="${changeColor}" stroke-width="2" stroke-linecap="round" fill="none"/></svg>`
-      : (vol ? `<div style="min-width:72px;text-align:right">
-          <div style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--dim);line-height:1">${vol}</div>
-          <div style="font-family:var(--mono);font-size:8px;color:#3a3834;margin-top:2px">VOLUME</div>
-        </div>` : '');
+    // Mini sparkline SVG
+    const sparkPath = isUp
+      ? 'M0 18 Q8 16 16 14 T32 8 T48 2'
+      : 'M0 4 Q8 6 16 8 T32 14 T48 20';
 
-    return `<a href="${mktUrl}" style="text-decoration:none;display:flex;align-items:center;gap:14px;padding:14px 18px;border-bottom:1px solid #1a1917;transition:background .15s;cursor:pointer" onmouseover="this.style.background='rgba(201,146,13,0.03)'" onmouseout="this.style.background='transparent'">
-      <div style="font-family:var(--mono);font-size:16px;font-weight:900;color:#2a2825;width:28px;text-align:center;flex-shrink:0">${m.rank}</div>
+    // Change badge or volume badge
+    const changeBadge = hasChange
+      ? `<div style="display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;background:${changeBg}">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="${changeColor}"><path d="${isUp ? 'M5 1L9 6H1Z' : 'M5 9L1 4H9Z'}"/></svg>
+          <span style="font-family:var(--mono);font-size:13px;font-weight:900;color:${changeColor}">${changeFmt}%</span>
+        </div>`
+      : (vol ? `<div style="font-family:var(--mono);font-size:11px;color:#4a4744;text-align:right"><span style="font-weight:700">${vol}</span><div style="font-size:8px;color:#3a3834;margin-top:1px">VOL</div></div>` : '');
+
+    return `<a href="${mktUrl}" style="text-decoration:none;display:flex;align-items:center;gap:16px;padding:16px 20px;border-bottom:1px solid #151413;transition:all .15s;cursor:pointer" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
+      <div style="font-family:var(--mono);font-size:14px;font-weight:800;color:#2a2825;width:24px;text-align:center;flex-shrink:0">${m.rank}</div>
       <div style="flex:1;min-width:0">
-        <div style="font-family:var(--sans);font-size:14px;font-weight:700;color:var(--text);line-height:1.35;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtmlDash(m.question)}</div>
-        <div style="display:flex;align-items:center;gap:6px">
+        <div style="font-family:var(--sans);font-size:15px;font-weight:700;color:#e8e4de;line-height:1.35;margin-bottom:4px">${escHtmlDash(m.question)}</div>
+        <div style="display:flex;align-items:center;gap:8px">
           ${catPill}
-          ${whalePill}
-          ${hasChange && vol ? '<span style="font-family:var(--mono);font-size:9px;color:#4a4744">' + vol + '</span>' : ''}
+          ${vol && hasChange ? '<span style="font-family:var(--mono);font-size:9px;color:#3a3834">' + vol + ' vol</span>' : ''}
         </div>
       </div>
-      <div style="display:flex;align-items:center;gap:14px;flex-shrink:0">
+      <div style="display:flex;align-items:center;gap:16px;flex-shrink:0">
         <div style="text-align:right">
-          <div style="font-family:var(--mono);font-size:18px;font-weight:900;color:var(--text);line-height:1">${price}</div>
+          <div style="font-family:var(--mono);font-size:20px;font-weight:900;color:#fff;line-height:1;letter-spacing:-0.5px">${price}</div>
         </div>
-        ${rightHtml}
+        ${hasChange ? `<svg width="52" height="24" viewBox="0 0 52 24" fill="none" style="flex-shrink:0"><path d="${sparkPath}" stroke="${changeColor}" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.5"/><path d="${sparkPath}" stroke="${changeColor}" stroke-width="2" stroke-linecap="round" fill="none" filter="blur(3px)" opacity="0.3"/></svg>` : '<div style="width:52px"></div>'}
+        ${changeBadge}
       </div>
     </a>`;
   }).join('');

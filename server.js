@@ -18836,6 +18836,19 @@ app.get('/api/screener', async (req, res) => {
       }
     } catch (e) { /* silent */ }
 
+    // Fallback: compute price changes from _volumeTracker if snapshots are empty
+    if (Object.keys(priceChanges).length === 0 && Object.keys(_volumeTracker).length > 0) {
+      for (const [mid, vt] of Object.entries(_volumeTracker)) {
+        if (!vt.samples || vt.samples.length < 2) continue;
+        const oldest = vt.samples[0];
+        const newest = vt.samples[vt.samples.length - 1];
+        if (oldest.yes_price != null && newest.yes_price != null && oldest.yes_price > 0) {
+          const change = parseFloat(((newest.yes_price - oldest.yes_price) / oldest.yes_price * 100).toFixed(1));
+          if (change !== 0) priceChanges[mid] = change;
+        }
+      }
+    }
+
     // Build enriched market list (filter expired markets)
     const now = new Date();
     const markets = [];
@@ -18961,10 +18974,8 @@ app.get('/api/screener', async (req, res) => {
       });
     }
 
-    // ── Volume tracking: diff old vs new screener before overwriting ──
-    if (_screenerCache && _screenerCache.data) {
-      const oldByMid = {};
-      for (const om of _screenerCache.data) { if (om.market_id) oldByMid[om.market_id] = om; }
+    // ── Volume tracking: always record price samples for price change computation ──
+    {
       for (const nm of markets) {
         if (!nm.market_id) continue;
         if (!_volumeTracker[nm.market_id]) _volumeTracker[nm.market_id] = { samples: [] };
