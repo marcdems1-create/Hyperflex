@@ -15138,6 +15138,15 @@ function openTradeModal(posDataJson, mode) {
   const iconEl = document.getElementById('tradeModalIcon');
   if (iconEl && pos.icon) iconEl.innerHTML = '<img src="' + pos.icon + '" style="width:36px;height:36px;border-radius:8px;object-fit:cover" onerror="this.parentElement.textContent=\'📊\'">';
 
+  // Set market page link
+  const mktLinkEl = document.getElementById('tradeMarketLink');
+  if (mktLinkEl) {
+    const mktUrl = pos.market_url || pos.url || '';
+    const hfxLink = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(mktUrl) : '#';
+    mktLinkEl.href = hfxLink;
+    mktLinkEl.style.display = hfxLink && hfxLink !== '#' ? 'block' : 'none';
+  }
+
   // Set side
   setTradeSide(pos.side || 'YES');
 
@@ -15595,6 +15604,9 @@ function closePositionAll(posDataJson) {
       <!-- Buy button -->
       <button id="tradeConfirmBtn" onclick="confirmTrade()" style="width:100%;background:#3b82f6;color:#fff;border:none;border-radius:12px;padding:16px;font-family:var(--sans);font-size:15px;font-weight:800;cursor:pointer;min-height:52px;transition:opacity .15s" onmouseover="this.style.opacity='0.88'" onmouseout="this.style.opacity='1'">Buy Yes</button>
       <div style="text-align:center;margin-top:10px;font-family:var(--mono);font-size:10px;color:#555">Orders signed via HMAC. We never store your keys.</div>
+
+      <!-- View Market link -->
+      <a id="tradeMarketLink" href="#" style="display:block;text-align:center;margin-top:10px;font-family:var(--mono);font-size:12px;font-weight:700;color:var(--gold,#c9920d);text-decoration:none;padding:8px;border:1px solid rgba(201,146,13,0.25);border-radius:8px;transition:background .15s" onmouseover="this.style.background='rgba(201,146,13,0.08)'" onmouseout="this.style.background='none'">📊 View Market Page</a>
 
       <!-- Orderbook info (collapsed) -->
       <div id="tradeOrderbookInfo" style="margin-top:12px;padding:8px 12px;background:rgba(255,255,255,0.03);border-radius:8px">
