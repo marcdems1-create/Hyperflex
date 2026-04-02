@@ -25934,6 +25934,26 @@ cron.schedule('0 15 * * *', safeCron('expiryTweet', async () => {
   } catch(e) { console.warn('[expiry-tweet]', e.message); }
 }));
 
+// Daily Rewards tweet — 6pm UTC (1pm ET) — rotating hook copy
+const _rewardsTweetPool = [
+  `Polymarket pays referral fees.\n\nMost platforms keep it.\n\nWe don't.\n\nEvery trade through HYPERFLEX earns you real USDC back.\n\nhyperflex.network/rewards`,
+  `Trade & Earn USDC.\n\nEvery Polymarket trade you make through HYPERFLEX earns you a share of our referral revenue.\n\nThe more you trade, the more you earn.\n\nhyperflex.network/rewards`,
+  `We're sharing 100% of our Polymarket referral revenue with traders.\n\nThis week's reward pool is live.\n\nBe early → hyperflex.network/rewards`,
+  `Most prediction market tools keep the referral fee.\n\nHYPERFLEX gives it back to you in USDC.\n\nTrade smarter, earn more → hyperflex.network/rewards`,
+  `Real money. Every trade.\n\nHYPERFLEX shares Polymarket referral revenue directly with the traders who use it.\n\nStart earning → hyperflex.network/rewards`,
+  `You're already trading on Polymarket.\n\nYou might as well get paid for it.\n\nHYPERFLEX shares real USDC with every trader.\n\nhyperflex.network/rewards`,
+  `Prediction markets are beating Wall Street analysts.\n\nNow they're paying you too.\n\nTrade through HYPERFLEX → earn USDC every week.\n\nhyperflex.network/rewards`,
+];
+let _rewardsTweetIdx = Math.floor(Math.random() * _rewardsTweetPool.length);
+cron.schedule('0 18 * * *', safeCron('rewardsTweet', async () => {
+  try {
+    const text = _rewardsTweetPool[_rewardsTweetIdx % _rewardsTweetPool.length];
+    _rewardsTweetIdx++;
+    await postTweet(text);
+    console.log('[rewards-tweet] Posted rewards tweet');
+  } catch(e) { console.warn('[rewards-tweet]', e.message); }
+}));
+
 // ══════════════════════════════════════════════════════════════════════
 // REPLY-TO-ENGAGEMENT BOT — find prediction market tweets and reply with data
 // ══════════════════════════════════════════════════════════════════════
