@@ -19357,6 +19357,314 @@ app.get('/api/market/:slug/whale-flow', async (req, res) => {
   }
 });
 
+// ── WATCHLISTS + PRICE ALERTS ─────────────────────────────────────────────
+
+app.get('/api/watchlist', requireAuth, async (req, res) => {
+  try {
+    const userId = req.userId;
+    let rows = [];
+    if (pool) {
+      rows = await dbQuery('SELECT * FROM watchlist WHERE user_id = $1 ORDER BY created_at DESC', [userId]).catch(() => []);
+    } else {
+      const { data } = await supabase.from('watchlist').select('*').eq('user_id', userId).order('created_at', { ascending: false });
+      rows = data || [];
+    }
+
+    // Enrich with live prices from screener cache
+    const enriched = rows.map(w => {
+      const live = (_screenerCache && _screenerCache.data || []).find(m => {
+        const mSlug = (m.slug || '').toLowerCase();
+        const wSlug = (w.market_slug || '').toLowerCase();
+        return mSlug === wSlug || (m.question || '').toLowerCase().includes((w.market_question || '').toLowerCase().substring(0, 20));
+      });
+      return {
+        ...w,
+        current_price: live ? live.yes_price : null,
+        price_change_24h: live ? live.price_change_24h : null,
+        volume: live ? live.volume : null
+      };
+    });
+
+    res.json({ watchlist: enriched });
+  } catch (err) {
+    console.error('[watchlist]', err.message);
+    res.status(500).json({ error: 'Failed to load watchlist' });
+  }
+});
+
+app.post('/api/watchlist', requireAuth, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { market_slug, market_question, alert_above, alert_below } = req.body;
+    if (!market_slug && !market_question) return res.status(400).json({ error: 'market_slug or market_question required' });
+
+    const row = {
+      user_id: userId,
+      market_slug: market_slug || '',
+      market_question: market_question || '',
+      alert_above: alert_above != null ? parseFloat(alert_above) : null,
+      alert_below: alert_below != null ? parseFloat(alert_below) : null,
+      created_at: new Date().toISOString()
+    };
+
+    if (pool) {
+      await dbQuery(
+        'INSERT INTO watchlist (user_id, market_slug, market_question, alert_above, alert_below, created_at) VALUES ($1,$2,$3,$4,$5,$6)',
+        [row.user_id, row.market_slug, row.market_question, row.alert_above, row.alert_below, row.created_at]
+      );
+    } else {
+      await supabase.from('watchlist').insert([row]);
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[watchlist add]', err.message);
+    res.status(500).json({ error: 'Failed to add to watchlist' });
+  }
+});
+
+app.delete('/api/watchlist/:id', requireAuth, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const id = req.params.id;
+    if (pool) {
+      await dbQuery('DELETE FROM watchlist WHERE id = $1 AND user_id = $2', [id, userId]);
+    } else {
+      await supabase.from('watchlist').delete().eq('id', id).eq('user_id', userId);
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[watchlist del]', err.message);
+    res.status(500).json({ error: 'Failed to remove from watchlist' });
+  }
+});
+
+// ── DAILY AI BRIEFING ─────────────────────────────────────────────────────
+let _briefingCache = null;
+
+app.get('/api/briefing', async (req, res) => {
+  try {
+    // 60-min cache
+    if (_briefingCache && (Date.now() - _briefingCache.ts < 60 * 60 * 1000)) {
+      return res.json(_briefingCache.data);
+    }
+
+    // Gather intelligence from existing caches
+    const screener = (_screenerCache && _screenerCache.data) || [];
+    const whales = (_whaleWatchCache && _whaleWatchCache.data && _whaleWatchCache.data.whales) || [];
+    const signals = []; // from signal cache if available
+
+    // Top movers (biggest 24h price changes)
+    const movers = screener.filter(m => m.price_change_24h != null && Math.abs(m.price_change_24h) >= 3)
+      .sort((a, b) => Math.abs(b.price_change_24h) - Math.abs(a.price_change_24h))
+      .slice(0, 5)
+      .map(m => ({
+        question: m.question,
+        change: m.price_change_24h,
+        yes_price: m.yes_price,
+        volume: m.volume,
+        slug: m.slug
+      }));
+
+    // Whale activity summary
+    const whaleMarkets = {};
+    for (const w of whales) {
+      const mkt = w.market || w.position || 'unknown';
+      if (!whaleMarkets[mkt]) whaleMarkets[mkt] = { count: 0, capital: 0 };
+      whaleMarkets[mkt].count++;
+      whaleMarkets[mkt].capital += parseFloat(w.size || 0);
+    }
+    const topWhaleMarkets = Object.entries(whaleMarkets)
+      .sort((a, b) => b[1].capital - a[1].capital)
+      .slice(0, 5)
+      .map(([market, data]) => ({ market, whale_count: data.count, capital: data.capital }));
+
+    // Markets expiring soon
+    const expiringSoon = screener
+      .filter(m => m.days_until_expiry != null && m.days_until_expiry <= 3 && m.yes_price != null && m.yes_price > 0.1 && m.yes_price < 0.9)
+      .sort((a, b) => (a.days_until_expiry || 99) - (b.days_until_expiry || 99))
+      .slice(0, 5)
+      .map(m => ({ question: m.question, yes_price: m.yes_price, days: m.days_until_expiry, slug: m.slug }));
+
+    // Highest alpha edge opportunities
+    const alphaOpps = screener
+      .filter(m => m.alpha_edge != null && Math.abs(m.alpha_edge) >= 3)
+      .sort((a, b) => Math.abs(b.alpha_edge) - Math.abs(a.alpha_edge))
+      .slice(0, 5)
+      .map(m => ({
+        question: m.question,
+        market_price: m.yes_price,
+        model_price: m.model_probability,
+        alpha_edge: m.alpha_edge,
+        slug: m.slug
+      }));
+
+    // Volume leaders
+    const volumeLeaders = screener.slice().sort((a, b) => b.volume - a.volume).slice(0, 5)
+      .map(m => ({ question: m.question, volume: m.volume, yes_price: m.yes_price, slug: m.slug }));
+
+    const briefing = {
+      date: new Date().toISOString().split('T')[0],
+      generated_at: new Date().toISOString(),
+      summary: {
+        total_markets: screener.length,
+        total_whale_positions: whales.length,
+        markets_with_alpha: screener.filter(m => m.alpha_edge != null && Math.abs(m.alpha_edge) >= 3).length,
+        expiring_today: screener.filter(m => m.days_until_expiry != null && m.days_until_expiry <= 1).length
+      },
+      sections: {
+        top_movers: movers,
+        whale_activity: topWhaleMarkets,
+        expiring_soon: expiringSoon,
+        alpha_opportunities: alphaOpps,
+        volume_leaders: volumeLeaders
+      }
+    };
+
+    _briefingCache = { ts: Date.now(), data: briefing };
+    res.json(briefing);
+  } catch (err) {
+    console.error('[briefing]', err.message);
+    res.status(500).json({ error: 'Failed to generate briefing' });
+  }
+});
+
+// ── CATALYST CALENDAR — upcoming market-moving events ────────────────────
+let _calendarCache = null;
+
+app.get('/api/calendar', async (req, res) => {
+  try {
+    // 30-min cache
+    if (_calendarCache && (Date.now() - _calendarCache.ts < 30 * 60 * 1000)) {
+      return res.json(_calendarCache.data);
+    }
+
+    const now = new Date();
+    const events = [];
+
+    // ── Static known macro/political events (auto-generated rolling calendar) ──
+    const year = now.getFullYear();
+    const month = now.getMonth(); // 0-indexed
+
+    // FOMC meetings (2026 schedule — 8 meetings/year)
+    const fomcDates = ['2026-01-28','2026-03-18','2026-05-06','2026-06-17','2026-07-29','2026-09-16','2026-11-04','2026-12-16'];
+    for (const d of fomcDates) {
+      const dt = new Date(d);
+      if (dt >= now && dt <= new Date(now.getTime() + 90 * 86400000)) {
+        const daysAway = Math.ceil((dt - now) / 86400000);
+        events.push({
+          date: d, title: 'FOMC Interest Rate Decision', category: 'macro',
+          impact: 'high', days_away: daysAway,
+          description: 'Federal Reserve announces interest rate decision. Directly impacts rate cut/hike prediction markets.',
+          related_keywords: ['fed', 'interest rate', 'rate cut', 'rate hike', 'fomc', 'powell']
+        });
+      }
+    }
+
+    // CPI releases (usually ~12th of each month)
+    for (let mi = 0; mi < 3; mi++) {
+      const cpiMonth = new Date(year, month + mi, 12);
+      if (cpiMonth >= now) {
+        events.push({
+          date: cpiMonth.toISOString().split('T')[0], title: 'US CPI Inflation Report', category: 'macro',
+          impact: 'high', days_away: Math.ceil((cpiMonth - now) / 86400000),
+          description: 'Consumer Price Index release. Moves inflation, rate cut, and recession markets.',
+          related_keywords: ['inflation', 'cpi', 'consumer price', 'rate cut']
+        });
+      }
+    }
+
+    // Jobs report (first Friday of month)
+    for (let mi = 0; mi < 3; mi++) {
+      const firstOfMonth = new Date(year, month + mi, 1);
+      const dayOfWeek = firstOfMonth.getDay();
+      const firstFriday = new Date(year, month + mi, 1 + ((5 - dayOfWeek + 7) % 7));
+      if (firstFriday >= now) {
+        events.push({
+          date: firstFriday.toISOString().split('T')[0], title: 'US Non-Farm Payrolls', category: 'macro',
+          impact: 'high', days_away: Math.ceil((firstFriday - now) / 86400000),
+          description: 'Monthly jobs report. Key indicator for recession and rate cut markets.',
+          related_keywords: ['unemployment', 'jobs', 'recession', 'economy']
+        });
+      }
+    }
+
+    // GDP releases (quarterly — end of month after quarter ends)
+    const gdpDates = [`${year}-01-30`, `${year}-04-30`, `${year}-07-30`, `${year}-10-30`];
+    for (const d of gdpDates) {
+      const dt = new Date(d);
+      if (dt >= now && dt <= new Date(now.getTime() + 90 * 86400000)) {
+        events.push({
+          date: d, title: 'US GDP Report', category: 'macro',
+          impact: 'medium', days_away: Math.ceil((dt - now) / 86400000),
+          description: 'Quarterly GDP growth estimate. Impacts recession probability markets.',
+          related_keywords: ['gdp', 'recession', 'economy', 'growth']
+        });
+      }
+    }
+
+    // Bitcoin halving (next one ~2028, but add crypto events)
+    // Major crypto events
+    const cryptoEvents = [
+      { date: `${year}-04-15`, title: 'US Tax Deadline', category: 'crypto', impact: 'medium', description: 'Tax selling pressure on crypto markets. Watch BTC/ETH price prediction markets.' },
+      { date: `${year}-06-01`, title: 'ETH Pectra Upgrade (est.)', category: 'crypto', impact: 'medium', description: 'Ethereum protocol upgrade. Impacts ETH price prediction markets.' },
+    ];
+    for (const ce of cryptoEvents) {
+      const dt = new Date(ce.date);
+      if (dt >= now && dt <= new Date(now.getTime() + 90 * 86400000)) {
+        events.push({ ...ce, days_away: Math.ceil((dt - now) / 86400000), related_keywords: ['bitcoin', 'ethereum', 'crypto', 'btc', 'eth'] });
+      }
+    }
+
+    // Political events
+    const politicalEvents = [
+      { date: `${year}-11-03`, title: 'US Midterm Elections', category: 'politics', impact: 'high', description: 'US midterm election day. Impacts all political prediction markets.', related_keywords: ['election', 'congress', 'senate', 'republican', 'democrat'] },
+    ];
+    for (const pe of politicalEvents) {
+      const dt = new Date(pe.date);
+      if (dt >= now && dt <= new Date(now.getTime() + 180 * 86400000)) {
+        events.push({ ...pe, days_away: Math.ceil((dt - now) / 86400000) });
+      }
+    }
+
+    // ── Match events to live Polymarket markets ──
+    if (_screenerCache && _screenerCache.data) {
+      for (const evt of events) {
+        const keywords = evt.related_keywords || [];
+        evt.related_markets = [];
+        for (const m of _screenerCache.data) {
+          if (evt.related_markets.length >= 3) break;
+          const q = (m.question || '').toLowerCase();
+          const matchCount = keywords.filter(k => q.includes(k)).length;
+          if (matchCount >= 1) {
+            evt.related_markets.push({
+              question: m.question,
+              yes_price: m.yes_price,
+              slug: m.slug,
+              volume: m.volume
+            });
+          }
+        }
+      }
+    }
+
+    // Sort by date ascending
+    events.sort((a, b) => a.days_away - b.days_away);
+
+    const result = {
+      events,
+      total: events.length,
+      updated_at: new Date().toISOString()
+    };
+
+    _calendarCache = { ts: Date.now(), data: result };
+    res.json(result);
+  } catch (err) {
+    console.error('[calendar]', err.message);
+    res.status(500).json({ error: 'Failed to load calendar', detail: err.message });
+  }
+});
+
 // ── WHALE FLOW INDEX — aggregated whale insights ──────────────────────────
 let _whaleFlowCache = null;
 

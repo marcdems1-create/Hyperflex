@@ -2949,6 +2949,15 @@ body.nav-open .sidebar-backdrop {
       <a class="nav-item" data-nav-section="trading" onclick="showTab('arbitrage')">
         <span class="nav-icon">⚖️</span><span class="nav-label">Arbitrage</span>
       </a>
+      <a class="nav-item" data-nav-section="trading" onclick="showTab('calendar')">
+        <span class="nav-icon">📅</span><span class="nav-label">Catalysts</span>
+      </a>
+      <a class="nav-item" data-nav-section="trading" onclick="showTab('watchlist')">
+        <span class="nav-icon">👁️</span><span class="nav-label">Watchlist</span>
+      </a>
+      <a class="nav-item" data-nav-section="trading" onclick="showTab('briefing')">
+        <span class="nav-icon">📋</span><span class="nav-label">Daily Brief</span>
+      </a>
       <div class="nav-section-label" id="navSectionCommunity" data-nav-section="community">Community</div>
       <a class="nav-item" data-nav-section="community" onclick="showTab('overview')">
         <span class="nav-icon">📊</span><span class="nav-label">Overview</span>
@@ -5333,6 +5342,64 @@ body.nav-open .sidebar-backdrop {
         </div>
       </div><!-- /tab-arbitrage -->
 
+      <!-- CATALYST CALENDAR TAB -->
+      <div id="tab-calendar" style="display:none">
+        <div class="section">
+          <div style="max-width:960px">
+            <div style="margin-bottom:20px">
+              <div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:6px">📅 Catalyst Calendar</div>
+              <div style="font-family:var(--mono);font-size:11px;color:var(--dim)">Upcoming events that move prediction markets — mapped to tradeable opportunities</div>
+            </div>
+            <div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap" id="calFilterPills">
+              <button class="ta-btn active" onclick="filterCalendar('all',this)">All</button>
+              <button class="ta-btn" onclick="filterCalendar('macro',this)">Macro</button>
+              <button class="ta-btn" onclick="filterCalendar('politics',this)">Politics</button>
+              <button class="ta-btn" onclick="filterCalendar('crypto',this)">Crypto</button>
+              <button class="ta-btn" onclick="filterCalendar('sports',this)">Sports</button>
+              <button class="ta-btn" onclick="filterCalendar('earnings',this)">Earnings</button>
+              <button class="ta-btn" onclick="filterCalendar('geopolitics',this)">Geopolitics</button>
+            </div>
+            <div id="calList" style="display:flex;flex-direction:column;gap:10px">
+              <div style="text-align:center;padding:40px 0;font-family:var(--mono);font-size:12px;color:var(--dim)">Loading catalysts...</div>
+            </div>
+          </div>
+        </div>
+      </div><!-- /tab-calendar -->
+
+      <!-- WATCHLIST TAB -->
+      <div id="tab-watchlist" style="display:none">
+        <div class="section">
+          <div style="max-width:960px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+              <div>
+                <div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:6px">👁️ Watchlist</div>
+                <div style="font-family:var(--mono);font-size:11px;color:var(--dim)">Track markets and set price alerts</div>
+              </div>
+              <button onclick="openAddWatchlist()" style="padding:8px 16px;background:var(--gold);color:#141412;border:none;border-radius:8px;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer">+ Add Market</button>
+            </div>
+            <div id="watchlistList" style="display:flex;flex-direction:column;gap:10px">
+              <div style="text-align:center;padding:40px 0;font-family:var(--mono);font-size:12px;color:var(--dim)">Loading watchlist...</div>
+            </div>
+          </div>
+        </div>
+      </div><!-- /tab-watchlist -->
+
+      <!-- DAILY BRIEFING TAB -->
+      <div id="tab-briefing" style="display:none">
+        <div class="section">
+          <div style="max-width:960px">
+            <div style="margin-bottom:20px">
+              <div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:6px">📋 Daily Intelligence Brief</div>
+              <div style="font-family:var(--mono);font-size:11px;color:var(--dim)" id="briefingDate">Loading...</div>
+            </div>
+            <div id="briefingSummary" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px"></div>
+            <div id="briefingSections" style="display:flex;flex-direction:column;gap:20px">
+              <div style="text-align:center;padding:40px 0;font-family:var(--mono);font-size:12px;color:var(--dim)">Generating brief...</div>
+            </div>
+          </div>
+        </div>
+      </div><!-- /tab-briefing -->
+
       <!-- ACCOUNT TAB -->
       <div id="tab-account" style="display:none">
         <div class="section">
@@ -7155,7 +7222,7 @@ function ensureMoreExpanded(tab) {
 // Tab switching
 function showTab(tab) {
   ensureMoreExpanded(tab);
-  ['overview','markets','resolve','members','leaderboard','share','rewards','seasons','settings','analytics','economy','branding','flexbot','ideas','portfolio','account','performance','breaking','quicktrade','findmarkets','arbitrage'].forEach(t => {
+  ['overview','markets','resolve','members','leaderboard','share','rewards','seasons','settings','analytics','economy','branding','flexbot','ideas','portfolio','account','performance','breaking','quicktrade','findmarkets','arbitrage','calendar','watchlist','briefing'].forEach(t => {
     const el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === tab ? 'block' : 'none';
   });
@@ -7163,7 +7230,7 @@ function showTab(tab) {
   document.querySelectorAll('.nav-item').forEach(n => {
     if (n.getAttribute('onclick') && n.getAttribute('onclick').includes(`'${tab}'`)) n.classList.add('active');
   });
-  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Social', portfolio:'My Positions', account:'My Account', performance:'Performance', breaking:'Breaking', quicktrade:'Quick Trade', findmarkets:'Find Markets', arbitrage:'Arbitrage Scanner' };
+  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Social', portfolio:'My Positions', account:'My Account', performance:'Performance', breaking:'Breaking', quicktrade:'Quick Trade', findmarkets:'Find Markets', arbitrage:'Arbitrage Scanner', calendar:'Catalyst Calendar', watchlist:'Watchlist', briefing:'Daily Brief' };
   document.getElementById('topbarTitle').textContent = titles[tab] || tab;
   if (tab === 'analytics' && !analyticsLoaded) loadAnalytics();
   if (tab === 'members') { loadSocialTab(); loadMembers(); }
@@ -7208,6 +7275,9 @@ function showTab(tab) {
   if (tab === 'breaking') { loadBreakingTab(); }
   if (tab === 'quicktrade') { loadQuickTrade(); }
   if (tab === 'arbitrage') { loadArbitrageTab(); }
+  if (tab === 'calendar') { loadCalendarTab(); }
+  if (tab === 'watchlist') { loadWatchlistTab(); }
+  if (tab === 'briefing') { loadBriefingTab(); }
   if (tab === 'account') populateAccountTab();
   if (tab === 'seasons' && !seasonsLoaded) loadSeasons();
   if (tab === 'markets') {
@@ -13096,6 +13166,249 @@ async function loadQtFearGreed() {
     var lbl = document.getElementById('qtFearGreedLabel'); if (lbl) lbl.textContent = label;
   } catch(e) {}
 }
+// ── WATCHLIST TAB ────────────────────────────────────────────────────────────
+async function loadWatchlistTab() {
+  try {
+    const r = await fetch('/api/watchlist', { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) throw new Error('Failed');
+    const data = await r.json();
+    const items = data.watchlist || [];
+    const list = document.getElementById('watchlistList');
+
+    if (!items.length) {
+      list.innerHTML = '<div style="text-align:center;padding:40px"><div style="font-size:28px;margin-bottom:8px">👁️</div><div style="font-family:var(--mono);font-size:12px;color:var(--dim)">Your watchlist is empty</div><div style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:4px">Add markets from Find Markets or Screener to track them here</div></div>';
+      return;
+    }
+
+    list.innerHTML = items.map(function(w) {
+      var pct = w.current_price != null ? Math.round(w.current_price * 100) : null;
+      var change = w.price_change_24h;
+      var changeStr = change != null ? (change > 0 ? '+' : '') + Math.round(change) + '%' : '';
+      var changeColor = change > 0 ? 'var(--green)' : change < 0 ? 'var(--red)' : 'var(--dim)';
+      var alertStr = '';
+      if (w.alert_above) alertStr += 'Alert above ' + Math.round(w.alert_above * 100) + '% ';
+      if (w.alert_below) alertStr += 'Alert below ' + Math.round(w.alert_below * 100) + '%';
+
+      return '<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;align-items:center;gap:14px">' +
+        '<div style="flex:1;min-width:0">' +
+          '<a href="/market/' + escH(w.market_slug || '') + '" style="font-size:13px;font-weight:700;color:var(--text);text-decoration:none;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escH(w.market_question || w.market_slug) + '</a>' +
+          (alertStr ? '<div style="font-family:var(--mono);font-size:9px;color:var(--gold);margin-top:3px">' + escH(alertStr) + '</div>' : '') +
+        '</div>' +
+        (pct != null ? '<div style="text-align:right;min-width:60px">' +
+          '<div style="font-family:var(--mono);font-size:18px;font-weight:700">' + pct + '%</div>' +
+          (changeStr ? '<div style="font-family:var(--mono);font-size:10px;color:' + changeColor + '">' + changeStr + ' 24h</div>' : '') +
+        '</div>' : '') +
+        '<button onclick="removeWatchlist(\'' + w.id + '\')" style="background:none;border:none;cursor:pointer;color:var(--dim);font-size:14px;padding:4px" title="Remove">✕</button>' +
+      '</div>';
+    }).join('');
+  } catch(e) {
+    document.getElementById('watchlistList').innerHTML = '<div style="text-align:center;padding:40px;font-family:var(--mono);font-size:12px;color:var(--dim)">Failed to load watchlist</div>';
+  }
+}
+
+async function removeWatchlist(id) {
+  try {
+    await fetch('/api/watchlist/' + id, { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } });
+    loadWatchlistTab();
+  } catch(e) {}
+}
+
+function openAddWatchlist() {
+  var q = prompt('Enter market name or slug to add to watchlist:');
+  if (!q || !q.trim()) return;
+  var alertAbove = prompt('Alert when price goes above (e.g. 70 for 70%, leave blank for no alert):', '');
+  var alertBelow = prompt('Alert when price drops below (e.g. 30 for 30%, leave blank for no alert):', '');
+
+  fetch('/api/watchlist', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    body: JSON.stringify({
+      market_slug: q.trim().toLowerCase().replace(/\s+/g, '-'),
+      market_question: q.trim(),
+      alert_above: alertAbove ? parseFloat(alertAbove) / 100 : null,
+      alert_below: alertBelow ? parseFloat(alertBelow) / 100 : null
+    })
+  }).then(function() { loadWatchlistTab(); }).catch(function() {});
+}
+
+// ── DAILY BRIEFING TAB ──────────────────────────────────────────────────────
+async function loadBriefingTab() {
+  try {
+    const r = await fetch('/api/briefing', { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) throw new Error('Failed');
+    const data = await r.json();
+
+    document.getElementById('briefingDate').textContent = 'Generated: ' + new Date(data.generated_at).toLocaleString() + ' · ' + data.summary.total_markets + ' markets tracked';
+
+    // Summary cards
+    var s = data.summary;
+    document.getElementById('briefingSummary').innerHTML = [
+      { label: 'Markets Tracked', val: s.total_markets, color: 'var(--text)' },
+      { label: 'Whale Positions', val: s.total_whale_positions, color: 'var(--gold)' },
+      { label: 'Alpha Opportunities', val: s.markets_with_alpha, color: 'var(--green)' },
+      { label: 'Expiring Today', val: s.expiring_today, color: s.expiring_today > 0 ? 'var(--red)' : 'var(--dim)' }
+    ].map(function(c) {
+      return '<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">' +
+        '<div style="font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">' + c.label + '</div>' +
+        '<div style="font-family:var(--mono);font-size:22px;font-weight:700;color:' + c.color + '">' + c.val + '</div>' +
+      '</div>';
+    }).join('');
+
+    // Sections
+    var sections = data.sections;
+    var html = '';
+
+    // Top Movers
+    if (sections.top_movers && sections.top_movers.length > 0) {
+      html += briefSection('Top Movers (24h)', sections.top_movers.map(function(m) {
+        var pct = m.yes_price != null ? Math.round(m.yes_price * 100) + '%' : '—';
+        var ch = (m.change > 0 ? '+' : '') + Math.round(m.change) + '%';
+        var chColor = m.change > 0 ? 'var(--green)' : 'var(--red)';
+        return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">' +
+          '<a href="/market/' + escH(m.slug || '') + '" style="flex:1;font-size:12px;font-weight:600;color:var(--text);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escH(m.question) + '</a>' +
+          '<span style="font-family:var(--mono);font-size:12px;min-width:40px;text-align:right">' + pct + '</span>' +
+          '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:' + chColor + ';min-width:50px;text-align:right">' + ch + '</span>' +
+        '</div>';
+      }).join(''));
+    }
+
+    // Alpha Opportunities
+    if (sections.alpha_opportunities && sections.alpha_opportunities.length > 0) {
+      html += briefSection('Alpha Opportunities', sections.alpha_opportunities.map(function(m) {
+        var mktPct = m.market_price != null ? Math.round(m.market_price * 100) : '—';
+        var modelPct = m.model_price != null ? Math.round(m.model_price * 100) : '—';
+        var edge = m.alpha_edge;
+        return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">' +
+          '<a href="/market/' + escH(m.slug || '') + '" style="flex:1;font-size:12px;font-weight:600;color:var(--text);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escH(m.question) + '</a>' +
+          '<span style="font-family:var(--mono);font-size:10px;color:var(--dim)">Mkt ' + mktPct + '%</span>' +
+          '<span style="font-family:var(--mono);font-size:10px;color:var(--gold)">Model ' + modelPct + '%</span>' +
+          '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:' + (edge > 0 ? 'var(--green)' : 'var(--red)') + '">' + (edge > 0 ? '+' : '') + edge + 'pt</span>' +
+        '</div>';
+      }).join(''));
+    }
+
+    // Whale Activity
+    if (sections.whale_activity && sections.whale_activity.length > 0) {
+      html += briefSection('Whale Activity', sections.whale_activity.map(function(w) {
+        var cap = w.capital >= 1e6 ? '$' + (w.capital/1e6).toFixed(1) + 'M' : '$' + Math.round(w.capital/1000) + 'K';
+        return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">' +
+          '<span style="flex:1;font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escH(w.market) + '</span>' +
+          '<span style="font-family:var(--mono);font-size:10px;color:var(--dim)">' + w.whale_count + ' whales</span>' +
+          '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gold)">' + cap + '</span>' +
+        '</div>';
+      }).join(''));
+    }
+
+    // Expiring Soon
+    if (sections.expiring_soon && sections.expiring_soon.length > 0) {
+      html += briefSection('Expiring Soon', sections.expiring_soon.map(function(m) {
+        var pct = m.yes_price != null ? Math.round(m.yes_price * 100) + '%' : '—';
+        var d = m.days === 0 ? 'TODAY' : m.days + 'd';
+        var dColor = m.days <= 1 ? 'var(--red)' : 'var(--gold)';
+        return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">' +
+          '<a href="/market/' + escH(m.slug || '') + '" style="flex:1;font-size:12px;font-weight:600;color:var(--text);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escH(m.question) + '</a>' +
+          '<span style="font-family:var(--mono);font-size:12px;min-width:40px;text-align:right">' + pct + '</span>' +
+          '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:' + dColor + ';min-width:50px;text-align:right">' + d + '</span>' +
+        '</div>';
+      }).join(''));
+    }
+
+    // Volume Leaders
+    if (sections.volume_leaders && sections.volume_leaders.length > 0) {
+      html += briefSection('Volume Leaders', sections.volume_leaders.map(function(m) {
+        var vol = m.volume >= 1e6 ? '$' + (m.volume/1e6).toFixed(1) + 'M' : m.volume >= 1000 ? '$' + Math.round(m.volume/1000) + 'K' : '$' + Math.round(m.volume);
+        var pct = m.yes_price != null ? Math.round(m.yes_price * 100) + '%' : '—';
+        return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">' +
+          '<a href="/market/' + escH(m.slug || '') + '" style="flex:1;font-size:12px;font-weight:600;color:var(--text);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escH(m.question) + '</a>' +
+          '<span style="font-family:var(--mono);font-size:12px;min-width:40px;text-align:right">' + pct + '</span>' +
+          '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--text);min-width:60px;text-align:right">' + vol + '</span>' +
+        '</div>';
+      }).join(''));
+    }
+
+    document.getElementById('briefingSections').innerHTML = html || '<div style="text-align:center;padding:40px;font-family:var(--mono);font-size:12px;color:var(--dim)">No data available yet — check back soon</div>';
+  } catch(e) {
+    document.getElementById('briefingSections').innerHTML = '<div style="text-align:center;padding:40px;font-family:var(--mono);font-size:12px;color:var(--dim)">Failed to generate briefing</div>';
+  }
+}
+
+function briefSection(title, content) {
+  return '<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px">' +
+    '<h4 style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--text)">' + title + '</h4>' +
+    content + '</div>';
+}
+
+// ── CATALYST CALENDAR TAB ────────────────────────────────────────────────────
+let _calendarData = [];
+let _calFilter = 'all';
+
+async function loadCalendarTab() {
+  try {
+    const r = await fetch('/api/calendar', { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) throw new Error('Failed');
+    const data = await r.json();
+    _calendarData = data.events || [];
+    renderCalendar();
+  } catch(e) {
+    document.getElementById('calList').innerHTML = '<div style="text-align:center;padding:40px;font-family:var(--mono);font-size:12px;color:var(--dim)">Failed to load calendar</div>';
+  }
+}
+
+function filterCalendar(cat, btn) {
+  _calFilter = cat;
+  document.querySelectorAll('#calFilterPills .ta-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderCalendar();
+}
+
+function renderCalendar() {
+  const filtered = _calFilter === 'all' ? _calendarData : _calendarData.filter(e => e.category === _calFilter);
+  const list = document.getElementById('calList');
+
+  if (!filtered.length) {
+    list.innerHTML = '<div style="text-align:center;padding:40px"><div style="font-size:28px;margin-bottom:8px">📅</div><div style="font-family:var(--mono);font-size:12px;color:var(--dim)">No upcoming catalysts in this category</div></div>';
+    return;
+  }
+
+  list.innerHTML = filtered.map(function(e) {
+    var impactColor = e.impact === 'high' ? 'var(--red)' : e.impact === 'medium' ? 'var(--gold)' : 'var(--dim)';
+    var impactBg = e.impact === 'high' ? 'rgba(239,68,68,.1)' : e.impact === 'medium' ? 'rgba(201,146,13,.1)' : 'rgba(255,255,255,.03)';
+    var catEmoji = {macro:'🏛️',politics:'🗳️',crypto:'₿',sports:'🏈',earnings:'💰',geopolitics:'🌍'}[e.category] || '📊';
+    var urgency = e.days_away <= 1 ? 'TODAY' : e.days_away <= 3 ? e.days_away + 'd' : e.days_away <= 7 ? e.days_away + 'd' : e.days_away + 'd';
+    var urgencyColor = e.days_away <= 1 ? 'var(--red)' : e.days_away <= 3 ? 'var(--gold)' : e.days_away <= 7 ? 'var(--green)' : 'var(--dim)';
+
+    var marketsHtml = '';
+    if (e.related_markets && e.related_markets.length > 0) {
+      marketsHtml = '<div style="margin-top:10px;display:flex;flex-direction:column;gap:6px">' +
+        '<div style="font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em">Related Markets</div>' +
+        e.related_markets.map(function(rm) {
+          var pct = rm.yes_price != null ? Math.round(rm.yes_price * 100) : '—';
+          return '<a href="/market/' + escH(rm.slug || '') + '" style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;text-decoration:none;color:var(--text);transition:border-color .15s" onmouseover="this.style.borderColor=\'var(--gold)\'" onmouseout="this.style.borderColor=\'var(--border)\'">' +
+            '<span style="font-family:var(--mono);font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escH(rm.question) + '</span>' +
+            '<span style="font-family:var(--mono);font-size:12px;font-weight:700;color:' + (pct >= 70 ? 'var(--green)' : pct <= 30 ? 'var(--red)' : 'var(--text)') + '">' + pct + '%</span>' +
+          '</a>';
+        }).join('') +
+      '</div>';
+    }
+
+    return '<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;border-left:3px solid ' + impactColor + '">' +
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">' +
+        '<span style="font-size:18px">' + catEmoji + '</span>' +
+        '<div style="flex:1">' +
+          '<div style="font-size:14px;font-weight:700">' + escH(e.title) + '</div>' +
+          '<div style="font-family:var(--mono);font-size:10px;color:var(--dim)">' + escH(e.date) + '</div>' +
+        '</div>' +
+        '<div style="text-align:right">' +
+          '<div style="font-family:var(--mono);font-size:14px;font-weight:700;color:' + urgencyColor + '">' + urgency + '</div>' +
+          '<div style="font-family:var(--mono);font-size:9px;padding:2px 6px;border-radius:3px;background:' + impactBg + ';color:' + impactColor + ';text-transform:uppercase;font-weight:700">' + e.impact + ' impact</div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="font-family:var(--mono);font-size:11px;color:var(--soft);line-height:1.5">' + escH(e.description) + '</div>' +
+      marketsHtml +
+    '</div>';
+  }).join('');
+}
+
 // ── ARBITRAGE SCANNER TAB ────────────────────────────────────────────────────
 async function loadArbitrageTab() {
   try {
