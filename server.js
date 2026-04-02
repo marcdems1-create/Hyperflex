@@ -9,8 +9,8 @@ function pRef(url) {
   if (!POLY_REF || typeof url !== 'string') return url;
   // Only tag polymarket.com (no subdomains: data-api, gamma-api, clob, strapi-matic, docs)
   if (!/^https?:\/\/polymarket\.com(\/|$|\?)/.test(url)) return url;
-  if (url.includes('via=')) return url; // don't double-tag
-  return url + (url.includes('?') ? '&' : '?') + 'via=' + POLY_REF;
+  if (url.includes('r=') && url.includes(POLY_REF)) return url; // don't double-tag
+  return url + (url.includes('?') ? '&' : '?') + 'r=' + POLY_REF;
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -388,8 +388,8 @@ if (POLY_REF) {
           let str = JSON.stringify(body);
           // Tag polymarket.com URLs inside JSON string values (followed by " or ? in JSON)
           str = str.replace(/https:\/\/polymarket\.com(\/[^"]*?)?(?=")/g, (match) => {
-            if (match.includes('via=')) return match;
-            return match + (match.includes('?') ? '&' : '?') + 'via=' + POLY_REF;
+            if (match.includes('r=') && match.includes(POLY_REF)) return match;
+            return match + (match.includes('?') ? '&' : '?') + 'r=' + POLY_REF;
           });
           return origJson(JSON.parse(str));
         } catch(e) { return origJson(body); }

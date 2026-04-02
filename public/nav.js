@@ -91,16 +91,16 @@
   window.polyRef = function(url) {
     if (!REF_CODE || typeof url !== 'string') return url;
     if (!/^https?:\/\/polymarket\.com(\/|$|\?)/.test(url)) return url;
-    if (url.indexOf('via=') !== -1) return url;
-    return url + (url.indexOf('?') !== -1 ? '&' : '?') + 'via=' + REF_CODE;
+    if (url.indexOf('r=') !== -1 && url.indexOf(REF_CODE) !== -1) return url;
+    return url + (url.indexOf('?') !== -1 ? '&' : '?') + 'r=' + REF_CODE;
   };
   // Click interceptor — tag any <a href="polymarket.com/..."> on the page
   document.addEventListener('click', function(e) {
     var a = e.target.closest ? e.target.closest('a[href]') : null;
     if (!a) return;
     var href = a.getAttribute('href') || '';
-    if (/^https?:\/\/polymarket\.com(\/|$|\?)/.test(href) && href.indexOf('via=') === -1 && REF_CODE) {
-      a.setAttribute('href', href + (href.indexOf('?') !== -1 ? '&' : '?') + 'via=' + REF_CODE);
+    if (/^https?:\/\/polymarket\.com(\/|$|\?)/.test(href) && REF_CODE && !(href.indexOf('r=') !== -1 && href.indexOf(REF_CODE) !== -1)) {
+      a.setAttribute('href', href + (href.indexOf('?') !== -1 ? '&' : '?') + 'r=' + REF_CODE);
     }
   }, true);
 })();
