@@ -18462,7 +18462,10 @@ app.get('/data', (req, res) => res.sendFile(path.join(__dirname, 'public', 'data
 // ════════════════════════════════════════════════════════════
 // POLYMARKET MARKET DETAIL PAGE
 // ════════════════════════════════════════════════════════════
-app.get('/market/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'market.html')));
+app.get('/market/:slug', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(__dirname, 'public', 'market.html'));
+});
 
 const _marketDetailCache = new Map();
 const MARKET_DETAIL_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
