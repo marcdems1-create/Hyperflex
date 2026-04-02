@@ -12890,12 +12890,12 @@ async function loadCrystalBallPick() {
       ${url ? `<div>${qtTradeBtn(url, 'Trade \u2192', '#c9920d')}</div>` : ''}
     `;
   } catch (e) {
-    console.warn('[qt crystal-ball]', e.message);
-    // Fallback: show top market from hot markets if already loaded
-    const hotEl = document.getElementById('qtHotGrid');
-    const firstCard = hotEl && hotEl.querySelector('.qt-mkt-card');
-    if (firstCard) {
-      card.innerHTML = '<div style="text-align:center;padding:20px;color:var(--dim);font-size:12px">Crystal Ball loading — check top hot markets below</div>';
+    console.warn('[qt crystal-ball]', e.message, e);
+    // Retry once after 10s (caches may still be warming)
+    if (!loadCrystalBallPick._retried) {
+      loadCrystalBallPick._retried = true;
+      setTimeout(loadCrystalBallPick, 10000);
+      card.innerHTML = '<div style="text-align:center;padding:20px;color:var(--dim);font-size:12px">Loading AI picks…</div>';
     } else {
       card.innerHTML = '<div style="text-align:center;padding:20px;color:var(--dim);font-size:12px">No AI picks right now — refresh in a few minutes</div>';
     }
