@@ -15292,88 +15292,100 @@ async function confirmTrade() {
   const errEl = document.getElementById('tradeModalError');
   const btn = document.getElementById('tradeConfirmBtn');
   errEl.style.display = 'none';
-  const amount = parseFloat(document.getElementById('tradeAmount')?.value) || 0;
-  if (!amount || amount <= 0) {
-    errEl.textContent = 'Enter a valid amount';
+
+  const shares = parseFloat(document.getElementById('tradeAmount')?.value) || 0;
+  if (!shares || shares <= 0) {
+    errEl.textContent = 'Enter number of shares';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const tokenId = _tradeModalData.token_id || _tradeModalData.id || _tradeModalData.conditionId || '';
+  if (!tokenId) {
+    errEl.textContent = 'No token ID for this market';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const clobSide = _tradeModalData.mode === 'buy' ? 'BUY' : 'SELL';
+  const price = _tradeModalData._limitPrice || (_tradeModalData.current_price || 0.5);
+
+  // Get stored CLOB API credentials
+  const apiKey = localStorage.getItem('poly_api_key');
+  const apiSecret = localStorage.getItem('poly_api_secret');
+  const apiPassphrase = localStorage.getItem('poly_api_passphrase');
+  const eoaAddress = localStorage.getItem('poly_eoa_address') || window._connectedWallet;
+  const proxyAddress = localStorage.getItem('hf_poly_wallet');
+
+  if (!apiKey || !apiSecret || !apiPassphrase) {
+    errEl.textContent = 'Connect Wallet on a market page first to derive API keys';
     errEl.style.display = 'block';
     return;
   }
 
   btn.disabled = true;
+  btn.textContent = 'Signing order...';
 
-  // Use token_id (asset field) for order placement — the correct CLOB token
-  const tokenId = _tradeModalData.token_id || _tradeModalData.id || _tradeModalData.conditionId || '';
-  const side = _tradeModalData.mode === 'buy' ? 'BUY' : 'SELL';
-  const ob = _tradeModalData._orderbook || {};
-  const price = side === 'BUY' ? (ob.best_ask || 0.5) : (ob.best_bid || 0.5);
-
-  // Prefer HMAC (CLOB API key) path — no wallet popup needed
-  if (isClobTradingEnabled()) {
-    btn.textContent = 'Submitting order...';
-    try {
-      const token = localStorage.getItem('hf_token');
-      const r = await fetch('/api/polymarket/clob-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-        body: JSON.stringify({
-          token_id: tokenId,
-          side: side,
-          size: amount.toString(),
-          price: price.toString(),
-          api_key: localStorage.getItem('poly_api_key'),
-          api_secret: localStorage.getItem('poly_api_secret'),
-          api_passphrase: localStorage.getItem('poly_api_passphrase')
-        })
-      });
-
-      const data = await r.json();
-      if (!r.ok) {
-        // If auth failed, clear stale keys and suggest re-enabling
-        if (r.status === 401 || r.status === 403) {
-          localStorage.removeItem('poly_api_key');
-          localStorage.removeItem('poly_api_secret');
-          localStorage.removeItem('poly_api_passphrase');
-          updateWalletUI();
-          errEl.textContent = 'API key expired. Please click "Connect Wallet" again.';
-        } else {
-          errEl.textContent = data.error || 'Order failed';
-        }
+  try {
+    // Need wallet signer for EIP-712 order signing
+    if (!window._walletSigner) {
+      // Try to get signer from MetaMask
+      if (window.ethereum) {
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        window._walletSigner = await provider.getSigner();
+      } else {
+        errEl.textContent = 'MetaMask required to sign orders';
         errEl.style.display = 'block';
         btn.disabled = false;
         btn.textContent = 'Confirm Trade';
         return;
       }
-
-      showToast((side === 'BUY' ? 'Buy' : 'Sell') + ' order submitted!', 'success');
-      closeTradeModal();
-      setTimeout(() => loadPolymarketPositions(true), 2000);
-    } catch (e) {
-      errEl.textContent = 'Trade failed: ' + (e.message || 'Unknown error');
-      errEl.style.display = 'block';
-      btn.disabled = false;
-      btn.textContent = 'Confirm Trade';
     }
-    return;
-  }
 
-  // Fallback: EIP-712 wallet signing path (MetaMask popup)
-  if (!window._walletSigner) {
-    showToast('Enable trading or connect wallet signer', 'error');
-    btn.disabled = false;
-    btn.textContent = 'Confirm Trade';
-    return;
-  }
+    // Build order amounts (6 decimal places)
+    const DECIMALS = 1000000;
+    let makerAmt, takerAmt, sideInt;
+    if (clobSide === 'BUY') {
+      sideInt = 0;
+      // BUY: maker provides USDC (shares * price), receives tokens (shares)
+      makerAmt = Math.round(shares * price * DECIMALS).toString();
+      takerAmt = Math.round(shares * DECIMALS).toString();
+    } else {
+      sideInt = 1;
+      // SELL: maker provides tokens (shares), receives USDC (shares * price)
+      makerAmt = Math.round(shares * DECIMALS).toString();
+      takerAmt = Math.round(shares * price * DECIMALS).toString();
+    }
 
-  btn.textContent = 'Signing order...';
+    // Random salt
+    const orderSalt = Math.floor(Math.random() * 9007199254740991);
 
-  try {
-    // Build EIP-712 typed data for Polymarket CLOB order
-    const domain = {
+    // Neg-risk exchange (default for modern markets)
+    const exchangeAddr = '0xC5d563A36AE78145C45a50134d48A1215220f80a';
+
+    // Build EIP-712 order struct
+    const orderStruct = {
+      salt: orderSalt,
+      maker: proxyAddress || eoaAddress,
+      signer: eoaAddress,
+      taker: '0x0000000000000000000000000000000000000000',
+      tokenId: tokenId,
+      makerAmount: makerAmt,
+      takerAmount: takerAmt,
+      expiration: '0',
+      nonce: '0',
+      feeRateBps: '0',
+      side: sideInt,
+      signatureType: proxyAddress ? 1 : 0  // POLY_PROXY if proxy exists, else EOA
+    };
+
+    const orderDomain = {
       name: 'Polymarket CTF Exchange',
       version: '1',
-      chainId: 137
+      chainId: 137,
+      verifyingContract: exchangeAddr
     };
-    const types = {
+    const orderTypes = {
       Order: [
         { name: 'salt', type: 'uint256' },
         { name: 'maker', type: 'address' },
@@ -15390,73 +15402,101 @@ async function confirmTrade() {
       ]
     };
 
-    const salt = BigInt(Math.floor(Math.random() * 2**128)).toString();
-    const makerAmount = side === 'BUY'
-      ? Math.floor(amount * 1e6).toString()
-      : Math.floor(amount * 1e6).toString();
-    const takerAmount = side === 'BUY'
-      ? Math.floor(amount / price * 1e6).toString()
-      : Math.floor(amount * price * 1e6).toString();
-
-    const orderData = {
-      salt: salt,
-      maker: window._connectedWallet,
-      signer: window._connectedWallet,
-      taker: '0x0000000000000000000000000000000000000000',
-      tokenId: tokenId,
-      makerAmount: makerAmount,
-      takerAmount: takerAmount,
-      expiration: '0',
-      nonce: '0',
-      feeRateBps: '0',
-      side: side === 'BUY' ? 0 : 1,
-      signatureType: 0
-    };
-
     btn.textContent = 'Sign in wallet...';
+    const orderSignature = await window._walletSigner.signTypedData(orderDomain, orderTypes, orderStruct);
 
-    // Request wallet signature (MetaMask popup)
-    const signature = await window._walletSigner.signTypedData(domain, types, orderData);
-
-    btn.textContent = 'Submitting order...';
-
-    // Submit signed order to server proxy
-    const token = localStorage.getItem('hf_token');
-    const r = await fetch('/api/polymarket/order', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-      body: JSON.stringify({
-        signed_order: { ...orderData, signature },
-        market_id: _tradeModalData.id || tokenId,
-        side: side,
-        amount: amount
-      })
+    // Build CLOB request body (side as string "BUY"/"SELL" in JSON)
+    btn.textContent = 'Placing order...';
+    const requestBody = JSON.stringify({
+      order: {
+        salt: orderStruct.salt,
+        maker: orderStruct.maker,
+        signer: orderStruct.signer,
+        taker: orderStruct.taker,
+        tokenId: orderStruct.tokenId,
+        makerAmount: orderStruct.makerAmount,
+        takerAmount: orderStruct.takerAmount,
+        expiration: orderStruct.expiration,
+        nonce: orderStruct.nonce,
+        feeRateBps: orderStruct.feeRateBps,
+        side: clobSide,
+        signatureType: orderStruct.signatureType,
+        signature: orderSignature
+      },
+      owner: apiKey,
+      orderType: 'GTC'
     });
 
-    const data = await r.json();
-    if (!r.ok) {
-      errEl.textContent = data.error || 'Order failed';
+    // HMAC-SHA256 sign the HTTP request (base64url)
+    const ts = Math.floor(Date.now() / 1000).toString();
+    const hmacMessage = ts + 'POST' + '/order' + requestBody;
+    const enc = new TextEncoder();
+
+    // Decode API secret (base64url → raw bytes)
+    let b64std = apiSecret.replace(/-/g, '+').replace(/_/g, '/');
+    while (b64std.length % 4) b64std += '=';
+    let secretBytes;
+    try {
+      secretBytes = Uint8Array.from(atob(b64std), c => c.charCodeAt(0));
+    } catch (e) {
+      secretBytes = enc.encode(apiSecret);
+    }
+
+    const cryptoKey = await crypto.subtle.importKey('raw', secretBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    const sigBuf = await crypto.subtle.sign('HMAC', cryptoKey, enc.encode(hmacMessage));
+    const hmacSig = btoa(String.fromCharCode.apply(null, new Uint8Array(sigBuf)))
+      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+    // POST directly to Polymarket CLOB
+    const res = await fetch('https://clob.polymarket.com/order', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'POLY_ADDRESS': eoaAddress,
+        'POLY_API_KEY': apiKey,
+        'POLY_PASSPHRASE': apiPassphrase,
+        'POLY_TIMESTAMP': ts,
+        'POLY_SIGNATURE': hmacSig
+      },
+      body: requestBody
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      console.error('[qt-trade] CLOB error:', res.status, data);
+      if (res.status === 401 || (res.status === 400 && JSON.stringify(data).toLowerCase().includes('api'))) {
+        localStorage.removeItem('poly_api_key');
+        localStorage.removeItem('poly_api_secret');
+        localStorage.removeItem('poly_api_passphrase');
+        localStorage.removeItem('poly_eoa_address');
+        updateWalletUI();
+        errEl.textContent = 'API key expired. Connect Wallet again on a market page.';
+      } else {
+        errEl.textContent = data.error || data.message || 'Order rejected (' + res.status + ')';
+      }
       errEl.style.display = 'block';
       btn.disabled = false;
       btn.textContent = 'Confirm Trade';
       return;
     }
 
-    showToast((side === 'BUY' ? 'Buy' : 'Sell') + ' order submitted!', 'success');
+    showToast((clobSide === 'BUY' ? 'Buy' : 'Sell') + ' ' + shares + ' shares @ ' + (price * 100).toFixed(0) + '¢ placed!', 'success');
+    console.log('[qt-trade] Order success:', data);
     closeTradeModal();
-
-    // Refresh positions
     setTimeout(() => loadPolymarketPositions(true), 2000);
 
   } catch (e) {
     if (e.code === 'ACTION_REJECTED' || e.code === 4001) {
-      errEl.textContent = 'Transaction rejected in wallet';
+      errEl.textContent = 'Order signing rejected in wallet';
     } else {
       errEl.textContent = 'Trade failed: ' + (e.shortMessage || e.message || 'Unknown error');
     }
     errEl.style.display = 'block';
     btn.disabled = false;
     btn.textContent = 'Confirm Trade';
+    console.error('[qt-trade] Error:', e);
   }
 }
 
