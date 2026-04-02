@@ -18981,6 +18981,40 @@ app.get('/api/screener', async (req, res) => {
         aiHook = `${wCount} whale wallets positioned — watching for consensus`;
       }
 
+      // ── Model Probability (implied fair value) ──
+      // Blends market price with whale signal, momentum, and volume conviction
+      let modelProb = null;
+      if (yesPrice != null) {
+        const mktPct = yesPrice; // 0-1
+        let whaleBias = 0;       // whale consensus pull
+        let momentumBias = 0;    // price momentum pull
+        let volumeConf = Math.min(1, Math.log10(Math.max(volume, 1)) / 6); // 0-1, $1M = 1.0
+
+        // Whale consensus: if whales heavily one side, pull model toward that side
+        if (whaleInfo && whaleInfo.count >= 2) {
+          // Net whale capital direction would be in the whale index
+          const wIdx = (_whaleIndexCache && _whaleIndexCache.data && _whaleIndexCache.data.picks) || [];
+          const wPick = wIdx.find(p => (p.market || '').toLowerCase() === qLower);
+          if (wPick) {
+            const wSide = (wPick.consensus_side || '').toUpperCase();
+            const wStr = Math.min(0.25, whaleInfo.count * 0.04); // max 25% pull
+            whaleBias = wSide === 'YES' ? wStr : (wSide === 'NO' ? -wStr : 0);
+          }
+        }
+
+        // Momentum: recent price movement suggests direction
+        if (pChange != null) {
+          momentumBias = Math.max(-0.10, Math.min(0.10, pChange / 100)); // cap at ±10%
+        }
+
+        // Blend: market price + whale bias + momentum, weighted by volume confidence
+        const rawModel = mktPct + (whaleBias + momentumBias) * volumeConf;
+        modelProb = Math.max(0.01, Math.min(0.99, rawModel));
+      }
+
+      // Alpha edge: difference between model and market
+      const alphaEdge = (modelProb != null && yesPrice != null) ? Math.round((modelProb - yesPrice) * 100) : null;
+
       markets.push({
         market_id: marketId,
         question,
@@ -18997,6 +19031,8 @@ app.get('/api/screener', async (req, res) => {
         slug: eventSlug,
         edge_score: edgeScore,
         alpha_score: 0, // populated after whale index is ready
+        model_probability: modelProb != null ? parseFloat(modelProb.toFixed(3)) : null,
+        alpha_edge: alphaEdge,
         trade,
         ai_hook: aiHook || null
       });
@@ -19066,6 +19102,260 @@ function filterScreenerResults(markets, query) {
 
   return filtered;
 }
+
+// ── ARBITRAGE SCANNER — cross-platform price discrepancies ────────────────
+let _arbCache = null;
+
+app.get('/api/arbitrage', async (req, res) => {
+  try {
+    // 5-min cache
+    if (_arbCache && (Date.now() - _arbCache.ts < 5 * 60 * 1000)) {
+      return res.json(_arbCache.data);
+    }
+
+    const fetch = _nodeFetch;
+
+    // Fetch Polymarket top markets (use screener cache if available)
+    let polyMarkets = [];
+    if (_screenerCache && _screenerCache.data) {
+      polyMarkets = _screenerCache.data.map(m => ({
+        question: m.question,
+        yes_price: m.yes_price,
+        volume: m.volume,
+        slug: m.slug,
+        platform: 'polymarket'
+      }));
+    }
+
+    // Fetch Kalshi events
+    let kalshiEvents = [];
+    try { kalshiEvents = await getKalshiEvents(); } catch(e) {}
+
+    // Build Kalshi market list with prices
+    const kalshiMarkets = [];
+    for (const evt of kalshiEvents) {
+      const mkts = (evt.markets || []).filter(m => m.status === 'open' || m.status === 'active');
+      for (const m of mkts) {
+        const yesAsk = m.yes_ask_dollars != null ? parseFloat(m.yes_ask_dollars) : (m.last_price_dollars != null ? parseFloat(m.last_price_dollars) : null);
+        if (yesAsk == null || yesAsk >= 0.95 || yesAsk <= 0.05) continue;
+        kalshiMarkets.push({
+          question: (evt.title || m.title || '').toLowerCase().trim(),
+          title_raw: evt.title || m.title || '',
+          yes_price: yesAsk,
+          volume: parseFloat(m.volume_fp || m.volume || 0),
+          ticker: m.event_ticker || m.ticker || '',
+          platform: 'kalshi'
+        });
+      }
+    }
+
+    // Fuzzy match: find Polymarket ↔ Kalshi pairs on similar questions
+    const opportunities = [];
+    const usedKalshi = new Set();
+
+    for (const pm of polyMarkets) {
+      if (!pm.yes_price || pm.yes_price <= 0.05 || pm.yes_price >= 0.95) continue;
+      const pq = (pm.question || '').toLowerCase().trim();
+      const pWords = pq.split(/\s+/).filter(w => w.length > 3);
+      if (pWords.length < 2) continue;
+
+      // Find best Kalshi match by word overlap
+      let bestMatch = null;
+      let bestScore = 0;
+      for (let ki = 0; ki < kalshiMarkets.length; ki++) {
+        if (usedKalshi.has(ki)) continue;
+        const kq = kalshiMarkets[ki].question;
+        const kWords = kq.split(/\s+/).filter(w => w.length > 3);
+        const overlap = pWords.filter(w => kWords.includes(w)).length;
+        const score = overlap / Math.max(pWords.length, kWords.length);
+        if (score > bestScore && score >= 0.35) { // 35% word overlap minimum
+          bestScore = score;
+          bestMatch = ki;
+        }
+      }
+
+      if (bestMatch !== null) {
+        const km = kalshiMarkets[bestMatch];
+        const spread = Math.abs(pm.yes_price - km.yes_price);
+        if (spread >= 0.02) { // Minimum 2¢ spread to be an opportunity
+          const polyPct = Math.round(pm.yes_price * 100);
+          const kalshiPct = Math.round(km.yes_price * 100);
+          const spreadPct = Math.round(spread * 100);
+
+          // Determine trade direction
+          const buyPlatform = pm.yes_price < km.yes_price ? 'polymarket' : 'kalshi';
+          const buyPrice = Math.min(pm.yes_price, km.yes_price);
+          const sellPrice = Math.max(pm.yes_price, km.yes_price);
+          const roi = buyPrice > 0 ? Math.round(((sellPrice - buyPrice) / buyPrice) * 100) : 0;
+
+          opportunities.push({
+            question: pm.question,
+            polymarket_price: pm.yes_price,
+            kalshi_price: km.yes_price,
+            spread: parseFloat(spread.toFixed(3)),
+            spread_pct: spreadPct,
+            buy_on: buyPlatform,
+            buy_price: parseFloat(buyPrice.toFixed(3)),
+            sell_price: parseFloat(sellPrice.toFixed(3)),
+            arb_roi: roi,
+            poly_volume: pm.volume,
+            kalshi_volume: km.volume,
+            poly_slug: pm.slug,
+            kalshi_ticker: km.ticker,
+            match_confidence: Math.round(bestScore * 100)
+          });
+          usedKalshi.add(bestMatch);
+        }
+      }
+    }
+
+    // Sort by spread (biggest arb first)
+    opportunities.sort((a, b) => b.spread - a.spread);
+
+    const result = {
+      opportunities: opportunities.slice(0, 30),
+      total_found: opportunities.length,
+      avg_spread: opportunities.length > 0 ? parseFloat((opportunities.reduce((s, o) => s + o.spread, 0) / opportunities.length).toFixed(3)) : 0,
+      updated_at: new Date().toISOString()
+    };
+
+    _arbCache = { ts: Date.now(), data: result };
+    res.json(result);
+  } catch (err) {
+    console.error('[arbitrage]', err.message);
+    if (_arbCache) return res.json(_arbCache.data);
+    res.status(500).json({ error: 'Failed to compute arbitrage', detail: err.message });
+  }
+});
+
+// ── SIGNAL ACCURACY TRACKING — prove the edge ────────────────────────────
+app.get('/api/accuracy/signals', async (req, res) => {
+  try {
+    // Query prediction_log for resolved signals
+    let rows = [];
+    if (pool) {
+      rows = await dbQuery(`
+        SELECT source, prediction_type, predicted_outcome, actual_outcome, confidence,
+               market_question, resolved_at, created_at
+        FROM prediction_log
+        WHERE actual_outcome IS NOT NULL
+        ORDER BY resolved_at DESC
+        LIMIT 2000
+      `).catch(() => []);
+    } else {
+      const { data } = await supabase.from('prediction_log')
+        .select('source, prediction_type, predicted_outcome, actual_outcome, confidence, market_question, resolved_at, created_at')
+        .not('actual_outcome', 'is', null)
+        .order('resolved_at', { ascending: false })
+        .limit(2000);
+      rows = data || [];
+    }
+
+    // Compute accuracy by type
+    const byType = {};
+    let totalCorrect = 0;
+    let totalCount = 0;
+    const calibration = {}; // confidence bucket → { correct, total }
+
+    for (const r of rows) {
+      const type = r.prediction_type || r.source || 'unknown';
+      if (!byType[type]) byType[type] = { correct: 0, total: 0, avg_confidence: 0, sum_conf: 0 };
+      byType[type].total++;
+      byType[type].sum_conf += parseFloat(r.confidence || 0);
+      const correct = r.predicted_outcome === r.actual_outcome;
+      if (correct) { byType[type].correct++; totalCorrect++; }
+      totalCount++;
+
+      // Calibration: bucket by confidence (10% bands)
+      const conf = parseFloat(r.confidence || 50);
+      const bucket = Math.floor(conf / 10) * 10; // 0, 10, 20, ..., 90
+      const bKey = bucket + '-' + (bucket + 10);
+      if (!calibration[bKey]) calibration[bKey] = { correct: 0, total: 0, predicted_avg: 0, sum_pred: 0 };
+      calibration[bKey].total++;
+      calibration[bKey].sum_pred += conf;
+      if (correct) calibration[bKey].correct++;
+    }
+
+    // Finalize
+    const typeStats = {};
+    for (const [t, s] of Object.entries(byType)) {
+      typeStats[t] = {
+        accuracy: s.total > 0 ? parseFloat((s.correct / s.total * 100).toFixed(1)) : 0,
+        correct: s.correct,
+        total: s.total,
+        avg_confidence: s.total > 0 ? parseFloat((s.sum_conf / s.total).toFixed(1)) : 0
+      };
+    }
+
+    const calibrationData = Object.entries(calibration).map(([bucket, s]) => ({
+      bucket,
+      predicted_avg: s.total > 0 ? parseFloat((s.sum_pred / s.total).toFixed(1)) : 0,
+      actual_accuracy: s.total > 0 ? parseFloat((s.correct / s.total * 100).toFixed(1)) : 0,
+      count: s.total
+    })).sort((a, b) => parseFloat(a.bucket) - parseFloat(b.bucket));
+
+    res.json({
+      overall_accuracy: totalCount > 0 ? parseFloat((totalCorrect / totalCount * 100).toFixed(1)) : 0,
+      total_predictions: totalCount,
+      total_correct: totalCorrect,
+      by_type: typeStats,
+      calibration: calibrationData,
+      period: '30d',
+      updated_at: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('[accuracy]', err.message);
+    res.status(500).json({ error: 'Failed to compute accuracy', detail: err.message });
+  }
+});
+
+// ── WHALE FLOW TIMELINE — per-market whale entry/exit history ─────────────
+app.get('/api/market/:slug/whale-flow', async (req, res) => {
+  try {
+    const slug = req.params.slug;
+    if (!slug) return res.status(400).json({ error: 'Missing slug' });
+
+    // Get whale data
+    const whaleData = (_whaleWatchCache && _whaleWatchCache.data) ? _whaleWatchCache.data : null;
+    if (!whaleData || !whaleData.whales) return res.json({ flows: [], market: slug });
+
+    // Match whale positions to this market (by slug in question text)
+    const slugLower = slug.toLowerCase().replace(/-/g, ' ');
+    const flows = [];
+
+    for (const w of whaleData.whales) {
+      const mkt = (w.market || w.position || '').toLowerCase();
+      // Fuzzy: slug words must appear in market name
+      const slugWords = slugLower.split(' ').filter(s => s.length > 2);
+      const matchCount = slugWords.filter(sw => mkt.includes(sw)).length;
+      if (matchCount < Math.ceil(slugWords.length * 0.4)) continue;
+
+      flows.push({
+        wallet: (w.proxyWallet || w.trader || '').substring(0, 10) + '...',
+        side: (w.side || 'YES').toUpperCase(),
+        size: parseFloat(w.size || 0),
+        entry_price: w.avgPrice ? parseFloat(w.avgPrice) : null,
+        current_value: w.currentValue ? parseFloat(w.currentValue) : null,
+        pnl: w.pnl ? parseFloat(w.pnl) : null,
+        timestamp: w.timestamp || w.detected_at || null
+      });
+    }
+
+    // Sort by size descending
+    flows.sort((a, b) => b.size - a.size);
+
+    res.json({
+      flows: flows.slice(0, 20),
+      total_whale_capital: flows.reduce((s, f) => s + f.size, 0),
+      whale_count: flows.length,
+      net_sentiment: flows.reduce((s, f) => s + (f.side === 'YES' ? f.size : -f.size), 0) > 0 ? 'BULLISH' : 'BEARISH',
+      market: slug
+    });
+  } catch (err) {
+    console.error('[whale-flow]', err.message);
+    res.status(500).json({ error: 'Failed to fetch whale flow', detail: err.message });
+  }
+});
 
 // ── WHALE FLOW INDEX — aggregated whale insights ──────────────────────────
 let _whaleFlowCache = null;

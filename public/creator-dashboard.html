@@ -2946,6 +2946,9 @@ body.nav-open .sidebar-backdrop {
       <a class="nav-item" data-nav-section="trading" onclick="showTab('findmarkets')">
         <span class="nav-icon">🔍</span><span class="nav-label">Find Markets</span>
       </a>
+      <a class="nav-item" data-nav-section="trading" onclick="showTab('arbitrage')">
+        <span class="nav-icon">⚖️</span><span class="nav-label">Arbitrage</span>
+      </a>
       <div class="nav-section-label" id="navSectionCommunity" data-nav-section="community">Community</div>
       <a class="nav-item" data-nav-section="community" onclick="showTab('overview')">
         <span class="nav-icon">📊</span><span class="nav-label">Overview</span>
@@ -5301,6 +5304,35 @@ body.nav-open .sidebar-backdrop {
         </div>
       </div><!-- /tab-findmarkets -->
 
+      <!-- ARBITRAGE TAB -->
+      <div id="tab-arbitrage" style="display:none">
+        <div class="section">
+          <div style="max-width:960px">
+            <div style="margin-bottom:20px">
+              <div style="font-size:16px;font-weight:800;color:var(--text);margin-bottom:6px">⚖️ Cross-Platform Arbitrage</div>
+              <div style="font-family:var(--mono);font-size:11px;color:var(--dim)">Price discrepancies between Polymarket and Kalshi — buy low on one, sell high on the other</div>
+            </div>
+            <div id="arbSummary" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
+              <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
+                <div style="font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Opportunities</div>
+                <div style="font-family:var(--mono);font-size:22px;font-weight:700;color:var(--gold)" id="arbCount">—</div>
+              </div>
+              <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
+                <div style="font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Avg Spread</div>
+                <div style="font-family:var(--mono);font-size:22px;font-weight:700;color:var(--green)" id="arbAvgSpread">—</div>
+              </div>
+              <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
+                <div style="font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Best Arb</div>
+                <div style="font-family:var(--mono);font-size:22px;font-weight:700;color:var(--green)" id="arbBestSpread">—</div>
+              </div>
+            </div>
+            <div id="arbList" style="display:flex;flex-direction:column;gap:12px">
+              <div style="text-align:center;padding:40px 0;font-family:var(--mono);font-size:12px;color:var(--dim)">Loading arbitrage opportunities...</div>
+            </div>
+          </div>
+        </div>
+      </div><!-- /tab-arbitrage -->
+
       <!-- ACCOUNT TAB -->
       <div id="tab-account" style="display:none">
         <div class="section">
@@ -7123,7 +7155,7 @@ function ensureMoreExpanded(tab) {
 // Tab switching
 function showTab(tab) {
   ensureMoreExpanded(tab);
-  ['overview','markets','resolve','members','leaderboard','share','rewards','seasons','settings','analytics','economy','branding','flexbot','ideas','portfolio','account','performance','breaking','quicktrade','findmarkets'].forEach(t => {
+  ['overview','markets','resolve','members','leaderboard','share','rewards','seasons','settings','analytics','economy','branding','flexbot','ideas','portfolio','account','performance','breaking','quicktrade','findmarkets','arbitrage'].forEach(t => {
     const el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === tab ? 'block' : 'none';
   });
@@ -7131,7 +7163,7 @@ function showTab(tab) {
   document.querySelectorAll('.nav-item').forEach(n => {
     if (n.getAttribute('onclick') && n.getAttribute('onclick').includes(`'${tab}'`)) n.classList.add('active');
   });
-  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Social', portfolio:'My Positions', account:'My Account', performance:'Performance', breaking:'Breaking', quicktrade:'Quick Trade', findmarkets:'Find Markets' };
+  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Social', portfolio:'My Positions', account:'My Account', performance:'Performance', breaking:'Breaking', quicktrade:'Quick Trade', findmarkets:'Find Markets', arbitrage:'Arbitrage Scanner' };
   document.getElementById('topbarTitle').textContent = titles[tab] || tab;
   if (tab === 'analytics' && !analyticsLoaded) loadAnalytics();
   if (tab === 'members') { loadSocialTab(); loadMembers(); }
@@ -7175,6 +7207,7 @@ function showTab(tab) {
   if (tab === 'performance') loadPerformanceTab();
   if (tab === 'breaking') { loadBreakingTab(); }
   if (tab === 'quicktrade') { loadQuickTrade(); }
+  if (tab === 'arbitrage') { loadArbitrageTab(); }
   if (tab === 'account') populateAccountTab();
   if (tab === 'seasons' && !seasonsLoaded) loadSeasons();
   if (tab === 'markets') {
@@ -13063,6 +13096,72 @@ async function loadQtFearGreed() {
     var lbl = document.getElementById('qtFearGreedLabel'); if (lbl) lbl.textContent = label;
   } catch(e) {}
 }
+// ── ARBITRAGE SCANNER TAB ────────────────────────────────────────────────────
+async function loadArbitrageTab() {
+  try {
+    const r = await fetch('/api/arbitrage', { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) throw new Error('Failed to load');
+    const data = await r.json();
+
+    document.getElementById('arbCount').textContent = data.total_found || 0;
+    document.getElementById('arbAvgSpread').textContent = data.avg_spread ? Math.round(data.avg_spread * 100) + '¢' : '—';
+    document.getElementById('arbBestSpread').textContent = data.opportunities && data.opportunities.length > 0
+      ? Math.round(data.opportunities[0].spread * 100) + '¢' : '—';
+
+    const list = document.getElementById('arbList');
+    if (!data.opportunities || data.opportunities.length === 0) {
+      list.innerHTML = '<div style="text-align:center;padding:40px 0"><div style="font-size:28px;margin-bottom:8px">⚖️</div><div style="font-family:var(--mono);font-size:12px;color:var(--dim)">No arbitrage opportunities found right now</div><div style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:4px">Check back later — spreads appear when markets drift between platforms</div></div>';
+      return;
+    }
+
+    list.innerHTML = data.opportunities.map(function(o, i) {
+      var spreadCents = Math.round(o.spread * 100);
+      var polyPct = Math.round(o.polymarket_price * 100);
+      var kalshiPct = Math.round(o.kalshi_price * 100);
+      var buyColor = o.buy_on === 'polymarket' ? '#8b5cf6' : '#3b82f6';
+      var buyLabel = o.buy_on === 'polymarket' ? 'Polymarket' : 'Kalshi';
+      var sellLabel = o.buy_on === 'polymarket' ? 'Kalshi' : 'Polymarket';
+      var polyVol = o.poly_volume >= 1e6 ? '$' + (o.poly_volume/1e6).toFixed(1) + 'M' : o.poly_volume >= 1000 ? '$' + Math.round(o.poly_volume/1000) + 'K' : '$' + Math.round(o.poly_volume);
+
+      return '<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;position:relative' + (i === 0 ? ';border-color:var(--gold)' : '') + '">' +
+        (i === 0 ? '<div style="position:absolute;top:-8px;right:12px;background:var(--gold);color:#141412;font-family:var(--mono);font-size:9px;font-weight:700;padding:2px 8px;border-radius:4px;text-transform:uppercase">Best Arb</div>' : '') +
+        '<div style="font-size:13px;font-weight:700;margin-bottom:10px;line-height:1.4">' + escH(o.question) + '</div>' +
+        '<div style="display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;margin-bottom:12px">' +
+          // Polymarket side
+          '<div style="background:rgba(139,92,246,.08);border:1px solid rgba(139,92,246,.2);border-radius:8px;padding:10px;text-align:center">' +
+            '<div style="font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;margin-bottom:3px">Polymarket</div>' +
+            '<div style="font-family:var(--mono);font-size:18px;font-weight:700;color:#8b5cf6">' + polyPct + '%</div>' +
+          '</div>' +
+          // Arrow + spread
+          '<div style="text-align:center">' +
+            '<div style="font-family:var(--mono);font-size:16px;font-weight:700;color:var(--green)">' + spreadCents + '¢</div>' +
+            '<div style="font-family:var(--mono);font-size:9px;color:var(--dim)">spread</div>' +
+          '</div>' +
+          // Kalshi side
+          '<div style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);border-radius:8px;padding:10px;text-align:center">' +
+            '<div style="font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;margin-bottom:3px">Kalshi</div>' +
+            '<div style="font-family:var(--mono);font-size:18px;font-weight:700;color:#3b82f6">' + kalshiPct + '%</div>' +
+          '</div>' +
+        '</div>' +
+        // Trade instruction
+        '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;display:flex;align-items:center;gap:10px;margin-bottom:8px">' +
+          '<div style="font-family:var(--mono);font-size:10px;font-weight:700;color:' + buyColor + ';text-transform:uppercase;min-width:60px">Buy on ' + buyLabel + '</div>' +
+          '<div style="font-family:var(--mono);font-size:10px;color:var(--dim)">at ' + Math.round(o.buy_price * 100) + '¢</div>' +
+          '<span style="color:var(--dim)">&rarr;</span>' +
+          '<div style="font-family:var(--mono);font-size:10px;color:var(--dim)">Sell on ' + sellLabel + ' at ' + Math.round(o.sell_price * 100) + '¢</div>' +
+          '<div style="margin-left:auto;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--green)">+' + o.arb_roi + '% ROI</div>' +
+        '</div>' +
+        '<div style="display:flex;gap:12px;font-family:var(--mono);font-size:10px;color:var(--dim)">' +
+          '<span>Vol: ' + polyVol + '</span>' +
+          '<span>Match: ' + o.match_confidence + '%</span>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  } catch(e) {
+    document.getElementById('arbList').innerHTML = '<div style="text-align:center;padding:40px 0;font-family:var(--mono);font-size:12px;color:var(--dim)">Failed to load arbitrage data</div>';
+  }
+}
+
 async function loadQuickTrade() {
   loadCrystalBallPick();
   loadWhaleIndexPicks();

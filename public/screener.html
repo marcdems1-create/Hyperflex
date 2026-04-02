@@ -598,6 +598,12 @@ function renderCards() {
         '</div>' +
         '<div class="edge-badge ' + edgeClass + '"><span class="edge-num">' + edge + '</span><span class="edge-label">' + (edge >= 60 ? 'Hot' : edge >= 35 ? 'Edge' : 'Low') + '</span></div>' +
       '</div>' +
+      (m.model_probability != null && m.alpha_edge != null && Math.abs(m.alpha_edge) >= 2 ? '<div style="display:flex;align-items:center;gap:8px;margin:6px 0 2px;font-family:var(--mono);font-size:10px">' +
+        '<span style="color:var(--dim)">Mkt ' + (yesPct || '—') + '%</span>' +
+        '<span style="color:var(--dim)">&rarr;</span>' +
+        '<span style="color:var(--gold)">Model ' + Math.round(m.model_probability * 100) + '%</span>' +
+        '<span style="font-weight:700;color:' + (m.alpha_edge > 0 ? 'var(--green)' : 'var(--red)') + '">' + (m.alpha_edge > 0 ? '+' : '') + m.alpha_edge + 'pt edge</span>' +
+      '</div>' : '') +
       '<h3>' + regionFlag(m.question) + ' ' + escH(m.question) + '</h3>' +
       (m.ai_hook ? '<div class="story-hook">' + escH(m.ai_hook) + '</div>' : '') +
       '<div class="story-bullets">' + bullets.map(function(b) { return '<div class="story-bullet">' + escH(b) + '</div>'; }).join('') + '</div>' +
