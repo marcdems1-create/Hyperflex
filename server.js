@@ -28556,9 +28556,14 @@ setInterval(() => {
         .catch(e => _logError('watchdog/screener', e));
     }
 
-    // Check signals cache
-    if (_signalsCache && _signalsCache.ts && (now - _signalsCache.ts > staleMs)) {
-      _signalsCache = null; // force refresh
+    // Check signals cache — proactively refresh (same pattern as whale/screener watchdog)
+    if (!_signalsCache || (_signalsCache && _signalsCache.ts && (now - _signalsCache.ts > staleMs))) {
+      console.warn('[watchdog] Signals cache stale, triggering proactive refresh...');
+      const _signalsPort = process.env.PORT || 3000;
+      fetch(`http://localhost:${_signalsPort}/api/signals`)
+        .then(r => { if (!r.ok) throw new Error('signals refresh returned ' + r.status); return r.json(); })
+        .then(() => console.log('[watchdog] Signals cache refreshed'))
+        .catch(e => _logError('watchdog/signals', e));
     }
 
   } catch (e) {
