@@ -18636,17 +18636,23 @@ app.get('/api/whale-index', async (req, res) => {
       const mkt = p.market || p.position || 'Unknown';
       const wallet = (p.proxyWallet || p.trader || 'unknown').toLowerCase();
       const nk = wallet + ':' + mkt.toLowerCase();
-      if (!wiNetMap[nk]) wiNetMap[nk] = { yes_cap: 0, no_cap: 0, market: mkt, wallet, url: p.market_url || 'https://polymarket.com', current_price: p.current_price || 0 };
+      if (!wiNetMap[nk]) wiNetMap[nk] = { yes_cap: 0, no_cap: 0, market: mkt, wallet, url: p.market_url || 'https://polymarket.com', yes_price: 0 };
       const side = (p.side || 'YES').toUpperCase();
       const cap = parseFloat(p.size || 0);
-      if (side === 'YES' || side === 'Y') wiNetMap[nk].yes_cap += cap;
-      else wiNetMap[nk].no_cap += cap;
-      if (p.current_price > 0) wiNetMap[nk].current_price = p.current_price;
+      if (side === 'YES' || side === 'Y') {
+        wiNetMap[nk].yes_cap += cap;
+        // curPrice for YES position IS the YES price
+        if (p.current_price > 0) wiNetMap[nk].yes_price = p.current_price;
+      } else {
+        wiNetMap[nk].no_cap += cap;
+        // curPrice for NO position is the NO price; YES price = 1 - NO price
+        if (p.current_price > 0) wiNetMap[nk].yes_price = parseFloat((1 - p.current_price).toFixed(4));
+      }
     }
     const positions = Object.values(wiNetMap).map(n => {
       const net = n.yes_cap - n.no_cap;
       if (Math.abs(net) < 10) return null; // fully hedged — skip
-      return { market: n.market, side: net >= 0 ? 'YES' : 'NO', size: Math.abs(net), market_url: n.url, current_price: n.current_price };
+      return { market: n.market, side: net >= 0 ? 'YES' : 'NO', size: Math.abs(net), market_url: n.url, yes_price: n.yes_price };
     }).filter(Boolean);
 
     // Group positions by market
@@ -18675,7 +18681,9 @@ app.get('/api/whale-index', async (req, res) => {
         if (!sideCap[normSide]) sideCap[normSide] = 0;
         sideCap[normSide] += (p.size || 0);
         totalCapital += (p.size || 0);
-        if (p.current_price > 0.005 && p.current_price < 0.995) { priceSum += p.current_price; priceCount++; }
+        // Use normalized yes_price (already corrected for YES/NO side)
+        const yp = p.yes_price || 0;
+        if (yp > 0.005 && yp < 0.995) { priceSum += yp; priceCount++; }
       }
 
       // Find consensus side
@@ -18706,6 +18714,7 @@ app.get('/api/whale-index', async (req, res) => {
         consensus_side: consensusSide,
         consensus_pct: consensusPct,
         current_price: avgPrice,
+        yes_price: avgPrice,
         url: data.url,
         strength,
         // For consensus chart — consensus side mapped to YES, opposition to NO
