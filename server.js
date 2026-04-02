@@ -20210,6 +20210,68 @@ Only include headlines that actually affect a market. Skip irrelevant ones.`
   }
 });
 
+// ── NEW MARKETS — recently created on Polymarket ──────────────────────────
+let _newMarketsCache = null;
+
+app.get('/api/new-markets', async (req, res) => {
+  try {
+    if (_newMarketsCache && (Date.now() - _newMarketsCache.ts < 10 * 60 * 1000)) {
+      return res.json(_newMarketsCache.data);
+    }
+    const fetch = _nodeFetch;
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 15000);
+    const r = await fetch('https://gamma-api.polymarket.com/markets?closed=false&limit=30&order=startDate&ascending=false', {
+      signal: ctrl.signal,
+      headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+    });
+    clearTimeout(tid);
+    if (!r.ok) throw new Error('Gamma API ' + r.status);
+    const raw = await r.json();
+    const now = new Date();
+    const markets = (raw || []).filter(m => m.question).map(m => {
+      let yesPrice = null;
+      try {
+        const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
+        if (Array.isArray(prices) && prices[0] != null) yesPrice = parseFloat(prices[0]);
+      } catch {}
+      // Skip resolved
+      if (yesPrice != null && (yesPrice >= 0.95 || yesPrice <= 0.05)) return null;
+      const eventSlug = (m.events && m.events[0] && m.events[0].slug) || m.eventSlug || m.slug || '';
+      const volume = parseFloat(m.volume) || 0;
+      const startDate = m.startDate || m.createdAt || m.created_at;
+      const hoursAgo = startDate ? Math.round((now - new Date(startDate)) / 3600000) : null;
+      // Extract options for multi-outcome markets
+      let options = null;
+      if (m.outcomes && Array.isArray(m.outcomes) && m.outcomes.length > 2) {
+        const optPrices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : (m.outcomePrices || []);
+        options = m.outcomes.map((o, i) => ({
+          label: o,
+          pct: optPrices[i] != null ? Math.round(parseFloat(optPrices[i]) * 100) : null
+        }));
+      }
+      return {
+        question: m.question,
+        yes_price: yesPrice,
+        volume,
+        slug: eventSlug,
+        url: eventSlug ? pRef('https://polymarket.com/event/' + eventSlug) : pRef('https://polymarket.com'),
+        icon: (m.events && m.events[0] && m.events[0].image) || m.image || null,
+        hours_ago: hoursAgo,
+        end_date: (m.endDate || m.end_date_iso) ? new Date(m.endDate || m.end_date_iso).toISOString() : null,
+        options
+      };
+    }).filter(Boolean).slice(0, 20);
+
+    _newMarketsCache = { ts: Date.now(), data: { markets, updated_at: now.toISOString() } };
+    res.json(_newMarketsCache.data);
+  } catch (err) {
+    console.error('[new-markets]', err.message);
+    if (_newMarketsCache) return res.json(_newMarketsCache.data);
+    res.status(502).json({ error: 'Failed to fetch new markets' });
+  }
+});
+
 // ── MARKET MOVERS — biggest price changes in last 24h ─────────────────────
 let _marketMoversCache = null;
 

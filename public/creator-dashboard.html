@@ -5242,6 +5242,17 @@ body.nav-open .sidebar-backdrop {
                     <div style="text-align:center;padding:20px;color:var(--dim);font-size:13px">Loading...</div>
                   </div>
                 </div>
+
+                <!-- New Markets -->
+                <div id="qtNewMarkets" style="margin-bottom:20px">
+                  <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+                    <span style="font-family:var(--mono);font-size:10px;color:#22c55e;text-transform:uppercase;letter-spacing:.1em;font-weight:700">+ New Markets</span>
+                    <span style="font-family:var(--mono);font-size:9px;color:var(--dim)">Recently added</span>
+                  </div>
+                  <div id="qtNewGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                    <div style="text-align:center;padding:20px;color:var(--dim);font-size:13px;grid-column:1/-1">Loading new markets...</div>
+                  </div>
+                </div>
               </div>
 
               <!-- Sidebar -->
@@ -13057,6 +13068,7 @@ async function loadQuickTrade() {
   loadWhaleIndexPicks();
   loadExpiringMarkets();
   loadHotMarkets();
+  loadNewMarkets();
   loadQtFearGreed();
 }
 
@@ -13115,6 +13127,55 @@ async function loadCrystalBallPick() {
     } else {
       card.innerHTML = '<div style="text-align:center;padding:20px;color:var(--dim);font-size:12px">No AI picks right now — refresh in a few minutes</div>';
     }
+  }
+}
+
+async function loadNewMarkets() {
+  const grid = document.getElementById('qtNewGrid');
+  if (!grid) return;
+  try {
+    const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+    const r = await fetch('/api/new-markets', { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) throw new Error('Failed');
+    const d = await r.json();
+    const markets = d.markets || [];
+    if (!markets.length) { grid.innerHTML = '<div style="text-align:center;padding:20px;color:var(--dim);font-size:12px;grid-column:1/-1">No new markets right now</div>'; return; }
+    grid.innerHTML = markets.slice(0, 8).map(m => {
+      const price = m.yes_price != null ? Math.round(m.yes_price * 100) : null;
+      const mktUrl = m.slug ? '/market/' + m.slug : '#';
+      const timeAgo = m.hours_ago != null ? (m.hours_ago < 1 ? 'Just now' : m.hours_ago < 24 ? m.hours_ago + 'h ago' : Math.round(m.hours_ago / 24) + 'd ago') : '';
+      const vol = m.volume ? (m.volume >= 1000000 ? '$' + (m.volume / 1000000).toFixed(1) + 'M' : m.volume >= 1000 ? '$' + Math.round(m.volume / 1000) + 'K' : '$' + Math.round(m.volume)) : '';
+
+      // Multi-option preview (top 2 options)
+      let optionsHtml = '';
+      if (m.options && m.options.length > 2) {
+        optionsHtml = m.options.slice(0, 2).map(o =>
+          `<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;font-family:var(--mono);font-size:10px">
+            <span style="color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:70%">${escHtmlDash(o.label)}</span>
+            <span style="color:var(--text);font-weight:700">${o.pct != null ? o.pct + '%' : '—'}</span>
+          </div>`
+        ).join('') + (m.options.length > 2 ? `<div style="font-family:var(--mono);font-size:9px;color:#3a3834">+${m.options.length - 2} more</div>` : '');
+      }
+
+      return `<a href="${mktUrl}" class="qt-mkt-card" style="text-decoration:none;display:block;background:#0f0e0c;border:1px solid #1e1e1c;border-radius:10px;padding:14px;transition:all .15s;position:relative" onmouseover="this.style.borderColor='#333'" onmouseout="this.style.borderColor='#1e1e1c'">
+        <div style="position:absolute;top:10px;right:10px">
+          <span style="font-family:var(--mono);font-size:8px;font-weight:700;padding:2px 6px;border-radius:3px;background:rgba(34,197,94,0.1);color:#22c55e;border:1px solid rgba(34,197,94,0.2)">+ NEW</span>
+        </div>
+        ${m.icon ? '<img src="' + m.icon + '" alt="" style="width:28px;height:28px;border-radius:6px;margin-bottom:8px;border:1px solid #1e1e1c" onerror="this.style.display=\'none\'">' : ''}
+        <div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--text);line-height:1.35;margin-bottom:8px;padding-right:50px">${escHtmlDash(m.question)}</div>
+        ${optionsHtml ? '<div style="margin-bottom:8px;padding:6px 8px;background:rgba(255,255,255,0.02);border-radius:6px">' + optionsHtml + '</div>' : ''}
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div style="display:flex;align-items:center;gap:8px">
+            ${price != null && !optionsHtml ? '<span style="font-family:var(--mono);font-size:14px;font-weight:900;color:var(--text)">' + price + '%</span>' : ''}
+            ${vol ? '<span style="font-family:var(--mono);font-size:9px;color:#4a4744">' + vol + ' vol</span>' : ''}
+          </div>
+          <span style="font-family:var(--mono);font-size:9px;color:#3a3834">${timeAgo}</span>
+        </div>
+      </a>`;
+    }).join('');
+  } catch (e) {
+    console.warn('[qt new-markets]', e);
+    grid.innerHTML = '<div style="text-align:center;padding:20px;color:var(--dim);font-size:12px;grid-column:1/-1">Failed to load</div>';
   }
 }
 
