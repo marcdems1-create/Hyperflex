@@ -2461,11 +2461,12 @@ let memberAuthTab = 'login';
 function updateNavAuthState() {
   const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
   const loggedIn = !!token;
-  document.getElementById('navDashboardLink').style.display  = loggedIn ? '' : 'none';
-  document.getElementById('navSignOutBtn').style.display     = loggedIn ? '' : 'none';
-  document.getElementById('navMemberSignIn').style.display   = loggedIn ? 'none' : '';
-  const cl = document.getElementById('navCreatorLogin'); if (cl) cl.style.display = loggedIn ? 'none' : '';
-  document.getElementById('navStartFree').style.display      = loggedIn ? 'none' : '';
+  var el;
+  el = document.getElementById('navDashboardLink'); if (el) el.style.display  = loggedIn ? '' : 'none';
+  el = document.getElementById('navSignOutBtn');     if (el) el.style.display = loggedIn ? '' : 'none';
+  el = document.getElementById('navMemberSignIn');   if (el) el.style.display = loggedIn ? 'none' : '';
+  el = document.getElementById('navCreatorLogin');   if (el) el.style.display = loggedIn ? 'none' : '';
+  el = document.getElementById('navStartFree');      if (el) el.style.display = loggedIn ? 'none' : '';
 }
 
 function openMemberAuth(tab) {
