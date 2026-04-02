@@ -7454,6 +7454,7 @@ function showSeasonError(msg) {
 }
 
 function escHtmlDash(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+var escH = escHtmlDash; // alias used by arb/calendar/watchlist/briefing tabs
 
 // Create market
 function obQuickPick(question, category) {
