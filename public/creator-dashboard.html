@@ -4836,6 +4836,64 @@ body.nav-open .sidebar-backdrop {
 
             <!-- Main portfolio content (hidden when welcome is shown) -->
             <div id="portfolioMain">
+            <!-- No real positions message -->
+            <div id="noRealPositionsMsg" style="display:none;background:rgba(201,146,13,0.04);border:1px solid rgba(201,146,13,0.15);border-radius:10px;padding:14px 20px;margin-bottom:16px;font-family:var(--mono);font-size:12px;color:var(--dim);line-height:1.6">
+              <strong style="color:var(--gold)">No open positions on Polymarket.</strong> Your previous positions may have resolved. The stats below reflect your USDC wallet balance. Visit <a href="https://polymarket.com" target="_blank" style="color:#a78bfa">polymarket.com</a> to open new positions.
+            </div>
+            <!-- Two-card Polymarket-style portfolio summary -->
+            <div id="portfolioSummaryBar" style="display:none;margin-bottom:20px">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+                <!-- LEFT CARD: Portfolio Value + Available Balance -->
+                <div style="background:#0f0e0c;border:1px solid #2a2825;border-radius:14px;padding:24px 28px;position:relative;overflow:hidden">
+                  <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--gold),transparent)"></div>
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+                    <div id="psSummaryValueLabel" style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752">Portfolio</div>
+                    <div style="font-family:var(--mono);font-size:10px;color:#5a5752">Available to trade <span id="psAvailBalance" style="font-weight:700;color:var(--text)">—</span></div>
+                  </div>
+                  <div id="psSummaryValue" style="font-family:var(--mono);font-size:32px;font-weight:900;color:#f5f0e8;letter-spacing:-0.02em;margin-bottom:6px">—</div>
+                  <div id="psSummaryPnlPct" style="font-family:var(--mono);font-size:12px;font-weight:700;color:#5a5752;margin-bottom:20px"></div>
+                  <div style="display:flex;gap:16px;border-top:1px solid #2a2825;padding-top:16px">
+                    <div style="flex:1">
+                      <div style="font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#5a5752;margin-bottom:4px">Win Rate</div>
+                      <div style="display:flex;align-items:center;gap:6px">
+                        <div id="psWinRateRing" style="width:28px;height:28px;border-radius:50%;background:conic-gradient(#333 0%,#333 100%);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                          <div style="width:20px;height:20px;border-radius:50%;background:#0f0e0c;display:flex;align-items:center;justify-content:center">
+                            <span id="psWinRateVal" style="font-family:var(--mono);font-size:8px;font-weight:900;color:#5a5752">—</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div style="flex:1">
+                      <div style="font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#5a5752;margin-bottom:4px">Sharp</div>
+                      <div id="psSharpBadge" style="display:inline-flex;align-items:center;justify-content:center;min-width:32px;padding:4px 8px;border-radius:6px;background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.2)">
+                        <span id="psSharpVal" style="font-family:var(--mono);font-size:13px;font-weight:900;color:var(--gold)">—</span>
+                      </div>
+                    </div>
+                    <div style="flex:1;text-align:right">
+                      <div style="font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#5a5752;margin-bottom:4px">ROI</div>
+                      <div id="psSummaryROI" style="font-family:var(--mono);font-size:16px;font-weight:900;color:#5a5752">—</div>
+                    </div>
+                  </div>
+                </div>
+                <!-- RIGHT CARD: Profit/Loss + Chart -->
+                <div style="background:#0f0e0c;border:1px solid #2a2825;border-radius:14px;padding:24px 28px;display:flex;flex-direction:column">
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+                    <div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752">Profit / Loss</div>
+                    <div style="display:flex;gap:0;border:1px solid #2a2825;border-radius:6px;overflow:hidden">
+                      <button onclick="setPnlPeriod('1d')" class="pnl-tab" id="pnlTab1d" style="padding:4px 10px;font-family:var(--mono);font-size:9px;font-weight:700;color:#5a5752;background:transparent;border:none;cursor:pointer">1D</button>
+                      <button onclick="setPnlPeriod('1w')" class="pnl-tab" id="pnlTab1w" style="padding:4px 10px;font-family:var(--mono);font-size:9px;font-weight:700;color:#5a5752;background:transparent;border:none;cursor:pointer">1W</button>
+                      <button onclick="setPnlPeriod('1m')" class="pnl-tab" id="pnlTab1m" style="padding:4px 10px;font-family:var(--mono);font-size:9px;font-weight:700;color:var(--text);background:var(--gold);border:none;cursor:pointer">1M</button>
+                      <button onclick="setPnlPeriod('all')" class="pnl-tab" id="pnlTaball" style="padding:4px 10px;font-family:var(--mono);font-size:9px;font-weight:700;color:#5a5752;background:transparent;border:none;cursor:pointer">ALL</button>
+                    </div>
+                  </div>
+                  <div id="psSummaryPnl" style="font-family:var(--mono);font-size:32px;font-weight:900;color:#5a5752;letter-spacing:-0.02em;margin-bottom:4px">—</div>
+                  <div id="psPnlPeriodLabel" style="font-family:var(--mono);font-size:10px;color:#5a5752;margin-bottom:12px">Past Month</div>
+                  <div id="portfolioPnlChart" style="flex:1;min-height:60px;display:flex;align-items:flex-end">
+                    <div id="pnlChartBars" style="display:flex;align-items:flex-end;gap:3px;height:100%;width:100%;padding:0"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
             <!-- Platform tab bar -->
             <div style="display:flex;border-bottom:1px solid var(--border);margin-bottom:28px;gap:0;overflow-x:auto">
               <button id="ptab-all" onclick="switchPortfolioTab('all')"
@@ -5015,66 +5073,6 @@ body.nav-open .sidebar-backdrop {
               <button id="shareRecordBtn" onclick="shareRecordOnX()" style="background:linear-gradient(135deg,rgba(201,146,13,0.15),rgba(201,146,13,0.06));border:1px solid rgba(201,146,13,0.35);border-radius:12px;padding:14px 24px;font-family:var(--sans);font-size:14px;font-weight:700;color:var(--gold);cursor:pointer;display:flex;align-items:center;gap:10px;transition:all .2s;width:100%" onmouseover="this.style.background='linear-gradient(135deg,rgba(201,146,13,0.25),rgba(201,146,13,0.12))';this.style.borderColor='var(--gold)'" onmouseout="this.style.background='linear-gradient(135deg,rgba(201,146,13,0.15),rgba(201,146,13,0.06))';this.style.borderColor='rgba(201,146,13,0.35)'">
                 <span style="font-size:18px">📢</span> Share My Record on X <span style="margin-left:auto;opacity:0.6">→</span>
               </button>
-            </div>
-            <!-- Premium Portfolio Summary Bar -->
-            <div id="noRealPositionsMsg" style="display:none;background:rgba(201,146,13,0.04);border:1px solid rgba(201,146,13,0.15);border-radius:10px;padding:14px 20px;margin-bottom:16px;font-family:var(--mono);font-size:12px;color:var(--dim);line-height:1.6">
-              <strong style="color:var(--gold)">No open positions on Polymarket.</strong> Your previous positions may have resolved. The stats below reflect your USDC wallet balance. Visit <a href="https://polymarket.com" target="_blank" style="color:#a78bfa">polymarket.com</a> to open new positions.
-            </div>
-            <div id="portfolioSummaryBar" style="display:none;margin-bottom:20px">
-              <!-- Two-card Polymarket-style layout -->
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-                <!-- LEFT CARD: Portfolio Value + Available Balance -->
-                <div style="background:#0f0e0c;border:1px solid #2a2825;border-radius:14px;padding:24px 28px;position:relative;overflow:hidden">
-                  <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--gold),transparent)"></div>
-                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-                    <div id="psSummaryValueLabel" style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752">Portfolio</div>
-                    <div style="font-family:var(--mono);font-size:10px;color:#5a5752">Available to trade <span id="psAvailBalance" style="font-weight:700;color:var(--text)">—</span></div>
-                  </div>
-                  <div id="psSummaryValue" style="font-family:var(--mono);font-size:32px;font-weight:900;color:#f5f0e8;letter-spacing:-0.02em;margin-bottom:6px">—</div>
-                  <div id="psSummaryPnlPct" style="font-family:var(--mono);font-size:12px;font-weight:700;color:#5a5752;margin-bottom:20px"></div>
-                  <!-- Win Rate + Sharp Score + ROI row -->
-                  <div style="display:flex;gap:16px;border-top:1px solid #2a2825;padding-top:16px">
-                    <div style="flex:1">
-                      <div style="font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#5a5752;margin-bottom:4px">Win Rate</div>
-                      <div style="display:flex;align-items:center;gap:6px">
-                        <div id="psWinRateRing" style="width:28px;height:28px;border-radius:50%;background:conic-gradient(#333 0%,#333 100%);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-                          <div style="width:20px;height:20px;border-radius:50%;background:#0f0e0c;display:flex;align-items:center;justify-content:center">
-                            <span id="psWinRateVal" style="font-family:var(--mono);font-size:8px;font-weight:900;color:#5a5752">—</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <div style="flex:1">
-                      <div style="font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#5a5752;margin-bottom:4px">Sharp</div>
-                      <div id="psSharpBadge" style="display:inline-flex;align-items:center;justify-content:center;min-width:32px;padding:4px 8px;border-radius:6px;background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.2)">
-                        <span id="psSharpVal" style="font-family:var(--mono);font-size:13px;font-weight:900;color:var(--gold)">—</span>
-                      </div>
-                    </div>
-                    <div style="flex:1;text-align:right">
-                      <div style="font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#5a5752;margin-bottom:4px">ROI</div>
-                      <div id="psSummaryROI" style="font-family:var(--mono);font-size:16px;font-weight:900;color:#5a5752">—</div>
-                    </div>
-                  </div>
-                </div>
-                <!-- RIGHT CARD: Profit/Loss + Chart -->
-                <div style="background:#0f0e0c;border:1px solid #2a2825;border-radius:14px;padding:24px 28px;display:flex;flex-direction:column">
-                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-                    <div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752">Profit / Loss</div>
-                    <div style="display:flex;gap:0;border:1px solid #2a2825;border-radius:6px;overflow:hidden">
-                      <button onclick="setPnlPeriod('1d')" class="pnl-tab" id="pnlTab1d" style="padding:4px 10px;font-family:var(--mono);font-size:9px;font-weight:700;color:#5a5752;background:transparent;border:none;cursor:pointer">1D</button>
-                      <button onclick="setPnlPeriod('1w')" class="pnl-tab" id="pnlTab1w" style="padding:4px 10px;font-family:var(--mono);font-size:9px;font-weight:700;color:#5a5752;background:transparent;border:none;cursor:pointer">1W</button>
-                      <button onclick="setPnlPeriod('1m')" class="pnl-tab" id="pnlTab1m" style="padding:4px 10px;font-family:var(--mono);font-size:9px;font-weight:700;color:var(--text);background:var(--gold);border:none;cursor:pointer">1M</button>
-                      <button onclick="setPnlPeriod('all')" class="pnl-tab" id="pnlTaball" style="padding:4px 10px;font-family:var(--mono);font-size:9px;font-weight:700;color:#5a5752;background:transparent;border:none;cursor:pointer">ALL</button>
-                    </div>
-                  </div>
-                  <div id="psSummaryPnl" style="font-family:var(--mono);font-size:32px;font-weight:900;color:#5a5752;letter-spacing:-0.02em;margin-bottom:4px">—</div>
-                  <div id="psPnlPeriodLabel" style="font-family:var(--mono);font-size:10px;color:#5a5752;margin-bottom:12px">Past Month</div>
-                  <!-- Inline P&L chart -->
-                  <div id="portfolioPnlChart" style="flex:1;min-height:60px;display:flex;align-items:flex-end">
-                    <div id="pnlChartBars" style="display:flex;align-items:flex-end;gap:3px;height:100%;width:100%;padding:0"></div>
-                  </div>
-                </div>
-              </div>
             </div>
             <!-- Best Calls Section -->
             <div id="bestCallsSection" style="display:none;margin-bottom:20px">
