@@ -953,34 +953,56 @@ async function executeTrade() {
   cta.textContent = 'Placing order...';
 
   try {
-    var res = await fetch('/api/polymarket/clob-order', {
+    var apiKey = localStorage.getItem('poly_api_key');
+    var apiSecret = localStorage.getItem('poly_api_secret');
+    var apiPassphrase = localStorage.getItem('poly_api_passphrase');
+    if (!apiKey || !apiSecret || !apiPassphrase) {
+      showTradeStatus('API credentials required. Enable trading first.', 'error');
+      return;
+    }
+
+    // Build order body matching Polymarket CLOB spec
+    var orderBody = JSON.stringify({
+      tokenID: tokenId,
+      side: clobSide,
+      size: parseFloat(shares.toFixed(4)).toString(),
+      price: parseFloat(clobPrice).toString(),
+      type: 'GTC'
+    });
+
+    // HMAC-SHA256 sign: timestamp + method + path + body (done in browser to avoid geo-block)
+    var ts = Math.floor(Date.now() / 1000).toString();
+    var message = ts + 'POST' + '/order' + orderBody;
+    var enc = new TextEncoder();
+    var keyData = enc.encode(apiSecret);
+    var cryptoKey = await crypto.subtle.importKey('raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    var sigBuf = await crypto.subtle.sign('HMAC', cryptoKey, enc.encode(message));
+    var hmacSignature = btoa(String.fromCharCode.apply(null, new Uint8Array(sigBuf)));
+
+    // Direct browser → CLOB (user's IP, avoids server geo-block)
+    var res = await fetch('https://clob.polymarket.com/order', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + token
+        'Accept': 'application/json',
+        'POLY_API_KEY': apiKey,
+        'POLY_PASSPHRASE': apiPassphrase,
+        'POLY_TIMESTAMP': ts,
+        'POLY_SIGNATURE': hmacSignature
       },
-      body: JSON.stringify({
-        token_id: tokenId,
-        side: clobSide,
-        size: shares.toFixed(4),
-        price: clobPrice,
-        api_key: localStorage.getItem('poly_api_key'),
-        api_secret: localStorage.getItem('poly_api_secret'),
-        api_passphrase: localStorage.getItem('poly_api_passphrase')
-      })
+      body: orderBody
     });
 
-    var data = await res.json();
+    var data = await res.json().catch(function() { return {}; });
     if (!res.ok) {
-      // If auth expired, clear keys and prompt re-enable
-      if (res.status === 400 && (data.error || '').toLowerCase().includes('api')) {
+      if (res.status === 400 && (JSON.stringify(data)).toLowerCase().includes('api')) {
         localStorage.removeItem('poly_api_key');
         localStorage.removeItem('poly_api_secret');
         localStorage.removeItem('poly_api_passphrase');
         updateTradingUI();
         showTradeStatus('API key expired \u2014 click Enable Trading to reconnect', 'error');
       } else {
-        showTradeStatus(data.error || 'Order rejected', 'error');
+        showTradeStatus(data.error || data.message || 'Order rejected', 'error');
       }
       return;
     }
