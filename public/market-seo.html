@@ -649,7 +649,7 @@ function renderMarket(d) {
 
   // Compare section
   document.getElementById('polyYes').textContent = yesP + '%';
-  document.getElementById('polyLink').href = d.polymarket_url || '#';
+  document.getElementById('polyLink').href = polyRef(d.polymarket_url || '#');
 
   // Try Kalshi match
   searchKalshi(d.title);

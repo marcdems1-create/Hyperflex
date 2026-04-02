@@ -5208,7 +5208,7 @@ app.get('/api/creator/members', requireCreator, async (req, res) => {
       return {
         user_id:      b.user_id,
         display_name: user.display_name || 'Anonymous',
-        email:        plan !== 'free' ? (user.email || null) : null, // emails gated to Pro+
+        email:        user.email || null,
         joined_at:    b.created_at,
         balance:      b.balance || 0,         // centpoints
         total_bets:   stats.total,
@@ -14086,8 +14086,8 @@ app.post('/api/creator/flexbot', requireCreator, async (req, res) => {
       const { data: settings } = await supabase .from('creator_settings') .select('plan, slug, display_name, starting_balance, min_bet, max_bet, refill_enabled, refill_amount') .eq('creator_id', req.creator.id) .single();
     }
 
-    if (!settings || settings.plan !== 'platinum') {
-      return res.status(403).json({ error: 'FLEX BOT is available on Premium plans only.' });
+    if (!settings) {
+      return res.status(404).json({ error: 'Creator not found' });
     }
 
     const systemPrompt = `You are FLEX BOT, an AI assistant built into HYPERFLEX — a B2B SaaS platform where creators build branded prediction markets for their communities using play-money Flex Points.
@@ -14144,10 +14144,6 @@ app.post('/api/creator/custom-domain/set', requireCreator, async (req, res) => {
       const { data: creator } = await supabase .from('creator_settings') .select('plan, slug') .eq('creator_id', req.creator.id) .single();
     }
 
-    if (creator.plan !== 'platinum') {
-      return res.status(403).json({ error: 'Custom domains require the Premium plan.' });
-    }
-
     const domain = (req.body.domain || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
     if (!domain || !/^[a-z0-9.-]+$/.test(domain)) {
       return res.status(400).json({ error: 'Invalid domain format. Example: markets.yourdomain.com' });
@@ -14198,9 +14194,6 @@ app.post('/api/creator/custom-domain/verify', requireCreator, async (req, res) =
       const { data: creator } = await supabase .from('creator_settings') .select('plan, custom_domain, custom_domain_token, slug') .eq('creator_id', req.creator.id) .single();
     }
 
-    if (creator.plan !== 'platinum') {
-      return res.status(403).json({ error: 'Custom domains require the Premium plan.' });
-    }
     if (!creator.custom_domain) {
       return res.status(400).json({ error: 'No domain saved. Call /set first.' });
     }
