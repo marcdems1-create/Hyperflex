@@ -18538,7 +18538,9 @@ app.get('/api/market/:slug', async (req, res) => {
             clobTokenIds: m.clobTokenIds,
             active: m.active,
             closed: m.closed,
-            conditionId: m.conditionId
+            conditionId: m.conditionId,
+            neg_risk: m.neg_risk !== undefined ? m.neg_risk : true,
+            groupItemTitle: m.groupItemTitle || ''
           }));
         }
       }

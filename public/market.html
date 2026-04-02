@@ -384,6 +384,7 @@ var _tradeMode = 'buy';
 var _chartInterval = 'all';
 var _activeOutcomeIndex = 0;
 var _eventMarkets = null;
+var _sortedEventMarkets = null; // sorted mapping for multi-outcome events
 
 function escH(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 function fmtCap(n) { if (n >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M'; if (n >= 1e3) return '$' + (n/1e3).toFixed(1) + 'K'; return '$' + n.toFixed(0); }
@@ -546,8 +547,14 @@ function renderOutcomes(m) {
     }
     // Sort by YES price descending (favorites first)
     rows.sort(function(a, b) { return b.yesP - a.yesP; });
-    // Re-index after sort
-    for (var j = 0; j < rows.length; j++) rows[j].idx = j;
+    // Re-index after sort and store sorted event markets for token ID lookup
+    _sortedEventMarkets = [];
+    for (var j = 0; j < rows.length; j++) {
+      rows[j].idx = j;
+      // Find the original event market for this sorted row (match by slug or question)
+      var origEm = _eventMarkets.find(function(em) { return em.slug === rows[j].slug; }) || _eventMarkets[j];
+      _sortedEventMarkets.push(origEm);
+    }
   } else {
     // Standard single-market or binary market
     var outcomes = m.outcomes;
@@ -604,7 +611,38 @@ function switchOutcome(index) {
     r.classList.toggle('active-outcome', parseInt(r.getAttribute('data-idx')) === index);
   });
 
-  // Get token IDs
+  // For multi-outcome events, use the correct event market's data
+  if (_sortedEventMarkets && _sortedEventMarkets[index]) {
+    var em = _sortedEventMarkets[index];
+    var emPrices = em.outcomePrices || '[]';
+    if (typeof emPrices === 'string') { try { emPrices = JSON.parse(emPrices); } catch(e) { emPrices = []; } }
+    var yp = emPrices[0] ? parseFloat(emPrices[0]) : 0.5;
+    var np = emPrices[1] ? parseFloat(emPrices[1]) : 1 - yp;
+    document.getElementById('yesPrice').textContent = Math.round(yp * 100) + '¢';
+    document.getElementById('noPrice').textContent = Math.round(np * 100) + '¢';
+    // Update trade widget title to this outcome's question
+    var title = em.question || em.groupItemTitle || '';
+    document.getElementById('tradeTitle').textContent = title.substring(0, 50);
+    // Update trade price for selected side
+    var sidePrice = _tradeSide === 'yes' ? yp : np;
+    document.getElementById('tradePrice').value = Math.round(sidePrice * 100);
+    updateTradeCalc();
+    document.getElementById('chartOutcome').textContent = em.question || 'Outcome';
+
+    // Re-fetch price history for this outcome's YES token
+    var emTids = em.clobTokenIds || '[]';
+    if (typeof emTids === 'string') { try { emTids = JSON.parse(emTids); } catch(e) { emTids = []; } }
+    var tokenId = emTids[0];
+    if (tokenId) {
+      fetch('https://clob.polymarket.com/prices-history?market=' + tokenId + '&interval=' + _chartInterval + '&fidelity=60')
+        .then(function(r) { return r.json(); })
+        .then(function(d) { _priceHistory = (d.history || []); drawChart(_priceHistory); setTimeout(applyTA, 150); })
+        .catch(function() {});
+    }
+    return;
+  }
+
+  // Standard single-market fallback
   var tids = _market.clobTokenIds || '[]';
   if (typeof tids === 'string') { try { tids = JSON.parse(tids); } catch(e) { tids = []; } }
 
@@ -1421,15 +1459,20 @@ async function executeTrade() {
   }
 
   // Get token ID for the selected outcome + side
-  var tids = _market.clobTokenIds || '[]';
-  if (typeof tids === 'string') { try { tids = JSON.parse(tids); } catch(e) { tids = []; } }
+  // For multi-outcome events, use the specific event market's token IDs
+  var tids;
+  if (_sortedEventMarkets && _sortedEventMarkets[_activeOutcomeIndex]) {
+    var em = _sortedEventMarkets[_activeOutcomeIndex];
+    tids = em.clobTokenIds || '[]';
+    if (typeof tids === 'string') { try { tids = JSON.parse(tids); } catch(e) { tids = []; } }
+  } else {
+    tids = _market.clobTokenIds || '[]';
+    if (typeof tids === 'string') { try { tids = JSON.parse(tids); } catch(e) { tids = []; } }
+  }
 
-  // For binary markets: tids[0] = YES token, tids[1] = NO token
-  // _tradeSide determines which token; _tradeMode determines buy/sell
-  var tokenIndex = _tradeSide === 'yes' ? (_activeOutcomeIndex * 2) : (_activeOutcomeIndex * 2 + 1);
-  // Fallback for simple binary with only 2 tokens
-  if (tids.length === 2) tokenIndex = _tradeSide === 'yes' ? 0 : 1;
-  var tokenId = tids[tokenIndex] || tids[_activeOutcomeIndex] || tids[0];
+  // Each market has 2 tokens: tids[0] = YES, tids[1] = NO
+  var tokenIndex = _tradeSide === 'yes' ? 0 : 1;
+  var tokenId = tids[tokenIndex] || tids[0];
 
   if (!tokenId) {
     showTradeStatus('No token ID for this market \u2014 cannot trade', 'error');
@@ -1519,8 +1562,10 @@ async function executeTrade() {
     var orderSalt = Math.floor(Math.random() * 9007199254740991);
 
     // Determine exchange contract address (neg-risk vs standard)
-    // Nearly all modern Polymarket markets use neg-risk; default to true
-    var isNegRisk = _market.neg_risk !== undefined ? !!_market.neg_risk : true;
+    // For multi-outcome events, check the specific event market's neg_risk
+    var activeEM = (_sortedEventMarkets && _sortedEventMarkets[_activeOutcomeIndex]) || null;
+    var isNegRisk = activeEM ? (activeEM.neg_risk !== undefined ? !!activeEM.neg_risk : true)
+                   : (_market.neg_risk !== undefined ? !!_market.neg_risk : true);
     var exchangeAddr = isNegRisk
       ? '0xC5d563A36AE78145C45a50134d48A1215220f80a'   // Neg Risk CTF Exchange
       : '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E';  // CTF Exchange
