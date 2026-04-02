@@ -12805,69 +12805,58 @@ async function loadBreakingTab() {
     const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
     const headers = { Authorization: 'Bearer ' + token };
 
-    // Fetch movers + screener in parallel for richer data
-    const [moversRes, screenerRes] = await Promise.all([
-      fetch('/api/market-movers', { headers }).then(r => r.ok ? r.json() : null).catch(() => null),
-      fetch('/api/screener?sort=price_change&limit=30', { headers }).then(r => r.ok ? r.json() : null).catch(() => null)
+    // Fetch screener (has volume, price, whale data, edge scores) + movers (has price changes if snapshots exist)
+    const [screenerRes, moversRes] = await Promise.all([
+      fetch('/api/screener?sort=volume&limit=50', { headers }).then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch('/api/market-movers', { headers }).then(r => r.ok ? r.json() : null).catch(() => null)
     ]);
 
     let items = [];
 
-    // Market movers — primary source
-    if (moversRes && moversRes.movers && moversRes.movers.length) {
-      items = moversRes.movers.map((m, i) => ({
-        rank: i + 1,
-        question: m.question,
-        current_price: m.current_price,
-        change_pct: m.change_pct,
-        change_pts: m.odds_change_pts,
-        url: m.url,
-        volume: null,
-        category: guessCategory(m.question)
-      }));
-    }
-
-    // Enrich with screener data (volume, icons)
-    if (screenerRes) {
-      const screenerArr = Array.isArray(screenerRes) ? screenerRes : (screenerRes.markets || screenerRes.data || []);
-      const screenerMap = {};
-      for (const s of screenerArr) {
-        const q = (s.question || '').toLowerCase();
-        screenerMap[q] = s;
-      }
-      for (const item of items) {
-        const match = screenerMap[(item.question || '').toLowerCase()];
-        if (match) {
-          item.volume = match.volume || match.total_volume || null;
-          item.icon = match.icon || match.image || null;
-        }
-      }
-      // Add screener markets with big price changes that aren't in movers
-      if (items.length < 20) {
-        const existingQs = new Set(items.map(i => (i.question || '').toLowerCase()));
-        for (const s of screenerArr) {
-          if (items.length >= 20) break;
-          const q = (s.question || '').toLowerCase();
-          if (existingQs.has(q)) continue;
-          const pChange = s.price_change_24h || 0;
-          if (Math.abs(pChange) < 3) continue;
-          items.push({
-            rank: items.length + 1,
-            question: s.question,
-            current_price: s.yes_price != null ? Math.round(s.yes_price * 100) : null,
-            change_pct: pChange,
-            change_pts: Math.round(pChange),
-            url: s.url || s.market_url || '#',
-            volume: s.volume || s.total_volume || null,
-            icon: s.icon || s.image || null,
-            category: guessCategory(s.question)
-          });
-        }
+    // Build price change lookup from movers
+    const moverChanges = {};
+    if (moversRes && moversRes.movers) {
+      for (const m of moversRes.movers) {
+        moverChanges[(m.question || '').toLowerCase()] = { change_pct: m.change_pct, change_pts: m.odds_change_pts };
       }
     }
 
-    // Re-sort by absolute change
-    items.sort((a, b) => Math.abs(b.change_pct) - Math.abs(a.change_pct));
+    // Primary source: screener data (always available from Gamma API)
+    const screenerArr = screenerRes ? (Array.isArray(screenerRes) ? screenerRes : (screenerRes.markets || screenerRes.data || [])) : [];
+
+    for (const s of screenerArr) {
+      if (items.length >= 25) break;
+      const q = s.question || '';
+      // Get price change from movers if available, otherwise from screener
+      const moverMatch = moverChanges[q.toLowerCase()];
+      const pChange = moverMatch ? moverMatch.change_pct : (s.price_change_24h || 0);
+      const pPts = moverMatch ? moverMatch.change_pts : (s.odds_change_24h || Math.round(pChange));
+
+      items.push({
+        rank: 0,
+        question: q,
+        current_price: s.yes_price != null ? Math.round(s.yes_price * 100) : null,
+        change_pct: pChange,
+        change_pts: pPts,
+        url: s.url || s.market_url || '#',
+        volume: s.volume || 0,
+        icon: s.icon || s.image || null,
+        category: s.category || guessCategory(q),
+        edge_score: s.edge_score || 0,
+        whale_count: s.whale_count || 0,
+        ai_hook: s.ai_hook || null
+      });
+    }
+
+    // Sort: markets with price changes first (by abs change), then by volume
+    items.sort((a, b) => {
+      const aHasChange = Math.abs(a.change_pct) > 0;
+      const bHasChange = Math.abs(b.change_pct) > 0;
+      if (aHasChange && !bHasChange) return -1;
+      if (!aHasChange && bHasChange) return 1;
+      if (aHasChange && bHasChange) return Math.abs(b.change_pct) - Math.abs(a.change_pct);
+      return (b.volume || 0) - (a.volume || 0);
+    });
     items.forEach((m, i) => m.rank = i + 1);
 
     _brkData = items;
@@ -12920,36 +12909,43 @@ function renderBreakingList() {
   }
 
   list.innerHTML = items.map((m, i) => {
+    const hasChange = Math.abs(m.change_pct || 0) > 0;
     const isUp = m.change_pct > 0;
-    const changeColor = isUp ? '#22c55e' : '#ef4444';
-    const arrow = isUp ? '↗' : '↘';
-    const changePts = Math.abs(m.change_pts || 0);
+    const changeColor = hasChange ? (isUp ? '#22c55e' : '#ef4444') : 'var(--dim)';
+    const arrow = hasChange ? (isUp ? '↗' : '↘') : '';
     const changePct = Math.abs(m.change_pct || 0).toFixed(0);
     const price = m.current_price != null ? m.current_price + '%' : '—';
     const vol = m.volume ? (m.volume >= 1000000 ? '$' + (m.volume / 1000000).toFixed(1) + 'M' : m.volume >= 1000 ? '$' + Math.round(m.volume / 1000) + 'K' : '$' + Math.round(m.volume)) : '';
     const mktUrl = window.hfxMarketUrl ? window.hfxMarketUrl(m.url) : m.url;
-    const polyUrl = typeof polyRef === 'function' ? polyRef(m.url) : m.url;
     const catPill = m.category && m.category !== 'other' ? '<span style="font-family:var(--mono);font-size:8px;font-weight:700;padding:2px 6px;border-radius:3px;background:rgba(201,146,13,0.08);color:var(--gold);text-transform:uppercase;letter-spacing:.05em">' + m.category + '</span>' : '';
+    const whalePill = m.whale_count >= 3 ? '<span style="font-family:var(--mono);font-size:8px;font-weight:700;padding:2px 6px;border-radius:3px;background:rgba(96,165,250,0.08);color:#60a5fa">🐋 ' + m.whale_count + '</span>' : '';
 
-    return `<a href="${mktUrl}" style="text-decoration:none;display:flex;align-items:center;gap:14px;padding:16px 18px;border-bottom:1px solid #1a1917;transition:background .15s;cursor:pointer" onmouseover="this.style.background='rgba(201,146,13,0.03)'" onmouseout="this.style.background='transparent'">
+    // Right side: show price change if available, otherwise volume
+    const rightHtml = hasChange
+      ? `<div style="min-width:72px;text-align:right">
+          <div style="font-family:var(--mono);font-size:14px;font-weight:900;color:${changeColor};line-height:1">${arrow} ${changePct}%</div>
+        </div>
+        <svg width="48" height="24" viewBox="0 0 48 24" fill="none" style="flex-shrink:0;opacity:0.6"><path d="${isUp ? 'M2 20 L12 16 L22 18 L32 10 L42 4 L46 2' : 'M2 4 L12 8 L22 6 L32 14 L42 20 L46 22'}" stroke="${changeColor}" stroke-width="2" stroke-linecap="round" fill="none"/></svg>`
+      : (vol ? `<div style="min-width:72px;text-align:right">
+          <div style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--dim);line-height:1">${vol}</div>
+          <div style="font-family:var(--mono);font-size:8px;color:#3a3834;margin-top:2px">VOLUME</div>
+        </div>` : '');
+
+    return `<a href="${mktUrl}" style="text-decoration:none;display:flex;align-items:center;gap:14px;padding:14px 18px;border-bottom:1px solid #1a1917;transition:background .15s;cursor:pointer" onmouseover="this.style.background='rgba(201,146,13,0.03)'" onmouseout="this.style.background='transparent'">
       <div style="font-family:var(--mono);font-size:16px;font-weight:900;color:#2a2825;width:28px;text-align:center;flex-shrink:0">${m.rank}</div>
-      ${m.icon ? '<img src="' + m.icon + '" alt="" style="width:36px;height:36px;border-radius:8px;border:1px solid #1e1e1c;flex-shrink:0;object-fit:cover" onerror="this.style.display=\'none\'">' : ''}
       <div style="flex:1;min-width:0">
         <div style="font-family:var(--sans);font-size:14px;font-weight:700;color:var(--text);line-height:1.35;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtmlDash(m.question)}</div>
-        <div style="display:flex;align-items:center;gap:8px">
+        <div style="display:flex;align-items:center;gap:6px">
           ${catPill}
-          ${vol ? '<span style="font-family:var(--mono);font-size:9px;color:#4a4744">' + vol + ' vol</span>' : ''}
+          ${whalePill}
+          ${hasChange && vol ? '<span style="font-family:var(--mono);font-size:9px;color:#4a4744">' + vol + '</span>' : ''}
         </div>
       </div>
-      <div style="display:flex;align-items:center;gap:16px;flex-shrink:0">
+      <div style="display:flex;align-items:center;gap:14px;flex-shrink:0">
         <div style="text-align:right">
           <div style="font-family:var(--mono);font-size:18px;font-weight:900;color:var(--text);line-height:1">${price}</div>
         </div>
-        <div style="min-width:72px;text-align:right">
-          <div style="font-family:var(--mono);font-size:14px;font-weight:900;color:${changeColor};line-height:1">${arrow} ${changePct}%</div>
-          ${changePts ? '<div style="font-family:var(--mono);font-size:9px;color:' + changeColor + ';opacity:0.7">' + (isUp ? '+' : '-') + changePts + ' pts</div>' : ''}
-        </div>
-        <svg width="48" height="24" viewBox="0 0 48 24" fill="none" style="flex-shrink:0;opacity:0.6"><path d="${isUp ? 'M2 20 L12 16 L22 18 L32 10 L42 4 L46 2' : 'M2 4 L12 8 L22 6 L32 14 L42 20 L46 22'}" stroke="${changeColor}" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+        ${rightHtml}
       </div>
     </a>`;
   }).join('');
