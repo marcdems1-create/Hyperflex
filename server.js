@@ -27912,56 +27912,297 @@ app.get('/api/rewards/tiers', (req, res) => {
   res.json({ tiers: REWARD_TIERS });
 });
 
-// GET /api/rewards/leaderboard — public: top 20 traders by weekly volume (mock data for now)
+// ── Helper: get week start for a given date string or default to current week ──
+function rewardsWeekStart(weekParam) {
+  if (weekParam && /^\d{4}-\d{2}-\d{2}$/.test(weekParam)) return weekParam;
+  return getWeekStart();
+}
+
+// ════════════════════════════════════════════════════════════════════
+// ADMIN REWARDS ENDPOINTS — protected by requireAdmin
+// ════════════════════════════════════════════════════════════════════
+
+// POST /api/admin/rewards/pool — Set this week's pool amount
+app.post('/api/admin/rewards/pool', requireAdmin, async (req, res) => {
+  try {
+    const week = rewardsWeekStart(req.body.week_start);
+    const amount = parseFloat(req.body.pool_amount);
+    if (isNaN(amount) || amount < 0) return res.status(400).json({ error: 'Invalid pool_amount' });
+    if (pool) {
+      const rows = await dbQuery(
+        `INSERT INTO rewards_pool (week_start, pool_amount) VALUES ($1, $2)
+         ON CONFLICT (week_start) DO UPDATE SET pool_amount = $2
+         RETURNING *`, [week, amount]);
+      res.json(rows[0]);
+    } else {
+      const { data, error } = await supabase.from('rewards_pool').upsert({ week_start: week, pool_amount: amount }, { onConflict: 'week_start' }).select().single();
+      if (error) throw error;
+      res.json(data);
+    }
+  } catch (e) {
+    _logError('admin-rewards-pool-set', e);
+    res.status(500).json({ error: 'Failed to set pool' });
+  }
+});
+
+// GET /api/admin/rewards/pool — Get current/past pool records
+app.get('/api/admin/rewards/pool', requireAdmin, async (req, res) => {
+  try {
+    const week = rewardsWeekStart(req.query.week);
+    let poolRec, clickSummary;
+    if (pool) {
+      const rows = await dbQuery('SELECT * FROM rewards_pool WHERE week_start = $1', [week]);
+      poolRec = rows[0] || null;
+      const clicks = await dbQuery(
+        `SELECT COUNT(*) as total_clicks, COUNT(DISTINCT user_id) as unique_users
+         FROM rewards_click_tracking WHERE created_at >= $1::date AND created_at < ($1::date + interval '7 days')`, [week]);
+      clickSummary = clicks[0] || { total_clicks: 0, unique_users: 0 };
+    } else {
+      const { data } = await supabase.from('rewards_pool').select('*').eq('week_start', week).single();
+      poolRec = data;
+      clickSummary = { total_clicks: 0, unique_users: 0 };
+    }
+    res.json({ pool: poolRec, clicks: { total: parseInt(clickSummary.total_clicks) || 0, unique_users: parseInt(clickSummary.unique_users) || 0 }, week_start: week });
+  } catch (e) {
+    _logError('admin-rewards-pool-get', e);
+    res.status(500).json({ error: 'Failed to get pool' });
+  }
+});
+
+// POST /api/admin/rewards/distribute — Calculate and distribute shares
+app.post('/api/admin/rewards/distribute', requireAdmin, async (req, res) => {
+  try {
+    const week = rewardsWeekStart(req.body.week_start);
+    // Get pool record
+    let poolRec;
+    if (pool) {
+      const rows = await dbQuery('SELECT * FROM rewards_pool WHERE week_start = $1', [week]);
+      poolRec = rows[0];
+    } else {
+      const { data } = await supabase.from('rewards_pool').select('*').eq('week_start', week).single();
+      poolRec = data;
+    }
+    if (!poolRec) return res.status(400).json({ error: 'No pool set for this week. Set a pool amount first.' });
+    if (poolRec.distributed) return res.status(400).json({ error: 'Already distributed for this week.' });
+    const poolAmount = parseFloat(poolRec.pool_amount) || 0;
+    if (poolAmount <= 0) return res.status(400).json({ error: 'Pool amount must be > 0' });
+
+    // Query click counts grouped by user_id for this week
+    let clickRows;
+    if (pool) {
+      clickRows = await dbQuery(
+        `SELECT user_id, COUNT(*) as clicks FROM rewards_click_tracking
+         WHERE user_id IS NOT NULL AND created_at >= $1::date AND created_at < ($1::date + interval '7 days')
+         GROUP BY user_id ORDER BY clicks DESC`, [week]);
+    } else {
+      const { data } = await supabase.rpc('rewards_click_summary', { week_param: week });
+      clickRows = data || [];
+    }
+    if (!clickRows.length) return res.status(400).json({ error: 'No clicks tracked this week. Nothing to distribute.' });
+
+    const totalClicks = clickRows.reduce((sum, r) => sum + parseInt(r.clicks), 0);
+    const distribution = clickRows.map(r => {
+      const clicks = parseInt(r.clicks);
+      const sharePct = parseFloat(((clicks / totalClicks) * 100).toFixed(4));
+      const usdcEarned = parseFloat(((clicks / totalClicks) * poolAmount).toFixed(6));
+      return { user_id: r.user_id, click_count: clicks, share_pct: sharePct, usdc_earned: usdcEarned };
+    });
+
+    // Upsert user_rewards for each user
+    for (const d of distribution) {
+      if (pool) {
+        await dbQuery(
+          `INSERT INTO user_rewards (user_id, week_start, click_count, share_pct, usdc_earned)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (user_id, week_start) DO UPDATE SET click_count = $3, share_pct = $4, usdc_earned = $5`,
+          [d.user_id, week, d.click_count, d.share_pct, d.usdc_earned]);
+      } else {
+        await supabase.from('user_rewards').upsert({
+          user_id: d.user_id, week_start: week, click_count: d.click_count, share_pct: d.share_pct, usdc_earned: d.usdc_earned
+        }, { onConflict: 'user_id,week_start' });
+      }
+    }
+
+    // Mark pool as distributed
+    if (pool) {
+      await dbQuery('UPDATE rewards_pool SET distributed = true, distributed_at = NOW() WHERE week_start = $1', [week]);
+    } else {
+      await supabase.from('rewards_pool').update({ distributed: true, distributed_at: new Date().toISOString() }).eq('week_start', week);
+    }
+
+    res.json({ week_start: week, pool_amount: poolAmount, total_clicks: totalClicks, users: distribution.length, distribution });
+  } catch (e) {
+    _logError('admin-rewards-distribute', e);
+    res.status(500).json({ error: 'Failed to distribute: ' + e.message });
+  }
+});
+
+// POST /api/admin/rewards/mark-paid — Mark a user's reward as paid
+app.post('/api/admin/rewards/mark-paid', requireAdmin, async (req, res) => {
+  try {
+    const { user_id, week_start, tx_hash } = req.body || {};
+    if (!user_id || !week_start) return res.status(400).json({ error: 'user_id and week_start required' });
+    if (pool) {
+      const rows = await dbQuery(
+        `UPDATE user_rewards SET paid = true, paid_at = NOW(), tx_hash = $3
+         WHERE user_id = $1 AND week_start = $2 RETURNING *`,
+        [user_id, week_start, tx_hash || null]);
+      if (!rows.length) return res.status(404).json({ error: 'Reward record not found' });
+      res.json(rows[0]);
+    } else {
+      const { data, error } = await supabase.from('user_rewards')
+        .update({ paid: true, paid_at: new Date().toISOString(), tx_hash: tx_hash || null })
+        .eq('user_id', user_id).eq('week_start', week_start).select().single();
+      if (error) throw error;
+      res.json(data);
+    }
+  } catch (e) {
+    _logError('admin-rewards-mark-paid', e);
+    res.status(500).json({ error: 'Failed to mark paid' });
+  }
+});
+
+// GET /api/admin/rewards/summary — Full admin view
+app.get('/api/admin/rewards/summary', requireAdmin, async (req, res) => {
+  try {
+    const week = rewardsWeekStart(req.query.week);
+    let poolRec, clickStats, distribution, allWeeks;
+    if (pool) {
+      const pRows = await dbQuery('SELECT * FROM rewards_pool WHERE week_start = $1', [week]);
+      poolRec = pRows[0] || null;
+      const cRows = await dbQuery(
+        `SELECT COUNT(*) as total_clicks, COUNT(DISTINCT user_id) as unique_users
+         FROM rewards_click_tracking WHERE user_id IS NOT NULL AND created_at >= $1::date AND created_at < ($1::date + interval '7 days')`, [week]);
+      clickStats = cRows[0] || { total_clicks: 0, unique_users: 0 };
+      // Get distribution breakdown with user info
+      const dRows = await dbQuery(
+        `SELECT ur.*, cs.display_name, cs.payout_wallet, cs.slug
+         FROM user_rewards ur
+         LEFT JOIN creator_settings cs ON cs.creator_id = ur.user_id
+         WHERE ur.week_start = $1 ORDER BY ur.usdc_earned DESC`, [week]);
+      distribution = dRows;
+      // Also try to get display_name from users table for non-creators
+      for (const d of distribution) {
+        if (!d.display_name) {
+          const uRows = await dbQuery('SELECT display_name, email FROM users WHERE id = $1', [d.user_id]);
+          if (uRows[0]) { d.display_name = uRows[0].display_name || uRows[0].email; }
+        }
+      }
+      const wRows = await dbQuery('SELECT week_start FROM rewards_pool ORDER BY week_start DESC LIMIT 20');
+      allWeeks = wRows.map(r => r.week_start);
+    } else {
+      const { data: p } = await supabase.from('rewards_pool').select('*').eq('week_start', week).single();
+      poolRec = p;
+      clickStats = { total_clicks: 0, unique_users: 0 };
+      const { data: d } = await supabase.from('user_rewards').select('*').eq('week_start', week).order('usdc_earned', { ascending: false });
+      distribution = d || [];
+      const { data: w } = await supabase.from('rewards_pool').select('week_start').order('week_start', { ascending: false }).limit(20);
+      allWeeks = (w || []).map(r => r.week_start);
+    }
+    res.json({
+      week_start: week,
+      pool: poolRec,
+      clicks: { total: parseInt(clickStats.total_clicks) || 0, unique_users: parseInt(clickStats.unique_users) || 0 },
+      distributed: poolRec?.distributed || false,
+      distribution: distribution || [],
+      all_weeks: allWeeks || []
+    });
+  } catch (e) {
+    _logError('admin-rewards-summary', e);
+    res.status(500).json({ error: 'Failed to load summary' });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════
+// USER REWARDS ENDPOINTS
+// ════════════════════════════════════════════════════════════════════
+
+// GET /api/rewards/leaderboard — public: top 20 by click count this week
 app.get('/api/rewards/leaderboard', async (req, res) => {
   try {
     const weekStart = getWeekStart();
-    // Future: query rewards_tracking table for real data
-    // For now, return mock leaderboard to demonstrate the UI
-    const mockTraders = [
-      { rank: 1, wallet_truncated: '0x7a3...f92d', volume: 142500, tier: '\uD83D\uDC51 Whale', estimated_reward: 1068.75 },
-      { rank: 2, wallet_truncated: '0xb2e...4a1c', volume: 98200,  tier: '\uD83D\uDC8E Diamond', estimated_reward: 589.20 },
-      { rank: 3, wallet_truncated: '0x1f9...8b3e', volume: 67800,  tier: '\uD83D\uDC8E Diamond', estimated_reward: 406.80 },
-      { rank: 4, wallet_truncated: '0xc4d...2f7a', volume: 45300,  tier: '\uD83E\uDD47 Gold', estimated_reward: 203.85 },
-      { rank: 5, wallet_truncated: '0x9e1...6d4b', volume: 38900,  tier: '\uD83E\uDD47 Gold', estimated_reward: 175.05 },
-      { rank: 6, wallet_truncated: '0x5a8...1c9f', volume: 27600,  tier: '\uD83E\uDD47 Gold', estimated_reward: 124.20 },
-      { rank: 7, wallet_truncated: '0xd3f...7e2a', volume: 19400,  tier: '\uD83E\uDD47 Gold', estimated_reward: 87.30 },
-      { rank: 8, wallet_truncated: '0x8b2...4d6c', volume: 14200,  tier: '\uD83E\uDD47 Gold', estimated_reward: 63.90 },
-      { rank: 9, wallet_truncated: '0x6c7...9a3f', volume: 8750,   tier: '\uD83E\uDD48 Silver', estimated_reward: 26.25 },
-      { rank: 10, wallet_truncated: '0x2e4...b8d1', volume: 5400,  tier: '\uD83E\uDD48 Silver', estimated_reward: 16.20 },
-      { rank: 11, wallet_truncated: '0xf1a...3c7e', volume: 4200,  tier: '\uD83E\uDD48 Silver', estimated_reward: 12.60 },
-      { rank: 12, wallet_truncated: '0x4d9...a2f5', volume: 3100,  tier: '\uD83E\uDD48 Silver', estimated_reward: 9.30 },
-      { rank: 13, wallet_truncated: '0xa6c...d4b8', volume: 2400,  tier: '\uD83E\uDD48 Silver', estimated_reward: 7.20 },
-      { rank: 14, wallet_truncated: '0x3f7...c1e9', volume: 1800,  tier: '\uD83E\uDD48 Silver', estimated_reward: 5.40 },
-      { rank: 15, wallet_truncated: '0xe2b...5a3d', volume: 1200,  tier: '\uD83E\uDD48 Silver', estimated_reward: 3.60 },
-      { rank: 16, wallet_truncated: '0x7c1...f6a2', volume: 850,   tier: '\uD83E\uDD49 Bronze', estimated_reward: 1.28 },
-      { rank: 17, wallet_truncated: '0xb5e...2d8c', volume: 620,   tier: '\uD83E\uDD49 Bronze', estimated_reward: 0.93 },
-      { rank: 18, wallet_truncated: '0x1a4...e7f3', volume: 430,   tier: '\uD83E\uDD49 Bronze', estimated_reward: 0.65 },
-      { rank: 19, wallet_truncated: '0xd8f...4b1a', volume: 280,   tier: '\uD83E\uDD49 Bronze', estimated_reward: 0.42 },
-      { rank: 20, wallet_truncated: '0x9c3...a5d7', volume: 150,   tier: '\uD83E\uDD49 Bronze', estimated_reward: 0.23 },
-    ];
-    const poolTotal = mockTraders.reduce((sum, t) => sum + t.estimated_reward, 0);
-    res.json({ week_start: weekStart, traders: mockTraders, pool_total: poolTotal });
+    let traders, poolRec;
+    if (pool) {
+      // Get pool amount for estimate calculation
+      const pRows = await dbQuery('SELECT pool_amount FROM rewards_pool WHERE week_start = $1', [weekStart]);
+      poolRec = pRows[0] || null;
+      const poolAmount = parseFloat(poolRec?.pool_amount) || 0;
+      // Get click counts grouped by user
+      const rows = await dbQuery(
+        `SELECT rct.user_id, COUNT(*) as clicks, cs.display_name, cs.slug
+         FROM rewards_click_tracking rct
+         LEFT JOIN creator_settings cs ON cs.creator_id = rct.user_id
+         WHERE rct.user_id IS NOT NULL AND rct.created_at >= $1::date AND rct.created_at < ($1::date + interval '7 days')
+         GROUP BY rct.user_id, cs.display_name, cs.slug
+         ORDER BY clicks DESC LIMIT 20`, [weekStart]);
+      const totalClicks = rows.reduce((sum, r) => sum + parseInt(r.clicks), 0);
+      traders = rows.map((r, i) => {
+        const clicks = parseInt(r.clicks);
+        const estimated = totalClicks > 0 && poolAmount > 0 ? parseFloat(((clicks / totalClicks) * poolAmount).toFixed(2)) : 0;
+        return { rank: i + 1, display_name: r.display_name || ('User ' + (r.user_id || '').slice(0, 6)), clicks, estimated_reward: estimated };
+      });
+    } else {
+      traders = [];
+    }
+    res.json({ week_start: weekStart, traders, pool_total: parseFloat(poolRec?.pool_amount) || 0 });
   } catch (e) {
     _logError('rewards-leaderboard', e);
     res.status(500).json({ error: 'Failed to load leaderboard' });
   }
 });
 
-// GET /api/rewards/my-stats — auth required: personal stats (mock for now)
+// GET /api/rewards/my-stats — auth required: personal real stats
 app.get('/api/rewards/my-stats', requireAuth, async (req, res) => {
   try {
     const userId = req.user.id;
-    // Future: query rewards_tracking for real user data
-    // For now return placeholder zeros — real data comes when Polymarket referral API is wired
+    const weekStart = getWeekStart();
+    let clicksThisWeek = 0, pendingUsdc = 0, lifetimeEarned = 0, currentWeekEstimate = 0, payoutWallet = null, history = [];
+    if (pool) {
+      // Clicks this week
+      const cRows = await dbQuery(
+        `SELECT COUNT(*) as cnt FROM rewards_click_tracking
+         WHERE user_id = $1 AND created_at >= $2::date AND created_at < ($2::date + interval '7 days')`,
+        [userId, weekStart]);
+      clicksThisWeek = parseInt(cRows[0]?.cnt) || 0;
+
+      // Pending USDC (unpaid)
+      const pRows = await dbQuery(
+        'SELECT COALESCE(SUM(usdc_earned), 0) as pending FROM user_rewards WHERE user_id = $1 AND paid = false', [userId]);
+      pendingUsdc = parseFloat(pRows[0]?.pending) || 0;
+
+      // Lifetime earned (paid)
+      const lRows = await dbQuery(
+        'SELECT COALESCE(SUM(usdc_earned), 0) as lifetime FROM user_rewards WHERE user_id = $1 AND paid = true', [userId]);
+      lifetimeEarned = parseFloat(lRows[0]?.lifetime) || 0;
+
+      // Current week estimate: my clicks / total clicks * pool amount
+      const totalRows = await dbQuery(
+        `SELECT COUNT(*) as total FROM rewards_click_tracking
+         WHERE user_id IS NOT NULL AND created_at >= $1::date AND created_at < ($1::date + interval '7 days')`, [weekStart]);
+      const totalClicks = parseInt(totalRows[0]?.total) || 0;
+      const poolRows = await dbQuery('SELECT pool_amount FROM rewards_pool WHERE week_start = $1', [weekStart]);
+      const poolAmount = parseFloat(poolRows[0]?.pool_amount) || 0;
+      if (totalClicks > 0 && poolAmount > 0) {
+        currentWeekEstimate = parseFloat(((clicksThisWeek / totalClicks) * poolAmount).toFixed(6));
+      }
+
+      // Payout wallet
+      const wRows = await dbQuery('SELECT payout_wallet FROM creator_settings WHERE creator_id = $1', [userId]);
+      payoutWallet = wRows[0]?.payout_wallet || null;
+
+      // History (last 12 weeks)
+      const hRows = await dbQuery(
+        'SELECT week_start, click_count, share_pct, usdc_earned, paid, paid_at, tx_hash FROM user_rewards WHERE user_id = $1 ORDER BY week_start DESC LIMIT 12', [userId]);
+      history = hRows;
+    }
     res.json({
-      wallet: req.user.wallet_address || null,
-      volume_this_week: 0,
-      volume_this_month: 0,
-      tier: 'Bronze',
-      estimated_payout: 0,
-      lifetime_earned: 0,
-      payout_history: []
+      clicks_this_week: clicksThisWeek,
+      pending_usdc: pendingUsdc,
+      lifetime_earned: lifetimeEarned,
+      current_week_estimate: currentWeekEstimate,
+      payout_wallet: payoutWallet,
+      history,
+      week_start: weekStart
     });
   } catch (e) {
     _logError('rewards-my-stats', e);
@@ -27969,16 +28210,63 @@ app.get('/api/rewards/my-stats', requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/rewards/track-click — supplementary click tracking for referral links
+// PUT /api/rewards/wallet — Set payout wallet address
+app.put('/api/rewards/wallet', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { wallet } = req.body || {};
+    if (!wallet || !/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
+      return res.status(400).json({ error: 'Invalid wallet address. Must be 0x... format (42 chars).' });
+    }
+    if (pool) {
+      // Upsert into creator_settings — user may not have a creator_settings row yet
+      const existing = await dbQuery('SELECT creator_id FROM creator_settings WHERE creator_id = $1', [userId]);
+      if (existing.length) {
+        await dbQuery('UPDATE creator_settings SET payout_wallet = $1 WHERE creator_id = $2', [wallet, userId]);
+      } else {
+        // Create minimal creator_settings row for this user
+        await dbQuery('INSERT INTO creator_settings (creator_id, payout_wallet) VALUES ($1, $2) ON CONFLICT (creator_id) DO UPDATE SET payout_wallet = $2', [userId, wallet]);
+      }
+      res.json({ ok: true, wallet });
+    } else {
+      const { error } = await supabase.from('creator_settings').upsert({ creator_id: userId, payout_wallet: wallet }, { onConflict: 'creator_id' });
+      if (error) throw error;
+      res.json({ ok: true, wallet });
+    }
+  } catch (e) {
+    _logError('rewards-wallet', e);
+    res.status(500).json({ error: 'Failed to save wallet' });
+  }
+});
+
+// POST /api/rewards/track-click — INSERT into rewards_click_tracking
 app.post('/api/rewards/track-click', async (req, res) => {
   try {
     const { market_slug, source_page } = req.body || {};
-    // Log for analytics — actual volume tracking comes from Polymarket referral API
-    console.log(`[rewards] click tracked: ${source_page} → ${(market_slug || '').slice(0, 80)}`);
-    // Future: insert into rewards_click_tracking table
+    // Extract user_id from JWT if present
+    let userId = null;
+    const auth = req.headers.authorization;
+    const token = auth && auth.startsWith('Bearer ') ? auth.slice(7) : null;
+    if (token) {
+      try { const payload = jwt.verify(token, JWT_SECRET); userId = payload.id; } catch (_) {}
+    }
+    // Session ID fallback
+    const sessionId = req.headers['x-session-id'] || req.cookies?.hfx_session || null;
+
+    if (pool) {
+      await dbQuery(
+        'INSERT INTO rewards_click_tracking (user_id, session_id, market_slug, source_page) VALUES ($1, $2, $3, $4)',
+        [userId, sessionId, (market_slug || '').slice(0, 200), (source_page || '').slice(0, 200)]);
+    } else {
+      await supabase.from('rewards_click_tracking').insert({
+        user_id: userId, session_id: sessionId, market_slug: (market_slug || '').slice(0, 200), source_page: (source_page || '').slice(0, 200)
+      });
+    }
     res.json({ ok: true });
   } catch (e) {
-    res.json({ ok: true }); // Non-critical, never fail
+    // Non-critical — never fail the user experience
+    console.log('[rewards] click track error:', e.message);
+    res.json({ ok: true });
   }
 });
 

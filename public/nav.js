@@ -102,6 +102,14 @@
     if (/^https?:\/\/polymarket\.com(\/|$|\?)/.test(href) && REF_CODE && !(href.indexOf('r=') !== -1 && href.indexOf(REF_CODE) !== -1)) {
       a.setAttribute('href', href + (href.indexOf('?') !== -1 ? '&' : '?') + 'r=' + REF_CODE);
     }
+    // Track click for USDC rewards
+    if (/^https?:\/\/polymarket\.com(\/|$|\?)/.test(href)) {
+      fetch('/api/rewards/track-click', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('hf_token') || '') },
+        body: JSON.stringify({ market_slug: href.split('/event/')[1] ? href.split('/event/')[1].split('?')[0] : '', source_page: location.pathname })
+      }).catch(function(){});
+    }
   }, true);
 })();
 

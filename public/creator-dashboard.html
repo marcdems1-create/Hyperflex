@@ -5291,6 +5291,51 @@ body.nav-open .sidebar-backdrop {
                 <button class="btn-primary" onclick="submitAccountChangePassword()" style="width:fit-content">Update Password</button>
               </div>
             </div>
+
+            <!-- USDC Rewards -->
+            <div style="margin-top:36px;border-top:1px solid var(--border);padding-top:28px">
+              <div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:6px">USDC Rewards</div>
+              <div style="font-size:12px;color:var(--dim);margin-bottom:20px;line-height:1.6">Every Polymarket link you click through HYPERFLEX earns you a share of our weekly USDC pool. The more active you are, the bigger your share.</div>
+
+              <!-- Stats cards -->
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px">
+                <div style="background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
+                  <div style="font-size:20px;font-weight:800;color:var(--gold)" id="usdcClicksWeek">-</div>
+                  <div style="font-size:10px;color:var(--dim);margin-top:3px;font-family:var(--mono)">CLICKS THIS WEEK</div>
+                </div>
+                <div style="background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
+                  <div style="font-size:20px;font-weight:800;color:#22c55e" id="usdcPending">$0.00</div>
+                  <div style="font-size:10px;color:var(--dim);margin-top:3px;font-family:var(--mono)">PENDING USDC</div>
+                </div>
+                <div style="background:var(--paper);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
+                  <div style="font-size:20px;font-weight:800;color:var(--text)" id="usdcLifetime">$0.00</div>
+                  <div style="font-size:10px;color:var(--dim);margin-top:3px;font-family:var(--mono)">LIFETIME EARNED</div>
+                </div>
+              </div>
+
+              <!-- Current week estimate -->
+              <div id="usdcEstimateBar" style="background:rgba(201,146,13,0.06);border:1px solid rgba(201,146,13,0.15);border-radius:8px;padding:12px 16px;margin-bottom:20px;display:none">
+                <span style="font-size:12px;color:var(--dim)">Estimated this week:</span>
+                <span style="font-size:14px;font-weight:800;color:var(--gold);margin-left:6px" id="usdcEstimate">$0.00</span>
+              </div>
+
+              <!-- Payout wallet -->
+              <div style="margin-bottom:20px">
+                <div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:8px">Payout Wallet</div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                  <input class="form-input" id="usdcWalletInput" placeholder="0x..." style="flex:1;min-width:200px;font-family:var(--mono);font-size:12px"/>
+                  <button class="btn-primary" onclick="savePayoutWallet()" style="white-space:nowrap">Save Wallet</button>
+                </div>
+                <div id="usdcWalletStatus" style="font-size:11px;color:var(--dim);margin-top:6px"></div>
+              </div>
+
+              <!-- Payout history -->
+              <div style="margin-top:20px">
+                <div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:10px">Recent Payouts</div>
+                <div id="usdcPayoutHistory" style="font-size:12px;color:var(--dim)">Loading...</div>
+              </div>
+            </div>
+
           </div>
         </div>
       </div><!-- /tab-account -->
@@ -7065,6 +7110,7 @@ function showTab(tab) {
     }
   }
   if (tab === 'settings') loadApiAccess();
+  if (tab === 'account') loadUsdcRewards();
   if (tab === 'portfolio') loadPortfolio();
   if (tab === 'performance') loadPerformanceTab();
   if (tab === 'quicktrade') { loadQuickTrade(); }
@@ -8276,6 +8322,69 @@ async function submitAccountChangePassword() {
     document.getElementById('acConfirm').value = '';
     showToast('Password updated ✓', 'success');
   } catch { errEl.textContent = 'Network error'; errEl.style.display = 'block'; }
+}
+
+// ── USDC REWARDS ─────────────────────────────────────────
+async function loadUsdcRewards() {
+  const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+  if (!token) return;
+  try {
+    const r = await fetch('/api/rewards/my-stats', { headers: { 'Authorization': 'Bearer ' + token } });
+    if (!r.ok) return;
+    const d = await r.json();
+    const el = (id) => document.getElementById(id);
+    el('usdcClicksWeek').textContent = d.clicks_this_week || 0;
+    el('usdcPending').textContent = '$' + (d.pending_usdc || 0).toFixed(2);
+    el('usdcLifetime').textContent = '$' + (d.lifetime_earned || 0).toFixed(2);
+    if (d.current_week_estimate > 0) {
+      el('usdcEstimate').textContent = '$' + d.current_week_estimate.toFixed(4);
+      el('usdcEstimateBar').style.display = '';
+    }
+    if (d.payout_wallet) el('usdcWalletInput').value = d.payout_wallet;
+    // Render history
+    const histEl = el('usdcPayoutHistory');
+    if (d.history && d.history.length) {
+      histEl.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:12px">' +
+        '<thead><tr style="text-align:left;color:var(--dim);font-family:var(--mono);font-size:10px">' +
+        '<th style="padding:6px 8px">Week</th><th style="padding:6px 8px">Clicks</th><th style="padding:6px 8px">USDC</th><th style="padding:6px 8px">Status</th></tr></thead><tbody>' +
+        d.history.slice(0, 4).map(h => {
+          const paid = h.paid ? '<span style="color:#22c55e">Paid</span>' : '<span style="color:var(--dim)">Pending</span>';
+          return '<tr style="border-top:1px solid var(--border)"><td style="padding:6px 8px;font-family:var(--mono)">' + h.week_start + '</td>' +
+            '<td style="padding:6px 8px">' + (h.click_count || 0) + '</td>' +
+            '<td style="padding:6px 8px;color:var(--gold);font-weight:700">$' + (parseFloat(h.usdc_earned) || 0).toFixed(4) + '</td>' +
+            '<td style="padding:6px 8px">' + paid + '</td></tr>';
+        }).join('') + '</tbody></table>';
+    } else {
+      histEl.textContent = 'No payouts yet. Start clicking Polymarket links to earn!';
+    }
+  } catch (e) {
+    console.log('usdc rewards load error:', e.message);
+  }
+}
+
+async function savePayoutWallet() {
+  const wallet = (document.getElementById('usdcWalletInput').value || '').trim();
+  const statusEl = document.getElementById('usdcWalletStatus');
+  if (!wallet || !/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
+    statusEl.textContent = 'Invalid wallet address. Must be 0x... (42 characters).';
+    statusEl.style.color = '#ef4444';
+    return;
+  }
+  const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+  try {
+    const r = await fetch('/api/rewards/wallet', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ wallet })
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Failed');
+    statusEl.textContent = 'Wallet saved.';
+    statusEl.style.color = '#22c55e';
+  } catch (e) {
+    statusEl.textContent = 'Error: ' + e.message;
+    statusEl.style.color = '#ef4444';
+  }
 }
 
 // ── ACCOUNT DELETION ──────────────────────────────────────

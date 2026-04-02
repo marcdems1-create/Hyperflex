@@ -496,6 +496,7 @@
       <button class="admin-tab active" id="tabBtnCreators" onclick="showAdminTab('creators')">Creators</button>
       <button class="admin-tab" id="tabBtnUsers" onclick="showAdminTab('users')">All Users</button>
       <button class="admin-tab" id="tabBtnOutreach" onclick="showAdminTab('outreach')">✉️ Outreach</button>
+      <button class="admin-tab" id="tabBtnRewards" onclick="showAdminTab('rewards')">💰 Rewards</button>
     </div>
 
     <!-- Creators tab -->
@@ -644,6 +645,84 @@
       </div>
     </div>
 
+    <!-- Rewards tab -->
+    <div id="adminTabRewards" style="display:none">
+      <div class="section-header" style="margin-bottom:20px">
+        <div>
+          <div class="section-title">💰 USDC Rewards Distribution</div>
+          <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:3px">Set the weekly pool, distribute shares based on click activity, and track payouts.</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select id="rewardsWeekSelect" onchange="loadRewardsSummary()" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:6px 10px;color:#ddd8cc;font-family:inherit;font-size:12px">
+            <option value="">This Week</option>
+          </select>
+          <button class="refresh-btn" onclick="loadRewardsSummary()">↺ Refresh</button>
+        </div>
+      </div>
+
+      <!-- Set Pool -->
+      <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:24px;margin-bottom:20px">
+        <div style="font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,0.4);margin-bottom:16px">This Week's Pool</div>
+        <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+          <div>
+            <label style="font-size:11px;color:rgba(255,255,255,0.4);display:block;margin-bottom:6px;font-family:var(--mono);letter-spacing:.04em">USDC AMOUNT</label>
+            <input class="filter-input" id="rewardsPoolInput" type="number" step="0.01" min="0" placeholder="e.g. 50.00" style="margin:0;width:160px"/>
+          </div>
+          <button class="refresh-btn" onclick="setRewardsPool()" style="background:rgba(201,146,13,0.2);border-color:rgba(201,146,13,0.5);color:#c9920d;padding:8px 20px">Set Pool</button>
+          <div id="rewardsPoolStatus" style="font-size:12px;color:rgba(255,255,255,0.4)"></div>
+        </div>
+        <div id="rewardsPoolCurrent" style="margin-top:12px;font-size:13px;color:rgba(255,255,255,0.5)"></div>
+      </div>
+
+      <!-- Click Activity Stats -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">
+        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:16px;text-align:center">
+          <div style="font-size:24px;font-weight:800;color:#c9920d" id="rwdStatPool">$0</div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:4px;font-family:var(--mono)">POOL AMOUNT</div>
+        </div>
+        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:16px;text-align:center">
+          <div style="font-size:24px;font-weight:800;color:#fff" id="rwdStatClicks">0</div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:4px;font-family:var(--mono)">TOTAL CLICKS</div>
+        </div>
+        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:16px;text-align:center">
+          <div style="font-size:24px;font-weight:800;color:#fff" id="rwdStatUsers">0</div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:4px;font-family:var(--mono)">UNIQUE USERS</div>
+        </div>
+        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:16px;text-align:center">
+          <div style="font-size:24px;font-weight:800" id="rwdStatDistributed" style="color:rgba(255,255,255,0.4)">Pending</div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:4px;font-family:var(--mono)">STATUS</div>
+        </div>
+      </div>
+
+      <!-- Distribute Button -->
+      <div style="margin-bottom:20px;display:flex;gap:12px;align-items:center">
+        <button class="refresh-btn" id="distributeBtn" onclick="distributeRewards()" style="background:rgba(34,197,94,0.15);border-color:rgba(34,197,94,0.4);color:#22c55e;padding:10px 24px;font-weight:700">Calculate & Distribute</button>
+        <div id="distributeStatus" style="font-size:12px;color:rgba(255,255,255,0.4)"></div>
+      </div>
+
+      <!-- Distribution / Payout Table -->
+      <div class="section-header" style="margin-bottom:12px">
+        <div class="section-title" style="font-size:14px">Payout Breakdown</div>
+      </div>
+      <div class="table-wrap">
+        <div class="table-msg" id="rewardsDistMsg">Set a pool and distribute to see the breakdown.</div>
+        <table id="rewardsDistTable" style="display:none">
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>Clicks</th>
+              <th>Share %</th>
+              <th>USDC Earned</th>
+              <th>Wallet</th>
+              <th>Paid?</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="rewardsDistBody"></tbody>
+        </table>
+      </div>
+    </div>
+
   </main>
 </div>
 
@@ -752,12 +831,13 @@ async function loadCreators() {
 
 // ── Admin tabs ────────────────────────────────────────────
 function showAdminTab(tab) {
-  ['creators','users','outreach'].forEach(t => {
+  ['creators','users','outreach','rewards'].forEach(t => {
     document.getElementById('adminTab' + t.charAt(0).toUpperCase() + t.slice(1)).style.display = t === tab ? 'block' : 'none';
     document.getElementById('tabBtn' + t.charAt(0).toUpperCase() + t.slice(1)).classList.toggle('active', t === tab);
   });
   if (tab === 'users' && !allUsers.length) loadUsers();
   if (tab === 'outreach') loadInvites();
+  if (tab === 'rewards') loadRewardsSummary();
 }
 
 // ── Outreach ──────────────────────────────────────────────
@@ -1375,6 +1455,146 @@ function esc(s) {
 }
 
 // ── Init: resume session if secret in sessionStorage ──────
+// ── Rewards tab ──────────────────────────────────────────────
+let _rewardsData = null;
+
+async function loadRewardsSummary() {
+  const weekVal = document.getElementById('rewardsWeekSelect').value;
+  const qs = weekVal ? '&week=' + encodeURIComponent(weekVal) : '';
+  try {
+    const r = await fetch(API + '/api/admin/rewards/summary?secret=' + encodeURIComponent(adminSecret) + qs);
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Failed');
+    _rewardsData = data;
+    renderRewardsSummary(data);
+  } catch (e) {
+    document.getElementById('rewardsDistMsg').textContent = 'Error: ' + e.message;
+  }
+}
+
+function renderRewardsSummary(data) {
+  const poolAmt = data.pool ? parseFloat(data.pool.pool_amount) : 0;
+  document.getElementById('rwdStatPool').textContent = '$' + poolAmt.toFixed(2);
+  document.getElementById('rwdStatClicks').textContent = data.clicks.total;
+  document.getElementById('rwdStatUsers').textContent = data.clicks.unique_users;
+  const statusEl = document.getElementById('rwdStatDistributed');
+  if (data.distributed) {
+    statusEl.textContent = 'Distributed';
+    statusEl.style.color = '#22c55e';
+  } else {
+    statusEl.textContent = 'Pending';
+    statusEl.style.color = 'rgba(255,255,255,0.4)';
+  }
+  // Pool input
+  if (poolAmt > 0) {
+    document.getElementById('rewardsPoolInput').value = poolAmt;
+    document.getElementById('rewardsPoolCurrent').textContent = 'Current pool: $' + poolAmt.toFixed(2) + (data.distributed ? ' (distributed)' : '');
+  } else {
+    document.getElementById('rewardsPoolCurrent').textContent = 'No pool set for this week yet.';
+  }
+  // Disable distribute if already distributed
+  document.getElementById('distributeBtn').disabled = data.distributed;
+  document.getElementById('distributeBtn').style.opacity = data.distributed ? '0.4' : '1';
+
+  // Week selector
+  const sel = document.getElementById('rewardsWeekSelect');
+  const currentVal = sel.value;
+  if (data.all_weeks && data.all_weeks.length) {
+    sel.innerHTML = '<option value="">This Week</option>' + data.all_weeks.map(w => '<option value="' + w + '"' + (w === currentVal ? ' selected' : '') + '>' + w + '</option>').join('');
+  }
+
+  // Distribution table
+  if (data.distribution && data.distribution.length) {
+    renderRewardsDistTable(data.distribution, data.week_start);
+  } else {
+    document.getElementById('rewardsDistMsg').textContent = data.distributed ? 'Distribution complete but no records found.' : 'Not yet distributed.';
+    document.getElementById('rewardsDistMsg').style.display = 'block';
+    document.getElementById('rewardsDistTable').style.display = 'none';
+  }
+}
+
+function renderRewardsDistTable(dist, weekStart) {
+  const tbody = document.getElementById('rewardsDistBody');
+  tbody.innerHTML = dist.map(d => {
+    const name = escHtml(d.display_name || d.slug || (d.user_id || '').slice(0, 8));
+    const wallet = d.payout_wallet ? escHtml(d.payout_wallet.slice(0, 6) + '...' + d.payout_wallet.slice(-4)) : '<span style="color:rgba(255,255,255,0.3)">Not set</span>';
+    const paidBadge = d.paid
+      ? '<span style="font-size:11px;padding:2px 8px;border-radius:4px;background:rgba(34,197,94,0.15);color:#22c55e">Paid</span>'
+      : '<span style="font-size:11px;padding:2px 8px;border-radius:4px;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.4)">Unpaid</span>';
+    const actionHtml = d.paid
+      ? (d.tx_hash ? '<span style="font-size:10px;color:rgba(255,255,255,0.3);font-family:var(--mono)">' + escHtml(d.tx_hash.slice(0, 10)) + '...</span>' : '')
+      : '<input class="filter-input" placeholder="tx hash" style="margin:0;width:100px;font-size:11px;padding:4px 6px" id="txHash_' + d.user_id + '"/>' +
+        '<button class="refresh-btn" onclick="markRewardPaid(\'' + d.user_id + '\',\'' + weekStart + '\')" style="padding:4px 10px;font-size:11px;margin-left:4px">Mark Paid</button>';
+    return '<tr>' +
+      '<td style="font-size:12px">' + name + '</td>' +
+      '<td style="font-family:var(--mono);font-size:12px">' + (d.click_count || 0) + '</td>' +
+      '<td style="font-family:var(--mono);font-size:12px">' + (parseFloat(d.share_pct) || 0).toFixed(2) + '%</td>' +
+      '<td style="font-family:var(--mono);font-size:12px;color:#c9920d;font-weight:700">$' + (parseFloat(d.usdc_earned) || 0).toFixed(4) + '</td>' +
+      '<td style="font-size:11px;font-family:var(--mono)">' + wallet + '</td>' +
+      '<td>' + paidBadge + '</td>' +
+      '<td style="white-space:nowrap">' + actionHtml + '</td>' +
+      '</tr>';
+  }).join('');
+  document.getElementById('rewardsDistMsg').style.display = 'none';
+  document.getElementById('rewardsDistTable').style.display = 'table';
+}
+
+async function setRewardsPool() {
+  const amount = parseFloat(document.getElementById('rewardsPoolInput').value);
+  if (isNaN(amount) || amount < 0) { document.getElementById('rewardsPoolStatus').textContent = 'Enter a valid amount.'; return; }
+  const weekVal = document.getElementById('rewardsWeekSelect').value || undefined;
+  document.getElementById('rewardsPoolStatus').textContent = 'Saving...';
+  try {
+    const r = await fetch(API + '/api/admin/rewards/pool', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + adminSecret },
+      body: JSON.stringify({ pool_amount: amount, week_start: weekVal, secret: adminSecret })
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Failed');
+    document.getElementById('rewardsPoolStatus').textContent = 'Pool set: $' + amount.toFixed(2);
+    loadRewardsSummary();
+  } catch (e) {
+    document.getElementById('rewardsPoolStatus').textContent = 'Error: ' + e.message;
+  }
+}
+
+async function distributeRewards() {
+  if (!confirm('Distribute the pool to all users based on their clicks this week?')) return;
+  const weekVal = document.getElementById('rewardsWeekSelect').value || undefined;
+  document.getElementById('distributeStatus').textContent = 'Distributing...';
+  try {
+    const r = await fetch(API + '/api/admin/rewards/distribute', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + adminSecret },
+      body: JSON.stringify({ week_start: weekVal, secret: adminSecret })
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Failed');
+    document.getElementById('distributeStatus').textContent = 'Distributed $' + (data.pool_amount || 0).toFixed(2) + ' to ' + (data.users || 0) + ' users.';
+    loadRewardsSummary();
+  } catch (e) {
+    document.getElementById('distributeStatus').textContent = 'Error: ' + e.message;
+  }
+}
+
+async function markRewardPaid(userId, weekStart) {
+  const txInput = document.getElementById('txHash_' + userId);
+  const txHash = txInput ? txInput.value.trim() : '';
+  try {
+    const r = await fetch(API + '/api/admin/rewards/mark-paid', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + adminSecret },
+      body: JSON.stringify({ user_id: userId, week_start: weekStart, tx_hash: txHash, secret: adminSecret })
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Failed');
+    loadRewardsSummary();
+  } catch (e) {
+    alert('Failed to mark paid: ' + e.message);
+  }
+}
+
 (function() {
   const stored = sessionStorage.getItem('hf_admin_secret');
   if (stored) {
