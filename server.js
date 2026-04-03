@@ -17468,8 +17468,8 @@ app.get('/api/markets/search', async (req, res) => {
     // Targeted searches use _q (server-side full-text) so we trust their relevance
     const broadResponses = [polyRes].filter(r => r.status === 'fulfilled' && r.value.ok);
     const targetedResponses = polyTargetedResults.filter(r => r.status === 'fulfilled' && r.value.ok);
-    // ALL results need client-side filtering — Polymarket's _q search returns noise
-    const polyResponses = [...broadResponses.map(r => ({ res: r, needsFilter: true })), ...targetedResponses.map(r => ({ res: r, needsFilter: true }))];
+    // Broad results need client-side filtering; targeted _q results are already relevant
+    const polyResponses = [...broadResponses.map(r => ({ res: r, needsFilter: true })), ...targetedResponses.map(r => ({ res: r, needsFilter: false }))];
     for (const { res: pRes, needsFilter } of polyResponses) {
       const raw = await pRes.value.json();
       const events = Array.isArray(raw) ? raw : [];
@@ -17493,7 +17493,7 @@ app.get('/api/markets/search', async (req, res) => {
             question: mTitle,
             yes_pct: yesPct,
             close_date: m.endDate || m.endDateIso || evt.endDate || null,
-            url: evtSlug ? `https://polymarket.com/event/${evtSlug}` : 'https://polymarket.com',
+            url: evtSlug ? `https://polymarket.com/event/${evtSlug}` : `https://polymarket.com/markets?_q=${encodeURIComponent(mTitle.slice(0, 100))}`,
             slug: evtSlug || '',
             volume: parseFloat(m.volume || m.volumeNum) || 0
           });
@@ -17532,7 +17532,7 @@ app.get('/api/markets/search', async (req, res) => {
     }
 
     polyMarkets.sort((a, b) => b.volume - a.volume);
-    polyMarkets = polyMarkets.slice(0, 20);
+    polyMarkets = polyMarkets.slice(0, 50);
 
     // ── Cross-reference screener cache for live CLOB prices ──
     if (_screenerCache && _screenerCache.data) {
@@ -19308,7 +19308,9 @@ app.get('/api/screener', async (req, res) => {
 
       // Build Polymarket URL — use event slug from events array (market slug 404s)
       const eventSlug = (m.events && m.events[0] && m.events[0].slug) || m.eventSlug || '';
-      const marketUrl = eventSlug ? `https://polymarket.com/event/${eventSlug}` : 'https://polymarket.com';
+      const marketUrl = eventSlug
+        ? `https://polymarket.com/event/${eventSlug}`
+        : (question ? `https://polymarket.com/markets?_q=${encodeURIComponent(question.slice(0, 100))}` : 'https://polymarket.com');
 
       // Skip resolved markets (95%+ or 5%-)
       if (yesPrice != null && (yesPrice >= 0.95 || yesPrice <= 0.05)) continue;
@@ -20448,7 +20450,9 @@ app.get('/api/high-prob', async (req, res) => {
       if (minApy > 0 && apy < minApy) continue;
 
       const eventSlug = (m.events && m.events[0] && m.events[0].slug) || m.eventSlug || '';
-      const marketUrl = eventSlug ? `https://polymarket.com/event/${eventSlug}` : 'https://polymarket.com';
+      const marketUrl = eventSlug
+        ? `https://polymarket.com/event/${eventSlug}`
+        : (question ? `https://polymarket.com/markets?_q=${encodeURIComponent(question.slice(0, 100))}` : 'https://polymarket.com');
 
       results.push({
         question,

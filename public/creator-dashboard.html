@@ -13429,7 +13429,7 @@ async function loadBreakingTab() {
         current_price: s.yes_price != null ? Math.round(s.yes_price * 100) : null,
         change_pct: pChange,
         change_pts: pPts,
-        url: s.url || s.market_url || '#',
+        url: s.url || s.market_url || '',
         slug: s.slug || '',
         volume: s.volume || 0,
         icon: s.icon || s.image || null,
@@ -13681,7 +13681,7 @@ async function loadWatchlistTab() {
 
       return '<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;align-items:center;gap:14px">' +
         '<div style="flex:1;min-width:0">' +
-          '<a href="/market/' + escH(w.market_slug || '') + '" style="font-size:13px;font-weight:700;color:var(--text);text-decoration:none;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escH(w.market_question || w.market_slug) + '</a>' +
+          '<a href="' + escH(buildMarketUrl({ slug: w.market_slug, question: w.market_question })) + '" target="_blank" rel="noopener" style="font-size:13px;font-weight:700;color:var(--text);text-decoration:none;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escH(w.market_question || w.market_slug) + '</a>' +
           (alertStr ? '<div style="font-family:var(--mono);font-size:9px;color:var(--gold);margin-top:3px">' + escH(alertStr) + '</div>' : '') +
         '</div>' +
         (pct != null ? '<div style="text-align:right;min-width:60px">' +
@@ -13963,8 +13963,9 @@ async function loadBriefingTab() {
         var pct = m.yes_price != null ? Math.round(m.yes_price * 100) + '%' : '—';
         var ch = (m.change > 0 ? '+' : '') + Math.round(m.change) + '%';
         var chColor = m.change > 0 ? 'var(--green)' : 'var(--red)';
+        var mUrl = buildMarketUrl({ slug: m.slug, question: m.question });
         return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">' +
-          '<a href="/market/' + escH(m.slug || '') + '" style="flex:1;font-size:12px;font-weight:600;color:var(--text);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escH(m.question) + '</a>' +
+          '<a href="' + escH(mUrl) + '" target="_blank" rel="noopener" style="flex:1;font-size:12px;font-weight:600;color:var(--text);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escH(m.question) + '</a>' +
           '<span style="font-family:var(--mono);font-size:12px;min-width:40px;text-align:right">' + pct + '</span>' +
           '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:' + chColor + ';min-width:50px;text-align:right">' + ch + '</span>' +
         '</div>';
@@ -13977,8 +13978,9 @@ async function loadBriefingTab() {
         var mktPct = m.market_price != null ? Math.round(m.market_price * 100) : '—';
         var modelPct = m.model_price != null ? Math.round(m.model_price * 100) : '—';
         var edge = m.alpha_edge;
+        var mUrl = buildMarketUrl({ slug: m.slug, question: m.question });
         return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">' +
-          '<a href="/market/' + escH(m.slug || '') + '" style="flex:1;font-size:12px;font-weight:600;color:var(--text);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escH(m.question) + '</a>' +
+          '<a href="' + escH(mUrl) + '" target="_blank" rel="noopener" style="flex:1;font-size:12px;font-weight:600;color:var(--text);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escH(m.question) + '</a>' +
           '<span style="font-family:var(--mono);font-size:10px;color:var(--dim)">Mkt ' + mktPct + '%</span>' +
           '<span style="font-family:var(--mono);font-size:10px;color:var(--gold)">Model ' + modelPct + '%</span>' +
           '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:' + (edge > 0 ? 'var(--green)' : 'var(--red)') + '">' + (edge > 0 ? '+' : '') + edge + 'pt</span>' +
@@ -14004,8 +14006,9 @@ async function loadBriefingTab() {
         var pct = m.yes_price != null ? Math.round(m.yes_price * 100) + '%' : '—';
         var d = m.days === 0 ? 'TODAY' : m.days + 'd';
         var dColor = m.days <= 1 ? 'var(--red)' : 'var(--gold)';
+        var mUrl = buildMarketUrl({ slug: m.slug, question: m.question });
         return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">' +
-          '<a href="/market/' + escH(m.slug || '') + '" style="flex:1;font-size:12px;font-weight:600;color:var(--text);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escH(m.question) + '</a>' +
+          '<a href="' + escH(mUrl) + '" target="_blank" rel="noopener" style="flex:1;font-size:12px;font-weight:600;color:var(--text);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escH(m.question) + '</a>' +
           '<span style="font-family:var(--mono);font-size:12px;min-width:40px;text-align:right">' + pct + '</span>' +
           '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:' + dColor + ';min-width:50px;text-align:right">' + d + '</span>' +
         '</div>';
@@ -14017,8 +14020,9 @@ async function loadBriefingTab() {
       html += briefSection('Volume Leaders', sections.volume_leaders.map(function(m) {
         var vol = m.volume >= 1e6 ? '$' + (m.volume/1e6).toFixed(1) + 'M' : m.volume >= 1000 ? '$' + Math.round(m.volume/1000) + 'K' : '$' + Math.round(m.volume);
         var pct = m.yes_price != null ? Math.round(m.yes_price * 100) + '%' : '—';
+        var mUrl = buildMarketUrl({ slug: m.slug, question: m.question });
         return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">' +
-          '<a href="/market/' + escH(m.slug || '') + '" style="flex:1;font-size:12px;font-weight:600;color:var(--text);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escH(m.question) + '</a>' +
+          '<a href="' + escH(mUrl) + '" target="_blank" rel="noopener" style="flex:1;font-size:12px;font-weight:600;color:var(--text);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escH(m.question) + '</a>' +
           '<span style="font-family:var(--mono);font-size:12px;min-width:40px;text-align:right">' + pct + '</span>' +
           '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--text);min-width:60px;text-align:right">' + vol + '</span>' +
         '</div>';
@@ -14082,7 +14086,8 @@ function renderCalendar() {
         '<div style="font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em">Related Markets</div>' +
         e.related_markets.map(function(rm) {
           var pct = rm.yes_price != null ? Math.round(rm.yes_price * 100) : '—';
-          return '<a href="/market/' + escH(rm.slug || '') + '" style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;text-decoration:none;color:var(--text);transition:border-color .15s" onmouseover="this.style.borderColor=\'var(--gold)\'" onmouseout="this.style.borderColor=\'var(--border)\'">' +
+          var rmUrl = buildMarketUrl({ slug: rm.slug, question: rm.question });
+          return '<a href="' + escH(rmUrl) + '" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;text-decoration:none;color:var(--text);transition:border-color .15s" onmouseover="this.style.borderColor=\'var(--gold)\'" onmouseout="this.style.borderColor=\'var(--border)\'">' +
             '<span style="font-family:var(--mono);font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escH(rm.question) + '</span>' +
             '<span style="font-family:var(--mono);font-size:12px;font-weight:700;color:' + (pct >= 70 ? 'var(--green)' : pct <= 30 ? 'var(--red)' : 'var(--text)') + '">' + pct + '%</span>' +
           '</a>';
@@ -16071,15 +16076,11 @@ async function derivePolymarketApiKey() {
 
     if (btn) btn.textContent = 'Deriving key...';
 
-    // Call CLOB directly from browser (avoids server proxy issues)
-    const res = await fetch('https://clob.polymarket.com/auth/derive-api-key', {
-      method: 'GET',
-      headers: {
-        'POLY_ADDRESS': address,
-        'POLY_SIGNATURE': signature,
-        'POLY_TIMESTAMP': timestamp,
-        'POLY_NONCE': nonce
-      }
+    // Route through server proxy to avoid CORS blocking
+    const res = await fetch('/api/polymarket/derive-api-key', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ address, signature, timestamp, nonce })
     });
     const data = await res.json();
     console.log('[derive-api-key] response:', JSON.stringify(data));
@@ -16101,33 +16102,8 @@ async function derivePolymarketApiKey() {
       var proxyAddr = data.proxyAddress || data.proxy_address || data.polyAddress || '';
 
       // If no proxy in response, try GET /auth/api-keys with the new creds
-      if (!proxyAddr) {
-        try {
-          if (btn) btn.textContent = 'Getting proxy address...';
-          var keysRes = await fetch('https://clob.polymarket.com/auth/api-keys', {
-            method: 'GET',
-            headers: {
-              'POLY_ADDRESS': address,
-              'POLY_SIGNATURE': signature,
-              'POLY_TIMESTAMP': timestamp,
-              'POLY_NONCE': nonce
-            }
-          });
-          var keysData = await keysRes.json();
-          console.log('[api-keys] response:', JSON.stringify(keysData));
-          // Response is array of keys, each might have proxyAddress
-          if (Array.isArray(keysData)) {
-            for (var k of keysData) {
-              if (k.proxyAddress || k.proxy_address) {
-                proxyAddr = (k.proxyAddress || k.proxy_address).toLowerCase();
-                break;
-              }
-            }
-          } else if (keysData.proxyAddress || keysData.proxy_address) {
-            proxyAddr = (keysData.proxyAddress || keysData.proxy_address).toLowerCase();
-          }
-        } catch(e) { console.warn('[api-keys] lookup failed:', e.message); }
-      }
+      // Proxy address should come from server derive response (it handles lookup internally)
+      if (!proxyAddr && data.proxy_address) proxyAddr = data.proxy_address.toLowerCase();
 
       if (proxyAddr) {
         _polyWalletAddress = proxyAddr.toLowerCase();
@@ -16545,19 +16521,17 @@ async function confirmTrade() {
     const hmacSig = btoa(String.fromCharCode.apply(null, new Uint8Array(sigBuf)))
       .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
-    // POST directly to Polymarket CLOB
-    const res = await fetch('https://clob.polymarket.com/order', {
+    // Route through server proxy to avoid CORS blocking
+    const res = await fetch('/api/polymarket/clob-order', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'POLY_ADDRESS': eoaAddress,
-        'POLY_API_KEY': apiKey,
-        'POLY_PASSPHRASE': apiPassphrase,
-        'POLY_TIMESTAMP': ts,
-        'POLY_SIGNATURE': hmacSig
-      },
-      body: requestBody
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        signed_body: requestBody,
+        api_key: apiKey,
+        api_secret: apiSecret,
+        api_passphrase: apiPassphrase,
+        eoa_address: eoaAddress
+      })
     });
 
     const data = await res.json().catch(() => ({}));
