@@ -1900,9 +1900,11 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
   var hmacSig = btoa(String.fromCharCode.apply(null, new Uint8Array(sigBuf)))
     .replace(/\+/g, '-').replace(/\//g, '_');
 
-  // Attempt 1: Browser-direct to Polymarket CLOB (preserves user IP for geo-compliance)
-  tradeDebug('submitOrder', { apiKey: apiKey.slice(0,8) + '...', eoa: eoaAddress.slice(0,10), ts: ts, hmacEndsWithPad: hmacSig.endsWith('='), hmacLen: hmacSig.length, bodyLen: requestBody.length });
+  tradeDebug('submitOrder', { apiKey: apiKey.slice(0,8) + '...', eoa: eoaAddress.slice(0,10), ts: ts, hmacHasPad: hmacSig.includes('='), hmacLen: hmacSig.length });
+
+  // Attempt 1: Browser-direct to Polymarket CLOB
   try {
+    tradeDebug('trying browser-direct', 'POST clob.polymarket.com/order');
     var res = await fetch('https://clob.polymarket.com/order', {
       method: 'POST',
       headers: {
@@ -1918,33 +1920,30 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
     });
 
     var data = await res.json().catch(function() { return {}; });
-    tradeDebug('CLOB response', { status: res.status, data: data });
+    tradeDebug('CLOB ' + res.status, JSON.stringify(data).substring(0, 300));
 
     if (res.ok) return data;
 
     var errMsg = data.error || data.message || data.errorMsg || JSON.stringify(data);
-    tradeDebug('CLOB REJECTED', { status: res.status, error: errMsg });
 
-    // Only treat actual 401 (Invalid API key) as expired — NOT 400 validation errors
     if (res.status === 401) {
       localStorage.removeItem('poly_api_key');
       localStorage.removeItem('poly_api_secret');
       localStorage.removeItem('poly_api_passphrase');
       localStorage.removeItem('poly_eoa_address');
       updateTradingUI();
-      return { _expired: true, _errorMsg: 'API key expired — reconnecting' };
+      return { _expired: true, _errorMsg: 'CLOB 401: ' + errMsg };
     }
 
-    // 400 = order validation error from CLOB — show the real error
-    return { _error: true, _errorMsg: errMsg };
+    return { _error: true, _errorMsg: 'CLOB ' + res.status + ': ' + errMsg };
 
-  } catch (corsErr) {
-    // CORS or network error — fall back to server proxy
-    console.warn('[trade] Browser-direct CORS/network error, trying server proxy:', corsErr.message);
+  } catch (directErr) {
+    tradeDebug('browser-direct THREW', directErr.message);
   }
 
-  // Attempt 2: Server proxy (bypasses CORS, server does HMAC)
+  // Attempt 2: Server proxy
   try {
+    tradeDebug('trying server proxy', '/api/polymarket/clob-order');
     var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
     var proxyHeaders = { 'Content-Type': 'application/json' };
     if (token) proxyHeaders['Authorization'] = 'Bearer ' + token;
@@ -1962,33 +1961,26 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
     });
 
     var proxyData = await proxyRes.json().catch(function() { return {}; });
+    tradeDebug('proxy ' + proxyRes.status, JSON.stringify(proxyData).substring(0, 300));
 
     if (proxyRes.ok) return proxyData;
 
-    console.error('[trade] Server proxy failed:', proxyRes.status, proxyData);
+    var proxyErrMsg = proxyData.error || proxyData.message || JSON.stringify(proxyData);
+    var clobDetail = proxyData.detail ? JSON.stringify(proxyData.detail).substring(0, 200) : '';
 
-    // 401 from our server = HF auth issue (token expired). Re-derive API key.
-    // 4xx from CLOB (proxied through our server) = order-level error, don't wipe keys.
-    var isHfAuthError = proxyRes.status === 401 && (!proxyData.detail || typeof proxyData.detail === 'string');
-    var isClobAuthError = proxyData.detail && typeof proxyData.detail === 'object';
-
-    if (isHfAuthError) {
-      // HF token expired — need to re-login, but keys themselves may be fine
-      return { _error: true, _errorMsg: 'Session expired — sign in to HYPERFLEX and try again' };
-    }
-
-    if (isClobAuthError && (proxyRes.status === 401 || proxyRes.status === 403)) {
-      // CLOB rejected the credentials — keys are actually bad
+    if (proxyRes.status === 401 && clobDetail) {
+      // CLOB rejected credentials via proxy
       localStorage.removeItem('poly_api_key');
       localStorage.removeItem('poly_api_secret');
       localStorage.removeItem('poly_api_passphrase');
       localStorage.removeItem('poly_eoa_address');
       updateTradingUI();
-      return { _expired: true, _errorMsg: 'Polymarket credentials expired — reconnecting...' };
+      return { _expired: true, _errorMsg: 'CLOB via proxy 401: ' + clobDetail };
     }
 
-    return { _error: true, _errorMsg: proxyData.error || proxyData.message || 'Order rejected (' + proxyRes.status + ')' };
+    return { _error: true, _errorMsg: 'Proxy ' + proxyRes.status + ': ' + proxyErrMsg + (clobDetail ? ' | ' + clobDetail : '') };
   } catch (proxyErr) {
+    tradeDebug('proxy THREW', proxyErr.message);
     return { _error: true, _errorMsg: 'Network error: ' + proxyErr.message };
   }
 }
