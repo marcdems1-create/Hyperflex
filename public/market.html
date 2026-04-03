@@ -1685,36 +1685,69 @@ async function executeTrade() {
       localStorage.setItem('hf_poly_wallet', proxyAddress);
     }
 
-    // Build amounts — match official Polymarket client:
-    // compute one side, derive the other to maintain exact price at tick precision
-    var DECIMALS = 1000000;
+    // Build amounts — match official Polymarket ROUNDING_CONFIG:
+    // tickSize 0.01 → price: 2 decimals, size: 2 decimals, amount: 4 decimals
+    // tickSize 0.001 → price: 3 decimals, size: 3 decimals, amount: 5 decimals
+    // tickSize 0.0001 → price: 4 decimals, size: 4 decimals, amount: 6 decimals
+    var DECIMALS = 1000000; // 10^6 for USDC
+    var tickDecimals = Math.round(-Math.log10(tickSize)); // 0.01→2, 0.001→3
+    var sizeDecimals = tickDecimals;
+    var amountDecimals = tickDecimals + 2;
+
+    // Helper: round to N decimal places using string math to avoid floating point
+    function roundDown(val, dec) {
+      var m = Math.pow(10, dec);
+      return Math.floor(val * m) / m;
+    }
+    function roundUp(val, dec) {
+      var m = Math.pow(10, dec);
+      return Math.ceil(val * m) / m;
+    }
+    // Convert a decimal number to fixed-point integer (USDC has 6 decimals)
+    // Use string manipulation to avoid floating-point multiplication errors
+    function toFixedPoint(val, unitDecimals) {
+      // val is a number like 9.9981, unitDecimals is 6
+      // Result should be 9998100
+      var s = val.toFixed(unitDecimals); // "9.998100"
+      var parts = s.split('.');
+      var intPart = parts[0];
+      var fracPart = (parts[1] || '').padEnd(unitDecimals, '0').slice(0, unitDecimals);
+      return intPart + fracPart; // "9998100"
+    }
+
     var makerAmt, takerAmt, sideInt;
     if (clobSide === 'BUY') {
       sideInt = 0;
-      // BUY: maker pays USDC (makerAmt), receives outcome tokens (takerAmt)
-      var takerRaw = Math.floor(shares * DECIMALS);
-      var makerRaw = Math.ceil(takerRaw * clobPrice);
-      // Ensure amounts are valid
-      if (takerRaw <= 0 || makerRaw <= 0) {
+      // BUY: maker pays USDC (makerAmount), receives outcome tokens (takerAmount)
+      // Round shares DOWN to sizeDecimals
+      var rawShares = roundDown(shares, sizeDecimals);
+      // Compute USDC cost: shares × price, round UP to amountDecimals
+      var rawCost = roundUp(rawShares * clobPrice, amountDecimals);
+      if (rawShares <= 0 || rawCost <= 0) {
         showTradeStatus('Order too small — increase amount', 'error');
         cta.disabled = false; updateCtaButton();
         return;
       }
-      makerAmt = makerRaw.toString();
-      takerAmt = takerRaw.toString();
+      // Convert to fixed-point strings using string math
+      makerAmt = toFixedPoint(rawCost, 6);    // USDC amount (maker pays)
+      takerAmt = toFixedPoint(rawShares, 6);   // shares (maker receives)
     } else {
       sideInt = 1;
-      // SELL: maker gives outcome tokens (makerAmt), receives USDC (takerAmt)
-      var makerRaw2 = Math.floor(shares * DECIMALS);
-      var takerRaw2 = Math.floor(makerRaw2 * clobPrice);
-      if (makerRaw2 <= 0 || takerRaw2 <= 0) {
+      // SELL: maker gives outcome tokens (makerAmount), receives USDC (takerAmount)
+      var rawShares2 = roundDown(shares, sizeDecimals);
+      var rawProceeds = roundDown(rawShares2 * clobPrice, amountDecimals);
+      if (rawShares2 <= 0 || rawProceeds <= 0) {
         showTradeStatus('Order too small — increase amount', 'error');
         cta.disabled = false; updateCtaButton();
         return;
       }
-      makerAmt = makerRaw2.toString();
-      takerAmt = takerRaw2.toString();
+      makerAmt = toFixedPoint(rawShares2, 6);   // shares (maker gives)
+      takerAmt = toFixedPoint(rawProceeds, 6);   // USDC amount (maker receives)
     }
+    // Strip leading zeros but keep at least "0"
+    makerAmt = makerAmt.replace(/^0+/, '') || '0';
+    takerAmt = takerAmt.replace(/^0+/, '') || '0';
+    console.log('[trade] Amounts: maker=' + makerAmt + ' taker=' + takerAmt + ' price=' + clobPrice + ' shares=' + (clobSide === 'BUY' ? rawShares : rawShares2) + ' implied=' + (clobSide === 'BUY' ? (parseInt(makerAmt)/parseInt(takerAmt)) : (parseInt(takerAmt)/parseInt(makerAmt))));
 
     var orderSalt = Math.floor(Math.random() * 9007199254740991);
     var exchangeAddr = isNegRisk
