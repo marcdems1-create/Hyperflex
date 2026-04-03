@@ -16466,13 +16466,14 @@ async function confirmTrade() {
       takerAmt = Math.round(shares * price * DECIMALS).toString();
     }
 
-    // Random salt
-    const orderSalt = Math.floor(Math.random() * 9007199254740991);
+    // Random salt (matches @polymarket/clob-client pattern)
+    const orderSalt = Math.round(Math.random() * Date.now()).toString();
 
     // Neg-risk exchange (default for modern markets)
     const exchangeAddr = '0xC5d563A36AE78145C45a50134d48A1215220f80a';
 
     // Build EIP-712 order struct
+    // signatureType: 2 = POLY_GNOSIS_SAFE (Polymarket proxy wallets are Gnosis Safes)
     const orderStruct = {
       salt: orderSalt,
       maker: proxyAddress || eoaAddress,
@@ -16485,7 +16486,7 @@ async function confirmTrade() {
       nonce: '0',
       feeRateBps: '0',
       side: sideInt,
-      signatureType: proxyAddress ? 1 : 0  // POLY_PROXY if proxy exists, else EOA
+      signatureType: proxyAddress ? 2 : 0  // POLY_GNOSIS_SAFE if proxy, else EOA
     };
 
     const orderDomain = {
@@ -16518,7 +16519,7 @@ async function confirmTrade() {
     btn.textContent = 'Placing order...';
     const requestBody = JSON.stringify({
       order: {
-        salt: orderStruct.salt,
+        salt: parseInt(orderStruct.salt, 10),
         maker: orderStruct.maker,
         signer: orderStruct.signer,
         taker: orderStruct.taker,
