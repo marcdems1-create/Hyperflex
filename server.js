@@ -10819,52 +10819,30 @@ app.get('/api/predictors', async (req, res) => {
 const _leaderboardCache = {};
 
 async function fetchPolymarketLeaderboard(period) {
-  // Polymarket data-api uses timePeriod param: DAY, WEEK, MONTH, ALL
-  const periodMap = { '7d': 'WEEK', '30d': 'MONTH', 'all': 'ALL' };
-  const timePeriod = periodMap[period] || 'MONTH';
-
-  // Fetch both PnL-ranked and volume-ranked to get richer data
-  const [pnlResp, volResp] = await Promise.all([
-    fetch(`https://data-api.polymarket.com/v1/leaderboard?timePeriod=${timePeriod}&orderBy=PNL&limit=50`, { headers: { 'Accept': 'application/json' }, signal: AbortSignal.timeout(10000) }),
-    fetch(`https://data-api.polymarket.com/v1/leaderboard?timePeriod=${timePeriod}&orderBy=VOL&limit=50`, { headers: { 'Accept': 'application/json' }, signal: AbortSignal.timeout(10000) })
-  ]);
-  if (!pnlResp.ok) throw new Error(`Polymarket API returned ${pnlResp.status}`);
-  const pnlTraders = await pnlResp.json();
-  const volTraders = volResp.ok ? await volResp.json() : [];
-  if (!Array.isArray(pnlTraders) || pnlTraders.length === 0) throw new Error('Empty Polymarket leaderboard response');
-
-  // Merge volume data into PnL-ranked list for vol/user stat
-  const volMap = {};
-  for (const t of (Array.isArray(volTraders) ? volTraders : [])) {
-    const addr = (t.proxyWallet || t.proxy_wallet || '').toLowerCase();
-    if (addr) volMap[addr] = parseFloat(t.vol) || parseFloat(t.volume) || 0;
-  }
-
-  return pnlTraders.map((t, i) => {
+  const windowMap = { '7d': 'day', '30d': 'week', 'all': 'all' };
+  const window = windowMap[period] || 'week';
+  const url = `https://data-api.polymarket.com/v1/leaderboard?limit=50&window=${window}`;
+  const resp = await fetch(url, { headers: { 'Accept': 'application/json' }, signal: AbortSignal.timeout(8000) });
+  if (!resp.ok) throw new Error(`Polymarket API returned ${resp.status}`);
+  const traders = await resp.json();
+  if (!Array.isArray(traders) || traders.length === 0) throw new Error('Empty Polymarket leaderboard response');
+  return traders.map((t, i) => {
     const pnl = parseFloat(t.pnl) || 0;
     const vol = parseFloat(t.vol) || parseFloat(t.volume) || 0;
-    const wallet = t.proxyWallet || t.proxy_wallet || t.address || '';
-    const roi = vol > 0 ? (pnl / vol) * 100 : 0;
-    // Composite sharp score from real data: ROI weight + volume weight + profitability bonus
-    const roiPts = Math.min(40, Math.max(0, roi * 2));  // up to 40 pts for positive ROI
-    const volPts = vol > 1000000 ? 30 : vol > 100000 ? 20 : vol > 10000 ? 15 : vol > 1000 ? 10 : 5;
-    const profitBonus = pnl > 0 ? 15 : 0;
-    const rankBonus = i < 5 ? 15 : i < 10 ? 10 : i < 25 ? 5 : 0;
-    const sharpScore = Math.min(99, Math.max(1, Math.round(roiPts + volPts + profitBonus + rankBonus)));
-
+    const sharpScore = Math.min(100, Math.round(
+      50 +
+      (pnl > 100000 ? 30 : pnl > 10000 ? 20 : pnl > 1000 ? 10 : 0) +
+      (vol > 100000 ? 15 : vol > 10000 ? 10 : 0)
+    ));
     return {
-      rank: parseInt(t.rank) || (i + 1),
-      display_name: (() => { const n = t.userName || t.username || t.name || ''; if (n && !/^0x[0-9a-fA-F]{6,}/.test(n)) return n; const addr = wallet || n || ''; return addr.length > 10 ? addr.slice(0, 6) + '...' + addr.slice(-4) : addr || `Trader #${i+1}`; })(),
-      profileImage: t.profileImage || '',
-      xUsername: t.xUsername || '',
-      total_pnl: Math.round(pnl * 100) / 100,
-      volume: Math.round(vol * 100) / 100,
-      roi: Math.round(roi * 100) / 100,
-      wallet,
-      account_value: Math.round(vol),
+      rank: i + 1,
+      display_name: (() => { const n = t.userName || t.username || t.name || ''; if (n && !/^0x[0-9a-fA-F]{6,}/.test(n)) return n; const addr = t.proxyWallet || t.proxy_wallet || t.address || n || ''; return addr.length > 10 ? addr.slice(0, 6) + '...' + addr.slice(-4) : addr || `Trader #${i+1}`; })(),
+      total_pnl: Math.round(pnl),
+      volume: Math.round(vol),
+      wallet: t.proxyWallet || t.proxy_wallet || t.address || '',
+      win_rate: 0,
       sharp_score: sharpScore,
-      platforms: ['POLY'],
-      verified: !!t.verifiedBadge
+      platforms: ['POLY']
     };
   });
 }
@@ -11030,104 +11008,6 @@ app.get('/api/leaderboard', async (req, res) => {
   } catch (err) {
     console.error('[api/leaderboard]', err);
     res.status(500).json({ error: 'Failed to load leaderboard' });
-  }
-});
-
-// ── MARKET INTELLIGENCE REPORT (Kobeissi-style AI) ──────────────────────────
-// GET /api/market-intelligence — AI-generated market analysis from live Polymarket data, cached 30 min
-const _marketIntelCache = { ts: 0, data: null };
-app.get('/api/market-intelligence', async (req, res) => {
-  try {
-    // Cache for 30 minutes
-    if (_marketIntelCache.data && Date.now() - _marketIntelCache.ts < 30 * 60 * 1000) {
-      return res.json(_marketIntelCache.data);
-    }
-
-    if (!process.env.ANTHROPIC_API_KEY) {
-      return res.status(503).json({ error: 'AI not configured' });
-    }
-
-    // Fetch live market data from Polymarket for analysis
-    const [marketsResp, lbResp] = await Promise.all([
-      fetch('https://gamma-api.polymarket.com/markets?closed=false&limit=30&order=volume24hr&ascending=false', { signal: AbortSignal.timeout(8000) }).then(r => r.ok ? r.json() : []).catch(() => []),
-      fetch('https://data-api.polymarket.com/v1/leaderboard?timePeriod=WEEK&orderBy=PNL&limit=10', { signal: AbortSignal.timeout(8000) }).then(r => r.ok ? r.json() : []).catch(() => [])
-    ]);
-
-    // Build context from top markets
-    const marketSummaries = (Array.isArray(marketsResp) ? marketsResp : []).slice(0, 20).map(m => {
-      const yes = parseFloat(m.outcomePrices ? JSON.parse(m.outcomePrices)[0] : m.bestBid || 0.5);
-      return `- "${m.question}" — YES: ${Math.round(yes * 100)}%, Vol 24h: $${Math.round((parseFloat(m.volume24hr) || 0)).toLocaleString()}, Liquidity: $${Math.round((parseFloat(m.liquidityNum) || 0)).toLocaleString()}`;
-    }).join('\n');
-
-    const topTraders = (Array.isArray(lbResp) ? lbResp : []).slice(0, 5).map(t =>
-      `- ${t.userName || 'Anon'}: PnL $${Math.round(parseFloat(t.pnl) || 0).toLocaleString()}, Vol $${Math.round(parseFloat(t.vol) || 0).toLocaleString()}`
-    ).join('\n');
-
-    const now = new Date();
-    const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-
-    const msg = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1200,
-      messages: [{
-        role: 'user',
-        content: `You are a senior macro analyst writing a concise daily market intelligence brief for prediction market traders. Style: The Kobeissi Letter — data-driven, sharp, no fluff. Use numbers and percentages. Reference specific markets by name.
-
-Today is ${dateStr}.
-
-LIVE POLYMARKET DATA (top markets by 24h volume):
-${marketSummaries}
-
-TOP TRADERS THIS WEEK:
-${topTraders}
-
-Write a brief with EXACTLY these 4 sections. Each section should be 2-3 sentences max. Use plain text, no markdown headers.
-
-1. MARKET PULSE — What's moving today. Reference 2-3 specific high-volume markets and their odds shifts.
-2. SMART MONEY SIGNAL — What the top traders are doing. Reference PnL figures and any patterns.
-3. CORRELATION WATCH — Identify one interesting cross-market correlation or divergence between 2 markets.
-4. RISK ALERT — One contrarian take or risk factor traders should watch.
-
-End with a single bold one-liner prediction or call-to-action.`
-      }]
-    });
-
-    const report = msg.content[0]?.text || '';
-
-    // Parse sections
-    const sections = [];
-    const sectionNames = ['MARKET PULSE', 'SMART MONEY SIGNAL', 'CORRELATION WATCH', 'RISK ALERT'];
-    for (let i = 0; i < sectionNames.length; i++) {
-      const name = sectionNames[i];
-      const nextName = sectionNames[i + 1];
-      const regex = new RegExp(`(?:\\d+\\.\\s*)?${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[:\\s—-]*(.+?)(?=(?:\\d+\\.\\s*)?${nextName ? nextName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : '$'})`, 's');
-      const match = report.match(regex);
-      sections.push({ title: name, content: match ? match[1].trim() : '' });
-    }
-
-    // Extract the bold closing line (after section 4)
-    const closingMatch = report.match(/(?:RISK ALERT[^]*?\n\n)(.+)$/s);
-    const closingLine = closingMatch ? closingMatch[1].trim() : '';
-
-    const result = {
-      date: dateStr,
-      generated_at: now.toISOString(),
-      sections,
-      closing: closingLine,
-      top_markets: (Array.isArray(marketsResp) ? marketsResp : []).slice(0, 5).map(m => ({
-        question: m.question,
-        yes_price: parseFloat(m.outcomePrices ? JSON.parse(m.outcomePrices)[0] : 0.5),
-        volume_24h: parseFloat(m.volume24hr) || 0,
-        slug: m.slug || ''
-      }))
-    };
-
-    _marketIntelCache.ts = Date.now();
-    _marketIntelCache.data = result;
-    res.json(result);
-  } catch (err) {
-    console.error('[market-intelligence]', err);
-    res.status(500).json({ error: 'Failed to generate report' });
   }
 });
 
