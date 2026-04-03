@@ -16248,18 +16248,45 @@ function closeTradeModal() {
 function setTradeSide(side) {
   if (!_tradeModalData) return;
   _tradeModalData.side = side;
+  _tradeModalData.selectedSide = side;
   const yesBtn = document.getElementById('tradeYesBtn');
   const noBtn = document.getElementById('tradeNoBtn');
   if (yesBtn) { yesBtn.style.background = side === 'YES' ? '#22c55e' : '#2d2d44'; yesBtn.style.border = side === 'YES' ? 'none' : '1px solid #3d3d54'; }
   if (noBtn) { noBtn.style.background = side === 'NO' ? '#ef4444' : '#2d2d44'; noBtn.style.border = side === 'NO' ? 'none' : '1px solid #3d3d54'; }
+  // Update limit price from CLOB orderbook when side changes
+  _updateLimitFromOrderbook();
   updateTradeEstimate();
   updateTradeConfirmBtn();
 }
 
+function _updateLimitFromOrderbook() {
+  if (!_tradeModalData || !_tradeModalData._orderbook) return;
+  const ob = _tradeModalData._orderbook;
+  const mode = _tradeModalData.mode || 'buy';
+  let livePrice = null;
+  if (mode === 'buy' && ob.best_ask != null) {
+    livePrice = ob.best_ask;
+  } else if (mode === 'sell' && ob.best_bid != null) {
+    livePrice = ob.best_bid;
+  } else if (ob.mid_price != null) {
+    livePrice = ob.mid_price;
+  }
+  if (livePrice != null && livePrice > 0 && livePrice < 1) {
+    const tick = _tradeModalData._tickSize || 0.01;
+    livePrice = Math.round(livePrice / tick) * tick;
+    _tradeModalData._limitPrice = livePrice;
+    const limitEl = document.getElementById('tradeLimitPrice');
+    if (limitEl) limitEl.textContent = (livePrice * 100).toFixed(1) + '\u00A2';
+  }
+}
+
 function adjustPrice(delta) {
   if (!_tradeModalData) return;
+  const tick = _tradeModalData._tickSize || 0.01;
+  const step = delta > 0 ? tick : -tick;
   const current = _tradeModalData._limitPrice || 0;
-  _tradeModalData._limitPrice = Math.max(0.01, Math.min(0.99, current + delta));
+  const newPrice = Math.round((current + step) / tick) * tick;
+  _tradeModalData._limitPrice = Math.max(tick, Math.min(1 - tick, newPrice));
   const el = document.getElementById('tradeLimitPrice');
   if (el) el.textContent = (_tradeModalData._limitPrice * 100).toFixed(1) + '¢';
   updateTradeEstimate();
@@ -16312,21 +16339,59 @@ function setTradeMode(mode) {
     sellBtn.style.color = mode === 'sell' ? '#fff' : '#f87171';
     sellBtn.style.border = mode === 'sell' ? '1px solid #f87171' : '1px solid #2a2825';
   }
+  _updateLimitFromOrderbook();
   updateTradeEstimate();
+  updateTradeConfirmBtn();
 }
 
 async function loadOrderbook(pos) {
   const el = document.getElementById('tradeOrderbookInfo');
   if (!el) return;
-  el.innerHTML = '<span style="color:var(--dim);font-family:var(--mono);font-size:11px">Loading orderbook...</span>';
+  el.innerHTML = '<span style="color:var(--dim);font-family:var(--mono);font-size:11px">Loading live CLOB prices...</span>';
   try {
-    // Use token_id (asset field) for orderbook — this is the correct CLOB token
     const tokenId = pos.token_id || pos.id || pos.conditionId || '';
     if (!tokenId) { el.innerHTML = '<span style="color:var(--dim);font-size:11px">No token ID</span>'; return; }
-    const r = await fetch('/api/polymarket/orderbook/' + encodeURIComponent(tokenId));
-    const data = await r.json();
+
+    // Fetch orderbook, negRisk, and tick size in parallel
+    const [obRes, nrRes, tsRes] = await Promise.all([
+      fetch('/api/polymarket/orderbook/' + encodeURIComponent(tokenId)),
+      fetch('/api/polymarket/neg-risk/' + encodeURIComponent(tokenId)),
+      fetch('/api/polymarket/tick-size/' + encodeURIComponent(tokenId))
+    ]);
+    const data = await obRes.json();
+    const nrData = await nrRes.json().catch(() => ({ neg_risk: true }));
+    const tsData = await tsRes.json().catch(() => ({ minimum_tick_size: 0.01 }));
+
     if (data.error) { el.innerHTML = '<span style="color:#f87171;font-size:11px">' + data.error + '</span>'; return; }
     _tradeModalData._orderbook = data;
+    _tradeModalData._negRisk = nrData.neg_risk !== false;
+    _tradeModalData._tickSize = tsData.minimum_tick_size || 0.01;
+
+    // Update limit price to live CLOB price (best ask for BUY, best bid for SELL)
+    const mode = _tradeModalData.mode || 'buy';
+    let livePrice = null;
+    if (mode === 'buy' && data.best_ask != null) {
+      livePrice = data.best_ask;
+    } else if (mode === 'sell' && data.best_bid != null) {
+      livePrice = data.best_bid;
+    } else if (data.mid_price != null) {
+      livePrice = data.mid_price;
+    }
+    if (livePrice != null && livePrice > 0 && livePrice < 1) {
+      // Round to tick size
+      const tick = _tradeModalData._tickSize;
+      livePrice = Math.round(livePrice / tick) * tick;
+      _tradeModalData._limitPrice = livePrice;
+      const limitEl = document.getElementById('tradeLimitPrice');
+      if (limitEl) limitEl.textContent = (livePrice * 100).toFixed(1) + '\u00A2';
+
+      // Also update YES/NO price displays with CLOB data
+      const yesPrice = data.best_ask != null ? data.best_ask : (data.mid_price || 0.5);
+      const noPrice = 1 - yesPrice;
+      document.getElementById('tradeYesPrice').textContent = (yesPrice * 100).toFixed(1) + '\u00A2';
+      document.getElementById('tradeNoPrice').textContent = (noPrice * 100).toFixed(1) + '\u00A2';
+    }
+
     const bestBid = data.best_bid ? (data.best_bid * 100).toFixed(1) + '\u00A2' : '—';
     const bestAsk = data.best_ask ? (data.best_ask * 100).toFixed(1) + '\u00A2' : '—';
     const midPrice = data.mid_price ? (data.mid_price * 100).toFixed(1) + '\u00A2' : '—';
@@ -16451,26 +16516,55 @@ async function confirmTrade() {
       }
     }
 
-    // Build order amounts (6 decimal places)
+    // Tick size rounding — precision from CLOB tick-size endpoint
+    const tickSize = _tradeModalData._tickSize || 0.01;
+    const tickRounding = {
+      0.1:   { priceDec: 1, sizeDec: 2, amountDec: 3 },
+      0.01:  { priceDec: 2, sizeDec: 2, amountDec: 4 },
+      0.001: { priceDec: 3, sizeDec: 2, amountDec: 5 },
+      0.0001:{ priceDec: 4, sizeDec: 2, amountDec: 6 }
+    };
+    const rounding = tickRounding[tickSize] || tickRounding[0.01];
+    function roundDown(val, decimals) { const f = Math.pow(10, decimals); return Math.floor(val * f) / f; }
+
+    // Round price to tick size
+    const roundedPrice = roundDown(price, rounding.priceDec);
+    if (roundedPrice <= 0 || roundedPrice >= 1) {
+      errEl.textContent = 'Invalid price: ' + (price * 100).toFixed(1) + '¢';
+      errEl.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Confirm Trade';
+      return;
+    }
+
+    // Build order amounts (6 decimal places = USDC decimals)
     const DECIMALS = 1000000;
     let makerAmt, takerAmt, sideInt;
     if (clobSide === 'BUY') {
       sideInt = 0;
-      // BUY: maker provides USDC (shares * price), receives tokens (shares)
-      makerAmt = Math.round(shares * price * DECIMALS).toString();
-      takerAmt = Math.round(shares * DECIMALS).toString();
+      // BUY: maker provides USDC, taker provides tokens
+      // makerAmount = USDC to spend = shares * price
+      // takerAmount = tokens to receive = shares
+      const rawMaker = roundDown(shares * roundedPrice, rounding.amountDec);
+      const rawTaker = roundDown(shares, rounding.sizeDec);
+      makerAmt = Math.round(rawMaker * DECIMALS).toString();
+      takerAmt = Math.round(rawTaker * DECIMALS).toString();
     } else {
       sideInt = 1;
-      // SELL: maker provides tokens (shares), receives USDC (shares * price)
-      makerAmt = Math.round(shares * DECIMALS).toString();
-      takerAmt = Math.round(shares * price * DECIMALS).toString();
+      // SELL: maker provides tokens, taker provides USDC
+      const rawMaker = roundDown(shares, rounding.sizeDec);
+      const rawTaker = roundDown(shares * roundedPrice, rounding.amountDec);
+      makerAmt = Math.round(rawMaker * DECIMALS).toString();
+      takerAmt = Math.round(rawTaker * DECIMALS).toString();
     }
 
-    // Random salt (matches @polymarket/clob-client pattern)
-    const orderSalt = Math.round(Math.random() * Date.now()).toString();
+    // Random salt — large random number matching SDK pattern
+    const orderSalt = (BigInt(Math.floor(Math.random() * 2**32)) * BigInt(10**9) + BigInt(Date.now())).toString();
 
-    // Neg-risk exchange (default for modern markets)
-    const exchangeAddr = '0xC5d563A36AE78145C45a50134d48A1215220f80a';
+    // Exchange contract: negRisk vs standard CTF Exchange
+    const isNegRisk = _tradeModalData._negRisk !== false;
+    const exchangeAddr = isNegRisk
+      ? '0xC5d563A36AE78145C45a50134d48A1215220f80a'   // Neg Risk CTF Exchange
+      : '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E';  // CTF Exchange
 
     // Build EIP-712 order struct
     // signatureType: 2 = POLY_GNOSIS_SAFE (Polymarket proxy wallets are Gnosis Safes)
@@ -16515,11 +16609,13 @@ async function confirmTrade() {
     btn.textContent = 'Sign in wallet...';
     const orderSignature = await window._walletSigner.signTypedData(orderDomain, orderTypes, orderStruct);
 
-    // Build CLOB request body (side as string "BUY"/"SELL" in JSON)
+    // Build CLOB request body
+    // CLOB API expects salt as a numeric string, not parsed int (would overflow for large values)
     btn.textContent = 'Placing order...';
+    console.log('[qt-trade] Order params:', { side: clobSide, price: roundedPrice, shares, makerAmt, takerAmt, negRisk: isNegRisk, tickSize, exchange: exchangeAddr, maker: orderStruct.maker, signer: orderStruct.signer });
     const requestBody = JSON.stringify({
       order: {
-        salt: parseInt(orderStruct.salt, 10),
+        salt: orderStruct.salt,
         maker: orderStruct.maker,
         signer: orderStruct.signer,
         taker: orderStruct.taker,
@@ -16534,7 +16630,7 @@ async function confirmTrade() {
         signature: orderSignature
       },
       owner: apiKey,
-      orderType: 'GTC'
+      orderType: 'FOK'
     });
 
     // HMAC-SHA256 sign the HTTP request (base64url)
@@ -16592,16 +16688,22 @@ async function confirmTrade() {
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
-      console.error('[qt-trade] CLOB error:', res.status, data);
-      if (res.status === 401 || (res.status === 400 && JSON.stringify(data).toLowerCase().includes('api'))) {
+      console.error('[qt-trade] CLOB error:', res.status, JSON.stringify(data));
+      const errStr = JSON.stringify(data).toLowerCase();
+      if (res.status === 401 || (res.status === 400 && errStr.includes('api key'))) {
         localStorage.removeItem('poly_api_key');
         localStorage.removeItem('poly_api_secret');
         localStorage.removeItem('poly_api_passphrase');
         localStorage.removeItem('poly_eoa_address');
         updateWalletUI();
         errEl.textContent = 'API key expired. Click Confirm Trade again to get fresh keys.';
+      } else if (res.status === 400 && errStr.includes('not enough balance')) {
+        errEl.textContent = 'Insufficient USDC balance on Polymarket. Deposit funds first.';
+      } else if (res.status === 400 && errStr.includes('tick size')) {
+        errEl.textContent = 'Price precision error — try adjusting the price.';
       } else {
-        errEl.textContent = data.error || data.message || 'Order rejected (' + res.status + ')';
+        const msg = data.error || data.message || (typeof data === 'string' ? data : '');
+        errEl.textContent = msg || ('Order rejected by CLOB (' + res.status + ')');
       }
       errEl.style.display = 'block';
       btn.disabled = false;
@@ -16609,7 +16711,7 @@ async function confirmTrade() {
       return;
     }
 
-    showToast((clobSide === 'BUY' ? 'Buy' : 'Sell') + ' ' + shares + ' shares @ ' + (price * 100).toFixed(0) + '¢ placed!', 'success');
+    showToast((clobSide === 'BUY' ? 'Buy' : 'Sell') + ' ' + shares + ' shares @ ' + (roundedPrice * 100).toFixed(1) + '\u00A2 — order placed!', 'success');
     console.log('[qt-trade] Order success:', data);
     closeTradeModal();
     setTimeout(() => loadPolymarketPositions(true), 2000);

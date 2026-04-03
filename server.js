@@ -17171,6 +17171,61 @@ app.get('/api/polymarket/orderbook/:tokenId', async (req, res) => {
   }
 });
 
+// ── POLYMARKET NEG-RISK CHECK (determines exchange contract per market) ──────
+const _negRiskCache = new Map();
+app.get('/api/polymarket/neg-risk/:tokenId', async (req, res) => {
+  const tokenId = req.params.tokenId.trim();
+  if (!tokenId) return res.status(400).json({ error: 'Token ID required' });
+  const cached = _negRiskCache.get(tokenId);
+  if (cached && Date.now() - cached._ts < 300000) return res.json(cached.data); // 5 min cache
+  try {
+    const upstream = await fetch(`https://clob.polymarket.com/neg-risk?token_id=${encodeURIComponent(tokenId)}`, {
+      headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+    });
+    if (!upstream.ok) {
+      // Default to negRisk=true for modern markets
+      const fallback = { neg_risk: true };
+      _negRiskCache.set(tokenId, { _ts: Date.now(), data: fallback });
+      return res.json(fallback);
+    }
+    const data = await upstream.json();
+    const result = { neg_risk: data.neg_risk === true || data === true };
+    _negRiskCache.set(tokenId, { _ts: Date.now(), data: result });
+    if (_negRiskCache.size > 500) { const oldest = _negRiskCache.keys().next().value; _negRiskCache.delete(oldest); }
+    res.json(result);
+  } catch (err) {
+    console.error('[polymarket neg-risk]', err.message);
+    res.json({ neg_risk: true }); // safe default
+  }
+});
+
+// ── POLYMARKET TICK SIZE (determines rounding precision per market) ──────────
+const _tickSizeCache = new Map();
+app.get('/api/polymarket/tick-size/:tokenId', async (req, res) => {
+  const tokenId = req.params.tokenId.trim();
+  if (!tokenId) return res.status(400).json({ error: 'Token ID required' });
+  const cached = _tickSizeCache.get(tokenId);
+  if (cached && Date.now() - cached._ts < 600000) return res.json(cached.data); // 10 min cache
+  try {
+    const upstream = await fetch(`https://clob.polymarket.com/tick-size?token_id=${encodeURIComponent(tokenId)}`, {
+      headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+    });
+    if (!upstream.ok) {
+      const fallback = { minimum_tick_size: 0.01 };
+      _tickSizeCache.set(tokenId, { _ts: Date.now(), data: fallback });
+      return res.json(fallback);
+    }
+    const data = await upstream.json();
+    const result = { minimum_tick_size: parseFloat(data.minimum_tick_size || data) || 0.01 };
+    _tickSizeCache.set(tokenId, { _ts: Date.now(), data: result });
+    if (_tickSizeCache.size > 500) { const oldest = _tickSizeCache.keys().next().value; _tickSizeCache.delete(oldest); }
+    res.json(result);
+  } catch (err) {
+    console.error('[polymarket tick-size]', err.message);
+    res.json({ minimum_tick_size: 0.01 }); // safe default
+  }
+});
+
 // ── POLYMARKET ORDER PROXY (submits signed order to CLOB) ──────────────────
 app.post('/api/polymarket/order', requireAuth, async (req, res) => {
   const { signed_order, market_id, side, amount } = req.body;
