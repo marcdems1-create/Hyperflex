@@ -14257,13 +14257,12 @@ async function fetchRealizedPnL(address) {
       if (m.sells <= 0 && m.redeems <= 0) continue;
       const inApi = currentById[cid];
       if (inApi) {
-        // Position still exists in API — API cashPnl covers remaining tokens only
-        // Add the profit from sold tokens: sell proceeds - proportional cost of sold tokens
-        const costPerToken = m.buyTokens > 0 ? m.buys / m.buyTokens : 0;
-        const soldTokenProfit = m.sells - (costPerToken * m.sellTokens);
-        if (soldTokenProfit > 0) extraRealizedPnl += soldTokenProfit;
+        // Position still exists in API — Polymarket's cashPnl already includes
+        // total position P&L (current value + sell proceeds - total cost).
+        // Do NOT add extra sold-token profit here — it would double-count.
+        continue;
       } else {
-        // Position fully closed — not in API at all
+        // Position fully closed — not in API at all, cashPnl not reported
         const net = (m.sells + m.redeems) - m.buys;
         extraRealizedPnl += net;
       }
@@ -14279,12 +14278,8 @@ async function fetchRealizedPnL(address) {
         const net = (m.sells + m.redeems) - m.buys;
         if (net > 0) closedWins++;
         else if (net < -0.5) closedLosses++; // ignore tiny rounding losses
-      } else if (m.sells > 0) {
-        // Partially sold — count the sold portion as a trade
-        const costPerToken = m.buyTokens > 0 ? m.buys / m.buyTokens : 0;
-        const soldProfit = m.sells - (costPerToken * m.sellTokens);
-        if (soldProfit > 0.5) closedWins++;
       }
+      // Do NOT count partially-sold positions as closed trades — they're still active
     }
     window._closedTradeWins = closedWins;
     window._closedTradeLosses = closedLosses;
@@ -14450,6 +14445,11 @@ function updatePortfolioSummary() {
 
   // P&L Over Time Chart
   renderPnlChart(positions);
+
+  // After initial render, refresh P&L from Polymarket API for current period
+  if (_polyWalletAddress) {
+    setPnlPeriod(_pnlPeriod);
+  }
   } catch(e) { console.error('[updatePortfolioSummary]', e); }
 }
 
@@ -14564,7 +14564,44 @@ function renderPnlChart(positions) {
 
 /* ── P&L Period Tabs (1D / 1W / 1M / ALL) ── */
 let _pnlPeriod = '1m';
-function setPnlPeriod(period) {
+let _polyPnlCache = {}; // cache Polymarket P&L by period
+
+// Fetch actual P&L from Polymarket data-api for accurate period P&L
+async function _fetchPolyPnl(address, days) {
+  const cacheKey = days + '';
+  if (_polyPnlCache[cacheKey] != null) return _polyPnlCache[cacheKey];
+  try {
+    // Polymarket's data-api accepts startDate/endDate for P&L calculation
+    const end = new Date();
+    const start = new Date(); start.setDate(start.getDate() - days);
+    const startStr = start.toISOString().slice(0, 10);
+    const endStr = end.toISOString().slice(0, 10);
+    const url = `https://data-api.polymarket.com/profit-loss?user=${address.toLowerCase()}&startDate=${startStr}&endDate=${endStr}`;
+    const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (r.ok) {
+      const data = await r.json();
+      // API returns array of daily snapshots or a summary — handle both
+      let pnl = null;
+      if (typeof data === 'number') pnl = data;
+      else if (Array.isArray(data) && data.length > 0) {
+        // Sum daily P&L changes, or use last cumulative value
+        const last = data[data.length - 1];
+        const first = data[0];
+        if (last && last.pnl != null) pnl = parseFloat(last.pnl) - (first && first.pnl != null ? parseFloat(first.pnl) : 0);
+        else if (last && last.profit != null) pnl = parseFloat(last.profit);
+      }
+      else if (data && data.pnl != null) pnl = parseFloat(data.pnl);
+      else if (data && data.profit != null) pnl = parseFloat(data.profit);
+      if (pnl != null && !isNaN(pnl)) {
+        _polyPnlCache[cacheKey] = pnl;
+        return pnl;
+      }
+    }
+  } catch (e) { console.warn('[polyPnl]', e.message); }
+  return null; // fallback to local calc
+}
+
+async function setPnlPeriod(period) {
   _pnlPeriod = period;
   // Update tab active states
   ['1d','1w','1m','all'].forEach(p => {
@@ -14585,18 +14622,20 @@ function setPnlPeriod(period) {
 
   const dayMap = { '1d': 1, '1w': 7, '1m': 30, 'all': 9999 };
   const days = dayMap[period] || 30;
-  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - days);
-  const cutoffStr = cutoff.toISOString().slice(0, 10);
 
-  // Filter positions by period for P&L recalc
-  const filtered = period === 'all' ? positions : positions.filter(p => {
-    const d = (p.end_date || p.resolved_at || p.created_at || '').slice(0, 10);
-    return d >= cutoffStr;
-  });
+  // Try to get accurate P&L from Polymarket's API first
+  let periodPnl = null;
+  if (_polyWalletAddress && period !== 'all') {
+    periodPnl = await _fetchPolyPnl(_polyWalletAddress, days);
+  }
 
-  // Recalc period P&L
-  let periodPnl = 0;
-  filtered.forEach(p => { if (p.pnl != null) periodPnl += p.pnl; });
+  // Fallback: use local cashPnl sum (for 'all' or if API fails)
+  if (periodPnl == null) {
+    periodPnl = 0;
+    positions.forEach(p => { if (p.pnl != null) periodPnl += parseFloat(p.pnl); });
+    // For 'all' period, add closed-trade P&L too
+    if (period === 'all') periodPnl += (window._realizedPnLFromActivity || 0);
+  }
 
   const pnlEl = document.getElementById('psSummaryPnl');
   if (pnlEl) {
