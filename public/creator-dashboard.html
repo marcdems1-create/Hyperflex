@@ -16003,7 +16003,37 @@ async function confirmTrade() {
   const proxyAddress = localStorage.getItem('hf_poly_wallet');
 
   if (!apiKey || !apiSecret || !apiPassphrase) {
-    errEl.textContent = 'Connect Wallet on a market page first to derive API keys';
+    // Auto-derive CLOB API keys if wallet is connected but keys not yet derived
+    if (window._connectedWallet && window.ethereum) {
+      errEl.textContent = 'Deriving trading keys — please sign the wallet prompt...';
+      errEl.style.color = 'var(--gold)';
+      errEl.style.display = 'block';
+      btn.disabled = true;
+      btn.textContent = 'Enabling trading...';
+      try {
+        await derivePolymarketApiKey();
+        // Check if keys were derived successfully
+        const newKey = localStorage.getItem('poly_api_key');
+        const newSecret = localStorage.getItem('poly_api_secret');
+        const newPass = localStorage.getItem('poly_api_passphrase');
+        if (newKey && newSecret && newPass) {
+          errEl.style.display = 'none';
+          errEl.style.color = '';
+          btn.disabled = false;
+          btn.textContent = _tradeModalData?.mode === 'sell' ? 'Sell' : ('Buy ' + (_tradeModalData?.selectedSide || 'Yes'));
+          showToast('Trading enabled! Try your order again.', 'success');
+          return;
+        }
+      } catch(e) {
+        console.warn('[auto-derive]', e.message);
+      }
+      errEl.textContent = 'Could not derive keys. Connect MetaMask and try again.';
+      errEl.style.color = '#ef4444';
+      btn.disabled = false;
+      btn.textContent = _tradeModalData?.mode === 'sell' ? 'Sell' : ('Buy ' + (_tradeModalData?.selectedSide || 'Yes'));
+      return;
+    }
+    errEl.textContent = 'Connect MetaMask wallet first to enable trading';
     errEl.style.display = 'block';
     return;
   }
