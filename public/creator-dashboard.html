@@ -12929,7 +12929,8 @@ async function loadManifoldPositions(forceRefresh) {
         meta: (p.shares||0).toFixed(1)+' shares' + (endDate ? ' · Exp '+endDate : ''),
         pnl: p.pnl_pct!=null ? p.pnl_pct : null, pnlIsPercent: true,
         url: buildMarketUrl({ url: p.market_url, question: p.question, platform: 'manifold' }), accentColor:'#34d399',
-        posData:{question:p.question,side:p.side,platform:'manifold',current_price:p.current_price,pnl_pct:p.pnl_pct||null,cash_value:p.cash_value,market_url:p.market_url}
+        posData:{question:p.question,side:p.side,platform:'manifold',current_price:p.current_price,pnl_pct:p.pnl_pct||null,cash_value:p.cash_value,market_url:p.market_url},
+        idPrefix:'mani'
       });
     }).join('');
 
@@ -13242,7 +13243,8 @@ async function loadPolymarketPositions(forceRefresh) {
       meta: (p.shares||0).toFixed(2)+' shares',
       pnl: p.pnl!=null?p.pnl:null,
       url: buildMarketUrl({ url: p.market_url, slug: p.slug || p.eventSlug, question: p.question }), accentColor:'#7c3aed',
-      posData:{question:p.question,side:p.side,platform:'polymarket',probability:p.current_price,current_price:p.current_price,pnl:p.pnl||null,pnl_pct:p.pnl_pct||null,shares:p.shares,cost_basis:p.cost_basis||0,cash_value:p.cash_value||0,avg_cost:p.avg_cost||null,icon:p.icon||null,end_date:p.end_date||null,whale:p.whale||null,market_url:p.market_url,slug:p.slug||p.eventSlug||null,token_id:p.token_id||null,condition_id:p.condition_id||p.id||null,id:p.id}
+      posData:{question:p.question,side:p.side,platform:'polymarket',probability:p.current_price,current_price:p.current_price,pnl:p.pnl||null,pnl_pct:p.pnl_pct||null,shares:p.shares,cost_basis:p.cost_basis||0,cash_value:p.cash_value||0,avg_cost:p.avg_cost||null,icon:p.icon||null,end_date:p.end_date||null,whale:p.whale||null,market_url:p.market_url,slug:p.slug||p.eventSlug||null,token_id:p.token_id||null,condition_id:p.condition_id||p.id||null,id:p.id},
+      idPrefix:'poly'
     });}).join('');
 
     const ts = new Date().toLocaleTimeString();
@@ -15296,7 +15298,8 @@ function updateAllPositionsTab() {
             pnl: p.pnl != null ? p.pnl : null,
             url: buildMarketUrl({ url: p.market_url, slug: p.slug || p.eventSlug, question: p.question || p.market_title }),
             accentColor: p._accentColor || 'var(--gold)',
-            posData: { ...p, platform: p._platform }
+            posData: { ...p, platform: p._platform },
+            idPrefix: 'all'
           });
         }).join('');
       }
@@ -15329,12 +15332,14 @@ document.addEventListener('click', function(e) {
   // Don't toggle if clicking a button, link, or trade action inside header
   if (e.target.closest('button') || e.target.closest('a') || e.target.closest('.poly-trade-actions')) return;
   var card = header.closest('.pos-card');
-  if (card) togglePosCard(card.id);
+  if (card) togglePosCard(card);
 });
 
-function togglePosCard(cardId) {
-  var card = document.getElementById(cardId);
+function togglePosCard(cardOrId) {
+  // Accept either a DOM element or a string ID
+  var card = typeof cardOrId === 'string' ? document.getElementById(cardOrId) : cardOrId;
   if (!card) return;
+  var cardId = card.id;
   var body = card.querySelector('.pos-card-body');
   var chevron = card.querySelector('.pos-card-chevron');
   if (!body) return;
@@ -15351,7 +15356,7 @@ function togglePosCard(cardId) {
     _posCardExpandedSet.add(cardId);
   }
 }
-function renderPositionCard({question,side,pct,meta,pnl,pnlLabel,pnlIsPercent,url,accentColor,posData}){
+function renderPositionCard({question,side,pct,meta,pnl,pnlLabel,pnlIsPercent,url,accentColor,posData,idPrefix}){
   const isYes=side==='YES';
   const sideColor=isYes?'#22c55e':'#f87171';
   const sideBg=isYes?'rgba(34,197,94,0.10)':'rgba(248,113,113,0.10)';
@@ -15401,7 +15406,7 @@ function renderPositionCard({question,side,pct,meta,pnl,pnlLabel,pnlIsPercent,ur
   const tradeActionsHtml=isPoly?`<div class="poly-trade-actions" style="display:${walletConnected?'flex':'none'};gap:8px;margin-left:auto"><button onclick="event.stopPropagation();openTradeModal(window._posDataMap['${_posKey}'],'buy')" style="background:rgba(34,197,94,0.10);border:1px solid rgba(34,197,94,0.30);border-radius:6px;padding:6px 14px;font-size:11px;color:#22c55e;cursor:pointer;font-family:var(--mono);font-weight:700;transition:all .15s;min-height:36px" onmouseover="this.style.background='rgba(34,197,94,0.20)'" onmouseout="this.style.background='rgba(34,197,94,0.10)'">Buy</button><button onclick="event.stopPropagation();openTradeModal(window._posDataMap['${_posKey}'],'sell')" style="background:rgba(248,113,113,0.10);border:1px solid rgba(248,113,113,0.30);border-radius:6px;padding:6px 14px;font-size:11px;color:#f87171;cursor:pointer;font-family:var(--mono);font-weight:700;transition:all .15s;min-height:36px" onmouseover="this.style.background='rgba(248,113,113,0.20)'" onmouseout="this.style.background='rgba(248,113,113,0.10)'">Sell</button></div>`:'';
 
   // Unique card ID for collapse state
-  const cardId = 'pos-' + (posData?.condition_id || posData?.market_slug || Math.random().toString(36).slice(2,8));
+  const cardId = (idPrefix||'pos') + '-' + (posData?.condition_id || posData?.market_slug || Math.random().toString(36).slice(2,8));
   const isExpanded = _posCardExpandedSet.has(cardId);
 
   return `<div id="${cardId}" class="pos-card" style="background:var(--cream);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:10px;transition:border-color .2s,box-shadow .2s" onmouseover="this.style.borderColor='${accentColor}50';this.style.boxShadow='0 2px 16px rgba(0,0,0,0.2)'" onmouseout="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
