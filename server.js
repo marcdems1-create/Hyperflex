@@ -24174,6 +24174,8 @@ app.post('/api/polymarket/derive-api-key', optionalAuth, async (req, res) => {
     }
 
     console.log(`[polymarket derive-api-key] user=${req.userId} address=${address.slice(0,8)}... proxy=${(proxyAddress||'none').slice(0,8)}... derived=${_derivedAddresses.length} keys: ${JSON.stringify(Object.keys(data))}`);
+    console.log(`[polymarket derive-api-key] FINAL proxy address being returned: ${proxyAddress || 'NONE'}`);
+    console.log(`[polymarket derive-api-key] Derived addresses: safe=${_derivedAddresses[0]?.slice(0,10)}... proxy=${_derivedAddresses[1]?.slice(0,10)}...`);
 
     // Save proxy address to user profile if we got one
     if (proxyAddress && req.userId && pool) {
