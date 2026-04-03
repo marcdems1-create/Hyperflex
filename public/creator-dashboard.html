@@ -12315,7 +12315,8 @@ function renderBestWorstCalls() {
         const q = (p.question || p.title || 'Unknown').length > 47 ? (p.question || p.title || '').slice(0, 47) + '...' : (p.question || p.title || 'Unknown');
         const platform = p._platform || 'unknown';
         const price = p.yes_price || p.current_price || 0.5;
-        return '<div style="padding:10px 12px;border-bottom:1px solid #2a2825;display:flex;align-items:center;gap:10px">' +
+        const mUrl = buildMarketUrl({ url: p.market_url, slug: p.slug || p.eventSlug, question: p.question || p.title, platform: platform });
+        return '<a href="' + mUrl + '" target="_blank" rel="noopener" style="display:flex;text-decoration:none;padding:10px 12px;border-bottom:1px solid #2a2825;align-items:center;gap:10px;transition:background .15s" onmouseover="this.style.background=\'rgba(255,255,255,0.02)\'" onmouseout="this.style.background=\'transparent\'">' +
           '<div style="flex:1;min-width:0">' +
             '<div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + q + '</div>' +
             '<div style="display:flex;align-items:center;gap:6px;margin-top:4px">' +
@@ -12324,7 +12325,7 @@ function renderBestWorstCalls() {
             '</div>' +
           '</div>' +
           '<div style="font-family:var(--mono);font-size:14px;font-weight:900;color:#22c55e;white-space:nowrap">ROI: +' + Math.round(p._roi) + '%</div>' +
-        '</div>';
+        '</a>';
       }).join('');
 
       // Right box: Top 3 positions at risk (price moved against entry)
@@ -12350,7 +12351,8 @@ function renderBestWorstCalls() {
           const q = (p.question || p.title || 'Unknown').length > 47 ? (p.question || p.title || '').slice(0, 47) + '...' : (p.question || p.title || 'Unknown');
           const platform = p._platform || 'unknown';
           const pnlSign = p._unrealizedPnl >= 0 ? '+' : '';
-          return '<div style="padding:10px 12px;border-bottom:1px solid #2a2825;display:flex;align-items:center;gap:10px">' +
+          const mUrl = buildMarketUrl({ url: p.market_url, slug: p.slug || p.eventSlug, question: p.question || p.title, platform: platform });
+          return '<a href="' + mUrl + '" target="_blank" rel="noopener" style="display:flex;text-decoration:none;padding:10px 12px;border-bottom:1px solid #2a2825;align-items:center;gap:10px;transition:background .15s" onmouseover="this.style.background=\'rgba(255,255,255,0.02)\'" onmouseout="this.style.background=\'transparent\'">' +
             '<div style="flex:1;min-width:0">' +
               '<div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + q + '</div>' +
               '<div style="display:flex;align-items:center;gap:6px;margin-top:4px">' +
@@ -12359,7 +12361,7 @@ function renderBestWorstCalls() {
               '</div>' +
             '</div>' +
             '<div style="font-family:var(--mono);font-size:14px;font-weight:900;color:#ef4444;white-space:nowrap">' + pnlSign + '$' + Math.abs(p._unrealizedPnl).toFixed(2) + '</div>' +
-          '</div>';
+          '</a>';
         }).join('');
       } else {
         worstList.innerHTML = '<div style="padding:16px;text-align:center;color:var(--dim);font-size:12px;font-family:var(--mono);line-height:1.6">No positions at risk \u2014 looking good!</div>';
@@ -12385,7 +12387,10 @@ function renderBestWorstCalls() {
     const sideBg = (p.side || '').toUpperCase() === 'YES' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)';
     const sideColor = (p.side || '').toUpperCase() === 'YES' ? '#22c55e' : '#ef4444';
     const platform = p._platform || 'unknown';
-    return '<div style="padding:10px 12px;border-bottom:1px solid #2a2825;display:flex;align-items:center;gap:10px">' +
+    const costBasis = parseFloat(p.cost_basis) || parseFloat(p.initialValue) || 0;
+    const roi = costBasis > 0 ? Math.round(((p.pnl || 0) / costBasis) * 100) : null;
+    const mUrl = buildMarketUrl({ url: p.market_url, slug: p.slug || p.eventSlug, question: p.question || p.title, platform: platform });
+    return '<a href="' + mUrl + '" target="_blank" rel="noopener" style="display:flex;text-decoration:none;padding:10px 12px;border-bottom:1px solid #2a2825;align-items:center;gap:10px;transition:background .15s" onmouseover="this.style.background=\'rgba(255,255,255,0.02)\'" onmouseout="this.style.background=\'transparent\'">' +
       '<div style="flex:1;min-width:0">' +
         '<div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + q + '</div>' +
         '<div style="display:flex;align-items:center;gap:6px;margin-top:4px">' +
@@ -12393,8 +12398,10 @@ function renderBestWorstCalls() {
           '<span style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:capitalize">' + platform + '</span>' +
         '</div>' +
       '</div>' +
-      '<div style="font-family:var(--mono);font-size:14px;font-weight:900;color:' + pnlColor + ';white-space:nowrap">' + sign + '$' + Math.abs(p.pnl || 0).toFixed(2) + '</div>' +
-    '</div>';
+      '<div style="text-align:right"><div style="font-family:var(--mono);font-size:14px;font-weight:900;color:' + pnlColor + ';white-space:nowrap">' + sign + '$' + Math.abs(p.pnl || 0).toFixed(2) + '</div>' +
+      (roi != null ? '<div style="font-family:var(--mono);font-size:9px;color:' + pnlColor + ';opacity:0.7">' + (roi >= 0 ? '+' : '') + roi + '% ROI</div>' : '') +
+      '</div>' +
+    '</a>';
   }
 
   bestList.innerHTML = best.length > 0 ? best.map(renderCallCard).join('') : '<div style="padding:16px;text-align:center;color:var(--dim);font-size:12px;font-family:var(--mono)">No winning calls yet</div>';
@@ -12868,7 +12875,7 @@ async function loadManifoldPositions(forceRefresh) {
         pct: Math.round((p.current_price || 0) * 100),
         meta: (p.shares||0).toFixed(1)+' shares' + (endDate ? ' · Exp '+endDate : ''),
         pnl: p.pnl_pct!=null ? p.pnl_pct : null, pnlIsPercent: true,
-        url: p.market_url||'#', accentColor:'#34d399',
+        url: buildMarketUrl({ url: p.market_url, question: p.question, platform: 'manifold' }), accentColor:'#34d399',
         posData:{question:p.question,side:p.side,platform:'manifold',current_price:p.current_price,pnl_pct:p.pnl_pct||null,cash_value:p.cash_value,market_url:p.market_url}
       });
     }).join('');
@@ -13077,7 +13084,7 @@ async function loadPolymarketPositions(forceRefresh) {
         shares: parseFloat(p.size)||0, current_price: parseFloat(p.curPrice)||0,
         cash_value: parseFloat(p.currentValue)||0, cost_basis: parseFloat(p.initialValue)||0,
         pnl: parseFloat(p.cashPnl)||0, pnl_pct: parseFloat(p.percentPnl)||0,
-        market_url: (typeof polyRef==='function'?polyRef:function(u){return u})(p.slug ? 'https://polymarket.com/event/'+(p.eventSlug||p.slug) : 'https://polymarket.com'),
+        market_url: (typeof polyRef==='function'?polyRef:function(u){return u})(buildMarketUrl({ slug: p.eventSlug||p.slug, question: p.title||p.question })),
         icon: p.icon||null, end_date: p.endDateIso||p.endDate||null, platform: 'polymarket',
         avg_cost: parseFloat(p.size)>0 ? Math.round(parseFloat(p.initialValue)/parseFloat(p.size)*100)/100 : null
       }));
@@ -13180,7 +13187,7 @@ async function loadPolymarketPositions(forceRefresh) {
       side: p.side, pct: Math.round((p.current_price||0)*100),
       meta: (p.shares||0).toFixed(2)+' shares',
       pnl: p.pnl!=null?p.pnl:null,
-      url: p.market_url||'#', accentColor:'#7c3aed',
+      url: buildMarketUrl({ url: p.market_url, slug: p.slug || p.eventSlug, question: p.question }), accentColor:'#7c3aed',
       posData:{question:p.question,side:p.side,platform:'polymarket',probability:p.current_price,current_price:p.current_price,pnl:p.pnl||null,pnl_pct:p.pnl_pct||null,shares:p.shares,cost_basis:p.cost_basis||0,cash_value:p.cash_value||0,avg_cost:p.avg_cost||null,icon:p.icon||null,end_date:p.end_date||null,whale:p.whale||null,market_url:p.market_url,token_id:p.token_id||null,condition_id:p.condition_id||p.id||null,id:p.id}
     });}).join('');
 
@@ -13448,7 +13455,7 @@ function renderBreakingList() {
     const changeFmt = changePct >= 10 ? changePct.toFixed(0) : changePct.toFixed(1);
     const price = m.current_price != null ? m.current_price + '%' : '—';
     const vol = m.volume ? (m.volume >= 1000000 ? '$' + (m.volume / 1000000).toFixed(1) + 'M' : m.volume >= 1000 ? '$' + Math.round(m.volume / 1000) + 'K' : '$' + Math.round(m.volume)) : '';
-    const mktUrl = m.slug ? '/market/' + m.slug : (window.hfxMarketUrl ? window.hfxMarketUrl(m.url) : m.url);
+    const mktUrl = buildMarketUrl({ url: m.url, slug: m.slug, question: m.question });
     const catColors = { politics:'#a78bfa', crypto:'#f59e0b', sports:'#22c55e', world:'#60a5fa', finance:'#10b981', tech:'#818cf8' };
     const catColor = catColors[m.category] || 'var(--gold)';
     const catPill = m.category && m.category !== 'other' ? `<span style="font-family:var(--mono);font-size:8px;font-weight:700;padding:2px 8px;border-radius:3px;background:${catColor}15;color:${catColor};text-transform:uppercase;letter-spacing:.06em">${m.category}</span>` : '';
@@ -13487,21 +13494,40 @@ function renderBreakingList() {
 }
 let _qtSearchTimer = null;
 
+// Build a valid market URL from whatever data we have — never returns '#' or bare domain
+function buildMarketUrl(data) {
+  // data can be: { url, market_url, slug, question, conditionId, platform }
+  const url = data.url || data.market_url || '';
+  // If we already have a specific market URL (not bare domain), use it
+  if (url && url !== '#' && !/^https?:\/\/[^/]+\/?$/.test(url)) return url;
+  // Try to construct from slug
+  if (data.slug) {
+    if ((data.platform || '').toLowerCase() === 'kalshi') return 'https://kalshi.com/markets/' + data.slug;
+    return 'https://polymarket.com/event/' + data.slug;
+  }
+  // Construct Polymarket search URL from question — always links to something useful
+  if (data.question) {
+    const q = (data.question || '').slice(0, 100);
+    return 'https://polymarket.com/markets?_q=' + encodeURIComponent(q);
+  }
+  return url || '';
+}
+
 function qtTradeBtn(url, label, color, extraData) {
-  if (!url) return '';
-  if (!url.startsWith('https://polymarket.com')) return '';
-  if (url === 'https://polymarket.com' || url === 'https://polymarket.com/') return '';
+  // Accept any valid market URL (Polymarket, Kalshi, Manifold, etc.)
+  let finalUrl = url || '';
+  // If URL is bare domain or empty, try to build from extraData
+  if (!finalUrl || finalUrl === '#' || /^https?:\/\/[^/]+\/?$/.test(finalUrl)) {
+    if (extraData) {
+      finalUrl = buildMarketUrl({ url: finalUrl, question: extraData.question, slug: extraData.slug, platform: extraData.platform });
+    }
+    if (!finalUrl || finalUrl === '#' || /^https?:\/\/[^/]+\/?$/.test(finalUrl)) return '';
+  }
   const btnLabel = label || 'View Market →';
   const bg = color || '#c9920d';
   const fg = (bg === 'var(--gold)' || color === '#c9920d') ? '#141412' : '#fff';
-  // Link directly to HFX market page
-  const hfxUrl = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(url) : null;
-  if (hfxUrl && hfxUrl !== '#') {
-    return `<a href="${hfxUrl}" style="display:inline-block;text-decoration:none;background:${bg};color:${fg};border:none;border-radius:6px;padding:7px 14px;font-family:var(--mono);font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap">${btnLabel}</a>`;
-  }
-  // Fallback: open on Polymarket
-  const safeUrl = url.replace(/'/g, "\\'");
-  const refUrl = (typeof polyRef === 'function' ? polyRef(safeUrl) : safeUrl).replace(/'/g, "\\'");
+  const safeUrl = finalUrl.replace(/'/g, "\\'");
+  const refUrl = (typeof polyRef === 'function' && safeUrl.includes('polymarket.com') ? polyRef(safeUrl) : safeUrl).replace(/'/g, "\\'");
   return `<a href="${refUrl}" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none;background:${bg};color:${fg};border:none;border-radius:6px;padding:7px 14px;font-family:var(--mono);font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap">${btnLabel}</a>`;
 }
 
@@ -13523,9 +13549,8 @@ function renderHotMarkets() {
   if (!top.length) { grid.innerHTML = '<div style="text-align:center;padding:20px;color:var(--dim);font-size:13px;grid-column:1/-1">No markets in this category.</div>'; return; }
   grid.innerHTML = top.map(function(m) {
     var price = Math.round((m.yes_price || 0.5) * 100);
-    var rawUrl = (typeof polyRef==='function'?polyRef:function(u){return u})(m.url || 'https://polymarket.com');
-    var hfxUrl = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(rawUrl) : '#';
-    var cardLink = hfxUrl && hfxUrl !== '#' ? hfxUrl : rawUrl;
+    var rawUrl = buildMarketUrl({ url: m.url, slug: m.slug, question: m.question });
+    var cardLink = (typeof polyRef==='function' && rawUrl.includes('polymarket.com')) ? polyRef(rawUrl) : rawUrl;
     var cat = (m.category || 'other').toUpperCase();
     var vol = m.volume >= 1e6 ? '$' + (m.volume / 1e6).toFixed(1) + 'M' : m.volume >= 1e3 ? '$' + Math.round(m.volume / 1e3) + 'K' : '$' + (m.volume || 0);
     var whales = m.whale_count || 0;
@@ -13912,11 +13937,8 @@ async function loadCrystalBallPick() {
     confPct = Math.min(95, confPct);
     const confColor = confPct >= 80 ? '#22c55e' : confPct >= 60 ? '#c9920d' : '#ef4444';
     const confLabel = confPct >= 80 ? 'HIGH' : confPct >= 60 ? 'MEDIUM' : 'LOW';
-    let url = top.market_url || (top.market && top.market.url) || top.url || top.polymarket_url || '';
-    if (url === 'https://polymarket.com' || url === 'https://polymarket.com/') {
-      const q = (top.market && top.market.question) || top.prediction || '';
-      if (q) { url = 'https://polymarket.com/event/' + q.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').substring(0, 80); }
-    }
+    const rawCbUrl = top.market_url || (top.market && top.market.url) || top.url || top.polymarket_url || '';
+    let url = buildMarketUrl({ url: rawCbUrl, slug: top.slug || (top.market && top.market.slug), question: (top.market && top.market.question) || top.prediction || top.question });
     const marketName = top.market_name || (top.market && top.market.question) || top.question || '';
     const typeBadge = top.type || 'EDGE SCORE';
     const trade = top.trade || {};
@@ -13965,7 +13987,7 @@ async function loadNewMarkets() {
     if (!markets.length) { grid.innerHTML = '<div style="text-align:center;padding:20px;color:var(--dim);font-size:12px;grid-column:1/-1">No new markets right now</div>'; return; }
     grid.innerHTML = markets.slice(0, 8).map(m => {
       const price = m.yes_price != null ? Math.round(m.yes_price * 100) : null;
-      const mktUrl = m.slug ? '/market/' + m.slug : '#';
+      const mktUrl = buildMarketUrl({ url: m.url, slug: m.slug, question: m.question });
       const timeAgo = m.hours_ago != null ? (m.hours_ago < 1 ? 'Just now' : m.hours_ago < 24 ? m.hours_ago + 'h ago' : Math.round(m.hours_ago / 24) + 'd ago') : '';
       const vol = m.volume ? (m.volume >= 1000000 ? '$' + (m.volume / 1000000).toFixed(1) + 'M' : m.volume >= 1000 ? '$' + Math.round(m.volume / 1000) + 'K' : '$' + Math.round(m.volume)) : '';
 
@@ -14056,9 +14078,15 @@ async function doQuickTradeSearch() {
       const showOdds = yesPct != null && yesPct > 0 && yesPct < 100;
       const noPct = showOdds ? 100 - yesPct : 50;
       const displayYes = showOdds ? yesPct : null;
-      const url = m.market_url || m.url || m.polymarket_url || '';
+      const rawUrl = m.market_url || m.url || m.polymarket_url || '';
+      const mktUrl = buildMarketUrl({ url: rawUrl, slug: m.slug, question: m.question || m.title, platform: m.platform });
       const platform = m.platform || 'Polymarket';
-      return `<div style="background:#0f0e0c;border:1px solid #2a2825;border-radius:12px;padding:16px;margin-bottom:8px">
+      // Trade context: entry cost and ROI
+      const entry = displayYes != null ? (displayYes <= 50 ? displayYes : (100 - displayYes)) : null;
+      const profit = entry != null ? 100 - entry : null;
+      const roi = entry != null && entry > 0 && entry < 95 ? Math.round((profit / entry) * 100) : null;
+      const tradeSide = displayYes != null ? (displayYes <= 50 ? 'YES' : 'NO') : null;
+      return `<a href="${mktUrl}" target="_blank" rel="noopener" style="display:block;text-decoration:none;background:#0f0e0c;border:1px solid #2a2825;border-radius:12px;padding:16px;margin-bottom:8px;transition:border-color .15s" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='#2a2825'">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
           <span style="font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:6px;background:rgba(124,58,237,0.12);color:#a78bfa;border:1px solid rgba(124,58,237,0.3)">${escHtmlDash(platform)}</span>
         </div>
@@ -14072,10 +14100,17 @@ async function doQuickTradeSearch() {
           <span style="font-family:var(--mono);font-size:11px;color:var(--dim)">/</span>
           <span style="font-family:var(--mono);font-size:11px;color:#ef4444;font-weight:700">${noPct}%</span>
         </div>` : `<div style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:12px">Odds not available</div>`}
+        ${roi != null && tradeSide ? `<div style="display:flex;gap:12px;align-items:center;padding:6px 10px;background:rgba(255,255,255,.03);border-radius:6px;margin-bottom:10px">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:${tradeSide==='YES'?'#22c55e':'#ef4444'}">${tradeSide}</span>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--text)">${entry}\u00A2</span>
+          <span style="color:var(--dim);font-size:10px">\u2192</span>
+          <span style="font-family:var(--mono);font-size:11px;color:#22c55e">+${profit}\u00A2</span>
+          <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#22c55e">+${roi}% ROI</span>
+        </div>` : ''}
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          ${url ? qtTradeBtn(url, 'Trade \u2192', '#c9920d') : ''}
+          <span style="display:inline-block;background:#c9920d;color:#141412;border:none;border-radius:6px;padding:7px 14px;font-family:var(--mono);font-size:10px;font-weight:700;white-space:nowrap">Trade \u2192</span>
         </div>
-      </div>`;
+      </a>`;
     }).join('');
   } catch (e) {
     resultsEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--dim);font-size:13px">Search error: ' + escHtmlDash(e.message) + '</div>';
@@ -14093,7 +14128,8 @@ async function loadWhaleIndexPicks() {
     const picks = (Array.isArray(d) ? d : (d.picks || d.whales || d.data || [])).slice(0, 5);
     if (!picks.length) { container.innerHTML = '<div style="text-align:center;padding:32px;color:var(--dim);font-size:13px">Whale index unavailable.</div>'; return; }
     container.innerHTML = picks.map((p, i) => {
-      const url = p.market_url || p.url || p.polymarket_url || '';
+      const rawUrl = p.market_url || p.url || p.polymarket_url || '';
+      const mktUrl = buildMarketUrl({ url: rawUrl, slug: p.slug, question: p.market || p.question || p.title });
       const whaleCount = p.whale_count || p.whales || 0;
       const side = (p.consensus_side || p.side || 'YES').toUpperCase();
       const pct = Math.round(p.consensus_pct || p.probability || p.pct || 0);
@@ -14107,11 +14143,12 @@ async function loadWhaleIndexPicks() {
       const roi = entry > 0 && entry < 95 ? Math.round((profit / entry) * 100) : 0;
       const capital = p.total_capital || p.capital || 0;
       const capStr = capital >= 1e6 ? '$' + (capital / 1e6).toFixed(1) + 'M' : capital >= 1e3 ? '$' + Math.round(capital / 1e3) + 'K' : '';
-      return `<div style="background:#0f0e0c;border:1px solid ${i === 0 ? 'var(--gold)' : '#2a2825'};border-radius:10px;padding:14px 16px;${i === 0 ? 'position:relative;overflow:hidden' : ''}">
+      return `<a href="${mktUrl}" target="_blank" rel="noopener" style="display:block;text-decoration:none;background:#0f0e0c;border:1px solid ${i === 0 ? 'var(--gold)' : '#2a2825'};border-radius:10px;padding:14px 16px;transition:border-color .15s;${i === 0 ? 'position:relative;overflow:hidden' : ''}" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='${i===0?'var(--gold)':'#2a2825'}'">
         ${i === 0 ? '<div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--gold),transparent)"></div>' : ''}
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
           <span style="font-family:var(--mono);font-size:9px;padding:2px 8px;border-radius:4px;background:rgba(201,146,13,0.12);color:var(--gold);font-weight:700">${whaleCount} whale${whaleCount !== 1 ? 's' : ''}${capStr ? ' \u00B7 ' + capStr : ''}</span>
           <span style="font-family:var(--mono);font-size:11px;font-weight:800;color:${sideColor}">${side}</span>
+          <span style="font-family:var(--mono);font-size:11px;font-weight:900;color:var(--text);margin-left:auto">${pricePct}%</span>
         </div>
         <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;font-weight:600;color:#fff;margin-bottom:8px;line-height:1.35">${escHtmlDash(p.market || p.question || p.title || '')}</div>
         ${entry > 0 && entry < 95 ? `<div style="display:flex;gap:12px;align-items:center;padding:6px 10px;background:rgba(255,255,255,.03);border-radius:6px;margin-bottom:10px">
@@ -14120,8 +14157,8 @@ async function loadWhaleIndexPicks() {
           <span style="font-family:var(--mono);font-size:12px;color:#22c55e">+${profit}\u00A2</span>
           <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:#22c55e">+${roi}% ROI</span>
         </div>` : ''}
-        ${url ? `<div>${qtTradeBtn(url, 'Trade \u2192', '#c9920d', {question: p.market||p.question||p.title||'', side: side, current_price: pricePct/100, market_url: url, token_id: p.token_id||p.conditionId||''})}</div>` : ''}
-      </div>`;
+        <div><span style="display:inline-block;background:#c9920d;color:#141412;border:none;border-radius:6px;padding:7px 14px;font-family:var(--mono);font-size:10px;font-weight:700;white-space:nowrap">Trade \u2192</span></div>
+      </a>`;
     }).join('');
   } catch (e) {
     container.innerHTML = '<div style="text-align:center;padding:32px;color:var(--dim);font-size:13px">Whale index unavailable.</div>';
@@ -14151,21 +14188,26 @@ async function loadExpiringMarkets() {
       const mins = Math.floor((diff % 3600000) / 60000);
       const countdown = hrs > 0 ? hrs + 'h ' + mins + 'm' : mins + 'm';
       const price = Math.round((m.yes_price || m.probability || m.price || 0.5) * 100);
-      const url = m.market_url || m.url || m.polymarket_url || '';
-      return `<div style="background:#0f0e0c;border:1px solid #2a2825;border-radius:12px;padding:16px">
+      const mktUrl = buildMarketUrl({ url: m.market_url || m.url, slug: m.slug, question: m.question || m.title });
+      // Trade context
+      const entry = price <= 50 ? price : (100 - price);
+      const profit = 100 - entry;
+      const roi = entry > 0 && entry < 95 ? Math.round((profit / entry) * 100) : 0;
+      return `<a href="${mktUrl}" target="_blank" rel="noopener" style="display:block;text-decoration:none;background:#0f0e0c;border:1px solid #2a2825;border-radius:12px;padding:16px;transition:border-color .15s" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='#2a2825'">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
           <div style="flex:1;min-width:0">
             <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px;line-height:1.4">${escHtmlDash(m.question || m.title || '')}</div>
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
               <span style="font-family:var(--mono);font-size:11px;padding:3px 10px;border-radius:20px;background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.3);font-weight:700">Expires in ${countdown}</span>
-              <span style="font-family:var(--mono);font-size:12px;color:var(--text);font-weight:700">${price}c</span>
+              <span style="font-family:var(--mono);font-size:12px;color:var(--text);font-weight:700">${price}%</span>
+              ${roi > 0 ? `<span style="font-family:var(--mono);font-size:10px;color:#22c55e;font-weight:700">${entry}\u00A2 \u2192 +${roi}% ROI</span>` : ''}
             </div>
           </div>
           <div style="flex-shrink:0">
-            ${url ? qtTradeBtn(url, 'Trade \u2192', '#c9920d') : ''}
+            <span style="display:inline-block;background:#c9920d;color:#141412;border:none;border-radius:6px;padding:7px 14px;font-family:var(--mono);font-size:10px;font-weight:700;white-space:nowrap">Trade \u2192</span>
           </div>
         </div>
-      </div>`;
+      </a>`;
     }).join('');
   } catch (e) {
     container.innerHTML = '<div style="text-align:center;padding:32px;color:var(--dim);font-size:13px">Expiring markets unavailable.</div>';
@@ -14857,15 +14899,20 @@ function renderResolvedCard(p) {
     : '<span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 10px;border-radius:6px;background:rgba(239,68,68,0.12);color:#ef4444;border:1px solid rgba(239,68,68,0.3)">LOST</span>';
   const sideColor = p.side === 'YES' ? '#22c55e' : '#f87171';
   const sideBg = p.side === 'YES' ? 'rgba(34,197,94,0.08)' : 'rgba(248,113,113,0.08)';
-  const url = p.market_url || '#';
-  return `<div style="display:flex;align-items:center;gap:14px;padding:14px 18px;border-bottom:1px solid #1a1917;transition:background .15s" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background=''">
+  const url = buildMarketUrl({ url: p.market_url, slug: p.slug || p.eventSlug, question: question, platform: p._platform });
+  const costBasis = parseFloat(p.cost_basis) || parseFloat(p.initialValue) || 0;
+  const roi = costBasis > 0 ? ((pnl / costBasis) * 100).toFixed(1) : null;
+  return `<a href="${url}" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:14px;padding:14px 18px;border-bottom:1px solid #1a1917;transition:background .15s;text-decoration:none" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background=''">
     <span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 8px;border-radius:5px;background:${sideBg};color:${sideColor};flex-shrink:0">${p.side || '—'}</span>
-    <div style="flex:1;min-width:0"><a href="${url}" target="_blank" rel="noopener" style="text-decoration:none;color:#e8e4de;font-size:13px;font-weight:600;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtmlDash(question)}</a><div style="font-family:var(--mono);font-size:10px;color:#5a5752;margin-top:3px">${(p.shares||0).toFixed(2)} shares · ${p._platform||''}</div></div>
+    <div style="flex:1;min-width:0"><div style="color:#e8e4de;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtmlDash(question)}</div><div style="font-family:var(--mono);font-size:10px;color:#5a5752;margin-top:3px">${(p.shares||0).toFixed(2)} shares · ${p._platform||''}</div></div>
     <div style="flex-shrink:0;display:flex;align-items:center;gap:10px">
-      <span style="font-family:var(--mono);font-size:14px;font-weight:800;color:${pnlColor}">${pnlStr}</span>
+      <div style="text-align:right">
+        <span style="font-family:var(--mono);font-size:14px;font-weight:800;color:${pnlColor}">${pnlStr}</span>
+        ${roi != null ? `<div style="font-family:var(--mono);font-size:9px;color:${pnlColor};opacity:0.7">${pnl >= 0 ? '+' : ''}${roi}%</div>` : ''}
+      </div>
       ${badge}
     </div>
-  </div>`;
+  </a>`;
 }
 
 function togglePortfolioSection(section) {
@@ -14939,7 +14986,7 @@ function updateAllPositionsTab() {
             pct: Math.round((p.current_price || p.curPrice || p.probability || 0) * 100),
             meta: (p.shares || 0).toFixed(2) + ' shares' + (endDate ? ' · Exp ' + endDate : '') + ' · ' + (p._platform || ''),
             pnl: p.pnl != null ? p.pnl : null,
-            url: p.market_url || '#',
+            url: buildMarketUrl({ url: p.market_url, slug: p.slug || p.eventSlug, question: p.question || p.market_title }),
             accentColor: p._accentColor || 'var(--gold)',
             posData: { ...p, platform: p._platform }
           });
@@ -15190,10 +15237,8 @@ function renderMarketSearchResults(data, el) {
     const label = platform === 'polymarket' ? '🟣 Polymarket' : '🟡 Kalshi';
     const exp = fmtDate(m.close_date || m.end_date);
     const bestBadge = isBest ? '<span style="font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:8px;background:rgba(201,146,13,0.15);color:#c9920d;border:1px solid rgba(201,146,13,0.3);font-weight:700">★ BEST ODDS</span>' : '';
-    const hfxUrl = platform === 'polymarket' && typeof hfxMarketUrl === 'function' ? hfxMarketUrl(m.url) : '#';
-    const hasHfxPage = hfxUrl && hfxUrl !== '#';
-    const cardHref = hasHfxPage ? hfxUrl : (m.url || '#');
-    const cardTarget = hasHfxPage ? '' : ' target="_blank" rel="noopener"';
+    const cardHref = buildMarketUrl({ url: m.url, slug: m.slug, question: m.question, platform: platform });
+    const cardTarget = ' target="_blank" rel="noopener"';
     return `<a href="${cardHref}"${cardTarget} style="display:block;text-decoration:none;background:#0f0e0c;border:1px solid #2a2825;border-radius:10px;padding:14px 16px;margin-bottom:6px;transition:border-color .15s" onmouseover="this.style.borderColor='${color}44'" onmouseout="this.style.borderColor='#2a2825'">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
         <span style="font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:8px;background:${color}15;color:${color};border:1px solid ${color}30">${label}</span>
@@ -15814,10 +15859,10 @@ function openTradeModal(posDataJson, mode) {
   // Set market page link
   const mktLinkEl = document.getElementById('tradeMarketLink');
   if (mktLinkEl) {
-    const mktUrl = pos.market_url || pos.url || '';
-    const hfxLink = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(mktUrl) : '#';
-    mktLinkEl.href = hfxLink;
-    mktLinkEl.style.display = hfxLink && hfxLink !== '#' ? 'block' : 'none';
+    const mktUrl = buildMarketUrl({ url: pos.market_url || pos.url, slug: pos.slug, question: pos.question, platform: pos.platform });
+    mktLinkEl.href = mktUrl;
+    mktLinkEl.target = '_blank';
+    mktLinkEl.style.display = mktUrl ? 'block' : 'none';
   }
 
   // Set side
