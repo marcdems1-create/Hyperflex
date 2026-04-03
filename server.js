@@ -16847,15 +16847,9 @@ app.put('/api/user/wallets', requireAuth, async (req, res) => {
         await dbQuery(`UPDATE users SET ${setClauses.join(', ')} WHERE id = $1`, [req.userId, ...Object.values(updates)]);
       } catch (e) { error = e; }
     } else {
-      if (pool) {
-        const _upd = updates;
-        const _cols = Object.keys(_upd); const _vals = Object.values(_upd);
-        const _set = _cols.map((c, i) => `${c} = $${i + 1}`).join(', ');
-        const _where = [req.userId];
-        await dbQuery(`UPDATE users SET ${_set} WHERE id = $${_vals.length + 1}`, [..._vals, ..._where]);
-      } else {
+      try {
         ({ error } = await supabase.from('users').update(updates).eq('id', req.userId));
-      }
+      } catch (e) { error = e; }
     }
     if (error) throw error;
     res.json({ ok: true, gifted_premium: req._giftedPremium || false });
