@@ -5888,7 +5888,7 @@ Rules:
 Return only valid JSON array, no markdown, no explanation.`;
 
     const message = await anthropic.messages.create({
-      model: 'claude-3-5-haiku-20241022',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
       messages: [{ role: 'user', content: prompt }]
     }, { timeout: 30000 });
@@ -29890,9 +29890,9 @@ async function fetchPythPolymarkets() {
     // Fetch via gamma API events
     for (const term of searchTerms) {
       try {
-        const r = await fetch(`https://gamma-api.polymarket.com/events?active=true&closed=false&limit=20&title=${encodeURIComponent(term)}`, {
+        const r = await fetch(`https://gamma-api.polymarket.com/events?active=true&closed=false&limit=20&_q=${encodeURIComponent(term)}`, {
           signal: AbortSignal.timeout(8000),
-          headers: { 'User-Agent': 'HYPERFLEX/1.0' }
+          headers: { Accept: 'application/json', 'User-Agent': 'HYPERFLEX/1.0' }
         });
         if (!r.ok) continue;
         const events = await r.json();
