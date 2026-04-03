@@ -24050,40 +24050,89 @@ app.get('/api/whale-profile/:address', async (req, res) => {
 // POLYMARKET CLOB TRADING — API key derivation + HMAC order signing
 // ════════════════════════════════════════════════════════════
 
-// POST /api/polymarket/derive-api-key — derive CLOB API key from wallet signature
+// POST /api/polymarket/derive-api-key — derive or CREATE CLOB API key from wallet signature
+// Uses create_or_derive pattern: try GET /auth/derive-api-key first, fall back to POST /auth/api-key
 app.post('/api/polymarket/derive-api-key', optionalAuth, async (req, res) => {
   const { address, signature, timestamp, nonce } = req.body;
   if (!address || !signature || !timestamp) {
     return res.status(400).json({ error: 'address, signature, and timestamp required' });
   }
   try {
-    const upstream = await fetch('https://clob.polymarket.com/auth/derive-api-key', {
-      method: 'GET',
-      headers: {
-        'POLY_ADDRESS': address,
-        'POLY_SIGNATURE': signature,
-        'POLY_TIMESTAMP': timestamp,
-        'POLY_NONCE': nonce || '0',
-        'Accept': 'application/json',
-        'User-Agent': 'Hyperflex/1.0'
-      }
-    });
-    const data = await upstream.json().catch(() => ({}));
-    if (!upstream.ok) {
-      console.error('[polymarket derive-api-key]', upstream.status, data);
-      return res.status(upstream.status >= 400 && upstream.status < 500 ? upstream.status : 502).json({
-        error: data.error || data.message || 'Failed to derive API key',
-        detail: data
-      });
-    }
-    let proxyAddress = data.proxyAddress || data.proxy_address || data.polyAddress || null;
-    const apiKey = data.apiKey || data.api_key || null;
-    const secret = data.secret || data.apiSecret || null;
-    const passphrase = data.passphrase || null;
+    const l1Headers = {
+      'POLY_ADDRESS': address,
+      'POLY_SIGNATURE': signature,
+      'POLY_TIMESTAMP': timestamp,
+      'POLY_NONCE': nonce || '0',
+      'Accept': 'application/json',
+      'User-Agent': 'Hyperflex/1.0'
+    };
 
-    // If derive-api-key didn't return proxy, fetch it from GET /auth/api-keys
+    // Step 1: Try GET /auth/derive-api-key (retrieves existing keys)
+    let data = {};
+    let derivedOk = false;
+    try {
+      const upstream = await fetch('https://clob.polymarket.com/auth/derive-api-key', {
+        method: 'GET',
+        headers: l1Headers
+      });
+      data = await upstream.json().catch(() => ({}));
+      if (upstream.ok && (data.apiKey || data.api_key || data.key)) {
+        derivedOk = true;
+        console.log('[polymarket derive-api-key] Derive succeeded for', address.slice(0, 8));
+      } else {
+        console.warn('[polymarket derive-api-key] Derive failed:', upstream.status, JSON.stringify(data).slice(0, 200));
+      }
+    } catch (deriveErr) {
+      console.warn('[polymarket derive-api-key] Derive request error:', deriveErr.message);
+    }
+
+    // Step 2: If derive failed, try POST /auth/api-key (creates new keys)
+    if (!derivedOk) {
+      console.log('[polymarket derive-api-key] Falling back to POST /auth/api-key (create)...');
+      try {
+        const createRes = await fetch('https://clob.polymarket.com/auth/api-key', {
+          method: 'POST',
+          headers: l1Headers
+        });
+        const createData = await createRes.json().catch(() => ({}));
+        if (createRes.ok && (createData.apiKey || createData.api_key || createData.key)) {
+          data = createData;
+          derivedOk = true;
+          console.log('[polymarket derive-api-key] Create succeeded for', address.slice(0, 8));
+        } else {
+          console.error('[polymarket derive-api-key] Create also failed:', createRes.status, JSON.stringify(createData).slice(0, 200));
+          // Return the create error since it's the final attempt
+          return res.status(createRes.status >= 400 && createRes.status < 500 ? createRes.status : 502).json({
+            error: createData.error || createData.message || 'Failed to derive or create API key',
+            detail: createData
+          });
+        }
+      } catch (createErr) {
+        console.error('[polymarket derive-api-key] Create request error:', createErr.message);
+        return res.status(502).json({
+          error: 'Failed to reach Polymarket CLOB for key creation',
+          detail: createErr.message
+        });
+      }
+    }
+    // Log raw CLOB response so we can see exactly what fields come back
+    console.log(`[derive-api-key] RAW CLOB response keys: ${JSON.stringify(Object.keys(data))}`);
+    console.log(`[derive-api-key] RAW CLOB response (truncated): ${JSON.stringify(data).slice(0, 500)}`);
+
+    // Extract proxy address — check every possible field name Polymarket might use
+    let proxyAddress = data.proxyAddress || data.proxy_address || data.polyAddress
+      || data.safe_address || data.safeAddress || data.proxy || data.funder
+      || data.funderAddress || data.funder_address || null;
+    const apiKey = data.apiKey || data.api_key || data.key || null;
+    const secret = data.secret || data.apiSecret || data.api_secret || null;
+    const passphrase = data.passphrase || data.apiPassphrase || data.api_passphrase || null;
+
+    console.log(`[derive-api-key] Extracted: apiKey=${(apiKey||'').slice(0,8)}... proxy=${proxyAddress || 'NONE'} hasSecret=${!!secret} hasPass=${!!passphrase}`);
+
+    // If derive/create didn't return proxy, fetch it from GET /auth/api-keys (L2 auth)
     if (!proxyAddress && apiKey && secret && passphrase) {
       try {
+        console.log('[derive-api-key] No proxy in response, trying GET /auth/api-keys with L2 creds...');
         const keysRes = await fetch('https://clob.polymarket.com/auth/api-keys', {
           headers: {
             'POLY_ADDRESS': address,
@@ -24094,21 +24143,26 @@ app.post('/api/polymarket/derive-api-key', optionalAuth, async (req, res) => {
             'User-Agent': 'Hyperflex/1.0'
           }
         });
+        const keysRaw = await keysRes.text();
+        console.log(`[derive-api-key] L2 api-keys response (${keysRes.status}): ${keysRaw.slice(0, 500)}`);
         if (keysRes.ok) {
-          const keysData = await keysRes.json();
-          // Response is array of api keys — each has a proxyAddress or polyAddress
+          const keysData = JSON.parse(keysRaw);
           const keys = Array.isArray(keysData) ? keysData : [keysData];
           for (const k of keys) {
-            const pa = k.proxyAddress || k.proxy_address || k.polyAddress || null;
-            if (pa) { proxyAddress = pa; break; }
+            // Check every possible proxy field name
+            const pa = k.proxyAddress || k.proxy_address || k.polyAddress
+              || k.safe_address || k.safeAddress || k.proxy || k.funder
+              || k.funderAddress || k.funder_address || null;
+            if (pa) { proxyAddress = pa; console.log(`[derive-api-key] Found proxy in api-keys: ${pa}`); break; }
           }
         }
-      } catch(e) { console.warn('[derive-api-key] api-keys lookup failed:', e.message); }
+      } catch(e) { console.warn('[derive-api-key] L2 api-keys lookup failed:', e.message); }
     }
 
     // Fallback: try L1-auth GET /auth/api-keys with original signature headers
     if (!proxyAddress) {
       try {
+        console.log('[derive-api-key] Still no proxy, trying GET /auth/api-keys with L1 signature...');
         const keysRes2 = await fetch('https://clob.polymarket.com/auth/api-keys', {
           headers: {
             'POLY_ADDRESS': address,
@@ -24118,65 +24172,29 @@ app.post('/api/polymarket/derive-api-key', optionalAuth, async (req, res) => {
             'Accept': 'application/json'
           }
         });
+        const keysRaw2 = await keysRes2.text();
+        console.log(`[derive-api-key] L1 api-keys response (${keysRes2.status}): ${keysRaw2.slice(0, 500)}`);
         if (keysRes2.ok) {
-          const keysData2 = await keysRes2.json();
-          console.log('[derive-api-key] L1 api-keys response:', JSON.stringify(keysData2).slice(0, 300));
+          const keysData2 = JSON.parse(keysRaw2);
           const keys2 = Array.isArray(keysData2) ? keysData2 : [keysData2];
           for (const k of keys2) {
-            const pa = k.proxyAddress || k.proxy_address || k.polyAddress || null;
-            if (pa) { proxyAddress = pa; break; }
+            const pa = k.proxyAddress || k.proxy_address || k.polyAddress
+              || k.safe_address || k.safeAddress || k.proxy || k.funder
+              || k.funderAddress || k.funder_address || null;
+            if (pa) { proxyAddress = pa; console.log(`[derive-api-key] Found proxy in L1 api-keys: ${pa}`); break; }
           }
         }
       } catch(e) { console.warn('[derive-api-key] L1 api-keys lookup failed:', e.message); }
     }
 
-    // Fallback: compute proxy address using CREATE2 (both Safe and ProxyWallet factories)
-    let _derivedAddresses = [];
+    // NO CREATE2 FALLBACK — it produces wrong addresses for some wallets.
+    // If CLOB didn't give us a proxy address after all 3 lookups, return what we have.
+    // A missing proxy is better than a wrong proxy (wrong proxy = silently invalid orders).
     if (!proxyAddress) {
-      try {
-        const { createHash } = require('crypto');
-        // Keccak-256 using ethers or crypto (Node.js doesn't have native keccak)
-        // Use a simple approach: try both derived addresses and check which has positions
-        const ethers = require('ethers');
-        const addrLower = address.toLowerCase();
-
-        // deriveSafe: encodeAbiParameters([{type:'address'}], [address])
-        const safeFactory = '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b';
-        const safeInitCodeHash = '0x2bce2127ff07fb632d16c8347c4ebf501f4841168bed00d9e6ef715ddb6fcecf';
-        // Use Polymarket's official deriveSafe method for salt calculation
-        const abiEncoded = ethers.AbiCoder.defaultAbiCoder().encode(['address'], [addrLower]);
-        const safeSalt = ethers.keccak256(abiEncoded);
-        const safeAddr = ethers.getCreate2Address(safeFactory, safeSalt, safeInitCodeHash);
-
-        // deriveProxyWallet: encodePacked([address])
-        const proxyFactory = '0xaB45c5A4B0c941a2F231C04C3f49182e1A254052';
-        const proxyInitCodeHash = '0xd21df8dc65880a8606f09fe0ce3df9b8869287ab0b058be05aa9e8af6330a00b';
-        const proxySalt = ethers.keccak256(ethers.solidityPacked(['address'], [addrLower]));
-        const proxyAddr = ethers.getCreate2Address(proxyFactory, proxySalt, proxyInitCodeHash);
-
-        console.log(`[derive-api-key] CREATE2 derivation: safe=${safeAddr.slice(0,10)}... proxy=${proxyAddr.slice(0,10)}...`);
-        _derivedAddresses = [safeAddr.toLowerCase(), proxyAddr.toLowerCase()];
-
-        // Try server-side position check (may fail due to geo-blocking)
-        for (const candidate of _derivedAddresses) {
-          try {
-            const checkRes = await fetch(`https://data-api.polymarket.com/positions?user=${candidate}&limit=1&sortBy=CURRENT`, {
-              headers: { Accept: 'application/json' }
-            });
-            const checkData = await checkRes.json();
-            if (Array.isArray(checkData) && checkData.length > 0) {
-              proxyAddress = candidate;
-              console.log(`[derive-api-key] Found positions at ${candidate.slice(0,10)}...`);
-              break;
-            }
-          } catch(e) {}
-        }
-      } catch(e) { console.warn('[derive-api-key] CREATE2 derivation failed:', e.message); }
+      console.warn(`[derive-api-key] WARNING: No proxy address found for ${address.slice(0,10)}. Orders may need proxy from client-side or user's Polymarket deposit page.`);
     }
 
-    console.log(`[polymarket derive-api-key] user=${req.userId} address=${address.slice(0,8)}... proxy=${(proxyAddress||'none').slice(0,8)}... derived=${_derivedAddresses.length} keys: ${JSON.stringify(Object.keys(data))}`);
-    console.log(`[polymarket derive-api-key] FINAL proxy address being returned: ${proxyAddress || 'NONE'}`);
-    console.log(`[polymarket derive-api-key] Derived addresses: safe=${_derivedAddresses[0]?.slice(0,10)}... proxy=${_derivedAddresses[1]?.slice(0,10)}...`);
+    console.log(`[polymarket derive-api-key] FINAL: user=${req.userId} address=${address.slice(0,8)}... proxy=${proxyAddress || 'NONE'} apiKey=${(apiKey||'').slice(0,8)}...`);
 
     // Save proxy address to user profile if we got one
     if (proxyAddress && req.userId && pool) {
@@ -24190,8 +24208,7 @@ app.post('/api/polymarket/derive-api-key', optionalAuth, async (req, res) => {
       apiKey: apiKey,
       secret: secret,
       passphrase: passphrase,
-      proxyAddress: proxyAddress,
-      derivedAddresses: _derivedAddresses
+      proxyAddress: proxyAddress
     });
   } catch (err) {
     console.error('[polymarket derive-api-key]', err.message);
@@ -24288,6 +24305,8 @@ app.post('/api/polymarket/clob-order', optionalAuth, async (req, res) => {
       builderHeaders['POLY_BUILDER_PASSPHRASE'] = builderPassphrase;
       builderHeaders['POLY_BUILDER_SIGNATURE'] = builderSig;
       console.log('[builder] Attribution headers attached for order');
+    } else {
+      console.warn('[builder] WARNING: No builder credentials configured! Orders will NOT earn trading fees. Set POLY_BUILDER_API_KEY, POLY_BUILDER_SECRET, POLY_BUILDER_PASSPHRASE env vars.');
     }
 
     const upstream = await fetch('https://clob.polymarket.com/order', {
@@ -30114,6 +30133,23 @@ app.get('/api/pyth/history/:feed', async (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`HYPERFLEX server running on port ${PORT}`);
+
+  // Check Polymarket Builder credentials
+  if (!process.env.POLY_BUILDER_API_KEY || !process.env.POLY_BUILDER_SECRET || !process.env.POLY_BUILDER_PASSPHRASE) {
+    console.warn('');
+    console.warn('==========================================================');
+    console.warn('  WARNING: Polymarket Builder credentials NOT configured!');
+    console.warn('  Trades will go through but will NOT earn trading fees.');
+    console.warn('  Set these env vars on Railway:');
+    console.warn('    POLY_BUILDER_API_KEY');
+    console.warn('    POLY_BUILDER_SECRET');
+    console.warn('    POLY_BUILDER_PASSPHRASE');
+    console.warn('  Register at: https://docs.polymarket.com/developers/builders/builder-intro');
+    console.warn('==========================================================');
+    console.warn('');
+  } else {
+    console.log('[boot] Polymarket Builder credentials configured - fee attribution enabled');
+  }
 
   // Pre-warm critical data caches on startup (non-blocking)
   setTimeout(async () => {

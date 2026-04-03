@@ -13162,7 +13162,14 @@ async function loadPolymarketPositions(forceRefresh) {
       }
     }
     // AUTO-RECOVERY: if 0 positions, try alternative addresses before giving up
-    if (positions.length === 0 && !_polyRecoveryAttempted && !_polyWalletExplicitlySet) {
+    // SKIP recovery if user recently connected a wallet (check localStorage flag)
+    const recentWalletSwitch = localStorage.getItem('hf_wallet_explicit_switch');
+    const switchAge = recentWalletSwitch ? (Date.now() - parseInt(recentWalletSwitch)) : Infinity;
+    const skipRecovery = _polyWalletExplicitlySet || (switchAge < 300000); // 5 min grace period
+    if (skipRecovery && positions.length === 0) {
+      console.log('[poly-recovery] Skipping recovery — wallet was explicitly set', switchAge < 300000 ? '(recent switch ' + Math.round(switchAge/1000) + 's ago)' : '');
+    }
+    if (positions.length === 0 && !_polyRecoveryAttempted && !skipRecovery) {
       _polyRecoveryAttempted = true;
 
       // First: try last known good address (fastest path)

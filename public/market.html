@@ -1490,7 +1490,11 @@ async function enableTrading() {
       localStorage.removeItem('poly_api_passphrase');
       localStorage.removeItem('poly_eoa_address');
       localStorage.removeItem('hf_poly_wallet');
-      
+      localStorage.removeItem('poly_proxy_address');
+
+      // Signal to dashboard: user explicitly switched wallets — don't auto-recover to old wallet
+      localStorage.setItem('hf_wallet_explicit_switch', Date.now().toString());
+
       // Clear balance display immediately
       var balanceEl = document.getElementById('tradeBalance');
       if (balanceEl) balanceEl.textContent = 'Balance: $0.00';
@@ -1546,35 +1550,47 @@ async function enableTrading() {
       tradeDebug('server-proxy ERROR', proxyErr.message);
     }
 
-    // Attempt 2: Browser-direct to CLOB
+    // Attempt 2: Browser-direct to CLOB (derive, then create fallback)
     if (!data || (!data.apiKey && !data.key)) {
       tradeDebug('trying browser-direct', 'server proxy had no key');
+      var l1Headers = { 'POLY_ADDRESS': address, 'POLY_SIGNATURE': signature, 'POLY_TIMESTAMP': timestamp, 'POLY_NONCE': nonce };
       try {
+        // Try derive first (existing keys)
         var clobRes = await fetch('https://clob.polymarket.com/auth/derive-api-key', {
           method: 'GET',
-          headers: { 'POLY_ADDRESS': address, 'POLY_SIGNATURE': signature, 'POLY_TIMESTAMP': timestamp, 'POLY_NONCE': nonce }
+          headers: l1Headers
         });
         if (clobRes.ok) {
           data = await clobRes.json();
-          tradeDebug('browser-direct OK', { keys: Object.keys(data), keyField: data.apiKey ? 'apiKey' : data.key ? 'key' : data.api_key ? 'api_key' : 'NONE' });
+          tradeDebug('browser-direct derive OK', { keys: Object.keys(data), keyField: data.apiKey ? 'apiKey' : data.key ? 'key' : data.api_key ? 'api_key' : 'NONE' });
         } else {
-          var clobErr = await clobRes.json().catch(function() { return {}; });
-          tradeDebug('browser-direct FAIL', { status: clobRes.status, error: clobErr });
-          
-          // Provide specific error messages for common issues
-          var errorMsg = clobErr.error || clobErr.message || 'CLOB auth failed (' + clobRes.status + ')';
-          if (clobRes.status === 400 && (errorMsg.includes('derive') || errorMsg.includes('signature'))) {
-            errorMsg = 'Invalid signature or wallet mismatch. Try refreshing the page and reconnecting your wallet.';
-          } else if (clobRes.status === 401) {
-            errorMsg = 'Unauthorized. Please make sure you have a Polymarket account connected to this wallet.';
+          tradeDebug('browser-direct derive FAIL', { status: clobRes.status });
+          // Derive failed — try POST /auth/api-key to CREATE new keys
+          tradeDebug('trying browser-direct CREATE', 'POST /auth/api-key');
+          var createRes = await fetch('https://clob.polymarket.com/auth/api-key', {
+            method: 'POST',
+            headers: l1Headers
+          });
+          if (createRes.ok) {
+            data = await createRes.json();
+            tradeDebug('browser-direct create OK', { keys: Object.keys(data) });
+          } else {
+            var clobErr = await createRes.json().catch(function() { return {}; });
+            tradeDebug('browser-direct create FAIL', { status: createRes.status, error: clobErr });
+            var errorMsg = clobErr.error || clobErr.message || 'CLOB auth failed (' + createRes.status + ')';
+            if (createRes.status === 400 && (errorMsg.includes('derive') || errorMsg.includes('signature'))) {
+              errorMsg = 'Invalid signature or wallet not registered with Polymarket. Visit polymarket.com to set up your account first.';
+            } else if (createRes.status === 401) {
+              errorMsg = 'Unauthorized. Please make sure you have a Polymarket account connected to this wallet.';
+            }
+            throw new Error(errorMsg);
           }
-          throw new Error(errorMsg);
         }
       } catch (corsErr) {
         tradeDebug('browser-direct ERROR', corsErr.message);
         if (!data) {
           tradeDebug('browser-direct FALLBACK', 'no data from either attempt - throwing error');
-          throw new Error('Could not derive API key — check MetaMask and try again');
+          throw new Error('Could not derive or create API key — check MetaMask and try again');
         }
       }
     }
@@ -1590,21 +1606,19 @@ async function enableTrading() {
     localStorage.setItem('poly_api_secret', secret);
     localStorage.setItem('poly_api_passphrase', passphrase);
     localStorage.setItem('poly_eoa_address', address);
+    // Mark that user explicitly connected a wallet — prevents dashboard auto-recovery
+    localStorage.setItem('hf_wallet_explicit_switch', Date.now().toString());
 
-    // Derive proxy address — use server-provided or compute via CREATE2
-    var proxyAddr = data.proxyAddress || data.proxy_address || '';
+    // Proxy address — MUST come from CLOB response (derive or create), never computed locally.
+    // CREATE2 derivation produces wrong addresses for some wallets (Polymarket uses multiple factory versions).
+    var proxyAddr = data.proxyAddress || data.proxy_address || data.safe_address || data.safeAddress || data.proxy || data.funder || '';
     if (!proxyAddr) {
-      console.log('[wallet debug] Server did not return proxy address, computing fallback...');
-      var factoryAddress = '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b';
-      var initCodeHash = '0x2bce2127ff07fb632d16c8347c4ebf501f4841168bed00d9e6ef715ddb6fcecf';
-      // Use Polymarket's official deriveSafe method for salt calculation
-      var addrLower = address.toLowerCase();
-      var abiEncoded = ethers.AbiCoder.defaultAbiCoder().encode(['address'], [addrLower]);
-      var safeSalt = ethers.keccak256(abiEncoded);
-      proxyAddr = ethers.getCreate2Address(factoryAddress, safeSalt, initCodeHash).toLowerCase();
-      console.log('[wallet debug] Fallback proxy computed:', proxyAddr);
+      console.warn('[wallet debug] WARNING: No proxy address from CLOB. Balance/positions may not load correctly.');
+      console.warn('[wallet debug] Full CLOB response keys:', Object.keys(data));
+      // Don't compute a CREATE2 fallback — a wrong proxy is worse than no proxy.
+      // The user can find their deposit address on polymarket.com → Profile → Deposit Address.
     } else {
-      console.log('[wallet debug] Using server-provided proxy address:', proxyAddr);
+      console.log('[wallet debug] Using CLOB-provided proxy address:', proxyAddr);
     }
     localStorage.setItem('hf_poly_wallet', proxyAddr);
 
@@ -1884,12 +1898,12 @@ async function executeTrade() {
       localStorage.setItem('poly_eoa_address', eoaAddress);
     }
     if (!proxyAddress) {
-      var factoryAddress = '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b';
-      var initCodeHash = '0x2bce2127ff07fb632d16c8347c4ebf501f4841168bed00d9e6ef715ddb6fcecf';
-      var abiEncoded = ethers.AbiCoder.defaultAbiCoder().encode(['address'], [eoaAddress.toLowerCase()]);
-      var proxySalt = ethers.keccak256(abiEncoded);
-      proxyAddress = ethers.getCreate2Address(factoryAddress, proxySalt, initCodeHash).toLowerCase();
-      localStorage.setItem('hf_poly_wallet', proxyAddress);
+      // No proxy address available — cannot place orders without it.
+      // DO NOT use CREATE2 fallback — it produces wrong addresses for some wallets.
+      showTradeStatus('No proxy wallet found. Reconnect wallet or check Polymarket deposit address.', 'error');
+      console.error('[trade] No proxy address for', eoaAddress.slice(0, 10), '— cannot build order. Try disconnecting and reconnecting wallet.');
+      cta.disabled = false; updateCtaButton();
+      return;
     }
 
     // Build amounts — match official Polymarket ROUNDING_CONFIG:
