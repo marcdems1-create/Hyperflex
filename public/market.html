@@ -1406,22 +1406,22 @@ function updateTradeCalc() {
 
 // ── Fetch USDC balance from Polygon ──────────────────────────────────────────
 async function fetchTradeBalance() {
-  var eoaAddress = localStorage.getItem('poly_eoa_address');
   var proxyAddress = localStorage.getItem('hf_poly_wallet');
+  var eoaAddress = localStorage.getItem('poly_eoa_address');
   console.log('[balance debug] EOA address:', eoaAddress);
   console.log('[balance debug] Proxy address:', proxyAddress);
   
-  if (!eoaAddress || !window.ethereum) {
-    console.log('[balance debug] Missing EOA address or ethereum');
+  if (!proxyAddress || !window.ethereum) {
+    console.log('[balance debug] Missing proxy address or ethereum');
     return;
   }
   try {
     var provider = new ethers.BrowserProvider(window.ethereum);
-    // USDC on Polygon
+    // USDC on Polygon - USDC is held in Polymarket proxy wallet, not EOA
     var usdcAddress = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
     var abi = ['function balanceOf(address) view returns (uint256)'];
     var contract = new ethers.Contract(usdcAddress, abi, provider);
-    var raw = await contract.balanceOf(eoaAddress);
+    var raw = await contract.balanceOf(proxyAddress);
     var balance = parseFloat(ethers.formatUnits(raw, 6));
     console.log('[balance debug] Raw balance:', raw.toString());
     console.log('[balance debug] Formatted balance:', balance);
