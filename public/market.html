@@ -191,6 +191,7 @@ canvas{display:block;width:100%!important}
 
 <!-- Debug button for troubleshooting -->
 <button onclick="if(document.getElementById('tradeDebugPanel')) document.getElementById('tradeDebugPanel').style.display=document.getElementById('tradeDebugPanel').style.display==='none'?'block':'none'; else tradeDebug('DEBUG', 'Panel triggered manually');" style="position:fixed;top:10px;right:10px;background:#c9920d;color:#000;border:none;padding:4px 8px;font-size:10px;cursor:pointer;border-radius:3px;z-index:99999">🐛 Debug</button>
+<button onclick="fetchTradeBalance()" style="position:fixed;top:35px;right:10px;background:#22c55e;color:#000;border:none;padding:4px 8px;font-size:10px;cursor:pointer;border-radius:3px;z-index:99999">💰 Refresh Balance</button>
 
 <div id="nav-root"></div>
 <script>if(typeof polyRef==='undefined')window.polyRef=function(u){return u};</script>
@@ -1406,7 +1407,14 @@ function updateTradeCalc() {
 // ── Fetch USDC balance from Polygon ──────────────────────────────────────────
 async function fetchTradeBalance() {
   var eoaAddress = localStorage.getItem('poly_eoa_address');
-  if (!eoaAddress || !window.ethereum) return;
+  var proxyAddress = localStorage.getItem('hf_poly_wallet');
+  console.log('[balance debug] EOA address:', eoaAddress);
+  console.log('[balance debug] Proxy address:', proxyAddress);
+  
+  if (!eoaAddress || !window.ethereum) {
+    console.log('[balance debug] Missing EOA address or ethereum');
+    return;
+  }
   try {
     var provider = new ethers.BrowserProvider(window.ethereum);
     // USDC on Polygon
@@ -1415,10 +1423,17 @@ async function fetchTradeBalance() {
     var contract = new ethers.Contract(usdcAddress, abi, provider);
     var raw = await contract.balanceOf(eoaAddress);
     var balance = parseFloat(ethers.formatUnits(raw, 6));
+    console.log('[balance debug] Raw balance:', raw.toString());
+    console.log('[balance debug] Formatted balance:', balance);
+    
     var el = document.getElementById('tradeBalance');
-    if (el) el.textContent = 'Balance: $' + balance.toFixed(2);
+    if (el) {
+      el.textContent = 'Balance: $' + balance.toFixed(2);
+      console.log('[balance debug] Updated UI with:', balance.toFixed(2));
+    }
   } catch (e) {
-    console.warn('[balance]', e.message);
+    console.warn('[balance error]', e.message);
+    console.warn('[balance error stack]', e.stack);
   }
 }
 
