@@ -45,7 +45,11 @@ const _healthTimestamps = {
   lastSignalCompute: null,
   lastBriefGenerate: null,
   lastCacheCleanup: null,
-  watchdogRestarts: 0
+  watchdogRestarts: 0,
+  twitterGuardianPause: null,
+  twitterGuardianReason: null,
+  twitterTotalPosted: 0,
+  twitterTotalSkipped: 0
 };
 
 // ══════════════════════════════════════════════════════════════════════
@@ -13264,11 +13268,23 @@ app.get('/health', (req, res) => {
     staleChecks[key] = { last: ts, age_min: Math.round(age / 60000), stale: age > staleThresholdMs };
   }
   const anyStale = Object.values(staleChecks).some(c => c.stale);
+  // Twitter bot status
+  const twitterBot = {
+    paused: !!_healthTimestamps.twitterGuardianPause && (now - new Date(_healthTimestamps.twitterGuardianPause).getTime() < 12 * 60 * 60 * 1000),
+    pause_reason: _healthTimestamps.twitterGuardianReason || null,
+    paused_at: _healthTimestamps.twitterGuardianPause || null,
+    recent_tweets: typeof _tweetHistory !== 'undefined' ? _tweetHistory.length : 0,
+    tracked_markets: typeof _tweetedMarkets !== 'undefined' ? _tweetedMarkets.size : 0,
+    total_posted: _healthTimestamps.twitterTotalPosted || 0,
+    total_skipped: _healthTimestamps.twitterTotalSkipped || 0
+  };
+
   res.json({
     status: anyStale ? 'DEGRADED' : 'OK',
     uptime_minutes: uptimeMin,
     memory: { rss_mb: Math.round(mem.rss / 1048576), heap_used_mb: Math.round(mem.heapUsed / 1048576), heap_total_mb: Math.round(mem.heapTotal / 1048576) },
     data_freshness: staleChecks,
+    twitter_bot: twitterBot,
     watchdog_restarts: _healthTimestamps.watchdogRestarts,
     recent_errors: _recentErrors.slice(-10),
     boot_time: _healthTimestamps.boot
@@ -26528,6 +26544,13 @@ async function generateDraftTweet() {
 
 async function generateAndPostDailyTweet(draftOnly = false) {
 
+  // Rate limit check — prevents spam even if cron fires multiple times
+  if (!draftOnly && !canTweet()) {
+    console.log('[tweet] Rate limited — skipping this cycle');
+    _healthTimestamps.twitterTotalSkipped = (_healthTimestamps.twitterTotalSkipped || 0) + 1;
+    return { text: '', posted: false, skipped: true, reason: 'Rate limited (max 5/day or 2h gap)' };
+  }
+
   // Get brief data directly from cache or generate fresh
   let briefData;
   try {
@@ -26641,6 +26664,7 @@ HARD RULES:
       console.log(`[tweet] Attempt ${attempts}/${MAX_ATTEMPTS}: Claude returned SKIP — no original tweet possible`);
       if (attempts >= MAX_ATTEMPTS) {
         console.log('[tweet] All attempts exhausted — skipping this tweet cycle entirely');
+        _healthTimestamps.twitterTotalSkipped = (_healthTimestamps.twitterTotalSkipped || 0) + 1;
         return { text: '', posted: false, skipped: true, reason: 'Could not generate original tweet after ' + MAX_ATTEMPTS + ' attempts' };
       }
       continue;
@@ -26651,6 +26675,7 @@ HARD RULES:
       console.log(`[tweet] Attempt ${attempts}/${MAX_ATTEMPTS}: Too similar to recent tweet — retrying`);
       if (attempts >= MAX_ATTEMPTS) {
         console.log('[tweet] All attempts produced similar content — skipping');
+        _healthTimestamps.twitterTotalSkipped = (_healthTimestamps.twitterTotalSkipped || 0) + 1;
         return { text: tweet, posted: false, skipped: true, reason: 'All generated tweets too similar to recent posts' };
       }
       continue;
@@ -26661,6 +26686,7 @@ HARD RULES:
   }
 
   if (!tweet || tweet === 'SKIP') {
+    _healthTimestamps.twitterTotalSkipped = (_healthTimestamps.twitterTotalSkipped || 0) + 1;
     return { text: '', posted: false, skipped: true, reason: 'No original content generated' };
   }
 
@@ -26696,6 +26722,7 @@ HARD RULES:
   // Record this tweet BEFORE posting to prevent race conditions
   recordTweet(finalTweet, primaryMarket);
   const result = await postTweet(finalTweet);
+  _healthTimestamps.twitterTotalPosted = (_healthTimestamps.twitterTotalPosted || 0) + 1;
   return { text: finalTweet, posted: true, ...result };
 }
 
@@ -26901,6 +26928,14 @@ async function searchAndDraftReplies() {
     let postType = 'standalone';
     const mediaId = null;
 
+    // Check dedup before posting — reply bot also feeds into the same history
+    if (isTweetTooSimilar(reply)) {
+      console.log(`[reply-bot] Skipping — reply too similar to recent tweet: "${reply.substring(0, 60)}..."`);
+      _replyLog.push(target.id);
+      if (_replyLog.length > 200) _replyLog.splice(0, 100);
+      return;
+    }
+
     try {
       // Try quote tweet first (more engagement), fall back to standalone
       const tweetUrl = 'https://api.x.com/2/tweets';
@@ -26916,12 +26951,19 @@ async function searchAndDraftReplies() {
       if (quoteRes.ok) {
         postResult = quoteData;
         postType = 'quote';
+        recordTweet(reply, '');
         console.log(`[reply-bot] QUOTE-TWEETED ${target.id}: "${reply.substring(0, 60)}..."${mediaId ? ' (with image)' : ''}`);
       } else {
         // Quote tweet failed (maybe Basic tier limitation), fall back to standalone
         console.warn(`[reply-bot] Quote tweet failed (${quoteRes.status}), falling back to standalone`);
-        postResult = await postTweet(reply, mediaId);
-        console.log(`[reply-bot] STANDALONE tweet inspired by ${target.id}: "${reply.substring(0, 60)}..."${mediaId ? ' (with image)' : ''}`);
+        // Check rate limit before standalone fallback
+        if (!canTweet()) {
+          console.warn('[reply-bot] Rate limited — skipping standalone fallback');
+        } else {
+          postResult = await postTweet(reply, mediaId);
+          recordTweet(reply, '');
+          console.log(`[reply-bot] STANDALONE tweet inspired by ${target.id}: "${reply.substring(0, 60)}..."${mediaId ? ' (with image)' : ''}`);
+        }
       }
       _replyLog.push(target.id);
       if (_replyLog.length > 200) _replyLog.splice(0, 100);
@@ -28680,7 +28722,7 @@ setTimeout(() => {
 // ══════════════════════════════════════════════════════════════════════
 // WATCHDOG — every 5 min, check data freshness and restart stale polls
 // ══════════════════════════════════════════════════════════════════════
-setInterval(() => {
+setInterval(async () => {
   try {
     const now = Date.now();
     const staleMs = 10 * 60 * 1000; // 10 min threshold (health check flags at 15 min, so trigger well before)
@@ -28714,6 +28756,76 @@ setInterval(() => {
         .then(() => console.log('[watchdog] Signals cache refreshed'))
         .catch(e => _logError('watchdog/signals', e));
     }
+
+    // ── TWITTER GUARDIAN — detect & prevent spam/duplicate posting ──
+    // Fetch our own recent tweets and check for duplicates that slipped through
+    try {
+      const bearer = process.env.X_BEARER_TOKEN;
+      const xUserId = process.env.X_USER_ID; // @HyperFlexapp user ID
+      if (bearer && xUserId && _tweetHistory.length > 0) {
+        const timelineUrl = `https://api.x.com/2/users/${xUserId}/tweets?max_results=5&tweet.fields=created_at,text`;
+        const tlRes = await fetch(timelineUrl, {
+          headers: { 'Authorization': `Bearer ${bearer}` },
+          signal: AbortSignal.timeout(8000)
+        });
+        if (tlRes.ok) {
+          const tlData = await tlRes.json();
+          const recentTweets = (tlData.data || []);
+
+          // Check for duplicate tweets in timeline (same text within 6h)
+          const sixHoursAgo = new Date(now - 6 * 60 * 60 * 1000).toISOString();
+          const recentSixH = recentTweets.filter(t => t.created_at > sixHoursAgo);
+
+          // Build word sets for similarity comparison
+          const normalize = t => (t || '').toLowerCase().replace(/https?:\/\/\S+/g, '').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+          const wordSet = t => new Set(normalize(t).split(' ').filter(w => w.length > 3));
+
+          let duplicatesFound = 0;
+          for (let i = 0; i < recentSixH.length; i++) {
+            for (let j = i + 1; j < recentSixH.length; j++) {
+              const ws1 = wordSet(recentSixH[i].text);
+              const ws2 = wordSet(recentSixH[j].text);
+              const inter = [...ws1].filter(w => ws2.has(w)).length;
+              const union = new Set([...ws1, ...ws2]).size;
+              if (union > 0 && inter / union > 0.55) duplicatesFound++;
+            }
+          }
+
+          if (duplicatesFound > 0) {
+            console.warn(`[guardian] ⚠ DUPLICATE TWEETS DETECTED on timeline: ${duplicatesFound} similar pairs in last 6h`);
+            _logError('guardian/twitter-spam', new Error(`${duplicatesFound} similar tweet pairs detected in last 6h — auto-pausing bot for 12h`));
+            // Auto-pause: fill rate limiter to prevent more posting
+            const pauseUntil = now + 12 * 60 * 60 * 1000;
+            while (_tweetLog.length < 5) _tweetLog.push(pauseUntil);
+            _healthTimestamps.twitterGuardianPause = new Date().toISOString();
+            _healthTimestamps.twitterGuardianReason = `${duplicatesFound} duplicate pairs detected`;
+          }
+
+          // Sync timeline into _tweetHistory so we catch cross-restart duplication
+          for (const t of recentTweets) {
+            const alreadyTracked = _tweetHistory.some(h => normalize(h.text) === normalize(t.text));
+            if (!alreadyTracked) {
+              _tweetHistory.push({ text: t.text, market: '', ts: new Date(t.created_at).getTime() });
+            }
+          }
+          // Keep history bounded
+          if (_tweetHistory.length > 60) _tweetHistory.splice(0, 30);
+        }
+      }
+    } catch (e) { _logError('guardian/twitter-check', e); }
+
+    // ── SITE HEALTH SELF-CHECK — verify critical pages respond ──
+    try {
+      const port = process.env.PORT || 3000;
+      const criticalPages = ['/api/health', '/api/screener', '/api/signals'];
+      for (const page of criticalPages) {
+        const checkRes = await fetch(`http://localhost:${port}${page}`, { signal: AbortSignal.timeout(10000) });
+        if (!checkRes.ok) {
+          console.warn(`[guardian] ⚠ ${page} returned ${checkRes.status}`);
+          _logError('guardian/site-health', new Error(`${page} returned ${checkRes.status}`));
+        }
+      }
+    } catch (e) { _logError('guardian/site-health', e); }
 
   } catch (e) {
     _logError('watchdog', e);
