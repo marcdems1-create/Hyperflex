@@ -24028,10 +24028,12 @@ app.post('/api/polymarket/clob-order', optionalAuth, async (req, res) => {
     const method = 'POST';
     const requestPath = '/order';
 
-    // HMAC-SHA256 sign: timestamp + method + path + body (base64url encoding)
+    // HMAC-SHA256 sign: timestamp + method + path + body
+    // NOTE: Must be url-safe base64 but KEEP "=" padding (per official Polymarket client)
     const message = ts + method + requestPath + signed_body;
     const secretBuf = Buffer.from(api_secret.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
-    const hmacSig = crypto.createHmac('sha256', secretBuf).update(message).digest('base64url');
+    const hmacSig = crypto.createHmac('sha256', secretBuf).update(message).digest('base64')
+      .replace(/\+/g, '-').replace(/\//g, '_');
 
     // Builder attribution headers — gasless + volume tracking
     const builderHeaders = {};
@@ -24041,7 +24043,8 @@ app.post('/api/polymarket/clob-order', optionalAuth, async (req, res) => {
     if (builderKey && builderSecret && builderPassphrase) {
       const builderMessage = ts + method + requestPath + signed_body;
       const bSecretBuf = Buffer.from(builderSecret.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
-      const builderSig = crypto.createHmac('sha256', bSecretBuf).update(builderMessage).digest('base64url');
+      const builderSig = crypto.createHmac('sha256', bSecretBuf).update(builderMessage).digest('base64')
+        .replace(/\+/g, '-').replace(/\//g, '_');
       builderHeaders['POLY_BUILDER_API_KEY'] = builderKey;
       builderHeaders['POLY_BUILDER_TIMESTAMP'] = ts;
       builderHeaders['POLY_BUILDER_PASSPHRASE'] = builderPassphrase;
@@ -24103,7 +24106,8 @@ app.post('/api/polymarket/builder-sign', requireAuth, async (req, res) => {
     const ts = Math.floor(Date.now() / 1000).toString();
     const message = ts + (method || 'GET').toUpperCase() + path + (body || '');
     const secretBuf = Buffer.from(builderSecret, 'base64');
-    const signature = crypto.createHmac('sha256', secretBuf).update(message).digest('base64');
+    const signature = crypto.createHmac('sha256', secretBuf).update(message).digest('base64')
+      .replace(/\+/g, '-').replace(/\//g, '_');
     res.json({
       POLY_BUILDER_API_KEY: builderKey,
       POLY_BUILDER_TIMESTAMP: ts,

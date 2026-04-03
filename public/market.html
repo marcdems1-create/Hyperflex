@@ -1896,11 +1896,12 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
 
   var cryptoKey = await crypto.subtle.importKey('raw', secretBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   var sigBuf = await crypto.subtle.sign('HMAC', cryptoKey, enc.encode(hmacMessage));
+  // NOTE: Must be url safe base64 encoding, but KEEP base64 "=" suffix (per official Polymarket client)
   var hmacSig = btoa(String.fromCharCode.apply(null, new Uint8Array(sigBuf)))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    .replace(/\+/g, '-').replace(/\//g, '_');
 
   // Attempt 1: Browser-direct to Polymarket CLOB (preserves user IP for geo-compliance)
-  tradeDebug('submitOrder', { apiKey: apiKey.slice(0,8) + '...', eoa: eoaAddress.slice(0,10), ts: ts, bodyLen: requestBody.length });
+  tradeDebug('submitOrder', { apiKey: apiKey.slice(0,8) + '...', eoa: eoaAddress.slice(0,10), ts: ts, hmacEndsWithPad: hmacSig.endsWith('='), hmacLen: hmacSig.length, bodyLen: requestBody.length });
   try {
     var res = await fetch('https://clob.polymarket.com/order', {
       method: 'POST',
