@@ -1,2 +1,2 @@
 [build]
-buildCommand = "npm install"
+buildCommand = "npm install && npm rebuild sharp --platform=linux"

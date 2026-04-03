@@ -162,7 +162,7 @@ try {
 let _sharp = null;
 function getSharp() {
   if (_sharp) return _sharp;
-  try { _sharp = require('sharp'); } catch { _sharp = null; }
+  try { _sharp = require('sharp'); console.log('[startup] sharp loaded OK'); } catch (e) { _sharp = null; console.warn('[startup] sharp failed to load:', e.message); }
   return _sharp;
 }
 
