@@ -1420,6 +1420,7 @@ async function enableTrading() {
 
     // Attempt 1: Server proxy (bypasses CORS, does additional proxy wallet derivation)
     // Works with or without HF auth — optionalAuth on server
+    tradeDebug('enableTrading', 'address=' + address.slice(0,10) + ' hasHfToken=' + !!token);
     try {
       var proxyHeaders = { 'Content-Type': 'application/json' };
       if (token) proxyHeaders['Authorization'] = 'Bearer ' + token;
@@ -1430,17 +1431,18 @@ async function enableTrading() {
       });
       if (proxyRes.ok) {
         data = await proxyRes.json();
-        console.log('[trade] API key derived via server proxy');
+        tradeDebug('server-proxy OK', { keys: Object.keys(data), apiKey: (data.apiKey||'').slice(0,8), hasSecret: !!(data.secret), hasPass: !!(data.passphrase), proxyAddr: (data.proxyAddress||'').slice(0,10) });
       } else {
         var errData = await proxyRes.json().catch(function() { return {}; });
-        console.warn('[trade] Server proxy derive failed:', proxyRes.status, errData);
+        tradeDebug('server-proxy FAIL', { status: proxyRes.status, error: errData });
       }
     } catch (proxyErr) {
-      console.warn('[trade] Server proxy error:', proxyErr.message);
+      tradeDebug('server-proxy ERROR', proxyErr.message);
     }
 
-    // Attempt 2: Browser-direct to CLOB (may fail due to CORS with custom headers)
+    // Attempt 2: Browser-direct to CLOB
     if (!data || (!data.apiKey && !data.key)) {
+      tradeDebug('trying browser-direct', 'server proxy had no key');
       try {
         var clobRes = await fetch('https://clob.polymarket.com/auth/derive-api-key', {
           method: 'GET',
@@ -1448,9 +1450,10 @@ async function enableTrading() {
         });
         if (clobRes.ok) {
           data = await clobRes.json();
-          console.log('[trade] API key derived via browser-direct');
+          tradeDebug('browser-direct OK', { keys: Object.keys(data), keyField: data.apiKey ? 'apiKey' : data.key ? 'key' : data.api_key ? 'api_key' : 'NONE' });
         } else {
           var clobErr = await clobRes.json().catch(function() { return {}; });
+          tradeDebug('browser-direct FAIL', { status: clobRes.status, error: clobErr });
           throw new Error(clobErr.error || clobErr.message || 'CLOB auth failed (' + clobRes.status + ')');
         }
       } catch (corsErr) {
@@ -1461,6 +1464,7 @@ async function enableTrading() {
     var apiKey = data.apiKey || data.key || '';
     var secret = data.secret || data.apiSecret || '';
     var passphrase = data.passphrase || data.apiPassphrase || '';
+    tradeDebug('extracted keys', { apiKey: apiKey.slice(0,8) + '...', hasSecret: !!secret, hasPassphrase: !!passphrase });
 
     if (!apiKey) throw new Error('No API key returned — you may need a Polymarket account first');
 
@@ -1512,6 +1516,30 @@ function showTradeStatus(msg, type) {
   el.style.color = type === 'error' ? 'var(--red)' : type === 'success' ? 'var(--green)' : type === 'info' ? 'var(--gold)' : 'var(--soft)';
   el.style.display = 'block';
   // Don't auto-hide — let the next action clear it
+}
+
+// Temporary debug panel for trade diagnostics
+var _tradeDebugLog = [];
+function tradeDebug(label, data) {
+  var entry = '[' + new Date().toLocaleTimeString() + '] ' + label + ': ' + (typeof data === 'object' ? JSON.stringify(data, null, 0).substring(0, 500) : String(data));
+  _tradeDebugLog.push(entry);
+  console.log('[TRADE DEBUG]', label, data);
+  var panel = document.getElementById('tradeDebugPanel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'tradeDebugPanel';
+    panel.style.cssText = 'position:fixed;bottom:0;left:0;right:0;max-height:200px;overflow-y:auto;background:#1a1a18;border-top:2px solid #c9920d;padding:8px 12px;font-family:monospace;font-size:10px;color:#e8e4d9;z-index:99999;white-space:pre-wrap;word-break:break-all';
+    var close = document.createElement('button');
+    close.textContent = '✕ Close Debug';
+    close.style.cssText = 'position:absolute;top:4px;right:8px;background:#c9920d;color:#000;border:none;padding:2px 8px;font-size:10px;cursor:pointer;border-radius:3px';
+    close.onclick = function() { panel.style.display = 'none'; };
+    panel.appendChild(close);
+    document.body.appendChild(panel);
+  }
+  panel.style.display = 'block';
+  // Show last 15 entries
+  var txt = _tradeDebugLog.slice(-15).join('\n');
+  panel.innerHTML = '<button onclick="this.parentElement.style.display=\'none\'" style="position:absolute;top:4px;right:8px;background:#c9920d;color:#000;border:none;padding:2px 8px;font-size:10px;cursor:pointer;border-radius:3px">✕ Close</button>' + txt;
 }
 
 function updateTradingUI() {
@@ -1738,6 +1766,7 @@ async function executeTrade() {
     showTradeStatus('Sign the order in MetaMask \u2192', 'info');
     cta.textContent = 'Sign in wallet...';
     var orderSignature = await signer.signTypedData(orderDomain, orderTypes, orderStruct);
+    tradeDebug('order signed', { sig: orderSignature.slice(0,20) + '...', maker: orderStruct.maker.slice(0,10), signer: orderStruct.signer.slice(0,10), token: orderStruct.tokenId.slice(0,15) + '...', makerAmt: orderStruct.makerAmount, takerAmt: orderStruct.takerAmount, exchange: exchangeAddr.slice(0,10), negRisk: isNegRisk });
 
     // Step 4: Submit to CLOB
     showTradeStatus('Submitting order to Polymarket...', 'info');
@@ -1871,6 +1900,7 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
   // Attempt 1: Browser-direct to Polymarket CLOB (preserves user IP for geo-compliance)
+  tradeDebug('submitOrder', { apiKey: apiKey.slice(0,8) + '...', eoa: eoaAddress.slice(0,10), ts: ts, bodyLen: requestBody.length });
   try {
     var res = await fetch('https://clob.polymarket.com/order', {
       method: 'POST',
@@ -1887,11 +1917,12 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
     });
 
     var data = await res.json().catch(function() { return {}; });
+    tradeDebug('CLOB response', { status: res.status, data: data });
 
     if (res.ok) return data;
 
     var errMsg = data.error || data.message || data.errorMsg || JSON.stringify(data);
-    console.warn('[trade] Browser-direct failed:', res.status, errMsg);
+    tradeDebug('CLOB REJECTED', { status: res.status, error: errMsg });
 
     // Only treat actual 401 (Invalid API key) as expired — NOT 400 validation errors
     if (res.status === 401) {
