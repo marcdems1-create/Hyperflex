@@ -9951,9 +9951,9 @@ function signOut() {
   localStorage.removeItem('hf_wallet_address');
   localStorage.removeItem('hf_hl_wallet');
   localStorage.removeItem('hf_member_token');
-  localStorage.removeItem('poly_api_key');
-  localStorage.removeItem('poly_api_secret');
-  localStorage.removeItem('poly_api_passphrase');
+  // NOTE: deliberately preserving hf_poly_wallet, hf_poly_last_good,
+  // poly_api_key/secret/passphrase across sign-out so positions + trading
+  // survive re-login without re-connecting wallet
   window.location.href = '/';
 }
 
@@ -11921,15 +11921,41 @@ function shareCommunityPage(anchorEl) {
 let _portfolioLoaded = false;
 let _kalshiConnected = false;
 let _manifoldUsername = '';
-// Persist wallet address in localStorage as backup — TRIPLE redundancy
-// This is the most critical variable on the site. Check every possible source.
+// ── POLYMARKET WALLET ADDRESS — SINGLE SOURCE OF TRUTH ──────────────────────
+// This address determines which positions load. If it's wrong, everything breaks.
+// ALL writes go through setPolyAddress() which validates + logs + persists.
 let _polyWalletAddress = localStorage.getItem('hf_poly_wallet') || sessionStorage.getItem('hf_poly_wallet_session') || '';
+// Address that last successfully returned positions — never overwrite this blindly
+let _polyLastGoodAddress = localStorage.getItem('hf_poly_last_good') || '';
 
-// Auto-reconnect: if we have a saved wallet in localStorage but _polyWalletAddress is empty somehow
+function setPolyAddress(addr, reason) {
+  if (!addr || typeof addr !== 'string') return;
+  addr = addr.toLowerCase().trim();
+  if (!addr.startsWith('0x') || addr.length < 40) return;
+  if (addr === _polyWalletAddress) return; // no-op
+  const prev = _polyWalletAddress;
+  _polyWalletAddress = addr;
+  localStorage.setItem('hf_poly_wallet', addr);
+  sessionStorage.setItem('hf_poly_wallet_session', addr);
+  console.log('[poly-addr] Changed:', prev ? prev.slice(0,10)+'...' : '(empty)', '→', addr.slice(0,10)+'...', '| Reason:', reason || 'unknown');
+  // Save to DB (fire-and-forget)
+  try { const t = localStorage.getItem('hf_token'); if (t) fetch('/api/user/wallets', { method: 'PUT', headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' }, body: JSON.stringify({ polymarket_address: addr }) }); } catch(e) {}
+}
+
+function markPolyAddressGood() {
+  if (_polyWalletAddress) {
+    _polyLastGoodAddress = _polyWalletAddress;
+    localStorage.setItem('hf_poly_last_good', _polyWalletAddress);
+    console.log('[poly-addr] Marked good:', _polyWalletAddress.slice(0,10) + '...');
+  }
+}
+
+// Recovery from localStorage fallback keys
 if (!_polyWalletAddress) {
   var _savedWallet = localStorage.getItem('hf_poly_wallet') || localStorage.getItem('hf_connected_wallet') || localStorage.getItem('hf_wallet_address') || '';
   if (_savedWallet && _savedWallet.startsWith('0x') && _savedWallet.length >= 40) {
     _polyWalletAddress = _savedWallet;
+    localStorage.setItem('hf_poly_wallet', _savedWallet);
     console.log('[wallet-recovery] Recovered wallet from localStorage:', _polyWalletAddress.slice(0,10) + '...');
   }
 }
@@ -12856,8 +12882,26 @@ async function loadPolymarketPositions(forceRefresh) {
       }
     }
     // AUTO-RECOVERY: if 0 positions, try alternative addresses before giving up
-    if (positions.length === 0 && !_polyRecoveryAttempted && typeof ethers !== 'undefined' && typeof window.ethereum !== 'undefined') {
+    if (positions.length === 0 && !_polyRecoveryAttempted) {
       _polyRecoveryAttempted = true;
+
+      // First: try last known good address (fastest path)
+      if (_polyLastGoodAddress && _polyLastGoodAddress !== _polyWalletAddress.toLowerCase()) {
+        try {
+          console.log('[poly-recovery] Trying last known good address:', _polyLastGoodAddress.slice(0,10));
+          const lgr = await fetch('https://data-api.polymarket.com/positions?user=' + _polyLastGoodAddress + '&limit=3&sortBy=CURRENT');
+          const lgd = await lgr.json();
+          if (Array.isArray(lgd) && lgd.length > 0) {
+            console.log('[poly-recovery] Last good address has positions!');
+            setPolyAddress(_polyLastGoodAddress, 'recovery-last-good');
+            showToast('Recovered your Polymarket positions!', 'success');
+            return loadPolymarketPositions(true);
+          }
+        } catch(e) {}
+      }
+
+      // Second: try CREATE2 derivations + EOA
+      if (typeof ethers !== 'undefined' && typeof window.ethereum !== 'undefined') {
       try {
         const accts = await window.ethereum.request({ method: 'eth_accounts' });
         const eoa = accts && accts.length ? accts[0].toLowerCase() : null;
@@ -12885,9 +12929,7 @@ async function loadPolymarketPositions(forceRefresh) {
               const raw = await r.json();
               if (Array.isArray(raw) && raw.length > 0) {
                 console.log('[poly-recovery] Found positions at:', addr, '(' + raw.length + ')');
-                _polyWalletAddress = addr;
-                localStorage.setItem('hf_poly_wallet', addr);
-                try { fetch('/api/user/wallets', { method: 'PUT', headers: { Authorization: 'Bearer ' + localStorage.getItem('hf_token'), 'Content-Type': 'application/json' }, body: JSON.stringify({ polymarket_address: addr }) }); } catch(e) {}
+                setPolyAddress(addr, 'recovery-scan');
                 showToast('Found your Polymarket positions!', 'success');
                 // Re-fetch full positions with correct address
                 return loadPolymarketPositions(true);
@@ -12896,9 +12938,12 @@ async function loadPolymarketPositions(forceRefresh) {
           }
         }
       } catch(e) { console.warn('[poly-recovery]', e.message); }
+      } // end ethers/ethereum check
     }
 
     window._polyPositionsData = positions;
+    // Mark address as verified good when positions are found
+    if (positions.length > 0) markPolyAddressGood();
     // Fetch USDC balance + activity for realized P&L from sold positions
     fetchUSDCBalance(_polyWalletAddress).then(() => updatePortfolioSummary());
     fetchRealizedPnL(_polyWalletAddress).then(() => updatePortfolioSummary());
