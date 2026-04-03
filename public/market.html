@@ -1597,8 +1597,11 @@ async function enableTrading() {
       console.log('[wallet debug] Server did not return proxy address, computing fallback...');
       var factoryAddress = '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b';
       var initCodeHash = '0x2bce2127ff07fb632d16c8347c4ebf501f4841168bed00d9e6ef715ddb6fcecf';
-      var salt = ethers.zeroPadValue(address, 32);
-      proxyAddr = ethers.getCreate2Address(factoryAddress, salt, initCodeHash).toLowerCase();
+      // Use Polymarket's official deriveSafe method for salt calculation
+      var addrLower = address.toLowerCase();
+      var abiEncoded = ethers.AbiCoder.defaultAbiCoder().encode(['address'], [addrLower]);
+      var safeSalt = ethers.keccak256(abiEncoded);
+      proxyAddr = ethers.getCreate2Address(factoryAddress, safeSalt, initCodeHash).toLowerCase();
       console.log('[wallet debug] Fallback proxy computed:', proxyAddr);
     } else {
       console.log('[wallet debug] Using server-provided proxy address:', proxyAddr);

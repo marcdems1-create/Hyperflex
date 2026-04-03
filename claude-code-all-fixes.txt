@@ -1,0 +1,2247 @@
+# Claude Code: Bug Fixes — Live Site Audit (March 23, 2026)
+
+Full audit of all public-facing pages complete. Fix the following bugs in priority order. All changes are in `server.js` and the relevant `public/` HTML files.
+
+---
+
+## BUG 1 (HIGH): Crystal Ball / Momentum signals — expired markets + near-zero price bug
+
+**Symptoms:**
+- Crystal Ball shows 10 predictions, ALL on expired or near-expired markets (0h left)
+- All predictions are markets that moved from 0¢ → small value (5¢, 15¢, 25¢, 48¢)
+- "La U win Colombian chamber" shows 0¢ → 0¢ (no move at all) being flagged
+- All 10 have identical 87 confidence — algorithm isn't differentiating
+- Daily Briefing on explore.html shows: `"Ethereum above 2,135 on March 22, 8PM ET?" moved up 4900.0%`
+
+**Root cause:**
+Markets with near-zero prices (0¢ or 1¢ baseline) get flagged as "momentum" because any move looks like a massive % gain. Expired markets aren't filtered out.
+
+**Fixes needed in `server.js`:**
+
+### 1A. Fix the momentum/crystal ball market detection
+
+Find the function that generates momentum signals / crystal ball predictions (likely `getCrystalBallPredictions()` or similar, searches for markets with recent price movement). Add these filters:
+
+```js
+// Filter 1: Skip expired markets
+if (new Date(market.endDateIso || market.end_date) < new Date()) continue;
+
+// Filter 2: Skip markets expiring within 2 hours (no trading value)
+const hoursLeft = (new Date(market.endDateIso || market.end_date) - new Date()) / 3600000;
+if (hoursLeft < 2) continue;
+
+// Filter 3: Skip near-zero price baseline (noise filter)
+// Only flag momentum if starting price was at least 3¢ (0.03)
+const priorPrice = parseFloat(market.priorPrice || market.prior_price || 0);
+if (priorPrice < 0.03) continue;
+
+// Filter 4: Require meaningful absolute move (at least 3¢)
+const currentPrice = parseFloat(market.currentPrice || market.price || 0);
+const absoluteMove = Math.abs(currentPrice - priorPrice);
+if (absoluteMove < 0.03) continue;
+
+// Filter 5: Cap percentage display at 999% to avoid "4900%" in UI
+const pctMove = priorPrice > 0 ? ((currentPrice - priorPrice) / priorPrice) * 100 : 0;
+const displayPct = Math.min(Math.abs(pctMove), 999).toFixed(0);
+```
+
+### 1B. Fix the Daily Briefing momentum percentage display
+
+In the function that generates daily briefing text (likely `generateDailyBriefing()` or the `/api/briefing` or `/api/activity` endpoint), find where it formats the momentum move and cap it:
+
+```js
+// Replace any raw % calculation in briefing copy with capped version
+// Change: `moved up ${pct.toFixed(1)}%`
+// To:
+const cappedPct = Math.min(pct, 999);
+const moveStr = priorPrice < 0.02
+  ? `surged from near-zero to ${(currentPrice * 100).toFixed(0)}¢`
+  : `moved up ${cappedPct.toFixed(0)}%`;
+// Use moveStr in the briefing bullet
+```
+
+**Also**: In the signals page (`public/signals.html` or wherever signals are rendered), find the momentum signal card rendering and apply the same cap to the displayed percentage.
+
+---
+
+## BUG 2 (HIGH): Signals page — Momentum signal direction is wrong
+
+**Symptom:** A Momentum signal shows `BUY YES — odds: 7¢ → 2¢` with `Move: +5pts` — price DROPPED from 7¢ to 2¢ but it's flagged as a positive momentum BUY signal.
+
+**Fix in `server.js`:** In the momentum signal detection, verify the direction filter. Momentum BUY signals should only fire when `currentPrice > priorPrice`. Add:
+
+```js
+// Only flag as momentum BUY if price actually increased
+if (currentPrice <= priorPrice) continue; // skip if price dropped
+```
+
+Also fix the Move display in `public/signals.html`:
+- If `move < 0`, render as red negative, not green positive
+- The `Move:` label should show actual signed value: `Move: ${move > 0 ? '+' : ''}${move}pts`
+
+---
+
+## BUG 3 (MEDIUM): AI Analysis button — "Unable to analyze this market right now"
+
+**Symptom:** Clicking "AI Analysis" on signals page populates the input box with the market question but returns `Unable to analyze this market right now.`
+
+**Investigate:** Check the `/api/signals/analyze` (or similar) endpoint in server.js. The likely cause is:
+1. The endpoint is hitting Anthropic API but failing (check `ANTHROPIC_API_KEY` env var is set on Railway)
+2. Or the market lookup by question string isn't finding the market (title mismatch)
+
+**Fix:**
+- Add better error logging to the analyze endpoint: `console.error('AI analysis error:', err.message, err.stack)`
+- Add a fallback message if Claude fails: `"AI analysis temporarily unavailable. The whale data above provides the key signal."`
+- If the issue is the market lookup, try matching by partial title or slug instead of exact title
+
+---
+
+## BUG 4 (MEDIUM): Trader profile — "Recent Wins" labels ALL resolved positions as "WIN"
+
+**Symptom:** On `/trader/:address`, the "RECENT WINS" section shows positions with PnL of `-$22.5K`, `-$21.7K`, `-$86.3K` all labeled with green `WIN` badges.
+
+**Location:** In `public/trader.html`, find the `RECENT WINS` section rendering.
+
+**Fix:**
+```js
+// In the renderRecentWins() function or wherever wins are rendered:
+// Change section title from hardcoded "RECENT WINS" to dynamic
+
+const resolvedPositions = data.polymarket?.resolved || [];
+const actualWins = resolvedPositions.filter(p => p.pnl > 0);
+const actualLosses = resolvedPositions.filter(p => p.pnl <= 0);
+
+// Show wins and losses separately, or just wins:
+// Section header: `RECENT WINS (${actualWins.length})`
+// Only show actualWins in this section
+// Add separate "RECENT LOSSES" section or just omit losses from wins
+```
+
+Also fix the badge: only show green `WIN` if `pnl > 0`, otherwise show red `LOSS`.
+
+---
+
+## BUG 5 (LOW): Member profile — "Member since Dec 1969"
+
+**Symptom:** On `/p/:address` profile pages, "Member since Dec 1969" — Unix epoch 0 date.
+
+**Location:** In `public/member.html` or wherever the profile page renders the join date.
+
+**Fix:**
+```js
+// Replace this pattern (wherever joined_at / created_at is formatted):
+const joinDate = user.created_at || user.joined_at;
+// Guard against epoch 0 or null:
+const joinDisplay = (!joinDate || new Date(joinDate).getFullYear() < 2020)
+  ? null  // don't show
+  : new Date(joinDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+
+// In template: only render if joinDisplay is non-null
+if (joinDisplay) {
+  memberSinceEl.textContent = `Member since ${joinDisplay}`;
+} else {
+  memberSinceEl.style.display = 'none';
+}
+```
+
+---
+
+## BUG 6 (LOW): HL Whale table — Entry and Mark price showing $0
+
+**Symptom:** On `/whales` Hyperliquid tab, ENTRY and MARK columns show `$0` for all positions.
+
+**Location:** In `server.js`, the Hyperliquid whale data fetch. Check the HL position object — `entryPx` and `markPx` (or `liquidationPx`) may be inside a nested object.
+
+The HL API `clearinghouseState` returns position data like:
+```js
+position.position.entryPx  // might be string "0" for some positions
+position.position.markPx   // might not exist at top level
+```
+
+**Fix in `server.js`:**
+```js
+// When building the HL position object, use the correct field path:
+entry_price: parseFloat(p.position.entryPx) || null,
+mark_price: parseFloat(p.position.markPx || p.position.unrealizedPnl ?
+  (p.position.positionValue / Math.abs(p.position.szi)) : null) || null,
+```
+
+**Fix in the whale table HTML:** Show `—` when value is 0 or null:
+```js
+const entryDisplay = pos.entry_price && pos.entry_price > 0
+  ? `$${pos.entry_price.toFixed(4)}` : '—';
+const markDisplay = pos.mark_price && pos.mark_price > 0
+  ? `$${pos.mark_price.toFixed(4)}` : '—';
+```
+
+---
+
+## BUG 7 (LOW): Signals score icon inconsistency
+
+**Symptom:** High-score signals (≥8.0) show `🔥 9.0`, but lower-score signals show `• 5.6` (bare bullet point, no emoji).
+
+**Location:** `public/signals.html` — wherever signal score is rendered.
+
+**Fix:** Use a consistent icon at all scores:
+```js
+const scoreIcon = score >= 8 ? '🔥' : score >= 6 ? '⚡' : '📊';
+// Render: `${scoreIcon} ${score.toFixed(1)}`
+```
+
+---
+
+## SUMMARY OF CHANGES
+
+| File | Changes |
+|------|---------|
+| `server.js` | Crystal Ball/momentum: add expired market filter, near-zero price filter, direction filter; fix AI analysis error logging |
+| `server.js` | Daily Briefing: cap momentum % at 999%, use descriptive language for near-zero moves |
+| `public/signals.html` | Fix momentum direction display, cap % display, fix score icon consistency |
+| `public/trader.html` | Fix Recent Wins to show only actual wins (pnl > 0), fix badge labels |
+| `public/member.html` (or wherever `/p/:address` renders) | Guard against epoch-0 join date |
+| `public/whales.html` | Show `—` for null/zero entry and mark prices on HL tab |
+
+After making all changes:
+1. `git add -p` to review each change
+2. `git commit -m "fix: crystal ball momentum filter, signal direction, trader wins display, epoch date bug"`
+3. `git push origin main`
+
+---
+
+## PATCH REMINDER
+
+At end of session, run:
+```bash
+cd /Users/marcdems/Desktop/HYPERFLEX
+git diff HEAD > cowork-latest.patch
+```
+Then apply in Claude Code with `git apply cowork-latest.patch`.
+# Claude Code: Whales Page — 2 UX Fixes
+
+Both changes are in `public/whales.html`. No server.js changes needed.
+
+---
+
+## FIX 1: "Auto-Copy" button — make it clear what it does
+
+### Problem
+The actions column shows three buttons: `+ Follow`, `Copy Trade`, `Auto-Copy`. Users don't understand what "Auto-Copy" does or how it differs from "Copy Trade".
+
+### What the buttons should communicate:
+- **Copy Trade** — one-time action: replicate this specific open position right now
+- **Auto-Copy** — ongoing: mirror ALL future trades from this wallet automatically
+
+### Changes
+
+**1A. Rename and add tooltip to "Auto-Copy":**
+
+Find the button rendering code in `whales.html` (in the Polymarket whale table rows). Change:
+```html
+<!-- BEFORE -->
+<button class="btn-auto-copy" onclick="setupAutoCopy(...)">🤖 Auto-Copy</button>
+```
+To:
+```html
+<!-- AFTER -->
+<button class="btn-auto-copy" onclick="setupAutoCopy(...)" title="Mirror all future trades from this wallet automatically">
+  🤖 Auto-Mirror
+</button>
+```
+
+**1B. Add a small descriptor line under each button pair.** After the two action buttons row, add:
+```html
+<div style="font-size:10px; color:#888; margin-top:3px; text-align:center;">
+  Copy: this trade · Mirror: all future
+</div>
+```
+
+**1C. When "Auto-Mirror" is clicked**, show a confirmation modal (or toast) that explains what's happening:
+```js
+function setupAutoCopy(address, traderName) {
+  // Show confirmation instead of silently setting up
+  const confirmed = confirm(
+    `Auto-Mirror: We'll notify you every time ${traderName} opens a new position, ` +
+    `so you can copy their trades in real time.\n\nEnable for this wallet?`
+  );
+  if (!confirmed) return;
+  // ... rest of existing auto-copy logic
+}
+```
+
+**1D. Style the two buttons distinctly** so the hierarchy is clear:
+```css
+/* Copy Trade = secondary (outlined) */
+.btn-copy-trade {
+  background: transparent;
+  border: 1px solid #c9920d;
+  color: #c9920d;
+}
+/* Auto-Mirror = primary (filled) — the more powerful action */
+.btn-auto-copy {
+  background: #c9920d;
+  color: #141412;
+  font-weight: 600;
+}
+```
+
+---
+
+## FIX 2: Hyperliquid whales — Large Cap filter + tier badges
+
+### Problem
+The HL tab shows positions in coins like PUMP, BLAST, and other micro-cap tokens. Traders want to see where smart money is in **real assets** (BTC, ETH, SOL, etc.), not shitcoins. Currently there's no way to filter.
+
+### Solution
+Add a **Large Cap filter** that defaults ON when switching to the HL tab, with per-row tier badges.
+
+---
+
+### 2A. Define large cap coins (top of script section or in the HL render function)
+
+```js
+const HL_LARGE_CAP = new Set([
+  'BTC','ETH','SOL','BNB','XRP','DOGE','ADA','AVAX','TRX','LINK',
+  'DOT','MATIC','UNI','LTC','BCH','SUI','ARB','OP','APT','ATOM',
+  'NEAR','FIL','ICP','INJ','WLD','MKR','AAVE','SNX','CRV','GMX',
+  'PENDLE','WIF','PEPE','SHIB','TON','STX','RUNE','SEI','TIA','JUP'
+]);
+
+const HL_MID_CAP = new Set([
+  'BLUR','ENS','DYDX','LDO','COMP','BAL','YFI','SUSHI','1INCH',
+  'CAKE','ZRX','BAND','API3','UMA','BADGER','PERP','IMX','BOBA',
+  'MAGIC','HFT','HOOK','GMX','RDNT','VELA','UMAMI'
+]);
+
+function getHLTier(coin) {
+  if (HL_LARGE_CAP.has(coin)) return 'large';
+  if (HL_MID_CAP.has(coin)) return 'mid';
+  return 'small';
+}
+
+function getHLTierBadge(coin) {
+  const tier = getHLTier(coin);
+  if (tier === 'large') return '<span class="hl-tier-badge hl-large">🔵 L</span>';
+  if (tier === 'mid')   return '<span class="hl-tier-badge hl-mid">🟡 M</span>';
+  return '<span class="hl-tier-badge hl-small">🔴 S</span>';
+}
+```
+
+---
+
+### 2B. Add filter pills above the HL table
+
+Find where the HL tab content is rendered. Above the HL positions table, add:
+
+```html
+<div id="hl-cap-filter" style="display:flex; gap:8px; margin:12px 0 8px; align-items:center;">
+  <span style="font-size:11px; color:#888; font-family:'Space Mono',monospace; text-transform:uppercase; letter-spacing:.05em;">FILTER:</span>
+  <button class="hl-filter-pill active" data-filter="large" onclick="setHLFilter('large')">🔵 Large Cap</button>
+  <button class="hl-filter-pill" data-filter="mid" onclick="setHLFilter('mid')">🟡 Mid Cap</button>
+  <button class="hl-filter-pill" data-filter="small" onclick="setHLFilter('small')">🔴 Small Cap</button>
+  <button class="hl-filter-pill" data-filter="all" onclick="setHLFilter('all')">All</button>
+  <span id="hl-filter-count" style="font-size:11px; color:#888; margin-left:4px;"></span>
+</div>
+```
+
+CSS for the pills:
+```css
+.hl-filter-pill {
+  background: transparent;
+  border: 1px solid #333;
+  color: #888;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: 'Space Mono', monospace;
+  transition: all .15s;
+}
+.hl-filter-pill.active {
+  background: #1a1a18;
+  border-color: #c9920d;
+  color: #c9920d;
+}
+.hl-tier-badge {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-left: 4px;
+  font-family: 'Space Mono', monospace;
+}
+```
+
+---
+
+### 2C. Filter logic
+
+```js
+let _hlFilter = 'large'; // default to large cap
+
+function setHLFilter(filter) {
+  _hlFilter = filter;
+  // Update pill active states
+  document.querySelectorAll('.hl-filter-pill').forEach(p => {
+    p.classList.toggle('active', p.dataset.filter === filter);
+  });
+  // Re-render the table with current data
+  renderHLWhaleTable(window._hlPositionsCache || []);
+}
+
+function renderHLWhaleTable(positions) {
+  window._hlPositionsCache = positions; // cache for re-filtering
+
+  const filtered = _hlFilter === 'all'
+    ? positions
+    : positions.filter(p => getHLTier(p.coin) === _hlFilter);
+
+  // Update count label
+  const countEl = document.getElementById('hl-filter-count');
+  if (countEl) countEl.textContent = `${filtered.length} positions`;
+
+  // ... render filtered positions into the table
+  // (replace the existing table body render with filtered array)
+}
+```
+
+---
+
+### 2D. Add tier badge to each table row's COIN column
+
+In the row template for HL positions, change the COIN cell:
+```html
+<!-- BEFORE -->
+<td class="hl-coin">${pos.coin}</td>
+
+<!-- AFTER -->
+<td class="hl-coin">
+  ${pos.coin}
+  ${getHLTierBadge(pos.coin)}
+</td>
+```
+
+---
+
+### 2E. Default to "Large Cap" when switching to HL tab
+
+Find where the HL tab is activated (the `onclick` for the "Hyperliquid" tab button). Add:
+
+```js
+// When HL tab is clicked, default filter to 'large'
+function switchToHLTab() {
+  _hlFilter = 'large';
+  document.querySelectorAll('.hl-filter-pill').forEach(p => {
+    p.classList.toggle('active', p.dataset.filter === 'large');
+  });
+  // ... existing HL tab switch logic
+}
+```
+
+---
+
+### 2F. HL tab summary stats — show large cap stats by default
+
+In the HL tab's summary cards (TOTAL CAPITAL, LARGEST POSITION, MOST POPULAR MARKET, AVG POSITION SIZE), compute these for large-cap positions only when large cap filter is active.
+
+Add a subtle label to the stats cards when filtered:
+```html
+<div class="stat-label">TOTAL CAPITAL <span style="color:#c9920d; font-size:9px;">(LARGE CAP)</span></div>
+```
+
+---
+
+## SUMMARY
+
+| File | Changes |
+|------|---------|
+| `public/whales.html` | Rename Auto-Copy → Auto-Mirror, add tooltip + confirmation modal + button styling |
+| `public/whales.html` | Add HL cap filter pills, `HL_LARGE_CAP` / `HL_MID_CAP` sets, tier badges, `setHLFilter()`, default to large cap on tab switch |
+
+After changes:
+```bash
+git add public/whales.html
+git commit -m "fix: whales — clarify Auto-Mirror button, add HL large/mid/small cap filter"
+git push origin main
+```
+# Claude Code: Signals Page — Deduplication + Narrative Diversity
+
+Two fixes in `server.js` (signal generation) and `public/signals.html` (display).
+
+## The Problem
+
+The signals feed shows "US x Iran ceasefire by March 31", "...by April 15", "...by April 30"
+as three separate WHALE CLUSTER signals. They're the same event — just different expiry dates.
+This happens because:
+1. Polymarket creates one market per deadline for the same underlying event
+2. The same whales hedge across all dates, so each passes the whale threshold
+3. No deduplication or per-narrative cap exists
+
+---
+
+## FIX 1: Base-question deduplication in `server.js`
+
+Find the function that builds signal results (likely `getSignals()` or the `/api/signals` handler).
+After collecting all raw signals but **before** returning them, add a dedup pass.
+
+### 1A. Strip date noise from questions to find duplicates
+
+```js
+function baseQuestion(question) {
+  // Remove trailing date phrases like "by March 31", "by April 15?", "before Q2 2026", etc.
+  return question
+    .replace(/\s+by\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+\d{1,2}(\?)?$/i, '')
+    .replace(/\s+by\s+\w+\s+\d{4}(\?)?$/i, '')
+    .replace(/\s+before\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+\d{1,2}(\?)?$/i, '')
+    .replace(/\s+in\s+(q[1-4]|q[1-4]\s+\d{4}|\d{4})(\?)?$/i, '')
+    .replace(/\s+(by|before|in|through|until)\s+\d{4}(\?)?$/i, '')
+    .replace(/\?$/, '')
+    .trim()
+    .toLowerCase();
+}
+```
+
+### 1B. Deduplicate signals by base question — keep the best one per group
+
+Add this dedup function and call it on your raw signals array:
+
+```js
+function deduplicateSignals(signals) {
+  const seen = new Map(); // baseQ -> best signal so far
+
+  for (const signal of signals) {
+    const base = baseQuestion(signal.question || signal.market?.question || '');
+    const existing = seen.get(base);
+
+    if (!existing) {
+      // First time seeing this base question
+      seen.set(base, { ...signal, _altCount: 0, _altMarkets: [] });
+    } else {
+      // Already have one — keep whichever has more whales (or higher score)
+      const existingScore = (existing.whaleCount || existing.whale_count || 0) * 10
+        + (existing.score || 0);
+      const newScore = (signal.whaleCount || signal.whale_count || 0) * 10
+        + (signal.score || 0);
+
+      if (newScore > existingScore) {
+        // New one is better — replace, but carry over the alt count
+        const altMarkets = existing._altMarkets.concat([{
+          question: existing.question || existing.market?.question,
+          expiry: existing.endDate || existing.market?.endDate
+        }]);
+        seen.set(base, {
+          ...signal,
+          _altCount: existing._altCount + 1,
+          _altMarkets: altMarkets
+        });
+      } else {
+        // Keep existing — just increment alt count
+        existing._altCount += 1;
+        existing._altMarkets.push({
+          question: signal.question || signal.market?.question,
+          expiry: signal.endDate || signal.market?.endDate
+        });
+      }
+    }
+  }
+
+  return Array.from(seen.values());
+}
+```
+
+### 1C. Call dedup in the signals handler
+
+Find where signals are assembled and add the dedup call:
+
+```js
+// After building `signals` array, before sorting/returning:
+const deduped = deduplicateSignals(signals);
+// Return deduped instead of signals
+```
+
+Also expose `_altCount` in the API response (it's used in the frontend to show "2 more" note).
+
+---
+
+## FIX 2: Per-narrative cap — max 2 signals per narrative
+
+After deduplication, apply a narrative diversity cap:
+
+```js
+function applyNarrativeCap(signals, maxPerNarrative = 2) {
+  // Reuse the same keyword map from screener narratives
+  const NARRATIVE_KEYWORDS = {
+    'Trump & US Politics':   ['trump','president','democrat','republican','congress','senate','maga','white house','tariff','executive order'],
+    'Crypto & DeFi':         ['bitcoin','btc','ethereum','eth','crypto','solana','sol','defi','nft','coinbase','stablecoin'],
+    'Middle East & War':     ['israel','iran','gaza','hamas','hezbollah','ceasefire','hormuz','middle east','lebanon'],
+    'AI & Big Tech':         ['ai','openai','gpt','artificial intelligence','nvidia','apple','microsoft','google','meta'],
+    'Macro & Economy':       ['fed','federal reserve','interest rate','inflation','recession','gdp','cpi','unemployment','rate cut'],
+    'Ukraine & Russia':      ['ukraine','russia','zelensky','putin','nato','kyiv','donbas'],
+    'NBA & Basketball':      ['nba','basketball','finals','playoff','lakers','celtics','warriors'],
+    'NFL & American Sports': ['nfl','super bowl','mlb','world series','nhl','stanley cup'],
+    'Global Elections':      ['election','vote','ballot','candidate','prime minister'],
+  };
+
+  function getSignalNarrative(signal) {
+    const q = (signal.question || signal.market?.question || '').toLowerCase();
+    for (const [narrative, keywords] of Object.entries(NARRATIVE_KEYWORDS)) {
+      if (keywords.some(kw => q.includes(kw))) return narrative;
+    }
+    return 'Other';
+  }
+
+  const narrativeCounts = {};
+  const result = [];
+
+  for (const signal of signals) {
+    const narrative = getSignalNarrative(signal);
+    narrativeCounts[narrative] = (narrativeCounts[narrative] || 0) + 1;
+
+    if (narrative === 'Other' || narrativeCounts[narrative] <= maxPerNarrative) {
+      result.push({ ...signal, _narrative: narrative });
+    }
+    // Signals beyond the cap are silently dropped (already deduped, so these are truly different)
+  }
+
+  return result;
+}
+```
+
+### Apply after dedup:
+
+```js
+const deduped = deduplicateSignals(signals);
+const diversified = applyNarrativeCap(deduped, 2); // max 2 per narrative
+// Sort by score descending
+diversified.sort((a, b) => (b.score || 0) - (a.score || 0));
+// Return diversified
+```
+
+---
+
+## FIX 3: Frontend — show "N more like this" note in `public/signals.html`
+
+When a signal was deduped, show a small note under the card so the user knows similar markets exist.
+
+Find the signal card rendering code. After the main card content (whale count, capital, buttons),
+add this conditional block:
+
+```js
+// In the card render template — after the action buttons:
+${signal._altCount > 0 ? `
+  <div style="
+    margin-top: 8px;
+    padding: 6px 10px;
+    background: #0e0e0c;
+    border: 1px solid #222;
+    border-radius: 6px;
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: #555;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  ">
+    <span style="color:#444">📅</span>
+    <span>+${signal._altCount} similar market${signal._altCount > 1 ? 's' : ''} (different deadline)</span>
+  </div>
+` : ''}
+```
+
+---
+
+## FIX 4: Add "narrative diversity" label to the signal type filter
+
+In `signals.html`, the filter pills are: All | Whale Cluster | Momentum | New Entry | Arbitrage.
+
+After deduplification, each signal now has `_narrative` attached. Add a subtle narrative label
+on each card (small pill below the signal type badge), so the feed feels categorized:
+
+```js
+// In the card header area, after the signal type badge:
+${signal._narrative && signal._narrative !== 'Other' ? `
+  <span style="
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    background: #1a1a18;
+    color: #555;
+    border: 1px solid #222;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  ">${signal._narrative}</span>
+` : ''}
+```
+
+---
+
+## Expected Result
+
+**Before:** 5 signals, all Iran ceasefire with different dates
+**After:** 2 signals max from "Middle East & War" narrative, each deduplicated to the strongest
+version, with a small "📅 +2 similar markets (different deadline)" note on the shown card.
+
+The feed will now show a mix like:
+- 🐋 WHALE CLUSTER — US x Iran ceasefire by April 30 (+2 similar) · Middle East & War
+- 🐋 WHALE CLUSTER — Will BTC hit $90K by March 31? · Crypto & DeFi
+- ⚡ MOMENTUM — Will the Fed cut in May? · Macro & Economy
+- 🆕 NEW ENTRY — NBA Finals: Will the Celtics repeat? · NBA & Basketball
+- 📊 ARBITRAGE — Ethereum above $2,400 · Crypto & DeFi
+
+---
+
+## Commit
+
+```bash
+git add server.js public/signals.html
+git commit -m "fix: signals dedup by base question + 2-per-narrative cap to prevent feed flooding"
+git push origin main
+```
+# Claude Code: Signals — Winner Picks "No active whale positions" fix
+
+File: `public/signals.html` (and possibly `server.js` if Winner Picks data comes from an API endpoint)
+
+---
+
+## The Problem
+
+The Winner Picks widget shows traders ranked by historical PnL/win rate.
+Some of those traders have zero currently open positions (they've exited everything).
+The card renders correctly but shows "No active whale positions detected" — useless to the user.
+
+Example: `0xa4f5650a655502b2e2bc66636d347a2fd8281079` — W: +$76K but no open positions.
+
+---
+
+## FIX 1: Filter winners with no active positions out of the displayed list
+
+Find the Winner Picks rendering code in `signals.html`. It likely:
+1. Fetches a list of top winners
+2. For each winner, fetches/shows their active positions
+3. Renders a card regardless of whether positions exist
+
+Change the render logic to **skip** winners with no active positions:
+
+```js
+function renderWinnerPicks(winners) {
+  // Filter to only winners who have at least 1 active position
+  const withPositions = winners.filter(w =>
+    w.activePositions && w.activePositions.length > 0
+  );
+
+  if (withPositions.length === 0) {
+    document.getElementById('winner-picks-container').innerHTML =
+      '<div style="color:#555; font-family:\'Space Mono\',monospace; font-size:12px; padding:12px 0; text-align:center;">No active whale positions right now</div>';
+    return;
+  }
+
+  // Render only winners with active positions
+  document.getElementById('winner-picks-container').innerHTML =
+    withPositions.map(w => renderWinnerCard(w)).join('');
+}
+```
+
+---
+
+## FIX 2: If positions are fetched async per winner, filter after load
+
+If Winner Picks works by fetching positions for each winner separately (lazy loading),
+the filter needs to happen after each position fetch resolves:
+
+```js
+async function loadWinnerPick(winner, cardEl) {
+  try {
+    const res = await fetch(`/api/polymarket/positions/${winner.address}`);
+    const data = await res.json();
+    const positions = (data.positions || data || []).filter(p =>
+      p.size > 0 && !p.resolved
+    );
+
+    if (positions.length === 0) {
+      // Hide the entire card — don't show "No active positions"
+      cardEl.style.display = 'none';
+      return;
+    }
+
+    // Render positions into card
+    renderPositionsInCard(cardEl, positions, winner);
+  } catch (e) {
+    cardEl.style.display = 'none'; // hide on error too
+  }
+}
+```
+
+---
+
+## FIX 3: If Winner Picks data comes from the backend (`/api/signals` or similar)
+
+Find the backend endpoint that powers Winner Picks. Add a position check before including a winner:
+
+```js
+// When building the winner picks array, filter out wallets with no open positions
+const winnersWithPositions = await Promise.all(
+  topWinners.map(async (winner) => {
+    const positions = await getPolymarketPositions(winner.address);
+    const activePositions = (positions || []).filter(p =>
+      parseFloat(p.size || p.shares || 0) > 0 &&
+      !p.market?.closed &&
+      !p.market?.resolved
+    );
+    return { ...winner, activePositions, hasActive: activePositions.length > 0 };
+  })
+);
+
+const filtered = winnersWithPositions.filter(w => w.hasActive);
+// Return filtered
+```
+
+Note: if this makes the endpoint too slow (many parallel fetches), cache position results
+for 5 min using the existing `_polyCache` or a similar Map keyed by address.
+
+---
+
+## FIX 4: Minimum — if you can't filter, change the empty state message
+
+Worst case (can't filter without major refactor), at least make the empty state useful:
+
+Change:
+```
+"No active whale positions detected"
+```
+To hide the card entirely, OR show:
+```
+"Closed all positions — check back soon"
+```
+with a dimmed style so it's clearly not actionable:
+
+```js
+if (!positions || positions.length === 0) {
+  cardEl.style.opacity = '0.4';
+  cardEl.querySelector('.positions-area').innerHTML =
+    '<span style="font-size:11px; color:#444; font-family:Space Mono,monospace;">· No open positions right now</span>';
+}
+```
+
+But FIX 1 or 2 (hiding the card entirely) is strongly preferred.
+
+---
+
+## Commit
+
+```bash
+git add public/signals.html server.js
+git commit -m "fix: winner picks — hide traders with no active positions instead of showing empty state"
+git push origin main
+```
+# Claude Code: Screener — Narrative Intelligence Layer
+
+Add a "Narrative Intelligence" section at the top of `public/screener.html` + a new `GET /api/screener/narratives` endpoint in `server.js`.
+
+The feature answers: **"What themes are dominating prediction markets right now, and is that changing?"**
+
+---
+
+## What It Does
+
+- Groups all active Polymarket markets into 8–12 narrative themes using keyword matching
+- For each narrative: shows **dominance %** (share of total market volume), **weekly change** (+/- ppts), market count
+- Clicking a narrative filters the screener table below to show only those markets
+- Snapshots stored weekly in Supabase to power the 7d delta
+
+---
+
+## 1. Backend — `server.js`
+
+### 1A. Narrative keyword map (add near top of file, with other constants)
+
+```js
+const NARRATIVE_KEYWORDS = {
+  'Trump & US Politics':    ['trump', 'president', 'democrat', 'republican', 'congress', 'senate', 'maga', 'white house', 'tariff', 'executive order'],
+  'Crypto & DeFi':          ['bitcoin', 'btc', 'ethereum', 'eth', 'crypto', 'solana', 'sol', 'defi', 'nft', 'coinbase', 'stablecoin', 'altcoin'],
+  'Middle East & War':      ['israel', 'iran', 'gaza', 'hamas', 'hezbollah', 'ceasefire', 'hormuz', 'middle east', 'lebanon'],
+  'AI & Big Tech':          ['ai', 'openai', 'gpt', 'artificial intelligence', 'nvidia', 'apple', 'microsoft', 'google', 'meta', 'anthropic'],
+  'Macro & Economy':        ['fed', 'federal reserve', 'interest rate', 'inflation', 'recession', 'gdp', 'cpi', 'unemployment', 'rate cut', 'yield'],
+  'Ukraine & Russia':       ['ukraine', 'russia', 'zelensky', 'putin', 'nato', 'kyiv', 'donbas', 'ceasefire ukraine'],
+  'NBA & Basketball':       ['nba', 'basketball', 'finals', 'playoff', 'lakers', 'celtics', 'warriors', 'nuggets'],
+  'NFL & American Sports':  ['nfl', 'super bowl', 'mlb', 'world series', 'nhl', 'stanley cup', 'ncaa'],
+  'Global Elections':       ['election', 'vote', 'ballot', 'candidate', 'prime minister', 'chancellor', 'parliament'],
+  'Other':                  [] // catch-all
+};
+
+function classifyMarketNarrative(question) {
+  const q = question.toLowerCase();
+  for (const [narrative, keywords] of Object.entries(NARRATIVE_KEYWORDS)) {
+    if (narrative === 'Other') continue;
+    if (keywords.some(kw => q.includes(kw))) return narrative;
+  }
+  return 'Other';
+}
+```
+
+### 1B. Narrative snapshot table helper (add near other Supabase helpers)
+
+```js
+async function snapshotNarratives(narrativeData) {
+  // Store daily snapshots for weekly delta calculation
+  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const rows = narrativeData.map(n => ({
+    narrative: n.narrative,
+    snapshot_date: today,
+    dominance_pct: n.dominance_pct,
+    market_count: n.market_count,
+    total_volume: n.total_volume
+  }));
+  // Upsert — one row per narrative per day
+  await supabase.from('narrative_snapshots')
+    .upsert(rows, { onConflict: 'narrative,snapshot_date' });
+}
+
+async function getNarrativeWeeklyDeltas() {
+  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const { data } = await supabase.from('narrative_snapshots')
+    .select('narrative, dominance_pct, snapshot_date')
+    .eq('snapshot_date', weekAgo);
+  const map = {};
+  (data || []).forEach(r => { map[r.narrative] = r.dominance_pct; });
+  return map;
+}
+```
+
+### 1C. New API endpoint (add with other screener/signal routes)
+
+```js
+// Narrative intelligence — groups markets into themes with dominance %
+const _narrativeCache = { data: null, ts: 0 };
+app.get('/api/screener/narratives', async (req, res) => {
+  try {
+    // 15-min cache
+    if (_narrativeCache.data && Date.now() - _narrativeCache.ts < 15 * 60 * 1000) {
+      return res.json(_narrativeCache.data);
+    }
+
+    // Fetch active markets (reuse existing Polymarket cache if available)
+    // Adjust the fetch URL to match what your screener currently uses
+    const pmRes = await fetch(
+      'https://clob.polymarket.com/markets?active=true&closed=false&limit=500',
+      { headers: { 'User-Agent': 'hyperflex.network' } }
+    );
+    const pmData = await pmRes.json();
+    const markets = (pmData.data || pmData || []).filter(m =>
+      m.volume && parseFloat(m.volume) > 1000
+    );
+
+    if (!markets.length) return res.json([]);
+
+    // Group by narrative
+    const groups = {};
+    let totalVolume = 0;
+    for (const m of markets) {
+      const narrative = classifyMarketNarrative(m.question || '');
+      if (!groups[narrative]) groups[narrative] = { markets: [], volume: 0 };
+      const vol = parseFloat(m.volume) || 0;
+      groups[narrative].markets.push(m);
+      groups[narrative].volume += vol;
+      totalVolume += vol;
+    }
+
+    // Get weekly deltas from Supabase
+    const weeklyDeltas = await getNarrativeWeeklyDeltas();
+
+    // Build result array
+    const result = Object.entries(groups)
+      .map(([narrative, g]) => {
+        const dominance_pct = totalVolume > 0
+          ? Math.round((g.volume / totalVolume) * 1000) / 10  // 1 decimal
+          : 0;
+        const prior = weeklyDeltas[narrative];
+        const weekly_change = prior != null
+          ? Math.round((dominance_pct - prior) * 10) / 10
+          : null;
+
+        // Top market by volume
+        const top = g.markets.sort((a, b) =>
+          (parseFloat(b.volume) || 0) - (parseFloat(a.volume) || 0)
+        )[0];
+
+        return {
+          narrative,
+          dominance_pct,
+          weekly_change,        // null if no snapshot yet
+          market_count: g.markets.length,
+          total_volume: Math.round(g.volume),
+          top_market: top ? {
+            question: top.question,
+            yes_pct: top.outcomePrices
+              ? Math.round(parseFloat(JSON.parse(top.outcomePrices)[0]) * 100)
+              : null,
+            volume: Math.round(parseFloat(top.volume) || 0)
+          } : null
+        };
+      })
+      .filter(n => n.narrative !== 'Other' || n.market_count > 5)
+      .sort((a, b) => b.dominance_pct - a.dominance_pct);
+
+    // Snapshot for future weekly deltas (fire-and-forget)
+    snapshotNarratives(result).catch(() => {});
+
+    _narrativeCache.data = result;
+    _narrativeCache.ts = Date.now();
+    res.json(result);
+  } catch (err) {
+    console.error('[narratives]', err.message);
+    res.json([]);
+  }
+});
+```
+
+---
+
+## 2. Migration — `supabase_migration_narrative_snapshots.sql`
+
+Create this file and run it in Supabase SQL editor:
+
+```sql
+CREATE TABLE IF NOT EXISTS narrative_snapshots (
+  id            BIGSERIAL PRIMARY KEY,
+  narrative     TEXT NOT NULL,
+  snapshot_date DATE NOT NULL,
+  dominance_pct NUMERIC(5,2),
+  market_count  INTEGER,
+  total_volume  BIGINT,
+  created_at    TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (narrative, snapshot_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_narrative_snapshots_date ON narrative_snapshots (snapshot_date);
+```
+
+Add as migration **#31** in CLAUDE.md ordered list.
+
+---
+
+## 3. Frontend — `public/screener.html`
+
+### 3A. Add the Narrative Intelligence section
+
+Insert this **above the existing filter pills row** (above the `CATEGORY` / `WHALES` / `VOLUME` filters div):
+
+```html
+<!-- NARRATIVE INTELLIGENCE -->
+<div id="narrative-section" style="margin: 0 0 32px; max-width: 960px; margin-left: auto; margin-right: auto;">
+  <div style="display:flex; align-items:baseline; gap:12px; margin-bottom:14px;">
+    <h2 style="font-family:'Syne',sans-serif; font-size:15px; font-weight:700; color:#f0ebe3; letter-spacing:.05em; text-transform:uppercase; margin:0;">
+      🧭 Narrative Intelligence
+    </h2>
+    <span style="font-family:'Space Mono',monospace; font-size:11px; color:#555;">
+      what themes dominate prediction markets this week
+    </span>
+  </div>
+
+  <div id="narrative-grid" style="display:flex; flex-direction:column; gap:6px;">
+    <!-- Populated by JS -->
+    <div style="color:#555; font-family:'Space Mono',monospace; font-size:12px; padding:12px 0;">Loading narratives…</div>
+  </div>
+</div>
+```
+
+### 3B. Add CSS (inside the `<style>` block)
+
+```css
+.narrative-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #0e0e0c;
+  border: 1px solid #1e1e1c;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+  position: relative;
+  overflow: hidden;
+}
+.narrative-row:hover {
+  border-color: #333;
+  background: #111110;
+}
+.narrative-row.active {
+  border-color: #c9920d;
+  background: #111110;
+}
+/* Dominance fill bar behind the row */
+.narrative-bar-fill {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  background: rgba(201,146,13,0.07);
+  border-radius: 8px 0 0 8px;
+  pointer-events: none;
+  transition: width .4s ease;
+}
+.narrative-name {
+  font-family: 'Syne', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: #f0ebe3;
+  min-width: 180px;
+  flex-shrink: 0;
+}
+.narrative-dominance {
+  font-family: 'Space Mono', monospace;
+  font-size: 14px;
+  font-weight: 700;
+  color: #c9920d;
+  min-width: 52px;
+  flex-shrink: 0;
+}
+.narrative-weekly {
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  min-width: 54px;
+  text-align: center;
+}
+.narrative-weekly.up   { background: rgba(0,200,100,.12); color: #00c864; }
+.narrative-weekly.down { background: rgba(200,50,50,.12);  color: #e05252; }
+.narrative-weekly.flat { background: #1a1a18; color: #555; }
+.narrative-count {
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  color: #555;
+  flex-shrink: 0;
+}
+.narrative-top-market {
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+@media (max-width: 600px) {
+  .narrative-top-market { display: none; }
+  .narrative-name { min-width: 130px; }
+}
+```
+
+### 3C. Add JS (inside the `<script>` block, near other init functions)
+
+```js
+let _activeNarrative = null;
+const NARRATIVE_COLORS = {
+  'Trump & US Politics':   '#c9920d',
+  'Crypto & DeFi':         '#627eea',
+  'Middle East & War':     '#e05252',
+  'AI & Big Tech':         '#00c8c8',
+  'Macro & Economy':       '#a0c878',
+  'Ukraine & Russia':      '#e08040',
+  'NBA & Basketball':      '#ff6b35',
+  'NFL & American Sports': '#4a90e2',
+  'Global Elections':      '#c94db4',
+  'Other':                 '#555'
+};
+
+async function loadNarratives() {
+  try {
+    const res = await fetch('/api/screener/narratives');
+    const narratives = await res.json();
+    renderNarratives(narratives);
+  } catch (e) {
+    document.getElementById('narrative-grid').innerHTML =
+      '<div style="color:#555;font-family:Space Mono,monospace;font-size:12px;padding:8px 0;">Unable to load narratives</div>';
+  }
+}
+
+function renderNarratives(narratives) {
+  const grid = document.getElementById('narrative-grid');
+  if (!narratives.length) {
+    grid.innerHTML = '<div style="color:#555;font-size:12px;font-family:Space Mono,monospace;">No narratives found</div>';
+    return;
+  }
+
+  const maxDominance = narratives[0].dominance_pct;
+
+  grid.innerHTML = narratives.map(n => {
+    const color = NARRATIVE_COLORS[n.narrative] || '#c9920d';
+    const barPct = maxDominance > 0 ? (n.dominance_pct / maxDominance) * 100 : 0;
+
+    // Weekly change badge
+    let weeklyHtml = '';
+    if (n.weekly_change === null) {
+      weeklyHtml = `<span class="narrative-weekly flat">new</span>`;
+    } else if (n.weekly_change > 0.1) {
+      weeklyHtml = `<span class="narrative-weekly up">▲ ${n.weekly_change.toFixed(1)}%</span>`;
+    } else if (n.weekly_change < -0.1) {
+      weeklyHtml = `<span class="narrative-weekly down">▼ ${Math.abs(n.weekly_change).toFixed(1)}%</span>`;
+    } else {
+      weeklyHtml = `<span class="narrative-weekly flat">– 0%</span>`;
+    }
+
+    // Top market preview
+    const topQ = n.top_market
+      ? n.top_market.question.length > 60
+        ? n.top_market.question.substring(0, 57) + '…'
+        : n.top_market.question
+      : '';
+    const topVol = n.top_market
+      ? `$${n.top_market.volume >= 1000000
+          ? (n.top_market.volume / 1000000).toFixed(1) + 'M'
+          : (n.top_market.volume / 1000).toFixed(0) + 'K'}`
+      : '';
+
+    return `
+      <div class="narrative-row" onclick="filterByNarrative('${n.narrative.replace(/'/g, "\\'")}')"
+           data-narrative="${n.narrative}">
+        <div class="narrative-bar-fill" style="width:${barPct}%"></div>
+        <span style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0;display:inline-block;"></span>
+        <span class="narrative-name">${n.narrative}</span>
+        <span class="narrative-dominance">${n.dominance_pct.toFixed(1)}%</span>
+        ${weeklyHtml}
+        <span class="narrative-count">${n.market_count} markets</span>
+        <span class="narrative-top-market">${topQ}${topVol ? ` · <b style="color:#888">${topVol}</b>` : ''}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+function filterByNarrative(narrative) {
+  if (_activeNarrative === narrative) {
+    // Toggle off — clear filter
+    _activeNarrative = null;
+    document.querySelectorAll('.narrative-row').forEach(r => r.classList.remove('active'));
+    // Re-apply normal screener filters without narrative constraint
+    applyScreenerFilters(); // call whatever your existing filter function is named
+    return;
+  }
+
+  _activeNarrative = narrative;
+  document.querySelectorAll('.narrative-row').forEach(r => {
+    r.classList.toggle('active', r.dataset.narrative === narrative);
+  });
+
+  // Filter the screener table — pass narrative as keyword search
+  // This integrates with your existing filter logic:
+  // Option A: if there's a search input, set its value
+  const searchInput = document.getElementById('screener-search') || document.querySelector('.screener-search');
+  if (searchInput) {
+    searchInput.value = '';
+  }
+
+  // Option B: call the existing filter/render function with narrative keywords
+  // Adjust `applyScreenerFilters` to check `_activeNarrative` and filter market questions
+  applyScreenerFilters();
+}
+```
+
+### 3D. Hook narrative filter into existing `applyScreenerFilters()`
+
+Find your existing `applyScreenerFilters()` function (or whatever renders/filters the table). Add this block **at the top of that function**, before the category/whale/volume filters:
+
+```js
+// Narrative filter
+if (_activeNarrative && _activeNarrative !== 'Other') {
+  const NARRATIVE_FILTER_KEYWORDS = {
+    'Trump & US Politics':   ['trump','president','democrat','republican','congress','senate','maga','white house','tariff'],
+    'Crypto & DeFi':         ['bitcoin','btc','ethereum','eth','crypto','solana','sol','defi','nft','coinbase'],
+    'Middle East & War':     ['israel','iran','gaza','hamas','hezbollah','ceasefire','hormuz','middle east'],
+    'AI & Big Tech':         ['ai','openai','gpt','artificial intelligence','nvidia','apple','microsoft','google','meta'],
+    'Macro & Economy':       ['fed','federal reserve','interest rate','inflation','recession','gdp','cpi','unemployment','rate cut'],
+    'Ukraine & Russia':      ['ukraine','russia','zelensky','putin','nato','kyiv'],
+    'NBA & Basketball':      ['nba','basketball','finals','playoff','lakers','celtics'],
+    'NFL & American Sports': ['nfl','super bowl','mlb','world series','nhl','stanley cup'],
+    'Global Elections':      ['election','vote','ballot','candidate','prime minister','chancellor'],
+  };
+  const kws = NARRATIVE_FILTER_KEYWORDS[_activeNarrative] || [];
+  markets = markets.filter(m => {
+    const q = (m.question || '').toLowerCase();
+    return kws.some(kw => q.includes(kw));
+  });
+}
+```
+
+### 3E. Call `loadNarratives()` on page load
+
+Find where the screener initialises (likely a `DOMContentLoaded` or `init()` call). Add:
+
+```js
+loadNarratives();
+```
+
+---
+
+## 4. CLAUDE.md Updates
+
+- Add `supabase_migration_narrative_snapshots.sql` as **#31** in the ordered migration list
+- In "Current State", note: Screener now has Narrative Intelligence section — dominance % + weekly delta + click-to-filter
+
+---
+
+## 5. Commit
+
+```bash
+git add server.js public/screener.html supabase_migration_narrative_snapshots.sql CLAUDE.md
+git commit -m "feat: screener narrative intelligence — dominant themes, dominance %, weekly change"
+git push origin main
+```
+
+---
+
+## Expected Result
+
+Screener page now has a **Narrative Intelligence panel** above the filters showing:
+
+```
+🧭 Narrative Intelligence    what themes dominate prediction markets this week
+
+● Trump & US Politics     31.2%  ▲ 4.1%    47 markets   Will Trump be impeached? · $12.4M
+● Crypto & DeFi           18.7%  ▼ 2.3%    38 markets   Will BTC hit $100K? · $9.1M
+● Middle East & War       12.1%  ▲ 0.8%    21 markets   Will Iran attack Israel? · $6.2M
+● AI & Big Tech            9.4%  new        15 markets   Will OpenAI IPO in 2026? · $4.0M
+● Macro & Economy          8.2%  ▼ 1.0%    19 markets   Will Fed cut rates in May? · $3.8M
+…
+```
+
+Clicking any row filters the table below to that narrative. Clicking again clears the filter.
+Weekly change shows null → "new" on first day, then % point movement after 7 days of snapshots.
+# Claude Code: Password Reset Flow
+
+Add forgot-password / reset-password to the login page, a standalone reset page, and an admin "Send Reset Link" button.
+
+Files: `server.js`, `public/creator-login.html`, `public/reset-password.html` (new), `public/admin.html`
+
+---
+
+## 1. Migration — add reset token columns
+
+Add to the bottom of `server.js` migrations section, OR run manually in Supabase:
+
+```sql
+ALTER TABLE creator_settings
+  ADD COLUMN IF NOT EXISTS password_reset_token TEXT,
+  ADD COLUMN IF NOT EXISTS password_reset_expires TIMESTAMPTZ;
+```
+
+Also add to `users` table for member accounts:
+```sql
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS password_reset_token TEXT,
+  ADD COLUMN IF NOT EXISTS password_reset_expires TIMESTAMPTZ;
+```
+
+---
+
+## 2. Backend — `server.js`
+
+### 2A. POST /api/auth/forgot-password
+
+```js
+app.post('/api/auth/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email required' });
+
+    const token = require('crypto').randomBytes(32).toString('hex');
+    const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    // Check creator_settings first
+    const { data: creator } = await supabase
+      .from('creator_settings')
+      .select('id, email, display_name')
+      .eq('email', email.toLowerCase().trim())
+      .single();
+
+    if (creator) {
+      await supabase.from('creator_settings').update({
+        password_reset_token: token,
+        password_reset_expires: expires.toISOString()
+      }).eq('id', creator.id);
+
+      await sendPasswordResetEmail(email, creator.display_name || 'there', token);
+      return res.json({ ok: true });
+    }
+
+    // Check users table
+    const { data: user } = await supabase
+      .from('users')
+      .select('id, email, display_name')
+      .eq('email', email.toLowerCase().trim())
+      .single();
+
+    if (user) {
+      await supabase.from('users').update({
+        password_reset_token: token,
+        password_reset_expires: expires.toISOString()
+      }).eq('id', user.id);
+
+      await sendPasswordResetEmail(email, user.display_name || 'there', token);
+      return res.json({ ok: true });
+    }
+
+    // Always return ok — don't reveal whether email exists
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('[forgot-password]', err.message);
+    res.status(500).json({ error: 'Something went wrong' });
+  }
+});
+```
+
+### 2B. POST /api/auth/reset-password
+
+```js
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    const { token, password } = req.body;
+    if (!token || !password) return res.status(400).json({ error: 'Token and password required' });
+    if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+
+    const now = new Date().toISOString();
+
+    // Check creator_settings
+    const { data: creator } = await supabase
+      .from('creator_settings')
+      .select('id, email')
+      .eq('password_reset_token', token)
+      .gt('password_reset_expires', now)
+      .single();
+
+    if (creator) {
+      const password_hash = await bcrypt.hash(password, 12);
+      await supabase.from('creator_settings').update({
+        password_hash,
+        password_reset_token: null,
+        password_reset_expires: null
+      }).eq('id', creator.id);
+      return res.json({ ok: true });
+    }
+
+    // Check users
+    const { data: user } = await supabase
+      .from('users')
+      .select('id, email')
+      .eq('password_reset_token', token)
+      .gt('password_reset_expires', now)
+      .single();
+
+    if (user) {
+      const password_hash = await bcrypt.hash(password, 12);
+      await supabase.from('users').update({
+        password_hash,
+        password_reset_token: null,
+        password_reset_expires: null
+      }).eq('id', user.id);
+      return res.json({ ok: true });
+    }
+
+    return res.status(400).json({ error: 'Reset link is invalid or has expired' });
+  } catch (err) {
+    console.error('[reset-password]', err.message);
+    res.status(500).json({ error: 'Something went wrong' });
+  }
+});
+```
+
+### 2C. POST /api/admin/reset-password (admin-triggered)
+
+```js
+app.post('/api/admin/reset-password', async (req, res) => {
+  const secret = req.headers['x-admin-secret'];
+  if (secret !== process.env.ADMIN_SECRET) return res.status(403).json({ error: 'Forbidden' });
+
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email required' });
+
+    const token = require('crypto').randomBytes(32).toString('hex');
+    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours for admin-triggered
+
+    // Try creator_settings
+    const { data: creator } = await supabase
+      .from('creator_settings')
+      .select('id, display_name')
+      .eq('email', email.toLowerCase().trim())
+      .single();
+
+    if (creator) {
+      await supabase.from('creator_settings').update({
+        password_reset_token: token,
+        password_reset_expires: expires.toISOString()
+      }).eq('id', creator.id);
+      await sendPasswordResetEmail(email, creator.display_name || 'there', token);
+      return res.json({ ok: true, sent_to: email });
+    }
+
+    // Try users
+    const { data: user } = await supabase
+      .from('users')
+      .select('id, display_name')
+      .eq('email', email.toLowerCase().trim())
+      .single();
+
+    if (user) {
+      await supabase.from('users').update({
+        password_reset_token: token,
+        password_reset_expires: expires.toISOString()
+      }).eq('id', user.id);
+      await sendPasswordResetEmail(email, user.display_name || 'there', token);
+      return res.json({ ok: true, sent_to: email });
+    }
+
+    return res.status(404).json({ error: 'No account found with that email' });
+  } catch (err) {
+    console.error('[admin-reset-password]', err.message);
+    res.status(500).json({ error: 'Something went wrong' });
+  }
+});
+```
+
+### 2D. sendPasswordResetEmail helper
+
+Add near other email helpers (like `sendResolutionEmails`):
+
+```js
+async function sendPasswordResetEmail(toEmail, name, token) {
+  if (!process.env.SMTP_HOST) return; // no-op if email not configured
+  const resetUrl = `https://hyperflex.network/reset-password?token=${token}`;
+  const html = `
+    <div style="background:#0e0e0c;color:#f0ebe3;font-family:sans-serif;max-width:520px;margin:0 auto;padding:32px;border-radius:10px;">
+      <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;margin-bottom:8px;">
+        <span style="color:#c9920d;">HYPER</span>FLEX
+      </div>
+      <h2 style="font-size:18px;margin:24px 0 8px;">Reset your password</h2>
+      <p style="color:#aaa;font-size:14px;line-height:1.6;margin-bottom:24px;">
+        Hey ${name}, click the button below to reset your password. This link expires in 1 hour.
+      </p>
+      <a href="${resetUrl}" style="display:inline-block;background:#c9920d;color:#0e0e0c;font-weight:700;padding:13px 28px;border-radius:6px;text-decoration:none;font-size:15px;">
+        Reset Password →
+      </a>
+      <p style="color:#555;font-size:12px;margin-top:28px;">
+        If you didn't request this, ignore this email — your password won't change.<br/>
+        Link: ${resetUrl}
+      </p>
+    </div>
+  `;
+  await sendEmail(toEmail, 'Reset your HYPERFLEX password', html);
+}
+```
+
+(Assumes `sendEmail(to, subject, html)` already exists — adapt to match your existing mailer helper name.)
+
+### 2E. Serve the reset page
+
+```js
+app.get('/reset-password', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'reset-password.html'));
+});
+```
+
+---
+
+## 3. Login page — `public/creator-login.html`
+
+### 3A. Add "Forgot password?" link
+
+Find the password input block and add below it:
+
+```html
+<!-- After the password input, before the login button -->
+<div style="text-align:right; margin: -8px 0 16px;">
+  <a href="#" onclick="showForgotForm(); return false;"
+     style="font-family:'Space Mono',monospace; font-size:12px; color:#666;
+            text-decoration:none; transition:color .15s;"
+     onmouseover="this.style.color='#c9920d'" onmouseout="this.style.color='#666'">
+    Forgot password?
+  </a>
+</div>
+```
+
+### 3B. Add forgot-password form (hidden by default)
+
+After the main login form `</form>`, add:
+
+```html
+<!-- FORGOT PASSWORD FORM (hidden by default) -->
+<div id="forgotForm" style="display:none; margin-top:8px;">
+  <p style="font-family:'Space Mono',monospace; font-size:12px; color:#888; margin-bottom:16px; line-height:1.5;">
+    Enter your email and we'll send a reset link.
+  </p>
+  <input type="email" id="forgotEmail" placeholder="Your email"
+         style="width:100%; padding:12px 14px; background:#0e0e0c; border:1px solid #2a2a26;
+                border-radius:6px; color:#f0ebe3; font-family:'Space Mono',monospace;
+                font-size:13px; box-sizing:border-box; margin-bottom:12px;"
+         onkeydown="if(event.key==='Enter') sendForgotPassword()"/>
+  <button onclick="sendForgotPassword()"
+          style="width:100%; padding:13px; background:#c9920d; border:none; border-radius:6px;
+                 color:#0e0e0c; font-family:'Syne',sans-serif; font-size:15px;
+                 font-weight:700; cursor:pointer;">
+    Send Reset Link →
+  </button>
+  <div style="text-align:center; margin-top:12px;">
+    <a href="#" onclick="showLoginForm(); return false;"
+       style="font-family:'Space Mono',monospace; font-size:12px; color:#666; text-decoration:none;">
+      ← Back to sign in
+    </a>
+  </div>
+  <div id="forgotMsg" style="display:none; margin-top:14px; padding:12px 14px;
+       border-radius:6px; font-family:'Space Mono',monospace; font-size:12px;"></div>
+</div>
+```
+
+### 3C. JS functions
+
+Add in the `<script>` block:
+
+```js
+function showForgotForm() {
+  document.getElementById('loginForm').style.display = 'none'; // hide the login form
+  document.getElementById('forgotForm').style.display = 'block';
+  document.getElementById('forgotEmail').focus();
+}
+
+function showLoginForm() {
+  document.getElementById('forgotForm').style.display = 'none';
+  document.getElementById('loginForm').style.display = 'block'; // show login form
+}
+
+async function sendForgotPassword() {
+  const email = document.getElementById('forgotEmail').value.trim();
+  const msg = document.getElementById('forgotMsg');
+  if (!email) { showForgotMsg('Please enter your email.', false); return; }
+
+  try {
+    await fetch('/api/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    // Always show success — don't reveal if email exists
+    showForgotMsg('If that email has an account, a reset link is on its way. Check your inbox.', true);
+  } catch (e) {
+    showForgotMsg('Something went wrong. Please try again.', false);
+  }
+}
+
+function showForgotMsg(text, success) {
+  const el = document.getElementById('forgotMsg');
+  el.style.display = 'block';
+  el.style.background = success ? 'rgba(0,200,100,0.1)' : 'rgba(200,50,50,0.1)';
+  el.style.color = success ? '#00c864' : '#e05252';
+  el.style.border = `1px solid ${success ? 'rgba(0,200,100,0.2)' : 'rgba(200,50,50,0.2)'}`;
+  el.textContent = text;
+}
+```
+
+Note: The login form wrapper `<form>` or `<div>` needs an `id="loginForm"` — add that attribute if it doesn't already exist.
+
+---
+
+## 4. New page — `public/reset-password.html`
+
+Create this file from scratch:
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Reset Password — HYPERFLEX</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { background:#0e0e0c; color:#f0ebe3; font-family:'Space Mono',monospace;
+           min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
+    .card { background:#141412; border:1px solid #222; border-radius:12px;
+            padding:40px 36px; width:100%; max-width:420px; }
+    .logo { font-family:'Syne',sans-serif; font-size:22px; font-weight:800; margin-bottom:28px; }
+    .logo span { color:#c9920d; }
+    h1 { font-family:'Syne',sans-serif; font-size:20px; font-weight:700; margin-bottom:8px; }
+    p { color:#888; font-size:13px; line-height:1.6; margin-bottom:24px; }
+    input { width:100%; padding:12px 14px; background:#0e0e0c; border:1px solid #2a2a26;
+            border-radius:6px; color:#f0ebe3; font-family:'Space Mono',monospace;
+            font-size:13px; margin-bottom:12px; outline:none; transition:border-color .15s; }
+    input:focus { border-color:#c9920d; }
+    button { width:100%; padding:13px; background:#c9920d; border:none; border-radius:6px;
+             color:#0e0e0c; font-family:'Syne',sans-serif; font-size:15px;
+             font-weight:700; cursor:pointer; transition:background .15s; }
+    button:hover { background:#d9a01d; }
+    button:disabled { opacity:0.5; cursor:not-allowed; }
+    .msg { display:none; margin-top:14px; padding:12px 14px; border-radius:6px; font-size:12px; }
+    .msg.success { background:rgba(0,200,100,.1); color:#00c864; border:1px solid rgba(0,200,100,.2); }
+    .msg.error   { background:rgba(200,50,50,.1);  color:#e05252; border:1px solid rgba(200,50,50,.2); }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo"><span>HYPER</span>FLEX</div>
+    <h1>Set new password</h1>
+    <p>Enter your new password below.</p>
+
+    <div id="formArea">
+      <input type="password" id="pw1" placeholder="New password (min 8 chars)" autocomplete="new-password"/>
+      <input type="password" id="pw2" placeholder="Confirm new password" autocomplete="new-password"
+             onkeydown="if(event.key==='Enter') submitReset()"/>
+      <button onclick="submitReset()" id="submitBtn">Set New Password →</button>
+    </div>
+
+    <div id="msg" class="msg"></div>
+    <div id="loginLink" style="display:none; margin-top:20px; text-align:center;">
+      <a href="/creator/login" style="color:#c9920d; font-size:13px; text-decoration:none;">
+        Sign in with your new password →
+      </a>
+    </div>
+    <div id="expiredMsg" style="display:none; text-align:center; margin-top:16px;">
+      <p style="color:#e05252; font-size:13px; margin-bottom:12px;">This reset link has expired.</p>
+      <a href="/creator/login" style="color:#c9920d; font-size:13px; text-decoration:none;">
+        Request a new one →
+      </a>
+    </div>
+  </div>
+
+  <script>
+    const token = new URLSearchParams(window.location.search).get('token');
+    if (!token) {
+      document.getElementById('formArea').style.display = 'none';
+      document.getElementById('expiredMsg').style.display = 'block';
+    }
+
+    async function submitReset() {
+      const pw1 = document.getElementById('pw1').value;
+      const pw2 = document.getElementById('pw2').value;
+      const msg = document.getElementById('msg');
+      const btn = document.getElementById('submitBtn');
+
+      if (!pw1 || pw1.length < 8) { showMsg('Password must be at least 8 characters.', false); return; }
+      if (pw1 !== pw2) { showMsg('Passwords don\'t match.', false); return; }
+
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
+
+      try {
+        const r = await fetch('/api/auth/reset-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, password: pw1 })
+        });
+        const data = await r.json();
+        if (data.ok) {
+          document.getElementById('formArea').style.display = 'none';
+          showMsg('Password updated! You can now sign in.', true);
+          document.getElementById('loginLink').style.display = 'block';
+        } else {
+          showMsg(data.error || 'Something went wrong.', false);
+          btn.disabled = false;
+          btn.textContent = 'Set New Password →';
+        }
+      } catch (e) {
+        showMsg('Network error. Please try again.', false);
+        btn.disabled = false;
+        btn.textContent = 'Set New Password →';
+      }
+    }
+
+    function showMsg(text, success) {
+      const el = document.getElementById('msg');
+      el.style.display = 'block';
+      el.className = 'msg ' + (success ? 'success' : 'error');
+      el.textContent = text;
+    }
+  </script>
+</body>
+</html>
+```
+
+---
+
+## 5. Admin dashboard — `public/admin.html`
+
+### 5A. Add "Send Reset Link" button to the creators table
+
+Find where creator rows are rendered (the `renderCreators()` or similar function that builds table rows). In the actions column, add a reset button next to the existing plan/delete buttons:
+
+```js
+// In the creator row actions, add:
+<button onclick="adminSendReset('${esc(c.email)}')"
+        style="background:transparent; border:1px solid #444; color:#888; padding:4px 10px;
+               border-radius:4px; font-size:11px; font-family:'Space Mono',monospace;
+               cursor:pointer; transition:all .15s;"
+        onmouseover="this.style.borderColor='#c9920d';this.style.color='#c9920d'"
+        onmouseout="this.style.borderColor='#444';this.style.color='#888'"
+        title="Send password reset email">
+  🔑 Reset
+</button>
+```
+
+### 5B. Add the JS function
+
+```js
+async function adminSendReset(email) {
+  if (!confirm(`Send password reset email to ${email}?`)) return;
+  try {
+    const r = await fetch('/api/admin/reset-password', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-secret': ADMIN_SECRET  // use whatever your admin secret var is called
+      },
+      body: JSON.stringify({ email })
+    });
+    const data = await r.json();
+    if (data.ok) {
+      showToast(`✅ Reset link sent to ${email}`);
+    } else {
+      showToast(`❌ ${data.error}`, true);
+    }
+  } catch (e) {
+    showToast('❌ Network error', true);
+  }
+}
+```
+
+---
+
+## 6. Commit
+
+```bash
+git add server.js public/creator-login.html public/reset-password.html public/admin.html
+git commit -m "feat: password reset — forgot password on login page, reset-password page, admin send-reset button"
+git push origin main
+```
+
+---
+
+## Notes
+
+- Reset tokens expire in **1 hour** (self-service) / **24 hours** (admin-triggered)
+- Email is no-op if SMTP is not configured — same pattern as rest of email system
+- Always returns `{ ok: true }` on forgot-password regardless of whether email exists (security best practice — no account enumeration)
+- The `/reset-password` page reads the token from `?token=` URL param — works as a standard email link
+- DB columns use `IF NOT EXISTS` — safe to run without a formal migration file, but add to Supabase manually if needed
+# Claude Code Task: Trader Profile Page (`/trader/:address`) + Cohort Intelligence
+
+Build a deep-dive multi-platform trader profile page at `/trader/:address` — HYPERFLEX's answer to HyperDash. Any EVM wallet gets its own analytics page. Auto-detects Polymarket and Hyperliquid activity. Also adds cohort intelligence to the signals and explore pages — the feature HyperDash has for crypto, that nobody has built yet for prediction markets.
+
+---
+
+## PART 1: `/trader/:address` — Trader Profile Page
+
+### Core concept
+Both Polymarket and Hyperliquid use EVM addresses (`0x...`). Fetch both in parallel, show whichever has data. Platform badges: `POLY` / `HL` / `HFX`.
+
+### 1A. Server routes
+
+```js
+// Serve page
+app.get('/trader/:address', (req, res) => res.sendFile(path.join(__dirname, 'public', 'trader.html')));
+
+// API
+// GET /api/trader/:address/profile  — public, no auth, 3-min cache
+```
+
+### 1B. API logic: `GET /api/trader/:address/profile`
+
+Validate `0x[0-9a-fA-F]{40}`. Cache in `_polyCache` for 3 min.
+
+**Polymarket** (2 parallel fetches):
+```
+GET https://data-api.polymarket.com/positions?user=${address}&limit=100&sortBy=CURRENT&winning=false
+GET https://data-api.polymarket.com/positions?user=${address}&limit=100&sortBy=CURRENT&winning=true
+```
+
+Note: `winning=false` is confirmed working in production (existing `/api/polymarket/positions/:address`). `winning=true` is the logical complement for resolved winning positions — if it returns empty, also try `?closed=true` as a fallback. Both calls should use the same field mapping.
+
+**Hyperliquid** (2 parallel POST requests to `https://api.hyperliquid.xyz/info`):
+```json
+{ "type": "clearinghouseState", "user": "0xADDRESS_LOWERCASE" }
+{ "type": "userFills", "user": "0xADDRESS_LOWERCASE", "startTime": Date.now() - 30*24*60*60*1000 }
+```
+
+**HFX account check:**
+```js
+const { data: hfxUser } = await supabase
+  .from('creator_settings')
+  .select('user_id, display_name')
+  .eq('polymarket_address', address.toLowerCase())
+  .maybeSingle();
+```
+
+**Hyperliquid clearinghouseState response shape:**
+```json
+{
+  "assetPositions": [{
+    "position": {
+      "coin": "BTC",
+      "szi": "0.05",           // positive = long, negative = short
+      "entryPx": "65000",
+      "unrealizedPnl": "312.50",
+      "returnOnEquity": "0.15",
+      "liquidationPx": "58000",
+      "marginUsed": "650",
+      "positionValue": "3250"
+    }
+  }],
+  "marginSummary": {
+    "accountValue": "8200",
+    "totalNtlPos": "12000",
+    "totalMarginUsed": "1200",
+    "withdrawable": "7000"
+  }
+}
+```
+
+**userFills response** — array of:
+```json
+{
+  "coin": "BTC", "px": "65000", "sz": "0.01",
+  "side": "B",  // B=buy/long, A=sell/short
+  "time": 1700000000000,
+  "closedPnl": "45.00",  // non-empty string on close trades
+  "dir": "Open Long"     // or "Close Long", "Open Short", etc.
+}
+```
+
+**Return shape:**
+```json
+{
+  "address": "0x...",
+  "has_hfx_account": false,
+  "hfx_user_id": null,
+  "platforms": ["polymarket", "hyperliquid"],
+  "polymarket": {
+    "active": true,
+    "open_positions": [...],
+    "won_positions": [...],
+    "open_pnl": 450.00,
+    "won_pnl": 890.00,
+    "open_value": 3200.00,
+    "total_invested": 4500.00,
+    "roi_pct": 18.2,
+    "win_count": 14
+  },
+  "hyperliquid": {
+    "active": true,
+    "open_positions": [...],
+    "account_value": 8200.00,
+    "total_notional": 12000.00,
+    "unrealized_pnl": 312.50,
+    "realized_pnl": 1450.00,
+    "margin_used": 1200.00,
+    "withdrawable": 7000.00,
+    "fills": [...],
+    "win_count": 8,
+    "loss_count": 3,
+    "total_volume": 245000.00
+  },
+  "summary": {
+    "total_pnl": 3102.50,
+    "open_count": 11,
+    "platforms_active": 2
+  },
+  "fetched_at": "..."
+}
+```
+
+Map Polymarket positions:
+```js
+{
+  conditionId, question, side: p.outcome || 'YES',
+  shares: parseFloat(p.size), current_price: parseFloat(p.currentPrice),
+  cash_value: parseFloat(p.currentValue), cost_basis: parseFloat(p.initialValue),
+  pnl: parseFloat(p.cashPnl), pnl_pct: parseFloat(p.percentPnl),
+  market_url: `https://polymarket.com/event/${p.conditionId}`,
+  end_date: p.endDateIso, payout: parseFloat(p.value)
+}
+```
+
+Map HL positions:
+```js
+{
+  coin: p.position.coin,
+  side: parseFloat(p.position.szi) > 0 ? 'LONG' : 'SHORT',
+  size: Math.abs(parseFloat(p.position.szi)),
+  entry_price: parseFloat(p.position.entryPx),
+  position_value: parseFloat(p.position.positionValue),
+  unrealized_pnl: parseFloat(p.position.unrealizedPnl),
+  roi_pct: parseFloat(p.position.returnOnEquity) * 100,
+  liquidation_price: parseFloat(p.position.liquidationPx),
+  margin_used: parseFloat(p.position.marginUsed)
+}
+```
+
+---
+
+### 1C. `public/trader.html` layout
+
+Design: `#141412` bg, `#c9920d` gold, Syne + Space Mono. Address from `window.location.pathname`.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  HYPERFLEX nav                                              │
+│  ← Back to Predictors                                       │
+├─────────────────────────────────────────────────────────────┤
+│  [Avatar]  0xABCD...1234   [POLY] [HL] [HFX]   [Follow]   │
+│                                                             │
+│  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌─────────┐ │
+│  │ Total P&L  │ │ HL Value   │ │ Open Pos   │ │Platforms│ │
+│  │ +$14,200   │ │ $8,200     │ │    11      │ │    2    │ │
+│  └────────────┘ └────────────┘ └────────────┘ └─────────┘ │
+├─────────────────────────────────────────────────────────────┤
+│  [TABS: Overview | Polymarket | Hyperliquid | History]      │
+├─────────────────────────────────────────────────────────────┤
+│  [Combined P&L Timeline — canvas chart]                     │
+├──────────────────────┬──────────────────────────────────────┤
+│  POLYMARKET          │  HYPERLIQUID                         │
+│  (if active)         │  (if active)                         │
+└──────────────────────┴──────────────────────────────────────┘
+│  [PNL CALENDAR — GitHub-style heatmap]                      │
+│  [Per-Market Performance table]                             │
+│  [Full Trade History / Fills table]                         │
+│  CTA: Get Started Free →                                    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Hero header:**
+- Avatar: chars at index 2–3 of address (first 2 chars after `0x`), gold bg, uppercase
+- Full address with copy-to-clipboard (shows "Copied!" toast)
+- Platform badges: POLY (blue `#0066ff`), HL (purple `#7c3aed`), HFX (gold)
+- Stat pills row: Total P&L (green/red), HL Account Value (if active), Open Positions, Platforms Active
+- Follow button: only if `has_hfx_account` — calls `/api/predictors/:userId/follow-status`
+
+**P&L Timeline (canvas):**
+- Merge HL fills (sorted by `time`) + Polymarket won positions (sorted by `end_date`) into one timeline
+- Compute cumulative P&L at each point, draw gold fill-chart on `#1a1814`
+- Horizontal zero line in `rgba(255,255,255,0.1)`
+- Skip if < 3 data points total
+
+**PNL Calendar (GitHub-style heatmap):**
+- 52 columns × 7 rows grid, each cell = one day
+- Color intensity from gold `rgba(201,146,13,0.15)` → `rgba(201,146,13,1.0)` based on absolute P&L
+- Red tint for loss days, gold tint for win days
+- Build from fills data (use `time` field) + Polymarket resolved positions (use `end_date`)
+- Tooltip on hover: date + P&L for that day
+- Show last 6 months minimum
+
+**Per-Market Performance table:**
+- Group fills by `coin` (HL) and by `conditionId` (Poly)
+- Columns: Market/Asset | Trades | Win Rate (mini bar) | Net P&L
+- Sort by |PNL| desc
+- Empty: "No resolved trade history available"
+
+**Full Fills History table (paginated, 20 per page):**
+- Columns: Platform | Asset/Market | Direction | Size | Price | P&L | Time
+- Direction pill: "Open Long" green, "Close Long" grey, "Open Short" red, etc.
+- WIN/LOSS badge on close trades with PNL
+- Relative time ("2h ago", "3d ago")
+
+**Polymarket section** (only if `polymarket.active`):
+```
+📊 POLYMARKET POSITIONS [POLY badge]
+
+Market                    Side   Value    P&L      Odds
+────────────────────────────────────────────────────
+Will X happen by Y?      YES    $410    +$60     82¢
+```
+- Market name links to `https://polymarket.com/event/${conditionId}`
+- Side pill: gold = YES, dark = NO
+- P&L green/red, sorted by |pnl| desc
+
+Won positions section: last 10 wins with WIN 🟢 badge + payout.
+
+**Hyperliquid section** (only if `hyperliquid.active`):
+```
+⚡ HYPERLIQUID PERPS [HL badge]
+
+Account Value: $8,200  |  Unrealized PNL: +$312  |  Margin Used: $1,200  |  Withdrawable: $7,000
+```
+
+Open positions table:
+```
+Asset    Side     Size    Entry      Liq        Value      Unr. P&L
+BTC      LONG     0.05   $65,000    $58,000    $3,250     +$312
+ETH      SHORT    2.00   $3,200     $3,520     $6,400     -$180
+```
+- Side: green pill = LONG, red pill = SHORT
+- Sort by `|unrealized_pnl|` desc
+
+**Bottom CTA:**
+```
+Track your own portfolio on HYPERFLEX →
+Polymarket + Kalshi + Manifold in one dashboard.
+[Get Started Free →]
+```
+
+**Style notes:**
+- Loading: dark grey skeleton pulse on card areas
+- Error/empty: "No activity found for this address on Polymarket or Hyperliquid"
+- HL badge: `#7c3aed`, POLY: `#0066ff`, HFX: `#c9920d`
+- LONG: `rgba(0,200,100,0.15)` bg, `#00c864` text
+- SHORT: `rgba(231,76,60,0.15)` bg, `#e74c3c` text
+- Numbers > $1000: format as `$1.2K`, `$45.6K`
+- Page title: `0xABCD...1234 — Trader Profile | HYPERFLEX`
+- Hyperliquid API: always lowercase address; if `assetPositions` empty → `active: false`
+
+---
+
+## PART 2: Cohort Intelligence on Signal Pages
+
+This is the feature HyperDash built for crypto — we're building it for prediction markets. The insight: segment bettors by track record quality and show how each cohort is positioned on a given market.
+
+### 2A. New API endpoint: `GET /api/market/:marketId/cohort-sentiment`
+
+No auth. Cache 5 min.
+
+Logic:
+1. Get all bets on this market from the `positions` table:
+   ```js
+   const { data: mktPositions } = await supabase
+     .from('positions')
+     .select('user_id, side, amount')
+     .eq('market_id', marketId);
+   ```
+2. Get per-user win rates by aggregating ALL their settled positions:
+   ```js
+   const userIds = [...new Set(mktPositions.map(p => p.user_id))];
+   const { data: userStats } = await supabase
+     .from('positions')
+     .select('user_id, won')
+     .in('user_id', userIds)
+     .eq('settled', true);
+   // Build map: userId -> { wins, total }
+   const statsMap = {};
+   for (const p of userStats || []) {
+     if (!statsMap[p.user_id]) statsMap[p.user_id] = { wins: 0, total: 0 };
+     statsMap[p.user_id].total++;
+     if (p.won) statsMap[p.user_id].wins++;
+   }
+   ```
+3. Segment each bettor by their historical win rate:
+   - **Sharp** (≥65% win rate AND ≥10 total predictions): "Sharp Money"
+   - **Experienced** (50-65% win rate AND ≥5 predictions): "Experienced"
+   - **Retail** (<50% win rate OR <5 predictions): "Retail"
+4. For each cohort, compute:
+   - Total centpoints on YES vs NO (divide by 100 for display)
+   - Number of bettors YES vs NO
+   - Implied sentiment %
+5. Return:
+```json
+{
+  "market_id": "...",
+  "cohorts": [
+    {
+      "label": "Sharp Money",
+      "description": "≥65% win rate, 10+ bets",
+      "yes_pct": 74,
+      "no_pct": 26,
+      "yes_count": 8,
+      "no_count": 3,
+      "yes_volume": 4500,
+      "no_volume": 1200,
+      "total_bettors": 11
+    },
+    { "label": "Experienced", "yes_pct": 58, "no_pct": 42, ... },
+    { "label": "Retail", "yes_pct": 51, "no_pct": 49, ... }
+  ],
+  "gap": 23,   // Sharp pct - Retail pct (the alpha signal)
+  "signal": "SHARP_YES"  // or "SHARP_NO" or "CONSENSUS" or "SPLIT"
+}
+```
+
+Signal logic:
+- `gap >= 15` and sharp YES > 60%: `"SHARP_YES"`
+- `gap >= 15` and sharp NO > 60%: `"SHARP_NO"`
+- All cohorts within 5% of each other: `"CONSENSUS"`
+- Otherwise: `"SPLIT"`
+
+### 2B. Add cohort sentiment widget to `community.html` market cards
+
+On each market card, after the YES/NO odds bar, add a compact cohort sentiment row:
+
+```html
+<div class="cohort-row">
+  <span class="cohort-label">Sharp Money:</span>
+  <span class="cohort-bar">
+    <span style="width:74%;background:#2ecc71"></span>
+    <span style="width:26%;background:#e74c3c"></span>
+  </span>
+  <span class="cohort-pct">74% YES</span>
+  <span class="cohort-badge sharp-yes">↑ SHARP YES</span>
+</div>
+```
+
+Only show when `total_bettors >= 3`. Lazy-load: fetch after card renders, fill in data.
+
+Badge styles:
+- SHARP_YES: gold bg, dark text: "⚡ Sharp YES"
+- SHARP_NO: red bg: "⚡ Sharp NO"
+- CONSENSUS: grey: "✓ Consensus"
+- SPLIT: no badge
+
+### 2C. Add full cohort sentiment panel to signals page (`/signals` or wherever whale signals appear)
+
+On each signal card, replace or augment the existing odds display with the cohort breakdown:
+
+```
+┌─────────────────────────────────────────────────┐
+│  Will X happen?                                  │
+│                                                  │
+│  Sharp Money  [████████░░░░░░░]  74% YES  ⚡    │
+│  Experienced  [██████████░░░░░]  58% YES        │
+│  Retail       [███████████████]  51% YES        │
+│                                                  │
+│  Smart Money Gap: +23pts vs Retail               │
+└─────────────────────────────────────────────────┘
+```
+
+### 2D. Cohort Overview page: `/explore` — add a "Smart Money" section
+
+In `explore.html`, add a new section above the activity feed: **"Smart Money Positioning"**
+
+Shows the top 5 markets where the Sharp/Retail gap is largest:
+
+```
+⚡ SMART MONEY DIVERGENCE
+Markets where sharp predictors disagree most with retail
+
+1. Will the Fed cut rates in May?
+   Sharp: 78% YES  |  Retail: 44% YES  |  Gap: +34pts
+   [View Market →]
+
+2. Will BTC hit $100K by June?
+   Sharp: 31% YES  |  Retail: 67% YES  |  Gap: -36pts
+   ...
+```
+
+API: `GET /api/explore/smart-money-divergence` — queries all active HFX community markets, computes cohort sentiment for each, returns top 5 by absolute gap. Cache 10 min.
+
+---
+
+## PART 3: Fix predictors.html
+
+In `renderCard(p)`, add "View Positions →" link if polymarket_address exists:
+
+```html
+${p.polymarket_address ? `
+  <div style="padding:0 16px 12px">
+    <a href="/trader/${escHtml(p.polymarket_address)}" onclick="event.stopPropagation()"
+       style="font-size:10px;font-family:var(--mono);color:var(--gold);border:1px solid rgba(201,146,13,0.4);border-radius:12px;padding:3px 10px;text-decoration:none;">
+      🔗 View Positions →
+    </a>
+  </div>` : ''}
+```
+
+Update `GET /api/predictors` to include `polymarket_address` in the SELECT from `creator_settings`.
+
+---
+
+## Summary of files to touch
+
+| File | Change |
+|------|--------|
+| `public/trader.html` | **CREATE** — full multi-platform profile page |
+| `server.js` | `GET /trader/:address` page route + `GET /api/trader/:address/profile` + `GET /api/market/:id/cohort-sentiment` + `GET /api/explore/smart-money-divergence` |
+| `public/predictors.html` | Add "View Positions →" link on cards with polymarket_address |
+| `public/community.html` | Add cohort sentiment row on each market card |
+| `public/explore.html` | Add Smart Money Divergence section |
+
+No new DB migrations needed. Uses existing bets, win_rate data, Polymarket API, and Hyperliquid API.

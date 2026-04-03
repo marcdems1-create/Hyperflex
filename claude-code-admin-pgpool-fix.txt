@@ -1,0 +1,134 @@
+TASK: Fix admin dashboard "Tenant or user not found" — rewrite admin routes to use pg pool instead of supabase client.
+
+CONTEXT:
+The supabase-js client is returning "Tenant or user not found" on every call. The pg pool
+(DATABASE_URL) works fine. Admin routes use supabase.from() which breaks. Fix by switching
+all admin route queries to use pool.query() directly.
+
+STEP 1 — Find the pg pool variable name.
+Search server.js for: new Pool(  or  Pool({
+The pool is initialized from DATABASE_URL. Note the variable name (likely `pool` or `pgPool`).
+
+STEP 2 — Rewrite /api/admin/creators (around line 9302):
+
+FIND this pattern in the route:
+    const { data: settings } = await supabase
+      .from('creator_settings')
+      .select('creator_id, slug, display_name, plan, created_at, custom_points_name, primary_color, plan_trial_expires_at')
+      .order('created_at', { ascending: false });
+
+REPLACE with:
+    const settingsRes = await pool.query(
+      `SELECT creator_id, slug, display_name, plan, created_at, custom_points_name, primary_color, plan_trial_expires_at
+       FROM creator_settings ORDER BY created_at DESC`
+    );
+    const settings = settingsRes.rows;
+
+Then find the next two supabase calls in that same route (market counts + member counts).
+They'll look like:
+    const { data: mktCounts } = await supabase.from('markets')...
+    const { data: memCounts } = await supabase.from('community_balances')...
+
+Replace each with pool.query() equivalents:
+
+    const mktRes = await pool.query(
+      `SELECT tenant_slug, COUNT(*) as count FROM markets WHERE is_public = true GROUP BY tenant_slug`
+    );
+    const mktMap = {};
+    mktRes.rows.forEach(r => { mktMap[r.tenant_slug] = parseInt(r.count); });
+
+    const memRes = await pool.query(
+      `SELECT creator_slug, COUNT(DISTINCT user_id) as count FROM community_balances GROUP BY creator_slug`
+    );
+    const memMap = {};
+    memRes.rows.forEach(r => { memMap[r.creator_slug] = parseInt(r.count); });
+
+Then fix the row assembly — change:
+    settings.map(s => ({
+to use:
+    settings.map(s => ({
+      ...same fields...
+      markets: mktMap[s.slug] || 0,
+      members:  memMap[s.slug] || 0,
+      ...
+    }))
+
+STEP 3 — Rewrite /api/admin/set-plan (around line 9357):
+
+FIND:
+    const { error } = await supabase
+      .from('creator_settings')
+      .update({ plan, plan_trial_expires_at: null })
+      .eq('slug', slug);
+    if (error) throw error;
+
+REPLACE with:
+    await pool.query(
+      `UPDATE creator_settings SET plan = $1, plan_trial_expires_at = NULL WHERE slug = $2`,
+      [plan, slug]
+    );
+
+STEP 4 — Rewrite /api/admin/users (around line 9377):
+
+FIND:
+    const { data: allUsers } = await supabase
+      .from('users')
+      ...
+
+REPLACE with pool.query() for the users table and any other supabase calls in that route.
+Pattern: SELECT id, display_name, email, created_at FROM users ORDER BY created_at DESC
+
+For the creator_settings lookup in that route:
+    const csRes = await pool.query(`SELECT creator_id FROM creator_settings`);
+    const creatorIdSet = new Set(csRes.rows.map(r => r.creator_id));
+
+For trade counts:
+    const tradesRes = await pool.query(
+      `SELECT user_id, COUNT(*) as count FROM positions GROUP BY user_id`
+    );
+    const tradeMap = {};
+    tradesRes.rows.forEach(r => { tradeMap[r.user_id] = parseInt(r.count); });
+
+STEP 5 — Rewrite /api/admin/platform-stats (around line 9427):
+Replace all supabase count calls with pool.query COUNT(*) queries:
+    const r = await pool.query(`SELECT
+      (SELECT COUNT(*) FROM users) as total_users,
+      (SELECT COUNT(*) FROM creator_settings) as total_creators,
+      (SELECT COUNT(*) FROM markets WHERE is_public = true) as total_markets,
+      (SELECT COUNT(*) FROM positions) as total_trades,
+      (SELECT COUNT(*) FROM users WHERE created_at > NOW() - INTERVAL '7 days') as new_users_7d,
+      (SELECT COUNT(*) FROM positions WHERE created_at > NOW() - INTERVAL '7 days') as new_trades_7d
+    `);
+    const stats = r.rows[0];
+    res.json({
+      total_users:    parseInt(stats.total_users),
+      total_creators: parseInt(stats.total_creators),
+      total_markets:  parseInt(stats.total_markets),
+      total_trades:   parseInt(stats.total_trades),
+      new_users_7d:   parseInt(stats.new_users_7d),
+      new_trades_7d:  parseInt(stats.new_trades_7d)
+    });
+
+STEP 6 — Rewrite /api/admin/gift-trial (around line 9747):
+FIND:
+    const { error } = await supabase
+      .from('creator_settings')
+      .update({ plan: 'platinum', plan_trial_expires_at: expiresAt })
+      .eq('slug', slug);
+
+REPLACE with:
+    await pool.query(
+      `UPDATE creator_settings SET plan = 'platinum', plan_trial_expires_at = $1 WHERE slug = $2`,
+      [expiresAt, slug]
+    );
+
+STEP 7 — Also fix /api/admin/reset-password if it exists (from password reset feature).
+Any supabase calls in admin routes — replace with pool.query equivalents.
+
+STEP 8 — Commit and push:
+    git add server.js
+    git commit -m "fix: admin routes use pg pool directly — bypass broken supabase-js client"
+    git push origin main
+
+NOTE: Do NOT change any non-admin routes. Only fix the routes that log "[admin]" errors.
+The goal is to get admin working. The supabase-js issue can be investigated separately.

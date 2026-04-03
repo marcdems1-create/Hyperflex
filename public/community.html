@@ -4012,9 +4012,10 @@ async function submitPredict() {
   txtEl.innerHTML = '<span class="spinner"></span> Placing…';
 
   try {
+    const token = localStorage.getItem('hf_token');
     const r = await fetch(`${API}/trade`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ user_id: currentUser.id, market_id: pendingMarket.id, side: pendingSide, amount })
     });
     const data = await r.json();

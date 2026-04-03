@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "HyperFlex — Whale Tracker for Polymarket",
+  "description": "See whale wallet positions, smart money consensus, and AI signals directly on Polymarket trading pages.",
+  "version": "1.0.0",
+  "icons": {
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "permissions": [],
+  "host_permissions": [
+    "https://polymarket.com/*",
+    "https://hyperflex.network/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://polymarket.com/*"],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  }
+}

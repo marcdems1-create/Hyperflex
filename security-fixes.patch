@@ -1,0 +1,194 @@
+From ad080b335fd83aa2378eee3c8a034a523676d37a Mon Sep 17 00:00:00 2001
+From: Marc Dems <marcdems1@gmail.com>
+Date: Tue, 17 Mar 2026 19:36:40 -0400
+Subject: [PATCH] =?UTF-8?q?fix:=20security=20audit=20=E2=80=94=20auth=20on?=
+ =?UTF-8?q?=20/trade=20+=20/positions,=20JWT=20consolidation,=20HTML=20esc?=
+ =?UTF-8?q?aping,=20trial=20plan=20bug,=20multi-option=20votes,=20payout?=
+ =?UTF-8?q?=20logging,=20admin=20header-only?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ server.js | 59 ++++++++++++++++++++++++++++++++++---------------------
+ 1 file changed, 37 insertions(+), 22 deletions(-)
+
+diff --git a/server.js b/server.js
+index 06c5d46..a2134d6 100644
+--- a/server.js
++++ b/server.js
+@@ -11,7 +11,6 @@ const fs = require('fs');
+ const crypto = require('crypto');
+ const dns = require('dns').promises;
+ const nodemailer = require('nodemailer');
+-const { execFile } = require('child_process');
+ 
+ // sharp is optional — loaded lazily so server starts even before npm install runs on Railway
+ let _sharp = null;
+@@ -22,6 +21,9 @@ function getSharp() {
+ }
+ 
+ const app = express();
++
++const JWT_SECRET = process.env.JWT_SECRET || 'hyperflex-dev-secret-change-in-prod';
++
+ app.use(cors());
+ 
+ // ── Stripe webhook needs raw body — must be registered BEFORE express.json() ──
+@@ -237,7 +239,7 @@ app.post('/login', async (req, res) => {
+   if (error || !user) return res.status(400).json({ error: 'User not found' });
+   const valid = await bcrypt.compare(password, user.password_hash);
+   if (!valid) return res.status(400).json({ error: 'Invalid password' });
+-  const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET || 'hyperflex_secret');
++  const token = jwt.sign({ id: user.id }, JWT_SECRET);
+   res.json({ token, user: { id: user.id, email: user.email, display_name: user.display_name, balance: user.balance } });
+ });
+ 
+@@ -247,7 +249,7 @@ function requireAuth(req, res, next) {
+   const token = auth && auth.startsWith('Bearer ') ? auth.slice(7) : null;
+   if (!token) return res.status(401).json({ error: 'Auth required' });
+   try {
+-    const payload = jwt.verify(token, process.env.JWT_SECRET || 'hyperflex_secret');
++    const payload = jwt.verify(token, JWT_SECRET);
+     req.userId = payload.id;
+     req.user   = { id: payload.id };   // used by newer endpoints
+     next();
+@@ -623,7 +625,7 @@ app.post('/markets', async (req, res) => {
+   const token = auth && auth.startsWith('Bearer ') ? auth.slice(7) : null;
+   if (token) {
+     try {
+-      const payload = jwt.verify(token, process.env.JWT_SECRET || 'hyperflex_secret');
++      const payload = jwt.verify(token, JWT_SECRET);
+       // Try creator_id first (new schema), fall back to user_id (old schema)
+       let { data: settings } = await supabase
+         .from('creator_settings')
+@@ -654,8 +656,9 @@ app.post('/markets', async (req, res) => {
+       .eq('slug', row.tenant_slug)
+       .maybeSingle();
+     if (cs) {
++      // effectivePlan: during active trial treat as 'pro'; otherwise use actual plan
+       const effectivePlan = (cs.plan_trial_expires_at && new Date(cs.plan_trial_expires_at) > new Date())
+-        ? cs.plan : cs.plan;
++        ? 'pro' : cs.plan;
+       const FREE_MARKET_LIMIT = 5;
+       if (effectivePlan === 'free') {
+         const { count } = await supabase
+@@ -857,8 +860,9 @@ app.post('/api/creator/markets/bulk', requireCreator, async (req, res) => {
+ // ── TRADING ───────────────────────────────────────
+ 
+ // Place a trade
+-app.post('/trade', async (req, res) => {
+-  const { user_id, market_id, side, amount } = req.body;
++app.post('/trade', requireAuth, async (req, res) => {
++  const { market_id, side, amount } = req.body;
++  const user_id = req.userId; // from auth middleware — prevents spoofing
+ 
+   // Validate user exists
+   const { data: user, error: userError } = await supabase
+@@ -1032,7 +1036,7 @@ function getUserIdFromReq(req) {
+     const auth = req.headers.authorization || '';
+     const token = auth.replace('Bearer ', '').trim();
+     if (!token) return null;
+-    const payload = jwt.verify(token, process.env.JWT_SECRET || 'hyperflex_secret');
++    const payload = jwt.verify(token, JWT_SECRET);
+     return payload.id || null;
+   } catch {
+     return null;
+@@ -1263,7 +1267,9 @@ app.get('/api/user/my-positions/:slug', async (req, res) => {
+ });
+ 
+ // Get user positions
+-app.get('/positions/:user_id', async (req, res) => {
++app.get('/positions/:user_id', requireAuth, async (req, res) => {
++  // Only allow users to fetch their own positions
++  if (req.userId !== req.params.user_id) return res.status(403).json({ error: 'Forbidden' });
+   const { data, error } = await supabase
+     .from('positions')
+     .select('*, markets(*)')
+@@ -2034,7 +2040,7 @@ async function scanAndCreateMarkets() {
+ cron.schedule('0 */6 * * *', scanAndCreateMarkets);
+ 
+ // Manual trigger endpoint (legacy)
+-app.post('/api/scan-markets', async (req, res) => {
++app.post('/api/scan-markets', requireAdmin, async (req, res) => {
+   try {
+     await scanAndCreateMarkets();
+     res.json({ ok: true });
+@@ -2769,7 +2775,6 @@ app.get('/api/templates/:id', (req, res) => {
+ // Run: npm install bcrypt jsonwebtoken
+ // ============================================================
+ 
+-const JWT_SECRET = process.env.JWT_SECRET || 'hyperflex-dev-secret-change-in-prod';
+ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+ const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
+ 
+@@ -4608,8 +4613,14 @@ app.post('/api/markets/:id/dispute', requireAuth, async (req, res) => {
+       if (!market.expiry_date || new Date(market.expiry_date) > new Date()) {
+         return res.status(400).json({ error: 'You can only vote on expired markets' });
+       }
+-      if (!['YES', 'NO'].includes(requested_outcome)) {
+-        return res.status(400).json({ error: 'requested_outcome must be YES or NO' });
++      // For binary markets: must be YES or NO.
++      // For multi-option markets: must match one of the option labels.
++      const isMultiOpt = Array.isArray(market.options) && market.options.length > 0;
++      const validOutcomes = isMultiOpt
++        ? market.options.map(o => o.label)
++        : ['YES', 'NO'];
++      if (!requested_outcome || !validOutcomes.includes(requested_outcome)) {
++        return res.status(400).json({ error: `requested_outcome must be one of: ${validOutcomes.join(', ')}` });
+       }
+       disputeType  = 'resolution_vote';
+       insertReason = (reason?.trim() || '').slice(0, 500);
+@@ -4860,7 +4871,12 @@ app.post('/markets/:id/resolve', requireCreator, async (req, res) => {
+           );
+         }
+       }
+-      await Promise.allSettled(payouts);
++      const payoutResults = await Promise.allSettled(payouts);
++      const failed = payoutResults.filter(r => r.status === 'rejected');
++      if (failed.length > 0) {
++        console.error(`[resolve] ${failed.length} payout(s) failed for market ${id}:`, failed.map(r => r.reason?.message));
++        // Still respond OK — partial resolution recorded, admin can review logs
++      }
+     }
+ 
+     res.json({ ok: true, outcome, positions_settled: positions?.length || 0 });
+@@ -6691,7 +6707,7 @@ app.get('/api/search', async (req, res) => {
+     const token = auth && auth.startsWith('Bearer ') ? auth.slice(7) : null;
+     if (token) {
+       try {
+-        const payload = jwt.verify(token, process.env.JWT_SECRET || 'hyperflex_secret');
++        const payload = jwt.verify(token, JWT_SECRET);
+         const { data: myBals } = await supabase
+           .from('community_balances')
+           .select('creator_slug')
+@@ -7401,11 +7417,11 @@ app.post('/api/nominate', async (req, res) => {
+         subject: `🎯 New creator nomination: ${creator_name}`,
+         html: `<div style="font-family:monospace;background:#141412;color:#ddd;padding:24px;border-radius:8px;">
+           <h2 style="color:#c9920d;">New Creator Nomination</h2>
+-          <p><strong>Creator:</strong> ${creator_name}</p>
+-          ${creator_url ? `<p><strong>Channel/URL:</strong> ${creator_url}</p>` : ''}
+-          ${fan_name ? `<p><strong>From fan:</strong> ${fan_name}</p>` : ''}
+-          ${fan_email ? `<p><strong>Fan email:</strong> ${fan_email}</p>` : ''}
+-          ${message ? `<p><strong>Message:</strong> ${message}</p>` : ''}
++          <p><strong>Creator:</strong> ${escapeHtml(creator_name)}</p>
++          ${creator_url ? `<p><strong>Channel/URL:</strong> ${escapeHtml(creator_url)}</p>` : ''}
++          ${fan_name ? `<p><strong>From fan:</strong> ${escapeHtml(fan_name)}</p>` : ''}
++          ${fan_email ? `<p><strong>Fan email:</strong> ${escapeHtml(fan_email)}</p>` : ''}
++          ${message ? `<p><strong>Message:</strong> ${escapeHtml(message)}</p>` : ''}
+         </div>`,
+       }).catch(e => console.warn('[nominate] email error:', e.message));
+     }
+@@ -8461,8 +8477,7 @@ app.get('/:slug', async (req, res, next) => {
+ function requireAdmin(req, res, next) {
+   const secret = process.env.ADMIN_SECRET;
+   if (!secret) return res.status(503).json({ error: 'Admin not configured (set ADMIN_SECRET)' });
+-  const provided = req.query.secret
+-    || (req.headers.authorization || '').replace('Bearer ', '').trim();
++  const provided = (req.headers.authorization || '').replace('Bearer ', '').trim();
+   if (provided !== secret) return res.status(403).json({ error: 'Forbidden' });
+   next();
+ }
+-- 
+2.34.1
+

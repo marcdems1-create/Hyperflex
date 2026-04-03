@@ -104,6 +104,7 @@
 5. **Always check git status** before assuming what's deployed vs local
 6. **Aggregator-first mindset:** Portfolio tracker is the primary value prop. Community markets support retention. When building new features, ask: "Does this help a Polymarket trader?"
 7. **⛔ NEVER start or stop the server.** Do NOT run `node server.js`, `npm start`, `npm run dev`, `pkill node`, or any command that starts/stops a process on port 3000. Railway handles production. If you need to verify code works, edit files and commit — do not run the server locally. Killing the server disrupts the live site.
+8. **Always track every user request as a todo item before starting work.** When the user gives a task or list of tasks, add them to a running todo list immediately. Mark items in-progress when starting, completed when done. Never let a request go untracked.
 
 ---
 

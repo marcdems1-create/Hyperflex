@@ -1,0 +1,202 @@
+#hfx-whale-panel {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 340px;
+  max-height: 520px;
+  overflow-y: auto;
+  background: #141412;
+  border: 1px solid rgba(201, 146, 13, 0.3);
+  border-radius: 16px;
+  z-index: 99999;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #ddd8cc;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+  transition: all 0.2s ease;
+}
+
+#hfx-whale-panel.hfx-collapsed {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  cursor: pointer;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #c9920d;
+  border: none;
+}
+#hfx-whale-panel.hfx-collapsed:hover { transform: scale(1.08); }
+#hfx-whale-panel.hfx-collapsed .hfx-content { display: none; }
+#hfx-whale-panel.hfx-collapsed .hfx-fab-icon { display: flex; }
+
+.hfx-fab-icon { display: none; font-size: 20px; }
+
+.hfx-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px 10px;
+  border-bottom: 1px solid rgba(201, 146, 13, 0.15);
+  position: sticky;
+  top: 0;
+  background: #141412;
+  z-index: 1;
+}
+
+.hfx-logo {
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  color: #c9920d;
+}
+
+.hfx-close {
+  background: none;
+  border: none;
+  color: #7a7870;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.hfx-close:hover { color: #ddd8cc; }
+
+.hfx-body { padding: 12px 16px 14px; }
+
+.hfx-section {
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(201, 146, 13, 0.08);
+}
+.hfx-section:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+
+.hfx-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #c9920d;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 8px;
+}
+
+.hfx-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 0;
+}
+
+.hfx-label {
+  font-size: 12px;
+  color: #7a7870;
+}
+
+.hfx-val {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ddd8cc;
+}
+
+.hfx-gold { color: #c9920d; }
+.hfx-green { color: #22c55e; }
+.hfx-red { color: #ef4444; }
+
+.hfx-bar {
+  height: 5px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 3px;
+  overflow: hidden;
+  margin: 6px 0;
+}
+.hfx-bar-fill {
+  height: 100%;
+  background: #22c55e;
+  border-radius: 3px;
+}
+
+.hfx-strength-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-top: 6px;
+}
+.hfx-strength-STRONG { background: rgba(34,197,94,0.15); color: #22c55e; }
+.hfx-strength-MODERATE { background: rgba(201,146,13,0.15); color: #c9920d; }
+.hfx-strength-EMERGING { background: rgba(122,120,112,0.15); color: #7a7870; }
+
+.hfx-ai-hook {
+  font-size: 12px;
+  color: #c9920d;
+  font-style: italic;
+  margin-top: 6px;
+  line-height: 1.4;
+}
+
+.hfx-trade {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  background: rgba(34, 197, 94, 0.06);
+  border: 1px solid rgba(34, 197, 94, 0.15);
+  border-radius: 8px;
+  margin-top: 8px;
+}
+
+.hfx-signal-type {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ddd8cc;
+  margin-bottom: 4px;
+}
+
+.hfx-signal-conf {
+  font-size: 12px;
+  color: #7a7870;
+}
+
+.hfx-signal-desc {
+  font-size: 11px;
+  color: #7a7870;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.hfx-no-data {
+  text-align: center;
+  color: #7a7870;
+  font-size: 12px;
+  padding: 16px 0;
+  line-height: 1.5;
+}
+
+.hfx-footer {
+  padding: 8px 16px;
+  border-top: 1px solid rgba(201, 146, 13, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  bottom: 0;
+  background: #141412;
+}
+
+.hfx-footer a {
+  color: #c9920d;
+  text-decoration: none;
+  font-size: 11px;
+  font-weight: 700;
+}
+.hfx-footer a:hover { text-decoration: underline; }
+
+.hfx-loading {
+  text-align: center;
+  color: #7a7870;
+  font-size: 12px;
+  padding: 20px 0;
+}

@@ -24143,6 +24143,7 @@ app.post('/api/polymarket/derive-api-key', optionalAuth, async (req, res) => {
         // deriveSafe: encodeAbiParameters([{type:'address'}], [address])
         const safeFactory = '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b';
         const safeInitCodeHash = '0x2bce2127ff07fb632d16c8347c4ebf501f4841168bed00d9e6ef715ddb6fcecf';
+        // Use Polymarket's official deriveSafe method for salt calculation
         const abiEncoded = ethers.AbiCoder.defaultAbiCoder().encode(['address'], [addrLower]);
         const safeSalt = ethers.keccak256(abiEncoded);
         const safeAddr = ethers.getCreate2Address(safeFactory, safeSalt, safeInitCodeHash);
