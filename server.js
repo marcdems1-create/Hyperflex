@@ -26739,12 +26739,26 @@ function canTweet() {
   return true;
 }
 
+// Extract subject keywords from tweet text (for topic-level dedup)
+function _extractTweetSubject(text) {
+  const norm = (text || '').toLowerCase().replace(/https?:\/\/\S+/g, '').replace(/hyperflex\.network\S*/g, '');
+  // Common noise words to skip
+  const noise = new Set(['the','this','that','with','from','into','just','only','been','what','when','where','which','will','would','could','should',
+    'about','their','there','market','markets','pricing','priced','sitting','volume','trading','traders','betting','money','smart','whale','whales',
+    'massive','suggests','either','sitting','between','before','after','still','says','percent','million','billion','hitting','consensus']);
+  // Extract significant words (5+ chars, not noise, not pure numbers)
+  const words = norm.replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length >= 4 && !noise.has(w) && !/^\d+$/.test(w));
+  // Return first 4 significant words as the "subject fingerprint"
+  return words.slice(0, 4).sort().join(' ');
+}
+
 // Content similarity check — prevents near-duplicate tweets
 function isTweetTooSimilar(newTweet) {
   const now = Date.now();
   const normalize = t => (t || '').toLowerCase().replace(/\n+/g, ' ').replace(/hyperflex\.network\S*/g, '').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
   const newNorm = normalize(newTweet);
   const newWords = new Set(newNorm.split(' ').filter(w => w.length > 3));
+  const newSubject = _extractTweetSubject(newTweet);
 
   // Clean up old entries (keep 48h window)
   while (_tweetHistory.length && now - _tweetHistory[0].ts > 48 * 60 * 60 * 1000) {
@@ -26757,11 +26771,18 @@ function isTweetTooSimilar(newTweet) {
     // Exact or near-exact match
     if (prevNorm === newNorm) return true;
 
-    // Jaccard similarity on words (>60% overlap = too similar)
+    // Jaccard similarity on words (>45% overlap = too similar — lowered from 60%)
     const prevWords = new Set(prevNorm.split(' ').filter(w => w.length > 3));
     const intersection = [...newWords].filter(w => prevWords.has(w)).length;
     const union = new Set([...newWords, ...prevWords]).size;
-    if (union > 0 && (intersection / union) > 0.6) return true;
+    if (union > 0 && (intersection / union) > 0.45) return true;
+
+    // Subject-level dedup: if the core topic keywords match, it's the same market
+    const prevSubject = _extractTweetSubject(prev.text);
+    if (newSubject && prevSubject && newSubject === prevSubject) {
+      console.log(`[tweet-dedup] Subject match blocked: "${newSubject}" === "${prevSubject}"`);
+      return true;
+    }
 
     // Check if it's about the same market (substring match on market names)
     if (prev.market && newNorm.includes(prev.market.toLowerCase().slice(0, 20))) return true;
@@ -26776,6 +26797,53 @@ function recordTweet(text, market) {
   // Cap history
   if (_tweetHistory.length > 50) _tweetHistory.splice(0, 25);
 }
+
+// ── Seed tweet history from X timeline on startup (prevents post-deploy duplicate spam) ──
+async function _seedTweetHistoryFromTimeline() {
+  const bearer = process.env.X_BEARER_TOKEN;
+  const xUserId = process.env.X_USER_ID;
+  if (!bearer || !xUserId) {
+    console.log('[tweet-seed] Skipped: X_BEARER_TOKEN or X_USER_ID not set');
+    return;
+  }
+  try {
+    const timelineUrl = `https://api.x.com/2/users/${xUserId}/tweets?max_results=15&tweet.fields=created_at,text`;
+    const res = await fetch(timelineUrl, {
+      headers: { 'Authorization': `Bearer ${bearer}` },
+      signal: AbortSignal.timeout(10000)
+    });
+    if (!res.ok) {
+      console.warn('[tweet-seed] X API returned', res.status);
+      return;
+    }
+    const data = await res.json();
+    const tweets = data.data || [];
+    const normalize = t => (t || '').toLowerCase().replace(/https?:\/\/\S+/g, '').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+    let seeded = 0;
+    for (const t of tweets) {
+      const ts = new Date(t.created_at).getTime();
+      // Only seed tweets from last 48h
+      if (Date.now() - ts > 48 * 60 * 60 * 1000) continue;
+      const alreadyTracked = _tweetHistory.some(h => normalize(h.text) === normalize(t.text));
+      if (!alreadyTracked) {
+        _tweetHistory.push({ text: t.text, market: '', ts });
+        seeded++;
+      }
+    }
+    // Also seed _tweetLog timestamps so rate limiter is aware of recent posts
+    const last24h = tweets.filter(t => Date.now() - new Date(t.created_at).getTime() < 24 * 60 * 60 * 1000);
+    for (const t of last24h) {
+      const ts = new Date(t.created_at).getTime();
+      if (!_tweetLog.some(l => Math.abs(l - ts) < 60000)) _tweetLog.push(ts);
+    }
+    _tweetLog.sort((a, b) => a - b);
+    console.log(`[tweet-seed] Seeded ${seeded} tweets from timeline, ${_tweetLog.length} in rate limiter`);
+  } catch (e) {
+    console.warn('[tweet-seed] Failed:', e.message);
+  }
+}
+// Fire on startup (non-blocking)
+_seedTweetHistoryFromTimeline().catch(() => {});
 
 // ── Event-driven tweets (fire-and-forget, rate-limited) ──
 
@@ -26917,9 +26985,15 @@ async function generateAndPostDailyTweet(draftOnly = false) {
   const flowData = _whaleFlowCache && _whaleFlowCache.data ? _whaleFlowCache.data : null;
   const concentration = (flowData && flowData.concentration) || [];
 
-  // Filter out markets we already tweeted about in last 48h
-  const freshConcentration = concentration.filter(c => !_tweetedMarkets.has(c.market));
-  const freshWhales = whalePositions.filter(p => !_tweetedMarkets.has(p.market));
+  // Filter out markets we already tweeted about in last 48h (by slug AND by subject similarity)
+  const tweetedSubjects = _tweetHistory.map(h => _extractTweetSubject(h.text)).filter(Boolean);
+  const isMarketStale = (marketName) => {
+    if (_tweetedMarkets.has(marketName)) return true;
+    const subj = _extractTweetSubject(marketName);
+    return subj && tweetedSubjects.some(s => s === subj);
+  };
+  const freshConcentration = concentration.filter(c => !isMarketStale(c.market));
+  const freshWhales = whalePositions.filter(p => !isMarketStale(p.market));
 
   // Top whale move by capital — prefer fresh markets
   let topMove = freshConcentration[0] || concentration[0] || null;
@@ -29107,7 +29181,7 @@ setInterval(async () => {
     try {
       const bearer = process.env.X_BEARER_TOKEN;
       const xUserId = process.env.X_USER_ID; // @HyperFlexapp user ID
-      if (bearer && xUserId && _tweetHistory.length > 0) {
+      if (bearer && xUserId) {
         const timelineUrl = `https://api.x.com/2/users/${xUserId}/tweets?max_results=5&tweet.fields=created_at,text`;
         const tlRes = await fetch(timelineUrl, {
           headers: { 'Authorization': `Bearer ${bearer}` },
