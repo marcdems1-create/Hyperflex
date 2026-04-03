@@ -61,9 +61,11 @@ canvas{display:block;width:100%!important}
 .mkt-outcomes-table tbody td{padding:12px 10px;font-size:13px}
 .mkt-outcomes-table tbody td:not(:first-child){text-align:center;font-family:var(--mono)}
 .outcome-name{display:flex;align-items:center;gap:8px;font-weight:700}
-.outcome-btn{display:inline-block;padding:4px 10px;border-radius:5px;font-family:var(--mono);font-size:11px;font-weight:700;min-width:54px;text-align:center}
+.outcome-btn{display:inline-flex;align-items:center;gap:4px;padding:6px 12px;border-radius:6px;font-family:var(--mono);font-size:11px;font-weight:700;min-width:80px;text-align:center;justify-content:center;cursor:pointer;transition:all .15s;border:none}
 .outcome-btn-yes{background:rgba(34,197,94,.12);color:var(--green);border:1px solid rgba(34,197,94,.25)}
+.outcome-btn-yes:hover{background:rgba(34,197,94,.25);border-color:rgba(34,197,94,.5)}
 .outcome-btn-no{background:rgba(239,68,68,.12);color:var(--red);border:1px solid rgba(239,68,68,.25)}
+.outcome-btn-no:hover{background:rgba(239,68,68,.25);border-color:rgba(239,68,68,.5)}
 
 /* Holders section */
 .mkt-holders{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:24px}
@@ -149,6 +151,9 @@ canvas{display:block;width:100%!important}
   .mkt-stats{grid-template-columns:repeat(2,1fr)}
   .holders-grid{grid-template-columns:1fr}
   .ob-grid{grid-template-columns:1fr}
+  .outcome-btn{font-size:10px;padding:5px 8px;min-width:68px;min-height:44px}
+  .mkt-outcomes-table thead th{font-size:8px;padding:0 6px 8px}
+  .mkt-outcomes-table tbody td{padding:8px 6px}
 }
 </style>
 </head>
@@ -360,6 +365,12 @@ canvas{display:block;width:100%!important}
         <button class="trade-cta buy-yes" id="tradeCta" onclick="executeTrade()">Buy Yes</button>
         <div id="tradeStatus" style="display:none;font-family:var(--mono);font-size:11px;text-align:center;padding:6px 0"></div>
         <div class="trade-disclaimer">Click "Connect Wallet" to connect to Polymarket</div>
+
+        <!-- Your Position (shown after trade or if holding) -->
+        <div id="tradePosition" style="display:none;margin-top:12px;padding:10px 14px;background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.15);border-radius:8px">
+          <div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.08em;color:var(--dim);margin-bottom:6px">YOUR POSITION</div>
+          <div id="positionDetails" style="font-family:var(--mono);font-size:12px;color:var(--text)"></div>
+        </div>
       </div>
 
       <div class="mkt-poly-link">
@@ -583,16 +594,18 @@ function renderOutcomes(m) {
   var liq = fmtCap(m.liquidityNum || m.liquidity || 0);
 
   var html = '<table class="mkt-outcomes-table"><thead><tr>' +
-    '<th>Outcome</th><th>YES</th><th>NO</th><th>Vol</th><th>Liq</th>' +
+    '<th>Outcome</th><th>Buy Yes</th><th>Buy No</th><th>Vol</th><th>Liq</th>' +
     '</tr></thead><tbody>';
 
   for (var r = 0; r < rows.length; r++) {
     var row = rows[r];
     var activeClass = (row.idx === _activeOutcomeIndex) ? ' active-outcome' : '';
-    html += '<tr class="outcome-row' + activeClass + '" onclick="switchOutcome(' + row.idx + ')" data-idx="' + row.idx + '">' +
-      '<td><div class="outcome-name">' + escH(row.name) + '</div></td>' +
-      '<td><span class="outcome-btn outcome-btn-yes">' + Math.round(row.yesP * 100) + '%</span></td>' +
-      '<td><span class="outcome-btn outcome-btn-no">' + Math.round(row.noP * 100) + '%</span></td>' +
+    var yesCents = Math.round(row.yesP * 100);
+    var noCents = Math.round(row.noP * 100);
+    html += '<tr class="outcome-row' + activeClass + '" data-idx="' + row.idx + '">' +
+      '<td onclick="switchOutcome(' + row.idx + ')" style="cursor:pointer"><div class="outcome-name">' + escH(row.name) + '</div></td>' +
+      '<td><button class="outcome-btn outcome-btn-yes" onclick="buyOutcome(' + row.idx + ',\'yes\',' + yesCents + ')" title="Buy Yes at ' + yesCents + '\u00a2">Buy Yes ' + yesCents + '\u00a2</button></td>' +
+      '<td><button class="outcome-btn outcome-btn-no" onclick="buyOutcome(' + row.idx + ',\'no\',' + noCents + ')" title="Buy No at ' + noCents + '\u00a2">Buy No ' + noCents + '\u00a2</button></td>' +
       '<td style="color:var(--soft);font-size:11px">' + vol + '</td>' +
       '<td style="color:var(--soft);font-size:11px">' + liq + '</td>' +
       '</tr>';
@@ -600,6 +613,17 @@ function renderOutcomes(m) {
 
   html += '</tbody></table>';
   document.getElementById('mktOutcomes').innerHTML = html;
+}
+
+// ── buyOutcome — click Buy Yes/No on outcomes table → select outcome + side + scroll to trade ──
+function buyOutcome(index, side, priceCents) {
+  switchOutcome(index);
+  setTradeSide(side);
+  document.getElementById('tradePrice').value = priceCents;
+  updateTradeCalc();
+  // Scroll trade widget into view
+  var widget = document.querySelector('.trade-widget');
+  if (widget) widget.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // ── switchOutcome ─────────────────────────────────────────────────────────────
@@ -1432,9 +1456,9 @@ function showTradeStatus(msg, type) {
   var el = document.getElementById('tradeStatus');
   if (!el) return;
   el.textContent = msg;
-  el.style.color = type === 'error' ? 'var(--red)' : type === 'success' ? 'var(--green)' : 'var(--soft)';
+  el.style.color = type === 'error' ? 'var(--red)' : type === 'success' ? 'var(--green)' : type === 'info' ? 'var(--gold)' : 'var(--soft)';
   el.style.display = 'block';
-  if (type === 'success') setTimeout(function() { el.style.display = 'none'; }, 4000);
+  // Don't auto-hide — let the next action clear it
 }
 
 function updateTradingUI() {
@@ -1454,13 +1478,24 @@ function updateTradingUI() {
 var _tradeRetrying = false;
 
 async function executeTrade() {
-  // Check if trading is enabled — if not, run Connect Wallet flow
+  var cta = document.getElementById('tradeCta');
+
+  // Step 1: Check if trading is enabled — if not, run Connect Wallet flow
   if (!isTradingEnabled()) {
+    showTradeStatus('Connecting wallet...', 'info');
+    cta.disabled = true;
     var enabled = await enableTrading();
-    if (!enabled) return;
+    if (!enabled) {
+      cta.disabled = false;
+      updateCtaButton();
+      return;
+    }
+    // After wallet connect, continue directly to place the trade
+    showTradeStatus('Wallet connected! Placing your order...', 'info');
   }
 
-  // Get token ID for the selected outcome + side
+  // Step 2: Get token ID for the selected outcome
+  showTradeStatus('Preparing order...', 'info');
   var tids;
   if (_sortedEventMarkets && _sortedEventMarkets[_activeOutcomeIndex]) {
     var em = _sortedEventMarkets[_activeOutcomeIndex];
@@ -1475,7 +1510,8 @@ async function executeTrade() {
   var tokenId = tids[tokenIndex] || tids[0];
 
   if (!tokenId) {
-    showTradeStatus('No token ID for this market \u2014 cannot trade', 'error');
+    console.error('[trade] No token ID. tids:', tids, '_activeOutcomeIndex:', _activeOutcomeIndex, '_sortedEventMarkets:', !!_sortedEventMarkets);
+    showTradeStatus('No token ID for this market \u2014 try selecting an outcome below', 'error');
     return;
   }
 
@@ -1494,10 +1530,10 @@ async function executeTrade() {
   var clobPrice = price / 100;
   var clobSide = _tradeMode === 'buy' ? 'BUY' : 'SELL';
   var shares = amount / clobPrice;
+  var sideLabel = (_tradeSide === 'yes' ? 'YES' : 'NO');
 
-  var cta = document.getElementById('tradeCta');
   cta.disabled = true;
-  cta.textContent = 'Signing order...';
+  cta.textContent = 'Preparing...';
 
   try {
     var apiKey = localStorage.getItem('poly_api_key');
@@ -1507,7 +1543,7 @@ async function executeTrade() {
     var proxyAddress = localStorage.getItem('hf_poly_wallet');
 
     if (!apiKey || !apiSecret || !apiPassphrase) {
-      showTradeStatus('API credentials required. Enable trading first.', 'error');
+      showTradeStatus('Wallet not connected. Click Buy to connect.', 'error');
       cta.disabled = false; updateCtaButton();
       return;
     }
@@ -1517,6 +1553,8 @@ async function executeTrade() {
       cta.disabled = false; updateCtaButton();
       return;
     }
+
+    showTradeStatus('Connecting to MetaMask...', 'info');
     var provider = new ethers.BrowserProvider(window.ethereum);
     var signer = await provider.getSigner();
     var signerAddress = await signer.getAddress();
@@ -1538,7 +1576,6 @@ async function executeTrade() {
       localStorage.setItem('hf_poly_wallet', proxyAddress);
     }
 
-    // Build order amounts (6 decimal places — USDC + conditional tokens both use 10^6)
     var DECIMALS = 1000000;
     var makerAmt, takerAmt, sideInt;
     if (clobSide === 'BUY') {
@@ -1598,9 +1635,13 @@ async function executeTrade() {
       ]
     };
 
-    cta.textContent = 'Sign order in wallet...';
+    // Step 3: Sign the order in MetaMask
+    showTradeStatus('Sign the order in MetaMask \u2192', 'info');
+    cta.textContent = 'Sign in wallet...';
     var orderSignature = await signer.signTypedData(orderDomain, orderTypes, orderStruct);
 
+    // Step 4: Submit to CLOB
+    showTradeStatus('Submitting order to Polymarket...', 'info');
     cta.textContent = 'Placing order...';
     var requestBody = JSON.stringify({
       order: {
@@ -1622,25 +1663,20 @@ async function executeTrade() {
       orderType: 'GTC'
     });
 
-    // Try submitting the order — browser-direct first, server proxy fallback
     var data = await submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eoaAddress);
 
     if (data._expired) {
-      // API key expired — auto-reconnect and retry once
       if (!_tradeRetrying) {
         _tradeRetrying = true;
-        console.log('[trade] API key expired — auto-reconnecting...');
-        cta.textContent = 'Reconnecting wallet...';
-        showTradeStatus('API key expired \u2014 reconnecting automatically...', 'error');
+        showTradeStatus('API key expired \u2014 reconnecting...', 'info');
+        cta.textContent = 'Reconnecting...';
         var reconnected = await enableTrading();
         _tradeRetrying = false;
         if (reconnected) {
-          // Retry the trade with fresh keys
-          cta.textContent = 'Retrying order...';
+          cta.textContent = 'Retrying...';
           apiKey = localStorage.getItem('poly_api_key');
           apiSecret = localStorage.getItem('poly_api_secret');
           apiPassphrase = localStorage.getItem('poly_api_passphrase');
-          // Re-build request body with new apiKey as owner
           var retryBody = JSON.stringify({
             order: JSON.parse(requestBody).order,
             owner: apiKey,
@@ -1652,11 +1688,11 @@ async function executeTrade() {
             return;
           }
         } else {
-          showTradeStatus('Could not reconnect \u2014 click Connect Wallet manually', 'error');
+          showTradeStatus('Could not reconnect \u2014 try again', 'error');
           return;
         }
       } else {
-        showTradeStatus('API key expired \u2014 click Connect Wallet to reconnect', 'error');
+        showTradeStatus('API key expired \u2014 click Buy to reconnect', 'error');
         return;
       }
     }
@@ -1666,8 +1702,14 @@ async function executeTrade() {
       return;
     }
 
-    showTradeStatus('\u2705 Order placed! ' + clobSide + ' ' + shares.toFixed(2) + ' shares @ ' + price + '\u00a2', 'success');
+    // Step 5: SUCCESS — show confirmation + position
+    var payout = shares.toFixed(2);
+    showTradeStatus('\u2705 Order placed! ' + sideLabel + ' ' + shares.toFixed(1) + ' shares @ ' + price + '\u00a2', 'success');
     console.log('[trade] Order success:', data);
+
+    // Show position in trade panel
+    showTradePosition(sideLabel, shares, price, amount, payout);
+
     // Refresh balance after trade
     setTimeout(fetchTradeBalance, 2000);
   } catch (err) {
@@ -1682,6 +1724,30 @@ async function executeTrade() {
     updateCtaButton();
     _tradeRetrying = false;
   }
+}
+
+function showTradePosition(side, shares, price, cost, payout) {
+  var el = document.getElementById('tradePosition');
+  var details = document.getElementById('positionDetails');
+  if (!el || !details) return;
+
+  var sideColor = side === 'YES' ? 'var(--green)' : 'var(--red)';
+  var profit = (parseFloat(payout) - cost).toFixed(2);
+  var profitSign = profit >= 0 ? '+' : '';
+
+  details.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">' +
+      '<span style="font-weight:700;color:' + sideColor + '">' + side + ' \u00b7 ' + shares.toFixed(1) + ' shares</span>' +
+      '<span style="color:var(--dim)">@ ' + price + '\u00a2</span>' +
+    '</div>' +
+    '<div style="display:flex;justify-content:space-between;font-size:11px">' +
+      '<span>Cost: $' + cost.toFixed(2) + '</span>' +
+      '<span>Payout if ' + side + ': <strong style="color:var(--green)">$' + payout + '</strong></span>' +
+    '</div>';
+
+  el.style.display = 'block';
+  el.style.borderColor = side === 'YES' ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.25)';
+  el.style.background = side === 'YES' ? 'rgba(34,197,94,0.06)' : 'rgba(239,68,68,0.06)';
 }
 
 // Submit order to CLOB — tries browser-direct, falls back to server proxy
