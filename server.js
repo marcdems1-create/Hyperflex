@@ -29794,6 +29794,294 @@ setInterval(() => {
   }
 }, 30 * 60 * 1000);
 
+// ══════════════════════════════════════════════════════════════════════
+// PYTH EDGE — Real-time price feeds for daily commodity/ETF markets
+// Uses Pyth Hermes public API (400ms delay) to detect mispriced Polymarket markets
+// ══════════════════════════════════════════════════════════════════════
+
+const PYTH_HERMES = 'https://hermes.pyth.network';
+
+// Price feed IDs — verified from Pyth API
+const PYTH_FEEDS = {
+  'XAU/USD':  { id: '765d2ba906dbc32ca17cc11f5310a89e9ee1f6420508c63861f2f8ba4ee34bb2', label: 'Gold',   symbol: 'XAU/USD' },
+  'XAG/USD':  { id: 'f2fb02c32b055c805e7238d628e5e9dadef274376114eb1f012337cabe93871e', label: 'Silver', symbol: 'XAG/USD' },
+  'SPY/USD':  { id: '19e09bb805456ada3979a7d1cbb4b6d63babc3a0f8e8a9509f68afa5c4c11cd5', label: 'SPY',    symbol: 'SPY' },
+  'QQQ/USD':  { id: '9695e2b96ea7b3859da9ed25b7a46a920a776e2fdae19a7bcfdf2b219230452d', label: 'QQQ',    symbol: 'QQQ' },
+  'IWM/USD':  { id: 'eff690a187797aa225723345d4612abec0bf0cec1ae62347c0e7b1905d730879', label: 'IWM',    symbol: 'IWM' },
+  'GLD/USD':  { id: 'e190f467043db04548200354889dfe0d9d314c08b8d4e62fabf4d5a3140fecca', label: 'GLD',    symbol: 'GLD' },
+  'SLV/USD':  { id: '6fc08c9963d266069cbd9780d98383dabf2668322a5bef0b9491e11d67e5d7e7', label: 'SLV',    symbol: 'SLV' },
+  'AAPL/USD': { id: '49f6b65cb1de6b10eaf75e7c03ca029c306d0357e91b5311b175084a5ad55688', label: 'AAPL',   symbol: 'AAPL' },
+  'NVDA/USD': { id: 'b1073854ed24cbc755dc527418f52b7d271f6cc967bbf8d8129112b18860a593', label: 'NVDA',   symbol: 'NVDA' },
+  'TSLA/USD': { id: '16dad506d7db8da01c87581c87ca897a012a153557d4d578c3b9c9e1bc0632f1', label: 'TSLA',   symbol: 'TSLA' },
+  'AMZN/USD': { id: 'b5d0e0fa58a1f8b81498ae670ce93c872d14434b72c364885d4fa1b257cbb07a', label: 'AMZN',   symbol: 'AMZN' },
+  'GOOG/USD': { id: 'e65ff435be42630439c96396653a342829e877e2aafaeaf1a10d0ee5fd2cf3f2', label: 'GOOG',   symbol: 'GOOG' },
+  'MSFT/USD': { id: 'd0ca23c1cc005e004ccf1db5bf76aeb6a49218f43dac3d4b275e92de12ded4d1', label: 'MSFT',   symbol: 'MSFT' },
+  'META/USD': { id: '78a3e3b8e676a8f73c439f5d749737034b139bbbe899ba5775216fba596607fe', label: 'META',   symbol: 'META' },
+};
+
+// Cache: { prices: { 'XAU/USD': { price, conf, expo, publishTime, computed } }, ts }
+let _pythPriceCache = { prices: {}, ts: 0 };
+const PYTH_CACHE_TTL = 2000; // 2 seconds
+
+// Cache for Polymarket daily markets
+let _pythMarketsCache = { markets: [], ts: 0 };
+const PYTH_MARKETS_CACHE_TTL = 5 * 60 * 1000; // 5 min
+
+// Price history for charts (last 200 ticks per feed)
+const _pythPriceHistory = {};
+const PYTH_HISTORY_MAX = 200;
+
+async function fetchPythPrices(feedKeys) {
+  const now = Date.now();
+  // Return cache if fresh enough
+  const staleKeys = feedKeys.filter(k => {
+    const cached = _pythPriceCache.prices[k];
+    return !cached || (now - cached._fetchedAt > PYTH_CACHE_TTL);
+  });
+  if (staleKeys.length === 0) return _pythPriceCache.prices;
+
+  const ids = staleKeys.map(k => PYTH_FEEDS[k]?.id).filter(Boolean);
+  if (!ids.length) return _pythPriceCache.prices;
+
+  try {
+    const url = `${PYTH_HERMES}/v2/updates/price/latest?${ids.map(id => 'ids[]=' + id).join('&')}&parsed=true`;
+    const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!r.ok) throw new Error('Pyth HTTP ' + r.status);
+    const data = await r.json();
+    const parsed = data.parsed || [];
+
+    for (const p of parsed) {
+      const feedKey = Object.keys(PYTH_FEEDS).find(k => PYTH_FEEDS[k].id === p.id);
+      if (!feedKey) continue;
+      const price = parseFloat(p.price.price) * Math.pow(10, p.price.expo);
+      const conf = parseFloat(p.price.conf) * Math.pow(10, p.price.expo);
+      const emaPrice = parseFloat(p.ema_price.price) * Math.pow(10, p.ema_price.expo);
+      _pythPriceCache.prices[feedKey] = {
+        price, conf, emaPrice,
+        publishTime: p.price.publish_time,
+        _fetchedAt: now,
+        label: PYTH_FEEDS[feedKey].label,
+        symbol: PYTH_FEEDS[feedKey].symbol,
+      };
+      // Track history
+      if (!_pythPriceHistory[feedKey]) _pythPriceHistory[feedKey] = [];
+      _pythPriceHistory[feedKey].push({ price, ts: p.price.publish_time * 1000 });
+      if (_pythPriceHistory[feedKey].length > PYTH_HISTORY_MAX) _pythPriceHistory[feedKey].shift();
+    }
+    _pythPriceCache.ts = now;
+  } catch (e) {
+    console.warn('[pyth] fetchPythPrices error:', e.message);
+  }
+  return _pythPriceCache.prices;
+}
+
+// Fetch Polymarket daily markets that resolve via Pyth
+async function fetchPythPolymarkets() {
+  const now = Date.now();
+  if (_pythMarketsCache.markets.length && now - _pythMarketsCache.ts < PYTH_MARKETS_CACHE_TTL) {
+    return _pythMarketsCache.markets;
+  }
+  try {
+    // Search for active daily commodity/ETF markets
+    const slugPatterns = ['xauusd', 'xagusd', 'gc-up', 'si-up', 'spy-up', 'qqq-up', 'iwm-up'];
+    const searchTerms = ['Gold Up or Down', 'Silver Up or Down', 'SPY Up or Down', 'QQQ Up or Down', 'Gold hit', 'Silver hit'];
+    let allMarkets = [];
+
+    // Fetch via gamma API events
+    for (const term of searchTerms) {
+      try {
+        const r = await fetch(`https://gamma-api.polymarket.com/events?active=true&closed=false&limit=20&title=${encodeURIComponent(term)}`, {
+          signal: AbortSignal.timeout(8000),
+          headers: { 'User-Agent': 'HYPERFLEX/1.0' }
+        });
+        if (!r.ok) continue;
+        const events = await r.json();
+        for (const evt of events) {
+          if (!evt.markets || !evt.markets.length) continue;
+          for (const mkt of evt.markets) {
+            // Only include if it's Pyth-resolved or daily commodity/ETF
+            const q = (mkt.question || '').toLowerCase();
+            const isPyth = (mkt.resolutionSource || '').includes('pythdata') || (evt.resolutionSource || '').includes('pythdata');
+            const isDaily = /up or down|will .* (hit|reach|dip)|settle at/.test(q);
+            const isCommodity = /gold|silver|xau|xag|spy|qqq|iwm|gld|slv|crude|oil|wti/.test(q);
+            if ((isPyth || isDaily) && isCommodity) {
+              // Determine which Pyth feed this maps to
+              let pythFeed = null;
+              if (/gold|xau|gc[^a-z]/i.test(q)) pythFeed = 'XAU/USD';
+              else if (/silver|xag|si[^a-z]/i.test(q)) pythFeed = 'XAG/USD';
+              else if (/\bspy\b/i.test(q)) pythFeed = 'SPY/USD';
+              else if (/\bqqq\b/i.test(q)) pythFeed = 'QQQ/USD';
+              else if (/\biwm\b/i.test(q)) pythFeed = 'IWM/USD';
+
+              // Extract price threshold from question if present
+              const thresholdMatch = q.match(/\$([0-9,]+(?:\.\d+)?)/);
+              const threshold = thresholdMatch ? parseFloat(thresholdMatch[1].replace(/,/g, '')) : null;
+
+              // Determine market type
+              let marketType = 'direction'; // up or down
+              if (/hit|reach|dip/.test(q)) marketType = 'threshold';
+              else if (/settle/.test(q)) marketType = 'settlement';
+
+              allMarkets.push({
+                id: mkt.id,
+                question: mkt.question,
+                slug: evt.slug || mkt.slug || '',
+                url: pRef('https://polymarket.com/event/' + (evt.slug || mkt.slug || '')),
+                yes_price: parseFloat(mkt.outcomePrices?.[0]) || null,
+                no_price: parseFloat(mkt.outcomePrices?.[1]) || null,
+                volume: parseFloat(mkt.volume || 0),
+                volume24h: parseFloat(mkt.volume24hr || 0),
+                liquidity: parseFloat(mkt.liquidity || 0),
+                endDate: mkt.endDate || evt.endDate || null,
+                clobTokenIds: mkt.clobTokenIds || [],
+                conditionId: mkt.conditionId || '',
+                outcomes: mkt.outcomes || ['Yes', 'No'],
+                pythFeed,
+                threshold,
+                marketType,
+                isPyth,
+                automaticallyResolved: mkt.automaticallyResolved || false,
+                resolutionSource: mkt.resolutionSource || evt.resolutionSource || '',
+                eventSlug: evt.slug || '',
+              });
+            }
+          }
+        }
+      } catch (e) { /* skip this search term */ }
+    }
+
+    // Deduplicate by market ID
+    const seen = new Set();
+    allMarkets = allMarkets.filter(m => {
+      if (seen.has(m.id)) return false;
+      seen.add(m.id);
+      return true;
+    });
+
+    _pythMarketsCache = { markets: allMarkets, ts: now };
+    return allMarkets;
+  } catch (e) {
+    console.warn('[pyth] fetchPythPolymarkets error:', e.message);
+    return _pythMarketsCache.markets;
+  }
+}
+
+// Compute edge: compare Pyth price to Polymarket implied probability
+function computePythEdge(market, pythPrices) {
+  if (!market.pythFeed || !pythPrices[market.pythFeed]) return null;
+  const pyth = pythPrices[market.pythFeed];
+  const yesPrice = market.yes_price;
+  if (yesPrice == null) return null;
+
+  const q = (market.question || '').toLowerCase();
+
+  if (market.marketType === 'direction') {
+    // "Up or Down" — Pyth price vs previous close determines true probability
+    // If Pyth is currently UP from prior close, YES (Up) should be high
+    // We can't know prior close from Pyth alone, but we can compare EMA
+    // If price > EMA, momentum is up → YES should be > 50%
+    const priceDelta = pyth.price - pyth.emaPrice;
+    const deltaPct = (priceDelta / pyth.emaPrice) * 100;
+    // Rough implied: if price is 0.5% above EMA, ~70% chance of finishing up
+    // Sigmoid-like mapping: implied = 0.5 + 0.5 * tanh(deltaPct * 2)
+    const implied = 0.5 + 0.5 * Math.tanh(deltaPct * 2);
+    const edge = implied - yesPrice;
+    return {
+      pythPrice: pyth.price,
+      emaPrice: pyth.emaPrice,
+      deltaPct: +deltaPct.toFixed(3),
+      impliedYes: +implied.toFixed(3),
+      marketYes: yesPrice,
+      edge: +edge.toFixed(3),
+      direction: priceDelta >= 0 ? 'UP' : 'DOWN',
+      signal: Math.abs(edge) >= 0.05 ? (edge > 0 ? 'BUY_YES' : 'BUY_NO') : 'NEUTRAL',
+      confidence: pyth.conf,
+    };
+  } else if (market.marketType === 'threshold' && market.threshold) {
+    // "Will Gold hit $X" — compare current Pyth price to threshold
+    const isHigh = /high|reach|above|over/i.test(q);
+    const distance = isHigh ? (market.threshold - pyth.price) : (pyth.price - market.threshold);
+    const distPct = (distance / pyth.price) * 100;
+    // If price is already past threshold → high probability
+    // If far away → low probability
+    let implied;
+    if (isHigh) {
+      implied = pyth.price >= market.threshold ? 0.92 : Math.max(0.05, 0.5 - distPct * 0.08);
+    } else {
+      implied = pyth.price <= market.threshold ? 0.92 : Math.max(0.05, 0.5 - distPct * 0.08);
+    }
+    implied = Math.min(0.95, Math.max(0.05, implied));
+    const edge = implied - yesPrice;
+    return {
+      pythPrice: pyth.price,
+      threshold: market.threshold,
+      distancePct: +distPct.toFixed(2),
+      impliedYes: +implied.toFixed(3),
+      marketYes: yesPrice,
+      edge: +edge.toFixed(3),
+      signal: Math.abs(edge) >= 0.05 ? (edge > 0 ? 'BUY_YES' : 'BUY_NO') : 'NEUTRAL',
+      confidence: pyth.conf,
+    };
+  }
+  return null;
+}
+
+// ── API: Pyth prices ────────────────────────────────────────────────
+app.get('/api/pyth/prices', async (req, res) => {
+  try {
+    const keys = Object.keys(PYTH_FEEDS);
+    const prices = await fetchPythPrices(keys);
+    const history = {};
+    for (const k of keys) {
+      if (_pythPriceHistory[k]) history[k] = _pythPriceHistory[k];
+    }
+    res.json({ prices, history, ts: Date.now() });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── API: Pyth edge — markets with divergence signals ────────────────
+app.get('/api/pyth/edge', async (req, res) => {
+  try {
+    const [markets, prices] = await Promise.all([
+      fetchPythPolymarkets(),
+      fetchPythPrices(Object.keys(PYTH_FEEDS)),
+    ]);
+
+    const results = markets.map(m => {
+      const edge = computePythEdge(m, prices);
+      return { ...m, edge };
+    }).filter(m => m.edge != null);
+
+    // Sort by absolute edge descending
+    results.sort((a, b) => Math.abs(b.edge?.edge || 0) - Math.abs(a.edge?.edge || 0));
+
+    res.json({
+      markets: results,
+      prices,
+      updated: Date.now(),
+      count: results.length,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── API: Pyth price history for charts ──────────────────────────────
+app.get('/api/pyth/history/:feed', async (req, res) => {
+  const feed = decodeURIComponent(req.params.feed);
+  if (!PYTH_FEEDS[feed]) return res.status(400).json({ error: 'Unknown feed: ' + feed });
+  // Ensure we have at least one price
+  await fetchPythPrices([feed]);
+  res.json({
+    feed,
+    label: PYTH_FEEDS[feed].label,
+    history: _pythPriceHistory[feed] || [],
+    current: _pythPriceCache.prices[feed] || null,
+  });
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`HYPERFLEX server running on port ${PORT}`);
