@@ -1403,31 +1403,69 @@ async function enableTrading() {
     var value = { address: address, timestamp: timestamp, nonce: parseInt(nonce), message: 'This message attests that I control the given wallet' };
     var signature = await signer.signTypedData(domain, types, value);
 
-    // Derive CLOB API key
+    // Derive CLOB API key — server proxy first (avoids CORS), browser-direct fallback
     cta.textContent = 'Deriving API key...';
-    var res = await fetch('https://clob.polymarket.com/auth/derive-api-key', {
-      method: 'GET',
-      headers: { 'POLY_ADDRESS': address, 'POLY_SIGNATURE': signature, 'POLY_TIMESTAMP': timestamp, 'POLY_NONCE': nonce }
-    });
-    var data = await res.json();
-    if (!res.ok) throw new Error(data.error || data.message || 'CLOB auth failed');
+    var data = null;
+    var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+
+    // Attempt 1: Server proxy (bypasses CORS, does additional proxy wallet derivation)
+    if (token) {
+      try {
+        var proxyRes = await fetch('/api/polymarket/derive-api-key', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+          body: JSON.stringify({ address: address, signature: signature, timestamp: timestamp, nonce: nonce })
+        });
+        if (proxyRes.ok) {
+          data = await proxyRes.json();
+          console.log('[trade] API key derived via server proxy');
+        } else {
+          var errData = await proxyRes.json().catch(function() { return {}; });
+          console.warn('[trade] Server proxy derive failed:', proxyRes.status, errData);
+        }
+      } catch (proxyErr) {
+        console.warn('[trade] Server proxy error:', proxyErr.message);
+      }
+    }
+
+    // Attempt 2: Browser-direct to CLOB (may fail due to CORS with custom headers)
+    if (!data || (!data.apiKey && !data.key)) {
+      try {
+        var clobRes = await fetch('https://clob.polymarket.com/auth/derive-api-key', {
+          method: 'GET',
+          headers: { 'POLY_ADDRESS': address, 'POLY_SIGNATURE': signature, 'POLY_TIMESTAMP': timestamp, 'POLY_NONCE': nonce }
+        });
+        if (clobRes.ok) {
+          data = await clobRes.json();
+          console.log('[trade] API key derived via browser-direct');
+        } else {
+          var clobErr = await clobRes.json().catch(function() { return {}; });
+          throw new Error(clobErr.error || clobErr.message || 'CLOB auth failed (' + clobRes.status + ')');
+        }
+      } catch (corsErr) {
+        if (!data) throw new Error('Could not derive API key. Please sign in to HYPERFLEX first.');
+      }
+    }
 
     var apiKey = data.apiKey || data.key || '';
-    var secret = data.secret || '';
-    var passphrase = data.passphrase || '';
+    var secret = data.secret || data.apiSecret || '';
+    var passphrase = data.passphrase || data.apiPassphrase || '';
 
-    if (!apiKey) throw new Error('No API key returned');
+    if (!apiKey) throw new Error('No API key returned — you may need a Polymarket account first');
 
     localStorage.setItem('poly_api_key', apiKey);
     localStorage.setItem('poly_api_secret', secret);
     localStorage.setItem('poly_api_passphrase', passphrase);
     localStorage.setItem('poly_eoa_address', address);
 
-    // Derive proxy address via CREATE2
-    var factoryAddress = '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b';
-    var initCodeHash = '0x2bce2127ff07fb632d16c8347c4ebf501f4841168bed00d9e6ef715ddb6fcecf';
-    var salt = ethers.zeroPadValue(address, 32);
-    var proxyAddr = ethers.getCreate2Address(factoryAddress, salt, initCodeHash).toLowerCase();
+    // Derive proxy address — use server-provided or compute via CREATE2
+    var proxyAddr = data.proxyAddress || data.proxy_address || '';
+    if (!proxyAddr) {
+      var factoryAddress = '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b';
+      var initCodeHash = '0x2bce2127ff07fb632d16c8347c4ebf501f4841168bed00d9e6ef715ddb6fcecf';
+      var salt = ethers.zeroPadValue(address, 32);
+      proxyAddr = ethers.getCreate2Address(factoryAddress, salt, initCodeHash).toLowerCase();
+    }
     localStorage.setItem('hf_poly_wallet', proxyAddr);
 
     // Also save HYPERFLEX auth token if logged in
@@ -1855,58 +1893,9 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
   }
 }
 
-// Proactive key validation — silently check if CLOB keys are still valid on page load
-async function validateClobKeys() {
-  if (!isTradingEnabled()) return;
-  var apiKey = localStorage.getItem('poly_api_key');
-  var apiSecret = localStorage.getItem('poly_api_secret');
-  var apiPassphrase = localStorage.getItem('poly_api_passphrase');
-  var eoaAddress = localStorage.getItem('poly_eoa_address');
-  if (!apiKey || !apiSecret || !eoaAddress) return;
-
-  try {
-    // Hit a lightweight CLOB endpoint that requires auth — /auth/api-keys returns key info
-    var ts = Math.floor(Date.now() / 1000).toString();
-    var hmacMessage = ts + 'GET' + '/auth/api-keys';
-    var enc = new TextEncoder();
-    var b64std = apiSecret.replace(/-/g, '+').replace(/_/g, '/');
-    while (b64std.length % 4) b64std += '=';
-    var secretBytes;
-    try { secretBytes = Uint8Array.from(atob(b64std), function(c) { return c.charCodeAt(0); }); }
-    catch(e) { secretBytes = enc.encode(apiSecret); }
-    var cryptoKey = await crypto.subtle.importKey('raw', secretBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-    var sigBuf = await crypto.subtle.sign('HMAC', cryptoKey, enc.encode(hmacMessage));
-    var hmacSig = btoa(String.fromCharCode.apply(null, new Uint8Array(sigBuf)))
-      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-
-    var res = await fetch('https://clob.polymarket.com/auth/api-keys', {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'POLY_ADDRESS': eoaAddress,
-        'POLY_API_KEY': apiKey,
-        'POLY_PASSPHRASE': apiPassphrase,
-        'POLY_TIMESTAMP': ts,
-        'POLY_SIGNATURE': hmacSig
-      }
-    });
-
-    if (res.status === 401) {
-      console.warn('[trade] CLOB keys expired on load — clearing');
-      localStorage.removeItem('poly_api_key');
-      localStorage.removeItem('poly_api_secret');
-      localStorage.removeItem('poly_api_passphrase');
-      localStorage.removeItem('poly_eoa_address');
-      updateTradingUI();
-      showTradeStatus('API key expired \u2014 click Connect Wallet to reconnect', 'error');
-    } else if (res.ok) {
-      console.log('[trade] CLOB keys validated OK');
-    }
-  } catch (e) {
-    // CORS or network — skip silently, will catch on trade attempt
-    console.log('[trade] Key validation skipped (CORS/network):', e.message);
-  }
-}
+// NOTE: Proactive key validation REMOVED — it was clearing valid keys due to CORS issues
+// with clob.polymarket.com/auth/api-keys. If keys are expired, the trade attempt itself
+// detects it via 401 response and auto-reconnects. No benefit to preemptive clearing.
 
 // ── Live CLOB price polling — keeps outcomes + trade widget in sync with real market ──
 var _livePriceInterval = null;
@@ -2027,8 +2016,6 @@ loadMarket().then(function() {
   _livePriceInterval = setInterval(fetchLivePrices, 10000);
 });
 updateTradingUI();
-// Validate keys 2s after load (non-blocking)
-setTimeout(validateClobKeys, 2000);
 </script>
 </body>
 </html>

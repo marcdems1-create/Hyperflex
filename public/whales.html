@@ -679,7 +679,8 @@ function openCopyTrade(trader, market, side, size, marketUrl, proxyWallet) {
 
   // Set CTA link
   const ctaEl = document.getElementById('ctCta');
-  ctaEl.href = polyRef(marketUrl || 'https://polymarket.com');
+  var internalCtaUrl = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(marketUrl || '') : '#';
+  ctaEl.href = (internalCtaUrl && internalCtaUrl !== '#') ? internalCtaUrl : polyRef(marketUrl || 'https://polymarket.com');
   ctaEl.onclick = function() { handleCopyTradeCta(); };
 
   document.getElementById('ctOverlay').classList.add('open');

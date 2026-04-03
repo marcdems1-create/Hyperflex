@@ -979,7 +979,9 @@ nav {
         if (trader.length > 14) trader = trader.substring(0, 12) + '..';
         var market = (t.market || 'Unknown');
         if (market.length > 40) market = market.substring(0, 37) + '...';
-        return '<a class="lf-item" href="' + polyRef(t.url || 'https://polymarket.com') + '" target="_blank" rel="noopener">' +
+        var lfUrl = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(t.url || '') : '#';
+        if (lfUrl === '#') lfUrl = polyRef(t.url || 'https://polymarket.com');
+        return '<a class="lf-item" href="' + lfUrl + '"' + (lfUrl.startsWith('http') ? ' target="_blank" rel="noopener"' : '') + '>' +
           '<span style="font-family:\'Space Mono\',monospace;font-size:11px;color:var(--dim)">' + whalePrefix + trader + '</span>' +
           '<span class="lf-size">' + sizeStr + '</span>' +
           '<span class="lf-side ' + sideClass + '">' + sideUp + '</span>' +
@@ -1965,13 +1967,15 @@ function activityCard(a) {
     const sizeChange = (a.action === 'increased' || a.action === 'decreased') && a.old_size_display && a.new_size_display
       ? ` from ${a.old_size_display} → ${a.new_size_display}`
       : '';
-    const dest = polyRef(a.url || 'https://polymarket.com');
-    const isExt = dest.startsWith('http');
+    var destRaw = a.url || 'https://polymarket.com';
+    const dest = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(destRaw) : '#';
+    const finalDest = (dest && dest !== '#') ? dest : polyRef(destRaw);
+    const isExt = finalDest.startsWith('http');
     const _ctTrader = escHtml(a.trader_name || 'Whale');
     const _ctQuestion = escHtml(a.question || '');
     const _ctSide = escHtml(a.side || '');
     const _ctSize = a.size || 0;
-    const _ctUrl = escHtml(dest);
+    const _ctUrl = escHtml(finalDest);
     return `<div class="activity-card" style="border-left:3px solid #c9920d;cursor:pointer" onclick="if(event.target.closest('.whale-copy-btn'))return;window.open('${_ctUrl}','_blank')">
       <div class="ac-avatar" style="background:rgba(201,146,13,0.15);border:1px solid rgba(201,146,13,0.3);font-size:22px;display:flex;align-items:center;justify-content:center">&#x1F40B;</div>
       <div class="ac-body">

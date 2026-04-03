@@ -297,7 +297,9 @@ function renderSignals() {
     var typeLabels = {whale_cluster:'WHALE',momentum:'MOMENTUM',new_entry:'NEW ENTRY',arbitrage:'ARB',volume_surge:'VOLUME'};
     var plain = translateSide(s.market, s.side);
     var flag = regionFlag(s.market);
-    var url = polyRef(s.url && s.url.startsWith('https://polymarket.com') ? s.url : 'https://polymarket.com');
+    var url = s.url && s.url.startsWith('https://polymarket.com') ? s.url : 'https://polymarket.com';
+    var internalUrl = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(url) : '#';
+    if (internalUrl === '#') internalUrl = polyRef(url); // fallback to polymarket with ref tag
 
     // Build meta items
     var meta = [];
@@ -341,7 +343,7 @@ function renderSignals() {
           '<span class="s-row-type type-' + s.type + '">' + (typeLabels[s.type]||s.type) + '</span>' +
           (isStale ? '<span style="font-family:var(--mono);font-size:8px;color:var(--red);letter-spacing:.5px">STALE</span>' : '') +
         '</div>' +
-        '<div class="s-row-market"><a href="' + (typeof hfxMarketUrl === 'function' ? hfxMarketUrl(url) : url) + '">' + (flag ? flag + ' ' : '') + escH(s.market) + '</a></div>' +
+        '<div class="s-row-market"><a href="' + internalUrl + '">' + (flag ? flag + ' ' : '') + escH(s.market) + '</a></div>' +
         '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:2px">' +
           '<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:' + sideColor + '">' + (s.side||'YES').toUpperCase() + '</span>' +
           (meta.length ? meta.join('<span style="color:var(--muted);font-family:var(--mono);font-size:9px">\u00B7</span>') : '') +
@@ -349,7 +351,7 @@ function renderSignals() {
       '</div>' +
       '<div class="s-row-right" style="display:flex;align-items:center;gap:8px;flex-shrink:0">' +
         alphaBadge +
-        '<a href="' + (typeof hfxMarketUrl === 'function' ? hfxMarketUrl(url) : url) + '" class="s-row-link">Trade &rarr;</a>' +
+        '<a href="' + internalUrl + '" class="s-row-link">Trade &rarr;</a>' +
       '</div>' +
     '</div>';
   }).join('');
