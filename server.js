@@ -84,6 +84,22 @@ async function resilientFetch(url, options = {}, { retries = 3, baseDelay = 1000
   }
 }
 
+// ── Monetization strategy: all users get Premium ──
+// One-time bulk upgrade on boot — ensures every existing user has platinum plan
+setTimeout(async () => {
+  try {
+    if (pool) {
+      const result = await dbQuery("UPDATE creator_settings SET plan = 'platinum', plan_trial_expires_at = NULL WHERE plan != 'platinum' OR plan IS NULL");
+      console.log(`[boot] Bulk-upgraded all users to Premium (platinum). Rows affected: ${result?.rowCount || 'unknown'}`);
+    } else {
+      await supabase.from('creator_settings').update({ plan: 'platinum', plan_trial_expires_at: null }).neq('plan', 'platinum');
+      console.log('[boot] Bulk-upgraded all users to Premium (platinum)');
+    }
+  } catch (e) {
+    console.error('[boot] Bulk upgrade failed:', e.message);
+  }
+}, 5000); // 5s after boot to let DB connections establish
+
 // Safe wrapper for async cron/interval callbacks
 function safeCron(name, fn) {
   return () => {
@@ -357,17 +373,9 @@ app.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (re
           user = u;
         }
         if (user) {
-          if (pool) {
-            await dbQuery('UPDATE creator_settings SET plan = $1, plan_scheduled_change = $2, plan_change_date = $3, custom_domain_verified = $4 WHERE creator_id = $5', ['free', null, null, false, user.id]);
-          } else {
-            await supabase.from('creator_settings').update({
-              plan: 'free',
-              plan_scheduled_change: null,
-              plan_change_date: null,
-              custom_domain_verified: false
-            }).eq('creator_id', user.id);
-          }
-          console.log(`[stripe] downgraded creator ${customer.email} to free`);
+          // Monetization strategy change: all users keep Premium even on Stripe cancellation
+          // Just log the event, don't downgrade
+          console.log(`[stripe] subscription cancelled for ${customer.email} — keeping platinum (free Premium for all)`);
         }
       }
     }
@@ -2875,30 +2883,16 @@ async function settleMarkets() {
 cron.schedule('0 * * * *', () => { settleMarkets().catch(err => console.error('[settle] Cron error:', err.message)); });
 
 // ── TRIAL EXPIRY ────────────────────────────────────────
-// Every hour: downgrade any creators whose gifted trial has expired
+// Trial expiry DISABLED — all users get Premium (monetization strategy change)
+// Every hour: just clear trial expiry dates but keep everyone on platinum
 async function expireTrials() {
   try {
-    let expired;
     if (pool) {
-      expired = await dbQuery('SELECT slug, creator_id, plan_trial_expires_at FROM creator_settings WHERE plan_trial_expires_at IS NOT NULL AND plan_trial_expires_at < $1', [new Date().toISOString()]);
+      await dbQuery('UPDATE creator_settings SET plan_trial_expires_at = NULL WHERE plan_trial_expires_at IS NOT NULL');
     } else {
-      const { data: d } = await supabase
-        .from('creator_settings')
-        .select('slug, creator_id, plan_trial_expires_at')
-        .not('plan_trial_expires_at', 'is', null)
-        .lt('plan_trial_expires_at', new Date().toISOString());
-      expired = d;
-    }
-    if (!expired?.length) return;
-    for (const cs of expired) {
-      if (pool) {
-        await dbQuery('UPDATE creator_settings SET plan = $1, plan_trial_expires_at = $2 WHERE slug = $3', ['free', null, cs.slug]);
-      } else {
-        await supabase.from('creator_settings')
-          .update({ plan: 'free', plan_trial_expires_at: null })
-          .eq('slug', cs.slug);
-      }
-      console.log(`[trial-expiry] /${cs.slug} trial expired → downgraded to free`);
+      await supabase.from('creator_settings')
+        .update({ plan_trial_expires_at: null })
+        .not('plan_trial_expires_at', 'is', null);
     }
   } catch (err) {
     console.error('[trial-expiry] error:', err.message);
@@ -4388,10 +4382,10 @@ app.post('/api/creator/signup', async (req, res) => {
       if (pool) {
         await dbQuery(
           'INSERT INTO creator_settings (creator_id, slug, display_name, custom_points_name, primary_color, community_description, is_active, plan, created_at) VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8)',
-          [newUser.id, slug, display_name, custom_points_name, primary_color, community_description, 'free', new Date().toISOString()]
+          [newUser.id, slug, display_name, custom_points_name, primary_color, community_description, 'platinum', new Date().toISOString()]
         );
       } else {
-        const { error: settingsErr } = await supabase.from('creator_settings').insert({ creator_id: newUser.id, slug, display_name, custom_points_name, primary_color, community_description, is_active: true, plan: 'free', created_at: new Date().toISOString() });
+        const { error: settingsErr } = await supabase.from('creator_settings').insert({ creator_id: newUser.id, slug, display_name, custom_points_name, primary_color, community_description, is_active: true, plan: 'platinum', created_at: new Date().toISOString() });
         if (settingsErr) throw settingsErr;
       }
     } catch (settingsErr) {
@@ -4885,7 +4879,7 @@ app.get('/api/creator/dashboard', requireCreator, async (req, res) => {
         return res.json({
           wallet_only: true,
           creator: { id: creatorId, display_name: walletUser?.display_name || 'Trader', email: walletUser?.email || null },
-          settings: { plan: 'free', community_name: 'My Portfolio', slug: null },
+          settings: { plan: 'platinum', community_name: 'My Portfolio', slug: null },
           markets: [], stats: { total_markets: 0, active_markets: 0, total_predictions: 0, total_members: 0 }
         });
       }
@@ -16537,7 +16531,7 @@ app.get('/api/user/api-key', requireAuth, async (req, res) => {
     if (!creator) return res.json({ api_key: null, plan: 'free' });
     const key = creator.api_key;
     const masked = key ? ('hfx_' + '\u2022'.repeat(8) + '...' + key.slice(-4)) : null;
-    res.json({ api_key_masked: masked, has_key: !!key, plan: creator.plan || 'free' });
+    res.json({ api_key_masked: masked, has_key: !!key, plan: creator.plan || 'platinum' });
   } catch (e) {
     console.error('[get-api-key]', e.message);
     res.status(500).json({ error: 'Failed to get API key status' });
