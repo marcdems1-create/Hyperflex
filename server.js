@@ -23816,7 +23816,7 @@ app.get('/api/whale-profile/:address', async (req, res) => {
 // ════════════════════════════════════════════════════════════
 
 // POST /api/polymarket/derive-api-key — derive CLOB API key from wallet signature
-app.post('/api/polymarket/derive-api-key', requireAuth, async (req, res) => {
+app.post('/api/polymarket/derive-api-key', optionalAuth, async (req, res) => {
   const { address, signature, timestamp, nonce } = req.body;
   if (!address || !signature || !timestamp) {
     return res.status(400).json({ error: 'address, signature, and timestamp required' });
@@ -24011,7 +24011,7 @@ app.post('/api/polymarket/lookup-proxy', requireAuth, async (req, res) => {
 // POST /api/polymarket/clob-order — proxy for pre-signed orders (client sends full signed order body)
 // The client handles EIP-712 order signing + HMAC signing; this proxy just forwards to CLOB
 // Used as CORS fallback when browser can't reach clob.polymarket.com directly
-app.post('/api/polymarket/clob-order', requireAuth, async (req, res) => {
+app.post('/api/polymarket/clob-order', optionalAuth, async (req, res) => {
   const { signed_body, api_key, api_secret, api_passphrase, eoa_address } = req.body;
 
   // Legacy format check — reject old-format requests
@@ -24074,7 +24074,7 @@ app.post('/api/polymarket/clob-order', requireAuth, async (req, res) => {
       });
     }
 
-    console.log(`[polymarket clob-order] user=${req.userId} status=ok`);
+    console.log(`[polymarket clob-order] user=${req.userId || 'anon'} status=ok`);
     res.json({
       success: true,
       order_id: data.orderID || data.order_id || data.id || null,

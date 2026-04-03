@@ -607,9 +607,9 @@ function renderOutcomes(m) {
     var yesFmt = fmtCents(row.yesP);
     var noFmt = fmtCents(row.noP);
     html += '<tr class="outcome-row' + activeClass + '" data-idx="' + row.idx + '">' +
-      '<td onclick="switchOutcome(' + row.idx + ')" style="cursor:pointer"><div class="outcome-name">' + escH(row.name) + '</div></td>' +
-      '<td><button class="outcome-btn outcome-btn-yes" onclick="buyOutcome(' + row.idx + ',\'yes\',' + yesCents + ')" title="Buy Yes at ' + yesFmt + '\u00a2">Buy Yes ' + yesFmt + '\u00a2</button></td>' +
-      '<td><button class="outcome-btn outcome-btn-no" onclick="buyOutcome(' + row.idx + ',\'no\',' + noCents + ')" title="Buy No at ' + noFmt + '\u00a2">Buy No ' + noFmt + '\u00a2</button></td>' +
+      '<td style="cursor:pointer"><div class="outcome-name">' + escH(row.name) + '</div></td>' +
+      '<td><button class="outcome-btn outcome-btn-yes" data-idx="' + row.idx + '" data-price="' + yesCents + '" title="Buy Yes at ' + yesFmt + '\u00a2">Buy Yes ' + yesFmt + '\u00a2</button></td>' +
+      '<td><button class="outcome-btn outcome-btn-no" data-idx="' + row.idx + '" data-price="' + noCents + '" title="Buy No at ' + noFmt + '\u00a2">Buy No ' + noFmt + '\u00a2</button></td>' +
       '<td style="color:var(--soft);font-size:11px">' + vol + '</td>' +
       '<td style="color:var(--soft);font-size:11px">' + liq + '</td>' +
       '</tr>';
@@ -1419,23 +1419,24 @@ async function enableTrading() {
     var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
 
     // Attempt 1: Server proxy (bypasses CORS, does additional proxy wallet derivation)
-    if (token) {
-      try {
-        var proxyRes = await fetch('/api/polymarket/derive-api-key', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-          body: JSON.stringify({ address: address, signature: signature, timestamp: timestamp, nonce: nonce })
-        });
-        if (proxyRes.ok) {
-          data = await proxyRes.json();
-          console.log('[trade] API key derived via server proxy');
-        } else {
-          var errData = await proxyRes.json().catch(function() { return {}; });
-          console.warn('[trade] Server proxy derive failed:', proxyRes.status, errData);
-        }
-      } catch (proxyErr) {
-        console.warn('[trade] Server proxy error:', proxyErr.message);
+    // Works with or without HF auth — optionalAuth on server
+    try {
+      var proxyHeaders = { 'Content-Type': 'application/json' };
+      if (token) proxyHeaders['Authorization'] = 'Bearer ' + token;
+      var proxyRes = await fetch('/api/polymarket/derive-api-key', {
+        method: 'POST',
+        headers: proxyHeaders,
+        body: JSON.stringify({ address: address, signature: signature, timestamp: timestamp, nonce: nonce })
+      });
+      if (proxyRes.ok) {
+        data = await proxyRes.json();
+        console.log('[trade] API key derived via server proxy');
+      } else {
+        var errData = await proxyRes.json().catch(function() { return {}; });
+        console.warn('[trade] Server proxy derive failed:', proxyRes.status, errData);
       }
+    } catch (proxyErr) {
+      console.warn('[trade] Server proxy error:', proxyErr.message);
     }
 
     // Attempt 2: Browser-direct to CLOB (may fail due to CORS with custom headers)
@@ -1453,7 +1454,7 @@ async function enableTrading() {
           throw new Error(clobErr.error || clobErr.message || 'CLOB auth failed (' + clobRes.status + ')');
         }
       } catch (corsErr) {
-        if (!data) throw new Error('Could not derive API key. Please sign in to HYPERFLEX first.');
+        if (!data) throw new Error('Could not derive API key — check MetaMask and try again');
       }
     }
 
@@ -1579,9 +1580,7 @@ async function executeTrade() {
     return;
   }
 
-  var clobPrice = price / 100;
   var clobSide = _tradeMode === 'buy' ? 'BUY' : 'SELL';
-  var shares = amount / clobPrice;
   var sideLabel = (_tradeSide === 'yes' ? 'YES' : 'NO');
 
   cta.disabled = true;
@@ -1606,6 +1605,36 @@ async function executeTrade() {
       return;
     }
 
+    // Fetch tick size + neg_risk from CLOB (parallel) to build valid order
+    showTradeStatus('Preparing order...', 'info');
+    var tickSize = 0.01; // default
+    var isNegRisk = false;
+    try {
+      var [tickRes, negRes] = await Promise.all([
+        fetch('https://clob.polymarket.com/tick-size?token_id=' + encodeURIComponent(tokenId)).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
+        fetch('https://clob.polymarket.com/neg-risk?token_id=' + encodeURIComponent(tokenId)).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; })
+      ]);
+      if (tickRes && tickRes.minimum_tick_size) tickSize = parseFloat(tickRes.minimum_tick_size);
+      if (negRes && negRes.neg_risk !== undefined) isNegRisk = !!negRes.neg_risk;
+      console.log('[trade] CLOB metadata: tickSize=' + tickSize + ' negRisk=' + isNegRisk);
+    } catch (metaErr) {
+      console.warn('[trade] Could not fetch CLOB metadata:', metaErr.message);
+      // Fallback: use market data
+      var activeEM0 = (_sortedEventMarkets && _sortedEventMarkets[_activeOutcomeIndex]) || null;
+      isNegRisk = activeEM0 ? (activeEM0.neg_risk !== undefined ? !!activeEM0.neg_risk : false)
+                   : (_market.neg_risk !== undefined ? !!_market.neg_risk : false);
+    }
+
+    // Round price to tick size (e.g., 0.33 with tick 0.01 stays 0.33; 0.333 with tick 0.01 becomes 0.33)
+    var clobPrice = Math.round(price / 100 / tickSize) * tickSize;
+    clobPrice = parseFloat(clobPrice.toFixed(4)); // avoid floating-point drift
+    if (clobPrice <= 0 || clobPrice >= 1) {
+      showTradeStatus('Price must be 1–99¢', 'error');
+      cta.disabled = false; updateCtaButton();
+      return;
+    }
+    var shares = amount / clobPrice;
+
     showTradeStatus('Connecting to MetaMask...', 'info');
     var provider = new ethers.BrowserProvider(window.ethereum);
     var signer = await provider.getSigner();
@@ -1628,23 +1657,38 @@ async function executeTrade() {
       localStorage.setItem('hf_poly_wallet', proxyAddress);
     }
 
+    // Build amounts — match official Polymarket client:
+    // compute one side, derive the other to maintain exact price at tick precision
     var DECIMALS = 1000000;
     var makerAmt, takerAmt, sideInt;
     if (clobSide === 'BUY') {
       sideInt = 0;
-      makerAmt = Math.round(amount * DECIMALS).toString();
-      takerAmt = Math.round(shares * DECIMALS).toString();
+      // BUY: maker pays USDC (makerAmt), receives outcome tokens (takerAmt)
+      var takerRaw = Math.floor(shares * DECIMALS);
+      var makerRaw = Math.ceil(takerRaw * clobPrice);
+      // Ensure amounts are valid
+      if (takerRaw <= 0 || makerRaw <= 0) {
+        showTradeStatus('Order too small — increase amount', 'error');
+        cta.disabled = false; updateCtaButton();
+        return;
+      }
+      makerAmt = makerRaw.toString();
+      takerAmt = takerRaw.toString();
     } else {
       sideInt = 1;
-      makerAmt = Math.round(shares * DECIMALS).toString();
-      takerAmt = Math.round(amount * DECIMALS).toString();
+      // SELL: maker gives outcome tokens (makerAmt), receives USDC (takerAmt)
+      var makerRaw2 = Math.floor(shares * DECIMALS);
+      var takerRaw2 = Math.floor(makerRaw2 * clobPrice);
+      if (makerRaw2 <= 0 || takerRaw2 <= 0) {
+        showTradeStatus('Order too small — increase amount', 'error');
+        cta.disabled = false; updateCtaButton();
+        return;
+      }
+      makerAmt = makerRaw2.toString();
+      takerAmt = takerRaw2.toString();
     }
 
     var orderSalt = Math.floor(Math.random() * 9007199254740991);
-
-    var activeEM = (_sortedEventMarkets && _sortedEventMarkets[_activeOutcomeIndex]) || null;
-    var isNegRisk = activeEM ? (activeEM.neg_risk !== undefined ? !!activeEM.neg_risk : true)
-                   : (_market.neg_risk !== undefined ? !!_market.neg_risk : true);
     var exchangeAddr = isNegRisk
       ? '0xC5d563A36AE78145C45a50134d48A1215220f80a'
       : '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E';
@@ -1663,6 +1707,9 @@ async function executeTrade() {
       side: sideInt,
       signatureType: 1
     };
+
+    console.log('[trade] Order struct:', JSON.stringify(orderStruct));
+    console.log('[trade] Exchange:', exchangeAddr, 'negRisk:', isNegRisk, 'tickSize:', tickSize);
 
     var orderDomain = {
       name: 'Polymarket CTF Exchange',
@@ -1720,7 +1767,7 @@ async function executeTrade() {
     if (data._expired) {
       if (!_tradeRetrying) {
         _tradeRetrying = true;
-        showTradeStatus('API key expired \u2014 reconnecting...', 'info');
+        showTradeStatus('Reconnecting wallet...', 'info');
         cta.textContent = 'Reconnecting...';
         var reconnected = await enableTrading();
         _tradeRetrying = false;
@@ -1843,19 +1890,21 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
 
     if (res.ok) return data;
 
-    console.warn('[trade] Browser-direct failed:', res.status, data);
+    var errMsg = data.error || data.message || data.errorMsg || JSON.stringify(data);
+    console.warn('[trade] Browser-direct failed:', res.status, errMsg);
 
-    // Check if it's an auth/key expiry error
-    if (res.status === 401 || (res.status === 400 && JSON.stringify(data).toLowerCase().includes('api'))) {
+    // Only treat actual 401 (Invalid API key) as expired — NOT 400 validation errors
+    if (res.status === 401) {
       localStorage.removeItem('poly_api_key');
       localStorage.removeItem('poly_api_secret');
       localStorage.removeItem('poly_api_passphrase');
       localStorage.removeItem('poly_eoa_address');
       updateTradingUI();
-      return { _expired: true, _errorMsg: 'API key expired' };
+      return { _expired: true, _errorMsg: 'API key expired — reconnecting' };
     }
 
-    return { _error: true, _errorMsg: data.error || data.message || 'Order rejected (' + res.status + ')' };
+    // 400 = order validation error from CLOB — show the real error
+    return { _error: true, _errorMsg: errMsg };
 
   } catch (corsErr) {
     // CORS or network error — fall back to server proxy
@@ -1865,14 +1914,12 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
   // Attempt 2: Server proxy (bypasses CORS, server does HMAC)
   try {
     var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
-    if (!token) return { _error: true, _errorMsg: 'Sign in to HYPERFLEX to trade via server proxy' };
+    var proxyHeaders = { 'Content-Type': 'application/json' };
+    if (token) proxyHeaders['Authorization'] = 'Bearer ' + token;
 
     var proxyRes = await fetch('/api/polymarket/clob-order', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + token
-      },
+      headers: proxyHeaders,
       body: JSON.stringify({
         signed_body: requestBody,
         api_key: apiKey,
@@ -1888,13 +1935,24 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
 
     console.error('[trade] Server proxy failed:', proxyRes.status, proxyData);
 
-    if (proxyRes.status === 401 || (proxyData.error && proxyData.error.toLowerCase().includes('api'))) {
+    // 401 from our server = HF auth issue (token expired). Re-derive API key.
+    // 4xx from CLOB (proxied through our server) = order-level error, don't wipe keys.
+    var isHfAuthError = proxyRes.status === 401 && (!proxyData.detail || typeof proxyData.detail === 'string');
+    var isClobAuthError = proxyData.detail && typeof proxyData.detail === 'object';
+
+    if (isHfAuthError) {
+      // HF token expired — need to re-login, but keys themselves may be fine
+      return { _error: true, _errorMsg: 'Session expired — sign in to HYPERFLEX and try again' };
+    }
+
+    if (isClobAuthError && (proxyRes.status === 401 || proxyRes.status === 403)) {
+      // CLOB rejected the credentials — keys are actually bad
       localStorage.removeItem('poly_api_key');
       localStorage.removeItem('poly_api_secret');
       localStorage.removeItem('poly_api_passphrase');
       localStorage.removeItem('poly_eoa_address');
       updateTradingUI();
-      return { _expired: true, _errorMsg: 'API key expired' };
+      return { _expired: true, _errorMsg: 'Polymarket credentials expired — reconnecting...' };
     }
 
     return { _error: true, _errorMsg: proxyData.error || proxyData.message || 'Order rejected (' + proxyRes.status + ')' };
@@ -1984,16 +2042,38 @@ function updateOutcomePricesDOM() {
 
     var yesBtn = row.querySelector('.outcome-btn-yes');
     var noBtn = row.querySelector('.outcome-btn-no');
+    // Only update text + data attributes, NOT onclick (avoids click race with 10s polling)
     if (yesBtn) {
       yesBtn.textContent = 'Buy Yes ' + fmtCents(yp) + '\u00a2';
-      yesBtn.onclick = function() { buyOutcome(idx, 'yes', yesCents); };
+      yesBtn.setAttribute('data-idx', idx);
+      yesBtn.setAttribute('data-price', yesCents);
     }
     if (noBtn) {
       noBtn.textContent = 'Buy No ' + fmtCents(np) + '\u00a2';
-      noBtn.onclick = function() { buyOutcome(idx, 'no', noCents); };
+      noBtn.setAttribute('data-idx', idx);
+      noBtn.setAttribute('data-price', noCents);
     }
   });
 }
+
+// Event delegation for outcome buttons — survives price DOM updates without onclick replacement
+(function() {
+  document.addEventListener('click', function(e) {
+    var btn = e.target.closest('.outcome-btn-yes, .outcome-btn-no');
+    if (!btn) return;
+    e.stopPropagation();
+    var idx = parseInt(btn.getAttribute('data-idx'));
+    var price = parseInt(btn.getAttribute('data-price'));
+    var side = btn.classList.contains('outcome-btn-yes') ? 'yes' : 'no';
+    if (!isNaN(idx) && !isNaN(price)) buyOutcome(idx, side, price);
+  });
+  document.addEventListener('click', function(e) {
+    var row = e.target.closest('.outcome-row');
+    if (!row || e.target.closest('.outcome-btn')) return;
+    var idx = parseInt(row.getAttribute('data-idx'));
+    if (!isNaN(idx)) switchOutcome(idx);
+  });
+})();
 
 function updateActiveTradePrice() {
   var yp, np;
