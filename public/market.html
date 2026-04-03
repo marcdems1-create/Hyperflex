@@ -189,6 +189,9 @@ canvas{display:block;width:100%!important}
 </head>
 <body>
 
+<!-- Debug button for troubleshooting -->
+<button onclick="if(document.getElementById('tradeDebugPanel')) document.getElementById('tradeDebugPanel').style.display=document.getElementById('tradeDebugPanel').style.display==='none'?'block':'none'; else tradeDebug('DEBUG', 'Panel triggered manually');" style="position:fixed;top:10px;right:10px;background:#c9920d;color:#000;border:none;padding:4px 8px;font-size:10px;cursor:pointer;border-radius:3px;z-index:99999">🐛 Debug</button>
+
 <div id="nav-root"></div>
 <script>if(typeof polyRef==='undefined')window.polyRef=function(u){return u};</script>
 <script src="/nav.js?v=5"></script>
@@ -1458,6 +1461,21 @@ async function enableTrading() {
     var signer = await provider.getSigner();
     var address = await signer.getAddress();
 
+    // Clear cached credentials if wallet changed
+    var cachedEoaAddress = localStorage.getItem('poly_eoa_address');
+    if (cachedEoaAddress && cachedEoaAddress.toLowerCase() !== address.toLowerCase()) {
+      tradeDebug('enableTrading', 'wallet changed from ' + cachedEoaAddress.slice(0,10) + ' to ' + address.slice(0,10) + ' - clearing cached credentials');
+      localStorage.removeItem('poly_api_key');
+      localStorage.removeItem('poly_api_secret');
+      localStorage.removeItem('poly_api_passphrase');
+      localStorage.removeItem('poly_eoa_address');
+      localStorage.removeItem('hf_poly_wallet');
+      
+      // Clear balance display immediately
+      var balanceEl = document.getElementById('tradeBalance');
+      if (balanceEl) balanceEl.textContent = 'Balance: $0.00';
+    }
+
     // EIP-712 CLOB auth signature
     cta.textContent = 'Sign in MetaMask...';
     var timestamp = Math.floor(Date.now() / 1000).toString();
@@ -1496,6 +1514,11 @@ async function enableTrading() {
       } else {
         var errData = await proxyRes.json().catch(function() { return {}; });
         tradeDebug('server-proxy FAIL', { status: proxyRes.status, error: errData });
+        
+        // Provide specific error for server proxy failures
+        if (proxyRes.status === 400 && errData.error && errData.error.includes('derive')) {
+          tradeDebug('server-proxy DERIVE ERROR', 'server also failed to derive - will try browser-direct');
+        }
       }
     } catch (proxyErr) {
       tradeDebug('server-proxy ERROR', proxyErr.message);
@@ -1515,10 +1538,22 @@ async function enableTrading() {
         } else {
           var clobErr = await clobRes.json().catch(function() { return {}; });
           tradeDebug('browser-direct FAIL', { status: clobRes.status, error: clobErr });
-          throw new Error(clobErr.error || clobErr.message || 'CLOB auth failed (' + clobRes.status + ')');
+          
+          // Provide specific error messages for common issues
+          var errorMsg = clobErr.error || clobErr.message || 'CLOB auth failed (' + clobRes.status + ')';
+          if (clobRes.status === 400 && (errorMsg.includes('derive') || errorMsg.includes('signature'))) {
+            errorMsg = 'Invalid signature or wallet mismatch. Try refreshing the page and reconnecting your wallet.';
+          } else if (clobRes.status === 401) {
+            errorMsg = 'Unauthorized. Please make sure you have a Polymarket account connected to this wallet.';
+          }
+          throw new Error(errorMsg);
         }
       } catch (corsErr) {
-        if (!data) throw new Error('Could not derive API key — check MetaMask and try again');
+        tradeDebug('browser-direct ERROR', corsErr.message);
+        if (!data) {
+          tradeDebug('browser-direct FALLBACK', 'no data from either attempt - throwing error');
+          throw new Error('Could not derive API key — check MetaMask and try again');
+        }
       }
     }
 
@@ -1543,6 +1578,9 @@ async function enableTrading() {
       proxyAddr = ethers.getCreate2Address(factoryAddress, salt, initCodeHash).toLowerCase();
     }
     localStorage.setItem('hf_poly_wallet', proxyAddr);
+
+    // Refresh balance with new wallet
+    fetchTradeBalance();
 
     // Also save HYPERFLEX auth token if logged in
     if (!localStorage.getItem('hf_token') && !localStorage.getItem('hf_creator_token')) {
