@@ -4847,50 +4847,49 @@ body.nav-open .sidebar-backdrop {
             <div id="portfolioSummaryBar" style="display:none;margin-bottom:20px">
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
                 <!-- LEFT CARD: Portfolio Value + Available Balance -->
-                <div style="background:#0f0e0c;border:1px solid #2a2825;border-radius:14px;padding:24px 28px;position:relative;overflow:hidden">
-                  <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--gold),transparent)"></div>
-                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-                    <div id="psSummaryValueLabel" style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752">Portfolio</div>
-                    <div style="font-family:var(--mono);font-size:10px;color:#5a5752">Available to trade <span id="psAvailBalance" style="font-weight:700;color:var(--text)">—</span></div>
+                <div style="background:var(--cream);border:1px solid var(--border);border-radius:14px;padding:24px 28px;position:relative;overflow:hidden">
+                  <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:16px">
+                    <div id="psSummaryValueLabel" style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--dim)">Portfolio</div>
+                    <div style="font-family:var(--sans);font-size:12px;color:var(--dim)">Available to trade <span id="psAvailBalance" style="font-family:var(--mono);font-weight:700;color:var(--text)">—</span></div>
                   </div>
-                  <div id="psSummaryValue" style="font-family:var(--mono);font-size:32px;font-weight:900;color:#f5f0e8;letter-spacing:-0.02em;margin-bottom:6px">—</div>
-                  <div id="psSummaryPnlPct" style="font-family:var(--mono);font-size:12px;font-weight:700;color:#5a5752;margin-bottom:20px"></div>
-                  <div style="display:flex;gap:16px;border-top:1px solid #2a2825;padding-top:16px">
+                  <div id="psSummaryValue" style="font-family:var(--mono);font-size:36px;font-weight:900;color:var(--text);letter-spacing:-0.03em;margin-bottom:6px">—</div>
+                  <div id="psSummaryPnlPct" style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--dim);margin-bottom:20px"></div>
+                  <div style="display:flex;gap:16px;border-top:1px solid var(--border);padding-top:16px">
                     <div style="flex:1">
-                      <div style="font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#5a5752;margin-bottom:4px">Win Rate</div>
+                      <div style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--dim);margin-bottom:6px">Win Rate</div>
                       <div style="display:flex;align-items:center;gap:6px">
-                        <div id="psWinRateRing" style="width:28px;height:28px;border-radius:50%;background:conic-gradient(#333 0%,#333 100%);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-                          <div style="width:20px;height:20px;border-radius:50%;background:#0f0e0c;display:flex;align-items:center;justify-content:center">
-                            <span id="psWinRateVal" style="font-family:var(--mono);font-size:8px;font-weight:900;color:#5a5752">—</span>
+                        <div id="psWinRateRing" style="width:32px;height:32px;border-radius:50%;background:conic-gradient(#333 0%,#333 100%);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                          <div style="width:22px;height:22px;border-radius:50%;background:var(--cream);display:flex;align-items:center;justify-content:center">
+                            <span id="psWinRateVal" style="font-family:var(--mono);font-size:10px;font-weight:900;color:var(--dim)">—</span>
                           </div>
                         </div>
                       </div>
                     </div>
                     <div style="flex:1">
-                      <div style="font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#5a5752;margin-bottom:4px">Sharp</div>
-                      <div id="psSharpBadge" style="display:inline-flex;align-items:center;justify-content:center;min-width:32px;padding:4px 8px;border-radius:6px;background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.2)">
-                        <span id="psSharpVal" style="font-family:var(--mono);font-size:13px;font-weight:900;color:var(--gold)">—</span>
+                      <div style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--dim);margin-bottom:6px">Sharp</div>
+                      <div id="psSharpBadge" style="display:inline-flex;align-items:center;justify-content:center;min-width:36px;padding:5px 10px;border-radius:6px;background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.2)">
+                        <span id="psSharpVal" style="font-family:var(--mono);font-size:15px;font-weight:900;color:var(--gold)">—</span>
                       </div>
                     </div>
                     <div style="flex:1;text-align:right">
-                      <div style="font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#5a5752;margin-bottom:4px">ROI</div>
-                      <div id="psSummaryROI" style="font-family:var(--mono);font-size:16px;font-weight:900;color:#5a5752">—</div>
+                      <div style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--dim);margin-bottom:6px">ROI</div>
+                      <div id="psSummaryROI" style="font-family:var(--mono);font-size:18px;font-weight:900;color:var(--dim)">—</div>
                     </div>
                   </div>
                 </div>
                 <!-- RIGHT CARD: Profit/Loss + Chart -->
-                <div style="background:#0f0e0c;border:1px solid #2a2825;border-radius:14px;padding:24px 28px;display:flex;flex-direction:column">
-                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-                    <div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5a5752">Profit / Loss</div>
-                    <div style="display:flex;gap:0;border:1px solid #2a2825;border-radius:6px;overflow:hidden">
-                      <button onclick="setPnlPeriod('1d')" class="pnl-tab" id="pnlTab1d" style="padding:4px 10px;font-family:var(--mono);font-size:9px;font-weight:700;color:#5a5752;background:transparent;border:none;cursor:pointer">1D</button>
-                      <button onclick="setPnlPeriod('1w')" class="pnl-tab" id="pnlTab1w" style="padding:4px 10px;font-family:var(--mono);font-size:9px;font-weight:700;color:#5a5752;background:transparent;border:none;cursor:pointer">1W</button>
-                      <button onclick="setPnlPeriod('1m')" class="pnl-tab" id="pnlTab1m" style="padding:4px 10px;font-family:var(--mono);font-size:9px;font-weight:700;color:var(--text);background:var(--gold);border:none;cursor:pointer">1M</button>
-                      <button onclick="setPnlPeriod('all')" class="pnl-tab" id="pnlTaball" style="padding:4px 10px;font-family:var(--mono);font-size:9px;font-weight:700;color:#5a5752;background:transparent;border:none;cursor:pointer">ALL</button>
+                <div style="background:var(--cream);border:1px solid var(--border);border-radius:14px;padding:24px 28px;display:flex;flex-direction:column">
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+                    <div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--dim)">Profit / Loss</div>
+                    <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:6px;overflow:hidden">
+                      <button onclick="setPnlPeriod('1d')" class="pnl-tab" id="pnlTab1d" style="padding:5px 12px;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--dim);background:transparent;border:none;cursor:pointer;transition:all .15s">1D</button>
+                      <button onclick="setPnlPeriod('1w')" class="pnl-tab" id="pnlTab1w" style="padding:5px 12px;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--dim);background:transparent;border:none;cursor:pointer;transition:all .15s">1W</button>
+                      <button onclick="setPnlPeriod('1m')" class="pnl-tab" id="pnlTab1m" style="padding:5px 12px;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--text);background:var(--gold);border:none;cursor:pointer;transition:all .15s">1M</button>
+                      <button onclick="setPnlPeriod('all')" class="pnl-tab" id="pnlTaball" style="padding:5px 12px;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--dim);background:transparent;border:none;cursor:pointer;transition:all .15s">ALL</button>
                     </div>
                   </div>
-                  <div id="psSummaryPnl" style="font-family:var(--mono);font-size:32px;font-weight:900;color:#5a5752;letter-spacing:-0.02em;margin-bottom:4px">—</div>
-                  <div id="psPnlPeriodLabel" style="font-family:var(--mono);font-size:10px;color:#5a5752;margin-bottom:12px">Past Month</div>
+                  <div id="psSummaryPnl" style="font-family:var(--mono);font-size:36px;font-weight:900;color:var(--dim);letter-spacing:-0.03em;margin-bottom:4px">—</div>
+                  <div id="psPnlPeriodLabel" style="font-family:var(--sans);font-size:12px;color:var(--dim);margin-bottom:12px">Past Month</div>
                   <div id="portfolioPnlChart" style="flex:1;min-height:60px;display:flex;align-items:flex-end">
                     <div id="pnlChartBars" style="display:flex;align-items:flex-end;gap:3px;height:100%;width:100%;padding:0"></div>
                   </div>
@@ -14623,6 +14622,18 @@ async function renderPnlChart(positions) {
       const activity = await _ensurePolyActivity(_polyWalletAddress);
       if (activity && activity.length > 0) {
         const { dailyPnl } = _buildDailyPnlFromActivity(activity, 30);
+        // Add unrealized P&L from open positions to today
+        const today = new Date().toISOString().slice(0, 10);
+        let unrealized = 0;
+        for (const p of positions) {
+          if (p._platform === 'polymarket' || p.platform === 'polymarket') {
+            const val = parseFloat(p.cash_value) || 0;
+            const cost = parseFloat(p.cost_basis) || parseFloat(p.initialValue) || 0;
+            if (cost > 0) unrealized += (val - cost);
+          }
+        }
+        if (dailyPnl[today] !== undefined) dailyPnl[today] += unrealized;
+        else dailyPnl[today] = unrealized;
         _renderPnlSvg(barsEl, dailyPnl, 120);
         return;
       }
@@ -14785,17 +14796,32 @@ function _buildDailyPnlFromActivity(activity, days) {
   return { dailyPnl, totalRealized };
 }
 
-// Compute period P&L: realized trading P&L from activity + unrealized change estimate
+// Compute period P&L: realized trading P&L from activity + unrealized from open positions
 async function _fetchPolyPnl(address, days) {
   const cacheKey = days + '';
   if (_polyPnlCache[cacheKey] != null) return _polyPnlCache[cacheKey];
   try {
     const activity = await _ensurePolyActivity(address);
-    if (!activity.length) return null;
+    let totalRealized = 0;
+    if (activity.length) {
+      const result = _buildDailyPnlFromActivity(activity, days);
+      totalRealized = result.totalRealized;
+    }
 
-    const { totalRealized } = _buildDailyPnlFromActivity(activity, days);
-    _polyPnlCache[cacheKey] = totalRealized;
-    return totalRealized;
+    // Add unrealized P&L from open positions (value - cost basis)
+    let unrealized = 0;
+    const allPos = getAllPositionsFlat();
+    for (const p of allPos) {
+      if (p._platform === 'polymarket' || p.platform === 'polymarket') {
+        const val = parseFloat(p.cash_value) || 0;
+        const cost = parseFloat(p.cost_basis) || parseFloat(p.initialValue) || 0;
+        if (cost > 0) unrealized += (val - cost);
+      }
+    }
+
+    const total = totalRealized + unrealized;
+    _polyPnlCache[cacheKey] = total;
+    return total;
   } catch(e) { console.warn('[polyPnl]', e.message); return null; }
 }
 
@@ -14868,6 +14894,19 @@ async function renderPnlChartForPeriod(positions, days) {
       const activity = await _ensurePolyActivity(_polyWalletAddress);
       if (activity && activity.length > 0) {
         const { dailyPnl } = _buildDailyPnlFromActivity(activity, days);
+        // Add unrealized P&L from open positions to today's entry
+        const today = new Date().toISOString().slice(0, 10);
+        let unrealized = 0;
+        const allPos = getAllPositionsFlat();
+        for (const p of allPos) {
+          if (p._platform === 'polymarket' || p.platform === 'polymarket') {
+            const val = parseFloat(p.cash_value) || 0;
+            const cost = parseFloat(p.cost_basis) || parseFloat(p.initialValue) || 0;
+            if (cost > 0) unrealized += (val - cost);
+          }
+        }
+        if (dailyPnl[today] !== undefined) dailyPnl[today] += unrealized;
+        else dailyPnl[today] = unrealized;
         _renderPnlSvg(barsEl, dailyPnl, 120);
         return;
       }
@@ -15082,56 +15121,55 @@ function renderPositionCard({question,side,pct,meta,pnl,pnlLabel,pnlIsPercent,ur
   const roiStr=costBasis>0?((pnl||0)>=0?'+':'')+((pnl||0)/costBasis*100).toFixed(1)+'%':'—';
 
   // Trade buttons — use global map key instead of inline JSON to avoid HTML corruption
-  const tradeActionsHtml=isPoly?`<div class="poly-trade-actions" style="display:${walletConnected?'flex':'none'};gap:6px;margin-left:auto"><button onclick="event.stopPropagation();openTradeModal(window._posDataMap['${_posKey}'],'buy')" style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);border-radius:6px;padding:5px 12px;font-size:10px;color:#22c55e;cursor:pointer;font-family:var(--mono);transition:all .15s;letter-spacing:.04em;min-height:32px" onmouseover="this.style.background='rgba(34,197,94,0.18)'" onmouseout="this.style.background='rgba(34,197,94,0.08)'">Buy ↑</button><button onclick="event.stopPropagation();openTradeModal(window._posDataMap['${_posKey}'],'sell')" style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);border-radius:6px;padding:5px 12px;font-size:10px;color:#f87171;cursor:pointer;font-family:var(--mono);transition:all .15s;letter-spacing:.04em;min-height:32px" onmouseover="this.style.background='rgba(248,113,113,0.18)'" onmouseout="this.style.background='rgba(248,113,113,0.08)'">Sell ↓</button><button onclick="event.stopPropagation();closePositionAll(window._posDataMap['${_posKey}'])" style="background:none;border:1px solid #2a2825;border-radius:6px;padding:5px 10px;font-size:10px;color:#4a4744;cursor:pointer;font-family:var(--mono);transition:all .15s;min-height:32px" onmouseover="this.style.borderColor='#f87171';this.style.color='#f87171'" onmouseout="this.style.borderColor='#2a2825';this.style.color='#4a4744'">Close</button></div>`:'';
+  const tradeActionsHtml=isPoly?`<div class="poly-trade-actions" style="display:${walletConnected?'flex':'none'};gap:8px;margin-left:auto"><button onclick="event.stopPropagation();openTradeModal(window._posDataMap['${_posKey}'],'buy')" style="background:rgba(34,197,94,0.10);border:1px solid rgba(34,197,94,0.30);border-radius:6px;padding:6px 14px;font-size:11px;color:#22c55e;cursor:pointer;font-family:var(--mono);font-weight:700;transition:all .15s;min-height:36px" onmouseover="this.style.background='rgba(34,197,94,0.20)'" onmouseout="this.style.background='rgba(34,197,94,0.10)'">Buy</button><button onclick="event.stopPropagation();openTradeModal(window._posDataMap['${_posKey}'],'sell')" style="background:rgba(248,113,113,0.10);border:1px solid rgba(248,113,113,0.30);border-radius:6px;padding:6px 14px;font-size:11px;color:#f87171;cursor:pointer;font-family:var(--mono);font-weight:700;transition:all .15s;min-height:36px" onmouseover="this.style.background='rgba(248,113,113,0.20)'" onmouseout="this.style.background='rgba(248,113,113,0.10)'">Sell</button></div>`:'';
 
   // Unique card ID for collapse state
   const cardId = 'pos-' + (posData?.condition_id || posData?.market_slug || Math.random().toString(36).slice(2,8));
   const isExpanded = _posCardExpandedSet.has(cardId);
 
-  return `<div id="${cardId}" style="background:linear-gradient(180deg,#111110 0%,#0d0d0c 100%);border:1px solid #222;border-radius:10px;overflow:hidden;margin-bottom:8px;transition:border-color .2s,box-shadow .2s" onmouseover="this.style.borderColor='${accentColor}40';this.style.boxShadow='0 2px 12px ${accentColor}08'" onmouseout="this.style.borderColor='#222';this.style.boxShadow='none'">
+  return `<div id="${cardId}" style="background:var(--cream);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:10px;transition:border-color .2s,box-shadow .2s" onmouseover="this.style.borderColor='${accentColor}50';this.style.boxShadow='0 2px 16px rgba(0,0,0,0.2)'" onmouseout="this.style.borderColor='var(--border)';this.style.boxShadow='none'">
     <!-- Compact header — always visible, click to expand -->
-    <div onclick="togglePosCard('${cardId}')" style="display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;user-select:none;-webkit-user-select:none">
-      ${icon?`<img src="${icon}" alt="" style="width:28px;height:28px;border-radius:50%;border:1px solid #1e1e1c;flex-shrink:0" onerror="this.style.display='none'">`:`<div style="width:28px;height:28px;border-radius:50%;background:${sideBg};border:1px solid ${sideBorder};display:flex;align-items:center;justify-content:center;flex-shrink:0"><span style="font-family:var(--mono);font-size:9px;font-weight:800;color:${sideColor}">${(side||'?')[0]}</span></div>`}
-      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
-        <div style="font-size:13px;font-weight:700;color:#e8e4de;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3">${escHtmlDash(question)}</div>
-        <div style="display:flex;align-items:center;gap:6px">
-          <span style="font-family:var(--mono);font-size:9px;font-weight:800;padding:2px 6px;border-radius:3px;background:${sideBg};color:${sideColor};border:1px solid ${sideBorder};letter-spacing:.04em">${side||'—'}</span>
-          <span style="font-family:var(--mono);font-size:9px;color:#4a4744">${fmtPrice(avgCost)} → <span style="color:${dirColor}">${fmtPrice(curPrice)} ${dirArrow}</span></span>
-          ${endDate?`<span style="font-family:var(--mono);font-size:9px;color:#3a3834">${endDate}</span>`:''}
+    <div onclick="togglePosCard('${cardId}')" style="display:flex;align-items:center;gap:12px;padding:14px 16px;cursor:pointer;user-select:none;-webkit-user-select:none">
+      ${icon?`<img src="${icon}" alt="" style="width:32px;height:32px;border-radius:50%;border:1px solid var(--border);flex-shrink:0" onerror="this.style.display='none'">`:`<div style="width:32px;height:32px;border-radius:50%;background:${sideBg};border:1px solid ${sideBorder};display:flex;align-items:center;justify-content:center;flex-shrink:0"><span style="font-family:var(--sans);font-size:11px;font-weight:800;color:${sideColor}">${(side||'?')[0]}</span></div>`}
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+        <div style="font-family:var(--sans);font-size:14px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3">${escHtmlDash(question)}</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-family:var(--mono);font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;background:${sideBg};color:${sideColor};border:1px solid ${sideBorder}">${side||'—'}</span>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--dim)">${fmtPrice(avgCost)}</span>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--dim)">→</span>
+          <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:${dirColor}">${fmtPrice(curPrice)} ${dirArrow}</span>
+          ${endDate?`<span style="font-family:var(--mono);font-size:11px;color:#4a4744">${endDate}</span>`:''}
         </div>
       </div>
-      <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
+      <div style="display:flex;align-items:center;gap:12px;flex-shrink:0">
         ${pnl!=null?`<div style="text-align:right">
-          <div style="font-family:var(--mono);font-size:15px;font-weight:900;color:${pnlColor};letter-spacing:-0.02em;line-height:1.1">${pnlStr}</div>
-          ${pnlPctStr?`<div style="font-family:var(--mono);font-size:9px;color:${pnlColor};opacity:0.7">${pnlPctStr}</div>`:''}
+          <div style="font-family:var(--mono);font-size:16px;font-weight:900;color:${pnlColor};letter-spacing:-0.02em;line-height:1.2">${pnlStr}</div>
+          ${pnlPctStr?`<div style="font-family:var(--mono);font-size:11px;color:${pnlColor};opacity:0.7">${pnlPctStr}</div>`:''}
         </div>`:''}
-        <svg class="pos-card-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none" style="transition:transform .25s ease;transform:rotate(${isExpanded?'180':'0'}deg);flex-shrink:0;opacity:0.3"><path d="M2 4.5L6 8.5L10 4.5" stroke="#7a7870" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <svg class="pos-card-chevron" width="14" height="14" viewBox="0 0 12 12" fill="none" style="transition:transform .25s ease;transform:rotate(${isExpanded?'180':'0'}deg);flex-shrink:0;opacity:0.4"><path d="M2 4.5L6 8.5L10 4.5" stroke="var(--dim)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
     </div>
 
     <!-- Expandable body -->
     <div class="pos-card-body" style="max-height:${isExpanded?'500px':'0px'};opacity:${isExpanded?'1':'0'};overflow:hidden;transition:max-height .3s ease,opacity .25s ease">
-      <div style="padding:0 14px 14px;border-top:1px solid #1a1a18">
+      <div style="padding:0 16px 16px;border-top:1px solid var(--border)">
         <!-- Stats strip -->
-        <div style="display:flex;gap:0;margin:10px 0;border-radius:6px;overflow:hidden;border:1px solid #1a1a18">
-          <div style="flex:1;padding:8px 0;text-align:center;background:#0c0c0b">
-            <div style="font-family:var(--mono);font-size:7px;color:#3a3834;text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px">Shares</div>
-            <div style="font-family:var(--mono);font-size:12px;font-weight:700;color:#7a7870">${shares>0?shares.toFixed(1):'—'}</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;margin:12px 0;border-radius:8px;overflow:hidden;background:var(--border)">
+          <div style="padding:10px 0;text-align:center;background:var(--ink)">
+            <div style="font-family:var(--sans);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Shares</div>
+            <div style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--text)">${shares>0?shares.toFixed(1):'—'}</div>
           </div>
-          <div style="width:1px;background:#1a1a18"></div>
-          <div style="flex:1;padding:8px 0;text-align:center;background:#0c0c0b">
-            <div style="font-family:var(--mono);font-size:7px;color:#3a3834;text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px">Cost</div>
-            <div style="font-family:var(--mono);font-size:12px;font-weight:700;color:#7a7870">${fmtVal(costBasis)}</div>
+          <div style="padding:10px 0;text-align:center;background:var(--ink)">
+            <div style="font-family:var(--sans);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Traded</div>
+            <div style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--text)">${fmtVal(costBasis)}</div>
           </div>
-          <div style="width:1px;background:#1a1a18"></div>
-          <div style="flex:1;padding:8px 0;text-align:center;background:#0c0c0b">
-            <div style="font-family:var(--mono);font-size:7px;color:#3a3834;text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px">Value</div>
-            <div style="font-family:var(--mono);font-size:12px;font-weight:700;color:#e8e4de">${fmtVal(cashValue)}</div>
+          <div style="padding:10px 0;text-align:center;background:var(--ink)">
+            <div style="font-family:var(--sans);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Value</div>
+            <div style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--text)">${fmtVal(cashValue)}</div>
           </div>
-          <div style="width:1px;background:#1a1a18"></div>
-          <div style="flex:1;padding:8px 0;text-align:center;background:#0c0c0b">
-            <div style="font-family:var(--mono);font-size:7px;color:#3a3834;text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px">ROI</div>
-            <div style="font-family:var(--mono);font-size:12px;font-weight:700;color:${pnlColor||'#6b6560'}">${roiStr}</div>
+          <div style="padding:10px 0;text-align:center;background:var(--ink)">
+            <div style="font-family:var(--sans);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">ROI</div>
+            <div style="font-family:var(--mono);font-size:14px;font-weight:700;color:${pnlColor||'var(--dim)'}">${roiStr}</div>
           </div>
         </div>
 
@@ -15139,9 +15177,9 @@ function renderPositionCard({question,side,pct,meta,pnl,pnlLabel,pnlIsPercent,ur
         ${whaleHtml}
 
         <!-- Actions -->
-        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-          <a href="${url}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="font-family:var(--mono);font-size:9px;color:#4a4744;text-decoration:none;padding:4px 10px;border:1px solid #1e1e1c;border-radius:5px;transition:all .15s;letter-spacing:.04em" onmouseover="this.style.borderColor='#444';this.style.color='#a09d94'" onmouseout="this.style.borderColor='#1e1e1c';this.style.color='#4a4744'">VIEW</a>
-          <button onclick="event.stopPropagation();sharePositionToFeed(window._posDataMap['${_posKey}'])" style="background:none;border:1px solid #1e1e1c;border-radius:5px;padding:4px 10px;font-size:9px;color:#4a4744;cursor:pointer;font-family:var(--mono);transition:all .15s;letter-spacing:.04em" onmouseover="this.style.borderColor='${accentColor}';this.style.color='${accentColor}'" onmouseout="this.style.borderColor='#1e1e1c';this.style.color='#4a4744'">SHARE</button>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <a href="${url}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="font-family:var(--mono);font-size:11px;color:var(--dim);text-decoration:none;padding:6px 14px;border:1px solid var(--border);border-radius:6px;transition:all .15s;min-height:36px;display:flex;align-items:center" onmouseover="this.style.borderColor='var(--dim)';this.style.color='var(--text)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">View on ${isPoly?'Polymarket':'market'} ↗</a>
+          <button onclick="event.stopPropagation();sharePositionToFeed(window._posDataMap['${_posKey}'])" style="background:none;border:1px solid var(--border);border-radius:6px;padding:6px 14px;font-size:11px;color:var(--dim);cursor:pointer;font-family:var(--mono);transition:all .15s;min-height:36px" onmouseover="this.style.borderColor='${accentColor}';this.style.color='${accentColor}'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">Share</button>
           ${tradeActionsHtml}
         </div>
       </div>
