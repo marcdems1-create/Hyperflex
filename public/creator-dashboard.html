@@ -1783,6 +1783,9 @@ input[type="date"].form-input { color-scheme:dark; }
   0%, 100% { opacity: 1; }
   50% { opacity: 0.3; }
 }
+@keyframes hfSpin {
+  to { transform: rotate(360deg); }
+}
 .status-dot.live {
   background: var(--green);
   animation: pulse-live 2.2s ease-in-out infinite;
@@ -5149,6 +5152,24 @@ body.nav-open .sidebar-backdrop {
                   </div>
                 </div>
                 <div id="perfWhaleCompareContent" style="padding:18px 24px 20px"></div>
+              </div>
+            </div>
+
+            <!-- ═══ AI PORTFOLIO COACH ═══ -->
+            <div id="perfAICoach" style="display:none;margin-bottom:20px">
+              <div style="background:linear-gradient(135deg,#0f0e0c 0%,#131210 50%,#0f0e0c 100%);border:1px solid rgba(201,146,13,0.2);border-radius:14px;overflow:hidden">
+                <div style="padding:18px 24px 14px;border-bottom:1px solid rgba(201,146,13,0.15);display:flex;align-items:center;justify-content:space-between">
+                  <div style="font-family:var(--sans);font-size:15px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px">
+                    <span style="font-size:16px">&#x1F9E0;</span> AI Portfolio Coach
+                    <span style="font-family:var(--mono);font-size:9px;color:var(--gold);background:rgba(201,146,13,0.12);padding:2px 8px;border-radius:4px;font-weight:700">AI</span>
+                  </div>
+                  <button id="perfCoachBtn" onclick="generateAICoach()" style="background:var(--gold);color:#141412;border:none;border-radius:8px;padding:8px 16px;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;min-height:36px" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">Generate Insights</button>
+                </div>
+                <div id="perfCoachContent" style="padding:18px 24px 20px">
+                  <div style="text-align:center;padding:20px;color:var(--dim);font-family:var(--mono);font-size:12px;line-height:1.6">
+                    Click "Generate Insights" to get personalized AI analysis of your portfolio — category allocation, risk exposure, and actionable opportunities based on whale data.
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -12062,6 +12083,7 @@ async function loadPerformanceTab() {
   const bestWorst = document.getElementById('perfBestWorstCalls');
   const whaleCompare = document.getElementById('perfWhaleCompare');
   const posSizing = document.getElementById('perfPositionSizing');
+  const aiCoach = document.getElementById('perfAICoach');
   if (!hasAny) {
     if (emptyEl) emptyEl.style.display = 'block';
     if (shareBar) shareBar.style.display = 'none';
@@ -12071,6 +12093,7 @@ async function loadPerformanceTab() {
     if (bestWorst) bestWorst.style.display = 'none';
     if (whaleCompare) whaleCompare.style.display = 'none';
     if (posSizing) posSizing.style.display = 'none';
+    if (aiCoach) aiCoach.style.display = 'none';
     return;
   }
   if (emptyEl) emptyEl.style.display = 'none';
@@ -12086,6 +12109,9 @@ async function loadPerformanceTab() {
   renderBestWorstCalls();
   renderPositionSizing();
   loadWhaleComparison();
+  // Show AI Coach section if user has positions
+  const coachEl = document.getElementById('perfAICoach');
+  if (coachEl && hasAny) coachEl.style.display = 'block';
 }
 
 async function loadPerfPlatformAnalytics() {
@@ -12258,6 +12284,79 @@ function renderBestWorstCalls() {
   const resolved = positions.filter(p => p._isResolved);
 
   if (resolved.length === 0) {
+    const openPositions = positions.filter(p => !p._isResolved);
+    if (openPositions.length > 0) {
+      // === "Positions to Watch" mode ===
+      container.style.display = 'block';
+      // Update headers dynamically
+      const bestHeader = bestList.parentElement.querySelector('div:first-child div');
+      const worstHeader = worstList.parentElement.querySelector('div:first-child div');
+      if (bestHeader) bestHeader.innerHTML = '<span>\uD83C\uDFAF</span> Top Opportunities';
+      if (worstHeader) worstHeader.innerHTML = '<span>\u26A0\uFE0F</span> Positions at Risk';
+
+      // Left box: Top 3 by ROI potential
+      const withROI = openPositions.map(p => {
+        const price = p.yes_price || p.current_price || 0.5;
+        const roi = price > 0 ? ((1 - price) / price * 100) : 0;
+        return { ...p, _roi: roi };
+      }).sort((a, b) => b._roi - a._roi).slice(0, 3);
+
+      bestList.innerHTML = withROI.map(p => {
+        const q = (p.question || p.title || 'Unknown').length > 47 ? (p.question || p.title || '').slice(0, 47) + '...' : (p.question || p.title || 'Unknown');
+        const platform = p._platform || 'unknown';
+        const price = p.yes_price || p.current_price || 0.5;
+        return '<div style="padding:10px 12px;border-bottom:1px solid #2a2825;display:flex;align-items:center;gap:10px">' +
+          '<div style="flex:1;min-width:0">' +
+            '<div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + q + '</div>' +
+            '<div style="display:flex;align-items:center;gap:6px;margin-top:4px">' +
+              '<span style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:capitalize">' + platform + '</span>' +
+              '<span style="font-family:var(--mono);font-size:10px;color:var(--dim)">' + Math.round(price * 100) + '\u00A2</span>' +
+            '</div>' +
+          '</div>' +
+          '<div style="font-family:var(--mono);font-size:14px;font-weight:900;color:#22c55e;white-space:nowrap">ROI: +' + Math.round(p._roi) + '%</div>' +
+        '</div>';
+      }).join('');
+
+      // Right box: Top 3 positions at risk (price moved against entry)
+      const atRisk = openPositions.map(p => {
+        const currentPrice = p.yes_price || p.current_price || 0.5;
+        const entryPrice = p.entry_price || p.avg_price || currentPrice;
+        const side = (p.side || 'YES').toUpperCase();
+        const shares = p.shares || p.quantity || 1;
+        let unrealizedPnl = 0;
+        let isLosing = false;
+        if (side === 'YES') {
+          unrealizedPnl = (currentPrice - entryPrice) * shares;
+          isLosing = currentPrice < entryPrice;
+        } else {
+          unrealizedPnl = (entryPrice - currentPrice) * shares;
+          isLosing = currentPrice > entryPrice;
+        }
+        return { ...p, _unrealizedPnl: unrealizedPnl, _isLosing: isLosing, _currentPrice: currentPrice, _entryPrice: entryPrice };
+      }).filter(p => p._isLosing).sort((a, b) => a._unrealizedPnl - b._unrealizedPnl).slice(0, 3);
+
+      if (atRisk.length > 0) {
+        worstList.innerHTML = atRisk.map(p => {
+          const q = (p.question || p.title || 'Unknown').length > 47 ? (p.question || p.title || '').slice(0, 47) + '...' : (p.question || p.title || 'Unknown');
+          const platform = p._platform || 'unknown';
+          const pnlSign = p._unrealizedPnl >= 0 ? '+' : '';
+          return '<div style="padding:10px 12px;border-bottom:1px solid #2a2825;display:flex;align-items:center;gap:10px">' +
+            '<div style="flex:1;min-width:0">' +
+              '<div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + q + '</div>' +
+              '<div style="display:flex;align-items:center;gap:6px;margin-top:4px">' +
+                '<span style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:capitalize">' + platform + '</span>' +
+                '<span style="font-family:var(--mono);font-size:10px;color:var(--dim)">Entry: ' + Math.round(p._entryPrice * 100) + '\u00A2 \u2192 Now: ' + Math.round(p._currentPrice * 100) + '\u00A2</span>' +
+              '</div>' +
+            '</div>' +
+            '<div style="font-family:var(--mono);font-size:14px;font-weight:900;color:#ef4444;white-space:nowrap">' + pnlSign + '$' + Math.abs(p._unrealizedPnl).toFixed(2) + '</div>' +
+          '</div>';
+        }).join('');
+      } else {
+        worstList.innerHTML = '<div style="padding:16px;text-align:center;color:var(--dim);font-size:12px;font-family:var(--mono);line-height:1.6">No positions at risk \u2014 looking good!</div>';
+      }
+      return;
+    }
+    // No open positions either — show generic empty
     container.style.display = 'block';
     const emptyMsg = '<div style="padding:16px;text-align:center;color:var(--dim);font-size:12px;font-family:var(--mono);line-height:1.6">No resolved positions yet \u2014 your best calls will show here once markets settle.</div>';
     bestList.innerHTML = emptyMsg;
@@ -12291,6 +12390,112 @@ function renderBestWorstCalls() {
   bestList.innerHTML = best.length > 0 ? best.map(renderCallCard).join('') : '<div style="padding:16px;text-align:center;color:var(--dim);font-size:12px;font-family:var(--mono)">No winning calls yet</div>';
   worstList.innerHTML = worst.length > 0 ? worst.map(renderCallCard).join('') : '<div style="padding:16px;text-align:center;color:var(--dim);font-size:12px;font-family:var(--mono)">No losses yet</div>';
   container.style.display = 'block';
+}
+
+// ── AI PORTFOLIO COACH ──────────────────────────────────────────────────────
+async function generateAICoach() {
+  const btn = document.getElementById('perfCoachBtn');
+  const content = document.getElementById('perfCoachContent');
+  if (!btn || !content) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Analyzing\u2026';
+  content.innerHTML = '<div style="text-align:center;padding:30px"><div style="display:inline-block;width:24px;height:24px;border:2px solid var(--gold);border-top-color:transparent;border-radius:50%;animation:hfSpin 1s linear infinite"></div><div style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:12px">Analyzing your portfolio...</div></div>';
+
+  try {
+    const positions = getAllPositionsFlat();
+    if (positions.length === 0) {
+      content.innerHTML = '<div style="text-align:center;padding:20px;color:var(--dim);font-family:var(--mono);font-size:12px">Connect a platform and make some trades first.</div>';
+      btn.disabled = false; btn.textContent = 'Generate Insights';
+      return;
+    }
+
+    // Build summary
+    const catMap = {};
+    let totalValue = 0;
+    const platformCounts = {};
+    positions.forEach(p => {
+      const cat = categorizePosition(p.question || p.title || '');
+      const cost = p.cost_basis || (p.shares || 0) * 0.5;
+      catMap[cat] = (catMap[cat] || 0) + cost;
+      totalValue += cost;
+      const plat = p._platform || 'unknown';
+      platformCounts[plat] = (platformCounts[plat] || 0) + 1;
+    });
+
+    const categories = Object.entries(catMap).map(([k,v]) => ({ name: k, pct: Math.round(v / (totalValue || 1) * 100) }));
+
+    // Get whale comparison data if available
+    let whaleData = null;
+    try {
+      const r = await fetch('/api/whale-flow');
+      if (r.ok) {
+        const d = await r.json();
+        whaleData = (d.category_breakdown || []).map(c => ({ name: c.category, pct: c.pct }));
+      }
+    } catch(e) {}
+
+    const token = localStorage.getItem('hf_token');
+    const r = await fetch('/api/portfolio/ai-coach', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        summary: {
+          positionCount: positions.length,
+          totalValue: totalValue.toFixed(2),
+          categories,
+          platforms: platformCounts,
+          whaleComparison: whaleData,
+          topPositions: positions.slice(0, 5).map(p => ({
+            question: (p.question || p.title || '').slice(0, 80),
+            side: p.side,
+            price: p.yes_price || p.current_price,
+            platform: p._platform
+          }))
+        }
+      })
+    });
+
+    if (!r.ok) throw new Error('Failed');
+    const data = await r.json();
+    const insights = data.insights || [];
+
+    if (insights.length === 0) {
+      content.innerHTML = '<div style="text-align:center;padding:20px;color:var(--dim);font-family:var(--mono);font-size:12px">No insights generated. Try again later.</div>';
+      btn.disabled = false; btn.textContent = 'Generate Insights';
+      return;
+    }
+
+    const typeIcons = { opportunity: '\uD83C\uDFAF', risk: '\u26A0\uFE0F', edge: '\uD83D\uDCCA', diversify: '\uD83D\uDD04', timing: '\u23F0' };
+    const typeColors = { opportunity: '#22c55e', risk: '#ef4444', edge: '#a78bfa', diversify: '#3b82f6', timing: '#f59e0b' };
+    const prioLabels = { high: 'HIGH', medium: 'MED', low: 'LOW' };
+    const prioBg = { high: 'rgba(239,68,68,0.12)', medium: 'rgba(245,158,11,0.12)', low: 'rgba(107,114,128,0.12)' };
+    const prioColor = { high: '#ef4444', medium: '#f59e0b', low: '#6b7280' };
+
+    content.innerHTML = insights.map(ins => {
+      const icon = typeIcons[ins.type] || '\uD83D\uDCA1';
+      const color = typeColors[ins.type] || 'var(--gold)';
+      return '<div style="padding:16px 0;border-bottom:1px solid #1a1917">' +
+        '<div style="display:flex;align-items:flex-start;gap:12px">' +
+          '<span style="font-size:18px;margin-top:2px">' + icon + '</span>' +
+          '<div style="flex:1;min-width:0">' +
+            '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
+              '<span style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--text)">' + (ins.title || '') + '</span>' +
+              '<span style="font-family:var(--mono);font-size:8px;font-weight:700;padding:2px 6px;border-radius:3px;background:' + (prioBg[ins.priority] || prioBg.medium) + ';color:' + (prioColor[ins.priority] || prioColor.medium) + '">' + (prioLabels[ins.priority] || 'MED') + '</span>' +
+            '</div>' +
+            '<div style="font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.6;margin-bottom:8px">' + (ins.body || '') + '</div>' +
+            (ins.action ? '<div style="font-family:var(--mono);font-size:10px;color:' + color + ';font-weight:700">\u2192 ' + ins.action + '</div>' : '') +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+  } catch(e) {
+    console.warn('[aiCoach]', e);
+    content.innerHTML = '<div style="text-align:center;padding:20px;color:#ef4444;font-family:var(--mono);font-size:12px">Failed to generate insights. Try again.</div>';
+  }
+  btn.disabled = false;
+  btn.textContent = 'Regenerate';
 }
 
 // ── WHALE COMPARISON ────────────────────────────────────────────────────────

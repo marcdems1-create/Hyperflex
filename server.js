@@ -5801,6 +5801,116 @@ Return only valid JSON array, no markdown, no explanation.`;
 });
 
 // ════════════════════════════════════════════════════════════
+// 4b-2. AI PORTFOLIO COACH
+// POST /api/portfolio/ai-coach
+// Auth: Bearer token required
+// Uses portfolio summary to generate 4-5 personalized trading insights via Claude
+// ════════════════════════════════════════════════════════════
+app.post('/api/portfolio/ai-coach', requireCreator, async (req, res) => {
+  try {
+    const { summary } = req.body;
+    if (!summary) return res.status(400).json({ error: 'summary required' });
+    if (!anthropic) return res.status(503).json({ error: 'AI not configured' });
+
+    const {
+      positionCount = 0,
+      categories = [],
+      totalValue = 0,
+      platforms = {},
+      whaleComparison = null,
+      topPositions = []
+    } = summary;
+
+    // Build category allocation lines (array of {name, pct})
+    const categoryLines = Array.isArray(categories)
+      ? categories.map(c => `${c.name}: ${c.pct}%`).join(', ')
+      : 'no category data';
+
+    // Build platform position counts
+    const platformLines = Object.entries(platforms)
+      .map(([plat, count]) => `${plat}: ${count} positions`)
+      .join(', ') || 'no platform data';
+
+    // Build whale comparison mismatch lines (array of {name, pct} or null)
+    let whaleMismatches = 'no whale comparison data';
+    if (Array.isArray(whaleComparison) && Array.isArray(categories)) {
+      const userMap = {};
+      categories.forEach(c => { userMap[c.name] = c.pct; });
+      whaleMismatches = whaleComparison
+        .map(w => {
+          const userPct = userMap[w.name] || 0;
+          return `${w.name}: you ${userPct}% vs whales ${w.pct}%`;
+        })
+        .join('; ');
+    }
+
+    // Top positions context
+    const topPosLines = topPositions.map(p =>
+      `"${p.question}" — ${p.side || '?'} @ ${Math.round((p.price || 0.5) * 100)}c (${p.platform})`
+    ).join('\n') || 'no position details';
+
+    // Position sizing context
+    const posCount = positionCount || 0;
+    const avgSize = posCount > 0 ? (parseFloat(totalValue) / posCount).toFixed(2) : 0;
+
+    const prompt = `You are a sharp prediction market trading coach. Analyze this user's real portfolio data and give exactly 4-5 specific, actionable recommendations. Every insight must reference the user's actual numbers.
+
+PORTFOLIO OVERVIEW:
+- Total portfolio value: $${totalValue}
+- Total positions: ${posCount}
+- Average position size: $${avgSize}
+
+CATEGORY ALLOCATION:
+${categoryLines}
+
+POSITIONS PER PLATFORM:
+${platformLines}
+
+WHALE COMPARISON (where user differs from top traders):
+${whaleMismatches}
+
+TOP POSITIONS:
+${topPosLines}
+
+Return a JSON array of 4-5 insight objects. Each object must have:
+- "type": one of "opportunity", "risk", "edge", "diversify", "timing"
+- "title": 5-8 words, punchy and specific
+- "body": 2-3 sentences. First sentence = specific observation citing a number from the data. Remaining sentences = why it matters and what to do.
+- "action": a single concrete next step the user can take right now (e.g. "Search 'Bitcoin' in Quick Trade", "Reduce your largest position by 20%")
+- "priority": "high", "medium", or "low" based on urgency and impact
+
+Rules:
+- No generic advice. Every insight must cite a specific number or category from the data above.
+- If one category dominates, call it out. If whale mismatch is large, flag the edge or risk.
+- If position sizing is uneven, mention concentration risk.
+- Be direct and opinionated — this is a coach, not a disclaimer.
+
+Return only valid JSON array, no markdown, no explanation.`;
+
+    const message = await anthropic.messages.create({
+      model: 'claude-3-5-haiku-20241022',
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: prompt }]
+    }, { timeout: 30000 });
+
+    const raw = message.content[0].text.trim();
+    const clean = raw.replace(/^```json?\s*/i, '').replace(/```\s*$/, '').trim();
+    let insights;
+    try {
+      insights = JSON.parse(clean);
+    } catch (e) {
+      console.error('[ai-coach] JSON parse error:', e.message, '\nRaw:', raw.slice(0, 300));
+      return res.status(500).json({ error: 'AI returned invalid JSON' });
+    }
+
+    res.json({ insights });
+  } catch (err) {
+    console.error('[ai-coach] error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
 // 4c. UPLOAD BRAND ASSET (logo or banner)
 // POST /api/creator/upload-asset
 // Auth: Bearer token required
