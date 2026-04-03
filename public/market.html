@@ -2067,48 +2067,9 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
 
   tradeDebug('submitOrder', { apiKey: apiKey.slice(0,8) + '...', eoa: eoaAddress.slice(0,10), ts: ts, hmacHasPad: hmacSig.includes('='), hmacLen: hmacSig.length });
 
-  // Attempt 1: Browser-direct to Polymarket CLOB
+  // Always route through server proxy — ensures builder attribution headers for referral fees
   try {
-    tradeDebug('trying browser-direct', 'POST clob.polymarket.com/order');
-    var res = await fetch('https://clob.polymarket.com/order', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'POLY_ADDRESS': eoaAddress,
-        'POLY_API_KEY': apiKey,
-        'POLY_PASSPHRASE': apiPassphrase,
-        'POLY_TIMESTAMP': ts,
-        'POLY_SIGNATURE': hmacSig
-      },
-      body: requestBody
-    });
-
-    var data = await res.json().catch(function() { return {}; });
-    tradeDebug('CLOB ' + res.status, JSON.stringify(data).substring(0, 300));
-
-    if (res.ok) return data;
-
-    var errMsg = data.error || data.message || data.errorMsg || JSON.stringify(data);
-
-    if (res.status === 401) {
-      localStorage.removeItem('poly_api_key');
-      localStorage.removeItem('poly_api_secret');
-      localStorage.removeItem('poly_api_passphrase');
-      localStorage.removeItem('poly_eoa_address');
-      updateTradingUI();
-      return { _expired: true, _errorMsg: 'CLOB 401: ' + errMsg };
-    }
-
-    return { _error: true, _errorMsg: 'CLOB ' + res.status + ': ' + errMsg };
-
-  } catch (directErr) {
-    tradeDebug('browser-direct THREW', directErr.message);
-  }
-
-  // Attempt 2: Server proxy
-  try {
-    tradeDebug('trying server proxy', '/api/polymarket/clob-order');
+    tradeDebug('submitting via server proxy', '/api/polymarket/clob-order');
     var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
     var proxyHeaders = { 'Content-Type': 'application/json' };
     if (token) proxyHeaders['Authorization'] = 'Bearer ' + token;
@@ -2133,17 +2094,16 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
     var proxyErrMsg = proxyData.error || proxyData.message || JSON.stringify(proxyData);
     var clobDetail = proxyData.detail ? JSON.stringify(proxyData.detail).substring(0, 200) : '';
 
-    if (proxyRes.status === 401 && clobDetail) {
-      // CLOB rejected credentials via proxy
+    if (proxyRes.status === 401 || (proxyRes.status === 502 && clobDetail.includes('401'))) {
       localStorage.removeItem('poly_api_key');
       localStorage.removeItem('poly_api_secret');
       localStorage.removeItem('poly_api_passphrase');
       localStorage.removeItem('poly_eoa_address');
       updateTradingUI();
-      return { _expired: true, _errorMsg: 'CLOB via proxy 401: ' + clobDetail };
+      return { _expired: true, _errorMsg: 'CLOB 401: ' + (clobDetail || proxyErrMsg) };
     }
 
-    return { _error: true, _errorMsg: 'Proxy ' + proxyRes.status + ': ' + proxyErrMsg + (clobDetail ? ' | ' + clobDetail : '') };
+    return { _error: true, _errorMsg: 'CLOB ' + proxyRes.status + ': ' + proxyErrMsg + (clobDetail ? ' | ' + clobDetail : '') };
   } catch (proxyErr) {
     tradeDebug('proxy THREW', proxyErr.message);
     return { _error: true, _errorMsg: 'Network error: ' + proxyErr.message };

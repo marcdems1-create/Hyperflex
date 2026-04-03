@@ -13550,23 +13550,33 @@ function renderBreakingList() {
 }
 let _qtSearchTimer = null;
 
-// Build a valid market URL from whatever data we have — never returns '#' or bare domain
+// Build a valid market URL — prefer internal /market/ pages, only external for non-Polymarket
 function buildMarketUrl(data) {
-  // data can be: { url, market_url, slug, question, conditionId, platform }
   const url = data.url || data.market_url || '';
-  // If we already have a specific market URL (not bare domain), use it
-  if (url && url !== '#' && !/^https?:\/\/[^/]+\/?$/.test(url)) return url;
-  // Try to construct from slug
-  if (data.slug) {
-    if ((data.platform || '').toLowerCase() === 'kalshi') return 'https://kalshi.com/markets/' + data.slug;
-    return 'https://polymarket.com/event/' + data.slug;
+  const platform = (data.platform || '').toLowerCase();
+
+  // Kalshi stays external
+  if (platform === 'kalshi' && data.slug) return 'https://kalshi.com/markets/' + data.slug;
+
+  // Extract slug from polymarket URL if we have one
+  let slug = data.slug || '';
+  if (!slug && url) {
+    const m = url.match(/polymarket\.com\/event\/([a-z0-9-]+)/i);
+    if (m) slug = m[1].toLowerCase();
   }
-  // Construct Polymarket search URL from question — always links to something useful
+
+  // Internal market page if we have a slug
+  if (slug) return '/market/' + slug;
+
+  // If URL is already internal, use it
+  if (url && url.startsWith('/market/')) return url;
+
+  // Search fallback — route to our Find Markets instead of Polymarket
   if (data.question) {
     const q = (data.question || '').slice(0, 100);
-    return 'https://polymarket.com/markets?_q=' + encodeURIComponent(q);
+    return '/market/search?q=' + encodeURIComponent(q);
   }
-  return url || '';
+  return url || '/creator/dashboard#find-markets';
 }
 
 function qtTradeBtn(url, label, color, extraData) {
@@ -16635,58 +16645,18 @@ async function confirmTrade() {
       orderType: 'FOK'
     });
 
-    // HMAC-SHA256 sign the HTTP request (base64url)
-    const ts = Math.floor(Date.now() / 1000).toString();
-    const hmacMessage = ts + 'POST' + '/order' + requestBody;
-    const enc = new TextEncoder();
-
-    // Decode API secret (base64url → raw bytes)
-    let b64std = apiSecret.replace(/-/g, '+').replace(/_/g, '/');
-    while (b64std.length % 4) b64std += '=';
-    let secretBytes;
-    try {
-      secretBytes = Uint8Array.from(atob(b64std), c => c.charCodeAt(0));
-    } catch (e) {
-      secretBytes = enc.encode(apiSecret);
-    }
-
-    const cryptoKey = await crypto.subtle.importKey('raw', secretBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-    const sigBuf = await crypto.subtle.sign('HMAC', cryptoKey, enc.encode(hmacMessage));
-    // base64url: replace +→- /→_ but KEEP = padding (SDK requires it)
-    const hmacSig = btoa(String.fromCharCode.apply(null, new Uint8Array(sigBuf)))
-      .replace(/\+/g, '-').replace(/\//g, '_');
-
-    // Try direct browser→CLOB first (preserves user's VPN/geo), fall back to server proxy
-    let res;
-    try {
-      res = await fetch('https://clob.polymarket.com/order', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'POLY_ADDRESS': eoaAddress,
-          'POLY_API_KEY': apiKey,
-          'POLY_PASSPHRASE': apiPassphrase,
-          'POLY_TIMESTAMP': ts,
-          'POLY_SIGNATURE': hmacSig
-        },
-        body: requestBody
-      });
-    } catch (corsErr) {
-      // CORS blocked — fall back to server proxy
-      console.warn('[qt-trade] Direct CLOB blocked, using server proxy:', corsErr.message);
-      res = await fetch('/api/polymarket/clob-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          signed_body: requestBody,
-          api_key: apiKey,
-          api_secret: apiSecret,
-          api_passphrase: apiPassphrase,
-          eoa_address: eoaAddress
-        })
-      });
-    }
+    // Always route through server proxy — server computes HMAC + attaches builder attribution headers
+    const res = await fetch('/api/polymarket/clob-order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        signed_body: requestBody,
+        api_key: apiKey,
+        api_secret: apiSecret,
+        api_passphrase: apiPassphrase,
+        eoa_address: eoaAddress
+      })
+    });
 
     const data = await res.json().catch(() => ({}));
 

@@ -116,7 +116,7 @@
 // Usage: hfxMarketUrl('https://polymarket.com/event/us-x-iran-ceasefire-by-march-31')
 // Returns: '/market/us-x-iran-ceasefire-by-march-31'
 window.hfxMarketUrl = function(polyUrl) {
-  if (!polyUrl || typeof polyUrl !== 'string') return '#';
+  if (!polyUrl || typeof polyUrl !== 'string') return '/creator/dashboard#find-markets';
   // Already our URL
   if (polyUrl.startsWith('/market/')) return polyUrl;
   // Extract slug from polymarket.com/event/SLUG or polymarket.com/event/SLUG/SUBMARKET
@@ -125,5 +125,5 @@ window.hfxMarketUrl = function(polyUrl) {
   // Try extracting from any URL-like slug
   var parts = polyUrl.split('/').filter(function(p) { return p && p !== 'https:' && p !== 'http:' && !p.includes('.'); });
   if (parts.length) return '/market/' + parts[parts.length - 1].toLowerCase();
-  return '#';
+  return '/creator/dashboard#find-markets';
 };
