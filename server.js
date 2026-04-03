@@ -17297,21 +17297,26 @@ app.get('/api/markets/search', async (req, res) => {
       if (q.includes(keyword)) matchedSports.add(sportKey);
     }
 
-    // Build targeted Polymarket title searches — query + top synonym expansions
+    // Build targeted Polymarket searches using _q (Strapi full-text search) for much better coverage
+    // _q searches across title, description, and slug — catches markets that title= misses
     const polyTitleSearches = [q];
     for (const term of expandedTerms) {
       if (term !== q && term.length >= 3 && !term.includes(' ')) polyTitleSearches.push(term);
     }
     // Cap at 4 targeted searches to avoid rate limiting
     const polyTargeted = [...new Set(polyTitleSearches)].slice(0, 4).map(term =>
-      fetchWithTimeout(`https://gamma-api.polymarket.com/events?closed=false&limit=20&title=${encodeURIComponent(term)}`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }, 10000)
+      fetchWithTimeout(`https://gamma-api.polymarket.com/events?closed=false&limit=20&_q=${encodeURIComponent(term)}`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }, 10000)
     );
+    // Also search individual markets (not just events) for niche/sub-markets
+    const polyMarketSearch = fetchWithTimeout(`https://gamma-api.polymarket.com/markets?closed=false&limit=30&_q=${encodeURIComponent(q)}`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }, 10000);
 
     const allResults = await Promise.allSettled([
       // Polymarket — broad top-200 by liquidity
       fetchWithTimeout(`https://gamma-api.polymarket.com/events?closed=false&limit=200&order=liquidity&ascending=false`, { headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' } }, 12000),
-      // Polymarket — targeted title searches (catches niche markets not in top 200)
+      // Polymarket — targeted full-text searches (catches niche markets not in top 200)
       ...polyTargeted,
+      // Polymarket — individual markets search (finds sub-markets within events)
+      polyMarketSearch,
       // Kalshi — paginated cache of ALL events (10-min TTL)
       getKalshiEvents(),
       // The Odds API — fetch odds for matched sports (or top sports if no match)
@@ -17323,30 +17328,34 @@ app.get('/api/markets/search', async (req, res) => {
       ) : [])
     ]);
 
-    // Split results: [broadPoly, ...targetedPoly(N), kalshi, ...odds]
+    // Split results: [broadPoly, ...targetedPoly(N), polyMarketSearch, kalshi, ...odds]
     const polyRes = allResults[0];
     const polyTargetedResults = allResults.slice(1, 1 + polyTargeted.length);
-    const kalshiEventsResult = allResults[1 + polyTargeted.length];
-    const oddsResults = allResults.slice(2 + polyTargeted.length);
+    const polyMarketSearchResult = allResults[1 + polyTargeted.length];
+    const kalshiEventsResult = allResults[2 + polyTargeted.length];
+    const oddsResults = allResults.slice(3 + polyTargeted.length);
 
     // --- Parse Polymarket (events endpoint returns events with nested markets) ---
     let polyMarkets = [];
     const seenPolyQuestions = new Set();
     // Merge broad + all targeted search results
-    const polyResponses = [polyRes, ...polyTargetedResults].filter(r => r.status === 'fulfilled' && r.value.ok);
-    for (const pRes of polyResponses) {
+    // Targeted searches use _q (server-side full-text) so we trust their relevance
+    const broadResponses = [polyRes].filter(r => r.status === 'fulfilled' && r.value.ok);
+    const targetedResponses = polyTargetedResults.filter(r => r.status === 'fulfilled' && r.value.ok);
+    const polyResponses = [...broadResponses.map(r => ({ res: r, needsFilter: true })), ...targetedResponses.map(r => ({ res: r, needsFilter: false }))];
+    for (const { res: pRes, needsFilter } of polyResponses) {
       const raw = await pRes.value.json();
       const events = Array.isArray(raw) ? raw : [];
       for (const evt of events) {
         const evtTitle = evt.title || '';
         const evtSlug = evt.slug || '';
         const evtDesc = evt.description || '';
-        const evtMatch = matchesQuery(evtTitle) || matchesQuery(evtDesc);
+        const evtMatch = !needsFilter || matchesQuery(evtTitle) || matchesQuery(evtDesc);
         const nestedMarkets = evt.markets || [];
         for (const m of nestedMarkets) {
           if (m.closed) continue;
           const mTitle = m.question || m.groupItemTitle || m.title || evtTitle;
-          if (!evtMatch && !matchesQuery(mTitle)) continue;
+          if (needsFilter && !evtMatch && !matchesQuery(mTitle)) continue;
           const dedupKey = mTitle.toLowerCase().trim();
           if (seenPolyQuestions.has(dedupKey)) continue;
           seenPolyQuestions.add(dedupKey);
@@ -17363,6 +17372,34 @@ app.get('/api/markets/search', async (req, res) => {
         }
       }
     }
+    // Also parse individual market search results (polyMarketSearch returns flat market array)
+    if (polyMarketSearchResult && polyMarketSearchResult.status === 'fulfilled' && polyMarketSearchResult.value.ok) {
+      try {
+        const mkts = await polyMarketSearchResult.value.json();
+        const mktArr = Array.isArray(mkts) ? mkts : [];
+        for (const m of mktArr) {
+          if (m.closed) continue;
+          const mTitle = m.question || m.groupItemTitle || m.title || '';
+          if (!mTitle) continue;
+          const dedupKey = mTitle.toLowerCase().trim();
+          if (seenPolyQuestions.has(dedupKey)) continue;
+          seenPolyQuestions.add(dedupKey);
+          let yesPct = null;
+          try { if (m.outcomePrices) yesPct = Math.round(JSON.parse(m.outcomePrices)[0] * 100); } catch {}
+          if (yesPct !== null && (yesPct >= 95 || yesPct <= 5)) continue;
+          // Try to get event slug for URL
+          const evtSlug = m.eventSlug || m.slug || '';
+          polyMarkets.push({
+            question: mTitle,
+            yes_pct: yesPct,
+            close_date: m.endDate || m.endDateIso || null,
+            url: evtSlug ? `https://polymarket.com/event/${evtSlug}` : 'https://polymarket.com',
+            volume: parseFloat(m.volume || m.volumeNum) || 0
+          });
+        }
+      } catch(e) { console.warn('[poly-market-search] parse error:', e.message); }
+    }
+
     polyMarkets.sort((a, b) => b.volume - a.volume);
     polyMarkets = polyMarkets.slice(0, 20);
 
