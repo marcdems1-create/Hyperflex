@@ -16629,7 +16629,7 @@ async function confirmTrade() {
         signatureType: orderStruct.signatureType,
         signature: orderSignature
       },
-      owner: orderStruct.maker,
+      owner: apiKey,
       orderType: 'FOK'
     });
 
@@ -16650,8 +16650,9 @@ async function confirmTrade() {
 
     const cryptoKey = await crypto.subtle.importKey('raw', secretBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
     const sigBuf = await crypto.subtle.sign('HMAC', cryptoKey, enc.encode(hmacMessage));
+    // base64url: replace +→- /→_ but KEEP = padding (SDK requires it)
     const hmacSig = btoa(String.fromCharCode.apply(null, new Uint8Array(sigBuf)))
-      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      .replace(/\+/g, '-').replace(/\//g, '_');
 
     // Try direct browser→CLOB first (preserves user's VPN/geo), fall back to server proxy
     let res;
