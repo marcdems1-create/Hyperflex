@@ -26953,23 +26953,9 @@ async function uploadMediaToX(imageBuffer) {
 }
 
 async function postTweet(text, mediaId) {
-  const url = 'https://api.x.com/2/tweets';
-  const payload = { text };
-  if (mediaId) payload.media = { media_ids: [mediaId] };
-  const body = JSON.stringify(payload);
-  const auth = _xOAuthSign('POST', url, {});
-  if (!auth) throw new Error('X API keys not configured');
-
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Authorization': auth, 'Content-Type': 'application/json' },
-    body
-  });
-
-  const data = await res.json();
-  if (!res.ok) throw new Error(`X API ${res.status}: ${JSON.stringify(data)}`);
-  console.log('[tweet] Posted successfully:', data.data?.id, mediaId ? '(with image)' : '');
-  return data;
+  // ALL tweeting DISABLED — account flagged for automated posting
+  console.log('[tweet] BLOCKED — tweeting disabled. Would have posted:', text?.substring(0, 60));
+  return { data: { id: 'disabled' } };
 }
 
 // Generate tweet text without posting — used by draft mode
@@ -27211,11 +27197,12 @@ app.post('/api/tweet-brief', async (req, res) => {
   });
 });
 
-// Daily tweet cron — 1:30pm UTC (8:30am ET) — right after brief generates + caches warm
-cron.schedule('30 13 * * *', safeCron('dailyTweet', generateAndPostDailyTweet));
+// ALL tweet crons DISABLED — account flagged for automated posting
+// cron.schedule('30 13 * * *', safeCron('dailyTweet', generateAndPostDailyTweet));
 
-// Expiry countdown tweet — 3pm UTC (10am ET) — check for markets expiring today that are still contested
-cron.schedule('0 15 * * *', safeCron('expiryTweet', async () => {
+// Expiry countdown tweet DISABLED
+// cron.schedule('0 15 * * *', safeCron('expiryTweet', async () => {
+/* DISABLED — account flagged
   try {
     const screenerRes = await fetch('https://gamma-api.polymarket.com/markets?closed=false&limit=100&order=volume&ascending=false', {
       headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' },
@@ -27242,26 +27229,13 @@ cron.schedule('0 15 * * *', safeCron('expiryTweet', async () => {
     }
   } catch(e) { console.warn('[expiry-tweet]', e.message); }
 }));
+DISABLED — account flagged */
 
-// Daily Rewards tweet — 6pm UTC (1pm ET) — rotating hook copy
-const _rewardsTweetPool = [
-  `Polymarket pays referral fees.\n\nMost platforms keep it.\n\nWe don't.\n\nEvery trade through HYPERFLEX earns you real USDC back.\n\nhyperflex.network/rewards`,
-  `Trade & Earn USDC.\n\nEvery Polymarket trade you make through HYPERFLEX earns you a share of our referral revenue.\n\nThe more you trade, the more you earn.\n\nhyperflex.network/rewards`,
-  `We're sharing 100% of our Polymarket referral revenue with traders.\n\nThis week's reward pool is live.\n\nBe early → hyperflex.network/rewards`,
-  `Most prediction market tools keep the referral fee.\n\nHYPERFLEX gives it back to you in USDC.\n\nTrade smarter, earn more → hyperflex.network/rewards`,
-  `Real money. Every trade.\n\nHYPERFLEX shares Polymarket referral revenue directly with the traders who use it.\n\nStart earning → hyperflex.network/rewards`,
-  `You're already trading on Polymarket.\n\nYou might as well get paid for it.\n\nHYPERFLEX shares real USDC with every trader.\n\nhyperflex.network/rewards`,
-  `Prediction markets are beating Wall Street analysts.\n\nNow they're paying you too.\n\nTrade through HYPERFLEX → earn USDC every week.\n\nhyperflex.network/rewards`,
-];
-let _rewardsTweetIdx = Math.floor(Math.random() * _rewardsTweetPool.length);
-cron.schedule('0 18 * * *', safeCron('rewardsTweet', async () => {
-  try {
-    const text = _rewardsTweetPool[_rewardsTweetIdx % _rewardsTweetPool.length];
-    _rewardsTweetIdx++;
-    await postTweet(text);
-    console.log('[rewards-tweet] Posted rewards tweet');
-  } catch(e) { console.warn('[rewards-tweet]', e.message); }
-}));
+// Daily Rewards tweet DISABLED
+/*
+const _rewardsTweetPool = [...];
+cron.schedule('0 18 * * *', safeCron('rewardsTweet', ...));
+DISABLED — account flagged */
 
 // ══════════════════════════════════════════════════════════════════════
 // REPLY-TO-ENGAGEMENT BOT — find prediction market tweets and reply with data
@@ -27473,11 +27447,10 @@ app.post('/api/reply-queue/trigger', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Run reply bot every 2 hours at :30
-cron.schedule('15 */4 * * *', safeCron('replyBot', searchAndDraftReplies));
-// Also run once 2 min after boot to populate queue
-setTimeout(() => searchAndDraftReplies().catch(e => console.warn('[reply-bot] initial run:', e.message)), 120000);
-console.log('[boot] Reply engagement bot initialized');
+// Reply engagement bot DISABLED — got account flagged
+// cron.schedule('15 */4 * * *', safeCron('replyBot', searchAndDraftReplies));
+// setTimeout(() => searchAndDraftReplies().catch(e => console.warn('[reply-bot] initial run:', e.message)), 120000);
+console.log('[boot] Reply engagement bot DISABLED');
 
 // ════════════════════════════════════════════════════════════
 // ACCURACY TRACKING — the core product
