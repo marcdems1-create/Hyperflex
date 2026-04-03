@@ -16352,11 +16352,12 @@ async function loadOrderbook(pos) {
     const tokenId = pos.token_id || pos.id || pos.conditionId || '';
     if (!tokenId) { el.innerHTML = '<span style="color:var(--dim);font-size:11px">No token ID</span>'; return; }
 
-    // Fetch orderbook, negRisk, and tick size in parallel
-    const [obRes, nrRes, tsRes] = await Promise.all([
+    // Fetch orderbook, negRisk, tick size, and fee rate in parallel
+    const [obRes, nrRes, tsRes, feeRes] = await Promise.all([
       fetch('/api/polymarket/orderbook/' + encodeURIComponent(tokenId)),
       fetch('/api/polymarket/neg-risk/' + encodeURIComponent(tokenId)),
-      fetch('/api/polymarket/tick-size/' + encodeURIComponent(tokenId))
+      fetch('/api/polymarket/tick-size/' + encodeURIComponent(tokenId)),
+      fetch('https://clob.polymarket.com/fee-rate?token_id=' + encodeURIComponent(tokenId)).then(r => r.ok ? r.json() : null).catch(() => null)
     ]);
     const data = await obRes.json();
     const nrData = await nrRes.json().catch(() => ({ neg_risk: true }));
@@ -16366,6 +16367,7 @@ async function loadOrderbook(pos) {
     _tradeModalData._orderbook = data;
     _tradeModalData._negRisk = nrData.neg_risk !== false;
     _tradeModalData._tickSize = tsData.minimum_tick_size || 0.01;
+    _tradeModalData._feeRateBps = (feeRes && feeRes.base_fee !== undefined) ? String(feeRes.base_fee) : '0';
 
     // Update limit price to live CLOB price (best ask for BUY, best bid for SELL)
     const mode = _tradeModalData.mode || 'buy';
@@ -16579,7 +16581,7 @@ async function confirmTrade() {
       takerAmount: takerAmt,
       expiration: '0',
       nonce: '0',
-      feeRateBps: '0',
+      feeRateBps: _tradeModalData._feeRateBps || '0',
       side: sideInt,
       signatureType: proxyAddress ? 2 : 0  // POLY_GNOSIS_SAFE if proxy, else EOA
     };

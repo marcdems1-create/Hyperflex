@@ -1765,13 +1765,16 @@ async function executeTrade() {
     var tickSize = 0.01; // default
     var isNegRisk = false;
     try {
-      var [tickRes, negRes] = await Promise.all([
+      var [tickRes, negRes, feeRes] = await Promise.all([
         fetch('https://clob.polymarket.com/tick-size?token_id=' + encodeURIComponent(tokenId)).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
-        fetch('https://clob.polymarket.com/neg-risk?token_id=' + encodeURIComponent(tokenId)).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; })
+        fetch('https://clob.polymarket.com/neg-risk?token_id=' + encodeURIComponent(tokenId)).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
+        fetch('https://clob.polymarket.com/fee-rate?token_id=' + encodeURIComponent(tokenId)).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; })
       ]);
       if (tickRes && tickRes.minimum_tick_size) tickSize = parseFloat(tickRes.minimum_tick_size);
       if (negRes && negRes.neg_risk !== undefined) isNegRisk = !!negRes.neg_risk;
-      console.log('[trade] CLOB metadata: tickSize=' + tickSize + ' negRisk=' + isNegRisk);
+      var feeRateBps = '0';
+      if (feeRes && feeRes.base_fee !== undefined) feeRateBps = String(feeRes.base_fee);
+      console.log('[trade] CLOB metadata: tickSize=' + tickSize + ' negRisk=' + isNegRisk + ' feeRateBps=' + feeRateBps);
     } catch (metaErr) {
       console.warn('[trade] Could not fetch CLOB metadata:', metaErr.message);
       // Fallback: use market data
@@ -1807,7 +1810,8 @@ async function executeTrade() {
     if (!proxyAddress) {
       var factoryAddress = '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b';
       var initCodeHash = '0x2bce2127ff07fb632d16c8347c4ebf501f4841168bed00d9e6ef715ddb6fcecf';
-      var proxySalt = ethers.zeroPadValue(eoaAddress, 32);
+      var abiEncoded = ethers.AbiCoder.defaultAbiCoder().encode(['address'], [eoaAddress.toLowerCase()]);
+      var proxySalt = ethers.keccak256(abiEncoded);
       proxyAddress = ethers.getCreate2Address(factoryAddress, proxySalt, initCodeHash).toLowerCase();
       localStorage.setItem('hf_poly_wallet', proxyAddress);
     }
@@ -1891,7 +1895,7 @@ async function executeTrade() {
       takerAmount: takerAmt,
       expiration: '0',
       nonce: '0',
-      feeRateBps: '0',
+      feeRateBps: feeRateBps,
       side: sideInt,
       signatureType: 2  // POLY_GNOSIS_SAFE — proxy derived from Safe factory 0xaacFeEa0
     };
