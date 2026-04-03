@@ -401,6 +401,8 @@ function escH(s) { var d = document.createElement('div'); d.textContent = s; ret
 function fmtCap(n) { if (n >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M'; if (n >= 1e3) return '$' + (n/1e3).toFixed(1) + 'K'; return '$' + n.toFixed(0); }
 function fmtNum(n) { return Math.round(n).toLocaleString(); }
 function truncAddr(a) { if (!a || a.length < 12) return a || '—'; return a.substring(0, 8) + '...' + a.slice(-4); }
+// Format price as cents — 1 decimal for <10¢ (matches Polymarket: "0.4¢", "7.0¢", "36¢")
+function fmtCents(p) { var c = p * 100; if (c < 10) return c.toFixed(1); return Math.round(c).toString(); }
 
 // Get slug from URL
 var slug = window.location.pathname.split('/market/')[1] || '';
@@ -602,10 +604,12 @@ function renderOutcomes(m) {
     var activeClass = (row.idx === _activeOutcomeIndex) ? ' active-outcome' : '';
     var yesCents = Math.round(row.yesP * 100);
     var noCents = Math.round(row.noP * 100);
+    var yesFmt = fmtCents(row.yesP);
+    var noFmt = fmtCents(row.noP);
     html += '<tr class="outcome-row' + activeClass + '" data-idx="' + row.idx + '">' +
       '<td onclick="switchOutcome(' + row.idx + ')" style="cursor:pointer"><div class="outcome-name">' + escH(row.name) + '</div></td>' +
-      '<td><button class="outcome-btn outcome-btn-yes" onclick="buyOutcome(' + row.idx + ',\'yes\',' + yesCents + ')" title="Buy Yes at ' + yesCents + '\u00a2">Buy Yes ' + yesCents + '\u00a2</button></td>' +
-      '<td><button class="outcome-btn outcome-btn-no" onclick="buyOutcome(' + row.idx + ',\'no\',' + noCents + ')" title="Buy No at ' + noCents + '\u00a2">Buy No ' + noCents + '\u00a2</button></td>' +
+      '<td><button class="outcome-btn outcome-btn-yes" onclick="buyOutcome(' + row.idx + ',\'yes\',' + yesCents + ')" title="Buy Yes at ' + yesFmt + '\u00a2">Buy Yes ' + yesFmt + '\u00a2</button></td>' +
+      '<td><button class="outcome-btn outcome-btn-no" onclick="buyOutcome(' + row.idx + ',\'no\',' + noCents + ')" title="Buy No at ' + noFmt + '\u00a2">Buy No ' + noFmt + '\u00a2</button></td>' +
       '<td style="color:var(--soft);font-size:11px">' + vol + '</td>' +
       '<td style="color:var(--soft);font-size:11px">' + liq + '</td>' +
       '</tr>';
@@ -1904,8 +1908,124 @@ async function validateClobKeys() {
   }
 }
 
+// ── Live CLOB price polling — keeps outcomes + trade widget in sync with real market ──
+var _livePriceInterval = null;
+
+async function fetchLivePrices() {
+  // Collect all YES token IDs
+  var tokens = [];
+  if (_eventMarkets && _eventMarkets.length > 1) {
+    for (var i = 0; i < _eventMarkets.length; i++) {
+      var tids = _eventMarkets[i].clobTokenIds || '[]';
+      if (typeof tids === 'string') { try { tids = JSON.parse(tids); } catch(e) { tids = []; } }
+      tokens.push({ src: 'event', idx: i, tokenId: (Array.isArray(tids) && tids[0]) || null });
+    }
+  } else if (_market) {
+    var tids = _market.clobTokenIds || '[]';
+    if (typeof tids === 'string') { try { tids = JSON.parse(tids); } catch(e) { tids = []; } }
+    tokens.push({ src: 'market', idx: 0, tokenId: (Array.isArray(tids) && tids[0]) || null });
+  }
+
+  if (!tokens.length) return;
+
+  // Fetch midpoints in parallel from CLOB
+  var results = await Promise.all(tokens.map(function(t) {
+    if (!t.tokenId) return Promise.resolve({ src: t.src, idx: t.idx, mid: null });
+    return fetch('https://clob.polymarket.com/midpoint?token_id=' + encodeURIComponent(t.tokenId))
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(d) { return { src: t.src, idx: t.idx, mid: d && d.mid !== undefined ? parseFloat(d.mid) : null }; })
+      .catch(function() { return { src: t.src, idx: t.idx, mid: null }; });
+  }));
+
+  var changed = false;
+  for (var r = 0; r < results.length; r++) {
+    var res = results[r];
+    if (res.mid === null || isNaN(res.mid) || res.mid <= 0 || res.mid >= 1) continue;
+
+    if (res.src === 'event' && _eventMarkets && _eventMarkets[res.idx]) {
+      _eventMarkets[res.idx].outcomePrices = JSON.stringify([res.mid, 1 - res.mid]);
+      changed = true;
+    } else if (res.src === 'market') {
+      _market.outcomePrices = JSON.stringify([res.mid, 1 - res.mid]);
+      changed = true;
+    }
+  }
+
+  if (!changed) return;
+
+  // Update outcomes table prices in-place (no full re-render to preserve sort + active state)
+  updateOutcomePricesDOM();
+  // Update trade widget sidebar prices for active selection
+  updateActiveTradePrice();
+}
+
+function updateOutcomePricesDOM() {
+  var rows = document.querySelectorAll('.outcome-row');
+  if (!rows.length) return;
+
+  rows.forEach(function(row) {
+    var idx = parseInt(row.getAttribute('data-idx'));
+    var yp, np;
+
+    if (_sortedEventMarkets && _sortedEventMarkets[idx]) {
+      var em = _sortedEventMarkets[idx];
+      var emPrices = em.outcomePrices || '[]';
+      if (typeof emPrices === 'string') { try { emPrices = JSON.parse(emPrices); } catch(e) { emPrices = []; } }
+      yp = emPrices[0] ? parseFloat(emPrices[0]) : 0;
+      np = emPrices[1] ? parseFloat(emPrices[1]) : 1 - yp;
+    } else if (_market) {
+      var mp = _market.outcomePrices || '[]';
+      if (typeof mp === 'string') { try { mp = JSON.parse(mp); } catch(e) { mp = []; } }
+      yp = mp[0] ? parseFloat(mp[0]) : 0.5;
+      np = mp[1] ? parseFloat(mp[1]) : 1 - yp;
+    } else return;
+
+    var yesCents = Math.round(yp * 100);
+    var noCents = Math.round(np * 100);
+
+    var yesBtn = row.querySelector('.outcome-btn-yes');
+    var noBtn = row.querySelector('.outcome-btn-no');
+    if (yesBtn) {
+      yesBtn.textContent = 'Buy Yes ' + fmtCents(yp) + '\u00a2';
+      yesBtn.onclick = function() { buyOutcome(idx, 'yes', yesCents); };
+    }
+    if (noBtn) {
+      noBtn.textContent = 'Buy No ' + fmtCents(np) + '\u00a2';
+      noBtn.onclick = function() { buyOutcome(idx, 'no', noCents); };
+    }
+  });
+}
+
+function updateActiveTradePrice() {
+  var yp, np;
+  if (_sortedEventMarkets && _sortedEventMarkets[_activeOutcomeIndex]) {
+    var em = _sortedEventMarkets[_activeOutcomeIndex];
+    var emPrices = em.outcomePrices || '[]';
+    if (typeof emPrices === 'string') { try { emPrices = JSON.parse(emPrices); } catch(e) { emPrices = []; } }
+    yp = emPrices[0] ? parseFloat(emPrices[0]) : 0.5;
+    np = emPrices[1] ? parseFloat(emPrices[1]) : 0.5;
+  } else if (_market) {
+    var mp = _market.outcomePrices || '[]';
+    if (typeof mp === 'string') { try { mp = JSON.parse(mp); } catch(e) { mp = []; } }
+    yp = mp[0] ? parseFloat(mp[0]) : 0.5;
+    np = mp[1] ? parseFloat(mp[1]) : 0.5;
+  } else return;
+
+  document.getElementById('yesPrice').textContent = Math.round(yp * 100) + '\u00a2';
+  document.getElementById('noPrice').textContent = Math.round(np * 100) + '\u00a2';
+  // Update Mkt button
+  updateCurrentPriceBtn();
+}
+
 // Init
-loadMarket().then(function() { updateCurrentPriceBtn(); fetchTradeBalance(); });
+loadMarket().then(function() {
+  updateCurrentPriceBtn();
+  fetchTradeBalance();
+  // First live price fetch 1s after load (backend already fetches CLOB, but this catches any delta)
+  setTimeout(fetchLivePrices, 1000);
+  // Poll every 10 seconds
+  _livePriceInterval = setInterval(fetchLivePrices, 10000);
+});
 updateTradingUI();
 // Validate keys 2s after load (non-blocking)
 setTimeout(validateClobKeys, 2000);

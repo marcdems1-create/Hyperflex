@@ -18540,7 +18540,7 @@ app.get('/market/:slug', (req, res) => {
 });
 
 const _marketDetailCache = new Map();
-const MARKET_DETAIL_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const MARKET_DETAIL_CACHE_TTL = 60 * 1000; // 60 seconds — live CLOB prices need freshness
 
 app.get('/api/market/:slug', async (req, res) => {
   const { slug } = req.params;
@@ -18632,10 +18632,52 @@ app.get('/api/market/:slug', async (req, res) => {
       }
     }
 
+    // 4. For multi-outcome events, fetch live CLOB midpoints for ALL outcomes
+    //    Gamma-api outcomePrices are delayed; CLOB midpoints are real-time
+    if (eventMarkets && eventMarkets.length > 1) {
+      const midpointPromises = eventMarkets.map(em => {
+        try {
+          const tids = typeof em.clobTokenIds === 'string' ? JSON.parse(em.clobTokenIds) : em.clobTokenIds;
+          const yesTokenId = Array.isArray(tids) && tids[0] ? tids[0] : null;
+          if (!yesTokenId) return Promise.resolve(null);
+          return fetch(`https://clob.polymarket.com/midpoint?token_id=${encodeURIComponent(yesTokenId)}`, {
+            headers: { Accept: 'application/json' }
+          }).then(r => r.ok ? r.json() : null).catch(() => null);
+        } catch (e) { return Promise.resolve(null); }
+      });
+      const midpoints = await Promise.all(midpointPromises);
+      for (let i = 0; i < eventMarkets.length; i++) {
+        if (midpoints[i] && midpoints[i].mid !== undefined) {
+          const mid = parseFloat(midpoints[i].mid);
+          if (!isNaN(mid) && mid > 0 && mid < 1) {
+            eventMarkets[i].outcomePrices = JSON.stringify([mid, 1 - mid]);
+            eventMarkets[i]._livePrice = true;
+          }
+        }
+      }
+    }
+
+    // Also fetch live midpoint for primary market
+    if (tokenId) {
+      try {
+        const midRes = await fetch(`https://clob.polymarket.com/midpoint?token_id=${encodeURIComponent(tokenId)}`, {
+          headers: { Accept: 'application/json' }
+        });
+        if (midRes.ok) {
+          const midData = await midRes.json();
+          const mid = parseFloat(midData.mid);
+          if (!isNaN(mid) && mid > 0 && mid < 1) {
+            market.outcomePrices = JSON.stringify([mid, 1 - mid]);
+            market._livePrice = true;
+          }
+        }
+      } catch (e) { /* continue with gamma prices */ }
+    }
+
     const result = { market, priceHistory, orderbook };
     if (eventMarkets) result.eventMarkets = eventMarkets;
 
-    // Cache the result
+    // Cache the result (shorter TTL for live prices — 60s instead of 5min)
     _marketDetailCache.set(cacheKey, { data: result, ts: Date.now() });
 
     // Evict old cache entries periodically
