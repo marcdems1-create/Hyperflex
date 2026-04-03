@@ -13960,7 +13960,7 @@ async function loadCrystalBallPick() {
         <div style="width:1px;height:24px;background:#2a2825"></div>
         <div><span style="font-family:var(--mono);font-size:9px;color:var(--dim);display:block">ROI</span><span style="font-family:var(--mono);font-size:15px;font-weight:700;color:#22c55e">+${trade.roi_pct}%</span></div>
       </div>` : ''}
-      ${url ? `<div>${qtTradeBtn(url, 'Trade \u2192', '#c9920d')}</div>` : ''}
+      ${url ? `<a href="${url}" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none;background:#c9920d;color:#141412;border:none;border-radius:6px;padding:7px 14px;font-family:var(--mono);font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap">Trade \u2192</a>` : ''}
     `;
   } catch (e) {
     console.warn('[qt crystal-ball]', e.message, e);

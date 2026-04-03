@@ -17494,6 +17494,7 @@ app.get('/api/markets/search', async (req, res) => {
             yes_pct: yesPct,
             close_date: m.endDate || m.endDateIso || evt.endDate || null,
             url: evtSlug ? `https://polymarket.com/event/${evtSlug}` : 'https://polymarket.com',
+            slug: evtSlug || '',
             volume: parseFloat(m.volume || m.volumeNum) || 0
           });
         }
@@ -17523,6 +17524,7 @@ app.get('/api/markets/search', async (req, res) => {
             yes_pct: yesPct,
             close_date: m.endDate || m.endDateIso || null,
             url: evtSlug ? `https://polymarket.com/event/${evtSlug}` : 'https://polymarket.com',
+            slug: evtSlug || '',
             volume: parseFloat(m.volume || m.volumeNum) || 0
           });
         }
@@ -18981,6 +18983,18 @@ app.get('/api/whale-index', async (req, res) => {
       const consensusCapital = Math.round(maxCap);
       const oppositionCapital = Math.round(totalCapital - maxCap);
 
+      // Enrich with slug from screener cache for proper market links
+      let pickSlug = '';
+      let pickUrl = data.url;
+      if (_screenerCache && _screenerCache.data) {
+        const mktLower = market.toLowerCase().trim();
+        const scMatch = _screenerCache.data.find(s => (s.question || '').toLowerCase().trim() === mktLower);
+        if (scMatch) {
+          if (scMatch.slug) pickSlug = scMatch.slug;
+          if (scMatch.url && scMatch.url !== 'https://polymarket.com') pickUrl = scMatch.url;
+        }
+      }
+
       picks.push({
         market,
         whale_count: whaleCount,
@@ -18989,7 +19003,8 @@ app.get('/api/whale-index', async (req, res) => {
         consensus_pct: consensusPct,
         current_price: avgPrice,
         yes_price: avgPrice,
-        url: data.url,
+        url: pickUrl,
+        slug: pickSlug,
         strength,
         // For consensus chart — consensus side mapped to YES, opposition to NO
         yes_capital: consensusCapital,
@@ -23372,7 +23387,7 @@ async function generateCrystalBallPredictions() {
           'Historical whale consensus accuracy: ~73%'
         ],
         action: pick.consensus_side === 'YES' ? `BUY YES at current ${priceDisplay}%` : `SELL NO at current ${100 - priceDisplay}%`,
-        market: { question: pick.market, url: pick.url || 'https://polymarket.com' },
+        market: { question: pick.market, url: pick.url || 'https://polymarket.com', slug: pick.slug || '' },
         yes_pct: priceDisplay,
         detected_at: now.toISOString(),
         expires_at: new Date(now.getTime() + 6 * 60 * 60 * 1000).toISOString(),
@@ -23416,7 +23431,7 @@ async function generateCrystalBallPredictions() {
           `Similar moves historically continued ~65% of the time`
         ],
         action: direction === 'up' ? `BUY YES at current ${m.current_price}%` : `SELL NO at current ${m.current_price}%`,
-        market: { question: m.question, url: m.url || 'https://polymarket.com' },
+        market: { question: m.question, url: m.url || 'https://polymarket.com', slug: m.slug || '' },
         detected_at: now.toISOString(),
         expires_at: new Date(now.getTime() + 4 * 60 * 60 * 1000).toISOString(),
         _whale_count: 0,
@@ -23454,7 +23469,7 @@ async function generateCrystalBallPredictions() {
           'When edge score >20pts, whale side wins ~73% historically'
         ],
         action: pick.consensus_side === 'YES' ? `BUY YES at current ${mktPrice}%` : `BUY NO at current ${100 - mktPrice}%`,
-        market: { question: pick.market, url: pick.url || 'https://polymarket.com' },
+        market: { question: pick.market, url: pick.url || 'https://polymarket.com', slug: pick.slug || '' },
         yes_pct: mktPrice,
         detected_at: now.toISOString(),
         expires_at: new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString(),
@@ -23503,6 +23518,7 @@ async function generateCrystalBallPredictions() {
         const side = hlPos.side || 'LONG';
         const marketQ = matchedPick ? matchedPick.market : `${coin} price movement`;
         const marketUrl = matchedPick ? (matchedPick.url || 'https://polymarket.com') : 'https://polymarket.com';
+        const marketSlug = matchedPick ? (matchedPick.slug || '') : '';
 
         predictions.push({
           type: 'LEVERAGE_SIGNAL',
@@ -23514,7 +23530,7 @@ async function generateCrystalBallPredictions() {
             'High leverage = high conviction'
           ],
           action: side === 'LONG' ? 'BUY YES on correlated markets' : 'BUY NO on correlated markets',
-          market: { question: marketQ, url: marketUrl },
+          market: { question: marketQ, url: marketUrl, slug: marketSlug },
           detected_at: now.toISOString(),
           expires_at: new Date(now.getTime() + 4 * 60 * 60 * 1000).toISOString(),
           _whale_count: 0,
@@ -23569,7 +23585,7 @@ async function generateCrystalBallPredictions() {
           whaleCount > 0 ? `${whaleCount} whales positioned ${whaleSide}` : 'No strong whale positioning detected'
         ],
         action: whaleSide ? `BUY ${whaleSide} at current ${whaleSide === 'YES' ? price : (100 - price)}%` : `WATCH — price at ${price}%`,
-        market: { question: mkt.question, url: mkt.url || 'https://polymarket.com' },
+        market: { question: mkt.question, url: mkt.url || 'https://polymarket.com', slug: mkt.slug || '' },
         detected_at: now.toISOString(),
         expires_at: endDate.toISOString(),
         _whale_count: whaleCount,
@@ -23605,7 +23621,7 @@ async function generateCrystalBallPredictions() {
             'News-price disagreements often correct within 24h'
           ],
           action: ni.sentiment === 'bullish' ? `BUY YES at current ${mkt.yes_pct}%` : `SELL YES at current ${mkt.yes_pct}%`,
-          market: { question: mkt.question, url: mkt.url || 'https://polymarket.com' },
+          market: { question: mkt.question, url: mkt.url || 'https://polymarket.com', slug: mkt.slug || '' },
           detected_at: now.toISOString(),
           expires_at: new Date(now.getTime() + 12 * 60 * 60 * 1000).toISOString(),
           _whale_count: 0,
@@ -23715,7 +23731,7 @@ async function generateCrystalBallPredictions() {
             'Volume indicates significant market interest'
           ],
           action: `BUY ${side} at current ${side === 'YES' ? pricePct : (100 - pricePct)}%`,
-          market: { question: m.question, url: m.url || 'https://polymarket.com' },
+          market: { question: m.question, url: m.url || 'https://polymarket.com', slug: m.slug || '' },
           market_name: m.question,
           yes_pct: pricePct,
           trade: entry > 0 && entry < 100 ? { side, entry_cost: entry, potential_profit: profit, roi_pct: Math.round((profit / entry) * 100) } : null,
