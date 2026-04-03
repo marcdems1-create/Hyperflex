@@ -16120,9 +16120,25 @@ async function derivePolymarketApiKey() {
       // Save proxy address if returned directly
       var proxyAddr = data.proxyAddress || data.proxy_address || data.polyAddress || '';
 
-      // If no proxy in response, try GET /auth/api-keys with the new creds
-      // Proxy address should come from server derive response (it handles lookup internally)
-      if (!proxyAddr && data.proxy_address) proxyAddr = data.proxy_address.toLowerCase();
+      // If no proxy in response, look it up from /auth/api-keys
+      if (!proxyAddr) {
+        try {
+          if (btn) btn.textContent = 'Getting proxy address...';
+          var keysRes = await fetch('https://clob.polymarket.com/auth/api-keys', {
+            method: 'GET',
+            headers: { 'POLY_ADDRESS': address, 'POLY_SIGNATURE': signature, 'POLY_TIMESTAMP': timestamp, 'POLY_NONCE': nonce }
+          });
+          var keysData = await keysRes.json();
+          console.log('[api-keys] response:', JSON.stringify(keysData));
+          if (Array.isArray(keysData)) {
+            for (var k of keysData) {
+              if (k.proxyAddress || k.proxy_address) { proxyAddr = (k.proxyAddress || k.proxy_address).toLowerCase(); break; }
+            }
+          } else if (keysData.proxyAddress || keysData.proxy_address) {
+            proxyAddr = (keysData.proxyAddress || keysData.proxy_address).toLowerCase();
+          }
+        } catch(e) { console.warn('[api-keys] lookup failed:', e.message); }
+      }
 
       if (proxyAddr) {
         _polyWalletAddress = proxyAddr.toLowerCase();
