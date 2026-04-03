@@ -16577,14 +16577,35 @@ async function confirmTrade() {
     if (!res.ok) {
       console.error('[qt-trade] CLOB error:', res.status, data);
       if (res.status === 401 || (res.status === 400 && JSON.stringify(data).toLowerCase().includes('api'))) {
+        // API key expired — auto-derive fresh keys and retry once
         localStorage.removeItem('poly_api_key');
         localStorage.removeItem('poly_api_secret');
         localStorage.removeItem('poly_api_passphrase');
         localStorage.removeItem('poly_eoa_address');
+        if (!confirmTrade._retried && window._connectedWallet && window.ethereum) {
+          confirmTrade._retried = true;
+          errEl.textContent = 'API key expired — re-deriving keys, please sign the wallet prompt...';
+          errEl.style.color = 'var(--gold)';
+          errEl.style.display = 'block';
+          btn.textContent = 'Re-deriving keys...';
+          try {
+            await derivePolymarketApiKey();
+            const newKey = localStorage.getItem('poly_api_key');
+            if (newKey) {
+              errEl.style.display = 'none';
+              errEl.style.color = '';
+              btn.disabled = false;
+              btn.textContent = _tradeModalData?.mode === 'sell' ? 'Sell' : ('Buy ' + (_tradeModalData?.selectedSide || 'Yes'));
+              confirmTrade._retried = false;
+              showToast('Keys refreshed! Retrying trade...', 'success');
+              return confirmTrade(); // retry with fresh keys
+            }
+          } catch(deriveErr) { console.warn('[trade] re-derive failed:', deriveErr.message); }
+          confirmTrade._retried = false;
+        }
         updateWalletUI();
-        const mktLink = document.getElementById('tradeMarketLink');
-        const mktHref = mktLink ? mktLink.href : '';
-        errEl.innerHTML = 'API key expired. <a href="' + (mktHref || '#') + '" target="_blank" rel="noopener" style="color:#c9920d;text-decoration:underline;font-weight:700">Re-connect on Polymarket</a> then try again.';
+        errEl.style.color = '';
+        errEl.innerHTML = 'API key expired. Click <b>Confirm Trade</b> again — you\'ll be prompted to sign a new key.';
       } else {
         errEl.textContent = data.error || data.message || 'Order rejected (' + res.status + ')';
       }
