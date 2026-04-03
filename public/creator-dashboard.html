@@ -14502,19 +14502,16 @@ function updatePortfolioSummary() {
   const availEl = document.getElementById('psAvailBalance');
   if (availEl) availEl.textContent = fmtD(stats.cashBalance);
 
-  // Total P&L
+  // Total P&L — show placeholder, will be overridden by setPnlPeriod with real data
   const pnlEl = document.getElementById('psSummaryPnl');
   const pnlPctEl = document.getElementById('psSummaryPnlPct');
   if (pnlEl) {
-    const sign = stats.totalPnl >= 0 ? '+' : '';
-    pnlEl.textContent = sign + fmtD(Math.abs(stats.totalPnl));
-    pnlEl.style.color = stats.totalPnl >= 0 ? '#22c55e' : '#ef4444';
+    // Show loading state — setPnlPeriod will replace with accurate activity-based P&L
+    pnlEl.textContent = '...';
+    pnlEl.style.color = '#5a5752';
   }
-  if (pnlPctEl && stats.totalCost > 0) {
-    const pnlPct = (stats.totalPnl / stats.totalCost) * 100;
-    const sign = pnlPct >= 0 ? '+' : '';
-    pnlPctEl.textContent = sign + pnlPct.toFixed(1) + '%';
-    pnlPctEl.style.color = pnlPct >= 0 ? '#22c55e' : '#ef4444';
+  if (pnlPctEl) {
+    pnlPctEl.textContent = '';
   }
 
   // Win Rate Ring — dim when no resolved trades
@@ -14557,85 +14554,65 @@ function updatePortfolioSummary() {
     }
   }
 
-  // P&L Over Time Chart
+  // P&L Over Time Chart — use activity data if available, else show positions-based fallback
   renderPnlChart(positions);
 
-  // After initial render, refresh P&L from Polymarket API for current period
-  if (_polyWalletAddress) {
-    setPnlPeriod(_pnlPeriod);
-  }
+  // Refresh P&L + chart from real activity data for current period
+  // Always call setPnlPeriod — it handles fallbacks for non-Polymarket positions
+  setPnlPeriod(_pnlPeriod);
   } catch(e) { console.error('[updatePortfolioSummary]', e); }
 }
 
-function renderPnlChart(positions) {
+async function renderPnlChart(positions) {
   const chartEl = document.getElementById('portfolioPnlChart');
   const barsEl = document.getElementById('pnlChartBars');
   if (!chartEl || !barsEl) return;
 
-  // Build daily P&L from ALL positions (not just resolved)
-  const withPnl = positions.filter(p => p.pnl != null && p.pnl !== 0);
-  if (withPnl.length < 1) { chartEl.style.display = 'none'; return; }
+  const hasPositions = positions.filter(p => p.pnl != null && p.pnl !== 0).length > 0;
+  if (!hasPositions && !_polyWalletAddress) { chartEl.style.display = 'none'; return; }
   chartEl.style.display = 'flex';
 
-  // Build 30-day date buckets
+  // Try to use REAL activity data from Polymarket
+  if (_polyWalletAddress) {
+    try {
+      const activity = await _ensurePolyActivity(_polyWalletAddress);
+      if (activity && activity.length > 0) {
+        const { dailyPnl } = _buildDailyPnlFromActivity(activity, 30);
+        _renderPnlSvg(barsEl, dailyPnl, 120);
+        return;
+      }
+    } catch(e) { console.warn('[renderPnlChart] activity fallback:', e.message); }
+  }
+
+  // Fallback: place resolved P&L on resolution dates (no fake interpolation for open positions)
   const now = new Date();
-  const nowStr = now.toISOString().slice(0, 10);
   const dailyPnl = {};
   for (let i = 29; i >= 0; i--) {
     const d = new Date(now); d.setDate(d.getDate() - i);
     dailyPnl[d.toISOString().slice(0, 10)] = 0;
   }
-  const dateKeys = Object.keys(dailyPnl).sort();
-  const startStr = dateKeys[0];
-
-  // Simulate daily P&L movement:
-  // - Resolved positions: attribute P&L to their end/resolution date
-  // - Open positions: spread unrealized P&L linearly from creation (or period start) to today
-  //   This creates realistic up/down movement instead of a flat line
-  withPnl.forEach(p => {
+  positions.filter(p => p.pnl != null && p.pnl !== 0).forEach(p => {
     const isResolved = !!(p.end_date || p.resolved_at);
     if (isResolved) {
-      // Resolved: place P&L on the resolution date
       const date = (p.end_date || p.resolved_at || '').slice(0, 10);
       if (date && dailyPnl[date] !== undefined) dailyPnl[date] += p.pnl;
-    } else {
-      // Open position: distribute P&L gradually from creation to today
-      const created = (p.created_at || '').slice(0, 10);
-      const posStart = (!created || created < startStr) ? startStr : created;
-      // Find start and end indices in our date range
-      const startIdx = dateKeys.indexOf(posStart);
-      const endIdx = dateKeys.length - 1;
-      if (startIdx < 0 || startIdx >= endIdx) {
-        // Position created today or outside range — put all on today
-        dailyPnl[nowStr] = (dailyPnl[nowStr] || 0) + p.pnl;
-      } else {
-        // Spread with slight daily variance for realistic movement
-        const span = endIdx - startIdx;
-        const dailySlice = p.pnl / span;
-        // Add small random-looking variance using position hash for consistency
-        const hash = (p.condition_id || p.market_slug || p.question || '').length;
-        for (let i = startIdx; i < endIdx; i++) {
-          // Sinusoidal micro-variance for visual interest (deterministic from hash + index)
-          const variance = 1.0 + 0.3 * Math.sin((hash + i) * 2.1) + 0.15 * Math.cos((hash + i) * 3.7);
-          dailyPnl[dateKeys[i]] += dailySlice * variance;
-        }
-        // Last day gets remainder to ensure total matches
-        const allocated = Object.keys(dailyPnl).reduce((s, k) => s, 0); // recalc not needed, variance evens out
-      }
     }
+    // Open positions: do NOT spread/interpolate — wait for real activity data
   });
+  _renderPnlSvg(barsEl, dailyPnl, 120);
+}
 
-  // Cumulative P&L
-  const dates = dateKeys;
+// Shared SVG chart renderer — takes dailyPnl map { 'YYYY-MM-DD': number } and renders cumulative line
+function _renderPnlSvg(barsEl, dailyPnl, H) {
+  const dateKeys = Object.keys(dailyPnl).sort();
+  if (dateKeys.length < 2) return;
+
   let cumulative = 0;
-  const points = dates.map(d => { cumulative += dailyPnl[d]; return { date: d, val: cumulative }; });
+  const points = dateKeys.map(d => { cumulative += dailyPnl[d]; return { date: d, val: cumulative }; });
 
-  // Render as SVG line chart (Polymarket style)
   const W = barsEl.offsetWidth || 600;
-  const H = 120;
-  const maxAbs = Math.max(1, ...points.map(p => Math.abs(p.val)));
   const padding = 8;
-
+  const maxAbs = Math.max(0.01, ...points.map(p => Math.abs(p.val)));
   const xStep = (W - padding * 2) / Math.max(1, points.length - 1);
   const pathPoints = points.map((p, i) => {
     const x = padding + i * xStep;
@@ -14643,20 +14620,14 @@ function renderPnlChart(positions) {
     return { x, y, val: p.val, date: p.date };
   });
 
-  // Build SVG path
   let pathD = '';
   pathPoints.forEach((pt, i) => { pathD += (i === 0 ? 'M' : 'L') + pt.x.toFixed(1) + ',' + pt.y.toFixed(1) + ' '; });
 
-  // Gradient fill path
-  const lastPt = pathPoints[pathPoints.length - 1] || { x: W, y: H/2 };
+  const lastPt = pathPoints[pathPoints.length - 1] || { x: W, y: H/2, val: 0 };
   const firstPt = pathPoints[0] || { x: 0, y: H/2 };
   const fillD = pathD + `L${lastPt.x.toFixed(1)},${H} L${firstPt.x.toFixed(1)},${H} Z`;
   const lineColor = lastPt.val >= 0 ? '#22c55e' : '#ef4444';
-  const fillColor = lastPt.val >= 0 ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)';
-
-  // Value labels
-  const lastVal = lastPt.val;
-  const sign = lastVal >= 0 ? '+' : '';
+  const sign = lastPt.val >= 0 ? '+' : '';
 
   barsEl.innerHTML = `
     <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="display:block">
@@ -14670,9 +14641,9 @@ function renderPnlChart(positions) {
       <path d="${fillD}" fill="url(#pnlGrad)"/>
       <path d="${pathD}" fill="none" stroke="${lineColor}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
       <circle cx="${lastPt.x.toFixed(1)}" cy="${lastPt.y.toFixed(1)}" r="4" fill="${lineColor}" stroke="#141412" stroke-width="2"/>
-      <text x="${W-padding}" y="14" text-anchor="end" fill="${lineColor}" font-family="var(--mono)" font-size="12" font-weight="700">${sign}$${Math.abs(lastVal).toFixed(2)}</text>
-      <text x="${padding}" y="${H-4}" fill="#5a5752" font-family="var(--mono)" font-size="9">${dates[0] ? dates[0].slice(5) : ''}</text>
-      <text x="${W-padding}" y="${H-4}" text-anchor="end" fill="#5a5752" font-family="var(--mono)" font-size="9">${dates[dates.length-1] ? dates[dates.length-1].slice(5) : ''}</text>
+      <text x="${W-padding}" y="14" text-anchor="end" fill="${lineColor}" font-family="var(--mono)" font-size="12" font-weight="700">${sign}$${Math.abs(lastPt.val).toFixed(2)}</text>
+      <text x="${padding}" y="${H-4}" fill="#5a5752" font-family="var(--mono)" font-size="9">${dateKeys[0] ? dateKeys[0].slice(5) : ''}</text>
+      <text x="${W-padding}" y="${H-4}" text-anchor="end" fill="#5a5752" font-family="var(--mono)" font-size="9">${dateKeys[dateKeys.length-1] ? dateKeys[dateKeys.length-1].slice(5) : ''}</text>
     </svg>`;
 }
 
@@ -14681,38 +14652,106 @@ let _pnlPeriod = '1m';
 let _polyPnlCache = {}; // cache Polymarket P&L by period
 
 // Fetch actual P&L from Polymarket data-api for accurate period P&L
+// Fetch and cache activity data from Polymarket for P&L computation + charts
+let _polyActivityCache = null;
+async function _ensurePolyActivity(address) {
+  if (_polyActivityCache) return _polyActivityCache;
+  try {
+    let allItems = [];
+    let offset = 0;
+    while (offset < 600) {
+      const r = await fetch(`https://data-api.polymarket.com/activity?user=${address.toLowerCase()}&limit=200&offset=${offset}`, { signal: AbortSignal.timeout(10000) });
+      if (!r.ok) break;
+      const items = await r.json();
+      if (!Array.isArray(items) || items.length === 0) break;
+      allItems = allItems.concat(items);
+      if (items.length < 200) break;
+      offset += 200;
+    }
+    _polyActivityCache = allItems;
+    return allItems;
+  } catch(e) { console.warn('[polyActivity]', e.message); return []; }
+}
+
+// Build daily realized P&L from activity (grouped by day)
+// Returns { dailyPnl: { 'YYYY-MM-DD': number }, totalRealized: number }
+function _buildDailyPnlFromActivity(activity, days) {
+  const now = new Date();
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - days);
+  const cutoffTs = cutoff.getTime();
+
+  // Group buys/sells by conditionId to compute per-trade realized P&L
+  const byMarket = {};
+  const dailyPnl = {};
+
+  // Init date buckets
+  for (let i = Math.min(days, 90) - 1; i >= 0; i--) {
+    const d = new Date(now); d.setDate(d.getDate() - i);
+    dailyPnl[d.toISOString().slice(0, 10)] = 0;
+  }
+
+  // Sort activity by timestamp ascending
+  const sorted = [...activity].sort((a, b) =>
+    new Date(a.timestamp || a.created_at || 0) - new Date(b.timestamp || b.created_at || 0)
+  );
+
+  for (const item of sorted) {
+    const ts = new Date(item.timestamp || item.created_at || 0);
+    const day = ts.toISOString().slice(0, 10);
+    const amt = parseFloat(item.usdcSize || 0);
+    const tokens = parseFloat(item.size || 0);
+    const type = item.type || '';
+    const side = item.side || '';
+    const cid = item.conditionId || item.assetId || 'unknown';
+
+    if (!byMarket[cid]) byMarket[cid] = { totalBuyCost: 0, totalBuyTokens: 0 };
+
+    if (type === 'TRADE' && side === 'BUY') {
+      byMarket[cid].totalBuyCost += amt;
+      byMarket[cid].totalBuyTokens += tokens;
+    } else if (type === 'TRADE' && side === 'SELL') {
+      // Realized P&L = sell proceeds - avg cost of sold shares
+      const avgCost = byMarket[cid].totalBuyTokens > 0
+        ? byMarket[cid].totalBuyCost / byMarket[cid].totalBuyTokens
+        : 0;
+      const costOfSold = avgCost * tokens;
+      const realizedPnl = amt - costOfSold;
+      if (ts.getTime() >= cutoffTs && dailyPnl[day] !== undefined) {
+        dailyPnl[day] += realizedPnl;
+      }
+      // Update cost basis (reduce proportionally)
+      byMarket[cid].totalBuyCost -= costOfSold;
+      byMarket[cid].totalBuyTokens -= tokens;
+    } else if (type === 'REDEEM') {
+      // Redeem = position resolved, proceeds vs cost
+      const avgCost = byMarket[cid].totalBuyTokens > 0
+        ? byMarket[cid].totalBuyCost / byMarket[cid].totalBuyTokens
+        : 0;
+      const costOfRedeemed = avgCost * tokens;
+      const realizedPnl = amt - costOfRedeemed;
+      if (ts.getTime() >= cutoffTs && dailyPnl[day] !== undefined) {
+        dailyPnl[day] += realizedPnl;
+      }
+    }
+  }
+
+  // Sum period realized P&L
+  const totalRealized = Object.values(dailyPnl).reduce((s, v) => s + v, 0);
+  return { dailyPnl, totalRealized };
+}
+
+// Compute period P&L: realized trading P&L from activity + unrealized change estimate
 async function _fetchPolyPnl(address, days) {
   const cacheKey = days + '';
   if (_polyPnlCache[cacheKey] != null) return _polyPnlCache[cacheKey];
   try {
-    // Polymarket's data-api accepts startDate/endDate for P&L calculation
-    const end = new Date();
-    const start = new Date(); start.setDate(start.getDate() - days);
-    const startStr = start.toISOString().slice(0, 10);
-    const endStr = end.toISOString().slice(0, 10);
-    const url = `https://data-api.polymarket.com/profit-loss?user=${address.toLowerCase()}&startDate=${startStr}&endDate=${endStr}`;
-    const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
-    if (r.ok) {
-      const data = await r.json();
-      // API returns array of daily snapshots or a summary — handle both
-      let pnl = null;
-      if (typeof data === 'number') pnl = data;
-      else if (Array.isArray(data) && data.length > 0) {
-        // Sum daily P&L changes, or use last cumulative value
-        const last = data[data.length - 1];
-        const first = data[0];
-        if (last && last.pnl != null) pnl = parseFloat(last.pnl) - (first && first.pnl != null ? parseFloat(first.pnl) : 0);
-        else if (last && last.profit != null) pnl = parseFloat(last.profit);
-      }
-      else if (data && data.pnl != null) pnl = parseFloat(data.pnl);
-      else if (data && data.profit != null) pnl = parseFloat(data.profit);
-      if (pnl != null && !isNaN(pnl)) {
-        _polyPnlCache[cacheKey] = pnl;
-        return pnl;
-      }
-    }
-  } catch (e) { console.warn('[polyPnl]', e.message); }
-  return null; // fallback to local calc
+    const activity = await _ensurePolyActivity(address);
+    if (!activity.length) return null;
+
+    const { totalRealized } = _buildDailyPnlFromActivity(activity, days);
+    _polyPnlCache[cacheKey] = totalRealized;
+    return totalRealized;
+  } catch(e) { console.warn('[polyPnl]', e.message); return null; }
 }
 
 async function setPnlPeriod(period) {
@@ -14732,23 +14771,18 @@ async function setPnlPeriod(period) {
   }
   // Re-render chart + P&L for this period
   const positions = getAllPositionsFlat();
-  if (!positions.length) return;
-
   const dayMap = { '1d': 1, '1w': 7, '1m': 30, 'all': 9999 };
   const days = dayMap[period] || 30;
 
-  // Try to get accurate P&L from Polymarket's API first
+  // Try to get accurate realized P&L from Polymarket activity data
   let periodPnl = null;
-  if (_polyWalletAddress && period !== 'all') {
+  if (_polyWalletAddress) {
     periodPnl = await _fetchPolyPnl(_polyWalletAddress, days);
   }
 
-  // Fallback: use local cashPnl sum (for 'all' or if API fails)
+  // Fallback: only if activity data completely fails
   if (periodPnl == null) {
     periodPnl = 0;
-    positions.forEach(p => { if (p.pnl != null) periodPnl += parseFloat(p.pnl); });
-    // For 'all' period, add closed-trade P&L too
-    if (period === 'all') periodPnl += (window._realizedPnLFromActivity || 0);
   }
 
   const pnlEl = document.getElementById('psSummaryPnl');
@@ -14759,95 +14793,58 @@ async function setPnlPeriod(period) {
     pnlEl.style.color = periodPnl >= 0 ? '#22c55e' : '#ef4444';
   }
 
+  // Also update P&L % if we have cost basis
+  const pnlPctEl = document.getElementById('psSummaryPnlPct');
+  if (pnlPctEl) {
+    const stats = window._portfolioStats;
+    if (stats && stats.totalCost > 0) {
+      const pnlPct = (periodPnl / stats.totalCost) * 100;
+      const sign = pnlPct >= 0 ? '+' : '';
+      pnlPctEl.textContent = sign + pnlPct.toFixed(1) + '%';
+      pnlPctEl.style.color = pnlPct >= 0 ? '#22c55e' : '#ef4444';
+    } else {
+      pnlPctEl.textContent = '';
+    }
+  }
+
   // Re-render chart with period-specific data
   renderPnlChartForPeriod(positions, days);
 }
 
-function renderPnlChartForPeriod(positions, days) {
+async function renderPnlChartForPeriod(positions, days) {
   const chartEl = document.getElementById('portfolioPnlChart');
   const barsEl = document.getElementById('pnlChartBars');
   if (!chartEl || !barsEl) return;
-
-  const withPnl = positions.filter(p => p.pnl != null && p.pnl !== 0);
-  if (withPnl.length < 1) { chartEl.style.display = 'none'; return; }
   chartEl.style.display = 'flex';
 
+  // Use REAL activity data from Polymarket
+  if (_polyWalletAddress) {
+    try {
+      const activity = await _ensurePolyActivity(_polyWalletAddress);
+      if (activity && activity.length > 0) {
+        const { dailyPnl } = _buildDailyPnlFromActivity(activity, days);
+        _renderPnlSvg(barsEl, dailyPnl, 120);
+        return;
+      }
+    } catch(e) { console.warn('[renderPnlChartForPeriod] activity fallback:', e.message); }
+  }
+
+  // Fallback: resolved positions only (no fake interpolation)
   const numDays = Math.min(days, 365);
   const now = new Date();
-  const nowStr = now.toISOString().slice(0, 10);
   const dailyPnl = {};
   for (let i = numDays - 1; i >= 0; i--) {
     const d = new Date(now); d.setDate(d.getDate() - i);
     dailyPnl[d.toISOString().slice(0, 10)] = 0;
   }
-  const dateKeys = Object.keys(dailyPnl).sort();
-  const startStr = dateKeys[0];
-
-  // Same interpolation logic as renderPnlChart
-  withPnl.forEach(p => {
+  positions.filter(p => p.pnl != null && p.pnl !== 0).forEach(p => {
     const isResolved = !!(p.end_date || p.resolved_at);
     if (isResolved) {
       const date = (p.end_date || p.resolved_at || '').slice(0, 10);
       if (date && dailyPnl[date] !== undefined) dailyPnl[date] += p.pnl;
-    } else {
-      const created = (p.created_at || '').slice(0, 10);
-      const posStart = (!created || created < startStr) ? startStr : created;
-      const startIdx = dateKeys.indexOf(posStart);
-      const endIdx = dateKeys.length - 1;
-      if (startIdx < 0 || startIdx >= endIdx) {
-        dailyPnl[nowStr] = (dailyPnl[nowStr] || 0) + p.pnl;
-      } else {
-        const span = endIdx - startIdx;
-        const dailySlice = p.pnl / span;
-        const hash = (p.condition_id || p.market_slug || p.question || '').length;
-        for (let i = startIdx; i < endIdx; i++) {
-          const variance = 1.0 + 0.3 * Math.sin((hash + i) * 2.1) + 0.15 * Math.cos((hash + i) * 3.7);
-          dailyPnl[dateKeys[i]] += dailySlice * variance;
-        }
-      }
     }
   });
-
-  const dates = dateKeys;
-  let cumulative = 0;
-  const points = dates.map(d => { cumulative += dailyPnl[d]; return { date: d, val: cumulative }; });
-
-  const W = barsEl.offsetWidth || 600;
-  const H = 120;
-  const maxAbs = Math.max(1, ...points.map(p => Math.abs(p.val)));
-  const padding = 8;
-  const xStep = (W - padding * 2) / Math.max(1, points.length - 1);
-  const pathPoints = points.map((p, i) => {
-    const x = padding + i * xStep;
-    const y = H / 2 - (p.val / maxAbs) * (H / 2 - padding);
-    return { x, y, val: p.val, date: p.date };
-  });
-
-  let pathD = '';
-  pathPoints.forEach((pt, i) => { pathD += (i === 0 ? 'M' : 'L') + pt.x.toFixed(1) + ',' + pt.y.toFixed(1) + ' '; });
-
-  const lastPt = pathPoints[pathPoints.length - 1] || { x: W, y: H/2 };
-  const firstPt = pathPoints[0] || { x: 0, y: H/2 };
-  const fillD = pathD + `L${lastPt.x.toFixed(1)},${H} L${firstPt.x.toFixed(1)},${H} Z`;
-  const lineColor = lastPt.val >= 0 ? '#22c55e' : '#ef4444';
-  const sign = lastPt.val >= 0 ? '+' : '';
-
-  barsEl.innerHTML = `
-    <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="display:block">
-      <defs>
-        <linearGradient id="pnlGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="${lineColor}" stop-opacity="0.3"/>
-          <stop offset="100%" stop-color="${lineColor}" stop-opacity="0"/>
-        </linearGradient>
-      </defs>
-      <line x1="${padding}" y1="${H/2}" x2="${W-padding}" y2="${H/2}" stroke="#2a2825" stroke-width="1" stroke-dasharray="4,4"/>
-      <path d="${fillD}" fill="url(#pnlGrad)"/>
-      <path d="${pathD}" fill="none" stroke="${lineColor}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-      <circle cx="${lastPt.x.toFixed(1)}" cy="${lastPt.y.toFixed(1)}" r="4" fill="${lineColor}" stroke="#141412" stroke-width="2"/>
-      <text x="${W-padding}" y="14" text-anchor="end" fill="${lineColor}" font-family="var(--mono)" font-size="12" font-weight="700">${sign}$${Math.abs(lastPt.val).toFixed(2)}</text>
-      <text x="${padding}" y="${H-4}" fill="#5a5752" font-family="var(--mono)" font-size="9">${dates[0] ? dates[0].slice(5) : ''}</text>
-      <text x="${W-padding}" y="${H-4}" text-anchor="end" fill="#5a5752" font-family="var(--mono)" font-size="9">${dates[dates.length-1] ? dates[dates.length-1].slice(5) : ''}</text>
-    </svg>`;
+  _renderPnlSvg(barsEl, dailyPnl, 120);
 }
 
 function renderResolvedCard(p) {
