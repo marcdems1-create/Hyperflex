@@ -26366,6 +26366,9 @@ function _xOAuthSign(method, url, params) {
 
 // ── Tweet rate limiting: max 5/day, minimum 2h gap ──
 const _tweetLog = []; // timestamps of recent tweets
+const _tweetHistory = []; // last 50 posted tweets { text, market, ts }
+const _tweetedMarkets = new Set(); // market slugs/questions tweeted in last 24h
+
 function canTweet() {
   const now = Date.now();
   // Remove tweets older than 24h
@@ -26373,6 +26376,44 @@ function canTweet() {
   if (_tweetLog.length >= 5) return false; // max 5/day
   if (_tweetLog.length && now - _tweetLog[_tweetLog.length - 1] < 2 * 60 * 60 * 1000) return false; // 2h gap
   return true;
+}
+
+// Content similarity check — prevents near-duplicate tweets
+function isTweetTooSimilar(newTweet) {
+  const now = Date.now();
+  const normalize = t => (t || '').toLowerCase().replace(/\n+/g, ' ').replace(/hyperflex\.network\S*/g, '').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+  const newNorm = normalize(newTweet);
+  const newWords = new Set(newNorm.split(' ').filter(w => w.length > 3));
+
+  // Clean up old entries (keep 48h window)
+  while (_tweetHistory.length && now - _tweetHistory[0].ts > 48 * 60 * 60 * 1000) {
+    const old = _tweetHistory.shift();
+    if (old.market) _tweetedMarkets.delete(old.market);
+  }
+
+  for (const prev of _tweetHistory) {
+    const prevNorm = normalize(prev.text);
+    // Exact or near-exact match
+    if (prevNorm === newNorm) return true;
+
+    // Jaccard similarity on words (>60% overlap = too similar)
+    const prevWords = new Set(prevNorm.split(' ').filter(w => w.length > 3));
+    const intersection = [...newWords].filter(w => prevWords.has(w)).length;
+    const union = new Set([...newWords, ...prevWords]).size;
+    if (union > 0 && (intersection / union) > 0.6) return true;
+
+    // Check if it's about the same market (substring match on market names)
+    if (prev.market && newNorm.includes(prev.market.toLowerCase().slice(0, 20))) return true;
+  }
+  return false;
+}
+
+function recordTweet(text, market) {
+  _tweetLog.push(Date.now());
+  _tweetHistory.push({ text, market: market || '', ts: Date.now() });
+  if (market) _tweetedMarkets.add(market);
+  // Cap history
+  if (_tweetHistory.length > 50) _tweetHistory.splice(0, 25);
 }
 
 // ── Event-driven tweets (fire-and-forget, rate-limited) ──
@@ -26508,66 +26549,123 @@ async function generateAndPostDailyTweet(draftOnly = false) {
   const flowData = _whaleFlowCache && _whaleFlowCache.data ? _whaleFlowCache.data : null;
   const concentration = (flowData && flowData.concentration) || [];
 
-  // Top whale move by capital
-  let topMove = null;
-  if (concentration.length > 0) {
-    topMove = concentration[0]; // already sorted by whale_count
-  }
+  // Filter out markets we already tweeted about in last 48h
+  const freshConcentration = concentration.filter(c => !_tweetedMarkets.has(c.market));
+  const freshWhales = whalePositions.filter(p => !_tweetedMarkets.has(p.market));
 
-  // Find biggest single whale position for $ shock value
+  // Top whale move by capital — prefer fresh markets
+  let topMove = freshConcentration[0] || concentration[0] || null;
+
+  // Find biggest single whale position — prefer fresh markets
   let biggestBet = null;
-  for (const p of whalePositions) {
+  const whalePool = freshWhales.length > 0 ? freshWhales : whalePositions;
+  for (const p of whalePool) {
     if (!biggestBet || (p.size || 0) > (biggestBet.size || 0)) biggestBet = p;
   }
 
-  // Other notable moves (2nd and 3rd)
-  const otherMoves = concentration.slice(1, 4).map(c => {
+  // Other notable moves (pick from fresh first)
+  const otherPool = freshConcentration.length > 1 ? freshConcentration : concentration;
+  const otherMoves = otherPool.slice(1, 6).map(c => {
     const cap = c.total_capital >= 1000000 ? '$' + (c.total_capital/1000000).toFixed(1) + 'M' : '$' + Math.round(c.total_capital/1000) + 'K';
     return `${c.whale_count} whales / ${cap} on "${c.market}" (${c.consensus_pct}% ${c.consensus_side})`;
   });
 
   // Build the data block for Claude
-  const bigCap = biggestBet ? (biggestBet.size >= 1000000 ? '$' + (biggestBet.size/1000000).toFixed(1) + 'M' : '$' + Math.round(biggestBet.size/1000) + 'K') : '';
-  const topCap = topMove ? (topMove.total_capital >= 1000000 ? '$' + (topMove.total_capital/1000000).toFixed(1) + 'M' : '$' + Math.round(topMove.total_capital/1000) + 'K') : '';
+  const fmtCap = (n) => n >= 1000000 ? '$' + (n/1000000).toFixed(1) + 'M' : '$' + Math.round(n/1000) + 'K';
+  const bigCap = biggestBet ? fmtCap(biggestBet.size || 0) : '';
+  const topCap = topMove ? fmtCap(topMove.total_capital || 0) : '';
+
+  // Build recent tweet history to prevent repetition
+  const recentTweetTexts = _tweetHistory.slice(-10).map(h => h.text.replace(/\n.*hyperflex\.network\S*/s, '').trim());
+  const recentBlock = recentTweetTexts.length > 0
+    ? '\n\nRECENT TWEETS (DO NOT repeat these or write anything similar):\n' + recentTweetTexts.map((t, i) => `${i+1}. "${t}"`).join('\n')
+    : '';
+
+  // Determine the primary market to tweet about (for dedup tracking)
+  const primaryMarket = topMove?.market || biggestBet?.market || '';
 
   const anthropic = new Anthropic();
-  const tweetRes = await anthropic.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 280,
-    system: `You write whale alert tweets for a prediction market intelligence account. You sound like a sharp trader sharing alpha with friends — NOT a newsletter, NOT an AI.
 
-YOUR JOB: Take the whale data below and turn it into a tweet that makes people CLICK. Lead with the biggest, most shocking whale bet.
+  // Try up to 3 times to generate a unique tweet
+  let tweet = '';
+  let attempts = 0;
+  const MAX_ATTEMPTS = 3;
 
-FORMULA THAT WORKS:
-"The biggest Polymarket whale just put $285K on NO for [market]. Here's what else they're betting on: [link]"
-"Someone just dropped $1.2M on YES for [market] at 34%. Either they know something, or they're about to learn an expensive lesson."
-"$440K says [team] wins. 7 whale wallets, 100% consensus. When was the last time whales were this unanimous?"
+  while (attempts < MAX_ATTEMPTS) {
+    attempts++;
+    const tweetRes = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 280,
+      system: `You write tweets for @HyperFlexapp, a prediction market intelligence account. You sound like a sharp trader sharing alpha — conversational, slightly provocative, data-driven.
+
+YOUR JOB: Pick ONE market from the data below and write a tweet about it. Each tweet should feel unique — different angle, different market if possible.
+
+WINNING FORMAT (study these — this is what performs):
+"SpaceX IPO market cap between $1.4T-$1.6T is pricing at just 5%, but $97K in volume suggests smart money's still skeptical on that tight band. Wider range bets are where the real action is."
+"Axiom token launch by Dec 31, 2026 sitting at 50% YES on $98K volume. Perfect coin flip—either thesis breaks or Solana gets another contender."
+"$440K says [outcome]. 7 whale wallets, 100% consensus. When was the last time whales were this unanimous?"
+
+THE PATTERN:
+1. Name the specific market/event
+2. State the current price (X% YES) and volume ($XXK)
+3. Add a sharp TAKE — your opinion, analysis, or provocative observation
+4. Optional: end with a question or curiosity hook
 
 HARD RULES:
-- ALWAYS lead with a specific $ amount — the bigger the better
-- ALWAYS mention the market question or event specifically
-- Sound like a PERSON, not a brand. Conversational. Slightly provocative.
-- End with curiosity — make them want to click
+- MUST mention the specific market name/event
+- MUST include the price (X% YES) or odds
+- MUST include volume or capital figure ($XXK)
+- MUST include your own TAKE or analysis — don't just state facts
+- Sound like a PERSON sharing an insight, not a data feed
 - NEVER use hashtags or emojis
 - NEVER use cashtags ($BTC etc)
-- NEVER start with "Breaking" or "Alert" or "Good morning"
-- MUST be under 240 characters. Count carefully.
+- NEVER start with "Breaking", "Alert", "Whale alert", or "Good morning"
+- MUST be under 240 characters
+- MUST be completely different from any recent tweets listed below
+- If you can't write something original, output exactly: SKIP
 - Output ONLY the tweet text. Nothing else.`,
-    messages: [{
-      role: 'user',
-      content: `Write one whale alert tweet. MUST be under 240 chars. Output ONLY the tweet.\n\nBiggest single bet: ${biggestBet ? bigCap + ' on ' + (biggestBet.side||'YES') + ' for "' + biggestBet.market + '"' : 'N/A'}\nTop concentration: ${topMove ? topMove.whale_count + ' whales / ' + topCap + ' on "' + topMove.market + '" (' + topMove.consensus_pct + '% ' + topMove.consensus_side + ')' : 'N/A'}\nOther moves:\n${otherMoves.join('\n') || 'None'}\nFear & Greed: ${briefData.fear_greed?.score || 'N/A'} (${briefData.fear_greed?.label || ''})`
-    }]
-  });
+      messages: [{
+        role: 'user',
+        content: `Write one prediction market tweet. MUST be under 240 chars. Pick the MOST interesting market that hasn't been covered recently. Output ONLY the tweet text, or SKIP if you can't write something original.\n\nBiggest single bet: ${biggestBet ? bigCap + ' on ' + (biggestBet.side||'YES') + ' for "' + biggestBet.market + '"' : 'N/A'}\nTop whale concentration: ${topMove ? topMove.whale_count + ' whales / ' + topCap + ' on "' + topMove.market + '" (' + topMove.consensus_pct + '% ' + topMove.consensus_side + ')' : 'N/A'}\nOther markets to choose from:\n${otherMoves.join('\n') || 'None'}\nFear & Greed: ${briefData.fear_greed?.score || 'N/A'} (${briefData.fear_greed?.label || ''})${recentBlock}`
+      }]
+    });
 
-  let tweet = (tweetRes.content[0]?.text || '').trim();
-  // Strip any meta-commentary Claude might leak
-  tweet = tweet.replace(/\*\*.*?\*\*/g, '').replace(/^---+$/gm, '').replace(/character count.*$/gim, '').replace(/^\s*\n/gm, '\n').trim();
-  tweet = tweet.replace(/^["']|["']$/g, '').trim();
-  // Remove any > bullet lines that slipped through
-  tweet = tweet.replace(/^>\s*/gm, '').trim();
-  // Hard cap at 240 chars — no truncation, just cut cleanly at last sentence/space
+    tweet = (tweetRes.content[0]?.text || '').trim();
+    // Strip meta-commentary
+    tweet = tweet.replace(/\*\*.*?\*\*/g, '').replace(/^---+$/gm, '').replace(/character count.*$/gim, '').replace(/^\s*\n/gm, '\n').trim();
+    tweet = tweet.replace(/^["']|["']$/g, '').trim();
+    tweet = tweet.replace(/^>\s*/gm, '').trim();
+
+    // If Claude says SKIP, it couldn't come up with something original
+    if (tweet === 'SKIP' || tweet.toUpperCase().startsWith('SKIP')) {
+      console.log(`[tweet] Attempt ${attempts}/${MAX_ATTEMPTS}: Claude returned SKIP — no original tweet possible`);
+      if (attempts >= MAX_ATTEMPTS) {
+        console.log('[tweet] All attempts exhausted — skipping this tweet cycle entirely');
+        return { text: '', posted: false, skipped: true, reason: 'Could not generate original tweet after ' + MAX_ATTEMPTS + ' attempts' };
+      }
+      continue;
+    }
+
+    // Check similarity against recent tweets
+    if (isTweetTooSimilar(tweet)) {
+      console.log(`[tweet] Attempt ${attempts}/${MAX_ATTEMPTS}: Too similar to recent tweet — retrying`);
+      if (attempts >= MAX_ATTEMPTS) {
+        console.log('[tweet] All attempts produced similar content — skipping');
+        return { text: tweet, posted: false, skipped: true, reason: 'All generated tweets too similar to recent posts' };
+      }
+      continue;
+    }
+
+    // Good unique tweet — break out
+    break;
+  }
+
+  if (!tweet || tweet === 'SKIP') {
+    return { text: '', posted: false, skipped: true, reason: 'No original content generated' };
+  }
+
+  // Hard cap at 240 chars
   if (tweet.length > 240) {
-    // Try to cut at last sentence boundary
     let cut = tweet.substring(0, 240);
     const lastPeriod = cut.lastIndexOf('.');
     const lastQuestion = cut.lastIndexOf('?');
@@ -26575,26 +26673,30 @@ HARD RULES:
     if (lastBreak > 140) {
       tweet = cut.substring(0, lastBreak + 1);
     } else {
-      // Fall back to last space
       const lastSpace = cut.lastIndexOf(' ');
       tweet = lastSpace > 100 ? cut.substring(0, lastSpace) : cut;
     }
   }
-  const link = '\n\nhyperflex.network/data';
+
+  const link = '\n\nhyperflex.network/whales';
   const tweetWithLink = tweet + link;
 
+  // Final length check
+  let finalTweet = tweetWithLink;
   if (tweetWithLink.length > 280) {
     const maxBody = 280 - link.length;
     let cut = tweet.substring(0, maxBody);
     const lastSpace = cut.lastIndexOf(' ');
     if (lastSpace > 80) cut = cut.substring(0, lastSpace);
-    const finalTweet = cut + link;
-    if (draftOnly) return { text: finalTweet, posted: false };
-    return { text: finalTweet, posted: true, ...(await postTweet(finalTweet)) };
+    finalTweet = cut + link;
   }
 
-  if (draftOnly) return { text: tweetWithLink, posted: false };
-  return { text: tweetWithLink, posted: true, ...(await postTweet(tweetWithLink)) };
+  if (draftOnly) return { text: finalTweet, posted: false };
+
+  // Record this tweet BEFORE posting to prevent race conditions
+  recordTweet(finalTweet, primaryMarket);
+  const result = await postTweet(finalTweet);
+  return { text: finalTweet, posted: true, ...result };
 }
 
 // POST /api/tweet-brief — manual trigger (admin only)
