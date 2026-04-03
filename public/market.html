@@ -1405,15 +1405,15 @@ function updateTradeCalc() {
 
 // ── Fetch USDC balance from Polygon ──────────────────────────────────────────
 async function fetchTradeBalance() {
-  var wallet = localStorage.getItem('hf_poly_wallet');
-  if (!wallet || !window.ethereum) return;
+  var eoaAddress = localStorage.getItem('poly_eoa_address');
+  if (!eoaAddress || !window.ethereum) return;
   try {
     var provider = new ethers.BrowserProvider(window.ethereum);
     // USDC on Polygon
     var usdcAddress = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
     var abi = ['function balanceOf(address) view returns (uint256)'];
     var contract = new ethers.Contract(usdcAddress, abi, provider);
-    var raw = await contract.balanceOf(wallet);
+    var raw = await contract.balanceOf(eoaAddress);
     var balance = parseFloat(ethers.formatUnits(raw, 6));
     var el = document.getElementById('tradeBalance');
     if (el) el.textContent = 'Balance: $' + balance.toFixed(2);
