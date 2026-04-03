@@ -16557,8 +16557,9 @@ async function confirmTrade() {
       takerAmt = Math.round(rawTaker * DECIMALS).toString();
     }
 
-    // Random salt — large random number matching SDK pattern
-    const orderSalt = (BigInt(Math.floor(Math.random() * 2**32)) * BigInt(10**9) + BigInt(Date.now())).toString();
+    // Random salt — must fit in JS safe integer for JSON serialization
+    // Use high-entropy value within Number.MAX_SAFE_INTEGER range
+    const orderSalt = Math.floor(Math.random() * Number.MAX_SAFE_INTEGER).toString();
 
     // Exchange contract: negRisk vs standard CTF Exchange
     const isNegRisk = _tradeModalData._negRisk !== false;
@@ -16609,13 +16610,12 @@ async function confirmTrade() {
     btn.textContent = 'Sign in wallet...';
     const orderSignature = await window._walletSigner.signTypedData(orderDomain, orderTypes, orderStruct);
 
-    // Build CLOB request body
-    // CLOB API expects salt as a numeric string, not parsed int (would overflow for large values)
+    // Build CLOB request body — salt must be a JSON number, not string
     btn.textContent = 'Placing order...';
     console.log('[qt-trade] Order params:', { side: clobSide, price: roundedPrice, shares, makerAmt, takerAmt, negRisk: isNegRisk, tickSize, exchange: exchangeAddr, maker: orderStruct.maker, signer: orderStruct.signer });
     const requestBody = JSON.stringify({
       order: {
-        salt: orderStruct.salt,
+        salt: Number(orderStruct.salt),
         maker: orderStruct.maker,
         signer: orderStruct.signer,
         taker: orderStruct.taker,
