@@ -18713,6 +18713,59 @@ app.get('/api/market/:slug', async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
+// POLYMARKET MARKET COMMENTS — community discussion on market pages
+// ════════════════════════════════════════════════════════════
+// In-memory store (persists across requests, resets on deploy — good enough for MVP)
+const _polyMarketComments = {}; // slug -> [{id, display_name, body, position, created_at}]
+
+app.get('/api/market/:slug/comments', (req, res) => {
+  const slug = req.params.slug;
+  const comments = _polyMarketComments[slug] || [];
+  res.json(comments);
+});
+
+app.post('/api/market/:slug/comments', optionalAuth, (req, res) => {
+  const slug = req.params.slug;
+  const { body } = req.body || {};
+  if (!body || typeof body !== 'string' || body.trim().length === 0) {
+    return res.status(400).json({ error: 'Comment body required' });
+  }
+  if (body.length > 500) {
+    return res.status(400).json({ error: 'Comment too long (max 500 chars)' });
+  }
+
+  // Get user info from auth if available
+  let displayName = 'Anon';
+  if (req.userId) {
+    // Try to get display name from token context
+    displayName = req.userName || req.displayName || 'Trader';
+  }
+  // Allow anonymous posting with a wallet address
+  const walletAddr = req.body.wallet || '';
+  if (!req.userId && !walletAddr) {
+    displayName = 'Anon';
+  } else if (walletAddr && !req.userId) {
+    displayName = walletAddr.length > 10 ? walletAddr.slice(0, 6) + '...' + walletAddr.slice(-4) : walletAddr;
+  }
+
+  if (!_polyMarketComments[slug]) _polyMarketComments[slug] = [];
+
+  const comment = {
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    display_name: displayName,
+    body: body.trim(),
+    position: req.body.position || null, // YES/NO if user has a position
+    created_at: new Date().toISOString()
+  };
+
+  _polyMarketComments[slug].unshift(comment);
+  // Cap at 200 comments per market
+  if (_polyMarketComments[slug].length > 200) _polyMarketComments[slug] = _polyMarketComments[slug].slice(0, 200);
+
+  res.status(201).json(comment);
+});
+
+// ════════════════════════════════════════════════════════════
 // WHALE INDEX — auto-generated portfolio from top whale positions
 // ════════════════════════════════════════════════════════════
 let _whaleIndexCache = null;

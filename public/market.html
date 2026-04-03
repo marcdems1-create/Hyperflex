@@ -81,6 +81,36 @@ canvas{display:block;width:100%!important}
 .holder-shares{font-family:var(--mono);font-size:11px;color:var(--dim)}
 
 /* Orderbook */
+.mkt-comments{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:24px}
+.mkt-comments h3{font-size:14px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.comments-tabs{display:flex;gap:8px;margin-bottom:16px}
+.comments-tab{font-family:var(--mono);font-size:11px;font-weight:700;padding:5px 14px;border-radius:16px;border:1px solid var(--border);background:transparent;color:var(--dim);cursor:pointer;transition:all .15s}
+.comments-tab.active{background:rgba(201,146,13,.12);border-color:rgba(201,146,13,.4);color:var(--gold)}
+.comment-list{display:flex;flex-direction:column;gap:14px;max-height:400px;overflow-y:auto}
+.comment-item{display:flex;gap:10px}
+.comment-avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,rgba(201,146,13,.25),rgba(201,146,13,.08));border:1px solid rgba(201,146,13,.2);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gold);flex-shrink:0}
+.comment-body{flex:1;min-width:0}
+.comment-header{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.comment-name{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text)}
+.comment-badge{font-family:var(--mono);font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;background:rgba(6,182,212,.12);color:#06b6d4;border:1px solid rgba(6,182,212,.2)}
+.comment-time{font-family:var(--mono);font-size:10px;color:var(--dim)}
+.comment-text{font-size:13px;line-height:1.6;color:rgba(221,216,204,.85)}
+.comment-input-row{display:flex;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
+.comment-input{flex:1;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--text);font-family:inherit;resize:none;outline:none;transition:border-color .15s}
+.comment-input:focus{border-color:var(--gold)}
+.comment-input::placeholder{color:var(--dim)}
+.comment-submit{font-family:var(--mono);font-size:11px;font-weight:700;padding:10px 18px;border-radius:8px;background:var(--gold);color:#000;border:none;cursor:pointer;white-space:nowrap;transition:opacity .15s}
+.comment-submit:hover{opacity:.85}
+.holder-dist{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:24px;display:flex;align-items:center;gap:24px}
+.holder-dist h3{font-size:14px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.dist-chart-wrap{width:140px;height:140px;flex-shrink:0;position:relative}
+.dist-chart-wrap canvas{width:100%;height:100%}
+.dist-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center}
+.dist-center-pct{font-family:var(--mono);font-size:28px;font-weight:700}
+.dist-center-label{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--dim)}
+.dist-legend{display:flex;flex-direction:column;gap:10px;flex:1}
+.dist-legend-item{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px}
+.dist-legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
 .mkt-orderbook{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:24px}
 .mkt-orderbook-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .mkt-orderbook-header h3{font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px}
@@ -273,6 +303,37 @@ canvas{display:block;width:100%!important}
             <div class="holders-col-header no">NO Holders</div>
             <div id="holdersNo"><div style="font-family:var(--mono);font-size:11px;color:var(--dim)">Loading...</div></div>
           </div>
+        </div>
+      </div>
+
+      <!-- Holder Distribution -->
+      <div class="holder-dist" id="holderDistSection" style="display:none">
+        <div>
+          <h3 style="white-space:nowrap">Top Holders Distribution</h3>
+          <div class="dist-chart-wrap">
+            <canvas id="distCanvas" width="280" height="280"></canvas>
+            <div class="dist-center">
+              <div class="dist-center-pct" id="distPct" style="color:var(--green)">—</div>
+              <div class="dist-center-label" id="distLabel">YES HOLDERS</div>
+            </div>
+          </div>
+        </div>
+        <div class="dist-legend" id="distLegend"></div>
+      </div>
+
+      <!-- Comments -->
+      <div class="mkt-comments" id="mktCommentsSection">
+        <h3>Comments <span style="font-family:var(--mono);font-size:11px;font-weight:400;color:var(--dim)" id="commentCount"></span></h3>
+        <div class="comments-tabs">
+          <button class="comments-tab active" onclick="setCommentSort('new')">New</button>
+          <button class="comments-tab" onclick="setCommentSort('top')">Top</button>
+        </div>
+        <div class="comment-list" id="commentList">
+          <div style="font-family:var(--mono);font-size:11px;color:var(--dim);text-align:center;padding:20px 0">No comments yet — be the first</div>
+        </div>
+        <div class="comment-input-row">
+          <textarea class="comment-input" id="commentInput" rows="1" maxlength="500" placeholder="Share your analysis..."></textarea>
+          <button class="comment-submit" onclick="postMarketComment()">Post</button>
         </div>
       </div>
 
@@ -2230,6 +2291,178 @@ loadMarket().then(function() {
   _livePriceInterval = setInterval(fetchLivePrices, 10000);
 });
 updateTradingUI();
+
+// ── Holder Distribution Donut Chart ──────────────────────────────────────────
+function drawHolderDistribution(yesCount, noCount) {
+  var section = document.getElementById('holderDistSection');
+  if (yesCount + noCount === 0) { section.style.display = 'none'; return; }
+  section.style.display = 'flex';
+
+  var canvas = document.getElementById('distCanvas');
+  var ctx = canvas.getContext('2d');
+  var W = canvas.width, H = canvas.height;
+  var cx = W / 2, cy = H / 2, r = W / 2 - 10, inner = r * 0.65;
+  var total = yesCount + noCount;
+  var yesPct = Math.round(yesCount / total * 100);
+  var noPct = 100 - yesPct;
+
+  ctx.clearRect(0, 0, W, H);
+
+  // YES arc
+  var yesAngle = (yesCount / total) * Math.PI * 2;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + yesAngle);
+  ctx.arc(cx, cy, inner, -Math.PI / 2 + yesAngle, -Math.PI / 2, true);
+  ctx.closePath();
+  ctx.fillStyle = '#22c55e';
+  ctx.fill();
+
+  // NO arc
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, -Math.PI / 2 + yesAngle, -Math.PI / 2 + Math.PI * 2);
+  ctx.arc(cx, cy, inner, -Math.PI / 2 + Math.PI * 2, -Math.PI / 2 + yesAngle, true);
+  ctx.closePath();
+  ctx.fillStyle = '#ef4444';
+  ctx.fill();
+
+  // Center text
+  var majority = yesPct >= noPct;
+  document.getElementById('distPct').textContent = (majority ? yesPct : noPct) + '%';
+  document.getElementById('distPct').style.color = majority ? 'var(--green)' : 'var(--red)';
+  document.getElementById('distLabel').textContent = majority ? 'YES HOLDERS' : 'NO HOLDERS';
+
+  // Legend
+  document.getElementById('distLegend').innerHTML =
+    '<div class="dist-legend-item"><div class="dist-legend-dot" style="background:#22c55e"></div><span style="color:var(--text)">' + yesPct + '% YES</span><span style="color:var(--dim);margin-left:auto">' + fmtNum(yesCount) + ' shares</span></div>' +
+    '<div class="dist-legend-item"><div class="dist-legend-dot" style="background:#ef4444"></div><span style="color:var(--text)">' + noPct + '% NO</span><span style="color:var(--dim);margin-left:auto">' + fmtNum(noCount) + ' shares</span></div>';
+}
+
+// Hook into existing loadTopHolders to also draw the donut
+var _origLoadTopHolders = loadTopHolders;
+loadTopHolders = async function(m) {
+  await _origLoadTopHolders(m);
+  // Parse the holder data from the DOM to draw distribution
+  var yesEl = document.getElementById('holdersYes');
+  var noEl = document.getElementById('holdersNo');
+  var yesCount = yesEl ? yesEl.querySelectorAll('.holder-row').length : 0;
+  var noCount = noEl ? noEl.querySelectorAll('.holder-row').length : 0;
+  // Try to get actual share counts
+  var yesShares = 0, noShares = 0;
+  if (yesEl) yesEl.querySelectorAll('.holder-shares').forEach(function(el) { yesShares += parseFloat(el.textContent.replace(/[,$K]/g, '')) || 0; });
+  if (noEl) noEl.querySelectorAll('.holder-shares').forEach(function(el) { noShares += parseFloat(el.textContent.replace(/[,$K]/g, '')) || 0; });
+  drawHolderDistribution(yesShares || yesCount, noShares || noCount);
+};
+
+// ── Comments Section ─────────────────────────────────────────────────────────
+var _marketComments = [];
+var _commentSort = 'new';
+
+function setCommentSort(sort) {
+  _commentSort = sort;
+  document.querySelectorAll('.comments-tab').forEach(function(t) { t.classList.toggle('active', t.textContent.toLowerCase() === sort); });
+  renderComments();
+}
+
+function renderComments() {
+  var list = document.getElementById('commentList');
+  var sorted = _marketComments.slice();
+  if (_commentSort === 'top') {
+    sorted.sort(function(a, b) { return (b.likes || 0) - (a.likes || 0); });
+  } else {
+    sorted.sort(function(a, b) { return new Date(b.created_at) - new Date(a.created_at); });
+  }
+
+  if (!sorted.length) {
+    list.innerHTML = '<div style="font-family:var(--mono);font-size:11px;color:var(--dim);text-align:center;padding:20px 0">No comments yet — be the first</div>';
+    return;
+  }
+
+  list.innerHTML = sorted.map(function(c) {
+    var name = c.display_name || c.username || 'Anon';
+    var initial = name.charAt(0).toUpperCase();
+    var ago = timeAgo(c.created_at);
+    var posTag = c.position ? '<span class="comment-badge" style="' + (c.position === 'YES' ? 'background:rgba(34,197,94,.12);color:#22c55e;border-color:rgba(34,197,94,.2)' : 'background:rgba(239,68,68,.12);color:#ef4444;border-color:rgba(239,68,68,.2)') + '">' + c.position + '</span>' : '';
+    return '<div class="comment-item">' +
+      '<div class="comment-avatar">' + initial + '</div>' +
+      '<div class="comment-body">' +
+        '<div class="comment-header">' +
+          '<span class="comment-name">' + escH(name) + '</span>' +
+          posTag +
+          '<span class="comment-time">' + ago + '</span>' +
+        '</div>' +
+        '<div class="comment-text">' + escH(c.body || c.content || '') + '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  document.getElementById('commentCount').textContent = '(' + sorted.length + ')';
+}
+
+function timeAgo(dateStr) {
+  if (!dateStr) return '';
+  var diff = Date.now() - new Date(dateStr).getTime();
+  var mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return mins + 'm ago';
+  var hrs = Math.floor(mins / 60);
+  if (hrs < 24) return hrs + 'h ago';
+  var days = Math.floor(hrs / 24);
+  return days + 'd ago';
+}
+
+async function loadMarketComments(slug) {
+  try {
+    var r = await fetch('/api/market/' + encodeURIComponent(slug) + '/comments');
+    if (!r.ok) return;
+    var data = await r.json();
+    _marketComments = Array.isArray(data) ? data : (data.comments || []);
+    renderComments();
+  } catch (e) { /* silent */ }
+}
+
+async function postMarketComment() {
+  var input = document.getElementById('commentInput');
+  var body = (input.value || '').trim();
+  if (!body) return;
+  if (body.length > 500) { alert('Comment too long (max 500 chars)'); return; }
+
+  var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || localStorage.getItem('hf_member_token');
+  if (!token) {
+    alert('Sign in to comment');
+    return;
+  }
+
+  var slug = window.location.pathname.split('/market/')[1];
+  if (!slug) return;
+
+  try {
+    var r = await fetch('/api/market/' + encodeURIComponent(slug) + '/comments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ body: body })
+    });
+    if (r.ok) {
+      var newComment = await r.json();
+      _marketComments.unshift(newComment);
+      renderComments();
+      input.value = '';
+    } else {
+      var err = await r.json().catch(function() { return {}; });
+      alert(err.error || 'Could not post comment');
+    }
+  } catch (e) {
+    alert('Error posting comment');
+  }
+}
+
+// Load comments when market loads
+var _origLoadMarket = loadMarket;
+loadMarket = async function() {
+  var result = await _origLoadMarket();
+  var slug = window.location.pathname.split('/market/')[1];
+  if (slug) loadMarketComments(slug);
+  return result;
+};
 </script>
 </body>
 </html>
