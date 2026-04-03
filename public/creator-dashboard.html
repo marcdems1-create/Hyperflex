@@ -12019,6 +12019,8 @@ function setPolyAddress(addr, reason) {
   _polyWalletAddress = addr;
   localStorage.setItem('hf_poly_wallet', addr);
   sessionStorage.setItem('hf_poly_wallet_session', addr);
+  // Mark as explicitly set by user action — prevents recovery from overriding
+  if (reason && !reason.startsWith('recovery')) _polyWalletExplicitlySet = true;
   console.log('[poly-addr] Changed:', prev ? prev.slice(0,10)+'...' : '(empty)', '→', addr.slice(0,10)+'...', '| Reason:', reason || 'unknown');
   // Save to DB (fire-and-forget)
   try { const t = localStorage.getItem('hf_token'); if (t) fetch('/api/user/wallets', { method: 'PUT', headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' }, body: JSON.stringify({ polymarket_address: addr }) }); } catch(e) {}
@@ -13111,6 +13113,7 @@ async function disconnectPolymarket() {
 }
 
 let _polyRecoveryAttempted = false;
+let _polyWalletExplicitlySet = false; // true when user just connected wallet — skip recovery
 async function loadPolymarketPositions(forceRefresh) {
   const el = document.getElementById('polyPositions');
   // Ensure wallet address is loaded from localStorage if not set yet
@@ -13159,7 +13162,7 @@ async function loadPolymarketPositions(forceRefresh) {
       }
     }
     // AUTO-RECOVERY: if 0 positions, try alternative addresses before giving up
-    if (positions.length === 0 && !_polyRecoveryAttempted) {
+    if (positions.length === 0 && !_polyRecoveryAttempted && !_polyWalletExplicitlySet) {
       _polyRecoveryAttempted = true;
 
       // First: try last known good address (fastest path)
@@ -16091,26 +16094,12 @@ async function derivePolymarketApiKey() {
 
     if (btn) btn.textContent = 'Deriving key...';
 
-    // Try direct browser→CLOB first (preserves user's VPN/geo), fall back to server proxy
-    let res;
-    try {
-      res = await fetch('https://clob.polymarket.com/auth/derive-api-key', {
-        method: 'GET',
-        headers: {
-          'POLY_ADDRESS': address,
-          'POLY_SIGNATURE': signature,
-          'POLY_TIMESTAMP': timestamp,
-          'POLY_NONCE': nonce
-        }
-      });
-    } catch (corsErr) {
-      console.warn('[derive-api-key] Direct CLOB blocked, using server proxy:', corsErr.message);
-      res = await fetch('/api/polymarket/derive-api-key', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address, signature, timestamp, nonce })
-      });
-    }
+    // Always use server proxy for derive-api-key (more reliable, handles fallbacks)
+    const res = await fetch('/api/polymarket/derive-api-key', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ address, signature, timestamp, nonce })
+    });
     const data = await res.json();
     console.log('[derive-api-key] response:', JSON.stringify(data));
     if (!res.ok) {
