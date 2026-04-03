@@ -13085,6 +13085,7 @@ async function loadPolymarketPositions(forceRefresh) {
         cash_value: parseFloat(p.currentValue)||0, cost_basis: parseFloat(p.initialValue)||0,
         pnl: parseFloat(p.cashPnl)||0, pnl_pct: parseFloat(p.percentPnl)||0,
         market_url: (typeof polyRef==='function'?polyRef:function(u){return u})(buildMarketUrl({ slug: p.eventSlug||p.slug, question: p.title||p.question })),
+        slug: p.eventSlug||p.slug||null,
         icon: p.icon||null, end_date: p.endDateIso||p.endDate||null, platform: 'polymarket',
         avg_cost: parseFloat(p.size)>0 ? Math.round(parseFloat(p.initialValue)/parseFloat(p.size)*100)/100 : null
       }));
@@ -13188,7 +13189,7 @@ async function loadPolymarketPositions(forceRefresh) {
       meta: (p.shares||0).toFixed(2)+' shares',
       pnl: p.pnl!=null?p.pnl:null,
       url: buildMarketUrl({ url: p.market_url, slug: p.slug || p.eventSlug, question: p.question }), accentColor:'#7c3aed',
-      posData:{question:p.question,side:p.side,platform:'polymarket',probability:p.current_price,current_price:p.current_price,pnl:p.pnl||null,pnl_pct:p.pnl_pct||null,shares:p.shares,cost_basis:p.cost_basis||0,cash_value:p.cash_value||0,avg_cost:p.avg_cost||null,icon:p.icon||null,end_date:p.end_date||null,whale:p.whale||null,market_url:p.market_url,token_id:p.token_id||null,condition_id:p.condition_id||p.id||null,id:p.id}
+      posData:{question:p.question,side:p.side,platform:'polymarket',probability:p.current_price,current_price:p.current_price,pnl:p.pnl||null,pnl_pct:p.pnl_pct||null,shares:p.shares,cost_basis:p.cost_basis||0,cash_value:p.cash_value||0,avg_cost:p.avg_cost||null,icon:p.icon||null,end_date:p.end_date||null,whale:p.whale||null,market_url:p.market_url,slug:p.slug||p.eventSlug||null,token_id:p.token_id||null,condition_id:p.condition_id||p.id||null,id:p.id}
     });}).join('');
 
     const ts = new Date().toLocaleTimeString();
@@ -16229,7 +16230,9 @@ async function confirmTrade() {
         localStorage.removeItem('poly_api_passphrase');
         localStorage.removeItem('poly_eoa_address');
         updateWalletUI();
-        errEl.textContent = 'API key expired. Connect Wallet again on a market page.';
+        const mktLink = document.getElementById('tradeMarketLink');
+        const mktHref = mktLink ? mktLink.href : '';
+        errEl.innerHTML = 'API key expired. <a href="' + (mktHref || '#') + '" target="_blank" rel="noopener" style="color:#c9920d;text-decoration:underline;font-weight:700">Re-connect on Polymarket</a> then try again.';
       } else {
         errEl.textContent = data.error || data.message || 'Order rejected (' + res.status + ')';
       }
