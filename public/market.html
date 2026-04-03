@@ -1478,7 +1478,12 @@ async function enableTrading() {
 
     // Clear cached credentials if wallet changed
     var cachedEoaAddress = localStorage.getItem('poly_eoa_address');
+    console.log('[wallet change debug] Current MetaMask address:', address);
+    console.log('[wallet change debug] Cached EOA address:', cachedEoaAddress);
+    console.log('[wallet change debug] Addresses match:', cachedEoaAddress && cachedEoaAddress.toLowerCase() === address.toLowerCase());
+    
     if (cachedEoaAddress && cachedEoaAddress.toLowerCase() !== address.toLowerCase()) {
+      console.log('[wallet change debug] WALLET CHANGED - clearing cache');
       tradeDebug('enableTrading', 'wallet changed from ' + cachedEoaAddress.slice(0,10) + ' to ' + address.slice(0,10) + ' - clearing cached credentials');
       localStorage.removeItem('poly_api_key');
       localStorage.removeItem('poly_api_secret');
@@ -1489,6 +1494,8 @@ async function enableTrading() {
       // Clear balance display immediately
       var balanceEl = document.getElementById('tradeBalance');
       if (balanceEl) balanceEl.textContent = 'Balance: $0.00';
+    } else {
+      console.log('[wallet change debug] Same wallet or first connection - no cache clear needed');
     }
 
     // EIP-712 CLOB auth signature
@@ -1593,6 +1600,15 @@ async function enableTrading() {
       proxyAddr = ethers.getCreate2Address(factoryAddress, salt, initCodeHash).toLowerCase();
     }
     localStorage.setItem('hf_poly_wallet', proxyAddr);
+
+    // Debug: Show all addresses being stored
+    console.log('[wallet debug] === WALLET CONNECTION DEBUG ===');
+    console.log('[wallet debug] EOA Address:', address);
+    console.log('[wallet debug] Server Proxy Address:', data.proxyAddress || data.proxy_address || 'NONE');
+    console.log('[wallet debug] Computed Proxy Address:', proxyAddr);
+    console.log('[wallet debug] Stored in hf_poly_wallet:', localStorage.getItem('hf_poly_wallet'));
+    console.log('[wallet debug] Stored in poly_eoa_address:', localStorage.getItem('poly_eoa_address'));
+    console.log('[wallet debug] =================================');
 
     // Refresh balance with new wallet
     fetchTradeBalance();
