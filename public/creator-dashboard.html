@@ -15439,7 +15439,7 @@ function renderPositionCard({question,side,pct,meta,pnl,pnlLabel,pnlIsPercent,ur
 
         <!-- Actions -->
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <a href="${url}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="font-family:var(--mono);font-size:11px;color:var(--dim);text-decoration:none;padding:6px 14px;border:1px solid var(--border);border-radius:6px;transition:all .15s;min-height:36px;display:flex;align-items:center" onmouseover="this.style.borderColor='var(--dim)';this.style.color='var(--text)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">View on ${isPoly?'Polymarket':'market'} ↗</a>
+          <a href="${url}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="font-family:var(--mono);font-size:11px;color:var(--dim);text-decoration:none;padding:6px 14px;border:1px solid var(--border);border-radius:6px;transition:all .15s;min-height:36px;display:flex;align-items:center" onmouseover="this.style.borderColor='var(--dim)';this.style.color='var(--text)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">View market page ↗</a>
           <button onclick="event.stopPropagation();sharePositionToFeed(window._posDataMap['${_posKey}'])" style="background:none;border:1px solid var(--border);border-radius:6px;padding:6px 14px;font-size:11px;color:var(--dim);cursor:pointer;font-family:var(--mono);transition:all .15s;min-height:36px" onmouseover="this.style.borderColor='${accentColor}';this.style.color='${accentColor}'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">Share</button>
           ${tradeActionsHtml}
         </div>
