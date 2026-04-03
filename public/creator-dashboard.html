@@ -16629,7 +16629,7 @@ async function confirmTrade() {
         signatureType: orderStruct.signatureType,
         signature: orderSignature
       },
-      owner: apiKey,
+      owner: orderStruct.maker,
       orderType: 'FOK'
     });
 
