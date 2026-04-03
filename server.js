@@ -17468,7 +17468,8 @@ app.get('/api/markets/search', async (req, res) => {
     // Targeted searches use _q (server-side full-text) so we trust their relevance
     const broadResponses = [polyRes].filter(r => r.status === 'fulfilled' && r.value.ok);
     const targetedResponses = polyTargetedResults.filter(r => r.status === 'fulfilled' && r.value.ok);
-    const polyResponses = [...broadResponses.map(r => ({ res: r, needsFilter: true })), ...targetedResponses.map(r => ({ res: r, needsFilter: false }))];
+    // ALL results need client-side filtering — Polymarket's _q search returns noise
+    const polyResponses = [...broadResponses.map(r => ({ res: r, needsFilter: true })), ...targetedResponses.map(r => ({ res: r, needsFilter: true }))];
     for (const { res: pRes, needsFilter } of polyResponses) {
       const raw = await pRes.value.json();
       const events = Array.isArray(raw) ? raw : [];
@@ -17507,6 +17508,8 @@ app.get('/api/markets/search', async (req, res) => {
           if (m.closed) continue;
           const mTitle = m.question || m.groupItemTitle || m.title || '';
           if (!mTitle) continue;
+          // Filter: must actually match the user's query
+          if (!matchesQuery(mTitle) && !matchesQuery(m.description || '')) continue;
           const dedupKey = mTitle.toLowerCase().trim();
           if (seenPolyQuestions.has(dedupKey)) continue;
           seenPolyQuestions.add(dedupKey);
