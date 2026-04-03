@@ -1733,7 +1733,7 @@ async function executeTrade() {
       nonce: '0',
       feeRateBps: '0',
       side: sideInt,
-      signatureType: 1
+      signatureType: 2  // POLY_GNOSIS_SAFE — proxy derived from Safe factory 0xaacFeEa0
     };
 
     console.log('[trade] Order struct:', JSON.stringify(orderStruct));
