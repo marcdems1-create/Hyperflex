@@ -419,6 +419,10 @@ function renderProfileMarkets(mktList) {
             ? `<div class="mkt-yes">${yp}% YES</div><div class="mkt-no">${np}% NO</div>`
             : `<div class="mkt-yes" style="color:var(--muted);font-size:11px">Be first to predict</div>`}
         </div>
+        ${yp !== null ? `<div style="display:flex;justify-content:space-between;margin:4px 0 0;font-family:var(--mono);font-size:10px;font-weight:700">
+          <span style="color:var(--green)">YES ROI: ${yp > 0 ? Math.round((100 - yp) / yp * 100) : 0}%</span>
+          <span style="color:var(--red)">NO ROI: ${np > 0 ? Math.round((100 - np) / np * 100) : 0}%</span>
+        </div>` : ''}
         <div class="mkt-meta">${m.trader_count || 0} traders · closes ${new Date(m.expiry_date).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</div>
       </div>`;
   }).join('');

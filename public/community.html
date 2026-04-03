@@ -3411,6 +3411,10 @@ function marketCardHTML(m, isResolved, featured) {
         <div class="market-question">${escHtml(m.question)}</div>
         ${posHTML}
         ${oddsBarHTML}
+        ${!isResolved && hasVotes && !isMultiOpt ? `<div style="display:flex;justify-content:space-between;align-items:center;margin:6px 0 2px">
+          <span style="font-family:var(--mono);font-size:10px;color:var(--green);font-weight:700">YES ROI: ${yesPct > 0 ? Math.round((100 - yesPct) / yesPct * 100) : 0}%</span>
+          <span style="font-family:var(--mono);font-size:10px;color:var(--red);font-weight:700">NO ROI: ${noPct > 0 ? Math.round((100 - noPct) / noPct * 100) : 0}%</span>
+        </div>` : ''}
         <div id="cohort-${m.id}" class="cohort-row" style="display:none"></div>
         ${innerActionsHTML}
         ${metaHTML}

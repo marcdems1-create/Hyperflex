@@ -1728,7 +1728,7 @@ function activityCard(a) {
             <div class="ac-question">${escHtml(a.market_question || '')}</div>
             <div class="ac-odds-bar"><div class="ac-odds-fill" style="width:${yesPct !== null ? yesPct : 50}%;background:${barColor};opacity:${yesPct !== null ? 1 : 0.3}"></div></div>
             ${yesPct !== null
-              ? `<div class="ac-odds-labels"><span style="color:#22c55e;font-weight:600">YES ${yesPct}%</span><span style="color:#ef4444;font-weight:600">NO ${noPct}%</span></div>`
+              ? `<div class="ac-odds-labels"><span style="color:#22c55e;font-weight:600">YES ${yesPct}%</span><span style="font-family:var(--mono);font-size:10px;color:#22c55e;font-weight:700">ROI: ${yesPct > 0 ? Math.round((100 - yesPct) / yesPct * 100) : 0}%</span><span style="font-family:var(--mono);font-size:10px;color:#ef4444;font-weight:700">ROI: ${noPct > 0 ? Math.round((100 - noPct) / noPct * 100) : 0}%</span><span style="color:#ef4444;font-weight:600">NO ${noPct}%</span></div>`
               : `<div class="ac-odds-labels" style="justify-content:center"><span style="color:var(--muted);font-size:11px">🎯 First prediction</span></div>`}
           </div>
         </div>
@@ -2228,7 +2228,7 @@ function renderMarkets(markets, communities, containerId) {
         </div>
         <div class="sentiment-labels">
           ${yesPct !== null
-            ? `<span class="yes-label">YES ${yesPct}%</span><span class="trader-count">${(m.trader_count || 0).toLocaleString()} traders</span><span class="no-label">NO ${noPct}%</span>`
+            ? `<span class="yes-label">YES ${yesPct}%</span><span style="font-family:var(--mono);font-size:10px;color:var(--green);font-weight:700">ROI: ${yesPct > 0 ? Math.round((100 - yesPct) / yesPct * 100) : 0}%</span><span class="trader-count">${(m.trader_count || 0).toLocaleString()} traders</span><span style="font-family:var(--mono);font-size:10px;color:var(--red);font-weight:700">ROI: ${noPct > 0 ? Math.round((100 - noPct) / noPct * 100) : 0}%</span><span class="no-label">NO ${noPct}%</span>`
             : `<span class="trader-count" style="margin:auto">🎯 No predictions yet · ${(m.trader_count || 0).toLocaleString()} traders</span>`}
         </div>
       </a>`;
