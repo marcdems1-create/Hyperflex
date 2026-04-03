@@ -16081,12 +16081,26 @@ async function derivePolymarketApiKey() {
 
     if (btn) btn.textContent = 'Deriving key...';
 
-    // Route through server proxy to avoid CORS blocking
-    const res = await fetch('/api/polymarket/derive-api-key', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ address, signature, timestamp, nonce })
-    });
+    // Try direct browser→CLOB first (preserves user's VPN/geo), fall back to server proxy
+    let res;
+    try {
+      res = await fetch('https://clob.polymarket.com/auth/derive-api-key', {
+        method: 'GET',
+        headers: {
+          'POLY_ADDRESS': address,
+          'POLY_SIGNATURE': signature,
+          'POLY_TIMESTAMP': timestamp,
+          'POLY_NONCE': nonce
+        }
+      });
+    } catch (corsErr) {
+      console.warn('[derive-api-key] Direct CLOB blocked, using server proxy:', corsErr.message);
+      res = await fetch('/api/polymarket/derive-api-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address, signature, timestamp, nonce })
+      });
+    }
     const data = await res.json();
     console.log('[derive-api-key] response:', JSON.stringify(data));
     if (!res.ok) {
@@ -16526,18 +16540,37 @@ async function confirmTrade() {
     const hmacSig = btoa(String.fromCharCode.apply(null, new Uint8Array(sigBuf)))
       .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
-    // Route through server proxy to avoid CORS blocking
-    const res = await fetch('/api/polymarket/clob-order', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        signed_body: requestBody,
-        api_key: apiKey,
-        api_secret: apiSecret,
-        api_passphrase: apiPassphrase,
-        eoa_address: eoaAddress
-      })
-    });
+    // Try direct browser→CLOB first (preserves user's VPN/geo), fall back to server proxy
+    let res;
+    try {
+      res = await fetch('https://clob.polymarket.com/order', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'POLY_ADDRESS': eoaAddress,
+          'POLY_API_KEY': apiKey,
+          'POLY_PASSPHRASE': apiPassphrase,
+          'POLY_TIMESTAMP': ts,
+          'POLY_SIGNATURE': hmacSig
+        },
+        body: requestBody
+      });
+    } catch (corsErr) {
+      // CORS blocked — fall back to server proxy
+      console.warn('[qt-trade] Direct CLOB blocked, using server proxy:', corsErr.message);
+      res = await fetch('/api/polymarket/clob-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          signed_body: requestBody,
+          api_key: apiKey,
+          api_secret: apiSecret,
+          api_passphrase: apiPassphrase,
+          eoa_address: eoaAddress
+        })
+      });
+    }
 
     const data = await res.json().catch(() => ({}));
 
