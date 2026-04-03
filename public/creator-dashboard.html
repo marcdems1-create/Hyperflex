@@ -12731,7 +12731,9 @@ async function loadKalshiPositions(forceRefresh) {
       const sideColor = p.side === 'YES' ? '#2d9b5f' : '#c0392b';
       const price = Math.round((p.current_price || 0) * 100);
       const endDate = p.end_date ? new Date(p.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
-      const posJson = JSON.stringify({ question: p.question, side: p.side, platform: 'kalshi', current_price: p.current_price, pnl_pct: p.pnl_pct || null, cash_value: p.cash_value, market_url: p.market_url }).replace(/'/g, '&#39;');
+      const _kKey = '_kp_' + (p.ticker || p.question || Math.random().toString(36).slice(2,8));
+      if (!window._posDataMap) window._posDataMap = {};
+      window._posDataMap[_kKey] = { question: p.question, side: p.side, platform: 'kalshi', current_price: p.current_price, pnl_pct: p.pnl_pct || null, cash_value: p.cash_value, market_url: p.market_url };
       return `
         <div style="background:var(--ink);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:10px;transition:border-color 0.15s"
           onmouseover="this.style.borderColor='rgba(201,146,13,0.4)'" onmouseout="this.style.borderColor='var(--border)'">
@@ -12756,7 +12758,7 @@ async function loadKalshiPositions(forceRefresh) {
             </div>
           </a>
           <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px">
-            <button data-pos='${posJson}' onclick="sharePositionToFeed(JSON.parse(this.getAttribute('data-pos')))" style="background:none;border:1px solid var(--gold);border-radius:6px;padding:4px 12px;font-size:11px;font-family:var(--mono);color:var(--gold);cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='rgba(201,146,13,0.1)'" onmouseout="this.style.background='none'">📢 Share to feed</button>
+            <button onclick="sharePositionToFeed(window._posDataMap['${_kKey}'])" style="background:none;border:1px solid var(--gold);border-radius:6px;padding:4px 12px;font-size:11px;font-family:var(--mono);color:var(--gold);cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='rgba(201,146,13,0.1)'" onmouseout="this.style.background='none'">📢 Share to feed</button>
           </div>
         </div>`;
     }).join('');
@@ -15041,7 +15043,17 @@ function renderPositionCard({question,side,pct,meta,pnl,pnlLabel,pnlIsPercent,ur
   const pnlColor=pnl==null?'':(pnl>=0?'#22c55e':'#f87171');
   const pnlStr=pnl==null?'':(pnl>=0?'+':'')+(pnlIsPercent?pnl.toFixed(1)+'%':'$'+Math.abs(pnl).toFixed(2));
   const pnlPctStr=(posData&&posData.pnl_pct!=null&&posData.pnl_pct!==0)?((posData.pnl_pct>=0?'+':'')+posData.pnl_pct.toFixed(1)+'%'):'';
-  const posJson=JSON.stringify(posData||{}).replace(/'/g,"&#39;").replace(/"/g,"&quot;");
+  // Store trade data in global map — avoids serializing JSON into HTML attributes
+  const _posKey = '_pd_' + (posData?.condition_id || posData?.id || Math.random().toString(36).slice(2,8));
+  if (!window._posDataMap) window._posDataMap = {};
+  window._posDataMap[_posKey] = posData ? {
+    question: posData.question, side: posData.side, platform: posData.platform,
+    current_price: posData.current_price, shares: posData.shares,
+    cost_basis: posData.cost_basis, cash_value: posData.cash_value,
+    market_url: posData.market_url, slug: posData.slug,
+    token_id: posData.token_id, condition_id: posData.condition_id || posData.id,
+    icon: posData.icon, pnl: posData.pnl
+  } : {};
   const walletConnected=!!window._connectedWallet;
   const isPoly=(posData&&posData.platform==='polymarket');
 
@@ -15069,8 +15081,8 @@ function renderPositionCard({question,side,pct,meta,pnl,pnlLabel,pnlIsPercent,ur
   const fmtVal=v=>v!=null?'$'+v.toFixed(2):'—';
   const roiStr=costBasis>0?((pnl||0)>=0?'+':'')+((pnl||0)/costBasis*100).toFixed(1)+'%':'—';
 
-  // Trade buttons
-  const tradeActionsHtml=isPoly?`<div class="poly-trade-actions" style="display:${walletConnected?'flex':'none'};gap:6px;margin-left:auto"><button data-pos="${posJson}" onclick="event.stopPropagation();openTradeModal(JSON.parse(this.getAttribute('data-pos').replace(/&quot;/g,'\\&quot;')),'buy')" style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);border-radius:6px;padding:5px 12px;font-size:10px;color:#22c55e;cursor:pointer;font-family:var(--mono);transition:all .15s;letter-spacing:.04em;min-height:32px" onmouseover="this.style.background='rgba(34,197,94,0.18)'" onmouseout="this.style.background='rgba(34,197,94,0.08)'">Buy ↑</button><button data-pos="${posJson}" onclick="event.stopPropagation();openTradeModal(JSON.parse(this.getAttribute('data-pos').replace(/&quot;/g,'\\&quot;')),'sell')" style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);border-radius:6px;padding:5px 12px;font-size:10px;color:#f87171;cursor:pointer;font-family:var(--mono);transition:all .15s;letter-spacing:.04em;min-height:32px" onmouseover="this.style.background='rgba(248,113,113,0.18)'" onmouseout="this.style.background='rgba(248,113,113,0.08)'">Sell ↓</button><button data-pos="${posJson}" onclick="event.stopPropagation();closePositionAll(JSON.parse(this.getAttribute('data-pos').replace(/&quot;/g,'\\&quot;')))" style="background:none;border:1px solid #2a2825;border-radius:6px;padding:5px 10px;font-size:10px;color:#4a4744;cursor:pointer;font-family:var(--mono);transition:all .15s;min-height:32px" onmouseover="this.style.borderColor='#f87171';this.style.color='#f87171'" onmouseout="this.style.borderColor='#2a2825';this.style.color='#4a4744'">Close</button></div>`:'';
+  // Trade buttons — use global map key instead of inline JSON to avoid HTML corruption
+  const tradeActionsHtml=isPoly?`<div class="poly-trade-actions" style="display:${walletConnected?'flex':'none'};gap:6px;margin-left:auto"><button onclick="event.stopPropagation();openTradeModal(window._posDataMap['${_posKey}'],'buy')" style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);border-radius:6px;padding:5px 12px;font-size:10px;color:#22c55e;cursor:pointer;font-family:var(--mono);transition:all .15s;letter-spacing:.04em;min-height:32px" onmouseover="this.style.background='rgba(34,197,94,0.18)'" onmouseout="this.style.background='rgba(34,197,94,0.08)'">Buy ↑</button><button onclick="event.stopPropagation();openTradeModal(window._posDataMap['${_posKey}'],'sell')" style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);border-radius:6px;padding:5px 12px;font-size:10px;color:#f87171;cursor:pointer;font-family:var(--mono);transition:all .15s;letter-spacing:.04em;min-height:32px" onmouseover="this.style.background='rgba(248,113,113,0.18)'" onmouseout="this.style.background='rgba(248,113,113,0.08)'">Sell ↓</button><button onclick="event.stopPropagation();closePositionAll(window._posDataMap['${_posKey}'])" style="background:none;border:1px solid #2a2825;border-radius:6px;padding:5px 10px;font-size:10px;color:#4a4744;cursor:pointer;font-family:var(--mono);transition:all .15s;min-height:32px" onmouseover="this.style.borderColor='#f87171';this.style.color='#f87171'" onmouseout="this.style.borderColor='#2a2825';this.style.color='#4a4744'">Close</button></div>`:'';
 
   // Unique card ID for collapse state
   const cardId = 'pos-' + (posData?.condition_id || posData?.market_slug || Math.random().toString(36).slice(2,8));
@@ -15129,7 +15141,7 @@ function renderPositionCard({question,side,pct,meta,pnl,pnlLabel,pnlIsPercent,ur
         <!-- Actions -->
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
           <a href="${url}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="font-family:var(--mono);font-size:9px;color:#4a4744;text-decoration:none;padding:4px 10px;border:1px solid #1e1e1c;border-radius:5px;transition:all .15s;letter-spacing:.04em" onmouseover="this.style.borderColor='#444';this.style.color='#a09d94'" onmouseout="this.style.borderColor='#1e1e1c';this.style.color='#4a4744'">VIEW</a>
-          <button data-pos="${posJson}" onclick="event.stopPropagation();sharePositionToFeed(JSON.parse(this.getAttribute('data-pos').replace(/&quot;/g,'\\"')))" style="background:none;border:1px solid #1e1e1c;border-radius:5px;padding:4px 10px;font-size:9px;color:#4a4744;cursor:pointer;font-family:var(--mono);transition:all .15s;letter-spacing:.04em" onmouseover="this.style.borderColor='${accentColor}';this.style.color='${accentColor}'" onmouseout="this.style.borderColor='#1e1e1c';this.style.color='#4a4744'">SHARE</button>
+          <button onclick="event.stopPropagation();sharePositionToFeed(window._posDataMap['${_posKey}'])" style="background:none;border:1px solid #1e1e1c;border-radius:5px;padding:4px 10px;font-size:9px;color:#4a4744;cursor:pointer;font-family:var(--mono);transition:all .15s;letter-spacing:.04em" onmouseover="this.style.borderColor='${accentColor}';this.style.color='${accentColor}'" onmouseout="this.style.borderColor='#1e1e1c';this.style.color='#4a4744'">SHARE</button>
           ${tradeActionsHtml}
         </div>
       </div>
