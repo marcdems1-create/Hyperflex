@@ -11961,6 +11961,12 @@ app.get('/api/activity', async (req, res) => {
             const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
             if (Array.isArray(prices) && prices[0] != null) yesPct = Math.round(prices[0] * 100);
           } catch {}
+          // Cross-reference screener cache for live CLOB prices
+          if (_screenerCache && _screenerCache.data) {
+            const qKey = (m.question || '').toLowerCase().trim();
+            const sMatch = _screenerCache.data.find(sm => (sm.question || '').toLowerCase().trim() === qKey);
+            if (sMatch && sMatch.yes_price != null) yesPct = Math.round(sMatch.yes_price * 100);
+          }
           // Auto-categorize based on question text
           const qLower = (m.question || m.title || '').toLowerCase();
           const category = /\bnba\b|nfl|mlb|nhl|ufc|mma|premier league|soccer|football|basketball|baseball|hockey|tennis|boxing|f1|formula|cricket|golf|champion|playoff|super bowl|world cup|olympics|spread:|o\/u |moneyline|game \d|vs\.|match|cavaliers|lakers|celtics|warriors|hawks|bulls|nets|knicks|mavericks|bucks|heat|suns|spurs|nuggets|clippers|rockets|grizzlies|pacers|wizards|kings|hornets|pistons|magic|raptors|76ers|blazers|timberwolves|pelicans|thunder|jazz|pride|crimson|bengals|chiefs|eagles|cowboys|saints|ravens|bills|dolphins|steelers|patriots|broncos|chargers|raiders|49ers|seahawks|packers|bears|vikings|lions|falcons|panthers|buccaneers|commanders|jaguars|texans|colts|titans|cardinals|rams|giants|jets|browns/.test(qLower) ? 'sports'
@@ -17413,6 +17419,17 @@ app.get('/api/markets/search', async (req, res) => {
     polyMarkets.sort((a, b) => b.volume - a.volume);
     polyMarkets = polyMarkets.slice(0, 20);
 
+    // ── Cross-reference screener cache for live CLOB prices ──
+    if (_screenerCache && _screenerCache.data) {
+      for (const pm of polyMarkets) {
+        const qLower = (pm.question || '').toLowerCase().trim();
+        const match = _screenerCache.data.find(sm => (sm.question || '').toLowerCase().trim() === qLower);
+        if (match && match.yes_price != null) {
+          pm.yes_pct = Math.round(match.yes_price * 100);
+        }
+      }
+    }
+
     // --- Supplement Kalshi cache with targeted series ticker queries ---
     // Some Kalshi event types (hourly crypto, sports props) don't appear in status=open pagination
     const kalshiSeriesMap = {
@@ -18857,6 +18874,96 @@ app.get('/api/whale-index', async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
+// CLOB LIVE PRICE UPGRADE — replaces stale gamma-api prices with real-time CLOB midpoints
+// Reusable utility: call on any array of markets that have clobTokenIds or outcomePrices
+// ════════════════════════════════════════════════════════════
+
+// In-memory CLOB midpoint cache — shared across all endpoints (30s TTL per token)
+const _clobMidpointCache = new Map(); // tokenId → { mid, ts }
+const CLOB_MIDPOINT_TTL = 30 * 1000; // 30 seconds
+
+/**
+ * Upgrade an array of market objects with live CLOB midpoint prices.
+ * Works with both raw gamma-api markets (have clobTokenIds + outcomePrices)
+ * and enriched screener markets (have yes_price).
+ * Batches requests in chunks of 20 to avoid overwhelming the CLOB.
+ * @param {Array} markets - array of market objects
+ * @param {string} priceField - which field to update ('yes_price' for screener, 'outcomePrices' for raw gamma)
+ * @returns {Array} same markets array, mutated with live prices
+ */
+async function upgradeToClobPrices(markets, priceField = 'yes_price') {
+  if (!markets || !markets.length) return markets;
+  const fetch = _nodeFetch;
+  const now = Date.now();
+
+  // Collect tokens that need fetching
+  const toFetch = []; // { idx, tokenId }
+  for (let i = 0; i < markets.length; i++) {
+    const m = markets[i];
+    let tokenId = null;
+    try {
+      const tids = typeof m.clobTokenIds === 'string' ? JSON.parse(m.clobTokenIds) : m.clobTokenIds;
+      if (Array.isArray(tids) && tids[0]) tokenId = tids[0];
+    } catch (e) {}
+    if (!tokenId) continue;
+
+    // Check cache first
+    const cached = _clobMidpointCache.get(tokenId);
+    if (cached && (now - cached.ts < CLOB_MIDPOINT_TTL)) {
+      // Apply cached price immediately
+      if (priceField === 'yes_price' && cached.mid != null) {
+        m.yes_price = cached.mid;
+      } else if (priceField === 'outcomePrices' && cached.mid != null) {
+        m.outcomePrices = JSON.stringify([cached.mid, 1 - cached.mid]);
+      }
+      continue;
+    }
+    toFetch.push({ idx: i, tokenId });
+  }
+
+  if (!toFetch.length) return markets;
+
+  // Fetch in chunks of 25 (parallel within chunk, sequential between chunks)
+  const CHUNK_SIZE = 25;
+  for (let c = 0; c < toFetch.length; c += CHUNK_SIZE) {
+    const chunk = toFetch.slice(c, c + CHUNK_SIZE);
+    const results = await Promise.all(chunk.map(t =>
+      fetch(`https://clob.polymarket.com/midpoint?token_id=${encodeURIComponent(t.tokenId)}`, {
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined
+      })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => ({ idx: t.idx, tokenId: t.tokenId, mid: d && d.mid !== undefined ? parseFloat(d.mid) : null }))
+        .catch(() => ({ idx: t.idx, tokenId: t.tokenId, mid: null }))
+    ));
+
+    for (const r of results) {
+      if (r.mid === null || isNaN(r.mid) || r.mid <= 0 || r.mid >= 1) continue;
+
+      // Cache the result
+      _clobMidpointCache.set(r.tokenId, { mid: r.mid, ts: Date.now() });
+
+      // Apply to market
+      const m = markets[r.idx];
+      if (priceField === 'yes_price') {
+        m.yes_price = r.mid;
+      } else if (priceField === 'outcomePrices') {
+        m.outcomePrices = JSON.stringify([r.mid, 1 - r.mid]);
+      }
+    }
+  }
+
+  // Evict old cache entries periodically
+  if (_clobMidpointCache.size > 500) {
+    for (const [k, v] of _clobMidpointCache) {
+      if (now - v.ts > 5 * 60 * 1000) _clobMidpointCache.delete(k);
+    }
+  }
+
+  return markets;
+}
+
+// ════════════════════════════════════════════════════════════
 // MARKET SCREENER — filter and discover enriched markets
 // ════════════════════════════════════════════════════════════
 let _screenerCache = null;
@@ -18869,8 +18976,8 @@ let _volumeBaselineCache = null; // { ts, data: { market_id: avg_volume } }
 
 app.get('/api/screener', async (req, res) => {
   try {
-    // Check cache (5 min TTL)
-    if (_screenerCache && (Date.now() - _screenerCache.ts < 5 * 60 * 1000)) {
+    // Check cache (90s TTL — live CLOB prices need freshness)
+    if (_screenerCache && (Date.now() - _screenerCache.ts < 90 * 1000)) {
       return res.json(filterScreenerResults(_screenerCache.data, req.query));
     }
 
@@ -19120,6 +19227,7 @@ app.get('/api/screener', async (req, res) => {
         question,
         category,
         yes_price: yesPrice,
+        clobTokenIds: m.clobTokenIds || null,
         volume,
         whale_count: wCount,
         total_whale_capital: wCapital,
@@ -19168,6 +19276,12 @@ app.get('/api/screener', async (req, res) => {
         m.alpha_score = computeMarketAlphaScore(m, whaleIdx, eliteData.scores);
       }
     } catch (e) { console.warn('[screener] alpha score computation:', e.message); }
+
+    // ── UPGRADE TO LIVE CLOB PRICES — replace stale gamma-api outcomePrices with real-time midpoints ──
+    try {
+      await upgradeToClobPrices(markets, 'yes_price');
+      console.log('[screener] Upgraded', markets.filter(m => m.clobTokenIds).length, 'markets to live CLOB prices');
+    } catch (e) { console.warn('[screener] CLOB price upgrade failed:', e.message); }
 
     _screenerCache = { ts: Date.now(), data: markets };
     _healthTimestamps.lastScreenerFetch = new Date().toISOString();
@@ -21615,13 +21729,39 @@ async function snapshotPolymarketPrices() {
     const markets = await res.json();
     if (!Array.isArray(markets) || !markets.length) { console.warn('[snapshot] No markets returned'); return; }
 
+    // Upgrade to live CLOB prices before snapshotting
+    try {
+      const marketsWithTokens = markets.filter(m => m.clobTokenIds).map(m => {
+        let yesPrice = null;
+        try { const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices; if (Array.isArray(prices) && prices[0] != null) yesPrice = parseFloat(prices[0]); } catch {}
+        return { ...m, yes_price: yesPrice, clobTokenIds: m.clobTokenIds };
+      });
+      await upgradeToClobPrices(marketsWithTokens, 'yes_price');
+      // Merge upgraded prices back
+      const upgraded = {};
+      for (const u of marketsWithTokens) {
+        const mid = u.conditionId || u.slug || u.id || '';
+        if (mid && u.yes_price != null) upgraded[mid] = u.yes_price;
+      }
+      // Apply upgraded prices to markets array
+      for (const m of markets) {
+        const mid = m.conditionId || m.slug || m.id || '';
+        if (upgraded[mid] != null) {
+          m._upgradedPrice = upgraded[mid];
+        }
+      }
+      console.log('[snapshot] Upgraded', Object.keys(upgraded).length, 'markets to CLOB prices');
+    } catch (e) { console.warn('[snapshot] CLOB upgrade failed:', e.message); }
+
     const rows = [];
     for (const m of markets) {
-      let yesPrice = null;
-      try {
-        const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
-        if (Array.isArray(prices) && prices[0] != null) yesPrice = parseFloat(prices[0]);
-      } catch {}
+      let yesPrice = m._upgradedPrice || null;
+      if (yesPrice == null) {
+        try {
+          const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
+          if (Array.isArray(prices) && prices[0] != null) yesPrice = parseFloat(prices[0]);
+        } catch {}
+      }
       const marketId = m.conditionId || m.slug || m.id || '';
       if (!marketId) continue;
       rows.push({
@@ -22946,10 +23086,12 @@ async function generateCrystalBallPredictions() {
           let yesPrice = null;
           try { const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices; if (Array.isArray(prices) && prices[0] != null) yesPrice = parseFloat(prices[0]); } catch {}
           const evtSlug = (m.events && m.events[0] && m.events[0].slug) || m.slug || '';
-          return { market_id: m.conditionId || evtSlug || m.id || '', question: m.question, yes_price: yesPrice, volume: parseFloat(m.volume) || 0, end_date: (m.endDate || m.end_date_iso) ? new Date(m.endDate || m.end_date_iso).toISOString() : null, url: evtSlug ? `https://polymarket.com/event/${evtSlug}` : 'https://polymarket.com', slug: evtSlug };
+          return { market_id: m.conditionId || evtSlug || m.id || '', question: m.question, yes_price: yesPrice, clobTokenIds: m.clobTokenIds || null, volume: parseFloat(m.volume) || 0, end_date: (m.endDate || m.end_date_iso) ? new Date(m.endDate || m.end_date_iso).toISOString() : null, url: evtSlug ? `https://polymarket.com/event/${evtSlug}` : 'https://polymarket.com', slug: evtSlug };
         });
+        // Upgrade to live CLOB prices
+        try { await upgradeToClobPrices(markets, 'yes_price'); } catch (e) { console.warn('[crystal-ball] CLOB upgrade failed:', e.message); }
         _screenerCache = { ts: Date.now(), data: markets };
-        console.log('[crystal-ball] Warmed screener cache:', markets.length, 'markets');
+        console.log('[crystal-ball] Warmed screener cache:', markets.length, 'markets (CLOB upgraded)');
       }
     } catch(e) { console.warn('[crystal-ball] screener warm failed:', e.message); }
   }
@@ -23428,7 +23570,7 @@ async function generateCrystalBallPredictions() {
 app.get('/api/crystal-ball', async (req, res) => {
   try {
     // 5 min cache
-    if (_crystalBallCache && (Date.now() - _crystalBallCache.ts < 5 * 60 * 1000)) {
+    if (_crystalBallCache && (Date.now() - _crystalBallCache.ts < 2 * 60 * 1000)) { // 2-min TTL — inherits live CLOB prices from screener
       return res.json(_crystalBallCache.data);
     }
     const data = await generateCrystalBallPredictions();
@@ -23982,7 +24124,7 @@ let _signalsCache = null;
 app.get('/api/signals', async (req, res) => {
   try {
     // Check cache (5 min TTL)
-    if (_signalsCache && (Date.now() - _signalsCache.ts < 5 * 60 * 1000)) {
+    if (_signalsCache && (Date.now() - _signalsCache.ts < 2 * 60 * 1000)) { // 2-min TTL — inherits live CLOB prices from screener
       return res.json(_signalsCache.data);
     }
 
