@@ -28021,7 +28021,111 @@ app.get('/api/resolution-probability', (req, res) => {
   }
 });
 
-// (market-intelligence endpoint moved earlier in file — old version removed)
+// ════════════════════════════════════════════════════════════
+// FEATURE: MARKET INTELLIGENCE SUMMARY — one endpoint, everything you need
+// ════════════════════════════════════════════════════════════
+let _marketIntelCache = null;
+
+app.get('/api/market-intelligence', (req, res) => {
+  try {
+    // 5 min cache
+    if (_marketIntelCache && (Date.now() - _marketIntelCache.ts < 5 * 60 * 1000)) {
+      return res.json(_marketIntelCache.data);
+    }
+
+    // Crystal Ball — top prediction
+    const cbData = _crystalBallCache && _crystalBallCache.data ? _crystalBallCache.data : null;
+    let topPrediction = null;
+    if (cbData && cbData.predictions && cbData.predictions.length > 0) {
+      const p = cbData.predictions[0];
+      topPrediction = {
+        prediction: p.prediction,
+        confidence: p.confidence,
+        type: p.type,
+        action: p.action,
+        market_url: p.market && p.market.url ? p.market.url : null
+      };
+    }
+
+    // Fear & Greed
+    let fearGreed = null;
+    try {
+      const fg = computeFearGreed();
+      // Determine trend
+      let trend = 'stable';
+      if (_fearGreedCache && _fearGreedCache.data) {
+        const diff = fg.score - _fearGreedCache.data.score;
+        if (diff > 3) trend = 'rising';
+        else if (diff < -3) trend = 'falling';
+      }
+      fearGreed = { score: fg.score, label: fg.label, color: fg.color, trend };
+    } catch (e) {
+      fearGreed = { score: 50, label: 'Neutral', color: '#eab308', trend: 'stable' };
+    }
+
+    // Resolution probability — markets expiring in 24h
+    const rpData = _resolutionProbCache && _resolutionProbCache.data ? _resolutionProbCache.data : null;
+    let expiringIn24h = 0;
+    let urgentMarkets = [];
+    if (rpData && rpData.markets) {
+      urgentMarkets = rpData.markets.filter(m => m.hours_to_expiry <= 24);
+      expiringIn24h = urgentMarkets.length;
+    }
+
+    // Correlations summary
+    const corrData = _correlationCache && _correlationCache.data ? _correlationCache.data : null;
+    const topCorrelation = corrData && corrData.pairs && corrData.pairs.length > 0 ? corrData.pairs[0] : null;
+
+    // Contrarian summary
+    const contrData = _contrarianCache && _contrarianCache.data ? _contrarianCache.data : null;
+    const topContrarian = contrData && contrData.signals && contrData.signals.length > 0 ? contrData.signals[0] : null;
+
+    // Whale flow summary
+    const flowData = _whaleFlowCache && _whaleFlowCache.data ? _whaleFlowCache.data : null;
+    let whaleFlowSummary = null;
+    if (flowData) {
+      whaleFlowSummary = {
+        total_capital: flowData.total_capital || 0,
+        yes_pct: flowData.sentiment ? flowData.sentiment.yes_pct : 50,
+        top_concentration: flowData.concentration && flowData.concentration[0] ? flowData.concentration[0] : null
+      };
+    }
+
+    const result = {
+      top_prediction: topPrediction,
+      fear_greed: fearGreed,
+      expiring_markets: {
+        count_24h: expiringIn24h,
+        urgent: urgentMarkets.slice(0, 3).map(m => ({
+          market: m.market,
+          hours_left: m.hours_to_expiry,
+          probability: m.resolution_probability,
+          url: m.url
+        }))
+      },
+      top_correlation: topCorrelation ? {
+        market_a: topCorrelation.market_a,
+        market_b: topCorrelation.market_b,
+        shared_whales: topCorrelation.shared_whales,
+        type: topCorrelation.correlation_type
+      } : null,
+      top_contrarian: topContrarian ? {
+        market: topContrarian.market,
+        contrarian_score: topContrarian.contrarian_score,
+        suggestion: topContrarian.suggestion
+      } : null,
+      whale_flow: whaleFlowSummary,
+      updated_at: new Date().toISOString()
+    };
+
+    _marketIntelCache = { ts: Date.now(), data: result };
+    res.json(result);
+  } catch (err) {
+    console.error('[market-intelligence]', err.message);
+    if (_marketIntelCache) return res.json(_marketIntelCache.data);
+    res.status(500).json({ error: 'Failed to build intelligence summary', detail: err.message });
+  }
+});
 
 // ════════════════════════════════════════════════════════════
 // EVENT CALENDAR — map real-world events to prediction markets
