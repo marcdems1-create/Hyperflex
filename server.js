@@ -24202,24 +24202,81 @@ app.post('/api/polymarket/derive-api-key', optionalAuth, async (req, res) => {
       } catch(e) { console.warn('[derive-api-key] L1 api-keys lookup failed:', e.message); }
     }
 
-    // Fallback: try Polymarket profile/data API for proxy discovery
+    // Fallback: try multiple Polymarket data API endpoints to discover proxy
+    if (!proxyAddress) {
+      const addrLower = address.toLowerCase();
+      // Try profile endpoint with both ?address= and ?user= params
+      for (const profileUrl of [
+        `https://data-api.polymarket.com/profile?address=${addrLower}`,
+        `https://data-api.polymarket.com/profile?user=${addrLower}`
+      ]) {
+        if (proxyAddress) break;
+        try {
+          console.log(`[derive-api-key] Trying: ${profileUrl}`);
+          const profileRes = await fetch(profileUrl);
+          if (profileRes.ok) {
+            const profileData = await profileRes.json();
+            console.log(`[derive-api-key] Profile response keys: ${JSON.stringify(Object.keys(profileData)).slice(0,300)}`);
+            const profProxy = profileData.proxyAddress || profileData.proxy_address || profileData.proxyWallet
+              || profileData.proxy_wallet || profileData.funder || profileData.depositAddress
+              || profileData.deposit_address || profileData.contractAddress || profileData.contract_address || null;
+            if (profProxy && profProxy.toLowerCase() !== addrLower) {
+              proxyAddress = profProxy;
+              console.log(`[derive-api-key] Found proxy from profile: ${proxyAddress}`);
+            }
+          }
+        } catch(e) { console.warn('[derive-api-key] Profile lookup failed:', e.message); }
+      }
+    }
+
+    // Try activity endpoint — transactions may reference the proxy wallet
     if (!proxyAddress) {
       try {
-        console.log('[derive-api-key] Trying Polymarket profile API...');
-        const profileRes = await fetch(`https://data-api.polymarket.com/profile?address=${address.toLowerCase()}`);
-        if (profileRes.ok) {
-          const profileData = await profileRes.json();
-          console.log(`[derive-api-key] Profile response keys: ${JSON.stringify(Object.keys(profileData))}`);
-          const profProxy = profileData.proxyAddress || profileData.proxy_address || profileData.proxyWallet
-            || profileData.proxy_wallet || profileData.funder || null;
-          if (profProxy && profProxy.toLowerCase() !== address.toLowerCase()) {
-            proxyAddress = profProxy;
-            console.log(`[derive-api-key] Found proxy from profile API: ${proxyAddress}`);
+        const actUrl = `https://data-api.polymarket.com/activity?user=${address.toLowerCase()}&limit=5`;
+        console.log(`[derive-api-key] Trying activity: ${actUrl}`);
+        const actRes = await fetch(actUrl);
+        if (actRes.ok) {
+          const actData = await actRes.json();
+          const activities = Array.isArray(actData) ? actData : [];
+          console.log(`[derive-api-key] Activity response: ${activities.length} items, keys: ${activities.length > 0 ? JSON.stringify(Object.keys(activities[0])).slice(0,200) : 'none'}`);
+          for (const act of activities) {
+            const candidate = act.proxyAddress || act.proxy_address || act.proxyWallet
+              || act.owner || act.maker || act.funder || null;
+            if (candidate && candidate.toLowerCase() !== address.toLowerCase()
+                && candidate.startsWith('0x') && candidate.length === 42) {
+              proxyAddress = candidate;
+              console.log(`[derive-api-key] Found proxy from activity: ${proxyAddress}`);
+              break;
+            }
           }
-        } else {
-          console.log(`[derive-api-key] Profile API ${profileRes.status}`);
         }
-      } catch(e) { console.warn('[derive-api-key] Profile API lookup failed:', e.message); }
+      } catch(e) { console.warn('[derive-api-key] Activity lookup failed:', e.message); }
+    }
+
+    // Try positions endpoint — if the EOA has positions, it might BE the proxy
+    // or the positions response might contain the proxy address
+    if (!proxyAddress) {
+      try {
+        const posUrl = `https://data-api.polymarket.com/positions?user=${address.toLowerCase()}&limit=3&sortBy=CURRENT`;
+        console.log(`[derive-api-key] Trying positions for EOA...`);
+        const posRes = await fetch(posUrl);
+        if (posRes.ok) {
+          const posData = await posRes.json();
+          if (Array.isArray(posData) && posData.length > 0) {
+            console.log(`[derive-api-key] EOA has ${posData.length} positions — checking for proxy in response`);
+            console.log(`[derive-api-key] Position keys: ${JSON.stringify(Object.keys(posData[0])).slice(0,300)}`);
+            for (const pos of posData) {
+              const candidate = pos.proxyAddress || pos.proxy_address || pos.owner || pos.maker || null;
+              if (candidate && candidate.toLowerCase() !== address.toLowerCase()
+                  && candidate.startsWith('0x') && candidate.length === 42) {
+                proxyAddress = candidate;
+                console.log(`[derive-api-key] Found proxy from positions: ${proxyAddress}`);
+                break;
+              }
+            }
+          }
+        }
+      } catch(e) { console.warn('[derive-api-key] Positions lookup failed:', e.message); }
     }
 
     // Fallback: check our DB for a previously stored proxy address

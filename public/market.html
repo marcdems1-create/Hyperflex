@@ -1651,22 +1651,76 @@ async function enableTrading() {
       }
     }
 
-    // If derive/retry didn't find proxy, try discovering it from Polymarket profile API
+    // If derive/retry didn't find proxy, try multiple Polymarket data API endpoints
     if (!proxyAddr) {
-      console.log('[wallet debug] No proxy from derive — trying Polymarket profile lookup...');
+      console.log('[wallet debug] No proxy from derive — trying Polymarket data API discovery...');
       cta.textContent = 'Finding deposit address...';
-      try {
-        var profileRes = await fetch('https://data-api.polymarket.com/profile?address=' + address.toLowerCase());
-        if (profileRes.ok) {
-          var profileData = await profileRes.json();
-          console.log('[wallet debug] Profile response keys:', Object.keys(profileData));
-          var foundProxy = profileData.proxyAddress || profileData.proxy_address || profileData.proxyWallet || profileData.proxy_wallet || profileData.funder || null;
-          if (foundProxy && foundProxy.toLowerCase() !== address.toLowerCase()) {
-            proxyAddr = foundProxy.toLowerCase();
-            console.log('[wallet debug] Found proxy from profile API:', proxyAddr);
+      var addrLower = address.toLowerCase();
+
+      // Try profile with both param styles
+      var profileUrls = [
+        'https://data-api.polymarket.com/profile?address=' + addrLower,
+        'https://data-api.polymarket.com/profile?user=' + addrLower
+      ];
+      for (var pi = 0; pi < profileUrls.length && !proxyAddr; pi++) {
+        try {
+          var profileRes = await fetch(profileUrls[pi]);
+          if (profileRes.ok) {
+            var profileData = await profileRes.json();
+            console.log('[wallet debug] Profile response keys:', Object.keys(profileData));
+            var foundProxy = profileData.proxyAddress || profileData.proxy_address || profileData.proxyWallet
+              || profileData.proxy_wallet || profileData.funder || profileData.depositAddress
+              || profileData.deposit_address || profileData.contractAddress || null;
+            if (foundProxy && foundProxy.toLowerCase() !== addrLower) {
+              proxyAddr = foundProxy.toLowerCase();
+              console.log('[wallet debug] Found proxy from profile:', proxyAddr);
+            }
           }
-        }
-      } catch(profErr) { console.warn('[wallet debug] Profile lookup failed:', profErr.message); }
+        } catch(profErr) { console.warn('[wallet debug] Profile lookup failed:', profErr.message); }
+      }
+
+      // Try activity endpoint
+      if (!proxyAddr) {
+        try {
+          var actRes = await fetch('https://data-api.polymarket.com/activity?user=' + addrLower + '&limit=5');
+          if (actRes.ok) {
+            var actData = await actRes.json();
+            var activities = Array.isArray(actData) ? actData : [];
+            console.log('[wallet debug] Activity:', activities.length, 'items', activities.length > 0 ? Object.keys(activities[0]) : '');
+            for (var ai = 0; ai < activities.length; ai++) {
+              var act = activities[ai];
+              var candidate = act.proxyAddress || act.proxy_address || act.proxyWallet || act.owner || act.maker || act.funder || null;
+              if (candidate && candidate.toLowerCase() !== addrLower && candidate.startsWith('0x') && candidate.length === 42) {
+                proxyAddr = candidate.toLowerCase();
+                console.log('[wallet debug] Found proxy from activity:', proxyAddr);
+                break;
+              }
+            }
+          }
+        } catch(actErr) { console.warn('[wallet debug] Activity lookup failed:', actErr.message); }
+      }
+
+      // Try positions endpoint — proxy may be in position data
+      if (!proxyAddr) {
+        try {
+          var posRes = await fetch('https://data-api.polymarket.com/positions?user=' + addrLower + '&limit=3&sortBy=CURRENT');
+          if (posRes.ok) {
+            var posData = await posRes.json();
+            if (Array.isArray(posData) && posData.length > 0) {
+              console.log('[wallet debug] EOA has', posData.length, 'positions, keys:', Object.keys(posData[0]));
+              for (var posi = 0; posi < posData.length; posi++) {
+                var pos = posData[posi];
+                var posCand = pos.proxyAddress || pos.proxy_address || pos.owner || pos.maker || null;
+                if (posCand && posCand.toLowerCase() !== addrLower && posCand.startsWith('0x') && posCand.length === 42) {
+                  proxyAddr = posCand.toLowerCase();
+                  console.log('[wallet debug] Found proxy from positions:', proxyAddr);
+                  break;
+                }
+              }
+            }
+          }
+        } catch(posErr) { console.warn('[wallet debug] Positions lookup failed:', posErr.message); }
+      }
     }
 
     // Last resort: check per-EOA cached proxy from dashboard/previous session
@@ -1703,6 +1757,48 @@ async function enableTrading() {
       console.warn('[wallet debug] WARNING: No proxy address found after all methods.');
       console.warn('[wallet debug] Full CLOB response keys:', Object.keys(data));
       // DON'T store empty string or EOA as proxy — that causes wrong signatureType
+
+      // Option B: Manual paste fallback — show inline input for deposit address
+      cta.disabled = false;
+      updateCtaButton();
+      showTradeStatus('', 'info');
+      var statusEl = document.getElementById('tradeStatus');
+      if (statusEl) {
+        statusEl.innerHTML = '<div style="text-align:left;font-size:12px;line-height:1.5">' +
+          '<div style="color:var(--gold);font-weight:700;margin-bottom:6px">Deposit address not found automatically.</div>' +
+          '<div style="color:var(--soft);margin-bottom:8px">Find it at <a href="https://polymarket.com" target="_blank" style="color:var(--gold)">polymarket.com</a> &rarr; Profile icon (top right) &rarr; copy the 0x address shown.</div>' +
+          '<div style="display:flex;gap:6px;align-items:center">' +
+            '<input id="manualProxyInput" type="text" placeholder="0x... deposit address" style="flex:1;padding:8px 10px;background:#0f0e0c;border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--mono);font-size:11px">' +
+            '<button onclick="window._saveManualProxy()" style="padding:8px 14px;background:var(--gold);color:#141412;border:none;border-radius:6px;font-family:var(--sans);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">Save</button>' +
+          '</div>' +
+          '<div id="manualProxyStatus" style="font-size:11px;margin-top:4px;color:var(--dim)"></div>' +
+        '</div>';
+      }
+      // Wire up the save handler
+      window._saveManualProxy = function() {
+        var input = document.getElementById('manualProxyInput');
+        var statusDiv = document.getElementById('manualProxyStatus');
+        if (!input) return;
+        var val = (input.value || '').trim().toLowerCase();
+        if (!val.startsWith('0x') || val.length !== 42) {
+          if (statusDiv) { statusDiv.textContent = 'Invalid address — must be 0x... (42 characters)'; statusDiv.style.color = 'var(--red)'; }
+          return;
+        }
+        if (val === address.toLowerCase()) {
+          if (statusDiv) { statusDiv.textContent = 'That\'s your MetaMask address, not your deposit address'; statusDiv.style.color = 'var(--red)'; }
+          return;
+        }
+        localStorage.setItem('hf_poly_wallet', val);
+        localStorage.setItem('hf_poly_proxy_' + address.toLowerCase(), val);
+        if (statusDiv) { statusDiv.textContent = 'Saved! Refreshing...'; statusDiv.style.color = 'var(--green)'; }
+        // Refresh balance + UI
+        setTimeout(function() {
+          fetchTradeBalance();
+          updateTradingUI();
+          showTradeStatus('Trading enabled! Deposit address saved.', 'success');
+        }, 300);
+      };
+      return true; // Keys are stored, just no proxy yet — user can paste it
     } else {
       console.log('[wallet debug] Using proxy address:', proxyAddr);
       localStorage.setItem('hf_poly_wallet', proxyAddr);
