@@ -12019,9 +12019,17 @@ function setPolyAddress(addr, reason) {
   _polyWalletAddress = addr;
   localStorage.setItem('hf_poly_wallet', addr);
   sessionStorage.setItem('hf_poly_wallet_session', addr);
+  // Store per-EOA mapping so different wallets don't cross-contaminate
+  var eoa = (localStorage.getItem('poly_eoa_address') || '').toLowerCase();
+  if (eoa && addr !== eoa) {
+    localStorage.setItem('hf_poly_proxy_' + eoa, addr);
+  }
   // Mark as explicitly set by user action — prevents recovery from overriding
-  if (reason && !reason.startsWith('recovery')) _polyWalletExplicitlySet = true;
-  console.log('[poly-addr] Changed:', prev ? prev.slice(0,10)+'...' : '(empty)', '→', addr.slice(0,10)+'...', '| Reason:', reason || 'unknown');
+  if (reason && !reason.startsWith('recovery')) {
+    _polyWalletExplicitlySet = true;
+    localStorage.setItem('hf_wallet_explicit_switch', Date.now().toString());
+  }
+  console.log('[poly-addr] Changed:', prev ? prev.slice(0,10)+'...' : '(empty)', '→', addr.slice(0,10)+'...', '| Reason:', reason || 'unknown', eoa ? '(EOA: ' + eoa.slice(0,10) + ')' : '');
   // Save to DB (fire-and-forget)
   try { const t = localStorage.getItem('hf_token'); if (t) fetch('/api/user/wallets', { method: 'PUT', headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' }, body: JSON.stringify({ polymarket_address: addr }) }); } catch(e) {}
 }
@@ -12030,7 +12038,14 @@ function markPolyAddressGood() {
   if (_polyWalletAddress) {
     _polyLastGoodAddress = _polyWalletAddress;
     localStorage.setItem('hf_poly_last_good', _polyWalletAddress);
-    console.log('[poly-addr] Marked good:', _polyWalletAddress.slice(0,10) + '...');
+    // Store per-EOA so different wallets don't cross-contaminate
+    var eoa = (localStorage.getItem('poly_eoa_address') || '').toLowerCase();
+    if (eoa && _polyWalletAddress.toLowerCase() !== eoa) {
+      localStorage.setItem('hf_poly_proxy_' + eoa, _polyWalletAddress);
+      console.log('[poly-addr] Marked good (per-EOA ' + eoa.slice(0,10) + '):', _polyWalletAddress.slice(0,10) + '...');
+    } else {
+      console.log('[poly-addr] Marked good:', _polyWalletAddress.slice(0,10) + '...');
+    }
   }
 }
 
@@ -13129,20 +13144,49 @@ async function loadPolymarketPositions(forceRefresh) {
       }
     }
     // AUTO-RECOVERY: if 0 positions, try alternative addresses before giving up
-    // SKIP recovery if user recently connected a wallet (check localStorage flag)
+    // SKIP recovery if user recently connected/switched a wallet (persisted in localStorage, 10min grace)
     const recentWalletSwitch = localStorage.getItem('hf_wallet_explicit_switch');
     const switchAge = recentWalletSwitch ? (Date.now() - parseInt(recentWalletSwitch)) : Infinity;
-    const skipRecovery = _polyWalletExplicitlySet || (switchAge < 300000); // 5 min grace period
+    const skipRecovery = _polyWalletExplicitlySet || (switchAge < 600000); // 10 min grace period
     if (skipRecovery && positions.length === 0) {
-      console.log('[poly-recovery] Skipping recovery — wallet was explicitly set', switchAge < 300000 ? '(recent switch ' + Math.round(switchAge/1000) + 's ago)' : '');
+      console.log('[poly-recovery] Skipping recovery — wallet was explicitly set', switchAge < 600000 ? '(recent switch ' + Math.round(switchAge/1000) + 's ago)' : '');
     }
     if (positions.length === 0 && !_polyRecoveryAttempted && !skipRecovery) {
       _polyRecoveryAttempted = true;
 
-      // First: try last known good address (fastest path)
-      if (_polyLastGoodAddress && _polyLastGoodAddress !== _polyWalletAddress.toLowerCase()) {
+      // Get current EOA to scope recovery — prevents cross-wallet contamination
+      var recoveryEoa = (localStorage.getItem('poly_eoa_address') || '').toLowerCase();
+      if (!recoveryEoa && typeof window.ethereum !== 'undefined') {
         try {
-          console.log('[poly-recovery] Trying last known good address:', _polyLastGoodAddress.slice(0,10));
+          var accts0 = await window.ethereum.request({ method: 'eth_accounts' });
+          if (accts0 && accts0.length) recoveryEoa = accts0[0].toLowerCase();
+        } catch(e) {}
+      }
+      console.log('[poly-recovery] Starting recovery for EOA:', recoveryEoa ? recoveryEoa.slice(0,10) : 'unknown');
+
+      // First: try per-EOA cached proxy (scoped to THIS wallet only)
+      if (recoveryEoa) {
+        var perEoaProxy = localStorage.getItem('hf_poly_proxy_' + recoveryEoa);
+        if (perEoaProxy && perEoaProxy !== _polyWalletAddress.toLowerCase()) {
+          try {
+            console.log('[poly-recovery] Trying per-EOA cached proxy:', perEoaProxy.slice(0,10));
+            const perEoaRes = await fetch('https://data-api.polymarket.com/positions?user=' + perEoaProxy + '&limit=3&sortBy=CURRENT');
+            const perEoaData = await perEoaRes.json();
+            if (Array.isArray(perEoaData) && perEoaData.length > 0) {
+              console.log('[poly-recovery] Per-EOA proxy has positions!');
+              setPolyAddress(perEoaProxy, 'recovery-per-eoa');
+              showToast('Recovered your Polymarket positions!', 'success');
+              return loadPolymarketPositions(true);
+            }
+          } catch(e) {}
+        }
+      }
+
+      // Second: try global last known good — ONLY if no EOA is known
+      // (if we have an EOA, the global last-good might belong to a different wallet)
+      if (!recoveryEoa && _polyLastGoodAddress && _polyLastGoodAddress !== _polyWalletAddress.toLowerCase()) {
+        try {
+          console.log('[poly-recovery] Trying global last known good:', _polyLastGoodAddress.slice(0,10));
           const lgr = await fetch('https://data-api.polymarket.com/positions?user=' + _polyLastGoodAddress + '&limit=3&sortBy=CURRENT');
           const lgd = await lgr.json();
           if (Array.isArray(lgd) && lgd.length > 0) {
@@ -13154,7 +13198,7 @@ async function loadPolymarketPositions(forceRefresh) {
         } catch(e) {}
       }
 
-      // Second: try EOA directly (no CREATE2 — it produces wrong addresses)
+      // Third: try EOA directly
       if (typeof window.ethereum !== 'undefined') {
       try {
         const accts = await window.ethereum.request({ method: 'eth_accounts' });
@@ -16062,10 +16106,13 @@ async function derivePolymarketApiKey() {
         }
       }
 
-      if (proxyAddr) {
+      if (proxyAddr && proxyAddr.toLowerCase() !== address.toLowerCase()) {
         _polyWalletAddress = proxyAddr.toLowerCase();
         localStorage.setItem('hf_poly_wallet', _polyWalletAddress);
-        console.log('[wallet] Polymarket proxy address:', _polyWalletAddress);
+        // Per-EOA mapping — prevents cross-wallet contamination on recovery
+        localStorage.setItem('hf_poly_proxy_' + address.toLowerCase(), _polyWalletAddress);
+        localStorage.setItem('poly_eoa_address', address);
+        console.log('[wallet] Polymarket proxy address:', _polyWalletAddress, '(EOA:', address.slice(0,10) + ')');
         renderPolymarketConnectState();
         loadPolymarketPositions(true);
         var welcomeEl = document.getElementById('portfolioWelcome');

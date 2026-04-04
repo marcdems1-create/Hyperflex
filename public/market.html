@@ -1669,12 +1669,33 @@ async function enableTrading() {
       } catch(profErr) { console.warn('[wallet debug] Profile lookup failed:', profErr.message); }
     }
 
-    // Last resort: check if dashboard/previous session already found a valid proxy
+    // Last resort: check per-EOA cached proxy from dashboard/previous session
+    if (!proxyAddr) {
+      var perEoaProxy = localStorage.getItem('hf_poly_proxy_' + address.toLowerCase());
+      if (perEoaProxy && perEoaProxy.length === 42 && perEoaProxy.toLowerCase() !== address.toLowerCase()) {
+        proxyAddr = perEoaProxy;
+        console.log('[wallet debug] Using per-EOA cached proxy:', proxyAddr);
+      }
+    }
+    // Fallback: global hf_poly_wallet — but ONLY if no EOA-specific cache exists
+    // (global cache might belong to a different wallet)
     if (!proxyAddr) {
       var cachedProxy = localStorage.getItem('hf_poly_wallet');
       if (cachedProxy && cachedProxy.length === 42 && cachedProxy.toLowerCase() !== address.toLowerCase()) {
-        proxyAddr = cachedProxy;
-        console.log('[wallet debug] Using cached proxy from previous session:', proxyAddr);
+        // Verify it's not another wallet's proxy by checking if ANY per-EOA key maps to it
+        var isForeignProxy = false;
+        for (var si = 0; si < localStorage.length; si++) {
+          var sk = localStorage.key(si);
+          if (sk && sk.startsWith('hf_poly_proxy_') && sk !== 'hf_poly_proxy_' + address.toLowerCase()) {
+            if (localStorage.getItem(sk) === cachedProxy) { isForeignProxy = true; break; }
+          }
+        }
+        if (!isForeignProxy) {
+          proxyAddr = cachedProxy;
+          console.log('[wallet debug] Using global cached proxy:', proxyAddr);
+        } else {
+          console.log('[wallet debug] Global cached proxy belongs to different EOA, skipping');
+        }
       }
     }
 
@@ -1685,6 +1706,8 @@ async function enableTrading() {
     } else {
       console.log('[wallet debug] Using proxy address:', proxyAddr);
       localStorage.setItem('hf_poly_wallet', proxyAddr);
+      // Store per-EOA mapping for future sessions
+      localStorage.setItem('hf_poly_proxy_' + address.toLowerCase(), proxyAddr);
     }
 
     // Debug: Show all addresses being stored
