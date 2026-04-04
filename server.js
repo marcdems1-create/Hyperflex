@@ -24365,7 +24365,7 @@ app.post('/api/polymarket/clob-order', optionalAuth, async (req, res) => {
 
 // POST /api/polymarket/builder-sign — remote signing endpoint
 // Client sends { method, path, body } → server returns builder HMAC headers
-app.post('/api/polymarket/builder-sign', requireAuth, async (req, res) => {
+app.post('/api/polymarket/builder-sign', optionalAuth, async (req, res) => {
   const builderKey = process.env.POLY_BUILDER_API_KEY;
   const builderSecret = process.env.POLY_BUILDER_SECRET;
   const builderPassphrase = process.env.POLY_BUILDER_PASSPHRASE;

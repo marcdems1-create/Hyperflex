@@ -2196,12 +2196,87 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
 
   tradeDebug('submitOrder', { apiKey: apiKey.slice(0,8) + '...', eoa: eoaAddress.slice(0,10), ts: ts, hmacHasPad: hmacSig.includes('='), hmacLen: hmacSig.length });
 
-  // Always route through server proxy — ensures builder attribution headers for referral fees
+  // PRIMARY: Submit directly from browser to Polymarket CLOB (bypasses Railway geo-blocking).
+  // Get builder attribution headers from our server first, then submit directly.
+  try {
+    tradeDebug('browser-direct order', 'fetching builder headers...');
+    var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+
+    // Step 1: Get builder attribution headers from server
+    var builderHeaders = {};
+    try {
+      var bsHeaders = { 'Content-Type': 'application/json' };
+      if (token) bsHeaders['Authorization'] = 'Bearer ' + token;
+      var bsRes = await fetch('/api/polymarket/builder-sign', {
+        method: 'POST',
+        headers: bsHeaders,
+        body: JSON.stringify({ method: 'POST', path: '/order', body: requestBody })
+      });
+      if (bsRes.ok) {
+        builderHeaders = await bsRes.json();
+        tradeDebug('builder-sign OK', Object.keys(builderHeaders).join(','));
+      } else {
+        tradeDebug('builder-sign FAIL', bsRes.status + ' — submitting without builder attribution');
+      }
+    } catch (bsErr) {
+      tradeDebug('builder-sign ERROR', bsErr.message + ' — submitting without builder attribution');
+    }
+
+    // Step 2: Submit order directly to Polymarket CLOB from browser
+    var directHeaders = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'POLY_ADDRESS': eoaAddress,
+      'POLY_API_KEY': apiKey,
+      'POLY_PASSPHRASE': apiPassphrase,
+      'POLY_TIMESTAMP': ts,
+      'POLY_SIGNATURE': hmacSig
+    };
+    // Merge builder headers for fee attribution
+    for (var bk in builderHeaders) {
+      if (builderHeaders.hasOwnProperty(bk)) directHeaders[bk] = builderHeaders[bk];
+    }
+
+    tradeDebug('submitting directly to CLOB', 'https://clob.polymarket.com/order');
+    var directRes = await fetch('https://clob.polymarket.com/order', {
+      method: 'POST',
+      headers: directHeaders,
+      body: requestBody
+    });
+
+    var directData = await directRes.json().catch(function() { return {}; });
+    tradeDebug('direct ' + directRes.status, JSON.stringify(directData).substring(0, 300));
+
+    if (directRes.ok) return directData;
+
+    // Handle 401 — expired keys
+    if (directRes.status === 401) {
+      localStorage.removeItem('poly_api_key');
+      localStorage.removeItem('poly_api_secret');
+      localStorage.removeItem('poly_api_passphrase');
+      localStorage.removeItem('poly_eoa_address');
+      updateTradingUI();
+      return { _expired: true, _errorMsg: 'CLOB 401: ' + (directData.error || directData.message || 'Unauthorized') };
+    }
+
+    var directErrMsg = directData.error || directData.message || JSON.stringify(directData);
+    tradeDebug('direct order failed', directRes.status + ': ' + directErrMsg);
+
+    // If browser-direct failed for non-auth reasons, DON'T fall through to server proxy
+    // (server proxy will also get geo-blocked from Railway's IP)
+    return { _error: true, _errorMsg: 'CLOB ' + directRes.status + ': ' + directErrMsg };
+
+  } catch (directErr) {
+    // CORS or network error on browser-direct — fall back to server proxy as last resort
+    tradeDebug('direct THREW (CORS?)', directErr.message + ' — falling back to server proxy');
+  }
+
+  // FALLBACK: Server proxy (only if browser-direct threw — e.g. CORS blocked)
   try {
     tradeDebug('submitting via server proxy', '/api/polymarket/clob-order');
-    var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+    var token2 = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
     var proxyHeaders = { 'Content-Type': 'application/json' };
-    if (token) proxyHeaders['Authorization'] = 'Bearer ' + token;
+    if (token2) proxyHeaders['Authorization'] = 'Bearer ' + token2;
 
     var proxyRes = await fetch('/api/polymarket/clob-order', {
       method: 'POST',
