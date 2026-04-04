@@ -12044,27 +12044,8 @@ if (!_polyWalletAddress) {
   }
 }
 
-// Also try to auto-derive CREATE2 proxy on page load if MetaMask is available
-// This runs BEFORE loadPortfolio so positions load immediately
-(async function autoDerivProxy() {
-  if (_polyWalletAddress) return; // already have it
-  if (typeof window.ethereum === 'undefined') return;
-  if (typeof ethers === 'undefined') return;
-  try {
-    var accounts = await window.ethereum.request({ method: 'eth_accounts' }); // silent, no popup
-    if (!accounts || !accounts.length) return;
-    var address = accounts[0];
-    var addrLower = address.toLowerCase();
-    var safeFactory = '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b';
-    var safeInitCodeHash = '0x2bce2127ff07fb632d16c8347c4ebf501f4841168bed00d9e6ef715ddb6fcecf';
-    var abiEncoded = ethers.AbiCoder.defaultAbiCoder().encode(['address'], [addrLower]);
-    var safeSalt = ethers.keccak256(abiEncoded);
-    var computedProxy = ethers.getCreate2Address(safeFactory, safeSalt, safeInitCodeHash);
-    _polyWalletAddress = computedProxy.toLowerCase();
-    localStorage.setItem('hf_poly_wallet', _polyWalletAddress);
-    console.log('[auto-derive] CREATE2 proxy on page load:', _polyWalletAddress.slice(0,10) + '...');
-  } catch(e) { /* silent — ethers might not be loaded yet */ }
-})();
+// NO auto-derive CREATE2 on page load — CREATE2 produces wrong addresses for some wallets.
+// Proxy address must come from CLOB response during wallet connect flow.
 
 async function loadPortfolio() {
   if (_portfolioLoaded) return;
@@ -12085,21 +12066,7 @@ async function loadPortfolio() {
     } else if (!_polyWalletAddress) {
       _polyWalletAddress = localStorage.getItem('hf_poly_wallet') || localStorage.getItem('hf_connected_wallet') || localStorage.getItem('hf_wallet_address') || '';
     }
-    // Last resort: if MetaMask is connected but no proxy, derive it now
-    if (!_polyWalletAddress && typeof window.ethereum !== 'undefined' && typeof ethers !== 'undefined') {
-      try {
-        var accts = await window.ethereum.request({ method: 'eth_accounts' });
-        if (accts && accts.length) {
-          var al = accts[0].toLowerCase();
-          var sf = '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b';
-          var sh = '0x2bce2127ff07fb632d16c8347c4ebf501f4841168bed00d9e6ef715ddb6fcecf';
-          var ae = ethers.AbiCoder.defaultAbiCoder().encode(['address'], [al]);
-          var ss = ethers.keccak256(ae);
-          _polyWalletAddress = ethers.getCreate2Address(sf, ss, sh).toLowerCase();
-          console.log('[loadPortfolio] Last-resort CREATE2:', _polyWalletAddress.slice(0,10));
-        }
-      } catch(e) {}
-    }
+    // No CREATE2 fallback — proxy address must come from CLOB during wallet connect.
     if (_polyWalletAddress) {
       localStorage.setItem('hf_poly_wallet', _polyWalletAddress);
       sessionStorage.setItem('hf_poly_wallet_session', _polyWalletAddress);
@@ -13187,42 +13154,23 @@ async function loadPolymarketPositions(forceRefresh) {
         } catch(e) {}
       }
 
-      // Second: try CREATE2 derivations + EOA
-      if (typeof ethers !== 'undefined' && typeof window.ethereum !== 'undefined') {
+      // Second: try EOA directly (no CREATE2 — it produces wrong addresses)
+      if (typeof window.ethereum !== 'undefined') {
       try {
         const accts = await window.ethereum.request({ method: 'eth_accounts' });
         const eoa = accts && accts.length ? accts[0].toLowerCase() : null;
-        if (eoa) {
-          const candidates = [];
-          // Try multiple CREATE2 derivations
-          const factories = [
-            { f: '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b', h: '0x2bce2127ff07fb632d16c8347c4ebf501f4841168bed00d9e6ef715ddb6fcecf' },
-            { f: '0xa6B71E26C5e0845f74c812102Ca7114b6a896AB2', h: '0xaacbb47e7a4604d8c6853ced7bb9505060a3458e770b213e1e5a62cf8c33d8e6' },
-          ];
-          for (const d of factories) {
-            try {
-              const enc = ethers.AbiCoder.defaultAbiCoder().encode(['address'], [eoa]);
-              const salt = ethers.keccak256(enc);
-              const proxy = ethers.getCreate2Address(d.f, salt, d.h).toLowerCase();
-              if (proxy !== _polyWalletAddress.toLowerCase()) candidates.push(proxy);
-            } catch(e) {}
-          }
-          // Also try EOA directly
-          if (eoa !== _polyWalletAddress.toLowerCase()) candidates.push(eoa);
-          console.log('[poly-recovery] Trying', candidates.length, 'alternative addresses...');
-          for (const addr of candidates) {
-            try {
-              const r = await fetch('https://data-api.polymarket.com/positions?user=' + addr + '&limit=5&sortBy=CURRENT');
-              const raw = await r.json();
-              if (Array.isArray(raw) && raw.length > 0) {
-                console.log('[poly-recovery] Found positions at:', addr, '(' + raw.length + ')');
-                setPolyAddress(addr, 'recovery-scan');
-                showToast('Found your Polymarket positions!', 'success');
-                // Re-fetch full positions with correct address
-                return loadPolymarketPositions(true);
-              }
-            } catch(e) {}
-          }
+        if (eoa && eoa !== _polyWalletAddress.toLowerCase()) {
+          console.log('[poly-recovery] Trying EOA directly:', eoa.slice(0,10));
+          try {
+            const r = await fetch('https://data-api.polymarket.com/positions?user=' + eoa + '&limit=5&sortBy=CURRENT');
+            const raw = await r.json();
+            if (Array.isArray(raw) && raw.length > 0) {
+              console.log('[poly-recovery] Found positions at EOA:', eoa.slice(0,10), '(' + raw.length + ')');
+              setPolyAddress(eoa, 'recovery-eoa');
+              showToast('Found your Polymarket positions!', 'success');
+              return loadPolymarketPositions(true);
+            }
+          } catch(e) {}
         }
       } catch(e) { console.warn('[poly-recovery]', e.message); }
       } // end ethers/ethereum check
@@ -15742,52 +15690,13 @@ async function connectBrowserWallet() {
     updateWalletUI();
     fetchWalletBalance(provider, address);
 
-    // Auto-connect to Polymarket — always try CREATE2 when wallet connects
+    // Auto-connect to Polymarket — proxy address from CLOB, never CREATE2
+    localStorage.setItem('hf_wallet_explicit_switch', Date.now().toString());
     {
       let found = false;
 
-      // CREATE2 derivation: compute Polymarket Safe proxy from EOA
-      // Try multiple factory/init code hash combos (Polymarket changed over time)
-      let create2Proxy = null;
-      const derivations = [
-        { factory: '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b', hash: '0x2bce2127ff07fb632d16c8347c4ebf501f4841168bed00d9e6ef715ddb6fcecf' },
-        { factory: '0xa6B71E26C5e0845f74c812102Ca7114b6a896AB2', hash: '0xaacbb47e7a4604d8c6853ced7bb9505060a3458e770b213e1e5a62cf8c33d8e6' },
-      ];
-      try {
-        const addrLower = address.toLowerCase();
-        for (const d of derivations) {
-          try {
-            const abiEncoded = ethers.AbiCoder.defaultAbiCoder().encode(['address'], [addrLower]);
-            const safeSalt = ethers.keccak256(abiEncoded);
-            const computedProxy = ethers.getCreate2Address(d.factory, safeSalt, d.hash);
-            console.log('[wallet] CREATE2 candidate:', computedProxy, 'factory:', d.factory.slice(0,10));
-
-            // Check if positions exist at this derived address
-            const checkRes = await fetch('https://data-api.polymarket.com/positions?user=' + computedProxy.toLowerCase() + '&limit=3&sortBy=CURRENT');
-            const checkPositions = await checkRes.json();
-            if (Array.isArray(checkPositions) && checkPositions.length > 0) {
-              create2Proxy = computedProxy.toLowerCase();
-              _polyWalletAddress = create2Proxy;
-              localStorage.setItem('hf_poly_wallet', _polyWalletAddress);
-              found = true;
-              console.log('[wallet] CREATE2 proxy WITH positions:', _polyWalletAddress, '(' + checkPositions.length + ' positions)');
-              showToast('Polymarket account found! Loading ' + checkPositions.length + '+ positions...', 'success');
-              // Persist to DB
-              try { fetch('/api/user/wallets', { method: 'PUT', headers: { Authorization: 'Bearer ' + localStorage.getItem('hf_token'), 'Content-Type': 'application/json' }, body: JSON.stringify({ polymarket_address: _polyWalletAddress }) }); } catch(e) {}
-              break;
-            }
-          } catch(e) { /* try next derivation */ }
-        }
-        // If no derivation had positions, save first derivation as default (for trading)
-        if (!found && !create2Proxy) {
-          try {
-            const abiEncoded = ethers.AbiCoder.defaultAbiCoder().encode(['address'], [address.toLowerCase()]);
-            const safeSalt = ethers.keccak256(abiEncoded);
-            create2Proxy = ethers.getCreate2Address(derivations[0].factory, safeSalt, derivations[0].hash).toLowerCase();
-            console.log('[wallet] CREATE2 default (no positions found):', create2Proxy);
-          } catch(e) {}
-        }
-      } catch(e) { console.warn('[wallet] CREATE2 derivation failed:', e.message); }
+      // No CREATE2 derivation — it produces wrong addresses for some wallets.
+      // Proxy address must come from CLOB response or position lookup.
 
       // If trading is already enabled, use API key to look up proxy address
       const existingKey = localStorage.getItem('poly_api_key');
@@ -15844,12 +15753,7 @@ async function connectBrowserWallet() {
         }
       } catch(e) {}
 
-      // If nothing found positions, save the CREATE2 default for trading (but don't claim found)
-      if (!found && create2Proxy) {
-        _polyWalletAddress = create2Proxy;
-        localStorage.setItem('hf_poly_wallet', _polyWalletAddress);
-        console.log('[wallet] No positions found anywhere, using CREATE2 default for trading:', _polyWalletAddress.slice(0,10));
-      }
+      // No CREATE2 default fallback — proxy must come from CLOB.
 
       // If browser wallet has no positions, check localStorage for previously saved Polymarket address
       if (!found) {
