@@ -24146,18 +24146,112 @@ app.post('/api/polymarket/derive-api-key', optionalAuth, async (req, res) => {
       return null;
     }
 
-    // If derive/create didn't return proxy, fetch it from GET /auth/api-keys with retry
-    // New Polymarket API keys take ~2 minutes to activate — immediate lookups return 401.
-    // Retry up to 3 times with increasing delays (3s, 6s, 10s) before falling back to L1.
-    if (!proxyAddress && apiKey && secret && passphrase) {
-      const retryDelays = [0, 3000, 6000, 10000]; // immediate, then 3s, 6s, 10s
-      for (let attempt = 0; attempt < retryDelays.length && !proxyAddress; attempt++) {
-        if (retryDelays[attempt] > 0) {
-          console.log(`[derive-api-key] L2 api-keys attempt ${attempt + 1}: waiting ${retryDelays[attempt] / 1000}s for key activation...`);
-          await new Promise(r => setTimeout(r, retryDelays[attempt]));
+    // Verify derived keys by calling GET /auth/api-keys with L2 creds.
+    // If api-keys returns 401, the derived keys are stale/invalid — discard and create fresh.
+    let keysVerified = false;
+    if (apiKey && secret && passphrase) {
+      // Quick verification attempt (no delay — if keys are valid, this returns instantly)
+      try {
+        console.log(`[derive-api-key] Verifying derived keys with GET /auth/api-keys...`);
+        const verifyRes = await fetch('https://clob.polymarket.com/auth/api-keys', {
+          headers: {
+            'POLY_ADDRESS': address,
+            'POLY_API_KEY': apiKey,
+            'POLY_API_SECRET': secret,
+            'POLY_PASSPHRASE': passphrase,
+            'Accept': 'application/json',
+            'User-Agent': 'Hyperflex/1.0'
+          }
+        });
+        const verifyRaw = await verifyRes.text();
+        if (verifyRes.ok) {
+          keysVerified = true;
+          proxyAddress = extractProxyFromKeys(verifyRaw, verifyRes.status, 'L2 verify');
+          console.log(`[derive-api-key] Derived keys verified OK. proxy=${proxyAddress || 'NONE'}`);
+        } else {
+          console.warn(`[derive-api-key] Derived keys FAILED verification (${verifyRes.status}): ${verifyRaw.slice(0, 200)}`);
+          if (verifyRes.status === 401) {
+            console.log(`[derive-api-key] Derived keys are stale/invalid — will try POST create for fresh keys`);
+          }
         }
+      } catch(e) { console.warn('[derive-api-key] Verification request failed:', e.message); }
+    }
+
+    // If derived keys failed verification (401), try POST /auth/api-key to create FRESH keys
+    // This replaces the stale derived keys entirely
+    let freshKeysCreated = false;
+    if (!keysVerified && apiKey) {
+      console.log(`[derive-api-key] Creating fresh keys via POST /auth/api-key...`);
+      try {
+        const createRes = await fetch('https://clob.polymarket.com/auth/api-key', {
+          method: 'POST',
+          headers: l1Headers
+        });
+        const createData = await createRes.json().catch(() => ({}));
+        console.log(`[derive-api-key] POST create response (${createRes.status}): ${JSON.stringify(createData).slice(0, 500)}`);
+        if (createRes.ok && (createData.apiKey || createData.api_key || createData.key)) {
+          // Replace stale keys with fresh ones
+          data = createData;
+          freshKeysCreated = true;
+          console.log('[derive-api-key] Fresh keys created successfully');
+
+          // Re-extract credentials from fresh response
+          const freshApiKey = createData.apiKey || createData.api_key || createData.key || null;
+          const freshSecret = createData.secret || createData.apiSecret || createData.api_secret || null;
+          const freshPassphrase = createData.passphrase || createData.apiPassphrase || createData.api_passphrase || null;
+
+          // Check if create response includes proxy address directly
+          proxyAddress = createData.proxyAddress || createData.proxy_address || createData.polyAddress
+            || createData.safe_address || createData.safeAddress || createData.proxy || createData.funder
+            || createData.funderAddress || createData.funder_address || null;
+
+          // Verify fresh keys + look up proxy with retries
+          if (freshApiKey && freshSecret && freshPassphrase) {
+            const retryDelays = [0, 3000, 6000, 10000];
+            for (let attempt = 0; attempt < retryDelays.length; attempt++) {
+              if (proxyAddress) break; // already found
+              if (retryDelays[attempt] > 0) {
+                console.log(`[derive-api-key] Fresh keys L2 attempt ${attempt + 1}: waiting ${retryDelays[attempt] / 1000}s...`);
+                await new Promise(r => setTimeout(r, retryDelays[attempt]));
+              }
+              try {
+                const keysRes = await fetch('https://clob.polymarket.com/auth/api-keys', {
+                  headers: {
+                    'POLY_ADDRESS': address,
+                    'POLY_API_KEY': freshApiKey,
+                    'POLY_API_SECRET': freshSecret,
+                    'POLY_PASSPHRASE': freshPassphrase,
+                    'Accept': 'application/json',
+                    'User-Agent': 'Hyperflex/1.0'
+                  }
+                });
+                const keysRaw = await keysRes.text();
+                if (keysRes.ok) {
+                  keysVerified = true;
+                  proxyAddress = extractProxyFromKeys(keysRaw, keysRes.status, `fresh L2 attempt ${attempt + 1}`);
+                  console.log(`[derive-api-key] Fresh keys verified on attempt ${attempt + 1}. proxy=${proxyAddress || 'NONE'}`);
+                  break;
+                } else if (keysRes.status !== 401) {
+                  console.log(`[derive-api-key] Fresh keys got non-401 error (${keysRes.status}), stopping retries`);
+                  break;
+                }
+              } catch(e) { console.warn(`[derive-api-key] Fresh keys attempt ${attempt + 1} error:`, e.message); }
+            }
+          }
+        } else {
+          console.warn(`[derive-api-key] POST create failed (${createRes.status}): ${JSON.stringify(createData).slice(0, 200)}`);
+        }
+      } catch(e) { console.warn('[derive-api-key] POST create error:', e.message); }
+    }
+
+    // If we still don't have a verified key set but DO have keys from derive, try delayed retries
+    // (covers the case where derive returned valid-but-not-yet-activated keys)
+    if (!keysVerified && !freshKeysCreated && apiKey && secret && passphrase && !proxyAddress) {
+      const retryDelays = [3000, 6000, 10000];
+      for (let attempt = 0; attempt < retryDelays.length && !proxyAddress; attempt++) {
+        console.log(`[derive-api-key] Delayed verify attempt ${attempt + 1}: waiting ${retryDelays[attempt] / 1000}s...`);
+        await new Promise(r => setTimeout(r, retryDelays[attempt]));
         try {
-          console.log(`[derive-api-key] L2 api-keys attempt ${attempt + 1}/${retryDelays.length}...`);
           const keysRes = await fetch('https://clob.polymarket.com/auth/api-keys', {
             headers: {
               'POLY_ADDRESS': address,
@@ -24170,19 +24264,18 @@ app.post('/api/polymarket/derive-api-key', optionalAuth, async (req, res) => {
           });
           const keysRaw = await keysRes.text();
           if (keysRes.ok) {
-            proxyAddress = extractProxyFromKeys(keysRaw, keysRes.status, `L2 attempt ${attempt + 1}`);
-            if (proxyAddress) break;
-          } else {
-            console.log(`[derive-api-key] L2 attempt ${attempt + 1} got ${keysRes.status}: ${keysRaw.slice(0, 200)}`);
-            // If not 401 (auth not ready), don't bother retrying — it's a different error
-            if (keysRes.status !== 401) {
-              console.log(`[derive-api-key] Non-401 error, skipping further L2 retries`);
-              break;
-            }
-          }
-        } catch(e) { console.warn(`[derive-api-key] L2 attempt ${attempt + 1} failed:`, e.message); }
+            keysVerified = true;
+            proxyAddress = extractProxyFromKeys(keysRaw, keysRes.status, `delayed attempt ${attempt + 1}`);
+            break;
+          } else if (keysRes.status !== 401) break;
+        } catch(e) {}
       }
     }
+
+    // Re-extract final credentials (may have changed if fresh keys were created)
+    const finalApiKey = data.apiKey || data.api_key || data.key || null;
+    const finalSecret = data.secret || data.apiSecret || data.api_secret || null;
+    const finalPassphrase = data.passphrase || data.apiPassphrase || data.api_passphrase || null;
 
     // Fallback: try L1-auth GET /auth/api-keys with original signature headers
     if (!proxyAddress) {
@@ -24297,7 +24390,7 @@ app.post('/api/polymarket/derive-api-key', optionalAuth, async (req, res) => {
       console.warn(`[derive-api-key] WARNING: No proxy address found for ${address.slice(0,10)} after all methods (CLOB, api-keys, profile, DB).`);
     }
 
-    console.log(`[polymarket derive-api-key] FINAL: user=${req.userId} address=${address.slice(0,8)}... proxy=${proxyAddress || 'NONE'} apiKey=${(apiKey||'').slice(0,8)}...`);
+    console.log(`[polymarket derive-api-key] FINAL: user=${req.userId} address=${address.slice(0,8)}... proxy=${proxyAddress || 'NONE'} apiKey=${(finalApiKey||'').slice(0,8)}... keysVerified=${keysVerified} freshKeysCreated=${freshKeysCreated}`);
 
     // Save proxy address to user profile if we got one
     if (proxyAddress && req.userId && pool) {
@@ -24308,10 +24401,12 @@ app.post('/api/polymarket/derive-api-key', optionalAuth, async (req, res) => {
     }
 
     res.json({
-      apiKey: apiKey,
-      secret: secret,
-      passphrase: passphrase,
-      proxyAddress: proxyAddress
+      apiKey: finalApiKey,
+      secret: finalSecret,
+      passphrase: finalPassphrase,
+      proxyAddress: proxyAddress,
+      keysVerified: keysVerified,
+      freshKeysCreated: freshKeysCreated
     });
   } catch (err) {
     console.error('[polymarket derive-api-key]', err.message);
