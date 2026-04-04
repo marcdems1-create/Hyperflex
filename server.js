@@ -29522,17 +29522,21 @@ setInterval(async () => {
     } catch (e) { _logError('guardian/twitter-check', e); }
 
     // ── SITE HEALTH SELF-CHECK — verify critical pages respond ──
-    try {
-      const port = process.env.PORT || 3000;
-      const criticalPages = ['/api/health', '/api/screener', '/api/signals'];
-      for (const page of criticalPages) {
-        const checkRes = await fetch(`http://localhost:${port}${page}`, { signal: AbortSignal.timeout(10000) });
-        if (!checkRes.ok) {
-          console.warn(`[guardian] ⚠ ${page} returned ${checkRes.status}`);
-          _logError('guardian/site-health', new Error(`${page} returned ${checkRes.status}`));
+    // Skip for first 10 min after boot to avoid false timeouts during cache warm-up
+    const uptimeSinceBootMs = Date.now() - new Date(_healthTimestamps.boot).getTime();
+    if (uptimeSinceBootMs > 10 * 60 * 1000) {
+      try {
+        const port = process.env.PORT || 3000;
+        const criticalPages = ['/api/health', '/api/screener', '/api/signals'];
+        for (const page of criticalPages) {
+          const checkRes = await fetch(`http://localhost:${port}${page}`, { signal: AbortSignal.timeout(30000) });
+          if (!checkRes.ok) {
+            console.warn(`[guardian] ⚠ ${page} returned ${checkRes.status}`);
+            _logError('guardian/site-health', new Error(`${page} returned ${checkRes.status}`));
+          }
         }
-      }
-    } catch (e) { _logError('guardian/site-health', e); }
+      } catch (e) { _logError('guardian/site-health', e); }
+    }
 
   } catch (e) {
     _logError('watchdog', e);
