@@ -24177,10 +24177,34 @@ app.post('/api/polymarket/derive-api-key', optionalAuth, async (req, res) => {
       } catch(e) { console.warn('[derive-api-key] Verification request failed:', e.message); }
     }
 
-    // If derived keys failed verification (401), try POST /auth/api-key to create FRESH keys
-    // This replaces the stale derived keys entirely
+    // If derived keys failed verification (401), try to get working keys:
+    // 1. First try DELETE /auth/api-key to revoke stale keys, then POST to create fresh
+    // 2. If delete isn't supported, POST create directly (may return existing or new)
     let freshKeysCreated = false;
-    if (!keysVerified && apiKey) {
+    if (!keysVerified) {
+      console.log(`[derive-api-key] Keys unverified — attempting DELETE + POST create cycle...`);
+
+      // Try to revoke stale keys first
+      if (apiKey && secret && passphrase) {
+        try {
+          console.log(`[derive-api-key] Revoking stale key ${(apiKey||'').slice(0,8)}...`);
+          const deleteRes = await fetch('https://clob.polymarket.com/auth/api-key', {
+            method: 'DELETE',
+            headers: {
+              ...l1Headers,
+              'POLY_API_KEY': apiKey,
+              'POLY_API_SECRET': secret,
+              'POLY_PASSPHRASE': passphrase,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({})
+          });
+          const deleteRaw = await deleteRes.text();
+          console.log(`[derive-api-key] DELETE response (${deleteRes.status}): ${deleteRaw.slice(0, 300)}`);
+        } catch(e) { console.warn('[derive-api-key] DELETE failed:', e.message); }
+      }
+
+      // Now create fresh keys
       console.log(`[derive-api-key] Creating fresh keys via POST /auth/api-key...`);
       try {
         const createRes = await fetch('https://clob.polymarket.com/auth/api-key', {
@@ -24244,32 +24268,29 @@ app.post('/api/polymarket/derive-api-key', optionalAuth, async (req, res) => {
       } catch(e) { console.warn('[derive-api-key] POST create error:', e.message); }
     }
 
-    // If we still don't have a verified key set but DO have keys from derive, try delayed retries
-    // (covers the case where derive returned valid-but-not-yet-activated keys)
-    if (!keysVerified && !freshKeysCreated && apiKey && secret && passphrase && !proxyAddress) {
-      const retryDelays = [3000, 6000, 10000];
-      for (let attempt = 0; attempt < retryDelays.length && !proxyAddress; attempt++) {
-        console.log(`[derive-api-key] Delayed verify attempt ${attempt + 1}: waiting ${retryDelays[attempt] / 1000}s...`);
-        await new Promise(r => setTimeout(r, retryDelays[attempt]));
-        try {
-          const keysRes = await fetch('https://clob.polymarket.com/auth/api-keys', {
-            headers: {
-              'POLY_ADDRESS': address,
-              'POLY_API_KEY': apiKey,
-              'POLY_API_SECRET': secret,
-              'POLY_PASSPHRASE': passphrase,
-              'Accept': 'application/json',
-              'User-Agent': 'Hyperflex/1.0'
-            }
-          });
-          const keysRaw = await keysRes.text();
-          if (keysRes.ok) {
-            keysVerified = true;
-            proxyAddress = extractProxyFromKeys(keysRaw, keysRes.status, `delayed attempt ${attempt + 1}`);
-            break;
-          } else if (keysRes.status !== 401) break;
-        } catch(e) {}
-      }
+    // If POST create also failed, try GET /auth/derive-api-key one more time
+    // (sometimes re-deriving after a DELETE produces fresh keys)
+    if (!keysVerified && !freshKeysCreated) {
+      try {
+        console.log(`[derive-api-key] Last resort: re-deriving after DELETE...`);
+        const rederiveRes = await fetch('https://clob.polymarket.com/auth/derive-api-key', {
+          method: 'GET',
+          headers: l1Headers
+        });
+        const rederiveData = await rederiveRes.json().catch(() => ({}));
+        console.log(`[derive-api-key] Re-derive response (${rederiveRes.status}): ${JSON.stringify(rederiveData).slice(0, 500)}`);
+        if (rederiveRes.ok && (rederiveData.apiKey || rederiveData.api_key || rederiveData.key)) {
+          const rdKey = rederiveData.apiKey || rederiveData.api_key || rederiveData.key;
+          // Only use if it's DIFFERENT from the stale key
+          if (rdKey !== apiKey) {
+            data = rederiveData;
+            freshKeysCreated = true;
+            console.log(`[derive-api-key] Re-derive returned NEW key: ${rdKey.slice(0,8)}... (was ${(apiKey||'').slice(0,8)}...)`);
+          } else {
+            console.log(`[derive-api-key] Re-derive returned SAME stale key, ignoring`);
+          }
+        }
+      } catch(e) { console.warn('[derive-api-key] Re-derive failed:', e.message); }
     }
 
     // Re-extract final credentials (may have changed if fresh keys were created)
