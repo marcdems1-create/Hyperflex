@@ -1613,45 +1613,8 @@ async function enableTrading() {
     // CREATE2 derivation produces wrong addresses for some wallets (Polymarket uses multiple factory versions).
     var proxyAddr = data.proxyAddress || data.proxy_address || data.safe_address || data.safeAddress || data.proxy || data.funder || '';
 
-    // If server didn't return proxy, retry via /api/polymarket/lookup-proxy with delays.
-    // New Polymarket API keys take ~2 minutes to activate — the server's immediate lookup
-    // may have gotten 401. Client-side retry gives keys more time to become valid.
-    if (!proxyAddr && apiKey && secret && passphrase) {
-      console.warn('[wallet debug] No proxy from initial derive — starting retry with delays...');
-      var retryDelays = [4000, 8000, 15000]; // 4s, 8s, 15s (server already tried 0/3/6/10s)
-      for (var ri = 0; ri < retryDelays.length; ri++) {
-        cta.textContent = 'Waiting for key activation... (' + (ri + 1) + '/' + retryDelays.length + ')';
-        tradeDebug('proxy-retry', 'attempt ' + (ri + 1) + ' waiting ' + (retryDelays[ri] / 1000) + 's');
-        await new Promise(function(resolve) { setTimeout(resolve, retryDelays[ri]); });
-        try {
-          var retryHeaders = { 'Content-Type': 'application/json' };
-          if (token) retryHeaders['Authorization'] = 'Bearer ' + token;
-          var retryRes = await fetch('/api/polymarket/lookup-proxy', {
-            method: 'POST',
-            headers: retryHeaders,
-            body: JSON.stringify({ address: address, apiKey: apiKey, secret: secret, passphrase: passphrase })
-          });
-          if (retryRes.ok) {
-            var retryData = await retryRes.json();
-            tradeDebug('proxy-retry OK', { attempt: ri + 1, proxy: (retryData.proxyAddress || '').slice(0, 10) });
-            if (retryData.proxyAddress) {
-              proxyAddr = retryData.proxyAddress;
-              console.log('[wallet debug] Proxy found on retry attempt ' + (ri + 1) + ':', proxyAddr);
-              break;
-            }
-          } else {
-            var retryErr = await retryRes.json().catch(function() { return {}; });
-            tradeDebug('proxy-retry FAIL', { attempt: ri + 1, status: retryRes.status, error: retryErr });
-            // If not 401, stop retrying — different error
-            if (retryRes.status !== 502 && retryRes.status !== 401) break;
-          }
-        } catch (retryE) {
-          tradeDebug('proxy-retry ERROR', { attempt: ri + 1, error: retryE.message });
-        }
-      }
-    }
-
-    // If derive/retry didn't find proxy, try multiple Polymarket data API endpoints
+    // If derive didn't return proxy, try Polymarket data API endpoints (server already retried CLOB)
+    // No client-side retry loop — the server derive endpoint does 0/3/6/10s retries already.
     if (!proxyAddr) {
       console.log('[wallet debug] No proxy from derive — trying Polymarket data API discovery...');
       cta.textContent = 'Finding deposit address...';
@@ -1757,47 +1720,8 @@ async function enableTrading() {
       console.warn('[wallet debug] WARNING: No proxy address found after all methods.');
       console.warn('[wallet debug] Full CLOB response keys:', Object.keys(data));
       // DON'T store empty string or EOA as proxy — that causes wrong signatureType
-
-      // Option B: Manual paste fallback — show inline input for deposit address
-      cta.disabled = false;
-      updateCtaButton();
-      showTradeStatus('', 'info');
-      var statusEl = document.getElementById('tradeStatus');
-      if (statusEl) {
-        statusEl.innerHTML = '<div style="text-align:left;font-size:12px;line-height:1.5">' +
-          '<div style="color:var(--gold);font-weight:700;margin-bottom:6px">Deposit address not found automatically.</div>' +
-          '<div style="color:var(--soft);margin-bottom:8px">Find it at <a href="https://polymarket.com" target="_blank" style="color:var(--gold)">polymarket.com</a> &rarr; Profile icon (top right) &rarr; copy the 0x address shown.</div>' +
-          '<div style="display:flex;gap:6px;align-items:center">' +
-            '<input id="manualProxyInput" type="text" placeholder="0x... deposit address" style="flex:1;padding:8px 10px;background:#0f0e0c;border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--mono);font-size:11px">' +
-            '<button onclick="window._saveManualProxy()" style="padding:8px 14px;background:var(--gold);color:#141412;border:none;border-radius:6px;font-family:var(--sans);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">Save</button>' +
-          '</div>' +
-          '<div id="manualProxyStatus" style="font-size:11px;margin-top:4px;color:var(--dim)"></div>' +
-        '</div>';
-      }
-      // Wire up the save handler
-      window._saveManualProxy = function() {
-        var input = document.getElementById('manualProxyInput');
-        var statusDiv = document.getElementById('manualProxyStatus');
-        if (!input) return;
-        var val = (input.value || '').trim().toLowerCase();
-        if (!val.startsWith('0x') || val.length !== 42) {
-          if (statusDiv) { statusDiv.textContent = 'Invalid address — must be 0x... (42 characters)'; statusDiv.style.color = 'var(--red)'; }
-          return;
-        }
-        if (val === address.toLowerCase()) {
-          if (statusDiv) { statusDiv.textContent = 'That\'s your MetaMask address, not your deposit address'; statusDiv.style.color = 'var(--red)'; }
-          return;
-        }
-        localStorage.setItem('hf_poly_wallet', val);
-        localStorage.setItem('hf_poly_proxy_' + address.toLowerCase(), val);
-        if (statusDiv) { statusDiv.textContent = 'Saved! Refreshing...'; statusDiv.style.color = 'var(--green)'; }
-        // Refresh balance + UI
-        setTimeout(function() {
-          fetchTradeBalance();
-          updateTradingUI();
-          showTradeStatus('Trading enabled! Deposit address saved.', 'success');
-        }, 300);
-      };
+      // Show manual paste fallback — user can paste their deposit address from polymarket.com
+      showManualProxyInput(address);
       return true; // Keys are stored, just no proxy yet — user can paste it
     } else {
       console.log('[wallet debug] Using proxy address:', proxyAddr);
@@ -1842,6 +1766,48 @@ async function enableTrading() {
 
 function isTradingEnabled() {
   return !!(localStorage.getItem('poly_api_key') && localStorage.getItem('poly_api_secret') && localStorage.getItem('poly_api_passphrase'));
+}
+
+// Reusable manual proxy input — shown when automated proxy discovery fails
+function showManualProxyInput(eoaAddress) {
+  var cta = document.getElementById('tradeCta');
+  if (cta) { cta.disabled = false; updateCtaButton(); }
+  showTradeStatus('', 'info');
+  var statusEl = document.getElementById('tradeStatus');
+  if (statusEl) {
+    statusEl.innerHTML = '<div style="text-align:left;font-size:12px;line-height:1.5;border:1px solid var(--gold);border-radius:8px;padding:12px;background:rgba(201,146,13,0.06)">' +
+      '<div style="color:var(--gold);font-weight:700;margin-bottom:6px">Deposit address not found automatically.</div>' +
+      '<div style="color:var(--soft);margin-bottom:8px">Find it at <a href="https://polymarket.com" target="_blank" style="color:var(--gold)">polymarket.com</a> &rarr; Profile icon (top right) &rarr; copy the 0x address shown.</div>' +
+      '<div style="display:flex;gap:6px;align-items:center">' +
+        '<input id="manualProxyInput" type="text" placeholder="0x... deposit address" style="flex:1;padding:8px 10px;background:#0f0e0c;border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--mono);font-size:11px">' +
+        '<button onclick="window._saveManualProxy()" style="padding:8px 14px;background:var(--gold);color:#141412;border:none;border-radius:6px;font-family:var(--sans);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">Save</button>' +
+      '</div>' +
+      '<div id="manualProxyStatus" style="font-size:11px;margin-top:4px;color:var(--dim)"></div>' +
+    '</div>';
+  }
+  var addr = (eoaAddress || localStorage.getItem('poly_eoa_address') || '').toLowerCase();
+  window._saveManualProxy = function() {
+    var input = document.getElementById('manualProxyInput');
+    var statusDiv = document.getElementById('manualProxyStatus');
+    if (!input) return;
+    var val = (input.value || '').trim().toLowerCase();
+    if (!val.startsWith('0x') || val.length !== 42) {
+      if (statusDiv) { statusDiv.textContent = 'Invalid address \u2014 must be 0x... (42 characters)'; statusDiv.style.color = 'var(--red)'; }
+      return;
+    }
+    if (val === addr) {
+      if (statusDiv) { statusDiv.textContent = 'That\'s your MetaMask address, not your deposit address'; statusDiv.style.color = 'var(--red)'; }
+      return;
+    }
+    localStorage.setItem('hf_poly_wallet', val);
+    if (addr) localStorage.setItem('hf_poly_proxy_' + addr, val);
+    if (statusDiv) { statusDiv.textContent = 'Saved! Refreshing...'; statusDiv.style.color = 'var(--green)'; }
+    setTimeout(function() {
+      fetchTradeBalance();
+      updateTradingUI();
+      showTradeStatus('Trading enabled! Deposit address saved.', 'success');
+    }, 300);
+  };
 }
 
 function showTradeStatus(msg, type) {
@@ -2044,8 +2010,8 @@ async function executeTrade() {
         && proxyAddress.toLowerCase() !== (eoaAddress || '').toLowerCase();
 
       if (!proxyValid) {
-        showTradeStatus('Could not find your Polymarket deposit address. Try visiting polymarket.com first, then reconnect here.', 'error');
-        cta.disabled = false; updateCtaButton();
+        // Show manual proxy input so user can paste their deposit address
+        showManualProxyInput(eoaAddress);
         return;
       }
     }
