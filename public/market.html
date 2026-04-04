@@ -1612,13 +1612,52 @@ async function enableTrading() {
     // Proxy address — MUST come from CLOB response (derive or create), never computed locally.
     // CREATE2 derivation produces wrong addresses for some wallets (Polymarket uses multiple factory versions).
     var proxyAddr = data.proxyAddress || data.proxy_address || data.safe_address || data.safeAddress || data.proxy || data.funder || '';
+
+    // If server didn't return proxy, retry via /api/polymarket/lookup-proxy with delays.
+    // New Polymarket API keys take ~2 minutes to activate — the server's immediate lookup
+    // may have gotten 401. Client-side retry gives keys more time to become valid.
+    if (!proxyAddr && apiKey && secret && passphrase) {
+      console.warn('[wallet debug] No proxy from initial derive — starting retry with delays...');
+      var retryDelays = [4000, 8000, 15000]; // 4s, 8s, 15s (server already tried 0/3/6/10s)
+      for (var ri = 0; ri < retryDelays.length; ri++) {
+        cta.textContent = 'Waiting for key activation... (' + (ri + 1) + '/' + retryDelays.length + ')';
+        tradeDebug('proxy-retry', 'attempt ' + (ri + 1) + ' waiting ' + (retryDelays[ri] / 1000) + 's');
+        await new Promise(function(resolve) { setTimeout(resolve, retryDelays[ri]); });
+        try {
+          var retryHeaders = { 'Content-Type': 'application/json' };
+          if (token) retryHeaders['Authorization'] = 'Bearer ' + token;
+          var retryRes = await fetch('/api/polymarket/lookup-proxy', {
+            method: 'POST',
+            headers: retryHeaders,
+            body: JSON.stringify({ address: address, apiKey: apiKey, secret: secret, passphrase: passphrase })
+          });
+          if (retryRes.ok) {
+            var retryData = await retryRes.json();
+            tradeDebug('proxy-retry OK', { attempt: ri + 1, proxy: (retryData.proxyAddress || '').slice(0, 10) });
+            if (retryData.proxyAddress) {
+              proxyAddr = retryData.proxyAddress;
+              console.log('[wallet debug] Proxy found on retry attempt ' + (ri + 1) + ':', proxyAddr);
+              break;
+            }
+          } else {
+            var retryErr = await retryRes.json().catch(function() { return {}; });
+            tradeDebug('proxy-retry FAIL', { attempt: ri + 1, status: retryRes.status, error: retryErr });
+            // If not 401, stop retrying — different error
+            if (retryRes.status !== 502 && retryRes.status !== 401) break;
+          }
+        } catch (retryE) {
+          tradeDebug('proxy-retry ERROR', { attempt: ri + 1, error: retryE.message });
+        }
+      }
+    }
+
     if (!proxyAddr) {
-      console.warn('[wallet debug] WARNING: No proxy address from CLOB. Balance/positions may not load correctly.');
+      console.warn('[wallet debug] WARNING: No proxy address after all retries. Balance/positions may not load correctly.');
       console.warn('[wallet debug] Full CLOB response keys:', Object.keys(data));
       // Don't compute a CREATE2 fallback — a wrong proxy is worse than no proxy.
       // The user can find their deposit address on polymarket.com → Profile → Deposit Address.
     } else {
-      console.log('[wallet debug] Using CLOB-provided proxy address:', proxyAddr);
+      console.log('[wallet debug] Using proxy address:', proxyAddr);
     }
     localStorage.setItem('hf_poly_wallet', proxyAddr);
 

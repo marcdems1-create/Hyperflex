@@ -24129,34 +24129,59 @@ app.post('/api/polymarket/derive-api-key', optionalAuth, async (req, res) => {
 
     console.log(`[derive-api-key] Extracted: apiKey=${(apiKey||'').slice(0,8)}... proxy=${proxyAddress || 'NONE'} hasSecret=${!!secret} hasPass=${!!passphrase}`);
 
-    // If derive/create didn't return proxy, fetch it from GET /auth/api-keys (L2 auth)
-    if (!proxyAddress && apiKey && secret && passphrase) {
+    // Helper: extract proxy from api-keys response
+    function extractProxyFromKeys(keysRaw, statusCode, label) {
+      console.log(`[derive-api-key] ${label} response (${statusCode}): ${keysRaw.slice(0, 500)}`);
+      if (statusCode !== 200) return null;
       try {
-        console.log('[derive-api-key] No proxy in response, trying GET /auth/api-keys with L2 creds...');
-        const keysRes = await fetch('https://clob.polymarket.com/auth/api-keys', {
-          headers: {
-            'POLY_ADDRESS': address,
-            'POLY_API_KEY': apiKey,
-            'POLY_API_SECRET': secret,
-            'POLY_PASSPHRASE': passphrase,
-            'Accept': 'application/json',
-            'User-Agent': 'Hyperflex/1.0'
-          }
-        });
-        const keysRaw = await keysRes.text();
-        console.log(`[derive-api-key] L2 api-keys response (${keysRes.status}): ${keysRaw.slice(0, 500)}`);
-        if (keysRes.ok) {
-          const keysData = JSON.parse(keysRaw);
-          const keys = Array.isArray(keysData) ? keysData : [keysData];
-          for (const k of keys) {
-            // Check every possible proxy field name
-            const pa = k.proxyAddress || k.proxy_address || k.polyAddress
-              || k.safe_address || k.safeAddress || k.proxy || k.funder
-              || k.funderAddress || k.funder_address || null;
-            if (pa) { proxyAddress = pa; console.log(`[derive-api-key] Found proxy in api-keys: ${pa}`); break; }
-          }
+        const keysData = JSON.parse(keysRaw);
+        const keys = Array.isArray(keysData) ? keysData : [keysData];
+        for (const k of keys) {
+          const pa = k.proxyAddress || k.proxy_address || k.polyAddress
+            || k.safe_address || k.safeAddress || k.proxy || k.funder
+            || k.funderAddress || k.funder_address || null;
+          if (pa) { console.log(`[derive-api-key] Found proxy in ${label}: ${pa}`); return pa; }
         }
-      } catch(e) { console.warn('[derive-api-key] L2 api-keys lookup failed:', e.message); }
+      } catch(e) { console.warn(`[derive-api-key] ${label} parse error:`, e.message); }
+      return null;
+    }
+
+    // If derive/create didn't return proxy, fetch it from GET /auth/api-keys with retry
+    // New Polymarket API keys take ~2 minutes to activate — immediate lookups return 401.
+    // Retry up to 3 times with increasing delays (3s, 6s, 10s) before falling back to L1.
+    if (!proxyAddress && apiKey && secret && passphrase) {
+      const retryDelays = [0, 3000, 6000, 10000]; // immediate, then 3s, 6s, 10s
+      for (let attempt = 0; attempt < retryDelays.length && !proxyAddress; attempt++) {
+        if (retryDelays[attempt] > 0) {
+          console.log(`[derive-api-key] L2 api-keys attempt ${attempt + 1}: waiting ${retryDelays[attempt] / 1000}s for key activation...`);
+          await new Promise(r => setTimeout(r, retryDelays[attempt]));
+        }
+        try {
+          console.log(`[derive-api-key] L2 api-keys attempt ${attempt + 1}/${retryDelays.length}...`);
+          const keysRes = await fetch('https://clob.polymarket.com/auth/api-keys', {
+            headers: {
+              'POLY_ADDRESS': address,
+              'POLY_API_KEY': apiKey,
+              'POLY_API_SECRET': secret,
+              'POLY_PASSPHRASE': passphrase,
+              'Accept': 'application/json',
+              'User-Agent': 'Hyperflex/1.0'
+            }
+          });
+          const keysRaw = await keysRes.text();
+          if (keysRes.ok) {
+            proxyAddress = extractProxyFromKeys(keysRaw, keysRes.status, `L2 attempt ${attempt + 1}`);
+            if (proxyAddress) break;
+          } else {
+            console.log(`[derive-api-key] L2 attempt ${attempt + 1} got ${keysRes.status}: ${keysRaw.slice(0, 200)}`);
+            // If not 401 (auth not ready), don't bother retrying — it's a different error
+            if (keysRes.status !== 401) {
+              console.log(`[derive-api-key] Non-401 error, skipping further L2 retries`);
+              break;
+            }
+          }
+        } catch(e) { console.warn(`[derive-api-key] L2 attempt ${attempt + 1} failed:`, e.message); }
+      }
     }
 
     // Fallback: try L1-auth GET /auth/api-keys with original signature headers
@@ -24173,17 +24198,7 @@ app.post('/api/polymarket/derive-api-key', optionalAuth, async (req, res) => {
           }
         });
         const keysRaw2 = await keysRes2.text();
-        console.log(`[derive-api-key] L1 api-keys response (${keysRes2.status}): ${keysRaw2.slice(0, 500)}`);
-        if (keysRes2.ok) {
-          const keysData2 = JSON.parse(keysRaw2);
-          const keys2 = Array.isArray(keysData2) ? keysData2 : [keysData2];
-          for (const k of keys2) {
-            const pa = k.proxyAddress || k.proxy_address || k.polyAddress
-              || k.safe_address || k.safeAddress || k.proxy || k.funder
-              || k.funderAddress || k.funder_address || null;
-            if (pa) { proxyAddress = pa; console.log(`[derive-api-key] Found proxy in L1 api-keys: ${pa}`); break; }
-          }
-        }
+        proxyAddress = extractProxyFromKeys(keysRaw2, keysRes2.status, 'L1 api-keys');
       } catch(e) { console.warn('[derive-api-key] L1 api-keys lookup failed:', e.message); }
     }
 
@@ -24217,7 +24232,7 @@ app.post('/api/polymarket/derive-api-key', optionalAuth, async (req, res) => {
 });
 
 // POST /api/polymarket/lookup-proxy — use existing API key to find proxy address
-app.post('/api/polymarket/lookup-proxy', requireAuth, async (req, res) => {
+app.post('/api/polymarket/lookup-proxy', optionalAuth, async (req, res) => {
   const { address, apiKey, secret, passphrase } = req.body;
   if (!address || !apiKey) return res.status(400).json({ error: 'Missing address or apiKey' });
   try {
@@ -24242,7 +24257,9 @@ app.post('/api/polymarket/lookup-proxy', requireAuth, async (req, res) => {
     let proxyAddress = null;
     const keys = Array.isArray(keysData) ? keysData : [keysData];
     for (const k of keys) {
-      const pa = k.proxyAddress || k.proxy_address || k.polyAddress || k.address || null;
+      const pa = k.proxyAddress || k.proxy_address || k.polyAddress
+        || k.safe_address || k.safeAddress || k.proxy || k.funder
+        || k.funderAddress || k.funder_address || k.address || null;
       if (pa && pa.toLowerCase() !== address.toLowerCase()) {
         proxyAddress = pa;
         break;

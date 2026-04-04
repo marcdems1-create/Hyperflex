@@ -16030,24 +16030,36 @@ async function derivePolymarketApiKey() {
       // Save proxy address if returned directly
       var proxyAddr = data.proxyAddress || data.proxy_address || data.polyAddress || '';
 
-      // If no proxy in response, look it up from /auth/api-keys
-      if (!proxyAddr) {
-        try {
-          if (btn) btn.textContent = 'Getting proxy address...';
-          var keysRes = await fetch('https://clob.polymarket.com/auth/api-keys', {
-            method: 'GET',
-            headers: { 'POLY_ADDRESS': address, 'POLY_SIGNATURE': signature, 'POLY_TIMESTAMP': timestamp, 'POLY_NONCE': nonce }
-          });
-          var keysData = await keysRes.json();
-          console.log('[api-keys] response:', JSON.stringify(keysData));
-          if (Array.isArray(keysData)) {
-            for (var k of keysData) {
-              if (k.proxyAddress || k.proxy_address) { proxyAddr = (k.proxyAddress || k.proxy_address).toLowerCase(); break; }
+      // If no proxy in response, retry via server /api/polymarket/lookup-proxy with delays.
+      // New Polymarket API keys take ~2 minutes to activate — immediate lookups return 401.
+      if (!proxyAddr && apiKey && secret && passphrase) {
+        var retryDelays = [3000, 6000, 12000]; // 3s, 6s, 12s
+        for (var ri = 0; ri < retryDelays.length && !proxyAddr; ri++) {
+          if (btn) btn.textContent = 'Waiting for key activation... (' + (ri + 1) + '/' + retryDelays.length + ')';
+          console.log('[api-keys] retry ' + (ri + 1) + ': waiting ' + (retryDelays[ri] / 1000) + 's...');
+          await new Promise(function(resolve) { setTimeout(resolve, retryDelays[ri]); });
+          try {
+            var retryHeaders = { 'Content-Type': 'application/json' };
+            var hfToken = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+            if (hfToken) retryHeaders['Authorization'] = 'Bearer ' + hfToken;
+            var retryRes = await fetch('/api/polymarket/lookup-proxy', {
+              method: 'POST',
+              headers: retryHeaders,
+              body: JSON.stringify({ address: address, apiKey: apiKey, secret: secret, passphrase: passphrase })
+            });
+            if (retryRes.ok) {
+              var retryData = await retryRes.json();
+              console.log('[api-keys] retry ' + (ri + 1) + ' result:', retryData);
+              if (retryData.proxyAddress) {
+                proxyAddr = retryData.proxyAddress.toLowerCase();
+                console.log('[api-keys] Proxy found on retry ' + (ri + 1) + ':', proxyAddr);
+                break;
+              }
+            } else {
+              console.log('[api-keys] retry ' + (ri + 1) + ' status:', retryRes.status);
             }
-          } else if (keysData.proxyAddress || keysData.proxy_address) {
-            proxyAddr = (keysData.proxyAddress || keysData.proxy_address).toLowerCase();
-          }
-        } catch(e) { console.warn('[api-keys] lookup failed:', e.message); }
+          } catch(e) { console.warn('[api-keys] retry ' + (ri + 1) + ' failed:', e.message); }
+        }
       }
 
       if (proxyAddr) {
