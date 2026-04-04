@@ -1883,6 +1883,20 @@ async function executeTrade() {
       return;
     }
 
+    if (!proxyAddress) {
+      // No proxy address = can't trade (funds live in the proxy wallet, not the EOA).
+      // Try re-connecting to resolve the proxy address.
+      showTradeStatus('Proxy wallet not found. Reconnecting...', 'info');
+      cta.textContent = 'Reconnecting...';
+      var reconnected = await enableTrading();
+      proxyAddress = localStorage.getItem('hf_poly_wallet');
+      if (!proxyAddress) {
+        showTradeStatus('Could not find your Polymarket deposit address. Please try disconnecting and reconnecting your wallet, or visit polymarket.com to find your deposit address.', 'error');
+        cta.disabled = false; updateCtaButton();
+        return;
+      }
+    }
+
     if (!window.ethereum) {
       showTradeStatus('MetaMask required to sign orders', 'error');
       cta.disabled = false; updateCtaButton();
@@ -2009,14 +2023,20 @@ async function executeTrade() {
     takerAmt = takerAmt.replace(/^0+/, '') || '0';
     console.log('[trade] Amounts: maker=' + makerAmt + ' taker=' + takerAmt + ' price=' + clobPrice + ' shares=' + (clobSide === 'BUY' ? rawShares : rawShares2) + ' implied=' + (clobSide === 'BUY' ? (parseInt(makerAmt)/parseInt(takerAmt)) : (parseInt(takerAmt)/parseInt(makerAmt))));
 
-    var orderSalt = Math.floor(Math.random() * 9007199254740991);
+    var orderSalt = Math.floor(Math.random() * 9007199254740991).toString();
     var exchangeAddr = isNegRisk
       ? '0xC5d563A36AE78145C45a50134d48A1215220f80a'
       : '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E';
 
+    // signatureType: 2 = POLY_GNOSIS_SAFE (proxy wallet), 0 = EOA
+    // maker = proxy wallet (where funds live); signer = EOA (MetaMask key)
+    var sigType = proxyAddress && proxyAddress.toLowerCase() !== eoaAddress.toLowerCase() ? 2 : 0;
+    var makerAddr = proxyAddress || eoaAddress;
+    console.log('[trade] maker=' + makerAddr.slice(0,10) + ' signer=' + eoaAddress.slice(0,10) + ' sigType=' + sigType + ' proxy=' + (proxyAddress || 'NONE'));
+
     var orderStruct = {
       salt: orderSalt,
-      maker: proxyAddress,
+      maker: makerAddr,
       signer: eoaAddress,
       taker: '0x0000000000000000000000000000000000000000',
       tokenId: tokenId,
@@ -2026,7 +2046,7 @@ async function executeTrade() {
       nonce: '0',
       feeRateBps: feeRateBps,
       side: sideInt,
-      signatureType: 2  // POLY_GNOSIS_SAFE — proxy derived from Safe factory 0xaacFeEa0
+      signatureType: sigType
     };
 
     console.log('[trade] Order struct:', JSON.stringify(orderStruct));
@@ -2064,9 +2084,13 @@ async function executeTrade() {
     // Step 4: Submit to CLOB
     showTradeStatus('Submitting order to Polymarket...', 'info');
     cta.textContent = 'Placing order...';
+    // Request body for CLOB /order endpoint
+    // CRITICAL: 'side' must be integer (0=BUY, 1=SELL) matching the EIP-712 signed value,
+    // NOT the string "BUY"/"SELL". Mismatch causes "invalid signature" because CLOB
+    // re-hashes the order and gets a different digest than what was signed.
     var requestBody = JSON.stringify({
       order: {
-        salt: orderStruct.salt,
+        salt: String(orderStruct.salt),
         maker: orderStruct.maker,
         signer: orderStruct.signer,
         taker: orderStruct.taker,
@@ -2075,14 +2099,15 @@ async function executeTrade() {
         takerAmount: orderStruct.takerAmount,
         expiration: orderStruct.expiration,
         nonce: orderStruct.nonce,
-        feeRateBps: orderStruct.feeRateBps,
-        side: clobSide,
+        feeRateBps: String(orderStruct.feeRateBps),
+        side: sideInt,
         signatureType: orderStruct.signatureType,
         signature: orderSignature
       },
       owner: apiKey,
       orderType: 'GTC'
     });
+    tradeDebug('requestBody', { side: sideInt, sigType: sigType, maker: makerAddr.slice(0,10), owner: apiKey.slice(0,10), bodyLen: requestBody.length });
 
     var data = await submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eoaAddress);
 
