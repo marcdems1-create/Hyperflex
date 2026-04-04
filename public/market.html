@@ -1609,8 +1609,7 @@ async function enableTrading() {
     // Mark that user explicitly connected a wallet — prevents dashboard auto-recovery
     localStorage.setItem('hf_wallet_explicit_switch', Date.now().toString());
 
-    // Proxy address — MUST come from CLOB response (derive or create), never computed locally.
-    // CREATE2 derivation produces wrong addresses for some wallets (Polymarket uses multiple factory versions).
+    // Proxy address — prefer CLOB response, then data-api, then dual CREATE2 with verification.
     var proxyAddr = data.proxyAddress || data.proxy_address || data.safe_address || data.safeAddress || data.proxy || data.funder || '';
 
     // If derive didn't return proxy, try Polymarket data API endpoints (server already retried CLOB)
@@ -1684,6 +1683,58 @@ async function enableTrading() {
           }
         } catch(posErr) { console.warn('[wallet debug] Positions lookup failed:', posErr.message); }
       }
+    }
+
+    // Dual CREATE2 factory derivation — compute proxy addresses from both Polymarket factories,
+    // then verify via browser-direct positions check (data-api is NOT geo-blocked).
+    if (!proxyAddr) {
+      console.log('[wallet debug] Trying dual CREATE2 factory derivation...');
+      cta.textContent = 'Computing proxy address...';
+      try {
+        var eoaLower = address.toLowerCase();
+        // Factory 1: Safe factory — salt = keccak256(abiEncode(['address'], [eoa]))
+        var SAFE_FACTORY = '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b';
+        // Factory 2: Proxy factory — salt = keccak256(solidityPacked(['address'], [eoa]))
+        var PROXY_FACTORY = '0xaB45c5A4B0c941a2F231C04C3f49182e1A254052';
+        // Gnosis Safe singleton init code hash (same for both factories)
+        var SAFE_INIT_HASH = '0x' + ethers.keccak256(ethers.getBytes('0x' + 'ff' + SAFE_FACTORY.slice(2))).slice(2);
+
+        var candidates = [];
+        // Candidate 1: Safe factory with abiEncode salt
+        try {
+          var safeSalt = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['address'], [address]));
+          var safeCandidate = ethers.getCreate2Address(SAFE_FACTORY, safeSalt, '0xb1a6e24430a128537c1b88ddd496588fbdd498d64e74af26ae0e13e4bb2d4e49');
+          candidates.push({ addr: safeCandidate.toLowerCase(), label: 'Safe factory' });
+          console.log('[wallet debug] CREATE2 Safe candidate:', safeCandidate);
+        } catch(e) { console.warn('[wallet debug] Safe factory CREATE2 error:', e.message); }
+
+        // Candidate 2: Proxy factory with solidityPacked salt
+        try {
+          var proxySalt = ethers.keccak256(ethers.solidityPacked(['address'], [address]));
+          var proxyCandidate = ethers.getCreate2Address(PROXY_FACTORY, proxySalt, '0xb1a6e24430a128537c1b88ddd496588fbdd498d64e74af26ae0e13e4bb2d4e49');
+          candidates.push({ addr: proxyCandidate.toLowerCase(), label: 'Proxy factory' });
+          console.log('[wallet debug] CREATE2 Proxy candidate:', proxyCandidate);
+        } catch(e) { console.warn('[wallet debug] Proxy factory CREATE2 error:', e.message); }
+
+        // Verify each candidate by checking positions from browser (not geo-blocked)
+        for (var ci = 0; ci < candidates.length && !proxyAddr; ci++) {
+          var c = candidates[ci];
+          if (c.addr === eoaLower) continue; // skip if same as EOA
+          try {
+            console.log('[wallet debug] Verifying ' + c.label + ' candidate:', c.addr);
+            var verifyRes = await fetch('https://data-api.polymarket.com/positions?user=' + c.addr + '&limit=1&sortBy=CURRENT');
+            if (verifyRes.ok) {
+              var verifyData = await verifyRes.json();
+              if (Array.isArray(verifyData) && verifyData.length > 0) {
+                proxyAddr = c.addr;
+                console.log('[wallet debug] CREATE2 VERIFIED via positions (' + c.label + '):', proxyAddr);
+              } else {
+                console.log('[wallet debug] ' + c.label + ' candidate has no positions, skipping');
+              }
+            }
+          } catch(ve) { console.warn('[wallet debug] ' + c.label + ' verify error:', ve.message); }
+        }
+      } catch(create2Err) { console.warn('[wallet debug] CREATE2 derivation failed:', create2Err.message); }
     }
 
     // Last resort: check per-EOA cached proxy from dashboard/previous session
@@ -2224,7 +2275,8 @@ async function executeTrade() {
         signature: orderSignature
       },
       owner: apiKey,
-      orderType: 'GTC'
+      orderType: 'GTC',
+      deferExec: false
     });
     tradeDebug('requestBody', { side: sideInt, sigType: sigType, maker: makerAddr.slice(0,10), owner: apiKey.slice(0,10), bodyLen: requestBody.length });
 

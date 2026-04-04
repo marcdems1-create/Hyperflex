@@ -24067,51 +24067,52 @@ app.post('/api/polymarket/derive-api-key', optionalAuth, async (req, res) => {
       'User-Agent': 'Hyperflex/1.0'
     };
 
-    // Step 1: Try GET /auth/derive-api-key (retrieves existing keys)
+    // Step 1: Try POST /auth/api-key FIRST (create) — matches official SDK createOrDeriveApiKey() order
     let data = {};
     let derivedOk = false;
     try {
-      const upstream = await fetch('https://clob.polymarket.com/auth/derive-api-key', {
-        method: 'GET',
-        headers: l1Headers
+      console.log('[polymarket derive-api-key] Step 1: POST /auth/api-key (create) for', address.slice(0, 8));
+      const createRes = await fetch('https://clob.polymarket.com/auth/api-key', {
+        method: 'POST',
+        headers: { ...l1Headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
       });
-      data = await upstream.json().catch(() => ({}));
-      if (upstream.ok && (data.apiKey || data.api_key || data.key)) {
+      const createData = await createRes.json().catch(() => ({}));
+      if (createRes.ok && (createData.apiKey || createData.api_key || createData.key)) {
+        data = createData;
         derivedOk = true;
-        console.log('[polymarket derive-api-key] Derive succeeded for', address.slice(0, 8));
+        console.log('[polymarket derive-api-key] Create succeeded for', address.slice(0, 8));
       } else {
-        console.warn('[polymarket derive-api-key] Derive failed:', upstream.status, JSON.stringify(data).slice(0, 200));
+        console.warn('[polymarket derive-api-key] Create returned:', createRes.status, JSON.stringify(createData).slice(0, 200));
       }
-    } catch (deriveErr) {
-      console.warn('[polymarket derive-api-key] Derive request error:', deriveErr.message);
+    } catch (createErr) {
+      console.warn('[polymarket derive-api-key] Create request error:', createErr.message);
     }
 
-    // Step 2: If derive failed, try POST /auth/api-key (creates new keys)
+    // Step 2: If create didn't return a key, fall back to GET /auth/derive-api-key (retrieves existing)
     if (!derivedOk) {
-      console.log('[polymarket derive-api-key] Falling back to POST /auth/api-key (create)...');
+      console.log('[polymarket derive-api-key] Step 2: GET /auth/derive-api-key (derive) for', address.slice(0, 8));
       try {
-        const createRes = await fetch('https://clob.polymarket.com/auth/api-key', {
-          method: 'POST',
+        const upstream = await fetch('https://clob.polymarket.com/auth/derive-api-key', {
+          method: 'GET',
           headers: l1Headers
         });
-        const createData = await createRes.json().catch(() => ({}));
-        if (createRes.ok && (createData.apiKey || createData.api_key || createData.key)) {
-          data = createData;
+        data = await upstream.json().catch(() => ({}));
+        if (upstream.ok && (data.apiKey || data.api_key || data.key)) {
           derivedOk = true;
-          console.log('[polymarket derive-api-key] Create succeeded for', address.slice(0, 8));
+          console.log('[polymarket derive-api-key] Derive succeeded for', address.slice(0, 8));
         } else {
-          console.error('[polymarket derive-api-key] Create also failed:', createRes.status, JSON.stringify(createData).slice(0, 200));
-          // Return the create error since it's the final attempt
-          return res.status(createRes.status >= 400 && createRes.status < 500 ? createRes.status : 502).json({
-            error: createData.error || createData.message || 'Failed to derive or create API key',
-            detail: createData
+          console.error('[polymarket derive-api-key] Derive also failed:', upstream.status, JSON.stringify(data).slice(0, 200));
+          return res.status(upstream.status >= 400 && upstream.status < 500 ? upstream.status : 502).json({
+            error: data.error || data.message || 'Failed to create or derive API key',
+            detail: data
           });
         }
-      } catch (createErr) {
-        console.error('[polymarket derive-api-key] Create request error:', createErr.message);
+      } catch (deriveErr) {
+        console.error('[polymarket derive-api-key] Derive request error:', deriveErr.message);
         return res.status(502).json({
-          error: 'Failed to reach Polymarket CLOB for key creation',
-          detail: createErr.message
+          error: 'Failed to reach Polymarket CLOB for key derivation',
+          detail: deriveErr.message
         });
       }
     }
