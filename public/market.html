@@ -1651,15 +1651,41 @@ async function enableTrading() {
       }
     }
 
+    // If derive/retry didn't find proxy, try discovering it from Polymarket profile API
     if (!proxyAddr) {
-      console.warn('[wallet debug] WARNING: No proxy address after all retries. Balance/positions may not load correctly.');
+      console.log('[wallet debug] No proxy from derive — trying Polymarket profile lookup...');
+      cta.textContent = 'Finding deposit address...';
+      try {
+        var profileRes = await fetch('https://data-api.polymarket.com/profile?address=' + address.toLowerCase());
+        if (profileRes.ok) {
+          var profileData = await profileRes.json();
+          console.log('[wallet debug] Profile response keys:', Object.keys(profileData));
+          var foundProxy = profileData.proxyAddress || profileData.proxy_address || profileData.proxyWallet || profileData.proxy_wallet || profileData.funder || null;
+          if (foundProxy && foundProxy.toLowerCase() !== address.toLowerCase()) {
+            proxyAddr = foundProxy.toLowerCase();
+            console.log('[wallet debug] Found proxy from profile API:', proxyAddr);
+          }
+        }
+      } catch(profErr) { console.warn('[wallet debug] Profile lookup failed:', profErr.message); }
+    }
+
+    // Last resort: check if dashboard/previous session already found a valid proxy
+    if (!proxyAddr) {
+      var cachedProxy = localStorage.getItem('hf_poly_wallet');
+      if (cachedProxy && cachedProxy.length === 42 && cachedProxy.toLowerCase() !== address.toLowerCase()) {
+        proxyAddr = cachedProxy;
+        console.log('[wallet debug] Using cached proxy from previous session:', proxyAddr);
+      }
+    }
+
+    if (!proxyAddr) {
+      console.warn('[wallet debug] WARNING: No proxy address found after all methods.');
       console.warn('[wallet debug] Full CLOB response keys:', Object.keys(data));
-      // Don't compute a CREATE2 fallback — a wrong proxy is worse than no proxy.
-      // The user can find their deposit address on polymarket.com → Profile → Deposit Address.
+      // DON'T store empty string or EOA as proxy — that causes wrong signatureType
     } else {
       console.log('[wallet debug] Using proxy address:', proxyAddr);
+      localStorage.setItem('hf_poly_wallet', proxyAddr);
     }
-    localStorage.setItem('hf_poly_wallet', proxyAddr);
 
     // Debug: Show all addresses being stored
     console.log('[wallet debug] === WALLET CONNECTION DEBUG ===');
@@ -1883,15 +1909,23 @@ async function executeTrade() {
       return;
     }
 
-    if (!proxyAddress) {
-      // No proxy address = can't trade (funds live in the proxy wallet, not the EOA).
+    // Validate proxy address: must exist, be a real 0x address, and differ from EOA
+    var proxyValid = proxyAddress && proxyAddress.length === 42 && proxyAddress.startsWith('0x')
+      && proxyAddress.toLowerCase() !== (eoaAddress || '').toLowerCase();
+
+    if (!proxyValid) {
+      // No valid proxy = can't trade (funds live in the proxy wallet, not the EOA).
       // Try re-connecting to resolve the proxy address.
-      showTradeStatus('Proxy wallet not found. Reconnecting...', 'info');
-      cta.textContent = 'Reconnecting...';
+      console.warn('[trade] Invalid proxy:', proxyAddress, '(EOA:', eoaAddress, ') — reconnecting...');
+      showTradeStatus('Finding your Polymarket deposit address...', 'info');
+      cta.textContent = 'Finding deposit address...';
       var reconnected = await enableTrading();
       proxyAddress = localStorage.getItem('hf_poly_wallet');
-      if (!proxyAddress) {
-        showTradeStatus('Could not find your Polymarket deposit address. Please try disconnecting and reconnecting your wallet, or visit polymarket.com to find your deposit address.', 'error');
+      proxyValid = proxyAddress && proxyAddress.length === 42 && proxyAddress.startsWith('0x')
+        && proxyAddress.toLowerCase() !== (eoaAddress || '').toLowerCase();
+
+      if (!proxyValid) {
+        showTradeStatus('Could not find your Polymarket deposit address. Try visiting polymarket.com first, then reconnect here.', 'error');
         cta.disabled = false; updateCtaButton();
         return;
       }

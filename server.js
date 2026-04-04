@@ -24202,11 +24202,42 @@ app.post('/api/polymarket/derive-api-key', optionalAuth, async (req, res) => {
       } catch(e) { console.warn('[derive-api-key] L1 api-keys lookup failed:', e.message); }
     }
 
-    // NO CREATE2 FALLBACK — it produces wrong addresses for some wallets.
-    // If CLOB didn't give us a proxy address after all 3 lookups, return what we have.
-    // A missing proxy is better than a wrong proxy (wrong proxy = silently invalid orders).
+    // Fallback: try Polymarket profile/data API for proxy discovery
     if (!proxyAddress) {
-      console.warn(`[derive-api-key] WARNING: No proxy address found for ${address.slice(0,10)}. Orders may need proxy from client-side or user's Polymarket deposit page.`);
+      try {
+        console.log('[derive-api-key] Trying Polymarket profile API...');
+        const profileRes = await fetch(`https://data-api.polymarket.com/profile?address=${address.toLowerCase()}`);
+        if (profileRes.ok) {
+          const profileData = await profileRes.json();
+          console.log(`[derive-api-key] Profile response keys: ${JSON.stringify(Object.keys(profileData))}`);
+          const profProxy = profileData.proxyAddress || profileData.proxy_address || profileData.proxyWallet
+            || profileData.proxy_wallet || profileData.funder || null;
+          if (profProxy && profProxy.toLowerCase() !== address.toLowerCase()) {
+            proxyAddress = profProxy;
+            console.log(`[derive-api-key] Found proxy from profile API: ${proxyAddress}`);
+          }
+        } else {
+          console.log(`[derive-api-key] Profile API ${profileRes.status}`);
+        }
+      } catch(e) { console.warn('[derive-api-key] Profile API lookup failed:', e.message); }
+    }
+
+    // Fallback: check our DB for a previously stored proxy address
+    if (!proxyAddress && req.userId && pool) {
+      try {
+        const dbRes = await dbQuery('SELECT polymarket_address FROM users WHERE id = $1 AND polymarket_address IS NOT NULL AND polymarket_address != $2', [req.userId, '']);
+        if (dbRes.rows && dbRes.rows[0] && dbRes.rows[0].polymarket_address) {
+          const dbProxy = dbRes.rows[0].polymarket_address;
+          if (dbProxy.toLowerCase() !== address.toLowerCase()) {
+            proxyAddress = dbProxy;
+            console.log(`[derive-api-key] Found proxy from DB: ${proxyAddress}`);
+          }
+        }
+      } catch(e) { /* silent */ }
+    }
+
+    if (!proxyAddress) {
+      console.warn(`[derive-api-key] WARNING: No proxy address found for ${address.slice(0,10)} after all methods (CLOB, api-keys, profile, DB).`);
     }
 
     console.log(`[polymarket derive-api-key] FINAL: user=${req.userId} address=${address.slice(0,8)}... proxy=${proxyAddress || 'NONE'} apiKey=${(apiKey||'').slice(0,8)}...`);
