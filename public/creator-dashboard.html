@@ -13174,6 +13174,9 @@ setTimeout(async function() {
           localStorage.removeItem('poly_api_key');
           localStorage.removeItem('poly_api_secret');
           localStorage.removeItem('poly_api_passphrase');
+          localStorage.removeItem('hf_clob_api_key');
+          localStorage.removeItem('hf_clob_api_secret');
+          localStorage.removeItem('hf_clob_api_passphrase');
           localStorage.removeItem('poly_eoa_address');
           localStorage.removeItem('hf_poly_wallet');
           sessionStorage.removeItem('hf_poly_wallet_session');
@@ -16116,10 +16119,13 @@ function disconnectBrowserWallet() {
   window._walletBalanceUSDC = null;
   window._walletBalanceMATIC = null;
   localStorage.removeItem('hf_wallet_address');
-  // Clear CLOB trading keys on disconnect
+  // Clear CLOB trading keys on disconnect — both naming conventions
   localStorage.removeItem('poly_api_key');
   localStorage.removeItem('poly_api_secret');
   localStorage.removeItem('poly_api_passphrase');
+  localStorage.removeItem('hf_clob_api_key');
+  localStorage.removeItem('hf_clob_api_secret');
+  localStorage.removeItem('hf_clob_api_passphrase');
   updateWalletUI();
   showToast('Wallet disconnected', 'success');
 }
@@ -16176,10 +16182,13 @@ if (typeof window.ethereum !== 'undefined') {
     if (accounts.length === 0) {
       disconnectBrowserWallet();
     } else if (accounts[0].toLowerCase() !== (window._connectedWallet || '').toLowerCase()) {
-      // Clear stale CLOB keys from previous wallet
+      // Clear stale CLOB keys from previous wallet — both naming conventions
       localStorage.removeItem('poly_api_key');
       localStorage.removeItem('poly_api_secret');
       localStorage.removeItem('poly_api_passphrase');
+      localStorage.removeItem('hf_clob_api_key');
+      localStorage.removeItem('hf_clob_api_secret');
+      localStorage.removeItem('hf_clob_api_passphrase');
       localStorage.removeItem('poly_eoa_address');
       localStorage.removeItem('hf_poly_wallet');
       sessionStorage.removeItem('hf_poly_wallet_session');
@@ -16862,6 +16871,9 @@ async function confirmTrade() {
         localStorage.removeItem('poly_api_key');
         localStorage.removeItem('poly_api_secret');
         localStorage.removeItem('poly_api_passphrase');
+        localStorage.removeItem('hf_clob_api_key');
+        localStorage.removeItem('hf_clob_api_secret');
+        localStorage.removeItem('hf_clob_api_passphrase');
         localStorage.removeItem('poly_eoa_address');
         updateWalletUI();
         errEl.textContent = 'API key expired. Click Confirm Trade again to get fresh keys.';

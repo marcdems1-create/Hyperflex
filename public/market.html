@@ -1967,6 +1967,9 @@ async function enableTrading() {
       localStorage.removeItem('poly_api_key');
       localStorage.removeItem('poly_api_secret');
       localStorage.removeItem('poly_api_passphrase');
+      localStorage.removeItem('hf_clob_api_key');
+      localStorage.removeItem('hf_clob_api_secret');
+      localStorage.removeItem('hf_clob_api_passphrase');
       localStorage.removeItem('poly_eoa_address');
       localStorage.removeItem('hf_poly_wallet');
       localStorage.removeItem('poly_proxy_address');
@@ -2920,6 +2923,9 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
       localStorage.removeItem('poly_api_key');
       localStorage.removeItem('poly_api_secret');
       localStorage.removeItem('poly_api_passphrase');
+      localStorage.removeItem('hf_clob_api_key');
+      localStorage.removeItem('hf_clob_api_secret');
+      localStorage.removeItem('hf_clob_api_passphrase');
       localStorage.removeItem('poly_eoa_address');
       updateTradingUI();
       return { _expired: true, _errorMsg: 'CLOB 401: ' + (directData.error || directData.message || 'Unauthorized') };
@@ -2968,6 +2974,9 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
       localStorage.removeItem('poly_api_key');
       localStorage.removeItem('poly_api_secret');
       localStorage.removeItem('poly_api_passphrase');
+      localStorage.removeItem('hf_clob_api_key');
+      localStorage.removeItem('hf_clob_api_secret');
+      localStorage.removeItem('hf_clob_api_passphrase');
       localStorage.removeItem('poly_eoa_address');
       updateTradingUI();
       return { _expired: true, _errorMsg: 'CLOB 401: ' + (clobDetail || proxyErrMsg) };
