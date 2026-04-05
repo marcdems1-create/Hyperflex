@@ -1444,7 +1444,7 @@ async function fetchTradeBalance() {
   console.log('[balance debug] Proxy address (cached):', proxyAddress);
 
   // Always verify proxy via on-chain computeProxyAddress() to catch stale values
-  if (eoaAddress && window.ethereum) {
+  if (eoaAddress) {
     try {
       var freshProxy = await getPolymarketProxy(eoaAddress);
       if (freshProxy && freshProxy !== ethers.ZeroAddress && freshProxy.toLowerCase() !== eoaAddress.toLowerCase()) {
@@ -1461,13 +1461,13 @@ async function fetchTradeBalance() {
     }
   }
 
-  if (!proxyAddress || !window.ethereum) {
-    console.log('[balance debug] Missing proxy address or ethereum');
+  if (!proxyAddress) {
+    console.log('[balance debug] Missing proxy address');
     return;
   }
   try {
-    var provider = new ethers.BrowserProvider(window.ethereum);
-    // USDC on Polygon - USDC is held in Polymarket proxy wallet, not EOA
+    // Use public RPC for read-only balance call — no MetaMask needed
+    var provider = await getPublicProvider();
     var usdcAddress = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
     var abi = ['function balanceOf(address) view returns (uint256)'];
     var contract = new ethers.Contract(usdcAddress, abi, provider);
@@ -1475,14 +1475,13 @@ async function fetchTradeBalance() {
     var balance = parseFloat(ethers.formatUnits(raw, 6));
     console.log('[balance debug] Raw balance:', raw.toString());
     console.log('[balance debug] Formatted balance:', balance);
-    
+
     var el = document.getElementById('tradeBalance');
     if (el) {
       el.textContent = 'Balance: $' + balance.toFixed(2);
       console.log('[balance debug] Updated UI with:', balance.toFixed(2));
     }
   } catch (e) {
-    // Silent fail — CALL_EXCEPTION if MetaMask not on Polygon, not blocking
     console.log('[balance] skipped:', e.code || e.message);
   }
 }
@@ -1503,11 +1502,27 @@ var CTF_EXCHANGE = '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E';        // non-n
 var NEG_RISK_EXCHANGE = '0xC5d563A36AE78145C45a50134d48A1215220f80a'; // negRisk
 var MAX_UINT256 = '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
 
+// Public RPC provider for read-only calls — no MetaMask authorization needed.
+// Falls back to 1rpc.io if polygon-rpc.com is down.
+var POLYGON_RPCS = ['https://polygon-rpc.com', 'https://1rpc.io/matic'];
+async function getPublicProvider() {
+  for (var i = 0; i < POLYGON_RPCS.length; i++) {
+    try {
+      var p = new ethers.JsonRpcProvider(POLYGON_RPCS[i]);
+      await p.getBlockNumber(); // quick connectivity check
+      return p;
+    } catch (e) {
+      console.warn('[rpc] ' + POLYGON_RPCS[i] + ' failed:', e.message);
+    }
+  }
+  throw new Error('All public RPCs failed');
+}
+
 // The CORRECT way to get a Polymarket proxy address.
 // Calls computeProxyAddress(address) on the Safe factory contract on Polygon.
-// Returns the deterministic proxy for any EOA — no guessing, no data-api, no CREATE2 math.
+// Uses public RPC — no MetaMask popup, works without wallet authorization.
 async function getPolymarketProxy(eoaAddress) {
-  var provider = new ethers.BrowserProvider(window.ethereum);
+  var provider = await getPublicProvider();
   var factory = new ethers.Contract(SAFE_FACTORY_ADDRESS, [
     'function computeProxyAddress(address user) view returns (address)'
   ], provider);
@@ -1546,10 +1561,9 @@ async function checkProxyDeployed(proxyAddr) {
       return data.deployed === true;
     }
   } catch (e) { console.log('[setup] Relayer check failed, trying eth_getCode:', e.message); }
-  // Fallback: on-chain eth_getCode
-  if (!window.ethereum) return false;
+  // Fallback: on-chain eth_getCode via public RPC
   try {
-    var provider = new ethers.BrowserProvider(window.ethereum);
+    var provider = await getPublicProvider();
     var code = await provider.getCode(proxyAddr);
     var deployed = code && code !== '0x' && code.length > 2;
     console.log('[setup] eth_getCode:', proxyAddr.slice(0, 10), deployed ? 'YES' : 'NO');
@@ -1563,9 +1577,9 @@ async function checkProxyDeployed(proxyAddr) {
 // Step 3: Check USDC allowance for both exchange contracts
 async function checkTokenApproval() {
   var proxyAddr = localStorage.getItem('hf_poly_wallet');
-  if (!proxyAddr || !window.ethereum) return { ctf: false, negRisk: false };
+  if (!proxyAddr) return { ctf: false, negRisk: false };
   try {
-    var provider = new ethers.BrowserProvider(window.ethereum);
+    var provider = await getPublicProvider();
     var abi = ['function allowance(address owner, address spender) view returns (uint256)'];
     var usdc = new ethers.Contract(USDC_ADDRESS, abi, provider);
     var ctfAllowance = await usdc.allowance(proxyAddr, CTF_EXCHANGE);
@@ -1707,7 +1721,7 @@ async function checkTradingSetup() {
     var balVal = document.getElementById('setupBalanceVal');
     if (balPanel) balPanel.style.display = 'block';
     try {
-      var provider = new ethers.BrowserProvider(window.ethereum);
+      var provider = await getPublicProvider();
       var usdcAbi = ['function balanceOf(address) view returns (uint256)'];
       var usdcContract = new ethers.Contract(USDC_ADDRESS, usdcAbi, provider);
       var rawBal = await usdcContract.balanceOf(proxyAddr);
@@ -1717,7 +1731,6 @@ async function checkTradingSetup() {
       var headerBal = document.getElementById('tradeBalance');
       if (headerBal) headerBal.textContent = 'Balance: $' + formattedBal.toFixed(2);
     } catch (e) {
-      // Silent — CALL_EXCEPTION if not on Polygon, just leave "—"
       console.log('[setup] Balance skipped:', e.code || e.message);
     }
   }
