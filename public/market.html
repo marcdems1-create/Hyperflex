@@ -2275,54 +2275,119 @@ async function runFullSetup() {
   var proxyValid = proxyAddr && proxyAddr.length === 42 && proxyAddr.startsWith('0x')
     && proxyAddr.toLowerCase() !== eoaAddress.toLowerCase();
 
-  // Step 1: Deploy proxy if needed
+  // Step 1: Proxy must exist and be deployed BEFORE any CLOB auth
   if (!proxyValid) {
-    // First try to discover proxy via enableTrading's derive flow (which calls CLOB + data-api)
-    setSetupStep(2, 'active', 'Discovering proxy address...');
-    if (cta) cta.textContent = 'Discovering proxy...';
-    var enabled = await enableTrading();
+    // Try to discover proxy WITHOUT MetaMask signature — data-api + CREATE2 + cache only
+    setSetupStep(1, 'active', 'Finding proxy wallet...');
+    if (cta) cta.textContent = 'Finding proxy...';
+    var addrLower = eoaAddress.toLowerCase();
 
-    // Re-check if proxy was found
-    proxyAddr = localStorage.getItem('hf_poly_wallet') || '';
-    proxyValid = proxyAddr && proxyAddr.length === 42 && proxyAddr.startsWith('0x')
-      && proxyAddr.toLowerCase() !== eoaAddress.toLowerCase();
+    // Try per-EOA cache first
+    var cachedProxy = localStorage.getItem('hf_poly_proxy_' + addrLower);
+    if (cachedProxy && cachedProxy.length === 42 && cachedProxy.startsWith('0x') && cachedProxy.toLowerCase() !== addrLower) {
+      proxyAddr = cachedProxy;
+      proxyValid = true;
+      console.log('[setup] Found proxy in per-EOA cache:', proxyAddr);
+    }
 
-    if (proxyValid) {
-      // Proxy was discovered — check if it's deployed on-chain
-      setSetupStep(2, 'done', 'Enable Trading (CLOB Auth)');
-      var deployed = await checkProxyDeployed();
-      if (deployed) {
-        setSetupStep(1, 'done', 'Deploy Proxy Wallet');
-      } else {
-        // Proxy address known but not deployed — user needs to deploy
-        setSetupStep(1, 'active', 'Deploy Proxy Wallet \u2014 not yet deployed');
-        var btn1 = document.getElementById('setupBtn1');
-        if (btn1) { btn1.style.display = 'inline-block'; btn1.disabled = false; btn1.textContent = 'Deploy'; }
-        showTradeStatus('Your proxy wallet needs to be deployed. Click Deploy to continue.', 'info');
-        if (cta) { cta.disabled = false; cta.textContent = 'Set Up Trading'; }
-        return false;
+    // Try data-api profile
+    if (!proxyValid) {
+      var profileUrls = [
+        'https://data-api.polymarket.com/profile?address=' + addrLower,
+        'https://data-api.polymarket.com/profile?user=' + addrLower
+      ];
+      for (var pi = 0; pi < profileUrls.length && !proxyValid; pi++) {
+        try {
+          var profRes = await fetch(profileUrls[pi]);
+          if (profRes.ok) {
+            var profData = await profRes.json();
+            var fp = profData.proxyAddress || profData.proxy_address || profData.proxyWallet
+              || profData.proxy_wallet || profData.funder || profData.depositAddress || null;
+            if (fp && fp.toLowerCase() !== addrLower && fp.startsWith('0x') && fp.length === 42) {
+              proxyAddr = fp.toLowerCase();
+              proxyValid = true;
+              console.log('[setup] Found proxy from profile:', proxyAddr);
+            }
+          }
+        } catch(e) { /* skip */ }
       }
-    } else {
-      // Proxy not found at all — enableTrading will have shown manual input
-      // Mark step 1 as needing attention
-      setSetupStep(1, 'error', 'Deploy Proxy Wallet \u2014 address unknown');
-      setSetupStep(2, enabled ? 'done' : 'error', 'Enable Trading (CLOB Auth)');
-      if (cta) { cta.disabled = false; cta.textContent = 'Set Up Trading'; }
-      return false;
     }
+
+    // Try data-api positions (proxy may show up as owner/maker)
+    if (!proxyValid) {
+      try {
+        var posRes = await fetch('https://data-api.polymarket.com/positions?user=' + addrLower + '&limit=3&sortBy=CURRENT');
+        if (posRes.ok) {
+          var posArr = await posRes.json();
+          if (Array.isArray(posArr)) {
+            for (var qi = 0; qi < posArr.length && !proxyValid; qi++) {
+              var pc = posArr[qi].proxyAddress || posArr[qi].proxy_address || posArr[qi].owner || posArr[qi].maker || null;
+              if (pc && pc.toLowerCase() !== addrLower && pc.startsWith('0x') && pc.length === 42) {
+                proxyAddr = pc.toLowerCase();
+                proxyValid = true;
+                console.log('[setup] Found proxy from positions:', proxyAddr);
+              }
+            }
+          }
+        }
+      } catch(e) { /* skip */ }
+    }
+
+    // Try dual CREATE2 derivation + verification (no MetaMask needed)
+    if (!proxyValid) {
+      try {
+        var candidates = [];
+        try {
+          var safeSalt = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['address'], [eoaAddress]));
+          candidates.push(ethers.getCreate2Address(SAFE_FACTORY_ADDRESS, safeSalt, '0xb1a6e24430a128537c1b88ddd496588fbdd498d64e74af26ae0e13e4bb2d4e49').toLowerCase());
+        } catch(e) { /* skip */ }
+        try {
+          var proxySalt = ethers.keccak256(ethers.solidityPacked(['address'], [eoaAddress]));
+          candidates.push(ethers.getCreate2Address('0xaB45c5A4B0c941a2F231C04C3f49182e1A254052', proxySalt, '0xb1a6e24430a128537c1b88ddd496588fbdd498d64e74af26ae0e13e4bb2d4e49').toLowerCase());
+        } catch(e) { /* skip */ }
+        for (var ci = 0; ci < candidates.length && !proxyValid; ci++) {
+          if (candidates[ci] === addrLower) continue;
+          try {
+            var vRes = await fetch('https://data-api.polymarket.com/positions?user=' + candidates[ci] + '&limit=1&sortBy=CURRENT');
+            if (vRes.ok) {
+              var vData = await vRes.json();
+              if (Array.isArray(vData) && vData.length > 0) {
+                proxyAddr = candidates[ci];
+                proxyValid = true;
+                console.log('[setup] CREATE2 candidate verified via positions:', proxyAddr);
+              }
+            }
+          } catch(e) { /* skip */ }
+        }
+      } catch(e) { /* skip */ }
+    }
+
+    // Store discovered proxy
+    if (proxyValid) {
+      localStorage.setItem('hf_poly_wallet', proxyAddr);
+      localStorage.setItem('hf_poly_proxy_' + addrLower, proxyAddr);
+    }
+  }
+
+  // If proxy still unknown — show manual input and stop. Do NOT fire CLOB auth.
+  if (!proxyValid) {
+    setSetupStep(1, 'error', 'Deploy Proxy Wallet \u2014 address unknown');
+    showManualProxyInput(eoaAddress);
+    if (cta) { cta.disabled = false; cta.textContent = 'Set Up Trading'; }
+    return false;
+  }
+
+  // Proxy address known — check if deployed on-chain
+  var deployed = await checkProxyDeployed();
+  if (deployed) {
+    setSetupStep(1, 'done', 'Deploy Proxy Wallet');
   } else {
-    // Proxy already known — check deployment
-    var deployed = await checkProxyDeployed();
-    if (deployed) {
-      setSetupStep(1, 'done', 'Deploy Proxy Wallet');
-    } else {
-      setSetupStep(1, 'active', 'Deploy Proxy Wallet \u2014 not yet deployed');
-      var btn1 = document.getElementById('setupBtn1');
-      if (btn1) { btn1.style.display = 'inline-block'; btn1.disabled = false; btn1.textContent = 'Deploy'; }
-      showTradeStatus('Your proxy wallet needs to be deployed first.', 'info');
-      if (cta) { cta.disabled = false; cta.textContent = 'Set Up Trading'; }
-      return false;
-    }
+    setSetupStep(1, 'active', 'Deploy Proxy Wallet \u2014 not yet deployed');
+    var btn1 = document.getElementById('setupBtn1');
+    if (btn1) { btn1.style.display = 'inline-block'; btn1.disabled = false; btn1.textContent = 'Deploy'; }
+    showTradeStatus('Your proxy wallet needs to be deployed. Click Deploy to continue.', 'info');
+    if (cta) { cta.disabled = false; cta.textContent = 'Set Up Trading'; }
+    return false;
   }
 
   // Step 2: CLOB Auth (if not already done)
