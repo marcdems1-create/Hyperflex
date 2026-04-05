@@ -2522,9 +2522,29 @@ async function executeTrade() {
     var signerAddress = await signer.getAddress();
 
     if (eoaAddress && signerAddress.toLowerCase() !== eoaAddress.toLowerCase()) {
-      showTradeStatus('Wrong wallet. Switch to ' + eoaAddress.slice(0, 8) + '...', 'error');
-      cta.disabled = false; updateCtaButton();
-      return;
+      // Wallet changed (common on mobile MetaMask) — clear stale keys and adopt new wallet
+      console.warn('[trade] Wallet mismatch: cached=' + eoaAddress.slice(0,10) + ' current=' + signerAddress.slice(0,10) + ' — clearing stale data');
+      localStorage.removeItem('poly_api_key');
+      localStorage.removeItem('poly_api_secret');
+      localStorage.removeItem('poly_api_passphrase');
+      localStorage.removeItem('hf_clob_api_key');
+      localStorage.removeItem('hf_clob_api_secret');
+      localStorage.removeItem('hf_clob_api_passphrase');
+      localStorage.removeItem('hf_poly_wallet');
+      localStorage.setItem('hf_wallet_explicit_switch', Date.now().toString());
+      // Adopt the new wallet
+      eoaAddress = signerAddress.toLowerCase();
+      localStorage.setItem('poly_eoa_address', eoaAddress);
+      proxyAddress = ''; // force re-resolve below
+      // Re-enable trading with new wallet (signs fresh CLOB auth)
+      showTradeStatus('Wallet changed — reconnecting...', 'info');
+      var reconnected = await enableTrading();
+      if (!reconnected) {
+        cta.disabled = false; updateCtaButton();
+        return;
+      }
+      // Refresh with new keys
+      proxyAddress = localStorage.getItem('hf_poly_wallet') || '';
     }
     if (!eoaAddress) {
       eoaAddress = signerAddress;
@@ -3120,9 +3140,12 @@ setTimeout(function() { checkTradingSetup(); }, 500);
       var cachedEoa = (localStorage.getItem('poly_eoa_address') || '').toLowerCase();
       if (cachedEoa && cachedEoa !== currentEoa) {
         console.warn('[wallet] MetaMask account changed: cached=' + cachedEoa.slice(0,10) + ' current=' + currentEoa.slice(0,10));
-        // Clear stale data
+        // Clear stale data — both key naming conventions
         localStorage.removeItem('poly_eoa_address');
         localStorage.removeItem('hf_poly_wallet');
+        localStorage.removeItem('poly_api_key');
+        localStorage.removeItem('poly_api_secret');
+        localStorage.removeItem('poly_api_passphrase');
         localStorage.removeItem('hf_clob_api_key');
         localStorage.removeItem('hf_clob_api_secret');
         localStorage.removeItem('hf_clob_api_passphrase');
@@ -3149,6 +3172,9 @@ setTimeout(function() { checkTradingSetup(); }, 500);
       if (!accounts || accounts.length === 0) {
         localStorage.removeItem('poly_eoa_address');
         localStorage.removeItem('hf_poly_wallet');
+        localStorage.removeItem('poly_api_key');
+        localStorage.removeItem('poly_api_secret');
+        localStorage.removeItem('poly_api_passphrase');
         localStorage.removeItem('hf_clob_api_key');
         localStorage.removeItem('hf_clob_api_secret');
         localStorage.removeItem('hf_clob_api_passphrase');
@@ -3161,7 +3187,10 @@ setTimeout(function() { checkTradingSetup(); }, 500);
       var oldEoa = (localStorage.getItem('poly_eoa_address') || '').toLowerCase();
       if (newEoa === oldEoa) return;
       console.log('[wallet] Account changed to:', newEoa.slice(0,10));
-      // Clear old keys
+      // Clear old keys — both naming conventions
+      localStorage.removeItem('poly_api_key');
+      localStorage.removeItem('poly_api_secret');
+      localStorage.removeItem('poly_api_passphrase');
       localStorage.removeItem('hf_clob_api_key');
       localStorage.removeItem('hf_clob_api_secret');
       localStorage.removeItem('hf_clob_api_passphrase');
