@@ -1476,11 +1476,12 @@ body.plan-premium .main {
   border-radius: 12px;
   padding: 24px 24px 20px;
   position: relative;
-  transition: transform 0.15s;
+  transition: transform 0.15s, box-shadow 0.15s;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.025);
 }
 .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 20px rgba(201,146,13,0.06), inset 0 1px 0 rgba(255,255,255,0.03); }
-/* Form field primitives */
-.form-label { display:block; font-family:var(--mono); font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); margin-bottom:6px; }
+/* Form field primitives (used in season modal + reward modal) */
+.form-label { display:block; font-family:var(--mono); font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); margin-bottom:6px; }
 .form-input { display:block; width:100%; box-sizing:border-box; background:var(--paper); border:1px solid var(--border); border-radius:8px; color:var(--text); font-family:var(--sans); font-size:13px; padding:10px 14px; outline:none; transition:border-color .15s; }
 .form-input:focus { border-color:rgba(201,146,13,0.5); }
 textarea.form-input { resize:vertical; min-height:80px; }
@@ -2913,7 +2914,7 @@ body.nav-open .sidebar-backdrop {
 
   <!-- Sidebar -->
   <aside class="sidebar">
-    <a href="/explore" class="sidebar-logo" style="text-decoration:none;color:inherit" title="Explore">
+    <a href="/" class="sidebar-logo" style="text-decoration:none;color:inherit" title="Back to home">
       <svg class="logo-hex" viewBox="0 0 28 28" fill="none">
         <path d="M14 2L24 8V20L14 26L4 20V8L14 2Z" stroke="#c9920d" stroke-width="1.5" fill="rgba(201,146,13,0.1)"/>
         <path d="M14 7L19 10V16L14 19L9 16V10L14 7Z" fill="#c9920d" opacity="0.6"/>
@@ -4113,25 +4114,20 @@ body.nav-open .sidebar-backdrop {
 
           <!-- Economy/referral analytics gates removed — platform is free -->
 
-          <div id="platformAnalyticsSection" style="margin-bottom:20px">
+          <!-- Platform Trade Analytics (shown if any platform connected) -->
+          <div id="platformAnalyticsSection" style="display:none;margin-bottom:20px">
             <div class="section" style="margin-bottom:0">
               <div class="section-header">
                 <div>
                   <div class="section-title">🌐 My Prediction Analytics</div>
-                  <div class="section-subtitle">Your personal track record across connected platforms</div>
+                  <div class="section-subtitle">Your personal track record across all connected platforms</div>
                 </div>
-                <div style="display:flex;align-items:center;gap:12px">
-                  <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--dim)">
-                    <input type="checkbox" id="paToggleHFX" checked onchange="loadPlatformAnalytics(true)" style="accent-color:var(--gold)"/>
-                    HFX Community
-                  </label>
-                  <button class="btn-secondary" onclick="loadPlatformAnalytics(true)" style="font-size:13px">↺ Refresh</button>
-                </div>
+                <button class="btn-secondary" onclick="loadPlatformAnalytics(true)" style="font-size:13px">↺ Refresh</button>
               </div>
               <div class="markets-table" style="padding:20px 24px">
                 <div id="platformAnalyticsGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:20px"></div>
                 <div id="platformAnalyticsEmpty" style="display:none;padding:16px;text-align:center;color:var(--dim);font-size:13px;font-family:var(--mono)">
-                  Connect Polymarket or Kalshi in the Portfolio tab to see your cross-platform stats.
+                  Connect Polymarket, Kalshi, or Manifold in the Portfolio tab to see your cross-platform stats.
                 </div>
               </div>
             </div>
@@ -4818,7 +4814,7 @@ body.nav-open .sidebar-backdrop {
                       </div>
                     </div>
                     <p style="font-size:13px;color:var(--dim);line-height:1.5;margin-bottom:16px">Connect with your API key to sync real-money contracts and track P&L.</p>
-                    <button onclick="document.getElementById('kalshiApiKeyInput').focus();document.getElementById('portfolioWelcome').style.display='none';document.getElementById('portfolioMain').style.display='block'" style="width:100%;background:var(--gold);color:#141412;font-family:var(--sans);font-weight:700;font-size:13px;padding:11px;border:none;border-radius:8px;cursor:pointer;transition:opacity 0.15s;min-height:44px" onmouseover="this.style.opacity='0.88'" onmouseout="this.style.opacity='1'">Connect Kalshi</button>
+                    <button onclick="document.getElementById('portfolioWelcome').style.display='none';document.getElementById('portfolioMain').style.display='block';switchPortfolioTab('kalshi');setTimeout(()=>document.getElementById('kalshiApiKeyInput').focus(),50)" style="width:100%;background:var(--gold);color:#141412;font-family:var(--sans);font-weight:700;font-size:13px;padding:11px;border:none;border-radius:8px;cursor:pointer;transition:opacity 0.15s;min-height:44px" onmouseover="this.style.opacity='0.88'" onmouseout="this.style.opacity='1'">Connect Kalshi</button>
                   </div>
 
                   <!-- Manifold welcome card -->
@@ -7371,8 +7367,37 @@ function showTab(tab) {
   if (tab === 'account') populateAccountTab();
   if (tab === 'seasons' && !seasonsLoaded) loadSeasons();
   if (tab === 'markets') {
+    // Re-render markets from cached data so the tab is never stuck on "Loading…"
+    if (communityMarkets && communityMarkets.length >= 0) {
+      updateMarketCounts();
+      filterMarkets(currentMarketFilter);
+    }
     const sec = document.getElementById('suggestionsSection');
     if (sec && sec.style.display !== 'none') loadSuggestions();
+  }
+  if (tab === 'overview') {
+    // Re-render overview from cached data
+    if (creatorData) {
+      const { stats, markets, leaderboard, creator } = creatorData;
+      const cm = communityMarkets || markets || [];
+      renderMarketRows(cm.filter(m => !m.archived).slice(0, 5), 'overviewMarketsList');
+      renderLeaderboard(leaderboard || [], 'overviewLeaderboard', 5, creator.custom_points_name, true);
+      setStatValue('statTraders', stats.total_traders || 0);
+      setStatValue('statLive',    stats.live_markets  || 0);
+      setStatValue('statVolume',  stats.total_volume  || 0, true);
+      setStatValue('statWeekly',  stats.weekly_trades || 0);
+    }
+  }
+  if (tab === 'resolve') {
+    // fullResolveList is populated by renderDashboard, but loadDisputes() re-fetches to stay fresh
+    const flEl = document.getElementById('fullResolveList');
+    if (flEl && resolveQueue && resolveQueue.length >= 0) {
+      if (resolveQueue.length > 0) {
+        renderResolveList(resolveQueue, 'fullResolveList');
+      } else {
+        flEl.innerHTML = '<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">All caught up!</div><div class="empty-desc">No markets need resolution right now.</div></div>';
+      }
+    }
   }
   // Close sidebar drawer on mobile after nav tap
   if (window.innerWidth <= 1024) closeSidebar();
@@ -12714,18 +12739,18 @@ async function disconnectKalshi() {
 async function loadKalshiPositions(forceRefresh) {
   const el = document.getElementById('kalshiPositions');
   if (!el) return;
-  el.innerHTML = '<div style="padding:16px 0;font-size:13px;color:var(--muted);font-family:var(--mono)">Loading positions…</div>';
+  el.innerHTML = '<div style="padding:32px 0;text-align:center"><div style="font-family:var(--mono);font-size:11px;color:#4a4744;letter-spacing:.08em">LOADING POSITIONS…</div></div>';
   try {
     const token = localStorage.getItem('hf_token');
     const url = '/api/kalshi/positions' + (forceRefresh ? '?refresh=1' : '');
     const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
     if (r.status === 401) {
-      el.innerHTML = '<div style="color:#c0392b;font-size:13px;padding:8px 0">Invalid API key — please disconnect and reconnect.</div>';
+      el.innerHTML = '<div style="background:#1a0f0f;border:1px solid rgba(248,113,113,0.2);border-radius:8px;padding:12px 16px;font-size:12px;color:#f87171;font-family:var(--mono);margin-top:8px">Invalid API key — please disconnect and reconnect.</div>';
       return;
     }
     if (!r.ok) {
       const d = await r.json().catch(() => ({}));
-      el.innerHTML = `<div style="color:#c0392b;font-size:13px;padding:8px 0">${d.error || 'Failed to load positions'}</div>`;
+      el.innerHTML = `<div style="background:#1a0f0f;border:1px solid rgba(248,113,113,0.2);border-radius:8px;padding:12px 16px;font-size:12px;color:#f87171;font-family:var(--mono);margin-top:8px">${d.error || 'Failed to load positions'}</div>`;
       return;
     }
     const data = await r.json();
@@ -12880,49 +12905,74 @@ async function disconnectManifold() {
 async function loadManifoldPositions(forceRefresh) {
   const el = document.getElementById('manifoldPositions');
   if (!el || !_manifoldUsername) return;
-  el.innerHTML = '<div style="padding:16px 0;font-size:13px;color:var(--muted);font-family:var(--mono)">Loading positions…</div>';
+  el.innerHTML = '<div style="padding:32px 0;text-align:center"><div style="font-family:var(--mono);font-size:11px;color:#4a4744;letter-spacing:.08em">LOADING POSITIONS…</div></div>';
   try {
-    const token = localStorage.getItem('hf_token');
-    const r = await fetch(`/api/manifold/positions/${encodeURIComponent(_manifoldUsername)}`, {
-      headers: { Authorization: 'Bearer ' + token }
-    });
-    if (r.status === 404) {
-      el.innerHTML = '<div style="color:#c0392b;font-size:13px;padding:8px 0">Manifold user not found. Check your username.</div>';
+    // Call Manifold API directly from browser (CORS-enabled, no auth needed)
+    const betsRes = await fetch(`https://api.manifold.markets/v0/bets?username=${encodeURIComponent(_manifoldUsername)}&limit=200&filterRedemptions=true`);
+    if (betsRes.status === 404) {
+      el.innerHTML = '<div style="background:#1a0f0f;border:1px solid rgba(248,113,113,0.2);border-radius:8px;padding:12px 16px;font-size:12px;color:#f87171;font-family:var(--mono);margin-top:8px">Manifold user not found. Check your username.</div>';
       return;
     }
-    if (!r.ok) {
-      const d = await r.json().catch(() => ({}));
-      el.innerHTML = `<div style="color:#c0392b;font-size:13px;padding:8px 0">${d.error || 'Failed to load positions'}</div>`;
+    if (!betsRes.ok) throw new Error('Manifold API ' + betsRes.status);
+    const bets = await betsRes.json();
+
+    // Aggregate bets by contract
+    const contractMap = {};
+    for (const b of bets) {
+      if (b.isRedemption) continue;
+      if (!contractMap[b.contractId]) contractMap[b.contractId] = { shares: 0, amount: 0, outcome: b.outcome, contractId: b.contractId };
+      contractMap[b.contractId].shares += (b.shares || 0);
+      contractMap[b.contractId].amount += (b.amount || 0);
+    }
+    const openContracts = Object.values(contractMap).filter(c => c.shares > 0.01);
+
+    if (!openContracts.length) {
+      el.innerHTML = '<div style="padding:40px 20px;text-align:center;font-family:var(--mono);font-size:11px;color:#4a4744;letter-spacing:.06em">No open positions found on Manifold.</div>';
       return;
     }
-    const data = await r.json();
-    const positions = data.positions || [];
+
+    // Enrich with market details (up to 10 to avoid rate limits)
+    const enriched = await Promise.all(openContracts.slice(0, 10).map(async c => {
+      try {
+        const mr = await fetch(`https://api.manifold.markets/v0/market/${c.contractId}`);
+        const m = mr.ok ? await mr.json() : {};
+        if (m.isResolved) return null;
+        const currentProb = m.probability || 0.5;
+        const currentPrice = c.outcome === 'YES' ? currentProb : (1 - currentProb);
+        const cashValue = Math.round(c.shares * currentPrice * 100) / 100;
+        return { id: c.contractId, question: m.question || c.contractId, side: c.outcome, shares: Math.round(c.shares * 100) / 100, current_price: Math.round(currentPrice * 1000) / 1000, cash_value: cashValue, cost_basis: Math.round(c.amount * 100) / 100, pnl_pct: c.amount > 0 ? Math.round(((cashValue - c.amount) / c.amount) * 100) : 0, market_url: m.url || `https://manifold.markets/market/${c.contractId}`, platform: 'manifold', end_date: m.closeTime ? new Date(m.closeTime).toISOString() : null };
+      } catch { return null; }
+    }));
+    const positions = enriched.filter(Boolean);
     window._manifoldPositionsData = positions;
     setTimeout(updatePortfolioSummary, 100);
 
     if (!positions.length) {
-      el.innerHTML = '<div style="padding:20px 0;font-size:13px;color:var(--muted);text-align:center">No open positions found on Manifold.</div>';
+      el.innerHTML = '<div style="padding:40px 20px;text-align:center;font-family:var(--mono);font-size:11px;color:#4a4744;letter-spacing:.06em">No open positions found on Manifold.</div>';
       return;
     }
 
     el.innerHTML = positions.map(p => {
-      const endDate = p.end_date ? new Date(p.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+      const pricePct = Math.round((p.current_price || 0) * 100);
+      const endDate = p.end_date ? new Date(p.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null;
       return renderPositionCard({
-        question: p.question, side: p.side,
-        pct: Math.round((p.current_price || 0) * 100),
-        meta: (p.shares||0).toFixed(1)+' shares' + (endDate ? ' · Exp '+endDate : ''),
-        pnl: p.pnl_pct!=null ? p.pnl_pct : null, pnlIsPercent: true,
-        url: buildMarketUrl({ url: p.market_url, question: p.question, platform: 'manifold' }), accentColor:'#34d399',
-        posData:{question:p.question,side:p.side,platform:'manifold',current_price:p.current_price,pnl_pct:p.pnl_pct||null,cash_value:p.cash_value,market_url:p.market_url},
-        idPrefix:'mani'
+        question: p.question,
+        side: p.side,
+        pct: pricePct,
+        meta: endDate ? `Exp ${endDate}` : '',
+        pnl: p.pnl_pct != null ? p.pnl_pct : null,
+        pnlLabel: '% P&L',
+        pnlIsPercent: true,
+        url: p.market_url || '#',
+        accentColor: '#059669',
+        posData: { question: p.question, side: p.side, platform: 'manifold', current_price: p.current_price, pnl_pct: p.pnl_pct || null, cash_value: p.cash_value, market_url: p.market_url }
       });
     }).join('');
 
-    const ts = new Date(data.fetched_at).toLocaleTimeString();
-    el.insertAdjacentHTML('beforeend', `<div style="font-family:var(--mono);font-size:10px;color:var(--muted);text-align:right;margin-top:4px">Fetched ${ts} · 5 min cache · M$ = play money</div>`);
+    el.insertAdjacentHTML('beforeend', `<div style="font-family:var(--mono);font-size:10px;color:var(--muted);text-align:right;margin-top:8px">Live from Manifold · M$ = play money</div>`);
   } catch (e) {
     console.error('[manifold positions]', e);
-    el.innerHTML = '<div style="color:#c0392b;font-size:13px;padding:8px 0">Failed to load positions</div>';
+    el.innerHTML = '<div style="background:#1a0f0f;border:1px solid rgba(248,113,113,0.2);border-radius:8px;padding:12px 16px;font-size:12px;color:#f87171;font-family:var(--mono);margin-top:8px">Failed to load positions</div>';
   }
 }
 
@@ -12937,7 +12987,7 @@ function renderPolymarketConnectState() {
   if (_polyWalletAddress) {
     if (form)   form.style.display  = 'none';
     if (row)    row.style.display   = 'flex';
-    if (nameEl) nameEl.textContent  = _polyWalletAddress.slice(0, 8) + '…' + _polyWalletAddress.slice(-4);
+    if (nameEl) nameEl.textContent  = _polyWalletAddress.slice(0, 6) + '…' + _polyWalletAddress.slice(-4);
     // connected
   } else {
     if (form)   form.style.display  = 'block';

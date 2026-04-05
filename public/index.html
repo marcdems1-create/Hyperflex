@@ -603,6 +603,63 @@ footer {
   .email-section { padding: 40px 16px; }
   .email-card { padding: 32px 20px; }
 }
+
+/* ── FEATURE CARDS ── */
+.feat-card {
+  background: linear-gradient(145deg, #1f1e19 0%, #191917 100%);
+  border: 1px solid #353530;
+  border-radius: 14px;
+  padding: 28px 24px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.03);
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+}
+.feat-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(201,146,13,0.38);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.55), 0 0 0 1px rgba(201,146,13,0.06), inset 0 1px 0 rgba(255,255,255,0.04);
+}
+.feat-card-icon {
+  font-size: 30px;
+  margin-bottom: 18px;
+  display: inline-block;
+  filter: drop-shadow(0 2px 8px rgba(201,146,13,0.2));
+}
+
+/* ── TESTIMONIAL CARDS ── */
+.testimonial-card {
+  background: linear-gradient(160deg, #1a1918 0%, #161614 100%);
+  border: 1px solid #2e2e2a;
+  border-radius: 12px;
+  padding: 26px 24px 22px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.testimonial-card::before {
+  content: '\201C';
+  position: absolute;
+  top: -8px;
+  left: 16px;
+  font-size: 72px;
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  color: rgba(201,146,13,0.09);
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+}
+.testimonial-card:hover {
+  border-color: rgba(201,146,13,0.22);
+  box-shadow: 0 6px 28px rgba(0,0,0,0.4);
+}
+.testimonial-quote {
+  font-size: 13px;
+  color: #ccc8bc;
+  line-height: 1.7;
+  margin: 0 0 18px;
+  position: relative;
+  z-index: 1;
+}
 </style>
 </head>
 <body>
