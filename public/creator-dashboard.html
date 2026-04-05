@@ -15994,25 +15994,40 @@ function disconnectBrowserWallet() {
 }
 
 async function fetchWalletBalance(provider, address) {
-  if (!provider || !address) return;
+  if (!address) return;
+  // Use public RPC for read-only balance calls — no MetaMask popup, no 401
+  const POLYGON_RPCS = ['https://polygon-bor-rpc.publicnode.com', 'https://1rpc.io/matic'];
+  let pubProvider = null;
+  for (const rpc of POLYGON_RPCS) {
+    try {
+      const p = new ethers.JsonRpcProvider(rpc);
+      await p.getBlockNumber();
+      pubProvider = p;
+      break;
+    } catch (e) { console.warn('[rpc]', rpc, 'failed:', e.message); }
+  }
+  if (!pubProvider) { console.warn('[wallet balance] All public RPCs failed'); return; }
   try {
     // MATIC/POL native balance
-    const maticBal = await provider.getBalance(address);
+    const maticBal = await pubProvider.getBalance(address);
     window._walletBalanceMATIC = parseFloat(ethers.formatEther(maticBal));
 
-    // USDC balance (Polygon USDC contract: 0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359)
-    const USDC_ADDRESS = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
+    // USDC.e balance (Polymarket uses USDC.e bridged: 0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174)
+    const USDC_E_ADDRESS = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
+    // Also check native USDC (0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359)
+    const USDC_NATIVE_ADDRESS = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
     const USDC_ABI = ['function balanceOf(address) view returns (uint256)'];
-    const usdcContract = new ethers.Contract(USDC_ADDRESS, USDC_ABI, provider);
-    const usdcBal = await usdcContract.balanceOf(address);
-    window._walletBalanceUSDC = parseFloat(ethers.formatUnits(usdcBal, 6)); // USDC has 6 decimals
+    const usdcE = new ethers.Contract(USDC_E_ADDRESS, USDC_ABI, pubProvider);
+    const usdcN = new ethers.Contract(USDC_NATIVE_ADDRESS, USDC_ABI, pubProvider);
+    const [usdcEBal, usdcNBal] = await Promise.all([usdcE.balanceOf(address), usdcN.balanceOf(address)]);
+    // Show combined USDC balance (both bridged + native)
+    window._walletBalanceUSDC = parseFloat(ethers.formatUnits(usdcEBal, 6)) + parseFloat(ethers.formatUnits(usdcNBal, 6));
 
     updateWalletUI();
   } catch (e) {
     console.warn('[wallet balance]', e.message);
-    // Try just native balance if USDC fails
     try {
-      const maticBal = await provider.getBalance(address);
+      const maticBal = await pubProvider.getBalance(address);
       window._walletBalanceMATIC = parseFloat(ethers.formatEther(maticBal));
       updateWalletUI();
     } catch (e2) { console.warn('[wallet native balance]', e2.message); }
@@ -16026,14 +16041,35 @@ if (window._connectedWallet) {
 
 // Listen for account changes
 if (typeof window.ethereum !== 'undefined') {
-  window.ethereum.on && window.ethereum.on('accountsChanged', function(accounts) {
+  window.ethereum.on && window.ethereum.on('accountsChanged', async function(accounts) {
     if (accounts.length === 0) {
       disconnectBrowserWallet();
-    } else if (accounts[0] !== window._connectedWallet) {
+    } else if (accounts[0].toLowerCase() !== (window._connectedWallet || '').toLowerCase()) {
+      // Clear stale CLOB keys from previous wallet
+      localStorage.removeItem('poly_api_key');
+      localStorage.removeItem('poly_api_secret');
+      localStorage.removeItem('poly_api_passphrase');
+      localStorage.removeItem('poly_eoa_address');
+      localStorage.removeItem('hf_poly_wallet');
+      localStorage.setItem('hf_wallet_explicit_switch', Date.now().toString());
+
       window._connectedWallet = accounts[0];
+      window._walletSigner = null;
+      window._walletProvider = null;
       localStorage.setItem('hf_wallet_address', accounts[0]);
+      localStorage.setItem('hf_connected_wallet', accounts[0]);
+
+      // Re-establish signer for new account
+      try {
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        const signer = await provider.getSigner();
+        window._walletSigner = signer;
+        window._walletProvider = provider;
+        fetchWalletBalance(provider, accounts[0]);
+      } catch (e) { console.warn('[wallet switch] signer failed:', e.message); }
+
       updateWalletUI();
-      showToast('Wallet switched to ' + accounts[0].slice(0,6) + '...' + accounts[0].slice(-4), 'success');
+      showToast('Wallet switched to ' + accounts[0].slice(0,6) + '…' + accounts[0].slice(-4), 'success');
     }
   });
 }
