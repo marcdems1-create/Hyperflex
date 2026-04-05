@@ -2555,96 +2555,90 @@ async function executeTrade() {
       return;
     }
 
-    // Build amounts — match official Polymarket ROUNDING_CONFIG:
-    // tickSize 0.01 → price: 2 decimals, size: 2 decimals, amount: 4 decimals
-    // tickSize 0.001 → price: 3 decimals, size: 3 decimals, amount: 5 decimals
-    // tickSize 0.0001 → price: 4 decimals, size: 4 decimals, amount: 6 decimals
-    var DECIMALS = 1000000; // 10^6 for USDC
-    var tickDecimals = Math.round(-Math.log10(tickSize)); // 0.01→2, 0.001→3
-    var sizeDecimals = tickDecimals;
-    var amountDecimals = tickDecimals + 2;
+    // ── Build amounts — exact match to official @polymarket/clob-client SDK ──
+    // SDK ROUNDING_CONFIG: { "0.1": {price:1,size:2,amount:3}, "0.01": {price:2,size:2,amount:4},
+    //   "0.001": {price:3,size:2,amount:5}, "0.0001": {price:4,size:2,amount:6} }
+    var ROUNDING_CONFIG = {
+      '0.1':    { price: 1, size: 2, amount: 3 },
+      '0.01':   { price: 2, size: 2, amount: 4 },
+      '0.001':  { price: 3, size: 2, amount: 5 },
+      '0.0001': { price: 4, size: 2, amount: 6 }
+    };
+    var tickKey = tickSize.toString();
+    var roundConfig = ROUNDING_CONFIG[tickKey] || ROUNDING_CONFIG['0.01'];
+    var COLLATERAL_TOKEN_DECIMALS = 6; // USDC has 6 decimals
 
-    // Helper: round to N decimal places using string math to avoid floating point
-    function roundDown(val, dec) {
-      var m = Math.pow(10, dec);
-      return Math.floor(val * m) / m;
+    // SDK's decimalPlaces()
+    function decimalPlaces(num) {
+      if (Number.isInteger(num)) return 0;
+      var arr = num.toString().split('.');
+      return arr.length <= 1 ? 0 : arr[1].length;
     }
-    function roundUp(val, dec) {
-      var m = Math.pow(10, dec);
-      return Math.ceil(val * m) / m;
+    // SDK's roundNormal() — standard rounding with EPSILON guard
+    function roundNormal(num, decimals) {
+      if (decimalPlaces(num) <= decimals) return num;
+      return Math.round((num + Number.EPSILON) * Math.pow(10, decimals)) / Math.pow(10, decimals);
     }
-    // Convert a decimal number to fixed-point integer (USDC has 6 decimals)
-    // Use string manipulation to avoid floating-point multiplication errors
-    function toFixedPoint(val, unitDecimals) {
-      // val is a number like 9.9981, unitDecimals is 6
-      // Result should be 9998100
-      var s = val.toFixed(unitDecimals); // "9.998100"
-      var parts = s.split('.');
-      var intPart = parts[0];
+    // SDK's roundDown()
+    function roundDown(num, decimals) {
+      if (decimalPlaces(num) <= decimals) return num;
+      return Math.floor(num * Math.pow(10, decimals)) / Math.pow(10, decimals);
+    }
+    // SDK's roundUp()
+    function roundUp(num, decimals) {
+      if (decimalPlaces(num) <= decimals) return num;
+      return Math.ceil(num * Math.pow(10, decimals)) / Math.pow(10, decimals);
+    }
+    // SDK's parseUnits equivalent — converts decimal string to fixed-point integer string
+    // e.g. parseUnits("9.9981", 6) → "9998100"
+    function parseUnits(valStr, unitDecimals) {
+      var parts = valStr.split('.');
+      var intPart = parts[0] || '0';
       var fracPart = (parts[1] || '').padEnd(unitDecimals, '0').slice(0, unitDecimals);
-      return intPart + fracPart; // "9998100"
+      var result = (intPart + fracPart).replace(/^0+/, '') || '0';
+      return result;
     }
 
-    var makerAmt, takerAmt, sideInt;
+    // SDK's getOrderRawAmounts() — exact replica
+    var rawPrice = roundNormal(clobPrice, roundConfig.price);
+    var rawMakerAmt, rawTakerAmt, sideInt;
+
     if (clobSide === 'BUY') {
       sideInt = 0;
-      // BUY: maker pays USDC (makerAmount), receives outcome tokens (takerAmount)
-      // Round shares DOWN to sizeDecimals
-      var rawShares = roundDown(shares, sizeDecimals);
-      // Compute USDC cost: shares × price, round UP to amountDecimals
-      var rawCost = roundUp(rawShares * clobPrice, amountDecimals);
-      if (rawShares <= 0 || rawCost <= 0) {
-        showTradeStatus('Order too small — increase amount', 'error');
-        cta.disabled = false; updateCtaButton();
-        return;
+      // BUY: taker = shares (rounded down), maker = taker × price
+      rawTakerAmt = roundDown(shares, roundConfig.size);
+      rawMakerAmt = rawTakerAmt * rawPrice;
+      if (decimalPlaces(rawMakerAmt) > roundConfig.amount) {
+        rawMakerAmt = roundUp(rawMakerAmt, roundConfig.amount + 4);
+        if (decimalPlaces(rawMakerAmt) > roundConfig.amount) {
+          rawMakerAmt = roundDown(rawMakerAmt, roundConfig.amount);
+        }
       }
-      // Convert to fixed-point strings using string math
-      makerAmt = toFixedPoint(rawCost, 6);    // USDC amount (maker pays)
-      takerAmt = toFixedPoint(rawShares, 6);   // shares (maker receives)
     } else {
       sideInt = 1;
-      // SELL: maker gives outcome tokens (makerAmount), receives USDC (takerAmount)
-      var rawShares2 = roundDown(shares, sizeDecimals);
-      var rawProceeds = roundDown(rawShares2 * clobPrice, amountDecimals);
-      if (rawShares2 <= 0 || rawProceeds <= 0) {
-        showTradeStatus('Order too small — increase amount', 'error');
-        cta.disabled = false; updateCtaButton();
-        return;
-      }
-      makerAmt = toFixedPoint(rawShares2, 6);   // shares (maker gives)
-      takerAmt = toFixedPoint(rawProceeds, 6);   // USDC amount (maker receives)
-    }
-    // Strip leading zeros but keep at least "0"
-    makerAmt = makerAmt.replace(/^0+/, '') || '0';
-    takerAmt = takerAmt.replace(/^0+/, '') || '0';
-
-    // CRITICAL: Ensure implied price (maker/taker ratio) is tick-aligned.
-    // The CLOB rejects orders where the implied price breaks minimum tick size.
-    // Floating-point rounding in shares/cost can cause micro-drift (e.g. 0.6500065 instead of 0.65).
-    // Fix: recompute takerAmt from makerAmt using exact tick-aligned price.
-    var mInt = parseInt(makerAmt);
-    var tInt = parseInt(takerAmt);
-    if (mInt > 0 && tInt > 0) {
-      var impliedPrice = clobSide === 'BUY' ? (mInt / tInt) : (tInt / mInt);
-      var tickAligned = Math.round(impliedPrice / tickSize) * tickSize;
-      tickAligned = parseFloat(tickAligned.toFixed(4));
-      if (Math.abs(impliedPrice - tickAligned) > tickSize * 0.001) {
-        // Recalculate: for BUY, taker = maker / price; for SELL, taker = maker * price
-        if (clobSide === 'BUY') {
-          var correctedTaker = Math.round(mInt / tickAligned);
-          console.log('[trade] Tick fix: taker ' + tInt + ' → ' + correctedTaker + ' (implied ' + impliedPrice.toFixed(8) + ' → ' + tickAligned + ')');
-          takerAmt = String(correctedTaker);
-          tInt = correctedTaker;
-        } else {
-          var correctedTaker = Math.round(mInt * tickAligned);
-          console.log('[trade] Tick fix: taker ' + tInt + ' → ' + correctedTaker + ' (implied ' + impliedPrice.toFixed(8) + ' → ' + tickAligned + ')');
-          takerAmt = String(correctedTaker);
-          tInt = correctedTaker;
+      // SELL: maker = shares (rounded down), taker = maker × price
+      rawMakerAmt = roundDown(shares, roundConfig.size);
+      rawTakerAmt = rawMakerAmt * rawPrice;
+      if (decimalPlaces(rawTakerAmt) > roundConfig.amount) {
+        rawTakerAmt = roundUp(rawTakerAmt, roundConfig.amount + 4);
+        if (decimalPlaces(rawTakerAmt) > roundConfig.amount) {
+          rawTakerAmt = roundDown(rawTakerAmt, roundConfig.amount);
         }
       }
     }
 
-    console.log('[trade] Amounts: maker=' + makerAmt + ' taker=' + takerAmt + ' price=' + clobPrice + ' shares=' + (clobSide === 'BUY' ? rawShares : rawShares2) + ' implied=' + (clobSide === 'BUY' ? (parseInt(makerAmt)/parseInt(takerAmt)) : (parseInt(takerAmt)/parseInt(makerAmt))));
+    if (rawMakerAmt <= 0 || rawTakerAmt <= 0) {
+      showTradeStatus('Order too small — increase amount', 'error');
+      cta.disabled = false; updateCtaButton();
+      return;
+    }
+
+    // SDK's buildOrderCreationArgs: parseUnits(rawAmt.toString(), COLLATERAL_TOKEN_DECIMALS)
+    var makerAmt = parseUnits(rawMakerAmt.toString(), COLLATERAL_TOKEN_DECIMALS);
+    var takerAmt = parseUnits(rawTakerAmt.toString(), COLLATERAL_TOKEN_DECIMALS);
+
+    console.log('[trade] SDK amounts: rawMaker=' + rawMakerAmt + ' rawTaker=' + rawTakerAmt + ' price=' + rawPrice + ' roundConfig=' + JSON.stringify(roundConfig));
+    console.log('[trade] On-chain: maker=' + makerAmt + ' taker=' + takerAmt + ' implied=' + (clobSide === 'BUY' ? (parseInt(makerAmt)/parseInt(takerAmt)) : (parseInt(takerAmt)/parseInt(makerAmt))));
 
     var orderSalt = Math.floor(Math.random() * 9007199254740991);
     var exchangeAddr = isNegRisk
