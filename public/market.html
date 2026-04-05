@@ -1485,6 +1485,19 @@ var CTF_EXCHANGE = '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E';        // non-n
 var NEG_RISK_EXCHANGE = '0xC5d563A36AE78145C45a50134d48A1215220f80a'; // negRisk
 var MAX_UINT256 = '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
 
+// The CORRECT way to get a Polymarket proxy address.
+// Calls computeProxyAddress(address) on the Safe factory contract on Polygon.
+// Returns the deterministic proxy for any EOA — no guessing, no data-api, no CREATE2 math.
+async function getPolymarketProxy(eoaAddress) {
+  var provider = new ethers.BrowserProvider(window.ethereum);
+  var factory = new ethers.Contract(SAFE_FACTORY_ADDRESS, [
+    'function computeProxyAddress(address user) view returns (address)'
+  ], provider);
+  var proxy = await factory.computeProxyAddress(eoaAddress);
+  console.log('[proxy] computeProxyAddress(' + eoaAddress.slice(0, 10) + ') =>', proxy);
+  return proxy;
+}
+
 // Helper: update a setup step's visual state
 function setSetupStep(stepNum, state, extraText) {
   var step = document.getElementById('setupStep' + stepNum);
@@ -1502,23 +1515,23 @@ function setSetupStep(stepNum, state, extraText) {
   }
 }
 
-// Step 1: Check if proxy wallet is deployed on-chain
-async function checkProxyDeployed() {
-  var proxyAddr = localStorage.getItem('hf_poly_wallet');
+// Check if proxy wallet is deployed on-chain
+async function checkProxyDeployed(proxyAddr) {
+  proxyAddr = proxyAddr || localStorage.getItem('hf_poly_wallet');
   if (!proxyAddr || !window.ethereum) return false;
   try {
     var provider = new ethers.BrowserProvider(window.ethereum);
     var code = await provider.getCode(proxyAddr);
     var deployed = code && code !== '0x' && code.length > 2;
-    console.log('[setup] Proxy deployed check:', proxyAddr.slice(0, 10), deployed ? 'YES' : 'NO', 'code length:', code.length);
+    console.log('[setup] Proxy deployed:', proxyAddr.slice(0, 10), deployed ? 'YES' : 'NO');
     return deployed;
   } catch (e) {
-    console.warn('[setup] getCode error:', e.message);
+    console.log('[setup] getCode skipped:', e.code || e.message);
     return false;
   }
 }
 
-// Step 1 action: Deploy proxy wallet via Safe factory
+// Deploy proxy wallet via Safe factory (real on-chain tx, ~0.01 MATIC gas)
 async function deployProxy() {
   var btn = document.getElementById('setupBtn1');
   if (btn) { btn.disabled = true; btn.textContent = 'Deploying...'; }
@@ -1529,54 +1542,29 @@ async function deployProxy() {
     var signer = await provider.getSigner();
     var eoaAddress = await signer.getAddress();
 
-    // Safe factory createProxyWithNonce(singleton, initializer, saltNonce)
-    // singleton = GnosisSafe 1.3.0 on Polygon
     var SAFE_SINGLETON = '0xd9Db270c1B5E3Bd161E8c8503c55cEABeE709552';
-    // initializer = setup(owners, threshold, to, data, fallbackHandler, paymentToken, payment, paymentReceiver)
-    // For Polymarket: single owner = EOA, threshold = 1, no modules
     var iface = new ethers.Interface([
       'function setup(address[] calldata _owners, uint256 _threshold, address _to, bytes calldata _data, address _fallbackHandler, address _paymentToken, uint256 _payment, address _paymentReceiver)'
     ]);
     var initData = iface.encodeFunctionData('setup', [
-      [eoaAddress], // owners
-      1,            // threshold
-      ethers.ZeroAddress, // to (no delegate call)
-      '0x',         // data
-      '0xf48f2B2d2a534e402487b3ee7C18c33Aec0Fe5e4', // fallback handler (CompatibilityFallbackHandler)
-      ethers.ZeroAddress, // paymentToken
-      0,            // payment
-      ethers.ZeroAddress  // paymentReceiver
+      [eoaAddress], 1, ethers.ZeroAddress, '0x',
+      '0xf48f2B2d2a534e402487b3ee7C18c33Aec0Fe5e4',
+      ethers.ZeroAddress, 0, ethers.ZeroAddress
     ]);
 
-    // Call createProxyWithNonce on the Safe factory
-    var factoryAbi = ['function createProxyWithNonce(address _singleton, bytes memory initializer, uint256 saltNonce) returns (address proxy)'];
-    var factory = new ethers.Contract(SAFE_FACTORY_ADDRESS, factoryAbi, signer);
-
-    // Salt nonce = uint256 of the EOA address (matches Polymarket's pattern)
+    var factory = new ethers.Contract(SAFE_FACTORY_ADDRESS,
+      ['function createProxyWithNonce(address _singleton, bytes memory initializer, uint256 saltNonce) returns (address proxy)'],
+      signer);
     var saltNonce = BigInt(eoaAddress);
 
     console.log('[setup] Deploying proxy via Safe factory...');
-    console.log('[setup] singleton:', SAFE_SINGLETON, 'saltNonce:', saltNonce.toString());
     var tx = await factory.createProxyWithNonce(SAFE_SINGLETON, initData, saltNonce);
     showTradeStatus('Deploying proxy... waiting for confirmation', 'info');
     var receipt = await tx.wait();
     console.log('[setup] Proxy deployed! tx:', receipt.hash);
 
-    // Extract proxy address from event logs
-    // GnosisSafeProxyFactory emits ProxyCreation(address proxy, address singleton)
-    var proxyCreatedTopic = ethers.id('ProxyCreation(address,address)');
-    var proxyLog = receipt.logs.find(function(l) { return l.topics[0] === proxyCreatedTopic; });
-    if (proxyLog && proxyLog.data) {
-      var decoded = ethers.AbiCoder.defaultAbiCoder().decode(['address', 'address'], proxyLog.data);
-      var newProxy = decoded[0].toLowerCase();
-      console.log('[setup] Deployed proxy address from event:', newProxy);
-      localStorage.setItem('hf_poly_wallet', newProxy);
-      localStorage.setItem('hf_poly_proxy_' + eoaAddress.toLowerCase(), newProxy);
-    }
-
     setSetupStep(1, 'done', 'Deploy Proxy Wallet');
     showTradeStatus('Proxy wallet deployed!', 'success');
-    // Continue to check remaining steps
     checkTradingSetup();
     return true;
   } catch (e) {
@@ -1675,20 +1663,32 @@ async function checkTradingSetup() {
   }
   if (setupPanel) setupPanel.style.display = 'block';
 
-  // Step 1: Proxy deployment
+  // Step 1: Resolve proxy via on-chain call if not cached
   var proxyValid = proxyAddr && proxyAddr.length === 42 && proxyAddr.startsWith('0x')
     && proxyAddr.toLowerCase() !== eoaAddr.toLowerCase();
 
   if (!proxyValid) {
-    setSetupStep(1, 'error', 'Deploy Proxy Wallet \u2014 address unknown');
-    var btn1 = document.getElementById('setupBtn1');
-    if (btn1) { btn1.style.display = 'none'; } // Can't deploy without knowing address
+    try {
+      proxyAddr = await getPolymarketProxy(eoaAddr);
+      if (proxyAddr && proxyAddr !== ethers.ZeroAddress && proxyAddr.toLowerCase() !== eoaAddr.toLowerCase()) {
+        proxyAddr = proxyAddr.toLowerCase();
+        proxyValid = true;
+        localStorage.setItem('hf_poly_wallet', proxyAddr);
+        localStorage.setItem('hf_poly_proxy_' + eoaAddr.toLowerCase(), proxyAddr);
+      }
+    } catch (e) {
+      console.log('[setup] checkTradingSetup proxy resolve skipped:', e.code || e.message);
+    }
+  }
+
+  if (!proxyValid) {
+    setSetupStep(1, 'active', 'Deploy Proxy Wallet \u2014 connect to Polygon first');
     setSetupStep(2, '', 'Enable Trading (CLOB Auth)');
     setSetupStep(3, '', 'Approve USDC Spending');
     return;
   }
 
-  var deployed = await checkProxyDeployed();
+  var deployed = await checkProxyDeployed(proxyAddr);
   if (deployed) {
     setSetupStep(1, 'done', 'Deploy Proxy Wallet');
   } else {
@@ -1908,186 +1908,23 @@ async function enableTrading() {
     // Mark that user explicitly connected a wallet — prevents dashboard auto-recovery
     localStorage.setItem('hf_wallet_explicit_switch', Date.now().toString());
 
-    // Proxy address — prefer CLOB response, then data-api, then dual CREATE2 with verification.
-    var proxyAddr = data.proxyAddress || data.proxy_address || data.safe_address || data.safeAddress || data.proxy || data.funder || '';
-
-    // If derive didn't return proxy, try Polymarket data API endpoints (server already retried CLOB)
-    // No client-side retry loop — the server derive endpoint does 0/3/6/10s retries already.
-    if (!proxyAddr) {
-      console.log('[wallet debug] No proxy from derive — trying Polymarket data API discovery...');
-      cta.textContent = 'Finding deposit address...';
-      var addrLower = address.toLowerCase();
-
-      // Try profile with both param styles
-      var profileUrls = [
-        'https://data-api.polymarket.com/profile?address=' + addrLower,
-        'https://data-api.polymarket.com/profile?user=' + addrLower
-      ];
-      for (var pi = 0; pi < profileUrls.length && !proxyAddr; pi++) {
-        try {
-          var profileRes = await fetch(profileUrls[pi]);
-          if (profileRes.ok) {
-            var profileData = await profileRes.json();
-            console.log('[wallet debug] Profile response keys:', Object.keys(profileData));
-            var foundProxy = profileData.proxyAddress || profileData.proxy_address || profileData.proxyWallet
-              || profileData.proxy_wallet || profileData.funder || profileData.depositAddress
-              || profileData.deposit_address || profileData.contractAddress || null;
-            if (foundProxy && foundProxy.toLowerCase() !== addrLower) {
-              proxyAddr = foundProxy.toLowerCase();
-              console.log('[wallet debug] Found proxy from profile:', proxyAddr);
-            }
-          }
-        } catch(profErr) { console.warn('[wallet debug] Profile lookup failed:', profErr.message); }
+    // Get proxy address via on-chain computeProxyAddress() — single source of truth
+    cta.textContent = 'Finding proxy wallet...';
+    var proxyAddr = '';
+    try {
+      proxyAddr = await getPolymarketProxy(address);
+      if (proxyAddr && proxyAddr !== ethers.ZeroAddress && proxyAddr.toLowerCase() !== address.toLowerCase()) {
+        proxyAddr = proxyAddr.toLowerCase();
+        localStorage.setItem('hf_poly_wallet', proxyAddr);
+        localStorage.setItem('hf_poly_proxy_' + address.toLowerCase(), proxyAddr);
+        console.log('[wallet debug] Proxy from computeProxyAddress:', proxyAddr);
+      } else {
+        proxyAddr = '';
+        console.warn('[wallet debug] computeProxyAddress returned invalid:', proxyAddr);
       }
-
-      // Try activity endpoint
-      if (!proxyAddr) {
-        try {
-          var actRes = await fetch('https://data-api.polymarket.com/activity?user=' + addrLower + '&limit=5');
-          if (actRes.ok) {
-            var actData = await actRes.json();
-            var activities = Array.isArray(actData) ? actData : [];
-            console.log('[wallet debug] Activity:', activities.length, 'items', activities.length > 0 ? Object.keys(activities[0]) : '');
-            for (var ai = 0; ai < activities.length; ai++) {
-              var act = activities[ai];
-              var candidate = act.proxyAddress || act.proxy_address || act.proxyWallet || act.owner || act.maker || act.funder || null;
-              if (candidate && candidate.toLowerCase() !== addrLower && candidate.startsWith('0x') && candidate.length === 42) {
-                proxyAddr = candidate.toLowerCase();
-                console.log('[wallet debug] Found proxy from activity:', proxyAddr);
-                break;
-              }
-            }
-          }
-        } catch(actErr) { console.warn('[wallet debug] Activity lookup failed:', actErr.message); }
-      }
-
-      // Try positions endpoint — proxy may be in position data
-      if (!proxyAddr) {
-        try {
-          var posRes = await fetch('https://data-api.polymarket.com/positions?user=' + addrLower + '&limit=3&sortBy=CURRENT');
-          if (posRes.ok) {
-            var posData = await posRes.json();
-            if (Array.isArray(posData) && posData.length > 0) {
-              console.log('[wallet debug] EOA has', posData.length, 'positions, keys:', Object.keys(posData[0]));
-              for (var posi = 0; posi < posData.length; posi++) {
-                var pos = posData[posi];
-                var posCand = pos.proxyAddress || pos.proxy_address || pos.owner || pos.maker || null;
-                if (posCand && posCand.toLowerCase() !== addrLower && posCand.startsWith('0x') && posCand.length === 42) {
-                  proxyAddr = posCand.toLowerCase();
-                  console.log('[wallet debug] Found proxy from positions:', proxyAddr);
-                  break;
-                }
-              }
-            }
-          }
-        } catch(posErr) { console.warn('[wallet debug] Positions lookup failed:', posErr.message); }
-      }
+    } catch (proxyErr) {
+      console.warn('[wallet debug] computeProxyAddress failed:', proxyErr.message);
     }
-
-    // Dual CREATE2 factory derivation — compute proxy addresses from both Polymarket factories,
-    // then verify via browser-direct positions check (data-api is NOT geo-blocked).
-    if (!proxyAddr) {
-      console.log('[wallet debug] Trying dual CREATE2 factory derivation...');
-      cta.textContent = 'Computing proxy address...';
-      try {
-        var eoaLower = address.toLowerCase();
-        // Factory 1: Safe factory — salt = keccak256(abiEncode(['address'], [eoa]))
-        var SAFE_FACTORY = '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b';
-        // Factory 2: Proxy factory — salt = keccak256(solidityPacked(['address'], [eoa]))
-        var PROXY_FACTORY = '0xaB45c5A4B0c941a2F231C04C3f49182e1A254052';
-        // Gnosis Safe singleton init code hash (same for both factories)
-        var SAFE_INIT_HASH = '0x' + ethers.keccak256(ethers.getBytes('0x' + 'ff' + SAFE_FACTORY.slice(2))).slice(2);
-
-        var candidates = [];
-        // Candidate 1: Safe factory with abiEncode salt
-        try {
-          var safeSalt = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['address'], [address]));
-          var safeCandidate = ethers.getCreate2Address(SAFE_FACTORY, safeSalt, '0xb1a6e24430a128537c1b88ddd496588fbdd498d64e74af26ae0e13e4bb2d4e49');
-          candidates.push({ addr: safeCandidate.toLowerCase(), label: 'Safe factory' });
-          console.log('[wallet debug] CREATE2 Safe candidate:', safeCandidate);
-        } catch(e) { console.warn('[wallet debug] Safe factory CREATE2 error:', e.message); }
-
-        // Candidate 2: Proxy factory with solidityPacked salt
-        try {
-          var proxySalt = ethers.keccak256(ethers.solidityPacked(['address'], [address]));
-          var proxyCandidate = ethers.getCreate2Address(PROXY_FACTORY, proxySalt, '0xb1a6e24430a128537c1b88ddd496588fbdd498d64e74af26ae0e13e4bb2d4e49');
-          candidates.push({ addr: proxyCandidate.toLowerCase(), label: 'Proxy factory' });
-          console.log('[wallet debug] CREATE2 Proxy candidate:', proxyCandidate);
-        } catch(e) { console.warn('[wallet debug] Proxy factory CREATE2 error:', e.message); }
-
-        // Verify each candidate by checking positions from browser (not geo-blocked)
-        for (var ci = 0; ci < candidates.length && !proxyAddr; ci++) {
-          var c = candidates[ci];
-          if (c.addr === eoaLower) continue; // skip if same as EOA
-          try {
-            console.log('[wallet debug] Verifying ' + c.label + ' candidate:', c.addr);
-            var verifyRes = await fetch('https://data-api.polymarket.com/positions?user=' + c.addr + '&limit=1&sortBy=CURRENT');
-            if (verifyRes.ok) {
-              var verifyData = await verifyRes.json();
-              if (Array.isArray(verifyData) && verifyData.length > 0) {
-                proxyAddr = c.addr;
-                console.log('[wallet debug] CREATE2 VERIFIED via positions (' + c.label + '):', proxyAddr);
-              } else {
-                console.log('[wallet debug] ' + c.label + ' candidate has no positions, skipping');
-              }
-            }
-          } catch(ve) { console.warn('[wallet debug] ' + c.label + ' verify error:', ve.message); }
-        }
-      } catch(create2Err) { console.warn('[wallet debug] CREATE2 derivation failed:', create2Err.message); }
-    }
-
-    // Last resort: check per-EOA cached proxy from dashboard/previous session
-    if (!proxyAddr) {
-      var perEoaProxy = localStorage.getItem('hf_poly_proxy_' + address.toLowerCase());
-      if (perEoaProxy && perEoaProxy.length === 42 && perEoaProxy.toLowerCase() !== address.toLowerCase()) {
-        proxyAddr = perEoaProxy;
-        console.log('[wallet debug] Using per-EOA cached proxy:', proxyAddr);
-      }
-    }
-    // Fallback: global hf_poly_wallet — but ONLY if no EOA-specific cache exists
-    // (global cache might belong to a different wallet)
-    if (!proxyAddr) {
-      var cachedProxy = localStorage.getItem('hf_poly_wallet');
-      if (cachedProxy && cachedProxy.length === 42 && cachedProxy.toLowerCase() !== address.toLowerCase()) {
-        // Verify it's not another wallet's proxy by checking if ANY per-EOA key maps to it
-        var isForeignProxy = false;
-        for (var si = 0; si < localStorage.length; si++) {
-          var sk = localStorage.key(si);
-          if (sk && sk.startsWith('hf_poly_proxy_') && sk !== 'hf_poly_proxy_' + address.toLowerCase()) {
-            if (localStorage.getItem(sk) === cachedProxy) { isForeignProxy = true; break; }
-          }
-        }
-        if (!isForeignProxy) {
-          proxyAddr = cachedProxy;
-          console.log('[wallet debug] Using global cached proxy:', proxyAddr);
-        } else {
-          console.log('[wallet debug] Global cached proxy belongs to different EOA, skipping');
-        }
-      }
-    }
-
-    if (!proxyAddr) {
-      console.warn('[wallet debug] WARNING: No proxy address found after all methods.');
-      console.warn('[wallet debug] Full CLOB response keys:', Object.keys(data));
-      // DON'T store empty string or EOA as proxy — that causes wrong signatureType
-      // Show manual paste fallback — user can paste their deposit address from polymarket.com
-      showManualProxyInput(address);
-      return true; // Keys are stored, just no proxy yet — user can paste it
-    } else {
-      console.log('[wallet debug] Using proxy address:', proxyAddr);
-      localStorage.setItem('hf_poly_wallet', proxyAddr);
-      // Store per-EOA mapping for future sessions
-      localStorage.setItem('hf_poly_proxy_' + address.toLowerCase(), proxyAddr);
-    }
-
-    // Debug: Show all addresses being stored
-    console.log('[wallet debug] === WALLET CONNECTION DEBUG ===');
-    console.log('[wallet debug] EOA Address:', address);
-    console.log('[wallet debug] Server Proxy Address:', data.proxyAddress || data.proxy_address || 'NONE');
-    console.log('[wallet debug] Computed Proxy Address:', proxyAddr);
-    console.log('[wallet debug] Stored in hf_poly_wallet:', localStorage.getItem('hf_poly_wallet'));
-    console.log('[wallet debug] Stored in poly_eoa_address:', localStorage.getItem('poly_eoa_address'));
-    console.log('[wallet debug] =================================');
 
     // Refresh balance with new wallet
     fetchTradeBalance();
@@ -2118,49 +1955,6 @@ async function enableTrading() {
 
 function isTradingEnabled() {
   return !!(localStorage.getItem('poly_api_key') && localStorage.getItem('poly_api_secret') && localStorage.getItem('poly_api_passphrase'));
-}
-
-// Reusable manual proxy input — shown when automated proxy discovery fails
-function showManualProxyInput(eoaAddress) {
-  var cta = document.getElementById('tradeCta');
-  if (cta) { cta.disabled = false; updateCtaButton(); }
-  showTradeStatus('', 'info');
-  var statusEl = document.getElementById('tradeStatus');
-  if (statusEl) {
-    statusEl.innerHTML = '<div style="text-align:left;font-size:12px;line-height:1.5;border:1px solid var(--gold);border-radius:8px;padding:12px;background:rgba(201,146,13,0.06)">' +
-      '<div style="color:var(--gold);font-weight:700;margin-bottom:6px">Deposit address not found automatically.</div>' +
-      '<div style="color:var(--soft);margin-bottom:8px">Find it at <a href="https://polymarket.com" target="_blank" style="color:var(--gold)">polymarket.com</a> &rarr; Profile icon (top right) &rarr; copy the 0x address shown.</div>' +
-      '<div style="display:flex;gap:6px;align-items:center">' +
-        '<input id="manualProxyInput" type="text" placeholder="0x... deposit address" style="flex:1;padding:8px 10px;background:#0f0e0c;border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--mono);font-size:11px">' +
-        '<button onclick="window._saveManualProxy()" style="padding:8px 14px;background:var(--gold);color:#141412;border:none;border-radius:6px;font-family:var(--sans);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">Save</button>' +
-      '</div>' +
-      '<div id="manualProxyStatus" style="font-size:11px;margin-top:4px;color:var(--dim)"></div>' +
-    '</div>';
-  }
-  var addr = (eoaAddress || localStorage.getItem('poly_eoa_address') || '').toLowerCase();
-  window._saveManualProxy = function() {
-    var input = document.getElementById('manualProxyInput');
-    var statusDiv = document.getElementById('manualProxyStatus');
-    if (!input) return;
-    var val = (input.value || '').trim().toLowerCase();
-    if (!val.startsWith('0x') || val.length !== 42) {
-      if (statusDiv) { statusDiv.textContent = 'Invalid address \u2014 must be 0x... (42 characters)'; statusDiv.style.color = 'var(--red)'; }
-      return;
-    }
-    if (val === addr) {
-      if (statusDiv) { statusDiv.textContent = 'That\'s your MetaMask address, not your deposit address'; statusDiv.style.color = 'var(--red)'; }
-      return;
-    }
-    localStorage.setItem('hf_poly_wallet', val);
-    if (addr) localStorage.setItem('hf_poly_proxy_' + addr, val);
-    if (statusDiv) { statusDiv.textContent = 'Saved! Refreshing...'; statusDiv.style.color = 'var(--green)'; }
-    setTimeout(function() {
-      fetchTradeBalance();
-      updateTradingUI();
-      showTradeStatus('Trading enabled! Deposit address saved.', 'success');
-      checkTradingSetup();
-    }, 300);
-  };
 }
 
 function showTradeStatus(msg, type) {
@@ -2207,7 +2001,7 @@ function updateTradingUI() {
       disclaimer.innerHTML = '\u2705 Trading enabled \u00b7 <span style="font-family:var(--mono);font-size:10px;color:var(--dim)">' + proxyAddr.substring(0, 8) + '...' + proxyAddr.slice(-4) + '</span>';
       disclaimer.style.color = 'var(--green)';
     } else if (hasKeys && !proxyValid) {
-      disclaimer.innerHTML = '\u26a0\ufe0f Wallet connected but proxy not set \u00b7 <a href="#" onclick="showManualProxyInput();return false" style="color:var(--gold);text-decoration:underline">Enter deposit address</a>';
+      disclaimer.innerHTML = '\u26a0\ufe0f Wallet connected but proxy not set \u00b7 <a href="#" onclick="runFullSetup();return false" style="color:var(--gold);text-decoration:underline">Resolve proxy</a>';
       disclaimer.style.color = 'var(--gold)';
     } else {
       disclaimer.innerHTML = '<a href="#" onclick="runFullSetup();return false" style="color:var(--gold);text-decoration:underline">Set up trading</a> to trade on Polymarket';
@@ -2275,139 +2069,41 @@ async function runFullSetup() {
   var proxyValid = proxyAddr && proxyAddr.length === 42 && proxyAddr.startsWith('0x')
     && proxyAddr.toLowerCase() !== eoaAddress.toLowerCase();
 
-  // Step 1: Proxy must exist and be deployed BEFORE any CLOB auth
+  // Step 1: Get proxy address from on-chain computeProxyAddress() — single source of truth
   if (!proxyValid) {
-    // Try to discover proxy WITHOUT MetaMask signature — data-api + CREATE2 + cache only
     setSetupStep(1, 'active', 'Finding proxy wallet...');
     if (cta) cta.textContent = 'Finding proxy...';
-    var addrLower = eoaAddress.toLowerCase();
-
-    // Try per-EOA cache first
-    var cachedProxy = localStorage.getItem('hf_poly_proxy_' + addrLower);
-    if (cachedProxy && cachedProxy.length === 42 && cachedProxy.startsWith('0x') && cachedProxy.toLowerCase() !== addrLower) {
-      proxyAddr = cachedProxy;
-      proxyValid = true;
-      console.log('[setup] Found proxy in per-EOA cache:', proxyAddr);
-    }
-
-    // Try data-api profile
-    if (!proxyValid) {
-      var profileUrls = [
-        'https://data-api.polymarket.com/profile?address=' + addrLower,
-        'https://data-api.polymarket.com/profile?user=' + addrLower
-      ];
-      for (var pi = 0; pi < profileUrls.length && !proxyValid; pi++) {
-        try {
-          var profRes = await fetch(profileUrls[pi]);
-          if (profRes.ok) {
-            var profData = await profRes.json();
-            var fp = profData.proxyAddress || profData.proxy_address || profData.proxyWallet
-              || profData.proxy_wallet || profData.funder || profData.depositAddress || null;
-            if (fp && fp.toLowerCase() !== addrLower && fp.startsWith('0x') && fp.length === 42) {
-              proxyAddr = fp.toLowerCase();
-              proxyValid = true;
-              console.log('[setup] Found proxy from profile:', proxyAddr);
-            }
-          }
-        } catch(e) { /* skip */ }
-      }
-    }
-
-    // Try data-api positions (proxy may show up as owner/maker)
-    if (!proxyValid) {
-      try {
-        var posRes = await fetch('https://data-api.polymarket.com/positions?user=' + addrLower + '&limit=3&sortBy=CURRENT');
-        if (posRes.ok) {
-          var posArr = await posRes.json();
-          if (Array.isArray(posArr)) {
-            for (var qi = 0; qi < posArr.length && !proxyValid; qi++) {
-              var pc = posArr[qi].proxyAddress || posArr[qi].proxy_address || posArr[qi].owner || posArr[qi].maker || null;
-              if (pc && pc.toLowerCase() !== addrLower && pc.startsWith('0x') && pc.length === 42) {
-                proxyAddr = pc.toLowerCase();
-                proxyValid = true;
-                console.log('[setup] Found proxy from positions:', proxyAddr);
-              }
-            }
-          }
-        }
-      } catch(e) { /* skip */ }
-    }
-
-    // Try dual CREATE2 derivation + verification (no MetaMask needed)
-    if (!proxyValid) {
-      try {
-        var candidates = [];
-        try {
-          var safeSalt = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['address'], [eoaAddress]));
-          candidates.push(ethers.getCreate2Address(SAFE_FACTORY_ADDRESS, safeSalt, '0xb1a6e24430a128537c1b88ddd496588fbdd498d64e74af26ae0e13e4bb2d4e49').toLowerCase());
-        } catch(e) { /* skip */ }
-        try {
-          var proxySalt = ethers.keccak256(ethers.solidityPacked(['address'], [eoaAddress]));
-          candidates.push(ethers.getCreate2Address('0xaB45c5A4B0c941a2F231C04C3f49182e1A254052', proxySalt, '0xb1a6e24430a128537c1b88ddd496588fbdd498d64e74af26ae0e13e4bb2d4e49').toLowerCase());
-        } catch(e) { /* skip */ }
-        for (var ci = 0; ci < candidates.length && !proxyValid; ci++) {
-          if (candidates[ci] === addrLower) continue;
-          try {
-            var vRes = await fetch('https://data-api.polymarket.com/positions?user=' + candidates[ci] + '&limit=1&sortBy=CURRENT');
-            if (vRes.ok) {
-              var vData = await vRes.json();
-              if (Array.isArray(vData) && vData.length > 0) {
-                proxyAddr = candidates[ci];
-                proxyValid = true;
-                console.log('[setup] CREATE2 candidate verified via positions:', proxyAddr);
-              }
-            }
-          } catch(e) { /* skip */ }
-        }
-      } catch(e) { /* skip */ }
-    }
-
-    // Store discovered proxy
-    if (proxyValid) {
-      localStorage.setItem('hf_poly_wallet', proxyAddr);
-      localStorage.setItem('hf_poly_proxy_' + addrLower, proxyAddr);
-    }
-  }
-
-  // If proxy still unknown from data-api lookups, compute it deterministically via CREATE2.
-  // The address is known before deployment — Safe factory uses CREATE2 so the address is predictable.
-  if (!proxyValid) {
-    console.log('[setup] No proxy from data-api — computing CREATE2 address for deployment...');
     try {
-      var safeSalt = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['address'], [eoaAddress]));
-      var computedProxy = ethers.getCreate2Address(SAFE_FACTORY_ADDRESS, safeSalt, '0xb1a6e24430a128537c1b88ddd496588fbdd498d64e74af26ae0e13e4bb2d4e49').toLowerCase();
-      if (computedProxy && computedProxy !== eoaAddress.toLowerCase()) {
-        proxyAddr = computedProxy;
+      proxyAddr = await getPolymarketProxy(eoaAddress);
+      if (proxyAddr && proxyAddr !== ethers.ZeroAddress && proxyAddr.toLowerCase() !== eoaAddress.toLowerCase()) {
+        proxyAddr = proxyAddr.toLowerCase();
         proxyValid = true;
         localStorage.setItem('hf_poly_wallet', proxyAddr);
         localStorage.setItem('hf_poly_proxy_' + eoaAddress.toLowerCase(), proxyAddr);
-        console.log('[setup] Computed CREATE2 proxy address:', proxyAddr);
       }
-    } catch (c2err) {
-      console.warn('[setup] CREATE2 computation failed:', c2err.message);
+    } catch (e) {
+      console.warn('[setup] computeProxyAddress failed:', e.message);
     }
   }
 
-  // If even CREATE2 failed — manual input as last resort
   if (!proxyValid) {
-    setSetupStep(1, 'error', 'Deploy Proxy Wallet \u2014 address unknown');
-    showManualProxyInput(eoaAddress);
+    setSetupStep(1, 'error', 'Deploy Proxy Wallet \u2014 contract call failed');
+    showTradeStatus('Could not resolve proxy address. Make sure MetaMask is on Polygon.', 'error');
     if (cta) { cta.disabled = false; cta.textContent = 'Set Up Trading'; }
     return false;
   }
 
-  // Proxy address known (from data-api or CREATE2) — check if deployed on-chain
-  var deployed = await checkProxyDeployed();
+  // Check if proxy is deployed on-chain
+  var deployed = await checkProxyDeployed(proxyAddr);
   if (deployed) {
     setSetupStep(1, 'done', 'Deploy Proxy Wallet');
   } else {
-    // Not deployed — deploy it now via MetaMask transaction
+    // Not deployed — deploy via MetaMask transaction (~0.01 MATIC gas)
     setSetupStep(1, 'active', 'Deploying proxy wallet...');
     if (cta) cta.textContent = 'Deploying proxy...';
     showTradeStatus('Deploying your proxy wallet on Polygon (~0.01 MATIC gas)...', 'info');
     var deployOk = await deployProxy();
     if (!deployOk) {
-      // deployProxy() already showed error + reset buttons
       if (cta) { cta.disabled = false; cta.textContent = 'Set Up Trading'; }
       return false;
     }
@@ -2600,7 +2296,8 @@ async function executeTrade() {
         && proxyAddress.toLowerCase() !== (eoaAddress || '').toLowerCase();
 
       if (!proxyValid2) {
-        showManualProxyInput(eoaAddress);
+        showTradeStatus('Could not resolve proxy. Make sure MetaMask is on Polygon and try again.', 'error');
+        cta.disabled = false; updateCtaButton();
         return;
       }
     }
