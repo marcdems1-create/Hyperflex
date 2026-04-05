@@ -1464,8 +1464,8 @@ async function fetchTradeBalance() {
       console.log('[balance debug] Updated UI with:', balance.toFixed(2));
     }
   } catch (e) {
-    console.warn('[balance error]', e.message);
-    console.warn('[balance error stack]', e.stack);
+    // Silent fail — CALL_EXCEPTION if MetaMask not on Polygon, not blocking
+    console.log('[balance] skipped:', e.code || e.message);
   }
 }
 
@@ -1737,8 +1737,8 @@ async function checkTradingSetup() {
       var headerBal = document.getElementById('tradeBalance');
       if (headerBal) headerBal.textContent = 'Balance: $' + formattedBal.toFixed(2);
     } catch (e) {
-      if (balVal) balVal.textContent = 'error';
-      console.warn('[setup] Balance check error:', e.message);
+      // Silent — CALL_EXCEPTION if not on Polygon, just leave "—"
+      console.log('[setup] Balance skipped:', e.code || e.message);
     }
   }
 }
@@ -2369,7 +2369,26 @@ async function runFullSetup() {
     }
   }
 
-  // If proxy still unknown — show manual input and stop. Do NOT fire CLOB auth.
+  // If proxy still unknown from data-api lookups, compute it deterministically via CREATE2.
+  // The address is known before deployment — Safe factory uses CREATE2 so the address is predictable.
+  if (!proxyValid) {
+    console.log('[setup] No proxy from data-api — computing CREATE2 address for deployment...');
+    try {
+      var safeSalt = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['address'], [eoaAddress]));
+      var computedProxy = ethers.getCreate2Address(SAFE_FACTORY_ADDRESS, safeSalt, '0xb1a6e24430a128537c1b88ddd496588fbdd498d64e74af26ae0e13e4bb2d4e49').toLowerCase();
+      if (computedProxy && computedProxy !== eoaAddress.toLowerCase()) {
+        proxyAddr = computedProxy;
+        proxyValid = true;
+        localStorage.setItem('hf_poly_wallet', proxyAddr);
+        localStorage.setItem('hf_poly_proxy_' + eoaAddress.toLowerCase(), proxyAddr);
+        console.log('[setup] Computed CREATE2 proxy address:', proxyAddr);
+      }
+    } catch (c2err) {
+      console.warn('[setup] CREATE2 computation failed:', c2err.message);
+    }
+  }
+
+  // If even CREATE2 failed — manual input as last resort
   if (!proxyValid) {
     setSetupStep(1, 'error', 'Deploy Proxy Wallet \u2014 address unknown');
     showManualProxyInput(eoaAddress);
@@ -2377,17 +2396,22 @@ async function runFullSetup() {
     return false;
   }
 
-  // Proxy address known — check if deployed on-chain
+  // Proxy address known (from data-api or CREATE2) — check if deployed on-chain
   var deployed = await checkProxyDeployed();
   if (deployed) {
     setSetupStep(1, 'done', 'Deploy Proxy Wallet');
   } else {
-    setSetupStep(1, 'active', 'Deploy Proxy Wallet \u2014 not yet deployed');
-    var btn1 = document.getElementById('setupBtn1');
-    if (btn1) { btn1.style.display = 'inline-block'; btn1.disabled = false; btn1.textContent = 'Deploy'; }
-    showTradeStatus('Your proxy wallet needs to be deployed. Click Deploy to continue.', 'info');
-    if (cta) { cta.disabled = false; cta.textContent = 'Set Up Trading'; }
-    return false;
+    // Not deployed — deploy it now via MetaMask transaction
+    setSetupStep(1, 'active', 'Deploying proxy wallet...');
+    if (cta) cta.textContent = 'Deploying proxy...';
+    showTradeStatus('Deploying your proxy wallet on Polygon (~0.01 MATIC gas)...', 'info');
+    var deployOk = await deployProxy();
+    if (!deployOk) {
+      // deployProxy() already showed error + reset buttons
+      if (cta) { cta.disabled = false; cta.textContent = 'Set Up Trading'; }
+      return false;
+    }
+    setSetupStep(1, 'done', 'Deploy Proxy Wallet');
   }
 
   // Step 2: CLOB Auth (if not already done)
