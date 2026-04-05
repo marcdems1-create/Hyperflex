@@ -158,6 +158,15 @@ canvas{display:block;width:100%!important}
 .trade-cta.buy-no{background:var(--red);color:#fff}
 .trade-cta:hover{opacity:.9}
 .trade-disclaimer{font-family:var(--mono);font-size:9px;color:var(--dim);text-align:center;margin-top:10px}
+.setup-step{display:flex;align-items:center;gap:8px;padding:5px 0;font-family:var(--mono);font-size:11px;color:var(--soft)}
+.setup-step.done .setup-icon{color:var(--green)}
+.setup-step.active .setup-icon{color:var(--gold);animation:pulse 1.5s ease-in-out infinite}
+.setup-step.error .setup-icon{color:var(--red)}
+.setup-icon{font-size:13px;width:16px;text-align:center;flex-shrink:0}
+.setup-label{flex:1}
+.setup-action-btn{padding:4px 12px;background:var(--gold);color:#141412;border:none;border-radius:5px;font-family:var(--sans);font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap}
+.setup-action-btn:hover{opacity:.85}
+.setup-action-btn:disabled{opacity:.5;cursor:not-allowed}
 
 /* View on Polymarket link */
 .mkt-poly-link{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;color:var(--gold);padding:10px 0;justify-content:center}
@@ -430,6 +439,29 @@ canvas{display:block;width:100%!important}
         <button class="trade-cta buy-yes" id="tradeCta" onclick="executeTrade()">Buy Yes</button>
         <div id="tradeStatus" style="display:none;font-family:var(--mono);font-size:11px;text-align:center;padding:6px 0"></div>
         <div class="trade-disclaimer">Click "Connect Wallet" to connect to Polymarket</div>
+
+        <!-- Trading Setup Checklist (shown after wallet connect) -->
+        <div id="tradingSetup" style="display:none;margin-top:12px;padding:12px 14px;background:rgba(201,146,13,0.04);border:1px solid rgba(201,146,13,0.15);border-radius:8px">
+          <div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.08em;color:var(--dim);margin-bottom:8px">TRADING SETUP</div>
+          <div id="setupStep1" class="setup-step">
+            <span class="setup-icon" id="setupIcon1">○</span>
+            <span class="setup-label">Deploy Proxy Wallet</span>
+            <button class="setup-action-btn" id="setupBtn1" onclick="deployProxy()" style="display:none">Deploy</button>
+          </div>
+          <div id="setupStep2" class="setup-step">
+            <span class="setup-icon" id="setupIcon2">○</span>
+            <span class="setup-label">Enable Trading (CLOB Auth)</span>
+            <button class="setup-action-btn" id="setupBtn2" onclick="enableTrading()" style="display:none">Connect</button>
+          </div>
+          <div id="setupStep3" class="setup-step">
+            <span class="setup-icon" id="setupIcon3">○</span>
+            <span class="setup-label">Approve USDC Spending</span>
+            <button class="setup-action-btn" id="setupBtn3" onclick="approveTokens()" style="display:none">Approve</button>
+          </div>
+          <div id="setupProxyBalance" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid rgba(201,146,13,0.1);font-family:var(--mono);font-size:11px;color:var(--soft)">
+            Proxy Balance: <span id="setupBalanceVal" style="color:var(--gold)">—</span>
+          </div>
+        </div>
 
         <!-- Your Position (shown after trade or if holding) -->
         <div id="tradePosition" style="display:none;margin-top:12px;padding:10px 14px;background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.15);border-radius:8px">
@@ -1444,6 +1476,273 @@ function updateCtaButton() {
   cta.className = 'trade-cta ' + (_tradeSide === 'yes' ? 'buy-yes' : 'buy-no');
 }
 
+// ── Trading Setup: 3-step onboarding (Deploy Proxy → CLOB Auth → Approve USDC) ──
+
+// Contract addresses
+var USDC_ADDRESS = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
+var SAFE_FACTORY_ADDRESS = '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b';
+var CTF_EXCHANGE = '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E';        // non-negRisk
+var NEG_RISK_EXCHANGE = '0xC5d563A36AE78145C45a50134d48A1215220f80a'; // negRisk
+var MAX_UINT256 = '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
+
+// Helper: update a setup step's visual state
+function setSetupStep(stepNum, state, extraText) {
+  var step = document.getElementById('setupStep' + stepNum);
+  var icon = document.getElementById('setupIcon' + stepNum);
+  var btn = document.getElementById('setupBtn' + stepNum);
+  if (!step) return;
+  step.className = 'setup-step ' + state;
+  if (state === 'done') { icon.textContent = '\u2713'; if (btn) btn.style.display = 'none'; }
+  else if (state === 'active') { icon.textContent = '\u25cb'; }
+  else if (state === 'error') { icon.textContent = '\u2717'; }
+  else { icon.textContent = '\u25cb'; }
+  if (extraText) {
+    var label = step.querySelector('.setup-label');
+    if (label) label.textContent = extraText;
+  }
+}
+
+// Step 1: Check if proxy wallet is deployed on-chain
+async function checkProxyDeployed() {
+  var proxyAddr = localStorage.getItem('hf_poly_wallet');
+  if (!proxyAddr || !window.ethereum) return false;
+  try {
+    var provider = new ethers.BrowserProvider(window.ethereum);
+    var code = await provider.getCode(proxyAddr);
+    var deployed = code && code !== '0x' && code.length > 2;
+    console.log('[setup] Proxy deployed check:', proxyAddr.slice(0, 10), deployed ? 'YES' : 'NO', 'code length:', code.length);
+    return deployed;
+  } catch (e) {
+    console.warn('[setup] getCode error:', e.message);
+    return false;
+  }
+}
+
+// Step 1 action: Deploy proxy wallet via Safe factory
+async function deployProxy() {
+  var btn = document.getElementById('setupBtn1');
+  if (btn) { btn.disabled = true; btn.textContent = 'Deploying...'; }
+  setSetupStep(1, 'active', 'Deploying proxy wallet...');
+  try {
+    if (!window.ethereum) throw new Error('MetaMask required');
+    var provider = new ethers.BrowserProvider(window.ethereum);
+    var signer = await provider.getSigner();
+    var eoaAddress = await signer.getAddress();
+
+    // Safe factory createProxyWithNonce(singleton, initializer, saltNonce)
+    // singleton = GnosisSafe 1.3.0 on Polygon
+    var SAFE_SINGLETON = '0xd9Db270c1B5E3Bd161E8c8503c55cEABeE709552';
+    // initializer = setup(owners, threshold, to, data, fallbackHandler, paymentToken, payment, paymentReceiver)
+    // For Polymarket: single owner = EOA, threshold = 1, no modules
+    var iface = new ethers.Interface([
+      'function setup(address[] calldata _owners, uint256 _threshold, address _to, bytes calldata _data, address _fallbackHandler, address _paymentToken, uint256 _payment, address _paymentReceiver)'
+    ]);
+    var initData = iface.encodeFunctionData('setup', [
+      [eoaAddress], // owners
+      1,            // threshold
+      ethers.ZeroAddress, // to (no delegate call)
+      '0x',         // data
+      '0xf48f2B2d2a534e402487b3ee7C18c33Aec0Fe5e4', // fallback handler (CompatibilityFallbackHandler)
+      ethers.ZeroAddress, // paymentToken
+      0,            // payment
+      ethers.ZeroAddress  // paymentReceiver
+    ]);
+
+    // Call createProxyWithNonce on the Safe factory
+    var factoryAbi = ['function createProxyWithNonce(address _singleton, bytes memory initializer, uint256 saltNonce) returns (address proxy)'];
+    var factory = new ethers.Contract(SAFE_FACTORY_ADDRESS, factoryAbi, signer);
+
+    // Salt nonce = uint256 of the EOA address (matches Polymarket's pattern)
+    var saltNonce = BigInt(eoaAddress);
+
+    console.log('[setup] Deploying proxy via Safe factory...');
+    console.log('[setup] singleton:', SAFE_SINGLETON, 'saltNonce:', saltNonce.toString());
+    var tx = await factory.createProxyWithNonce(SAFE_SINGLETON, initData, saltNonce);
+    showTradeStatus('Deploying proxy... waiting for confirmation', 'info');
+    var receipt = await tx.wait();
+    console.log('[setup] Proxy deployed! tx:', receipt.hash);
+
+    // Extract proxy address from event logs
+    // GnosisSafeProxyFactory emits ProxyCreation(address proxy, address singleton)
+    var proxyCreatedTopic = ethers.id('ProxyCreation(address,address)');
+    var proxyLog = receipt.logs.find(function(l) { return l.topics[0] === proxyCreatedTopic; });
+    if (proxyLog && proxyLog.data) {
+      var decoded = ethers.AbiCoder.defaultAbiCoder().decode(['address', 'address'], proxyLog.data);
+      var newProxy = decoded[0].toLowerCase();
+      console.log('[setup] Deployed proxy address from event:', newProxy);
+      localStorage.setItem('hf_poly_wallet', newProxy);
+      localStorage.setItem('hf_poly_proxy_' + eoaAddress.toLowerCase(), newProxy);
+    }
+
+    setSetupStep(1, 'done', 'Deploy Proxy Wallet');
+    showTradeStatus('Proxy wallet deployed!', 'success');
+    // Continue to check remaining steps
+    checkTradingSetup();
+    return true;
+  } catch (e) {
+    console.error('[setup] Deploy error:', e);
+    setSetupStep(1, 'error', 'Deploy Proxy Wallet');
+    if (btn) { btn.disabled = false; btn.textContent = 'Deploy'; btn.style.display = 'inline-block'; }
+    if (e.code === 'ACTION_REJECTED' || e.code === 4001) {
+      showTradeStatus('Deploy cancelled', 'error');
+    } else {
+      showTradeStatus('Deploy failed: ' + (e.reason || e.message || 'Unknown error'), 'error');
+    }
+    return false;
+  }
+}
+
+// Step 3: Check USDC allowance for both exchange contracts
+async function checkTokenApproval() {
+  var proxyAddr = localStorage.getItem('hf_poly_wallet');
+  if (!proxyAddr || !window.ethereum) return { ctf: false, negRisk: false };
+  try {
+    var provider = new ethers.BrowserProvider(window.ethereum);
+    var abi = ['function allowance(address owner, address spender) view returns (uint256)'];
+    var usdc = new ethers.Contract(USDC_ADDRESS, abi, provider);
+    var ctfAllowance = await usdc.allowance(proxyAddr, CTF_EXCHANGE);
+    var negAllowance = await usdc.allowance(proxyAddr, NEG_RISK_EXCHANGE);
+    // Consider approved if allowance > 1M USDC (generous threshold)
+    var threshold = ethers.parseUnits('1000000', 6);
+    var ctfOk = ctfAllowance >= threshold;
+    var negOk = negAllowance >= threshold;
+    console.log('[setup] USDC allowance — CTF:', ethers.formatUnits(ctfAllowance, 6), ctfOk ? 'OK' : 'LOW', '| NegRisk:', ethers.formatUnits(negAllowance, 6), negOk ? 'OK' : 'LOW');
+    return { ctf: ctfOk, negRisk: negOk };
+  } catch (e) {
+    console.warn('[setup] Allowance check error:', e.message);
+    return { ctf: false, negRisk: false };
+  }
+}
+
+// Step 3 action: Approve USDC for both exchange contracts
+async function approveTokens() {
+  var btn = document.getElementById('setupBtn3');
+  if (btn) { btn.disabled = true; btn.textContent = 'Approving...'; }
+  setSetupStep(3, 'active', 'Approving USDC spending...');
+  try {
+    if (!window.ethereum) throw new Error('MetaMask required');
+    var provider = new ethers.BrowserProvider(window.ethereum);
+    var signer = await provider.getSigner();
+    var abi = ['function approve(address spender, uint256 amount) returns (bool)'];
+    var usdc = new ethers.Contract(USDC_ADDRESS, abi, signer);
+
+    // Check which exchanges need approval
+    var status = await checkTokenApproval();
+
+    if (!status.ctf) {
+      showTradeStatus('Approve USDC for exchange (1/2)...', 'info');
+      console.log('[setup] Approving CTF exchange...');
+      var tx1 = await usdc.approve(CTF_EXCHANGE, MAX_UINT256);
+      await tx1.wait();
+      console.log('[setup] CTF exchange approved');
+    }
+
+    if (!status.negRisk) {
+      showTradeStatus('Approve USDC for neg-risk exchange (2/2)...', 'info');
+      console.log('[setup] Approving NegRisk exchange...');
+      var tx2 = await usdc.approve(NEG_RISK_EXCHANGE, MAX_UINT256);
+      await tx2.wait();
+      console.log('[setup] NegRisk exchange approved');
+    }
+
+    setSetupStep(3, 'done', 'Approve USDC Spending');
+    showTradeStatus('USDC approved! Ready to trade.', 'success');
+    checkTradingSetup();
+    return true;
+  } catch (e) {
+    console.error('[setup] Approve error:', e);
+    setSetupStep(3, 'error', 'Approve USDC Spending');
+    if (btn) { btn.disabled = false; btn.textContent = 'Approve'; btn.style.display = 'inline-block'; }
+    if (e.code === 'ACTION_REJECTED' || e.code === 4001) {
+      showTradeStatus('Approval cancelled', 'error');
+    } else {
+      showTradeStatus('Approval failed: ' + (e.reason || e.message || 'Unknown error'), 'error');
+    }
+    return false;
+  }
+}
+
+// Master check: runs all 3 steps and updates the setup UI
+async function checkTradingSetup() {
+  var setupPanel = document.getElementById('tradingSetup');
+  var proxyAddr = localStorage.getItem('hf_poly_wallet');
+  var eoaAddr = localStorage.getItem('poly_eoa_address');
+
+  // Only show setup panel if wallet is connected
+  if (!eoaAddr || !window.ethereum) {
+    if (setupPanel) setupPanel.style.display = 'none';
+    return;
+  }
+  if (setupPanel) setupPanel.style.display = 'block';
+
+  // Step 1: Proxy deployment
+  var proxyValid = proxyAddr && proxyAddr.length === 42 && proxyAddr.startsWith('0x')
+    && proxyAddr.toLowerCase() !== eoaAddr.toLowerCase();
+
+  if (!proxyValid) {
+    setSetupStep(1, 'error', 'Deploy Proxy Wallet \u2014 address unknown');
+    var btn1 = document.getElementById('setupBtn1');
+    if (btn1) { btn1.style.display = 'none'; } // Can't deploy without knowing address
+    setSetupStep(2, '', 'Enable Trading (CLOB Auth)');
+    setSetupStep(3, '', 'Approve USDC Spending');
+    return;
+  }
+
+  var deployed = await checkProxyDeployed();
+  if (deployed) {
+    setSetupStep(1, 'done', 'Deploy Proxy Wallet');
+  } else {
+    setSetupStep(1, 'active', 'Deploy Proxy Wallet \u2014 not yet deployed');
+    var btn1 = document.getElementById('setupBtn1');
+    if (btn1) { btn1.style.display = 'inline-block'; btn1.disabled = false; btn1.textContent = 'Deploy'; }
+  }
+
+  // Step 2: CLOB auth
+  var hasKeys = isTradingEnabled();
+  if (hasKeys) {
+    setSetupStep(2, 'done', 'Enable Trading (CLOB Auth)');
+  } else {
+    setSetupStep(2, 'active', 'Enable Trading (CLOB Auth)');
+    var btn2 = document.getElementById('setupBtn2');
+    if (btn2) btn2.style.display = 'inline-block';
+  }
+
+  // Step 3: Token approval (only check if proxy is deployed)
+  if (deployed && proxyValid) {
+    var approval = await checkTokenApproval();
+    if (approval.ctf && approval.negRisk) {
+      setSetupStep(3, 'done', 'Approve USDC Spending');
+    } else {
+      setSetupStep(3, 'active', 'Approve USDC Spending' + (!approval.ctf && !approval.negRisk ? '' : approval.ctf ? ' (neg-risk)' : ' (exchange)'));
+      var btn3 = document.getElementById('setupBtn3');
+      if (btn3) { btn3.style.display = 'inline-block'; btn3.disabled = false; btn3.textContent = 'Approve'; }
+    }
+  } else {
+    setSetupStep(3, '', 'Approve USDC Spending');
+  }
+
+  // Proxy balance display
+  if (proxyValid) {
+    var balPanel = document.getElementById('setupProxyBalance');
+    var balVal = document.getElementById('setupBalanceVal');
+    if (balPanel) balPanel.style.display = 'block';
+    try {
+      var provider = new ethers.BrowserProvider(window.ethereum);
+      var usdcAbi = ['function balanceOf(address) view returns (uint256)'];
+      var usdcContract = new ethers.Contract(USDC_ADDRESS, usdcAbi, provider);
+      var rawBal = await usdcContract.balanceOf(proxyAddr);
+      var formattedBal = parseFloat(ethers.formatUnits(rawBal, 6));
+      if (balVal) balVal.textContent = '$' + formattedBal.toFixed(2);
+      // Also update the header balance
+      var headerBal = document.getElementById('tradeBalance');
+      if (headerBal) headerBal.textContent = 'Balance: $' + formattedBal.toFixed(2);
+    } catch (e) {
+      if (balVal) balVal.textContent = 'error';
+      console.warn('[setup] Balance check error:', e.message);
+    }
+  }
+}
+
 // ── Connect Wallet (derive CLOB API keys via MetaMask EIP-712) ───────────────
 async function enableTrading() {
   if (!window.ethereum) {
@@ -1802,6 +2101,8 @@ async function enableTrading() {
     updateTradingUI();
     cta.disabled = false;
     updateCtaButton();
+    // Run full trading setup check (deploy, approval, balance)
+    checkTradingSetup();
     return true;
   } catch (e) {
     if (e.code === 'ACTION_REJECTED' || e.code === 4001) {
@@ -1857,6 +2158,7 @@ function showManualProxyInput(eoaAddress) {
       fetchTradeBalance();
       updateTradingUI();
       showTradeStatus('Trading enabled! Deposit address saved.', 'success');
+      checkTradingSetup();
     }, 300);
   };
 }
@@ -2655,6 +2957,8 @@ loadMarket().then(function() {
   _livePriceInterval = setInterval(fetchLivePrices, 10000);
 });
 updateTradingUI();
+// Run trading setup check on page load (non-blocking)
+setTimeout(function() { checkTradingSetup(); }, 500);
 
 // ── Holder Distribution Donut Chart ──────────────────────────────────────────
 function drawHolderDistribution(yesCount, noCount) {
