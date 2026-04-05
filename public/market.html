@@ -2520,7 +2520,7 @@ async function executeTrade() {
         expiration: orderStruct.expiration,
         nonce: orderStruct.nonce,
         feeRateBps: String(orderStruct.feeRateBps),
-        side: sideInt,
+        side: clobSide,
         signatureType: orderStruct.signatureType,
         signature: orderSignature
       },
@@ -2528,7 +2528,7 @@ async function executeTrade() {
       orderType: 'GTC',
       deferExec: false
     });
-    tradeDebug('requestBody', { side: sideInt, sigType: sigType, maker: makerAddr.slice(0,10), owner: apiKey.slice(0,10), bodyLen: requestBody.length });
+    tradeDebug('requestBody', { side: clobSide, sigType: sigType, maker: makerAddr.slice(0,10), owner: apiKey.slice(0,10), bodyLen: requestBody.length });
 
     var data = await submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eoaAddress);
 
