@@ -105,6 +105,61 @@
 6. **Aggregator-first mindset:** Portfolio tracker is the primary value prop. Community markets support retention. When building new features, ask: "Does this help a Polymarket trader?"
 7. **⛔ NEVER start or stop the server.** Do NOT run `node server.js`, `npm start`, `npm run dev`, `pkill node`, or any command that starts/stops a process on port 3000. Railway handles production. If you need to verify code works, edit files and commit — do not run the server locally. Killing the server disrupts the live site.
 8. **Always track every user request as a todo item before starting work.** When the user gives a task or list of tasks, add them to a running todo list immediately. Mark items in-progress when starting, completed when done. Never let a request go untracked.
+9. **Always read https://docs.polymarket.com/builders/overview before making CLOB trading changes.**
+
+---
+
+## ⚠️ Polymarket CLOB Trading Reference — DO NOT REGRESS
+
+Canonical spec for `market.html` order flow. Every field verified against the official `@polymarket/clob-client` SDK.
+
+### Proxy wallet discovery
+- **Single source of truth:** `computeProxyAddress(eoa)` on Safe factory `0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b`
+- **Use public RPC** (no MetaMask popup): `polygon-bor-rpc.publicnode.com` primary, `1rpc.io/matic` fallback
+- **Deploy check:** Polymarket relayer API `https://relayer-v2.polymarket.com/deployed?address=`
+- **If not deployed:** show "Visit polymarket.com to activate" — do NOT deploy from our app
+- **Balance reads from PROXY, not EOA**
+
+### EIP-712 order struct (for signing)
+All fields match the CTF Exchange contract. Types are uint256/address/uint8:
+- `salt`: number (not string) — `Math.floor(Math.random() * 9007199254740991)`
+- `side`: integer — `0` = BUY, `1` = SELL
+- `signatureType`: integer — `2` = POLY_GNOSIS_SAFE (proxy), `0` = EOA
+- `maker`: proxy address (where funds live)
+- `signer`: EOA address (MetaMask key)
+- `feeRateBps`: from CLOB `/fee-rate?token_id=` endpoint
+
+### POST /order JSON body (different from signing struct!)
+SDK's `orderToJson()` converts before posting:
+- `salt`: **number** — `parseInt(order.salt, 10)` (SDK does `Number.parseInt`)
+- `side`: **string** — `"BUY"` or `"SELL"` (SDK's `Side` enum, NOT integer)
+- `signatureType`: integer `2`
+- `deferExec`: `false` (always include)
+- `feeRateBps`: string `"0"` (scope outside try block — 0 is falsy!)
+- `orderType`: `"GTC"`
+
+### CLOB API endpoints (snake_case params)
+- Tick size: `GET /tick-size?token_id=`
+- Neg risk: `GET /neg-risk?token_id=`
+- Fee rate: `GET /fee-rate?token_id=`
+- Submit: `POST /order` with L2 auth headers
+
+### Auth headers (L2)
+```
+POLY_ADDRESS, POLY_API_KEY, POLY_PASSPHRASE, POLY_TIMESTAMP, POLY_SIGNATURE
+```
+HMAC: `timestamp + 'POST' + '/order' + body` signed with API secret (base64url decoded)
+
+### CLOB auth key lifecycle
+1. `POST /auth/api-key` (create) — try first
+2. `GET /auth/derive-api-key` (derive) — fallback
+Matches official SDK order.
+
+### Contract addresses
+- USDC.e: `0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174`
+- Safe factory: `0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b`
+- CTF Exchange: `0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E`
+- NegRisk Exchange: `0xC5d563A36AE78145C45a50134d48A1215220f80a`
 
 ---
 
