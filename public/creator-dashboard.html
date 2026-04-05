@@ -12118,6 +12118,31 @@ async function loadPortfolio() {
   if (_portfolioLoaded) return;
   _portfolioLoaded = true;
   try {
+    // Check MetaMask FIRST — if it has a different account than cached, update NOW
+    // This catches the race where portfolio loads before the 500ms auto-reconnect
+    if (window.ethereum && typeof ethers !== 'undefined') {
+      try {
+        const mmAccounts = await window.ethereum.request({ method: 'eth_accounts' });
+        if (mmAccounts && mmAccounts.length > 0) {
+          const mmAddr = mmAccounts[0].toLowerCase();
+          const cachedEoa = (localStorage.getItem('poly_eoa_address') || '').toLowerCase();
+          if (cachedEoa && cachedEoa !== mmAddr) {
+            console.log('[portfolio] MetaMask mismatch: cached EOA=' + cachedEoa.slice(0, 8) + ' MM=' + mmAddr.slice(0, 8));
+            localStorage.setItem('poly_eoa_address', mmAddr);
+            localStorage.setItem('hf_connected_wallet', mmAddr);
+            window._connectedWallet = mmAddr;
+            // Clear stale proxy — will be re-resolved below
+            _polyWalletAddress = '';
+            localStorage.removeItem('hf_poly_wallet');
+            sessionStorage.removeItem('hf_poly_wallet_session');
+          } else if (!cachedEoa) {
+            localStorage.setItem('poly_eoa_address', mmAddr);
+            window._connectedWallet = mmAddr;
+          }
+        }
+      } catch (e) { /* eth_accounts failed — no MetaMask, continue */ }
+    }
+
     const token = localStorage.getItem('hf_token');
     let data = {};
     try {
@@ -12127,33 +12152,46 @@ async function loadPortfolio() {
 
     _kalshiConnected = data.kalshi_api_key_set || false;
     _manifoldUsername = data.manifold_username || '';
-    // Load wallet: DB first, then localStorage, then connected browser wallet
-    if (data.polymarket_address) {
-      _polyWalletAddress = data.polymarket_address;
-    } else if (!_polyWalletAddress) {
-      _polyWalletAddress = localStorage.getItem('hf_poly_wallet') || '';
-    }
 
-    // If we have an EOA (from MetaMask) but no proxy, resolve it on-chain
-    const eoaAddr = localStorage.getItem('poly_eoa_address') || window._connectedWallet || '';
+    // Wallet resolution: MetaMask's current account WINS over DB.
+    // The DB may have wallet 1's proxy saved, but if MetaMask is on wallet 2,
+    // we must resolve wallet 2's proxy and use that.
+    const eoaAddr = (localStorage.getItem('poly_eoa_address') || window._connectedWallet || '').toLowerCase();
+    let proxyResolved = false;
+
     if (eoaAddr && typeof getPolymarketProxy === 'function') {
       try {
         const proxy = await getPolymarketProxy(eoaAddr);
-        if (proxy && proxy !== ethers.ZeroAddress && proxy.toLowerCase() !== eoaAddr.toLowerCase()) {
+        if (proxy && proxy !== ethers.ZeroAddress && proxy.toLowerCase() !== eoaAddr) {
           const proxyLower = proxy.toLowerCase();
-          // Update if we had no address or if current is the raw EOA (not the proxy)
-          if (!_polyWalletAddress || _polyWalletAddress.toLowerCase() === eoaAddr.toLowerCase()) {
-            console.log('[portfolio] Resolved proxy:', proxyLower.slice(0, 10), 'for EOA:', eoaAddr.slice(0, 8));
-            _polyWalletAddress = proxyLower;
-          }
-          localStorage.setItem('hf_poly_proxy_' + eoaAddr.toLowerCase(), proxyLower);
+          _polyWalletAddress = proxyLower;
+          localStorage.setItem('hf_poly_proxy_' + eoaAddr, proxyLower);
+          proxyResolved = true;
+          console.log('[portfolio] On-chain proxy for', eoaAddr.slice(0, 8) + ':', proxyLower.slice(0, 10));
         }
-      } catch (e) { console.warn('[portfolio] Proxy resolution skipped:', e.message); }
+      } catch (e) { console.warn('[portfolio] Proxy resolution failed:', e.message); }
+    }
+
+    // Fallback: DB value, then localStorage (only if no MetaMask proxy resolved)
+    if (!proxyResolved) {
+      if (data.polymarket_address) {
+        _polyWalletAddress = data.polymarket_address;
+      } else if (!_polyWalletAddress) {
+        _polyWalletAddress = localStorage.getItem('hf_poly_wallet') || '';
+      }
     }
 
     if (_polyWalletAddress) {
       localStorage.setItem('hf_poly_wallet', _polyWalletAddress);
       sessionStorage.setItem('hf_poly_wallet_session', _polyWalletAddress);
+      // Update DB if it's stale (different from what we resolved)
+      if (proxyResolved && data.polymarket_address && data.polymarket_address.toLowerCase() !== _polyWalletAddress.toLowerCase()) {
+        const token = localStorage.getItem('hf_token');
+        if (token) {
+          try { fetch('/api/user/wallets', { method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify({ polymarket_address: _polyWalletAddress }) }); } catch(e) {}
+        }
+        console.log('[portfolio] Updated DB: old=' + data.polymarket_address.slice(0,10) + ' new=' + _polyWalletAddress.slice(0,10));
+      }
     }
 
     // Show welcome state if nothing connected, otherwise show main
