@@ -2311,6 +2311,7 @@ async function executeTrade() {
     showTradeStatus('Preparing order...', 'info');
     var tickSize = 0.01; // default
     var isNegRisk = false;
+    var feeRateBps = '0';
     try {
       var [tickRes, negRes, feeRes] = await Promise.all([
         fetch('https://clob.polymarket.com/tick-size?token_id=' + encodeURIComponent(tokenId)).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
@@ -2319,7 +2320,6 @@ async function executeTrade() {
       ]);
       if (tickRes && tickRes.minimum_tick_size) tickSize = parseFloat(tickRes.minimum_tick_size);
       if (negRes && negRes.neg_risk !== undefined) isNegRisk = !!negRes.neg_risk;
-      var feeRateBps = '0';
       if (feeRes && feeRes.base_fee !== undefined) feeRateBps = String(feeRes.base_fee);
       console.log('[trade] CLOB metadata: tickSize=' + tickSize + ' negRisk=' + isNegRisk + ' feeRateBps=' + feeRateBps);
     } catch (metaErr) {
@@ -2443,7 +2443,7 @@ async function executeTrade() {
     takerAmt = takerAmt.replace(/^0+/, '') || '0';
     console.log('[trade] Amounts: maker=' + makerAmt + ' taker=' + takerAmt + ' price=' + clobPrice + ' shares=' + (clobSide === 'BUY' ? rawShares : rawShares2) + ' implied=' + (clobSide === 'BUY' ? (parseInt(makerAmt)/parseInt(takerAmt)) : (parseInt(takerAmt)/parseInt(makerAmt))));
 
-    var orderSalt = Math.floor(Math.random() * 9007199254740991).toString();
+    var orderSalt = Math.floor(Math.random() * 9007199254740991);
     var exchangeAddr = isNegRisk
       ? '0xC5d563A36AE78145C45a50134d48A1215220f80a'
       : '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E';
@@ -2510,7 +2510,7 @@ async function executeTrade() {
     // re-hashes the order and gets a different digest than what was signed.
     var requestBody = JSON.stringify({
       order: {
-        salt: String(orderStruct.salt),
+        salt: parseInt(orderStruct.salt, 10),
         maker: orderStruct.maker,
         signer: orderStruct.signer,
         taker: orderStruct.taker,
@@ -2690,8 +2690,11 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
       body: requestBody
     });
 
-    var directData = await directRes.json().catch(function() { return {}; });
-    tradeDebug('direct ' + directRes.status, JSON.stringify(directData).substring(0, 300));
+    var directText = await directRes.text().catch(function() { return ''; });
+    var directData;
+    try { directData = JSON.parse(directText); } catch (e) { directData = { _raw: directText }; }
+    tradeDebug('direct ' + directRes.status, directText.substring(0, 500));
+    console.log('[trade] CLOB response ' + directRes.status + ':', directText);
 
     if (directRes.ok) return directData;
 
