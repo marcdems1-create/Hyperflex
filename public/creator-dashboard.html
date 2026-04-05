@@ -13058,6 +13058,7 @@ async function connectMetaMask() {
 }
 
 // Auto-reconnect wallet + signer on page load (delayed for MetaMask injection)
+// Also detects if MetaMask account changed while away — clears stale CLOB keys
 setTimeout(async function() {
   const savedWallet = localStorage.getItem('hf_connected_wallet') || localStorage.getItem('hf_wallet_address');
   if (!savedWallet) return;
@@ -13069,13 +13070,26 @@ setTimeout(async function() {
     try {
       const accounts = await window.ethereum.request({ method: 'eth_accounts' });
       if (accounts && accounts.length > 0) {
+        const address = accounts[0];
+
+        // Detect wallet mismatch — MetaMask switched while page was closed
+        if (savedWallet.toLowerCase() !== address.toLowerCase()) {
+          console.warn('[wallet] MISMATCH on load: saved=' + savedWallet.slice(0, 8) + ' metamask=' + address.slice(0, 8) + ' — clearing stale keys');
+          localStorage.removeItem('poly_api_key');
+          localStorage.removeItem('poly_api_secret');
+          localStorage.removeItem('poly_api_passphrase');
+          localStorage.removeItem('poly_eoa_address');
+          localStorage.removeItem('hf_poly_wallet');
+          localStorage.setItem('hf_wallet_explicit_switch', Date.now().toString());
+        }
+
         const provider = new ethers.BrowserProvider(window.ethereum);
         const signer = await provider.getSigner();
-        const address = await signer.getAddress();
         window._connectedWallet = address;
         window._walletSigner = signer;
         window._walletProvider = provider;
         localStorage.setItem('hf_connected_wallet', address);
+        localStorage.setItem('hf_wallet_address', address);
         fetchWalletBalance(provider, address);
         if (typeof updateWalletUI === 'function') updateWalletUI();
         console.log('[wallet] Auto-reconnected signer for', address.slice(0, 8));
