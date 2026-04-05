@@ -2199,15 +2199,165 @@ function tradeDebug(label, data) {
 function updateTradingUI() {
   var disclaimer = document.querySelector('.trade-disclaimer');
   if (disclaimer) {
-    if (isTradingEnabled()) {
-      var addr = localStorage.getItem('hf_poly_wallet') || '';
-      disclaimer.innerHTML = '\u2705 Trading enabled' + (addr ? ' \u00b7 <span style="font-family:var(--mono);font-size:10px;color:var(--dim)">' + addr.substring(0, 8) + '...' + addr.slice(-4) + '</span>' : '');
+    var proxyAddr = localStorage.getItem('hf_poly_wallet') || '';
+    var proxyValid = proxyAddr && proxyAddr.length === 42 && proxyAddr.startsWith('0x');
+    var hasKeys = isTradingEnabled();
+
+    if (hasKeys && proxyValid) {
+      disclaimer.innerHTML = '\u2705 Trading enabled \u00b7 <span style="font-family:var(--mono);font-size:10px;color:var(--dim)">' + proxyAddr.substring(0, 8) + '...' + proxyAddr.slice(-4) + '</span>';
       disclaimer.style.color = 'var(--green)';
+    } else if (hasKeys && !proxyValid) {
+      disclaimer.innerHTML = '\u26a0\ufe0f Wallet connected but proxy not set \u00b7 <a href="#" onclick="showManualProxyInput();return false" style="color:var(--gold);text-decoration:underline">Enter deposit address</a>';
+      disclaimer.style.color = 'var(--gold)';
     } else {
-      disclaimer.innerHTML = '<a href="#" onclick="enableTrading();return false" style="color:var(--gold);text-decoration:underline">Connect Wallet</a> to trade on Polymarket';
+      disclaimer.innerHTML = '<a href="#" onclick="runFullSetup();return false" style="color:var(--gold);text-decoration:underline">Set up trading</a> to trade on Polymarket';
       disclaimer.style.color = 'var(--dim)';
     }
   }
+
+  // Update CTA button text for first-time wallets
+  var cta = document.getElementById('tradeCta');
+  if (cta && !cta.disabled) {
+    var eoaAddr = localStorage.getItem('poly_eoa_address');
+    if (!eoaAddr) {
+      cta.textContent = 'Set Up Trading';
+    } else {
+      updateCtaButton();
+    }
+  }
+}
+
+// Sequential setup: Deploy Proxy → CLOB Auth → Approve USDC → then trade
+async function runFullSetup() {
+  var cta = document.getElementById('tradeCta');
+  if (cta) { cta.disabled = true; cta.textContent = 'Setting up...'; }
+
+  if (!window.ethereum) {
+    showTradeStatus('Install MetaMask to trade', 'error');
+    if (cta) { cta.disabled = false; updateCtaButton(); }
+    return false;
+  }
+
+  // Connect MetaMask first to get EOA
+  try {
+    var accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    if (!accounts || !accounts.length) throw new Error('No accounts');
+    // Switch to Polygon
+    try {
+      await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x89' }] });
+    } catch (switchErr) {
+      if (switchErr.code === 4902) {
+        await window.ethereum.request({
+          method: 'wallet_addEthereumChain',
+          params: [{ chainId: '0x89', chainName: 'Polygon', nativeCurrency: { name: 'MATIC', symbol: 'POL', decimals: 18 }, rpcUrls: ['https://polygon-rpc.com'], blockExplorerUrls: ['https://polygonscan.com'] }]
+        });
+      }
+    }
+    var provider = new ethers.BrowserProvider(window.ethereum);
+    var signer = await provider.getSigner();
+    var eoaAddress = await signer.getAddress();
+    localStorage.setItem('poly_eoa_address', eoaAddress);
+  } catch (e) {
+    if (e.code === 'ACTION_REJECTED' || e.code === 4001) {
+      showTradeStatus('MetaMask connection rejected', 'error');
+    } else {
+      showTradeStatus('MetaMask error: ' + (e.message || 'Unknown'), 'error');
+    }
+    if (cta) { cta.disabled = false; updateTradingUI(); }
+    return false;
+  }
+
+  // Show the setup checklist
+  var setupPanel = document.getElementById('tradingSetup');
+  if (setupPanel) setupPanel.style.display = 'block';
+
+  var proxyAddr = localStorage.getItem('hf_poly_wallet') || '';
+  var proxyValid = proxyAddr && proxyAddr.length === 42 && proxyAddr.startsWith('0x')
+    && proxyAddr.toLowerCase() !== eoaAddress.toLowerCase();
+
+  // Step 1: Deploy proxy if needed
+  if (!proxyValid) {
+    // First try to discover proxy via enableTrading's derive flow (which calls CLOB + data-api)
+    setSetupStep(2, 'active', 'Discovering proxy address...');
+    if (cta) cta.textContent = 'Discovering proxy...';
+    var enabled = await enableTrading();
+
+    // Re-check if proxy was found
+    proxyAddr = localStorage.getItem('hf_poly_wallet') || '';
+    proxyValid = proxyAddr && proxyAddr.length === 42 && proxyAddr.startsWith('0x')
+      && proxyAddr.toLowerCase() !== eoaAddress.toLowerCase();
+
+    if (proxyValid) {
+      // Proxy was discovered — check if it's deployed on-chain
+      setSetupStep(2, 'done', 'Enable Trading (CLOB Auth)');
+      var deployed = await checkProxyDeployed();
+      if (deployed) {
+        setSetupStep(1, 'done', 'Deploy Proxy Wallet');
+      } else {
+        // Proxy address known but not deployed — user needs to deploy
+        setSetupStep(1, 'active', 'Deploy Proxy Wallet \u2014 not yet deployed');
+        var btn1 = document.getElementById('setupBtn1');
+        if (btn1) { btn1.style.display = 'inline-block'; btn1.disabled = false; btn1.textContent = 'Deploy'; }
+        showTradeStatus('Your proxy wallet needs to be deployed. Click Deploy to continue.', 'info');
+        if (cta) { cta.disabled = false; cta.textContent = 'Set Up Trading'; }
+        return false;
+      }
+    } else {
+      // Proxy not found at all — enableTrading will have shown manual input
+      // Mark step 1 as needing attention
+      setSetupStep(1, 'error', 'Deploy Proxy Wallet \u2014 address unknown');
+      setSetupStep(2, enabled ? 'done' : 'error', 'Enable Trading (CLOB Auth)');
+      if (cta) { cta.disabled = false; cta.textContent = 'Set Up Trading'; }
+      return false;
+    }
+  } else {
+    // Proxy already known — check deployment
+    var deployed = await checkProxyDeployed();
+    if (deployed) {
+      setSetupStep(1, 'done', 'Deploy Proxy Wallet');
+    } else {
+      setSetupStep(1, 'active', 'Deploy Proxy Wallet \u2014 not yet deployed');
+      var btn1 = document.getElementById('setupBtn1');
+      if (btn1) { btn1.style.display = 'inline-block'; btn1.disabled = false; btn1.textContent = 'Deploy'; }
+      showTradeStatus('Your proxy wallet needs to be deployed first.', 'info');
+      if (cta) { cta.disabled = false; cta.textContent = 'Set Up Trading'; }
+      return false;
+    }
+  }
+
+  // Step 2: CLOB Auth (if not already done)
+  if (!isTradingEnabled()) {
+    setSetupStep(2, 'active', 'Enabling trading...');
+    if (cta) cta.textContent = 'Enabling trading...';
+    var enabled = await enableTrading();
+    if (!enabled || !isTradingEnabled()) {
+      setSetupStep(2, 'error', 'Enable Trading (CLOB Auth)');
+      if (cta) { cta.disabled = false; cta.textContent = 'Set Up Trading'; }
+      return false;
+    }
+  }
+  setSetupStep(2, 'done', 'Enable Trading (CLOB Auth)');
+
+  // Step 3: Approve USDC
+  var approval = await checkTokenApproval();
+  if (!approval.ctf || !approval.negRisk) {
+    setSetupStep(3, 'active', 'Approving USDC spending...');
+    if (cta) cta.textContent = 'Approving USDC...';
+    var approved = await approveTokens();
+    if (!approved) {
+      if (cta) { cta.disabled = false; cta.textContent = 'Set Up Trading'; }
+      return false;
+    }
+  }
+  setSetupStep(3, 'done', 'Approve USDC Spending');
+
+  // All done
+  showTradeStatus('Setup complete! Ready to trade.', 'success');
+  if (cta) { cta.disabled = false; }
+  updateCtaButton();
+  updateTradingUI();
+  fetchTradeBalance();
+  return true;
 }
 
 // ── Confetti celebration on successful trade ──
@@ -2281,18 +2431,19 @@ var _tradeRetrying = false;
 async function executeTrade() {
   var cta = document.getElementById('tradeCta');
 
-  // Step 1: Check if trading is enabled — if not, run Connect Wallet flow
-  if (!isTradingEnabled()) {
-    showTradeStatus('Connecting wallet...', 'info');
-    cta.disabled = true;
-    var enabled = await enableTrading();
-    if (!enabled) {
-      cta.disabled = false;
-      updateCtaButton();
-      return;
-    }
-    // After wallet connect, continue directly to place the trade
-    showTradeStatus('Wallet connected! Placing your order...', 'info');
+  // Check if full setup is needed (no keys, no proxy, not approved)
+  var proxyAddr = localStorage.getItem('hf_poly_wallet') || '';
+  var eoaAddr = localStorage.getItem('poly_eoa_address') || '';
+  var proxyValid = proxyAddr && proxyAddr.length === 42 && proxyAddr.startsWith('0x')
+    && proxyAddr.toLowerCase() !== eoaAddr.toLowerCase();
+  var hasKeys = isTradingEnabled();
+
+  if (!hasKeys || !proxyValid) {
+    // Run the full 3-step setup flow (deploy → auth → approve)
+    var setupOk = await runFullSetup();
+    if (!setupOk) return; // Setup incomplete — user action needed
+    // After setup, continue to place the trade
+    showTradeStatus('Setup complete! Placing your order...', 'info');
   }
 
   // Step 2: Get token ID for the selected outcome
@@ -2348,22 +2499,18 @@ async function executeTrade() {
     }
 
     // Validate proxy address: must exist, be a real 0x address, and differ from EOA
-    var proxyValid = proxyAddress && proxyAddress.length === 42 && proxyAddress.startsWith('0x')
+    var proxyValid2 = proxyAddress && proxyAddress.length === 42 && proxyAddress.startsWith('0x')
       && proxyAddress.toLowerCase() !== (eoaAddress || '').toLowerCase();
 
-    if (!proxyValid) {
-      // No valid proxy = can't trade (funds live in the proxy wallet, not the EOA).
-      // Try re-connecting to resolve the proxy address.
-      console.warn('[trade] Invalid proxy:', proxyAddress, '(EOA:', eoaAddress, ') — reconnecting...');
-      showTradeStatus('Finding your Polymarket deposit address...', 'info');
-      cta.textContent = 'Finding deposit address...';
-      var reconnected = await enableTrading();
+    if (!proxyValid2) {
+      // No valid proxy — run full setup which handles deploy + discovery
+      console.warn('[trade] Invalid proxy:', proxyAddress, '(EOA:', eoaAddress, ') — running setup...');
+      var setupOk = await runFullSetup();
       proxyAddress = localStorage.getItem('hf_poly_wallet');
-      proxyValid = proxyAddress && proxyAddress.length === 42 && proxyAddress.startsWith('0x')
+      proxyValid2 = proxyAddress && proxyAddress.length === 42 && proxyAddress.startsWith('0x')
         && proxyAddress.toLowerCase() !== (eoaAddress || '').toLowerCase();
 
-      if (!proxyValid) {
-        // Show manual proxy input so user can paste their deposit address
+      if (!proxyValid2) {
         showManualProxyInput(eoaAddress);
         return;
       }
