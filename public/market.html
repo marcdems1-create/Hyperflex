@@ -1441,8 +1441,26 @@ async function fetchTradeBalance() {
   var proxyAddress = localStorage.getItem('hf_poly_wallet');
   var eoaAddress = localStorage.getItem('poly_eoa_address');
   console.log('[balance debug] EOA address:', eoaAddress);
-  console.log('[balance debug] Proxy address:', proxyAddress);
-  
+  console.log('[balance debug] Proxy address (cached):', proxyAddress);
+
+  // Always verify proxy via on-chain computeProxyAddress() to catch stale values
+  if (eoaAddress && window.ethereum) {
+    try {
+      var freshProxy = await getPolymarketProxy(eoaAddress);
+      if (freshProxy && freshProxy !== ethers.ZeroAddress && freshProxy.toLowerCase() !== eoaAddress.toLowerCase()) {
+        freshProxy = freshProxy.toLowerCase();
+        if (proxyAddress && proxyAddress.toLowerCase() !== freshProxy) {
+          console.warn('[balance] STALE PROXY: cached=' + (proxyAddress || 'none').slice(0, 10) + ' correct=' + freshProxy.slice(0, 10));
+        }
+        proxyAddress = freshProxy;
+        localStorage.setItem('hf_poly_wallet', freshProxy);
+        localStorage.setItem('hf_poly_proxy_' + eoaAddress.toLowerCase(), freshProxy);
+      }
+    } catch (e) {
+      console.log('[balance] computeProxyAddress skipped:', e.code || e.message);
+    }
+  }
+
   if (!proxyAddress || !window.ethereum) {
     console.log('[balance debug] Missing proxy address or ethereum');
     return;
@@ -2312,11 +2330,27 @@ async function executeTrade() {
       eoaAddress = signerAddress;
       localStorage.setItem('poly_eoa_address', eoaAddress);
     }
+
+    // Always resolve proxy via on-chain computeProxyAddress() — single source of truth
+    // This fixes stale localStorage values from old sessions or other pages
+    try {
+      var freshProxy = await getPolymarketProxy(eoaAddress);
+      if (freshProxy && freshProxy !== ethers.ZeroAddress && freshProxy.toLowerCase() !== eoaAddress.toLowerCase()) {
+        freshProxy = freshProxy.toLowerCase();
+        if (proxyAddress && proxyAddress.toLowerCase() !== freshProxy) {
+          console.warn('[trade] STALE PROXY DETECTED: cached=' + proxyAddress.slice(0, 10) + ' correct=' + freshProxy.slice(0, 10) + ' — updating');
+        }
+        proxyAddress = freshProxy;
+        localStorage.setItem('hf_poly_wallet', freshProxy);
+        localStorage.setItem('hf_poly_proxy_' + eoaAddress.toLowerCase(), freshProxy);
+      }
+    } catch (proxyErr) {
+      console.warn('[trade] computeProxyAddress failed:', proxyErr.message);
+    }
+
     if (!proxyAddress) {
-      // No proxy address available — cannot place orders without it.
-      // DO NOT use CREATE2 fallback — it produces wrong addresses for some wallets.
-      showTradeStatus('No proxy wallet found. Reconnect wallet or check Polymarket deposit address.', 'error');
-      console.error('[trade] No proxy address for', eoaAddress.slice(0, 10), '— cannot build order. Try disconnecting and reconnecting wallet.');
+      showTradeStatus('No proxy wallet found. Make sure MetaMask is on Polygon.', 'error');
+      console.error('[trade] No proxy address for', eoaAddress.slice(0, 10));
       cta.disabled = false; updateCtaButton();
       return;
     }
