@@ -60,7 +60,11 @@ canvas{display:block;width:100%!important}
 .mkt-outcomes-table tbody tr.active-outcome{background:rgba(201,146,13,.06);border-left:2px solid var(--gold)}
 .mkt-outcomes-table tbody td{padding:12px 10px;font-size:13px}
 .mkt-outcomes-table tbody td:not(:first-child){text-align:center;font-family:var(--mono)}
-.outcome-name{display:flex;align-items:center;gap:8px;font-weight:700}
+.outcome-name{display:flex;flex-direction:column;gap:4px;font-weight:700}
+.position-badge{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:4px;font-family:var(--mono);font-size:10px;font-weight:600;width:fit-content}
+.position-badge-yes{background:rgba(34,197,94,.10);color:var(--green);border:1px solid rgba(34,197,94,.20)}
+.position-badge-no{background:rgba(239,68,68,.10);color:var(--red);border:1px solid rgba(239,68,68,.20)}
+.pos-side{font-weight:700}.pos-shares{font-weight:600}.pos-sep{opacity:.5}.pos-price{opacity:.7}
 .outcome-btn{display:inline-flex;align-items:center;gap:4px;padding:6px 12px;border-radius:6px;font-family:var(--mono);font-size:11px;font-weight:700;min-width:80px;text-align:center;justify-content:center;cursor:pointer;transition:all .15s;border:none}
 .outcome-btn-yes{background:rgba(34,197,94,.12);color:var(--green);border:1px solid rgba(34,197,94,.25)}
 .outcome-btn-yes:hover{background:rgba(34,197,94,.25);border-color:rgba(34,197,94,.5)}
@@ -493,6 +497,7 @@ var _chartInterval = 'all';
 var _activeOutcomeIndex = 0;
 var _eventMarkets = null;
 var _sortedEventMarkets = null; // sorted mapping for multi-outcome events
+var _userPositions = {}; // tokenId → { size, avgPrice, side } from Polymarket data API
 
 function escH(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 function fmtCap(n) { if (n >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M'; if (n >= 1e3) return '$' + (n/1e3).toFixed(1) + 'K'; return '$' + n.toFixed(0); }
@@ -705,8 +710,35 @@ function renderOutcomes(m) {
     var noCents = Math.round(row.noP * 100);
     var yesFmt = fmtCents(row.yesP);
     var noFmt = fmtCents(row.noP);
+    // Build position badge HTML for this outcome row
+    var posBadge = '';
+    var rowTokenIds = getOutcomeTokenIds(row.idx);
+    if (rowTokenIds.length && Object.keys(_userPositions).length) {
+      var yTid = (rowTokenIds[0] || '').toLowerCase();
+      var nTid = (rowTokenIds[1] || '').toLowerCase();
+      var yPos = _userPositions[yTid];
+      var nPos = _userPositions[nTid];
+      if (yPos && yPos.size > 0) {
+        var avgC = (yPos.avgPrice * 100).toFixed(1);
+        posBadge = '<div class="position-badge position-badge-yes" title="Your YES position">' +
+          '<span class="pos-side">Yes</span> ' +
+          '<span class="pos-shares">' + yPos.size.toFixed(1) + '</span> ' +
+          '<span class="pos-sep">\u00b7</span> ' +
+          '<span class="pos-price">' + avgC + '\u00a2</span>' +
+          '</div>';
+      } else if (nPos && nPos.size > 0) {
+        var avgC = (nPos.avgPrice * 100).toFixed(1);
+        posBadge = '<div class="position-badge position-badge-no" title="Your NO position">' +
+          '<span class="pos-side">No</span> ' +
+          '<span class="pos-shares">' + nPos.size.toFixed(1) + '</span> ' +
+          '<span class="pos-sep">\u00b7</span> ' +
+          '<span class="pos-price">' + avgC + '\u00a2</span>' +
+          '</div>';
+      }
+    }
+
     html += '<tr class="outcome-row' + activeClass + '" data-idx="' + row.idx + '">' +
-      '<td style="cursor:pointer"><div class="outcome-name">' + escH(row.name) + '</div></td>' +
+      '<td style="cursor:pointer"><div class="outcome-name">' + escH(row.name) + posBadge + '</div></td>' +
       '<td><button class="outcome-btn outcome-btn-yes" data-idx="' + row.idx + '" data-price="' + yesCents + '" title="Buy Yes at ' + yesFmt + '\u00a2">Buy Yes ' + yesFmt + '\u00a2</button></td>' +
       '<td><button class="outcome-btn outcome-btn-no" data-idx="' + row.idx + '" data-price="' + noCents + '" title="Buy No at ' + noFmt + '\u00a2">Buy No ' + noFmt + '\u00a2</button></td>' +
       '<td style="color:var(--soft);font-size:11px">' + vol + '</td>' +
@@ -768,6 +800,7 @@ function switchOutcome(index) {
         .then(function(d) { _priceHistory = (d.history || []); drawChart(_priceHistory); setTimeout(applyTA, 150); })
         .catch(function() {});
     }
+    updateSidebarPosition();
     return;
   }
 
@@ -800,6 +833,9 @@ function switchOutcome(index) {
       .then(function(d) { _priceHistory = (d.history || []); drawChart(_priceHistory); setTimeout(applyTA, 150); })
       .catch(function() {});
   }
+
+  // Update sidebar position for new active outcome
+  updateSidebarPosition();
 }
 
 // ── AI Market Intelligence ───────────────────────────────────────────────────
@@ -1495,6 +1531,146 @@ async function fetchTradeBalance() {
   } catch (e) {
     console.log('[balance] skipped:', e.code || e.message);
   }
+}
+
+// ── Fetch user's open positions from Polymarket data API ─────────────────────
+async function fetchUserPositions() {
+  var proxyAddress = localStorage.getItem('hf_poly_wallet');
+  if (!proxyAddress) return;
+
+  // Collect all token IDs for this market
+  var tokenIds = [];
+  if (_sortedEventMarkets && _sortedEventMarkets.length > 1) {
+    for (var i = 0; i < _sortedEventMarkets.length; i++) {
+      var em = _sortedEventMarkets[i];
+      var tids = em.clobTokenIds;
+      if (typeof tids === 'string') { try { tids = JSON.parse(tids); } catch(e) { tids = []; } }
+      if (tids && tids.length) tokenIds = tokenIds.concat(tids);
+    }
+  } else if (_market && _market.clobTokenIds) {
+    var tids = _market.clobTokenIds;
+    if (typeof tids === 'string') { try { tids = JSON.parse(tids); } catch(e) { tids = []; } }
+    if (tids && tids.length) tokenIds = tokenIds.concat(tids);
+  }
+
+  if (!tokenIds.length) { console.log('[positions] No token IDs for this market'); return; }
+
+  try {
+    var url = 'https://data-api.polymarket.com/positions?user=' + encodeURIComponent(proxyAddress.toLowerCase()) + '&sizeThreshold=.1&limit=500';
+    console.log('[positions] Fetching:', url);
+    var resp = await fetch(url);
+    if (!resp.ok) { console.log('[positions] API returned', resp.status); return; }
+    var positions = await resp.json();
+    console.log('[positions] Got', positions.length, 'total positions from API');
+
+    // Build lookup: tokenId → position data
+    _userPositions = {};
+    var tokenIdSet = new Set(tokenIds.map(function(t) { return t.toLowerCase(); }));
+
+    for (var p = 0; p < positions.length; p++) {
+      var pos = positions[p];
+      var assetId = (pos.asset || '').toLowerCase();
+      if (tokenIdSet.has(assetId)) {
+        var size = parseFloat(pos.size || 0);
+        if (size > 0) {
+          _userPositions[assetId] = {
+            size: size,
+            avgPrice: parseFloat(pos.avgPrice || pos.avg_price || 0),
+            side: pos.proxyOutcome || pos.outcome || 'Yes',
+            currentPrice: parseFloat(pos.curPrice || pos.cur_price || 0),
+            pnl: parseFloat(pos.pnl || 0),
+            realizedPnl: parseFloat(pos.realizedPnl || pos.realized_pnl || 0)
+          };
+        }
+      }
+    }
+
+    console.log('[positions] Matched positions for this market:', Object.keys(_userPositions).length);
+
+    // Re-render outcomes with position badges
+    if (_market) renderOutcomes(_market);
+    // Update sidebar position for active outcome
+    updateSidebarPosition();
+
+  } catch (e) {
+    console.log('[positions] Error fetching:', e.message);
+  }
+}
+
+// Show position in sidebar for currently selected outcome
+function updateSidebarPosition() {
+  var posEl = document.getElementById('tradePosition');
+  var details = document.getElementById('positionDetails');
+  if (!posEl || !details) return;
+
+  // Find position for active outcome
+  var tokenIds = getActiveTokenIds();
+  if (!tokenIds || !tokenIds.length) return;
+
+  var yesTokenId = (tokenIds[0] || '').toLowerCase();
+  var noTokenId = (tokenIds[1] || '').toLowerCase();
+  var yesPos = _userPositions[yesTokenId];
+  var noPos = _userPositions[noTokenId];
+
+  if (!yesPos && !noPos) {
+    posEl.style.display = 'none';
+    return;
+  }
+
+  var pos = yesPos || noPos;
+  var side = yesPos ? 'YES' : 'NO';
+  var sideColor = side === 'YES' ? 'var(--green)' : 'var(--red)';
+  var avgCents = (pos.avgPrice * 100).toFixed(1);
+  var cost = (pos.size * pos.avgPrice).toFixed(2);
+  var currentVal = (pos.size * pos.currentPrice).toFixed(2);
+  var pnl = (currentVal - cost).toFixed(2);
+  var pnlSign = pnl >= 0 ? '+' : '';
+  var pnlColor = pnl >= 0 ? 'var(--green)' : 'var(--red)';
+
+  details.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">' +
+      '<span style="font-weight:700;color:' + sideColor + '">' + side + ' \u00b7 ' + pos.size.toFixed(1) + ' shares</span>' +
+      '<span style="color:var(--dim)">avg ' + avgCents + '\u00a2</span>' +
+    '</div>' +
+    '<div style="display:flex;justify-content:space-between;font-size:11px">' +
+      '<span>Cost: $' + cost + '</span>' +
+      '<span>Value: $' + currentVal + '</span>' +
+      '<span style="color:' + pnlColor + '">' + pnlSign + '$' + pnl + '</span>' +
+    '</div>';
+
+  posEl.style.display = 'block';
+  posEl.style.borderColor = side === 'YES' ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.25)';
+  posEl.style.background = side === 'YES' ? 'rgba(34,197,94,0.06)' : 'rgba(239,68,68,0.06)';
+}
+
+// Helper: get token IDs for a specific outcome index
+function getOutcomeTokenIds(idx) {
+  if (_sortedEventMarkets && _sortedEventMarkets[idx]) {
+    var em = _sortedEventMarkets[idx];
+    var tids = em.clobTokenIds;
+    if (typeof tids === 'string') { try { tids = JSON.parse(tids); } catch(e) { tids = []; } }
+    return tids || [];
+  } else if (_market && _market.clobTokenIds) {
+    var tids = _market.clobTokenIds;
+    if (typeof tids === 'string') { try { tids = JSON.parse(tids); } catch(e) { tids = []; } }
+    return tids || [];
+  }
+  return [];
+}
+
+// Helper: get token IDs for the active outcome
+function getActiveTokenIds() {
+  if (_sortedEventMarkets && _sortedEventMarkets[_activeOutcomeIndex]) {
+    var em = _sortedEventMarkets[_activeOutcomeIndex];
+    var tids = em.clobTokenIds;
+    if (typeof tids === 'string') { try { tids = JSON.parse(tids); } catch(e) { tids = []; } }
+    return tids || [];
+  } else if (_market && _market.clobTokenIds) {
+    var tids = _market.clobTokenIds;
+    if (typeof tids === 'string') { try { tids = JSON.parse(tids); } catch(e) { tids = []; } }
+    return tids || [];
+  }
+  return [];
 }
 
 function updateCtaButton() {
@@ -2577,8 +2753,9 @@ async function executeTrade() {
     // Show position in trade panel
     showTradePosition(sideLabel, shares, price, amount, payout);
 
-    // Refresh balance after trade
+    // Refresh balance + positions after trade
     setTimeout(fetchTradeBalance, 2000);
+    setTimeout(fetchUserPositions, 3000);
   } catch (err) {
     if (err.code === 'ACTION_REJECTED' || err.code === 4001) {
       showTradeStatus('Order signing rejected', 'error');
@@ -2901,6 +3078,8 @@ function updateActiveTradePrice() {
 loadMarket().then(function() {
   updateCurrentPriceBtn();
   fetchTradeBalance();
+  // Fetch user positions (non-blocking) — shows badges on outcomes + sidebar
+  setTimeout(fetchUserPositions, 300);
   // First live price fetch 1s after load (backend already fetches CLOB, but this catches any delta)
   setTimeout(fetchLivePrices, 1000);
   // Poll every 10 seconds
