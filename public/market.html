@@ -539,7 +539,9 @@ function renderMarket() {
   var prices = m.outcomePrices || '[]';
   if (typeof prices === 'string') prices = JSON.parse(prices);
   var yesPrice = prices[0] ? parseFloat(prices[0]) : 0.5;
+  if (!yesPrice || isNaN(yesPrice) || yesPrice <= 0 || yesPrice >= 1) yesPrice = 0.5;
   var noPrice = prices[1] ? parseFloat(prices[1]) : 1 - yesPrice;
+  if (!noPrice || isNaN(noPrice) || noPrice <= 0 || noPrice >= 1) noPrice = 1 - yesPrice;
   var icon = m.icon || m.image || '';
 
   // Title — use event title for multi-outcome events
@@ -582,7 +584,7 @@ function renderMarket() {
   // Trade widget
   document.getElementById('yesPrice').textContent = Math.round(yesPrice * 100) + '¢';
   document.getElementById('noPrice').textContent = Math.round(noPrice * 100) + '¢';
-  document.getElementById('tradePrice').value = Math.round(yesPrice * 100);
+  document.getElementById('tradePrice').value = Math.round(yesPrice * 100) || 50;
   if (icon) { var ti = document.getElementById('tradeIcon'); ti.src = icon; ti.style.display = ''; }
   document.getElementById('tradeTitle').textContent = (m.question || '').substring(0, 40);
   // Use event slug for Polymarket link (market slugs 404 on polymarket.com)
@@ -742,7 +744,9 @@ function switchOutcome(index) {
     var emPrices = em.outcomePrices || '[]';
     if (typeof emPrices === 'string') { try { emPrices = JSON.parse(emPrices); } catch(e) { emPrices = []; } }
     var yp = emPrices[0] ? parseFloat(emPrices[0]) : 0.5;
+    if (!yp || isNaN(yp) || yp <= 0 || yp >= 1) yp = 0.5;
     var np = emPrices[1] ? parseFloat(emPrices[1]) : 1 - yp;
+    if (!np || isNaN(np) || np <= 0 || np >= 1) np = 1 - yp;
     document.getElementById('yesPrice').textContent = Math.round(yp * 100) + '¢';
     document.getElementById('noPrice').textContent = Math.round(np * 100) + '¢';
     // Update trade widget title to this outcome's question
@@ -750,7 +754,7 @@ function switchOutcome(index) {
     document.getElementById('tradeTitle').textContent = title.substring(0, 50);
     // Update trade price for selected side
     var sidePrice = _tradeSide === 'yes' ? yp : np;
-    document.getElementById('tradePrice').value = Math.round(sidePrice * 100);
+    document.getElementById('tradePrice').value = Math.round(sidePrice * 100) || 50;
     updateTradeCalc();
     document.getElementById('chartOutcome').textContent = em.question || 'Outcome';
 
@@ -781,10 +785,11 @@ function switchOutcome(index) {
   var prices = _market.outcomePrices || '[]';
   if (typeof prices === 'string') { try { prices = JSON.parse(prices); } catch(e) { prices = []; } }
   var yp = prices[index*2] !== undefined ? parseFloat(prices[index*2]) : (prices[index] !== undefined ? parseFloat(prices[index]) : 0.5);
+  if (!yp || isNaN(yp) || yp <= 0 || yp >= 1) yp = 0.5;
   var np = 1 - yp;
   document.getElementById('yesPrice').textContent = Math.round(yp * 100) + '¢';
   document.getElementById('noPrice').textContent = Math.round(np * 100) + '¢';
-  document.getElementById('tradePrice').value = Math.round(yp * 100);
+  document.getElementById('tradePrice').value = Math.round(yp * 100) || 50;
   updateTradeCalc();
 
   // Re-fetch price history for this token
@@ -1374,14 +1379,20 @@ function setTradeSide(side) {
 
 // Get outcomePrices for the currently selected outcome (respects multi-outcome events)
 function getActiveOutcomePrices() {
+  var raw;
   if (_sortedEventMarkets && _sortedEventMarkets[_activeOutcomeIndex]) {
-    var emPrices = _sortedEventMarkets[_activeOutcomeIndex].outcomePrices || '[]';
-    if (typeof emPrices === 'string') { try { return JSON.parse(emPrices); } catch(e) {} }
-    return emPrices;
+    raw = _sortedEventMarkets[_activeOutcomeIndex].outcomePrices || '[]';
+  } else {
+    raw = (_market && _market.outcomePrices) || '[]';
   }
-  var prices = _market.outcomePrices || '[]';
-  if (typeof prices === 'string') { try { return JSON.parse(prices); } catch(e) { return []; } }
-  return prices;
+  if (typeof raw === 'string') { try { raw = JSON.parse(raw); } catch(e) { raw = []; } }
+  if (!Array.isArray(raw)) raw = [];
+  // Ensure valid prices — never return 0 or NaN
+  var y = raw[0] ? parseFloat(raw[0]) : 0;
+  var n = raw[1] ? parseFloat(raw[1]) : 0;
+  if (!y || isNaN(y) || y <= 0 || y >= 1) y = 0.5;
+  if (!n || isNaN(n) || n <= 0 || n >= 1) n = 1 - y;
+  return [y, n];
 }
 
 function setTradeMode(mode) {
@@ -1504,7 +1515,7 @@ var MAX_UINT256 = '0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
 
 // Public RPC provider for read-only calls — no MetaMask authorization needed.
 // Falls back to 1rpc.io if polygon-rpc.com is down.
-var POLYGON_RPCS = ['https://polygon-rpc.com', 'https://1rpc.io/matic'];
+var POLYGON_RPCS = ['https://polygon-bor-rpc.publicnode.com', 'https://1rpc.io/matic', 'https://polygon-rpc.com'];
 async function getPublicProvider() {
   for (var i = 0; i < POLYGON_RPCS.length; i++) {
     try {
