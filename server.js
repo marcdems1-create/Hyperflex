@@ -3976,10 +3976,16 @@ app.get('/api/smart-money', async (req, res) => {
   try {
     let data, error;
     if (pool) {
-      const _rows = await dbQuery('SELECT market_title, side, platform FROM cached_positions ORDER BY updated_at DESC LIMIT 500', []);
-      data = _rows;
+      try {
+        const _rows = await dbQuery('SELECT market_title, side, platform FROM cached_positions ORDER BY updated_at DESC LIMIT 500', []);
+        data = _rows;
+      } catch (e) { console.warn('[smart-money] cached_positions query failed:', e.message); data = []; }
     } else {
-      const { data, error } = await supabase .from('cached_positions') .select('market_title, side, platform') .order('updated_at', { ascending: false }) .limit(500);
+      try {
+        const result = await supabase .from('cached_positions') .select('market_title, side, platform') .order('updated_at', { ascending: false }) .limit(500);
+        data = result.data;
+        error = result.error;
+      } catch (e) { console.warn('[smart-money] cached_positions query failed:', e.message); data = []; }
     }
 
     if (error || !data || !data.length) return res.json({ markets: [] });
@@ -11401,19 +11407,25 @@ app.get('/api/feed/following', requireAuth, async (req, res) => {
       .select('*, users(display_name, username)')
       .in('user_id', followingIds)
       .order('created_at', { ascending: false })
-      .limit(50),
+      .limit(50)
+      .then(r => r)
+      .catch(() => ({ data: [], error: null })),
     supabase
       .from('cached_positions')
       .select('*, users(display_name, username)')
       .in('user_id', followingIds)
       .order('updated_at', { ascending: false })
-      .limit(50),
+      .limit(50)
+      .then(r => r)
+      .catch(() => ({ data: [], error: null })),
     supabase
       .from('positions')
       .select('*, markets(question, tenant_slug, id), users(display_name, username)')
       .in('user_id', followingIds)
       .order('created_at', { ascending: false })
-      .limit(50),
+      .limit(50)
+      .then(r => r)
+      .catch(() => ({ data: [], error: null })),
   ]);
 
   const items = [];
@@ -12270,10 +12282,11 @@ async function syncAllUserPositions() {
   try {
     let users;
     if (pool) {
-      const _rows = await dbQuery('SELECT id, polymarket_address, kalshi_api_key, kalshi_username, manifold_username FROM users WHERE (polymarket_address IS NOT NULL OR kalshi_api_key IS NOT NULL OR kalshi_username IS NOT NULL OR manifold_username IS NOT NULL)', []);
+      const _rows = await dbQuery('SELECT * FROM users WHERE (polymarket_address IS NOT NULL OR kalshi_api_key IS NOT NULL OR kalshi_username IS NOT NULL OR manifold_username IS NOT NULL)', []);
       users = _rows;
     } else {
-      const { data: users } = await supabase .from('users') .select('id, polymarket_address, kalshi_api_key, kalshi_username, manifold_username') .or('polymarket_address.not.is.null,kalshi_api_key.not.is.null,kalshi_username.not.is.null,manifold_username.not.is.null');
+      const { data: _u } = await supabase .from('users') .select('*') .or('polymarket_address.not.is.null,kalshi_api_key.not.is.null,kalshi_username.not.is.null,manifold_username.not.is.null');
+      users = _u;
     }
     if (!users || users.length === 0) return;
     console.log(`[auto-sync] Syncing ${users.length} users`);
@@ -12344,10 +12357,11 @@ async function syncUserPositions(user) {
     } catch(e) { console.warn('[sync-kalshi]', e.message); }
   }
 
-  // Manifold (stored under kalshi_username field)
-  if (user.kalshi_username) {
+  // Manifold
+  const _manifoldUser = user.manifold_username || user.kalshi_username;
+  if (_manifoldUser) {
     try {
-      const res = await fetch(`https://api.manifold.markets/v0/bets?username=${encodeURIComponent(user.kalshi_username)}&limit=50`);
+      const res = await fetch(`https://api.manifold.markets/v0/bets?username=${encodeURIComponent(_manifoldUser)}&limit=50`);
       const bets = await res.json();
       const grouped = {};
       (Array.isArray(bets) ? bets : []).filter(b => !b.isRedemption && b.amount > 0).forEach(b => {
@@ -15808,10 +15822,11 @@ async function autoResolveExpiredMarkets() {
     // Find expired unresolved markets with a resolution source
     let markets;
     if (pool) {
-      const _rows = await dbQuery('SELECT id, question, tenant_slug, resolution_source, resolution_sources, expiry_date, yes_price, yes_votes, no_votes FROM markets WHERE resolved = $1 AND expiry_date < $2 AND resolution_source IS NOT NULL', [false, now]);
+      const _rows = await dbQuery('SELECT * FROM markets WHERE resolved = $1 AND expiry_date < $2 AND resolution_source IS NOT NULL', [false, now]);
       markets = _rows;
     } else {
-      const { data: markets } = await supabase .from('markets') .select('id, question, tenant_slug, resolution_source, resolution_sources, expiry_date, yes_price, yes_votes, no_votes') .eq('resolved', false) .lt('expiry_date', now) .not('resolution_source', 'is', null);
+      const { data: _m } = await supabase .from('markets') .select('*') .eq('resolved', false) .lt('expiry_date', now) .not('resolution_source', 'is', null);
+      markets = _m;
     }
 
     if (!markets || !markets.length) return;
@@ -16568,10 +16583,10 @@ app.get('/api/user/wallets', requireAuth, async (req, res) => {
   try {
     let data;
     if (pool) {
-      const rows = await dbQuery('SELECT polymarket_address, kalshi_api_key, kalshi_username, manifold_username FROM users WHERE id = $1 LIMIT 1', [req.userId]);
+      const rows = await dbQuery('SELECT * FROM users WHERE id = $1 LIMIT 1', [req.userId]);
       data = rows[0] || null;
     } else {
-      const { data: d, error } = await supabase.from('users').select('polymarket_address, kalshi_api_key, kalshi_username, manifold_username').eq('id', req.userId).maybeSingle();
+      const { data: d, error } = await supabase.from('users').select('*').eq('id', req.userId).maybeSingle();
       if (error) throw error;
       data = d;
     }
@@ -16845,7 +16860,22 @@ app.put('/api/user/wallets', requireAuth, async (req, res) => {
       try {
         const setClauses = Object.keys(updates).map((k, i) => `${k} = $${i + 2}`);
         await dbQuery(`UPDATE users SET ${setClauses.join(', ')} WHERE id = $1`, [req.userId, ...Object.values(updates)]);
-      } catch (e) { error = e; }
+      } catch (e) {
+        // Retry: if a column doesn't exist, strip it and retry
+        if (e.message && e.message.includes('column') && e.message.includes('does not exist')) {
+          const badCol = (e.message.match(/column "([^"]+)"/) || [])[1];
+          if (badCol && updates[badCol] !== undefined) {
+            console.warn(`[wallets PUT] Column "${badCol}" missing, retrying without it`);
+            delete updates[badCol];
+            if (Object.keys(updates).length > 0) {
+              try {
+                const setClauses2 = Object.keys(updates).map((k, i) => `${k} = $${i + 2}`);
+                await dbQuery(`UPDATE users SET ${setClauses2.join(', ')} WHERE id = $1`, [req.userId, ...Object.values(updates)]);
+              } catch (e2) { error = e2; }
+            }
+          } else { error = e; }
+        } else { error = e; }
+      }
     } else {
       try {
         ({ error } = await supabase.from('users').update(updates).eq('id', req.userId));
@@ -17265,6 +17295,67 @@ app.post('/api/polymarket/order', requireAuth, async (req, res) => {
     console.error('[polymarket order]', err.message);
     res.status(502).json({ error: 'Failed to submit order to Polymarket', detail: err.message });
   }
+});
+
+// ── MARKET SEARCH AGGREGATOR ─────────────────────────────────────────────────
+// Searches Polymarket + Kalshi for open markets matching a query string.
+// Public endpoint — no auth required. Results cached 3 min.
+const _mktAggSearchCache = new Map();
+
+app.get('/api/markets/search', async (req, res) => {
+  const q = (req.query.q || '').trim();
+  if (!q || q.length < 2) return res.status(400).json({ error: 'Query too short' });
+  const cacheKey = `mkt_search_${q.toLowerCase()}`;
+  const cached = _mktAggSearchCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < 3 * 60 * 1000) return res.json(cached.data);
+
+  const [polyResult, kalshiResult] = await Promise.allSettled([
+    fetch(`https://gamma-api.polymarket.com/markets?_c=${encodeURIComponent(q)}&active=true&closed=false&limit=12&order=volume24hr&ascending=false`, {
+      headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+    }).then(r => r.ok ? r.json() : []).then(raw => {
+      const arr = Array.isArray(raw) ? raw : (raw.markets || []);
+      return arr.slice(0, 12).map(m => {
+        const prices = typeof m.outcomePrices === 'string' ? m.outcomePrices.split(',').map(Number) : (m.outcomePrices || []);
+        const yesPrice = prices[0] != null ? Math.round(prices[0] * 100) : null;
+        return {
+          id: m.conditionId || m.id,
+          question: m.question || m.title || 'Untitled',
+          yes_pct: yesPrice,
+          no_pct: yesPrice != null ? 100 - yesPrice : null,
+          volume: m.volumeNum || m.volume || 0,
+          end_date: m.endDate || m.endDateIso || null,
+          url: m.url ? `https://polymarket.com${m.url}` : `https://polymarket.com/event/${m.conditionId}`,
+          platform: 'polymarket'
+        };
+      });
+    }),
+    fetch(`https://trading-api.kalshi.com/trade-api/v2/markets?status=open&limit=12`, {
+      headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+    }).then(r => r.ok ? r.json() : { markets: [] }).then(raw => {
+      const arr = (raw.markets || []);
+      const ql = q.toLowerCase();
+      const filtered = arr.filter(m => (m.title || '').toLowerCase().includes(ql) || (m.subtitle || '').toLowerCase().includes(ql)).slice(0, 12);
+      return filtered.map(m => ({
+        id: m.ticker,
+        question: m.title || m.subtitle || 'Untitled',
+        yes_pct: m.yes_bid != null ? Math.round(m.yes_bid * 100) : null,
+        no_pct: m.no_bid != null ? Math.round(m.no_bid * 100) : null,
+        volume: m.volume || 0,
+        end_date: m.close_time || null,
+        url: `https://kalshi.com/markets/${m.ticker}`,
+        platform: 'kalshi'
+      }));
+    })
+  ]);
+
+  const data = {
+    query: q,
+    polymarket: polyResult.status === 'fulfilled' ? polyResult.value : [],
+    kalshi: kalshiResult.status === 'fulfilled' ? kalshiResult.value : [],
+    fetched_at: new Date().toISOString()
+  };
+  _mktAggSearchCache.set(cacheKey, { ts: Date.now(), data });
+  res.json(data);
 });
 
 app.get('/api/manifold/positions/:username', async (req, res) => {
@@ -29094,6 +29185,37 @@ if (pool) {
         outcome TEXT, outcome_return NUMERIC, outcome_set_at TIMESTAMPTZ,
         fired_at TIMESTAMPTZ DEFAULT NOW()
       )`).catch(() => {});
+
+      // Self-healing: missing tables
+      await dbQuery(`CREATE TABLE IF NOT EXISTS shared_positions (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        user_id TEXT, question TEXT, side TEXT, platform TEXT,
+        current_price NUMERIC, pnl_pct NUMERIC, cash_value NUMERIC,
+        market_url TEXT, created_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+
+      await dbQuery(`CREATE TABLE IF NOT EXISTS pending_emails (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        to_email TEXT, subject TEXT, html TEXT,
+        send_after TIMESTAMPTZ DEFAULT NOW(),
+        sent BOOLEAN DEFAULT false, sent_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+
+      await dbQuery(`CREATE TABLE IF NOT EXISTS reward_unlocks (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        user_id TEXT, creator_slug TEXT, reward_id TEXT,
+        reward_title TEXT, reward_threshold INTEGER,
+        unlocked_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+
+      // Self-healing: missing columns on existing tables
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS kalshi_username TEXT`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS manifold_username TEXT`).catch(() => {});
+      await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS polymarket_address TEXT`).catch(() => {});
+      await dbQuery(`ALTER TABLE cached_positions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`).catch(() => {});
+      await dbQuery(`ALTER TABLE market_snapshots ADD COLUMN IF NOT EXISTS volume NUMERIC`).catch(() => {});
+      await dbQuery(`ALTER TABLE markets ADD COLUMN IF NOT EXISTS resolution_sources JSONB`).catch(() => {});
 
       console.log('[boot] Auto-migration complete — all tables ensured');
     } catch(e) { console.warn('[boot] Auto-migration error:', e.message); }
