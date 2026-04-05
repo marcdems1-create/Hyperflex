@@ -2617,6 +2617,33 @@ async function executeTrade() {
     // Strip leading zeros but keep at least "0"
     makerAmt = makerAmt.replace(/^0+/, '') || '0';
     takerAmt = takerAmt.replace(/^0+/, '') || '0';
+
+    // CRITICAL: Ensure implied price (maker/taker ratio) is tick-aligned.
+    // The CLOB rejects orders where the implied price breaks minimum tick size.
+    // Floating-point rounding in shares/cost can cause micro-drift (e.g. 0.6500065 instead of 0.65).
+    // Fix: recompute takerAmt from makerAmt using exact tick-aligned price.
+    var mInt = parseInt(makerAmt);
+    var tInt = parseInt(takerAmt);
+    if (mInt > 0 && tInt > 0) {
+      var impliedPrice = clobSide === 'BUY' ? (mInt / tInt) : (tInt / mInt);
+      var tickAligned = Math.round(impliedPrice / tickSize) * tickSize;
+      tickAligned = parseFloat(tickAligned.toFixed(4));
+      if (Math.abs(impliedPrice - tickAligned) > tickSize * 0.001) {
+        // Recalculate: for BUY, taker = maker / price; for SELL, taker = maker * price
+        if (clobSide === 'BUY') {
+          var correctedTaker = Math.round(mInt / tickAligned);
+          console.log('[trade] Tick fix: taker ' + tInt + ' → ' + correctedTaker + ' (implied ' + impliedPrice.toFixed(8) + ' → ' + tickAligned + ')');
+          takerAmt = String(correctedTaker);
+          tInt = correctedTaker;
+        } else {
+          var correctedTaker = Math.round(mInt * tickAligned);
+          console.log('[trade] Tick fix: taker ' + tInt + ' → ' + correctedTaker + ' (implied ' + impliedPrice.toFixed(8) + ' → ' + tickAligned + ')');
+          takerAmt = String(correctedTaker);
+          tInt = correctedTaker;
+        }
+      }
+    }
+
     console.log('[trade] Amounts: maker=' + makerAmt + ' taker=' + takerAmt + ' price=' + clobPrice + ' shares=' + (clobSide === 'BUY' ? rawShares : rawShares2) + ' implied=' + (clobSide === 'BUY' ? (parseInt(makerAmt)/parseInt(takerAmt)) : (parseInt(takerAmt)/parseInt(makerAmt))));
 
     var orderSalt = Math.floor(Math.random() * 9007199254740991);
@@ -3088,6 +3115,79 @@ loadMarket().then(function() {
 updateTradingUI();
 // Run trading setup check on page load (non-blocking)
 setTimeout(function() { checkTradingSetup(); }, 500);
+
+// ── MetaMask wallet sync — detect current account on load + listen for changes ──
+(async function syncMetaMaskOnLoad() {
+  if (typeof window.ethereum === 'undefined') return;
+  try {
+    var accounts = await window.ethereum.request({ method: 'eth_accounts' });
+    if (accounts && accounts.length > 0) {
+      var currentEoa = accounts[0].toLowerCase();
+      var cachedEoa = (localStorage.getItem('poly_eoa_address') || '').toLowerCase();
+      if (cachedEoa && cachedEoa !== currentEoa) {
+        console.warn('[wallet] MetaMask account changed: cached=' + cachedEoa.slice(0,10) + ' current=' + currentEoa.slice(0,10));
+        // Clear stale data
+        localStorage.removeItem('poly_eoa_address');
+        localStorage.removeItem('hf_poly_wallet');
+        localStorage.removeItem('hf_clob_api_key');
+        localStorage.removeItem('hf_clob_api_secret');
+        localStorage.removeItem('hf_clob_api_passphrase');
+        // Set new EOA
+        localStorage.setItem('poly_eoa_address', currentEoa);
+        // Resolve new proxy
+        try {
+          var newProxy = await getPolymarketProxy(currentEoa);
+          if (newProxy && newProxy !== ethers.ZeroAddress && newProxy.toLowerCase() !== currentEoa) {
+            localStorage.setItem('hf_poly_wallet', newProxy.toLowerCase());
+            console.log('[wallet] Resolved new proxy:', newProxy.slice(0,10));
+          }
+        } catch(e) { console.log('[wallet] Proxy resolve skipped:', e.message); }
+        // Refresh balance + positions
+        fetchTradeBalance();
+        setTimeout(fetchUserPositions, 500);
+      }
+    }
+  } catch(e) { console.log('[wallet] eth_accounts check skipped:', e.message); }
+
+  // Listen for account changes (user switches wallet in MetaMask)
+  if (window.ethereum.on) {
+    window.ethereum.on('accountsChanged', async function(accounts) {
+      if (!accounts || accounts.length === 0) {
+        localStorage.removeItem('poly_eoa_address');
+        localStorage.removeItem('hf_poly_wallet');
+        localStorage.removeItem('hf_clob_api_key');
+        localStorage.removeItem('hf_clob_api_secret');
+        localStorage.removeItem('hf_clob_api_passphrase');
+        var balEl = document.getElementById('tradeBalance');
+        if (balEl) balEl.textContent = 'Balance: —';
+        document.getElementById('tradePosition').style.display = 'none';
+        return;
+      }
+      var newEoa = accounts[0].toLowerCase();
+      var oldEoa = (localStorage.getItem('poly_eoa_address') || '').toLowerCase();
+      if (newEoa === oldEoa) return;
+      console.log('[wallet] Account changed to:', newEoa.slice(0,10));
+      // Clear old keys
+      localStorage.removeItem('hf_clob_api_key');
+      localStorage.removeItem('hf_clob_api_secret');
+      localStorage.removeItem('hf_clob_api_passphrase');
+      localStorage.setItem('poly_eoa_address', newEoa);
+      localStorage.removeItem('hf_poly_wallet');
+      // Resolve proxy for new account
+      try {
+        var proxy = await getPolymarketProxy(newEoa);
+        if (proxy && proxy !== ethers.ZeroAddress && proxy.toLowerCase() !== newEoa) {
+          localStorage.setItem('hf_poly_wallet', proxy.toLowerCase());
+          console.log('[wallet] New proxy:', proxy.slice(0,10));
+        }
+      } catch(e) { console.log('[wallet] Proxy resolve skipped:', e.message); }
+      // Refresh everything
+      fetchTradeBalance();
+      setTimeout(fetchUserPositions, 500);
+      checkTradingSetup();
+    });
+  }
+})();
 
 // ── Holder Distribution Donut Chart ──────────────────────────────────────────
 function drawHolderDistribution(yesCount, noCount) {
