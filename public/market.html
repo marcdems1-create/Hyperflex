@@ -446,7 +446,7 @@ canvas{display:block;width:100%!important}
           <div id="setupStep1" class="setup-step">
             <span class="setup-icon" id="setupIcon1">○</span>
             <span class="setup-label">Deploy Proxy Wallet</span>
-            <button class="setup-action-btn" id="setupBtn1" onclick="deployProxy()" style="display:none">Deploy</button>
+            <span class="setup-action-btn" id="setupBtn1" style="display:none;font-size:10px;color:var(--dim);cursor:default">Activate on polymarket.com</span>
           </div>
           <div id="setupStep2" class="setup-step">
             <span class="setup-icon" id="setupIcon2">○</span>
@@ -1515,67 +1515,29 @@ function setSetupStep(stepNum, state, extraText) {
   }
 }
 
-// Check if proxy wallet is deployed on-chain
+// Check if proxy is deployed — relayer API first, eth_getCode fallback
 async function checkProxyDeployed(proxyAddr) {
   proxyAddr = proxyAddr || localStorage.getItem('hf_poly_wallet');
-  if (!proxyAddr || !window.ethereum) return false;
+  if (!proxyAddr) return false;
+  // Primary: Polymarket relayer API (public, no auth, no chain connection needed)
+  try {
+    var res = await fetch('https://relayer-v2.polymarket.com/deployed?address=' + proxyAddr);
+    if (res.ok) {
+      var data = await res.json();
+      console.log('[setup] Relayer deployed check:', proxyAddr.slice(0, 10), data.deployed);
+      return data.deployed === true;
+    }
+  } catch (e) { console.log('[setup] Relayer check failed, trying eth_getCode:', e.message); }
+  // Fallback: on-chain eth_getCode
+  if (!window.ethereum) return false;
   try {
     var provider = new ethers.BrowserProvider(window.ethereum);
     var code = await provider.getCode(proxyAddr);
     var deployed = code && code !== '0x' && code.length > 2;
-    console.log('[setup] Proxy deployed:', proxyAddr.slice(0, 10), deployed ? 'YES' : 'NO');
+    console.log('[setup] eth_getCode:', proxyAddr.slice(0, 10), deployed ? 'YES' : 'NO');
     return deployed;
   } catch (e) {
     console.log('[setup] getCode skipped:', e.code || e.message);
-    return false;
-  }
-}
-
-// Deploy proxy wallet via Safe factory (real on-chain tx, ~0.01 MATIC gas)
-async function deployProxy() {
-  var btn = document.getElementById('setupBtn1');
-  if (btn) { btn.disabled = true; btn.textContent = 'Deploying...'; }
-  setSetupStep(1, 'active', 'Deploying proxy wallet...');
-  try {
-    if (!window.ethereum) throw new Error('MetaMask required');
-    var provider = new ethers.BrowserProvider(window.ethereum);
-    var signer = await provider.getSigner();
-    var eoaAddress = await signer.getAddress();
-
-    var SAFE_SINGLETON = '0xd9Db270c1B5E3Bd161E8c8503c55cEABeE709552';
-    var iface = new ethers.Interface([
-      'function setup(address[] calldata _owners, uint256 _threshold, address _to, bytes calldata _data, address _fallbackHandler, address _paymentToken, uint256 _payment, address _paymentReceiver)'
-    ]);
-    var initData = iface.encodeFunctionData('setup', [
-      [eoaAddress], 1, ethers.ZeroAddress, '0x',
-      '0xf48f2B2d2a534e402487b3ee7C18c33Aec0Fe5e4',
-      ethers.ZeroAddress, 0, ethers.ZeroAddress
-    ]);
-
-    var factory = new ethers.Contract(SAFE_FACTORY_ADDRESS,
-      ['function createProxyWithNonce(address _singleton, bytes memory initializer, uint256 saltNonce) returns (address proxy)'],
-      signer);
-    var saltNonce = BigInt(eoaAddress);
-
-    console.log('[setup] Deploying proxy via Safe factory...');
-    var tx = await factory.createProxyWithNonce(SAFE_SINGLETON, initData, saltNonce);
-    showTradeStatus('Deploying proxy... waiting for confirmation', 'info');
-    var receipt = await tx.wait();
-    console.log('[setup] Proxy deployed! tx:', receipt.hash);
-
-    setSetupStep(1, 'done', 'Deploy Proxy Wallet');
-    showTradeStatus('Proxy wallet deployed!', 'success');
-    checkTradingSetup();
-    return true;
-  } catch (e) {
-    console.error('[setup] Deploy error:', e);
-    setSetupStep(1, 'error', 'Deploy Proxy Wallet');
-    if (btn) { btn.disabled = false; btn.textContent = 'Deploy'; btn.style.display = 'inline-block'; }
-    if (e.code === 'ACTION_REJECTED' || e.code === 4001) {
-      showTradeStatus('Deploy cancelled', 'error');
-    } else {
-      showTradeStatus('Deploy failed: ' + (e.reason || e.message || 'Unknown error'), 'error');
-    }
     return false;
   }
 }
@@ -1682,7 +1644,7 @@ async function checkTradingSetup() {
   }
 
   if (!proxyValid) {
-    setSetupStep(1, 'active', 'Deploy Proxy Wallet \u2014 connect to Polygon first');
+    setSetupStep(1, 'active', 'Proxy Wallet \u2014 connect to Polygon first');
     setSetupStep(2, '', 'Enable Trading (CLOB Auth)');
     setSetupStep(3, '', 'Approve USDC Spending');
     return;
@@ -1690,11 +1652,11 @@ async function checkTradingSetup() {
 
   var deployed = await checkProxyDeployed(proxyAddr);
   if (deployed) {
-    setSetupStep(1, 'done', 'Deploy Proxy Wallet');
+    setSetupStep(1, 'done', 'Proxy Wallet');
   } else {
-    setSetupStep(1, 'active', 'Deploy Proxy Wallet \u2014 not yet deployed');
+    setSetupStep(1, 'error', 'Proxy Wallet \u2014 not yet activated');
     var btn1 = document.getElementById('setupBtn1');
-    if (btn1) { btn1.style.display = 'inline-block'; btn1.disabled = false; btn1.textContent = 'Deploy'; }
+    if (btn1) { btn1.style.display = 'inline-block'; btn1.textContent = 'Activate on polymarket.com'; }
   }
 
   // Step 2: CLOB auth
@@ -2087,7 +2049,7 @@ async function runFullSetup() {
   }
 
   if (!proxyValid) {
-    setSetupStep(1, 'error', 'Deploy Proxy Wallet \u2014 contract call failed');
+    setSetupStep(1, 'error', 'Proxy Wallet \u2014 contract call failed');
     showTradeStatus('Could not resolve proxy address. Make sure MetaMask is on Polygon.', 'error');
     if (cta) { cta.disabled = false; cta.textContent = 'Set Up Trading'; }
     return false;
@@ -2096,18 +2058,13 @@ async function runFullSetup() {
   // Check if proxy is deployed on-chain
   var deployed = await checkProxyDeployed(proxyAddr);
   if (deployed) {
-    setSetupStep(1, 'done', 'Deploy Proxy Wallet');
+    setSetupStep(1, 'done', 'Proxy Wallet');
   } else {
-    // Not deployed — deploy via MetaMask transaction (~0.01 MATIC gas)
-    setSetupStep(1, 'active', 'Deploying proxy wallet...');
-    if (cta) cta.textContent = 'Deploying proxy...';
-    showTradeStatus('Deploying your proxy wallet on Polygon (~0.01 MATIC gas)...', 'info');
-    var deployOk = await deployProxy();
-    if (!deployOk) {
-      if (cta) { cta.disabled = false; cta.textContent = 'Set Up Trading'; }
-      return false;
-    }
-    setSetupStep(1, 'done', 'Deploy Proxy Wallet');
+    // Not deployed — user must activate on polymarket.com first
+    setSetupStep(1, 'error', 'Proxy Wallet — not yet activated');
+    showTradeStatus('Your Polymarket wallet needs to be activated. Visit polymarket.com and complete the Enable Trading setup, then come back.', 'error');
+    if (cta) { cta.disabled = false; cta.textContent = 'Set Up Trading'; }
+    return false;
   }
 
   // Step 2: CLOB Auth (if not already done)
