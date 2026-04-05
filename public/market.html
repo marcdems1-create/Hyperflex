@@ -2505,9 +2505,8 @@ async function executeTrade() {
     showTradeStatus('Submitting order to Polymarket...', 'info');
     cta.textContent = 'Placing order...';
     // Request body for CLOB /order endpoint
-    // CRITICAL: 'side' must be integer (0=BUY, 1=SELL) matching the EIP-712 signed value,
-    // NOT the string "BUY"/"SELL". Mismatch causes "invalid signature" because CLOB
-    // re-hashes the order and gets a different digest than what was signed.
+    // NOTE: 'side' in the JSON body is a STRING ("BUY"/"SELL") per SDK's orderToJson.
+    // The EIP-712 signing struct uses integer (0/1) — these are different representations.
     var requestBody = JSON.stringify({
       order: {
         salt: parseInt(orderStruct.salt, 10),

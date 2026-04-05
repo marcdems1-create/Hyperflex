@@ -12028,6 +12028,32 @@ function shareCommunityPage(anchorEl) {
 let _portfolioLoaded = false;
 let _kalshiConnected = false;
 let _manifoldUsername = '';
+// ── PUBLIC RPC + PROXY RESOLUTION (same as market.html) ─────────────────────
+// Public RPC for read-only calls — no MetaMask popup needed
+const DASHBOARD_POLYGON_RPCS = ['https://polygon-bor-rpc.publicnode.com', 'https://1rpc.io/matic'];
+async function getDashboardPublicProvider() {
+  for (const rpc of DASHBOARD_POLYGON_RPCS) {
+    try {
+      const p = new ethers.JsonRpcProvider(rpc);
+      await p.getBlockNumber();
+      return p;
+    } catch (e) { console.warn('[rpc]', rpc, 'failed:', e.message); }
+  }
+  throw new Error('All public RPCs failed');
+}
+
+// Resolve Polymarket proxy address from EOA via on-chain Safe factory call
+const SAFE_FACTORY_ADDRESS = '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b';
+async function getPolymarketProxy(eoaAddress) {
+  const provider = await getDashboardPublicProvider();
+  const factory = new ethers.Contract(SAFE_FACTORY_ADDRESS, [
+    'function computeProxyAddress(address user) view returns (address)'
+  ], provider);
+  const proxy = await factory.computeProxyAddress(eoaAddress);
+  console.log('[proxy] computeProxyAddress(' + eoaAddress.slice(0, 10) + ') =>', proxy);
+  return proxy;
+}
+
 // ── POLYMARKET WALLET ADDRESS — SINGLE SOURCE OF TRUTH ──────────────────────
 // This address determines which positions load. If it's wrong, everything breaks.
 // ALL writes go through setPolyAddress() which validates + logs + persists.
@@ -12074,13 +12100,14 @@ function markPolyAddressGood() {
   }
 }
 
-// Recovery from localStorage fallback keys
+// Recovery from localStorage — ONLY use hf_poly_wallet (which should be proxy).
+// Do NOT fall back to hf_connected_wallet or hf_wallet_address (those are EOAs).
+// Proxy will be resolved on-chain in loadPortfolio() or auto-reconnect.
 if (!_polyWalletAddress) {
-  var _savedWallet = localStorage.getItem('hf_poly_wallet') || localStorage.getItem('hf_connected_wallet') || localStorage.getItem('hf_wallet_address') || '';
-  if (_savedWallet && _savedWallet.startsWith('0x') && _savedWallet.length >= 40) {
-    _polyWalletAddress = _savedWallet;
-    localStorage.setItem('hf_poly_wallet', _savedWallet);
-    console.log('[wallet-recovery] Recovered wallet from localStorage:', _polyWalletAddress.slice(0,10) + '...');
+  var _savedProxy = localStorage.getItem('hf_poly_wallet') || '';
+  if (_savedProxy && _savedProxy.startsWith('0x') && _savedProxy.length >= 40) {
+    _polyWalletAddress = _savedProxy;
+    console.log('[wallet-recovery] Recovered proxy from hf_poly_wallet:', _polyWalletAddress.slice(0,10) + '...');
   }
 }
 
@@ -12104,9 +12131,26 @@ async function loadPortfolio() {
     if (data.polymarket_address) {
       _polyWalletAddress = data.polymarket_address;
     } else if (!_polyWalletAddress) {
-      _polyWalletAddress = localStorage.getItem('hf_poly_wallet') || localStorage.getItem('hf_connected_wallet') || localStorage.getItem('hf_wallet_address') || '';
+      _polyWalletAddress = localStorage.getItem('hf_poly_wallet') || '';
     }
-    // No CREATE2 fallback — proxy address must come from CLOB during wallet connect.
+
+    // If we have an EOA (from MetaMask) but no proxy, resolve it on-chain
+    const eoaAddr = localStorage.getItem('poly_eoa_address') || window._connectedWallet || '';
+    if (eoaAddr && typeof getPolymarketProxy === 'function') {
+      try {
+        const proxy = await getPolymarketProxy(eoaAddr);
+        if (proxy && proxy !== ethers.ZeroAddress && proxy.toLowerCase() !== eoaAddr.toLowerCase()) {
+          const proxyLower = proxy.toLowerCase();
+          // Update if we had no address or if current is the raw EOA (not the proxy)
+          if (!_polyWalletAddress || _polyWalletAddress.toLowerCase() === eoaAddr.toLowerCase()) {
+            console.log('[portfolio] Resolved proxy:', proxyLower.slice(0, 10), 'for EOA:', eoaAddr.slice(0, 8));
+            _polyWalletAddress = proxyLower;
+          }
+          localStorage.setItem('hf_poly_proxy_' + eoaAddr.toLowerCase(), proxyLower);
+        }
+      } catch (e) { console.warn('[portfolio] Proxy resolution skipped:', e.message); }
+    }
+
     if (_polyWalletAddress) {
       localStorage.setItem('hf_poly_wallet', _polyWalletAddress);
       sessionStorage.setItem('hf_poly_wallet_session', _polyWalletAddress);
@@ -13022,31 +13066,45 @@ async function connectMetaMask() {
     const input = document.getElementById('poly-wallet-input');
     if (input) input.value = address;
 
-    // Try to find the Polymarket proxy address from the wallet
-    // First try the connected address directly
-    btn.innerHTML = '<span style="display:flex;align-items:center;gap:8px">Verifying positions...</span>';
-    const check = await fetch(`/api/polymarket/positions/${encodeURIComponent(address)}`);
+    // Resolve the Polymarket proxy via on-chain Safe factory — positions live on proxy, not EOA
+    btn.innerHTML = '<span style="display:flex;align-items:center;gap:8px">Finding proxy wallet...</span>';
+    localStorage.setItem('poly_eoa_address', address);
+    let polyAddr = address; // fallback to EOA
+    try {
+      const proxy = await getPolymarketProxy(address);
+      if (proxy && proxy !== ethers.ZeroAddress && proxy.toLowerCase() !== address.toLowerCase()) {
+        polyAddr = proxy.toLowerCase();
+        console.log('[wallet] Resolved proxy:', polyAddr.slice(0, 10), 'for EOA:', address.slice(0, 8));
+        localStorage.setItem('hf_poly_proxy_' + address.toLowerCase(), polyAddr);
+      }
+    } catch (proxyErr) {
+      console.warn('[wallet] Proxy resolution failed, using EOA:', proxyErr.message);
+    }
+
+    // Check positions on the proxy address
+    btn.innerHTML = '<span style="display:flex;align-items:center;gap:8px">Loading positions...</span>';
+    const check = await fetch(`/api/polymarket/positions/${encodeURIComponent(polyAddr)}`);
     let posData = null;
     try { posData = await check.json(); } catch(e) {}
     const positions = posData && posData.positions ? posData.positions : [];
 
-    if (positions.length > 0) {
-      // This address has positions — use it directly
-      _polyWalletAddress = address;
-      localStorage.setItem('hf_poly_wallet', address);
-      const token = localStorage.getItem('hf_token');
-      if (token) {
-        try { await fetch('/api/user/wallets', { method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify({ polymarket_address: address }) }); } catch(e) {}
-      }
-      renderPolymarketConnectState();
-      showToast('Wallet connected! ' + positions.length + ' positions found.', 'success');
-      loadPolymarketPositions(false);
-    } else {
-      // No positions on this address — might need the Polymarket proxy address
-      showToast('Connected! No positions found on this address. Your Polymarket deposit address may be different — check polymarket.com → Profile → Deposit Address.', 'info');
-      btn.disabled = false;
-      btn.innerHTML = 'Connect Wallet';
+    // Save the proxy as the Polymarket wallet address
+    _polyWalletAddress = polyAddr;
+    localStorage.setItem('hf_poly_wallet', polyAddr);
+    sessionStorage.setItem('hf_poly_wallet_session', polyAddr);
+    const token = localStorage.getItem('hf_token');
+    if (token) {
+      try { await fetch('/api/user/wallets', { method: 'PUT', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify({ polymarket_address: polyAddr }) }); } catch(e) {}
     }
+    renderPolymarketConnectState();
+    if (positions.length > 0) {
+      showToast('Wallet connected! ' + positions.length + ' positions found.', 'success');
+    } else {
+      showToast('Wallet connected! No open positions yet.', 'success');
+    }
+    loadPolymarketPositions(false);
+    btn.disabled = false;
+    btn.innerHTML = 'Connect Wallet';
   } catch (e) {
     if (e.code === 4001) {
       showToast('Connection rejected by wallet', 'error');
@@ -13080,7 +13138,10 @@ setTimeout(async function() {
           localStorage.removeItem('poly_api_passphrase');
           localStorage.removeItem('poly_eoa_address');
           localStorage.removeItem('hf_poly_wallet');
+          sessionStorage.removeItem('hf_poly_wallet_session');
           localStorage.setItem('hf_wallet_explicit_switch', Date.now().toString());
+          // Clear stale _polyWalletAddress so portfolio re-resolves
+          _polyWalletAddress = '';
         }
 
         const provider = new ethers.BrowserProvider(window.ethereum);
@@ -13090,8 +13151,26 @@ setTimeout(async function() {
         window._walletProvider = provider;
         localStorage.setItem('hf_connected_wallet', address);
         localStorage.setItem('hf_wallet_address', address);
+        localStorage.setItem('poly_eoa_address', address);
+
+        // Resolve the Polymarket proxy for this EOA (positions live on proxy, not EOA)
+        try {
+          const proxy = await getPolymarketProxy(address);
+          if (proxy && proxy !== ethers.ZeroAddress && proxy.toLowerCase() !== address.toLowerCase()) {
+            const proxyLower = proxy.toLowerCase();
+            console.log('[wallet] Resolved proxy for', address.slice(0, 8) + ':', proxyLower.slice(0, 10));
+            _polyWalletAddress = proxyLower;
+            localStorage.setItem('hf_poly_wallet', proxyLower);
+            sessionStorage.setItem('hf_poly_wallet_session', proxyLower);
+            localStorage.setItem('hf_poly_proxy_' + address.toLowerCase(), proxyLower);
+          }
+        } catch (proxyErr) {
+          console.warn('[wallet] Proxy resolution failed:', proxyErr.message);
+        }
+
         fetchWalletBalance(provider, address);
         if (typeof updateWalletUI === 'function') updateWalletUI();
+        if (typeof renderPolymarketConnectState === 'function') renderPolymarketConnectState();
         console.log('[wallet] Auto-reconnected signer for', address.slice(0, 8));
       }
     } catch (e) {
@@ -16065,25 +16144,44 @@ if (typeof window.ethereum !== 'undefined') {
       localStorage.removeItem('poly_api_passphrase');
       localStorage.removeItem('poly_eoa_address');
       localStorage.removeItem('hf_poly_wallet');
+      sessionStorage.removeItem('hf_poly_wallet_session');
       localStorage.setItem('hf_wallet_explicit_switch', Date.now().toString());
+      _polyWalletAddress = '';
 
-      window._connectedWallet = accounts[0];
+      const newAddr = accounts[0];
+      window._connectedWallet = newAddr;
       window._walletSigner = null;
       window._walletProvider = null;
-      localStorage.setItem('hf_wallet_address', accounts[0]);
-      localStorage.setItem('hf_connected_wallet', accounts[0]);
+      localStorage.setItem('hf_wallet_address', newAddr);
+      localStorage.setItem('hf_connected_wallet', newAddr);
+      localStorage.setItem('poly_eoa_address', newAddr);
 
-      // Re-establish signer for new account
+      // Re-establish signer + resolve proxy for new account
       try {
         const provider = new ethers.BrowserProvider(window.ethereum);
         const signer = await provider.getSigner();
         window._walletSigner = signer;
         window._walletProvider = provider;
-        fetchWalletBalance(provider, accounts[0]);
+        fetchWalletBalance(provider, newAddr);
       } catch (e) { console.warn('[wallet switch] signer failed:', e.message); }
 
+      // Resolve proxy for new wallet
+      try {
+        const proxy = await getPolymarketProxy(newAddr);
+        if (proxy && proxy !== ethers.ZeroAddress && proxy.toLowerCase() !== newAddr.toLowerCase()) {
+          _polyWalletAddress = proxy.toLowerCase();
+          localStorage.setItem('hf_poly_wallet', _polyWalletAddress);
+          sessionStorage.setItem('hf_poly_wallet_session', _polyWalletAddress);
+          localStorage.setItem('hf_poly_proxy_' + newAddr.toLowerCase(), _polyWalletAddress);
+          console.log('[wallet switch] Resolved proxy:', _polyWalletAddress.slice(0, 10));
+        }
+      } catch (e) { console.warn('[wallet switch] proxy resolution failed:', e.message); }
+
       updateWalletUI();
-      showToast('Wallet switched to ' + accounts[0].slice(0,6) + '…' + accounts[0].slice(-4), 'success');
+      renderPolymarketConnectState();
+      _portfolioLoaded = false; // force portfolio reload
+      loadPortfolio();
+      showToast('Wallet switched to ' + newAddr.slice(0,6) + '…' + newAddr.slice(-4), 'success');
     }
   });
 }
