@@ -457,6 +457,87 @@ Sitemap: https://hyperflex.network/sitemap.xml
 `);
 });
 
+// ── Dynamic sitemap.xml — all public pages for Google/Bing/AI crawlers ──
+const _sitemapCache = { xml: '', ts: 0 };
+const SITEMAP_TTL = 3600000; // 1 hour
+app.get('/sitemap.xml', async (req, res) => {
+  try {
+    if (_sitemapCache.xml && Date.now() - _sitemapCache.ts < SITEMAP_TTL) {
+      return res.type('application/xml').send(_sitemapCache.xml);
+    }
+
+    const now = new Date().toISOString().split('T')[0];
+
+    // Static pages
+    const staticPages = [
+      { loc: '/', priority: '1.0', freq: 'daily' },
+      { loc: '/predictors', priority: '0.9', freq: 'daily' },
+      { loc: '/odds', priority: '0.9', freq: 'hourly' },
+      { loc: '/signals', priority: '0.8', freq: 'hourly' },
+      { loc: '/screener', priority: '0.8', freq: 'hourly' },
+      { loc: '/crystal-ball', priority: '0.8', freq: 'daily' },
+      { loc: '/whales', priority: '0.8', freq: 'daily' },
+      { loc: '/whale-index', priority: '0.7', freq: 'daily' },
+      { loc: '/explore', priority: '0.7', freq: 'daily' },
+      { loc: '/templates', priority: '0.6', freq: 'weekly' },
+      { loc: '/data', priority: '0.6', freq: 'daily' },
+      { loc: '/brief', priority: '0.7', freq: 'daily' },
+    ];
+
+    // Fetch top markets from screener cache for market pages
+    let marketSlugs = [];
+    try {
+      const _gammaHeaders = { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' };
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), 5000);
+      const r = await fetch('https://gamma-api.polymarket.com/events?limit=200&active=true&closed=false&order=volume24hr&ascending=false', {
+        headers: _gammaHeaders, signal: ctrl.signal
+      });
+      clearTimeout(tid);
+      if (r.ok) {
+        const events = await r.json();
+        marketSlugs = (events || []).filter(e => e.slug).map(e => e.slug);
+      }
+    } catch (e) { /* sitemap still works with just static pages */ }
+
+    // Fetch community slugs
+    let communitySlugs = [];
+    try {
+      if (pool) {
+        const rows = await dbQuery("SELECT slug FROM creator_settings WHERE slug IS NOT NULL AND slug != '' LIMIT 200");
+        communitySlugs = rows.map(r => r.slug);
+      }
+    } catch (e) { /* skip */ }
+
+    // Build XML
+    let urls = staticPages.map(p =>
+      `  <url><loc>https://hyperflex.network${p.loc}</loc><lastmod>${now}</lastmod><changefreq>${p.freq}</changefreq><priority>${p.priority}</priority></url>`
+    );
+
+    // Market pages
+    marketSlugs.forEach(slug => {
+      urls.push(`  <url><loc>https://hyperflex.network/market/${encodeURIComponent(slug)}</loc><lastmod>${now}</lastmod><changefreq>hourly</changefreq><priority>0.8</priority></url>`);
+    });
+
+    // Community pages
+    communitySlugs.forEach(slug => {
+      urls.push(`  <url><loc>https://hyperflex.network/${encodeURIComponent(slug)}</loc><lastmod>${now}</lastmod><changefreq>daily</changefreq><priority>0.5</priority></url>`);
+    });
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.join('\n')}
+</urlset>`;
+
+    _sitemapCache.xml = xml;
+    _sitemapCache.ts = Date.now();
+    res.type('application/xml').send(xml);
+  } catch (err) {
+    console.error('[sitemap]', err.message);
+    res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://hyperflex.network/</loc></url></urlset>`);
+  }
+});
+
 // Serve explore.html as the homepage — explore IS the hub
 app.get('/', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -18860,9 +18941,126 @@ app.get('/data', (req, res) => res.sendFile(path.join(__dirname, 'public', 'data
 // ════════════════════════════════════════════════════════════
 // POLYMARKET MARKET DETAIL PAGE
 // ════════════════════════════════════════════════════════════
-app.get('/market/:slug', (req, res) => {
-  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-  res.sendFile(path.join(__dirname, 'public', 'market.html'));
+app.get('/market/:slug', async (req, res) => {
+  const { slug } = req.params;
+  const ua = (req.headers['user-agent'] || '').toLowerCase();
+  const isCrawler = /bot|crawl|spider|slurp|facebookexternalhit|twitterbot|whatsapp|telegrambot|discord|slack|linkedinbot|pinterest|claude|gpt|bing|yandex|baidu|duckduck|archive|embed|preview|fetch|curl|wget/i.test(ua);
+  const isNavigate = req.headers['sec-fetch-mode'] === 'navigate' && !isCrawler;
+
+  // For browsers with JS, serve the SPA
+  if (!isCrawler && (isNavigate || !ua)) {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    return res.sendFile(path.join(__dirname, 'public', 'market.html'));
+  }
+
+  // For crawlers: SSR OG tags + JSON-LD structured data
+  try {
+    const _gammaHeaders = { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' };
+    let market = null, eventTitle = '';
+
+    // Try markets endpoint
+    const gRes = await fetch(`https://gamma-api.polymarket.com/markets?slug=${encodeURIComponent(slug)}`, { headers: _gammaHeaders });
+    if (gRes.ok) { const d = await gRes.json(); if (d && d.length) market = d[0]; }
+
+    // Fallback to events
+    if (!market) {
+      const eRes = await fetch(`https://gamma-api.polymarket.com/events?slug=${encodeURIComponent(slug)}`, { headers: _gammaHeaders });
+      if (eRes.ok) {
+        const ed = await eRes.json();
+        if (ed && ed.length && ed[0].markets && ed[0].markets.length) {
+          eventTitle = ed[0].title || '';
+          market = ed[0].markets[0];
+        }
+      }
+    }
+
+    if (!market) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      return res.sendFile(path.join(__dirname, 'public', 'market.html'));
+    }
+
+    const title = eventTitle || market.question || slug;
+    const desc = market.description ? market.description.substring(0, 200) : `Live odds, whale tracking, and AI analysis for "${title}" on HYPERFLEX — the prediction market intelligence platform.`;
+    const yesPrice = (() => { try { const p = JSON.parse(market.outcomePrices); return Math.round(p[0] * 100); } catch(e) { return 50; } })();
+    const noPrice = 100 - yesPrice;
+    const vol = market.volume ? '$' + (market.volume > 1e6 ? (market.volume/1e6).toFixed(1)+'M' : (market.volume/1e3).toFixed(0)+'K') : '';
+    const ogImg = market.image ? market.image : 'https://hyperflex.network/og-image.png';
+    const canonicalUrl = `https://hyperflex.network/market/${encodeURIComponent(slug)}`;
+    const endDate = market.endDate || market.end_date_iso || '';
+
+    const html = `<!DOCTYPE html>
+<html lang="en" prefix="og: http://ogp.me/ns#">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>${_escHtmlStr(title)} — Odds & Analysis | HYPERFLEX</title>
+<meta name="description" content="${_escHtmlStr(desc)}"/>
+<meta name="keywords" content="prediction market, ${_escHtmlStr(title)}, odds, polymarket, betting, forecast, probability"/>
+<link rel="canonical" href="${canonicalUrl}"/>
+
+<!-- Open Graph -->
+<meta property="og:type" content="article"/>
+<meta property="og:title" content="${_escHtmlStr(title)} — Live Odds"/>
+<meta property="og:description" content="YES ${yesPrice}¢ · NO ${noPrice}¢${vol ? ' · Volume ' + vol : ''} — Real-time odds, whale positions, and AI signals on HYPERFLEX."/>
+<meta property="og:url" content="${canonicalUrl}"/>
+<meta property="og:image" content="${ogImg}"/>
+<meta property="og:image:width" content="1200"/>
+<meta property="og:image:height" content="630"/>
+<meta property="og:site_name" content="HYPERFLEX"/>
+
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:title" content="${_escHtmlStr(title)} — Live Odds"/>
+<meta name="twitter:description" content="YES ${yesPrice}¢ · NO ${noPrice}¢${vol ? ' · Vol ' + vol : ''} — Track this market on HYPERFLEX"/>
+<meta name="twitter:image" content="${ogImg}"/>
+<meta name="twitter:site" content="@hyperflexhq"/>
+
+<!-- JSON-LD Structured Data -->
+<script type="application/ld+json">
+${JSON.stringify({
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": title,
+  "description": desc,
+  "url": canonicalUrl,
+  "image": ogImg,
+  "publisher": {
+    "@type": "Organization",
+    "name": "HYPERFLEX",
+    "url": "https://hyperflex.network",
+    "logo": { "@type": "ImageObject", "url": "https://hyperflex.network/og-image.png" }
+  },
+  "mainEntity": {
+    "@type": "Question",
+    "name": title,
+    "answerCount": 2,
+    "suggestedAnswer": [
+      { "@type": "Answer", "text": "Yes — currently at " + yesPrice + "% probability" },
+      { "@type": "Answer", "text": "No — currently at " + noPrice + "% probability" }
+    ]
+  },
+  ...(endDate ? { "expires": endDate } : {})
+})}
+</script>
+
+<meta http-equiv="refresh" content="0;url=${canonicalUrl}"/>
+</head>
+<body>
+<h1>${_escHtmlStr(title)}</h1>
+<p>YES: ${yesPrice}% · NO: ${noPrice}%${vol ? ' · Volume: ' + vol : ''}</p>
+<p>${_escHtmlStr(desc)}</p>
+<p><a href="${canonicalUrl}">View live odds on HYPERFLEX</a></p>
+<p><a href="https://hyperflex.network/odds">All prediction market odds</a> · <a href="https://hyperflex.network/signals">AI signals</a> · <a href="https://hyperflex.network/screener">Market screener</a></p>
+</body>
+</html>`;
+
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    res.type('html').send(html);
+  } catch (err) {
+    console.error('[market-seo]', err.message);
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.sendFile(path.join(__dirname, 'public', 'market.html'));
+  }
 });
 
 const _marketDetailCache = new Map();
