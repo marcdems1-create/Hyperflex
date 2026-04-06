@@ -2813,6 +2813,21 @@ body.nav-open .sidebar-backdrop {
   #portfolioSummaryBar > div > div { grid-template-columns: 1fr !important; }
 }
 
+/* Position table rows — responsive */
+#posTableHeader { display: none !important; }
+@media (min-width: 700px) {
+  #posTableHeader { display: grid !important; }
+}
+@media (max-width: 699px) {
+  .pos-table-row {
+    grid-template-columns: 1fr auto !important;
+    gap: 4px !important;
+  }
+  .pos-table-row > div:nth-child(2),
+  .pos-table-row > div:nth-child(3),
+  .pos-table-row > div:nth-child(4) { display: none !important; }
+}
+
 /* ══ Social Tab ══ */
 .social-accounts-grid {
   display: grid;
@@ -4925,6 +4940,28 @@ body.nav-open .sidebar-backdrop {
             <!-- ALL tab — Positions only -->
             <div id="ptabContent-all">
               <div id="allPositionsContainer">
+                <!-- Search + Filter Bar -->
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+                  <div style="flex:1;min-width:200px;position:relative">
+                    <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--dim);font-size:13px">🔍</span>
+                    <input id="posSearchInput" type="text" placeholder="Search" oninput="filterPositionRows()"
+                      style="width:100%;padding:10px 12px 10px 34px;background:#0f0e0c;border:1px solid #2a2825;border-radius:8px;color:var(--text);font-family:var(--sans);font-size:13px;outline:none;transition:border-color .15s"
+                      onfocus="this.style.borderColor='rgba(201,146,13,0.4)'" onblur="this.style.borderColor='#2a2825'" />
+                  </div>
+                  <button id="hideDustBtn" onclick="toggleHideDust()" style="display:flex;align-items:center;gap:6px;padding:8px 14px;background:transparent;border:1px solid #2a2825;border-radius:8px;color:var(--dim);font-family:var(--mono);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap">
+                    <span style="font-size:12px">⚙</span> Hide &lt;10¢
+                  </button>
+                  <div id="posSortDropdown" style="position:relative">
+                    <select id="posSortSelect" onchange="sortPositionRows(this.value)" style="padding:8px 14px;background:#0f0e0c;border:1px solid #2a2825;border-radius:8px;color:var(--text);font-family:var(--mono);font-size:11px;font-weight:600;cursor:pointer;appearance:none;padding-right:28px;-webkit-appearance:none">
+                      <option value="value">Sort: Value ↓</option>
+                      <option value="pnl">Sort: P&L ↓</option>
+                      <option value="pnl_pct">Sort: P&L % ↓</option>
+                      <option value="expiry">Sort: Expiry ↑</option>
+                      <option value="name">Sort: Name A-Z</option>
+                    </select>
+                    <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--dim);font-size:10px;pointer-events:none">▼</span>
+                  </div>
+                </div>
                 <!-- Open Positions Section -->
                 <div id="openPositionsSection" style="display:none;margin-bottom:20px">
                   <div onclick="togglePortfolioSection('openPositions')" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:12px 16px;background:#0f0e0c;border:1px solid #2a2825;border-radius:12px 12px 0 0;user-select:none" onmouseover="this.style.borderColor='rgba(201,146,13,0.3)'" onmouseout="this.style.borderColor='#2a2825'">
@@ -4934,6 +4971,15 @@ body.nav-open .sidebar-backdrop {
                       <span id="openPositionsCount" style="font-family:var(--mono);font-size:10px;color:#5a5752"></span>
                     </div>
                     <span id="openPositionsChevron" style="color:#5a5752;font-size:12px;transition:transform .2s">▼</span>
+                  </div>
+                  <!-- Table header -->
+                  <div id="posTableHeader" style="display:grid;grid-template-columns:minmax(180px,2fr) 100px 80px 90px 90px 80px;gap:0;padding:8px 16px;background:#0a0908;border:1px solid #2a2825;border-top:none;font-family:var(--mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#5a5752">
+                    <div>Market</div>
+                    <div style="text-align:center">Avg → Now</div>
+                    <div style="text-align:right">Bet</div>
+                    <div style="text-align:right">To Win</div>
+                    <div style="text-align:right">Value</div>
+                    <div style="text-align:right"></div>
                   </div>
                   <div id="openPositionsContent" style="border:1px solid #2a2825;border-top:none;border-radius:0 0 12px 12px;overflow:hidden"></div>
                 </div>
@@ -15497,19 +15543,16 @@ function updateAllPositionsTab() {
       const contentEl = document.getElementById('openPositionsContent');
       if (contentEl) {
         contentEl.innerHTML = open.map(p => {
-          const endDate = p.end_date ? new Date(p.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
-          return renderPositionCard({
+          return renderPositionRow({
             question: p.question || p.market_title || 'Unknown market',
             side: p.side,
-            pct: Math.round((p.current_price || p.curPrice || p.probability || 0) * 100),
-            meta: (p.shares || 0).toFixed(2) + ' shares' + (endDate ? ' · Exp ' + endDate : '') + ' · ' + (p._platform || ''),
-            pnl: p.pnl != null ? p.pnl : null,
             url: buildMarketUrl({ url: p.market_url, slug: p.slug || p.eventSlug, question: p.question || p.market_title }),
-            accentColor: p._accentColor || 'var(--gold)',
-            posData: { ...p, platform: p._platform },
-            idPrefix: 'all'
+            posData: { ...p, platform: p._platform }
           });
         }).join('');
+        // Apply current sort
+        var sortVal = document.getElementById('posSortSelect')?.value;
+        if (sortVal) sortPositionRows(sortVal);
       }
     } else {
       openSec.style.display = 'none';
@@ -15676,6 +15719,149 @@ function renderPositionCard({question,side,pct,meta,pnl,pnlLabel,pnlIsPercent,ur
     </div>
   </div>`;
 }
+// ── TABLE ROW POSITION RENDERER ────────────────────────────────────────────────
+// Polynter-style compact table rows with inline sell buttons
+function renderPositionRow({question,side,posData,url}) {
+  const isPoly = posData && posData.platform === 'polymarket';
+  const walletConnected = !!window._connectedWallet;
+  const icon = posData?.icon || '';
+  const avgCost = posData?.avg_cost != null ? posData.avg_cost : (posData?.cost_basis && posData?.shares > 0 ? Math.round(posData.cost_basis / posData.shares * 100) / 100 : null);
+  const curPrice = posData?.current_price != null ? posData.current_price : null;
+  const shares = posData?.shares || 0;
+  const cashValue = posData?.cash_value || 0;
+  const costBasis = posData?.cost_basis || 0;
+  const pnl = posData?.pnl != null ? posData.pnl : (cashValue - costBasis);
+  const pnlPct = posData?.pnl_pct != null ? posData.pnl_pct : (costBasis > 0 ? ((cashValue - costBasis) / costBasis * 100) : 0);
+  const toWin = shares > 0 ? (shares * 1) - costBasis : 0; // shares pay $1 each if correct
+  const endDate = posData?.end_date || null;
+  const sideColor = side === 'YES' ? '#22c55e' : side === 'NO' ? '#ef4444' : '#c9920d';
+
+  // Price direction
+  const priceUp = avgCost != null && curPrice != null && curPrice > avgCost;
+  const priceDown = avgCost != null && curPrice != null && curPrice < avgCost;
+  const dirColor = priceUp ? '#22c55e' : priceDown ? '#ef4444' : '#5a5752';
+
+  // Whale data
+  const whale = posData?.whale || null;
+  const whaleHtml = whale && whale.count > 0
+    ? `<span title="${whale.count} whales · ${whale.consensus_side} consensus" style="font-size:10px;margin-left:4px;cursor:help;opacity:0.7">${whale.aligned ? '🐋' : '⚠️'}</span>`
+    : '';
+
+  // Expiry
+  let expiryHtml = '';
+  if (endDate) {
+    const diff = new Date(endDate) - new Date();
+    if (diff > 0 && diff < 7 * 86400000) {
+      const d = Math.floor(diff / 86400000);
+      const h = Math.floor((diff % 86400000) / 3600000);
+      expiryHtml = `<span style="font-family:var(--mono);font-size:9px;padding:1px 5px;border-radius:4px;background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.2);margin-left:4px" title="Expires soon">${d > 0 ? d + 'd' : h + 'h'}</span>`;
+    }
+  }
+
+  // Format helpers
+  const fmtC = v => v != null ? Math.round(v * 100) + '¢' : '—';
+  const fmtV = v => v != null ? (Math.abs(v) >= 1000 ? '$' + (Math.abs(v) / 1000).toFixed(1) + 'K' : '$' + Math.abs(v).toFixed(2)) : '—';
+  const pnlColor = pnl >= 0 ? '#22c55e' : '#ef4444';
+  const pnlSign = pnl >= 0 ? '+' : '-';
+
+  // Trade data key
+  const _posKey = '_pd_' + (posData?.condition_id || posData?.id || Math.random().toString(36).slice(2, 8));
+  if (!window._posDataMap) window._posDataMap = {};
+  window._posDataMap[_posKey] = posData ? {
+    question: posData.question, side: posData.side, platform: posData.platform,
+    current_price: posData.current_price, shares: posData.shares,
+    cost_basis: posData.cost_basis, cash_value: posData.cash_value,
+    market_url: posData.market_url, slug: posData.slug,
+    token_id: posData.token_id, condition_id: posData.condition_id || posData.id,
+    icon: posData.icon, pnl: posData.pnl
+  } : {};
+
+  // Build internal market URL
+  const mktUrl = url && url !== '#' ? url : (posData?.slug ? '/market/' + posData.slug : '#');
+
+  return `<div class="pos-table-row" data-question="${escHtmlDash(question)}" data-value="${cashValue}" data-pnl="${pnl}" data-pnlpct="${pnlPct}" data-expiry="${endDate||''}" data-price="${curPrice||0}"
+    style="display:grid;grid-template-columns:minmax(180px,2fr) 100px 80px 90px 90px 80px;gap:0;align-items:center;padding:10px 16px;border-bottom:1px solid rgba(255,255,255,0.04);transition:background .1s;cursor:pointer"
+    onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background=''"
+    onclick="if(!event.target.closest('button'))window.location='${mktUrl}'">
+    <!-- MARKET -->
+    <div style="display:flex;align-items:center;gap:10px;min-width:0">
+      ${icon ? `<img src="${icon}" style="width:28px;height:28px;border-radius:6px;object-fit:cover;flex-shrink:0" onerror="this.style.display='none'" />` : `<div style="width:28px;height:28px;border-radius:6px;background:${sideColor}15;display:flex;align-items:center;justify-content:center;flex-shrink:0"><span style="font-size:11px;font-weight:900;color:${sideColor}">${(side || '?')[0]}</span></div>`}
+      <div style="min-width:0;overflow:hidden">
+        <div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtmlDash(question)}</div>
+        <div style="display:flex;align-items:center;gap:4px;margin-top:2px">
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:${sideColor};background:${sideColor}12;padding:0 5px;border-radius:3px">${side}</span>
+          <span style="font-family:var(--mono);font-size:10px;color:var(--dim)">${shares > 0 ? shares.toFixed(1) + ' shares' : ''}</span>
+          ${whaleHtml}${expiryHtml}
+        </div>
+      </div>
+    </div>
+    <!-- AVG → NOW -->
+    <div style="text-align:center;font-family:var(--mono);font-size:12px">
+      <span style="color:var(--dim)">${fmtC(avgCost)}</span>
+      <span style="color:#3a3835;margin:0 2px">→</span>
+      <span style="color:${dirColor};font-weight:700">${fmtC(curPrice)}</span>
+    </div>
+    <!-- BET -->
+    <div style="text-align:right;font-family:var(--mono);font-size:12px;font-weight:600;color:var(--text)">${fmtV(costBasis)}</div>
+    <!-- TO WIN -->
+    <div style="text-align:right;font-family:var(--mono);font-size:12px;font-weight:600;color:var(--text)">${toWin > 0 ? fmtV(toWin) : '—'}</div>
+    <!-- VALUE + P&L -->
+    <div style="text-align:right">
+      <div style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text)">${fmtV(cashValue)}</div>
+      <div style="font-family:var(--mono);font-size:10px;color:${pnlColor};font-weight:600">${pnlSign}${fmtV(Math.abs(pnl))} (${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%)</div>
+    </div>
+    <!-- SELL -->
+    <div style="text-align:right">
+      ${isPoly && walletConnected ? `<button onclick="event.stopPropagation();openTradeModal(window._posDataMap['${_posKey}'],'sell')" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:5px 12px;border-radius:6px;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.08);color:#ef4444;cursor:pointer;transition:all .15s" onmouseover="this.style.background='rgba(239,68,68,0.18)'" onmouseout="this.style.background='rgba(239,68,68,0.08)'">Sell</button>` : `<span style="font-family:var(--mono);font-size:10px;color:var(--dim)">···</span>`}
+    </div>
+  </div>`;
+}
+
+// ── POSITION SEARCH / FILTER / SORT ──────────────────────────────────────────
+var _hideDust = false;
+function toggleHideDust() {
+  _hideDust = !_hideDust;
+  var btn = document.getElementById('hideDustBtn');
+  if (btn) {
+    btn.style.borderColor = _hideDust ? 'rgba(201,146,13,0.4)' : '#2a2825';
+    btn.style.color = _hideDust ? 'var(--gold)' : 'var(--dim)';
+    btn.style.background = _hideDust ? 'rgba(201,146,13,0.06)' : 'transparent';
+  }
+  filterPositionRows();
+}
+
+function filterPositionRows() {
+  var query = (document.getElementById('posSearchInput')?.value || '').toLowerCase().trim();
+  var rows = document.querySelectorAll('.pos-table-row');
+  rows.forEach(function(row) {
+    var q = (row.dataset.question || '').toLowerCase();
+    var price = parseFloat(row.dataset.price) || 0;
+    var matchSearch = !query || q.includes(query);
+    var matchDust = !_hideDust || price >= 0.10;
+    row.style.display = (matchSearch && matchDust) ? '' : 'none';
+  });
+}
+
+function sortPositionRows(sortBy) {
+  var container = document.getElementById('openPositionsContent');
+  if (!container) return;
+  var rows = Array.from(container.querySelectorAll('.pos-table-row'));
+  rows.sort(function(a, b) {
+    switch(sortBy) {
+      case 'value': return (parseFloat(b.dataset.value) || 0) - (parseFloat(a.dataset.value) || 0);
+      case 'pnl': return (parseFloat(b.dataset.pnl) || 0) - (parseFloat(a.dataset.pnl) || 0);
+      case 'pnl_pct': return (parseFloat(b.dataset.pnlpct) || 0) - (parseFloat(a.dataset.pnlpct) || 0);
+      case 'expiry':
+        var da = a.dataset.expiry ? new Date(a.dataset.expiry).getTime() : Infinity;
+        var db = b.dataset.expiry ? new Date(b.dataset.expiry).getTime() : Infinity;
+        return da - db;
+      case 'name': return (a.dataset.question || '').localeCompare(b.dataset.question || '');
+      default: return 0;
+    }
+  });
+  rows.forEach(function(r) { container.appendChild(r); });
+}
+
 let _hfxPositionsLoaded = false;
 async function loadHFXPositions(force) {
   if (_hfxPositionsLoaded && !force) return;
