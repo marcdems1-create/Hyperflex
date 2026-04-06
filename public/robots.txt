@@ -1,0 +1,39 @@
+# HYPERFLEX robots.txt — Allow all crawlers including AI
+# We WANT visibility from search engines and AI tools
+
+User-agent: *
+Allow: /
+
+# Explicitly allow AI crawlers
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: GPTBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+User-agent: Amazonbot
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+User-agent: Bytespider
+Allow: /
+
+User-agent: meta-externalagent
+Allow: /
+
+# Block only private areas
+User-agent: *
+Disallow: /admin
+Disallow: /stripe/
+Disallow: /api/creator/
+
+# Sitemap
+Sitemap: https://hyperflex.network/sitemap.xml

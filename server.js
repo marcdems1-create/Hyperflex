@@ -418,6 +418,45 @@ app.get('/api/config/ref', (req, res) => {
   res.json({ ref: POLY_REF });
 });
 
+// ── robots.txt — explicit route so Cloudflare can't override ──
+app.get('/robots.txt', (req, res) => {
+  res.type('text/plain').send(`# HYPERFLEX robots.txt — Allow all crawlers including AI
+User-agent: *
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: GPTBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+User-agent: Amazonbot
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+User-agent: Bytespider
+Allow: /
+
+User-agent: meta-externalagent
+Allow: /
+
+User-agent: *
+Disallow: /admin
+Disallow: /stripe/
+Disallow: /api/creator/
+
+Sitemap: https://hyperflex.network/sitemap.xml
+`);
+});
+
 // Serve explore.html as the homepage — explore IS the hub
 app.get('/', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
