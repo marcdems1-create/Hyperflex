@@ -1437,17 +1437,18 @@ function updateOutcomeLabels() {
     return;
   }
 
-  // 2. Binary market with custom outcome names (e.g. ["$60k", "$80k"])
+  // 2. Binary market with SHORT custom outcome names (e.g. ["$60k", "$80k"])
+  //    Only replace when both names are ≤10 chars — keeps buttons clean,
+  //    avoids cramming full questions into tiny buttons
   if (_market) {
     var outcomes = _market.outcomes;
     if (typeof outcomes === 'string') { try { outcomes = JSON.parse(outcomes); } catch(e) { outcomes = null; } }
     if (outcomes && Array.isArray(outcomes) && outcomes.length === 2) {
       var yName = outcomes[0] || 'YES';
       var nName = outcomes[1] || 'NO';
-      // Don't replace if they're literally "Yes"/"No"
-      if (yName.toLowerCase() !== 'yes' || nName.toLowerCase() !== 'no') {
-        if (yName.length > 12) yName = yName.substring(0, 10) + '..';
-        if (nName.length > 12) nName = nName.substring(0, 10) + '..';
+      var isDefault = yName.toLowerCase() === 'yes' && nName.toLowerCase() === 'no';
+      var isShort = yName.length <= 10 && nName.length <= 10;
+      if (!isDefault && isShort) {
         yesLabel.textContent = '↗ ' + yName;
         noLabel.textContent = '↘ ' + nName;
         return;
