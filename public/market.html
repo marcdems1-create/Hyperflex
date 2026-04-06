@@ -922,13 +922,22 @@ async function loadWhaleFlow(marketSlug) {
         var pnlAbs = Math.abs(f.pnl);
         pnlStr = (f.pnl >= 0 ? '+' : '-') + '$' + (pnlAbs >= 1000 ? Math.round(pnlAbs/1000) + 'K' : Math.round(pnlAbs));
       }
-      // For multi-outcome events, show which outcome the whale is positioned on
+      // Show which outcome the whale is positioned on
       var outcomeLabel = '';
       if (f.outcome && _eventMarkets && _eventMarkets.length > 1) {
-        // Extract short outcome from title (e.g. "Will Bitcoin hit $60k..." → "$60k")
+        // Multi-outcome event: extract short outcome from title
         var shortOutcome = f.outcome;
         if (shortOutcome.length > 20) shortOutcome = shortOutcome.substring(0, 18) + '..';
         outcomeLabel = '<span style="font-family:var(--mono);font-size:9px;color:var(--soft);background:rgba(201,146,13,0.08);padding:1px 5px;border-radius:3px">' + escH(shortOutcome) + '</span>';
+      } else if (_market) {
+        // Binary market with custom outcome names: YES→outcome[0], NO→outcome[1]
+        var binaryOutcomes = _market.outcomes;
+        if (typeof binaryOutcomes === 'string') { try { binaryOutcomes = JSON.parse(binaryOutcomes); } catch(e) { binaryOutcomes = null; } }
+        if (binaryOutcomes && Array.isArray(binaryOutcomes) && binaryOutcomes.length === 2 &&
+            binaryOutcomes[0].toLowerCase() !== 'yes') {
+          var whaleOutcome = f.side === 'YES' ? binaryOutcomes[0] : binaryOutcomes[1];
+          outcomeLabel = '<span style="font-family:var(--mono);font-size:9px;color:var(--soft);background:rgba(201,146,13,0.08);padding:1px 5px;border-radius:3px">' + escH(whaleOutcome) + '</span>';
+        }
       }
       html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">' +
         '<span style="font-family:var(--mono);font-size:10px;color:var(--dim);min-width:80px">' + escH(f.wallet) + '</span>' +
@@ -1409,27 +1418,46 @@ function renderOrderbook() {
 }
 
 // ── Trade widget ──────────────────────────────────────────────────────────────
-// Replace YES/NO labels with outcome names for multi-outcome events
+// Replace YES/NO labels with outcome names for markets with custom outcomes
 function updateOutcomeLabels() {
   var yesLabel = document.querySelector('#sideYes span');
   var noLabel = document.querySelector('#sideNo span');
   if (!yesLabel || !noLabel) return;
 
+  // 1. Multi-outcome event (separate sub-markets)
   if (_sortedEventMarkets && _sortedEventMarkets.length > 1 && _sortedEventMarkets[_activeOutcomeIndex]) {
     var em = _sortedEventMarkets[_activeOutcomeIndex];
     var shortName = em.groupItemTitle || em.question || '';
-    // Extract short label
     var rangeMatch = shortName.match(/(?:at |between |close (?:at )?)(\$[\d,.]+\s*[-–]\s*\$[\d,.]+|\<\s*\$[\d,.]+|\>\s*\$[\d,.]+)/i);
     if (rangeMatch) shortName = rangeMatch[1];
     else { var teamMatch = shortName.match(/Will (?:the )?(.+?) win/i); if (teamMatch) shortName = teamMatch[1]; }
     if (shortName.length > 12) shortName = shortName.substring(0, 10) + '..';
-    // YES button = this outcome, NO button = "Other"
     yesLabel.textContent = '↗ ' + shortName;
     noLabel.textContent = '↘ No';
-  } else {
-    yesLabel.textContent = '↗ YES';
-    noLabel.textContent = '↘ NO';
+    return;
   }
+
+  // 2. Binary market with custom outcome names (e.g. ["$60k", "$80k"])
+  if (_market) {
+    var outcomes = _market.outcomes;
+    if (typeof outcomes === 'string') { try { outcomes = JSON.parse(outcomes); } catch(e) { outcomes = null; } }
+    if (outcomes && Array.isArray(outcomes) && outcomes.length === 2) {
+      var yName = outcomes[0] || 'YES';
+      var nName = outcomes[1] || 'NO';
+      // Don't replace if they're literally "Yes"/"No"
+      if (yName.toLowerCase() !== 'yes' || nName.toLowerCase() !== 'no') {
+        if (yName.length > 12) yName = yName.substring(0, 10) + '..';
+        if (nName.length > 12) nName = nName.substring(0, 10) + '..';
+        yesLabel.textContent = '↗ ' + yName;
+        noLabel.textContent = '↘ ' + nName;
+        return;
+      }
+    }
+  }
+
+  // 3. Default: standard YES/NO
+  yesLabel.textContent = '↗ YES';
+  noLabel.textContent = '↘ NO';
 }
 
 function setTradeSide(side) {
