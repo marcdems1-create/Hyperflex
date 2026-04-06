@@ -1951,7 +1951,7 @@ function activityCard(a) {
     const sizeChange = (a.action === 'increased' || a.action === 'decreased') && a.old_size_display && a.new_size_display
       ? ` from ${a.old_size_display} → ${a.new_size_display}`
       : '';
-    var destRaw = a.url || 'https://polymarket.com';
+    var destRaw = typeof polyRef==='function' ? polyRef(a.url || 'https://polymarket.com') : (a.url || 'https://polymarket.com');
     const dest = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(destRaw) : '#';
     const finalDest = (dest && dest !== '#') ? dest : (typeof hfxMarketUrl === 'function' ? hfxMarketUrl(destRaw) : '/explore');
     const isExt = finalDest.startsWith('http');
