@@ -1101,7 +1101,7 @@ nav {
     <!-- Page tabs -->
     <div class="tabs-wrap" id="tabs-wrap" style="margin-bottom:0">
       <div class="tabs">
-        <button class="tab active" onclick="switchTab('activity')">⚡ Activity</button>
+        <button class="tab active" onclick="switchTab('discover')">🔥 Markets</button>
         <button class="tab" onclick="switchTab('predictors')">👥 Predictors</button>
         <button class="tab" onclick="window.location.href='/odds'" style="display:flex;align-items:center;gap:5px">📊 Odds</button>
         <button class="tab" onclick="window.location.href='/whales'" style="display:flex;align-items:center;gap:5px">&#x1F40B; Whales</button>
@@ -1110,12 +1110,7 @@ nav {
 
     <div class="refresh-bar">
       <span id="last-updated">Updating...</span>
-      <button onclick="refreshActivity()">↻ Refresh</button>
-    </div>
-
-    <!-- NEW ACTIVITY BANNER (Twitter-style "X new items") -->
-    <div id="newActivityBanner" style="display:none;background:var(--gold);color:#141412;text-align:center;padding:8px 16px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:12px;transition:opacity 0.2s;" onclick="loadNewActivity()">
-      ↑ <span id="newActivityCount">0</span> new activities — click to refresh
+      <button onclick="loadFeed()">↻ Refresh</button>
     </div>
 
     <!-- SMART MONEY DIVERGENCE -->
@@ -1156,22 +1151,8 @@ nav {
       <div id="smartMoneyCards" style="display:flex;flex-direction:column;gap:8px"></div>
     </div>
 
-    <!-- LIVE INSIGHTS -->
-    <div id="explore-insights" style="display:none;margin-bottom:16px">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gold);margin-bottom:12px;font-family:'Space Mono',monospace;display:flex;align-items:center;gap:8px">
-        <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#2d9b5f;animation:pulse-dot 2s infinite"></span>
-        Live Insights
-      </div>
-      <div id="explore-insights-cards" style="display:flex;flex-direction:column;gap:8px"></div>
-    </div>
-
-    <!-- ACTIVITY FEED TAB -->
-    <div class="feed-section active" id="tab-activity">
-      <div id="activity-feed"><div class="loading">Loading activity...</div></div>
-    </div>
-
-    <!-- DISCOVER TAB (Hot + New + Communities merged) -->
-    <div class="feed-section" id="tab-discover">
+    <!-- MARKETS TAB (Hot + New + Communities) -->
+    <div class="feed-section active" id="tab-discover">
       <div style="margin-bottom:28px">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gold);margin-bottom:12px;font-family:'Space Mono',monospace">🔥 Hot Markets</div>
         <div id="hot-feed"><div class="loading">Loading hot markets...</div></div>
@@ -1193,6 +1174,7 @@ nav {
     </div>
 
     <!-- Hidden legacy sections for backward compat -->
+    <div style="display:none" id="tab-activity"><div id="activity-feed"></div></div>
     <div style="display:none" id="tab-following"></div>
     <div style="display:none" id="tab-live"><div id="trades-feed"></div></div>
     <div style="display:none" id="tab-hot"></div>
@@ -1258,7 +1240,7 @@ nav {
 
 <script>
 let feedData = null;
-let activeTab = 'activity';
+let activeTab = 'discover';
 let refreshInterval = null;
 let activityData = [];
 let activityLatestTs = null;
@@ -1336,30 +1318,7 @@ function loadDailyBriefing() {
 try { loadDailyBriefing(); } catch(e) { console.warn('[explore] briefing load failed:', e.message); }
 setInterval(function() { try { loadDailyBriefing(); } catch(e) {} }, 30 * 60 * 1000);
 
-// ── LIVE INSIGHTS LOADER ──
-function loadExploreInsights() {
-  fetch('/api/content-stream?limit=2').then(r => r.json()).then(data => {
-    const insights = data.insights || [];
-    if (!insights.length) return;
-    const container = document.getElementById('explore-insights-cards');
-    const section = document.getElementById('explore-insights');
-    function escH(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-    container.innerHTML = insights.map(ins => {
-      const shareUrl = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(ins.share_text || '');
-      return `<a href="${ins.cta_url || '/whales'}" class="explore-insight-card">
-        <div class="explore-insight-icon">${ins.icon || ''}</div>
-        <div class="explore-insight-info">
-          <div class="explore-insight-headline">${escH(ins.headline || '')}</div>
-          <div class="explore-insight-body">${escH(ins.body || '')}</div>
-        </div>
-        <div class="explore-insight-stat">${escH(ins.stat || '')}</div>
-        <a href="${shareUrl}" target="_blank" rel="noopener" class="explore-insight-share" onclick="event.stopPropagation()">Share on X</a>
-      </a>`;
-    }).join('');
-    section.style.display = 'block';
-  }).catch(() => {});
-}
-try { loadExploreInsights(); } catch(e) { console.warn('[explore] insights failed:', e.message); }
+// LIVE INSIGHTS removed — feed replaced with Markets tab
 
 // ── AI EDGE CARDS ──
 (async function loadAIEdge() {
@@ -1569,39 +1528,39 @@ function onExploreSearch(val) {
 
 function applyExploreSearch() {
   const q = _exploreSearchQuery;
-  if (activeTab === 'activity') {
-    if (!q) { renderActivityFeed(activityData); return; }
-    // Also search communities and show matching ones above activity results
-    const comms = (feedData && feedData.communities) || {};
-    const matchingComms = {};
-    Object.keys(comms).forEach(slug => {
-      const name = (comms[slug].display_name || slug).toLowerCase();
-      if (name.includes(q) || slug.includes(q)) matchingComms[slug] = comms[slug];
-    });
-    const commSlugs = Object.keys(matchingComms).sort((a,b) => (matchingComms[b].total_traders||0) - (matchingComms[a].total_traders||0));
-    let commHtml = '';
-    if (commSlugs.length) {
-      commHtml = '<div style="margin-bottom:16px"><div style="font-family:var(--mono);font-size:10px;color:var(--gold);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Communities</div>' +
-        commSlugs.slice(0, 5).map(slug => {
-          const c = matchingComms[slug];
-          const traders = c.total_traders || 0;
-          const markets = c.market_count || 0;
-          return `<a href="/${slug}" style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--card);border:1px solid var(--border);border-radius:10px;text-decoration:none;color:var(--text);margin-bottom:8px;">
-            <div style="width:9px;height:9px;border-radius:50%;background:${c.primary_color||'#c9920d'};flex-shrink:0"></div>
-            <div style="flex:1"><div style="font-size:13px;font-weight:600">${c.display_name||slug}</div><div style="font-size:11px;color:var(--muted);margin-top:2px">${markets} markets · ${traders.toLocaleString()} trades</div></div>
-          </a>`;
-        }).join('') + '</div>';
-    }
-    const filtered = activityData.filter(a => {
-      const text = ((a.question||'') + ' ' + (a.market_question||'') + ' ' + (a.community_name||a.community_slug||'') + ' ' + (a.username||'') + ' ' + (a.trader_name||'') + ' ' + (a.user||'')).toLowerCase();
-      return text.includes(q);
-    });
-    const feedEl = document.getElementById('activity-feed');
-    if (commHtml && feedEl) {
-      renderActivityFeed(filtered);
-      feedEl.insertAdjacentHTML('afterbegin', commHtml);
-    } else {
-      renderActivityFeed(filtered);
+  if (activeTab === 'discover' && feedData) {
+    const comms = feedData.communities || {};
+    // Filter hot markets
+    const hotFiltered = q ? (feedData.hot || []).filter(m => {
+      const commName = (comms[m.creator_slug]?.display_name || m.creator_slug || '').toLowerCase();
+      return (m.question||'').toLowerCase().includes(q) || commName.includes(q);
+    }) : (feedData.hot || []);
+    renderMarkets(hotFiltered, comms, 'hot-feed');
+    // Filter new markets
+    const newFiltered = q ? (feedData.newest || []).filter(m => {
+      const commName = (comms[m.creator_slug]?.display_name || m.creator_slug || '').toLowerCase();
+      return (m.question||'').toLowerCase().includes(q) || commName.includes(q);
+    }) : (feedData.newest || []);
+    renderMarkets(newFiltered, comms, 'new-feed');
+    // Filter communities
+    if (!q) { renderCommunitySections(feedData.community_sections, comms, feedData.top_predictors); }
+    else {
+      const filteredComms = {};
+      Object.keys(comms).forEach(slug => {
+        const name = (comms[slug].display_name || slug).toLowerCase();
+        if (name.includes(q) || slug.includes(q)) filteredComms[slug] = comms[slug];
+      });
+      const slugs = Object.keys(filteredComms).sort((a,b) => (filteredComms[b].total_traders||0)-(filteredComms[a].total_traders||0));
+      const html = slugs.length ? slugs.map(slug => {
+        const c = filteredComms[slug];
+        const traders = c.total_traders || 0;
+        const markets = c.market_count || 0;
+        return `<a href="/${slug}" style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--card);border:1px solid var(--border);border-radius:10px;text-decoration:none;color:var(--text);margin-bottom:8px;">
+          <div style="width:9px;height:9px;border-radius:50%;background:${c.primary_color||'#c9920d'};flex-shrink:0"></div>
+          <div style="flex:1"><div style="font-size:13px;font-weight:600">${c.display_name||slug}</div><div style="font-size:11px;color:var(--muted);margin-top:2px">${markets} markets · ${traders.toLocaleString()} trades</div></div>
+        </a>`;
+      }).join('') : '<div class="empty">No communities match your search.</div>';
+      document.getElementById('communities-feed').innerHTML = `<div style="padding:4px 0">${html}</div>`;
     }
   } else if ((activeTab === 'hot' || activeTab === 'new') && feedData) {
     const key = activeTab === 'hot' ? 'hot' : 'newest';
@@ -2441,7 +2400,7 @@ async function loadFeed() {
 }
 
 // Deep-link tab support: /explore?tab=discover
-const _tabRedirects = { hot: 'discover', new: 'discover', communities: 'discover', following: 'predictors' };
+const _tabRedirects = { hot: 'discover', new: 'discover', communities: 'discover', following: 'predictors', activity: 'discover' };
 let urlTab = new URLSearchParams(window.location.search).get('tab');
 if (urlTab) {
   urlTab = _tabRedirects[urlTab] || urlTab; // Redirect old tab names
@@ -2555,7 +2514,6 @@ function memberSignOut() {
 updateNavAuthState();
 
 // Initial loads
-loadActivityFeed();
 loadFeed();
 loadSmartMoneyDivergence();
 
