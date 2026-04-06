@@ -571,7 +571,9 @@
               <th>User</th>
               <th>Email</th>
               <th>Type</th>
-              <th style="text-align:center">Trades</th>
+              <th style="text-align:center">HFX Trades</th>
+              <th style="text-align:center">Poly Positions</th>
+              <th style="text-align:right">Poly P&amp;L</th>
               <th style="text-align:right">Balance (pts)</th>
               <th>Plan</th>
               <th>Joined</th>
@@ -998,10 +1000,12 @@ function renderUsersTable(rows) {
 
     return `
       <tr id="user-row-${uid}">
-        <td class="td-name">${esc(u.display_name || '—')}</td>
+        <td class="td-name">${esc(u.display_name || '—')}${u.polymarket_address ? '<br><span style="font-size:9px;color:var(--dim);font-family:monospace">' + esc(u.polymarket_address.slice(0,6) + '...' + u.polymarket_address.slice(-4)) + '</span>' : ''}</td>
         <td class="td-email">${esc(u.email)}</td>
-        <td>${typeLabel}</td>
-        <td class="td-markets">${u.trades}</td>
+        <td>${typeLabel}${u.creator_slug ? '<br><a href="/' + esc(u.creator_slug) + '" style="font-size:9px;color:var(--gold)">' + esc(u.creator_slug) + '</a>' : ''}</td>
+        <td class="td-markets">${u.hfx_trades || 0}</td>
+        <td style="text-align:center;font-family:monospace;font-size:12px">${u.poly_positions || 0}</td>
+        <td style="text-align:right;font-family:monospace;font-size:12px;color:${(u.poly_pnl || 0) >= 0 ? '#22c55e' : '#ef4444'}">${(u.poly_pnl || 0) !== 0 ? ((u.poly_pnl >= 0 ? '+' : '') + '$' + (u.poly_pnl || 0).toFixed(2)) : '—'}</td>
         <td style="text-align:right;font-family:monospace;font-size:12px">${pts}</td>
         <td><span class="plan-badge ${plan}">${plan === 'platinum' ? 'Premium' : plan}</span>${trialBadge ? '<br>' + trialBadge : ''}</td>
         <td class="td-date">${joined}</td>

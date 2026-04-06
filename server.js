@@ -1092,11 +1092,15 @@ app.post('/auth/wallet', async (req, res) => {
     let needsEmail = false;
 
     if (!user) {
-      // Create new user with wallet address
+      // Create new user with wallet address — use ON CONFLICT to prevent race condition duplicates
       const displayName = addrLower.slice(0, 6) + '...' + addrLower.slice(-4);
       if (pool) {
         const rows = await dbQuery(
-          'INSERT INTO users (display_name, polymarket_address, password_hash, created_at) VALUES ($1, $2, $3, NOW()) RETURNING id, email, display_name, balance',
+          `INSERT INTO users (display_name, polymarket_address, password_hash, created_at)
+           VALUES ($1, $2, $3, NOW())
+           ON CONFLICT (LOWER(polymarket_address)) WHERE polymarket_address IS NOT NULL AND polymarket_address != ''
+           DO UPDATE SET display_name = users.display_name
+           RETURNING id, email, display_name, balance`,
           [displayName, addrLower, 'wallet_auth_' + Date.now()]
         );
         user = rows[0];
@@ -13577,10 +13581,10 @@ app.post('/api/admin/set-plan', requireAdmin, async (req, res) => {
   }
 });
 
-// GET /api/admin/users — all members with activity stats + plan info
+// GET /api/admin/users — all members with activity stats + plan info + Polymarket data
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   try {
-    const allUsers = await dbQuery('SELECT id, email, display_name, created_at FROM users ORDER BY created_at DESC');
+    const allUsers = await dbQuery('SELECT id, email, display_name, polymarket_address, created_at FROM users ORDER BY created_at DESC');
     if (!allUsers?.length) return res.json([]);
 
     const creatorSettings = await dbQuery('SELECT creator_id, slug, plan, plan_trial_expires_at FROM creator_settings');
@@ -13595,10 +13599,11 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
     });
 
     const allUserIds = allUsers.map(u => u.id);
-    const [positions, balances, lastActivity] = await Promise.all([
-      dbQuery('SELECT user_id FROM positions WHERE user_id = ANY($1)', [allUserIds]),
-      dbQuery('SELECT user_id, balance FROM community_balances WHERE user_id = ANY($1)', [allUserIds]),
-      dbQuery('SELECT user_id, MAX(created_at) as last_active FROM positions WHERE user_id = ANY($1) GROUP BY user_id', [allUserIds])
+    const [positions, balances, lastActivity, cachedPos] = await Promise.all([
+      dbQuery('SELECT user_id FROM positions WHERE user_id = ANY($1)', [allUserIds]).catch(() => []),
+      dbQuery('SELECT user_id, balance FROM community_balances WHERE user_id = ANY($1)', [allUserIds]).catch(() => []),
+      dbQuery('SELECT user_id, MAX(created_at) as last_active FROM positions WHERE user_id = ANY($1) GROUP BY user_id', [allUserIds]).catch(() => []),
+      dbQuery('SELECT user_id, COUNT(*) as pos_count, SUM(CASE WHEN pnl IS NOT NULL THEN pnl ELSE 0 END) as total_pnl FROM cached_positions WHERE user_id = ANY($1) GROUP BY user_id', [allUserIds]).catch(() => [])
     ]);
     const tradeMap = {};
     (positions || []).forEach(p => { tradeMap[p.user_id] = (tradeMap[p.user_id] || 0) + 1; });
@@ -13606,15 +13611,25 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
     (balances || []).forEach(b => { balMap[b.user_id] = (balMap[b.user_id] || 0) + (b.balance || 0); });
     const activityMap = {};
     (lastActivity || []).forEach(a => { activityMap[a.user_id] = a.last_active; });
+    // Polymarket position counts + PnL from cached_positions
+    const polyPosMap = {};
+    const polyPnlMap = {};
+    (cachedPos || []).forEach(c => {
+      polyPosMap[c.user_id] = parseInt(c.pos_count) || 0;
+      polyPnlMap[c.user_id] = parseFloat(c.total_pnl) || 0;
+    });
 
     const rows = allUsers.map(u => ({
       id:                 u.id,
       email:              u.email || '—',
       display_name:       u.display_name || '—',
+      polymarket_address: u.polymarket_address || null,
       is_creator:         creatorIdSet.has(u.id),
       creator_slug:       creatorSlugMap[u.id] || null,
-      trades:             tradeMap[u.id] || 0,
+      hfx_trades:         tradeMap[u.id] || 0,
       total_balance:      balMap[u.id] || 0,
+      poly_positions:     polyPosMap[u.id] || 0,
+      poly_pnl:           polyPnlMap[u.id] || 0,
       joined:             u.created_at,
       last_active:        activityMap[u.id] || null,
       plan:               creatorPlanMap[u.id] || 'free',
@@ -29214,6 +29229,20 @@ if (pool) {
       await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS kalshi_username TEXT`).catch(() => {});
       await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS manifold_username TEXT`).catch(() => {});
       await dbQuery(`ALTER TABLE users ADD COLUMN IF NOT EXISTS polymarket_address TEXT`).catch(() => {});
+
+      // Dedup wallet users: keep earliest row per polymarket_address, delete rest
+      await dbQuery(`
+        DELETE FROM users WHERE id IN (
+          SELECT id FROM (
+            SELECT id, ROW_NUMBER() OVER (PARTITION BY LOWER(polymarket_address) ORDER BY created_at ASC) as rn
+            FROM users WHERE polymarket_address IS NOT NULL AND polymarket_address != ''
+          ) dupes WHERE rn > 1
+        )
+      `).catch(e => console.log('[boot] Dedup skipped:', e.message));
+
+      // Unique index on wallet address to prevent future duplicates
+      await dbQuery(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_polymarket_address_lower ON users (LOWER(polymarket_address)) WHERE polymarket_address IS NOT NULL AND polymarket_address != ''`).catch(() => {});
+
       await dbQuery(`ALTER TABLE cached_positions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`).catch(() => {});
       await dbQuery(`ALTER TABLE market_snapshots ADD COLUMN IF NOT EXISTS volume NUMERIC`).catch(() => {});
       await dbQuery(`ALTER TABLE markets ADD COLUMN IF NOT EXISTS resolution_sources JSONB`).catch(() => {});
