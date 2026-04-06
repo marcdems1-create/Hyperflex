@@ -19875,7 +19875,8 @@ app.get('/api/market/:slug/whale-flow', async (req, res) => {
         entry_price: w.avgPrice ? parseFloat(w.avgPrice) : null,
         current_value: w.currentValue ? parseFloat(w.currentValue) : null,
         pnl: w.pnl ? parseFloat(w.pnl) : null,
-        timestamp: w.timestamp || w.detected_at || null
+        timestamp: w.timestamp || w.detected_at || null,
+        outcome: w.title || w.outcome || w.market || ''
       });
     }
 
