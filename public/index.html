@@ -990,7 +990,7 @@ function openKelly(question, side, marketPct, whalePct, url, whaleCount, capital
     edgeEl.style.border = '1px solid rgba(239,68,68,0.3)';
     edgeEl.innerHTML = '<span style="color:#ef4444">\u26A0\uFE0F Edge may be gone</span> \u2014 market (' + marketPct + '%) already priced in whale consensus (' + whalePct + '%)';
   }
-  document.getElementById('kellyTradeLink').href = polyRef(url || '#');
+  document.getElementById('kellyTradeLink').href = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(url || '') : '#';
   var saved = localStorage.getItem('hfx_bankroll');
   if (saved) document.getElementById('kellyBankroll').value = saved;
   calcKelly();

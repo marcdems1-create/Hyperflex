@@ -194,7 +194,7 @@ function renderTable() {
     var profitStr = m.isArb ? '+$' + m.totalProfit.toFixed(2) : '—';
     var profitColor = m.isArb ? 'var(--green)' : 'var(--dim)';
     var spreadStr = m.isArb ? '+' + m.spreadPct.toFixed(2) + '%' : m.spreadPct.toFixed(2) + '%';
-    var polyUrl = polyRef('https://polymarket.com/event/' + (m.slug || m.conditionId));
+    var polyUrl = '/market/' + (m.slug || m.conditionId);
 
     // Depth bars (relative to max 1000 shares)
     var yesDepthPct = Math.min(100, m.yesAskSize / 10);

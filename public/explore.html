@@ -980,7 +980,7 @@ nav {
         var market = (t.market || 'Unknown');
         if (market.length > 40) market = market.substring(0, 37) + '...';
         var lfUrl = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(t.url || '') : '#';
-        if (lfUrl === '#') lfUrl = polyRef(t.url || 'https://polymarket.com');
+        if (lfUrl === '#') lfUrl = '/explore'; // fallback to explore if no slug found
         return '<a class="lf-item" href="' + lfUrl + '"' + (lfUrl.startsWith('http') ? ' target="_blank" rel="noopener"' : '') + '>' +
           '<span style="font-family:\'Space Mono\',monospace;font-size:11px;color:var(--dim)">' + whalePrefix + trader + '</span>' +
           '<span class="lf-size">' + sizeStr + '</span>' +
@@ -1414,7 +1414,7 @@ try { loadExploreInsights(); } catch(e) { console.warn('[explore] insights faile
       var sideColor = sideUp === 'YES' ? '#22c55e' : '#ef4444';
       var sideBg = sideUp === 'YES' ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)';
       var url = s.url && s.url.startsWith('https://polymarket.com') ? s.url : '#';
-      var tradeUrl = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(url) : polyRef(url);
+      var tradeUrl = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(url) : '/explore';
       var meta = [];
       if (s.whale_count) meta.push(s.whale_count + ' whales');
       if (s.capital) meta.push(fmtC(s.capital));
@@ -1969,14 +1969,14 @@ function activityCard(a) {
       : '';
     var destRaw = a.url || 'https://polymarket.com';
     const dest = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(destRaw) : '#';
-    const finalDest = (dest && dest !== '#') ? dest : polyRef(destRaw);
+    const finalDest = (dest && dest !== '#') ? dest : (typeof hfxMarketUrl === 'function' ? hfxMarketUrl(destRaw) : '/explore');
     const isExt = finalDest.startsWith('http');
     const _ctTrader = escHtml(a.trader_name || 'Whale');
     const _ctQuestion = escHtml(a.question || '');
     const _ctSide = escHtml(a.side || '');
     const _ctSize = a.size || 0;
     const _ctUrl = escHtml(finalDest);
-    return `<div class="activity-card" style="border-left:3px solid #c9920d;cursor:pointer" onclick="if(event.target.closest('.whale-copy-btn'))return;window.open('${_ctUrl}','_blank')">
+    return `<div class="activity-card" style="border-left:3px solid #c9920d;cursor:pointer" onclick="if(event.target.closest('.whale-copy-btn'))return;${isExt ? "window.open('" + _ctUrl + "','_blank')" : "window.location.href='" + _ctUrl + "'"}">
       <div class="ac-avatar" style="background:rgba(201,146,13,0.15);border:1px solid rgba(201,146,13,0.3);font-size:22px;display:flex;align-items:center;justify-content:center">&#x1F40B;</div>
       <div class="ac-body">
         <div class="ac-header">
@@ -2907,7 +2907,7 @@ function openWhaleCopyTrade(trader, market, side, size, marketUrl, proxyWallet) 
   document.getElementById('ect-size').textContent = fmtSize;
   document.getElementById('ect-amount').value = '';
   document.getElementById('ect-alert').checked = false;
-  document.getElementById('ect-cta').href = polyRef(marketUrl || 'https://polymarket.com');
+  document.getElementById('ect-cta').href = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(marketUrl || '') : '/explore';
   modal.style.display = 'flex';
 }
 function closeExploreCopy() {

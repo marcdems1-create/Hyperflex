@@ -214,7 +214,7 @@ function renderSignal() {
     '<div class="stat-box"><div class="stat-label">Urgency</div><div class="stat-val" style="color:' + urgColor + '">' + urgIcon + ' ' + (urgency || '-') + '</div></div>';
 
   // Set trade link
-  var url = polyRef(d.market_url || 'https://polymarket.com');
+  var url = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(d.market_url || '') : '/signals';
   document.getElementById('tradeBtn').href = url;
 
   // If already resolved or skipped

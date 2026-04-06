@@ -680,7 +680,7 @@ function openCopyTrade(trader, market, side, size, marketUrl, proxyWallet) {
   // Set CTA link
   const ctaEl = document.getElementById('ctCta');
   var internalCtaUrl = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(marketUrl || '') : '#';
-  ctaEl.href = (internalCtaUrl && internalCtaUrl !== '#') ? internalCtaUrl : polyRef(marketUrl || 'https://polymarket.com');
+  ctaEl.href = (internalCtaUrl && internalCtaUrl !== '#') ? internalCtaUrl : '/whales';
   ctaEl.onclick = function() { handleCopyTradeCta(); };
 
   document.getElementById('ctOverlay').classList.add('open');
@@ -1238,7 +1238,7 @@ function openMarketDetail(question, yesPct, url, marketId) {
   document.getElementById('mdYesPrice').style.color = '#22c55e';
   document.getElementById('mdNoPrice').textContent = noPct != null ? noPct + '%' : '--';
   document.getElementById('mdNoPrice').style.color = '#ef4444';
-  document.getElementById('mdTradeLink').href = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(url || '') : polyRef(url || 'https://polymarket.com');
+  document.getElementById('mdTradeLink').href = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(url || '') : '/whales';
   document.getElementById('mdChartArea').innerHTML = '<div class="md-no-data">Loading price history...</div>';
   document.getElementById('mdNewsArea').innerHTML = '';
   overlay.classList.add('open');
@@ -1642,7 +1642,7 @@ async function openWhaleProfile(addressOrName) {
     });
 
     // First market URL for CTA
-    var firstUrl = polyRef((d.top_positions && d.top_positions[0] && d.top_positions[0].url) ? d.top_positions[0].url : 'https://polymarket.com');
+    var firstUrl = typeof hfxMarketUrl === 'function' ? hfxMarketUrl((d.top_positions && d.top_positions[0] && d.top_positions[0].url) ? d.top_positions[0].url : '') : '/whales';
 
     // Fetch whale behavior data (non-blocking enrichment)
     var behaviorHtml = '';

@@ -13779,8 +13779,9 @@ function qtTradeBtn(url, label, color, extraData) {
   const bg = color || '#c9920d';
   const fg = (bg === 'var(--gold)' || color === '#c9920d') ? '#141412' : '#fff';
   const safeUrl = finalUrl.replace(/'/g, "\\'");
-  const refUrl = (typeof polyRef === 'function' && safeUrl.includes('polymarket.com') ? polyRef(safeUrl) : safeUrl).replace(/'/g, "\\'");
-  return `<a href="${refUrl}" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none;background:${bg};color:${fg};border:none;border-radius:6px;padding:7px 14px;font-family:var(--mono);font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap">${btnLabel}</a>`;
+  const refUrl = (typeof hfxMarketUrl === 'function' && safeUrl.includes('polymarket.com') ? hfxMarketUrl(safeUrl) : safeUrl).replace(/'/g, "\\'");
+  const isInternal = refUrl.startsWith('/');
+  return `<a href="${refUrl}"${isInternal ? '' : ' target="_blank" rel="noopener"'} style="display:inline-block;text-decoration:none;background:${bg};color:${fg};border:none;border-radius:6px;padding:7px 14px;font-family:var(--mono);font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap">${btnLabel}</a>`;
 }
 
 var _qtCategory = 'all';
@@ -13802,7 +13803,7 @@ function renderHotMarkets() {
   grid.innerHTML = top.map(function(m) {
     var price = Math.round((m.yes_price || 0.5) * 100);
     var rawUrl = buildMarketUrl({ url: m.url, slug: m.slug, question: m.question });
-    var cardLink = (typeof polyRef==='function' && rawUrl.includes('polymarket.com')) ? polyRef(rawUrl) : rawUrl;
+    var cardLink = (typeof hfxMarketUrl==='function' && rawUrl.includes('polymarket.com')) ? hfxMarketUrl(rawUrl) : rawUrl;
     var cat = (m.category || 'other').toUpperCase();
     var vol = m.volume >= 1e6 ? '$' + (m.volume / 1e6).toFixed(1) + 'M' : m.volume >= 1e3 ? '$' + Math.round(m.volume / 1e3) + 'K' : '$' + (m.volume || 0);
     var whales = m.whale_count || 0;

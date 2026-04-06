@@ -299,7 +299,7 @@ function renderSignals() {
     var flag = regionFlag(s.market);
     var url = s.url && s.url.startsWith('https://polymarket.com') ? s.url : 'https://polymarket.com';
     var internalUrl = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(url) : '#';
-    if (internalUrl === '#') internalUrl = polyRef(url); // fallback to polymarket with ref tag
+    if (internalUrl === '#') internalUrl = '/signals'; // fallback to signals page if no slug
 
     // Build meta items
     var meta = [];
@@ -378,7 +378,7 @@ async function loadWhaleConsensus() {
       // Fallback: build from signals
       var mktMap = {};
       _signals.forEach(function(s) {
-        if (!mktMap[s.market]) mktMap[s.market] = {market:s.market,whale_count:s.whale_count||0,capital:s.capital||0,side:s.side||'YES',url:polyRef(s.url||'https://polymarket.com')};
+        if (!mktMap[s.market]) mktMap[s.market] = {market:s.market,whale_count:s.whale_count||0,capital:s.capital||0,side:s.side||'YES',url:(typeof hfxMarketUrl==='function'?hfxMarketUrl(s.url||''):'/signals')};
       });
       picks = Object.values(mktMap).sort(function(a,b){return b.whale_count-a.whale_count}).slice(0,12);
     }
