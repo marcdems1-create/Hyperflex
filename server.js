@@ -1212,14 +1212,26 @@ app.post('/auth/wallet', async (req, res) => {
     let needsEmail = false;
 
     if (!user) {
-      // Create new user with wallet address — use ON CONFLICT to prevent race condition duplicates
+      // Double-check with broader search before creating (case-insensitive, trim whitespace)
+      if (pool) {
+        const recheck = await dbQuery(
+          `SELECT id, email, display_name, balance FROM users
+           WHERE LOWER(TRIM(polymarket_address)) = $1
+              OR LOWER(TRIM(display_name)) = $1
+           ORDER BY created_at ASC LIMIT 1`,
+          [addrLower]
+        );
+        user = recheck[0] || null;
+      }
+    }
+
+    if (!user) {
+      // Create new user — no existing record found
       const displayName = addrLower.slice(0, 6) + '...' + addrLower.slice(-4);
       if (pool) {
         const rows = await dbQuery(
           `INSERT INTO users (display_name, polymarket_address, password_hash, created_at)
            VALUES ($1, $2, $3, NOW())
-           ON CONFLICT (LOWER(polymarket_address)) WHERE polymarket_address IS NOT NULL AND polymarket_address != ''
-           DO UPDATE SET display_name = users.display_name
            RETURNING id, email, display_name, balance`,
           [displayName, addrLower, 'wallet_auth_' + Date.now()]
         );
