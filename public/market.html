@@ -702,6 +702,9 @@ function renderOutcomes(m) {
     '<th>Outcome</th><th>Buy Yes</th><th>Buy No</th><th>Vol</th><th>Liq</th>' +
     '</tr></thead><tbody>';
 
+  // Track which position assets have been claimed by an outcome row
+  var _claimedPositionAssets = {};
+
   for (var r = 0; r < rows.length; r++) {
     var row = rows[r];
     var activeClass = (row.idx === _activeOutcomeIndex) ? ' active-outcome' : '';
@@ -709,11 +712,13 @@ function renderOutcomes(m) {
     var noCents = Math.round(row.noP * 100);
     var yesFmt = fmtCents(row.yesP);
     var noFmt = fmtCents(row.noP);
-    // Build position badge — match by outcome name in title (simplest, most reliable)
+    // Build position badge — match by token ID or conditionId
     var posBadge = '';
     if (Object.keys(_userPositions).length) {
-      var matchedPos = findPositionForOutcome(row.name, row.idx);
+      var matchedPos = findPositionForOutcome(row.name, row.idx, _claimedPositionAssets);
       if (matchedPos && matchedPos.size > 0) {
+        // Mark this position's asset as claimed so it won't match another row
+        if (matchedPos._matchedAsset) _claimedPositionAssets[matchedPos._matchedAsset] = true;
         var avgC = (matchedPos.avgPrice * 100).toFixed(1);
         posBadge = '<div class="position-badge position-badge-yes" title="Your position">' +
           '<span class="pos-shares">' + matchedPos.size.toFixed(1) + ' shares</span> ' +
@@ -1691,18 +1696,29 @@ function updateSidebarPosition() {
 
 // Helper: find a user position matching a specific outcome row
 // Matches by token ID (each outcome has unique clobTokenIds) or conditionId
-function findPositionForOutcome(outcomeName, outcomeIdx) {
+// claimed = set of already-matched asset keys to prevent double-matching
+function findPositionForOutcome(outcomeName, outcomeIdx, claimed) {
   if (!Object.keys(_userPositions).length) return null;
+  claimed = claimed || {};
 
   // 1. Match by token ID — most reliable for multi-outcome events
   //    Each event market has unique clobTokenIds: [yesTokenId, noTokenId]
   //    The position's asset is keyed by its specific token ID
   var tids = getOutcomeTokenIds(outcomeIdx);
+  console.log('[pos-match] Outcome', outcomeIdx, '(' + (outcomeName || '').slice(0,20) + '): tokenIds=' + JSON.stringify(tids.map(function(t){return (t||'').slice(0,15)+'...'})));
   if (tids.length) {
     var yTid = (tids[0] || '').toLowerCase();
     var nTid = (tids[1] || '').toLowerCase();
-    if (_userPositions[yTid]) return _userPositions[yTid];
-    if (_userPositions[nTid]) return _userPositions[nTid];
+    if (_userPositions[yTid] && !claimed[yTid]) {
+      var p = Object.assign({}, _userPositions[yTid], { _matchedAsset: yTid });
+      console.log('[pos-match] → YES token matched for outcome', outcomeIdx);
+      return p;
+    }
+    if (_userPositions[nTid] && !claimed[nTid]) {
+      var p = Object.assign({}, _userPositions[nTid], { _matchedAsset: nTid });
+      console.log('[pos-match] → NO token matched for outcome', outcomeIdx);
+      return p;
+    }
   }
 
   // 2. Fallback: match by conditionId
@@ -1712,14 +1728,20 @@ function findPositionForOutcome(outcomeName, outcomeIdx) {
   } else if (_market) {
     rowConditionId = (_market.conditionId || '').toLowerCase();
   }
+  console.log('[pos-match] Outcome', outcomeIdx, 'conditionId=' + (rowConditionId || 'NONE').slice(0,15) + '...');
   if (rowConditionId) {
     var posKeys = Object.keys(_userPositions);
     for (var i = 0; i < posKeys.length; i++) {
-      if (_userPositions[posKeys[i]].conditionId === rowConditionId) {
-        return _userPositions[posKeys[i]];
+      if (_userPositions[posKeys[i]].conditionId === rowConditionId && !claimed[posKeys[i]]) {
+        var p = Object.assign({}, _userPositions[posKeys[i]], { _matchedAsset: posKeys[i] });
+        console.log('[pos-match] → conditionId matched for outcome', outcomeIdx, 'asset=' + posKeys[i].slice(0,15));
+        return p;
       }
     }
   }
+
+  // 3. Log all position keys vs all outcome token IDs for debugging
+  console.log('[pos-match] No match for outcome', outcomeIdx, '. Positions:', Object.keys(_userPositions).map(function(k){return k.slice(0,15)+'...'}));
 
   return null;
 }
