@@ -589,14 +589,14 @@ function renderMarket() {
   document.getElementById('tradePrice').value = Math.round(yesPrice * 100) || 50;
   if (icon) { var ti = document.getElementById('tradeIcon'); ti.src = icon; ti.style.display = ''; }
   document.getElementById('tradeTitle').textContent = (m._displayTitle || m.question || '').substring(0, 50);
-  // Replace YES/NO labels with outcome names for multi-outcome events
-  updateOutcomeLabels();
   // Use event slug for Polymarket link (market slugs 404 on polymarket.com)
   var eventSlug = m._eventSlug || (m.events && m.events[0] && m.events[0].slug) || slug;
   document.getElementById('polyLink').href = polyRef('https://polymarket.com/event/' + eventSlug);
 
   updateTradeCalc();
   renderOutcomes(m);
+  // Replace YES/NO labels with outcome names AFTER renderOutcomes sets _sortedEventMarkets
+  updateOutcomeLabels();
   // Multi-outcome chart: fetch history for top outcomes and draw colored lines
   if (_eventMarkets && _eventMarkets.length > 1) {
     document.getElementById('chartOutcome').textContent = 'All Outcomes';
@@ -1575,6 +1575,7 @@ async function fetchUserPositions() {
       if (cid) conditionIds.push(cid);
       var tids = em.clobTokenIds;
       if (typeof tids === 'string') { try { tids = JSON.parse(tids); } catch(e) { tids = []; } }
+      console.log('[positions] Outcome ' + i + ' (' + (em.groupItemTitle || em.question || '').slice(0,20) + '): conditionId=' + (cid || 'NONE').slice(0,15) + ' tokenIds=' + JSON.stringify(tids ? tids.map(function(t){return t.slice(0,15)+'...'}) : []));
       if (tids) {
         for (var t = 0; t < tids.length; t++) {
           tokenIdToCondition[tids[t].toLowerCase()] = cid.toLowerCase();
@@ -1689,23 +1690,22 @@ function updateSidebarPosition() {
 }
 
 // Helper: find a user position matching a specific outcome row
-// Uses title fuzzy match (most reliable) + token ID fallback
+// Matches by token ID (each outcome has unique clobTokenIds) or conditionId
 function findPositionForOutcome(outcomeName, outcomeIdx) {
   if (!Object.keys(_userPositions).length) return null;
-  var nameLower = (outcomeName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
-  // 1. Match by title — the API returns title like "Will Bitcoin hit $60k..." for each position
-  var posKeys = Object.keys(_userPositions);
-  for (var i = 0; i < posKeys.length; i++) {
-    var p = _userPositions[posKeys[i]];
-    var titleLower = (p.title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-    // Check if outcome name appears in position title (e.g. "60k" in "Will Bitcoin hit $60k...")
-    if (nameLower && titleLower && nameLower.length >= 2 && titleLower.includes(nameLower)) {
-      return p;
-    }
+  // 1. Match by token ID — most reliable for multi-outcome events
+  //    Each event market has unique clobTokenIds: [yesTokenId, noTokenId]
+  //    The position's asset is keyed by its specific token ID
+  var tids = getOutcomeTokenIds(outcomeIdx);
+  if (tids.length) {
+    var yTid = (tids[0] || '').toLowerCase();
+    var nTid = (tids[1] || '').toLowerCase();
+    if (_userPositions[yTid]) return _userPositions[yTid];
+    if (_userPositions[nTid]) return _userPositions[nTid];
   }
 
-  // 2. Match by conditionId
+  // 2. Fallback: match by conditionId
   var rowConditionId = '';
   if (_sortedEventMarkets && _sortedEventMarkets[outcomeIdx]) {
     rowConditionId = (_sortedEventMarkets[outcomeIdx].conditionId || '').toLowerCase();
@@ -1713,6 +1713,7 @@ function findPositionForOutcome(outcomeName, outcomeIdx) {
     rowConditionId = (_market.conditionId || '').toLowerCase();
   }
   if (rowConditionId) {
+    var posKeys = Object.keys(_userPositions);
     for (var i = 0; i < posKeys.length; i++) {
       if (_userPositions[posKeys[i]].conditionId === rowConditionId) {
         return _userPositions[posKeys[i]];
@@ -1720,11 +1721,7 @@ function findPositionForOutcome(outcomeName, outcomeIdx) {
     }
   }
 
-  // 3. Fallback: token ID
-  var tids = getOutcomeTokenIds(outcomeIdx);
-  var yTid = (tids[0] || '').toLowerCase();
-  var nTid = (tids[1] || '').toLowerCase();
-  return _userPositions[yTid] || _userPositions[nTid] || null;
+  return null;
 }
 
 // Helper: get token IDs for a specific outcome index
