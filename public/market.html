@@ -202,9 +202,6 @@ canvas{display:block;width:100%!important}
 </head>
 <body>
 
-<!-- Debug button for troubleshooting -->
-<button onclick="if(document.getElementById('tradeDebugPanel')) document.getElementById('tradeDebugPanel').style.display=document.getElementById('tradeDebugPanel').style.display==='none'?'block':'none'; else tradeDebug('DEBUG', 'Panel triggered manually');" style="position:fixed;top:10px;right:10px;background:#c9920d;color:#000;border:none;padding:4px 8px;font-size:10px;cursor:pointer;border-radius:3px;z-index:99999">🐛 Debug</button>
-<button onclick="fetchTradeBalance()" style="position:fixed;top:35px;right:10px;background:#22c55e;color:#000;border:none;padding:4px 8px;font-size:10px;cursor:pointer;border-radius:3px;z-index:99999">💰 Refresh Balance</button>
 
 <div id="nav-root"></div>
 <script>if(typeof polyRef==='undefined')window.polyRef=function(u){return u};</script>
