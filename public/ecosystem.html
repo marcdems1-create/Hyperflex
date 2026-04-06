@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>Polymarket Ecosystem Dashboard | HYPERFLEX</title>
+<meta name="description" content="Real-time Polymarket stats, volume, open interest, TVL, trending markets, top traders, LP rewards, and ecosystem tools. The most comprehensive Polymarket analytics dashboard."/>
+<meta name="keywords" content="polymarket stats, polymarket volume, polymarket analytics, polymarket open interest, polymarket TVL, polymarket traders, polymarket ecosystem, prediction market data"/>
+<link rel="canonical" href="https://hyperflex.network/ecosystem"/>
+<meta property="og:type" content="website"/>
+<meta property="og:url" content="https://hyperflex.network/ecosystem"/>
+<meta property="og:title" content="Polymarket Ecosystem Dashboard — HYPERFLEX"/>
+<meta property="og:description" content="Real-time Polymarket stats: volume, open interest, TVL, trending markets, top traders, LP rewards, and ecosystem tools."/>
+<meta property="og:image" content="https://hyperflex.network/og-ecosystem.png"/>
+<meta property="og:site_name" content="HYPERFLEX"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:site" content="@HyperFlexApp"/>
+<meta name="twitter:title" content="Polymarket Ecosystem Dashboard — HYPERFLEX"/>
+<meta name="twitter:description" content="Real-time Polymarket stats: volume, open interest, TVL, trending markets, top traders, LP rewards, and ecosystem tools."/>
+<meta name="twitter:image" content="https://hyperflex.network/og-ecosystem.png"/>
+<link rel="icon" href="/hyperflex-logo.png"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<style>
+:root{--bg:#0a0a09;--card:#111110;--card2:#161614;--border:#1e1e1b;--border2:#2a2a25;--text:#e8e4d9;--soft:#a09d94;--dim:#6b6860;--muted:#4a4744;--gold:#c9920d;--green:#22c55e;--red:#ef4444;--blue:#60a5fa;--purple:#a78bfa;--orange:#f97316;--sans:'Syne',sans-serif;--mono:'Space Mono',monospace}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+a{color:var(--gold);text-decoration:none} a:hover{text-decoration:underline}
+
+/* PAGE HEADER */
+.eco-header{max-width:1200px;margin:0 auto;padding:32px 20px 0}
+.eco-header h1{font-family:var(--sans);font-size:32px;font-weight:800;letter-spacing:-0.5px;color:var(--text)}
+.eco-header h1 span{color:var(--gold)}
+.eco-subtitle{font-family:var(--mono);font-size:12px;color:var(--dim);margin-top:6px;letter-spacing:.3px}
+.eco-live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);margin-right:6px;animation:livePulse 2s ease-in-out infinite}
+@keyframes livePulse{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(34,197,94,.4)}50%{opacity:.7;box-shadow:0 0 0 6px rgba(34,197,94,0)}}
+
+/* TABS */
+.eco-tabs{max-width:1200px;margin:0 auto;padding:20px 20px 0;display:flex;gap:4px;border-bottom:1px solid var(--border)}
+.eco-tab{font-family:var(--mono);font-size:11px;font-weight:700;padding:10px 20px;color:var(--dim);cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;transition:all .15s;min-height:44px}
+.eco-tab:hover{color:var(--soft)}
+.eco-tab.active{color:var(--text);border-bottom-color:var(--gold)}
+
+/* CONTAINER */
+.eco-container{max-width:1200px;margin:0 auto;padding:24px 20px 60px}
+.eco-panel{display:none}
+.eco-panel.active{display:block}
+
+/* PULSE ANIMATION ON NUMBERS */
+@keyframes numPulse{0%{text-shadow:0 0 0 rgba(201,146,13,0)}50%{text-shadow:0 0 12px rgba(201,146,13,.3)}100%{text-shadow:0 0 0 rgba(201,146,13,0)}}
+.stat-pulse{animation:numPulse 3s ease-in-out infinite}
+
+/* STAT GRID */
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:32px}
+.stat-card{background:var(--card);padding:24px 20px;position:relative;transition:background .15s}
+.stat-card:hover{background:var(--card2)}
+.stat-label{font-family:var(--mono);font-size:9px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.stat-label .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.stat-val{font-family:var(--sans);font-size:28px;font-weight:800;color:var(--text);letter-spacing:-0.5px;line-height:1}
+.stat-val.gold{color:var(--gold)}
+.stat-sub{font-family:var(--mono);font-size:9px;color:var(--dim);margin-top:6px}
+.stat-change{font-family:var(--mono);font-size:10px;font-weight:700;margin-top:4px}
+.stat-change.up{color:var(--green)}
+.stat-change.down{color:var(--red)}
+
+/* BUY/SELL RATIO BAR */
+.ratio-bar-wrap{margin-top:10px}
+.ratio-bar{height:8px;border-radius:4px;background:var(--border);overflow:hidden;display:flex}
+.ratio-buy{background:var(--green);height:100%;transition:width .6s ease}
+.ratio-sell{background:var(--red);height:100%;transition:width .6s ease}
+.ratio-labels{display:flex;justify-content:space-between;margin-top:4px;font-family:var(--mono);font-size:9px}
+.ratio-labels .buy-label{color:var(--green)}
+.ratio-labels .sell-label{color:var(--red)}
+
+/* SECTION HEADERS */
+.section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.section-title{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--soft);text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:8px}
+.section-badge{font-family:var(--mono);font-size:9px;font-weight:700;padding:3px 8px;border-radius:4px;background:rgba(201,146,13,.1);color:var(--gold)}
+
+/* TRENDING MARKETS */
+.trending-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px;margin-bottom:40px}
+.trend-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;transition:all .15s;cursor:default}
+.trend-card:hover{border-color:var(--border2);background:var(--card2)}
+.trend-rank{font-family:var(--mono);font-size:18px;font-weight:800;color:var(--gold);margin-right:12px;flex-shrink:0}
+.trend-top{display:flex;align-items:flex-start;margin-bottom:10px}
+.trend-q{font-size:14px;font-weight:700;color:var(--text);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.trend-meta{display:flex;gap:12px;font-family:var(--mono);font-size:10px;color:var(--dim);flex-wrap:wrap}
+.trend-meta .val{color:var(--soft);font-weight:700}
+.trend-odds{display:flex;gap:6px;margin-top:10px}
+.trend-yes,.trend-no{font-family:var(--mono);font-size:11px;font-weight:700;padding:5px 12px;border-radius:5px;flex:1;text-align:center}
+.trend-yes{background:rgba(34,197,94,.1);color:var(--green)}
+.trend-no{background:rgba(239,68,68,.1);color:var(--red)}
+.trend-link{font-family:var(--mono);font-size:9px;font-weight:700;color:var(--gold);margin-top:10px;display:inline-block}
+
+/* TOP TRADERS LEADERBOARD */
+.leaders{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:40px}
+.leader-row{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);transition:background .15s}
+.leader-row:last-child{border-bottom:none}
+.leader-row:hover{background:var(--card2)}
+.leader-rank{font-family:var(--mono);font-size:16px;font-weight:800;color:var(--gold);width:28px;text-align:center;flex-shrink:0}
+.leader-rank.top3{font-size:18px}
+.leader-info{flex:1;min-width:0}
+.leader-name{font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.leader-stats{font-family:var(--mono);font-size:9px;color:var(--dim);margin-top:2px}
+.leader-pnl{font-family:var(--mono);font-size:14px;font-weight:800;flex-shrink:0}
+.leader-pnl.pos{color:var(--green)}
+.leader-pnl.neg{color:var(--red)}
+
+/* LP REWARDS TABLE */
+.rewards-filters{display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap}
+.rw-pill{font-family:var(--mono);font-size:9px;font-weight:700;padding:6px 14px;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--dim);cursor:pointer;transition:all .15s;min-height:44px;display:inline-flex;align-items:center}
+.rw-pill:hover{border-color:var(--gold);color:var(--soft)}
+.rw-pill.active{background:var(--gold);color:var(--bg);border-color:var(--gold)}
+.rewards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:12px}
+.reward-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:18px;transition:all .15s}
+.reward-card:hover{border-color:var(--border2);background:var(--card2)}
+.reward-q{font-size:14px;font-weight:700;color:var(--text);line-height:1.4;margin-bottom:12px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.reward-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}
+.reward-stat{text-align:center}
+.reward-stat-label{font-family:var(--mono);font-size:8px;color:var(--dim);text-transform:uppercase;letter-spacing:.3px}
+.reward-stat-val{font-family:var(--sans);font-size:16px;font-weight:800;color:var(--text);margin-top:2px}
+.reward-stat-val.gold{color:var(--gold)}
+.reward-detail{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--dim);padding:8px 0;border-top:1px solid var(--border)}
+.reward-detail .val{color:var(--soft);font-weight:700}
+.reward-cta{display:block;text-align:center;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--bg);background:var(--gold);padding:10px;border-radius:6px;margin-top:12px;transition:background .15s;min-height:44px;display:flex;align-items:center;justify-content:center}
+.reward-cta:hover{background:#e0b340;text-decoration:none}
+
+/* ECOSYSTEM TOOLS */
+.tools-filters{display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap}
+.tools-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.tool-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:18px;transition:all .15s;position:relative}
+.tool-card:hover{border-color:var(--border2);background:var(--card2)}
+.tool-card.featured{border-color:var(--gold);box-shadow:0 0 20px rgba(201,146,13,.08)}
+.tool-card.featured::before{content:'FEATURED';position:absolute;top:12px;right:12px;font-family:var(--mono);font-size:8px;font-weight:700;color:var(--gold);background:rgba(201,146,13,.1);padding:3px 8px;border-radius:3px;letter-spacing:.5px}
+.tool-header{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.tool-name{font-size:16px;font-weight:800;color:var(--text);letter-spacing:-0.3px}
+.tool-verified{font-family:var(--mono);font-size:8px;font-weight:700;color:var(--green);background:rgba(34,197,94,.1);padding:2px 6px;border-radius:3px;display:inline-flex;align-items:center;gap:3px}
+.tool-cat{font-family:var(--mono);font-size:9px;font-weight:700;padding:3px 8px;border-radius:4px;display:inline-block;margin-bottom:8px}
+.cat-analytics{background:rgba(96,165,250,.1);color:var(--blue)}
+.cat-trading{background:rgba(34,197,94,.1);color:var(--green)}
+.cat-data{background:rgba(167,139,250,.1);color:var(--purple)}
+.cat-social{background:rgba(249,115,22,.1);color:var(--orange)}
+.cat-portfolio{background:rgba(201,146,13,.1);color:var(--gold)}
+.cat-infrastructure{background:rgba(160,157,148,.1);color:var(--soft)}
+.tool-desc{font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.6;margin-bottom:12px}
+.tool-links{display:flex;gap:10px}
+.tool-link{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--gold);display:flex;align-items:center;gap:4px}
+
+/* LOADING / EMPTY */
+.eco-loading{text-align:center;padding:60px 20px;font-family:var(--mono);font-size:11px;color:var(--dim)}
+.eco-loading .spinner{display:inline-block;width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;margin-bottom:10px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.eco-empty{text-align:center;padding:60px 20px;font-family:var(--mono);font-size:11px;color:var(--dim)}
+
+/* RESPONSIVE */
+@media(max-width:1024px){
+  .stat-grid{grid-template-columns:repeat(2,1fr)}
+}
+@media(max-width:768px){
+  .eco-header h1{font-size:24px}
+  .stat-grid{grid-template-columns:repeat(2,1fr)}
+  .stat-val{font-size:22px}
+  .trending-grid{grid-template-columns:1fr}
+  .rewards-grid{grid-template-columns:1fr}
+  .tools-grid{grid-template-columns:1fr}
+  .eco-container{padding:16px 12px 60px}
+  .eco-tabs{padding:12px 12px 0;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  .eco-tabs::-webkit-scrollbar{display:none}
+}
+@media(max-width:480px){
+  .stat-grid{grid-template-columns:1fr 1fr}
+  .stat-card{padding:16px 14px}
+  .stat-val{font-size:20px}
+  .eco-header{padding:20px 12px 0}
+}
+</style>
+</head>
+<body>
+
+<div id="nav-root"></div>
+<script>if(typeof polyRef==="undefined")window.polyRef=function(u){return u};</script>
+<script src="/nav.js?v=5"></script>
+
+<!-- PAGE HEADER -->
+<div class="eco-header">
+  <h1>Polymarket <span>Ecosystem</span></h1>
+  <div class="eco-subtitle"><span class="eco-live-dot"></span>Real-time metrics, LP rewards, and ecosystem tools</div>
+</div>
+
+<!-- TABS -->
+<div class="eco-tabs">
+  <button class="eco-tab active" onclick="switchTab('dashboard',this)">Dashboard</button>
+  <button class="eco-tab" onclick="switchTab('rewards',this)">LP Rewards</button>
+  <button class="eco-tab" onclick="switchTab('tools',this)">Ecosystem Tools</button>
+</div>
+
+<!-- CONTENT -->
+<div class="eco-container">
+
+<!-- ============ TAB 1: DASHBOARD ============ -->
+<div class="eco-panel active" id="panel-dashboard">
+
+  <!-- STAT GRID -->
+  <div class="stat-grid" id="statGrid">
+    <div class="stat-card">
+      <div class="stat-label"><span class="dot" style="background:var(--gold)"></span>Total Volume</div>
+      <div class="stat-val gold stat-pulse" id="st-volume">--</div>
+      <div class="stat-sub">All-time cumulative</div>
+      <div class="stat-change up" id="st-volume-chg"></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label"><span class="dot" style="background:var(--blue)"></span>Open Interest</div>
+      <div class="stat-val stat-pulse" id="st-oi">--</div>
+      <div class="stat-sub">Active positions</div>
+      <div class="stat-change up" id="st-oi-chg"></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label"><span class="dot" style="background:var(--green)"></span>Total Value Locked</div>
+      <div class="stat-val stat-pulse" id="st-tvl">--</div>
+      <div class="stat-sub">Protocol TVL</div>
+      <div class="stat-change up" id="st-tvl-chg"></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label"><span class="dot" style="background:var(--purple)"></span>Total Markets</div>
+      <div class="stat-val stat-pulse" id="st-markets">--</div>
+      <div class="stat-sub">Created to date</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label"><span class="dot" style="background:var(--orange)"></span>Total Traders</div>
+      <div class="stat-val stat-pulse" id="st-traders">--</div>
+      <div class="stat-sub">Unique addresses</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label"><span class="dot" style="background:var(--soft)"></span>Total Trades</div>
+      <div class="stat-val stat-pulse" id="st-trades">--</div>
+      <div class="stat-sub">Executed orders</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label"><span class="dot" style="background:var(--gold)"></span>Avg Trade Size</div>
+      <div class="stat-val stat-pulse" id="st-avg">--</div>
+      <div class="stat-sub">Per order</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label"><span class="dot" style="background:var(--green)"></span>Buy / Sell Ratio</div>
+      <div class="stat-val" id="st-ratio">--</div>
+      <div class="ratio-bar-wrap" id="ratioWrap" style="display:none">
+        <div class="ratio-bar"><div class="ratio-buy" id="ratioBuy"></div><div class="ratio-sell" id="ratioSell"></div></div>
+        <div class="ratio-labels"><span class="buy-label" id="ratioByLbl">BUY</span><span class="sell-label" id="ratioSlLbl">SELL</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TRENDING NOW -->
+  <div class="section-head">
+    <div class="section-title">Trending Now <span class="section-badge">24H VOLUME</span></div>
+  </div>
+  <div class="trending-grid" id="trendingGrid">
+    <div class="eco-loading"><div class="spinner"></div><br>Loading trending markets...</div>
+  </div>
+
+  <!-- TOP TRADERS -->
+  <div class="section-head">
+    <div class="section-title">Top Traders <span class="section-badge">BY P&amp;L</span></div>
+  </div>
+  <div class="leaders" id="leadersWrap">
+    <div class="eco-loading"><div class="spinner"></div><br>Loading leaderboard...</div>
+  </div>
+
+</div>
+
+<!-- ============ TAB 2: LP REWARDS ============ -->
+<div class="eco-panel" id="panel-rewards">
+  <div style="margin-bottom:16px">
+    <div class="section-title" style="margin-bottom:4px">Liquidity Provider Rewards</div>
+    <div style="font-family:var(--mono);font-size:10px;color:var(--dim)">Markets with active LP incentive programs. Provide liquidity, earn rewards.</div>
+  </div>
+  <div class="rewards-filters" id="rewardsFilters">
+    <button class="rw-pill active" onclick="filterRewards('all',this)">All</button>
+  </div>
+  <div class="rewards-grid" id="rewardsGrid">
+    <div class="eco-loading"><div class="spinner"></div><br>Loading LP rewards...</div>
+  </div>
+</div>
+
+<!-- ============ TAB 3: ECOSYSTEM TOOLS ============ -->
+<div class="eco-panel" id="panel-tools">
+  <div style="margin-bottom:16px">
+    <div class="section-title" style="margin-bottom:4px">Ecosystem Directory</div>
+    <div style="font-family:var(--mono);font-size:10px;color:var(--dim)">Tools, dashboards, and services built around the Polymarket ecosystem.</div>
+  </div>
+  <div class="tools-filters" id="toolsFilters">
+    <button class="rw-pill active" onclick="filterTools('all',this)">All</button>
+  </div>
+  <div class="tools-grid" id="toolsGrid">
+    <div class="eco-loading"><div class="spinner"></div><br>Loading ecosystem tools...</div>
+  </div>
+</div>
+
+</div><!-- /eco-container -->
+
+<script>
+/* ── TAB SWITCHING ── */
+function switchTab(tab, btn) {
+  document.querySelectorAll('.eco-tab').forEach(function(t){ t.classList.remove('active'); });
+  document.querySelectorAll('.eco-panel').forEach(function(p){ p.classList.remove('active'); });
+  btn.classList.add('active');
+  document.getElementById('panel-' + tab).classList.add('active');
+  if (tab === 'rewards' && !_rewardsLoaded) loadRewards();
+  if (tab === 'tools' && !_toolsLoaded) loadTools();
+}
+
+/* ── NUMBER FORMATTING ── */
+function fmtUSD(n) {
+  if (n == null) return '--';
+  if (n >= 1e12) return '$' + (n / 1e12).toFixed(1) + 'T';
+  if (n >= 1e9) return '$' + (n / 1e9).toFixed(1) + 'B';
+  if (n >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
+  return '$' + n.toFixed(0);
+}
+function fmtNum(n) {
+  if (n == null) return '--';
+  if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+  return n.toLocaleString();
+}
+function fmtPct(n) { return n != null ? (n > 0 ? '+' : '') + n.toFixed(1) + '%' : ''; }
+
+/* ── COUNT-UP ANIMATION ── */
+function animateValue(el, target, prefix, suffix, duration) {
+  prefix = prefix || ''; suffix = suffix || '';
+  var start = 0, startTime = null;
+  function step(ts) {
+    if (!startTime) startTime = ts;
+    var p = Math.min((ts - startTime) / duration, 1);
+    var ease = 1 - Math.pow(1 - p, 3);
+    var val = start + (target - start) * ease;
+    if (target >= 1e9) el.textContent = prefix + (val / 1e9).toFixed(1) + 'B' + suffix;
+    else if (target >= 1e6) el.textContent = prefix + (val / 1e6).toFixed(1) + 'M' + suffix;
+    else if (target >= 1e3) el.textContent = prefix + (val / 1e3).toFixed(1) + 'K' + suffix;
+    else el.textContent = prefix + Math.floor(val).toLocaleString() + suffix;
+    if (p < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+/* ── DASHBOARD DATA ── */
+function loadDashboard() {
+  fetch('/api/ecosystem/stats').then(function(r){ return r.json(); }).then(function(d) {
+    var s = d.stats || d;
+
+    // Animate stat cards
+    var pairs = [
+      ['st-volume', s.total_volume, '$', ''],
+      ['st-oi', s.open_interest, '$', ''],
+      ['st-tvl', s.tvl, '$', ''],
+      ['st-markets', s.total_markets, '', ''],
+      ['st-traders', s.total_traders, '', ''],
+      ['st-trades', s.total_trades, '', ''],
+      ['st-avg', s.avg_trade_size, '$', '']
+    ];
+    pairs.forEach(function(p) {
+      var el = document.getElementById(p[0]);
+      if (el && p[1] != null) animateValue(el, p[1], p[2], p[3], 1200);
+    });
+
+    // Buy/sell ratio
+    if (s.buy_sell_ratio != null) {
+      var ratio = s.buy_sell_ratio;
+      var buyPct = (ratio / (ratio + 1)) * 100;
+      var sellPct = 100 - buyPct;
+      document.getElementById('st-ratio').textContent = ratio.toFixed(2);
+      document.getElementById('ratioBuy').style.width = buyPct + '%';
+      document.getElementById('ratioSell').style.width = sellPct + '%';
+      document.getElementById('ratioByLbl').textContent = 'BUY ' + buyPct.toFixed(0) + '%';
+      document.getElementById('ratioSlLbl').textContent = sellPct.toFixed(0) + '% SELL';
+      document.getElementById('ratioWrap').style.display = '';
+    }
+
+    // 24h changes
+    if (s.volume_24h_change != null) {
+      var el = document.getElementById('st-volume-chg');
+      el.textContent = fmtPct(s.volume_24h_change) + ' 24h';
+      el.className = 'stat-change ' + (s.volume_24h_change >= 0 ? 'up' : 'down');
+    }
+    if (s.oi_24h_change != null) {
+      var el2 = document.getElementById('st-oi-chg');
+      el2.textContent = fmtPct(s.oi_24h_change) + ' 24h';
+      el2.className = 'stat-change ' + (s.oi_24h_change >= 0 ? 'up' : 'down');
+    }
+    if (s.tvl_24h_change != null) {
+      var el3 = document.getElementById('st-tvl-chg');
+      el3.textContent = fmtPct(s.tvl_24h_change) + ' 24h';
+      el3.className = 'stat-change ' + (s.tvl_24h_change >= 0 ? 'up' : 'down');
+    }
+
+    // Trending markets
+    renderTrending(d.trending_events || d.trending || []);
+    // Top traders
+    renderLeaders(d.top_traders || []);
+
+  }).catch(function(err) {
+    console.error('Ecosystem stats error:', err);
+    document.getElementById('trendingGrid').innerHTML = '<div class="eco-empty">Unable to load trending markets</div>';
+    document.getElementById('leadersWrap').innerHTML = '<div class="eco-empty">Unable to load leaderboard</div>';
+  });
+}
+
+function renderTrending(markets) {
+  var grid = document.getElementById('trendingGrid');
+  if (!markets.length) { grid.innerHTML = '<div class="eco-empty">No trending markets right now</div>'; return; }
+  grid.innerHTML = markets.slice(0, 5).map(function(m, i) {
+    var url = 'https://polymarket.com/event/' + (m.slug || m.condition_id || '');
+    if (typeof polyRef === 'function') url = polyRef(url);
+    var yPct = m.yes_price != null ? Math.round(m.yes_price * 100) : '--';
+    var nPct = m.yes_price != null ? Math.round((1 - m.yes_price) * 100) : '--';
+    return '<div class="trend-card">' +
+      '<div class="trend-top"><span class="trend-rank">' + (i + 1) + '</span>' +
+      '<div><div class="trend-q">' + esc(m.question || m.title || 'Untitled') + '</div></div></div>' +
+      '<div class="trend-meta">' +
+        '<span>Vol <span class="val">' + fmtUSD(m.volume_24h || m.volume) + '</span></span>' +
+        '<span>Liquidity <span class="val">' + fmtUSD(m.liquidity) + '</span></span>' +
+        (m.trader_count ? '<span>Traders <span class="val">' + fmtNum(m.trader_count) + '</span></span>' : '') +
+      '</div>' +
+      '<div class="trend-odds">' +
+        '<div class="trend-yes">YES ' + yPct + '%</div>' +
+        '<div class="trend-no">NO ' + nPct + '%</div>' +
+      '</div>' +
+      '<a href="' + esc(url) + '" target="_blank" rel="noopener" class="trend-link">Trade on Polymarket &rarr;</a>' +
+    '</div>';
+  }).join('');
+}
+
+function renderLeaders(traders) {
+  var wrap = document.getElementById('leadersWrap');
+  if (!traders.length) { wrap.innerHTML = '<div class="eco-empty">No trader data available</div>'; return; }
+  wrap.innerHTML = traders.slice(0, 5).map(function(t, i) {
+    var pnl = t.pnl || t.profit || 0;
+    var cls = pnl >= 0 ? 'pos' : 'neg';
+    var addr = t.address || t.wallet || '';
+    var name = t.name || t.username || (addr ? addr.slice(0, 6) + '...' + addr.slice(-4) : 'Trader ' + (i+1));
+    return '<div class="leader-row">' +
+      '<div class="leader-rank' + (i < 3 ? ' top3' : '') + '">' + (i + 1) + '</div>' +
+      '<div class="leader-info"><div class="leader-name">' + esc(name) + '</div>' +
+      '<div class="leader-stats">' +
+        (t.win_rate != null ? 'Win ' + Math.round(t.win_rate * 100) + '%' : '') +
+        (t.total_trades ? ' &middot; ' + fmtNum(t.total_trades) + ' trades' : '') +
+        (t.volume ? ' &middot; Vol ' + fmtUSD(t.volume) : '') +
+      '</div></div>' +
+      '<div class="leader-pnl ' + cls + '">' + (pnl >= 0 ? '+' : '') + fmtUSD(Math.abs(pnl)) + '</div>' +
+    '</div>';
+  }).join('');
+}
+
+/* ── LP REWARDS ── */
+var _rewardsLoaded = false;
+var _rewardsData = [];
+var _rewardsCat = 'all';
+
+function loadRewards() {
+  _rewardsLoaded = true;
+  document.getElementById('rewardsGrid').innerHTML = '<div class="eco-loading"><div class="spinner"></div><br>Loading LP rewards...</div>';
+  fetch('/api/ecosystem/rewards').then(function(r){ return r.json(); }).then(function(d) {
+    _rewardsData = d.markets || d.rewards || d || [];
+    buildRewardFilters();
+    renderRewards();
+  }).catch(function() {
+    document.getElementById('rewardsGrid').innerHTML = '<div class="eco-empty">Unable to load rewards data</div>';
+  });
+}
+
+function buildRewardFilters() {
+  var cats = {};
+  _rewardsData.forEach(function(r) { if (r.category) cats[r.category] = (cats[r.category] || 0) + 1; });
+  var wrap = document.getElementById('rewardsFilters');
+  wrap.innerHTML = '<button class="rw-pill active" onclick="filterRewards(\'all\',this)">All (' + _rewardsData.length + ')</button>';
+  Object.keys(cats).sort().forEach(function(c) {
+    wrap.innerHTML += '<button class="rw-pill" onclick="filterRewards(\'' + esc(c) + '\',this)">' + esc(c) + ' (' + cats[c] + ')</button>';
+  });
+}
+
+function filterRewards(cat, btn) {
+  _rewardsCat = cat;
+  document.querySelectorAll('#rewardsFilters .rw-pill').forEach(function(p){ p.classList.remove('active'); });
+  if (btn) btn.classList.add('active');
+  renderRewards();
+}
+
+function renderRewards() {
+  var grid = document.getElementById('rewardsGrid');
+  var items = _rewardsCat === 'all' ? _rewardsData : _rewardsData.filter(function(r){ return r.category === _rewardsCat; });
+  if (!items.length) { grid.innerHTML = '<div class="eco-empty">No LP rewards found' + (_rewardsCat !== 'all' ? ' for this category' : '') + '</div>'; return; }
+  grid.innerHTML = items.map(function(r) {
+    var url = 'https://polymarket.com/event/' + (r.slug || r.condition_id || '');
+    if (typeof polyRef === 'function') url = polyRef(url);
+    var endStr = r.end_date ? new Date(r.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '--';
+    return '<div class="reward-card">' +
+      '<div class="reward-q">' + esc(r.question || r.title || 'Untitled Market') + '</div>' +
+      '<div class="reward-stats">' +
+        '<div class="reward-stat"><div class="reward-stat-label">Volume</div><div class="reward-stat-val">' + fmtUSD(r.volume) + '</div></div>' +
+        '<div class="reward-stat"><div class="reward-stat-label">Liquidity</div><div class="reward-stat-val">' + fmtUSD(r.liquidity) + '</div></div>' +
+        '<div class="reward-stat"><div class="reward-stat-label">Reward Rate</div><div class="reward-stat-val gold">' + (r.reward_rate || r.rewards_daily_rate || '--') + '</div></div>' +
+      '</div>' +
+      '<div class="reward-detail"><span>Max Spread</span><span class="val">' + (r.max_spread != null ? (r.max_spread * 100).toFixed(1) + '%' : '--') + '</span></div>' +
+      '<div class="reward-detail"><span>End Date</span><span class="val">' + endStr + '</span></div>' +
+      (r.category ? '<div class="reward-detail"><span>Category</span><span class="val">' + esc(r.category) + '</span></div>' : '') +
+      '<a href="' + esc(url) + '" target="_blank" rel="noopener" class="reward-cta">Trade on Polymarket &rarr;</a>' +
+    '</div>';
+  }).join('');
+}
+
+/* ── ECOSYSTEM TOOLS ── */
+var _toolsLoaded = false;
+var _toolsData = [];
+var _toolsCat = 'all';
+
+function loadTools() {
+  _toolsLoaded = true;
+  document.getElementById('toolsGrid').innerHTML = '<div class="eco-loading"><div class="spinner"></div><br>Loading ecosystem tools...</div>';
+  fetch('/api/ecosystem/tools').then(function(r){ return r.json(); }).then(function(d) {
+    _toolsData = d.tools || d || [];
+    buildToolFilters();
+    renderTools();
+  }).catch(function() {
+    document.getElementById('toolsGrid').innerHTML = '<div class="eco-empty">Unable to load ecosystem tools</div>';
+  });
+}
+
+function buildToolFilters() {
+  var cats = {};
+  _toolsData.forEach(function(t) { if (t.category) cats[t.category] = (cats[t.category] || 0) + 1; });
+  var wrap = document.getElementById('toolsFilters');
+  wrap.innerHTML = '<button class="rw-pill active" onclick="filterTools(\'all\',this)">All (' + _toolsData.length + ')</button>';
+  Object.keys(cats).sort().forEach(function(c) {
+    wrap.innerHTML += '<button class="rw-pill" onclick="filterTools(\'' + esc(c) + '\',this)">' + esc(c) + ' (' + cats[c] + ')</button>';
+  });
+}
+
+function filterTools(cat, btn) {
+  _toolsCat = cat;
+  document.querySelectorAll('#toolsFilters .rw-pill').forEach(function(p){ p.classList.remove('active'); });
+  if (btn) btn.classList.add('active');
+  renderTools();
+}
+
+function renderTools() {
+  var grid = document.getElementById('toolsGrid');
+  var items = _toolsCat === 'all' ? _toolsData : _toolsData.filter(function(t){ return t.category === _toolsCat; });
+  if (!items.length) { grid.innerHTML = '<div class="eco-empty">No tools found' + (_toolsCat !== 'all' ? ' for this category' : '') + '</div>'; return; }
+
+  // Sort: featured first, then verified, then alphabetical
+  items.sort(function(a, b) {
+    if (a.featured && !b.featured) return -1;
+    if (!a.featured && b.featured) return 1;
+    if (a.verified && !b.verified) return -1;
+    if (!a.verified && b.verified) return 1;
+    return (a.name || '').localeCompare(b.name || '');
+  });
+
+  grid.innerHTML = items.map(function(t) {
+    var catClass = 'cat-' + (t.category || '').toLowerCase().replace(/[^a-z]/g, '');
+    return '<div class="tool-card' + (t.featured ? ' featured' : '') + '">' +
+      '<div class="tool-header">' +
+        '<span class="tool-name">' + esc(t.name || 'Unnamed') + '</span>' +
+        (t.verified ? '<span class="tool-verified">&#10003; Verified</span>' : '') +
+      '</div>' +
+      (t.category ? '<span class="tool-cat ' + catClass + '">' + esc(t.category) + '</span>' : '') +
+      '<div class="tool-desc">' + esc(t.description || '') + '</div>' +
+      '<div class="tool-links">' +
+        (t.website ? '<a href="' + esc(t.website) + '" target="_blank" rel="noopener" class="tool-link">Website &rarr;</a>' : '') +
+        (t.twitter ? '<a href="' + esc(t.twitter) + '" target="_blank" rel="noopener" class="tool-link">@' + esc(t.twitter.replace(/.*twitter\.com\/|.*x\.com\//,'')) + '</a>' : '') +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+/* ── HELPERS ── */
+function esc(s) {
+  if (!s) return '';
+  var d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+/* ── INIT ── */
+loadDashboard();
+</script>
+
+</body>
+</html>

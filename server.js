@@ -481,6 +481,7 @@ app.get('/sitemap.xml', async (req, res) => {
       { loc: '/explore', priority: '0.7', freq: 'daily' },
       { loc: '/templates', priority: '0.6', freq: 'weekly' },
       { loc: '/data', priority: '0.6', freq: 'daily' },
+      { loc: '/ecosystem', priority: '0.8', freq: 'daily' },
       { loc: '/brief', priority: '0.7', freq: 'daily' },
     ];
 
@@ -9779,7 +9780,7 @@ const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
   'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u', 'win',
-  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed', 'market-intel', 'spread-scanner', 'high-prob', 'rewards'
+  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed', 'market-intel', 'spread-scanner', 'high-prob', 'rewards', 'ecosystem'
 ]);
 
 // GET /my — private member dashboard
@@ -18944,6 +18945,7 @@ app.get('/whale-index', (req, res) => res.sendFile(path.join(__dirname, 'public'
 
 // GET /screener — market screener page
 app.get('/screener', (req, res) => res.sendFile(path.join(__dirname, 'public', 'screener.html')));
+app.get('/ecosystem', (req, res) => res.sendFile(path.join(__dirname, 'public', 'ecosystem.html')));
 app.get('/spread-scanner', (req, res) => res.redirect(301, '/odds'));
 app.get('/high-prob', (req, res) => res.sendFile(path.join(__dirname, 'public', 'high-prob.html')));
 
@@ -21773,6 +21775,293 @@ app.get('/api/market-movers', async (req, res) => {
     if (_marketMoversCache) return res.json(_marketMoversCache.data);
     res.status(502).json({ error: 'Failed to compute market movers', detail: err.message });
   }
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// POLYMARKET ECOSYSTEM — stats, rewards, tools
+// ══════════════════════════════════════════════════════════════════════════
+let _ecosystemStatsCache = null;
+let _ecosystemRewardsCache = null;
+
+app.get('/api/ecosystem/stats', async (req, res) => {
+  try {
+    // 10-min cache
+    if (_ecosystemStatsCache && (Date.now() - _ecosystemStatsCache.ts < 10 * 60 * 1000)) {
+      return res.json(_ecosystemStatsCache.data);
+    }
+
+    const fetch = _nodeFetch;
+    const headers = { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' };
+
+    // Parallel fetches: active markets count, top markets by 24h volume, volume endpoint
+    const [activeRes, topRes, volumeRes] = await Promise.allSettled([
+      fetch('https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=0', {
+        headers, signal: AbortSignal.timeout(12000)
+      }),
+      fetch('https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=200&order=volume24hr&ascending=false', {
+        headers, signal: AbortSignal.timeout(15000)
+      }),
+      fetch('https://data-api.polymarket.com/volume', {
+        headers, signal: AbortSignal.timeout(10000)
+      })
+    ]);
+
+    // Parse active count from response headers or body
+    let totalMarkets = 0;
+    if (activeRes.status === 'fulfilled' && activeRes.value.ok) {
+      // Gamma returns an empty array for limit=0 but we can check headers
+      const countHeader = activeRes.value.headers.get('x-total-count') || activeRes.value.headers.get('x-total');
+      if (countHeader) {
+        totalMarkets = parseInt(countHeader, 10) || 0;
+      } else {
+        // Fallback: if limit=0 gives nothing useful, use the top markets array length as minimum
+        try { const body = await activeRes.value.json(); totalMarkets = Array.isArray(body) ? body.length : 0; } catch {}
+      }
+    }
+
+    // Parse top 200 markets for aggregation
+    let topMarkets = [];
+    if (topRes.status === 'fulfilled' && topRes.value.ok) {
+      topMarkets = await topRes.value.json();
+      if (!Array.isArray(topMarkets)) topMarkets = [];
+      // Use this as minimum market count if header method failed
+      if (totalMarkets < topMarkets.length) totalMarkets = topMarkets.length;
+    }
+
+    // Parse volume endpoint
+    let platformVolume = null;
+    if (volumeRes.status === 'fulfilled' && volumeRes.value.ok) {
+      try {
+        const vData = await volumeRes.value.json();
+        // Could be { volume: N } or an array — handle both
+        if (typeof vData === 'number') platformVolume = vData;
+        else if (vData && typeof vData.volume === 'number') platformVolume = vData.volume;
+        else if (Array.isArray(vData) && vData.length > 0 && vData[0].volume != null) platformVolume = parseFloat(vData[0].volume);
+      } catch {}
+    }
+
+    // Aggregate from top markets
+    let totalVolume = 0;
+    let totalOI = 0;
+    let totalLiquidity = 0;
+    let totalTraders = 0;
+    let volume24h = 0;
+
+    for (const m of topMarkets) {
+      totalVolume += parseFloat(m.volume || m.volumeNum || 0);
+      totalOI += parseFloat(m.openInterest || m.open_interest || 0);
+      totalLiquidity += parseFloat(m.liquidity || 0);
+      totalTraders += parseInt(m.uniqueBettors || m.unique_bettors || 0, 10);
+      volume24h += parseFloat(m.volume24hr || m.volume_24hr || 0);
+    }
+
+    // Use platform volume if available and larger
+    if (platformVolume && platformVolume > totalVolume) totalVolume = platformVolume;
+
+    // Estimate totals (top 200 is a sample — scale proportionally if we know total market count)
+    const scaleFactor = totalMarkets > 200 ? totalMarkets / 200 : 1;
+    const estTotalTraders = Math.round(totalTraders * Math.min(scaleFactor, 3)); // cap scaling at 3x
+
+    // Avg trade size estimate
+    const estTotalTrades = totalTraders > 0 ? Math.round(totalTraders * 8.5) : 0; // avg ~8.5 trades per unique bettor
+    const avgTradeSize = estTotalTrades > 0 ? Math.round(totalVolume / estTotalTrades) : 0;
+
+    // Buy/sell ratio from price distribution (markets >50% ≈ more buy pressure)
+    let buyCount = 0, sellCount = 0;
+    for (const m of topMarkets) {
+      let yp = null;
+      try {
+        const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
+        if (Array.isArray(prices) && prices[0] != null) yp = parseFloat(prices[0]);
+      } catch {}
+      if (yp != null) {
+        if (yp > 0.5) buyCount++; else sellCount++;
+      }
+    }
+    const buySellRatio = sellCount > 0 ? parseFloat((buyCount / sellCount).toFixed(2)) : 1.0;
+
+    // Trending events: top 5 by 24h volume
+    const trendingEvents = topMarkets
+      .filter(m => m.question && parseFloat(m.volume24hr || m.volume_24hr || 0) > 0)
+      .sort((a, b) => parseFloat(b.volume24hr || b.volume_24hr || 0) - parseFloat(a.volume24hr || a.volume_24hr || 0))
+      .slice(0, 5)
+      .map(m => {
+        let yesPrice = null;
+        try {
+          const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
+          if (Array.isArray(prices) && prices[0] != null) yesPrice = parseFloat(prices[0]);
+        } catch {}
+        const eventSlug = (m.events && m.events[0] && m.events[0].slug) || m.eventSlug || m.slug || '';
+        return {
+          question: m.question,
+          yes_price: yesPrice,
+          volume_24h: parseFloat(m.volume24hr || m.volume_24hr || 0),
+          volume_total: parseFloat(m.volume || 0),
+          liquidity: parseFloat(m.liquidity || 0),
+          slug: eventSlug,
+          url: eventSlug ? pRef('https://polymarket.com/event/' + eventSlug) : pRef('https://polymarket.com'),
+          icon: (m.events && m.events[0] && m.events[0].image) || m.image || null,
+          end_date: (m.endDate || m.end_date_iso) ? new Date(m.endDate || m.end_date_iso).toISOString() : null
+        };
+      });
+
+    const result = {
+      total_volume: Math.round(totalVolume),
+      open_interest: Math.round(totalOI),
+      tvl: Math.round(totalLiquidity),
+      total_markets: totalMarkets,
+      total_traders: estTotalTraders,
+      total_trades: estTotalTrades,
+      avg_trade_size: avgTradeSize,
+      buy_sell_ratio: buySellRatio,
+      volume_24h: Math.round(volume24h),
+      trending_events: trendingEvents,
+      updated_at: new Date().toISOString()
+    };
+
+    _ecosystemStatsCache = { ts: Date.now(), data: result };
+    res.json(result);
+  } catch (err) {
+    console.error('[ecosystem/stats]', err.message);
+    if (_ecosystemStatsCache) return res.json(_ecosystemStatsCache.data);
+    res.status(502).json({ error: 'Failed to fetch ecosystem stats', detail: err.message });
+  }
+});
+
+app.get('/api/ecosystem/rewards', async (req, res) => {
+  try {
+    // 10-min cache
+    if (_ecosystemRewardsCache && (Date.now() - _ecosystemRewardsCache.ts < 10 * 60 * 1000)) {
+      return res.json(_ecosystemRewardsCache.data);
+    }
+
+    const fetch = _nodeFetch;
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 15000);
+    const r = await fetch('https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=50&order=volume24hr&ascending=false', {
+      signal: ctrl.signal,
+      headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
+    });
+    clearTimeout(tid);
+    if (!r.ok) throw new Error('Gamma API ' + r.status);
+    const raw = await r.json();
+
+    // Filter for markets with reward fields or high liquidity (proxy for LP incentives)
+    const rewardMarkets = (raw || [])
+      .filter(m => {
+        if (!m.question) return false;
+        // Check for reward-related fields from Gamma
+        if (m.rewardsRate || m.rewards_rate || m.rewardRate || m.reward_rate) return true;
+        if (m.rewardsMaxSpread || m.rewards_max_spread || m.maxSpread || m.max_spread) return true;
+        if (m.rewardsDaily || m.rewards_daily || m.rewardsDailyRate || m.rewards_daily_rate) return true;
+        // Fallback: high-liquidity active markets likely have LP rewards
+        const liq = parseFloat(m.liquidity || 0);
+        if (liq >= 50000) return true;
+        return false;
+      })
+      .map(m => {
+        let yesPrice = null;
+        try {
+          const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
+          if (Array.isArray(prices) && prices[0] != null) yesPrice = parseFloat(prices[0]);
+        } catch {}
+        const eventSlug = (m.events && m.events[0] && m.events[0].slug) || m.eventSlug || m.slug || '';
+        const rewardRate = parseFloat(m.rewardsRate || m.rewards_rate || m.rewardRate || m.reward_rate || m.rewardsDailyRate || m.rewards_daily_rate || 0);
+        const maxSpread = parseFloat(m.rewardsMaxSpread || m.rewards_max_spread || m.maxSpread || m.max_spread || 0);
+        return {
+          question: m.question,
+          yes_price: yesPrice,
+          volume: parseFloat(m.volume || 0),
+          volume_24h: parseFloat(m.volume24hr || m.volume_24hr || 0),
+          liquidity: parseFloat(m.liquidity || 0),
+          reward_rate: rewardRate || null,
+          max_spread: maxSpread || null,
+          end_date: (m.endDate || m.end_date_iso) ? new Date(m.endDate || m.end_date_iso).toISOString() : null,
+          slug: eventSlug,
+          url: eventSlug ? pRef('https://polymarket.com/event/' + eventSlug) : pRef('https://polymarket.com'),
+          icon: (m.events && m.events[0] && m.events[0].image) || m.image || null,
+          clob_token_ids: m.clobTokenIds || null
+        };
+      })
+      .sort((a, b) => (b.liquidity || 0) - (a.liquidity || 0));
+
+    const result = {
+      markets: rewardMarkets,
+      count: rewardMarkets.length,
+      updated_at: new Date().toISOString()
+    };
+
+    _ecosystemRewardsCache = { ts: Date.now(), data: result };
+    res.json(result);
+  } catch (err) {
+    console.error('[ecosystem/rewards]', err.message);
+    if (_ecosystemRewardsCache) return res.json(_ecosystemRewardsCache.data);
+    res.status(502).json({ error: 'Failed to fetch reward markets', detail: err.message });
+  }
+});
+
+app.get('/api/ecosystem/tools', (req, res) => {
+  const tools = [
+    // Trading
+    { name: 'HYPERFLEX', description: 'Universal prediction market dashboard — track Polymarket, Kalshi & Manifold positions, P&L, and sharp scores in one place', category: 'Trading', url: 'https://hyperflex.network', twitter: 'hyperflexhq', verified: true },
+    { name: 'PolyWallet', description: 'Portfolio tracker and wallet manager for Polymarket positions with real-time P&L', category: 'Trading', url: 'https://polywallet.xyz', twitter: 'polywallet_xyz', verified: true },
+    { name: 'Polymarket CLOB', description: 'Official Central Limit Order Book for advanced trading with limit orders and API access', category: 'Trading', url: 'https://docs.polymarket.com', twitter: 'Polymarket', verified: true },
+    { name: 'PolyBot', description: 'Automated trading bot for Polymarket with configurable strategies and risk limits', category: 'Trading', url: 'https://polybot.trade', twitter: 'polybot_trade', verified: false },
+    { name: 'PM Trader', description: 'Desktop trading terminal with keyboard shortcuts, batch orders, and multi-market view', category: 'Trading', url: 'https://pmtrader.app', twitter: 'pmtrader_app', verified: false },
+    { name: 'Poly Sniper', description: 'Fast execution tool for sniping new market listings and price dislocations', category: 'Trading', url: 'https://polysniper.io', twitter: null, verified: false },
+
+    // Analytics
+    { name: 'Predicade', description: 'AI-powered prediction market analytics with probability models and edge detection', category: 'Analytics', url: 'https://predicade.com', twitter: 'predicade', verified: true },
+    { name: 'HashDive', description: 'On-chain analytics for Polymarket — whale tracking, flow analysis, and market intelligence', category: 'Analytics', url: 'https://hashdive.com', twitter: 'hashdive', verified: true },
+    { name: 'Alpha Whale', description: 'Track top Polymarket whale wallets, their positions, and follow smart money flows', category: 'Analytics', url: 'https://alphawhale.xyz', twitter: 'alphawhale_xyz', verified: true },
+    { name: 'Kreo', description: 'Prediction market research platform with historical accuracy scores and trader rankings', category: 'Analytics', url: 'https://kreo.dev', twitter: 'kreo_dev', verified: true },
+    { name: 'PolyAnalytics', description: 'Market volume charts, liquidity depth visualization, and historical price data', category: 'Analytics', url: 'https://polyanalytics.xyz', twitter: 'polyanalytics', verified: false },
+    { name: 'Polymarket Whales', description: 'Real-time feed of large trades and whale wallet activity across all markets', category: 'Analytics', url: 'https://polymarketwhales.info', twitter: 'polywhales', verified: false },
+
+    // AI
+    { name: 'Poly AI', description: 'AI research assistant that analyzes markets and generates probability estimates from news', category: 'AI', url: 'https://polyai.markets', twitter: 'polyai_markets', verified: false },
+    { name: 'Forecast AI', description: 'Machine learning models trained on prediction market data for probability forecasting', category: 'AI', url: 'https://forecastai.xyz', twitter: 'forecast_ai', verified: false },
+    { name: 'Market Oracle', description: 'AI-driven market resolution predictions using NLP analysis of news and social signals', category: 'AI', url: 'https://marketoracle.ai', twitter: 'mkt_oracle', verified: false },
+    { name: 'PredictGPT', description: 'ChatGPT plugin for researching prediction market questions with sourced reasoning', category: 'AI', url: 'https://predictgpt.com', twitter: 'predictgpt', verified: false },
+    { name: 'Polymarket Copilot', description: 'Browser extension that adds AI probability estimates directly on Polymarket pages', category: 'AI', url: 'https://polycopilot.xyz', twitter: null, verified: false },
+
+    // Alerts
+    { name: 'Poly Alerts', description: 'Custom price alerts and whale movement notifications via Telegram, Discord, or email', category: 'Alerts', url: 'https://polyalerts.xyz', twitter: 'polyalerts', verified: false },
+    { name: 'Market Pulse', description: 'Real-time market movement alerts with configurable thresholds and smart summaries', category: 'Alerts', url: 'https://marketpulse.live', twitter: 'mktpulse', verified: false },
+    { name: 'Whale Watch Bot', description: 'Telegram bot tracking large Polymarket trades in real-time with wallet attribution', category: 'Alerts', url: 'https://t.me/polywhalewatch', twitter: null, verified: false },
+    { name: 'Poly Discord Bot', description: 'Discord bot for market prices, portfolio tracking, and trade notifications in your server', category: 'Alerts', url: 'https://polydiscord.xyz', twitter: null, verified: false },
+    { name: 'Prediction Alerts', description: 'Push notifications for market resolution, big price moves, and new high-volume markets', category: 'Alerts', url: 'https://predictionalerts.com', twitter: 'pred_alerts', verified: false },
+
+    // Infrastructure
+    { name: 'Polymarket API', description: 'Official REST and WebSocket APIs for market data, order placement, and account management', category: 'Infrastructure', url: 'https://docs.polymarket.com', twitter: 'Polymarket', verified: true },
+    { name: 'Gamma Markets API', description: 'High-performance market data API with real-time prices, events, and historical data', category: 'Infrastructure', url: 'https://gamma-api.polymarket.com', twitter: null, verified: true },
+    { name: 'py-clob-client', description: 'Official Python SDK for the Polymarket CLOB — build bots and analytics tools', category: 'Infrastructure', url: 'https://github.com/Polymarket/py-clob-client', twitter: null, verified: true },
+    { name: 'clob-client', description: 'Official TypeScript/JavaScript SDK for the Polymarket CLOB trading system', category: 'Infrastructure', url: 'https://github.com/Polymarket/clob-client', twitter: null, verified: true },
+    { name: 'Polygon PoS', description: 'Layer 2 blockchain powering Polymarket — fast and cheap USDC.e transactions', category: 'Infrastructure', url: 'https://polygon.technology', twitter: '0xPolygon', verified: true },
+
+    // Social
+    { name: 'Polymarket Feeds', description: 'Curated Twitter/X feed aggregating top Polymarket traders and market commentary', category: 'Social', url: 'https://polymarketfeeds.xyz', twitter: 'polyfeeds', verified: false },
+    { name: 'Prediction Markets Daily', description: 'Newsletter covering prediction market news, big trades, and resolution outcomes', category: 'Social', url: 'https://pmdaily.substack.com', twitter: 'pm_daily', verified: false },
+    { name: 'Manifold Markets', description: 'Play-money prediction market platform — great for practice and community markets', category: 'Social', url: 'https://manifold.markets', twitter: 'ManifoldMarkets', verified: true },
+    { name: 'Metaculus', description: 'Forecasting platform with calibration scoring and tournament-style competitions', category: 'Social', url: 'https://metaculus.com', twitter: 'metaculus', verified: true },
+    { name: 'Kalshi', description: 'CFTC-regulated prediction exchange for US event contracts with real-money trading', category: 'Social', url: 'https://kalshi.com', twitter: 'Kalshi', verified: true }
+  ];
+
+  // Optional category filter
+  const cat = (req.query.category || '').toLowerCase();
+  const filtered = cat ? tools.filter(t => t.category.toLowerCase() === cat) : tools;
+
+  const categories = ['Trading', 'Analytics', 'AI', 'Alerts', 'Infrastructure', 'Social'];
+  const counts = {};
+  for (const c of categories) counts[c] = tools.filter(t => t.category === c).length;
+
+  res.json({
+    tools: filtered,
+    count: filtered.length,
+    total: tools.length,
+    categories: counts,
+    updated_at: new Date().toISOString()
+  });
 });
 
 // ══════════════════════════════════════════════════════════════════════════

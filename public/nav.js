@@ -34,6 +34,7 @@
     { href: '/predictors', label: 'Predictors' },
     { href: '/odds', label: 'Odds' },
     { href: '/high-prob', label: '99% Bets', gold: true },
+    { href: '/ecosystem', label: 'Ecosystem' },
     { href: '/data', label: 'Data' },
     { href: '/api-docs', label: 'API' }
   ];
