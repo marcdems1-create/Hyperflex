@@ -1089,28 +1089,24 @@ nav {
 </div>
 
 <!-- ═══ COMMUNITY ACTIVITY — 2-COL LAYOUT ═══ -->
-<div style="max-width:1200px;margin:0 auto;padding:0 40px">
+<!-- Search hidden until community features re-enabled -->
+<div style="display:none">
   <div class="explore-search-wrap" id="exploreSearchWrap" style="padding:0;margin-bottom:12px">
-    <input type="search" id="exploreSearchInput" placeholder="Search markets, communities..." oninput="onExploreSearch(this.value)" style="width:100%;box-sizing:border-box;padding:11px 16px;border-radius:12px;border:1.5px solid #2a2a27;background:#1c1c19;color:#e8e3d5;font-size:14px;font-family:inherit;outline:none" />
+    <input type="search" id="exploreSearchInput" placeholder="Search markets..." oninput="onExploreSearch(this.value)" />
   </div>
 </div>
 
 <div class="explore-layout">
   <div class="main-col">
 
-    <!-- Page tabs -->
-    <div class="tabs-wrap" id="tabs-wrap" style="margin-bottom:0">
-      <div class="tabs">
-        <button class="tab active" onclick="switchTab('discover')">🔥 Markets</button>
-        <button class="tab" onclick="switchTab('predictors')">👥 Predictors</button>
-        <button class="tab" onclick="window.location.href='/odds'" style="display:flex;align-items:center;gap:5px">📊 Odds</button>
-        <button class="tab" onclick="window.location.href='/whales'" style="display:flex;align-items:center;gap:5px">&#x1F40B; Whales</button>
-      </div>
-    </div>
-
-    <div class="refresh-bar">
-      <span id="last-updated">Updating...</span>
-      <button onclick="loadFeed()">↻ Refresh</button>
+    <!-- Quick nav links -->
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+      <a href="/odds" style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--dim);padding:7px 14px;border:1px solid var(--border);border-radius:8px;text-decoration:none;transition:all .15s" onmouseover="this.style.borderColor='var(--gold)';this.style.color='var(--gold)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">📊 Odds</a>
+      <a href="/whales" style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--dim);padding:7px 14px;border:1px solid var(--border);border-radius:8px;text-decoration:none;transition:all .15s" onmouseover="this.style.borderColor='var(--gold)';this.style.color='var(--gold)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">🐋 Whales</a>
+      <a href="/signals" style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--dim);padding:7px 14px;border:1px solid var(--border);border-radius:8px;text-decoration:none;transition:all .15s" onmouseover="this.style.borderColor='var(--gold)';this.style.color='var(--gold)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">⚡ Signals</a>
+      <a href="/screener" style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--dim);padding:7px 14px;border:1px solid var(--border);border-radius:8px;text-decoration:none;transition:all .15s" onmouseover="this.style.borderColor='var(--gold)';this.style.color='var(--gold)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">🔍 Screener</a>
+      <a href="/brief" style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--dim);padding:7px 14px;border:1px solid var(--border);border-radius:8px;text-decoration:none;transition:all .15s" onmouseover="this.style.borderColor='var(--gold)';this.style.color='var(--gold)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">📋 AI Brief</a>
+      <a href="/predictors" style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--dim);padding:7px 14px;border:1px solid var(--border);border-radius:8px;text-decoration:none;transition:all .15s" onmouseover="this.style.borderColor='var(--gold)';this.style.color='var(--gold)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">👥 Leaderboard</a>
     </div>
 
     <!-- SMART MONEY DIVERGENCE -->
@@ -1151,29 +1147,9 @@ nav {
       <div id="smartMoneyCards" style="display:flex;flex-direction:column;gap:8px"></div>
     </div>
 
-    <!-- MARKETS TAB (Hot + New + Communities) -->
-    <div class="feed-section active" id="tab-discover">
-      <div style="margin-bottom:28px">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gold);margin-bottom:12px;font-family:'Space Mono',monospace">🔥 Hot Markets</div>
-        <div id="hot-feed"><div class="loading">Loading hot markets...</div></div>
-      </div>
-      <div style="margin-bottom:28px">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-soft);margin-bottom:12px;font-family:'Space Mono',monospace">✨ New Markets</div>
-        <div id="new-feed"><div class="loading">Loading new markets...</div></div>
-      </div>
-      <div>
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-soft);margin-bottom:12px;font-family:'Space Mono',monospace">🏘️ Communities</div>
-        <div id="communities-feed"><div class="loading">Loading communities...</div></div>
-      </div>
-    </div>
-
-    <!-- PREDICTORS TAB (Top Predictors + Following merged) -->
-    <div class="feed-section" id="tab-predictors">
-      <div id="followingFeed" style="display:none;margin-bottom:28px"></div>
-      <div id="predictors-feed"><div class="loading">Loading top predictors...</div></div>
-    </div>
-
-    <!-- Hidden legacy sections for backward compat -->
+    <!-- Hidden elements for JS compatibility -->
+    <div style="display:none" id="tab-discover"><div id="hot-feed"></div><div id="new-feed"></div><div id="communities-feed"></div></div>
+    <div style="display:none" id="tab-predictors"><div id="followingFeed"></div><div id="predictors-feed"></div></div>
     <div style="display:none" id="tab-activity"><div id="activity-feed"></div></div>
     <div style="display:none" id="tab-following"></div>
     <div style="display:none" id="tab-live"><div id="trades-feed"></div></div>
