@@ -14912,24 +14912,26 @@ async function fetchRealizedPnL(address) {
 }
 
 // Fetch USDC balance from Polygon RPC (no MetaMask needed)
+// Checks both USDC.e (bridged) and native USDC — Polymarket may use either
 async function fetchUSDCBalance(address) {
   if (!address || window._walletBalanceUSDC != null) return; // already have it
   try {
-    // USDC.e on Polygon (bridged — used by Polymarket)
-    const usdcContract = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
-    // ERC-20 balanceOf(address) selector: 0x70a08231 + padded address
+    const usdceContract = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174'; // USDC.e (bridged, 6 decimals)
+    const usdcNative    = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359'; // USDC (native, 6 decimals)
     const paddedAddr = '000000000000000000000000' + address.toLowerCase().replace('0x','');
     const callData = '0x70a08231' + paddedAddr;
-    const r = await fetch('https://polygon-bor-rpc.publicnode.com', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:usdcContract,data:callData},'latest'],id:1})
-    });
-    const d = await r.json();
-    if (d.result) {
-      const raw = parseInt(d.result, 16);
-      window._walletBalanceUSDC = raw / 1e6; // USDC has 6 decimals
-      console.log('[usdc-balance] Fetched:', window._walletBalanceUSDC.toFixed(2), 'USDC for', address.slice(0,8));
-    }
+    const rpcUrl = 'https://polygon-bor-rpc.publicnode.com';
+
+    // Fetch both in parallel
+    const [r1, r2] = await Promise.all([
+      fetch(rpcUrl, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:usdceContract,data:callData},'latest'],id:1}) }).then(r=>r.json()).catch(()=>null),
+      fetch(rpcUrl, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({jsonrpc:'2.0',method:'eth_call',params:[{to:usdcNative,data:callData},'latest'],id:2}) }).then(r=>r.json()).catch(()=>null)
+    ]);
+    let total = 0;
+    if (r1 && r1.result) total += parseInt(r1.result, 16) / 1e6;
+    if (r2 && r2.result) total += parseInt(r2.result, 16) / 1e6;
+    window._walletBalanceUSDC = total;
+    console.log('[usdc-balance] Fetched:', total.toFixed(2), 'USDC (bridged+native) for', address.slice(0,8));
   } catch(e) { console.warn('[usdc-balance]', e.message); }
 }
 
@@ -14971,6 +14973,8 @@ function computePortfolioStats(positions) {
 
 function updatePortfolioSummary() {
   try {
+  // Invalidate P&L cache so it recalculates with latest positions
+  _polyPnlCache = {};
   const bar = document.getElementById('portfolioSummaryBar');
   const shareBar = document.getElementById('portfolioShareBar');
   const chartEl = document.getElementById('portfolioPnlChart');
@@ -15264,7 +15268,8 @@ function _buildDailyPnlFromActivity(activity, days) {
 // Compute period P&L: realized trading P&L from activity + unrealized from open positions
 async function _fetchPolyPnl(address, days) {
   const cacheKey = days + '';
-  if (_polyPnlCache[cacheKey] != null) return _polyPnlCache[cacheKey];
+  // Only use cache if positions were loaded when it was computed
+  if (_polyPnlCache[cacheKey] != null && _polyPnlCache._posLoaded) return _polyPnlCache[cacheKey];
   try {
     const activity = await _ensurePolyActivity(address);
     let totalRealized = 0;
@@ -15276,8 +15281,10 @@ async function _fetchPolyPnl(address, days) {
     // Add unrealized P&L from open positions (value - cost basis)
     let unrealized = 0;
     const allPos = getAllPositionsFlat();
+    let hasPositions = false;
     for (const p of allPos) {
       if (p._platform === 'polymarket' || p.platform === 'polymarket') {
+        hasPositions = true;
         const val = parseFloat(p.cash_value) || 0;
         const cost = parseFloat(p.cost_basis) || parseFloat(p.initialValue) || 0;
         if (cost > 0) unrealized += (val - cost);
@@ -15285,7 +15292,11 @@ async function _fetchPolyPnl(address, days) {
     }
 
     const total = totalRealized + unrealized;
-    _polyPnlCache[cacheKey] = total;
+    // Only cache if positions were available (avoid caching stale 0)
+    if (hasPositions || allPos.length > 0) {
+      _polyPnlCache[cacheKey] = total;
+      _polyPnlCache._posLoaded = true;
+    }
     return total;
   } catch(e) { console.warn('[polyPnl]', e.message); return null; }
 }
@@ -15324,7 +15335,7 @@ async function setPnlPeriod(period) {
   const pnlEl = document.getElementById('psSummaryPnl');
   if (pnlEl) {
     function fmtD(n) { if (Math.abs(n)>=1e6) return '$'+(n/1e6).toFixed(1)+'M'; if (Math.abs(n)>=1e3) return '$'+(n/1e3).toFixed(1)+'K'; return '$'+n.toFixed(2); }
-    const sign = periodPnl >= 0 ? '+' : '';
+    const sign = periodPnl >= 0 ? '' : '-';
     pnlEl.textContent = sign + fmtD(Math.abs(periodPnl));
     pnlEl.style.color = periodPnl >= 0 ? '#22c55e' : '#ef4444';
   }
@@ -15335,8 +15346,8 @@ async function setPnlPeriod(period) {
     const stats = window._portfolioStats;
     if (stats && stats.totalCost > 0) {
       const pnlPct = (periodPnl / stats.totalCost) * 100;
-      const sign = pnlPct >= 0 ? '+' : '';
-      pnlPctEl.textContent = sign + pnlPct.toFixed(1) + '%';
+      const sign = pnlPct >= 0 ? '' : '';
+      pnlPctEl.textContent = (pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(1) + '%';
       pnlPctEl.style.color = pnlPct >= 0 ? '#22c55e' : '#ef4444';
     } else {
       pnlPctEl.textContent = '';
@@ -15559,7 +15570,7 @@ function renderPositionCard({question,side,pct,meta,pnl,pnlLabel,pnlIsPercent,ur
   const sideBg=isYes?'rgba(34,197,94,0.10)':'rgba(248,113,113,0.10)';
   const sideBorder=isYes?'rgba(34,197,94,0.25)':'rgba(248,113,113,0.25)';
   const pnlColor=pnl==null?'':(pnl>=0?'#22c55e':'#f87171');
-  const pnlStr=pnl==null?'':(pnl>=0?'+':'')+(pnlIsPercent?pnl.toFixed(1)+'%':'$'+Math.abs(pnl).toFixed(2));
+  const pnlStr=pnl==null?'':(pnl>=0?'+':'-')+(pnlIsPercent?Math.abs(pnl).toFixed(1)+'%':'$'+Math.abs(pnl).toFixed(2));
   const pnlPctStr=(posData&&posData.pnl_pct!=null&&posData.pnl_pct!==0)?((posData.pnl_pct>=0?'+':'')+posData.pnl_pct.toFixed(1)+'%'):'';
   // Store trade data in global map — avoids serializing JSON into HTML attributes
   const _posKey = '_pd_' + (posData?.condition_id || posData?.id || Math.random().toString(36).slice(2,8));
