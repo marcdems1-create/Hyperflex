@@ -679,6 +679,44 @@ nav {
 .wr-oracle { color: var(--gold); }
 .wr-sharp  { color: var(--green); }
 .wr-solid  { color: var(--blue); }
+.predictor-pnl {
+  font-family: 'Space Mono', monospace;
+  font-size: 15px;
+  font-weight: 700;
+  text-align: right;
+  flex-shrink: 0;
+  min-width: 70px;
+}
+.predictor-pnl.pnl-pos { color: var(--green); }
+.predictor-pnl.pnl-neg { color: #f44336; }
+.predictor-vol {
+  font-size: 11px;
+  color: var(--muted);
+  font-family: 'Space Mono', monospace;
+  text-align: right;
+  margin-top: 1px;
+}
+.predictor-platform-pills { display: flex; gap: 4px; flex-shrink: 0; }
+.predictor-platform-pills .pp {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.3px;
+}
+.pp-poly { background: rgba(118,65,255,0.15); color: #7641ff; }
+.pp-hl   { background: rgba(0,230,118,0.12); color: #00e676; }
+.pp-hfx  { background: rgba(201,146,13,0.15); color: var(--gold); }
+.predictor-row a.predictor-profile-link {
+  font-size: 10px;
+  font-family: 'Space Mono', monospace;
+  color: var(--gold);
+  text-decoration: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+}
+.predictor-row:hover a.predictor-profile-link { opacity: 1; }
 .predictors-footer {
   padding: 10px 18px;
   font-size: 11px;
@@ -687,6 +725,12 @@ nav {
   border-top: 1px solid var(--border);
   font-weight: 400;
 }
+.predictors-footer a {
+  color: var(--gold);
+  text-decoration: none;
+  font-weight: 600;
+}
+.predictors-footer a:hover { text-decoration: underline; }
 
 /* FEATURED SPOTLIGHT */
 .featured-card {
@@ -2299,44 +2343,97 @@ function renderStatsTicker(stats) {
   });
 }
 
-function renderTopPredictors(predictors) {
+function _whaleNickname(addr) {
+  var s = String(addr);
+  if (s.length > 10) return s.slice(0, 6) + '...' + s.slice(-4);
+  return s || 'Trader';
+}
+function _formatMoney(n) {
+  var a = Math.abs(n);
+  if (a >= 1e6) return '$' + (a / 1e6).toFixed(1) + 'M';
+  if (a >= 1e3) return '$' + (a / 1e3).toFixed(a >= 1e5 ? 0 : 1) + 'K';
+  return '$' + a.toLocaleString();
+}
+function _formatPnl(n) { return (n >= 0 ? '+' : '-') + _formatMoney(n); }
+
+async function loadTopPredictors() {
   const el = document.getElementById('predictors-feed');
-  if (!predictors || !predictors.length) {
+  try {
+    const res = await fetch('/api/leaderboard?period=1m');
+    if (!res.ok) throw new Error('leaderboard ' + res.status);
+    const traders = await res.json();
+    if (!traders || !traders.length) {
+      el.innerHTML = `
+        <div class="predictors-wrap">
+          <div style="text-align:center;padding:60px 20px;color:var(--muted)">
+            <div style="font-size:36px;margin-bottom:14px">🏆</div>
+            <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:8px">Leaderboard loading...</div>
+            <div style="font-size:13px;line-height:1.6">Top Polymarket traders will appear here shortly.</div>
+          </div>
+        </div>`;
+      return;
+    }
+
+    // Sort by account value / PnL and take top 10
+    const sorted = traders.slice().sort((a, b) => {
+      const aVal = a.account_value || Math.abs(a.total_pnl || 0);
+      const bVal = b.account_value || Math.abs(b.total_pnl || 0);
+      return bVal - aVal;
+    }).slice(0, 10);
+
+    const header = `
+      <div class="predictors-header">
+        <div class="predictors-header-title">🏆 Top Traders</div>
+        <div class="predictors-header-sub">Polymarket · Last 30 days</div>
+      </div>`;
+
+    const rows = sorted.map((r, i) => {
+      const rankClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
+      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '#' + (i + 1);
+      let dname = r.display_name || r.userName || r.name || '';
+      if (dname && /^0x[0-9a-fA-F]{6,}/.test(dname)) dname = _whaleNickname(dname);
+      if (!dname && r.user_id && String(r.user_id).startsWith('hl_')) {
+        const addr = String(r.user_id).replace('hl_', '');
+        dname = addr.length > 10 ? _whaleNickname(addr) : addr;
+      }
+      if (!dname) dname = r.user_id ? _whaleNickname(r.user_id) : 'Trader';
+
+      const pnl = r.total_pnl || r.pnl_all_time || r.pnl || 0;
+      const vol = r.volume || r.account_value || 0;
+      const pnlClass = pnl >= 0 ? 'pnl-pos' : 'pnl-neg';
+      const platforms = (r.platforms || ['POLY']).map(p => {
+        const cls = { POLY: 'pp-poly', HL: 'pp-hl', HFX: 'pp-hfx' }[p] || 'pp-hfx';
+        return `<span class="pp ${cls}">${p}</span>`;
+      }).join('');
+
+      const profileId = r.wallet || r.address || (r.user_id && String(r.user_id).startsWith('hl_') ? String(r.user_id).replace('hl_', '') : '') || r.user_id || dname;
+      const profileUrl = /^0x[0-9a-fA-F]{10,}$/i.test(profileId) ? '/trader/' + encodeURIComponent(profileId) : '/p/' + encodeURIComponent(profileId);
+
+      return `
+        <a href="${profileUrl}" class="predictor-row" style="text-decoration:none;color:inherit;cursor:pointer">
+          <div class="predictor-rank ${rankClass}">${medal}</div>
+          <div style="flex:1;min-width:0">
+            <div class="predictor-name">${escHtml(dname)}</div>
+            <div class="predictor-trades">Vol ${_formatMoney(vol)}</div>
+          </div>
+          <div class="predictor-platform-pills">${platforms}</div>
+          <div style="text-align:right;min-width:70px">
+            <div class="predictor-pnl ${pnlClass}">${_formatPnl(pnl)}</div>
+          </div>
+        </a>`;
+    }).join('');
+
+    const footer = `<div class="predictors-footer"><a href="/predictors">View full leaderboard →</a></div>`;
+    el.innerHTML = `<div class="predictors-wrap">${header}${rows}${footer}</div>`;
+  } catch (err) {
+    console.error('Top predictors error:', err);
     el.innerHTML = `
       <div class="predictors-wrap">
-        <div style="text-align:center;padding:60px 20px;color:var(--muted)">
-          <div style="font-size:36px;margin-bottom:14px">🎯</div>
-          <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:8px">No ranked predictors yet</div>
-          <div style="font-size:13px;line-height:1.6">Predictors need 5+ settled predictions to qualify.<br>Markets must be resolved to count.</div>
+        <div style="text-align:center;padding:40px 20px;color:var(--muted)">
+          <div style="font-size:13px">Could not load leaderboard</div>
         </div>
       </div>`;
-    return;
   }
-
-  const header = `
-    <div class="predictors-header">
-      <div class="predictors-header-title">Global Top Predictors</div>
-      <div class="predictors-header-sub">Min 5 predictions · Ranked by accuracy</div>
-    </div>`;
-
-  const rows = predictors.map((p, i) => {
-    const rankClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
-    const medal     = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`;
-    const tier      = p.win_rate >= 70 ? ['oracle', 'ORACLE', 'wr-oracle'] : p.win_rate >= 60 ? ['sharp', 'SHARP', 'wr-sharp'] : ['solid', 'SOLID', 'wr-solid'];
-    return `
-      <div class="predictor-row">
-        <div class="predictor-rank ${rankClass}">${medal}</div>
-        <div style="flex:1;min-width:0">
-          <div class="predictor-name">${escHtml(p.display_name || 'Anonymous')}</div>
-          <div class="predictor-trades">${p.total_trades} predictions · ${p.wins} correct</div>
-        </div>
-        <span class="predictor-tier tier-${tier[0]}">🎯 ${tier[1]}</span>
-        <div class="predictor-wr ${tier[2]}">${p.win_rate}%</div>
-      </div>`;
-  }).join('');
-
-  const note = `<div class="predictors-footer">Accuracy ranking across all communities · All-time</div>`;
-  el.innerHTML = `<div class="predictors-wrap">${header}${rows}${note}</div>`;
 }
 
 function renderFeaturedSpotlight(sections, communities) {
@@ -2368,7 +2465,7 @@ async function loadFeed() {
     renderTrades(data.trades || [], data.communities || {});
     renderMarkets(data.hot || [], data.communities || {}, 'hot-feed');
     renderMarkets(data.newest || [], data.communities || {}, 'new-feed');
-    renderTopPredictors(data.top_predictors || []);
+    loadTopPredictors(); // Fetch from Polymarket leaderboard independently
     renderCommunities(data.communities || {});
     renderCommunitySections(data.community_sections, data.communities || {}, data.top_predictors);
     renderAnnouncements(data.announcements || [], data.communities || {});

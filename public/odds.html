@@ -994,27 +994,35 @@ async function runAiAnalysis() {
     var arbs = d.opportunities || [];
     if (!arbs.length) { el.innerHTML = '<div style="text-align:center;padding:32px;color:var(--dim);font-family:var(--mono);font-size:13px">No arbitrage opportunities right now. Checked every 5 minutes.</div>'; return; }
     el.innerHTML = arbs.map(function(a) {
-      var edgeColor = a.edge_pct >= 5 ? '#22c55e' : a.edge_pct >= 2 ? '#eab308' : 'var(--dim)';
+      var spreadPct = a.spread_pct || Math.round((a.spread || 0) * 100);
+      var edgeColor = spreadPct >= 5 ? '#22c55e' : spreadPct >= 2 ? '#eab308' : 'var(--dim)';
       var isSB = a.type === 'sportsbook';
       var platformLabel = isSB ? 'Sportsbooks' : 'Kalshi';
       var platformColor = isSB ? '#f97316' : '#3b82f6';
-      var secondPct = isSB ? a.kalshi_yes + '% implied' : a.kalshi_yes + '% YES';
-      return '<div style="background:#1a1916;border:1px solid ' + (a.edge_pct >= 5 ? 'rgba(34,197,94,0.3)' : 'var(--border)') + ';border-radius:10px;padding:16px 20px">' +
+      var polyPct = a.polymarket_price != null ? Math.round(a.polymarket_price * 100) : (a.polymarket_yes || '?');
+      var kalshiPct = a.kalshi_price != null ? Math.round(a.kalshi_price * 100) : (a.kalshi_yes || '?');
+      var secondPct = isSB ? kalshiPct + '% implied' : kalshiPct + '% YES';
+      var question = a.question || a.market || '';
+      var direction = a.direction || (a.buy_on ? 'Buy YES on ' + a.buy_on.charAt(0).toUpperCase() + a.buy_on.slice(1) + (a.arb_roi ? ' · ' + a.arb_roi + '% ROI' : '') : '');
+      var polyUrl = a.poly_url || (a.poly_slug ? '/market/' + a.poly_slug : '');
+      var kalshiUrl = a.kalshi_url || (a.kalshi_ticker ? 'https://kalshi.com/markets/' + a.kalshi_ticker : '');
+      return '<div style="background:#1a1916;border:1px solid ' + (spreadPct >= 5 ? 'rgba(34,197,94,0.3)' : 'var(--border)') + ';border-radius:10px;padding:16px 20px">' +
         '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px">' +
-          '<span style="font-family:var(--mono);font-size:20px;font-weight:900;color:' + edgeColor + '">' + a.edge_pct + '%</span>' +
+          '<span style="font-family:var(--mono);font-size:20px;font-weight:900;color:' + edgeColor + '">' + spreadPct + '%</span>' +
           '<span style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em">edge</span>' +
           (isSB ? '<span style="font-family:var(--mono);font-size:9px;padding:2px 8px;border-radius:4px;background:rgba(249,115,22,0.1);color:#f97316;border:1px solid rgba(249,115,22,0.3)">SPORTSBOOK</span>' : '') +
-          '<span style="flex:1;font-size:14px;font-weight:600;color:var(--text)">' + (a.market || '').substring(0, 70) + '</span>' +
+          '<span style="flex:1;font-size:14px;font-weight:600;color:var(--text)">' + question.substring(0, 70) + '</span>' +
         '</div>' +
         '<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:var(--dim)">' +
-          '<span>Polymarket: <strong style="color:#7c3aed">' + a.polymarket_yes + '%</strong></span>' +
+          '<span>Polymarket: <strong style="color:#7c3aed">' + polyPct + '%</strong></span>' +
           '<span>' + platformLabel + ': <strong style="color:' + platformColor + '">' + secondPct + '</strong></span>' +
           (isSB && a.decimal_odds ? '<span style="color:#5a5752">' + a.bookmakers + ' books · ' + a.decimal_odds + 'x odds</span>' : '') +
+          (a.match_confidence ? '<span style="color:#5a5752">' + a.match_confidence + '% match</span>' : '') +
         '</div>' +
-        '<div style="margin-top:10px;font-family:var(--mono);font-size:11px;color:var(--muted)">' + (a.direction || '') + '</div>' +
+        '<div style="margin-top:10px;font-family:var(--mono);font-size:11px;color:var(--muted)">' + direction + '</div>' +
         '<div style="margin-top:10px;display:flex;gap:8px">' +
-          (a.poly_url ? '<a href="' + a.poly_url + '" target="_blank" rel="noopener" style="color:#7c3aed;font-weight:700;text-decoration:none;padding:6px 14px;border:1px solid rgba(124,58,237,0.3);border-radius:6px;font-size:11px">Trade Poly \u2192</a>' : '') +
-          (a.kalshi_url ? '<a href="' + a.kalshi_url + '" target="_blank" rel="noopener" style="color:' + platformColor + ';font-weight:700;text-decoration:none;padding:6px 14px;border:1px solid ' + platformColor + '33;border-radius:6px;font-size:11px">Trade ' + platformLabel + ' \u2192</a>' : '') +
+          (polyUrl ? '<a href="' + polyUrl + '" style="color:#7c3aed;font-weight:700;text-decoration:none;padding:6px 14px;border:1px solid rgba(124,58,237,0.3);border-radius:6px;font-size:11px">Trade Poly \u2192</a>' : '') +
+          (kalshiUrl ? '<a href="' + kalshiUrl + '" target="_blank" rel="noopener" style="color:' + platformColor + ';font-weight:700;text-decoration:none;padding:6px 14px;border:1px solid ' + platformColor + '33;border-radius:6px;font-size:11px">Trade ' + platformLabel + ' \u2192</a>' : '') +
         '</div>' +
       '</div>';
     }).join('');
