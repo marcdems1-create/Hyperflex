@@ -583,12 +583,14 @@ function renderMarket() {
     descEl.textContent = desc;
   }
 
-  // Trade widget
+  // Trade widget — use outcome names for multi-outcome events
   document.getElementById('yesPrice').textContent = Math.round(yesPrice * 100) + '¢';
   document.getElementById('noPrice').textContent = Math.round(noPrice * 100) + '¢';
   document.getElementById('tradePrice').value = Math.round(yesPrice * 100) || 50;
   if (icon) { var ti = document.getElementById('tradeIcon'); ti.src = icon; ti.style.display = ''; }
-  document.getElementById('tradeTitle').textContent = (m.question || '').substring(0, 40);
+  document.getElementById('tradeTitle').textContent = (m._displayTitle || m.question || '').substring(0, 50);
+  // Replace YES/NO labels with outcome names for multi-outcome events
+  updateOutcomeLabels();
   // Use event slug for Polymarket link (market slugs 404 on polymarket.com)
   var eventSlug = m._eventSlug || (m.events && m.events[0] && m.events[0].slug) || slug;
   document.getElementById('polyLink').href = polyRef('https://polymarket.com/event/' + eventSlug);
@@ -707,57 +709,31 @@ function renderOutcomes(m) {
     var noCents = Math.round(row.noP * 100);
     var yesFmt = fmtCents(row.yesP);
     var noFmt = fmtCents(row.noP);
-    // Build position badge HTML for this outcome row
+    // Build position badge — match by outcome name in title (simplest, most reliable)
     var posBadge = '';
     if (Object.keys(_userPositions).length) {
-      // Find position matching THIS specific outcome's conditionId + token IDs
-      var rowTokenIds = getOutcomeTokenIds(row.idx);
-      var rowConditionId = (row.conditionId || '').toLowerCase();
-      // For multi-outcome, also get conditionId from sorted event market
-      if (!rowConditionId && _sortedEventMarkets && _sortedEventMarkets[row.idx]) {
-        rowConditionId = (_sortedEventMarkets[row.idx].conditionId || '').toLowerCase();
-      }
-
-      var matchedPos = null;
-      var matchedSide = '';
-      // Search through all user positions and match by conditionId (most reliable)
-      // or by token ID as fallback
-      var posKeys = Object.keys(_userPositions);
-      for (var pk = 0; pk < posKeys.length; pk++) {
-        var p = _userPositions[posKeys[pk]];
-        // Match by conditionId if available (most reliable for multi-outcome events)
-        if (rowConditionId && p.conditionId === rowConditionId) {
-          matchedPos = p;
-          matchedSide = p.side;
-          break;
-        }
-      }
-      // Fallback: match by token ID
-      if (!matchedPos && rowTokenIds.length) {
-        var yTid = (rowTokenIds[0] || '').toLowerCase();
-        var nTid = (rowTokenIds[1] || '').toLowerCase();
-        if (_userPositions[yTid]) { matchedPos = _userPositions[yTid]; matchedSide = 'Yes'; }
-        else if (_userPositions[nTid]) { matchedPos = _userPositions[nTid]; matchedSide = 'No'; }
-      }
-
+      var matchedPos = findPositionForOutcome(row.name, row.idx);
       if (matchedPos && matchedPos.size > 0) {
         var avgC = (matchedPos.avgPrice * 100).toFixed(1);
-        var isYes = matchedSide.toLowerCase() === 'yes';
-        var badgeClass = isYes ? 'position-badge-yes' : 'position-badge-no';
-        var sideLabel = isYes ? 'Yes' : 'No';
-        posBadge = '<div class="position-badge ' + badgeClass + '" title="Your ' + sideLabel + ' position">' +
-          '<span class="pos-side">' + sideLabel + '</span> ' +
-          '<span class="pos-shares">' + matchedPos.size.toFixed(1) + '</span> ' +
+        posBadge = '<div class="position-badge position-badge-yes" title="Your position">' +
+          '<span class="pos-shares">' + matchedPos.size.toFixed(1) + ' shares</span> ' +
           '<span class="pos-sep">\u00b7</span> ' +
           '<span class="pos-price">' + avgC + '\u00a2</span>' +
           '</div>';
       }
     }
 
+    // For multi-outcome events, show outcome % instead of "Buy Yes/No"
+    var isMulti = _eventMarkets && _eventMarkets.length > 1;
+    var yesBtnLabel = isMulti ? (yesFmt + '\u00a2') : ('Buy Yes ' + yesFmt + '\u00a2');
+    var noBtnLabel = isMulti ? ('No ' + noFmt + '\u00a2') : ('Buy No ' + noFmt + '\u00a2');
+    var yesColHeader = isMulti ? 'BUY' : 'BUY YES';
+    var noColHeader = isMulti ? 'NO' : 'BUY NO';
+
     html += '<tr class="outcome-row' + activeClass + '" data-idx="' + row.idx + '">' +
-      '<td style="cursor:pointer"><div class="outcome-name">' + escH(row.name) + posBadge + '</div></td>' +
-      '<td><button class="outcome-btn outcome-btn-yes" data-idx="' + row.idx + '" data-price="' + yesCents + '" title="Buy Yes at ' + yesFmt + '\u00a2">Buy Yes ' + yesFmt + '\u00a2</button></td>' +
-      '<td><button class="outcome-btn outcome-btn-no" data-idx="' + row.idx + '" data-price="' + noCents + '" title="Buy No at ' + noFmt + '\u00a2">Buy No ' + noFmt + '\u00a2</button></td>' +
+      '<td style="cursor:pointer"><div class="outcome-name">' + escH(row.name) + ' <span style="color:var(--green);font-family:var(--mono);font-size:12px;font-weight:700">' + yesFmt + '\u00a2</span>' + posBadge + '</div></td>' +
+      '<td><button class="outcome-btn outcome-btn-yes" data-idx="' + row.idx + '" data-price="' + yesCents + '" title="Buy at ' + yesFmt + '\u00a2">' + yesBtnLabel + '</button></td>' +
+      '<td><button class="outcome-btn outcome-btn-no" data-idx="' + row.idx + '" data-price="' + noCents + '" title="Buy No at ' + noFmt + '\u00a2">' + noBtnLabel + '</button></td>' +
       '<td style="color:var(--soft);font-size:11px">' + vol + '</td>' +
       '<td style="color:var(--soft);font-size:11px">' + liq + '</td>' +
       '</tr>';
@@ -818,6 +794,7 @@ function switchOutcome(index) {
         .catch(function() {});
     }
     updateSidebarPosition();
+    updateOutcomeLabels();
     return;
   }
 
@@ -851,8 +828,9 @@ function switchOutcome(index) {
       .catch(function() {});
   }
 
-  // Update sidebar position for new active outcome
+  // Update sidebar position + labels for new active outcome
   updateSidebarPosition();
+  updateOutcomeLabels();
 }
 
 // ── AI Market Intelligence ───────────────────────────────────────────────────
@@ -1426,6 +1404,29 @@ function renderOrderbook() {
 }
 
 // ── Trade widget ──────────────────────────────────────────────────────────────
+// Replace YES/NO labels with outcome names for multi-outcome events
+function updateOutcomeLabels() {
+  var yesLabel = document.querySelector('#sideYes span');
+  var noLabel = document.querySelector('#sideNo span');
+  if (!yesLabel || !noLabel) return;
+
+  if (_sortedEventMarkets && _sortedEventMarkets.length > 1 && _sortedEventMarkets[_activeOutcomeIndex]) {
+    var em = _sortedEventMarkets[_activeOutcomeIndex];
+    var shortName = em.groupItemTitle || em.question || '';
+    // Extract short label
+    var rangeMatch = shortName.match(/(?:at |between |close (?:at )?)(\$[\d,.]+\s*[-–]\s*\$[\d,.]+|\<\s*\$[\d,.]+|\>\s*\$[\d,.]+)/i);
+    if (rangeMatch) shortName = rangeMatch[1];
+    else { var teamMatch = shortName.match(/Will (?:the )?(.+?) win/i); if (teamMatch) shortName = teamMatch[1]; }
+    if (shortName.length > 12) shortName = shortName.substring(0, 10) + '..';
+    // YES button = this outcome, NO button = "Other"
+    yesLabel.textContent = '↗ ' + shortName;
+    noLabel.textContent = '↘ No';
+  } else {
+    yesLabel.textContent = '↗ YES';
+    noLabel.textContent = '↘ NO';
+  }
+}
+
 function setTradeSide(side) {
   _tradeSide = side;
   document.getElementById('sideYes').classList.toggle('active', side === 'yes');
@@ -1648,50 +1649,32 @@ function updateSidebarPosition() {
   if (!posEl || !details) return;
   if (!Object.keys(_userPositions).length) { posEl.style.display = 'none'; return; }
 
-  // Find position for active outcome — match by conditionId first, then tokenId
-  var activeConditionId = '';
+  // Get active outcome name
+  var outcomeName = '';
   if (_sortedEventMarkets && _sortedEventMarkets[_activeOutcomeIndex]) {
-    activeConditionId = (_sortedEventMarkets[_activeOutcomeIndex].conditionId || '').toLowerCase();
-  } else if (_market) {
-    activeConditionId = (_market.conditionId || '').toLowerCase();
+    outcomeName = _sortedEventMarkets[_activeOutcomeIndex].groupItemTitle || _sortedEventMarkets[_activeOutcomeIndex].question || '';
   }
 
-  var pos = null;
-  var posKeys = Object.keys(_userPositions);
-  // Match by conditionId
-  if (activeConditionId) {
-    for (var i = 0; i < posKeys.length; i++) {
-      if (_userPositions[posKeys[i]].conditionId === activeConditionId) {
-        pos = _userPositions[posKeys[i]];
-        break;
-      }
-    }
-  }
-  // Fallback: match by token ID
-  if (!pos) {
-    var tokenIds = getActiveTokenIds();
-    var yTid = (tokenIds[0] || '').toLowerCase();
-    var nTid = (tokenIds[1] || '').toLowerCase();
-    pos = _userPositions[yTid] || _userPositions[nTid] || null;
-  }
-
+  var pos = findPositionForOutcome(outcomeName, _activeOutcomeIndex);
   if (!pos || pos.size <= 0) {
     posEl.style.display = 'none';
     return;
   }
 
-  var side = (pos.side || 'Yes').toUpperCase();
-  var sideColor = side === 'YES' ? 'var(--green)' : 'var(--red)';
+  // Use outcome name instead of YES/NO for multi-outcome events
+  var label = outcomeName || (pos.side || 'Yes').toUpperCase();
+  if (label.length > 15) label = label.substring(0, 13) + '..';
+  var sideColor = 'var(--green)';
   var avgCents = (pos.avgPrice * 100).toFixed(1);
   var cost = (pos.size * pos.avgPrice).toFixed(2);
   var currentVal = (pos.size * pos.currentPrice).toFixed(2);
-  var pnl = pos.cashPnl !== undefined ? pos.cashPnl.toFixed(2) : (currentVal - cost).toFixed(2);
+  var pnl = pos.cashPnl !== undefined && pos.cashPnl !== 0 ? pos.cashPnl.toFixed(2) : (currentVal - cost).toFixed(2);
   var pnlSign = pnl >= 0 ? '+' : '';
   var pnlColor = pnl >= 0 ? 'var(--green)' : 'var(--red)';
 
   details.innerHTML =
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">' +
-      '<span style="font-weight:700;color:' + sideColor + '">' + side + ' \u00b7 ' + pos.size.toFixed(1) + ' shares</span>' +
+      '<span style="font-weight:700;color:' + sideColor + '">' + escH(label) + ' \u00b7 ' + pos.size.toFixed(1) + ' shares</span>' +
       '<span style="color:var(--dim)">avg ' + avgCents + '\u00a2</span>' +
     '</div>' +
     '<div style="display:flex;justify-content:space-between;font-size:11px">' +
@@ -1701,8 +1684,47 @@ function updateSidebarPosition() {
     '</div>';
 
   posEl.style.display = 'block';
-  posEl.style.borderColor = side === 'YES' ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.25)';
-  posEl.style.background = side === 'YES' ? 'rgba(34,197,94,0.06)' : 'rgba(239,68,68,0.06)';
+  posEl.style.borderColor = 'rgba(34,197,94,0.25)';
+  posEl.style.background = 'rgba(34,197,94,0.06)';
+}
+
+// Helper: find a user position matching a specific outcome row
+// Uses title fuzzy match (most reliable) + token ID fallback
+function findPositionForOutcome(outcomeName, outcomeIdx) {
+  if (!Object.keys(_userPositions).length) return null;
+  var nameLower = (outcomeName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  // 1. Match by title — the API returns title like "Will Bitcoin hit $60k..." for each position
+  var posKeys = Object.keys(_userPositions);
+  for (var i = 0; i < posKeys.length; i++) {
+    var p = _userPositions[posKeys[i]];
+    var titleLower = (p.title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    // Check if outcome name appears in position title (e.g. "60k" in "Will Bitcoin hit $60k...")
+    if (nameLower && titleLower && nameLower.length >= 2 && titleLower.includes(nameLower)) {
+      return p;
+    }
+  }
+
+  // 2. Match by conditionId
+  var rowConditionId = '';
+  if (_sortedEventMarkets && _sortedEventMarkets[outcomeIdx]) {
+    rowConditionId = (_sortedEventMarkets[outcomeIdx].conditionId || '').toLowerCase();
+  } else if (_market) {
+    rowConditionId = (_market.conditionId || '').toLowerCase();
+  }
+  if (rowConditionId) {
+    for (var i = 0; i < posKeys.length; i++) {
+      if (_userPositions[posKeys[i]].conditionId === rowConditionId) {
+        return _userPositions[posKeys[i]];
+      }
+    }
+  }
+
+  // 3. Fallback: token ID
+  var tids = getOutcomeTokenIds(outcomeIdx);
+  var yTid = (tids[0] || '').toLowerCase();
+  var nTid = (tids[1] || '').toLowerCase();
+  return _userPositions[yTid] || _userPositions[nTid] || null;
 }
 
 // Helper: get token IDs for a specific outcome index
