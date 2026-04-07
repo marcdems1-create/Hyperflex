@@ -19598,10 +19598,60 @@ let _volumeBaselineCache = null; // { ts, data: { market_id: avg_volume } }
 // In-memory freshness tracker: market_id -> { first_seen_at, last_score, peak_score }
 // Stamps the moment a market first crosses the EDGE_FRESH_THRESHOLD so traders
 // can tell fresh signals (act fast, edge not priced in) from stale ones.
+// Hydrated from the alpha_freshness Postgres table at boot so stamps survive
+// deploys — without persistence the map resets every Railway redeploy and
+// every market looks "fresh" for the first 60 minutes after each push.
 const _alphaFreshness = new Map();
 const EDGE_FRESH_THRESHOLD = 50; // score must cross this to get a stamp
 const EDGE_DROP_THRESHOLD = 40;  // if score falls below this, edge has died — clear stamp
 const FRESH_WINDOW_MINUTES = 60; // <60min = is_new = true
+let _alphaFreshnessLoaded = false;
+
+// One-time hydrate from Postgres at first buildAlphaList call.
+async function hydrateAlphaFreshness() {
+  if (_alphaFreshnessLoaded || !pool) { _alphaFreshnessLoaded = true; return; }
+  try {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const rows = await dbQuery(
+      `SELECT market_id, first_seen_at, last_score, peak_score
+       FROM alpha_freshness
+       WHERE updated_at >= $1`,
+      [cutoff]
+    );
+    for (const r of (rows || [])) {
+      if (!r.market_id) continue;
+      _alphaFreshness.set(r.market_id, {
+        first_seen_at: new Date(r.first_seen_at).getTime(),
+        last_score: parseInt(r.last_score) || 0,
+        peak_score: parseInt(r.peak_score) || 0
+      });
+    }
+    console.log('[alpha-freshness] hydrated', _alphaFreshness.size, 'stamps from DB');
+  } catch (e) {
+    console.warn('[alpha-freshness] hydrate failed:', e.message);
+  }
+  _alphaFreshnessLoaded = true;
+}
+
+// Non-blocking upsert to persist a stamp. Called from buildAlphaList freshness loop.
+function persistAlphaFreshness(marketId, stamp) {
+  if (!pool || !marketId || !stamp) return;
+  dbQuery(
+    `INSERT INTO alpha_freshness (market_id, first_seen_at, last_score, peak_score, updated_at)
+     VALUES ($1, $2, $3, $4, NOW())
+     ON CONFLICT (market_id) DO UPDATE SET
+       last_score = EXCLUDED.last_score,
+       peak_score = GREATEST(alpha_freshness.peak_score, EXCLUDED.peak_score),
+       updated_at = NOW()`,
+    [marketId, new Date(stamp.first_seen_at).toISOString(), stamp.last_score, stamp.peak_score]
+  ).catch(() => {});
+}
+
+// Non-blocking delete when an edge dies (score < EDGE_DROP_THRESHOLD)
+function clearAlphaFreshness(marketId) {
+  if (!pool || !marketId) return;
+  dbQuery(`DELETE FROM alpha_freshness WHERE market_id = $1`, [marketId]).catch(() => {});
+}
 
 // AI hook cache — Claude Haiku-generated one-liners per market_id, 5-min TTL.
 // Avoids re-calling the API on every 90s refresh (cost + latency).
@@ -19690,6 +19740,9 @@ async function buildAlphaList(opts = {}) {
   if (!force && _screenerCache && (Date.now() - _screenerCache.ts < 90 * 1000)) {
     return _screenerCache.data;
   }
+
+  // One-time hydrate from Postgres so freshness stamps survive deploys
+  if (!_alphaFreshnessLoaded) await hydrateAlphaFreshness();
 
   const fetch = _nodeFetch;
 
@@ -20229,15 +20282,19 @@ async function buildAlphaList(opts = {}) {
         if (score >= EDGE_FRESH_THRESHOLD) {
           if (!existing) {
             // First time this market crosses the threshold — stamp it
-            _alphaFreshness.set(m.market_id, { first_seen_at: nowMs, last_score: score, peak_score: score });
+            const stamp = { first_seen_at: nowMs, last_score: score, peak_score: score };
+            _alphaFreshness.set(m.market_id, stamp);
+            persistAlphaFreshness(m.market_id, stamp);
             freshNew++;
           } else {
             existing.last_score = score;
             if (score > existing.peak_score) existing.peak_score = score;
+            persistAlphaFreshness(m.market_id, existing);
           }
         } else if (existing && score < EDGE_DROP_THRESHOLD) {
           // Edge died — clear stamp so the next time it crosses, it counts as fresh again
           _alphaFreshness.delete(m.market_id);
+          clearAlphaFreshness(m.market_id);
         }
 
         const stamped = _alphaFreshness.get(m.market_id);
@@ -30438,6 +30495,17 @@ if (pool) {
       await dbQuery(`ALTER TABLE cached_positions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`).catch(() => {});
       await dbQuery(`ALTER TABLE market_snapshots ADD COLUMN IF NOT EXISTS volume NUMERIC`).catch(() => {});
       await dbQuery(`ALTER TABLE markets ADD COLUMN IF NOT EXISTS resolution_sources JSONB`).catch(() => {});
+
+      // Alpha freshness — persists edge stamp timestamps across deploys so
+      // traders see stable "first seen Xm ago" times instead of resets.
+      await dbQuery(`CREATE TABLE IF NOT EXISTS alpha_freshness (
+        market_id TEXT PRIMARY KEY,
+        first_seen_at TIMESTAMPTZ NOT NULL,
+        last_score INTEGER NOT NULL,
+        peak_score INTEGER NOT NULL,
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_alpha_freshness_updated ON alpha_freshness(updated_at)`).catch(() => {});
 
       console.log('[boot] Auto-migration complete — all tables ensured');
     } catch(e) { console.warn('[boot] Auto-migration error:', e.message); }
