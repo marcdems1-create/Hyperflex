@@ -429,7 +429,6 @@ async function loadWhaleConsensus() {
       var side = m.consensus_side || m.side || 'YES';
       var consensus = m.consensus_pct || 0;
       var cap = m.total_capital || m.capital || 0;
-      var plain = translateSide(m.market||m.question||'', side);
       var flag = regionFlag(m.market||m.question||'');
       var mUrl = m.url || m.market_url || '';
       var hfxLink = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(mUrl) : '#';
@@ -439,15 +438,31 @@ async function loadWhaleConsensus() {
       var catEmoji = /crypto|btc|eth|bitcoin|solana/i.test(qLower) ? '\uD83D\uDCB0' : /nba|nfl|mlb|sport|game|match|vs\./i.test(qLower) ? '\u26BD' : /trump|biden|election|congress|president/i.test(qLower) ? '\uD83C\uDFDB' : /war|ceasefire|iran|israel|gaza/i.test(qLower) ? '\uD83C\uDF0D' : '\uD83D\uDCC8';
       // Time ago
       var updatedAgo = m.detected_at || m.updated_at || m.last_trade_at || '';
-      var agoStr = updatedAgo ? timeAgo(updatedAgo) + ' ago' : '';
+      var agoStr = updatedAgo ? timeAgo(updatedAgo) : '';
+      // ROI calc: entry = market price for consensus side, win = 1 - entry
+      var mktPrice = m.yes_price || m.price || 0;
+      var entry = side === 'YES' ? mktPrice : (1 - mktPrice);
+      if (entry <= 0 || entry >= 1) entry = 0.5;
+      var entryCents = Math.round(entry * 100);
+      var winCents = 100 - entryCents;
+      var roi = entryCents > 0 ? Math.round(winCents / entryCents * 100) : 0;
+      var sideColor = side === 'YES' ? 'var(--accent-green)' : 'var(--accent-red)';
       return '<a href="' + hfxLink + '" class="s-whale-row" style="text-decoration:none;color:inherit;display:flex">' +
         '<div class="s-whale-rank' + rankClass + '">' + (i+1) + '</div>' +
         '<div style="font-size:16px;flex-shrink:0;width:24px;text-align:center">' + catEmoji + '</div>' +
         '<div class="s-whale-info">' +
           '<div class="s-whale-q">' + (flag?flag+' ':'') + escH(m.market||m.question||'') + '</div>' +
-          '<div class="s-whale-stats"><span>\uD83D\uDC33 ' + (m.whale_count||0) + ' whales</span><span>\u00B7</span><span>' + fmtCap(cap) + '</span>' + (agoStr ? '<span style="color:var(--muted)">\u00B7 Updated ' + agoStr + '</span>' : '') + '</div>' +
+          '<div class="s-whale-stats">' +
+            '<span>\uD83D\uDC33 ' + (m.whale_count||0) + ' whales</span><span>\u00B7</span>' +
+            '<span>' + fmtCap(cap) + '</span><span>\u00B7</span>' +
+            '<span style="font-family:var(--mono);font-size:9px;color:' + sideColor + '">' + side + ' ' + entryCents + '\u00A2</span>' +
+            (agoStr ? '<span style="color:var(--muted)">\u00B7 ' + agoStr + '</span>' : '') +
+          '</div>' +
         '</div>' +
-        '<div class="s-whale-side ' + (side==='YES'?'yes':'no') + '">' + escH(plain) + '</div>' +
+        '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0">' +
+          '<span style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--accent-green)">+' + roi + '%</span>' +
+          '<span style="font-family:var(--mono);font-size:9px;color:var(--dim)">' + entryCents + '\u00A2\u2192' + winCents + '\u00A2</span>' +
+        '</div>' +
       '</a>';
     }).join('');
   } catch(e) { el.innerHTML = '<div class="s-empty">Failed to load.</div>'; }

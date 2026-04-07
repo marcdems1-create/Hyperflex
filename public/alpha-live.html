@@ -138,8 +138,9 @@
   .trade-cta:hover{filter:brightness(1.1);transform:translateY(-1px)}
   .trade-cta.yes{background:linear-gradient(135deg,var(--green),#00cc7a)}
   .trade-cta.no{background:linear-gradient(135deg,var(--red),#e63e5c)}
+  .trade-cta .roi-hero{font-family:var(--mono);font-size:20px;font-weight:800;letter-spacing:-0.5px}
   .trade-cta .side-tag{background:rgba(0,0,0,0.2);color:#0a0a0f;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:800;letter-spacing:0.04em}
-  .trade-cta .roi{margin-left:auto;font-size:12px;opacity:0.85;font-family:var(--mono)}
+  .trade-cta .entry-detail{margin-left:auto;font-size:11px;opacity:0.8;font-family:var(--mono)}
 
   /* AI hook + meta */
   .hook{font-size:11px;color:var(--dim);margin-top:8px;font-style:italic;padding-top:8px;border-top:1px dashed var(--border)}
@@ -346,9 +347,9 @@ function render(data){
         bdRow('Diverge',ec.divergence||0,10,'divergence')+
       '</div>'+
       '<div class="trade-cta '+(t.side==='YES'?'yes':'no')+'">'+
+        '<span class="roi-hero">+'+roi+'% ROI</span>'+
         '<span class="side-tag">'+t.side+'</span>'+
-        'BET @ '+entry+'¢ · Win '+win+'¢'+
-        '<span class="roi">+'+roi+'%</span>'+
+        '<span class="entry-detail">'+entry+'¢ → '+win+'¢</span>'+
       '</div>'+
       (m.ai_hook?'<div class="hook">'+esc(m.ai_hook)+'</div>':'')+
       '<div class="meta-row">'+
