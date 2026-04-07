@@ -19563,14 +19563,18 @@ let _volumeTracker = {};  // { market_id: { samples: [{volume, yes_price, ts}] }
 const VOLUME_TRACKER_MAX_SAMPLES = 24;
 let _volumeBaselineCache = null; // { ts, data: { market_id: avg_volume } }
 
-app.get('/api/screener', async (req, res) => {
-  try {
-    // Check cache (90s TTL — live CLOB prices need freshness)
-    if (_screenerCache && (Date.now() - _screenerCache.ts < 90 * 1000)) {
-      return res.json(filterScreenerResults(_screenerCache.data, req.query));
-    }
+// ── UNIFIED ALPHA ENGINE ──────────────────────────────────────────────────
+// Single source of truth for enriched market data. Used by /api/screener,
+// /api/alpha/top (landing hero), and read directly by /api/signals via the
+// shared _screenerCache. Add new alpha surfaces by reading buildAlphaList().
+async function buildAlphaList(opts = {}) {
+  const force = opts.force === true;
+  // 90s TTL — live CLOB prices need freshness
+  if (!force && _screenerCache && (Date.now() - _screenerCache.ts < 90 * 1000)) {
+    return _screenerCache.data;
+  }
 
-    const fetch = _nodeFetch;
+  const fetch = _nodeFetch;
 
     // Fetch top 200 markets from Gamma API
     const ctrl = new AbortController();
@@ -19876,11 +19880,44 @@ app.get('/api/screener', async (req, res) => {
 
     _screenerCache = { ts: Date.now(), data: markets };
     _healthTimestamps.lastScreenerFetch = new Date().toISOString();
+    return markets;
+}
+
+app.get('/api/screener', async (req, res) => {
+  try {
+    const markets = await buildAlphaList();
     res.json(filterScreenerResults(markets, req.query));
   } catch (err) {
     console.error('[screener]', err.message);
     if (_screenerCache) return res.json(filterScreenerResults(_screenerCache.data, req.query));
     res.status(502).json({ error: 'Failed to fetch screener data', detail: err.message });
+  }
+});
+
+// Top N edges for landing hero / alpha-preview / future surfaces.
+// Reads from the same unified buildAlphaList() the screener uses.
+app.get('/api/alpha/top', async (req, res) => {
+  try {
+    const n = Math.min(20, Math.max(1, parseInt(req.query.n) || 5));
+    const markets = await buildAlphaList();
+    const top = [...markets]
+      .sort((a, b) => (b.edge_score || 0) - (a.edge_score || 0))
+      .slice(0, n);
+    res.json({
+      markets: top,
+      count: top.length,
+      updated_at: new Date(_screenerCache ? _screenerCache.ts : Date.now()).toISOString()
+    });
+  } catch (err) {
+    console.error('[alpha/top]', err.message);
+    if (_screenerCache) {
+      const n = Math.min(20, Math.max(1, parseInt(req.query.n) || 5));
+      const top = [..._screenerCache.data]
+        .sort((a, b) => (b.edge_score || 0) - (a.edge_score || 0))
+        .slice(0, n);
+      return res.json({ markets: top, count: top.length, updated_at: new Date(_screenerCache.ts).toISOString(), stale: true });
+    }
+    res.status(502).json({ error: 'Failed to build alpha list', detail: err.message });
   }
 });
 
