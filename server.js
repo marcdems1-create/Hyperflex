@@ -19599,8 +19599,8 @@ let _volumeBaselineCache = null; // { ts, data: { market_id: avg_volume } }
 // Stamps the moment a market first crosses the EDGE_FRESH_THRESHOLD so traders
 // can tell fresh signals (act fast, edge not priced in) from stale ones.
 const _alphaFreshness = new Map();
-const EDGE_FRESH_THRESHOLD = 60; // score must cross this to get a stamp
-const EDGE_DROP_THRESHOLD = 50;  // if score falls below this, edge has died — clear stamp
+const EDGE_FRESH_THRESHOLD = 50; // score must cross this to get a stamp
+const EDGE_DROP_THRESHOLD = 40;  // if score falls below this, edge has died — clear stamp
 const FRESH_WINDOW_MINUTES = 60; // <60min = is_new = true
 
 async function buildAlphaList(opts = {}) {
@@ -19630,9 +19630,10 @@ async function buildAlphaList(opts = {}) {
       if (v24 > 0) return v24;
       return parseFloat(m.volume || m.volumeNum || 0);
     };
+    // Sort by 24h volume desc, take top 350 to cover more whale-traded markets
     const rawMarkets = (Array.isArray(_rawAll) ? _rawAll : [])
       .sort((a, b) => _vol(b) - _vol(a))
-      .slice(0, 250);
+      .slice(0, 350);
     console.log('[alpha] gamma fetch:', (Array.isArray(_rawAll) ? _rawAll.length : 0), '→ top', rawMarkets.length, 'by 24h volume');
 
     // Warm whale cache if empty (so Whale Moves lane always has data)
@@ -19806,8 +19807,18 @@ async function buildAlphaList(opts = {}) {
       // Liquid markets with whale activity should always beat noise markets.
       const edgeWhale = Math.min(35, wCount * 7);                                         // 3 whales=21, 5=35
       const edgeCapital = wCapital >= 1000000 ? 15 : wCapital >= 500000 ? 10 : wCapital >= 100000 ? 5 : 0;
-      // Volume now dominates: $10M=30, $5M=22, $1M=15, $500k=10, $100k=5
-      const edgeVolume = volume >= 10000000 ? 30 : volume >= 5000000 ? 22 : volume >= 1000000 ? 15 : volume >= 500000 ? 10 : volume >= 100000 ? 5 : 0;
+      // Volume tier — progressive so $50k markets still score and we don't waste signal:
+      // $10M=30, $5M=25, $1M=20, $500k=15, $250k=12, $100k=10, $50k=6, $10k=3, $1k=1
+      const edgeVolume =
+        volume >= 10000000 ? 30 :
+        volume >= 5000000 ? 25 :
+        volume >= 1000000 ? 20 :
+        volume >= 500000 ? 15 :
+        volume >= 250000 ? 12 :
+        volume >= 100000 ? 10 :
+        volume >= 50000 ? 6 :
+        volume >= 10000 ? 3 :
+        volume >= 1000 ? 1 : 0;
       // Momentum + expiry only fire on liquid markets (>$50k vol). Otherwise it's just noise.
       const liquid = volume >= 50000;
       const edgeMomentum = liquid ? Math.min(15, Math.abs(pChange || 0) * 1.5) : 0;
