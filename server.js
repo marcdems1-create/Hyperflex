@@ -19734,6 +19734,10 @@ No markdown, no preamble, just the JSON.`
   }
 }
 
+// In-flight promise lock — coalesces concurrent buildAlphaList() calls so the
+// boot pre-warm doesn't fire 3 parallel pipelines wasting Polymarket API quota.
+let _buildAlphaListPromise = null;
+
 async function buildAlphaList(opts = {}) {
   const force = opts.force === true;
   // 90s TTL — live CLOB prices need freshness
@@ -19741,6 +19745,16 @@ async function buildAlphaList(opts = {}) {
     return _screenerCache.data;
   }
 
+  // If a build is already in flight, wait on it instead of starting another
+  if (_buildAlphaListPromise) return _buildAlphaListPromise;
+
+  _buildAlphaListPromise = _buildAlphaListInner(opts).finally(() => {
+    _buildAlphaListPromise = null;
+  });
+  return _buildAlphaListPromise;
+}
+
+async function _buildAlphaListInner(opts = {}) {
   // One-time hydrate from Postgres so freshness stamps survive deploys
   if (!_alphaFreshnessLoaded) await hydrateAlphaFreshness();
 
