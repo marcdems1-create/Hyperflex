@@ -2950,6 +2950,10 @@ body.nav-open .sidebar-backdrop {
 
     <nav class="sidebar-nav">
       <div class="nav-section-label" id="navSectionTrading" data-nav-section="trading">Trading</div>
+      <a class="nav-item" data-nav-section="trading" onclick="showTab('alpha')">
+        <span class="nav-icon">⚡</span><span class="nav-label">Alpha Feed</span>
+        <span style="margin-left:auto;font-family:var(--mono);font-size:8px;font-weight:800;padding:2px 6px;border-radius:4px;background:rgba(0,230,138,0.15);color:#00e68a;letter-spacing:.05em">LIVE</span>
+      </a>
       <a class="nav-item" data-nav-section="trading" onclick="showTab('portfolio')">
         <span class="nav-icon">🌐</span><span class="nav-label">My Positions</span>
       </a>
@@ -4776,6 +4780,57 @@ body.nav-open .sidebar-backdrop {
       </div>
 
       <!-- PORTFOLIO TAB -->
+      <!-- ═══ ALPHA FEED TAB ═══ -->
+      <div id="tab-alpha" style="display:none">
+        <div class="section">
+          <div style="max-width:1040px">
+            <!-- Hero banner -->
+            <div style="background:linear-gradient(135deg,#06060d 0%,#0a0e1a 40%,#0d1117 70%,#06060d 100%);border:1px solid rgba(0,230,138,0.12);border-radius:16px;padding:32px 36px;margin-bottom:28px;position:relative;overflow:hidden">
+              <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 75% 30%,rgba(0,230,138,0.04) 0%,transparent 60%);pointer-events:none"></div>
+              <div style="position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(0,230,138,0.2),transparent)"></div>
+              <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;position:relative">
+                <div>
+                  <div style="font-family:var(--mono);font-size:9px;color:#4a4744;text-transform:uppercase;letter-spacing:.2em;margin-bottom:8px">LIVE ALPHA</div>
+                  <div style="font-family:var(--sans);font-size:28px;font-weight:900;color:#fff;letter-spacing:-0.5px;line-height:1.1">Alpha Feed</div>
+                  <div style="font-family:var(--mono);font-size:11px;color:#6b6560;margin-top:6px">Top edges from whale clusters, orderbook depth, momentum & AI signals</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:12px">
+                  <div style="display:flex;align-items:center;gap:8px;padding:8px 16px;background:rgba(0,230,138,0.06);border:1px solid rgba(0,230,138,0.15);border-radius:20px">
+                    <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#00e68a;animation:brkPulse 2s infinite"></span>
+                    <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:#00e68a;text-transform:uppercase;letter-spacing:.1em">Live</span>
+                  </div>
+                  <a href="/alpha" style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--gold);text-decoration:none;padding:8px 16px;border:1px solid rgba(201,146,13,0.3);border-radius:20px;transition:all .15s" onmouseover="this.style.background='rgba(201,146,13,0.1)'" onmouseout="this.style.background='transparent'">Full Terminal →</a>
+                </div>
+              </div>
+            </div>
+
+            <!-- Category filter pills -->
+            <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">
+              <button onclick="alphaFilter('all',this)" class="alpha-pill active" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:8px 18px;border-radius:8px;border:1px solid #00e68a;background:#00e68a;color:#000;cursor:pointer;transition:all .15s;min-height:36px">All</button>
+              <button onclick="alphaFilter('crypto',this)" class="alpha-pill" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:8px 18px;border-radius:8px;border:1px solid #222;background:rgba(255,255,255,0.02);color:var(--dim);cursor:pointer;transition:all .15s;min-height:36px">Crypto</button>
+              <button onclick="alphaFilter('politics',this)" class="alpha-pill" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:8px 18px;border-radius:8px;border:1px solid #222;background:rgba(255,255,255,0.02);color:var(--dim);cursor:pointer;transition:all .15s;min-height:36px">Politics</button>
+              <button onclick="alphaFilter('sports',this)" class="alpha-pill" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:8px 18px;border-radius:8px;border:1px solid #222;background:rgba(255,255,255,0.02);color:var(--dim);cursor:pointer;transition:all .15s;min-height:36px">Sports</button>
+              <button onclick="alphaFilter('entertainment',this)" class="alpha-pill" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:8px 18px;border-radius:8px;border:1px solid #222;background:rgba(255,255,255,0.02);color:var(--dim);cursor:pointer;transition:all .15s;min-height:36px">Entertainment</button>
+              <button onclick="alphaFilter('tech',this)" class="alpha-pill" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:8px 18px;border-radius:8px;border:1px solid #222;background:rgba(255,255,255,0.02);color:var(--dim);cursor:pointer;transition:all .15s;min-height:36px">Tech</button>
+            </div>
+
+            <!-- Stats strip -->
+            <div id="alphaStats" style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap"></div>
+
+            <!-- Alpha cards grid -->
+            <div id="alphaCardsList" style="display:flex;flex-direction:column;gap:0;background:#0c0c0b;border:1px solid #1a1917;border-radius:12px;overflow:hidden">
+              <div style="text-align:center;padding:48px 20px;color:var(--dim);font-size:13px">Loading alpha signals...</div>
+            </div>
+
+            <!-- Load more -->
+            <div id="alphaLoadMore" style="display:none;text-align:center;margin-top:16px">
+              <button onclick="alphaShowMore()" style="font-family:var(--mono);font-size:11px;font-weight:700;padding:10px 28px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;transition:all .15s;min-height:44px" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">Show more →</button>
+            </div>
+
+          </div>
+        </div>
+      </div><!-- /tab-alpha -->
+
       <div id="tab-portfolio" style="display:none">
         <div class="section">
           <div style="max-width:860px">
@@ -7360,7 +7415,7 @@ function ensureMoreExpanded(tab) {
 // Tab switching
 function showTab(tab) {
   ensureMoreExpanded(tab);
-  ['overview','markets','resolve','members','leaderboard','share','rewards','seasons','settings','analytics','economy','branding','flexbot','ideas','portfolio','account','performance','breaking','quicktrade','findmarkets','arbitrage','calendar','watchlist','briefing','pythedge'].forEach(t => {
+  ['overview','markets','resolve','members','leaderboard','share','rewards','seasons','settings','analytics','economy','branding','flexbot','ideas','portfolio','account','performance','breaking','quicktrade','findmarkets','arbitrage','calendar','watchlist','briefing','pythedge','alpha'].forEach(t => {
     const el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === tab ? 'block' : 'none';
   });
@@ -7368,7 +7423,7 @@ function showTab(tab) {
   document.querySelectorAll('.nav-item').forEach(n => {
     if (n.getAttribute('onclick') && n.getAttribute('onclick').includes(`'${tab}'`)) n.classList.add('active');
   });
-  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Social', portfolio:'My Positions', account:'My Account', performance:'Performance', breaking:'Breaking', quicktrade:'Quick Trade', findmarkets:'Find Markets', arbitrage:'Arbitrage Scanner', calendar:'Catalyst Calendar', watchlist:'Watchlist', briefing:'Daily Brief', pythedge:'Pyth Edge' };
+  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Social', portfolio:'My Positions', account:'My Account', performance:'Performance', breaking:'Breaking', quicktrade:'Quick Trade', findmarkets:'Find Markets', arbitrage:'Arbitrage Scanner', calendar:'Catalyst Calendar', watchlist:'Watchlist', briefing:'Daily Brief', pythedge:'Pyth Edge', alpha:'Alpha Feed' };
   document.getElementById('topbarTitle').textContent = titles[tab] || tab;
   if (tab === 'analytics' && !analyticsLoaded) loadAnalytics();
   if (tab === 'members') { loadSocialTab(); loadMembers(); }
@@ -7406,6 +7461,7 @@ function showTab(tab) {
       else flEl.innerHTML = '<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">All caught up!</div><div class="empty-desc">No markets need resolution right now.</div></div>';
     }
   }
+  if (tab === 'alpha' && !_alphaTabLoaded) loadAlphaTab();
   if (tab === 'settings') loadApiAccess();
   if (tab === 'account') loadUsdcRewards();
   if (tab === 'portfolio') loadPortfolio();
@@ -7455,6 +7511,164 @@ function showTab(tab) {
   }
   // Close sidebar drawer on mobile after nav tap
   if (window.innerWidth <= 1024) closeSidebar();
+}
+
+// ── ALPHA FEED TAB ──────────────────────────────────────────────────────────
+let _alphaTabLoaded = false;
+let _alphaAllMarkets = [];
+let _alphaDisplayCount = 20;
+let _alphaCatFilter = 'all';
+
+function alphaDetectCat(q) {
+  var t = (q || '').toLowerCase();
+  if (/bitcoin|btc|eth|crypto|solana|xrp|dogecoin|token|defi|nft/i.test(t)) return 'crypto';
+  if (/nba|nfl|mlb|nhl|soccer|football|basketball|ufc|boxing|game |match|playoff|super bowl|championship|league|team|player|coach|finals|series|mvp|win on 20|masters|pga|golf/i.test(t)) return 'sports';
+  if (/trump|biden|president|congress|senate|election|democrat|republican|politic|governor|vote |tariff/i.test(t)) return 'politics';
+  if (/movie|oscar|grammy|emmy|netflix|spotify|tiktok|youtube|celebrity|award|music|mrbeast/i.test(t)) return 'entertainment';
+  if (/ai |openai|chatgpt|apple|google|microsoft|meta |tesla|nvidia|amazon|tech/i.test(t)) return 'tech';
+  return 'other';
+}
+
+function alphaFilter(cat, btn) {
+  _alphaCatFilter = cat;
+  _alphaDisplayCount = 20;
+  document.querySelectorAll('.alpha-pill').forEach(function(el) {
+    if (el === btn) { el.style.background = '#00e68a'; el.style.color = '#000'; el.style.borderColor = '#00e68a'; }
+    else { el.style.background = 'rgba(255,255,255,0.02)'; el.style.color = 'var(--dim)'; el.style.borderColor = '#222'; }
+  });
+  renderAlphaCards();
+}
+
+function alphaShowMore() {
+  _alphaDisplayCount += 20;
+  renderAlphaCards();
+}
+
+function renderAlphaCards() {
+  var list = _alphaAllMarkets;
+  if (_alphaCatFilter !== 'all') {
+    list = list.filter(function(m) { return alphaDetectCat(m.question) === _alphaCatFilter; });
+  }
+  var showing = list.slice(0, _alphaDisplayCount);
+  var el = document.getElementById('alphaCardsList');
+  var more = document.getElementById('alphaLoadMore');
+
+  if (!showing.length) {
+    el.innerHTML = '<div style="text-align:center;padding:48px 20px;color:var(--dim);font-size:13px">No alpha signals in this category right now</div>';
+    more.style.display = 'none';
+    return;
+  }
+  more.style.display = list.length > _alphaDisplayCount ? 'block' : 'none';
+
+  function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+  function fmtVol(v) { if (v >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M'; if (v >= 1e3) return '$' + Math.round(v / 1e3) + 'K'; return '$' + Math.round(v); }
+
+  el.innerHTML = showing.map(function(m, i) {
+    var edge = m.edge_score || 0;
+    var alpha = m.alpha_score || 0;
+    var t = m.trade || {};
+    var side = (t.side || 'YES').toUpperCase();
+    var sideColor = side === 'YES' ? '#00e68a' : '#ff4d6a';
+    var sideBg = side === 'YES' ? 'rgba(0,230,138,0.08)' : 'rgba(255,77,106,0.08)';
+    var yesPct = m.yes_price != null ? Math.round(m.yes_price * 100) : null;
+    var ec = m.edge_components || {};
+    var url = m.slug ? '/market/' + m.slug : '/alpha';
+    var borderLeft = edge >= 60 ? '3px solid #00e68a' : edge >= 35 ? '3px solid #4d9fff' : '3px solid transparent';
+
+    // Alpha badge
+    var alphaBg = alpha >= 7 ? '#00e68a' : alpha >= 4 ? '#4d9fff' : '#4a4760';
+    var alphaText = alpha >= 7 ? '#000' : '#fff';
+
+    // Signal tags
+    var tags = [];
+    if (m.whale_count > 0) tags.push('<span style="font-size:10px;padding:2px 6px;border-radius:3px;background:rgba(168,85,247,0.1);color:#a855f7;border:1px solid rgba(168,85,247,0.2)">🐋 ' + m.whale_count + '</span>');
+    if (m.is_new) tags.push('<span style="font-size:10px;padding:2px 6px;border-radius:3px;background:rgba(0,230,138,0.1);color:#00e68a;border:1px solid rgba(0,230,138,0.2)">⚡ NEW</span>');
+    if (m.depth_ratio != null) { var imb = Math.max(m.depth_ratio, 1 / m.depth_ratio); if (imb >= 1.5) tags.push('<span style="font-size:10px;padding:2px 6px;border-radius:3px;background:rgba(77,159,255,0.1);color:#4d9fff;border:1px solid rgba(77,159,255,0.2)">📊 ' + (m.depth_side === 'bid' ? 'Bid' : 'Ask') + ' ' + imb.toFixed(1) + 'x</span>'); }
+    if ((ec.momentum || 0) >= 8) { var pc = m.price_change_24h || 0; tags.push('<span style="font-size:10px;padding:2px 6px;border-radius:3px;background:rgba(245,158,11,0.1);color:#f59e0b;border:1px solid rgba(245,158,11,0.2)">' + (pc > 0 ? '📈 +' : '📉 ') + Math.round(pc) + '%</span>'); }
+    if ((ec.decay || 0) > 0) tags.push('<span style="font-size:10px;padding:2px 6px;border-radius:3px;background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.2)">⏱ ' + (m.days_until_expiry === 0 ? 'Today' : m.days_until_expiry + 'd') + '</span>');
+
+    // Age
+    var ageStr = '';
+    if (m.edge_age_minutes != null) {
+      var mins = m.edge_age_minutes;
+      ageStr = mins < 60 ? mins + 'm ago' : mins < 1440 ? Math.floor(mins / 60) + 'h ago' : Math.floor(mins / 1440) + 'd ago';
+    }
+
+    return '<a href="' + url + '" style="display:flex;align-items:stretch;text-decoration:none;color:inherit;padding:0;border-bottom:1px solid #1a1917;transition:background .15s" onmouseenter="this.style.background=\'rgba(255,255,255,0.02)\'" onmouseleave="this.style.background=\'transparent\'">' +
+      '<div style="width:3px;flex-shrink:0;background:' + (edge >= 60 ? '#00e68a' : edge >= 35 ? '#4d9fff' : 'transparent') + '"></div>' +
+      '<div style="flex:1;padding:16px 20px;display:flex;flex-direction:column;gap:8px">' +
+        // Row 1: Score + Question + Alpha badge
+        '<div style="display:flex;align-items:flex-start;gap:12px">' +
+          '<div style="text-align:center;flex-shrink:0;width:44px">' +
+            '<div style="font-family:var(--mono);font-size:22px;font-weight:900;color:' + (edge >= 60 ? '#00e68a' : edge >= 35 ? '#4d9fff' : 'var(--text)') + ';line-height:1">' + edge + '</div>' +
+            '<div style="font-family:var(--mono);font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em">Edge</div>' +
+          '</div>' +
+          '<div style="flex:1;min-width:0">' +
+            '<div style="font-size:14px;font-weight:600;color:var(--text);line-height:1.35;margin-bottom:4px">' + esc(m.question || '') + '</div>' +
+            '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' +
+              tags.join('') +
+              (ageStr ? '<span style="font-family:var(--mono);font-size:10px;color:var(--muted)">' + ageStr + '</span>' : '') +
+            '</div>' +
+          '</div>' +
+          '<div style="flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:6px">' +
+            '<span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 8px;border-radius:5px;background:' + alphaBg + ';color:' + alphaText + ';white-space:nowrap">\u03B1 ' + alpha.toFixed(1) + '</span>' +
+            (yesPct != null ? '<span style="font-family:var(--mono);font-size:18px;font-weight:800;color:' + (yesPct >= 70 ? '#00e68a' : yesPct <= 30 ? '#ff4d6a' : 'var(--text)') + ';line-height:1">' + yesPct + '%</span>' : '') +
+          '</div>' +
+        '</div>' +
+        // Row 2: Trade context strip
+        (t.entry_cost != null ? '<div style="display:flex;align-items:center;gap:12px;padding:8px 12px;background:' + sideBg + ';border-radius:6px;font-family:var(--mono);font-size:11px">' +
+          '<span style="font-weight:700;color:' + sideColor + '">' + side + '</span>' +
+          '<span style="color:var(--muted)">Pay ' + t.entry_cost + '\u00A2</span>' +
+          '<span style="color:var(--muted)">\u2192</span>' +
+          '<span style="color:var(--text)">Win ' + t.potential_profit + '\u00A2</span>' +
+          '<span style="color:var(--muted)">\u2192</span>' +
+          '<span style="font-weight:700;color:' + sideColor + '">+' + t.roi_pct + '% ROI</span>' +
+          (m.total_whale_capital ? '<span style="margin-left:auto;color:var(--muted)">' + fmtVol(m.total_whale_capital) + ' whale $</span>' : '') +
+        '</div>' : '') +
+      '</div>' +
+    '</a>';
+  }).join('');
+}
+
+function loadAlphaTab() {
+  _alphaTabLoaded = true;
+  var el = document.getElementById('alphaCardsList');
+
+  fetch('/api/screener').then(function(r) { return r.ok ? r.json() : null; }).then(function(d) {
+    if (!d) { el.innerHTML = '<div style="text-align:center;padding:48px 20px;color:var(--dim);font-size:13px">Could not load alpha signals</div>'; return; }
+    var mkts = d.markets || d || [];
+    mkts.sort(function(a, b) { return (b.edge_score || 0) - (a.edge_score || 0); });
+    _alphaAllMarkets = mkts;
+
+    // Stats strip
+    var statsEl = document.getElementById('alphaStats');
+    var hotCount = mkts.filter(function(m) { return (m.edge_score || 0) >= 60; }).length;
+    var whaleCount = mkts.filter(function(m) { return (m.whale_count || 0) >= 3; }).length;
+    var newCount = mkts.filter(function(m) { return m.is_new; }).length;
+    statsEl.innerHTML =
+      '<div style="display:flex;align-items:center;gap:8px;padding:8px 16px;background:rgba(0,230,138,0.06);border:1px solid rgba(0,230,138,0.12);border-radius:8px"><span style="font-family:var(--mono);font-size:18px;font-weight:800;color:#00e68a">' + hotCount + '</span><span style="font-family:var(--mono);font-size:10px;color:var(--muted)">Hot edges</span></div>' +
+      '<div style="display:flex;align-items:center;gap:8px;padding:8px 16px;background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.12);border-radius:8px"><span style="font-family:var(--mono);font-size:18px;font-weight:800;color:#a855f7">' + whaleCount + '</span><span style="font-family:var(--mono);font-size:10px;color:var(--muted)">Whale clusters</span></div>' +
+      '<div style="display:flex;align-items:center;gap:8px;padding:8px 16px;background:rgba(77,159,255,0.06);border:1px solid rgba(77,159,255,0.12);border-radius:8px"><span style="font-family:var(--mono);font-size:18px;font-weight:800;color:#4d9fff">' + newCount + '</span><span style="font-family:var(--mono);font-size:10px;color:var(--muted)">New signals</span></div>' +
+      '<div style="display:flex;align-items:center;gap:8px;padding:8px 16px;background:rgba(201,146,13,0.06);border:1px solid rgba(201,146,13,0.12);border-radius:8px"><span style="font-family:var(--mono);font-size:18px;font-weight:800;color:var(--gold)">' + mkts.length + '</span><span style="font-family:var(--mono);font-size:10px;color:var(--muted)">Markets tracked</span></div>';
+
+    renderAlphaCards();
+  }).catch(function(err) {
+    console.warn('[alpha-tab]', err.message);
+    el.innerHTML = '<div style="text-align:center;padding:48px 20px;color:var(--dim);font-size:13px">Could not load alpha signals</div>';
+  });
+
+  // Auto-refresh every 90s
+  setInterval(function() {
+    if (document.getElementById('tab-alpha').style.display !== 'none') {
+      fetch('/api/screener').then(function(r) { return r.ok ? r.json() : null; }).then(function(d) {
+        if (!d) return;
+        var mkts = d.markets || d || [];
+        mkts.sort(function(a, b) { return (b.edge_score || 0) - (a.edge_score || 0); });
+        _alphaAllMarkets = mkts;
+        renderAlphaCards();
+      }).catch(function() {});
+    }
+  }, 90000);
 }
 
 // ── SEASONS ──────────────────────────────────────────────────────────────────
