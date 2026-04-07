@@ -687,6 +687,18 @@ footer {
 <!-- INTELLIGENCE BRIEFING -->
 <div id="intel-briefing" style="max-width:720px;margin:0 auto;padding:0 20px;display:flex;flex-direction:column;gap:16px">
 
+  <!-- PANEL 0: TOP EDGES (unified buildAlphaList output) -->
+  <div id="te-panel" style="display:none">
+    <div style="background:#1a1916;border:1px solid var(--border);border-radius:10px;padding:20px 24px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+        <span style="width:8px;height:8px;border-radius:50%;background:var(--gold);box-shadow:0 0 8px var(--gold);animation:livePulse 2s infinite"></span>
+        <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.08em">⚡ Top Edges · Live</span>
+        <span style="margin-left:auto"><a href="/alpha-live" style="font-family:var(--mono);font-size:10px;color:var(--dim);text-decoration:none">All edges →</a></span>
+      </div>
+      <div id="te-cards" style="display:flex;flex-direction:column;gap:8px"></div>
+    </div>
+  </div>
+
   <!-- PANEL 1: RIGHT NOW -->
   <div id="rn-panel" style="display:none">
     <div style="background:#1a1916;border-left:3px solid var(--gold);border-radius:10px;padding:20px 24px;position:relative;overflow:hidden">
@@ -794,6 +806,46 @@ footer {
   var catEmoji={sports:'\uD83C\uDFC8',crypto:'\u20BF',politics:'\uD83C\uDFDB\uFE0F',entertainment:'\uD83C\uDFAC',tech:'\uD83D\uDCBB',other:'\uD83D\uDCCA'};
   var catColors={sports:'#22c55e',crypto:'#f59e0b',politics:'#3b82f6',entertainment:'#a855f7',tech:'#06b6d4',other:'#888'};
   function catBadge(q){var c=detectCat(q);var e=catEmoji[c]||'';var col=catColors[c]||'#888';return'<span style="font-size:10px;padding:1px 6px;border-radius:3px;background:'+col+'18;color:'+col+';border:1px solid '+col+'33;font-family:var(--mono);white-space:nowrap">'+e+' '+c.toUpperCase()+'</span>';}
+
+  // PANEL 0: TOP EDGES — unified buildAlphaList()
+  function loadTopEdges(){
+    fetch('/api/alpha/top?n=3').then(function(r){return r.ok?r.json():null}).catch(function(){return null}).then(function(d){
+      var panel=document.getElementById('te-panel');
+      if(!panel)return;
+      var mkts=(d&&d.markets)||[];
+      if(!mkts.length){panel.style.display='none';return}
+      panel.style.display='block';
+      document.getElementById('te-cards').innerHTML=mkts.map(function(m){
+        var score=m.edge_score||0;
+        var ec=m.edge_components||{};
+        var t=m.trade||{};
+        var side=(t.side||'YES').toUpperCase();
+        var sc=side==='YES'?'#22c55e':'#ef4444';
+        var entry=t.entry_cost!=null?t.entry_cost+'¢':'';
+        var roi=t.roi_pct!=null?'+'+t.roi_pct+'%':'';
+        // Compose badge strip — only show signals that actually fired
+        var sigs=[];
+        if((ec.whale||0)>=14)sigs.push('🐋 '+(m.whale_count||0)+' whales');
+        if(m.depth_ratio!=null){var imb=Math.max(m.depth_ratio,1/m.depth_ratio);if(imb>=1.5)sigs.push('📊 '+(m.depth_side==='bid'?'Bid':'Ask')+' '+imb.toFixed(1)+'x');}
+        if((ec.decay||0)>0)sigs.push('⏱ Decay '+(m.days_until_expiry===0?'today':m.days_until_expiry+'d'));
+        if(m.is_new)sigs.push('🆕 NEW');
+        if((ec.momentum||0)>=8){var pc=m.price_change_24h||0;sigs.push((pc>0?'📈 +':'📉 ')+pc+'%')}
+        var sigStr=sigs.length?sigs.join(' · '):'';
+        var url=m.slug?'/market/'+m.slug:'/alpha-live';
+        var rgn=regionFlag(m.question||'');
+        return'<a href="'+url+'" style="display:block;text-decoration:none;color:inherit;padding:12px 14px;background:var(--paper);border:1px solid var(--border);border-radius:8px;transition:border-color .15s" onmouseover="this.style.borderColor=\'var(--gold)\'" onmouseout="this.style.borderColor=\'var(--border)\'">'+
+          '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap">'+
+            '<span style="font-family:var(--mono);font-size:18px;font-weight:800;color:var(--gold-bright);min-width:32px">'+score+'</span>'+
+            '<span style="font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em">EDGE</span>'+
+            catBadge(m.question||'')+
+            '<span style="margin-left:auto;font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 8px;border-radius:4px;background:'+sc+'18;color:'+sc+';border:1px solid '+sc+'33">'+side+' '+entry+' · '+roi+'</span>'+
+          '</div>'+
+          '<div style="font-size:13px;font-weight:600;color:var(--text);line-height:1.35;margin-bottom:'+(sigStr?'6px':'0')+'">'+(rgn?rgn+' ':'')+escH(truncate(m.question||'',80))+'</div>'+
+          (sigStr?'<div style="font-family:var(--mono);font-size:10px;color:var(--dim)">'+sigStr+'</div>':'')+
+        '</a>';
+      }).join('');
+    }).catch(function(){});
+  }
 
   // PANEL 1: RIGHT NOW
   function loadRightNow(){
@@ -925,9 +977,11 @@ footer {
     }).catch(function(){});
   }
 
+  try{loadTopEdges()}catch(e){console.warn('[home] topEdges:',e.message)}
   try{loadRightNow()}catch(e){console.warn('[home] rightNow:',e.message)}
   try{loadLastHour()}catch(e){console.warn('[home] lastHour:',e.message)}
   try{loadWatchlist()}catch(e){console.warn('[home] watchlist:',e.message)}
+  setInterval(loadTopEdges,90000);
   setInterval(loadRightNow,60000);
   setInterval(loadLastHour,90000);
 })();
