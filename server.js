@@ -20012,6 +20012,57 @@ async function buildAlphaList(opts = {}) {
       // Alpha edge: difference between model and market
       const alphaEdge = (modelProb != null && yesPrice != null) ? Math.round((modelProb - yesPrice) * 100) : null;
 
+      // ── TRADE THESIS — structured WHY data so every card shows its work ──
+      // Picks the dominant signal driving the score, lists supporting signals,
+      // determines smart-money direction, and tags urgency. Marc's UI can render
+      // this as bullets / badges / urgency dot without parsing the free-text hook.
+      const _components = {
+        whale: edgeWhale,
+        depth: 0, // populated post-CLOB depth fetch — placeholder here
+        decay: edgeDecay,
+        mega: edgeMega,
+        momentum: edgeMomentum,
+        volume: edgeVolume,
+        divergence: edgeDivergence,
+        capital: edgeCapital,
+        expiry: edgeExpiry
+      };
+      // Find the largest contributing component
+      let _primary = 'volume';
+      let _primaryVal = 0;
+      for (const [k, v] of Object.entries(_components)) {
+        if (v > _primaryVal) { _primary = k; _primaryVal = v; }
+      }
+      // Supporting = any component contributing 5+ that isn't the primary
+      const _supporting = Object.entries(_components)
+        .filter(([k, v]) => k !== _primary && v >= 5)
+        .map(([k]) => k);
+      // Smart money direction: from whale consensus if known, else from price location
+      let _smartDir = 'neutral';
+      if (whaleInfo && whaleInfo.count >= 2) {
+        const wIdx = (_whaleIndexCache && _whaleIndexCache.data && _whaleIndexCache.data.picks) || [];
+        const wPick = wIdx.find(p => (p.market || '').toLowerCase() === qLower);
+        if (wPick && wPick.consensus_side) {
+          _smartDir = wPick.consensus_side.toUpperCase() === 'YES' ? 'bullish' : 'bearish';
+        }
+      }
+      // Urgency: high if decay firing or fresh edge, medium if score >= 50, else low
+      let _urgency = 'low';
+      if (edgeDecay > 0 || (daysUntilExpiry != null && daysUntilExpiry <= 1 && volume >= 50000)) {
+        _urgency = 'high';
+      } else if (edgeScore >= 50) {
+        _urgency = 'medium';
+      }
+      const trade_thesis = {
+        side: trade ? trade.side : (yesPrice != null && yesPrice <= 0.5 ? 'YES' : 'NO'),
+        primary_signal: _primary,
+        supporting_signals: _supporting,
+        smart_money_direction: _smartDir,
+        urgency: _urgency,
+        whale_capital: wCapital,
+        whale_count: wCount
+      };
+
       markets.push({
         market_id: marketId,
         question,
@@ -20042,6 +20093,7 @@ async function buildAlphaList(opts = {}) {
         model_probability: modelProb != null ? parseFloat(modelProb.toFixed(3)) : null,
         alpha_edge: alphaEdge,
         trade,
+        trade_thesis,
         ai_hook: aiHook || null
       });
     }
@@ -20137,6 +20189,27 @@ async function buildAlphaList(opts = {}) {
         if (edgeDepth > 0) {
           m.edge_score = Math.min(99, m.edge_score + edgeDepth);
           if (m.edge_components) m.edge_components.depth = edgeDepth;
+          // Backfill trade_thesis: if depth is now the strongest signal, promote it.
+          if (m.trade_thesis) {
+            const ec = m.edge_components || {};
+            const cur = ec[m.trade_thesis.primary_signal] || 0;
+            if (edgeDepth > cur) {
+              if (!m.trade_thesis.supporting_signals.includes(m.trade_thesis.primary_signal)) {
+                m.trade_thesis.supporting_signals.unshift(m.trade_thesis.primary_signal);
+              }
+              m.trade_thesis.primary_signal = 'depth';
+            } else if (edgeDepth >= 5 && !m.trade_thesis.supporting_signals.includes('depth')) {
+              m.trade_thesis.supporting_signals.push('depth');
+            }
+            // Depth direction overrides smart-money direction if no whale signal
+            if (m.trade_thesis.smart_money_direction === 'neutral') {
+              m.trade_thesis.smart_money_direction = m.depth_side === 'bid' ? 'bullish' : 'bearish';
+            }
+            // Strong depth bumps urgency to high
+            if (edgeDepth >= 14 && m.trade_thesis.urgency !== 'high') {
+              m.trade_thesis.urgency = 'high';
+            }
+          }
         } else if (m.edge_components) {
           m.edge_components.depth = 0;
         }
