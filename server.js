@@ -29858,6 +29858,7 @@ app.get('/api/contrarian', (req, res) => {
       signals.push({
         market: pick.market,
         url: pick.url || 'https://polymarket.com',
+        slug: pick.slug || '',
         current_price: marketPrice,
         whale_consensus: `${whaleConsensusPct}% ${whaleConsensusSide}`,
         whale_count: pick.whale_count,
@@ -29981,6 +29982,7 @@ app.get('/api/resolution-probability', (req, res) => {
       results.push({
         market: mkt.question,
         url: mkt.url || 'https://polymarket.com',
+        slug: mkt.slug || '',
         current_price: pricePct,
         hours_to_expiry: Math.round(hoursToExpiry * 10) / 10,
         end_date: mkt.end_date,

@@ -68,11 +68,15 @@ a{color:var(--gold);text-decoration:none} a:hover{text-decoration:underline}
 .s-pill.active{background:var(--gold);color:var(--bg);border-color:var(--gold)}
 
 /* SIGNAL CARDS — premium glass style */
-.s-row{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border);transition:all .2s;cursor:default;position:relative;background:var(--card-glass);backdrop-filter:blur(12px)}
+a.s-row-link-wrap{display:block;text-decoration:none;color:inherit}
+a.s-row-link-wrap:hover{text-decoration:none}
+a.s-row-link-wrap:hover .s-row-market{color:var(--gold)}
+.s-row{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border);transition:all .2s;cursor:pointer;position:relative;background:var(--card-glass);backdrop-filter:blur(12px)}
 .s-row::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--accent-green),var(--accent-blue));opacity:0.6;transition:opacity .2s}
 .s-row:hover{background:var(--card2)}
 .s-row:hover::before{opacity:1}
 .s-row:last-child{border-bottom:none}
+a.s-row-link-wrap:last-child .s-row{border-bottom:none}
 .s-row-side{width:4px;min-height:40px;border-radius:2px;flex-shrink:0;margin-top:2px}
 .s-row-side.yes{background:var(--accent-green)}
 .s-row-side.no{background:var(--accent-red)}
@@ -89,8 +93,6 @@ a{color:var(--gold);text-decoration:none} a:hover{text-decoration:underline}
 .conf-MEDIUM{background:rgba(201,146,13,.12);color:var(--gold)}
 .conf-LOW{background:rgba(107,114,128,.12);color:#888}
 .s-row-market{font-family:var(--sans);font-size:14px;font-weight:600;color:#fff;letter-spacing:-0.3px;line-height:1.4;margin-bottom:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.s-row-market a{color:var(--text);text-decoration:none;transition:color .15s}
-.s-row-market a:hover{color:var(--gold)}
 .s-row-action{font-family:var(--mono);font-size:11px;font-weight:700;margin-bottom:4px}
 .s-row-meta{display:flex;gap:10px;flex-wrap:wrap;font-family:var(--sans);font-size:11px;color:#9a9590}
 .s-row-meta .val{color:var(--soft);font-weight:700}
@@ -372,7 +374,7 @@ function renderSignals() {
     var ageMs = s.detected_at ? Date.now() - new Date(s.detected_at).getTime() : 0;
     var isStale = ageMs > 4 * 60 * 60 * 1000;
 
-    return '<div class="s-row" style="' + (isStale ? 'opacity:.55;' : '') + '" data-type="' + s.type + '">' +
+    return '<a href="' + internalUrl + '" class="s-row-link-wrap"><div class="s-row" style="' + (isStale ? 'opacity:.55;' : '') + '" data-type="' + s.type + '">' +
       '<div style="position:absolute;top:0;left:0;right:0;height:2px;background:' + topGradient + ';opacity:' + (isStale ? '0.3' : '0.7') + '"></div>' +
       '<div class="s-row-side ' + sideClass + '"></div>' +
       '<div class="s-row-body">' +
@@ -381,7 +383,7 @@ function renderSignals() {
           (isStale ? '<span style="font-family:var(--sans);font-size:11px;font-weight:700;color:var(--accent-red);letter-spacing:.5px;padding:2px 6px;background:var(--accent-red-dim);border-radius:4px">STALE</span>' : '') +
           '<span style="margin-left:auto;display:flex;align-items:center;gap:6px">' + alphaBadge + '<span style="font-family:var(--mono);font-size:11px;color:#9a9590">' + timeAgo(s.detected_at) + '</span></span>' +
         '</div>' +
-        '<div class="s-row-market"><a href="' + internalUrl + '">' + (flag ? flag + ' ' : '') + escH(s.market) + '</a></div>' +
+        '<div class="s-row-market">' + (flag ? flag + ' ' : '') + escH(s.market) + '</div>' +
         '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:2px">' +
           '<span style="font-family:var(--mono);font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;background:' + (sideClass === 'yes' ? 'var(--accent-green-dim)' : 'var(--accent-red-dim)') + ';color:' + sideColor + '">' + (s.side||'YES').toUpperCase() + '</span>' +
           (meta.length ? meta.join('<span style="color:var(--muted);font-size:11px">\u00B7</span>') : '') +
@@ -391,9 +393,9 @@ function renderSignals() {
       '</div>' +
       '<div class="s-row-right" style="display:flex;align-items:center;gap:10px;flex-shrink:0">' +
         edgeScoreBadge +
-        '<a href="' + internalUrl + '" class="s-row-link">Trade &rarr;</a>' +
+        '<span class="s-row-link" style="pointer-events:none">Trade &rarr;</span>' +
       '</div>' +
-    '</div>';
+    '</div></a>';
   }).join('');
 }
 

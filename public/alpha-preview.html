@@ -11,7 +11,7 @@
     --paper-2:#1c1c19;
     --paper-3:#242420;
     --ink:#f4f1ea;
-    --ink-dim:#8a8680;
+    --ink-dim:#9a9590;
     --gold:#c9920d;
     --gold-bright:#e6a815;
     --green:#4ade80;
@@ -43,6 +43,7 @@
   .live-dot{
     display:inline-flex;align-items:center;gap:8px;
     font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:0.1em;
+    font-family:'Syne',sans-serif;
   }
   .live-dot::before{
     content:'';width:8px;height:8px;border-radius:50%;
@@ -63,10 +64,10 @@
     margin-bottom:18px;max-width:900px;
   }
   .hero h1 em{color:var(--gold);font-style:normal}
-  .hero-sub{font-size:15px;color:var(--ink-dim);max-width:640px;margin-bottom:28px}
+  .hero-sub{font-size:15px;color:var(--ink-dim);max-width:640px;margin-bottom:28px;font-family:'Syne',sans-serif}
   .hero-stats{display:flex;gap:40px;flex-wrap:wrap}
   .hero-stat .n{font-family:'Syne',sans-serif;font-size:28px;font-weight:800;color:var(--ink)}
-  .hero-stat .l{font-size:10px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:0.15em;margin-top:4px}
+  .hero-stat .l{font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:0.15em;margin-top:4px;font-family:'Syne',sans-serif}
 
   /* Section header */
   .sec-head{
@@ -74,7 +75,7 @@
     padding:36px 0 18px;border-bottom:1px solid var(--line);margin-bottom:20px;
   }
   .sec-head h2{font-family:'Syne',sans-serif;font-size:22px;font-weight:700;letter-spacing:-0.01em}
-  .sec-head .meta{font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:0.12em}
+  .sec-head .meta{font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:0.12em;font-family:'Syne',sans-serif}
 
   /* Edge card grid */
   .edge-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:16px;padding-bottom:40px}
@@ -101,13 +102,14 @@
     font-family:'Syne',sans-serif;font-weight:800;font-size:32px;
     color:var(--gold-bright);line-height:1;
   }
-  .edge-score .l{font-size:9px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:0.1em;margin-top:4px}
+  .edge-score .l{font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:0.1em;margin-top:4px;font-family:'Syne',sans-serif}
 
   .badges{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
   .badge{
     display:inline-flex;align-items:center;gap:4px;
-    font-size:10px;padding:4px 8px;border-radius:3px;
+    font-size:11px;padding:4px 8px;border-radius:3px;
     text-transform:uppercase;letter-spacing:0.08em;font-weight:700;
+    font-family:'Syne',sans-serif;
   }
   .badge-new{background:rgba(74,222,128,0.12);color:var(--green);border:1px solid rgba(74,222,128,0.3)}
   .badge-whale{background:rgba(201,146,13,0.12);color:var(--gold);border:1px solid rgba(201,146,13,0.3)}
@@ -115,14 +117,16 @@
   .badge-decay{background:rgba(239,68,68,0.12);color:var(--red);border:1px solid rgba(239,68,68,0.3)}
   .badge-stale{background:var(--paper-3);color:var(--ink-dim);border:1px solid var(--line)}
 
-  .card-q{font-size:15px;font-weight:700;color:var(--ink);line-height:1.35;margin-bottom:14px;min-height:40px}
+  .card-q{font-size:15px;font-weight:700;color:var(--ink);line-height:1.35;margin-bottom:14px;min-height:40px;font-family:'Syne',sans-serif}
+  .card-link{color:inherit;text-decoration:none;transition:color 0.15s}
+  .card-link:hover{color:var(--gold-bright);text-decoration:underline}
 
   .price-row{
     display:flex;align-items:center;gap:12px;
     padding:10px 12px;background:var(--paper);border-radius:4px;
     margin-bottom:12px;font-size:12px;
   }
-  .price-row .mkt{color:var(--ink-dim)}
+  .price-row .mkt{color:var(--ink-dim);font-family:'Syne',sans-serif}
   .price-row .arrow{color:var(--gold);font-weight:700}
   .price-row .model{color:var(--gold-bright);font-weight:700}
   .price-row .delta{margin-left:auto;color:var(--green);font-weight:700}
@@ -131,10 +135,10 @@
     background:var(--paper);border-radius:4px;padding:12px;margin-bottom:12px;
     border:1px solid var(--line);
   }
-  .breakdown-title{font-size:9px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:8px}
+  .breakdown-title{font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:8px;font-family:'Syne',sans-serif}
   .bd-row{display:flex;align-items:center;gap:8px;margin-bottom:4px;font-size:11px}
   .bd-row:last-child{margin-bottom:0}
-  .bd-label{width:68px;color:var(--ink-dim)}
+  .bd-label{width:68px;color:var(--ink-dim);font-family:'Syne',sans-serif}
   .bd-bar{flex:1;height:4px;background:var(--paper-3);border-radius:2px;overflow:hidden}
   .bd-fill{height:100%;background:var(--gold);border-radius:2px}
   .bd-val{width:28px;text-align:right;color:var(--ink);font-weight:700}
@@ -158,12 +162,13 @@
   .hook{
     font-size:11px;color:var(--ink-dim);margin-top:10px;font-style:italic;
     padding-top:10px;border-top:1px dashed var(--line);
+    font-family:'Syne',sans-serif;
   }
 
   .fresh-stamp{
     position:absolute;top:-1px;left:-1px;
     background:var(--green);color:var(--paper);
-    font-size:9px;font-weight:700;padding:3px 8px;
+    font-size:11px;font-weight:700;padding:3px 8px;
     text-transform:uppercase;letter-spacing:0.1em;
     border-radius:6px 0 6px 0;
   }
@@ -180,9 +185,9 @@
     width:90%;max-width:440px;padding:28px;
   }
   .modal h3{font-family:'Syne',sans-serif;font-size:20px;margin-bottom:4px}
-  .modal .mq{font-size:12px;color:var(--ink-dim);margin-bottom:20px}
+  .modal .mq{font-size:12px;color:var(--ink-dim);margin-bottom:20px;font-family:'Syne',sans-serif}
   .modal .field{margin-bottom:16px}
-  .modal label{font-size:10px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:0.12em;display:block;margin-bottom:6px}
+  .modal label{font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:0.12em;display:block;margin-bottom:6px;font-family:'Syne',sans-serif}
   .modal input{
     width:100%;background:var(--paper);border:1px solid var(--line);color:var(--ink);
     padding:12px;border-radius:4px;font-family:'Space Mono',monospace;font-size:14px;
@@ -207,6 +212,7 @@
   .footnote{
     padding:24px 0 60px;font-size:11px;color:var(--ink-dim);
     border-top:1px solid var(--line);margin-top:20px;text-align:center;
+    font-family:'Syne',sans-serif;
   }
   .footnote em{color:var(--gold);font-style:normal}
 
@@ -279,6 +285,7 @@
 const EDGES = [
   {
     rank:1, score:82, fresh:"14m ago", freshNew:true,
+    slug:"will-bitcoin-hit-100000-before-may-1",
     q:"Will Bitcoin hit $100,000 before May 1?",
     mkt:32, model:50, delta:"+18pt",
     badges:[["whale","🐋 Whale $420k"],["depth","📊 Depth 3.2x"]],
@@ -288,6 +295,7 @@ const EDGES = [
   },
   {
     rank:2, score:76, fresh:"42m ago", freshNew:true,
+    slug:"will-fed-cut-rates-at-may-fomc-meeting",
     q:"Will Fed cut rates at May FOMC meeting?",
     mkt:71, model:58, delta:"-13pt",
     badges:[["depth","📊 Depth 2.4x"],["whale","🐋 Smart $180k"]],
@@ -297,6 +305,7 @@ const EDGES = [
   },
   {
     rank:3, score:71, fresh:"1h 20m ago",
+    slug:"will-eth-flip-btc-market-cap-by-end-of-2026",
     q:"Will ETH flip BTC market cap by end of 2026?",
     mkt:8, model:14, delta:"+6pt",
     badges:[["decay","⏱ Decay Edge"],["whale","🐋 $95k"]],
@@ -306,6 +315,7 @@ const EDGES = [
   },
   {
     rank:4, score:68, fresh:"22m ago", freshNew:true,
+    slug:"will-trump-mention-crypto-in-next-speech",
     q:"Will Trump mention crypto in next speech?",
     mkt:61, model:72, delta:"+11pt",
     badges:[["whale","🐋 Cluster"],["depth","📊 Depth 1.9x"]],
@@ -315,6 +325,7 @@ const EDGES = [
   },
   {
     rank:5, score:64, fresh:"3h ago",
+    slug:"will-lakers-make-nba-playoffs",
     q:"Will Lakers make NBA playoffs?",
     mkt:41, model:52, delta:"+11pt",
     badges:[["depth","📊 Depth 2.1x"]],
@@ -324,6 +335,7 @@ const EDGES = [
   },
   {
     rank:6, score:61, fresh:"5h ago",
+    slug:"will-gpt-5-launch-before-june",
     q:"Will GPT-5 launch before June?",
     mkt:27, model:36, delta:"+9pt",
     badges:[["whale","🐋 $62k"],["stale","Stale 5h"]],
@@ -336,7 +348,7 @@ const EDGES = [
 function render(){
   const g = document.getElementById('grid');
   g.innerHTML = EDGES.map((e,i)=>`
-    <div class="edge-card ${i===0?'rank-1':''}" onclick="openTrade(${i})">
+    <div class="edge-card ${i===0?'rank-1':''}" onclick="window.location.href='/market/${e.slug}'">
       ${e.freshNew?'<div class="fresh-stamp">🆕 New Edge</div>':''}
       <div class="card-top">
         <div class="edge-score">
@@ -347,7 +359,7 @@ function render(){
           ${e.badges.map(b=>`<span class="badge badge-${b[0]}">${b[1]}</span>`).join('')}
         </div>
       </div>
-      <div class="card-q">${e.q}</div>
+      <div class="card-q"><a href="/market/${e.slug}" class="card-link">${e.q}</a></div>
       <div class="price-row">
         <span class="mkt">Mkt ${e.mkt}¢</span>
         <span class="arrow">→</span>
