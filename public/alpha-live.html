@@ -228,7 +228,7 @@ function render(data){
     const t = m.trade || {side:'YES',entry_cost:mktPct,potential_profit:100-mktPct,roi_pct:0};
     const bs = badges(m);
     return `
-      <a class="edge-card ${i===0?'rank-1':''}" href="${m.url||'https://polymarket.com'}" target="_blank" rel="noopener">
+      <a class="edge-card ${i===0?'rank-1':''}" href="${m.slug?'/market/'+m.slug:'/screener'}">
         <div class="card-top">
           <div class="edge-score">
             <div class="n">${m.edge_score}</div>
