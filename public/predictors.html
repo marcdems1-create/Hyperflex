@@ -97,10 +97,10 @@ body{background:var(--paper);color:var(--text);font-family:var(--sans);min-heigh
 .podium-pnl.negative{color:var(--red)}
 .podium-winrate{font-family:var(--mono);font-size:12px;color:var(--dim);margin-bottom:4px}
 .podium-winrate strong{color:var(--text)}
-.podium-roi{font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:10px}
-.podium-sharp{font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:12px}
+.podium-roi{font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:10px}
+.podium-sharp{font-family:var(--sans);font-size:11px;color:var(--muted);margin-bottom:12px}
 .podium-meta{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
-.podium-meta-item{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.podium-meta-item{font-family:var(--sans);font-size:11px;color:var(--muted)}
 .podium-meta-item strong{color:var(--text)}
 .podium-link{display:inline-block;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gold);text-decoration:none;padding:6px 16px;border:1px solid rgba(201,146,13,.3);border-radius:20px;transition:all .2s;position:relative;z-index:1}
 .podium-link:hover{background:rgba(201,146,13,.1);border-color:var(--gold)}
@@ -108,14 +108,14 @@ body{background:var(--paper);color:var(--text);font-family:var(--sans);min-heigh
 /* FILTER BAR */
 .filter-bar{position:relative;z-index:1;max-width:1100px;margin:48px auto 0;padding:0 40px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
 .filter-group{display:flex;gap:6px}
-.filter-pill{font-family:var(--mono);font-size:11px;font-weight:700;padding:8px 18px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--dim);cursor:pointer;transition:all .2s;letter-spacing:.5px}
+.filter-pill{font-family:var(--sans);font-size:11px;font-weight:700;padding:8px 18px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;transition:all .2s;letter-spacing:.5px}
 .filter-pill:hover{color:var(--text);border-color:var(--dim)}
 .filter-pill.active{background:rgba(201,146,13,.12);border-color:rgba(201,146,13,.5);color:var(--gold)}
 
 /* RANKINGS TABLE */
 .rankings-section{position:relative;z-index:1;max-width:1100px;margin:24px auto 0;padding:0 40px 40px}
 .lb-table{width:100%;border-collapse:separate;border-spacing:0}
-.lb-table thead th{font-family:var(--mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);text-align:left;padding:12px 14px;border-bottom:1px solid var(--border);white-space:nowrap}
+.lb-table thead th{font-family:var(--sans);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);text-align:left;padding:12px 14px;border-bottom:1px solid var(--border);white-space:nowrap}
 .lb-table thead th:first-child{width:50px;text-align:center}
 .lb-table tbody tr{transition:all .2s;cursor:pointer}
 .lb-table tbody tr:hover{background:rgba(201,146,13,.04);box-shadow:0 0 20px rgba(201,146,13,.06)}
@@ -138,15 +138,15 @@ body{background:var(--paper);color:var(--text);font-family:var(--sans);min-heigh
 .roi-pos{color:var(--green)}
 .roi-neg{color:var(--red)}
 .roi-neutral{color:var(--dim)}
-.streak-badge{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--dim)}
+.streak-badge{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--muted)}
 .streak-hot{color:#ff6b35}
-.platform-pill{font-family:var(--mono);font-size:9px;font-weight:700;padding:3px 8px;border-radius:10px;letter-spacing:.3px;display:inline-block}
+.platform-pill{font-family:var(--sans);font-size:11px;font-weight:700;padding:3px 8px;border-radius:10px;letter-spacing:.3px;display:inline-block}
 .pp-poly{background:rgba(100,160,255,.12);color:#6aa0ff}
 .pp-hl{background:rgba(119,185,0,.15);color:#77b900}
 .pp-hfx{background:rgba(201,146,13,.15);color:var(--gold)}
 .pp-kalshi{background:rgba(255,140,0,.12);color:#ff8c00}
 .pp-manifold{background:rgba(130,80,230,.12);color:#a78bfa}
-.follow-btn{font-family:var(--mono);font-size:10px;font-weight:700;padding:6px 14px;border-radius:20px;border:1px solid var(--gold);background:transparent;color:var(--gold);cursor:pointer;transition:all .15s;white-space:nowrap}
+.follow-btn{font-family:var(--sans);font-size:11px;font-weight:700;padding:6px 14px;border-radius:20px;border:1px solid var(--gold);background:transparent;color:var(--gold);cursor:pointer;transition:all .15s;white-space:nowrap}
 .follow-btn:hover{background:rgba(201,146,13,.12)}
 .follow-btn.following{background:rgba(201,146,13,.15);color:var(--gold-bright)}
 
@@ -161,13 +161,13 @@ body{background:var(--paper);color:var(--text);font-family:var(--sans);min-heigh
 .hof-rank{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gold);margin-bottom:8px}
 .hof-name{font-weight:700;font-size:14px;color:var(--text);margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hof-pnl{font-family:var(--mono);font-size:16px;font-weight:700;color:var(--green);margin-bottom:4px}
-.hof-vol{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.hof-vol{font-family:var(--mono);font-size:11px;color:var(--dim)}
 
 /* RISING STARS */
 .rising-section{position:relative;z-index:1;max-width:1100px;margin:48px auto 0;padding:0 40px}
 .rising-header{display:flex;align-items:center;gap:10px;margin-bottom:20px}
 .rising-title{font-family:var(--sans);font-size:18px;font-weight:800;color:var(--text)}
-.rising-badge{font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 10px;background:rgba(201,146,13,.12);border:1px solid rgba(201,146,13,.3);border-radius:12px;color:var(--gold);letter-spacing:.5px}
+.rising-badge{font-family:var(--sans);font-size:11px;font-weight:700;padding:3px 10px;background:rgba(201,146,13,.12);border:1px solid rgba(201,146,13,.3);border-radius:12px;color:var(--gold);letter-spacing:.5px}
 .rising-grid{display:flex;gap:14px;overflow-x:auto;padding-bottom:8px;scrollbar-width:none}
 .rising-grid::-webkit-scrollbar{display:none}
 .rising-card{flex:0 0 200px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 16px;transition:box-shadow .2s}
@@ -176,14 +176,14 @@ body{background:var(--paper);color:var(--text);font-family:var(--sans);min-heigh
 .rising-name{font-weight:700;font-size:13px;color:var(--text);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rising-streak{font-family:var(--mono);font-size:11px;color:#ff6b35;margin-bottom:10px}
 .rising-winrate{font-family:var(--mono);font-size:12px;color:var(--green);margin-bottom:10px}
-.rising-follow{font-family:var(--mono);font-size:10px;font-weight:700;padding:5px 12px;border-radius:16px;border:1px solid var(--gold);background:transparent;color:var(--gold);cursor:pointer;transition:all .15s;width:100%}
+.rising-follow{font-family:var(--sans);font-size:11px;font-weight:700;padding:5px 12px;border-radius:16px;border:1px solid var(--gold);background:transparent;color:var(--gold);cursor:pointer;transition:all .15s;width:100%}
 .rising-follow:hover{background:rgba(201,146,13,.12)}
 
 /* CATEGORY TABS */
 .cat-tabs{position:relative;z-index:1;max-width:1100px;margin:20px auto 0;padding:0 40px}
 .cat-tab-row{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
 .cat-tab-row::-webkit-scrollbar{display:none}
-.cat-tab{font-family:var(--mono);font-size:11px;font-weight:700;padding:7px 16px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--dim);cursor:pointer;transition:all .2s;white-space:nowrap;letter-spacing:.3px}
+.cat-tab{font-family:var(--sans);font-size:11px;font-weight:700;padding:7px 16px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;transition:all .2s;white-space:nowrap;letter-spacing:.3px}
 .cat-tab:hover{color:var(--text);border-color:var(--dim)}
 .cat-tab.active{background:rgba(201,146,13,.12);border-color:rgba(201,146,13,.5);color:var(--gold)}
 
@@ -251,7 +251,7 @@ body{background:var(--paper);color:var(--text);font-family:var(--sans);min-heigh
   .lb-table tbody td.td-actions{margin-left:auto;display:flex;gap:8px}
   .lb-table tbody td.td-vol,.lb-table tbody td.td-roi,.lb-table tbody td.td-streak,.lb-table tbody td.td-platform{display:none}
   .mobile-stats{display:flex;gap:12px;width:100%;padding-top:6px}
-  .mobile-stat{font-family:var(--mono);font-size:11px;color:var(--dim)}
+  .mobile-stat{font-family:var(--sans);font-size:11px;color:var(--muted)}
   .mobile-stat strong{color:var(--text)}
   .btn-nav{min-height:44px;display:inline-flex;align-items:center;padding:10px 16px}
   .nav-logo{min-height:44px}
@@ -344,7 +344,7 @@ body{background:var(--paper);color:var(--text);font-family:var(--sans);min-heigh
         <th>ROI</th>
         <th>Streak</th>
         <th>Platform</th>
-        <th><span id="sharpScoreHeader" style="cursor:pointer;color:var(--dim);white-space:nowrap" onclick="openSharpModal()">Sharp Score <span style="color:var(--gold);font-size:10px">ⓘ</span></span></th>
+        <th><span id="sharpScoreHeader" style="cursor:pointer;color:var(--dim);white-space:nowrap" onclick="openSharpModal()">Sharp Score <span style="color:var(--gold);font-size:11px">ⓘ</span></span></th>
         <th></th>
       </tr>
     </thead>
@@ -527,7 +527,7 @@ function alphaGradeBadge(wallet){
   var s=_alphaScores[wallet];if(!s)return'';
   var colors={'A+':'#00e676','A':'#4caf50','B':'#c9920d','C':'#ff9800','D':'#f44336'};
   var c=colors[s.grade]||'#888';
-  return' <span title="HFX Alpha\u2122 '+s.score+'/99" style="display:inline-block;font-family:var(--mono);font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px;background:'+c+'22;color:'+c+';border:1px solid '+c+'44;margin-left:4px;vertical-align:middle">'+s.grade+' '+s.score+'</span>';
+  return' <span title="HFX Alpha\u2122 '+s.score+'/99" style="display:inline-block;font-family:var(--mono);font-size:11px;font-weight:700;padding:1px 5px;border-radius:3px;background:'+c+'22;color:'+c+';border:1px solid '+c+'44;margin-left:4px;vertical-align:middle">'+s.grade+' '+s.score+'</span>';
 }
 
 async function loadLeaderboard(){
@@ -712,7 +712,7 @@ function renderTable(data){
       '<td class="td-platform">'+platformHtml+'</td>'+
       '<td class="td-sharp">'+sharpHtml+'</td>'+
       '<td class="td-actions">'+
-        (/^0x[0-9a-fA-F]{10,}$/i.test(profileId)?'<a href="/trader/'+escHtml(profileId)+'" onclick="event.stopPropagation()" style="font-size:10px;font-family:var(--mono);color:var(--gold);border:1px solid rgba(201,146,13,0.4);border-radius:12px;padding:3px 10px;text-decoration:none;background:rgba(201,146,13,0.06);margin-right:6px;white-space:nowrap">\uD83D\uDCC8 Track Record</a>':'')+
+        (/^0x[0-9a-fA-F]{10,}$/i.test(profileId)?'<a href="/trader/'+escHtml(profileId)+'" onclick="event.stopPropagation()" style="font-size:11px;font-family:var(--sans);color:var(--gold);border:1px solid rgba(201,146,13,0.4);border-radius:12px;padding:3px 10px;text-decoration:none;background:rgba(201,146,13,0.06);margin-right:6px;white-space:nowrap">\uD83D\uDCC8 Track Record</a>':'')+
         '<button class="follow-btn" id="follow-'+uid+'" onclick="event.stopPropagation();toggleFollow(\''+uid+'\',this)">Follow</button>'+
       '</td>'+
     '</tr>';

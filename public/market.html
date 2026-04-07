@@ -19,7 +19,7 @@ a{color:var(--gold);text-decoration:none}
 .mkt-sidebar{position:sticky;top:80px;height:fit-content}
 
 /* Back button */
-.mkt-back{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:12px;color:var(--dim);margin-bottom:16px;cursor:pointer;transition:color .15s}
+.mkt-back{display:inline-flex;align-items:center;gap:6px;font-family:var(--body);font-size:12px;color:var(--dim);margin-bottom:16px;cursor:pointer;transition:color .15s}
 .mkt-back:hover{color:var(--text)}
 
 /* Title section */
@@ -29,7 +29,7 @@ a{color:var(--gold);text-decoration:none}
 /* Stats bar */
 .mkt-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
 .mkt-stat{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
-.mkt-stat-label{font-family:var(--body);font-size:10px;font-weight:500;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;display:flex;align-items:center;gap:4px}
+.mkt-stat-label{font-family:var(--body);font-size:11px;font-weight:500;color:var(--soft);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;display:flex;align-items:center;gap:4px}
 .mkt-stat-val{font-family:var(--body);font-size:18px;font-weight:600}
 
 /* Chart */
@@ -37,7 +37,7 @@ a{color:var(--gold);text-decoration:none}
 .mkt-chart-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
 .mkt-chart-title{font-family:var(--body);font-size:13px;font-weight:600;color:var(--soft)}
 .mkt-chart-tabs{display:flex;gap:0;border:1px solid var(--border);border-radius:7px;overflow:hidden}
-.mkt-chart-tab{padding:6px 12px;font-family:var(--body);font-size:11px;font-weight:600;color:var(--dim);background:transparent;border:none;cursor:pointer;transition:all .15s}
+.mkt-chart-tab{padding:6px 12px;font-family:var(--body);font-size:11px;font-weight:600;color:var(--soft);background:transparent;border:none;cursor:pointer;transition:all .15s}
 .mkt-chart-tab.active{background:var(--gold);color:#141412}
 .mkt-chart-tab:hover:not(.active){color:var(--text)}
 canvas{display:block;width:100%!important}
@@ -52,7 +52,7 @@ canvas{display:block;width:100%!important}
 .mkt-outcomes{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:24px}
 .mkt-outcomes h3{font-family:var(--body);font-size:15px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:8px}
 .mkt-outcomes-table{width:100%;border-collapse:collapse}
-.mkt-outcomes-table thead th{font-family:var(--body);font-size:11px;font-weight:500;color:var(--dim);text-transform:uppercase;letter-spacing:.04em;padding:0 10px 10px;text-align:left;border-bottom:1px solid var(--border)}
+.mkt-outcomes-table thead th{font-family:var(--body);font-size:11px;font-weight:500;color:var(--soft);text-transform:uppercase;letter-spacing:.04em;padding:0 10px 10px;text-align:left;border-bottom:1px solid var(--border)}
 .mkt-outcomes-table thead th:not(:first-child){text-align:center}
 .mkt-outcomes-table tbody tr{cursor:pointer;transition:background .15s cubic-bezier(.4,0,.2,1);border-bottom:1px solid var(--border)}
 .mkt-outcomes-table tbody tr:last-child{border-bottom:none}
@@ -75,14 +75,14 @@ canvas{display:block;width:100%!important}
 .mkt-holders{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:24px}
 .mkt-holders h3{font-family:var(--body);font-size:15px;font-weight:600;margin-bottom:14px;display:flex;align-items:center;gap:8px}
 .holders-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-.holders-col-header{font-family:var(--body);font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.holders-col-header{font-family:var(--body);font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border)}
 .holders-col-header.yes{color:var(--green)}
 .holders-col-header.no{color:var(--red)}
 .holder-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(34,34,32,.5);transition:background .1s}
 .holder-row:last-child{border-bottom:none}
 .holder-row a{font-family:var(--body);font-size:12px;font-weight:500;color:var(--soft);transition:color .12s}
 .holder-row a:hover{color:var(--text)}
-.holder-shares{font-family:var(--body);font-size:12px;font-weight:500;color:var(--dim)}
+.holder-shares{font-family:var(--body);font-size:12px;font-weight:500;color:var(--soft)}
 
 /* Orderbook */
 .mkt-comments{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:24px}
@@ -96,8 +96,8 @@ canvas{display:block;width:100%!important}
 .comment-body{flex:1;min-width:0}
 .comment-header{display:flex;align-items:center;gap:8px;margin-bottom:4px}
 .comment-name{font-family:var(--body);font-size:13px;font-weight:600;color:var(--text)}
-.comment-badge{font-family:var(--body);font-size:10px;font-weight:600;padding:1px 6px;border-radius:7px;background:rgba(6,182,212,.12);color:#06b6d4;border:none}
-.comment-time{font-family:var(--body);font-size:11px;font-weight:400;color:var(--dim)}
+.comment-badge{font-family:var(--body);font-size:11px;font-weight:600;padding:1px 6px;border-radius:7px;background:rgba(6,182,212,.12);color:#06b6d4;border:none}
+.comment-time{font-family:var(--body);font-size:11px;font-weight:400;color:var(--soft)}
 .comment-text{font-family:var(--body);font-size:14px;line-height:1.6;color:rgba(221,216,204,.85)}
 .comment-input-row{display:flex;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
 .comment-input{flex:1;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:7px;padding:10px 12px;font-size:14px;color:var(--text);font-family:var(--body);resize:none;outline:none;transition:border-color .15s}
@@ -111,25 +111,25 @@ canvas{display:block;width:100%!important}
 .dist-chart-wrap canvas{width:100%;height:100%}
 .dist-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center}
 .dist-center-pct{font-family:var(--body);font-size:28px;font-weight:600}
-.dist-center-label{font-family:var(--body);font-size:9px;font-weight:500;text-transform:uppercase;letter-spacing:1px;color:var(--dim)}
+.dist-center-label{font-family:var(--sans);font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:1px;color:var(--soft)}
 .dist-legend{display:flex;flex-direction:column;gap:10px;flex:1}
 .dist-legend-item{display:flex;align-items:center;gap:8px;font-family:var(--body);font-size:13px;font-weight:500}
 .dist-legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
 .mkt-orderbook{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:24px}
 .mkt-orderbook-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .mkt-orderbook-header h3{font-family:var(--body);font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px}
-.ob-timestamp{font-family:var(--body);font-size:10px;font-weight:400;color:var(--dim)}
+.ob-timestamp{font-family:var(--body);font-size:11px;font-weight:400;color:var(--soft)}
 .ob-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-.ob-col-label{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.ob-col-label{font-family:var(--sans);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
 .ob-col-label.bids{color:var(--green)}
 .ob-col-label.asks{color:var(--red)}
-.ob-col-head{display:grid;grid-template-columns:2fr 2fr 3fr;font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;padding:3px 0 6px;border-bottom:1px solid var(--border)}
+.ob-col-head{display:grid;grid-template-columns:2fr 2fr 3fr;font-family:var(--sans);font-size:11px;color:var(--soft);text-transform:uppercase;letter-spacing:.05em;padding:3px 0 6px;border-bottom:1px solid var(--border)}
 .ob-col-head span:not(:first-child){text-align:right}
 .mkt-ob-row{display:grid;grid-template-columns:2fr 2fr 3fr;font-family:var(--mono);font-size:11px;padding:3px 0}
 .mkt-ob-row span:not(:first-child){text-align:right}
 .mkt-ob-bid{color:var(--green)}
 .mkt-ob-ask{color:var(--red)}
-.mkt-ob-size{color:var(--dim)}
+.mkt-ob-size{color:var(--soft)}
 .mkt-ob-total{color:var(--soft)}
 
 /* TRADE WIDGET (sidebar) */
@@ -147,7 +147,7 @@ canvas{display:block;width:100%!important}
 .trade-side.no{background:rgba(239,68,68,.12);color:#cb3131;border-color:transparent}
 .trade-side.no.active{background:#dc2626;color:#fff;border-color:#dc2626}
 .trade-field{margin-bottom:14px}
-.trade-field-label{font-family:var(--body);font-size:11px;font-weight:500;color:var(--dim);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;display:flex;justify-content:space-between}
+.trade-field-label{font-family:var(--body);font-size:11px;font-weight:500;color:var(--soft);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;display:flex;justify-content:space-between}
 .trade-input{width:100%;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:7px;color:var(--text);font-family:var(--body);font-size:16px;font-weight:600;text-align:center}
 .trade-input:focus{outline:none;border-color:var(--gold)}
 .trade-quick-btns{display:flex;gap:6px;margin-bottom:14px;justify-content:center}
@@ -161,7 +161,7 @@ canvas{display:block;width:100%!important}
 .trade-cta.buy-yes{background:#359a5e;color:#fff}
 .trade-cta.buy-no{background:#dc2626;color:#fff}
 .trade-cta:hover{opacity:.92;transform:scale(1.005)}
-.trade-disclaimer{font-family:var(--body);font-size:10px;color:var(--dim);text-align:center;margin-top:10px}
+.trade-disclaimer{font-family:var(--body);font-size:11px;color:var(--soft);text-align:center;margin-top:10px}
 .setup-step{display:flex;align-items:center;gap:8px;padding:5px 0;font-family:var(--body);font-size:12px;color:var(--soft)}
 .setup-step.done .setup-icon{color:var(--green)}
 .setup-step.active .setup-icon{color:var(--gold);animation:pulse 1.5s ease-in-out infinite}
@@ -183,7 +183,7 @@ canvas{display:block;width:100%!important}
 
 /* Technical Analysis Controls */
 .ta-controls{background:rgba(255,255,255,.02);border-top:1px solid var(--border);border-radius:0}
-.ta-btn{padding:5px 12px;font-family:var(--body);font-size:10px;font-weight:600;color:var(--dim);background:transparent;border:1px solid var(--border);border-radius:7px;cursor:pointer;transition:all .15s cubic-bezier(.4,0,.2,1);text-transform:uppercase;letter-spacing:.04em}
+.ta-btn{padding:5px 12px;font-family:var(--body);font-size:11px;font-weight:600;color:var(--soft);background:transparent;border:1px solid var(--border);border-radius:7px;cursor:pointer;transition:all .15s cubic-bezier(.4,0,.2,1);text-transform:uppercase;letter-spacing:.04em}
 .ta-btn.active{background:var(--gold);color:#141412;border-color:var(--gold)}
 .ta-btn:hover:not(.active){color:var(--text);border-color:var(--soft)}
 
@@ -194,8 +194,8 @@ canvas{display:block;width:100%!important}
   .mkt-stats{grid-template-columns:repeat(2,1fr)}
   .holders-grid{grid-template-columns:1fr}
   .ob-grid{grid-template-columns:1fr}
-  .outcome-btn{font-size:10px;padding:5px 8px;min-width:68px;min-height:44px}
-  .mkt-outcomes-table thead th{font-size:8px;padding:0 6px 8px}
+  .outcome-btn{font-size:11px;padding:5px 8px;min-width:68px;min-height:44px}
+  .mkt-outcomes-table thead th{font-size:11px;padding:0 6px 8px}
   .mkt-outcomes-table tbody td{padding:8px 6px}
 }
 </style>
@@ -271,7 +271,7 @@ canvas{display:block;width:100%!important}
 
       <!-- Outcomes -->
       <div class="mkt-outcomes" id="mktOutcomesSection">
-        <h3>Outcomes <span id="outcomesCount" style="font-family:var(--mono);font-size:10px;color:var(--dim);font-weight:400"></span></h3>
+        <h3>Outcomes <span id="outcomesCount" style="font-family:var(--mono);font-size:11px;color:var(--soft);font-weight:400"></span></h3>
         <div id="mktOutcomes">Loading...</div>
       </div>
 
@@ -280,27 +280,27 @@ canvas{display:block;width:100%!important}
         <h3 style="font-size:14px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px">AI Market Intelligence</h3>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px" id="intelGrid">
           <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center">
-            <div style="font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Market Price</div>
+            <div style="font-family:var(--sans);font-size:11px;color:var(--soft);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Market Price</div>
             <div style="font-family:var(--mono);font-size:20px;font-weight:700" id="intelMktPrice">—</div>
           </div>
           <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center">
-            <div style="font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Model Price</div>
+            <div style="font-family:var(--sans);font-size:11px;color:var(--soft);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Model Price</div>
             <div style="font-family:var(--mono);font-size:20px;font-weight:700;color:var(--gold)" id="intelModelPrice">—</div>
           </div>
           <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center">
-            <div style="font-family:var(--mono);font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Alpha Edge</div>
+            <div style="font-family:var(--sans);font-size:11px;color:var(--soft);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Alpha Edge</div>
             <div style="font-family:var(--mono);font-size:20px;font-weight:700" id="intelAlphaEdge">—</div>
           </div>
         </div>
-        <div style="font-family:var(--mono);font-size:11px;color:var(--soft);line-height:1.6" id="intelExplain"></div>
+        <div style="font-family:var(--body);font-size:11px;color:var(--soft);line-height:1.6" id="intelExplain"></div>
       </div>
 
       <!-- Whale Flow Timeline -->
       <div class="mkt-whale-flow" id="mktWhaleFlowSection" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:24px">
         <h3 style="font-size:14px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:8px">Whale Flow</h3>
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
-          <span style="font-family:var(--mono);font-size:11px;color:var(--dim)" id="whaleFlowSummary">Loading...</span>
-          <span style="font-family:var(--mono);font-size:10px;padding:3px 8px;border-radius:4px;font-weight:700" id="whaleFlowSentiment"></span>
+          <span style="font-family:var(--body);font-size:11px;color:var(--soft)" id="whaleFlowSummary">Loading...</span>
+          <span style="font-family:var(--mono);font-size:11px;padding:3px 8px;border-radius:4px;font-weight:700" id="whaleFlowSentiment"></span>
         </div>
         <div id="whaleFlowList"></div>
       </div>
@@ -311,11 +311,11 @@ canvas{display:block;width:100%!important}
         <div class="holders-grid">
           <div>
             <div class="holders-col-header yes">YES Holders</div>
-            <div id="holdersYes"><div style="font-family:var(--mono);font-size:11px;color:var(--dim)">Loading...</div></div>
+            <div id="holdersYes"><div style="font-family:var(--body);font-size:11px;color:var(--soft)">Loading...</div></div>
           </div>
           <div>
             <div class="holders-col-header no">NO Holders</div>
-            <div id="holdersNo"><div style="font-family:var(--mono);font-size:11px;color:var(--dim)">Loading...</div></div>
+            <div id="holdersNo"><div style="font-family:var(--body);font-size:11px;color:var(--soft)">Loading...</div></div>
           </div>
         </div>
       </div>
@@ -337,13 +337,13 @@ canvas{display:block;width:100%!important}
 
       <!-- Comments -->
       <div class="mkt-comments" id="mktCommentsSection">
-        <h3>Comments <span style="font-family:var(--mono);font-size:11px;font-weight:400;color:var(--dim)" id="commentCount"></span></h3>
+        <h3>Comments <span style="font-family:var(--mono);font-size:11px;font-weight:400;color:var(--soft)" id="commentCount"></span></h3>
         <div class="comments-tabs">
           <button class="comments-tab active" onclick="setCommentSort('new')">New</button>
           <button class="comments-tab" onclick="setCommentSort('top')">Top</button>
         </div>
         <div class="comment-list" id="commentList">
-          <div style="font-family:var(--mono);font-size:11px;color:var(--dim);text-align:center;padding:20px 0">No comments yet — be the first</div>
+          <div style="font-family:var(--body);font-size:11px;color:var(--soft);text-align:center;padding:20px 0">No comments yet — be the first</div>
         </div>
         <div class="comment-input-row">
           <textarea class="comment-input" id="commentInput" rows="1" maxlength="500" placeholder="Share your analysis..."></textarea>
@@ -384,7 +384,7 @@ canvas{display:block;width:100%!important}
           <button class="trade-tab active" onclick="setTradeMode('buy')">Buy</button>
           <button class="trade-tab" onclick="setTradeMode('sell')">Sell</button>
           <div style="margin-left:auto;display:flex;align-items:center">
-            <select id="tradeOrderType" style="background:transparent;border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-family:var(--mono);font-size:10px;color:var(--soft)">
+            <select id="tradeOrderType" style="background:transparent;border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-family:var(--body);font-size:11px;color:var(--soft)">
               <option value="limit">Limit</option>
               <option value="market">Market</option>
             </select>
@@ -439,7 +439,7 @@ canvas{display:block;width:100%!important}
 
         <button class="trade-cta buy-yes" id="tradeCta" onclick="executeTrade()">Buy Yes</button>
         <div id="tradeStatus" style="display:none;font-family:var(--mono);font-size:11px;text-align:center;padding:6px 0"></div>
-        <div id="flexPointsBar" style="display:none;margin-top:8px;padding:8px 12px;background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.12);border-radius:6px;display:flex;align-items:center;justify-content:space-between;font-family:var(--mono);font-size:10px">
+        <div id="flexPointsBar" style="display:none;margin-top:8px;padding:8px 12px;background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.12);border-radius:6px;display:flex;align-items:center;justify-content:space-between;font-family:var(--body);font-size:11px">
           <span style="color:#a855f7;font-weight:700">⚡ FLEX Points</span>
           <span id="flexPointsBadge" style="color:var(--text);font-weight:800">—</span>
         </div>
@@ -461,7 +461,7 @@ canvas{display:block;width:100%!important}
 
         <!-- Your Position (shown after trade or if holding) -->
         <div id="tradePosition" style="display:none;margin-top:12px;padding:10px 14px;background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.15);border-radius:8px">
-          <div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.08em;color:var(--dim);margin-bottom:6px">YOUR POSITION</div>
+          <div style="font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--soft);margin-bottom:6px">YOUR POSITION</div>
           <div id="positionDetails" style="font-family:var(--mono);font-size:12px;color:var(--text)"></div>
         </div>
       </div>
@@ -476,7 +476,7 @@ canvas{display:block;width:100%!important}
 <!-- Loading state -->
 <div class="mkt-loading" id="mktLoading">
   <div class="spinner"></div>
-  <div style="font-family:var(--mono);font-size:12px;color:var(--dim)">Loading market data...</div>
+  <div style="font-family:var(--body);font-size:12px;color:var(--soft)">Loading market data...</div>
 </div>
 
 <script>
@@ -503,7 +503,7 @@ var slug = window.location.pathname.split('/market/')[1] || '';
 if (slug.endsWith('/')) slug = slug.slice(0, -1);
 
 async function loadMarket() {
-  if (!slug) { document.getElementById('mktLoading').innerHTML = '<div style="color:var(--red);font-family:var(--mono);font-size:13px">No market slug provided</div>'; return; }
+  if (!slug) { document.getElementById('mktLoading').innerHTML = '<div style="color:var(--red);font-family:var(--body);font-size:13px">No market slug provided</div>'; return; }
 
   try {
     var res = await fetch('/api/market/' + encodeURIComponent(slug));
@@ -563,7 +563,7 @@ async function loadMarket() {
       }
     } catch (e2) { /* silent */ }
   } catch (e) {
-    document.getElementById('mktLoading').innerHTML = '<div style="color:var(--red);font-family:var(--mono);font-size:13px">Failed to load market: ' + escH(e.message) + '</div><div style="margin-top:12px"><a href="/" style="color:var(--gold)">&#x2190; Back to home</a></div>';
+    document.getElementById('mktLoading').innerHTML = '<div style="color:var(--red);font-family:var(--body);font-size:13px">Failed to load market: ' + escH(e.message) + '</div><div style="margin-top:12px"><a href="/" style="color:var(--gold)">&#x2190; Back to home</a></div>';
   }
 }
 
@@ -963,7 +963,7 @@ async function loadWhaleFlow(marketSlug) {
         // Multi-outcome event: extract short outcome from title
         var shortOutcome = f.outcome;
         if (shortOutcome.length > 20) shortOutcome = shortOutcome.substring(0, 18) + '..';
-        outcomeLabel = '<span style="font-family:var(--mono);font-size:9px;color:var(--soft);background:rgba(201,146,13,0.08);padding:1px 5px;border-radius:3px">' + escH(shortOutcome) + '</span>';
+        outcomeLabel = '<span style="font-family:var(--body);font-size:11px;color:var(--soft);background:rgba(201,146,13,0.08);padding:1px 5px;border-radius:3px">' + escH(shortOutcome) + '</span>';
       } else if (_market) {
         // Binary market with custom outcome names: YES→outcome[0], NO→outcome[1]
         var binaryOutcomes = _market.outcomes;
@@ -971,16 +971,16 @@ async function loadWhaleFlow(marketSlug) {
         if (binaryOutcomes && Array.isArray(binaryOutcomes) && binaryOutcomes.length === 2 &&
             binaryOutcomes[0].toLowerCase() !== 'yes') {
           var whaleOutcome = f.side === 'YES' ? binaryOutcomes[0] : binaryOutcomes[1];
-          outcomeLabel = '<span style="font-family:var(--mono);font-size:9px;color:var(--soft);background:rgba(201,146,13,0.08);padding:1px 5px;border-radius:3px">' + escH(whaleOutcome) + '</span>';
+          outcomeLabel = '<span style="font-family:var(--body);font-size:11px;color:var(--soft);background:rgba(201,146,13,0.08);padding:1px 5px;border-radius:3px">' + escH(whaleOutcome) + '</span>';
         }
       }
       html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">' +
-        '<span style="font-family:var(--mono);font-size:10px;color:var(--dim);min-width:80px">' + escH(f.wallet) + '</span>' +
-        '<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:' + sideColor + ';min-width:32px">' + f.side + '</span>' +
+        '<span style="font-family:var(--mono);font-size:11px;color:var(--soft);min-width:80px">' + escH(f.wallet) + '</span>' +
+        '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:' + sideColor + ';min-width:32px">' + f.side + '</span>' +
         outcomeLabel +
         '<span style="font-family:var(--mono);font-size:12px;font-weight:700;flex:1">' + sizeStr + '</span>' +
-        (f.entry_price ? '<span style="font-family:var(--mono);font-size:10px;color:var(--dim)">@ ' + Math.round(f.entry_price * 100) + '¢</span>' : '') +
-        (pnlStr ? '<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:' + (f.pnl >= 0 ? 'var(--green)' : 'var(--red)') + '">' + pnlStr + '</span>' : '') +
+        (f.entry_price ? '<span style="font-family:var(--mono);font-size:11px;color:var(--soft)">@ ' + Math.round(f.entry_price * 100) + '¢</span>' : '') +
+        (pnlStr ? '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:' + (f.pnl >= 0 ? 'var(--green)' : 'var(--red)') + '">' + pnlStr + '</span>' : '') +
         '</div>';
     });
     document.getElementById('whaleFlowList').innerHTML = html;
@@ -1010,7 +1010,7 @@ async function loadTopHolders(m) {
     });
 
     function renderHolderList(list, limit) {
-      if (!list.length) return '<div style="font-family:var(--mono);font-size:11px;color:var(--dim)">No data</div>';
+      if (!list.length) return '<div style="font-family:var(--body);font-size:11px;color:var(--soft)">No data</div>';
       return list.slice(0, limit).map(function(h) {
         var display = h.name ? escH(h.name) : truncAddr(h.address);
         var link = h.address ? polyRef('https://polymarket.com/profile/' + encodeURIComponent(h.address)) : '#';
@@ -1053,7 +1053,7 @@ function drawChart(history, multiData) {
   if (multiData && multiData.length > 0) {
     var hasAny = multiData.some(function(d) { return d.history && d.history.length >= 2; });
     if (!hasAny) {
-      container.innerHTML = '<div style="height:260px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:12px;color:var(--dim)">Not enough price data yet</div>';
+      container.innerHTML = '<div style="height:260px;display:flex;align-items:center;justify-content:center;font-family:var(--body);font-size:12px;color:var(--soft)">Not enough price data yet</div>';
       return;
     }
     container.innerHTML = '';
@@ -1093,7 +1093,7 @@ function drawChart(history, multiData) {
   legendEl.innerHTML = '';
 
   if (!history || history.length < 2) {
-    container.innerHTML = '<div style="height:260px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:12px;color:var(--dim)">Not enough price data yet</div>';
+    container.innerHTML = '<div style="height:260px;display:flex;align-items:center;justify-content:center;font-family:var(--body);font-size:12px;color:var(--soft)">Not enough price data yet</div>';
     return;
   }
 
@@ -1445,11 +1445,11 @@ function renderOrderbook() {
 
   document.getElementById('obBids').innerHTML = bids.length > 0
     ? bids.map(function(b) { return buildRow(b, 'mkt-ob-bid'); }).join('')
-    : '<div style="font-family:var(--mono);font-size:11px;color:var(--dim)">No bids</div>';
+    : '<div style="font-family:var(--body);font-size:11px;color:var(--soft)">No bids</div>';
 
   document.getElementById('obAsks').innerHTML = asks.length > 0
     ? asks.map(function(a) { return buildRow(a, 'mkt-ob-ask'); }).join('')
-    : '<div style="font-family:var(--mono);font-size:11px;color:var(--dim)">No asks</div>';
+    : '<div style="font-family:var(--body);font-size:11px;color:var(--soft)">No asks</div>';
 }
 
 // ── Trade widget ──────────────────────────────────────────────────────────────
@@ -1745,7 +1745,7 @@ function updateSidebarPosition() {
 
   details.innerHTML =
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">' +
-      '<span style="font-weight:700;color:' + sideColor + '"><span style="font-size:10px;padding:2px 5px;border-radius:3px;background:' + (posSide === 'NO' ? 'rgba(255,77,106,0.12)' : 'rgba(0,230,138,0.12)') + ';margin-right:4px">' + posSide + '</span>' + escH(label) + ' \u00b7 ' + pos.size.toFixed(1) + ' shares</span>' +
+      '<span style="font-weight:700;color:' + sideColor + '"><span style="font-size:11px;padding:2px 5px;border-radius:3px;background:' + (posSide === 'NO' ? 'rgba(255,77,106,0.12)' : 'rgba(0,230,138,0.12)') + ';margin-right:4px">' + posSide + '</span>' + escH(label) + ' \u00b7 ' + pos.size.toFixed(1) + ' shares</span>' +
       '<span style="color:var(--dim)">avg ' + avgCents + '\u00a2</span>' +
     '</div>' +
     '<div style="display:flex;justify-content:space-between;font-size:11px">' +
@@ -2327,10 +2327,10 @@ function tradeDebug(label, data) {
   if (!panel) {
     panel = document.createElement('div');
     panel.id = 'tradeDebugPanel';
-    panel.style.cssText = 'position:fixed;bottom:0;left:0;right:0;max-height:200px;overflow-y:auto;background:#1a1a18;border-top:2px solid #c9920d;padding:8px 12px;font-family:monospace;font-size:10px;color:#e8e4d9;z-index:99999;white-space:pre-wrap;word-break:break-all';
+    panel.style.cssText = 'position:fixed;bottom:0;left:0;right:0;max-height:200px;overflow-y:auto;background:#1a1a18;border-top:2px solid #c9920d;padding:8px 12px;font-family:monospace;font-size:11px;color:#e8e4d9;z-index:99999;white-space:pre-wrap;word-break:break-all';
     var close = document.createElement('button');
     close.textContent = '✕ Close Debug';
-    close.style.cssText = 'position:absolute;top:4px;right:8px;background:#c9920d;color:#000;border:none;padding:2px 8px;font-size:10px;cursor:pointer;border-radius:3px';
+    close.style.cssText = 'position:absolute;top:4px;right:8px;background:#c9920d;color:#000;border:none;padding:2px 8px;font-size:11px;cursor:pointer;border-radius:3px';
     close.onclick = function() { panel.style.display = 'none'; };
     panel.appendChild(close);
     document.body.appendChild(panel);
@@ -2338,7 +2338,7 @@ function tradeDebug(label, data) {
   panel.style.display = 'block';
   // Show last 15 entries
   var txt = _tradeDebugLog.slice(-15).join('\n');
-  panel.innerHTML = '<button onclick="this.parentElement.style.display=\'none\'" style="position:absolute;top:4px;right:8px;background:#c9920d;color:#000;border:none;padding:2px 8px;font-size:10px;cursor:pointer;border-radius:3px">✕ Close</button>' + txt;
+  panel.innerHTML = '<button onclick="this.parentElement.style.display=\'none\'" style="position:absolute;top:4px;right:8px;background:#c9920d;color:#000;border:none;padding:2px 8px;font-size:11px;cursor:pointer;border-radius:3px">✕ Close</button>' + txt;
 }
 
 function updateTradingUI() {
@@ -2349,7 +2349,7 @@ function updateTradingUI() {
     var hasKeys = isTradingEnabled();
 
     if (hasKeys && proxyValid) {
-      disclaimer.innerHTML = '\u2705 Trading enabled \u00b7 <span style="font-family:var(--mono);font-size:10px;color:var(--dim)">' + proxyAddr.substring(0, 8) + '...' + proxyAddr.slice(-4) + '</span>';
+      disclaimer.innerHTML = '\u2705 Trading enabled \u00b7 <span style="font-family:var(--mono);font-size:11px;color:var(--soft)">' + proxyAddr.substring(0, 8) + '...' + proxyAddr.slice(-4) + '</span>';
       disclaimer.style.color = 'var(--green)';
     } else if (hasKeys && !proxyValid) {
       disclaimer.innerHTML = '\u26a0\ufe0f Wallet connected but proxy not set \u00b7 <a href="#" onclick="runFullSetup();return false" style="color:var(--gold);text-decoration:underline">Resolve proxy</a>';
@@ -3488,7 +3488,7 @@ function renderComments() {
   }
 
   if (!sorted.length) {
-    list.innerHTML = '<div style="font-family:var(--mono);font-size:11px;color:var(--dim);text-align:center;padding:20px 0">No comments yet — be the first</div>';
+    list.innerHTML = '<div style="font-family:var(--body);font-size:11px;color:var(--soft);text-align:center;padding:20px 0">No comments yet — be the first</div>';
     return;
   }
 

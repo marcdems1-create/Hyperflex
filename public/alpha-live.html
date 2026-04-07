@@ -16,6 +16,7 @@
     --paper-3:#1e1e2a;
     --ink:#f0f0f5;
     --dim:#8888a0;
+    --soft:#aaaabe;
     --border:#1e1e2a;
     --green:#00e68a;
     --red:#ff4d6a;
@@ -41,19 +42,19 @@
   .hero-sub{font-size:14px;color:var(--dim);max-width:640px;margin-bottom:24px;line-height:1.6}
   .hero-stats{display:flex;gap:36px;flex-wrap:wrap}
   .hero-stat .n{font-family:var(--mono);font-size:26px;font-weight:700;color:var(--ink)}
-  .hero-stat .l{font-size:10px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:0.12em;margin-top:3px}
+  .hero-stat .l{font-size:11px;font-weight:600;color:var(--soft);text-transform:uppercase;letter-spacing:0.12em;margin-top:3px}
 
   /* Section head */
   .sec-head{display:flex;align-items:center;justify-content:space-between;padding:28px 0 16px;border-bottom:1px solid var(--border);margin-bottom:18px;flex-wrap:wrap;gap:12px}
   .sec-head h2{font-size:18px;font-weight:700;letter-spacing:-0.01em}
-  .sec-head .meta{font-family:var(--mono);font-size:11px;color:var(--dim);letter-spacing:0.04em}
+  .sec-head .meta{font-family:var(--sans);font-size:11px;color:var(--soft);letter-spacing:0.04em}
   .sec-head .controls{display:flex;gap:6px}
-  .ctrl{background:var(--paper-2);border:1px solid var(--border);color:var(--dim);font-family:var(--sans);font-size:11px;font-weight:600;padding:6px 14px;border-radius:8px;cursor:pointer;transition:all .15s}
+  .ctrl{background:var(--paper-2);border:1px solid var(--border);color:var(--soft);font-family:var(--sans);font-size:11px;font-weight:600;padding:6px 14px;border-radius:8px;cursor:pointer;transition:all .15s}
   .ctrl:hover{border-color:var(--blue);color:var(--blue)}
   .ctrl.active{border-color:var(--green);color:var(--green);background:rgba(0,230,138,0.06)}
 
   /* Live indicator */
-  .live-badge{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;color:var(--dim)}
+  .live-badge{display:inline-flex;align-items:center;gap:8px;font-family:var(--sans);font-size:11px;color:var(--soft)}
   .live-badge::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 2s infinite}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
 
@@ -81,28 +82,28 @@
   .edge-score .n.high{color:var(--green)}
   .edge-score .n.mid{color:var(--blue)}
   .edge-score .n.low{color:var(--dim)}
-  .edge-score .l{font-size:9px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:0.1em;margin-top:3px}
+  .edge-score .l{font-size:11px;font-weight:600;color:var(--soft);text-transform:uppercase;letter-spacing:0.1em;margin-top:3px}
   .alpha-badge{font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px;white-space:nowrap}
   .alpha-badge.high{background:rgba(0,230,138,0.12);color:var(--green)}
   .alpha-badge.mid{background:rgba(77,159,255,0.12);color:var(--blue)}
   .alpha-badge.low{background:rgba(136,136,160,0.12);color:var(--dim)}
 
   .badges{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
-  .badge{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:600;padding:3px 7px;border-radius:6px;letter-spacing:0.02em}
+  .badge{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:600;padding:3px 7px;border-radius:6px;letter-spacing:0.02em}
   .badge-whale{background:rgba(168,85,247,0.12);color:var(--purple);border:1px solid rgba(168,85,247,0.25)}
   .badge-momentum{background:rgba(0,230,138,0.1);color:var(--green);border:1px solid rgba(0,230,138,0.25)}
   .badge-momentum.down{background:rgba(255,77,106,0.1);color:var(--red);border-color:rgba(255,77,106,0.25)}
   .badge-decay{background:rgba(255,77,106,0.1);color:var(--red);border:1px solid rgba(255,77,106,0.25)}
   .badge-volume{background:rgba(77,159,255,0.1);color:var(--blue);border:1px solid rgba(77,159,255,0.25)}
   .badge-depth{background:rgba(245,158,11,0.1);color:var(--amber);border:1px solid rgba(245,158,11,0.25)}
-  .badge-cat{background:var(--paper-3);color:var(--dim);border:1px solid var(--border)}
+  .badge-cat{background:var(--paper-3);color:var(--soft);border:1px solid var(--border)}
 
   /* Question */
   .card-q{font-size:15px;font-weight:600;color:var(--ink);line-height:1.35;margin-bottom:12px;min-height:40px}
 
   /* Whale consensus row (replaces fake model probability) */
   .consensus-row{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--paper);border-radius:8px;margin-bottom:10px;font-size:12px;border:1px solid var(--border)}
-  .consensus-row .label{color:var(--dim);font-weight:500}
+  .consensus-row .label{color:var(--dim);font-weight:500;font-family:var(--sans)}
   .consensus-row .whales{color:var(--purple);font-weight:700;font-family:var(--mono)}
   .consensus-row .side-pill{font-family:var(--mono);font-weight:700;font-size:11px;padding:2px 8px;border-radius:4px}
   .consensus-row .side-pill.yes{background:rgba(0,230,138,0.12);color:var(--green)}
@@ -110,18 +111,18 @@
   .consensus-row .pct{font-family:var(--mono);font-weight:700;margin-left:auto}
 
   /* Trade context strip */
-  .trade-strip{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:10px;padding:6px 0}
+  .trade-strip{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;color:var(--soft);margin-bottom:10px;padding:6px 0}
   .trade-strip .entry{color:var(--ink)}
   .trade-strip .win{color:var(--green)}
   .trade-strip .roi{color:var(--amber);font-weight:700}
-  .trade-strip .arrow{color:var(--border);font-size:10px}
+  .trade-strip .arrow{color:var(--border);font-size:11px}
 
   /* Breakdown */
   .breakdown{background:var(--paper);border-radius:8px;padding:10px 12px;margin-bottom:10px;border:1px solid var(--border)}
-  .breakdown-title{font-size:9px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px}
+  .breakdown-title{font-family:var(--sans);font-size:11px;font-weight:600;color:var(--soft);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px}
   .bd-row{display:flex;align-items:center;gap:8px;margin-bottom:3px;font-size:11px}
   .bd-row:last-child{margin-bottom:0}
-  .bd-label{width:74px;color:var(--dim);font-weight:500}
+  .bd-label{width:74px;color:var(--soft);font-weight:500;font-family:var(--sans)}
   .bd-bar{flex:1;height:3px;background:var(--paper-3);border-radius:2px;overflow:hidden}
   .bd-fill{height:100%;border-radius:2px;transition:width .3s}
   .bd-fill.whale{background:var(--purple)}
@@ -131,7 +132,7 @@
   .bd-fill.momentum{background:var(--green)}
   .bd-fill.expiry{background:var(--red)}
   .bd-fill.divergence{background:var(--blue)}
-  .bd-val{width:28px;text-align:right;color:var(--ink);font-family:var(--mono);font-weight:600;font-size:10px}
+  .bd-val{width:28px;text-align:right;color:var(--ink);font-family:var(--mono);font-weight:600;font-size:11px}
 
   /* Trade CTA */
   .trade-cta{display:flex;align-items:center;gap:10px;padding:10px 14px;color:#0a0a0f;border-radius:10px;border:none;cursor:pointer;width:100%;font-family:var(--sans);font-weight:700;font-size:13px;transition:all .15s;text-decoration:none}
@@ -143,14 +144,14 @@
   .trade-cta .entry-detail{margin-left:auto;font-size:11px;opacity:0.8;font-family:var(--mono)}
 
   /* AI hook + meta */
-  .hook{font-size:11px;color:var(--dim);margin-top:8px;font-style:italic;padding-top:8px;border-top:1px dashed var(--border)}
-  .meta-row{display:flex;gap:14px;font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:8px;letter-spacing:0.02em}
+  .hook{font-size:11px;color:var(--soft);margin-top:8px;font-style:italic;padding-top:8px;border-top:1px dashed var(--border)}
+  .meta-row{display:flex;gap:14px;font-family:var(--sans);font-size:11px;color:var(--soft);margin-top:8px;letter-spacing:0.02em}
 
   /* States */
   .loading{color:var(--dim);text-align:center;padding:80px 20px;font-size:13px}
   .err{color:var(--red);text-align:center;padding:80px 20px;font-size:13px}
 
-  .footnote{padding:20px 0 60px;font-size:11px;color:var(--dim);border-top:1px solid var(--border);margin-top:20px;text-align:center}
+  .footnote{padding:20px 0 60px;font-size:11px;color:var(--soft);border-top:1px solid var(--border);margin-top:20px;text-align:center}
   .footnote em{color:var(--green);font-style:normal}
 
   @media(max-width:600px){
