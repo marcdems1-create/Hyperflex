@@ -198,6 +198,7 @@ td { padding: 12px 14px; font-size: 13px; vertical-align: middle; }
 }
 .story-card:hover { border-color: rgba(77,159,255,0.3); border-image: linear-gradient(90deg, var(--accent-blue), var(--accent-green)) 1; border-image-slice: 1 1 0 1; transform: translateY(-2px); box-shadow: 0 12px 40px rgba(0,0,0,0.4), 0 0 20px rgba(77,159,255,0.06); }
 .story-card.high-edge { border-image: linear-gradient(90deg, var(--accent-green), var(--accent-blue)) 1; border-image-slice: 1 1 0 1; box-shadow: 0 0 24px rgba(0,230,138,0.08); }
+.story-card.stale { opacity: 0.55; }
 .story-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
 .story-card-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .story-card h3 { font-family: var(--sans); font-size: 19px; font-weight: 700; line-height: 1.4; color: #fff; letter-spacing: -0.5px; margin: 0 0 10px; }
@@ -564,6 +565,11 @@ function renderCards() {
     var edge = m.edge_score || 0;
     var edgeClass = edge >= 60 ? 'high' : edge >= 35 ? 'mid' : 'low';
     var highEdge = edge >= 60 ? ' high-edge' : '';
+    // Alpha Score badge
+    var alpha = m.alpha_score || 0;
+    var alphaBg = alpha >= 7 ? '#00e68a' : alpha >= 4 ? '#4d9fff' : '#4a4760';
+    var alphaTextColor = alpha >= 7 ? '#000' : '#fff';
+    var alphaBadge = '<span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 8px;border-radius:5px;background:' + alphaBg + ';color:' + alphaTextColor + ';white-space:nowrap;letter-spacing:-0.3px">\u03B1 ' + alpha.toFixed(1) + '</span>';
     // Row tint
     var hasConsensus = m.whale_count >= 3 && m.trade && m.trade.roi_pct >= 50;
     var hasMomentum = m.price_change_24h != null && Math.abs(m.price_change_24h) >= 5;
@@ -611,12 +617,23 @@ function renderCards() {
     var safeUrl = m.slug ? '/market/' + m.slug : (typeof hfxMarketUrl === 'function' ? hfxMarketUrl(rawPolyUrl) : '/screener');
     var expiryStr = m.days_until_expiry != null ? (m.days_until_expiry === 0 ? 'Today' : m.days_until_expiry + 'd left') : '';
 
-    return '<div class="story-card' + highEdge + tintClass + '">' +
+    // Signal aging
+    var ageStr = '';
+    var staleClass = '';
+    if (m.edge_age_minutes != null) {
+      var mins = m.edge_age_minutes;
+      ageStr = mins < 60 ? mins + 'm ago' : mins < 1440 ? Math.floor(mins/60) + 'h ago' : Math.floor(mins/1440) + 'd ago';
+      if (mins > 240) staleClass = ' stale';
+    }
+
+    return '<div class="story-card' + highEdge + tintClass + staleClass + '">' +
       '<div class="story-card-top">' +
         '<div class="story-card-meta">' +
           '<span class="cat-pill cat-' + m.category + '">' + catEmoji + ' ' + (m.category || 'other').toUpperCase() + '</span>' +
+          (ageStr ? '<span style="font-family:var(--mono);font-size:10px;color:' + (m.edge_age_minutes > 240 ? 'var(--muted)' : 'var(--accent-green)') + '">' + (m.is_new ? '\u26A1 ' : '') + ageStr + '</span>' : '') +
           (expiryStr ? '<span class="story-expiry">' + expiryStr + '</span>' : '') +
         '</div>' +
+        alphaBadge +
         '<div class="edge-badge ' + edgeClass + '"><span class="edge-num">' + edge + '</span><span class="edge-label">' + (edge >= 60 ? 'Hot' : edge >= 35 ? 'Edge' : 'Low') + '</span></div>' +
       '</div>' +
       (m.model_probability != null && m.alpha_edge != null && Math.abs(m.alpha_edge) >= 2 ? '<div style="display:flex;align-items:center;gap:8px;margin:6px 0 2px;font-family:var(--mono);font-size:10px">' +
