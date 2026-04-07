@@ -30,7 +30,26 @@
       '.nav-signin:hover{color:#f0f0f5;border-color:rgba(255,255,255,0.2);background:rgba(255,255,255,0.04)}' +
       '.nav-cta{font-family:"Inter",-apple-system,sans-serif;font-size:11px;font-weight:700;color:#0a0a0f;background:linear-gradient(135deg,#00e68a,#4d9fff);text-decoration:none;padding:6px 14px;border-radius:8px;transition:all .15s;white-space:nowrap}' +
       '.nav-cta:hover{filter:brightness(1.1);transform:translateY(-1px)}' +
-      '@media(max-width:768px){.topbar{padding:12px 16px}.nav-links{gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}.nav-links::-webkit-scrollbar{display:none}.nav-link{font-size:11px;white-space:nowrap;min-height:44px;display:inline-flex;align-items:center;padding:6px 8px}.nav-link.desktop-only{display:none}.nav-auth{gap:6px;margin-left:8px}.nav-signin{font-size:10px;padding:5px 8px;min-height:44px;display:inline-flex;align-items:center}.nav-cta{font-size:10px;padding:5px 10px;min-height:44px;display:inline-flex;align-items:center}.nav-more-dd{right:-16px;min-width:200px}}' +
+      '@media(max-width:768px){.topbar{padding:12px 16px}.nav-links{display:none}.nav-auth{display:none}' +
+      '.nav-hamburger{display:flex;align-items:center;justify-content:center;width:44px;height:44px;border:none;background:none;cursor:pointer;padding:0;margin-left:auto;flex-shrink:0}' +
+      '.nav-hamburger svg{width:24px;height:24px;stroke:#f0f0f5;stroke-width:2;fill:none}' +
+      '.nav-mobile-menu{display:none;position:fixed;inset:0;z-index:9998;background:rgba(10,10,15,0.98);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);flex-direction:column;overflow-y:auto;padding:0}' +
+      '.nav-mobile-menu.open{display:flex}' +
+      '.nav-mobile-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.06)}' +
+      '.nav-mobile-close{display:flex;align-items:center;justify-content:center;width:44px;height:44px;border:none;background:none;cursor:pointer}' +
+      '.nav-mobile-close svg{width:24px;height:24px;stroke:#f0f0f5;stroke-width:2;fill:none}' +
+      '.nav-mobile-links{padding:8px 0;flex:1}' +
+      '.nav-mobile-sep{height:1px;background:rgba(255,255,255,0.06);margin:8px 16px}' +
+      '.nav-mobile-link{display:flex;align-items:center;gap:10px;padding:14px 20px;font-family:"Inter",-apple-system,sans-serif;font-size:15px;font-weight:500;color:#c0c0d0;text-decoration:none;min-height:48px;transition:background .1s}' +
+      '.nav-mobile-link:hover,.nav-mobile-link:active{background:rgba(255,255,255,0.05)}' +
+      '.nav-mobile-link.active{color:#f0f0f5;font-weight:600}' +
+      '.nav-mobile-link.gold{color:#00e68a}' +
+      '.nav-mobile-auth{padding:16px 20px;border-top:1px solid rgba(255,255,255,0.06)}' +
+      '.nav-mobile-auth a{display:block;text-align:center;padding:12px;border-radius:10px;font-family:"Inter",-apple-system,sans-serif;font-size:14px;font-weight:600;text-decoration:none;min-height:48px;line-height:24px}' +
+      '.nav-mobile-auth .mob-signin{color:#f0f0f5;border:1px solid rgba(255,255,255,0.12);margin-bottom:10px}' +
+      '.nav-mobile-auth .mob-dash{color:#0a0a0f;background:linear-gradient(135deg,#00e68a,#4d9fff)}' +
+      '}' +
+      '@media(min-width:769px){.nav-hamburger{display:none}}' +
       /* ── Global Search (Cmd+K) styles ── */
       '.nav-search-btn{display:flex;align-items:center;gap:6px;padding:5px 12px;border:1px solid rgba(255,255,255,0.08);border-radius:8px;background:rgba(255,255,255,0.03);cursor:pointer;margin-left:8px;transition:all .15s;flex-shrink:0}' +
       '.nav-search-btn:hover{border-color:rgba(255,255,255,0.16);background:rgba(255,255,255,0.06)}' +
@@ -149,7 +168,10 @@
       (isLoggedIn
         ? ''
         : '<a href="/creator/login" class="nav-signin">Sign in</a>') +
-    '</div>';
+    '</div>' +
+    '<button class="nav-hamburger" id="navHamburger">' +
+      '<svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>' +
+    '</button>';
 
   var root = document.getElementById('nav-root');
   if (root) {
@@ -159,6 +181,59 @@
   }
 
   // Dashboard link visibility already handled by isLoggedIn above
+
+  // ── Mobile hamburger menu ──
+  (function() {
+    var allLinks = primaryLinks.concat([{sep:true}]).concat(moreLinks);
+    var mobileMenu = document.createElement('div');
+    mobileMenu.className = 'nav-mobile-menu';
+    mobileMenu.id = 'navMobileMenu';
+    var mLinksHtml = allLinks.map(function(l) {
+      if (l.sep) return '<div class="nav-mobile-sep"></div>';
+      var isActive = path === l.href;
+      var cls = 'nav-mobile-link' + (isActive ? ' active' : '') + (l.gold && !isActive ? ' gold' : '');
+      return '<a href="' + l.href + '" class="' + cls + '">' + l.label + '</a>';
+    }).join('');
+    if (isLoggedIn) {
+      mLinksHtml += '<div class="nav-mobile-sep"></div><a href="/creator/dashboard" class="nav-mobile-link gold">🛠 Dashboard</a>';
+    }
+    mobileMenu.innerHTML =
+      '<div class="nav-mobile-header">' +
+        '<a href="/explore" class="topbar-logo" style="font-family:Inter,-apple-system,sans-serif;font-weight:800;font-size:18px;letter-spacing:-0.5px;color:#f0f0f5;text-decoration:none">HYPER<span style="background:linear-gradient(135deg,#00e68a,#4d9fff,#a855f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">FLEX</span></a>' +
+        '<button class="nav-mobile-close" id="navMobileClose">' +
+          '<svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+        '</button>' +
+      '</div>' +
+      '<div class="nav-mobile-links">' + mLinksHtml + '</div>' +
+      '<div class="nav-mobile-auth">' +
+        (isLoggedIn
+          ? ''
+          : '<a href="/creator/login" class="mob-signin">Sign in</a>') +
+      '</div>';
+    document.body.appendChild(mobileMenu);
+
+    var hamburger = document.getElementById('navHamburger');
+    var closeBtn = document.getElementById('navMobileClose');
+    if (hamburger) {
+      hamburger.addEventListener('click', function() {
+        mobileMenu.classList.add('open');
+        document.body.style.overflow = 'hidden';
+      });
+    }
+    if (closeBtn) {
+      closeBtn.addEventListener('click', function() {
+        mobileMenu.classList.remove('open');
+        document.body.style.overflow = '';
+      });
+    }
+    // Close on link click
+    mobileMenu.querySelectorAll('.nav-mobile-link').forEach(function(a) {
+      a.addEventListener('click', function() {
+        mobileMenu.classList.remove('open');
+        document.body.style.overflow = '';
+      });
+    });
+  })();
 
   // ── More dropdown toggle ──
   (function() {
@@ -171,7 +246,7 @@
       btn.classList.toggle('open', open);
     });
     document.addEventListener('click', function(e) {
-      if (!dd.contains(e.target) && e.target !== btn) {
+      if (!dd.contains(e.target) && !btn.contains(e.target)) {
         dd.classList.remove('open');
         btn.classList.remove('open');
       }
