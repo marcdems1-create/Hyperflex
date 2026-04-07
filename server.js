@@ -18301,6 +18301,7 @@ async function fetchWhalePositions() {
               proxyWallet: trader.proxyWallet,
               position: p.title || p.market || 'Unknown',
               market: p.title || p.market || 'Unknown',
+              conditionId: p.conditionId || p.condition_id || null,
               side: p.outcome || p.side || 'Unknown',
               size: parseFloat(p.size || 0),
               current_price: parseFloat(p.curPrice || p.cur_price || 0),
@@ -19597,26 +19598,36 @@ async function buildAlphaList(opts = {}) {
     }
 
     // Build whale lookup from cached whale data — net out hedged positions
+    // Key by conditionId (exact match) AND by lowercased question text (fallback).
     const whalePositions = (_whaleWatchCache && _whaleWatchCache.data && _whaleWatchCache.data.whales) ? _whaleWatchCache.data.whales : [];
     const _scrNetMap = {};
     for (const wp of whalePositions) {
       const mkt = (wp.market || wp.position || '').toLowerCase().trim();
-      if (!mkt) continue;
+      const cid = wp.conditionId || null;
+      if (!mkt && !cid) continue;
       const wallet = (wp.proxyWallet || wp.trader || 'unknown').toLowerCase();
-      const nk = wallet + ':' + mkt;
-      if (!_scrNetMap[nk]) _scrNetMap[nk] = { yes_cap: 0, no_cap: 0, market: mkt };
+      const nk = wallet + ':' + (cid || mkt);
+      if (!_scrNetMap[nk]) _scrNetMap[nk] = { yes_cap: 0, no_cap: 0, market: mkt, conditionId: cid };
       const side = (wp.side || 'YES').toUpperCase();
       const cap = parseFloat(wp.size || 0);
       if (side === 'YES' || side === 'Y') _scrNetMap[nk].yes_cap += cap;
       else _scrNetMap[nk].no_cap += cap;
     }
-    const whaleByMarket = {};
+    const whaleByMarket = {};   // text-keyed (fallback)
+    const whaleByCondId = {};   // conditionId-keyed (preferred)
     for (const n of Object.values(_scrNetMap)) {
       const net = Math.abs(n.yes_cap - n.no_cap);
       if (net < 10) continue; // fully hedged
-      if (!whaleByMarket[n.market]) whaleByMarket[n.market] = { count: 0, capital: 0 };
-      whaleByMarket[n.market].count++;
-      whaleByMarket[n.market].capital += net;
+      if (n.conditionId) {
+        if (!whaleByCondId[n.conditionId]) whaleByCondId[n.conditionId] = { count: 0, capital: 0 };
+        whaleByCondId[n.conditionId].count++;
+        whaleByCondId[n.conditionId].capital += net;
+      }
+      if (n.market) {
+        if (!whaleByMarket[n.market]) whaleByMarket[n.market] = { count: 0, capital: 0 };
+        whaleByMarket[n.market].count++;
+        whaleByMarket[n.market].capital += net;
+      }
     }
 
     // Auto-detect category
@@ -19695,14 +19706,19 @@ async function buildAlphaList(opts = {}) {
 
       const volume = parseFloat(m.volume) || 0;
       const marketId = m.conditionId || m.slug || m.id || '';
+      const conditionId = m.conditionId || null;
       const slug = m.slug || '';
       const category = detectCategory(question);
       const qLower = question.toLowerCase().trim();
 
-      // Whale enrichment: try exact match, then fuzzy
-      let whaleInfo = whaleByMarket[qLower] || null;
+      // ── HARD VOLUME FLOOR — kill noise markets ──
+      // <$10k volume = bid-ask spread eats any edge, no real liquidity
+      if (volume < 10000) continue;
+
+      // Whale enrichment: prefer exact conditionId match, fall back to text
+      let whaleInfo = (conditionId && whaleByCondId[conditionId]) || whaleByMarket[qLower] || null;
       if (!whaleInfo) {
-        // Try substring matching for whale data
+        // Last-resort substring matching
         for (const [wKey, wVal] of Object.entries(whaleByMarket)) {
           if (qLower.includes(wKey) || wKey.includes(qLower)) {
             whaleInfo = wVal;
@@ -19736,14 +19752,20 @@ async function buildAlphaList(opts = {}) {
       const pChange = priceChanges[marketId] || null;
       const oddsChg = pChange != null && yesPrice != null ? Math.round((yesPrice - yesPrice / (1 + pChange / 100)) * 100) : null;
 
-      // ── Edge Score (1–100) — weighted to create real differentiation ──
+      // ── Edge Score (1–100) — volume-dominant, noise-resistant ──
+      // Liquid markets with whale activity should always beat noise markets.
       const edgeWhale = Math.min(35, wCount * 7);                                         // 3 whales=21, 5=35
-      const edgeCapital = wCapital >= 1000000 ? 15 : wCapital >= 500000 ? 10 : wCapital >= 100000 ? 5 : 0; // capital weight
-      const edgeMomentum = Math.min(20, Math.abs(pChange || 0) * 2);                     // price movement
-      const edgeVolume = volume >= 1000000 ? 12 : volume >= 500000 ? 8 : volume >= 100000 ? 5 : volume >= 10000 ? 2 : 0;
-      const edgeExpiry = (daysUntilExpiry != null && daysUntilExpiry <= 3) ? 15 : (daysUntilExpiry != null && daysUntilExpiry <= 7) ? 10 : (daysUntilExpiry != null && daysUntilExpiry <= 30) ? 3 : 0;
+      const edgeCapital = wCapital >= 1000000 ? 15 : wCapital >= 500000 ? 10 : wCapital >= 100000 ? 5 : 0;
+      // Volume now dominates: $10M=30, $5M=22, $1M=15, $500k=10, $100k=5
+      const edgeVolume = volume >= 10000000 ? 30 : volume >= 5000000 ? 22 : volume >= 1000000 ? 15 : volume >= 500000 ? 10 : volume >= 100000 ? 5 : 0;
+      // Momentum + expiry only fire on liquid markets (>$50k vol). Otherwise it's just noise.
+      const liquid = volume >= 50000;
+      const edgeMomentum = liquid ? Math.min(15, Math.abs(pChange || 0) * 1.5) : 0;
+      const edgeExpiry = liquid && daysUntilExpiry != null
+        ? (daysUntilExpiry <= 3 ? 8 : daysUntilExpiry <= 7 ? 5 : daysUntilExpiry <= 30 ? 2 : 0)
+        : 0;
       const yesPct = yesPrice != null ? Math.round(yesPrice * 100) : 50;
-      const edgeDivergence = (wCount >= 3 && yesPrice != null) ? Math.min(15, Math.abs(50 - yesPct) * 0.4) : 0; // price far from 50%
+      const edgeDivergence = (wCount >= 3 && yesPrice != null) ? Math.min(10, Math.abs(50 - yesPct) * 0.3) : 0;
       const edgeScore = Math.min(99, Math.round(edgeWhale + edgeCapital + edgeMomentum + edgeVolume + edgeExpiry + edgeDivergence));
 
       // ── Trade ROI ──
