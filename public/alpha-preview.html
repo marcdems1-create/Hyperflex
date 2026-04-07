@@ -141,17 +141,19 @@
 
   .trade-cta{
     display:flex;align-items:center;gap:12px;
-    padding:12px;background:var(--gold);color:var(--paper);
+    padding:12px;color:var(--paper);
     border-radius:4px;border:none;cursor:pointer;width:100%;
     font-family:'Space Mono',monospace;font-weight:700;font-size:13px;
-    transition:background 0.15s;
+    transition:filter 0.15s;
   }
-  .trade-cta:hover{background:var(--gold-bright)}
+  .trade-cta:hover{filter:brightness(1.1)}
+  .trade-cta.yes{background:var(--green)}
+  .trade-cta.no{background:var(--red)}
   .trade-cta .side{
-    background:var(--paper);color:var(--gold);
-    padding:3px 8px;border-radius:2px;font-size:11px;
+    background:rgba(0,0,0,0.25);color:var(--paper);
+    padding:3px 8px;border-radius:2px;font-size:11px;letter-spacing:0.05em;
   }
-  .trade-cta .roi{margin-left:auto;font-size:11px;opacity:0.85}
+  .trade-cta .roi{margin-left:auto;font-size:11px;opacity:0.9}
 
   .hook{
     font-size:11px;color:var(--ink-dim);margin-top:10px;font-style:italic;
@@ -197,8 +199,9 @@
     flex:1;padding:14px;border-radius:4px;border:none;cursor:pointer;
     font-family:'Space Mono',monospace;font-weight:700;font-size:13px;
   }
-  .btn-primary{background:var(--gold);color:var(--paper)}
-  .btn-primary:hover{background:var(--gold-bright)}
+  .btn-primary{background:var(--green);color:var(--paper)}
+  .btn-primary:hover{filter:brightness(1.1)}
+  .btn-primary.no{background:var(--red)}
   .btn-ghost{background:transparent;color:var(--ink-dim);border:1px solid var(--line)}
 
   .footnote{
@@ -267,7 +270,7 @@
     </div>
     <div class="modal-btns">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="alert('Mock: would sign EIP-712 + POST /order via Polymarket builder')">Sign &amp; Submit</button>
+      <button class="btn btn-primary" id="m-submit" onclick="alert('Mock: would sign EIP-712 + POST /order via Polymarket builder')">Sign &amp; Submit</button>
     </div>
   </div>
 </div>
@@ -359,7 +362,7 @@ function render(){
         ${bdRow('Volume',e.bd.volume,15)}
         ${bdRow('Expiry',e.bd.expiry,10)}
       </div>
-      <button class="trade-cta" onclick="event.stopPropagation();openTrade(${i})">
+      <button class="trade-cta ${e.side==='YES'?'yes':'no'}" onclick="event.stopPropagation();openTrade(${i})">
         <span class="side">${e.side}</span>
         BET @ ${e.entry}¢ · Win ${e.profit}¢
         <span class="roi">ROI +${e.roi}%</span>
@@ -388,6 +391,9 @@ function openTrade(i){
   document.getElementById('m-shares').textContent = shares;
   document.getElementById('m-profit').textContent = `+$${profit}`;
   document.getElementById('m-roi').textContent = `+${e.roi}%`;
+  const sub = document.getElementById('m-submit');
+  sub.classList.toggle('no', e.side==='NO');
+  sub.textContent = `Sign & Submit ${e.side}`;
   document.getElementById('modal').classList.add('open');
 }
 function closeModal(){document.getElementById('modal').classList.remove('open')}
