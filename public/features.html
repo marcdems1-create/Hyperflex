@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>All Features — Polymarket Tools, Whale Tracker & AI Signals | HYPERFLEX</title>
+<meta name="description" content="HYPERFLEX gives you whale tracking, AI signals, arbitrage detection, and 15+ professional prediction market tools. All free. The most powerful Polymarket dashboard available."/>
+<link rel="canonical" href="https://hyperflex.network/features"/>
+<meta name="keywords" content="polymarket tools, prediction market dashboard, polymarket whale tracker, polymarket signals, polymarket arbitrage, kalshi tools, prediction market screener, polymarket portfolio tracker"/>
+<meta property="og:type" content="website"/>
+<meta property="og:url" content="https://hyperflex.network/features"/>
+<meta property="og:title" content="All Features — HYPERFLEX"/>
+<meta property="og:description" content="Whale tracking, AI signals, arbitrage detection, and 15+ professional tools for prediction markets. All free."/>
+<meta property="og:image" content="https://hyperflex.network/og-signals.png"/>
+<meta property="og:site_name" content="HYPERFLEX"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:site" content="@HyperFlexApp"/>
+<meta name="twitter:title" content="All Features — HYPERFLEX"/>
+<meta name="twitter:description" content="Whale tracking, AI signals, arbitrage detection, and 15+ professional tools for prediction markets. All free."/>
+<meta name="twitter:image" content="https://hyperflex.network/og-signals.png"/>
+<link rel="icon" href="/hyperflex-logo.png"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+:root{
+  --bg:#0a0a0f;--card:#111118;--card2:#16161f;--card-glass:rgba(22,22,31,0.8);
+  --border:#1e1e2a;--border2:#2a2a38;
+  --text:#e8e6f0;--soft:#a0a0b4;--dim:#6b6880;--muted:#4a4760;
+  --gold:#c9920d;
+  --accent-green:#00e68a;--accent-green-dim:rgba(0,230,138,0.15);
+  --accent-red:#ff4d6a;--accent-red-dim:rgba(255,77,106,0.15);
+  --accent-blue:#4d9fff;--accent-blue-dim:rgba(77,159,255,0.12);
+  --accent-purple:#a855f7;--accent-purple-dim:rgba(168,85,247,0.12);
+  --accent-amber:#f59e0b;--accent-amber-dim:rgba(245,158,11,0.12);
+  --green:#00e68a;--red:#ff4d6a;--blue:#4d9fff;--purple:#a855f7;--orange:#f59e0b;
+  --sans:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+  --mono:'JetBrains Mono',monospace;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased;background-image:radial-gradient(ellipse 80% 50% at 50% 0%,rgba(77,159,255,0.04),transparent),radial-gradient(ellipse 60% 40% at 80% 100%,rgba(168,85,247,0.03),transparent)}
+a{color:var(--gold);text-decoration:none}a:hover{text-decoration:underline}
+
+/* HERO */
+.f-hero{text-align:center;padding:100px 24px 80px;position:relative;overflow:hidden}
+.f-hero::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:800px;height:500px;background:radial-gradient(ellipse,rgba(77,159,255,0.08),rgba(168,85,247,0.04),transparent 70%);pointer-events:none}
+.f-hero-badge{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;font-weight:600;color:var(--accent-green);background:var(--accent-green-dim);padding:6px 14px;border-radius:20px;margin-bottom:24px;letter-spacing:0.5px}
+.f-hero-badge::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--accent-green);animation:pulse 2s infinite}
+.f-hero h1{font-family:var(--sans);font-size:clamp(32px,5vw,56px);font-weight:800;line-height:1.1;letter-spacing:-1.5px;max-width:800px;margin:0 auto 20px;background:linear-gradient(135deg,var(--text) 0%,var(--soft) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.f-hero-sub{font-size:clamp(16px,2vw,20px);color:var(--soft);max-width:640px;margin:0 auto 36px;line-height:1.6}
+.f-hero-sub strong{color:var(--text);font-weight:600}
+.f-hero-stats{display:flex;justify-content:center;gap:40px;flex-wrap:wrap;margin-top:16px}
+.f-hero-stat{text-align:center}
+.f-hero-stat-val{font-family:var(--mono);font-size:28px;font-weight:700;color:var(--accent-blue)}
+.f-hero-stat-label{font-size:11px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:0.8px;margin-top:2px}
+
+/* NAV PILLS */
+.f-nav{display:flex;justify-content:center;gap:8px;padding:0 24px 60px;flex-wrap:wrap}
+.f-nav a{font-size:12px;font-weight:600;padding:8px 16px;border-radius:8px;border:1px solid var(--border);color:var(--dim);transition:all .2s;text-decoration:none}
+.f-nav a:hover{border-color:var(--accent-blue);color:var(--soft);background:var(--accent-blue-dim);text-decoration:none}
+
+/* FEATURE SECTIONS */
+.f-sections{max-width:1100px;margin:0 auto;padding:0 24px 80px}
+.f-section{display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:center;margin-bottom:100px}
+.f-section.reversed{direction:rtl}
+.f-section.reversed>*{direction:ltr}
+
+.f-mock{position:relative;border-radius:16px;overflow:hidden;aspect-ratio:4/3;background:var(--card);border:1px solid var(--border);display:flex;align-items:center;justify-content:center}
+.f-mock-inner{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:24px;position:relative;overflow:hidden}
+.f-mock-icon{font-size:48px;line-height:1;filter:grayscale(0.2)}
+.f-mock-bars{display:flex;gap:6px;align-items:flex-end;height:60px}
+.f-mock-bar{width:18px;border-radius:4px 4px 0 0;animation:barGrow 2s ease infinite alternate}
+.f-mock-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;width:100%}
+.f-mock-cell{height:24px;border-radius:6px;background:var(--border);opacity:0.5}
+.f-mock-glow{position:absolute;width:200px;height:200px;border-radius:50%;filter:blur(80px);opacity:0.15;pointer-events:none}
+
+@keyframes barGrow{0%{transform:scaleY(0.5)}100%{transform:scaleY(1)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+.f-content{display:flex;flex-direction:column;gap:16px}
+.f-tag{font-family:var(--mono);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;padding:4px 10px;border-radius:6px;display:inline-flex;align-self:flex-start}
+.f-content h2{font-size:clamp(24px,3vw,36px);font-weight:800;letter-spacing:-0.8px;line-height:1.15}
+.f-content p{font-size:16px;line-height:1.7;color:var(--soft)}
+.f-insight{display:flex;gap:10px;padding:14px 16px;background:var(--card);border:1px solid var(--border);border-radius:10px;font-size:13px;line-height:1.5;color:var(--soft)}
+.f-insight-icon{flex-shrink:0;font-size:16px;margin-top:1px}
+.f-insight strong{color:var(--text);font-weight:600}
+.f-cta-btn{display:inline-flex;align-items:center;gap:8px;font-family:var(--sans);font-size:14px;font-weight:700;padding:12px 24px;border-radius:10px;border:none;cursor:pointer;transition:all .25s;text-decoration:none;align-self:flex-start}
+.f-cta-btn:hover{transform:translateY(-1px);text-decoration:none}
+.f-cta-btn.primary{background:var(--gold);color:var(--bg)}
+.f-cta-btn.primary:hover{background:#daa520;box-shadow:0 4px 24px rgba(201,146,13,0.3)}
+.f-cta-btn.glass{background:var(--card-glass);color:var(--text);border:1px solid var(--border);backdrop-filter:blur(12px)}
+.f-cta-btn.glass:hover{border-color:var(--accent-blue);background:var(--accent-blue-dim)}
+.f-account-note{font-size:11px;font-weight:600;color:var(--accent-green);display:flex;align-items:center;gap:4px;margin-top:-4px}
+
+/* BOTTOM CTA */
+.f-bottom{text-align:center;padding:80px 24px 120px;position:relative}
+.f-bottom::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:600px;height:400px;background:radial-gradient(ellipse,rgba(201,146,13,0.06),rgba(168,85,247,0.03),transparent 70%);pointer-events:none}
+.f-bottom h2{font-size:clamp(28px,4vw,48px);font-weight:800;letter-spacing:-1px;margin-bottom:12px}
+.f-bottom h2 span{background:linear-gradient(135deg,var(--accent-green),var(--accent-blue));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.f-bottom p{font-size:18px;color:var(--soft);margin-bottom:36px;max-width:500px;margin-left:auto;margin-right:auto;line-height:1.6}
+.f-bottom-btns{display:flex;justify-content:center;gap:16px;flex-wrap:wrap}
+.f-bottom-trust{display:flex;justify-content:center;gap:24px;margin-top:24px;flex-wrap:wrap}
+.f-bottom-trust span{font-size:12px;font-weight:600;color:var(--dim);display:flex;align-items:center;gap:6px}
+
+/* DIVIDER */
+.f-divider{height:1px;background:linear-gradient(90deg,transparent,var(--border),transparent);max-width:600px;margin:0 auto 100px}
+
+/* RESPONSIVE */
+@media(max-width:768px){
+  .f-hero{padding:80px 20px 60px}
+  .f-hero-stats{gap:24px}
+  .f-hero-stat-val{font-size:22px}
+  .f-nav{gap:6px}
+  .f-nav a{font-size:11px;padding:6px 12px}
+  .f-section{grid-template-columns:1fr;gap:32px;margin-bottom:72px}
+  .f-section.reversed{direction:ltr}
+  .f-mock{aspect-ratio:16/10}
+  .f-sections{padding:0 20px 60px}
+  .f-bottom{padding:60px 20px 80px}
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<div id="nav-placeholder"></div>
+
+<!-- HERO -->
+<section class="f-hero">
+  <div class="f-hero-badge">15+ professional tools</div>
+  <h1>Everything you need to trade prediction markets</h1>
+  <p class="f-hero-sub">HYPERFLEX gives you <strong>whale tracking</strong>, <strong>AI signals</strong>, <strong>arbitrage detection</strong>, and 15+ professional tools. All free.</p>
+  <div class="f-hero-stats">
+    <div class="f-hero-stat"><div class="f-hero-stat-val">15+</div><div class="f-hero-stat-label">Tools</div></div>
+    <div class="f-hero-stat"><div class="f-hero-stat-val">$50M+</div><div class="f-hero-stat-label">Whale Capital Tracked</div></div>
+    <div class="f-hero-stat"><div class="f-hero-stat-val">50+</div><div class="f-hero-stat-label">Whale Wallets</div></div>
+    <div class="f-hero-stat"><div class="f-hero-stat-val">3</div><div class="f-hero-stat-label">Platforms</div></div>
+  </div>
+</section>
+
+<!-- QUICK NAV -->
+<nav class="f-nav">
+  <a href="#whale-intelligence">Whales</a>
+  <a href="#ai-signals">Signals</a>
+  <a href="#crystal-ball">Crystal Ball</a>
+  <a href="#screener">Screener</a>
+  <a href="#arbitrage">Arbitrage</a>
+  <a href="#catalyst">Catalyst</a>
+  <a href="#quick-trade">Trade</a>
+  <a href="#pyth-edge">Pyth</a>
+  <a href="#daily-brief">Brief</a>
+  <a href="#portfolio">Portfolio</a>
+  <a href="#leaderboard">Leaderboard</a>
+  <a href="#ecosystem">Ecosystem</a>
+  <a href="#high-prob">99% Bets</a>
+  <a href="#odds">Odds</a>
+  <a href="#rewards">Rewards</a>
+</nav>
+
+<div class="f-sections">
+
+<!-- 1. WHALE INTELLIGENCE -->
+<section class="f-section" id="whale-intelligence">
+  <div class="f-mock">
+    <div class="f-mock-inner">
+      <div class="f-mock-glow" style="background:var(--accent-green);top:20%;left:10%"></div>
+      <div class="f-mock-icon">🐋</div>
+      <div class="f-mock-bars">
+        <div class="f-mock-bar" style="height:45px;background:var(--accent-green);animation-delay:0s"></div>
+        <div class="f-mock-bar" style="height:60px;background:var(--accent-green);animation-delay:0.2s"></div>
+        <div class="f-mock-bar" style="height:35px;background:var(--accent-blue);animation-delay:0.4s"></div>
+        <div class="f-mock-bar" style="height:55px;background:var(--accent-green);animation-delay:0.6s"></div>
+        <div class="f-mock-bar" style="height:40px;background:var(--accent-blue);animation-delay:0.8s"></div>
+      </div>
+      <div class="f-mock-grid">
+        <div class="f-mock-cell" style="background:var(--accent-green-dim)"></div>
+        <div class="f-mock-cell" style="background:var(--accent-green-dim)"></div>
+        <div class="f-mock-cell" style="background:var(--accent-blue-dim)"></div>
+      </div>
+    </div>
+  </div>
+  <div class="f-content">
+    <span class="f-tag" style="color:var(--accent-green);background:var(--accent-green-dim)">Intelligence</span>
+    <h2>Whale Intelligence</h2>
+    <p>Track $50M+ in whale capital across 50 wallets. See exactly where smart money is flowing before the market moves. Real-time alerts when whales open new positions or rotate capital.</p>
+    <div class="f-insight">
+      <span class="f-insight-icon">💡</span>
+      <span><strong>Key insight:</strong> Whale wallets move 48-72 hours before major price shifts. Seeing their flow first is your biggest edge.</span>
+    </div>
+    <a href="/whales" class="f-cta-btn primary">View whale dashboard →</a>
+  </div>
+</section>
+
+<!-- 2. AI SIGNALS -->
+<section class="f-section reversed" id="ai-signals">
+  <div class="f-mock">
+    <div class="f-mock-inner">
+      <div class="f-mock-glow" style="background:var(--accent-blue);top:30%;right:10%"></div>
+      <div class="f-mock-icon">📡</div>
+      <div class="f-mock-bars">
+        <div class="f-mock-bar" style="height:50px;background:var(--accent-blue);animation-delay:0.1s"></div>
+        <div class="f-mock-bar" style="height:38px;background:var(--accent-purple);animation-delay:0.3s"></div>
+        <div class="f-mock-bar" style="height:58px;background:var(--accent-blue);animation-delay:0.5s"></div>
+        <div class="f-mock-bar" style="height:42px;background:var(--accent-blue);animation-delay:0.7s"></div>
+        <div class="f-mock-bar" style="height:55px;background:var(--accent-purple);animation-delay:0.9s"></div>
+      </div>
+      <div class="f-mock-grid">
+        <div class="f-mock-cell" style="background:var(--accent-blue-dim)"></div>
+        <div class="f-mock-cell" style="background:var(--accent-purple-dim)"></div>
+        <div class="f-mock-cell" style="background:var(--accent-blue-dim)"></div>
+      </div>
+    </div>
+  </div>
+  <div class="f-content">
+    <span class="f-tag" style="color:var(--accent-blue);background:var(--accent-blue-dim)">AI-Powered</span>
+    <h2>AI Signals</h2>
+    <p>Real-time trading signals generated from whale clustering, price momentum, and cross-platform arbitrage. Each signal includes conviction score, edge estimate, and suggested position size.</p>
+    <div class="f-insight">
+      <span class="f-insight-icon">💡</span>
+      <span><strong>Key insight:</strong> Signals that combine whale + momentum + arbitrage data outperform single-factor signals by 3x.</span>
+    </div>
+    <a href="/signals" class="f-cta-btn primary">Explore signals →</a>
+  </div>
+</section>
+
+<!-- 3. CRYSTAL BALL -->
+<section class="f-section" id="crystal-ball">
+  <div class="f-mock">
+    <div class="f-mock-inner">
+      <div class="f-mock-glow" style="background:var(--accent-purple);top:20%;left:30%"></div>
+      <div class="f-mock-icon">🔮</div>
+      <div style="font-family:var(--mono);font-size:32px;font-weight:700;color:var(--accent-purple)">87%</div>
+      <div style="font-size:11px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:1px">Confidence Score</div>
+      <div class="f-mock-grid">
+        <div class="f-mock-cell" style="background:var(--accent-purple-dim)"></div>
+        <div class="f-mock-cell" style="background:var(--accent-purple-dim)"></div>
+        <div class="f-mock-cell" style="background:var(--accent-green-dim)"></div>
+      </div>
+    </div>
+  </div>
+  <div class="f-content">
+    <span class="f-tag" style="color:var(--accent-purple);background:var(--accent-purple-dim)">Predictions</span>
+    <h2>Crystal Ball</h2>
+    <p>AI-powered market predictions with confidence scores and a verifiable track record. See what the model thinks will happen, how confident it is, and how it has performed historically.</p>
+    <div class="f-insight">
+      <span class="f-insight-icon">💡</span>
+      <span><strong>Key insight:</strong> Markets where AI confidence diverges from market price by 15%+ are the highest-edge opportunities.</span>
+    </div>
+    <a href="/crystal-ball" class="f-cta-btn primary">See predictions →</a>
+  </div>
+</section>
+
+<!-- 4. MARKET SCREENER -->
+<section class="f-section reversed" id="screener">
+  <div class="f-mock">
+    <div class="f-mock-inner">
+      <div class="f-mock-glow" style="background:var(--accent-amber);top:40%;left:20%"></div>
+      <div class="f-mock-icon">🔎</div>
+      <div class="f-mock-bars">
+        <div class="f-mock-bar" style="height:60px;background:var(--accent-amber);animation-delay:0s"></div>
+        <div class="f-mock-bar" style="height:45px;background:var(--accent-amber);animation-delay:0.15s"></div>
+        <div class="f-mock-bar" style="height:50px;background:var(--accent-green);animation-delay:0.3s"></div>
+        <div class="f-mock-bar" style="height:35px;background:var(--accent-amber);animation-delay:0.45s"></div>
+        <div class="f-mock-bar" style="height:55px;background:var(--accent-green);animation-delay:0.6s"></div>
+        <div class="f-mock-bar" style="height:40px;background:var(--accent-amber);animation-delay:0.75s"></div>
+      </div>
+      <div class="f-mock-grid">
+        <div class="f-mock-cell" style="background:var(--accent-amber-dim)"></div>
+        <div class="f-mock-cell" style="background:var(--accent-green-dim)"></div>
+        <div class="f-mock-cell" style="background:var(--accent-amber-dim)"></div>
+      </div>
+    </div>
+  </div>
+  <div class="f-content">
+    <span class="f-tag" style="color:var(--accent-amber);background:var(--accent-amber-dim)">Discovery</span>
+    <h2>Market Screener</h2>
+    <p>Screen every active Polymarket market by edge score, volume, whale interest, and divergence. Filter, sort, and find the best opportunities across thousands of markets in seconds.</p>
+    <div class="f-insight">
+      <span class="f-insight-icon">💡</span>
+      <span><strong>Key insight:</strong> The screener surfaces markets where crowd pricing and smart money diverge — that gap is your alpha.</span>
+    </div>
+    <a href="/screener" class="f-cta-btn primary">Open screener →</a>
+  </div>
+</section>
+
+<!-- 5. ARBITRAGE SCANNER -->
+<section class="f-section" id="arbitrage">
+  <div class="f-mock">
+    <div class="f-mock-inner">
+      <div class="f-mock-glow" style="background:var(--accent-green);top:10%;right:20%"></div>
+      <div class="f-mock-icon">⚡</div>
+      <div style="display:flex;gap:16px;align-items:center">
+        <div style="text-align:center">
+          <div style="font-family:var(--mono);font-size:22px;font-weight:700;color:var(--accent-green)">62¢</div>
+          <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:1px">Polymarket</div>
+        </div>
+        <div style="font-size:20px;color:var(--dim)">→</div>
+        <div style="text-align:center">
+          <div style="font-family:var(--mono);font-size:22px;font-weight:700;color:var(--accent-amber)">71¢</div>
+          <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:1px">Kalshi</div>
+        </div>
+        <div style="text-align:center;margin-left:12px;padding:6px 10px;background:var(--accent-green-dim);border-radius:8px">
+          <div style="font-family:var(--mono);font-size:16px;font-weight:700;color:var(--accent-green)">+9¢</div>
+          <div style="font-size:8px;color:var(--accent-green);text-transform:uppercase">Edge</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="f-content">
+    <span class="f-tag" style="color:var(--accent-green);background:var(--accent-green-dim)">Alpha</span>
+    <h2>Arbitrage Scanner</h2>
+    <p>Cross-platform price discrepancies between Polymarket and Kalshi, updated in real time. Buy low on one platform, sell high on the other. Pure, risk-free edge.</p>
+    <div class="f-insight">
+      <span class="f-insight-icon">💡</span>
+      <span><strong>Key insight:</strong> Cross-platform arb windows typically last 15-45 minutes. Speed matters — the scanner alerts you instantly.</span>
+    </div>
+    <span class="f-account-note">✦ Free with account</span>
+    <a href="/creator/signup" class="f-cta-btn primary">Create free account →</a>
+  </div>
+</section>
+
+<!-- 6. CATALYST CALENDAR -->
+<section class="f-section reversed" id="catalyst">
+  <div class="f-mock">
+    <div class="f-mock-inner">
+      <div class="f-mock-glow" style="background:var(--accent-blue);top:30%;left:15%"></div>
+      <div class="f-mock-icon">📅</div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;width:100%;padding:0 8px">
+        <div style="height:28px;border-radius:6px;background:var(--border);opacity:0.3"></div>
+        <div style="height:28px;border-radius:6px;background:var(--border);opacity:0.3"></div>
+        <div style="height:28px;border-radius:6px;background:var(--accent-red-dim);border:1px solid rgba(255,77,106,0.3)"></div>
+        <div style="height:28px;border-radius:6px;background:var(--border);opacity:0.3"></div>
+        <div style="height:28px;border-radius:6px;background:var(--accent-blue-dim);border:1px solid rgba(77,159,255,0.3)"></div>
+        <div style="height:28px;border-radius:6px;background:var(--border);opacity:0.3"></div>
+        <div style="height:28px;border-radius:6px;background:var(--accent-amber-dim);border:1px solid rgba(245,158,11,0.3)"></div>
+        <div style="height:28px;border-radius:6px;background:var(--border);opacity:0.3"></div>
+        <div style="height:28px;border-radius:6px;background:var(--accent-green-dim);border:1px solid rgba(0,230,138,0.3)"></div>
+        <div style="height:28px;border-radius:6px;background:var(--border);opacity:0.3"></div>
+        <div style="height:28px;border-radius:6px;background:var(--border);opacity:0.3"></div>
+        <div style="height:28px;border-radius:6px;background:var(--accent-purple-dim);border:1px solid rgba(168,85,247,0.3)"></div>
+        <div style="height:28px;border-radius:6px;background:var(--border);opacity:0.3"></div>
+        <div style="height:28px;border-radius:6px;background:var(--accent-red-dim);border:1px solid rgba(255,77,106,0.3)"></div>
+      </div>
+    </div>
+  </div>
+  <div class="f-content">
+    <span class="f-tag" style="color:var(--accent-blue);background:var(--accent-blue-dim)">Planning</span>
+    <h2>Catalyst Calendar</h2>
+    <p>Visual calendar of every market-moving event: earnings, elections, court rulings, Fed meetings, and market expirations. Know what is coming before it moves the price.</p>
+    <div class="f-insight">
+      <span class="f-insight-icon">💡</span>
+      <span><strong>Key insight:</strong> 80% of major market moves happen within 24 hours of a catalyst event. The calendar shows you exactly when.</span>
+    </div>
+    <span class="f-account-note">✦ Free with account</span>
+    <a href="/creator/signup" class="f-cta-btn primary">Create free account →</a>
+  </div>
+</section>
+
+<!-- 7. QUICK TRADE -->
+<section class="f-section" id="quick-trade">
+  <div class="f-mock">
+    <div class="f-mock-inner">
+      <div class="f-mock-glow" style="background:var(--gold);top:25%;left:25%"></div>
+      <div class="f-mock-icon">🚀</div>
+      <div style="display:flex;gap:12px;align-items:center">
+        <div style="padding:10px 20px;border-radius:10px;background:var(--accent-green-dim);border:1px solid rgba(0,230,138,0.3);font-family:var(--mono);font-size:16px;font-weight:700;color:var(--accent-green)">BUY YES 63¢</div>
+        <div style="padding:10px 20px;border-radius:10px;background:var(--accent-red-dim);border:1px solid rgba(255,77,106,0.3);font-family:var(--mono);font-size:16px;font-weight:700;color:var(--accent-red)">BUY NO 37¢</div>
+      </div>
+      <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin-top:4px">via Polymarket CLOB</div>
+    </div>
+  </div>
+  <div class="f-content">
+    <span class="f-tag" style="color:var(--gold);background:rgba(201,146,13,0.12)">Execution</span>
+    <h2>Quick Trade</h2>
+    <p>Place trades directly through HYPERFLEX via Polymarket's CLOB API. See a signal, click trade, done. No switching between tabs or copying addresses.</p>
+    <div class="f-insight">
+      <span class="f-insight-icon">💡</span>
+      <span><strong>Key insight:</strong> Reducing trade execution from 30 seconds to 2 seconds means you capture the price you saw, not the price after slippage.</span>
+    </div>
+    <span class="f-account-note">✦ Free with account</span>
+    <a href="/creator/signup" class="f-cta-btn primary">Create free account →</a>
+  </div>
+</section>
+
+<!-- 8. PYTH EDGE -->
+<section class="f-section reversed" id="pyth-edge">
+  <div class="f-mock">
+    <div class="f-mock-inner">
+      <div class="f-mock-glow" style="background:var(--accent-purple);top:15%;right:15%"></div>
+      <div class="f-mock-icon">🔗</div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+        <div style="font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1px">BTC/USD Oracle</div>
+        <div style="font-family:var(--mono);font-size:28px;font-weight:700;color:var(--accent-purple)">$67,241</div>
+        <div style="font-family:var(--mono);font-size:12px;color:var(--accent-green)">+2.4%</div>
+      </div>
+      <div class="f-mock-grid">
+        <div class="f-mock-cell" style="background:var(--accent-purple-dim)"></div>
+        <div class="f-mock-cell" style="background:var(--accent-purple-dim)"></div>
+        <div class="f-mock-cell" style="background:var(--accent-green-dim)"></div>
+      </div>
+    </div>
+  </div>
+  <div class="f-content">
+    <span class="f-tag" style="color:var(--accent-purple);background:var(--accent-purple-dim)">DeFi</span>
+    <h2>Pyth Edge</h2>
+    <p>Real-time price oracle data from Pyth Network for DeFi-correlated markets. When BTC moves, prediction markets on crypto regulation, ETF approvals, and exchange events follow.</p>
+    <div class="f-insight">
+      <span class="f-insight-icon">💡</span>
+      <span><strong>Key insight:</strong> Oracle prices lead prediction market repricing by 5-15 minutes on DeFi-correlated events.</span>
+    </div>
+    <span class="f-account-note">✦ Free with account</span>
+    <a href="/creator/signup" class="f-cta-btn primary">Create free account →</a>
+  </div>
+</section>
+
+<!-- 9. DAILY AI BRIEF -->
+<section class="f-section" id="daily-brief">
+  <div class="f-mock">
+    <div class="f-mock-inner">
+      <div class="f-mock-glow" style="background:var(--accent-amber);top:20%;left:20%"></div>
+      <div class="f-mock-icon">📰</div>
+      <div style="display:flex;flex-direction:column;gap:6px;width:100%;padding:0 12px">
+        <div style="height:10px;width:80%;border-radius:4px;background:var(--border2)"></div>
+        <div style="height:10px;width:65%;border-radius:4px;background:var(--border)"></div>
+        <div style="height:10px;width:90%;border-radius:4px;background:var(--border2)"></div>
+        <div style="height:1px;background:var(--border);margin:4px 0"></div>
+        <div style="height:10px;width:70%;border-radius:4px;background:var(--accent-amber-dim)"></div>
+        <div style="height:10px;width:55%;border-radius:4px;background:var(--accent-green-dim)"></div>
+      </div>
+    </div>
+  </div>
+  <div class="f-content">
+    <span class="f-tag" style="color:var(--accent-amber);background:var(--accent-amber-dim)">Daily</span>
+    <h2>Daily AI Brief</h2>
+    <p>AI-generated morning briefing with overnight whale moves, top signals, and today's best edge opportunities. Everything you need to know in 60 seconds, delivered before markets heat up.</p>
+    <div class="f-insight">
+      <span class="f-insight-icon">💡</span>
+      <span><strong>Key insight:</strong> Traders who check the brief before 9am consistently enter positions 2-3 hours ahead of the crowd.</span>
+    </div>
+    <a href="/brief" class="f-cta-btn primary">Read today's brief →</a>
+  </div>
+</section>
+
+<!-- 10. PORTFOLIO TRACKER -->
+<section class="f-section reversed" id="portfolio">
+  <div class="f-mock">
+    <div class="f-mock-inner">
+      <div class="f-mock-glow" style="background:var(--accent-green);top:35%;left:25%"></div>
+      <div class="f-mock-icon">📊</div>
+      <div style="display:flex;gap:12px;justify-content:center">
+        <div style="text-align:center;padding:8px 14px;background:var(--accent-green-dim);border-radius:8px">
+          <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:1px">P&L</div>
+          <div style="font-family:var(--mono);font-size:18px;font-weight:700;color:var(--accent-green)">+$4,280</div>
+        </div>
+        <div style="text-align:center;padding:8px 14px;background:var(--accent-blue-dim);border-radius:8px">
+          <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:1px">Win Rate</div>
+          <div style="font-family:var(--mono);font-size:18px;font-weight:700;color:var(--accent-blue)">68%</div>
+        </div>
+        <div style="text-align:center;padding:8px 14px;background:var(--accent-purple-dim);border-radius:8px">
+          <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:1px">Sharp</div>
+          <div style="font-family:var(--mono);font-size:18px;font-weight:700;color:var(--accent-purple)">91</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="f-content">
+    <span class="f-tag" style="color:var(--accent-green);background:var(--accent-green-dim)">Portfolio</span>
+    <h2>Portfolio Tracker</h2>
+    <p>Track positions across Polymarket, Kalshi, and Manifold in one unified dashboard. See total P&L, win rate, calibration score, and Sharp Score across every platform.</p>
+    <div class="f-insight">
+      <span class="f-insight-icon">💡</span>
+      <span><strong>Key insight:</strong> Traders who track P&L across platforms improve their win rate by 12% within the first month.</span>
+    </div>
+    <span class="f-account-note">✦ Free with account</span>
+    <a href="/creator/signup" class="f-cta-btn primary">Create free account →</a>
+  </div>
+</section>
+
+<!-- 11. PREDICTOR LEADERBOARD -->
+<section class="f-section" id="leaderboard">
+  <div class="f-mock">
+    <div class="f-mock-inner">
+      <div class="f-mock-glow" style="background:var(--gold);top:15%;left:30%"></div>
+      <div class="f-mock-icon">🏆</div>
+      <div style="display:flex;flex-direction:column;gap:6px;width:100%;padding:0 12px">
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(201,146,13,0.08);border:1px solid rgba(201,146,13,0.15);border-radius:8px">
+          <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--gold)">#1</span>
+          <span style="font-size:12px;color:var(--text);flex:1">WhaleTrader.eth</span>
+          <span style="font-family:var(--mono);font-size:12px;color:var(--accent-green)">+$84K</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--card2);border-radius:8px">
+          <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--soft)">#2</span>
+          <span style="font-size:12px;color:var(--text);flex:1">CryptoSage</span>
+          <span style="font-family:var(--mono);font-size:12px;color:var(--accent-green)">+$61K</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--card2);border-radius:8px">
+          <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--soft)">#3</span>
+          <span style="font-size:12px;color:var(--text);flex:1">AlphaHunter</span>
+          <span style="font-family:var(--mono);font-size:12px;color:var(--accent-green)">+$47K</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="f-content">
+    <span class="f-tag" style="color:var(--gold);background:rgba(201,146,13,0.12)">Social</span>
+    <h2>Predictor Leaderboard</h2>
+    <p>Top 50 traders ranked by PnL, with Sharp Scores measuring prediction accuracy and calibration. Follow the best predictors and see their moves in your feed.</p>
+    <div class="f-insight">
+      <span class="f-insight-icon">💡</span>
+      <span><strong>Key insight:</strong> Following top-5 predictors and mirroring their highest-conviction calls is the easiest edge in prediction markets.</span>
+    </div>
+    <a href="/predictors" class="f-cta-btn primary">View leaderboard →</a>
+  </div>
+</section>
+
+<!-- 12. ECOSYSTEM DASHBOARD -->
+<section class="f-section reversed" id="ecosystem">
+  <div class="f-mock">
+    <div class="f-mock-inner">
+      <div class="f-mock-glow" style="background:var(--accent-blue);top:25%;right:20%"></div>
+      <div class="f-mock-icon">🌐</div>
+      <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap">
+        <div style="text-align:center">
+          <div style="font-family:var(--mono);font-size:20px;font-weight:700;color:var(--accent-blue)">$2.1B</div>
+          <div style="font-size:9px;color:var(--dim);text-transform:uppercase">TVL</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-family:var(--mono);font-size:20px;font-weight:700;color:var(--accent-green)">142K</div>
+          <div style="font-size:9px;color:var(--dim);text-transform:uppercase">Traders</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-family:var(--mono);font-size:20px;font-weight:700;color:var(--accent-purple)">3,400+</div>
+          <div style="font-size:9px;color:var(--dim);text-transform:uppercase">Markets</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="f-content">
+    <span class="f-tag" style="color:var(--accent-blue);background:var(--accent-blue-dim)">Data</span>
+    <h2>Ecosystem Dashboard</h2>
+    <p>Real-time Polymarket stats: volume, TVL, active traders, and trending markets. Understand the macro picture of the prediction market ecosystem at a glance.</p>
+    <div class="f-insight">
+      <span class="f-insight-icon">💡</span>
+      <span><strong>Key insight:</strong> Rising TVL + falling volume signals smart money accumulating. The ecosystem dashboard shows you when whales are loading up quietly.</span>
+    </div>
+    <a href="/ecosystem" class="f-cta-btn primary">View ecosystem →</a>
+  </div>
+</section>
+
+<!-- 13. 99% BETS -->
+<section class="f-section" id="high-prob">
+  <div class="f-mock">
+    <div class="f-mock-inner">
+      <div class="f-mock-glow" style="background:var(--accent-green);top:20%;left:15%"></div>
+      <div class="f-mock-icon">🎯</div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+        <div style="font-family:var(--mono);font-size:36px;font-weight:800;color:var(--accent-green)">97¢</div>
+        <div style="font-size:11px;color:var(--dim)">Pay 97¢ → Win $1.00</div>
+        <div style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--accent-green)">+3.1% return</div>
+      </div>
+    </div>
+  </div>
+  <div class="f-content">
+    <span class="f-tag" style="color:var(--accent-green);background:var(--accent-green-dim)">Low Risk</span>
+    <h2>99% Bets</h2>
+    <p>Markets trading above 95% where you pay pennies to win dollars. Low risk, consistent returns. The prediction market equivalent of picking up free money on the sidewalk.</p>
+    <div class="f-insight">
+      <span class="f-insight-icon">💡</span>
+      <span><strong>Key insight:</strong> A portfolio of 95%+ markets returning 3-5% per resolution compounds to 30%+ APY with near-zero risk.</span>
+    </div>
+    <a href="/high-prob" class="f-cta-btn primary">Find 99% bets →</a>
+  </div>
+</section>
+
+<!-- 14. CROSS-PLATFORM ODDS -->
+<section class="f-section reversed" id="odds">
+  <div class="f-mock">
+    <div class="f-mock-inner">
+      <div class="f-mock-glow" style="background:var(--accent-amber);top:30%;left:20%"></div>
+      <div class="f-mock-icon">📐</div>
+      <div style="display:flex;flex-direction:column;gap:6px;width:100%;padding:0 12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:var(--card2);border-radius:6px">
+          <span style="font-size:11px;color:var(--soft)">Polymarket</span>
+          <span style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--accent-blue)">63%</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:var(--card2);border-radius:6px">
+          <span style="font-size:11px;color:var(--soft)">Kalshi</span>
+          <span style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--accent-purple)">58%</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:var(--card2);border-radius:6px">
+          <span style="font-size:11px;color:var(--soft)">Sportsbook</span>
+          <span style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--accent-amber)">-150</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="f-content">
+    <span class="f-tag" style="color:var(--accent-amber);background:var(--accent-amber-dim)">Comparison</span>
+    <h2>Cross-Platform Odds</h2>
+    <p>Compare odds across Polymarket, Kalshi, and sportsbooks side by side. Instantly spot which platform has the best price for any given market and where the smart money disagrees.</p>
+    <div class="f-insight">
+      <span class="f-insight-icon">💡</span>
+      <span><strong>Key insight:</strong> When Polymarket and Kalshi disagree by 5%+, one of them is wrong. That mismatch is pure edge.</span>
+    </div>
+    <a href="/odds" class="f-cta-btn primary">Compare odds →</a>
+  </div>
+</section>
+
+<!-- 15. USDC REWARDS -->
+<section class="f-section" id="rewards">
+  <div class="f-mock">
+    <div class="f-mock-inner">
+      <div class="f-mock-glow" style="background:var(--accent-blue);top:25%;left:30%"></div>
+      <div class="f-mock-icon">💎</div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+        <div style="font-family:var(--mono);font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:1px">Rewards Earned</div>
+        <div style="font-family:var(--mono);font-size:32px;font-weight:700;color:var(--accent-blue)">$127.40</div>
+        <div style="font-size:11px;color:var(--accent-green)">USDC — withdrawable anytime</div>
+      </div>
+    </div>
+  </div>
+  <div class="f-content">
+    <span class="f-tag" style="color:var(--accent-blue);background:var(--accent-blue-dim)">Rewards</span>
+    <h2>USDC Rewards</h2>
+    <p>Earn USDC on every trade made through HYPERFLEX. Trade prediction markets the same way you already do — we just pay you back a percentage in real stablecoins for doing it here.</p>
+    <div class="f-insight">
+      <span class="f-insight-icon">💡</span>
+      <span><strong>Key insight:</strong> Rewards stack on top of your trading profits. Even on losing trades, you earn USDC back.</span>
+    </div>
+    <a href="/rewards" class="f-cta-btn primary">See reward tiers →</a>
+  </div>
+</section>
+
+</div>
+
+<div class="f-divider"></div>
+
+<!-- BOTTOM CTA -->
+<section class="f-bottom">
+  <h2>All of this. <span>Completely free.</span></h2>
+  <p>No credit card. No trial period. No catch. HYPERFLEX is free during Early Access — every tool, every signal, every feature.</p>
+  <div class="f-bottom-btns">
+    <a href="/creator/signup" class="f-cta-btn primary" style="font-size:16px;padding:16px 32px">Get started free →</a>
+    <a href="/signals" class="f-cta-btn glass" style="font-size:16px;padding:16px 32px">Explore signals</a>
+  </div>
+  <div class="f-bottom-trust">
+    <span>✦ Free forever during Early Access</span>
+    <span>✦ No credit card needed</span>
+    <span>✦ 15+ professional tools</span>
+  </div>
+</section>
+
+<script src="/nav.js"></script>
+</body>
+</html>
