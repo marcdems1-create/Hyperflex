@@ -20145,6 +20145,8 @@ async function _buildAlphaListInner(opts = {}) {
         end_date: (m.endDate || m.end_date_iso) ? new Date(m.endDate || m.end_date_iso).toISOString() : null,
         url: marketUrl,
         slug: eventSlug,
+        neg_risk: m.neg_risk === true || m.negRisk === true,
+        group_item: m.groupItemTitle || '',
         edge_score: edgeScore,
         edge_components: {
           whale: Math.round(edgeWhale),
@@ -20154,7 +20156,8 @@ async function _buildAlphaListInner(opts = {}) {
           mega: Math.round(edgeMega),
           expiry: Math.round(edgeExpiry),
           divergence: Math.round(edgeDivergence),
-          decay: Math.round(edgeDecay)
+          decay: Math.round(edgeDecay),
+          arb: 0 // populated by post-loop arb pass if applicable
         },
         alpha_score: 0, // populated after whale index is ready
         model_probability: modelProb != null ? parseFloat(modelProb.toFixed(3)) : null,
@@ -20283,6 +20286,68 @@ async function _buildAlphaListInner(opts = {}) {
       }
       console.log('[screener] Pulled CLOB depth for', withDepth, 'liquid markets');
     } catch (e) { console.warn('[screener] CLOB depth fetch failed:', e.message); }
+
+    // ── INTERNAL POLYMARKET ARBITRAGE — detect mispriced neg-risk events ──
+    // Groups markets by event slug. For events with 2+ neg_risk markets (which
+    // are mutually exclusive by definition), the YES prices should sum to ~1.0.
+    // When the sum drifts ≥3¢ from 1.0, that's risk-free arb within Polymarket.
+    try {
+      const eventGroups = {}; // eventSlug -> [marketObj, ...]
+      for (const m of markets) {
+        if (!m.slug || !m.neg_risk || m.yes_price == null) continue;
+        if (!eventGroups[m.slug]) eventGroups[m.slug] = [];
+        eventGroups[m.slug].push(m);
+      }
+      let arbCount = 0;
+      for (const [eventSlug, group] of Object.entries(eventGroups)) {
+        if (group.length < 2) continue;
+        const sum = group.reduce((s, m) => s + (m.yes_price || 0), 0);
+        const imbalance = Math.abs(1 - sum); // 0.04 = 4¢ off
+        if (imbalance < 0.03) continue;
+
+        // Arb side: if sum > 1, the basket is OVERPRICED — sell YES (or BUY NO)
+        // on the most overvalued option. If sum < 1, basket UNDERPRICED — BUY YES
+        // on the cheapest option (deepest discount to fair value).
+        const overPriced = sum > 1.0;
+        // Find the outlier within the group
+        const sorted = [...group].sort((a, b) => (b.yes_price || 0) - (a.yes_price || 0));
+        const outlier = overPriced ? sorted[0] : sorted[sorted.length - 1];
+        const arbPts = Math.round(imbalance * 100); // cents off
+
+        for (const m of group) {
+          // Edge bonus scales with how mispriced the basket is, capped at 18
+          const edgeArb = Math.min(18, Math.max(3, arbPts));
+          m.edge_score = Math.min(99, m.edge_score + edgeArb);
+          if (m.edge_components) m.edge_components.arb = edgeArb;
+          m.arb_event_size = group.length;
+          m.arb_event_sum = parseFloat(sum.toFixed(3));
+          m.arb_pts = arbPts;
+          m.arb_is_outlier = (m === outlier);
+          // Update trade_thesis: arb is now the strongest signal for the outlier
+          if (m.trade_thesis && m === outlier) {
+            const ec = m.edge_components || {};
+            const cur = ec[m.trade_thesis.primary_signal] || 0;
+            if (edgeArb > cur) {
+              if (!m.trade_thesis.supporting_signals.includes(m.trade_thesis.primary_signal)) {
+                m.trade_thesis.supporting_signals.unshift(m.trade_thesis.primary_signal);
+              }
+              m.trade_thesis.primary_signal = 'arb';
+            } else if (!m.trade_thesis.supporting_signals.includes('arb')) {
+              m.trade_thesis.supporting_signals.push('arb');
+            }
+            // Arb urgency is always high — risk-free edges close fast
+            m.trade_thesis.urgency = 'high';
+            // Side flips based on arb direction for the outlier
+            if (overPriced) m.trade_thesis.side = 'NO';
+            else m.trade_thesis.side = 'YES';
+          } else if (m.trade_thesis && !m.trade_thesis.supporting_signals.includes('arb')) {
+            m.trade_thesis.supporting_signals.push('arb');
+          }
+        }
+        arbCount++;
+      }
+      if (arbCount > 0) console.log('[screener] Detected', arbCount, 'internal arb events');
+    } catch (e) { console.warn('[screener] internal arb pass failed:', e.message); }
 
     // ── FRESHNESS STAMPS — track when each market first crossed the edge threshold ──
     try {
