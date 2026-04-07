@@ -7,20 +7,22 @@
 
 ## What This Project Is
 
-**HYPERFLEX** is the universal prediction market dashboard. One place to aggregate and track positions across Polymarket, Kalshi, and Manifold — share your best calls, compete on leaderboards, and prove your forecasting edge.
+**HYPERFLEX** is the **Bloomberg terminal for Polymarket traders** — alpha you can act on in the next 5 minutes. Live edges (whale clusters, orderbook depth, momentum, time-decay mispricings, freshness stamps) routed through our builder so every trade earns the fee.
 
-**Primary hook:** Cross-platform portfolio tracker for serious prediction market players. Connect your Polymarket wallet, Kalshi API key, or Manifold username and see all positions, P&L, win rate, and calibration score in a single dashboard.
+**Primary hook:** The Alpha Terminal at `/alpha-live`. Live Polymarket edges ranked by **Edge Score** computed from 8 independent signals (whale + capital + volume + depth + momentum + decay + expiry + divergence). All cards link to internal `/market/:slug` so traders never leave the funnel. Powered by the unified `buildAlphaList()` engine in `server.js`.
 
-**Retention layer:** Creators can launch branded community prediction markets (play-money Flex Points, AI-powered market generation via YouTube scanner). Communities drive engagement, streaks, and social loops.
+**Landing page (`/`)** is now an intelligence briefing layout (NOT the old aggregator pitch):
+- Hero: "Prediction market intelligence" + Read AI brief / See market intel CTAs
+- Intelligence Briefing panels: RIGHT NOW · LAST HOUR (whale feed) · TODAY'S WATCHLIST
+- Live Stats Ticker
+- Live Data Cards: Top Crystal Ball / Fear & Greed / Expiring Markets
+- Email capture → Product sections → Pricing → Footer
 
-**Target user:** Active Polymarket/Kalshi/Manifold traders who want one place to track everything, flex their win rate, and discover sharp predictors to follow.
+**Target user:** Active Polymarket traders chasing edge. Whale-watchers, sharps, anyone who wants pre-trade alpha rather than post-trade vanity stats.
 
-**Business model:** Free during Early Access. Future tiers:
-- **Free** — HYPERFLEX community markets only, basic profile
-- **Pro ($29/mo)** — Polymarket + Manifold portfolio sync, cross-platform P&L, sharp score
-- **Premium ($99/mo)** — All three platforms + auto-sync + calibration score + priority features
+**Business model:** **100% FREE.** Pricing section literally reads "100% Free. No Limits." Every feature, every signal, every tool. The entire Pro/Premium tier UI is gone. Revenue = Polymarket builder fees on every trade routed through `/market/:slug`.
 
-**DB plan values:** `'free'`, `'pro'`, `'platinum'` — display as Free / Pro / Premium in UI. Do NOT change DB value for Premium.
+**DB plan values:** `'free'`, `'pro'`, `'platinum'` columns still exist on `creator_settings` for legacy data — DO NOT touch them, but they're no longer used to gate any feature.
 
 **Live:** https://hyperflex.network
 **Railway:** auto-deploys from `git push origin main`
@@ -32,7 +34,8 @@
 
 | File | What it is |
 |------|-----------|
-| `public/index.html` | Landing page — "All Your Predictions. One Place." hero + Quick Preview |
+| `public/index.html` | Landing page — "Prediction market intelligence" hero + Intelligence Briefing panels (RIGHT NOW / LAST HOUR / WATCHLIST) + Live Data Cards. Pricing section says "100% Free. No Limits." |
+| `public/alpha-live.html` | **Alpha Terminal at `/alpha-live`** — live edge cards from `/api/alpha/top`. Marc's redesign (`d48cbef`): glass cards, Inter/JetBrains Mono, Alpha Score badges, whale consensus, trade context strips, colored breakdown bars. Auto-refresh 90s. |
 | `public/predictors.html` | Discover Predictors — ranked leaderboard, grid/list view, sharp scores |
 | `public/explore.html` | Global discover/explore page — activity feed, Following tab, community browser |
 | `public/community.html` | Community prediction market page at `/:slug` |
@@ -51,6 +54,48 @@
 | `index.html` | ⚠️ OLD React trading app at project root — NOT served, ignore |
 | `HYPERFLEX_Brief.md` | Full detailed brief — read this for deep context |
 | `CLAUDE.md` | This file — auto-loaded session memory |
+
+---
+
+## Alpha Engine (the trader-facing core)
+
+`buildAlphaList()` in `server.js` is the **single source of truth** for enriched market data. Both `/api/screener` and `/api/alpha/top` read from it. `/api/signals` cross-references the same `_screenerCache`. Add new alpha surfaces by reading `buildAlphaList()` — never duplicate the enrichment loop.
+
+**Pipeline (per refresh, 90s TTL):**
+1. Fetch top 200 markets from Polymarket Gamma API
+2. Hard volume floor: skip anything <$10k 24h volume (kills weather/tennis/earthquake noise)
+3. Whale enrichment: match by **conditionId** first (preferred), fall back to question text
+4. Compute base `edge_score` from 7 components
+5. `upgradeToClobPrices()` — replace stale gamma prices with live CLOB midpoints (30s cache)
+6. `fetchClobDepth()` — pull `/book` for liquid markets (>$100k vol), compute bid/ask imbalance within 5¢ of TOB (60s cache)
+7. Re-score with `edgeDepth` component
+8. **Freshness stamps** — `_alphaFreshness` Map tracks first time each market crosses score 60
+
+**Edge Score components (max contribution per signal):**
+| Component | Max | Source |
+|---|---:|---|
+| Whales | 35 | Top-50 trader positions, conditionId-matched |
+| Volume | 30 | $10M=30, $5M=22, $1M=15, $500k=10, $100k=5 |
+| Depth | 20 | CLOB orderbook bid/ask imbalance (≥1.5x = 8, ≥3x = 20) |
+| Capital | 15 | Total whale capital ≥$1M=15, ≥$500k=10, ≥$100k=5 |
+| Momentum | 15 | 24h price change ×1.5 (only fires if vol >$50k) |
+| Decay | 12 | Discount-zone (15-40¢ or 60-85¢) ≤3d to expiry |
+| Divergence | 10 | Price far from 50% with 3+ whales |
+| Expiry | 8 | Standard time-to-resolution weight |
+
+**API response fields per market:**
+- `edge_score`, `edge_components` (object with all 8 weights), `model_probability`, `alpha_edge`
+- `whale_count`, `total_whale_capital`, `depth_ratio`, `depth_side` ('bid' | 'ask'), `depth_total`
+- `edge_first_seen_at`, `edge_age_minutes`, `is_new` (true if <60min), `edge_peak_score`
+- `trade` ({ side, entry_cost, potential_profit, roi_pct }), `ai_hook`
+- `slug` for internal `/market/:slug` linking
+
+**Endpoints:**
+- `GET /api/screener` — full enriched market list (filterable)
+- `GET /api/alpha/top?n=5` — top N by edge_score (for landing/preview surfaces)
+- `GET /api/signals` — alert-style cards (whale_cluster / momentum / new_entry / arbitrage / volume_surge)
+
+**⛔ Don't:** add a new alpha surface without reading from `buildAlphaList()`. Don't compute whale matching by question text — use `conditionId`. Don't fire `edgeMomentum`/`edgeExpiry` on markets under $50k vol (it's noise).
 
 ---
 
@@ -98,7 +143,7 @@
 ## Rules Claude Must Follow Every Session
 
 1. **Read this file at session start** before touching anything
-2. **Font/color system:** Syne (display) + Space Mono (mono), gold `#c9920d`, paper `#141412`
+2. **Font/color system:** **Inter** (display/sans) + **JetBrains Mono** (mono). Multi-accent palette: gold `#c9920d`, green `#00e68a`, red `#ff4d6a`, blue `#4d9fff`, purple `#a855f7`, amber `#f59e0b`. Paper `#0e0e15`, ink `#f0f0f5`, border `#1e1e2a`. The old Syne + Space Mono + single-gold-accent system is deprecated as of the alpha terminal redesign (commits `4188aa6` + `d48cbef`).
 3. **DB:** `creator_settings` is the main creator table (not `communities`)
 4. **Plan values in DB:** `'free'`, `'pro'`, `'platinum'` — display as Free / Pro / Premium in UI
 5. **Always check git status** before assuming what's deployed vs local
