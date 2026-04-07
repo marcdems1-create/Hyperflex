@@ -19850,7 +19850,19 @@ async function buildAlphaList(opts = {}) {
         : 0;
       const yesPct = yesPrice != null ? Math.round(yesPrice * 100) : 50;
       const edgeDivergence = (wCount >= 3 && yesPrice != null) ? Math.min(10, Math.abs(50 - yesPct) * 0.3) : 0;
-      const edgeScore = Math.min(99, Math.round(edgeWhale + edgeCapital + edgeMomentum + edgeVolume + edgeExpiry + edgeDivergence));
+      // Time-decay mispricing: late-stage markets in the "retail discount zone"
+      // (15-40¢ or 60-85¢) where retail holds losers too long, creating cheap entries.
+      let edgeDecay = 0;
+      if (liquid && daysUntilExpiry != null && daysUntilExpiry <= 3 && yesPrice != null) {
+        const inDiscountZone = (yesPct >= 15 && yesPct <= 40) || (yesPct >= 60 && yesPct <= 85);
+        if (inDiscountZone) {
+          if (daysUntilExpiry === 0) edgeDecay = 12;
+          else if (daysUntilExpiry === 1) edgeDecay = 9;
+          else if (daysUntilExpiry === 2) edgeDecay = 6;
+          else edgeDecay = 4;
+        }
+      }
+      const edgeScore = Math.min(99, Math.round(edgeWhale + edgeCapital + edgeMomentum + edgeVolume + edgeExpiry + edgeDivergence + edgeDecay));
 
       // ── Trade ROI ──
       let trade = null;
@@ -19945,7 +19957,8 @@ async function buildAlphaList(opts = {}) {
           momentum: Math.round(edgeMomentum),
           volume: Math.round(edgeVolume),
           expiry: Math.round(edgeExpiry),
-          divergence: Math.round(edgeDivergence)
+          divergence: Math.round(edgeDivergence),
+          decay: Math.round(edgeDecay)
         },
         alpha_score: 0, // populated after whale index is ready
         model_probability: modelProb != null ? parseFloat(modelProb.toFixed(3)) : null,
