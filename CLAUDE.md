@@ -15,12 +15,11 @@
 
 **Target user:** Active Polymarket/Kalshi/Manifold traders who want one place to track everything, flex their win rate, and discover sharp predictors to follow.
 
-**Business model:** Free during Early Access. Future tiers:
-- **Free** — HYPERFLEX community markets only, basic profile
-- **Pro ($29/mo)** — Polymarket + Manifold portfolio sync, cross-platform P&L, sharp score
-- **Premium ($99/mo)** — All three platforms + auto-sync + calibration score + priority features
+**Business model:** 100% free for users. Primary income = **Polymarket referral fees** via the Polymarket Builder Program. Every CLOB order routed through HYPERFLEX carries our `POLY_BUILDER_*` headers, earning fee attribution on trade volume. No tiers, no paywalls — the more traders we onboard and the more volume they push through our trade widget, the more we earn. All features (Polymarket, Kalshi, Manifold sync, auto-sync, calibration score, sharp score, community markets) are free for everyone.
 
-**DB plan values:** `'free'`, `'pro'`, `'platinum'` — display as Free / Pro / Premium in UI. Do NOT change DB value for Premium.
+**Revenue strategy:** Maximise Polymarket trade volume routed through our builder ID. Every UI decision should ask: "Does this drive more Polymarket trades through HYPERFLEX?" Kalshi/Manifold remain free aggregator value to attract serious traders into the funnel.
+
+**Legacy DB plan values:** `'free'`, `'pro'`, `'platinum'` columns still exist in `creator_settings` (from the old tier model) — leave them alone for now, but do NOT gate features on them. Stripe checkout code is dormant; do not wire new gates to it.
 
 **Live:** https://hyperflex.network
 **Railway:** auto-deploys from `git push origin main`
@@ -68,9 +67,8 @@
 
 ## Current State (last updated March 18, 2026 — session 13)
 
-- **Stripe payments live** — Pro ($29/mo) + Premium ($99/mo) checkout + billing portal
-  - Railway env vars needed: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRO_PRICE_ID`, `STRIPE_PLATINUM_PRICE_ID`
-  - Webhook endpoint registered at: `https://hyperflex.network/stripe/webhook`
+- **Monetization = Polymarket builder fees** (no user-facing pricing). All `POLY_BUILDER_*` env vars set on Railway; every CLOB order in `/market/:slug` trade widget carries builder headers for fee attribution.
+- **Stripe code dormant** — checkout/webhook routes still exist from the old tier model but are not linked from any active UI. Do not extend.
 - **Admin dashboard** at `/admin` — password-gated, creator table, inline plan control (`ADMIN_SECRET` env var)
 - **OAuth**: Google fully working. X/Twitter works (name + username only)
 - **Premium rebrand**: "Platinum" → "Premium" in all UI. DB value stays `'platinum'`
@@ -445,12 +443,13 @@ Matches official SDK order.
 - Progress bar tracking connections, cards turn green on success
 - Multi-connect before proceeding, CTA upgrades after first connect
 
-### 4. Monetization Gating (next up)
-- **Early Access → paid flip**: all platform connections currently free; need gate logic for when EA ends
-- **Kalshi = Premium only**: real-money platform, highest value — gate behind $99/mo tier
-- **Calibration score = Premium only**: advanced analytics feature, strong upgrade driver
-- **Portfolio sync frequency tiers**: Free = manual refresh, Pro = daily auto-sync, Premium = hourly auto-sync
-- Stripe checkout already wired — just need UI gates + middleware checks per feature
+### 4. Maximise Polymarket Builder Revenue (next up)
+- **Funnel traders into the trade widget**: every Polymarket market view should surface a 1-click Buy/Sell CTA — every trade earns builder fees
+- **Trade widget on every Polymarket position card**: portfolio tab, member profile, predictor leaderboard, Quick Preview result — anywhere a Polymarket market appears, embed a "Trade →" button that opens the widget
+- **Surface deep liquidity / hot Polymarket markets** on landing + explore (drives clicks → trades)
+- **Builder header audit**: confirm `POLY_BUILDER_*` headers fire on 100% of `/order` POSTs; add error logging if missing
+- **Volume dashboard**: internal-only `/admin` view of builder fee accrual, top trading users, top markets — to optimise the funnel
+- Kill remaining "Pro" / "Premium" labels in UI — everything is free now
 
 ### Known Issues
 - **Creator referral acceptance**: `accepted` on `creator_referrals` stays false — needs flip on first public market publish
