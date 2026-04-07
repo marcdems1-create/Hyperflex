@@ -831,7 +831,16 @@ footer {
         if(m.is_new)sigs.push('🆕 NEW');
         if((ec.momentum||0)>=8){var pc=m.price_change_24h||0;sigs.push((pc>0?'📈 +':'📉 ')+pc+'%')}
         var sigStr=sigs.length?sigs.join(' · '):'';
-        var url=m.slug?'/market/'+m.slug+(m.market_id?'?outcome='+encodeURIComponent(m.market_id):''):'/alpha-live';
+        // Alpha-prefill: side + Kelly-sized position → market.html auto-populates the trade widget
+        var url='/alpha-live';
+        if(m.slug){
+          var _pp=[];
+          if(m.market_id) _pp.push('outcome='+encodeURIComponent(m.market_id));
+          _pp.push('from=alpha');
+          if(t.side) _pp.push('side='+t.side.toLowerCase());
+          if(t.recommended_size_usd) _pp.push('size='+t.recommended_size_usd);
+          url='/market/'+m.slug+'?'+_pp.join('&');
+        }
         var rgn=regionFlag(m.question||'');
         return'<a href="'+url+'" style="display:block;text-decoration:none;color:inherit;padding:12px 14px;background:var(--paper);border:1px solid var(--border);border-radius:8px;transition:border-color .15s" onmouseover="this.style.borderColor=\'var(--gold)\'" onmouseout="this.style.borderColor=\'var(--border)\'">'+
           '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap">'+

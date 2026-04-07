@@ -321,7 +321,18 @@ function render(data){
       '<span class="roi">'+roi+'% ROI</span>'+
     '</div>';
 
-    return '<a class="edge-card '+rankClass+'" href="'+(m.slug?'/market/'+m.slug+(m.market_id?'?outcome='+encodeURIComponent(m.market_id):''):'/screener')+'">'+
+    // Build link with alpha-prefill params so market.html opens the trade widget
+    // already populated (side + Kelly-sized size)
+    var _href='/screener';
+    if(m.slug){
+      var _params=[];
+      if(m.market_id) _params.push('outcome='+encodeURIComponent(m.market_id));
+      _params.push('from=alpha');
+      if(t.side) _params.push('side='+t.side.toLowerCase());
+      if(t.recommended_size_usd) _params.push('size='+t.recommended_size_usd);
+      _href='/market/'+m.slug+'?'+_params.join('&');
+    }
+    return '<a class="edge-card '+rankClass+'" href="'+_href+'">'+
       '<div class="card-top">'+
         '<div class="edge-score-wrap">'+
           '<div class="edge-score">'+
