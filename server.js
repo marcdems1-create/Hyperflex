@@ -21602,6 +21602,229 @@ edge_direction = if ai_probability differs from market by 10+ pts, recommend BUY
   }
 });
 
+// ── AI PORTFOLIO — diversified, hedged portfolio built from screener data + Claude ──
+const _aiPortfolioCache = { data: null, ts: 0 };
+const AI_PORTFOLIO_TTL = 45 * 60 * 1000;
+
+app.get('/api/ai-portfolio', async (req, res) => {
+  try {
+    const force = req.query.force === '1';
+    if (!force && _aiPortfolioCache.data && Date.now() - _aiPortfolioCache.ts < AI_PORTFOLIO_TTL) {
+      return res.json(_aiPortfolioCache.data);
+    }
+
+    // Phase 1: Get screener data
+    let markets = [];
+    if (_screenerCache && _screenerCache.data) {
+      markets = (_screenerCache.data.markets || _screenerCache.data || []).slice();
+    }
+    if (!markets.length) {
+      return res.json({ summary: { total_positions: 0 }, buckets: [], hedge_pairs: [], warnings: ['No market data available'] });
+    }
+
+    // Filter: need edge + trade data + decent volume
+    const minEdge = markets.filter(m => (m.edge_score || 0) >= 40).length >= 10 ? 40 : 30;
+    let candidates = markets
+      .filter(m => (m.edge_score || 0) >= minEdge && m.trade && (m.volume || 0) >= 25000)
+      .sort((a, b) => (b.edge_score || 0) - (a.edge_score || 0))
+      .slice(0, 30);
+
+    if (!candidates.length) {
+      return res.json({ summary: { total_positions: 0 }, buckets: [], hedge_pairs: [], warnings: ['No markets meet portfolio criteria right now'] });
+    }
+
+    // Phase 2: Claude identifies correlated markets for hedging
+    let hedgePairsRaw = [];
+    let excludeIndices = [];
+    if (process.env.ANTHROPIC_API_KEY && candidates.length >= 4) {
+      try {
+        const mktList = candidates.map((m, i) =>
+          `${i + 1}. "${(m.question || '').substring(0, 80)}" [${m.category || 'other'}] — ${m.trade.side} at ${m.trade.entry_cost}¢, edge=${m.edge_score}, expires=${m.days_until_expiry != null ? m.days_until_expiry + 'd' : 'unknown'}`
+        ).join('\n');
+
+        const aiResp = await anthropic.messages.create({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 1500,
+          messages: [{
+            role: 'user',
+            content: `You manage a prediction market portfolio. Given these candidate positions, identify:
+1. Correlated markets that should be hedged (same underlying event, opposite outcomes, or strongly correlated results)
+2. Markets to exclude (too similar to another, or redundant exposure)
+
+Markets:
+${mktList}
+
+Respond in JSON ONLY:
+{"hedge_pairs":[[1,3,"Both depend on Iran conflict outcome"]],"exclude":[5,8],"reasoning":"Brief portfolio construction note"}
+
+hedge_pairs: array of [index_a, index_b, reason]. Only include genuine correlations.
+exclude: indices of redundant markets (keep the one with higher edge).`
+          }]
+        });
+
+        const aiText = aiResp.content[0].text.trim();
+        const jsonMatch = aiText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          hedgePairsRaw = parsed.hedge_pairs || [];
+          excludeIndices = (parsed.exclude || []).map(i => i - 1); // Convert 1-indexed to 0-indexed
+        }
+      } catch (aiErr) {
+        console.warn('[ai-portfolio] Claude hedge detection failed:', aiErr.message);
+      }
+    }
+
+    // Phase 3: Build portfolio with position sizing
+    // Remove excluded markets
+    const excludeSet = new Set(excludeIndices);
+    const portfolio = candidates.filter((_, i) => !excludeSet.has(i));
+
+    // Category constraints: max 35% allocation per category, max 5 positions
+    const catCounts = {};
+    const catAlloc = {};
+    const selected = [];
+
+    for (const m of portfolio) {
+      const cat = m.category || 'other';
+      catCounts[cat] = (catCounts[cat] || 0) + 1;
+      if (catCounts[cat] > 5) continue;
+
+      // Quarter-Kelly sizing
+      const edge = Math.abs(m.alpha_edge || 0) / 100;
+      const price = m.trade.entry_cost / 100;
+      const kellyRaw = price > 0 && price < 1 ? Math.max(0, edge / (1 - price)) : 0;
+      const kellySize = Math.min(0.15, kellyRaw * 0.25); // Quarter Kelly, max 15%
+
+      const position = {
+        market_id: m.market_id || null,
+        question: m.question,
+        slug: m.slug,
+        category: cat,
+        side: m.trade.side,
+        entry_cost: m.trade.entry_cost,
+        potential_profit: m.trade.potential_profit,
+        roi_pct: m.trade.roi_pct,
+        edge_score: m.edge_score || 0,
+        alpha_score: m.alpha_score || 0,
+        alpha_edge: m.alpha_edge || 0,
+        kelly_size_pct: Math.round(kellySize * 1000) / 10,
+        whale_count: m.whale_count || 0,
+        days_until_expiry: m.days_until_expiry,
+        yes_price: m.yes_price,
+        volume: m.volume,
+        hedge_pair_id: null,
+        hedge_label: null,
+        _origIdx: candidates.indexOf(m)
+      };
+      selected.push(position);
+    }
+
+    // Enforce category allocation cap (35%)
+    const totalPositions = selected.length || 1;
+    const catPositionCounts = {};
+    for (const p of selected) {
+      catPositionCounts[p.category] = (catPositionCounts[p.category] || 0) + 1;
+    }
+    // Re-normalize Kelly sizes so they sum to ~100%
+    const totalKelly = selected.reduce((s, p) => s + p.kelly_size_pct, 0) || 1;
+    for (const p of selected) {
+      p.kelly_size_pct = Math.round((p.kelly_size_pct / totalKelly) * 1000) / 10;
+    }
+
+    // Mark hedge pairs
+    let pairId = 1;
+    const hedgePairs = [];
+    for (const [a, b, reason] of hedgePairsRaw) {
+      const posA = selected.find(p => p._origIdx === a - 1);
+      const posB = selected.find(p => p._origIdx === b - 1);
+      if (posA && posB) {
+        posA.hedge_pair_id = pairId;
+        posA.hedge_label = 'Hedges: ' + (posB.question || '').substring(0, 50);
+        posB.hedge_pair_id = pairId;
+        posB.hedge_label = 'Hedges: ' + (posA.question || '').substring(0, 50);
+        hedgePairs.push({
+          pair_id: pairId,
+          market_a: { question: posA.question, slug: posA.slug, side: posA.side, entry_cost: posA.entry_cost },
+          market_b: { question: posB.question, slug: posB.slug, side: posB.side, entry_cost: posB.entry_cost },
+          correlation_reason: reason || 'Correlated outcomes'
+        });
+        pairId++;
+      }
+    }
+
+    // Clean up internal field
+    for (const p of selected) delete p._origIdx;
+
+    // Phase 4: Build buckets
+    const bucketMap = {};
+    for (const p of selected) {
+      if (!bucketMap[p.category]) bucketMap[p.category] = { category: p.category, positions: [], allocation_pct: 0, avg_edge_score: 0 };
+      bucketMap[p.category].positions.push(p);
+    }
+    const buckets = Object.values(bucketMap).map(b => {
+      b.allocation_pct = Math.round((b.positions.length / totalPositions) * 100);
+      b.avg_edge_score = Math.round(b.positions.reduce((s, p) => s + p.edge_score, 0) / b.positions.length);
+      b.position_count = b.positions.length;
+      return b;
+    }).sort((a, b) => b.allocation_pct - a.allocation_pct);
+
+    // Phase 5: Compute portfolio metrics
+    const catAllocPcts = buckets.map(b => b.allocation_pct / 100);
+    const hhi = catAllocPcts.reduce((s, p) => s + p * p, 0);
+    const diversificationScore = Math.round((1 - hhi) * 100) / 100;
+    const hedgedCount = selected.filter(p => p.hedge_pair_id).length;
+    const projectedRoi = selected.length > 0
+      ? Math.round(selected.reduce((s, p) => s + (p.roi_pct || 0) * (p.kelly_size_pct / 100), 0))
+      : 0;
+    const riskLevel = diversificationScore >= 0.7 && buckets.every(b => b.allocation_pct <= 35) ? 'LOW'
+      : diversificationScore >= 0.5 ? 'MEDIUM' : 'HIGH';
+
+    const warnings = [];
+    if (buckets.length < 3) warnings.push('Only ' + buckets.length + ' categories — diversification limited');
+    if (candidates.length < 10) warnings.push('Thin market pool — fewer candidates available');
+    if (!hedgePairs.length) warnings.push('No hedge pairs identified — consider manual hedging');
+
+    // Hypothetical $1000 bankroll projections
+    const bankroll = 1000;
+    const positionDetails = selected.map(p => ({
+      ...p,
+      bet_amount: Math.round(bankroll * p.kelly_size_pct / 100 * 100) / 100,
+      potential_win: Math.round(bankroll * p.kelly_size_pct / 100 * (p.roi_pct / 100) * 100) / 100
+    }));
+    // Replace positions in buckets with enriched versions
+    for (const b of buckets) {
+      b.positions = b.positions.map(p => positionDetails.find(pd => pd.question === p.question && pd.slug === p.slug) || p);
+    }
+
+    const result = {
+      generated_at: new Date().toISOString(),
+      ttl_minutes: 45,
+      bankroll,
+      summary: {
+        total_positions: selected.length,
+        projected_roi_pct: projectedRoi,
+        risk_level: riskLevel,
+        diversification_score: diversificationScore,
+        hedge_coverage_pct: selected.length > 0 ? Math.round((hedgedCount / selected.length) * 100) : 0,
+        total_categories: buckets.length,
+        total_projected_profit: Math.round(bankroll * projectedRoi / 100 * 100) / 100,
+        ai_model: process.env.ANTHROPIC_API_KEY ? 'claude-haiku-4-5-20251001' : 'algorithmic-only'
+      },
+      buckets,
+      hedge_pairs: hedgePairs,
+      warnings
+    };
+
+    _aiPortfolioCache.data = result;
+    _aiPortfolioCache.ts = Date.now();
+    console.log(`[ai-portfolio] Built portfolio: ${selected.length} positions, ${buckets.length} categories, ${hedgePairs.length} hedges, projected ROI ${projectedRoi}%`);
+    res.json(result);
+  } catch (err) {
+    console.error('[ai-portfolio]', err.message);
+    res.json(_aiPortfolioCache.data || { summary: { total_positions: 0 }, buckets: [], hedge_pairs: [], warnings: ['Portfolio generation failed'] });
+  }
+});
+
 // ── RISK MANAGEMENT ENGINE — Kelly sizing, exposure analysis, correlation ──
 
 // Kelly Criterion position sizer
