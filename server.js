@@ -20138,11 +20138,26 @@ async function _buildAlphaListInner(opts = {}) {
         }
       }
       // Urgency: high if decay firing or fresh edge, medium if score >= 50, else low
+      // Also attach a reason string + optional expires_in_seconds so the UI can
+      // render loss-aversion countdowns (e.g. "Closes in 14h" or "Act fast · 8m since detected").
       let _urgency = 'low';
-      if (edgeDecay > 0 || (daysUntilExpiry != null && daysUntilExpiry <= 1 && volume >= 50000)) {
+      let _urgencyReason = null;
+      let _expiresIn = null;
+      if (edgeDecay > 0) {
         _urgency = 'high';
+        _urgencyReason = daysUntilExpiry === 0 ? 'Expires today — discount zone' : 'Expires in ' + daysUntilExpiry + 'd · discount zone';
+      } else if (daysUntilExpiry != null && daysUntilExpiry <= 1 && volume >= 50000) {
+        _urgency = 'high';
+        _urgencyReason = 'Expires in ' + (daysUntilExpiry === 0 ? '<24h' : '1d');
       } else if (edgeScore >= 50) {
         _urgency = 'medium';
+        _urgencyReason = 'Edge score ' + edgeScore + ' · worth watching';
+      }
+      // Compute expires_in_seconds from end_date when present
+      if (m.endDate || m.end_date_iso) {
+        const endMs = new Date(m.endDate || m.end_date_iso).getTime();
+        const diffS = Math.max(0, Math.round((endMs - Date.now()) / 1000));
+        if (diffS > 0) _expiresIn = diffS;
       }
       const trade_thesis = {
         side: trade ? trade.side : (yesPrice != null && yesPrice <= 0.5 ? 'YES' : 'NO'),
@@ -20150,6 +20165,8 @@ async function _buildAlphaListInner(opts = {}) {
         supporting_signals: _supporting,
         smart_money_direction: _smartDir,
         urgency: _urgency,
+        urgency_reason: _urgencyReason,
+        expires_in_seconds: _expiresIn,
         whale_capital: wCapital,
         whale_count: wCount
       };
@@ -20265,6 +20282,7 @@ async function _buildAlphaListInner(opts = {}) {
             // Strong depth bumps urgency to high
             if (edgeDepth >= 14 && m.trade_thesis.urgency !== 'high') {
               m.trade_thesis.urgency = 'high';
+              m.trade_thesis.urgency_reason = 'Orderbook ' + m.depth_side + '-side ' + (m.depth_ratio >= 1 ? m.depth_ratio.toFixed(1) : (1/m.depth_ratio).toFixed(1)) + 'x · price hasn\'t caught up';
             }
           }
         } else if (m.edge_components) {
@@ -20324,6 +20342,7 @@ async function _buildAlphaListInner(opts = {}) {
             }
             // Arb urgency is always high — risk-free edges close fast
             m.trade_thesis.urgency = 'high';
+            m.trade_thesis.urgency_reason = 'Internal arb · ' + arbPts + '¢ mispricing across ' + group.length + ' options · closes fast';
             // Side flips based on arb direction for the outlier
             if (overPriced) m.trade_thesis.side = 'NO';
             else m.trade_thesis.side = 'YES';
@@ -20370,6 +20389,14 @@ async function _buildAlphaListInner(opts = {}) {
           m.edge_age_minutes = ageMin;
           m.is_new = ageMin <= FRESH_WINDOW_MINUTES;
           m.edge_peak_score = stamped.peak_score;
+          // Freshness is the loudest urgency signal — bump to high and stamp a reason.
+          // Only override if current urgency isn't already arb/decay high.
+          if (m.is_new && m.trade_thesis && m.trade_thesis.urgency !== 'high') {
+            m.trade_thesis.urgency = 'high';
+            m.trade_thesis.urgency_reason = 'Fresh edge · first detected ' + (ageMin < 1 ? '<1m' : ageMin + 'm') + ' ago';
+          } else if (m.is_new && m.trade_thesis && !m.trade_thesis.urgency_reason) {
+            m.trade_thesis.urgency_reason = 'Fresh edge · first detected ' + (ageMin < 1 ? '<1m' : ageMin + 'm') + ' ago';
+          }
         } else {
           m.edge_first_seen_at = null;
           m.edge_age_minutes = null;
