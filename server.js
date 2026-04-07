@@ -20205,43 +20205,6 @@ async function _buildAlphaListInner(opts = {}) {
       console.log('[screener] Upgraded', markets.filter(m => m.clobTokenIds).length, 'markets to live CLOB prices');
     } catch (e) { console.warn('[screener] CLOB price upgrade failed:', e.message); }
 
-    // ── DIAGNOSTIC: dump engine state once per refresh so we can see why scores are low ──
-    try {
-      const condIdMapSize = Object.keys(whaleByCondId).length;
-      const textMapSize = Object.keys(whaleByMarket).length;
-      const totalMarkets = markets.length;
-      const matchedByCondId = markets.filter(m => m.whale_count > 0 && m.market_id && whaleByCondId[m.market_id]).length;
-      const matchedByText = markets.filter(m => m.whale_count > 0).length - matchedByCondId;
-      const sample = (rawMarkets || [])[0] || {};
-      console.log('[alpha-debug] whale maps:', JSON.stringify({
-        cond_id_keys: condIdMapSize,
-        text_keys: textMapSize,
-        total_markets: totalMarkets,
-        matched_by_cond_id: matchedByCondId,
-        matched_by_text: matchedByText,
-        sample_volume_fields: {
-          volume: sample.volume,
-          volume24hr: sample.volume24hr,
-          volume_24hr: sample.volume_24hr,
-          volumeNum: sample.volumeNum,
-          conditionId_present: !!sample.conditionId
-        }
-      }));
-      // Top 3 by current edge_score with full breakdown
-      const top3 = [...markets].sort((a,b) => (b.edge_score||0) - (a.edge_score||0)).slice(0, 3);
-      for (const m of top3) {
-        console.log('[alpha-debug] top:', JSON.stringify({
-          q: (m.question||'').slice(0, 60),
-          score: m.edge_score,
-          components: m.edge_components,
-          vol: m.volume,
-          whales: m.whale_count,
-          cap: m.total_whale_capital,
-          cond_id: m.market_id ? m.market_id.slice(0, 12) : null
-        }));
-      }
-    } catch (e) { console.warn('[alpha-debug] failed:', e.message); }
-
     // ── PULL ORDERBOOK DEPTH for liquid markets, then re-score with edgeDepth ──
     try {
       await fetchClobDepth(markets, { minVolume: 100000 });
