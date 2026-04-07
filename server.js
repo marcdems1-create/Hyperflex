@@ -19471,6 +19471,8 @@ app.get('/api/whale-index', async (req, res) => {
 // In-memory CLOB midpoint cache — shared across all endpoints (30s TTL per token)
 const _clobMidpointCache = new Map(); // tokenId → { mid, ts }
 const CLOB_MIDPOINT_TTL = 30 * 1000; // 30 seconds
+const _clobDepthCache = new Map(); // tokenId → { ratio, side, total, ts }
+const CLOB_DEPTH_TTL = 60 * 1000; // 60 seconds — orderbook moves fast
 
 /**
  * Upgrade an array of market objects with live CLOB midpoint prices.
@@ -19547,6 +19549,86 @@ async function upgradeToClobPrices(markets, priceField = 'yes_price') {
   if (_clobMidpointCache.size > 500) {
     for (const [k, v] of _clobMidpointCache) {
       if (now - v.ts > 5 * 60 * 1000) _clobMidpointCache.delete(k);
+    }
+  }
+
+  return markets;
+}
+
+// ── CLOB ORDERBOOK DEPTH ──────────────────────────────────────────────────
+// Pulls /book per token, computes bid/ask size imbalance within 5¢ of best.
+// Only fetches for liquid markets (>$100k vol) to keep this cheap. Attaches
+// depth_ratio, depth_side ('bid'|'ask'), and depth_total to each market.
+async function fetchClobDepth(markets, opts = {}) {
+  const minVol = opts.minVolume || 100000;
+  if (!markets || !markets.length) return markets;
+  const fetch = _nodeFetch;
+  const now = Date.now();
+
+  const toFetch = []; // { idx, tokenId }
+  for (let i = 0; i < markets.length; i++) {
+    const m = markets[i];
+    if ((m.volume || 0) < minVol) continue;
+    let tokenId = null;
+    try {
+      const tids = typeof m.clobTokenIds === 'string' ? JSON.parse(m.clobTokenIds) : m.clobTokenIds;
+      if (Array.isArray(tids) && tids[0]) tokenId = tids[0];
+    } catch (e) {}
+    if (!tokenId) continue;
+
+    const cached = _clobDepthCache.get(tokenId);
+    if (cached && (now - cached.ts < CLOB_DEPTH_TTL)) {
+      m.depth_ratio = cached.ratio;
+      m.depth_side = cached.side;
+      m.depth_total = cached.total;
+      continue;
+    }
+    toFetch.push({ idx: i, tokenId });
+  }
+
+  if (!toFetch.length) return markets;
+
+  const CHUNK_SIZE = 15;
+  for (let c = 0; c < toFetch.length; c += CHUNK_SIZE) {
+    const chunk = toFetch.slice(c, c + CHUNK_SIZE);
+    const results = await Promise.all(chunk.map(t =>
+      fetch(`https://clob.polymarket.com/book?token_id=${encodeURIComponent(t.tokenId)}`, {
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined
+      })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+          if (!d || !Array.isArray(d.bids) || !Array.isArray(d.asks)) return { idx: t.idx, tokenId: t.tokenId };
+          const bids = d.bids.map(b => ({ p: parseFloat(b.price), s: parseFloat(b.size) })).filter(x => x.s > 0 && x.p > 0);
+          const asks = d.asks.map(a => ({ p: parseFloat(a.price), s: parseFloat(a.size) })).filter(x => x.s > 0 && x.p > 0);
+          if (!bids.length || !asks.length) return { idx: t.idx, tokenId: t.tokenId };
+          const bestBid = Math.max(...bids.map(b => b.p));
+          const bestAsk = Math.min(...asks.map(a => a.p));
+          // Sum size within 5¢ of top of book on each side
+          const bidSize = bids.filter(b => b.p >= bestBid - 0.05).reduce((s, b) => s + b.s, 0);
+          const askSize = asks.filter(a => a.p <= bestAsk + 0.05).reduce((s, a) => s + a.s, 0);
+          if (bidSize <= 0 || askSize <= 0) return { idx: t.idx, tokenId: t.tokenId };
+          const ratio = bidSize / askSize;
+          const side = ratio >= 1 ? 'bid' : 'ask';
+          const total = bidSize + askSize;
+          return { idx: t.idx, tokenId: t.tokenId, ratio, side, total };
+        })
+        .catch(() => ({ idx: t.idx, tokenId: t.tokenId }))
+    ));
+
+    for (const r of results) {
+      if (r.ratio == null) continue;
+      _clobDepthCache.set(r.tokenId, { ratio: r.ratio, side: r.side, total: r.total, ts: Date.now() });
+      const m = markets[r.idx];
+      m.depth_ratio = parseFloat(r.ratio.toFixed(2));
+      m.depth_side = r.side;
+      m.depth_total = Math.round(r.total);
+    }
+  }
+
+  if (_clobDepthCache.size > 200) {
+    for (const [k, v] of _clobDepthCache) {
+      if (now - v.ts > 5 * 60 * 1000) _clobDepthCache.delete(k);
     }
   }
 
@@ -19907,6 +19989,30 @@ async function buildAlphaList(opts = {}) {
       await upgradeToClobPrices(markets, 'yes_price');
       console.log('[screener] Upgraded', markets.filter(m => m.clobTokenIds).length, 'markets to live CLOB prices');
     } catch (e) { console.warn('[screener] CLOB price upgrade failed:', e.message); }
+
+    // ── PULL ORDERBOOK DEPTH for liquid markets, then re-score with edgeDepth ──
+    try {
+      await fetchClobDepth(markets, { minVolume: 100000 });
+      let withDepth = 0;
+      for (const m of markets) {
+        if (m.depth_ratio == null) continue;
+        withDepth++;
+        const r = m.depth_ratio;
+        const imbalance = Math.max(r, 1 / r); // 1.0 balanced, 3.0 = 3x
+        let edgeDepth = 0;
+        if (imbalance >= 3) edgeDepth = 20;
+        else if (imbalance >= 2) edgeDepth = 14;
+        else if (imbalance >= 1.5) edgeDepth = 8;
+        else if (imbalance >= 1.2) edgeDepth = 4;
+        if (edgeDepth > 0) {
+          m.edge_score = Math.min(99, m.edge_score + edgeDepth);
+          if (m.edge_components) m.edge_components.depth = edgeDepth;
+        } else if (m.edge_components) {
+          m.edge_components.depth = 0;
+        }
+      }
+      console.log('[screener] Pulled CLOB depth for', withDepth, 'liquid markets');
+    } catch (e) { console.warn('[screener] CLOB depth fetch failed:', e.message); }
 
     _screenerCache = { ts: Date.now(), data: markets };
     _healthTimestamps.lastScreenerFetch = new Date().toISOString();

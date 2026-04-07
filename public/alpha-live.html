@@ -68,6 +68,7 @@
   .badge-momentum.down{background:rgba(239,68,68,0.12);color:var(--red);border-color:rgba(239,68,68,0.3)}
   .badge-decay{background:rgba(239,68,68,0.12);color:var(--red);border:1px solid rgba(239,68,68,0.3)}
   .badge-volume{background:rgba(124,58,237,0.12);color:#a78bfa;border:1px solid rgba(124,58,237,0.3)}
+  .badge-depth{background:rgba(59,130,246,0.12);color:#60a5fa;border:1px solid rgba(59,130,246,0.3)}
   .badge-cat{background:var(--paper-3);color:var(--ink-dim);border:1px solid var(--line)}
 
   .card-q{font-size:15px;font-weight:700;color:var(--ink);line-height:1.35;margin-bottom:14px;min-height:40px}
@@ -176,6 +177,14 @@ function badges(m){
   if (m.whale_count > 0) {
     out.push(['whale', `🐋 ${m.whale_count} Whale${m.whale_count>1?'s':''} ${fmtUSD(m.total_whale_capital||0)}`]);
   }
+  if (m.depth_ratio != null) {
+    const r = m.depth_ratio;
+    const imb = Math.max(r, 1/r);
+    if (imb >= 1.5) {
+      const dir = m.depth_side === 'bid' ? '📊 Bid' : '📊 Ask';
+      out.push(['depth', `${dir} ${imb.toFixed(1)}x`]);
+    }
+  }
   if (m.price_change_24h != null && Math.abs(m.price_change_24h) >= 5) {
     const dir = m.price_change_24h > 0 ? 'up' : 'down';
     out.push(['momentum'+(dir==='down'?' down':''), `${dir==='up'?'📈':'📉'} ${m.price_change_24h>0?'+':''}${m.price_change_24h}%`]);
@@ -249,10 +258,11 @@ function render(data){
           <div class="breakdown-title">Why score ${m.edge_score}?</div>
           ${bdRow('Whales',ec.whale||0,35)}
           ${bdRow('Capital',ec.capital||0,15)}
-          ${bdRow('Momentum',ec.momentum||0,20)}
-          ${bdRow('Volume',ec.volume||0,12)}
-          ${bdRow('Expiry',ec.expiry||0,15)}
-          ${bdRow('Divergence',ec.divergence||0,15)}
+          ${bdRow('Volume',ec.volume||0,30)}
+          ${bdRow('Depth',ec.depth||0,20)}
+          ${bdRow('Momentum',ec.momentum||0,15)}
+          ${bdRow('Expiry',ec.expiry||0,8)}
+          ${bdRow('Divergence',ec.divergence||0,10)}
         </div>
         <div class="trade-cta ${t.side==='YES'?'yes':'no'}">
           <span class="side">${t.side}</span>
