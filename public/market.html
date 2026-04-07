@@ -445,28 +445,19 @@ canvas{display:block;width:100%!important}
         </div>
         <div class="trade-disclaimer">Click "Connect Wallet" to connect to Polymarket</div>
 
-        <!-- Trading Setup Checklist (shown after wallet connect) -->
-        <div id="tradingSetup" style="display:none;margin-top:12px;padding:12px 14px;background:rgba(201,146,13,0.04);border:1px solid rgba(201,146,13,0.15);border-radius:8px">
-          <div style="font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.08em;color:var(--dim);margin-bottom:8px">TRADING SETUP</div>
-          <div id="setupStep1" class="setup-step">
-            <span class="setup-icon" id="setupIcon1">○</span>
-            <span class="setup-label">Deploy Proxy Wallet</span>
-            <span class="setup-action-btn" id="setupBtn1" style="display:none;font-size:10px;color:var(--dim);cursor:default">Activate on polymarket.com</span>
-          </div>
-          <div id="setupStep2" class="setup-step">
-            <span class="setup-icon" id="setupIcon2">○</span>
-            <span class="setup-label">Enable Trading (CLOB Auth)</span>
-            <button class="setup-action-btn" id="setupBtn2" onclick="enableTrading()" style="display:none">Connect</button>
-          </div>
-          <div id="setupStep3" class="setup-step">
-            <span class="setup-icon" id="setupIcon3">○</span>
-            <span class="setup-label">Approve USDC Spending</span>
-            <button class="setup-action-btn" id="setupBtn3" onclick="approveTokens()" style="display:none">Approve</button>
-          </div>
-          <div id="setupProxyBalance" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid rgba(201,146,13,0.1);font-family:var(--mono);font-size:11px;color:var(--soft)">
-            Proxy Balance: <span id="setupBalanceVal" style="color:var(--gold)">—</span>
-          </div>
-        </div>
+        <!-- Trading setup runs silently in background — no checklist UI -->
+        <div id="tradingSetup" style="display:none"></div>
+        <div id="setupStep1" style="display:none"></div>
+        <div id="setupStep2" style="display:none"></div>
+        <div id="setupStep3" style="display:none"></div>
+        <div id="setupIcon1" style="display:none"></div>
+        <div id="setupIcon2" style="display:none"></div>
+        <div id="setupIcon3" style="display:none"></div>
+        <div id="setupBtn1" style="display:none"></div>
+        <div id="setupBtn2" style="display:none"></div>
+        <div id="setupBtn3" style="display:none"></div>
+        <div id="setupProxyBalance" style="display:none"></div>
+        <div id="setupBalanceVal" style="display:none"></div>
 
         <!-- Your Position (shown after trade or if holding) -->
         <div id="tradePosition" style="display:none;margin-top:12px;padding:10px 14px;background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.15);border-radius:8px">
