@@ -19833,6 +19833,14 @@ async function buildAlphaList(opts = {}) {
         url: marketUrl,
         slug: eventSlug,
         edge_score: edgeScore,
+        edge_components: {
+          whale: Math.round(edgeWhale),
+          capital: Math.round(edgeCapital),
+          momentum: Math.round(edgeMomentum),
+          volume: Math.round(edgeVolume),
+          expiry: Math.round(edgeExpiry),
+          divergence: Math.round(edgeDivergence)
+        },
         alpha_score: 0, // populated after whale index is ready
         model_probability: modelProb != null ? parseFloat(modelProb.toFixed(3)) : null,
         alpha_edge: alphaEdge,

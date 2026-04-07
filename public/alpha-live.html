@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HYPERFLEX — Alpha Terminal · Live</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@500;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#141412;
+    --paper-2:#1c1c19;
+    --paper-3:#242420;
+    --ink:#f4f1ea;
+    --ink-dim:#8a8680;
+    --gold:#c9920d;
+    --gold-bright:#e6a815;
+    --green:#4ade80;
+    --red:#f87171;
+    --line:#2d2d28;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    background:var(--paper);color:var(--ink);
+    font-family:'Space Mono',monospace;font-size:14px;line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  .container{max-width:1280px;margin:0 auto;padding:0 24px}
+
+  .topbar{border-bottom:1px solid var(--line);padding:14px 0;background:var(--paper);position:sticky;top:0;z-index:10}
+  .topbar-inner{display:flex;align-items:center;justify-content:space-between;gap:24px}
+  .logo{font-family:'Syne',sans-serif;font-weight:800;font-size:18px;letter-spacing:0.04em}
+  .logo span{color:var(--gold)}
+  .live-dot{display:inline-flex;align-items:center;gap:8px;font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:0.1em}
+  .live-dot::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+
+  .hero{padding:56px 0 32px;border-bottom:1px solid var(--line)}
+  .hero-eyebrow{font-size:11px;color:var(--gold);text-transform:uppercase;letter-spacing:0.2em;margin-bottom:16px}
+  .hero h1{font-family:'Syne',sans-serif;font-weight:800;font-size:52px;line-height:1.05;letter-spacing:-0.03em;margin-bottom:18px;max-width:900px}
+  .hero h1 em{color:var(--gold);font-style:normal}
+  .hero-sub{font-size:15px;color:var(--ink-dim);max-width:640px;margin-bottom:28px}
+  .hero-stats{display:flex;gap:40px;flex-wrap:wrap}
+  .hero-stat .n{font-family:'Syne',sans-serif;font-size:28px;font-weight:800;color:var(--ink)}
+  .hero-stat .l{font-size:10px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:0.15em;margin-top:4px}
+
+  .sec-head{display:flex;align-items:baseline;justify-content:space-between;padding:36px 0 18px;border-bottom:1px solid var(--line);margin-bottom:20px;flex-wrap:wrap;gap:12px}
+  .sec-head h2{font-family:'Syne',sans-serif;font-size:22px;font-weight:700;letter-spacing:-0.01em}
+  .sec-head .meta{font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:0.12em}
+  .sec-head .controls{display:flex;gap:8px}
+  .ctrl{background:var(--paper-2);border:1px solid var(--line);color:var(--ink);font-family:inherit;font-size:11px;padding:6px 12px;border-radius:3px;cursor:pointer;text-transform:uppercase;letter-spacing:0.08em}
+  .ctrl:hover{border-color:var(--gold);color:var(--gold)}
+
+  .edge-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:16px;padding-bottom:40px;min-height:300px}
+
+  .edge-card{background:var(--paper-2);border:1px solid var(--line);border-radius:6px;padding:18px;position:relative;cursor:pointer;transition:all 0.15s ease;text-decoration:none;color:inherit;display:block}
+  .edge-card:hover{border-color:var(--gold);transform:translateY(-1px)}
+  .edge-card.rank-1{border-color:rgba(201,146,13,0.5);background:linear-gradient(180deg,rgba(201,146,13,0.06),var(--paper-2))}
+
+  .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px}
+  .edge-score{display:flex;flex-direction:column;align-items:center;min-width:56px}
+  .edge-score .n{font-family:'Syne',sans-serif;font-weight:800;font-size:32px;color:var(--gold-bright);line-height:1}
+  .edge-score .l{font-size:9px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:0.1em;margin-top:4px}
+
+  .badges{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  .badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;padding:4px 8px;border-radius:3px;text-transform:uppercase;letter-spacing:0.08em;font-weight:700}
+  .badge-whale{background:rgba(201,146,13,0.12);color:var(--gold);border:1px solid rgba(201,146,13,0.3)}
+  .badge-momentum{background:rgba(74,222,128,0.12);color:var(--green);border:1px solid rgba(74,222,128,0.3)}
+  .badge-momentum.down{background:rgba(239,68,68,0.12);color:var(--red);border-color:rgba(239,68,68,0.3)}
+  .badge-decay{background:rgba(239,68,68,0.12);color:var(--red);border:1px solid rgba(239,68,68,0.3)}
+  .badge-volume{background:rgba(124,58,237,0.12);color:#a78bfa;border:1px solid rgba(124,58,237,0.3)}
+  .badge-cat{background:var(--paper-3);color:var(--ink-dim);border:1px solid var(--line)}
+
+  .card-q{font-size:15px;font-weight:700;color:var(--ink);line-height:1.35;margin-bottom:14px;min-height:40px}
+
+  .price-row{display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--paper);border-radius:4px;margin-bottom:12px;font-size:12px}
+  .price-row .mkt{color:var(--ink-dim)}
+  .price-row .arrow{color:var(--gold);font-weight:700}
+  .price-row .model{color:var(--gold-bright);font-weight:700}
+  .price-row .delta{margin-left:auto;font-weight:700}
+  .price-row .delta.pos{color:var(--green)}
+  .price-row .delta.neg{color:var(--red)}
+
+  .breakdown{background:var(--paper);border-radius:4px;padding:12px;margin-bottom:12px;border:1px solid var(--line)}
+  .breakdown-title{font-size:9px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:8px}
+  .bd-row{display:flex;align-items:center;gap:8px;margin-bottom:4px;font-size:11px}
+  .bd-row:last-child{margin-bottom:0}
+  .bd-label{width:78px;color:var(--ink-dim)}
+  .bd-bar{flex:1;height:4px;background:var(--paper-3);border-radius:2px;overflow:hidden}
+  .bd-fill{height:100%;background:var(--gold);border-radius:2px}
+  .bd-val{width:32px;text-align:right;color:var(--ink);font-weight:700}
+
+  .trade-cta{display:flex;align-items:center;gap:12px;padding:12px;color:var(--paper);border-radius:4px;border:none;cursor:pointer;width:100%;font-family:'Space Mono',monospace;font-weight:700;font-size:13px;transition:filter 0.15s;text-decoration:none}
+  .trade-cta:hover{filter:brightness(1.1)}
+  .trade-cta.yes{background:var(--green)}
+  .trade-cta.no{background:var(--red)}
+  .trade-cta .side{background:rgba(0,0,0,0.25);color:var(--paper);padding:3px 8px;border-radius:2px;font-size:11px;letter-spacing:0.05em}
+  .trade-cta .roi{margin-left:auto;font-size:11px;opacity:0.9}
+
+  .hook{font-size:11px;color:var(--ink-dim);margin-top:10px;font-style:italic;padding-top:10px;border-top:1px dashed var(--line)}
+  .meta-row{display:flex;gap:14px;font-size:10px;color:var(--ink-dim);margin-top:8px;text-transform:uppercase;letter-spacing:0.08em}
+
+  .loading{color:var(--ink-dim);text-align:center;padding:80px 20px;font-size:13px}
+  .err{color:var(--red);text-align:center;padding:80px 20px;font-size:13px}
+
+  .footnote{padding:24px 0 60px;font-size:11px;color:var(--ink-dim);border-top:1px solid var(--line);margin-top:20px;text-align:center}
+  .footnote em{color:var(--gold);font-style:normal}
+
+  @media(max-width:600px){.hero h1{font-size:34px}.edge-grid{grid-template-columns:1fr}.hero-stats{gap:20px}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="container topbar-inner">
+    <div class="logo">HYPER<span>FLEX</span> / TERMINAL</div>
+    <div class="live-dot" id="live-dot">Live · Polymarket · Loading…</div>
+  </div>
+</div>
+
+<section class="hero">
+  <div class="container">
+    <div class="hero-eyebrow">THE TERMINAL FOR POLYMARKET</div>
+    <h1>Alpha you can trade in the <em>next 5 minutes.</em></h1>
+    <p class="hero-sub">Live edges from the unified alpha engine. Whale clusters, momentum, expiry decay — sorted by Edge Score.</p>
+    <div class="hero-stats">
+      <div class="hero-stat"><div class="n" id="s-count">—</div><div class="l">Live Edges</div></div>
+      <div class="hero-stat"><div class="n" id="s-top">—</div><div class="l">Top Score</div></div>
+      <div class="hero-stat"><div class="n" id="s-whales">—</div><div class="l">w/ Whales</div></div>
+      <div class="hero-stat"><div class="n" id="s-vol">—</div><div class="l">Total Vol</div></div>
+    </div>
+  </div>
+</section>
+
+<div class="container">
+  <div class="sec-head">
+    <h2>Top Edges · Live</h2>
+    <div class="meta" id="updated">—</div>
+    <div class="controls">
+      <button class="ctrl" onclick="load(10)">Top 10</button>
+      <button class="ctrl" onclick="load(20)">Top 20</button>
+      <button class="ctrl" onclick="load(currentN)">Refresh</button>
+    </div>
+  </div>
+
+  <div class="edge-grid" id="grid">
+    <div class="loading">Loading live alpha…</div>
+  </div>
+
+  <div class="footnote">
+    Live data from <em>/api/alpha/top</em> — unified <em>buildAlphaList()</em> engine. Cards link to Polymarket. Auto-refresh every 90s.
+  </div>
+</div>
+
+<script>
+let currentN = 10;
+let _refreshTimer = null;
+
+function fmtUSD(n){
+  if (n >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return '$' + Math.round(n/1e3) + 'k';
+  return '$' + Math.round(n);
+}
+
+function timeAgo(iso){
+  const ms = Date.now() - new Date(iso).getTime();
+  const s = Math.floor(ms/1000);
+  if (s < 60) return s + 's ago';
+  const m = Math.floor(s/60);
+  if (m < 60) return m + 'm ago';
+  const h = Math.floor(m/60);
+  return h + 'h ago';
+}
+
+function badges(m){
+  const out = [];
+  if (m.whale_count > 0) {
+    out.push(['whale', `🐋 ${m.whale_count} Whale${m.whale_count>1?'s':''} ${fmtUSD(m.total_whale_capital||0)}`]);
+  }
+  if (m.price_change_24h != null && Math.abs(m.price_change_24h) >= 5) {
+    const dir = m.price_change_24h > 0 ? 'up' : 'down';
+    out.push(['momentum'+(dir==='down'?' down':''), `${dir==='up'?'📈':'📉'} ${m.price_change_24h>0?'+':''}${m.price_change_24h}%`]);
+  }
+  if (m.days_until_expiry != null && m.days_until_expiry <= 3) {
+    out.push(['decay', `⏱ ${m.days_until_expiry===0?'Today':m.days_until_expiry+'d'}`]);
+  }
+  if (m.volume >= 1e6) {
+    out.push(['volume', `💰 ${fmtUSD(m.volume)}`]);
+  }
+  if (m.category && m.category !== 'other') {
+    out.push(['cat', m.category]);
+  }
+  return out;
+}
+
+function bdRow(label, val, max){
+  const pct = Math.min(100, Math.max(0, (val/max)*100));
+  return `<div class="bd-row">
+    <span class="bd-label">${label}</span>
+    <div class="bd-bar"><div class="bd-fill" style="width:${pct}%"></div></div>
+    <span class="bd-val">+${val}</span>
+  </div>`;
+}
+
+function render(data){
+  const markets = data.markets || [];
+  const g = document.getElementById('grid');
+
+  // Stats
+  document.getElementById('s-count').textContent = markets.length;
+  document.getElementById('s-top').textContent = markets[0] ? markets[0].edge_score : '—';
+  document.getElementById('s-whales').textContent = markets.filter(m=>m.whale_count>0).length;
+  const totalVol = markets.reduce((s,m)=>s+(m.volume||0),0);
+  document.getElementById('s-vol').textContent = fmtUSD(totalVol);
+  document.getElementById('updated').textContent = 'Updated ' + timeAgo(data.updated_at);
+  document.getElementById('live-dot').textContent = 'Live · Polymarket · ' + timeAgo(data.updated_at);
+
+  if (!markets.length) {
+    g.innerHTML = '<div class="loading">No edges right now. Try again in a minute.</div>';
+    return;
+  }
+
+  g.innerHTML = markets.map((m,i) => {
+    const mktPct = m.yes_price != null ? Math.round(m.yes_price*100) : 50;
+    const modelPct = m.model_probability != null ? Math.round(m.model_probability*100) : mktPct;
+    const delta = m.alpha_edge != null ? (m.alpha_edge > 0 ? '+' : '') + m.alpha_edge + 'pt' : '0pt';
+    const deltaClass = (m.alpha_edge||0) > 0 ? 'pos' : (m.alpha_edge||0) < 0 ? 'neg' : '';
+    const ec = m.edge_components || {};
+    const t = m.trade || {side:'YES',entry_cost:mktPct,potential_profit:100-mktPct,roi_pct:0};
+    const bs = badges(m);
+    return `
+      <a class="edge-card ${i===0?'rank-1':''}" href="${m.url||'https://polymarket.com'}" target="_blank" rel="noopener">
+        <div class="card-top">
+          <div class="edge-score">
+            <div class="n">${m.edge_score}</div>
+            <div class="l">Edge</div>
+          </div>
+          <div class="badges">
+            ${bs.map(b=>`<span class="badge badge-${b[0]}">${b[1]}</span>`).join('')}
+          </div>
+        </div>
+        <div class="card-q">${escapeHtml(m.question)}</div>
+        <div class="price-row">
+          <span class="mkt">Mkt ${mktPct}¢</span>
+          <span class="arrow">→</span>
+          <span class="model">Model ${modelPct}¢</span>
+          <span class="delta ${deltaClass}">${delta}</span>
+        </div>
+        <div class="breakdown">
+          <div class="breakdown-title">Why score ${m.edge_score}?</div>
+          ${bdRow('Whales',ec.whale||0,35)}
+          ${bdRow('Capital',ec.capital||0,15)}
+          ${bdRow('Momentum',ec.momentum||0,20)}
+          ${bdRow('Volume',ec.volume||0,12)}
+          ${bdRow('Expiry',ec.expiry||0,15)}
+          ${bdRow('Divergence',ec.divergence||0,15)}
+        </div>
+        <div class="trade-cta ${t.side==='YES'?'yes':'no'}">
+          <span class="side">${t.side}</span>
+          BET @ ${t.entry_cost}¢ · Win ${t.potential_profit}¢
+          <span class="roi">ROI +${t.roi_pct}%</span>
+        </div>
+        ${m.ai_hook ? `<div class="hook">${escapeHtml(m.ai_hook)}</div>` : ''}
+        <div class="meta-row">
+          <span>Vol ${fmtUSD(m.volume||0)}</span>
+          ${m.days_until_expiry!=null ? `<span>Expires ${m.days_until_expiry}d</span>` : ''}
+        </div>
+      </a>
+    `;
+  }).join('');
+}
+
+function escapeHtml(s){return (s||'').replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]))}
+
+async function load(n){
+  currentN = n || currentN;
+  try {
+    const r = await fetch('/api/alpha/top?n=' + currentN);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    render(data);
+  } catch(e) {
+    document.getElementById('grid').innerHTML = `<div class="err">Failed to load alpha: ${e.message}</div>`;
+  }
+}
+
+load(10);
+_refreshTimer = setInterval(()=>load(currentN), 90000);
+</script>
+</body>
+</html>
