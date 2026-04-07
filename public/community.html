@@ -4065,7 +4065,8 @@ async function submitPredict() {
       ? Math.round((data.yes_price ?? pendingMarket.yes_price) * 100)
       : null;
     closePredict();
-    showToast(`✓ ${pendingSide} · ${inputPts.toLocaleString()} pts placed`, 'success');
+    var flexEarned = data.flex_points_earned || 0;
+    showToast(`✓ ${pendingSide} · ${inputPts.toLocaleString()} pts placed` + (flexEarned ? ` · +${flexEarned} FLEX` : ''), 'success');
     showShareNudge(_shareMktId, _shareQ, _shareSide, _shareYesPct);
     refreshMarketCard(pendingMarket);
     renderUserHeader();

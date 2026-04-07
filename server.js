@@ -2097,11 +2097,15 @@ app.post('/trade', requireAuth, async (req, res) => {
     }
     if (mktErr) console.error('multi-option market update error:', mktErr.message);
 
+    // Award FLEX points for multi-option community trade
+    const flexEarned = await awardFlexPoints(user_id, Math.max(1, Math.round(amount / 100)), 'community_trade').catch(() => 0);
+
     return res.json({
       message:  'Trade placed',
       position,
       balance:  communityBalance - amount,
       options:  finalOpts,
+      flex_points_earned: flexEarned,
     });
   }
 
@@ -2176,6 +2180,10 @@ app.post('/trade', requireAuth, async (req, res) => {
 
   const totalVotes = newYesVotes + newNoVotes;
   const newBalance = communityBalance - amount;
+
+  // Award FLEX points for community trade (1 point per 100 centpoints bet = 1 point per 1 community point)
+  const flexEarned = await awardFlexPoints(user_id, Math.max(1, Math.round(amount / 100)), 'community_trade').catch(() => 0);
+
   res.json({
     message:    'Trade placed',
     position,
@@ -2185,6 +2193,7 @@ app.post('/trade', requireAuth, async (req, res) => {
     yes_votes:  newYesVotes,
     no_votes:   newNoVotes,
     yes_consensus: totalVotes > 0 ? Math.round(newYesVotes / totalVotes * 100) : null,
+    flex_points_earned: flexEarned,
   });
 });
 
@@ -9649,7 +9658,7 @@ app.post('/api/creator/oauth-complete', async (req, res) => {
         const _phs = _cols.map((_, i) => `$${i + 1}`).join(', ');
         await dbQuery(`INSERT INTO creator_settings (${_cols.join(', ')}) VALUES (${_phs})`, _vals);
       } else {
-        ({ error: insErr } = await supabase.from('creator_settings').insert({ creator_id:          payload.id, slug, display_name, custom_points_name:  'Flex Points', primary_color:       '#c9920d', is_active:           true, plan:                'free', created_at:          new Date().toISOString() }));
+        ({ error: insErr } = await supabase.from('creator_settings').insert({ creator_id:          payload.id, slug, display_name, custom_points_name:  'Points', primary_color:       '#c9920d', is_active:           true, plan:                'free', created_at:          new Date().toISOString() }));
       }
     }
     if (insErr) return res.status(500).json({ error: insErr.message });
@@ -21740,6 +21749,183 @@ app.get('/api/mispricings', async (req, res) => {
   } catch (err) {
     console.error('[mispricings]', err.message);
     res.json([]);
+  }
+});
+
+// ── FLEX POINTS — platform-wide points earned on every trade ──────────────
+const _flexPointsCache = {}; // userId → { points, updated }
+const FLEX_PTS_CACHE_TTL = 5 * 60 * 1000;
+
+// Earn FLEX points — 1 point per $1 traded (min 1 per trade), bonus for streaks
+async function awardFlexPoints(userId, tradeAmountUsd, source = 'polymarket_trade') {
+  if (!userId) return 0;
+  const basePoints = Math.max(1, Math.round(tradeAmountUsd));
+  // Streak bonus: check recent trades in last 7 days
+  let streakBonus = 0;
+  try {
+    let recentCount = 0;
+    if (pool) {
+      const rows = await dbQuery(`SELECT COUNT(*) as cnt FROM flex_points_log WHERE user_id = $1 AND created_at > NOW() - INTERVAL '7 days'`, [userId]);
+      recentCount = parseInt(rows[0]?.cnt || 0);
+    } else if (supabase) {
+      const { count } = await supabase.from('flex_points_log').select('id', { count: 'exact', head: true }).eq('user_id', userId).gte('created_at', new Date(Date.now() - 7 * 86400000).toISOString());
+      recentCount = count || 0;
+    }
+    // Streak tiers: 5+ trades/week = 1.5x, 10+ = 2x, 20+ = 2.5x
+    const multiplier = recentCount >= 20 ? 2.5 : recentCount >= 10 ? 2 : recentCount >= 5 ? 1.5 : 1;
+    streakBonus = Math.round(basePoints * (multiplier - 1));
+  } catch (e) { /* silent — don't block trade on points failure */ }
+
+  const totalPoints = basePoints + streakBonus;
+
+  // Log the earn event
+  try {
+    if (pool) {
+      await dbQuery(`INSERT INTO flex_points_log (user_id, points, source, trade_amount_usd) VALUES ($1, $2, $3, $4)`, [userId, totalPoints, source, tradeAmountUsd]);
+      await dbQuery(`INSERT INTO flex_points (user_id, total_points, trade_count, last_earned_at) VALUES ($1, $2, 1, NOW()) ON CONFLICT (user_id) DO UPDATE SET total_points = flex_points.total_points + $2, trade_count = flex_points.trade_count + 1, last_earned_at = NOW()`, [userId, totalPoints]);
+    } else if (supabase) {
+      await supabase.from('flex_points_log').insert({ user_id: userId, points: totalPoints, source, trade_amount_usd: tradeAmountUsd });
+      // Upsert total
+      const { data: existing } = await supabase.from('flex_points').select('total_points, trade_count').eq('user_id', userId).single();
+      if (existing) {
+        await supabase.from('flex_points').update({ total_points: existing.total_points + totalPoints, trade_count: existing.trade_count + 1, last_earned_at: new Date().toISOString() }).eq('user_id', userId);
+      } else {
+        await supabase.from('flex_points').insert({ user_id: userId, total_points: totalPoints, trade_count: 1, last_earned_at: new Date().toISOString() });
+      }
+    }
+    // Bust cache
+    delete _flexPointsCache[userId];
+  } catch (e) {
+    console.warn('[flex-points] Failed to award:', e.message);
+  }
+
+  return totalPoints;
+}
+
+// Get FLEX points balance
+app.get('/api/flex-points', requireAuth, async (req, res) => {
+  try {
+    const userId = req.userId;
+    // Check cache
+    if (_flexPointsCache[userId] && Date.now() - _flexPointsCache[userId].updated < FLEX_PTS_CACHE_TTL) {
+      return res.json(_flexPointsCache[userId].data);
+    }
+
+    let row = null;
+    if (pool) {
+      const rows = await dbQuery('SELECT total_points, trade_count, last_earned_at FROM flex_points WHERE user_id = $1', [userId]);
+      row = rows[0] || null;
+    } else if (supabase) {
+      const { data } = await supabase.from('flex_points').select('total_points, trade_count, last_earned_at').eq('user_id', userId).single();
+      row = data;
+    }
+
+    // Get recent log for history
+    let recentLog = [];
+    try {
+      if (pool) {
+        recentLog = await dbQuery('SELECT points, source, trade_amount_usd, created_at FROM flex_points_log WHERE user_id = $1 ORDER BY created_at DESC LIMIT 20', [userId]);
+      } else if (supabase) {
+        const { data } = await supabase.from('flex_points_log').select('points, source, trade_amount_usd, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(20);
+        recentLog = data || [];
+      }
+    } catch (e) { /* silent */ }
+
+    // Compute tier
+    const totalPts = row ? row.total_points : 0;
+    const tier = totalPts >= 10000 ? 'diamond' : totalPts >= 5000 ? 'platinum' : totalPts >= 1000 ? 'gold' : totalPts >= 250 ? 'silver' : 'bronze';
+    const tierThresholds = { bronze: 0, silver: 250, gold: 1000, platinum: 5000, diamond: 10000 };
+    const nextTier = tier === 'diamond' ? null : Object.keys(tierThresholds).find(t => tierThresholds[t] > totalPts);
+    const nextThreshold = nextTier ? tierThresholds[nextTier] : null;
+
+    // Weekly streak
+    let weeklyTrades = 0;
+    try {
+      if (pool) {
+        const rows = await dbQuery(`SELECT COUNT(*) as cnt FROM flex_points_log WHERE user_id = $1 AND created_at > NOW() - INTERVAL '7 days'`, [userId]);
+        weeklyTrades = parseInt(rows[0]?.cnt || 0);
+      } else if (supabase) {
+        const { count } = await supabase.from('flex_points_log').select('id', { count: 'exact', head: true }).eq('user_id', userId).gte('created_at', new Date(Date.now() - 7 * 86400000).toISOString());
+        weeklyTrades = count || 0;
+      }
+    } catch (e) { /* silent */ }
+
+    const streakMultiplier = weeklyTrades >= 20 ? '2.5x' : weeklyTrades >= 10 ? '2x' : weeklyTrades >= 5 ? '1.5x' : '1x';
+
+    const result = {
+      total_points: totalPts,
+      trade_count: row ? row.trade_count : 0,
+      last_earned_at: row ? row.last_earned_at : null,
+      tier,
+      next_tier: nextTier,
+      next_threshold: nextThreshold,
+      points_to_next: nextThreshold ? nextThreshold - totalPts : 0,
+      weekly_trades: weeklyTrades,
+      streak_multiplier: streakMultiplier,
+      recent_log: recentLog
+    };
+
+    _flexPointsCache[userId] = { data: result, updated: Date.now() };
+    res.json(result);
+  } catch (err) {
+    console.error('[flex-points]', err.message);
+    res.json({ total_points: 0, trade_count: 0, tier: 'bronze', weekly_trades: 0, streak_multiplier: '1x', recent_log: [] });
+  }
+});
+
+// Earn FLEX points endpoint — called after successful CLOB trade
+app.post('/api/flex-points/earn', optionalAuth, async (req, res) => {
+  try {
+    const userId = req.userId;
+    if (!userId) return res.json({ points_earned: 0, error: 'Not logged in' });
+
+    const { amount_usd, source } = req.body;
+    const tradeUsd = parseFloat(amount_usd) || 1;
+    const src = source || 'polymarket_trade';
+
+    const earned = await awardFlexPoints(userId, tradeUsd, src);
+
+    // Get updated total
+    let total = 0;
+    try {
+      if (pool) {
+        const rows = await dbQuery('SELECT total_points FROM flex_points WHERE user_id = $1', [userId]);
+        total = rows[0]?.total_points || 0;
+      } else if (supabase) {
+        const { data } = await supabase.from('flex_points').select('total_points').eq('user_id', userId).single();
+        total = data?.total_points || 0;
+      }
+    } catch (e) { /* silent */ }
+
+    const tier = total >= 10000 ? 'diamond' : total >= 5000 ? 'platinum' : total >= 1000 ? 'gold' : total >= 250 ? 'silver' : 'bronze';
+    res.json({ points_earned: earned, total_points: total, tier });
+  } catch (err) {
+    console.error('[flex-points/earn]', err.message);
+    res.json({ points_earned: 0 });
+  }
+});
+
+// FLEX points leaderboard
+app.get('/api/flex-points/leaderboard', async (req, res) => {
+  try {
+    let leaders = [];
+    if (pool) {
+      leaders = await dbQuery(`SELECT fp.user_id, fp.total_points, fp.trade_count, u.display_name, u.email FROM flex_points fp LEFT JOIN users u ON u.id = fp.user_id ORDER BY fp.total_points DESC LIMIT 50`);
+    } else if (supabase) {
+      const { data } = await supabase.from('flex_points').select('user_id, total_points, trade_count').order('total_points', { ascending: false }).limit(50);
+      leaders = data || [];
+    }
+    res.json({ leaderboard: leaders.map((l, i) => ({
+      rank: i + 1,
+      user_id: l.user_id,
+      display_name: l.display_name || null,
+      total_points: l.total_points,
+      trade_count: l.trade_count,
+      tier: l.total_points >= 10000 ? 'diamond' : l.total_points >= 5000 ? 'platinum' : l.total_points >= 1000 ? 'gold' : l.total_points >= 250 ? 'silver' : 'bronze'
+    })) });
+  } catch (err) {
+    console.error('[flex-leaderboard]', err.message);
+    res.json({ leaderboard: [] });
   }
 });
 

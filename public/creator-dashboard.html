@@ -2958,6 +2958,10 @@ body.nav-open .sidebar-backdrop {
         <span class="nav-icon">🧠</span><span class="nav-label">AI Portfolio</span>
         <span style="margin-left:auto;font-family:var(--mono);font-size:8px;font-weight:800;padding:2px 6px;border-radius:4px;background:rgba(168,85,247,0.15);color:#a855f7;letter-spacing:.05em">AI</span>
       </a>
+      <a class="nav-item" data-nav-section="trading" onclick="showTab('flexpoints')">
+        <span class="nav-icon">⚡</span><span class="nav-label">FLEX Points</span>
+        <span id="navFlexBadge" style="margin-left:auto;font-family:var(--mono);font-size:9px;font-weight:800;color:#a855f7"></span>
+      </a>
       <a class="nav-item" data-nav-section="trading" onclick="showTab('portfolio')">
         <span class="nav-icon">🌐</span><span class="nav-label">My Positions</span>
       </a>
@@ -3078,6 +3082,11 @@ body.nav-open .sidebar-backdrop {
         <div id="topbarWalletBadge" style="display:none;align-items:center;gap:6px;padding:6px 12px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:8px;cursor:pointer;font-family:var(--mono);font-size:11px;color:#4ade80" onclick="showTab('portfolio')" title="Connected wallet">
           <span style="width:8px;height:8px;border-radius:50%;background:#22c55e;flex-shrink:0"></span>
           <span id="topbarWalletAddr" style="max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+        </div>
+        <div id="topbarFlexPoints" style="display:none;align-items:center;gap:6px;padding:6px 12px;background:rgba(168,85,247,0.08);border:1px solid rgba(168,85,247,0.2);border-radius:8px;font-family:var(--mono);font-size:11px;cursor:pointer" onclick="showTab('flexpoints')" title="Your FLEX Points">
+          <span style="color:#a855f7;font-weight:700">⚡</span>
+          <span id="topbarFlexBadge" style="color:var(--text);font-weight:700">0 FP</span>
+          <span id="topbarFlexTier" style="font-size:8px;padding:1px 5px;border-radius:3px;background:rgba(168,85,247,0.15);color:#a855f7;font-weight:800"></span>
         </div>
         <a href="/explore" class="btn-explore">⚡ Explore</a>
         <button class="btn-primary" onclick="openCreateModal()">+ New Market</button>
@@ -4880,6 +4889,68 @@ body.nav-open .sidebar-backdrop {
           </div>
         </div>
       </div><!-- /tab-aiportfolio -->
+
+      <!-- ═══ FLEX POINTS TAB ═══ -->
+      <div id="tab-flexpoints" style="display:none">
+        <div class="section">
+          <div style="max-width:1040px">
+            <!-- Hero -->
+            <div style="background:linear-gradient(135deg,#06060d 0%,#0f081e 40%,#150d26 70%,#06060d 100%);border:1px solid rgba(168,85,247,0.15);border-radius:16px;padding:32px 36px;margin-bottom:28px;position:relative;overflow:hidden">
+              <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 30% 40%,rgba(168,85,247,0.06) 0%,transparent 60%);pointer-events:none"></div>
+              <div style="position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(168,85,247,0.3),transparent)"></div>
+              <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:20px;position:relative">
+                <div>
+                  <div style="font-family:var(--mono);font-size:9px;color:#4a4744;text-transform:uppercase;letter-spacing:.2em;margin-bottom:8px">PLATFORM REWARDS</div>
+                  <div style="font-family:var(--sans);font-size:28px;font-weight:900;color:#fff;letter-spacing:-0.5px;line-height:1.1">⚡ FLEX Points</div>
+                  <div style="font-family:var(--mono);font-size:11px;color:#6b6560;margin-top:6px">Earn FLEX points on every trade. Only on HYPERFLEX.</div>
+                </div>
+                <div id="fpHeroScore" style="text-align:center">
+                  <div id="fpHeroTotal" style="font-family:var(--mono);font-size:42px;font-weight:900;color:#a855f7;line-height:1">0</div>
+                  <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:4px">FLEX POINTS</div>
+                  <div id="fpHeroTier" style="margin-top:6px;font-family:var(--mono);font-size:11px;font-weight:800;padding:4px 12px;border-radius:6px;background:rgba(168,85,247,0.12);color:#a855f7;display:inline-block"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Stats strip -->
+            <div id="fpStats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px"></div>
+
+            <!-- Tier progress -->
+            <div id="fpTierProgress" style="margin-bottom:28px;padding:20px;background:#0c0c0b;border:1px solid #1a1917;border-radius:12px"></div>
+
+            <!-- How to earn -->
+            <div style="margin-bottom:28px;padding:20px;background:#0c0c0b;border:1px solid #1a1917;border-radius:12px">
+              <div style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--text);margin-bottom:14px;text-transform:uppercase;letter-spacing:.08em">How to Earn</div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+                <div style="padding:14px;background:rgba(0,230,138,0.04);border:1px solid rgba(0,230,138,0.1);border-radius:8px">
+                  <div style="font-size:20px;margin-bottom:6px">📈</div>
+                  <div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px">Trade on Polymarket</div>
+                  <div style="font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.5">1 FLEX point per $1 traded through HYPERFLEX. Use the trade widget on any market page.</div>
+                </div>
+                <div style="padding:14px;background:rgba(77,159,255,0.04);border:1px solid rgba(77,159,255,0.1);border-radius:8px">
+                  <div style="font-size:20px;margin-bottom:6px">🎯</div>
+                  <div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px">Community Markets</div>
+                  <div style="font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.5">1 FLEX point per community point bet. Every prediction earns.</div>
+                </div>
+                <div style="padding:14px;background:rgba(168,85,247,0.04);border:1px solid rgba(168,85,247,0.1);border-radius:8px">
+                  <div style="font-size:20px;margin-bottom:6px">🔥</div>
+                  <div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px">Weekly Streak Bonus</div>
+                  <div style="font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.5">5+ trades/week = 1.5x · 10+ = 2x · 20+ = 2.5x multiplier on all points.</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Recent activity -->
+            <div style="margin-bottom:28px">
+              <div style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--text);margin-bottom:12px;text-transform:uppercase;letter-spacing:.08em">Recent Activity</div>
+              <div id="fpRecentLog" style="background:#0c0c0b;border:1px solid #1a1917;border-radius:12px;overflow:hidden">
+                <div style="text-align:center;padding:32px 20px;color:var(--dim);font-size:12px">No FLEX points earned yet. Place your first trade!</div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div><!-- /tab-flexpoints -->
 
       <div id="tab-portfolio" style="display:none">
         <div class="section">
@@ -7465,7 +7536,7 @@ function ensureMoreExpanded(tab) {
 // Tab switching
 function showTab(tab) {
   ensureMoreExpanded(tab);
-  ['overview','markets','resolve','members','leaderboard','share','rewards','seasons','settings','analytics','economy','branding','flexbot','ideas','portfolio','account','performance','breaking','quicktrade','findmarkets','arbitrage','calendar','watchlist','briefing','pythedge','alpha','aiportfolio'].forEach(t => {
+  ['overview','markets','resolve','members','leaderboard','share','rewards','seasons','settings','analytics','economy','branding','flexbot','ideas','portfolio','account','performance','breaking','quicktrade','findmarkets','arbitrage','calendar','watchlist','briefing','pythedge','alpha','aiportfolio','flexpoints'].forEach(t => {
     const el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === tab ? 'block' : 'none';
   });
@@ -7473,7 +7544,7 @@ function showTab(tab) {
   document.querySelectorAll('.nav-item').forEach(n => {
     if (n.getAttribute('onclick') && n.getAttribute('onclick').includes(`'${tab}'`)) n.classList.add('active');
   });
-  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Social', portfolio:'My Positions', account:'My Account', performance:'Performance', breaking:'Breaking', quicktrade:'Quick Trade', findmarkets:'Find Markets', arbitrage:'Arbitrage Scanner', calendar:'Catalyst Calendar', watchlist:'Watchlist', briefing:'Daily Brief', pythedge:'Pyth Edge', alpha:'Alpha Feed', aiportfolio:'AI Portfolio' };
+  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Social', portfolio:'My Positions', account:'My Account', performance:'Performance', breaking:'Breaking', quicktrade:'Quick Trade', findmarkets:'Find Markets', arbitrage:'Arbitrage Scanner', calendar:'Catalyst Calendar', watchlist:'Watchlist', briefing:'Daily Brief', pythedge:'Pyth Edge', alpha:'Alpha Feed', aiportfolio:'AI Portfolio', flexpoints:'FLEX Points' };
   document.getElementById('topbarTitle').textContent = titles[tab] || tab;
   if (tab === 'analytics' && !analyticsLoaded) loadAnalytics();
   if (tab === 'members') { loadSocialTab(); loadMembers(); }
@@ -7513,6 +7584,7 @@ function showTab(tab) {
   }
   if (tab === 'alpha' && !_alphaTabLoaded) loadAlphaTab();
   if (tab === 'aiportfolio' && !_aiPortfolioLoaded) loadAIPortfolio();
+  if (tab === 'flexpoints') loadFlexPointsTab();
   if (tab === 'settings') loadApiAccess();
   if (tab === 'account') loadUsdcRewards();
   if (tab === 'portfolio') loadPortfolio();
@@ -7721,6 +7793,129 @@ function loadAlphaTab() {
     }
   }, 90000);
 }
+
+// ── FLEX POINTS TAB ─────────────────────────────────────────────────────────
+function loadFlexPointsTab() {
+  var token = localStorage.getItem('hf_token');
+  if (!token) return;
+
+  fetch('/api/flex-points', { headers: { 'Authorization': 'Bearer ' + token } })
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(fp) {
+      if (!fp) return;
+      renderFlexPointsData(fp);
+    }).catch(function() {});
+}
+
+// Load FLEX points on dashboard init (for topbar badge)
+function loadFlexPointsTopbar() {
+  var token = localStorage.getItem('hf_token');
+  if (!token) return;
+  fetch('/api/flex-points', { headers: { 'Authorization': 'Bearer ' + token } })
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(fp) {
+      if (!fp) return;
+      var el = document.getElementById('topbarFlexPoints');
+      var badge = document.getElementById('topbarFlexBadge');
+      var tier = document.getElementById('topbarFlexTier');
+      var navBadge = document.getElementById('navFlexBadge');
+      if (el) el.style.display = 'flex';
+      if (badge) badge.textContent = fp.total_points.toLocaleString() + ' FP';
+      if (tier) tier.textContent = fp.tier.toUpperCase();
+      if (navBadge) navBadge.textContent = fp.total_points.toLocaleString();
+    }).catch(function() {});
+}
+
+var _tierColors = { bronze:'#cd7f32', silver:'#c0c0c0', gold:'#ffd700', platinum:'#e5e4e2', diamond:'#b9f2ff' };
+var _tierBgs = { bronze:'rgba(205,127,50,0.1)', silver:'rgba(192,192,192,0.1)', gold:'rgba(255,215,0,0.1)', platinum:'rgba(229,228,226,0.1)', diamond:'rgba(185,242,255,0.1)' };
+var _tierOrder = ['bronze','silver','gold','platinum','diamond'];
+var _tierThresholds = { bronze:0, silver:250, gold:1000, platinum:5000, diamond:10000 };
+
+function renderFlexPointsData(fp) {
+  // Hero
+  var heroTotal = document.getElementById('fpHeroTotal');
+  var heroTier = document.getElementById('fpHeroTier');
+  if (heroTotal) heroTotal.textContent = fp.total_points.toLocaleString();
+  if (heroTier) {
+    heroTier.textContent = fp.tier.toUpperCase();
+    heroTier.style.color = _tierColors[fp.tier] || '#a855f7';
+    heroTier.style.background = _tierBgs[fp.tier] || 'rgba(168,85,247,0.12)';
+  }
+
+  // Stats
+  var statsEl = document.getElementById('fpStats');
+  statsEl.innerHTML =
+    '<div style="padding:14px;background:#0c0c0b;border:1px solid #1a1917;border-radius:10px;text-align:center">' +
+      '<div style="font-family:var(--mono);font-size:22px;font-weight:900;color:#a855f7">' + fp.total_points.toLocaleString() + '</div>' +
+      '<div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:4px">Total Points</div>' +
+    '</div>' +
+    '<div style="padding:14px;background:#0c0c0b;border:1px solid #1a1917;border-radius:10px;text-align:center">' +
+      '<div style="font-family:var(--mono);font-size:22px;font-weight:900;color:var(--text)">' + fp.trade_count + '</div>' +
+      '<div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:4px">Total Trades</div>' +
+    '</div>' +
+    '<div style="padding:14px;background:#0c0c0b;border:1px solid #1a1917;border-radius:10px;text-align:center">' +
+      '<div style="font-family:var(--mono);font-size:22px;font-weight:900;color:#00e68a">' + fp.streak_multiplier + '</div>' +
+      '<div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:4px">Streak Bonus · ' + fp.weekly_trades + ' this week</div>' +
+    '</div>' +
+    '<div style="padding:14px;background:#0c0c0b;border:1px solid #1a1917;border-radius:10px;text-align:center">' +
+      '<div style="font-family:var(--mono);font-size:22px;font-weight:900;color:' + (_tierColors[fp.tier] || '#a855f7') + '">' + fp.tier.toUpperCase() + '</div>' +
+      '<div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:4px">Current Tier</div>' +
+    '</div>';
+
+  // Tier progress
+  var tierEl = document.getElementById('fpTierProgress');
+  var currentIdx = _tierOrder.indexOf(fp.tier);
+  var progressHtml = '<div style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--text);margin-bottom:14px;text-transform:uppercase;letter-spacing:.08em">Tier Progress</div>';
+  progressHtml += '<div style="display:flex;align-items:center;gap:4px;margin-bottom:12px;height:6px;border-radius:3px;overflow:hidden;background:#1a1917">';
+  var totalMax = 10000;
+  var pctFilled = Math.min(100, (fp.total_points / totalMax) * 100);
+  progressHtml += '<div style="width:' + pctFilled + '%;height:100%;background:linear-gradient(90deg,#a855f7,#00e68a);border-radius:3px;transition:width .5s"></div>';
+  progressHtml += '</div>';
+  progressHtml += '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px">';
+  _tierOrder.forEach(function(t) {
+    var threshold = _tierThresholds[t];
+    var reached = fp.total_points >= threshold;
+    var isCurrent = t === fp.tier;
+    progressHtml += '<div style="text-align:center;min-width:60px;padding:8px 12px;border-radius:6px;border:1px solid ' + (isCurrent ? _tierColors[t] + '55' : '#1a1917') + ';background:' + (reached ? _tierBgs[t] : 'transparent') + '">' +
+      '<div style="font-family:var(--mono);font-size:12px;font-weight:800;color:' + (reached ? _tierColors[t] : 'var(--muted)') + '">' + t.toUpperCase() + '</div>' +
+      '<div style="font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:2px">' + threshold.toLocaleString() + ' FP</div>' +
+      (reached ? '<div style="font-size:10px;margin-top:2px">✓</div>' : '') +
+    '</div>';
+  });
+  progressHtml += '</div>';
+  if (fp.next_tier) {
+    progressHtml += '<div style="margin-top:12px;font-family:var(--mono);font-size:11px;color:var(--muted)">' + fp.points_to_next.toLocaleString() + ' points to <span style="color:' + (_tierColors[fp.next_tier] || '#a855f7') + ';font-weight:700">' + fp.next_tier.toUpperCase() + '</span></div>';
+  } else {
+    progressHtml += '<div style="margin-top:12px;font-family:var(--mono);font-size:11px;color:#b9f2ff;font-weight:700">💎 Maximum tier reached!</div>';
+  }
+  tierEl.innerHTML = progressHtml;
+
+  // Recent log
+  var logEl = document.getElementById('fpRecentLog');
+  if (fp.recent_log && fp.recent_log.length) {
+    logEl.innerHTML = fp.recent_log.map(function(entry) {
+      var sourceLabel = entry.source === 'polymarket_trade' ? '📈 Polymarket Trade' : entry.source === 'community_trade' ? '🎯 Community Trade' : '⚡ ' + entry.source;
+      var ago = '';
+      if (entry.created_at) {
+        var ms = Date.now() - new Date(entry.created_at).getTime();
+        ago = ms < 60000 ? 'just now' : ms < 3600000 ? Math.floor(ms / 60000) + 'm ago' : ms < 86400000 ? Math.floor(ms / 3600000) + 'h ago' : Math.floor(ms / 86400000) + 'd ago';
+      }
+      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid #1a1917">' +
+        '<div style="display:flex;align-items:center;gap:10px">' +
+          '<span style="font-family:var(--mono);font-size:10px;color:var(--muted)">' + sourceLabel + '</span>' +
+          (entry.trade_amount_usd ? '<span style="font-family:var(--mono);font-size:10px;color:var(--dim)">$' + Math.round(entry.trade_amount_usd) + ' traded</span>' : '') +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:8px">' +
+          '<span style="font-family:var(--mono);font-size:12px;font-weight:700;color:#00e68a">+' + entry.points + ' FP</span>' +
+          '<span style="font-family:var(--mono);font-size:9px;color:var(--muted)">' + ago + '</span>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+}
+
+// Load FLEX points on page init
+setTimeout(loadFlexPointsTopbar, 1500);
 
 // ── AI PORTFOLIO TAB ────────────────────────────────────────────────────────
 let _aiPortfolioLoaded = false;

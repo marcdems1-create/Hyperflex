@@ -439,6 +439,10 @@ canvas{display:block;width:100%!important}
 
         <button class="trade-cta buy-yes" id="tradeCta" onclick="executeTrade()">Buy Yes</button>
         <div id="tradeStatus" style="display:none;font-family:var(--mono);font-size:11px;text-align:center;padding:6px 0"></div>
+        <div id="flexPointsBar" style="display:none;margin-top:8px;padding:8px 12px;background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.12);border-radius:6px;display:flex;align-items:center;justify-content:space-between;font-family:var(--mono);font-size:10px">
+          <span style="color:#a855f7;font-weight:700">⚡ FLEX Points</span>
+          <span id="flexPointsBadge" style="color:var(--text);font-weight:800">—</span>
+        </div>
         <div class="trade-disclaimer">Click "Connect Wallet" to connect to Polymarket</div>
 
         <!-- Trading Setup Checklist (shown after wallet connect) -->
@@ -551,6 +555,22 @@ async function loadMarket() {
     loadTopHolders(_market);
     loadMarketIntel(slug);
     loadWhaleFlow(slug);
+    // Load FLEX points if logged in
+    try {
+      var hfToken = localStorage.getItem('hf_token');
+      if (hfToken) {
+        fetch('/api/flex-points', { headers: { 'Authorization': 'Bearer ' + hfToken } })
+          .then(function(r) { return r.ok ? r.json() : null; })
+          .then(function(fp) {
+            if (fp && fp.total_points != null) {
+              var bar = document.getElementById('flexPointsBar');
+              var badge = document.getElementById('flexPointsBadge');
+              if (bar) bar.style.display = 'flex';
+              if (badge) badge.textContent = fp.total_points.toLocaleString() + ' FP · ' + fp.tier.toUpperCase();
+            }
+          }).catch(function() {});
+      }
+    } catch (e2) { /* silent */ }
   } catch (e) {
     document.getElementById('mktLoading').innerHTML = '<div style="color:var(--red);font-family:var(--mono);font-size:13px">Failed to load market: ' + escH(e.message) + '</div><div style="margin-top:12px"><a href="/" style="color:var(--gold)">&#x2190; Back to home</a></div>';
   }
@@ -2953,6 +2973,24 @@ async function executeTrade() {
 
     // Show position in trade panel
     showTradePosition(sideLabel, shares, price, amount, payout);
+
+    // Award FLEX points — 1 per $1 traded
+    try {
+      var hfToken = localStorage.getItem('hf_token');
+      if (hfToken) {
+        fetch('/api/flex-points/earn', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + hfToken },
+          body: JSON.stringify({ amount_usd: amount, source: 'polymarket_trade' })
+        }).then(function(r) { return r.ok ? r.json() : null; }).then(function(fp) {
+          if (fp && fp.points_earned > 0) {
+            var flexEl = document.getElementById('flexPointsBadge');
+            if (flexEl) flexEl.textContent = fp.total_points.toLocaleString() + ' FP';
+            showTradeStatus('\u2705 Order placed! +' + fp.points_earned + ' FLEX points earned', 'success');
+          }
+        }).catch(function() {});
+      }
+    } catch (e) { /* silent */ }
 
     // Refresh balance + positions after trade
     setTimeout(fetchTradeBalance, 2000);
