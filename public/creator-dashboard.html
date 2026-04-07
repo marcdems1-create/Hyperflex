@@ -7572,7 +7572,7 @@ function renderAlphaCards() {
     var sideBg = side === 'YES' ? 'rgba(0,230,138,0.08)' : 'rgba(255,77,106,0.08)';
     var yesPct = m.yes_price != null ? Math.round(m.yes_price * 100) : null;
     var ec = m.edge_components || {};
-    var url = m.slug ? '/market/' + m.slug : '/alpha';
+    var url = m.slug ? '/market/' + m.slug + (m.market_id ? '?outcome=' + encodeURIComponent(m.market_id) : '') : '/alpha';
     var borderLeft = edge >= 60 ? '3px solid #00e68a' : edge >= 35 ? '3px solid #4d9fff' : '3px solid transparent';
 
     // Alpha badge

@@ -525,6 +525,26 @@ async function loadMarket() {
     }
 
     renderMarket();
+
+    // Auto-select outcome from ?outcome= param (conditionId or index)
+    var outcomeParam = new URLSearchParams(window.location.search).get('outcome');
+    if (outcomeParam && _sortedEventMarkets && _sortedEventMarkets.length > 1) {
+      var foundIdx = -1;
+      // Try matching by conditionId first
+      for (var oi = 0; oi < _sortedEventMarkets.length; oi++) {
+        if (_sortedEventMarkets[oi].conditionId === outcomeParam || _sortedEventMarkets[oi].slug === outcomeParam) {
+          foundIdx = oi; break;
+        }
+      }
+      // Fall back to numeric index
+      if (foundIdx < 0 && !isNaN(parseInt(outcomeParam))) {
+        foundIdx = parseInt(outcomeParam);
+      }
+      if (foundIdx >= 0 && foundIdx < _sortedEventMarkets.length) {
+        switchOutcome(foundIdx);
+      }
+    }
+
     document.getElementById('mktLoading').style.display = 'none';
     document.getElementById('marketContent').style.display = 'block';
     document.title = (_market._displayTitle || _market.question || 'Market') + ' | HYPERFLEX';

@@ -320,7 +320,7 @@ function render(data){
       '<span class="roi">'+roi+'% ROI</span>'+
     '</div>';
 
-    return '<a class="edge-card '+rankClass+'" href="'+(m.slug?'/market/'+m.slug:'/screener')+'">'+
+    return '<a class="edge-card '+rankClass+'" href="'+(m.slug?'/market/'+m.slug+(m.market_id?'?outcome='+encodeURIComponent(m.market_id):''):'/screener')+'">'+
       '<div class="card-top">'+
         '<div class="edge-score-wrap">'+
           '<div class="edge-score">'+

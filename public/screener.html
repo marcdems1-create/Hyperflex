@@ -614,7 +614,8 @@ function renderCards() {
 
     var _pRef = typeof polyRef==='function'?polyRef:function(u){return u};
     var rawPolyUrl = m.url && m.url.startsWith('https://polymarket.com') ? _pRef(m.url) : (m.slug ? _pRef('https://polymarket.com/event/' + m.slug) : _pRef('https://polymarket.com'));
-    var safeUrl = m.slug ? '/market/' + m.slug : (typeof hfxMarketUrl === 'function' ? hfxMarketUrl(rawPolyUrl) : '/screener');
+    var outcomeQ = m.market_id ? '?outcome=' + encodeURIComponent(m.market_id) : '';
+    var safeUrl = m.slug ? '/market/' + m.slug + outcomeQ : (typeof hfxMarketUrl === 'function' ? hfxMarketUrl(rawPolyUrl) : '/screener');
     var expiryStr = m.days_until_expiry != null ? (m.days_until_expiry === 0 ? 'Today' : m.days_until_expiry + 'd left') : '';
 
     // Signal aging
