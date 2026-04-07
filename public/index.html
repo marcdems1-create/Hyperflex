@@ -20,22 +20,27 @@
 <meta name="twitter:description" content="AI-powered market intelligence for prediction markets. Real-time signals, smart money flow, and cross-asset analysis across Polymarket."/>
 <meta name="twitter:image" content="https://hyperflex.network/og-default.png"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 <style>
 :root {
-  --ink: #0e0e0c;
-  --paper: #141412;
-  --cream: #1c1c19;
-  --text: #ddd8cc;
+  --ink: #0a0a0f;
+  --paper: #0e0e15;
+  --cream: #16161f;
+  --text: #f0f0f5;
   --gold: #c9920d;
   --gold-lt: #e0a820;
   --gold-bright: #f5c842;
-  --border: #2a2a26;
-  --dim: #7a7870;
-  --green: #2d9b5f;
-  --red: #c0392b;
-  --sans: 'Syne', sans-serif;
-  --mono: 'Space Mono', monospace;
+  --border: #1e1e2a;
+  --dim: #8888a0;
+  --green: #00e68a;
+  --red: #ff4d6a;
+  --accent-green: #00e68a;
+  --accent-red: #ff4d6a;
+  --accent-blue: #4d9fff;
+  --accent-purple: #a855f7;
+  --accent-amber: #f59e0b;
+  --sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --mono: 'JetBrains Mono', monospace;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 ::-webkit-scrollbar { width: 4px; }
@@ -641,9 +646,9 @@ footer {
   top: -8px;
   left: 16px;
   font-size: 72px;
-  font-family: 'Syne', sans-serif;
+  font-family: var(--sans);
   font-weight: 800;
-  color: rgba(201,146,13,0.09);
+  color: rgba(77,159,255,0.06);
   line-height: 1;
   pointer-events: none;
   user-select: none;
@@ -1203,38 +1208,38 @@ function logTradeIntent() {
 
 <!-- PRICING — 100% FREE -->
 <section class="pricing-section" id="pricing" style="text-align:center;padding:60px 20px">
-  <h2 style="font-family:'Syne',sans-serif;font-size:32px;color:#e8e4d9;margin-bottom:12px">100% Free. No Limits.</h2>
-  <p style="font-family:'Space Mono',monospace;font-size:14px;color:#7a7870;max-width:500px;margin:0 auto">Every feature. Every signal. Every tool. Completely free — no credit card, no catch.</p>
+  <h2 style="font-family:var(--sans);font-size:32px;color:#e8e4d9;margin-bottom:12px">100% Free. No Limits.</h2>
+  <p style="font-family:var(--mono);font-size:14px;color:#7a7870;max-width:500px;margin:0 auto">Every feature. Every signal. Every tool. Completely free — no credit card, no catch.</p>
 </section>
 
 <!-- CREATOR CTA -->
 <section style="padding:80px 40px;background:#0e0e0c;border-top:1px solid #2a2a26;border-bottom:1px solid #2a2a26">
   <div style="max-width:1100px;margin:0 auto">
     <div style="text-align:center;margin-bottom:56px">
-      <div style="font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:#c9920d;letter-spacing:3px;text-transform:uppercase;margin-bottom:16px">For Creators</div>
-      <h2 style="font-family:'Syne',sans-serif;font-size:clamp(28px,4vw,48px);font-weight:800;color:#e8e4d9;margin:0 0 16px">Turn your audience into predictors</h2>
-      <p style="font-family:'Space Mono',monospace;font-size:13px;color:#7a7870;max-width:540px;margin:0 auto;line-height:1.8">Launch a branded prediction market community in 5 minutes. Your audience competes, you grow. No code, no crypto.</p>
+      <div style="font-family:var(--mono);font-size:11px;font-weight:700;color:#c9920d;letter-spacing:3px;text-transform:uppercase;margin-bottom:16px">For Creators</div>
+      <h2 style="font-family:var(--sans);font-size:clamp(28px,4vw,48px);font-weight:800;color:#e8e4d9;margin:0 0 16px">Turn your audience into predictors</h2>
+      <p style="font-family:var(--mono);font-size:13px;color:#7a7870;max-width:540px;margin:0 auto;line-height:1.8">Launch a branded prediction market community in 5 minutes. Your audience competes, you grow. No code, no crypto.</p>
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px;margin-bottom:48px">
       <div style="background:#111110;border:1px solid #2a2a26;border-radius:12px;padding:28px">
         <div style="font-size:28px;margin-bottom:12px">🏛️</div>
-        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:#e8e4d9;margin-bottom:8px">Branded Community</div>
-        <div style="font-family:'Space Mono',monospace;font-size:12px;color:#7a7870;line-height:1.7">Your name, your colors, your URL. Members predict on your content — sports picks, market calls, episode outcomes. A leaderboard keeps them coming back.</div>
+        <div style="font-family:var(--sans);font-weight:700;font-size:16px;color:#e8e4d9;margin-bottom:8px">Branded Community</div>
+        <div style="font-family:var(--mono);font-size:12px;color:#7a7870;line-height:1.7">Your name, your colors, your URL. Members predict on your content — sports picks, market calls, episode outcomes. A leaderboard keeps them coming back.</div>
       </div>
       <div style="background:#111110;border:1px solid #2a2a26;border-radius:12px;padding:28px">
         <div style="font-size:28px;margin-bottom:12px">🤖</div>
-        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:#e8e4d9;margin-bottom:8px">AI Market Generation</div>
-        <div style="font-family:'Space Mono',monospace;font-size:12px;color:#7a7870;line-height:1.7">Paste a YouTube URL and our AI generates 6 ready-to-publish prediction markets about your video. From hours of work to 30 seconds.</div>
+        <div style="font-family:var(--sans);font-weight:700;font-size:16px;color:#e8e4d9;margin-bottom:8px">AI Market Generation</div>
+        <div style="font-family:var(--mono);font-size:12px;color:#7a7870;line-height:1.7">Paste a YouTube URL and our AI generates 6 ready-to-publish prediction markets about your video. From hours of work to 30 seconds.</div>
       </div>
       <div style="background:#111110;border:1px solid #2a2a26;border-radius:12px;padding:28px">
         <div style="font-size:28px;margin-bottom:12px">🏆</div>
-        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:#e8e4d9;margin-bottom:8px">Seasons &amp; Leaderboards</div>
-        <div style="font-family:'Space Mono',monospace;font-size:12px;color:#7a7870;line-height:1.7">Run prediction seasons with prizes. Members earn points, climb rankings, and share their wins — driving traffic back to you every week.</div>
+        <div style="font-family:var(--sans);font-weight:700;font-size:16px;color:#e8e4d9;margin-bottom:8px">Seasons &amp; Leaderboards</div>
+        <div style="font-family:var(--mono);font-size:12px;color:#7a7870;line-height:1.7">Run prediction seasons with prizes. Members earn points, climb rankings, and share their wins — driving traffic back to you every week.</div>
       </div>
     </div>
     <div style="text-align:center">
-      <a href="/creator/login#signup" style="display:inline-block;font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:#141412;background:#c9920d;text-decoration:none;padding:14px 32px;border-radius:8px;transition:background .15s" onmouseover="this.style.background='#e0b340'" onmouseout="this.style.background='#c9920d'">Launch your community free &rarr;</a>
-      <div style="font-family:'Space Mono',monospace;font-size:11px;color:#555;margin-top:12px">Free forever &middot; No credit card &middot; Live in 5 minutes</div>
+      <a href="/creator/login#signup" style="display:inline-block;font-family:var(--mono);font-size:13px;font-weight:700;color:#141412;background:#c9920d;text-decoration:none;padding:14px 32px;border-radius:8px;transition:background .15s" onmouseover="this.style.background='#e0b340'" onmouseout="this.style.background='#c9920d'">Launch your community free &rarr;</a>
+      <div style="font-family:var(--mono);font-size:11px;color:#555;margin-top:12px">Free forever &middot; No credit card &middot; Live in 5 minutes</div>
     </div>
   </div>
 </section>

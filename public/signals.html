@@ -119,12 +119,13 @@ a{color:var(--gold);text-decoration:none} a:hover{text-decoration:underline}
 .s-widget-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--border)}
 .s-widget-title{font-family:var(--sans);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:0.8px}
 .s-fg-wrap{padding:24px 14px;text-align:center;position:relative}
-.s-fg-wrap::before{content:'';position:absolute;top:50%;left:50%;width:120px;height:120px;transform:translate(-50%,-50%);border-radius:50%;background:radial-gradient(circle,rgba(77,159,255,0.06),transparent);pointer-events:none}
-.s-fg-score{font-family:var(--mono);font-size:52px;font-weight:700;line-height:1;position:relative}
-.s-fg-label{font-family:var(--sans);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;margin-top:6px}
-.s-fg-bar{height:6px;background:var(--border);border-radius:3px;overflow:hidden;position:relative;margin-top:14px}
-.s-fg-fill{position:absolute;top:0;left:0;height:100%;background:linear-gradient(90deg,var(--accent-red),var(--accent-amber),var(--accent-green));border-radius:3px}
-.s-fg-dot{position:absolute;top:-5px;width:16px;height:16px;border-radius:50%;border:2px solid var(--bg)}
+.s-fg-gauge{position:relative;width:130px;height:130px;margin:0 auto 12px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.s-fg-gauge::before{content:'';position:absolute;inset:6px;background:var(--card);border-radius:50%;z-index:1}
+.s-fg-score{font-family:var(--mono);font-size:36px;font-weight:800;line-height:1;position:relative;z-index:2;letter-spacing:-1px}
+.s-fg-label{font-family:var(--sans);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;position:relative;z-index:2;margin-top:4px}
+.s-fg-bar{height:4px;background:var(--border);border-radius:2px;overflow:hidden;position:relative;margin-top:8px;width:90%;margin-left:auto;margin-right:auto}
+.s-fg-fill{position:absolute;top:0;left:0;height:100%;background:linear-gradient(90deg,var(--accent-red),var(--accent-amber),var(--accent-green));border-radius:2px}
+.s-fg-dot{position:absolute;top:-4px;width:12px;height:12px;border-radius:50%;border:2px solid var(--card)}
 
 /* WINNER PICKS */
 .s-winner{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);transition:all .2s}
@@ -456,12 +457,17 @@ async function loadFG() {
     document.getElementById('stFG').textContent = score;
     document.getElementById('stFG').style.color = color;
     document.getElementById('stFGLabel').textContent = label;
+    // Radial gauge: score 0=full red, 100=full green
+    var deg = Math.round((score / 100) * 360);
+    var gaugeGrad = 'conic-gradient(var(--accent-red) 0deg, var(--accent-amber) ' + Math.round(deg * 0.4) + 'deg, var(--accent-green) ' + deg + 'deg, var(--border) ' + deg + 'deg 360deg)';
     document.getElementById('fgWidget').innerHTML =
-      '<div class="s-fg-score" style="color:' + color + '">' + score + '</div>' +
-      '<div class="s-fg-label" style="color:' + color + '">' + escH(label) + '</div>' +
+      '<div class="s-fg-gauge" style="background:' + gaugeGrad + '">' +
+        '<div class="s-fg-score" style="color:' + color + '">' + score + '</div>' +
+        '<div class="s-fg-label" style="color:' + color + '">' + escH(label) + '</div>' +
+      '</div>' +
       '<div class="s-fg-bar"><div class="s-fg-fill" style="width:' + score + '%"></div>' +
-        '<div class="s-fg-dot" style="left:calc(' + score + '% - 8px);background:' + color + ';box-shadow:0 0 12px ' + color + '"></div></div>' +
-      '<div style="display:flex;justify-content:space-between;margin-top:8px;font-family:var(--sans);font-size:9px;font-weight:600;color:var(--dim)"><span>Fear</span><span>Greed</span></div>';
+        '<div class="s-fg-dot" style="left:calc(' + score + '% - 6px);background:' + color + ';box-shadow:0 0 8px ' + color + '"></div></div>' +
+      '<div style="display:flex;justify-content:space-between;margin-top:6px;font-family:var(--sans);font-size:9px;font-weight:600;color:var(--dim)"><span>Fear</span><span>Greed</span></div>';
   } catch(e) {}
 }
 
