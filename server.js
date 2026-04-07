@@ -2097,15 +2097,11 @@ app.post('/trade', requireAuth, async (req, res) => {
     }
     if (mktErr) console.error('multi-option market update error:', mktErr.message);
 
-    // Award FLEX points for multi-option community trade
-    const flexEarned = await awardFlexPoints(user_id, Math.max(1, Math.round(amount / 100)), 'community_trade').catch(() => 0);
-
     return res.json({
       message:  'Trade placed',
       position,
       balance:  communityBalance - amount,
       options:  finalOpts,
-      flex_points_earned: flexEarned,
     });
   }
 
@@ -2181,9 +2177,6 @@ app.post('/trade', requireAuth, async (req, res) => {
   const totalVotes = newYesVotes + newNoVotes;
   const newBalance = communityBalance - amount;
 
-  // Award FLEX points for community trade (1 point per 100 centpoints bet = 1 point per 1 community point)
-  const flexEarned = await awardFlexPoints(user_id, Math.max(1, Math.round(amount / 100)), 'community_trade').catch(() => 0);
-
   res.json({
     message:    'Trade placed',
     position,
@@ -2193,7 +2186,6 @@ app.post('/trade', requireAuth, async (req, res) => {
     yes_votes:  newYesVotes,
     no_votes:   newNoVotes,
     yes_consensus: totalVotes > 0 ? Math.round(newYesVotes / totalVotes * 100) : null,
-    flex_points_earned: flexEarned,
   });
 });
 
@@ -21759,6 +21751,9 @@ const FLEX_PTS_CACHE_TTL = 5 * 60 * 1000;
 // Earn FLEX points — 1 point per $1 traded (min 1 per trade), bonus for streaks
 async function awardFlexPoints(userId, tradeAmountUsd, source = 'polymarket_trade') {
   if (!userId) return 0;
+  // Only real-money trades earn FLEX points
+  const VALID_SOURCES = ['polymarket_trade', 'kalshi_trade'];
+  if (!VALID_SOURCES.includes(source)) return 0;
   const basePoints = Math.max(1, Math.round(tradeAmountUsd));
   // Streak bonus: check recent trades in last 7 days
   let streakBonus = 0;
