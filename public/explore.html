@@ -1431,7 +1431,14 @@ setInterval(function() { try { loadDailyBriefing(); } catch(e) {} }, 30 * 60 * 1
     el.innerHTML = edges.slice(0, 4).map(function(e) {
       var dirColor = e.edge_direction === 'BUY YES' ? '#22c55e' : e.edge_direction === 'BUY NO' ? '#ef4444' : '#888';
       var confBadge = e.ai_confidence === 'high' ? '<span style="color:#22c55e;font-weight:700">HIGH</span>' : e.ai_confidence === 'medium' ? '<span style="color:var(--gold);font-weight:700">MEDIUM</span>' : '<span style="color:var(--muted)">LOW</span>';
-      return '<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;transition:border-color .15s" onmouseenter="this.style.borderColor=\'rgba(77,159,255,0.4)\'" onmouseleave="this.style.borderColor=\'var(--border)\'">' +
+      // Derive market link from market_url
+      var mktLink = '/screener';
+      if (e.market_url) {
+        var slugMatch = e.market_url.match(/polymarket\.com\/event\/([^?#\/]+)/);
+        if (slugMatch) mktLink = '/market/' + slugMatch[1];
+        else mktLink = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(e.market_url) : e.market_url;
+      }
+      return '<a href="' + mktLink + '" style="display:block;text-decoration:none;color:inherit;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;transition:border-color .15s" onmouseenter="this.style.borderColor=\'rgba(77,159,255,0.4)\'" onmouseleave="this.style.borderColor=\'var(--border)\'">' +
         '<div style="font-size:13px;font-weight:600;color:var(--text);line-height:1.4;margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">' + (e.question || '').substring(0, 60) + '</div>' +
         '<div style="display:flex;gap:12px;align-items:center;margin-bottom:8px">' +
           '<div><span style="font-family:var(--mono);font-size:9px;color:var(--muted);display:block">Market</span><span style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--text)">' + (e.current_yes_pct || 0) + '%</span></div>' +
@@ -1443,7 +1450,7 @@ setInterval(function() { try { loadDailyBriefing(); } catch(e) {} }, 30 * 60 * 1
           '<span style="font-family:var(--mono);font-size:9px">' + confBadge + '</span>' +
         '</div>' +
         (e.ai_reasoning ? '<div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5;border-top:1px solid var(--border);padding-top:8px">' + (e.ai_reasoning || '').substring(0, 100) + '</div>' : '') +
-      '</div>';
+      '</a>';
     }).join('');
   } catch(e) { console.warn('[ai-edge]', e.message); }
 })();
