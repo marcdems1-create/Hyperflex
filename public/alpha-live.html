@@ -3,126 +3,173 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HYPERFLEX — Alpha Terminal · Live</title>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@500;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<title>HYPERFLEX — Alpha Terminal · Live Edges</title>
+<meta name="description" content="Live alpha edges on Polymarket — whale clusters, momentum, expiry decay sorted by Edge Score. Trade in the next 5 minutes.">
+<meta property="og:title" content="HYPERFLEX Alpha Terminal">
+<meta property="og:description" content="Live prediction market edges you can trade right now.">
+<meta property="og:url" content="https://hyperflex.network/alpha-live">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --paper:#141412;
-    --paper-2:#1c1c19;
-    --paper-3:#242420;
-    --ink:#f4f1ea;
-    --ink-dim:#8a8680;
-    --gold:#c9920d;
-    --gold-bright:#e6a815;
-    --green:#4ade80;
-    --red:#f87171;
-    --line:#2d2d28;
+    --paper:#0e0e15;
+    --paper-2:#16161f;
+    --paper-3:#1e1e2a;
+    --ink:#f0f0f5;
+    --dim:#8888a0;
+    --border:#1e1e2a;
+    --green:#00e68a;
+    --red:#ff4d6a;
+    --blue:#4d9fff;
+    --purple:#a855f7;
+    --amber:#f59e0b;
+    --sans:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+    --mono:'JetBrains Mono',monospace;
   }
   *{margin:0;padding:0;box-sizing:border-box}
   body{
     background:var(--paper);color:var(--ink);
-    font-family:'Space Mono',monospace;font-size:14px;line-height:1.5;
+    font-family:var(--sans);font-size:14px;line-height:1.5;
     -webkit-font-smoothing:antialiased;
   }
   .container{max-width:1280px;margin:0 auto;padding:0 24px}
 
-  .topbar{border-bottom:1px solid var(--line);padding:14px 0;background:var(--paper);position:sticky;top:0;z-index:10}
-  .topbar-inner{display:flex;align-items:center;justify-content:space-between;gap:24px}
-  .logo{font-family:'Syne',sans-serif;font-weight:800;font-size:18px;letter-spacing:0.04em}
-  .logo span{color:var(--gold)}
-  .live-dot{display:inline-flex;align-items:center;gap:8px;font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:0.1em}
-  .live-dot::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 2s infinite}
-  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+  /* Hero */
+  .hero{padding:48px 0 32px;border-bottom:1px solid var(--border)}
+  .hero-eyebrow{font-size:11px;font-weight:600;color:var(--green);text-transform:uppercase;letter-spacing:0.2em;margin-bottom:14px}
+  .hero h1{font-family:var(--sans);font-weight:900;font-size:48px;line-height:1.05;letter-spacing:-0.03em;margin-bottom:16px;max-width:900px}
+  .hero h1 em{background:linear-gradient(135deg,var(--green),var(--blue));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-style:normal}
+  .hero-sub{font-size:14px;color:var(--dim);max-width:640px;margin-bottom:24px;line-height:1.6}
+  .hero-stats{display:flex;gap:36px;flex-wrap:wrap}
+  .hero-stat .n{font-family:var(--mono);font-size:26px;font-weight:700;color:var(--ink)}
+  .hero-stat .l{font-size:10px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:0.12em;margin-top:3px}
 
-  .hero{padding:56px 0 32px;border-bottom:1px solid var(--line)}
-  .hero-eyebrow{font-size:11px;color:var(--gold);text-transform:uppercase;letter-spacing:0.2em;margin-bottom:16px}
-  .hero h1{font-family:'Syne',sans-serif;font-weight:800;font-size:52px;line-height:1.05;letter-spacing:-0.03em;margin-bottom:18px;max-width:900px}
-  .hero h1 em{color:var(--gold);font-style:normal}
-  .hero-sub{font-size:15px;color:var(--ink-dim);max-width:640px;margin-bottom:28px}
-  .hero-stats{display:flex;gap:40px;flex-wrap:wrap}
-  .hero-stat .n{font-family:'Syne',sans-serif;font-size:28px;font-weight:800;color:var(--ink)}
-  .hero-stat .l{font-size:10px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:0.15em;margin-top:4px}
+  /* Section head */
+  .sec-head{display:flex;align-items:center;justify-content:space-between;padding:28px 0 16px;border-bottom:1px solid var(--border);margin-bottom:18px;flex-wrap:wrap;gap:12px}
+  .sec-head h2{font-size:18px;font-weight:700;letter-spacing:-0.01em}
+  .sec-head .meta{font-family:var(--mono);font-size:11px;color:var(--dim);letter-spacing:0.04em}
+  .sec-head .controls{display:flex;gap:6px}
+  .ctrl{background:var(--paper-2);border:1px solid var(--border);color:var(--dim);font-family:var(--sans);font-size:11px;font-weight:600;padding:6px 14px;border-radius:8px;cursor:pointer;transition:all .15s}
+  .ctrl:hover{border-color:var(--blue);color:var(--blue)}
+  .ctrl.active{border-color:var(--green);color:var(--green);background:rgba(0,230,138,0.06)}
 
-  .sec-head{display:flex;align-items:baseline;justify-content:space-between;padding:36px 0 18px;border-bottom:1px solid var(--line);margin-bottom:20px;flex-wrap:wrap;gap:12px}
-  .sec-head h2{font-family:'Syne',sans-serif;font-size:22px;font-weight:700;letter-spacing:-0.01em}
-  .sec-head .meta{font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:0.12em}
-  .sec-head .controls{display:flex;gap:8px}
-  .ctrl{background:var(--paper-2);border:1px solid var(--line);color:var(--ink);font-family:inherit;font-size:11px;padding:6px 12px;border-radius:3px;cursor:pointer;text-transform:uppercase;letter-spacing:0.08em}
-  .ctrl:hover{border-color:var(--gold);color:var(--gold)}
+  /* Live indicator */
+  .live-badge{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;color:var(--dim)}
+  .live-badge::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
 
-  .edge-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:16px;padding-bottom:40px;min-height:300px}
+  /* Grid */
+  .edge-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:14px;padding-bottom:40px;min-height:300px}
 
-  .edge-card{background:var(--paper-2);border:1px solid var(--line);border-radius:6px;padding:18px;position:relative;cursor:pointer;transition:all 0.15s ease;text-decoration:none;color:inherit;display:block}
-  .edge-card:hover{border-color:var(--gold);transform:translateY(-1px)}
-  .edge-card.rank-1{border-color:rgba(201,146,13,0.5);background:linear-gradient(180deg,rgba(201,146,13,0.06),var(--paper-2))}
+  /* Card */
+  .edge-card{
+    background:rgba(22,22,31,0.8);
+    border:1px solid var(--border);border-radius:14px;
+    padding:18px;position:relative;cursor:pointer;
+    transition:all .15s;text-decoration:none;color:inherit;display:block;
+    backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  }
+  .edge-card:hover{border-color:rgba(77,159,255,0.4);transform:translateY(-2px);box-shadow:0 8px 32px rgba(0,0,0,0.3)}
+  .edge-card.rank-1{border-color:rgba(0,230,138,0.3);background:linear-gradient(180deg,rgba(0,230,138,0.04),rgba(22,22,31,0.8))}
+  .edge-card.rank-2{border-color:rgba(77,159,255,0.2)}
+  .edge-card.rank-3{border-color:rgba(168,85,247,0.2)}
 
-  .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px}
-  .edge-score{display:flex;flex-direction:column;align-items:center;min-width:56px}
-  .edge-score .n{font-family:'Syne',sans-serif;font-weight:800;font-size:32px;color:var(--gold-bright);line-height:1}
-  .edge-score .l{font-size:9px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:0.1em;margin-top:4px}
+  /* Card top row */
+  .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px}
+  .edge-score-wrap{display:flex;align-items:center;gap:10px}
+  .edge-score{display:flex;flex-direction:column;align-items:center;min-width:52px}
+  .edge-score .n{font-family:var(--mono);font-weight:700;font-size:30px;line-height:1}
+  .edge-score .n.high{color:var(--green)}
+  .edge-score .n.mid{color:var(--blue)}
+  .edge-score .n.low{color:var(--dim)}
+  .edge-score .l{font-size:9px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:0.1em;margin-top:3px}
+  .alpha-badge{font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px;white-space:nowrap}
+  .alpha-badge.high{background:rgba(0,230,138,0.12);color:var(--green)}
+  .alpha-badge.mid{background:rgba(77,159,255,0.12);color:var(--blue)}
+  .alpha-badge.low{background:rgba(136,136,160,0.12);color:var(--dim)}
 
-  .badges{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
-  .badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;padding:4px 8px;border-radius:3px;text-transform:uppercase;letter-spacing:0.08em;font-weight:700}
-  .badge-whale{background:rgba(201,146,13,0.12);color:var(--gold);border:1px solid rgba(201,146,13,0.3)}
-  .badge-momentum{background:rgba(74,222,128,0.12);color:var(--green);border:1px solid rgba(74,222,128,0.3)}
-  .badge-momentum.down{background:rgba(239,68,68,0.12);color:var(--red);border-color:rgba(239,68,68,0.3)}
-  .badge-decay{background:rgba(239,68,68,0.12);color:var(--red);border:1px solid rgba(239,68,68,0.3)}
-  .badge-volume{background:rgba(124,58,237,0.12);color:#a78bfa;border:1px solid rgba(124,58,237,0.3)}
-  .badge-depth{background:rgba(59,130,246,0.12);color:#60a5fa;border:1px solid rgba(59,130,246,0.3)}
-  .badge-cat{background:var(--paper-3);color:var(--ink-dim);border:1px solid var(--line)}
+  .badges{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
+  .badge{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:600;padding:3px 7px;border-radius:6px;letter-spacing:0.02em}
+  .badge-whale{background:rgba(168,85,247,0.12);color:var(--purple);border:1px solid rgba(168,85,247,0.25)}
+  .badge-momentum{background:rgba(0,230,138,0.1);color:var(--green);border:1px solid rgba(0,230,138,0.25)}
+  .badge-momentum.down{background:rgba(255,77,106,0.1);color:var(--red);border-color:rgba(255,77,106,0.25)}
+  .badge-decay{background:rgba(255,77,106,0.1);color:var(--red);border:1px solid rgba(255,77,106,0.25)}
+  .badge-volume{background:rgba(77,159,255,0.1);color:var(--blue);border:1px solid rgba(77,159,255,0.25)}
+  .badge-depth{background:rgba(245,158,11,0.1);color:var(--amber);border:1px solid rgba(245,158,11,0.25)}
+  .badge-cat{background:var(--paper-3);color:var(--dim);border:1px solid var(--border)}
 
-  .card-q{font-size:15px;font-weight:700;color:var(--ink);line-height:1.35;margin-bottom:14px;min-height:40px}
+  /* Question */
+  .card-q{font-size:15px;font-weight:600;color:var(--ink);line-height:1.35;margin-bottom:12px;min-height:40px}
 
-  .price-row{display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--paper);border-radius:4px;margin-bottom:12px;font-size:12px}
-  .price-row .mkt{color:var(--ink-dim)}
-  .price-row .arrow{color:var(--gold);font-weight:700}
-  .price-row .model{color:var(--gold-bright);font-weight:700}
-  .price-row .delta{margin-left:auto;font-weight:700}
-  .price-row .delta.pos{color:var(--green)}
-  .price-row .delta.neg{color:var(--red)}
+  /* Whale consensus row (replaces fake model probability) */
+  .consensus-row{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--paper);border-radius:8px;margin-bottom:10px;font-size:12px;border:1px solid var(--border)}
+  .consensus-row .label{color:var(--dim);font-weight:500}
+  .consensus-row .whales{color:var(--purple);font-weight:700;font-family:var(--mono)}
+  .consensus-row .side-pill{font-family:var(--mono);font-weight:700;font-size:11px;padding:2px 8px;border-radius:4px}
+  .consensus-row .side-pill.yes{background:rgba(0,230,138,0.12);color:var(--green)}
+  .consensus-row .side-pill.no{background:rgba(255,77,106,0.12);color:var(--red)}
+  .consensus-row .pct{font-family:var(--mono);font-weight:700;margin-left:auto}
 
-  .breakdown{background:var(--paper);border-radius:4px;padding:12px;margin-bottom:12px;border:1px solid var(--line)}
-  .breakdown-title{font-size:9px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:8px}
-  .bd-row{display:flex;align-items:center;gap:8px;margin-bottom:4px;font-size:11px}
+  /* Trade context strip */
+  .trade-strip{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:10px;padding:6px 0}
+  .trade-strip .entry{color:var(--ink)}
+  .trade-strip .win{color:var(--green)}
+  .trade-strip .roi{color:var(--amber);font-weight:700}
+  .trade-strip .arrow{color:var(--border);font-size:10px}
+
+  /* Breakdown */
+  .breakdown{background:var(--paper);border-radius:8px;padding:10px 12px;margin-bottom:10px;border:1px solid var(--border)}
+  .breakdown-title{font-size:9px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px}
+  .bd-row{display:flex;align-items:center;gap:8px;margin-bottom:3px;font-size:11px}
   .bd-row:last-child{margin-bottom:0}
-  .bd-label{width:78px;color:var(--ink-dim)}
-  .bd-bar{flex:1;height:4px;background:var(--paper-3);border-radius:2px;overflow:hidden}
-  .bd-fill{height:100%;background:var(--gold);border-radius:2px}
-  .bd-val{width:32px;text-align:right;color:var(--ink);font-weight:700}
+  .bd-label{width:74px;color:var(--dim);font-weight:500}
+  .bd-bar{flex:1;height:3px;background:var(--paper-3);border-radius:2px;overflow:hidden}
+  .bd-fill{height:100%;border-radius:2px;transition:width .3s}
+  .bd-fill.whale{background:var(--purple)}
+  .bd-fill.capital{background:var(--purple)}
+  .bd-fill.volume{background:var(--blue)}
+  .bd-fill.depth{background:var(--amber)}
+  .bd-fill.momentum{background:var(--green)}
+  .bd-fill.expiry{background:var(--red)}
+  .bd-fill.divergence{background:var(--blue)}
+  .bd-val{width:28px;text-align:right;color:var(--ink);font-family:var(--mono);font-weight:600;font-size:10px}
 
-  .trade-cta{display:flex;align-items:center;gap:12px;padding:12px;color:var(--paper);border-radius:4px;border:none;cursor:pointer;width:100%;font-family:'Space Mono',monospace;font-weight:700;font-size:13px;transition:filter 0.15s;text-decoration:none}
-  .trade-cta:hover{filter:brightness(1.1)}
-  .trade-cta.yes{background:var(--green)}
-  .trade-cta.no{background:var(--red)}
-  .trade-cta .side{background:rgba(0,0,0,0.25);color:var(--paper);padding:3px 8px;border-radius:2px;font-size:11px;letter-spacing:0.05em}
-  .trade-cta .roi{margin-left:auto;font-size:11px;opacity:0.9}
+  /* Trade CTA */
+  .trade-cta{display:flex;align-items:center;gap:10px;padding:10px 14px;color:#0a0a0f;border-radius:10px;border:none;cursor:pointer;width:100%;font-family:var(--sans);font-weight:700;font-size:13px;transition:all .15s;text-decoration:none}
+  .trade-cta:hover{filter:brightness(1.1);transform:translateY(-1px)}
+  .trade-cta.yes{background:linear-gradient(135deg,var(--green),#00cc7a)}
+  .trade-cta.no{background:linear-gradient(135deg,var(--red),#e63e5c)}
+  .trade-cta .side-tag{background:rgba(0,0,0,0.2);color:#0a0a0f;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:800;letter-spacing:0.04em}
+  .trade-cta .roi{margin-left:auto;font-size:12px;opacity:0.85;font-family:var(--mono)}
 
-  .hook{font-size:11px;color:var(--ink-dim);margin-top:10px;font-style:italic;padding-top:10px;border-top:1px dashed var(--line)}
-  .meta-row{display:flex;gap:14px;font-size:10px;color:var(--ink-dim);margin-top:8px;text-transform:uppercase;letter-spacing:0.08em}
+  /* AI hook + meta */
+  .hook{font-size:11px;color:var(--dim);margin-top:8px;font-style:italic;padding-top:8px;border-top:1px dashed var(--border)}
+  .meta-row{display:flex;gap:14px;font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:8px;letter-spacing:0.02em}
 
-  .loading{color:var(--ink-dim);text-align:center;padding:80px 20px;font-size:13px}
+  /* States */
+  .loading{color:var(--dim);text-align:center;padding:80px 20px;font-size:13px}
   .err{color:var(--red);text-align:center;padding:80px 20px;font-size:13px}
 
-  .footnote{padding:24px 0 60px;font-size:11px;color:var(--ink-dim);border-top:1px solid var(--line);margin-top:20px;text-align:center}
-  .footnote em{color:var(--gold);font-style:normal}
+  .footnote{padding:20px 0 60px;font-size:11px;color:var(--dim);border-top:1px solid var(--border);margin-top:20px;text-align:center}
+  .footnote em{color:var(--green);font-style:normal}
 
-  @media(max-width:600px){.hero h1{font-size:34px}.edge-grid{grid-template-columns:1fr}.hero-stats{gap:20px}}
+  @media(max-width:600px){
+    .hero h1{font-size:32px}
+    .edge-grid{grid-template-columns:1fr}
+    .hero-stats{gap:18px}
+    .sec-head{flex-direction:column;align-items:flex-start}
+  }
 </style>
 </head>
 <body>
 
-<div class="topbar">
-  <div class="container topbar-inner">
-    <div class="logo">HYPER<span>FLEX</span> / TERMINAL</div>
-    <div class="live-dot" id="live-dot">Live · Polymarket · Loading…</div>
-  </div>
-</div>
+<div id="nav-root"></div>
+<script src="/nav.js"></script>
 
 <section class="hero">
   <div class="container">
-    <div class="hero-eyebrow">THE TERMINAL FOR POLYMARKET</div>
+    <div class="hero-eyebrow">⚡ Alpha Terminal</div>
     <h1>Alpha you can trade in the <em>next 5 minutes.</em></h1>
-    <p class="hero-sub">Live edges from the unified alpha engine. Whale clusters, momentum, expiry decay — sorted by Edge Score.</p>
+    <p class="hero-sub">Live edges from the unified alpha engine — whale clusters, momentum, book depth, expiry decay — ranked by Edge Score and enriched with Alpha Score.</p>
     <div class="hero-stats">
       <div class="hero-stat"><div class="n" id="s-count">—</div><div class="l">Live Edges</div></div>
       <div class="hero-stat"><div class="n" id="s-top">—</div><div class="l">Top Score</div></div>
@@ -134,12 +181,15 @@
 
 <div class="container">
   <div class="sec-head">
-    <h2>Top Edges · Live</h2>
+    <div style="display:flex;align-items:center;gap:14px">
+      <h2>Top Edges</h2>
+      <span class="live-badge" id="live-dot">Loading…</span>
+    </div>
     <div class="meta" id="updated">—</div>
     <div class="controls">
-      <button class="ctrl" onclick="load(10)">Top 10</button>
-      <button class="ctrl" onclick="load(20)">Top 20</button>
-      <button class="ctrl" onclick="load(currentN)">Refresh</button>
+      <button class="ctrl active" id="btn10" onclick="switchN(10)">Top 10</button>
+      <button class="ctrl" id="btn20" onclick="switchN(20)">Top 20</button>
+      <button class="ctrl" onclick="load(currentN)">↻ Refresh</button>
     </div>
   </div>
 
@@ -148,7 +198,7 @@
   </div>
 
   <div class="footnote">
-    Live data from <em>/api/alpha/top</em> — unified <em>buildAlphaList()</em> engine. Cards link to Polymarket. Auto-refresh every 90s.
+    Powered by <em>buildAlphaList()</em> — whale positions, CLOB depth, momentum, expiry decay. Auto-refresh 90s.
   </div>
 </div>
 
@@ -157,144 +207,180 @@ let currentN = 10;
 let _refreshTimer = null;
 
 function fmtUSD(n){
-  if (n >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M';
-  if (n >= 1e3) return '$' + Math.round(n/1e3) + 'k';
-  return '$' + Math.round(n);
+  if(n>=1e6) return '$'+(n/1e6).toFixed(1)+'M';
+  if(n>=1e3) return '$'+Math.round(n/1e3)+'k';
+  return '$'+Math.round(n);
 }
 
 function timeAgo(iso){
-  const ms = Date.now() - new Date(iso).getTime();
-  const s = Math.floor(ms/1000);
-  if (s < 60) return s + 's ago';
-  const m = Math.floor(s/60);
-  if (m < 60) return m + 'm ago';
-  const h = Math.floor(m/60);
-  return h + 'h ago';
+  const ms=Date.now()-new Date(iso).getTime();
+  const s=Math.floor(ms/1000);
+  if(s<60) return 'just now';
+  const m=Math.floor(s/60);
+  if(m<60) return m+'m ago';
+  const h=Math.floor(m/60);
+  if(h<24) return h+'h ago';
+  return Math.floor(h/24)+'d ago';
 }
 
+function esc(s){return(s||'').replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]))}
+
 function badges(m){
-  const out = [];
-  if (m.whale_count > 0) {
-    out.push(['whale', `🐋 ${m.whale_count} Whale${m.whale_count>1?'s':''} ${fmtUSD(m.total_whale_capital||0)}`]);
-  }
-  if (m.depth_ratio != null) {
-    const r = m.depth_ratio;
-    const imb = Math.max(r, 1/r);
-    if (imb >= 1.5) {
-      const dir = m.depth_side === 'bid' ? '📊 Bid' : '📊 Ask';
-      out.push(['depth', `${dir} ${imb.toFixed(1)}x`]);
+  const out=[];
+  if(m.whale_count>0)
+    out.push(['whale','🐋 '+m.whale_count+' Whale'+(m.whale_count>1?'s':'')+' '+fmtUSD(m.total_whale_capital||0)]);
+  if(m.depth_ratio!=null){
+    const imb=Math.max(m.depth_ratio,1/m.depth_ratio);
+    if(imb>=1.5){
+      const dir=m.depth_side==='bid'?'Bid':'Ask';
+      out.push(['depth',dir+' '+imb.toFixed(1)+'x']);
     }
   }
-  if (m.price_change_24h != null && Math.abs(m.price_change_24h) >= 5) {
-    const dir = m.price_change_24h > 0 ? 'up' : 'down';
-    out.push(['momentum'+(dir==='down'?' down':''), `${dir==='up'?'📈':'📉'} ${m.price_change_24h>0?'+':''}${m.price_change_24h}%`]);
+  if(m.price_change_24h!=null&&Math.abs(m.price_change_24h)>=5){
+    const dir=m.price_change_24h>0?'up':'down';
+    out.push(['momentum'+(dir==='down'?' down':''), (dir==='up'?'📈':'📉')+' '+(m.price_change_24h>0?'+':'')+m.price_change_24h+'%']);
   }
-  if (m.days_until_expiry != null && m.days_until_expiry <= 3) {
-    out.push(['decay', `⏱ ${m.days_until_expiry===0?'Today':m.days_until_expiry+'d'}`]);
-  }
-  if (m.volume >= 1e6) {
-    out.push(['volume', `💰 ${fmtUSD(m.volume)}`]);
-  }
-  if (m.category && m.category !== 'other') {
-    out.push(['cat', m.category]);
-  }
+  if(m.days_until_expiry!=null&&m.days_until_expiry<=3)
+    out.push(['decay','⏱ '+(m.days_until_expiry===0?'Today':m.days_until_expiry+'d')]);
+  if(m.volume>=1e6)
+    out.push(['volume','💰 '+fmtUSD(m.volume)]);
+  if(m.category&&m.category!=='other')
+    out.push(['cat',m.category]);
   return out;
 }
 
-function bdRow(label, val, max){
-  const pct = Math.min(100, Math.max(0, (val/max)*100));
-  return `<div class="bd-row">
-    <span class="bd-label">${label}</span>
-    <div class="bd-bar"><div class="bd-fill" style="width:${pct}%"></div></div>
-    <span class="bd-val">+${val}</span>
-  </div>`;
+function bdRow(label,val,max,cls){
+  const pct=Math.min(100,Math.max(0,(val/max)*100));
+  return '<div class="bd-row">'+
+    '<span class="bd-label">'+label+'</span>'+
+    '<div class="bd-bar"><div class="bd-fill '+cls+'" style="width:'+pct+'%"></div></div>'+
+    '<span class="bd-val">+'+val+'</span>'+
+  '</div>';
 }
 
 function render(data){
-  const markets = data.markets || [];
-  const g = document.getElementById('grid');
+  const markets=data.markets||[];
+  const g=document.getElementById('grid');
 
   // Stats
-  document.getElementById('s-count').textContent = markets.length;
-  document.getElementById('s-top').textContent = markets[0] ? markets[0].edge_score : '—';
-  document.getElementById('s-whales').textContent = markets.filter(m=>m.whale_count>0).length;
-  const totalVol = markets.reduce((s,m)=>s+(m.volume||0),0);
-  document.getElementById('s-vol').textContent = fmtUSD(totalVol);
-  document.getElementById('updated').textContent = 'Updated ' + timeAgo(data.updated_at);
-  document.getElementById('live-dot').textContent = 'Live · Polymarket · ' + timeAgo(data.updated_at);
+  document.getElementById('s-count').textContent=markets.length;
+  document.getElementById('s-top').textContent=markets[0]?markets[0].edge_score:'—';
+  document.getElementById('s-whales').textContent=markets.filter(m=>m.whale_count>0).length;
+  const totalVol=markets.reduce((s,m)=>s+(m.volume||0),0);
+  document.getElementById('s-vol').textContent=fmtUSD(totalVol);
+  document.getElementById('updated').textContent='Updated '+timeAgo(data.updated_at);
+  document.getElementById('live-dot').textContent='Live · '+timeAgo(data.updated_at);
 
-  if (!markets.length) {
-    g.innerHTML = '<div class="loading">No edges right now. Try again in a minute.</div>';
+  if(!markets.length){
+    g.innerHTML='<div class="loading">No edges right now — markets are quiet. Refreshing in 90s.</div>';
     return;
   }
 
-  g.innerHTML = markets.map((m,i) => {
-    const mktPct = m.yes_price != null ? Math.round(m.yes_price*100) : 50;
-    const modelPct = m.model_probability != null ? Math.round(m.model_probability*100) : mktPct;
-    const delta = m.alpha_edge != null ? (m.alpha_edge > 0 ? '+' : '') + m.alpha_edge + 'pt' : '0pt';
-    const deltaClass = (m.alpha_edge||0) > 0 ? 'pos' : (m.alpha_edge||0) < 0 ? 'neg' : '';
-    const ec = m.edge_components || {};
-    const t = m.trade || {side:'YES',entry_cost:mktPct,potential_profit:100-mktPct,roi_pct:0};
-    const bs = badges(m);
-    return `
-      <a class="edge-card ${i===0?'rank-1':''}" href="${m.slug?'/market/'+m.slug:'/screener'}">
-        <div class="card-top">
-          <div class="edge-score">
-            <div class="n">${m.edge_score}</div>
-            <div class="l">Edge</div>
-          </div>
-          <div class="badges">
-            ${bs.map(b=>`<span class="badge badge-${b[0]}">${b[1]}</span>`).join('')}
-          </div>
-        </div>
-        <div class="card-q">${escapeHtml(m.question)}</div>
-        <div class="price-row">
-          <span class="mkt">Mkt ${mktPct}¢</span>
-          <span class="arrow">→</span>
-          <span class="model">Model ${modelPct}¢</span>
-          <span class="delta ${deltaClass}">${delta}</span>
-        </div>
-        <div class="breakdown">
-          <div class="breakdown-title">Why score ${m.edge_score}?</div>
-          ${bdRow('Whales',ec.whale||0,35)}
-          ${bdRow('Capital',ec.capital||0,15)}
-          ${bdRow('Volume',ec.volume||0,30)}
-          ${bdRow('Depth',ec.depth||0,20)}
-          ${bdRow('Momentum',ec.momentum||0,15)}
-          ${bdRow('Expiry',ec.expiry||0,8)}
-          ${bdRow('Divergence',ec.divergence||0,10)}
-        </div>
-        <div class="trade-cta ${t.side==='YES'?'yes':'no'}">
-          <span class="side">${t.side}</span>
-          BET @ ${t.entry_cost}¢ · Win ${t.potential_profit}¢
-          <span class="roi">ROI +${t.roi_pct}%</span>
-        </div>
-        ${m.ai_hook ? `<div class="hook">${escapeHtml(m.ai_hook)}</div>` : ''}
-        <div class="meta-row">
-          <span>Vol ${fmtUSD(m.volume||0)}</span>
-          ${m.days_until_expiry!=null ? `<span>Expires ${m.days_until_expiry}d</span>` : ''}
-        </div>
-      </a>
-    `;
+  g.innerHTML=markets.map((m,i)=>{
+    const mktPct=m.yes_price!=null?Math.round(m.yes_price*100):50;
+    const ec=m.edge_components||{};
+    const t=m.trade||{side:'YES',entry_cost:mktPct,potential_profit:100-mktPct,roi_pct:0};
+    const bs=badges(m);
+
+    // Edge score color class
+    const scoreClass=m.edge_score>=60?'high':m.edge_score>=35?'mid':'low';
+
+    // Alpha score badge
+    const alpha=m.alpha_score||0;
+    const alphaClass=alpha>=7?'high':alpha>=4?'mid':'low';
+    const alphaBadge=alpha>0?
+      '<span class="alpha-badge '+alphaClass+'">α '+alpha.toFixed(1)+'</span>':'';
+
+    // Rank class
+    const rankClass=i===0?'rank-1':i===1?'rank-2':i===2?'rank-3':'';
+
+    // Whale consensus (real data, not fake model)
+    let consensusHtml='';
+    if(m.whale_count>=2){
+      const wSide=(m.trade&&m.trade.side)||'YES';
+      const wPct=m.whale_consensus_pct||m.edge_components&&m.edge_components.whale?Math.min(99,50+m.edge_components.whale):0;
+      consensusHtml='<div class="consensus-row">'+
+        '<span class="label">Whale Consensus</span>'+
+        '<span class="whales">'+m.whale_count+' whales</span>'+
+        '<span class="side-pill '+(wSide==='YES'?'yes':'no')+'">'+wSide+'</span>'+
+        '<span class="pct" style="color:var(--'+(wSide==='YES'?'green':'red')+')">'+fmtUSD(m.total_whale_capital||0)+'</span>'+
+      '</div>';
+    }
+
+    // Trade context strip
+    const entry=t.entry_cost||mktPct;
+    const win=t.potential_profit||(100-entry);
+    const roi=t.roi_pct||( entry>0?Math.round(win/entry*100):0);
+    const tradeStrip='<div class="trade-strip">'+
+      '<span class="entry">Pay '+entry+'¢</span>'+
+      '<span class="arrow">→</span>'+
+      '<span class="win">Win '+win+'¢</span>'+
+      '<span class="arrow">→</span>'+
+      '<span class="roi">'+roi+'% ROI</span>'+
+    '</div>';
+
+    return '<a class="edge-card '+rankClass+'" href="'+(m.slug?'/market/'+m.slug:'/screener')+'">'+
+      '<div class="card-top">'+
+        '<div class="edge-score-wrap">'+
+          '<div class="edge-score">'+
+            '<div class="n '+scoreClass+'">'+m.edge_score+'</div>'+
+            '<div class="l">Edge</div>'+
+          '</div>'+
+          alphaBadge+
+        '</div>'+
+        '<div class="badges">'+
+          bs.map(b=>'<span class="badge badge-'+b[0]+'">'+b[1]+'</span>').join('')+
+        '</div>'+
+      '</div>'+
+      '<div class="card-q">'+esc(m.question)+'</div>'+
+      consensusHtml+
+      tradeStrip+
+      '<div class="breakdown">'+
+        '<div class="breakdown-title">Score Breakdown</div>'+
+        bdRow('Whales',ec.whale||0,35,'whale')+
+        bdRow('Capital',ec.capital||0,15,'capital')+
+        bdRow('Volume',ec.volume||0,30,'volume')+
+        bdRow('Depth',ec.depth||0,20,'depth')+
+        bdRow('Momentum',ec.momentum||0,15,'momentum')+
+        bdRow('Expiry',ec.expiry||0,8,'expiry')+
+        bdRow('Diverge',ec.divergence||0,10,'divergence')+
+      '</div>'+
+      '<div class="trade-cta '+(t.side==='YES'?'yes':'no')+'">'+
+        '<span class="side-tag">'+t.side+'</span>'+
+        'BET @ '+entry+'¢ · Win '+win+'¢'+
+        '<span class="roi">+'+roi+'%</span>'+
+      '</div>'+
+      (m.ai_hook?'<div class="hook">'+esc(m.ai_hook)+'</div>':'')+
+      '<div class="meta-row">'+
+        '<span>Vol '+fmtUSD(m.volume||0)+'</span>'+
+        (m.days_until_expiry!=null?'<span>Expires '+m.days_until_expiry+'d</span>':'')+
+        '<span>Mkt '+mktPct+'¢</span>'+
+      '</div>'+
+    '</a>';
   }).join('');
 }
 
-function escapeHtml(s){return (s||'').replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]))}
+function switchN(n){
+  currentN=n;
+  document.getElementById('btn10').className='ctrl'+(n===10?' active':'');
+  document.getElementById('btn20').className='ctrl'+(n===20?' active':'');
+  load(n);
+}
 
 async function load(n){
-  currentN = n || currentN;
-  try {
-    const r = await fetch('/api/alpha/top?n=' + currentN);
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const data = await r.json();
+  currentN=n||currentN;
+  try{
+    const r=await fetch('/api/alpha/top?n='+currentN);
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const data=await r.json();
     render(data);
-  } catch(e) {
-    document.getElementById('grid').innerHTML = `<div class="err">Failed to load alpha: ${e.message}</div>`;
+  }catch(e){
+    document.getElementById('grid').innerHTML='<div class="err">Failed to load alpha: '+e.message+'</div>';
   }
 }
 
 load(10);
-_refreshTimer = setInterval(()=>load(currentN), 90000);
+_refreshTimer=setInterval(()=>load(currentN),90000);
 </script>
 </body>
 </html>

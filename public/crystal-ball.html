@@ -82,6 +82,10 @@ a{color:var(--gold);text-decoration:none} a:hover{text-decoration:underline}
 .cb-badge.EXPIRY_CONVERGENCE{background:var(--accent-amber-dim);color:var(--gold)}
 .cb-badge.CONTRARIAN{background:var(--accent-amber-dim);color:var(--accent-amber)}
 
+.cb-alpha{font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 9px;border-radius:8px;letter-spacing:.3px;white-space:nowrap;line-height:1.3}
+.cb-alpha.alpha-high{background:rgba(0,230,138,0.15);color:#00e68a}
+.cb-alpha.alpha-mid{background:rgba(77,159,255,0.15);color:#4d9fff}
+.cb-alpha.alpha-low{background:rgba(74,71,96,0.15);color:#8888a0}
 .cb-conf{font-family:var(--mono);font-size:18px;font-weight:700}
 .cb-market{font-family:var(--sans);font-size:15px;font-weight:600;line-height:1.4;color:#fff;letter-spacing:-0.3px;margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .cb-market a{color:var(--text);text-decoration:none;transition:color .15s}
@@ -324,10 +328,16 @@ function renderPredictions(){
     var scoreColor = combined >= 80 ? 'var(--accent-green)' : combined >= 60 ? 'var(--accent-blue)' : combined >= 40 ? 'var(--accent-amber)' : 'var(--accent-red)';
     var scoreLabel = combined >= 80 ? 'HIGH' : combined >= 60 ? 'MEDIUM' : combined >= 40 ? 'LOW' : 'WEAK';
 
+    var alphaVal = (alpha || 0).toFixed(1);
+    var alphaClass = alpha >= 7 ? 'alpha-high' : alpha >= 4 ? 'alpha-mid' : 'alpha-low';
+
     return '<div class="cb-card type-'+p.type+'">'+
       '<div class="cb-card-top">'+
         '<span class="cb-badge '+p.type+'">'+(TYPE_LABELS[p.type]||p.type)+'</span>'+
-        '<div style="display:flex;flex-direction:column;align-items:center;padding:5px 12px;border-radius:10px;background:var(--accent-blue-dim);border:1px solid rgba(77,159,255,.15)"><span style="font-family:var(--mono);font-size:20px;font-weight:700;color:'+scoreColor+';line-height:1">'+combined+'</span><span style="font-family:var(--sans);font-size:8px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">'+scoreLabel+'</span></div>'+
+        '<div style="display:flex;align-items:center;gap:8px">'+
+          '<span class="cb-alpha '+alphaClass+'">&#945; '+alphaVal+'</span>'+
+          '<div style="display:flex;flex-direction:column;align-items:center;padding:5px 12px;border-radius:10px;background:var(--accent-blue-dim);border:1px solid rgba(77,159,255,.15)"><span style="font-family:var(--mono);font-size:20px;font-weight:700;color:'+scoreColor+';line-height:1">'+combined+'</span><span style="font-family:var(--sans);font-size:8px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">'+scoreLabel+'</span></div>'+
+        '</div>'+
       '</div>'+
       (q?'<div class="cb-market"><a href="'+(typeof hfxMarketUrl==='function'?hfxMarketUrl(url):url)+'">'+escHtml(q.substring(0,80))+'</a></div>':'<div class="cb-market">'+escHtml(p.prediction)+'</div>')+
       (reasoning?'<div class="cb-reasoning">'+escHtml(reasoning)+'</div>':'')+

@@ -258,7 +258,7 @@ var _signals=[], _filter='all';
 
 function escH(s){var d=document.createElement('div');d.textContent=s||'';return d.innerHTML}
 function fmtCap(n){return n>=1e6?'$'+(n/1e6).toFixed(1)+'M':n>=1e3?'$'+(n/1e3).toFixed(0)+'K':'$'+Math.round(n)}
-function timeAgo(ts){if(!ts)return'';var d=Date.now()-new Date(ts).getTime(),m=Math.floor(d/60000);if(m<1)return'now';if(m<60)return m+'m';var h=Math.floor(m/60);if(h<24)return h+'h';return Math.floor(h/24)+'d'}
+function timeAgo(ts){if(!ts)return'';var d=Date.now()-new Date(ts).getTime(),m=Math.floor(d/60000);if(m<1)return'just now';if(m<60)return m+'m ago';var h=Math.floor(m/60);if(h<24)return h+'h ago';return Math.floor(h/24)+'d ago'}
 function regionFlag(q){var t=(q||'').toLowerCase();if(/\bus\b|united states|trump|biden|vance|congress|fed |us forces/i.test(t))return'\uD83C\uDDFA\uD83C\uDDF8';if(/\biran/i.test(t))return'\uD83C\uDDEE\uD83C\uDDF7';if(/\bisrael|gaza|hamas/i.test(t))return'\uD83C\uDDEE\uD83C\uDDF1';if(/bitcoin|btc|eth|crypto|solana|xrp/i.test(t))return'\uD83C\uDF10';if(/nba|nfl|mlb|yankees|mets|dodgers|warriors|lakers|celtics|mavericks|bucks|guardians|rangers|phillies|twins|orioles|rays|cardinals|red sox|reds|giants|mariners|sox|brewers/i.test(t))return'\uD83C\uDDFA\uD83C\uDDF8';if(/miami open|wimbledon|roland garros|us open|atp|wta|tennis/i.test(t))return'\uD83C\uDFBE';return''}
 
 function translateSide(q, side) {
@@ -337,8 +337,13 @@ function renderSignals() {
       meta.push('<span style="font-family:var(--mono);font-size:9px;color:' + (s.change_pct > 0 ? 'var(--accent-green)' : 'var(--accent-red)') + '">' + chg + Math.round(s.change_pct) + '%</span>');
     }
 
-    // Combined score badge (confidence-weighted)
+    // Alpha score badge (0.0-10.0)
     var alpha = s.alpha_score || 0;
+    var alphaBg = alpha >= 7 ? '#00e68a' : alpha >= 4 ? '#4d9fff' : '#4a4760';
+    var alphaTextColor = alpha >= 4 ? '#0a0a0f' : '#a0a0b4';
+    var alphaBadge = '<span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 8px;border-radius:5px;background:' + alphaBg + ';color:' + alphaTextColor + ';white-space:nowrap;letter-spacing:-0.3px">\u03B1 ' + alpha.toFixed(1) + '</span>';
+
+    // Combined edge score badge (confidence-weighted)
     var confVal = s.confidence === 'HIGH' ? 85 : s.confidence === 'MEDIUM' ? 65 : 40;
     var combined = Math.min(100, Math.round(confVal * 0.7 + (alpha * 10) * 0.3));
     var scoreColor = combined >= 75 ? 'var(--accent-green)' : combined >= 55 ? 'var(--gold)' : 'var(--dim)';
@@ -347,18 +352,19 @@ function renderSignals() {
       '<span style="font-family:var(--sans);font-size:7px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:0.5px">Edge</span>' +
     '</div>';
 
-    // Trade context strip: Pay | Win | ROI with dividers
+    // Trade context strip: "Pay Xc -> Win Yc -> Z% ROI"
     var tradeCtx = '';
-    if (s.price && s.price > 0.01 && s.price < 0.99) {
-      var pay = Math.round(s.price * 100);
+    var entryPrice = s.price || (s.yes_pct ? s.yes_pct / 100 : 0);
+    if (entryPrice > 0.01 && entryPrice < 0.99) {
+      var pay = Math.round(entryPrice * 100);
       var win = 100 - pay;
       var roi = Math.round((win / pay) * 100);
-      tradeCtx = '<div style="display:flex;gap:0;align-items:stretch;margin-top:6px;border-radius:6px;overflow:hidden;font-family:var(--mono);font-size:10px;border:1px solid var(--border)">' +
+      tradeCtx = '<div style="display:inline-flex;align-items:center;gap:0;margin-top:6px;border-radius:6px;overflow:hidden;font-family:var(--mono);font-size:10px;border:1px solid var(--border);line-height:1">' +
         '<span style="padding:5px 10px;color:var(--dim);background:rgba(255,255,255,0.02)">Pay <strong style="color:var(--text)">' + pay + '\u00A2</strong></span>' +
-        '<span style="width:1px;background:var(--border)"></span>' +
-        '<span style="padding:5px 10px;color:var(--dim);background:rgba(255,255,255,0.02)">Win <strong style="color:var(--accent-green)">+' + win + '\u00A2</strong></span>' +
-        '<span style="width:1px;background:var(--border)"></span>' +
-        '<span style="padding:5px 10px;color:var(--dim);background:rgba(255,255,255,0.02)">ROI <strong style="color:var(--accent-green)">+' + roi + '%</strong></span>' +
+        '<span style="color:var(--muted);padding:0 2px">\u2192</span>' +
+        '<span style="padding:5px 10px;color:var(--dim);background:rgba(255,255,255,0.02)">Win <strong style="color:var(--accent-green)">' + win + '\u00A2</strong></span>' +
+        '<span style="color:var(--muted);padding:0 2px">\u2192</span>' +
+        '<span style="padding:5px 10px;color:var(--dim);background:rgba(255,255,255,0.02)"><strong style="color:var(--accent-green)">' + roi + '% ROI</strong></span>' +
       '</div>';
     }
 
@@ -373,12 +379,13 @@ function renderSignals() {
         '<div class="s-row-top">' +
           '<span class="s-row-type type-' + s.type + '">' + (typeEmojis[s.type]||'') + ' ' + (typeLabels[s.type]||s.type) + '</span>' +
           (isStale ? '<span style="font-family:var(--sans);font-size:8px;font-weight:700;color:var(--accent-red);letter-spacing:.5px;padding:2px 6px;background:var(--accent-red-dim);border-radius:4px">STALE</span>' : '') +
-          '<span style="font-family:var(--mono);font-size:8px;color:var(--dim);margin-left:auto">' + timeAgo(s.detected_at) + '</span>' +
+          '<span style="margin-left:auto;display:flex;align-items:center;gap:6px">' + alphaBadge + '<span style="font-family:var(--mono);font-size:8px;color:var(--dim)">' + timeAgo(s.detected_at) + '</span></span>' +
         '</div>' +
         '<div class="s-row-market"><a href="' + internalUrl + '">' + (flag ? flag + ' ' : '') + escH(s.market) + '</a></div>' +
         '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:2px">' +
           '<span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:' + (sideClass === 'yes' ? 'var(--accent-green-dim)' : 'var(--accent-red-dim)') + ';color:' + sideColor + '">' + (s.side||'YES').toUpperCase() + '</span>' +
           (meta.length ? meta.join('<span style="color:var(--muted);font-size:9px">\u00B7</span>') : '') +
+          (s.detected_at ? '<span style="color:var(--muted);font-size:9px">\u00B7</span><span style="font-family:var(--mono);font-size:9px;color:var(--dim)">' + timeAgo(s.detected_at) + '</span>' : '') +
         '</div>' +
         tradeCtx +
       '</div>' +
