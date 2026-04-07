@@ -19,40 +19,80 @@
 <meta name="twitter:title" content="Explore — HYPERFLEX"/>
 <meta name="twitter:description" content="Live prediction market activity, whale trades, and news impact across all platforms."/>
 <meta name="twitter:image" content="https://hyperflex.network/og-default.png"/>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
   --gold: #c9920d;
   --gold-dim: rgba(201,146,13,0.15);
-  --paper: #0f0f0d;
-  --surface: #161614;
-  --card: #1c1c19;
-  --border: #262622;
-  --border-hover: #3a3a35;
-  --text: #e2ddd4;
-  --text-soft: #b0ab9f;
-  --muted: #70706a;
-  --green: #22c55e;
-  --green-dim: rgba(34,197,94,0.12);
-  --red: #ef4444;
-  --red-dim: rgba(239,68,68,0.12);
-  --blue: #60a5fa;
-  --blue-dim: rgba(96,165,250,0.12);
+  --paper: #0a0a0f;
+  --surface: #111118;
+  --card: #16161f;
+  --border: #1e1e2a;
+  --border-hover: #2a2a38;
+  --text: #e8e6f0;
+  --text-soft: #a0a0b4;
+  --muted: #6b6880;
+  --dim: #4a4760;
+  --green: #00e68a;
+  --green-dim: rgba(0,230,138,0.15);
+  --red: #ff4d6a;
+  --red-dim: rgba(255,77,106,0.15);
+  --blue: #4d9fff;
+  --blue-dim: rgba(77,159,255,0.12);
+  --accent-green: #00e68a;
+  --accent-green-dim: rgba(0,230,138,0.15);
+  --accent-red: #ff4d6a;
+  --accent-red-dim: rgba(255,77,106,0.15);
+  --accent-blue: #4d9fff;
+  --accent-blue-dim: rgba(77,159,255,0.12);
+  --accent-purple: #a855f7;
+  --accent-purple-dim: rgba(168,85,247,0.12);
+  --accent-amber: #f59e0b;
+  --accent-amber-dim: rgba(245,158,11,0.12);
   --radius: 12px;
   --radius-sm: 8px;
+  --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --mono: 'JetBrains Mono', monospace;
 }
 
 body {
   background: var(--paper);
   color: var(--text);
-  font-family: 'Inter', sans-serif;
+  font-family: var(--sans);
   font-size: 14px;
   line-height: 1.5;
   min-height: 100vh;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% 0%, rgba(77,159,255,0.04), transparent),
+    radial-gradient(ellipse 60% 40% at 80% 100%, rgba(168,85,247,0.03), transparent);
+}
+body::before {
+  content: '';
+  position: fixed;
+  top: -40%;
+  left: -20%;
+  width: 60%;
+  height: 60%;
+  background: radial-gradient(circle, rgba(201,146,13,0.03) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+body::after {
+  content: '';
+  position: fixed;
+  bottom: -30%;
+  right: -10%;
+  width: 50%;
+  height: 50%;
+  background: radial-gradient(circle, rgba(168,85,247,0.025) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
 }
 
 /* NAV */
@@ -64,13 +104,13 @@ nav {
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
-  background: rgba(15,15,13,0.92);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(10,10,15,0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   z-index: 100;
 }
 .nav-logo {
-  font-family: 'Syne', sans-serif;
+  font-family: var(--sans);
   font-size: 19px;
   font-weight: 800;
   color: var(--gold);
@@ -103,9 +143,11 @@ nav {
   padding: 56px 40px 36px;
   max-width: 1200px;
   margin: 0 auto;
+  position: relative;
+  z-index: 1;
 }
 .hero h1 {
-  font-family: 'Syne', sans-serif;
+  font-family: var(--sans);
   font-size: 44px;
   font-weight: 800;
   line-height: 1.08;
@@ -124,15 +166,16 @@ nav {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  background: var(--green-dim);
-  border: 1px solid rgba(34,197,94,0.25);
-  color: var(--green);
+  background: var(--accent-green-dim);
+  border: 1px solid rgba(0,230,138,0.25);
+  color: var(--accent-green);
   font-size: 12px;
   font-weight: 600;
   padding: 5px 12px;
   border-radius: 100px;
   margin-bottom: 22px;
   letter-spacing: 0.2px;
+  font-family: var(--sans);
 }
 .live-badge::before {
   content: '';
@@ -166,7 +209,7 @@ nav {
 }
 .tab {
   padding: 10px 18px;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--sans);
   font-size: 13px;
   font-weight: 500;
   color: var(--muted);
@@ -191,6 +234,8 @@ nav {
   display: grid;
   grid-template-columns: 1fr 320px;
   gap: 28px;
+  position: relative;
+  z-index: 1;
 }
 @media (max-width: 960px) {
   .explore-layout { grid-template-columns: 1fr; padding: 0 16px 60px; }
@@ -268,18 +313,23 @@ nav {
 .feed-item {
   background: var(--card);
   border: 1px solid var(--border);
+  border-top: 2px solid transparent;
+  border-image: linear-gradient(90deg, var(--accent-green), var(--accent-blue)) 1;
+  border-image-slice: 1 0 0 0;
   border-radius: var(--radius);
   padding: 16px 18px;
   margin-bottom: 10px;
   cursor: pointer;
-  transition: border-color 0.18s, box-shadow 0.18s;
+  transition: transform 0.18s, border-color 0.18s, box-shadow 0.18s;
   text-decoration: none;
   display: block;
   color: inherit;
+  position: relative;
+  overflow: hidden;
 }
 .feed-item:hover {
-  border-color: var(--border-hover);
-  box-shadow: 0 0 0 1px rgba(201,146,13,0.12), 0 4px 16px rgba(0,0,0,0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4), 0 0 0 1px rgba(201,146,13,0.12);
 }
 
 .feed-meta {
@@ -301,12 +351,13 @@ nav {
 .feed-time { font-size: 11px; color: var(--muted); margin-left: auto; }
 
 .feed-question {
-  font-family: 'Space Mono', monospace;
+  font-family: var(--sans);
   font-size: 13px;
   font-weight: 700;
   line-height: 1.45;
   margin-bottom: 14px;
   color: var(--text);
+  letter-spacing: -0.3px;
 }
 
 .sentiment-bar {
@@ -316,7 +367,7 @@ nav {
   overflow: hidden;
   margin-bottom: 8px;
 }
-.sentiment-yes { height: 100%; background: var(--green); border-radius: 3px; transition: width 0.6s cubic-bezier(.4,0,.2,1); }
+.sentiment-yes { height: 100%; background: var(--accent-green); border-radius: 3px; transition: width 0.6s cubic-bezier(.4,0,.2,1); }
 
 .sentiment-labels {
   display: flex;
@@ -325,21 +376,23 @@ nav {
   font-size: 11px;
   font-weight: 600;
 }
-.yes-label { color: var(--green); }
-.no-label { color: var(--red); }
+.yes-label { color: var(--accent-green); font-family: var(--mono); }
+.no-label { color: var(--accent-red); font-family: var(--mono); }
 .trader-count { color: var(--muted); font-size: 11px; font-weight: 400; }
 
 /* ACTIVITY FEED — Twitter-style cards */
 .activity-feed-wrap { display: flex; flex-direction: column; gap: 0; }
 .activity-card {
-  background: var(--card);
+  background: rgba(22,22,31,0.8);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border: 1px solid var(--border);
   border-bottom: none;
   padding: 16px 18px;
   display: grid;
   grid-template-columns: 40px 1fr;
   gap: 12px;
-  transition: background 0.12s, border-color 0.12s;
+  transition: background 0.15s, border-color 0.15s, transform 0.15s;
   cursor: pointer;
   text-decoration: none;
   color: inherit;
@@ -347,12 +400,12 @@ nav {
 .activity-card:first-child { border-radius: var(--radius) var(--radius) 0 0; }
 .activity-card:last-child { border-bottom: 1px solid var(--border); border-radius: 0 0 var(--radius) var(--radius); }
 .activity-card:only-child { border-bottom: 1px solid var(--border); border-radius: var(--radius); }
-.activity-card:hover { background: rgba(255,255,255,0.03); border-color: var(--border-hover); }
+.activity-card:hover { background: rgba(30,30,42,0.9); border-color: var(--border-hover); }
 .ac-avatar {
   width: 40px; height: 40px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 800;
-  flex-shrink: 0; color: #141412;
+  font-family: var(--sans); font-size: 14px; font-weight: 800;
+  flex-shrink: 0; color: #0a0a0f;
 }
 .ac-avatar-icon { font-size: 18px; background: var(--surface) !important; color: var(--text-soft) !important; border: 1px solid var(--border); }
 .ac-body { min-width: 0; }
@@ -387,11 +440,11 @@ nav {
 .ac-tag {
   font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 100px; letter-spacing: 0.3px;
 }
-.ac-tag-yes { background: rgba(34,197,94,0.12); color: var(--green); border: 1px solid rgba(34,197,94,0.25); }
-.ac-tag-no  { background: rgba(239,68,68,0.12);  color: var(--red);   border: 1px solid rgba(239,68,68,0.25); }
-.ac-tag-bet { background: rgba(96,165,250,0.1);  color: #60a5fa;      border: 1px solid rgba(96,165,250,0.2); }
-.ac-tag-resolved-yes { background: rgba(34,197,94,0.12); color: var(--green); border: 1px solid rgba(34,197,94,0.25); }
-.ac-tag-resolved-no  { background: rgba(239,68,68,0.12);  color: var(--red);   border: 1px solid rgba(239,68,68,0.25); }
+.ac-tag-yes { background: var(--accent-green-dim); color: var(--accent-green); border: 1px solid rgba(0,230,138,0.25); }
+.ac-tag-no  { background: var(--accent-red-dim);  color: var(--accent-red);   border: 1px solid rgba(255,77,106,0.25); }
+.ac-tag-bet { background: var(--accent-blue-dim);  color: var(--accent-blue);  border: 1px solid rgba(77,159,255,0.2); }
+.ac-tag-resolved-yes { background: var(--accent-green-dim); color: var(--accent-green); border: 1px solid rgba(0,230,138,0.25); }
+.ac-tag-resolved-no  { background: var(--accent-red-dim);  color: var(--accent-red);   border: 1px solid rgba(255,77,106,0.25); }
 .ac-tag-new  { background: rgba(201,146,13,0.12); color: var(--gold); border: 1px solid rgba(201,146,13,0.25); }
 .ac-stat { font-size: 11px; color: var(--muted); }
 .ac-join-link { margin-left: auto; font-size: 11px; color: var(--muted); text-decoration: none; font-weight: 600; opacity: 0; transition: opacity 0.15s; }
@@ -399,7 +452,8 @@ nav {
 
 /* TRADE FEED ITEMS (legacy) */
 .trade-wrap {
-  background: var(--card);
+  background: rgba(22,22,31,0.8);
+  backdrop-filter: blur(8px);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 4px 0;
@@ -425,8 +479,8 @@ nav {
   font-size: 12px;
   font-weight: 700;
   flex-shrink: 0;
-  color: #0f0f0d;
-  font-family: 'Syne', sans-serif;
+  color: #0a0a0f;
+  font-family: var(--sans);
 }
 .trade-body { flex: 1; min-width: 0; }
 .trade-user { font-size: 13px; font-weight: 600; color: var(--text); }
@@ -439,15 +493,25 @@ nav {
 
 /* SIDEBAR */
 .sidebar-card {
-  background: var(--card);
+  background: rgba(22,22,31,0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--border);
+  border-top: 2px solid transparent;
+  border-image: linear-gradient(90deg, var(--gold), var(--accent-amber)) 1;
+  border-image-slice: 1 0 0 0;
   border-radius: var(--radius);
   padding: 18px 20px;
   margin-bottom: 16px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.35);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+  transition: transform 0.18s, box-shadow 0.18s;
+}
+.sidebar-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
 }
 .sidebar-title {
-  font-family: 'Syne', sans-serif;
+  font-family: var(--sans);
   font-size: 11px;
   font-weight: 800;
   color: var(--gold);
@@ -471,7 +535,7 @@ nav {
 .sidebar-footer-link {
   display: block;
   margin-top: 12px;
-  font-family: 'Space Mono', monospace;
+  font-family: var(--mono);
   font-size: 11px;
   color: var(--gold);
   text-decoration: none;
@@ -504,14 +568,14 @@ nav {
 /* COMMUNITY SECTIONS (tab-communities) */
 .comm-section { margin-bottom: 32px; }
 .comm-section-title {
-  font-family: 'Syne', sans-serif;
+  font-family: var(--sans);
   font-size: 15px;
   font-weight: 800;
   color: var(--text);
   margin-bottom: 12px;
   padding-bottom: 10px;
   border-bottom: 1px solid var(--border);
-  letter-spacing: -0.3px;
+  letter-spacing: -0.5px;
 }
 
 .announcement-item {
@@ -548,25 +612,26 @@ nav {
 }
 .stat-pill { display: flex; flex-direction: column; gap: 3px; }
 .stat-pill-value {
-  font-family: 'Syne', sans-serif;
-  font-size: 30px;
-  font-weight: 800;
+  font-family: var(--mono);
+  font-size: 28px;
+  font-weight: 700;
   color: var(--gold);
   line-height: 1;
-  letter-spacing: -1.5px;
+  letter-spacing: -1px;
 }
 .stat-pill-label {
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 10px;
+  font-weight: 600;
   color: var(--muted);
   text-transform: uppercase;
-  letter-spacing: 0.6px;
+  letter-spacing: 0.8px;
+  font-family: var(--sans);
 }
 .stat-divider { width: 1px; height: 40px; background: var(--border); }
 
 /* CREATOR CTA STRIP */
 .creator-cta-strip {
-  background: linear-gradient(135deg, #191914 0%, #1e1a0f 100%);
+  background: linear-gradient(135deg, rgba(22,22,31,0.95) 0%, rgba(30,26,15,0.9) 100%);
   border: 1px solid rgba(201,146,13,0.25);
   border-radius: var(--radius);
   padding: 16px 22px;
@@ -586,11 +651,11 @@ nav {
 .cta-text strong { color: var(--text); font-weight: 600; }
 .cta-btn {
   background: var(--gold);
-  color: #0f0f0d;
+  color: #0a0a0f;
   border: none;
   padding: 9px 18px;
   border-radius: var(--radius-sm);
-  font-family: 'Inter', sans-serif;
+  font-family: var(--sans);
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
@@ -604,10 +669,16 @@ nav {
 
 /* TOP PREDICTORS */
 .predictors-wrap {
-  background: var(--card);
+  background: rgba(22,22,31,0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--border);
+  border-top: 2px solid transparent;
+  border-image: linear-gradient(90deg, var(--accent-green), var(--accent-blue)) 1;
+  border-image-slice: 1 0 0 0;
   border-radius: var(--radius);
   overflow: hidden;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.3);
 }
 .predictors-header {
   padding: 16px 18px 12px;
@@ -617,10 +688,10 @@ nav {
   justify-content: space-between;
 }
 .predictors-header-title {
-  font-family: 'Syne', sans-serif;
+  font-family: var(--sans);
   font-size: 15px;
   font-weight: 800;
-  letter-spacing: -0.3px;
+  letter-spacing: -0.5px;
 }
 .predictors-header-sub {
   font-size: 11px;
@@ -638,9 +709,9 @@ nav {
 .predictor-row:last-child { border-bottom: none; }
 .predictor-row:hover { background: rgba(255,255,255,0.02); }
 .predictor-rank {
-  font-family: 'Syne', sans-serif;
-  font-size: 16px;
-  font-weight: 800;
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 700;
   width: 32px;
   text-align: center;
   color: var(--muted);
@@ -669,7 +740,7 @@ nav {
 .tier-sharp   { background: var(--green-dim); color: var(--green); }
 .tier-solid   { background: var(--blue-dim); color: var(--blue); }
 .predictor-wr {
-  font-family: 'Space Mono', monospace;
+  font-family: var(--mono);
   font-size: 18px;
   font-weight: 700;
   width: 54px;
@@ -680,19 +751,19 @@ nav {
 .wr-sharp  { color: var(--green); }
 .wr-solid  { color: var(--blue); }
 .predictor-pnl {
-  font-family: 'Space Mono', monospace;
+  font-family: var(--mono);
   font-size: 15px;
   font-weight: 700;
   text-align: right;
   flex-shrink: 0;
   min-width: 70px;
 }
-.predictor-pnl.pnl-pos { color: var(--green); }
-.predictor-pnl.pnl-neg { color: #f44336; }
+.predictor-pnl.pnl-pos { color: var(--accent-green); }
+.predictor-pnl.pnl-neg { color: var(--accent-red); }
 .predictor-vol {
   font-size: 11px;
   color: var(--muted);
-  font-family: 'Space Mono', monospace;
+  font-family: var(--mono);
   text-align: right;
   margin-top: 1px;
 }
@@ -709,7 +780,7 @@ nav {
 .pp-hfx  { background: rgba(201,146,13,0.15); color: var(--gold); }
 .predictor-row a.predictor-profile-link {
   font-size: 10px;
-  font-family: 'Space Mono', monospace;
+  font-family: var(--mono);
   color: var(--gold);
   text-decoration: none;
   opacity: 0;
@@ -734,18 +805,22 @@ nav {
 
 /* FEATURED SPOTLIGHT */
 .featured-card {
-  background: linear-gradient(135deg, #1d1b13 0%, #191917 100%);
-  border: 1px solid rgba(201,146,13,0.3);
+  background: linear-gradient(135deg, rgba(22,22,31,0.9) 0%, rgba(17,17,24,0.95) 100%);
+  border: 1px solid rgba(201,146,13,0.2);
+  border-top: 2px solid transparent;
+  border-image: linear-gradient(90deg, var(--gold), var(--accent-amber)) 1;
+  border-image-slice: 1 0 0 0;
   border-radius: var(--radius);
   padding: 20px 22px;
   margin-bottom: 20px;
   text-decoration: none;
   display: block;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+  backdrop-filter: blur(8px);
 }
 .featured-card:hover {
-  border-color: rgba(201,146,13,0.7);
-  box-shadow: 0 0 0 1px rgba(201,146,13,0.08);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(201,146,13,0.15);
 }
 .featured-label {
   font-size: 11px;
@@ -756,12 +831,12 @@ nav {
   margin-bottom: 8px;
 }
 .featured-name {
-  font-family: 'Syne', sans-serif;
+  font-family: var(--sans);
   font-size: 22px;
   font-weight: 800;
   color: var(--text);
   margin-bottom: 5px;
-  letter-spacing: -0.5px;
+  letter-spacing: -0.7px;
 }
 .featured-meta {
   font-size: 12px;
@@ -809,7 +884,7 @@ nav {
   margin-bottom: 16px;
 }
 .section-title {
-  font-family: 'Syne', sans-serif;
+  font-family: var(--sans);
   font-size: 18px;
   font-weight: 800;
   letter-spacing: -0.5px;
@@ -829,42 +904,42 @@ nav {
   display: flex;
   align-items: center;
   gap: 12px;
-  background: #0f0e0c;
-  border: 1px solid #2a2a26;
+  background: var(--card);
+  border: 1px solid var(--border);
   border-left: 3px solid var(--gold);
   border-radius: 8px;
   padding: 12px 14px;
   cursor: pointer;
   text-decoration: none;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
 }
-.explore-insight-card:hover { border-color: rgba(201,146,13,0.4); box-shadow: 0 2px 12px rgba(0,0,0,0.3); }
+.explore-insight-card:hover { border-color: rgba(201,146,13,0.4); box-shadow: 0 4px 20px rgba(0,0,0,0.4); transform: translateY(-1px); }
 .explore-insight-icon { font-size: 22px; flex-shrink: 0; }
 .explore-insight-info { flex: 1; min-width: 0; }
-.explore-insight-headline { font-size: 13px; font-weight: 700; color: var(--text-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.explore-insight-body { font-size: 11px; color: #7a7870; margin-top: 2px; }
-.explore-insight-stat { font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 800; color: var(--gold); flex-shrink: 0; white-space: nowrap; }
-.explore-insight-share { font-family: 'Space Mono', monospace; font-size: 9px; color: #7a7870; background: transparent; border: 1px solid #2a2a26; border-radius: 4px; padding: 3px 6px; cursor: pointer; flex-shrink: 0; text-decoration: none; transition: all 0.15s; }
-.explore-insight-share:hover { color: var(--text-soft); border-color: #7a7870; }
+.explore-insight-headline { font-size: 13px; font-weight: 700; color: var(--text-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.3px; }
+.explore-insight-body { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.explore-insight-stat { font-family: var(--mono); font-size: 16px; font-weight: 700; color: var(--gold); flex-shrink: 0; white-space: nowrap; }
+.explore-insight-share { font-family: var(--mono); font-size: 9px; color: var(--muted); background: transparent; border: 1px solid var(--border); border-radius: 4px; padding: 3px 6px; cursor: pointer; flex-shrink: 0; text-decoration: none; transition: all 0.15s; }
+.explore-insight-share:hover { color: var(--text-soft); border-color: var(--border-hover); }
 
 /* DAILY BRIEFING */
-.briefing-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+.briefing-card { background: rgba(22,22,31,0.8); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--border); border-top: 2px solid transparent; border-image: linear-gradient(90deg, var(--accent-amber), var(--gold)) 1; border-image-slice: 1 0 0 0; border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
 .briefing-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; cursor: pointer; user-select: none; }
 .briefing-header:hover { background: rgba(201,146,13,0.04); }
-.briefing-title { font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; color: var(--gold); text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 8px; }
+.briefing-title { font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--gold); text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 8px; }
 .briefing-toggle { font-size: 12px; color: var(--muted); transition: transform 0.2s; }
 .briefing-toggle.open { transform: rotate(180deg); }
 .briefing-body { padding: 0 16px 16px; display: none; }
 .briefing-body.open { display: block; }
 .briefing-headline { font-size: 14px; font-weight: 700; color: var(--text); line-height: 1.4; margin-bottom: 12px; }
 .briefing-bullets { list-style: none; padding: 0; margin: 0 0 12px; }
-.briefing-bullets li { font-size: 12px; color: #9a9a8e; line-height: 1.5; padding: 4px 0; border-bottom: 1px solid rgba(42,42,36,0.3); display: flex; gap: 8px; }
+.briefing-bullets li { font-size: 12px; color: var(--soft, #a0a0b4); line-height: 1.5; padding: 4px 0; border-bottom: 1px solid rgba(42,42,36,0.3); display: flex; gap: 8px; }
 .briefing-bullets li:last-child { border: none; }
 .briefing-bullets .bullet-icon { flex-shrink: 0; }
 .briefing-fg { display: inline-flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; margin-bottom: 12px; }
-.briefing-fg-score { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 800; }
+.briefing-fg-score { font-family: var(--mono); font-size: 20px; font-weight: 700; }
 .briefing-fg-label { font-size: 11px; font-weight: 600; }
-.briefing-link { font-family: 'Space Mono', monospace; font-size: 11px; color: var(--gold); text-decoration: none; font-weight: 700; }
+.briefing-link { font-family: var(--mono); font-size: 11px; color: var(--gold); text-decoration: none; font-weight: 700; }
 .briefing-link:hover { text-decoration: underline; }
 </style>
 </head>
@@ -875,48 +950,48 @@ nav {
 <script src="/nav.js?v=5"></script>
 
 <!-- Member Auth Modal -->
-<div id="memberAuthOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeMemberAuth()">
-  <div style="background:#1c1c19;border:1px solid #2a2a27;border-radius:16px;width:100%;max-width:400px;padding:32px">
+<div id="memberAuthOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);backdrop-filter:blur(4px);z-index:9000;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeMemberAuth()">
+  <div style="background:var(--card);border:1px solid var(--border);border-top:2px solid var(--gold);border-radius:16px;width:100%;max-width:400px;padding:32px;box-shadow:0 16px 48px rgba(0,0,0,0.5)">
     <!-- Tab row -->
-    <div style="display:flex;border:1px solid #2a2a27;border-radius:8px;overflow:hidden;margin-bottom:24px">
-      <button id="maTabLogin" onclick="switchMemberTab('login')" style="flex:1;padding:10px;background:var(--gold,#c9920d);color:#141412;font-weight:700;font-size:13px;border:none;cursor:pointer;font-family:inherit">Sign in</button>
-      <button id="maTabRegister" onclick="switchMemberTab('register')" style="flex:1;padding:10px;background:transparent;color:#aaa8a0;font-size:13px;border:none;cursor:pointer;font-family:inherit">Create account</button>
+    <div style="display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:24px">
+      <button id="maTabLogin" onclick="switchMemberTab('login')" style="flex:1;padding:10px;background:var(--gold,#c9920d);color:var(--paper);font-weight:700;font-size:13px;border:none;cursor:pointer;font-family:inherit">Sign in</button>
+      <button id="maTabRegister" onclick="switchMemberTab('register')" style="flex:1;padding:10px;background:transparent;color:var(--soft,#a0a0b4);font-size:13px;border:none;cursor:pointer;font-family:inherit">Create account</button>
     </div>
 
     <!-- Login fields -->
     <div id="maLoginFields">
       <div style="margin-bottom:14px">
-        <label style="display:block;font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;font-family:monospace">Email</label>
-        <input id="maLoginEmail" type="email" placeholder="you@email.com" style="width:100%;background:#141412;border:1px solid #2a2a27;border-radius:8px;color:#f5f5f0;font-size:14px;padding:11px 14px;outline:none;box-sizing:border-box"/>
+        <label style="display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;font-family:var(--mono)">Email</label>
+        <input id="maLoginEmail" type="email" placeholder="you@email.com" style="width:100%;background:var(--paper);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;padding:11px 14px;outline:none;box-sizing:border-box"/>
       </div>
       <div style="margin-bottom:20px">
-        <label style="display:block;font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;font-family:monospace">Password</label>
-        <input id="maLoginPassword" type="password" placeholder="••••••••" style="width:100%;background:#141412;border:1px solid #2a2a27;border-radius:8px;color:#f5f5f0;font-size:14px;padding:11px 14px;outline:none;box-sizing:border-box" onkeydown="if(event.key==='Enter')submitMemberAuth()"/>
+        <label style="display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;font-family:var(--mono)">Password</label>
+        <input id="maLoginPassword" type="password" placeholder="••••••••" style="width:100%;background:var(--paper);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;padding:11px 14px;outline:none;box-sizing:border-box" onkeydown="if(event.key==='Enter')submitMemberAuth()"/>
       </div>
     </div>
 
     <!-- Register fields -->
     <div id="maRegisterFields" style="display:none">
       <div style="margin-bottom:14px">
-        <label style="display:block;font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;font-family:monospace">Username</label>
-        <input id="maRegisterName" type="text" maxlength="30" placeholder="Your display name" style="width:100%;background:#141412;border:1px solid #2a2a27;border-radius:8px;color:#f5f5f0;font-size:14px;padding:11px 14px;outline:none;box-sizing:border-box"/>
+        <label style="display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;font-family:var(--mono)">Username</label>
+        <input id="maRegisterName" type="text" maxlength="30" placeholder="Your display name" style="width:100%;background:var(--paper);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;padding:11px 14px;outline:none;box-sizing:border-box"/>
       </div>
       <div style="margin-bottom:14px">
-        <label style="display:block;font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;font-family:monospace">Email</label>
-        <input id="maRegisterEmail" type="email" placeholder="you@email.com" style="width:100%;background:#141412;border:1px solid #2a2a27;border-radius:8px;color:#f5f5f0;font-size:14px;padding:11px 14px;outline:none;box-sizing:border-box"/>
+        <label style="display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;font-family:var(--mono)">Email</label>
+        <input id="maRegisterEmail" type="email" placeholder="you@email.com" style="width:100%;background:var(--paper);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;padding:11px 14px;outline:none;box-sizing:border-box"/>
       </div>
       <div style="margin-bottom:20px">
-        <label style="display:block;font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;font-family:monospace">Password</label>
-        <input id="maRegisterPassword" type="password" placeholder="Min 8 characters" style="width:100%;background:#141412;border:1px solid #2a2a27;border-radius:8px;color:#f5f5f0;font-size:14px;padding:11px 14px;outline:none;box-sizing:border-box" onkeydown="if(event.key==='Enter')submitMemberAuth()"/>
+        <label style="display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;font-family:var(--mono)">Password</label>
+        <input id="maRegisterPassword" type="password" placeholder="Min 8 characters" style="width:100%;background:var(--paper);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;padding:11px 14px;outline:none;box-sizing:border-box" onkeydown="if(event.key==='Enter')submitMemberAuth()"/>
       </div>
     </div>
 
     <div id="maError" style="font-size:13px;color:#ef4444;margin-bottom:12px;display:none"></div>
 
-    <button id="maSubmitBtn" onclick="submitMemberAuth()" style="width:100%;padding:13px;background:#c9920d;color:#141412;font-weight:800;font-size:14px;border:none;border-radius:8px;cursor:pointer;font-family:inherit;letter-spacing:.02em">Sign in</button>
+    <button id="maSubmitBtn" onclick="submitMemberAuth()" style="width:100%;padding:13px;background:#c9920d;color:var(--paper);font-weight:800;font-size:14px;border:none;border-radius:8px;cursor:pointer;font-family:inherit;letter-spacing:.02em">Sign in</button>
 
     <div style="margin-top:16px;padding-top:16px;border-top:1px solid #2a2a27;text-align:center">
-      <div style="font-size:12px;color:#888;margin-bottom:10px">Are you a creator?</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Are you a creator?</div>
       <a href="/creator/login" style="font-size:13px;color:#c9920d;text-decoration:none">Creator login →</a>
       &nbsp;·&nbsp;
       <a href="/creator/signup" style="font-size:13px;color:#c9920d;text-decoration:none">Create a community →</a>
@@ -949,24 +1024,24 @@ nav {
 <!-- INTELLIGENCE CARDS -->
 <div style="max-width:1200px;margin:0 auto 24px;padding:0 40px">
   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
-    <a href="/signals" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;transition:border-color .2s;display:block" onmouseenter="this.style.borderColor='var(--gold)'" onmouseleave="this.style.borderColor='var(--border)'">
+    <a href="/signals" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--accent-green);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s,border-color .2s;display:block" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(0,230,138,0.1)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
       <div style="font-size:22px;margin-bottom:8px">📡</div>
-      <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px">Alpha Signals</div>
+      <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;letter-spacing:-0.3px">Alpha Signals</div>
       <div style="font-size:11px;color:var(--muted);line-height:1.5">Whale moves, momentum, edge scores — live feed</div>
     </a>
-    <a href="/crystal-ball" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;transition:border-color .2s;display:block" onmouseenter="this.style.borderColor='var(--gold)'" onmouseleave="this.style.borderColor='var(--border)'">
+    <a href="/crystal-ball" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--accent-purple);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s,border-color .2s;display:block" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(168,85,247,0.1)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
       <div style="font-size:22px;margin-bottom:8px">🔮</div>
-      <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px">Crystal Ball</div>
+      <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;letter-spacing:-0.3px">Crystal Ball</div>
       <div style="font-size:11px;color:var(--muted);line-height:1.5">AI predictions with trade context and ROI</div>
     </a>
-    <a href="/spread-scanner" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;transition:border-color .2s;display:block" onmouseenter="this.style.borderColor='var(--gold)'" onmouseleave="this.style.borderColor='var(--border)'">
+    <a href="/spread-scanner" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--accent-blue);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s,border-color .2s;display:block" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(77,159,255,0.1)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
       <div style="font-size:22px;margin-bottom:8px">⚡</div>
-      <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px">Spread Scanner</div>
+      <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;letter-spacing:-0.3px">Spread Scanner</div>
       <div style="font-size:11px;color:var(--muted);line-height:1.5">Live orderbook arb detection on crypto windows</div>
     </a>
-    <a href="/whales" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;transition:border-color .2s;display:block" onmouseenter="this.style.borderColor='var(--gold)'" onmouseleave="this.style.borderColor='var(--border)'">
+    <a href="/whales" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--accent-amber);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s,border-color .2s;display:block" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(245,158,11,0.1)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
       <div style="font-size:22px;margin-bottom:8px">🐋</div>
-      <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px">Market Intel</div>
+      <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;letter-spacing:-0.3px">Market Intel</div>
       <div style="font-size:11px;color:var(--muted);line-height:1.5">$20M+ tracked across 50 whale wallets</div>
     </a>
   </div>
@@ -975,12 +1050,12 @@ nav {
 <!-- LIVE TRADING FEED TICKER -->
 <div id="liveFeedTicker" style="max-width:1200px;margin:0 auto 16px;padding:0 40px;overflow:hidden">
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-    <span style="display:inline-flex;align-items:center;gap:5px;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:var(--green)"><span style="display:inline-block;width:6px;height:6px;background:var(--green);border-radius:50%;animation:pulse-dot 1.8s infinite"></span> LIVE TRADES</span>
-    <span style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted)" id="liveFeedUpdated"></span>
+    <span style="display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--accent-green)"><span style="display:inline-block;width:6px;height:6px;background:var(--accent-green);border-radius:50%;animation:pulse-dot 1.8s infinite"></span> LIVE TRADES</span>
+    <span style="font-family:var(--mono);font-size:10px;color:var(--muted)" id="liveFeedUpdated"></span>
   </div>
-  <div style="overflow:hidden;position:relative;border:1px solid var(--border);border-radius:10px;background:var(--card);padding:0">
+  <div style="overflow:hidden;position:relative;border:1px solid var(--border);border-radius:10px;background:rgba(22,22,31,0.8);backdrop-filter:blur(8px);padding:0">
     <div id="liveFeedScroll" style="display:flex;gap:0;animation:tickerScroll 30s linear infinite;white-space:nowrap;padding:10px 0">
-      <span style="font-family:'Space Mono',monospace;font-size:12px;color:var(--muted);padding:0 16px">Loading live trades...</span>
+      <span style="font-family:var(--mono);font-size:12px;color:var(--muted);padding:0 16px">Loading live trades...</span>
     </div>
   </div>
 </div>
@@ -993,10 +1068,10 @@ nav {
 .lf-item { display: inline-flex; align-items: center; gap: 6px; padding: 4px 16px; border-right: 1px solid var(--border); white-space: nowrap; cursor: pointer; transition: background 0.15s; text-decoration: none; color: inherit; flex-shrink: 0; }
 .lf-item:hover { background: rgba(201,146,13,0.06); }
 .lf-item:last-child { border-right: none; }
-.lf-size { font-family: 'Space Mono', monospace; font-size: 13px; font-weight: 700; color: var(--gold); }
-.lf-side { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; }
-.lf-side-yes { background: rgba(34,197,94,0.15); color: var(--green); }
-.lf-side-no { background: rgba(239,68,68,0.15); color: var(--red); }
+.lf-size { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--gold); }
+.lf-side { font-family: var(--mono); font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; }
+.lf-side-yes { background: var(--accent-green-dim); color: var(--accent-green); }
+.lf-side-no { background: var(--accent-red-dim); color: var(--accent-red); }
 .lf-market { font-size: 12px; color: var(--text); max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 960px) {
   #liveFeedTicker { padding: 0 16px; }
@@ -1010,7 +1085,7 @@ nav {
     fetch('/api/live-feed?limit=10').then(function(r) { return r.json(); }).then(function(d) {
       var trades = d.trades || [];
       if (!trades.length) {
-        document.getElementById('liveFeedScroll').innerHTML = '<span style="font-family:\'Space Mono\',monospace;font-size:12px;color:var(--muted);padding:0 16px">No recent large trades detected.</span>';
+        document.getElementById('liveFeedScroll').innerHTML = '<span style="font-family:var(--mono);font-size:12px;color:var(--muted);padding:0 16px">No recent large trades detected.</span>';
         return;
       }
       var items = trades.map(function(t) {
@@ -1026,7 +1101,7 @@ nav {
         var lfUrl = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(t.url || '') : '#';
         if (lfUrl === '#') lfUrl = '/explore'; // fallback to explore if no slug found
         return '<a class="lf-item" href="' + lfUrl + '"' + (lfUrl.startsWith('http') ? ' target="_blank" rel="noopener"' : '') + '>' +
-          '<span style="font-family:\'Space Mono\',monospace;font-size:11px;color:var(--dim)">' + whalePrefix + trader + '</span>' +
+          '<span style="font-family:var(--mono);font-size:11px;color:var(--dim)">' + whalePrefix + trader + '</span>' +
           '<span class="lf-size">' + sizeStr + '</span>' +
           '<span class="lf-side ' + sideClass + '">' + sideUp + '</span>' +
           '<span class="lf-market">' + market + '</span>' +
@@ -1061,10 +1136,10 @@ nav {
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
       <div style="display:flex;align-items:center;gap:8px">
         <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse-dot 2s infinite"></span>
-        <span style="font-family:'Space Mono',monospace;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">Top Signals</span>
-        <span style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted)">Live</span>
+        <span style="font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">Top Signals</span>
+        <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">Live</span>
       </div>
-      <a href="/signals" style="font-family:'Space Mono',monospace;font-size:11px;color:var(--gold);text-decoration:none">View all →</a>
+      <a href="/signals" style="font-family:var(--mono);font-size:11px;color:var(--gold);text-decoration:none">View all →</a>
     </div>
     <div id="hubSignalCards" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
       <div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--muted);font-size:12px">Loading signals...</div>
@@ -1076,9 +1151,9 @@ nav {
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
       <div style="display:flex;align-items:center;gap:8px">
         <span style="font-size:15px">📊</span>
-        <span style="font-family:'Space Mono',monospace;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">Screener Picks</span>
+        <span style="font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">Screener Picks</span>
       </div>
-      <a href="/screener" style="font-family:'Space Mono',monospace;font-size:11px;color:var(--gold);text-decoration:none">Full screener →</a>
+      <a href="/screener" style="font-family:var(--mono);font-size:11px;color:var(--gold);text-decoration:none">Full screener →</a>
     </div>
     <div id="hubScreenerCards" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
       <div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--muted);font-size:12px">Loading screener...</div>
@@ -1091,9 +1166,9 @@ nav {
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
         <div style="display:flex;align-items:center;gap:8px">
           <span style="font-size:15px">🔮</span>
-          <span style="font-family:'Space Mono',monospace;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">Crystal Ball</span>
+          <span style="font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">Crystal Ball</span>
         </div>
-        <a href="/crystal-ball" style="font-family:'Space Mono',monospace;font-size:11px;color:var(--gold);text-decoration:none">All →</a>
+        <a href="/crystal-ball" style="font-family:var(--mono);font-size:11px;color:var(--gold);text-decoration:none">All →</a>
       </div>
       <div id="hubCrystalCards" style="display:flex;flex-direction:column;gap:10px">
         <div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Loading predictions...</div>
@@ -1103,9 +1178,9 @@ nav {
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
         <div style="display:flex;align-items:center;gap:8px">
           <span style="font-size:15px">🧠</span>
-          <span style="font-family:'Space Mono',monospace;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">AI Edge Detector</span>
+          <span style="font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">AI Edge Detector</span>
         </div>
-        <a href="/screener" style="font-family:'Space Mono',monospace;font-size:11px;color:var(--gold);text-decoration:none">All →</a>
+        <a href="/screener" style="font-family:var(--mono);font-size:11px;color:var(--gold);text-decoration:none">All →</a>
       </div>
       <div id="aiEdgeCards" style="display:flex;flex-direction:column;gap:10px">
         <div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Loading AI edge...</div>
@@ -1126,9 +1201,9 @@ nav {
 <div style="max-width:1200px;margin:0 auto;padding:0 40px">
   <a href="/rewards" style="display:flex;align-items:center;gap:10px;padding:10px 16px;margin-bottom:12px;background:linear-gradient(90deg,rgba(201,146,13,0.08),rgba(201,146,13,0.02));border:1px solid rgba(201,146,13,0.15);border-radius:10px;text-decoration:none;transition:border-color 0.2s" onmouseover="this.style.borderColor='rgba(201,146,13,0.4)'" onmouseout="this.style.borderColor='rgba(201,146,13,0.15)'">
     <span style="font-size:18px">&#x1F4B0;</span>
-    <span style="font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:#c9920d">Earn USDC on every trade</span>
-    <span style="font-family:'Space Mono',monospace;font-size:11px;color:#7a7870">Trade through HYPERFLEX and get rewarded weekly</span>
-    <span style="margin-left:auto;font-family:'Space Mono',monospace;font-size:11px;color:#c9920d;white-space:nowrap">Learn more &rarr;</span>
+    <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:#c9920d">Earn USDC on every trade</span>
+    <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">Trade through HYPERFLEX and get rewarded weekly</span>
+    <span style="margin-left:auto;font-family:var(--mono);font-size:11px;color:#c9920d;white-space:nowrap">Learn more &rarr;</span>
   </a>
 </div>
 
@@ -1184,10 +1259,10 @@ nav {
 
     <!-- SMART MONEY DIVERGENCE -->
     <div id="smartMoneySection" style="display:none;margin-bottom:20px">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gold);margin-bottom:12px;font-family:'Space Mono',monospace;display:flex;align-items:center;gap:8px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gold);margin-bottom:12px;font-family:var(--mono);display:flex;align-items:center;gap:8px">
         <span>\u26A1</span> Edge Score
       </div>
-      <div style="font-family:'Space Mono',monospace;font-size:10px;color:#7a7870;margin-bottom:12px">Markets where smart money disagrees most with the market price</div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:12px">Markets where smart money disagrees most with the market price</div>
       <div id="smartMoneyCards" style="display:flex;flex-direction:column;gap:8px"></div>
     </div>
 
@@ -1355,17 +1430,17 @@ setInterval(function() { try { loadDailyBriefing(); } catch(e) {} }, 30 * 60 * 1
     if (!el || !edges.length) { if (el) el.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:16px;color:var(--muted);font-size:12px">No edge signals right now. Check back soon.</div>'; return; }
     el.innerHTML = edges.slice(0, 4).map(function(e) {
       var dirColor = e.edge_direction === 'BUY YES' ? '#22c55e' : e.edge_direction === 'BUY NO' ? '#ef4444' : '#888';
-      var confBadge = e.ai_confidence === 'high' ? '<span style="color:#22c55e;font-weight:700">HIGH</span>' : e.ai_confidence === 'medium' ? '<span style="color:var(--gold);font-weight:700">MEDIUM</span>' : '<span style="color:#888">LOW</span>';
+      var confBadge = e.ai_confidence === 'high' ? '<span style="color:#22c55e;font-weight:700">HIGH</span>' : e.ai_confidence === 'medium' ? '<span style="color:var(--gold);font-weight:700">MEDIUM</span>' : '<span style="color:var(--muted)">LOW</span>';
       return '<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;transition:border-color .15s" onmouseenter="this.style.borderColor=\'var(--gold)\'" onmouseleave="this.style.borderColor=\'var(--border)\'">' +
         '<div style="font-size:13px;font-weight:600;color:var(--text);line-height:1.4;margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">' + (e.question || '').substring(0, 60) + '</div>' +
         '<div style="display:flex;gap:12px;align-items:center;margin-bottom:8px">' +
-          '<div><span style="font-family:\'Space Mono\',monospace;font-size:9px;color:var(--muted);display:block">Market</span><span style="font-family:\'Space Mono\',monospace;font-size:14px;font-weight:700;color:var(--text)">' + (e.current_yes_pct || 0) + '%</span></div>' +
-          '<div><span style="font-family:\'Space Mono\',monospace;font-size:9px;color:var(--muted);display:block">AI Fair Value</span><span style="font-family:\'Space Mono\',monospace;font-size:14px;font-weight:700;color:var(--gold)">' + (e.ai_probability || 0) + '%</span></div>' +
-          '<div><span style="font-family:\'Space Mono\',monospace;font-size:9px;color:var(--muted);display:block">Edge</span><span style="font-family:\'Space Mono\',monospace;font-size:14px;font-weight:700;color:' + dirColor + '">' + (e.combined_edge || 0) + 'pts</span></div>' +
+          '<div><span style="font-family:var(--mono);font-size:9px;color:var(--muted);display:block">Market</span><span style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--text)">' + (e.current_yes_pct || 0) + '%</span></div>' +
+          '<div><span style="font-family:var(--mono);font-size:9px;color:var(--muted);display:block">AI Fair Value</span><span style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--gold)">' + (e.ai_probability || 0) + '%</span></div>' +
+          '<div><span style="font-family:var(--mono);font-size:9px;color:var(--muted);display:block">Edge</span><span style="font-family:var(--mono);font-size:14px;font-weight:700;color:' + dirColor + '">' + (e.combined_edge || 0) + 'pts</span></div>' +
         '</div>' +
         '<div style="display:flex;align-items:center;justify-content:space-between">' +
-          '<span style="font-family:\'Space Mono\',monospace;font-size:10px;color:' + dirColor + ';font-weight:700">' + (e.edge_direction || 'FAIR') + '</span>' +
-          '<span style="font-family:\'Space Mono\',monospace;font-size:9px">' + confBadge + '</span>' +
+          '<span style="font-family:var(--mono);font-size:10px;color:' + dirColor + ';font-weight:700">' + (e.edge_direction || 'FAIR') + '</span>' +
+          '<span style="font-family:var(--mono);font-size:9px">' + confBadge + '</span>' +
         '</div>' +
         (e.ai_reasoning ? '<div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5;border-top:1px solid var(--border);padding-top:8px">' + (e.ai_reasoning || '').substring(0, 100) + '</div>' : '') +
       '</div>';
@@ -1393,7 +1468,7 @@ setInterval(function() { try { loadDailyBriefing(); } catch(e) {} }, 30 * 60 * 1
       var alpha = s.alpha_score || 0;
       var confVal = s.confidence === 'HIGH' ? 85 : s.confidence === 'MEDIUM' ? 65 : 40;
       var combined = Math.min(100, Math.round(confVal * 0.7 + (alpha * 10) * 0.3));
-      var scoreColor = combined >= 75 ? '#22c55e' : combined >= 55 ? '#c9920d' : '#6b6860';
+      var scoreColor = combined >= 75 ? '#22c55e' : combined >= 55 ? '#c9920d' : '#4a4760';
       var sideUp = (s.side || 'YES').toUpperCase();
       var sideColor = sideUp === 'YES' ? '#22c55e' : '#ef4444';
       var sideBg = sideUp === 'YES' ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)';
@@ -1406,16 +1481,16 @@ setInterval(function() { try { loadDailyBriefing(); } catch(e) {} }, 30 * 60 * 1
       var stale = ageMs > 4 * 3600000;
       return '<a href="' + esc(tradeUrl) + '" style="text-decoration:none;display:block;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;transition:border-color .15s' + (stale ? ';opacity:.55' : '') + '" onmouseenter="this.style.borderColor=\'var(--gold)\'" onmouseleave="this.style.borderColor=\'var(--border)\'">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">' +
-          '<span style="font-family:\'Space Mono\',monospace;font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;background:' + (typeColors[s.type] || 'rgba(201,146,13,.12)') + ';color:' + (typeTextColors[s.type] || '#c9920d') + '">' + (typeLabels[s.type] || s.type) + '</span>' +
-          '<span style="font-family:\'Space Mono\',monospace;font-size:14px;font-weight:900;color:' + scoreColor + '">' + combined + '</span>' +
+          '<span style="font-family:var(--mono);font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;background:' + (typeColors[s.type] || 'rgba(201,146,13,.12)') + ';color:' + (typeTextColors[s.type] || '#c9920d') + '">' + (typeLabels[s.type] || s.type) + '</span>' +
+          '<span style="font-family:var(--mono);font-size:14px;font-weight:900;color:' + scoreColor + '">' + combined + '</span>' +
         '</div>' +
         '<div style="font-size:13px;font-weight:600;color:var(--text);line-height:1.3;margin-bottom:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">' + esc(s.market || '') + '</div>' +
         '<div style="display:flex;align-items:center;justify-content:space-between">' +
           '<div style="display:flex;align-items:center;gap:6px">' +
-            '<span style="font-family:\'Space Mono\',monospace;font-size:10px;font-weight:700;padding:2px 8px;border-radius:3px;background:' + sideBg + ';color:' + sideColor + '">' + sideUp + '</span>' +
-            (meta.length ? '<span style="font-family:\'Space Mono\',monospace;font-size:10px;color:var(--dim)">' + meta.join(' · ') + '</span>' : '') +
+            '<span style="font-family:var(--mono);font-size:10px;font-weight:700;padding:2px 8px;border-radius:3px;background:' + sideBg + ';color:' + sideColor + '">' + sideUp + '</span>' +
+            (meta.length ? '<span style="font-family:var(--mono);font-size:10px;color:var(--dim)">' + meta.join(' · ') + '</span>' : '') +
           '</div>' +
-          '<span style="font-family:\'Space Mono\',monospace;font-size:9px;color:var(--muted)">' + tAgo(s.detected_at) + '</span>' +
+          '<span style="font-family:var(--mono);font-size:9px;color:var(--muted)">' + tAgo(s.detected_at) + '</span>' +
         '</div>' +
       '</a>';
     }).join('');
@@ -1439,13 +1514,13 @@ setInterval(function() { try { loadDailyBriefing(); } catch(e) {} }, 30 * 60 * 1
       var edge = m.edge_score || 0;
       var score = alpha > 0 ? alpha.toFixed(1) : edge;
       var scoreLabel = alpha > 0 ? '/10' : '';
-      var scoreColor = alpha >= 7 ? '#22c55e' : alpha >= 4 ? '#c9920d' : edge >= 60 ? '#22c55e' : edge >= 35 ? '#c9920d' : '#6b6860';
+      var scoreColor = alpha >= 7 ? '#22c55e' : alpha >= 4 ? '#c9920d' : edge >= 60 ? '#22c55e' : edge >= 35 ? '#c9920d' : '#4a4760';
       var slug = m.slug || '';
       var tradeUrl = slug ? '/market/' + slug : '#';
       var yesPct = m.yes_price != null ? Math.round(m.yes_price * 100) : null;
       var roi = '';
       if (m.trade) {
-        roi = '<div style="display:flex;align-items:center;gap:6px;font-family:\'Space Mono\',monospace;font-size:10px;padding:4px 8px;background:rgba(34,197,94,.06);border-radius:4px;margin-top:4px">' +
+        roi = '<div style="display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;padding:4px 8px;background:rgba(34,197,94,.06);border-radius:4px;margin-top:4px">' +
           '<span style="color:var(--text);font-weight:700">' + m.trade.entry_cost + '\u00A2</span>' +
           '<span style="color:var(--muted)">\u2192</span>' +
           '<span style="color:#22c55e;font-weight:700">+' + m.trade.potential_profit + '\u00A2</span>' +
@@ -1455,11 +1530,11 @@ setInterval(function() { try { loadDailyBriefing(); } catch(e) {} }, 30 * 60 * 1
       }
       return '<a href="' + esc(tradeUrl) + '" style="text-decoration:none;display:block;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;transition:border-color .15s" onmouseenter="this.style.borderColor=\'var(--gold)\'" onmouseleave="this.style.borderColor=\'var(--border)\'">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">' +
-          '<span style="font-family:\'Space Mono\',monospace;font-size:9px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">' + (catEmoji[m.category] || '\uD83D\uDCCA') + ' ' + (m.category || 'other').toUpperCase() + '</span>' +
-          '<span style="font-family:\'Space Mono\',monospace;font-size:14px;font-weight:900;color:' + scoreColor + '">' + score + '<span style="font-size:9px;color:var(--dim)">' + scoreLabel + '</span></span>' +
+          '<span style="font-family:var(--mono);font-size:9px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">' + (catEmoji[m.category] || '\uD83D\uDCCA') + ' ' + (m.category || 'other').toUpperCase() + '</span>' +
+          '<span style="font-family:var(--mono);font-size:14px;font-weight:900;color:' + scoreColor + '">' + score + '<span style="font-size:9px;color:var(--dim)">' + scoreLabel + '</span></span>' +
         '</div>' +
         '<div style="font-size:13px;font-weight:600;color:var(--text);line-height:1.3;margin-bottom:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">' + esc(m.question || '') + '</div>' +
-        '<div style="display:flex;align-items:center;gap:8px;font-family:\'Space Mono\',monospace;font-size:10px;color:var(--dim)">' +
+        '<div style="display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:10px;color:var(--dim)">' +
           (m.whale_count ? '<span>' + m.whale_count + ' whales</span>' : '') +
           (yesPct != null ? '<span>' + yesPct + '% YES</span>' : '') +
         '</div>' +
@@ -1488,7 +1563,7 @@ setInterval(function() { try { loadDailyBriefing(); } catch(e) {} }, 30 * 60 * 1
       c = Math.min(95, c);
       var alpha = p.alpha_score || 0;
       var combined = Math.min(100, Math.round(c * 0.7 + (alpha * 10) * 0.3));
-      var scoreColor = combined >= 80 ? '#22c55e' : combined >= 60 ? '#c9920d' : '#6b6860';
+      var scoreColor = combined >= 80 ? '#22c55e' : combined >= 60 ? '#c9920d' : '#4a4760';
       var q = p.market && p.market.question ? p.market.question : '';
       var url = p.market && p.market.url ? p.market.url : '#';
       var tradeUrl = typeof hfxMarketUrl === 'function' ? hfxMarketUrl(url) : url;
@@ -1496,15 +1571,15 @@ setInterval(function() { try { loadDailyBriefing(); } catch(e) {} }, 30 * 60 * 1
       var reasoning = (p.reasoning || []).slice(0, 2).join(' \u00B7 ');
       return '<a href="' + esc(tradeUrl) + '" style="text-decoration:none;display:block;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;transition:border-color .15s" onmouseenter="this.style.borderColor=\'var(--gold)\'" onmouseleave="this.style.borderColor=\'var(--border)\'">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">' +
-          '<span style="font-family:\'Space Mono\',monospace;font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;background:rgba(201,146,13,.1);color:#c9920d">' + (TYPE_LABELS[p.type] || p.type) + '</span>' +
-          '<span style="font-family:\'Space Mono\',monospace;font-size:14px;font-weight:900;color:' + scoreColor + '">' + combined + '</span>' +
+          '<span style="font-family:var(--mono);font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;background:rgba(201,146,13,.1);color:#c9920d">' + (TYPE_LABELS[p.type] || p.type) + '</span>' +
+          '<span style="font-family:var(--mono);font-size:14px;font-weight:900;color:' + scoreColor + '">' + combined + '</span>' +
         '</div>' +
         (q ? '<div style="font-size:13px;font-weight:600;color:var(--text);line-height:1.3;margin-bottom:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">' + esc(q.substring(0, 80)) + '</div>' : '') +
-        (p.action ? '<div style="font-family:\'Space Mono\',monospace;font-size:10px;font-weight:700;color:' + actionColor + ';margin-bottom:4px">' + esc(p.action) + '</div>' : '') +
-        (reasoning ? '<div style="font-family:\'Space Mono\',monospace;font-size:10px;color:var(--dim);line-height:1.4;margin-bottom:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">' + esc(reasoning) + '</div>' : '') +
+        (p.action ? '<div style="font-family:var(--mono);font-size:10px;font-weight:700;color:' + actionColor + ';margin-bottom:4px">' + esc(p.action) + '</div>' : '') +
+        (reasoning ? '<div style="font-family:var(--mono);font-size:10px;color:var(--dim);line-height:1.4;margin-bottom:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">' + esc(reasoning) + '</div>' : '') +
         '<div style="display:flex;align-items:center;justify-content:space-between">' +
-          '<span style="font-family:\'Space Mono\',monospace;font-size:9px;color:var(--muted)">' + tAgo(p.detected_at) + '</span>' +
-          '<span style="font-family:\'Space Mono\',monospace;font-size:10px;font-weight:700;color:#c9920d">Trade \u2192</span>' +
+          '<span style="font-family:var(--mono);font-size:9px;color:var(--muted)">' + tAgo(p.detected_at) + '</span>' +
+          '<span style="font-family:var(--mono);font-size:10px;font-weight:700;color:#c9920d">Trade \u2192</span>' +
         '</div>' +
       '</a>';
     }).join('');
@@ -1525,17 +1600,17 @@ setInterval(function() { try { loadDailyBriefing(); } catch(e) {} }, 30 * 60 * 1
       var signalBadge='';
       if(m.signal==='SHARP_YES')signalBadge='<span style="font-size:9px;padding:2px 8px;border-radius:4px;background:rgba(201,146,13,0.15);color:#c9920d;font-weight:700;border:1px solid rgba(201,146,13,0.3)">\u26A1 Sharp YES</span>';
       else if(m.signal==='SHARP_NO')signalBadge='<span style="font-size:9px;padding:2px 8px;border-radius:4px;background:rgba(239,68,68,0.15);color:#ef4444;font-weight:700;border:1px solid rgba(239,68,68,0.3)">\u26A1 Sharp NO</span>';
-      return'<a href="/'+esc(m.slug||'')+'" style="display:block;background:#1a1917;border:1px solid #2a2a25;border-radius:10px;padding:14px 16px;text-decoration:none;transition:border-color .15s" onmouseover="this.style.borderColor=\'rgba(201,146,13,0.4)\'" onmouseout="this.style.borderColor=\'#2a2a25\'">'+
+      return'<a href="/'+esc(m.slug||'')+'" style="display:block;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;text-decoration:none;transition:border-color .15s" onmouseover="this.style.borderColor=\'rgba(201,146,13,0.4)\'" onmouseout="this.style.borderColor=\'var(--border)\'">'+
         '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'+
-          '<span style="font-family:\'Space Mono\',monospace;font-size:11px;color:#7a7870;font-weight:700">'+(i+1)+'.</span>'+
-          '<span style="font-size:13px;color:#e8e4d9;font-weight:600;flex:1">'+esc((m.question||'').length>55?m.question.substring(0,52)+'...':m.question)+'</span>'+
+          '<span style="font-family:var(--mono);font-size:11px;color:var(--muted);font-weight:700">'+(i+1)+'.</span>'+
+          '<span style="font-size:13px;color:var(--text);font-weight:600;flex:1">'+esc((m.question||'').length>55?m.question.substring(0,52)+'...':m.question)+'</span>'+
           signalBadge+
         '</div>'+
-        '<div style="display:flex;gap:16px;font-family:\'Space Mono\',monospace;font-size:11px">'+
+        '<div style="display:flex;gap:16px;font-family:var(--mono);font-size:11px">'+
           '<span style="color:#22c55e">Sharp: '+m.sharp_yes_pct+'% YES</span>'+
-          '<span style="color:#7a7870">|</span>'+
+          '<span style="color:var(--muted)">|</span>'+
           '<span style="color:#ef4444">Retail: '+m.retail_yes_pct+'% YES</span>'+
-          '<span style="color:#7a7870">|</span>'+
+          '<span style="color:var(--muted)">|</span>'+
           '<span style="color:'+gapColor+';font-weight:700">Gap: '+gapSign+m.gap+'pts</span>'+
         '</div>'+
       '</a>';
@@ -1638,7 +1713,7 @@ function applyExploreSearch() {
       <a href="/${slug}" style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);text-decoration:none;color:var(--text);" onmouseover="this.style.color='#c9920d'" onmouseout="this.style.color='var(--text)'">
         <div style="width:28px;height:28px;border-radius:50%;background:#c9920d22;border:1px solid rgba(201,146,13,0.3);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#c9920d;flex-shrink:0">${slug[0].toUpperCase()}</div>
         <span style="font-size:13px;font-weight:600">${slug}</span>
-        <span style="font-size:10px;color:#c9920d;margin-left:auto;font-family:monospace">→</span>
+        <span style="font-size:10px;color:#c9920d;margin-left:auto;font-family:var(--mono)">→</span>
       </a>`).join('');
     list.lastElementChild && (list.lastElementChild.style.borderBottom = 'none');
   } catch {}
@@ -2287,7 +2362,7 @@ function renderCommunitySections(sections, communities, topPredictors) {
           <div style="font-size:11px;color:var(--muted);margin-top:3px">${tp.total_trades} predictions · ${tp.wins} correct</div>
         </div>
         <div style="text-align:right;flex-shrink:0">
-          <div style="font-family:'Space Mono',monospace;font-size:22px;font-weight:700;color:var(--gold);line-height:1">${tp.win_rate}%</div>
+          <div style="font-family:var(--mono);font-size:22px;font-weight:700;color:var(--gold);line-height:1">${tp.win_rate}%</div>
           <div style="font-size:10px;font-weight:700;color:var(--gold);margin-top:4px;letter-spacing:0.5px">${tierLabel}</div>
         </div>
       </div>`;
@@ -2532,9 +2607,9 @@ function switchMemberTab(tab) {
   document.getElementById('maLoginFields').style.display    = isLogin ? 'block' : 'none';
   document.getElementById('maRegisterFields').style.display = isLogin ? 'none'  : 'block';
   document.getElementById('maTabLogin').style.background    = isLogin ? '#c9920d' : 'transparent';
-  document.getElementById('maTabLogin').style.color         = isLogin ? '#141412' : '#aaa8a0';
+  document.getElementById('maTabLogin').style.color         = isLogin ? '#0a0a0f' : '#a0a0b4';
   document.getElementById('maTabRegister').style.background = isLogin ? 'transparent' : '#c9920d';
-  document.getElementById('maTabRegister').style.color      = isLogin ? '#aaa8a0' : '#141412';
+  document.getElementById('maTabRegister').style.color      = isLogin ? '#a0a0b4' : '#0a0a0f';
   document.getElementById('maSubmitBtn').textContent        = isLogin ? 'Sign in' : 'Create account';
   document.getElementById('maError').style.display = 'none';
 }
@@ -2632,7 +2707,7 @@ async function loadFollowingFeed() {
     el.style.display = 'none';
     return;
   }
-  el.innerHTML = '<div style="text-align:center;padding:20px;color:#888">Loading...</div>';
+  el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">Loading...</div>';
   try {
     const res = await fetch('/api/feed/following', { headers: { 'Authorization': 'Bearer ' + token } });
     const data = await res.json();
@@ -2640,7 +2715,7 @@ async function loadFollowingFeed() {
       el.style.display = 'none';
       return;
     }
-    const header = `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gold);margin-bottom:12px;font-family:'Space Mono',monospace">👥 Following</div>`;
+    const header = `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gold);margin-bottom:12px;font-family:var(--mono)">👥 Following</div>`;
     el.innerHTML = header + data.items.map(item => {
       if (item.type === 'external_bet') {
         const platformColor = item.platform === 'polymarket' ? '#6366f1' : item.platform === 'kalshi' ? '#8b5cf6' : '#10b981';
@@ -2650,33 +2725,33 @@ async function loadFollowingFeed() {
         return `<div class="activity-card" style="border-left:3px solid ${platformColor}">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
             <a href="/m/${item.user_id}" style="font-weight:700;color:#c9920d">${item.username}</a>
-            <span style="color:#888;font-size:12px">bet on</span>
+            <span style="color:var(--muted);font-size:12px">bet on</span>
             <span style="background:${platformColor}22;color:${platformColor};font-size:11px;padding:2px 8px;border-radius:20px;font-weight:700">${platformName}</span>
           </div>
           <div style="font-size:15px;margin-bottom:8px">${item.market_title || ''}</div>
           <div style="display:flex;align-items:center;gap:12px">
             <span style="background:${item.side==='YES'?'#10b98122':'#ef444422'};color:${item.side==='YES'?'#10b981':'#ef4444'};padding:2px 10px;border-radius:12px;font-weight:700;font-size:13px">${item.side}</span>
             ${pnlHtml}
-            <span style="color:#888;font-size:12px;margin-left:auto">${timeAgo(item.created_at)}</span>
+            <span style="color:var(--muted);font-size:12px;margin-left:auto">${timeAgo(item.created_at)}</span>
           </div>
         </div>`;
       } else {
         return `<div class="activity-card" style="border-left:3px solid #c9920d">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
             <a href="/m/${item.user_id}" style="font-weight:700;color:#c9920d">${item.username}</a>
-            <span style="color:#888;font-size:12px">predicted on</span>
+            <span style="color:var(--muted);font-size:12px">predicted on</span>
             <span style="background:#c9920d22;color:#c9920d;font-size:11px;padding:2px 8px;border-radius:20px;font-weight:700">HYPERFLEX</span>
           </div>
           <div style="font-size:15px;margin-bottom:8px"><a href="/${item.community_slug}#market-${item.market_id}" style="color:inherit">${item.market_title || ''}</a></div>
           <div style="display:flex;align-items:center;gap:12px">
             <span style="background:${item.side==='YES'?'#10b98122':'#ef444422'};color:${item.side==='YES'?'#10b981':'#ef4444'};padding:2px 10px;border-radius:12px;font-weight:700;font-size:13px">${item.side}</span>
-            <span style="color:#888;font-size:12px;margin-left:auto">${timeAgo(item.created_at)}</span>
+            <span style="color:var(--muted);font-size:12px;margin-left:auto">${timeAgo(item.created_at)}</span>
           </div>
         </div>`;
       }
     }).join('');
   } catch(e) {
-    el.innerHTML = '<div style="text-align:center;padding:40px;color:#888">Failed to load feed</div>';
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">Failed to load feed</div>';
   }
 }
 
@@ -2705,12 +2780,12 @@ async function loadFollowingFeed() {
           return '<a href="' + _escH(link) + '" target="_blank" rel="noopener" class="sidebar-row">' +
             '<div style="flex:1;min-width:0">' +
               '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">' +
-                '<span style="font-size:12px;font-weight:700;color:var(--gold);font-family:\'Space Mono\',monospace">' + _escH(w.trader || 'Unknown') + '</span>' +
+                '<span style="font-size:12px;font-weight:700;color:var(--gold);font-family:var(--mono)">' + _escH(w.trader || 'Unknown') + '</span>' +
                 '<span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px;background:' + sideBg + ';color:' + sideColor + ';letter-spacing:0.3px">' + _escH(side) + '</span>' +
               '</div>' +
               '<div style="font-size:11px;color:var(--text-soft);line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + _escH(question) + '</div>' +
             '</div>' +
-            '<div style="font-family:\'Space Mono\',monospace;font-size:12px;font-weight:700;color:var(--text);flex-shrink:0;padding-top:2px">' + size + '</div>' +
+            '<div style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text);flex-shrink:0;padding-top:2px">' + size + '</div>' +
           '</a>';
         }).join('');
       }
@@ -2739,12 +2814,12 @@ async function loadFollowingFeed() {
           const volStr = '$' + _fmtNum(t.volume);
           const badges = ['#c9920d','#a8a8a8','#cd7f32','var(--muted)','var(--muted)'];
           return '<div class="sidebar-row">' +
-            '<div style="width:22px;height:22px;border-radius:50%;background:' + badges[i] + '22;border:1px solid ' + badges[i] + '44;display:flex;align-items:center;justify-content:center;font-family:\'Space Mono\',monospace;font-size:10px;font-weight:700;color:' + badges[i] + ';flex-shrink:0">' + (i+1) + '</div>' +
+            '<div style="width:22px;height:22px;border-radius:50%;background:' + badges[i] + '22;border:1px solid ' + badges[i] + '44;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:10px;font-weight:700;color:' + badges[i] + ';flex-shrink:0">' + (i+1) + '</div>' +
             '<div style="flex:1;min-width:0">' +
-              '<div style="font-size:12px;font-weight:700;color:var(--gold);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:\'Space Mono\',monospace">' + _escH(t.name) + '</div>' +
+              '<div style="font-size:12px;font-weight:700;color:var(--gold);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:var(--mono)">' + _escH(t.name) + '</div>' +
               '<div style="font-size:10px;color:var(--muted);margin-top:1px">Vol: ' + volStr + '</div>' +
             '</div>' +
-            '<div style="font-family:\'Space Mono\',monospace;font-size:12px;font-weight:700;color:' + pnlColor + ';flex-shrink:0">' + pnlStr + '</div>' +
+            '<div style="font-family:var(--mono);font-size:12px;font-weight:700;color:' + pnlColor + ';flex-shrink:0">' + pnlStr + '</div>' +
           '</div>';
         }).join('');
       }
@@ -2773,7 +2848,7 @@ async function loadFollowingFeed() {
             '<div style="flex:1;min-width:0">' +
               '<div style="font-size:11px;color:var(--text);line-height:1.4;margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + _escH(question) + '</div>' +
               '<div style="display:flex;align-items:center;gap:6px">' +
-                '<span style="font-size:10px;font-weight:700;color:var(--gold);font-family:\'Space Mono\',monospace">' + m.count + ' whale' + (m.count !== 1 ? 's' : '') + '</span>' +
+                '<span style="font-size:10px;font-weight:700;color:var(--gold);font-family:var(--mono)">' + m.count + ' whale' + (m.count !== 1 ? 's' : '') + '</span>' +
                 yesBadge +
               '</div>' +
             '</div>' +
@@ -2817,7 +2892,7 @@ async function loadFollowingFeed() {
           '<div style="font-size:11px;color:var(--text);line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + _escH(question) + '</div>' +
           '<div style="font-size:10px;color:var(--muted);margin-top:2px">Price: ' + (m.current_price || 0) + '%</div>' +
         '</div>' +
-        '<div style="font-family:\'Space Mono\',monospace;font-size:12px;font-weight:700;padding:2px 8px;border-radius:4px;background:' + changeBg + ';color:' + changeColor + ';flex-shrink:0">' + changeStr + '</div>' +
+        '<div style="font-family:var(--mono);font-size:12px;font-weight:700;padding:2px 8px;border-radius:4px;background:' + changeBg + ';color:' + changeColor + ';flex-shrink:0">' + changeStr + '</div>' +
       '</div>';
     }).join('');
   } catch(e) {
@@ -2841,7 +2916,7 @@ async function loadFollowingFeed() {
       return;
     }
     el.innerHTML = items.map(n => {
-      const badge = n.sentiment === 'bullish' ? '<span style="color:#22c55e;font-size:10px">&#x1F7E2;</span>' : n.sentiment === 'bearish' ? '<span style="color:#ef4444;font-size:10px">&#x1F534;</span>' : '<span style="color:#6a6a5e;font-size:10px">&#x26AA;</span>';
+      const badge = n.sentiment === 'bullish' ? '<span style="color:#22c55e;font-size:10px">&#x1F7E2;</span>' : n.sentiment === 'bearish' ? '<span style="color:#ef4444;font-size:10px">&#x1F534;</span>' : '<span style="color:var(--muted);font-size:10px">&#x26AA;</span>';
       const mkt = n.related_markets[0];
       const mktText = mkt ? '<div style="font-size:10px;color:var(--gold);margin-top:2px">' + _escH((mkt.question || '').substring(0, 50)) + (mkt.yes_pct != null ? ' — ' + mkt.yes_pct + '%' : '') + '</div>' : '';
       return '<a href="' + _escH(n.link || '/events') + '" target="_blank" rel="noopener" class="sidebar-row" style="text-decoration:none;display:block">' +
@@ -2883,10 +2958,10 @@ async function loadFollowingFeed() {
       return '<a href="' + _escH(profileUrl) + '" class="sidebar-row" style="text-decoration:none">' +
         '<div style="flex:1;min-width:0">' +
           '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">' +
-            '<span style="font-size:12px;font-weight:700;color:#c9920d;font-family:\'Space Mono\',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + _escH(t.display_name) + '</span>' +
+            '<span style="font-size:12px;font-weight:700;color:#c9920d;font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + _escH(t.display_name) + '</span>' +
             '<span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:10px;background:' + scoreBg + ';color:' + scoreColor + ';border:1px solid ' + scoreColor + '33;flex-shrink:0">' + t.consistency_score + '</span>' +
           '</div>' +
-          '<div style="display:flex;gap:10px;font-family:\'Space Mono\',monospace;font-size:10px">' +
+          '<div style="display:flex;gap:10px;font-family:var(--mono);font-size:10px">' +
             '<span style="color:#22c55e">W: ' + weekPnl + '</span>' +
             '<span style="color:var(--muted)">All: ' + allPnl + '</span>' +
           '</div>' +
@@ -2969,20 +3044,20 @@ async function handleExploreCopyCta() {
 </script>
 
 <!-- EXPLORE COPY TRADE MODAL -->
-<div id="exploreCopyModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center" onclick="if(event.target===this)closeExploreCopy()">
-  <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:28px;max-width:440px;width:90%;position:relative">
+<div id="exploreCopyModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(4px);z-index:1000;align-items:center;justify-content:center" onclick="if(event.target===this)closeExploreCopy()">
+  <div style="background:var(--card);border:1px solid var(--border);border-top:2px solid var(--gold);border-radius:14px;padding:28px;max-width:440px;width:90%;position:relative;box-shadow:0 16px 48px rgba(0,0,0,0.5)">
     <button onclick="closeExploreCopy()" style="position:absolute;top:12px;right:16px;background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer">&times;</button>
-    <h3 style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;margin-bottom:4px">Copy this trade?</h3>
-    <div style="font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);margin-bottom:20px">This will open Polymarket with the trade pre-selected</div>
-    <div style="margin-bottom:12px"><div style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Trader</div><div id="ect-trader" style="font-family:'Space Mono',monospace;font-size:13px;color:var(--text)">--</div></div>
-    <div style="margin-bottom:12px"><div style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Market</div><div id="ect-market" style="font-family:'Space Mono',monospace;font-size:13px;color:var(--text)">--</div></div>
-    <div style="margin-bottom:12px"><div style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Side</div><div id="ect-side" style="font-family:'Space Mono',monospace;font-size:13px">--</div></div>
-    <div style="margin-bottom:12px"><div style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Their position size</div><div id="ect-size" style="font-family:'Space Mono',monospace;font-size:13px;color:var(--text)">--</div></div>
-    <div style="margin-bottom:16px"><div style="font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Your amount ($)</div><input type="number" id="ect-amount" placeholder="100" min="1" step="1" style="width:100%;background:var(--paper);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-family:'Space Mono',monospace;font-size:14px;color:var(--text);outline:none"/></div>
-    <a id="ect-cta" href="#" target="_blank" rel="noopener" onclick="handleExploreCopyCta()" style="display:block;width:100%;padding:12px;border:none;border-radius:8px;background:#c9920d;color:#0f0f0d;font-family:'Syne',sans-serif;font-size:14px;font-weight:700;cursor:pointer;text-align:center;text-decoration:none;transition:opacity .15s">Open on Polymarket &rarr;</a>
+    <h3 style="font-family:var(--sans);font-size:18px;font-weight:800;margin-bottom:4px">Copy this trade?</h3>
+    <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:20px">This will open Polymarket with the trade pre-selected</div>
+    <div style="margin-bottom:12px"><div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Trader</div><div id="ect-trader" style="font-family:var(--mono);font-size:13px;color:var(--text)">--</div></div>
+    <div style="margin-bottom:12px"><div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Market</div><div id="ect-market" style="font-family:var(--mono);font-size:13px;color:var(--text)">--</div></div>
+    <div style="margin-bottom:12px"><div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Side</div><div id="ect-side" style="font-family:var(--mono);font-size:13px">--</div></div>
+    <div style="margin-bottom:12px"><div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Their position size</div><div id="ect-size" style="font-family:var(--mono);font-size:13px;color:var(--text)">--</div></div>
+    <div style="margin-bottom:16px"><div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Your amount ($)</div><input type="number" id="ect-amount" placeholder="100" min="1" step="1" style="width:100%;background:var(--paper);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-family:var(--mono);font-size:14px;color:var(--text);outline:none"/></div>
+    <a id="ect-cta" href="#" target="_blank" rel="noopener" onclick="handleExploreCopyCta()" style="display:block;width:100%;padding:12px;border:none;border-radius:8px;background:#c9920d;color:#0f0f0d;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;text-align:center;text-decoration:none;transition:opacity .15s">Open on Polymarket &rarr;</a>
     <label style="display:flex;align-items:center;gap:10px;margin-top:16px;padding:12px;background:rgba(201,146,13,0.06);border-radius:8px;cursor:pointer">
       <input type="checkbox" id="ect-alert" style="width:18px;height:18px;accent-color:#c9920d"/>
-      <span style="font-family:'Space Mono',monospace;font-size:12px;color:var(--muted)">&#x1F514; Alert me when this trader makes new moves</span>
+      <span style="font-family:var(--mono);font-size:12px;color:var(--muted)">&#x1F514; Alert me when this trader makes new moves</span>
     </label>
   </div>
 </div>
