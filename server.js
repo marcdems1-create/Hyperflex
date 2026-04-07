@@ -19612,16 +19612,28 @@ async function buildAlphaList(opts = {}) {
 
   const fetch = _nodeFetch;
 
-    // Fetch top 200 markets from Gamma API
+    // Fetch a wider window from Gamma API — gamma's order=volume sort is unreliable
+    // (returns markets with $99 lifetime volume first), so we fetch 500 and sort client-side
+    // by 24h volume desc to get the actually-hot markets in our processing window.
     const ctrl = new AbortController();
-    const tid = setTimeout(() => ctrl.abort(), 15000);
-    const mktRes = await fetch('https://gamma-api.polymarket.com/markets?closed=false&limit=200&order=volume&ascending=false', {
+    const tid = setTimeout(() => ctrl.abort(), 20000);
+    const mktRes = await fetch('https://gamma-api.polymarket.com/markets?closed=false&limit=500&order=volumeNum&ascending=false', {
       signal: ctrl.signal,
       headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
     });
     clearTimeout(tid);
     if (!mktRes.ok) throw new Error('Gamma API returned ' + mktRes.status);
-    const rawMarkets = await mktRes.json();
+    const _rawAll = await mktRes.json();
+    // Pick the right volume metric per market: prefer 24h, fall back to lifetime
+    const _vol = (m) => {
+      const v24 = parseFloat(m.volume24hr || m.volume_24hr || 0);
+      if (v24 > 0) return v24;
+      return parseFloat(m.volume || m.volumeNum || 0);
+    };
+    const rawMarkets = (Array.isArray(_rawAll) ? _rawAll : [])
+      .sort((a, b) => _vol(b) - _vol(a))
+      .slice(0, 250);
+    console.log('[alpha] gamma fetch:', (Array.isArray(_rawAll) ? _rawAll.length : 0), '→ top', rawMarkets.length, 'by 24h volume');
 
     // Warm whale cache if empty (so Whale Moves lane always has data)
     if (!_whaleWatchCache || !_whaleWatchCache.data) {
@@ -19739,16 +19751,19 @@ async function buildAlphaList(opts = {}) {
         if (Array.isArray(prices) && prices[0] != null) yesPrice = parseFloat(prices[0]);
       } catch {}
 
-      const volume = parseFloat(m.volume) || 0;
+      // Use 24h volume if available, else lifetime. Most active alpha lives in 24h activity.
+      const volume24h = parseFloat(m.volume24hr || m.volume_24hr || 0);
+      const volumeTotal = parseFloat(m.volume || m.volumeNum || 0);
+      const volume = volume24h > 0 ? volume24h : volumeTotal;
       const marketId = m.conditionId || m.slug || m.id || '';
       const conditionId = m.conditionId || null;
       const slug = m.slug || '';
       const category = detectCategory(question);
       const qLower = question.toLowerCase().trim();
 
-      // ── HARD VOLUME FLOOR — kill noise markets ──
-      // <$10k volume = bid-ask spread eats any edge, no real liquidity
-      if (volume < 10000) continue;
+      // ── SOFT VOLUME FLOOR — kill totally dead markets only ──
+      // Lowered from $10k to $1k. Edge score weighting handles the rest.
+      if (volume < 1000 && volumeTotal < 50000) continue;
 
       // Whale enrichment: prefer exact conditionId match, fall back to text
       let whaleInfo = (conditionId && whaleByCondId[conditionId]) || whaleByMarket[qLower] || null;
