@@ -20080,6 +20080,29 @@ async function _buildAlphaListInner(opts = {}) {
       // Alpha edge: difference between model and market
       const alphaEdge = (modelProb != null && yesPrice != null) ? Math.round((modelProb - yesPrice) * 100) : null;
 
+      // ── KELLY-SIZED RECOMMENDED POSITION — so traders don't have to think ──
+      // Same quarter-Kelly formula as the AI Portfolio builder (line 22132).
+      // Uses a $1000 reference bankroll. Frontend can scale to the trader's
+      // actual balance if connected. Capped at 15% of bankroll.
+      if (trade && alphaEdge != null && alphaEdge !== 0) {
+        const BANKROLL = 1000; // reference bankroll in USDC
+        const edge = Math.abs(alphaEdge) / 100;
+        const entryPrice = trade.entry_cost / 100; // 0.32 for 32¢
+        const kellyRaw = entryPrice > 0 && entryPrice < 1 ? Math.max(0, edge / (1 - entryPrice)) : 0;
+        const kellyPct = Math.min(0.15, kellyRaw * 0.25); // quarter-Kelly, cap 15%
+        if (kellyPct > 0) {
+          const sizeUsd = Math.round(BANKROLL * kellyPct * 100) / 100;
+          const shares = entryPrice > 0 ? Math.round((sizeUsd / entryPrice) * 10) / 10 : 0;
+          const maxWinUsd = Math.round(shares * (1 - entryPrice) * 100) / 100;
+          trade.kelly_pct = Math.round(kellyPct * 1000) / 10; // e.g. 3.5 for 3.5%
+          trade.recommended_size_usd = sizeUsd;
+          trade.recommended_shares = shares;
+          trade.max_loss_usd = sizeUsd; // you lose the stake if wrong
+          trade.potential_win_usd = maxWinUsd;
+          trade.bankroll_ref = BANKROLL;
+        }
+      }
+
       // ── TRADE THESIS — structured WHY data so every card shows its work ──
       // Picks the dominant signal driving the score, lists supporting signals,
       // determines smart-money direction, and tags urgency. Marc's UI can render
