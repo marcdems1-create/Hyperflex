@@ -17448,65 +17448,8 @@ app.post('/api/polymarket/order', requireAuth, async (req, res) => {
 });
 
 // ── MARKET SEARCH AGGREGATOR ─────────────────────────────────────────────────
-// Searches Polymarket + Kalshi for open markets matching a query string.
-// Public endpoint — no auth required. Results cached 3 min.
-const _mktAggSearchCache = new Map();
-
-app.get('/api/markets/search', async (req, res) => {
-  const q = (req.query.q || '').trim();
-  if (!q || q.length < 2) return res.status(400).json({ error: 'Query too short' });
-  const cacheKey = `mkt_search_${q.toLowerCase()}`;
-  const cached = _mktAggSearchCache.get(cacheKey);
-  if (cached && Date.now() - cached.ts < 3 * 60 * 1000) return res.json(cached.data);
-
-  const [polyResult, kalshiResult] = await Promise.allSettled([
-    fetch(`https://gamma-api.polymarket.com/markets?_c=${encodeURIComponent(q)}&active=true&closed=false&limit=12&order=volume24hr&ascending=false`, {
-      headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
-    }).then(r => r.ok ? r.json() : []).then(raw => {
-      const arr = Array.isArray(raw) ? raw : (raw.markets || []);
-      return arr.slice(0, 12).map(m => {
-        const prices = typeof m.outcomePrices === 'string' ? m.outcomePrices.split(',').map(Number) : (m.outcomePrices || []);
-        const yesPrice = prices[0] != null ? Math.round(prices[0] * 100) : null;
-        return {
-          id: m.conditionId || m.id,
-          question: m.question || m.title || 'Untitled',
-          yes_pct: yesPrice,
-          no_pct: yesPrice != null ? 100 - yesPrice : null,
-          volume: m.volumeNum || m.volume || 0,
-          end_date: m.endDate || m.endDateIso || null,
-          url: m.url ? `https://polymarket.com${m.url}` : `https://polymarket.com/event/${m.conditionId}`,
-          platform: 'polymarket'
-        };
-      });
-    }),
-    fetch(`https://trading-api.kalshi.com/trade-api/v2/markets?status=open&limit=12`, {
-      headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' }
-    }).then(r => r.ok ? r.json() : { markets: [] }).then(raw => {
-      const arr = (raw.markets || []);
-      const ql = q.toLowerCase();
-      const filtered = arr.filter(m => (m.title || '').toLowerCase().includes(ql) || (m.subtitle || '').toLowerCase().includes(ql)).slice(0, 12);
-      return filtered.map(m => ({
-        id: m.ticker,
-        question: m.title || m.subtitle || 'Untitled',
-        yes_pct: m.yes_bid != null ? Math.round(m.yes_bid * 100) : null,
-        no_pct: m.no_bid != null ? Math.round(m.no_bid * 100) : null,
-        volume: m.volume || 0,
-        end_date: m.close_time || null,
-        url: `https://kalshi.com/markets/${m.ticker}`,
-        platform: 'kalshi'
-      }));
-    })
-  ]);
-
-  const data = {
-    query: q,
-    polymarket: polyResult.status === 'fulfilled' ? polyResult.value : [],
-    kalshi: kalshiResult.status === 'fulfilled' ? kalshiResult.value : [],
-    fetched_at: new Date().toISOString()
-  };
-  _mktAggSearchCache.set(cacheKey, { ts: Date.now(), data });
-  res.json(data);
-});
+// (Duplicate route removed — comprehensive search with synonym expansion,
+//  full-text _q search, Kalshi series tickers, and sportsbook odds is at line ~17621)
 
 app.get('/api/manifold/positions/:username', async (req, res) => {
   let username = req.params.username.trim();

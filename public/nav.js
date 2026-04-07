@@ -240,12 +240,15 @@
 
     function renderMarketItem(m, idx) {
       var yesStr = m.yes_pct != null ? m.yes_pct + '%' : '--';
-      var noStr = m.no_pct != null ? m.no_pct + '%' : '--';
-      var badge = m.platform === 'kalshi'
+      var noStr = m.no_pct != null ? (100 - m.yes_pct) + '%' : '--';
+      var isKalshi = m.platform === 'kalshi' || (m.url && m.url.indexOf('kalshi.com') !== -1);
+      var isSportsbook = m.platform === 'sportsbook' || (m.url && m.url.indexOf('odds-api') !== -1);
+      var badge = isKalshi
         ? '<span class="hfx-search-badge kalshi">Kalshi</span>'
+        : isSportsbook ? '<span class="hfx-search-badge kalshi">Sportsbook</span>'
         : '<span class="hfx-search-badge poly">Polymarket</span>';
-      var href = m.platform === 'kalshi' ? (m.url || '#') : (window.hfxMarketUrl ? window.hfxMarketUrl(m.url || '') : (m.url || '#'));
-      return '<a href="' + escHtml(href) + '" class="hfx-search-item" data-idx="' + idx + '"' + (m.platform === 'kalshi' ? ' target="_blank" rel="noopener"' : '') + '>' +
+      var href = isKalshi ? (m.url || '#') : (window.hfxMarketUrl ? window.hfxMarketUrl(m.url || '') : (m.slug ? '/market/' + m.slug : (m.url || '#')));
+      return '<a href="' + escHtml(href) + '" class="hfx-search-item" data-idx="' + idx + '"' + (isKalshi || isSportsbook ? ' target="_blank" rel="noopener"' : '') + '>' +
         '<div class="hfx-search-item-icon market">📈</div>' +
         '<div class="hfx-search-item-body">' +
           '<div class="hfx-search-item-title">' + escHtml(m.question) + '</div>' +
@@ -253,6 +256,7 @@
         '<div class="hfx-search-item-odds">' +
           '<span class="yes">Y ' + yesStr + '</span>' +
           '<span class="no">N ' + noStr + '</span>' +
+          (m.yes_pct != null && m.yes_pct > 0 && m.yes_pct < 100 ? '<span style="font-family:var(--mono,monospace);font-size:10px;color:#f59e0b;font-weight:600">+' + Math.round((100 - m.yes_pct) / m.yes_pct * 100) + '%</span>' : '') +
           badge +
         '</div>' +
       '</a>';
@@ -351,7 +355,7 @@
           .then(function(r) { return r.ok ? r.json() : []; })
           .then(function(data) {
             if (lastQuery !== q) return; // stale
-            var markets = Array.isArray(data) ? data : (data.markets || data.results || []);
+            var markets = Array.isArray(data) ? data : (data.polymarket || data.kalshi) ? [].concat(data.polymarket || []).concat(data.kalshi || []) : (data.markets || data.results || []);
             var loadingEl = document.getElementById('hfxMktLoading');
             if (!loadingEl) return;
 
@@ -419,7 +423,7 @@
             .then(function(r) { return r.ok ? r.json() : []; })
             .then(function(data) {
               if (input.value.trim() !== q.trim()) return;
-              var markets = Array.isArray(data) ? data : (data.markets || data.results || []);
+              var markets = Array.isArray(data) ? data : (data.polymarket || data.kalshi) ? [].concat(data.polymarket || []).concat(data.kalshi || []) : (data.markets || data.results || []);
               var loadingEl = document.getElementById('hfxMktLoading');
               if (!loadingEl) return;
               if (!markets.length) {
