@@ -19603,6 +19603,87 @@ const EDGE_FRESH_THRESHOLD = 50; // score must cross this to get a stamp
 const EDGE_DROP_THRESHOLD = 40;  // if score falls below this, edge has died — clear stamp
 const FRESH_WINDOW_MINUTES = 60; // <60min = is_new = true
 
+// AI hook cache — Claude Haiku-generated one-liners per market_id, 5-min TTL.
+// Avoids re-calling the API on every 90s refresh (cost + latency).
+const _alphaHookCache = new Map(); // market_id -> { hook, ts }
+const ALPHA_HOOK_TTL = 5 * 60 * 1000;
+
+// Generate sharp 1-line trade rationale hooks for the top N alpha markets via Claude Haiku.
+// One batched call per refresh (cheap). Mutates each market's `ai_hook` field in place.
+async function generateAlphaHooks(topMarkets) {
+  if (!topMarkets || !topMarkets.length || !process.env.ANTHROPIC_API_KEY) return;
+  const now = Date.now();
+
+  // Filter to markets that need a fresh hook (not in cache or expired)
+  const need = [];
+  for (const m of topMarkets) {
+    if (!m.market_id) continue;
+    const cached = _alphaHookCache.get(m.market_id);
+    if (cached && (now - cached.ts < ALPHA_HOOK_TTL)) {
+      m.ai_hook = cached.hook;
+      continue;
+    }
+    need.push(m);
+  }
+  if (!need.length) return;
+
+  // Build a compact prompt — one entry per market, signal-focused
+  const lines = need.map((m, i) => {
+    const ec = m.edge_components || {};
+    const t = m.trade || {};
+    const sigs = [];
+    if (m.whale_count > 0) sigs.push(`${m.whale_count} whales $${Math.round((m.total_whale_capital || 0) / 1000)}k`);
+    if (m.depth_ratio != null) {
+      const imb = Math.max(m.depth_ratio, 1 / m.depth_ratio);
+      if (imb >= 1.5) sigs.push(`${m.depth_side === 'bid' ? 'bid' : 'ask'}-side depth ${imb.toFixed(1)}x`);
+    }
+    if ((ec.momentum || 0) >= 5 && m.price_change_24h != null) sigs.push(`${m.price_change_24h > 0 ? '+' : ''}${m.price_change_24h}% 24h`);
+    if ((ec.decay || 0) > 0) sigs.push(`${m.days_until_expiry}d to expiry, discount zone`);
+    if ((m.volume || 0) >= 5000000) sigs.push(`$${(m.volume / 1e6).toFixed(1)}M vol`);
+    return `${i + 1}. id=${m.market_id} | "${m.question}" | side=${t.side || 'YES'} @ ${t.entry_cost || 50}¢ | edge=${m.edge_score} | signals: ${sigs.join(', ') || 'none'}`;
+  }).join('\n');
+
+  try {
+    const resp = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 600,
+      messages: [{
+        role: 'user',
+        content: `You are a Bloomberg-terminal alpha analyst writing trade rationales for active Polymarket traders. For each market below, write ONE punchy line (max 90 chars) explaining WHY this is alpha to act on now. Be specific, reference the actual signals, no fluff. Use trader vocabulary (positioning, conviction, stack, fade, etc).
+
+Markets:
+${lines}
+
+Respond with ONLY a valid JSON object mapping market_id → hook string:
+{"<id>": "<hook>", ...}
+
+No markdown, no preamble, just the JSON.`
+      }]
+    });
+    const text = resp.content[0]?.text?.trim() || '';
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return;
+    const hooks = JSON.parse(match[0]);
+    for (const m of need) {
+      const hook = hooks[m.market_id];
+      if (typeof hook === 'string' && hook.length > 0) {
+        const trimmed = hook.slice(0, 120);
+        m.ai_hook = trimmed;
+        _alphaHookCache.set(m.market_id, { hook: trimmed, ts: now });
+      }
+    }
+    // Evict old cache entries
+    if (_alphaHookCache.size > 100) {
+      for (const [k, v] of _alphaHookCache) {
+        if (now - v.ts > 30 * 60 * 1000) _alphaHookCache.delete(k);
+      }
+    }
+    console.log('[alpha-hooks] generated', need.length, 'fresh hooks via Haiku');
+  } catch (e) {
+    console.warn('[alpha-hooks] failed:', e.message);
+  }
+}
+
 async function buildAlphaList(opts = {}) {
   const force = opts.force === true;
   // 90s TTL — live CLOB prices need freshness
@@ -20109,6 +20190,12 @@ async function buildAlphaList(opts = {}) {
 
       console.log('[screener] Freshness:', freshNew, 'newly stamped,', _alphaFreshness.size, 'tracked total');
     } catch (e) { console.warn('[screener] freshness tracking failed:', e.message); }
+
+    // ── AI HOOKS — generate sharp trade rationales for the top 5 via Claude Haiku ──
+    try {
+      const top5 = [...markets].sort((a, b) => (b.edge_score || 0) - (a.edge_score || 0)).slice(0, 5);
+      await generateAlphaHooks(top5);
+    } catch (e) { console.warn('[screener] alpha hook generation failed:', e.message); }
 
     _screenerCache = { ts: Date.now(), data: markets };
     _healthTimestamps.lastScreenerFetch = new Date().toISOString();
