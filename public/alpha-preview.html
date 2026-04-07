@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HYPERFLEX — Alpha Terminal Preview</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@500;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#141412;
+    --paper-2:#1c1c19;
+    --paper-3:#242420;
+    --ink:#f4f1ea;
+    --ink-dim:#8a8680;
+    --gold:#c9920d;
+    --gold-bright:#e6a815;
+    --green:#4ade80;
+    --red:#f87171;
+    --line:#2d2d28;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Space Mono',monospace;
+    font-size:14px;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  .display{font-family:'Syne',sans-serif;font-weight:800;letter-spacing:-0.02em}
+  .container{max-width:1280px;margin:0 auto;padding:0 24px}
+
+  /* Top bar */
+  .topbar{
+    border-bottom:1px solid var(--line);
+    padding:14px 0;
+    background:var(--paper);
+    position:sticky;top:0;z-index:10;
+  }
+  .topbar-inner{display:flex;align-items:center;justify-content:space-between;gap:24px}
+  .logo{font-family:'Syne',sans-serif;font-weight:800;font-size:18px;letter-spacing:0.04em}
+  .logo span{color:var(--gold)}
+  .live-dot{
+    display:inline-flex;align-items:center;gap:8px;
+    font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:0.1em;
+  }
+  .live-dot::before{
+    content:'';width:8px;height:8px;border-radius:50%;
+    background:var(--green);box-shadow:0 0 8px var(--green);
+    animation:pulse 2s infinite;
+  }
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+
+  /* Hero */
+  .hero{padding:56px 0 32px;border-bottom:1px solid var(--line)}
+  .hero-eyebrow{
+    font-size:11px;color:var(--gold);text-transform:uppercase;letter-spacing:0.2em;
+    margin-bottom:16px;
+  }
+  .hero h1{
+    font-family:'Syne',sans-serif;font-weight:800;
+    font-size:52px;line-height:1.05;letter-spacing:-0.03em;
+    margin-bottom:18px;max-width:900px;
+  }
+  .hero h1 em{color:var(--gold);font-style:normal}
+  .hero-sub{font-size:15px;color:var(--ink-dim);max-width:640px;margin-bottom:28px}
+  .hero-stats{display:flex;gap:40px;flex-wrap:wrap}
+  .hero-stat .n{font-family:'Syne',sans-serif;font-size:28px;font-weight:800;color:var(--ink)}
+  .hero-stat .l{font-size:10px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:0.15em;margin-top:4px}
+
+  /* Section header */
+  .sec-head{
+    display:flex;align-items:baseline;justify-content:space-between;
+    padding:36px 0 18px;border-bottom:1px solid var(--line);margin-bottom:20px;
+  }
+  .sec-head h2{font-family:'Syne',sans-serif;font-size:22px;font-weight:700;letter-spacing:-0.01em}
+  .sec-head .meta{font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:0.12em}
+
+  /* Edge card grid */
+  .edge-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:16px;padding-bottom:40px}
+
+  .edge-card{
+    background:var(--paper-2);
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:18px;
+    position:relative;
+    cursor:pointer;
+    transition:all 0.15s ease;
+  }
+  .edge-card:hover{border-color:var(--gold);transform:translateY(-1px)}
+  .edge-card.rank-1{border-color:rgba(201,146,13,0.5);background:linear-gradient(180deg,rgba(201,146,13,0.06),var(--paper-2))}
+
+  .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px}
+
+  .edge-score{
+    display:flex;flex-direction:column;align-items:center;
+    min-width:56px;
+  }
+  .edge-score .n{
+    font-family:'Syne',sans-serif;font-weight:800;font-size:32px;
+    color:var(--gold-bright);line-height:1;
+  }
+  .edge-score .l{font-size:9px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:0.1em;margin-top:4px}
+
+  .badges{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  .badge{
+    display:inline-flex;align-items:center;gap:4px;
+    font-size:10px;padding:4px 8px;border-radius:3px;
+    text-transform:uppercase;letter-spacing:0.08em;font-weight:700;
+  }
+  .badge-new{background:rgba(74,222,128,0.12);color:var(--green);border:1px solid rgba(74,222,128,0.3)}
+  .badge-whale{background:rgba(201,146,13,0.12);color:var(--gold);border:1px solid rgba(201,146,13,0.3)}
+  .badge-depth{background:rgba(124,58,237,0.12);color:#a78bfa;border:1px solid rgba(124,58,237,0.3)}
+  .badge-decay{background:rgba(239,68,68,0.12);color:var(--red);border:1px solid rgba(239,68,68,0.3)}
+  .badge-stale{background:var(--paper-3);color:var(--ink-dim);border:1px solid var(--line)}
+
+  .card-q{font-size:15px;font-weight:700;color:var(--ink);line-height:1.35;margin-bottom:14px;min-height:40px}
+
+  .price-row{
+    display:flex;align-items:center;gap:12px;
+    padding:10px 12px;background:var(--paper);border-radius:4px;
+    margin-bottom:12px;font-size:12px;
+  }
+  .price-row .mkt{color:var(--ink-dim)}
+  .price-row .arrow{color:var(--gold);font-weight:700}
+  .price-row .model{color:var(--gold-bright);font-weight:700}
+  .price-row .delta{margin-left:auto;color:var(--green);font-weight:700}
+
+  .breakdown{
+    background:var(--paper);border-radius:4px;padding:12px;margin-bottom:12px;
+    border:1px solid var(--line);
+  }
+  .breakdown-title{font-size:9px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:8px}
+  .bd-row{display:flex;align-items:center;gap:8px;margin-bottom:4px;font-size:11px}
+  .bd-row:last-child{margin-bottom:0}
+  .bd-label{width:68px;color:var(--ink-dim)}
+  .bd-bar{flex:1;height:4px;background:var(--paper-3);border-radius:2px;overflow:hidden}
+  .bd-fill{height:100%;background:var(--gold);border-radius:2px}
+  .bd-val{width:28px;text-align:right;color:var(--ink);font-weight:700}
+
+  .trade-cta{
+    display:flex;align-items:center;gap:12px;
+    padding:12px;background:var(--gold);color:var(--paper);
+    border-radius:4px;border:none;cursor:pointer;width:100%;
+    font-family:'Space Mono',monospace;font-weight:700;font-size:13px;
+    transition:background 0.15s;
+  }
+  .trade-cta:hover{background:var(--gold-bright)}
+  .trade-cta .side{
+    background:var(--paper);color:var(--gold);
+    padding:3px 8px;border-radius:2px;font-size:11px;
+  }
+  .trade-cta .roi{margin-left:auto;font-size:11px;opacity:0.85}
+
+  .hook{
+    font-size:11px;color:var(--ink-dim);margin-top:10px;font-style:italic;
+    padding-top:10px;border-top:1px dashed var(--line);
+  }
+
+  .fresh-stamp{
+    position:absolute;top:-1px;left:-1px;
+    background:var(--green);color:var(--paper);
+    font-size:9px;font-weight:700;padding:3px 8px;
+    text-transform:uppercase;letter-spacing:0.1em;
+    border-radius:6px 0 6px 0;
+  }
+
+  /* Modal */
+  .modal-backdrop{
+    position:fixed;inset:0;background:rgba(0,0,0,0.8);
+    display:none;align-items:center;justify-content:center;z-index:100;
+    backdrop-filter:blur(4px);
+  }
+  .modal-backdrop.open{display:flex}
+  .modal{
+    background:var(--paper-2);border:1px solid var(--line);border-radius:8px;
+    width:90%;max-width:440px;padding:28px;
+  }
+  .modal h3{font-family:'Syne',sans-serif;font-size:20px;margin-bottom:4px}
+  .modal .mq{font-size:12px;color:var(--ink-dim);margin-bottom:20px}
+  .modal .field{margin-bottom:16px}
+  .modal label{font-size:10px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:0.12em;display:block;margin-bottom:6px}
+  .modal input{
+    width:100%;background:var(--paper);border:1px solid var(--line);color:var(--ink);
+    padding:12px;border-radius:4px;font-family:'Space Mono',monospace;font-size:14px;
+  }
+  .modal-summary{
+    background:var(--paper);border:1px solid var(--line);border-radius:4px;
+    padding:14px;margin-bottom:16px;font-size:12px;
+  }
+  .ms-row{display:flex;justify-content:space-between;margin-bottom:6px}
+  .ms-row:last-child{margin-bottom:0;padding-top:6px;border-top:1px solid var(--line);font-weight:700}
+  .ms-row .p{color:var(--green)}
+  .modal-btns{display:flex;gap:10px}
+  .btn{
+    flex:1;padding:14px;border-radius:4px;border:none;cursor:pointer;
+    font-family:'Space Mono',monospace;font-weight:700;font-size:13px;
+  }
+  .btn-primary{background:var(--gold);color:var(--paper)}
+  .btn-primary:hover{background:var(--gold-bright)}
+  .btn-ghost{background:transparent;color:var(--ink-dim);border:1px solid var(--line)}
+
+  .footnote{
+    padding:24px 0 60px;font-size:11px;color:var(--ink-dim);
+    border-top:1px solid var(--line);margin-top:20px;text-align:center;
+  }
+  .footnote em{color:var(--gold);font-style:normal}
+
+  @media(max-width:600px){
+    .hero h1{font-size:34px}
+    .edge-grid{grid-template-columns:1fr}
+    .hero-stats{gap:20px}
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="container topbar-inner">
+    <div class="logo">HYPER<span>FLEX</span> / TERMINAL</div>
+    <div class="live-dot">Live · Polymarket · Updated 14s ago</div>
+  </div>
+</div>
+
+<section class="hero">
+  <div class="container">
+    <div class="hero-eyebrow">THE TERMINAL FOR POLYMARKET</div>
+    <h1>Alpha you can trade in the <em>next 5 minutes.</em></h1>
+    <p class="hero-sub">Whale flows, orderbook depth imbalance, and time-decay mispricings. One screen. Trade in one click.</p>
+    <div class="hero-stats">
+      <div class="hero-stat"><div class="n">7</div><div class="l">Live Edges &gt;60</div></div>
+      <div class="hero-stat"><div class="n">3</div><div class="l">Fresh &lt;30m</div></div>
+      <div class="hero-stat"><div class="n">$2.4M</div><div class="l">Whale Flow 24h</div></div>
+      <div class="hero-stat"><div class="n">+18pt</div><div class="l">Top Edge</div></div>
+    </div>
+  </div>
+</section>
+
+<div class="container">
+  <div class="sec-head">
+    <h2>Top Edges · Live</h2>
+    <div class="meta">Sorted by Edge Score · Refreshes every 60s</div>
+  </div>
+
+  <div class="edge-grid" id="grid"></div>
+
+  <div class="footnote">
+    This is a <em>mock preview</em>. Real data, whale clusters, orderbook depth, and freshness stamps will wire to the unified <em>buildAlphaList()</em> engine.
+  </div>
+</div>
+
+<!-- Trade Modal -->
+<div class="modal-backdrop" id="modal">
+  <div class="modal">
+    <h3>Place Trade</h3>
+    <div class="mq" id="m-q"></div>
+    <div class="field">
+      <label>Position Size (USDC)</label>
+      <input type="number" id="m-size" value="100">
+    </div>
+    <div class="modal-summary">
+      <div class="ms-row"><span>Entry</span><span id="m-entry">BUY YES @ 32¢</span></div>
+      <div class="ms-row"><span>Shares</span><span id="m-shares">312.5</span></div>
+      <div class="ms-row"><span>Max profit</span><span class="p" id="m-profit">+$212.50</span></div>
+      <div class="ms-row"><span>ROI if correct</span><span class="p" id="m-roi">+212%</span></div>
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="alert('Mock: would sign EIP-712 + POST /order via Polymarket builder')">Sign &amp; Submit</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const EDGES = [
+  {
+    rank:1, score:82, fresh:"14m ago", freshNew:true,
+    q:"Will Bitcoin hit $100,000 before May 1?",
+    mkt:32, model:50, delta:"+18pt",
+    badges:[["whale","🐋 Whale $420k"],["depth","📊 Depth 3.2x"]],
+    bd:{whale:35,depth:22,momentum:15,volume:7,expiry:3},
+    side:"YES", entry:32, profit:68, roi:212,
+    hook:"$420k whale cluster buying YES in last 90min. Bid depth 3.2x ask at current mid."
+  },
+  {
+    rank:2, score:76, fresh:"42m ago", freshNew:true,
+    q:"Will Fed cut rates at May FOMC meeting?",
+    mkt:71, model:58, delta:"-13pt",
+    badges:[["depth","📊 Depth 2.4x"],["whale","🐋 Smart $180k"]],
+    bd:{whale:28,depth:30,momentum:10,volume:6,expiry:2},
+    side:"NO", entry:29, profit:71, roi:244,
+    hook:"Ask-side depth 2.4x bid. Top 5 sharpest wallets net short. Fade the retail consensus."
+  },
+  {
+    rank:3, score:71, fresh:"1h 20m ago",
+    q:"Will ETH flip BTC market cap by end of 2026?",
+    mkt:8, model:14, delta:"+6pt",
+    badges:[["decay","⏱ Decay Edge"],["whale","🐋 $95k"]],
+    bd:{whale:20,depth:12,momentum:22,volume:12,expiry:5},
+    side:"YES", entry:8, profit:92, roi:1150,
+    hook:"Long-dated tail. Cheap exposure to whale accumulation at 8¢ vs model 14¢."
+  },
+  {
+    rank:4, score:68, fresh:"22m ago", freshNew:true,
+    q:"Will Trump mention crypto in next speech?",
+    mkt:61, model:72, delta:"+11pt",
+    badges:[["whale","🐋 Cluster"],["depth","📊 Depth 1.9x"]],
+    bd:{whale:25,depth:18,momentum:16,volume:6,expiry:3},
+    side:"YES", entry:61, profit:39, roi:64,
+    hook:"Six wallets stacked YES in past 30min. Bid-side thickening. Price hasn't caught up."
+  },
+  {
+    rank:5, score:64, fresh:"3h ago",
+    q:"Will Lakers make NBA playoffs?",
+    mkt:41, model:52, delta:"+11pt",
+    badges:[["depth","📊 Depth 2.1x"]],
+    bd:{whale:12,depth:26,momentum:14,volume:8,expiry:4},
+    side:"YES", entry:41, profit:59, roi:144,
+    hook:"Orderbook imbalance without whale confirmation — technical edge only."
+  },
+  {
+    rank:6, score:61, fresh:"5h ago",
+    q:"Will GPT-5 launch before June?",
+    mkt:27, model:36, delta:"+9pt",
+    badges:[["whale","🐋 $62k"],["stale","Stale 5h"]],
+    bd:{whale:22,depth:10,momentum:18,volume:8,expiry:3},
+    side:"YES", entry:27, profit:73, roi:270,
+    hook:"Whale bought 5h ago, price drifted up slightly. Edge shrinking — act fast or skip."
+  }
+];
+
+function render(){
+  const g = document.getElementById('grid');
+  g.innerHTML = EDGES.map((e,i)=>`
+    <div class="edge-card ${i===0?'rank-1':''}" onclick="openTrade(${i})">
+      ${e.freshNew?'<div class="fresh-stamp">🆕 New Edge</div>':''}
+      <div class="card-top">
+        <div class="edge-score">
+          <div class="n">${e.score}</div>
+          <div class="l">Edge</div>
+        </div>
+        <div class="badges">
+          ${e.badges.map(b=>`<span class="badge badge-${b[0]}">${b[1]}</span>`).join('')}
+        </div>
+      </div>
+      <div class="card-q">${e.q}</div>
+      <div class="price-row">
+        <span class="mkt">Mkt ${e.mkt}¢</span>
+        <span class="arrow">→</span>
+        <span class="model">Model ${e.model}¢</span>
+        <span class="delta">${e.delta}</span>
+      </div>
+      <div class="breakdown">
+        <div class="breakdown-title">Why score ${e.score}?</div>
+        ${bdRow('Whales',e.bd.whale,40)}
+        ${bdRow('Depth',e.bd.depth,35)}
+        ${bdRow('Momentum',e.bd.momentum,25)}
+        ${bdRow('Volume',e.bd.volume,15)}
+        ${bdRow('Expiry',e.bd.expiry,10)}
+      </div>
+      <button class="trade-cta" onclick="event.stopPropagation();openTrade(${i})">
+        <span class="side">${e.side}</span>
+        BET @ ${e.entry}¢ · Win ${e.profit}¢
+        <span class="roi">ROI +${e.roi}%</span>
+      </button>
+      <div class="hook">${e.hook} · ${e.fresh}</div>
+    </div>
+  `).join('');
+}
+
+function bdRow(label, val, max){
+  const pct = Math.min(100, (val/max)*100);
+  return `<div class="bd-row">
+    <span class="bd-label">${label}</span>
+    <div class="bd-bar"><div class="bd-fill" style="width:${pct}%"></div></div>
+    <span class="bd-val">+${val}</span>
+  </div>`;
+}
+
+function openTrade(i){
+  const e = EDGES[i];
+  document.getElementById('m-q').textContent = e.q;
+  document.getElementById('m-entry').textContent = `BUY ${e.side} @ ${e.entry}¢`;
+  const size = 100;
+  const shares = (size / (e.entry/100)).toFixed(1);
+  const profit = (shares * (e.profit/100)).toFixed(2);
+  document.getElementById('m-shares').textContent = shares;
+  document.getElementById('m-profit').textContent = `+$${profit}`;
+  document.getElementById('m-roi').textContent = `+${e.roi}%`;
+  document.getElementById('modal').classList.add('open');
+}
+function closeModal(){document.getElementById('modal').classList.remove('open')}
+document.getElementById('modal').addEventListener('click',e=>{
+  if(e.target.id==='modal') closeModal();
+});
+
+render();
+</script>
+</body>
+</html>
