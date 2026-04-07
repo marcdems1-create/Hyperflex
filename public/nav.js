@@ -443,17 +443,16 @@
       }
     }
 
-    // Debounced input handler
+    // Debounced input handler — delegates to doSearch() as single code path
     input.addEventListener('input', function() {
-      var q = input.value;
+      var q = input.value.trim();
       if (debounceTimer) clearTimeout(debounceTimer);
-      // Pages filter instantly, API debounced
-      var ql = (q || '').trim().toLowerCase();
-      if (!ql) {
+      if (!q) {
         doSearch('');
         return;
       }
-      // Show page results instantly
+      // Show page results instantly (no API call yet)
+      var ql = q.toLowerCase();
       var matchedPages = pages.filter(function(p) {
         return p.name.toLowerCase().indexOf(ql) !== -1 || p.desc.toLowerCase().indexOf(ql) !== -1;
       });
@@ -465,7 +464,7 @@
           quickHtml += renderPageItem(p, idx++);
         });
       }
-      if (ql.length >= 2) {
+      if (q.length >= 2) {
         quickHtml += '<div class="hfx-search-section">Markets</div>';
         quickHtml += '<div class="hfx-search-empty" id="hfxMktLoading">Searching markets...</div>';
       }
@@ -473,38 +472,10 @@
       results.innerHTML = quickHtml;
       activeIndex = -1;
 
-      // Debounced API call
-      if (ql.length >= 2) {
+      // Debounce the full doSearch (which handles the API call)
+      if (q.length >= 2) {
         debounceTimer = setTimeout(function() {
-          lastQuery = q.trim();
-          if (abortCtrl) abortCtrl.abort();
-          abortCtrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-          var signal = abortCtrl ? abortCtrl.signal : undefined;
-
-          fetch('/api/markets/search?q=' + encodeURIComponent(q.trim()), { signal: signal })
-            .then(function(r) { return r.ok ? r.json() : []; })
-            .then(function(data) {
-              if (input.value.trim() !== q.trim()) return;
-              var markets = Array.isArray(data) ? data : (data.polymarket || data.kalshi) ? [].concat(data.polymarket || []).concat(data.kalshi || []) : (data.markets || data.results || []);
-              var loadingEl = document.getElementById('hfxMktLoading');
-              if (!loadingEl) return;
-              if (!markets.length) {
-                loadingEl.textContent = 'No markets found for "' + q.trim() + '"';
-                return;
-              }
-              var mktHtml = '';
-              var currentItems = getAllItems();
-              var startIdx = currentItems.length;
-              markets.slice(0, 8).forEach(function(m) {
-                mktHtml += renderMarketItem(m, startIdx++);
-              });
-              loadingEl.outerHTML = mktHtml;
-            })
-            .catch(function(err) {
-              if (err && err.name === 'AbortError') return;
-              var loadingEl = document.getElementById('hfxMktLoading');
-              if (loadingEl) loadingEl.textContent = 'Could not load markets';
-            });
+          doSearch(q);
         }, 250);
       }
     });
