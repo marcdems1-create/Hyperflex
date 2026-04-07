@@ -13,12 +13,24 @@
       '.nav-link{font-family:"Inter",-apple-system,sans-serif;font-size:12px;font-weight:500;color:#8888a0;text-decoration:none;transition:all .15s;padding:6px 10px;border-radius:8px}' +
       '.nav-link:hover{color:#f0f0f5;background:rgba(255,255,255,0.05)}' +
       '.nav-link.active{color:#f0f0f5;background:rgba(255,255,255,0.08);font-weight:600}' +
+      /* Hamburger More menu */
+      '.nav-more-wrap{position:relative;flex-shrink:0}' +
+      '.nav-more-btn{display:flex;align-items:center;gap:5px;padding:6px 10px;border-radius:8px;cursor:pointer;font-family:"Inter",-apple-system,sans-serif;font-size:12px;font-weight:500;color:#8888a0;background:none;border:none;transition:all .15s}' +
+      '.nav-more-btn:hover,.nav-more-btn.open{color:#f0f0f5;background:rgba(255,255,255,0.05)}' +
+      '.nav-more-btn svg{width:16px;height:16px;stroke:currentColor;stroke-width:2;fill:none;transition:transform .2s}' +
+      '.nav-more-btn.open svg{transform:rotate(180deg)}' +
+      '.nav-more-dd{display:none;position:absolute;top:calc(100% + 8px);right:0;min-width:220px;background:rgba(18,18,24,0.95);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.08);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,0.5);padding:6px;z-index:200}' +
+      '.nav-more-dd.open{display:block}' +
+      '.nav-more-dd a{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;font-family:"Inter",-apple-system,sans-serif;font-size:13px;font-weight:500;color:#8888a0;text-decoration:none;transition:all .12s}' +
+      '.nav-more-dd a:hover{color:#f0f0f5;background:rgba(255,255,255,0.06)}' +
+      '.nav-more-dd a.active{color:#f0f0f5;background:rgba(255,255,255,0.08);font-weight:600}' +
+      '.nav-more-dd .dd-sep{height:1px;background:rgba(255,255,255,0.06);margin:4px 8px}' +
       '.nav-auth{display:flex;align-items:center;gap:8px;margin-left:12px;flex-shrink:0}' +
       '.nav-signin{font-family:"Inter",-apple-system,sans-serif;font-size:11px;font-weight:500;color:#8888a0;text-decoration:none;padding:6px 12px;border:1px solid rgba(255,255,255,0.08);border-radius:8px;transition:all .15s;white-space:nowrap}' +
       '.nav-signin:hover{color:#f0f0f5;border-color:rgba(255,255,255,0.2);background:rgba(255,255,255,0.04)}' +
       '.nav-cta{font-family:"Inter",-apple-system,sans-serif;font-size:11px;font-weight:700;color:#0a0a0f;background:linear-gradient(135deg,#00e68a,#4d9fff);text-decoration:none;padding:6px 14px;border-radius:8px;transition:all .15s;white-space:nowrap}' +
       '.nav-cta:hover{filter:brightness(1.1);transform:translateY(-1px)}' +
-      '@media(max-width:768px){.topbar{padding:12px 16px}.nav-links{gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}.nav-links::-webkit-scrollbar{display:none}.nav-link{font-size:11px;white-space:nowrap;min-height:44px;display:inline-flex;align-items:center;padding:6px 8px}.nav-auth{gap:6px;margin-left:8px}.nav-signin{font-size:10px;padding:5px 8px;min-height:44px;display:inline-flex;align-items:center}.nav-cta{font-size:10px;padding:5px 10px;min-height:44px;display:inline-flex;align-items:center}}' +
+      '@media(max-width:768px){.topbar{padding:12px 16px}.nav-links{gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}.nav-links::-webkit-scrollbar{display:none}.nav-link{font-size:11px;white-space:nowrap;min-height:44px;display:inline-flex;align-items:center;padding:6px 8px}.nav-link.desktop-only{display:none}.nav-auth{gap:6px;margin-left:8px}.nav-signin{font-size:10px;padding:5px 8px;min-height:44px;display:inline-flex;align-items:center}.nav-cta{font-size:10px;padding:5px 10px;min-height:44px;display:inline-flex;align-items:center}.nav-more-dd{right:-16px;min-width:200px}}' +
       /* ── Global Search (Cmd+K) styles ── */
       '.nav-search-btn{display:flex;align-items:center;gap:6px;padding:5px 12px;border:1px solid rgba(255,255,255,0.08);border-radius:8px;background:rgba(255,255,255,0.03);cursor:pointer;margin-left:8px;transition:all .15s;flex-shrink:0}' +
       '.nav-search-btn:hover{border-color:rgba(255,255,255,0.16);background:rgba(255,255,255,0.06)}' +
@@ -67,41 +79,66 @@
     document.head.appendChild(style);
   }
 
-  var links = [
-    { href: '/brief', label: '\uD83E\uDDE0 AI Brief', gold: true },
-    { href: '/explore', label: 'Explore' },
-    { href: '/rewards', label: '\uD83D\uDCB0 Rewards', gold: true },
-    { href: '/nominate', label: '+ Nominate a Creator', gold: true },
-    { href: '/crystal-ball', label: 'Crystal Ball' },
+  // Primary links shown in nav bar
+  var primaryLinks = [
     { href: '/alpha', label: '⚡ Alpha', gold: true },
     { href: '/signals', label: 'Signals' },
-    { href: '/whales', label: 'Market Intel' },
     { href: '/screener', label: 'Screener' },
+    { href: '/whales', label: 'Market Intel' },
+    { href: '/crystal-ball', label: 'Crystal Ball' },
     { href: '/predictors', label: 'Predictors' },
-    { href: '/odds', label: 'Odds' },
-    { href: '/high-prob', label: '99% Bets', gold: true },
-    { href: '/ecosystem', label: 'Ecosystem' },
-    { href: '/features', label: 'Features' },
-    { href: '/data', label: 'Data' },
-    { href: '/api-docs', label: 'API' }
+    { href: '/explore', label: 'Explore' }
   ];
+  // Secondary links in "More" dropdown
+  var moreLinks = [
+    { href: '/brief', label: '🧠 AI Brief', gold: true },
+    { href: '/odds', label: '🎲 Odds' },
+    { href: '/high-prob', label: '🎯 99% Bets', gold: true },
+    { href: '/rewards', label: '💰 Rewards', gold: true },
+    { sep: true },
+    { href: '/ecosystem', label: '🌐 Ecosystem' },
+    { href: '/features', label: '✨ Features' },
+    { href: '/data', label: '📈 Data' },
+    { href: '/api-docs', label: '⚙️ API' },
+    { sep: true },
+    { href: '/nominate', label: '➕ Nominate a Creator', gold: true }
+  ];
+  // Combined for search index
+  var links = primaryLinks.concat(moreLinks.filter(function(l){return !l.sep}));
 
   var path = window.location.pathname.replace(/\/$/, '') || '/';
 
   var isLoggedIn = !!(localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token'));
+
+  // Check if any "More" link is active (to highlight More button)
+  var moreActive = moreLinks.some(function(l) { return !l.sep && path === l.href; });
 
   var nav = document.createElement('nav');
   nav.className = 'topbar';
   nav.innerHTML =
     '<a href="/explore" class="topbar-logo">HYPER<span>FLEX</span></a>' +
     '<div class="nav-links">' +
-      links.map(function(l) {
+      primaryLinks.map(function(l) {
         var isActive = path === l.href;
         var cls = 'nav-link' + (isActive ? ' active' : '');
         var style = l.gold && !isActive ? ' style="color:#00e68a"' : '';
         return '<a href="' + l.href + '" class="' + cls + '"' + style + '>' + l.label + '</a>';
       }).join('') +
       '<a id="navDashLink" href="/creator/dashboard" class="nav-link" style="' + (isLoggedIn ? '' : 'display:none;') + 'color:#00e68a;font-weight:600">Dashboard</a>' +
+      '<div class="nav-more-wrap">' +
+        '<button class="nav-more-btn' + (moreActive ? ' active' : '') + '" id="navMoreBtn">' +
+          'More <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>' +
+        '</button>' +
+        '<div class="nav-more-dd" id="navMoreDd">' +
+          moreLinks.map(function(l) {
+            if (l.sep) return '<div class="dd-sep"></div>';
+            var isActive = path === l.href;
+            var cls = isActive ? ' class="active"' : '';
+            var style = l.gold && !isActive ? ' style="color:#00e68a"' : '';
+            return '<a href="' + l.href + '"' + cls + style + '>' + l.label + '</a>';
+          }).join('') +
+        '</div>' +
+      '</div>' +
     '</div>' +
     '<div class="nav-search-btn" id="hfxSearchBtn" title="Search (⌘K)">' +
       '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>' +
@@ -122,6 +159,31 @@
   }
 
   // Dashboard link visibility already handled by isLoggedIn above
+
+  // ── More dropdown toggle ──
+  (function() {
+    var btn = document.getElementById('navMoreBtn');
+    var dd = document.getElementById('navMoreDd');
+    if (!btn || !dd) return;
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var open = dd.classList.toggle('open');
+      btn.classList.toggle('open', open);
+    });
+    document.addEventListener('click', function(e) {
+      if (!dd.contains(e.target) && e.target !== btn) {
+        dd.classList.remove('open');
+        btn.classList.remove('open');
+      }
+    });
+    // Close on Escape
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && dd.classList.contains('open')) {
+        dd.classList.remove('open');
+        btn.classList.remove('open');
+      }
+    });
+  })();
 
   // ── Global Search Modal (Cmd+K / Ctrl+K) ──
   (function() {
