@@ -7,17 +7,21 @@
 
 ## What This Project Is
 
-**HYPERFLEX** is the universal prediction market dashboard. One place to aggregate and track positions across Polymarket, Kalshi, and Manifold — share your best calls, compete on leaderboards, and prove your forecasting edge.
+**HYPERFLEX is the Bloomberg Terminal for Polymarket.** The place serious traders go to get the alpha, form the thesis, and pull the trigger on the trade — all in one screen.
 
-**Primary hook:** Cross-platform portfolio tracker for serious prediction market players. Connect your Polymarket wallet, Kalshi API key, or Manifold username and see all positions, P&L, win rate, and calibration score in a single dashboard.
+**North-star product:** A professional-grade intelligence terminal for prediction markets. Traders open HYPERFLEX to research markets, read signals the crowd is missing, track sharp predictors, compare cross-platform odds (Polymarket vs Kalshi vs Manifold for arbitrage), and then execute trades through our embedded Polymarket trade widget — without ever leaving the tab.
 
-**Retention layer:** Creators can launch branded community prediction markets (play-money Flex Points, AI-powered market generation via YouTube scanner). Communities drive engagement, streaks, and social loops.
+**Primary hook:** Alpha. Every surface should answer "what should I trade next and why?" — news scanner signals, narrative/resonance scores, calibration-weighted sharp predictor picks, cross-platform mispricing, portfolio P&L, volume/velocity spikes, sentiment pulse. HYPERFLEX surfaces the edge, the trader acts on it.
 
-**Target user:** Active Polymarket/Kalshi/Manifold traders who want one place to track everything, flex their win rate, and discover sharp predictors to follow.
+**Secondary layer (portfolio tracker):** Cross-platform position aggregation across Polymarket, Kalshi, Manifold — not the hero anymore, it's a hook to pull traders into the terminal so they see our research surfaces and trade through our builder.
+
+**Retention layer (community markets):** Creators launch branded play-money markets for engagement/streaks/social loops. De-emphasised in the core terminal UX — community markets now support the terminal, not vice-versa.
+
+**Target user:** Serious Polymarket traders hunting alpha. Power users who would pay $$$ for a Bloomberg Terminal seat but can't because nothing like this exists in prediction markets. We give it to them free and monetise their trade volume.
 
 **Business model:** 100% free for users. Primary income = **Polymarket referral fees** via the Polymarket Builder Program. Every CLOB order routed through HYPERFLEX carries our `POLY_BUILDER_*` headers, earning fee attribution on trade volume. No tiers, no paywalls — the more traders we onboard and the more volume they push through our trade widget, the more we earn. All features (Polymarket, Kalshi, Manifold sync, auto-sync, calibration score, sharp score, community markets) are free for everyone.
 
-**Revenue strategy:** Maximise Polymarket trade volume routed through our builder ID. Every UI decision should ask: "Does this drive more Polymarket trades through HYPERFLEX?" Kalshi/Manifold remain free aggregator value to attract serious traders into the funnel.
+**Revenue strategy:** Maximise Polymarket trade volume routed through our builder ID. Every UI decision should ask two questions: (1) "Does this give a trader more alpha than they had 10 seconds ago?" and (2) "Is the Polymarket trade widget one click away from that insight?" Alpha → trade → fee. Kalshi/Manifold exist to surface arbitrage edges and attract sharp traders into the terminal — but the trade always executes on Polymarket through our builder.
 
 **Legacy DB plan values:** `'free'`, `'pro'`, `'platinum'` columns still exist in `creator_settings` (from the old tier model) — leave them alone for now, but do NOT gate features on them. Stripe checkout code is dormant; do not wire new gates to it.
 
@@ -100,7 +104,7 @@
 3. **DB:** `creator_settings` is the main creator table (not `communities`)
 4. **Plan values in DB:** `'free'`, `'pro'`, `'platinum'` — display as Free / Pro / Premium in UI
 5. **Always check git status** before assuming what's deployed vs local
-6. **Aggregator-first mindset:** Portfolio tracker is the primary value prop. Community markets support retention. When building new features, ask: "Does this help a Polymarket trader?"
+6. **Terminal-first mindset:** HYPERFLEX is the Bloomberg Terminal for Polymarket. Every feature must give a serious trader more alpha, faster, and put a trade 1 click away. Portfolio tracking and community markets are support layers — the research/intelligence/execution loop is the product. When building, ask: "Does this help a Polymarket trader find an edge AND act on it through our builder?"
 7. **⛔ NEVER start or stop the server.** Do NOT run `node server.js`, `npm start`, `npm run dev`, `pkill node`, or any command that starts/stops a process on port 3000. Railway handles production. If you need to verify code works, edit files and commit — do not run the server locally. Killing the server disrupts the live site.
 8. **Always track every user request as a todo item before starting work.** When the user gives a task or list of tasks, add them to a running todo list immediately. Mark items in-progress when starting, completed when done. Never let a request go untracked.
 9. **Always read https://docs.polymarket.com/builders/overview before making CLOB trading changes.**
@@ -443,13 +447,28 @@ Matches official SDK order.
 - Progress bar tracking connections, cards turn green on success
 - Multi-connect before proceeding, CTA upgrades after first connect
 
-### 4. Maximise Polymarket Builder Revenue (next up)
-- **Funnel traders into the trade widget**: every Polymarket market view should surface a 1-click Buy/Sell CTA — every trade earns builder fees
-- **Trade widget on every Polymarket position card**: portfolio tab, member profile, predictor leaderboard, Quick Preview result — anywhere a Polymarket market appears, embed a "Trade →" button that opens the widget
-- **Surface deep liquidity / hot Polymarket markets** on landing + explore (drives clicks → trades)
-- **Builder header audit**: confirm `POLY_BUILDER_*` headers fire on 100% of `/order` POSTs; add error logging if missing
-- **Volume dashboard**: internal-only `/admin` view of builder fee accrual, top trading users, top markets — to optimise the funnel
-- Kill remaining "Pro" / "Premium" labels in UI — everything is free now
+### 4. Build the Bloomberg Terminal for Polymarket (next up)
+The product north star. Every surface must deliver alpha and put the trade 1 click away.
+
+**Research & alpha surfaces:**
+- **Market screener** — filter Polymarket's full market universe by volume, liquidity, velocity, category, days-to-resolve, YES% band, resonance_score, sharp-predictor conviction. Sortable columns like a Bloomberg monitor.
+- **Narrative dominance screener** — already have `supabase_migration_narrative_snapshots.sql`; surface it. Which narratives are heating up across markets?
+- **Cross-platform arbitrage board** — same question priced differently on Polymarket vs Kalshi vs Manifold → instant edge list, click → trade on Polymarket
+- **News scanner feed** — tie `supabase_migration_news_scanner.sql` to Polymarket markets: "Breaking news → affected markets → trade now"
+- **Sharp predictor signal feed** — top calibration-score users' recent Polymarket bets, real-time
+- **Volume/velocity spike alerts** — which markets are moving *right now*, what side, how much
+- **Order book depth viewer** per market (pulled from CLOB), bid/ask ladder
+- **Market detail page upgrade** — `/market/:slug` becomes the terminal's "security screen": price history chart, holder distribution, related markets, news mentions, sharp predictors holding it, trade widget side-by-side
+
+**Execution surfaces (fee capture):**
+- **Trade widget embedded everywhere** — screener row → inline Buy/Sell, news card → Trade, arbitrage row → Trade, sharp predictor feed → Copy Trade, portfolio card → Trade More/Close
+- **1-click "Copy Trade"** from any sharp predictor activity card
+- **Builder header audit**: confirm `POLY_BUILDER_*` fires on 100% of `/order` POSTs; alert on misses
+- **Internal volume dashboard** at `/admin` — builder fee accrual, top traders, top markets, funnel conversion (view → trade)
+
+**De-emphasise:**
+- Community markets move out of the primary nav — stay as a creator sub-product, not a landing page hero
+- Kill remaining "Pro"/"Premium" labels in UI — everything is free
 
 ### Known Issues
 - **Creator referral acceptance**: `accepted` on `creator_referrals` stays false — needs flip on first public market publish
