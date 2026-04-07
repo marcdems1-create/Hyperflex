@@ -19595,6 +19595,14 @@ let _volumeBaselineCache = null; // { ts, data: { market_id: avg_volume } }
 // Single source of truth for enriched market data. Used by /api/screener,
 // /api/alpha/top (landing hero), and read directly by /api/signals via the
 // shared _screenerCache. Add new alpha surfaces by reading buildAlphaList().
+// In-memory freshness tracker: market_id -> { first_seen_at, last_score, peak_score }
+// Stamps the moment a market first crosses the EDGE_FRESH_THRESHOLD so traders
+// can tell fresh signals (act fast, edge not priced in) from stale ones.
+const _alphaFreshness = new Map();
+const EDGE_FRESH_THRESHOLD = 60; // score must cross this to get a stamp
+const EDGE_DROP_THRESHOLD = 50;  // if score falls below this, edge has died — clear stamp
+const FRESH_WINDOW_MINUTES = 60; // <60min = is_new = true
+
 async function buildAlphaList(opts = {}) {
   const force = opts.force === true;
   // 90s TTL — live CLOB prices need freshness
@@ -19971,6 +19979,53 @@ async function buildAlphaList(opts = {}) {
       }
       console.log('[screener] Pulled CLOB depth for', withDepth, 'liquid markets');
     } catch (e) { console.warn('[screener] CLOB depth fetch failed:', e.message); }
+
+    // ── FRESHNESS STAMPS — track when each market first crossed the edge threshold ──
+    try {
+      const nowMs = Date.now();
+      let freshNew = 0;
+      for (const m of markets) {
+        if (!m.market_id) continue;
+        const score = m.edge_score || 0;
+        const existing = _alphaFreshness.get(m.market_id);
+
+        if (score >= EDGE_FRESH_THRESHOLD) {
+          if (!existing) {
+            // First time this market crosses the threshold — stamp it
+            _alphaFreshness.set(m.market_id, { first_seen_at: nowMs, last_score: score, peak_score: score });
+            freshNew++;
+          } else {
+            existing.last_score = score;
+            if (score > existing.peak_score) existing.peak_score = score;
+          }
+        } else if (existing && score < EDGE_DROP_THRESHOLD) {
+          // Edge died — clear stamp so the next time it crosses, it counts as fresh again
+          _alphaFreshness.delete(m.market_id);
+        }
+
+        const stamped = _alphaFreshness.get(m.market_id);
+        if (stamped) {
+          const ageMin = Math.round((nowMs - stamped.first_seen_at) / 60000);
+          m.edge_first_seen_at = new Date(stamped.first_seen_at).toISOString();
+          m.edge_age_minutes = ageMin;
+          m.is_new = ageMin <= FRESH_WINDOW_MINUTES;
+          m.edge_peak_score = stamped.peak_score;
+        } else {
+          m.edge_first_seen_at = null;
+          m.edge_age_minutes = null;
+          m.is_new = false;
+          m.edge_peak_score = null;
+        }
+      }
+
+      // Evict stale stamps (older than 24h) to bound memory
+      const cutoff = nowMs - 24 * 60 * 60 * 1000;
+      for (const [k, v] of _alphaFreshness) {
+        if (v.first_seen_at < cutoff) _alphaFreshness.delete(k);
+      }
+
+      console.log('[screener] Freshness:', freshNew, 'newly stamped,', _alphaFreshness.size, 'tracked total');
+    } catch (e) { console.warn('[screener] freshness tracking failed:', e.message); }
 
     _screenerCache = { ts: Date.now(), data: markets };
     _healthTimestamps.lastScreenerFetch = new Date().toISOString();
