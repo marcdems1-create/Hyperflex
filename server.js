@@ -19630,11 +19630,8 @@ async function buildAlphaList(opts = {}) {
       if (v24 > 0) return v24;
       return parseFloat(m.volume || m.volumeNum || 0);
     };
-    // Sort by 24h volume desc, take top 350 to cover more whale-traded markets
-    const rawMarkets = (Array.isArray(_rawAll) ? _rawAll : [])
-      .sort((a, b) => _vol(b) - _vol(a))
-      .slice(0, 350);
-    console.log('[alpha] gamma fetch:', (Array.isArray(_rawAll) ? _rawAll.length : 0), '→ top', rawMarkets.length, 'by 24h volume');
+    // Sort all 500 by 24h volume desc — we'll slice top 350 + force-include whale markets later
+    const _sortedAll = (Array.isArray(_rawAll) ? _rawAll : []).sort((a, b) => _vol(b) - _vol(a));
 
     // Warm whale cache if empty (so Whale Moves lane always has data)
     if (!_whaleWatchCache || !_whaleWatchCache.data) {
@@ -19677,6 +19674,22 @@ async function buildAlphaList(opts = {}) {
         whaleByMarket[n.market].capital += net;
       }
     }
+
+    // ── Slice top 350 by 24h volume, then force-include any whale-traded markets
+    // from positions 350-500 that we'd otherwise miss. This guarantees the engine
+    // sees every market where smart money is positioned, regardless of volume rank.
+    const rawMarkets = _sortedAll.slice(0, 350);
+    const _inScope = new Set(rawMarkets.map(m => m.conditionId).filter(Boolean));
+    let _whaleForced = 0;
+    for (let i = 350; i < _sortedAll.length; i++) {
+      const m = _sortedAll[i];
+      if (m.conditionId && whaleByCondId[m.conditionId] && !_inScope.has(m.conditionId)) {
+        rawMarkets.push(m);
+        _inScope.add(m.conditionId);
+        _whaleForced++;
+      }
+    }
+    console.log('[alpha] gamma fetch:', _sortedAll.length, '→', rawMarkets.length, 'in scope (' + _whaleForced + ' force-included whale markets)');
 
     // Auto-detect category
     function detectCategory(q) {
@@ -19807,8 +19820,7 @@ async function buildAlphaList(opts = {}) {
       // Liquid markets with whale activity should always beat noise markets.
       const edgeWhale = Math.min(35, wCount * 7);                                         // 3 whales=21, 5=35
       const edgeCapital = wCapital >= 1000000 ? 15 : wCapital >= 500000 ? 10 : wCapital >= 100000 ? 5 : 0;
-      // Volume tier — progressive so $50k markets still score and we don't waste signal:
-      // $10M=30, $5M=25, $1M=20, $500k=15, $250k=12, $100k=10, $50k=6, $10k=3, $1k=1
+      // Volume tier — progressive, max 30 (fits Marc's UI bar):
       const edgeVolume =
         volume >= 10000000 ? 30 :
         volume >= 5000000 ? 25 :
@@ -19819,6 +19831,13 @@ async function buildAlphaList(opts = {}) {
         volume >= 50000 ? 6 :
         volume >= 10000 ? 3 :
         volume >= 1000 ? 1 : 0;
+      // Mega bonus — surfaces popular mega-markets (Bitcoin, Trump, Fed) even when
+      // they have no whale concentration. $5M+ = +5, $10M+ = +10, $25M+ = +15.
+      // Lives in its own component slot so it doesn't overflow Marc's volume bar.
+      const edgeMega =
+        volume >= 25000000 ? 15 :
+        volume >= 10000000 ? 10 :
+        volume >= 5000000 ? 5 : 0;
       // Momentum + expiry only fire on liquid markets (>$50k vol). Otherwise it's just noise.
       const liquid = volume >= 50000;
       const edgeMomentum = liquid ? Math.min(15, Math.abs(pChange || 0) * 1.5) : 0;
@@ -19839,7 +19858,7 @@ async function buildAlphaList(opts = {}) {
           else edgeDecay = 4;
         }
       }
-      const edgeScore = Math.min(99, Math.round(edgeWhale + edgeCapital + edgeMomentum + edgeVolume + edgeExpiry + edgeDivergence + edgeDecay));
+      const edgeScore = Math.min(99, Math.round(edgeWhale + edgeCapital + edgeMomentum + edgeVolume + edgeMega + edgeExpiry + edgeDivergence + edgeDecay));
 
       // ── Trade ROI ──
       let trade = null;
@@ -19933,6 +19952,7 @@ async function buildAlphaList(opts = {}) {
           capital: Math.round(edgeCapital),
           momentum: Math.round(edgeMomentum),
           volume: Math.round(edgeVolume),
+          mega: Math.round(edgeMega),
           expiry: Math.round(edgeExpiry),
           divergence: Math.round(edgeDivergence),
           decay: Math.round(edgeDecay)
