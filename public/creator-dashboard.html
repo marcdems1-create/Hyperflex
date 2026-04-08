@@ -2933,6 +2933,7 @@ body.nav-open .sidebar-backdrop {
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.9.0/dist/ethers.umd.min.js"></script>
+<script src="/wallet.js?v=1"></script>
 <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body class="plan-premium">
@@ -13940,8 +13941,9 @@ setTimeout(async function() {
           _polyWalletAddress = '';
         }
 
-        const provider = new ethers.BrowserProvider(window.ethereum);
-        const signer = await provider.getSigner();
+        const walletCtx = await HFXWallet.getSigner();
+        const provider = walletCtx.provider;
+        const signer = walletCtx.signer;
         window._connectedWallet = address;
         window._walletSigner = signer;
         window._walletProvider = provider;
@@ -16932,9 +16934,10 @@ async function connectBrowserWallet() {
   const btn = document.getElementById('walletConnectBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Connecting...'; }
   try {
-    const provider = new ethers.BrowserProvider(window.ethereum);
-    const signer = await provider.getSigner();
-    const address = await signer.getAddress();
+    const walletCtx = await HFXWallet.getSigner();
+    const provider = walletCtx.provider;
+    const signer = walletCtx.signer;
+    const address = walletCtx.address;
     window._connectedWallet = address;
     window._walletSigner = signer;
     window._walletProvider = provider;
@@ -17243,12 +17246,12 @@ if (typeof window.ethereum !== 'undefined') {
       localStorage.setItem('poly_eoa_address', newAddr);
 
       // Re-establish signer + resolve proxy for new account
+      // (HFXWallet auto-invalidated its cache on the accountsChanged event)
       try {
-        const provider = new ethers.BrowserProvider(window.ethereum);
-        const signer = await provider.getSigner();
-        window._walletSigner = signer;
-        window._walletProvider = provider;
-        fetchWalletBalance(provider, newAddr);
+        const walletCtx = await HFXWallet.getSigner();
+        window._walletSigner = walletCtx.signer;
+        window._walletProvider = walletCtx.provider;
+        fetchWalletBalance(walletCtx.provider, newAddr);
       } catch (e) { console.warn('[wallet switch] signer failed:', e.message); }
 
       // Resolve proxy for new wallet
@@ -17297,14 +17300,15 @@ async function derivePolymarketApiKey() {
       }
     }
 
-    // Re-establish signer on the new chain
-    const provider = new ethers.BrowserProvider(window.ethereum);
-    const signer = await provider.getSigner();
+    // Re-establish signer on the new chain via shared cache
+    const walletCtx = await HFXWallet.getSigner();
+    const provider = walletCtx.provider;
+    const signer = walletCtx.signer;
     window._walletSigner = signer;
     window._walletProvider = provider;
 
     if (btn) btn.textContent = 'Signing...';
-    const address = await signer.getAddress();
+    const address = walletCtx.address;
     const timestamp = Math.floor(Date.now() / 1000).toString();
     const nonce = '0';
 
@@ -17783,10 +17787,11 @@ async function confirmTrade() {
   try {
     // Need wallet signer for EIP-712 order signing
     if (!window._walletSigner) {
-      // Try to get signer from MetaMask
+      // Try to get signer from MetaMask via shared cache
       if (window.ethereum) {
-        const provider = new ethers.BrowserProvider(window.ethereum);
-        window._walletSigner = await provider.getSigner();
+        const walletCtx = await HFXWallet.getSigner();
+        window._walletSigner = walletCtx.signer;
+        window._walletProvider = walletCtx.provider;
       } else {
         errEl.textContent = 'MetaMask required to sign orders';
         errEl.style.display = 'block';
@@ -18009,6 +18014,12 @@ async function confirmTrade() {
   } catch (e) {
     if (e.code === 'ACTION_REJECTED' || e.code === 4001) {
       errEl.textContent = 'Order signing rejected in wallet';
+    } else if (HFXWallet.is32002Error(e)) {
+      HFXWallet.invalidate();
+      window._walletSigner = null;
+      window._walletProvider = null;
+      errEl.textContent = 'A wallet request is already pending. Open your MetaMask app, approve or dismiss the previous request, then try again.';
+      console.warn('[qt-trade] -32002 detected, signer cache cleared');
     } else {
       errEl.textContent = 'Trade failed: ' + (e.shortMessage || e.message || 'Unknown error');
     }
@@ -18088,8 +18099,9 @@ async function redeemPosition(posDataJson) {
 
   try {
     if (!window._walletSigner) {
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      window._walletSigner = await provider.getSigner();
+      const walletCtx = await HFXWallet.getSigner();
+      window._walletSigner = walletCtx.signer;
+      window._walletProvider = walletCtx.provider;
     }
 
     const conditionId = pos.condition_id.startsWith('0x') ? pos.condition_id : '0x' + pos.condition_id;
