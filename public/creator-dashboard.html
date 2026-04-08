@@ -15902,7 +15902,7 @@ async function renderPnlChart(positions) {
     try {
       const activity = await _ensurePolyActivity(_polyWalletAddress);
       if (activity && activity.length > 0) {
-        const { dailyPnl } = _buildDailyPnlFromActivity(activity, 30);
+        const { dailyPnl, tradeEvents } = _buildDailyPnlFromActivity(activity, 30);
         // Add unrealized P&L from open positions to today
         const today = new Date().toISOString().slice(0, 10);
         let unrealized = 0;
@@ -15915,7 +15915,7 @@ async function renderPnlChart(positions) {
         }
         if (dailyPnl[today] !== undefined) dailyPnl[today] += unrealized;
         else dailyPnl[today] = unrealized;
-        _renderPnlSvg(barsEl, dailyPnl, 120);
+        _renderPnlSvg(barsEl, dailyPnl, 120, tradeEvents);
         return;
       }
     } catch(e) { console.warn('[renderPnlChart] activity fallback:', e.message); }
@@ -15940,7 +15940,7 @@ async function renderPnlChart(positions) {
 }
 
 // Shared SVG chart renderer — takes dailyPnl map { 'YYYY-MM-DD': number } and renders cumulative line
-function _renderPnlSvg(barsEl, dailyPnl, H) {
+function _renderPnlSvg(barsEl, dailyPnl, H, tradeEvents) {
   const dateKeys = Object.keys(dailyPnl).sort();
   if (dateKeys.length < 2) return;
 
@@ -15951,6 +15951,7 @@ function _renderPnlSvg(barsEl, dailyPnl, H) {
   const padding = 8;
   const maxAbs = Math.max(0.01, ...points.map(p => Math.abs(p.val)));
   const xStep = (W - padding * 2) / Math.max(1, points.length - 1);
+  const dateToIdx = {}; dateKeys.forEach((d, i) => { dateToIdx[d] = i; });
   const pathPoints = points.map((p, i) => {
     const x = padding + i * xStep;
     const y = H / 2 - (p.val / maxAbs) * (H / 2 - padding);
@@ -15966,6 +15967,41 @@ function _renderPnlSvg(barsEl, dailyPnl, H) {
   const lineColor = lastPt.val >= 0 ? '#00e68a' : '#ff6b6b';
   const sign = lastPt.val >= 0 ? '+' : '';
 
+  // Build trade event dots (sells/redeems with P&L)
+  let dotsHtml = '';
+  const trades = tradeEvents || [];
+  // Dedupe by day — show largest trade per day to avoid clutter
+  const dotsByDay = {};
+  for (const t of trades) {
+    const day = (t.date || '').slice(0, 10);
+    if (!dotsByDay[day] || Math.abs(t.pnl) > Math.abs(dotsByDay[day].pnl)) dotsByDay[day] = t;
+  }
+  for (const t of Object.values(dotsByDay)) {
+    const day = (t.date || '').slice(0, 10);
+    const idx = dateToIdx[day];
+    if (idx == null || !pathPoints[idx]) continue;
+    const pt = pathPoints[idx];
+    const dotColor = t.pnl >= 0 ? '#00e68a' : '#ff6b6b';
+    const dotSign = t.pnl >= 0 ? '+' : '-';
+    const title = (t.title || 'Trade').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    const side = t.side || 'SELL';
+    const label = `${title}\n${side} · ${dotSign}$${Math.abs(t.pnl).toFixed(2)}`;
+    dotsHtml += `<circle cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="5" fill="${dotColor}" stroke="#0a0a0f" stroke-width="2" style="cursor:pointer" data-pnl-dot="1">
+      <title>${label}</title>
+    </circle>`;
+  }
+
+  // Invisible hover zones for crosshair — one per data point
+  let hoverHtml = '';
+  for (let i = 0; i < pathPoints.length; i++) {
+    const pt = pathPoints[i];
+    const fmtDate = pt.date.slice(5); // MM-DD
+    const pnlSign = pt.val >= 0 ? '+' : '-';
+    hoverHtml += `<rect x="${(pt.x - xStep/2).toFixed(1)}" y="0" width="${xStep.toFixed(1)}" height="${H}" fill="transparent" style="cursor:crosshair">
+      <title>${fmtDate}: ${pnlSign}$${Math.abs(pt.val).toFixed(2)}</title>
+    </rect>`;
+  }
+
   barsEl.innerHTML = `
     <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="display:block">
       <defs>
@@ -15977,10 +16013,12 @@ function _renderPnlSvg(barsEl, dailyPnl, H) {
       <line x1="${padding}" y1="${H/2}" x2="${W-padding}" y2="${H/2}" stroke="#2a2825" stroke-width="1" stroke-dasharray="4,4"/>
       <path d="${fillD}" fill="url(#pnlGrad)"/>
       <path d="${pathD}" fill="none" stroke="${lineColor}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      ${dotsHtml}
       <circle cx="${lastPt.x.toFixed(1)}" cy="${lastPt.y.toFixed(1)}" r="4" fill="${lineColor}" stroke="#0a0a0f" stroke-width="2"/>
       <text x="${W-padding}" y="14" text-anchor="end" fill="${lineColor}" font-family="var(--mono)" font-size="12" font-weight="700">${sign}$${Math.abs(lastPt.val).toFixed(2)}</text>
       <text x="${padding}" y="${H-4}" fill="#8888a0" font-family="var(--mono)" font-size="11">${dateKeys[0] ? dateKeys[0].slice(5) : ''}</text>
       <text x="${W-padding}" y="${H-4}" text-anchor="end" fill="#8888a0" font-family="var(--mono)" font-size="11">${dateKeys[dateKeys.length-1] ? dateKeys[dateKeys.length-1].slice(5) : ''}</text>
+      ${hoverHtml}
     </svg>`;
 }
 
@@ -16011,7 +16049,7 @@ async function _ensurePolyActivity(address) {
 }
 
 // Build daily realized P&L from activity (grouped by day)
-// Returns { dailyPnl: { 'YYYY-MM-DD': number }, totalRealized: number }
+// Returns { dailyPnl: { 'YYYY-MM-DD': number }, totalRealized: number, tradeEvents: [] }
 function _buildDailyPnlFromActivity(activity, days) {
   const now = new Date();
   const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - days);
@@ -16020,9 +16058,11 @@ function _buildDailyPnlFromActivity(activity, days) {
   // Group buys/sells by conditionId to compute per-trade realized P&L
   const byMarket = {};
   const dailyPnl = {};
+  const tradeEvents = []; // individual sells/redeems for chart dots
 
-  // Init date buckets
-  for (let i = Math.min(days, 90) - 1; i >= 0; i--) {
+  // Init date buckets — minimum 7 for chart readability, max 365
+  const numBuckets = Math.max(7, Math.min(days, 365));
+  for (let i = numBuckets - 1; i >= 0; i--) {
     const d = new Date(now); d.setDate(d.getDate() - i);
     dailyPnl[d.toISOString().slice(0, 10)] = 0;
   }
@@ -16040,8 +16080,10 @@ function _buildDailyPnlFromActivity(activity, days) {
     const type = item.type || '';
     const side = item.side || '';
     const cid = item.conditionId || item.assetId || 'unknown';
+    const title = item.title || item.question || '';
 
-    if (!byMarket[cid]) byMarket[cid] = { totalBuyCost: 0, totalBuyTokens: 0 };
+    if (!byMarket[cid]) byMarket[cid] = { totalBuyCost: 0, totalBuyTokens: 0, title: title };
+    if (title && !byMarket[cid].title) byMarket[cid].title = title;
 
     if (type === 'TRADE' && side === 'BUY') {
       byMarket[cid].totalBuyCost += amt;
@@ -16055,12 +16097,11 @@ function _buildDailyPnlFromActivity(activity, days) {
       const realizedPnl = amt - costOfSold;
       if (ts.getTime() >= cutoffTs && dailyPnl[day] !== undefined) {
         dailyPnl[day] += realizedPnl;
+        tradeEvents.push({ date: day, pnl: realizedPnl, title: byMarket[cid].title || cid.slice(0,12), side: 'SELL', amount: amt });
       }
-      // Update cost basis (reduce proportionally)
       byMarket[cid].totalBuyCost -= costOfSold;
       byMarket[cid].totalBuyTokens -= tokens;
     } else if (type === 'REDEEM') {
-      // Redeem = position resolved, proceeds vs cost
       const avgCost = byMarket[cid].totalBuyTokens > 0
         ? byMarket[cid].totalBuyCost / byMarket[cid].totalBuyTokens
         : 0;
@@ -16068,13 +16109,13 @@ function _buildDailyPnlFromActivity(activity, days) {
       const realizedPnl = amt - costOfRedeemed;
       if (ts.getTime() >= cutoffTs && dailyPnl[day] !== undefined) {
         dailyPnl[day] += realizedPnl;
+        tradeEvents.push({ date: day, pnl: realizedPnl, title: byMarket[cid].title || cid.slice(0,12), side: 'REDEEM', amount: amt });
       }
     }
   }
 
-  // Sum period realized P&L
   const totalRealized = Object.values(dailyPnl).reduce((s, v) => s + v, 0);
-  return { dailyPnl, totalRealized };
+  return { dailyPnl, totalRealized, tradeEvents };
 }
 
 // Compute period P&L: realized trading P&L from activity + unrealized from open positions
@@ -16181,7 +16222,7 @@ async function renderPnlChartForPeriod(positions, days) {
     try {
       const activity = await _ensurePolyActivity(_polyWalletAddress);
       if (activity && activity.length > 0) {
-        const { dailyPnl } = _buildDailyPnlFromActivity(activity, days);
+        const { dailyPnl, tradeEvents } = _buildDailyPnlFromActivity(activity, days);
         // Add unrealized P&L from open positions to today's entry
         const today = new Date().toISOString().slice(0, 10);
         let unrealized = 0;
@@ -16195,7 +16236,7 @@ async function renderPnlChartForPeriod(positions, days) {
         }
         if (dailyPnl[today] !== undefined) dailyPnl[today] += unrealized;
         else dailyPnl[today] = unrealized;
-        _renderPnlSvg(barsEl, dailyPnl, 120);
+        _renderPnlSvg(barsEl, dailyPnl, 120, tradeEvents);
         return;
       }
     } catch(e) { console.warn('[renderPnlChartForPeriod] activity fallback:', e.message); }
