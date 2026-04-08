@@ -17448,13 +17448,22 @@ function adjustShares(delta) {
 
 function setMaxShares() {
   if (!_tradeModalData) return;
-  const balance = window._walletBalanceUSDC || 0;
+  const mode = _tradeModalData.mode || 'buy';
   const price = _tradeModalData._limitPrice || (_tradeModalData.current_price || 0.5);
-  if (price > 0) {
-    const maxShares = Math.floor(balance / price);
-    const input = document.getElementById('tradeAmount');
-    if (input) { input.value = maxShares; updateTradeEstimate(); }
+  const input = document.getElementById('tradeAmount');
+  if (!input || price <= 0) return;
+
+  if (mode === 'sell') {
+    // Max sell = position value in USD (shares × price)
+    const shares = _tradeModalData.shares || _tradeModalData.size || 0;
+    const maxUsd = Math.floor(shares * price);
+    input.value = maxUsd;
+  } else {
+    // Max buy = wallet balance
+    const balance = window._walletBalanceUSDC || 0;
+    input.value = Math.floor(balance);
   }
+  updateTradeEstimate();
 }
 
 function updateTradeConfirmBtn() {
@@ -17485,6 +17494,12 @@ function setTradeMode(mode) {
     sellBtn.style.color = mode === 'sell' ? '#fff' : '#ff6b6b';
     sellBtn.style.border = mode === 'sell' ? '1px solid #ff6b6b' : '1px solid #2a2825';
   }
+  // Show Max button only in sell mode
+  const maxBtn = document.getElementById('tradeMaxBtn');
+  if (maxBtn) maxBtn.style.display = mode === 'sell' ? 'block' : 'none';
+
+  // Reset input
+  document.getElementById('tradeAmount').value = '0';
   _updateLimitFromOrderbook();
   updateTradeEstimate();
   updateTradeConfirmBtn();
@@ -17552,25 +17567,24 @@ async function loadOrderbook(pos) {
 
 function updateTradeEstimate() {
   if (!_tradeModalData) return;
-  const shares = parseInt(document.getElementById('tradeAmount')?.value) || 0;
+  const amount = parseFloat(document.getElementById('tradeAmount')?.value) || 0;
   const price = _tradeModalData._limitPrice || (_tradeModalData.current_price || 0.5);
   const mode = _tradeModalData.mode || 'buy';
+  const shares = price > 0 ? amount / price : 0;
 
   const totalEl = document.getElementById('tradeTotal');
   const toWinEl = document.getElementById('tradeToWin');
   const estEl = document.getElementById('tradeEstimate');
 
   if (mode === 'buy') {
-    const total = shares * price;
     const toWin = shares * (1 - price);
-    if (totalEl) totalEl.textContent = '$' + total.toFixed(2);
+    if (totalEl) totalEl.textContent = '$' + amount.toFixed(2);
     if (toWinEl) toWinEl.textContent = '$' + toWin.toFixed(2);
-    if (estEl) estEl.textContent = shares + ' shares @ ' + (price * 100).toFixed(1) + '¢ = $' + total.toFixed(2);
+    if (estEl) estEl.textContent = shares.toFixed(1) + ' shares @ ' + (price * 100).toFixed(1) + '¢ = $' + amount.toFixed(2);
   } else {
-    const proceeds = shares * price;
-    if (totalEl) totalEl.textContent = '$' + proceeds.toFixed(2);
-    if (toWinEl) toWinEl.textContent = '$' + proceeds.toFixed(2);
-    if (estEl) estEl.textContent = 'Sell ' + shares + ' shares @ ' + (price * 100).toFixed(1) + '¢ = $' + proceeds.toFixed(2);
+    if (totalEl) totalEl.textContent = '$' + amount.toFixed(2);
+    if (toWinEl) toWinEl.textContent = '$' + amount.toFixed(2);
+    if (estEl) estEl.textContent = 'Sell ' + shares.toFixed(1) + ' shares @ ' + (price * 100).toFixed(1) + '¢ = $' + amount.toFixed(2);
   }
 }
 
@@ -17585,12 +17599,14 @@ async function confirmTrade() {
   const btn = document.getElementById('tradeConfirmBtn');
   errEl.style.display = 'none';
 
-  const shares = parseFloat(document.getElementById('tradeAmount')?.value) || 0;
-  if (!shares || shares <= 0) {
-    errEl.textContent = 'Enter number of shares';
+  const amount = parseFloat(document.getElementById('tradeAmount')?.value) || 0;
+  if (!amount || amount <= 0) {
+    errEl.textContent = 'Enter amount in USD';
     errEl.style.display = 'block';
     return;
   }
+  const price = _tradeModalData._limitPrice || (_tradeModalData.current_price || 0.5);
+  const shares = price > 0 ? amount / price : 0;
 
   const tokenId = _tradeModalData.token_id || _tradeModalData.id || _tradeModalData.conditionId || '';
   if (!tokenId) {
@@ -17902,20 +17918,20 @@ function closePositionAll(posDataJson) {
 
       <div style="height:1px;background:#2d2d44;margin:16px 0"></div>
 
-      <!-- Shares input -->
+      <!-- Amount (USD) input -->
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
         <div>
-          <div style="font-size:14px;font-weight:600;color:#fff">Shares</div>
-          <div style="font-family:var(--mono);font-size:11px;color:#00e68a;cursor:pointer" onclick="setMaxShares()">Max</div>
+          <div id="tradeAmountLabel" style="font-size:14px;font-weight:600;color:#fff">Amount (USD)</div>
+          <div id="tradeMaxBtn" style="font-family:var(--mono);font-size:11px;color:#00e68a;cursor:pointer;display:none" onclick="setMaxShares()">Max</div>
         </div>
         <input id="tradeAmount" type="number" step="1" min="0" value="0" oninput="updateTradeEstimate()" style="width:100px;background:#2d2d44;border:1px solid #3d3d54;border-radius:8px;padding:10px 14px;font-family:var(--mono);font-size:16px;font-weight:700;color:#fff;outline:none;text-align:right;box-sizing:border-box" onfocus="this.style.borderColor='#00e68a'" onblur="this.style.borderColor='#3d3d54'"/>
       </div>
       <!-- Quick amount buttons -->
-      <div style="display:flex;gap:6px;margin:10px 0 16px;justify-content:flex-end">
-        <button onclick="adjustShares(-100)" style="background:#2d2d44;border:1px solid #3d3d54;border-radius:6px;padding:5px 10px;font-family:var(--mono);font-size:11px;color:#ccc;cursor:pointer">-100</button>
-        <button onclick="adjustShares(-10)" style="background:#2d2d44;border:1px solid #3d3d54;border-radius:6px;padding:5px 10px;font-family:var(--mono);font-size:11px;color:#ccc;cursor:pointer">-10</button>
-        <button onclick="adjustShares(10)" style="background:#2d2d44;border:1px solid #3d3d54;border-radius:6px;padding:5px 10px;font-family:var(--mono);font-size:11px;color:#ccc;cursor:pointer">+10</button>
-        <button onclick="adjustShares(100)" style="background:#2d2d44;border:1px solid #3d3d54;border-radius:6px;padding:5px 10px;font-family:var(--mono);font-size:11px;color:#ccc;cursor:pointer">+100</button>
+      <div id="tradeQuickBtns" style="display:flex;gap:6px;margin:10px 0 16px;justify-content:flex-end">
+        <button onclick="adjustShares(10)" style="background:#2d2d44;border:1px solid #3d3d54;border-radius:6px;padding:5px 10px;font-family:var(--mono);font-size:11px;color:#ccc;cursor:pointer">+$10</button>
+        <button onclick="adjustShares(50)" style="background:#2d2d44;border:1px solid #3d3d54;border-radius:6px;padding:5px 10px;font-family:var(--mono);font-size:11px;color:#ccc;cursor:pointer">+$50</button>
+        <button onclick="adjustShares(100)" style="background:#2d2d44;border:1px solid #3d3d54;border-radius:6px;padding:5px 10px;font-family:var(--mono);font-size:11px;color:#ccc;cursor:pointer">+$100</button>
+        <button onclick="adjustShares(250)" style="background:#2d2d44;border:1px solid #3d3d54;border-radius:6px;padding:5px 10px;font-family:var(--mono);font-size:11px;color:#ccc;cursor:pointer">+$250</button>
       </div>
 
       <div style="height:1px;background:#2d2d44;margin:0 0 16px"></div>
