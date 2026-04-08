@@ -206,6 +206,35 @@ Matches official SDK order.
 - CTF Exchange: `0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E`
 - NegRisk Exchange: `0xC5d563A36AE78145C45a50134d48A1215220f80a`
 
+### Market vs Limit order rules — DIFFERENT decimal constraints
+
+**Limit (GTC)**: follows the SDK's tick-size-driven `ROUNDING_CONFIG`. For tick `0.01`, `amount` decimals = 4. Use `getOrderRawAmounts()` replica in `executeTrade`.
+
+**Market (FOK)**: hard-coded constraints, NOT tick-driven:
+- BUY: `makerAmount` (USDC) max **2 decimals**, `takerAmount` (shares) max **4 decimals**
+- SELL: mirror — `makerAmount` (shares) max **4 decimals**, `takerAmount` (USDC) max **2 decimals**
+
+Build market-BUY `makerAmt` from the user-entered USDC `amount` directly (already 2 decimals), NOT from `shares × price` (the multiplication introduces 4-decimal float drift → CLOB 400 "invalid amounts").
+
+Also: for market orders, **walk the live orderbook before submit** via `GET /book?token_id=` and use the worst price the order would touch as the limit (rounded UP to tick). FOK requires the FULL size to fill at ≤ limit, so a thin top-of-book causes "order couldn't be fully filled" rejections if you just use the current mid as the limit. Same pattern as the SDK's `calculateMarketPrice()` helper.
+
+### Builder fees + Cloudflare Worker proxy
+
+Trades route through `cloudflare-trade-proxy/` (Worker) as the **primary** path to bypass geo-blocking. Direct CLOB is the fallback for non-geo-restricted users.
+
+**Builder fee headers** (returned by `POST /api/polymarket/builder-sign` in `server.js`, forwarded by browser → Worker → CLOB):
+```
+POLY_BUILDER_API_KEY, POLY_BUILDER_PASSPHRASE, POLY_BUILDER_TIMESTAMP, POLY_BUILDER_SIGNATURE
+```
+
+**⚠️ Cross-file invariant**: the Worker's `BUILDER_HEADERS` CORS allowlist (`cloudflare-trade-proxy/src/worker.js`) MUST be a superset of whatever names `server.js`'s `/api/polymarket/builder-sign` returns. CORS doesn't allow wildcards on header names. If you change the builder-sign header set on the server, also update the Worker's `BUILDER_HEADERS` array. The GitHub Actions workflow at `.github/workflows/deploy-cf-worker.yml` auto-deploys the Worker on push to `main` when worker source changes.
+
+**Stale-Worker symptom**: browser fetch to `hyperflex-trade-proxy.hyperflex.workers.dev/order` throws `Failed to fetch` because CORS preflight rejects the unknown header → trade falls through to direct CLOB (which works for non-geo-blocked users but fails for everyone else).
+
+**Worker secrets** (in GitHub repo Settings → Secrets and variables → Actions, NOT in `server.js`):
+- `CLOUDFLARE_API_TOKEN` — "Edit Cloudflare Workers" template
+- `CLOUDFLARE_ACCOUNT_ID`
+
 ---
 
 ## This session (March 16, session 6) — committed `a6a2b7d`, needs push + new commits
