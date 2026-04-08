@@ -17616,7 +17616,6 @@ async function confirmTrade() {
   }
 
   const clobSide = _tradeModalData.mode === 'buy' ? 'BUY' : 'SELL';
-  const price = _tradeModalData._limitPrice || (_tradeModalData.current_price || 0.5);
 
   // Get stored CLOB API credentials
   const apiKey = localStorage.getItem('poly_api_key');
