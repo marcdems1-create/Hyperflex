@@ -17969,14 +17969,7 @@ async function redeemPosition(posDataJson) {
   }
 
   if (!hasPol) {
-    // No POL — redirect to Polymarket where they pay gas for you
-    const polyUrl = typeof polyRef === 'function' ? polyRef('https://polymarket.com/portfolio') : 'https://polymarket.com/portfolio';
-    if (confirm(won
-      ? 'Claim $' + payout.toFixed(2) + ' USDC from "' + label + '"?\n\nYou need POL for gas to claim from here. Click OK to claim on Polymarket instead (free, they pay gas).'
-      : 'Clear "' + label + '"?\n\nYou need POL for gas. Click OK to go to Polymarket to claim (free).'
-    )) {
-      window.open(polyUrl, '_blank');
-    }
+    showToast('You need at least 0.01 POL in your wallet for gas fees to claim this position.', 'error');
     return;
   }
 
