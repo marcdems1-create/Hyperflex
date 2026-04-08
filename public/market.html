@@ -3335,12 +3335,15 @@ function updateActiveTradePrice() {
 }
 
 // Alpha-terminal prefill — when arriving from /alpha-live or the landing
-// TOP EDGES panel, the card link contains ?from=alpha&side=YES&size=35 so
-// the trade widget lands already populated. One-click from alpha → signed.
+// Trade widget prefill — accepts ?from=alpha&side=YES&size=35 (TOP EDGES /
+// alpha cards) and ?from=trader&side=YES (Copy Trade button on a sharp's
+// position). Either lands the widget pre-populated so the user goes
+// straight to "review and sign" instead of hunting for the form.
 function applyAlphaPrefill() {
   try {
     var p = new URLSearchParams(window.location.search);
-    if (p.get('from') !== 'alpha') return;
+    var from = p.get('from');
+    if (from !== 'alpha' && from !== 'trader') return;
     var side = (p.get('side') || '').toLowerCase();
     var size = parseFloat(p.get('size') || '');
     if (side === 'yes' || side === 'no') {
@@ -3355,9 +3358,11 @@ function applyAlphaPrefill() {
     }
     var widget = document.querySelector('.trade-widget');
     if (widget) widget.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    // Subtle confirmation banner
+    // Subtle confirmation banner — copy varies by source
     var hint = document.createElement('div');
-    hint.textContent = '⚡ Prefilled from Alpha Terminal — review and sign';
+    hint.textContent = from === 'trader'
+      ? '🎯 Copying trade — review and sign'
+      : '⚡ Prefilled from Alpha Terminal — review and sign';
     hint.style.cssText = 'position:fixed;top:74px;left:50%;transform:translateX(-50%);background:#00e68a;color:#0a0a0f;padding:8px 16px;border-radius:8px;font-family:Inter,sans-serif;font-weight:700;font-size:12px;z-index:1000;box-shadow:0 4px 16px rgba(0,230,138,0.3);animation:fadeOut 4s forwards';
     var style = document.createElement('style');
     style.textContent = '@keyframes fadeOut{0%,70%{opacity:1}100%{opacity:0;transform:translateX(-50%) translateY(-10px)}}';

@@ -10743,6 +10743,7 @@ app.get('/api/trader/:address/profile', async (req, res) => {
         polyData.open_positions = openPos.slice(0, 50).map(p => ({
           question: p.title || p.question || '',
           condition_id: p.conditionId || p.condition_id || '',
+          slug: p.eventSlug || p.slug || null,
           side: p.outcome || 'YES',
           size: parseFloat(p.size) || 0,
           avg_price: parseFloat(p.avgPrice) || 0,

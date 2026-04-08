@@ -64,6 +64,8 @@ tr:hover{background:rgba(201,146,13,0.03)}
 .loss-badge{background:rgba(239,68,68,0.15);color:var(--red);padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700}
 .mkt-link{color:var(--text);text-decoration:none;border-bottom:1px dashed rgba(201,146,13,0.3)}
 .mkt-link:hover{color:var(--gold)}
+.copy-trade-btn{display:inline-block;font-family:var(--mono);font-size:10px;font-weight:700;color:var(--gold);background:rgba(201,146,13,0.10);border:1px solid rgba(201,146,13,0.35);border-radius:6px;padding:5px 10px;text-decoration:none;white-space:nowrap;transition:all .15s}
+.copy-trade-btn:hover{background:rgba(201,146,13,0.22);border-color:var(--gold)}
 
 /* CTA */
 .cta-section{text-align:center;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:40px 20px;margin-top:16px}
@@ -192,15 +194,21 @@ function render(){
   if(d.polymarket.active){
     html+='<div class="section"><div class="section-header"><span class="section-title">\uD83D\uDCCA Polymarket Positions</span><span class="badge badge-poly">POLY</span></div>';
     if(d.polymarket.open_positions.length){
-      html+='<table><thead><tr><th>Market</th><th>Side</th><th>Value</th><th>P&L</th><th>Odds</th></tr></thead><tbody>';
+      html+='<table><thead><tr><th>Market</th><th>Side</th><th>Value</th><th>P&L</th><th>Odds</th><th></th></tr></thead><tbody>';
       d.polymarket.open_positions.sort(function(a,b){return Math.abs(b.pnl)-Math.abs(a.pnl)});
       d.polymarket.open_positions.forEach(function(p){
         var odds=Math.round(p.cur_price*100);
-        html+='<tr><td><a href="'+escH(p.market_url)+'" target="_blank" rel="noopener" class="mkt-link">'+escH(p.question.length>50?p.question.substring(0,47)+'...':p.question)+'</a></td>';
+        // Internal /market/:slug link routes the trade through our widget + builder fees.
+        // Fall back to polymarket.com only if we somehow have no slug.
+        var internalUrl = p.slug ? '/market/'+encodeURIComponent(p.slug) : (p.market_url || 'https://polymarket.com');
+        var copyHref = p.slug ? '/market/'+encodeURIComponent(p.slug)+'?from=trader&side='+(p.side==='YES'?'YES':'NO') : null;
+        html+='<tr><td><a href="'+escH(internalUrl)+'" class="mkt-link">'+escH(p.question.length>50?p.question.substring(0,47)+'...':p.question)+'</a></td>';
         html+='<td><span class="side-'+(p.side==='YES'?'yes':'no')+'">'+p.side+'</span></td>';
         html+='<td>'+fmt$(p.value)+'</td>';
         html+='<td>'+fmtPnl(p.pnl)+'</td>';
-        html+='<td>'+odds+'\u00A2</td></tr>';
+        html+='<td>'+odds+'\u00A2</td>';
+        html+='<td>'+(copyHref?'<a href="'+escH(copyHref)+'" class="copy-trade-btn" title="Copy this trade">Copy '+p.side+' &rarr;</a>':'')+'</td>';
+        html+='</tr>';
       });
       html+='</tbody></table>';
     }else{html+='<div class="empty">No open positions</div>';}
