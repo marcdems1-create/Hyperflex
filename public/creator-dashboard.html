@@ -14006,7 +14006,12 @@ async function loadPolymarketPositions(forceRefresh) {
         market_url: (typeof polyRef==='function'?polyRef:function(u){return u})(buildMarketUrl({ slug: p.eventSlug||p.slug, question: p.title||p.question })),
         slug: p.eventSlug||p.slug||null,
         icon: p.icon||null, end_date: p.endDateIso||p.endDate||null, platform: 'polymarket',
-        avg_cost: parseFloat(p.size)>0 ? Math.round(parseFloat(p.initialValue)/parseFloat(p.size)*100)/100 : null
+        avg_cost: parseFloat(p.size)>0 ? Math.round(parseFloat(p.initialValue)/parseFloat(p.size)*100)/100 : null,
+        // Redemption fields from Polymarket data API
+        redeemable: p.redeemable === true,
+        mergeable: p.mergeable === true,
+        neg_risk: p.negativeRisk === true,
+        opposite_asset: p.oppositeAsset || null
       }));
       console.log('[poly-positions] Client-side fetch:', positions.length, 'positions');
     } catch (clientErr) {
@@ -15456,16 +15461,16 @@ function classifyPosition(p) {
   const price = p.current_price || p.curPrice || p.probability || 0;
   const endDate = p.end_date ? new Date(p.end_date) : null;
   const isExpired = endDate && endDate < new Date();
-  // Only treat as terminal at exactly 0¢ or 100¢ (not 97¢ — that's still tradeable)
   const priceAtTerminal = price <= 0.01 || price >= 0.99;
   const cashValue = parseFloat(p.cash_value) || parseFloat(p.currentValue) || 0;
   const shares = parseFloat(p.shares) || parseFloat(p.size) || 0;
   // A position is resolved if:
+  // - Polymarket data API says redeemable (definitive — market has settled)
   // - explicitly marked resolved/settled/closed by the API
   // - expired AND price at terminal (0¢ or 100¢)
   // - has shares but currentValue is 0 (total loss — resolved at 0)
   const zeroedOut = shares > 0 && cashValue === 0;
-  const isResolved = p.resolved || p.settled || p.closed || (isExpired && priceAtTerminal) || zeroedOut;
+  const isResolved = p.redeemable || p.resolved || p.settled || p.closed || (isExpired && priceAtTerminal) || zeroedOut;
   let won = false;
   if (isResolved) {
     if (p.won != null) won = p.won;
@@ -16222,7 +16227,20 @@ function updateAllPositionsTab() {
       const countEl = document.getElementById('closedPositionsCount');
       if (countEl) countEl.textContent = resolved.length + ' resolved';
       const contentEl = document.getElementById('closedPositionsContent');
-      if (contentEl) contentEl.innerHTML = resolved.map(p => renderResolvedCard(p)).join('');
+      // Check for claimable positions
+      const claimable = resolved.filter(p => p.redeemable && parseFloat(p.shares) > 0);
+      const claimTotal = claimable.reduce((sum, p) => {
+        const won = (p._won) || (p.current_price >= 0.99 && p.side === 'YES') || (p.current_price <= 0.01 && p.side === 'NO');
+        return sum + (won ? parseFloat(p.shares) : 0);
+      }, 0);
+      let claimBanner = '';
+      if (claimable.length > 0 && window._connectedWallet) {
+        claimBanner = '<div style="padding:14px 16px;background:rgba(0,230,138,0.06);border:1px solid rgba(0,230,138,0.20);border-radius:10px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">' +
+          '<div><span style="font-family:var(--sans);font-size:13px;font-weight:700;color:#00e68a">' + claimable.length + ' position' + (claimable.length>1?'s':'') + ' ready to claim</span>' +
+          (claimTotal > 0 ? '<span style="font-family:var(--mono);font-size:12px;color:var(--dim);margin-left:8px">≈ $' + claimTotal.toFixed(2) + ' USDC</span>' : '') + '</div>' +
+          '<button onclick="redeemAllPositions()" style="background:#00e68a;color:#0a0a0f;border:none;border-radius:8px;padding:8px 18px;font-family:var(--sans);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;min-height:36px" onmouseover="this.style.opacity=\'0.88\'" onmouseout="this.style.opacity=\'1\'">Claim All →</button></div>';
+      }
+      if (contentEl) contentEl.innerHTML = claimBanner + resolved.map(p => renderResolvedCard(p)).join('');
     } else {
       closedSec.style.display = 'none';
     }
@@ -16281,7 +16299,9 @@ function renderPositionCard({question,side,pct,meta,pnl,pnlLabel,pnlIsPercent,ur
     market_url: posData.market_url, slug: posData.slug,
     token_id: posData.token_id, condition_id: posData.condition_id || posData.id,
     icon: posData.icon, pnl: posData.pnl,
-    _isResolved: posData._isResolved || false, _won: posData._won || false
+    _isResolved: posData._isResolved || false, _won: posData._won || false,
+    redeemable: posData.redeemable || false, neg_risk: posData.neg_risk || false,
+    opposite_asset: posData.opposite_asset || null
   } : {};
   const walletConnected=!!window._connectedWallet;
   const isPoly=(posData&&posData.platform==='polymarket');
@@ -16313,9 +16333,13 @@ function renderPositionCard({question,side,pct,meta,pnl,pnlLabel,pnlIsPercent,ur
 
   // Trade buttons — use global map key instead of inline JSON to avoid HTML corruption
   // Resolved markets: show "Claim on Polymarket" link instead of Buy/Sell (CLOB rejects price=1.00)
-  const claimUrl = posData?.market_url || (posData?.slug ? '/market/' + posData.slug : 'https://polymarket.com/portfolio');
+  const posRedeemable = posData?.redeemable || false;
+  const claimPayout = posResolved && posData?._won ? (posData?.shares || 0) : 0;
+  const claimLabel = claimPayout > 0 ? 'Claim $' + claimPayout.toFixed(2) : 'Claim';
   const tradeActionsHtml=isPoly?(posResolved
-    ? `<div class="poly-trade-actions" style="display:${walletConnected?'flex':'none'};gap:8px;margin-left:auto"><a href="${typeof polyRef==='function'?polyRef('https://polymarket.com/portfolio'):'https://polymarket.com/portfolio'}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="background:rgba(167,139,250,0.10);border:1px solid rgba(167,139,250,0.30);border-radius:6px;padding:6px 14px;font-size:11px;color:#a78bfa;cursor:pointer;font-family:var(--mono);font-weight:700;transition:all .15s;min-height:36px;text-decoration:none;display:flex;align-items:center;gap:4px" onmouseover="this.style.background='rgba(167,139,250,0.20)'" onmouseout="this.style.background='rgba(167,139,250,0.10)'">Claim ↗</a></div>`
+    ? `<div class="poly-trade-actions" style="display:${walletConnected?'flex':'none'};gap:8px;margin-left:auto">${posRedeemable
+        ? `<button onclick="event.stopPropagation();redeemPosition(window._posDataMap['${_posKey}'])" style="background:rgba(0,230,138,0.12);border:1px solid rgba(0,230,138,0.35);border-radius:6px;padding:6px 14px;font-size:11px;color:#00e68a;cursor:pointer;font-family:var(--mono);font-weight:700;transition:all .15s;min-height:36px;display:flex;align-items:center;gap:4px" onmouseover="this.style.background='rgba(0,230,138,0.22)'" onmouseout="this.style.background='rgba(0,230,138,0.12)'">${claimLabel}</button>`
+        : `<a href="${typeof polyRef==='function'?polyRef('https://polymarket.com/portfolio'):'https://polymarket.com/portfolio'}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="background:rgba(167,139,250,0.10);border:1px solid rgba(167,139,250,0.30);border-radius:6px;padding:6px 14px;font-size:11px;color:#a78bfa;cursor:pointer;font-family:var(--mono);font-weight:700;transition:all .15s;min-height:36px;text-decoration:none;display:flex;align-items:center;gap:4px" onmouseover="this.style.background='rgba(167,139,250,0.20)'" onmouseout="this.style.background='rgba(167,139,250,0.10)'">Claim ↗</a>`}</div>`
     : `<div class="poly-trade-actions" style="display:${walletConnected?'flex':'none'};gap:8px;margin-left:auto"><button onclick="event.stopPropagation();openTradeModal(window._posDataMap['${_posKey}'],'buy')" style="background:rgba(0,230,138,0.10);border:1px solid rgba(0,230,138,0.30);border-radius:6px;padding:6px 14px;font-size:11px;color:#00e68a;cursor:pointer;font-family:var(--mono);font-weight:700;transition:all .15s;min-height:36px" onmouseover="this.style.background='rgba(0,230,138,0.20)'" onmouseout="this.style.background='rgba(0,230,138,0.10)'">Buy</button><button onclick="event.stopPropagation();openTradeModal(window._posDataMap['${_posKey}'],'sell')" style="background:rgba(255,107,107,0.10);border:1px solid rgba(255,107,107,0.30);border-radius:6px;padding:6px 14px;font-size:11px;color:#ff6b6b;cursor:pointer;font-family:var(--mono);font-weight:700;transition:all .15s;min-height:36px" onmouseover="this.style.background='rgba(255,107,107,0.20)'" onmouseout="this.style.background='rgba(255,107,107,0.10)'">Sell</button></div>`)
     :'';
 
@@ -16437,7 +16461,9 @@ function renderPositionRow({question,side,posData,url}) {
     market_url: posData.market_url, slug: posData.slug,
     token_id: posData.token_id, condition_id: posData.condition_id || posData.id,
     icon: posData.icon, pnl: posData.pnl,
-    _isResolved: posData._isResolved || false, _won: posData._won || false
+    _isResolved: posData._isResolved || false, _won: posData._won || false,
+    redeemable: posData.redeemable || false, neg_risk: posData.neg_risk || false,
+    opposite_asset: posData.opposite_asset || null
   } : {};
 
   // Build internal market URL
@@ -16477,7 +16503,9 @@ function renderPositionRow({question,side,posData,url}) {
     <!-- SELL / CLAIM -->
     <div style="text-align:right">
       ${isPoly && walletConnected ? (posData?._isResolved
-        ? `<a href="${typeof polyRef==='function'?polyRef('https://polymarket.com/portfolio'):'https://polymarket.com/portfolio'}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="font-family:var(--mono);font-size:11px;font-weight:700;padding:5px 12px;border-radius:6px;border:1px solid rgba(167,139,250,0.3);background:rgba(167,139,250,0.08);color:#a78bfa;cursor:pointer;transition:all .15s;text-decoration:none" onmouseover="this.style.background='rgba(167,139,250,0.18)'" onmouseout="this.style.background='rgba(167,139,250,0.08)'">Claim ↗</a>`
+        ? (posData?.redeemable
+          ? `<button onclick="event.stopPropagation();redeemPosition(window._posDataMap['${_posKey}'])" style="font-family:var(--mono);font-size:11px;font-weight:700;padding:5px 12px;border-radius:6px;border:1px solid rgba(0,230,138,0.3);background:rgba(0,230,138,0.08);color:#00e68a;cursor:pointer;transition:all .15s" onmouseover="this.style.background='rgba(0,230,138,0.18)'" onmouseout="this.style.background='rgba(0,230,138,0.08)'">Claim</button>`
+          : `<span style="font-family:var(--mono);font-size:11px;color:var(--dim)">Settled</span>`)
         : `<button onclick="event.stopPropagation();openTradeModal(window._posDataMap['${_posKey}'],'sell')" style="font-family:var(--mono);font-size:11px;font-weight:700;padding:5px 12px;border-radius:6px;border:1px solid rgba(255,107,107,0.3);background:rgba(255,107,107,0.08);color:#ff6b6b;cursor:pointer;transition:all .15s" onmouseover="this.style.background='rgba(255,107,107,0.18)'" onmouseout="this.style.background='rgba(255,107,107,0.08)'">Sell</button>`)
       : `<span style="font-family:var(--mono);font-size:11px;color:var(--dim)">···</span>`}
     </div>
@@ -17896,6 +17924,160 @@ function closePositionAll(posDataJson) {
     amountInput.value = pos.shares.toFixed(2);
     updateTradeEstimate();
   }
+}
+
+// ── ONE-CLICK REDEEM — claim resolved positions on-chain ─────────────────────
+// Calls redeemPositions on the correct contract (CTF Exchange or NegRisk Adapter)
+// via the Gnosis Safe proxy wallet. Burns settled ERC-1155 tokens → USDC.
+const REDEEM_CONTRACTS = {
+  CTF_EXCHANGE:     '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E',
+  NEGRISK_ADAPTER:  '0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296',
+  USDC_E:           '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',
+  SAFE_FACTORY:     '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b'
+};
+const PARENT_COLLECTION_ID = '0x0000000000000000000000000000000000000000000000000000000000000000';
+
+async function redeemPosition(posDataJson) {
+  const pos = typeof posDataJson === 'string' ? JSON.parse(posDataJson) : posDataJson;
+  if (!window._connectedWallet) { showToast('Connect your wallet first', 'error'); return; }
+  if (!pos.condition_id) { showToast('Missing condition ID — cannot redeem', 'error'); return; }
+  if (!pos.redeemable) { showToast('This position is not redeemable yet', 'error'); return; }
+
+  const proxyAddr = _polyWalletAddress || localStorage.getItem('hf_poly_wallet');
+  if (!proxyAddr) { showToast('Proxy wallet not found — connect wallet first', 'error'); return; }
+
+  const won = pos._won || (pos.current_price >= 0.99 && pos.side === 'YES') || (pos.current_price <= 0.01 && pos.side === 'NO');
+  const payout = won ? (pos.shares || 0) : 0;
+  const label = pos.question ? pos.question.substring(0, 40) : 'position';
+
+  // Confirm
+  if (!confirm(won
+    ? 'Claim $' + payout.toFixed(2) + ' USDC from "' + label + '"?\n\nThis will burn your winning tokens and send USDC to your wallet. Gas cost: ~0.02 POL.'
+    : 'Clear resolved position "' + label + '"?\n\nThis removes the dead tokens from your wallet. Gas cost: ~0.02 POL.'
+  )) return;
+
+  showToast('Preparing redemption...', 'info');
+
+  try {
+    // Ensure signer is available
+    if (!window._walletSigner) {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      window._walletSigner = await provider.getSigner();
+    }
+
+    const conditionId = pos.condition_id.startsWith('0x') ? pos.condition_id : '0x' + pos.condition_id;
+    const isNegRisk = pos.neg_risk === true;
+
+    // Build the redeemPositions calldata for the inner transaction
+    let targetContract, calldata;
+
+    if (isNegRisk) {
+      // NegRisk Adapter: redeemPositions(bytes32 conditionId, uint256[] amounts)
+      targetContract = REDEEM_CONTRACTS.NEGRISK_ADAPTER;
+      const iface = new ethers.Interface([
+        'function redeemPositions(bytes32 conditionId, uint256[] amounts)'
+      ]);
+      // Amount = token balance in raw units (size × 1e6 for USDC decimals)
+      const rawAmount = ethers.parseUnits(String(pos.shares || 0), 6);
+      calldata = iface.encodeFunctionData('redeemPositions', [
+        conditionId,
+        [rawAmount, rawAmount] // [YES amount, NO amount]
+      ]);
+    } else {
+      // CTF Exchange: redeemPositions(address collateral, bytes32 parentId, bytes32 conditionId, uint256[] indexSets)
+      targetContract = REDEEM_CONTRACTS.CTF_EXCHANGE;
+      const iface = new ethers.Interface([
+        'function redeemPositions(address collateralToken, bytes32 parentCollectionId, bytes32 conditionId, uint256[] indexSets)'
+      ]);
+      calldata = iface.encodeFunctionData('redeemPositions', [
+        REDEEM_CONTRACTS.USDC_E,
+        PARENT_COLLECTION_ID,
+        conditionId,
+        [1, 2] // Index sets for YES and NO outcomes
+      ]);
+    }
+
+    // Execute via Gnosis Safe: call execTransaction on the proxy
+    const safeAbi = [
+      'function execTransaction(address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, bytes signatures) returns (bool success)'
+    ];
+    const safe = new ethers.Contract(proxyAddr, safeAbi, window._walletSigner);
+
+    // For owner-executed txs: pack a pre-approved signature (owner address padded)
+    // Signature format for pre-approved: r=ownerAddr, s=0, v=1
+    const ownerAddr = window._connectedWallet;
+    const sigR = ethers.zeroPadValue(ownerAddr, 32);
+    const sigS = ethers.zeroPadValue('0x00', 32);
+    const sigV = '01';
+    const preApprovedSig = sigR + sigS.slice(2) + sigV;
+
+    showToast('Confirm in MetaMask...', 'info');
+
+    const tx = await safe.execTransaction(
+      targetContract,   // to
+      0,                // value (no ETH)
+      calldata,         // data
+      0,                // operation (CALL)
+      0,                // safeTxGas
+      0,                // baseGas
+      0,                // gasPrice
+      ethers.ZeroAddress, // gasToken
+      ethers.ZeroAddress, // refundReceiver
+      preApprovedSig    // signatures
+    );
+
+    showToast('Redemption submitted — waiting for confirmation...', 'info');
+    const receipt = await tx.wait();
+
+    if (receipt.status === 1) {
+      showToast(won
+        ? '✓ Claimed $' + payout.toFixed(2) + ' USDC!'
+        : '✓ Resolved position cleared!',
+        'success'
+      );
+      // Refresh balance + positions
+      setTimeout(() => {
+        fetchWalletBalance(window._walletProvider, window._connectedWallet);
+        loadPolymarketPositions(true);
+      }, 3000);
+    } else {
+      showToast('Redemption transaction failed — check PolygonScan', 'error');
+    }
+  } catch (e) {
+    if (e.code === 'ACTION_REJECTED' || e.code === 4001) {
+      showToast('Redemption cancelled', 'info');
+    } else {
+      console.error('[redeem]', e);
+      showToast('Redeem failed: ' + (e.shortMessage || e.reason || e.message || 'Unknown error'), 'error');
+    }
+  }
+}
+
+// Redeem ALL settled positions in one batch
+async function redeemAllPositions() {
+  if (!window._connectedWallet) { showToast('Connect your wallet first', 'error'); return; }
+  const allPositions = window._polyPositionsData || [];
+  const redeemable = allPositions.filter(p => p.redeemable && parseFloat(p.shares) > 0);
+  if (redeemable.length === 0) { showToast('No redeemable positions found', 'info'); return; }
+
+  const totalPayout = redeemable.reduce((sum, p) => {
+    const won = (p.current_price >= 0.99 && p.side === 'YES') || (p.current_price <= 0.01 && p.side === 'NO');
+    return sum + (won ? parseFloat(p.shares) : 0);
+  }, 0);
+
+  if (!confirm('Claim ' + redeemable.length + ' resolved positions?\nEstimated payout: $' + totalPayout.toFixed(2) + ' USDC\nGas cost: ~0.02 POL per position')) return;
+
+  let success = 0, failed = 0;
+  for (const pos of redeemable) {
+    try {
+      await redeemPosition(pos);
+      success++;
+    } catch (e) {
+      failed++;
+      console.warn('[redeem-all] Failed:', pos.question, e.message);
+    }
+  }
+  showToast('Redeemed ' + success + '/' + redeemable.length + ' positions' + (failed > 0 ? ' (' + failed + ' failed)' : ''), 'success');
 }
 </script>
 
