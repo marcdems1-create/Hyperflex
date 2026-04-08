@@ -31096,6 +31096,27 @@ if (pool) {
       await dbQuery(`CREATE INDEX IF NOT EXISTS idx_flex_points_log_created ON flex_points_log(created_at)`).catch(() => {});
       await dbQuery(`CREATE INDEX IF NOT EXISTS idx_flex_points_total ON flex_points(total_points DESC)`).catch(() => {});
 
+      // Price Alerts — Marc's Smart Price Alerts (8a3fee7). Same pattern as
+      // flex_points: migration file uses UUID FK + RLS, adapted to TEXT here.
+      await dbQuery(`CREATE TABLE IF NOT EXISTS price_alerts (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        user_id TEXT NOT NULL,
+        condition_id TEXT NOT NULL,
+        slug TEXT,
+        question TEXT,
+        direction TEXT NOT NULL CHECK (direction IN ('above', 'below')),
+        threshold NUMERIC(5,4) NOT NULL,
+        side TEXT NOT NULL DEFAULT 'yes' CHECK (side IN ('yes', 'no')),
+        triggered BOOLEAN NOT NULL DEFAULT false,
+        triggered_at TIMESTAMPTZ,
+        triggered_price NUMERIC(5,4),
+        snoozed_until TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_price_alerts_user ON price_alerts(user_id)`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_price_alerts_active ON price_alerts(triggered, snoozed_until) WHERE triggered = false`).catch(() => {});
+      await dbQuery(`CREATE UNIQUE INDEX IF NOT EXISTS idx_price_alerts_unique ON price_alerts(user_id, condition_id, direction, threshold, side)`).catch(() => {});
+
       // Alpha freshness — persists edge stamp timestamps across deploys so
       // traders see stable "first seen Xm ago" times instead of resets.
       await dbQuery(`CREATE TABLE IF NOT EXISTS alpha_freshness (
