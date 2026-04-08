@@ -19895,6 +19895,37 @@ async function _buildAlphaListInner(opts = {}) {
       }
     }
 
+    // ── NEWS IMPACT — fold Marc's news-impact matching into the edge score ──
+    // Builds a map of question -> { count, sentiment, headline } from the
+    // _newsImpactCache. The cache is only populated on-demand via
+    // /api/news-impact, so if it's stale we fire a non-blocking warm call.
+    // The NEXT buildAlphaList cycle will see the fresh data.
+    if (!_newsImpactCache || (Date.now() - (_newsImpactCache.ts || 0) > 20 * 60 * 1000)) {
+      try {
+        const warmPort = process.env.PORT || 8080;
+        fetch('http://127.0.0.1:' + warmPort + '/api/news-impact', { signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined }).catch(() => {});
+      } catch (e) { /* silent */ }
+    }
+    const newsByMarket = new Map(); // lowercase question -> { count, sentiment, headline, source }
+    if (_newsImpactCache && _newsImpactCache.data && Array.isArray(_newsImpactCache.data.news_impacts)) {
+      for (const ni of _newsImpactCache.data.news_impacts) {
+        if (!Array.isArray(ni.related_markets)) continue;
+        const sentiment = (ni.sentiment || 'neutral').toLowerCase();
+        for (const rm of ni.related_markets) {
+          const key = (rm.question || '').toLowerCase().trim();
+          if (!key) continue;
+          const existing = newsByMarket.get(key);
+          if (existing) {
+            existing.count++;
+            // Upgrade sentiment to non-neutral if a later headline is directional
+            if (sentiment !== 'neutral' && existing.sentiment === 'neutral') existing.sentiment = sentiment;
+          } else {
+            newsByMarket.set(key, { count: 1, sentiment, headline: ni.headline || '', source: ni.source || '' });
+          }
+        }
+      }
+    }
+
     // Build enriched market list (filter expired markets)
     const now = new Date();
     const markets = [];
@@ -19987,6 +20018,17 @@ async function _buildAlphaListInner(opts = {}) {
         volume >= 25000000 ? 15 :
         volume >= 10000000 ? 10 :
         volume >= 5000000 ? 5 : 0;
+      // News impact: markets mentioned in current high-signal headlines.
+      // Base +8 for any match, +4 for multiple mentions, +3 for non-neutral sentiment.
+      // Capped at 15 so it can't dominate the score on a single headline.
+      let edgeNews = 0;
+      const newsInfo = newsByMarket.size > 0 ? newsByMarket.get(qLower) : null;
+      if (newsInfo) {
+        edgeNews = 8;
+        if (newsInfo.count >= 2) edgeNews += 4;
+        if (newsInfo.sentiment && newsInfo.sentiment !== 'neutral') edgeNews += 3;
+        edgeNews = Math.min(15, edgeNews);
+      }
       // Momentum + expiry only fire on liquid markets (>$50k vol). Otherwise it's just noise.
       const liquid = volume >= 50000;
       const edgeMomentum = liquid ? Math.min(15, Math.abs(pChange || 0) * 1.5) : 0;
@@ -20007,7 +20049,7 @@ async function _buildAlphaListInner(opts = {}) {
           else edgeDecay = 4;
         }
       }
-      const edgeScore = Math.min(99, Math.round(edgeWhale + edgeCapital + edgeMomentum + edgeVolume + edgeMega + edgeExpiry + edgeDivergence + edgeDecay));
+      const edgeScore = Math.min(99, Math.round(edgeWhale + edgeCapital + edgeMomentum + edgeVolume + edgeMega + edgeExpiry + edgeDivergence + edgeDecay + edgeNews));
 
       // ── Trade ROI ──
       let trade = null;
@@ -20112,6 +20154,7 @@ async function _buildAlphaListInner(opts = {}) {
         depth: 0, // populated post-CLOB depth fetch — placeholder here
         decay: edgeDecay,
         mega: edgeMega,
+        news: edgeNews,
         momentum: edgeMomentum,
         volume: edgeVolume,
         divergence: edgeDivergence,
@@ -20128,7 +20171,7 @@ async function _buildAlphaListInner(opts = {}) {
       const _supporting = Object.entries(_components)
         .filter(([k, v]) => k !== _primary && v >= 5)
         .map(([k]) => k);
-      // Smart money direction: from whale consensus if known, else from price location
+      // Smart money direction: from whale consensus if known, else from news sentiment, else neutral
       let _smartDir = 'neutral';
       if (whaleInfo && whaleInfo.count >= 2) {
         const wIdx = (_whaleIndexCache && _whaleIndexCache.data && _whaleIndexCache.data.picks) || [];
@@ -20137,18 +20180,29 @@ async function _buildAlphaListInner(opts = {}) {
           _smartDir = wPick.consensus_side.toUpperCase() === 'YES' ? 'bullish' : 'bearish';
         }
       }
-      // Urgency: high if decay firing or fresh edge, medium if score >= 50, else low
-      // Also attach a reason string + optional expires_in_seconds so the UI can
-      // render loss-aversion countdowns (e.g. "Closes in 14h" or "Act fast · 8m since detected").
+      // Fall back to news sentiment if whales are silent
+      if (_smartDir === 'neutral' && newsInfo && newsInfo.sentiment !== 'neutral') {
+        _smartDir = newsInfo.sentiment === 'positive' ? 'bullish' : 'bearish';
+      }
+      // Urgency: news-driven > decay > imminent expiry > medium score > low.
+      // News is the loudest 5-minute signal — a breaking headline closes the
+      // edge window fast as the market reprices.
       let _urgency = 'low';
       let _urgencyReason = null;
       let _expiresIn = null;
-      if (edgeDecay > 0) {
+      if (edgeNews >= 12 && newsInfo) {
+        _urgency = 'high';
+        const headline = (newsInfo.headline || '').slice(0, 70);
+        _urgencyReason = headline ? 'News-driven · "' + headline + '"' : 'News-driven · breaking headline';
+      } else if (edgeDecay > 0) {
         _urgency = 'high';
         _urgencyReason = daysUntilExpiry === 0 ? 'Expires today — discount zone' : 'Expires in ' + daysUntilExpiry + 'd · discount zone';
       } else if (daysUntilExpiry != null && daysUntilExpiry <= 1 && volume >= 50000) {
         _urgency = 'high';
         _urgencyReason = 'Expires in ' + (daysUntilExpiry === 0 ? '<24h' : '1d');
+      } else if (edgeNews > 0 && newsInfo) {
+        _urgency = 'medium';
+        _urgencyReason = 'Matched news · "' + (newsInfo.headline || '').slice(0, 60) + '"';
       } else if (edgeScore >= 50) {
         _urgency = 'medium';
         _urgencyReason = 'Edge score ' + edgeScore + ' · worth watching';
@@ -20195,11 +20249,15 @@ async function _buildAlphaListInner(opts = {}) {
           momentum: Math.round(edgeMomentum),
           volume: Math.round(edgeVolume),
           mega: Math.round(edgeMega),
+          news: Math.round(edgeNews),
           expiry: Math.round(edgeExpiry),
           divergence: Math.round(edgeDivergence),
           decay: Math.round(edgeDecay),
           arb: 0 // populated by post-loop arb pass if applicable
         },
+        news_headline: newsInfo ? newsInfo.headline : null,
+        news_source: newsInfo ? newsInfo.source : null,
+        news_sentiment: newsInfo ? newsInfo.sentiment : null,
         alpha_score: 0, // populated after whale index is ready
         model_probability: modelProb != null ? parseFloat(modelProb.toFixed(3)) : null,
         alpha_edge: alphaEdge,
