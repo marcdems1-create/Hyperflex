@@ -1,0 +1,39 @@
+name: Deploy CF Worker (trade proxy)
+
+# Auto-deploys cloudflare-trade-proxy/ to Cloudflare Workers whenever the
+# worker source changes on main, or when manually triggered from the GitHub
+# UI / mobile app via the "Run workflow" button.
+#
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#   CLOUDFLARE_API_TOKEN  — create at https://dash.cloudflare.com/profile/api-tokens
+#                           with template "Edit Cloudflare Workers"
+#   CLOUDFLARE_ACCOUNT_ID — found at https://dash.cloudflare.com → right sidebar
+#                           on any zone, or under Workers & Pages overview
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cloudflare-trade-proxy/**'
+      - '.github/workflows/deploy-cf-worker.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to Cloudflare
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Deploy with Wrangler
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: cloudflare-trade-proxy
