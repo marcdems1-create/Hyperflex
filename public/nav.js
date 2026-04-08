@@ -99,7 +99,7 @@
     document.head.appendChild(style);
   }
 
-  // Primary links shown in nav bar
+  // Primary links shown in desktop nav bar — alpha-source order
   var primaryLinks = [
     { href: '/alpha', label: '⚡ Alpha', gold: true },
     { href: '/signals', label: 'Signals' },
@@ -109,16 +109,16 @@
     { href: '/predictors', label: 'Predictors' },
     { href: '/explore', label: 'Explore' }
   ];
-  // Secondary links in "More" dropdown
+  // Secondary links in "More" dropdown — reordered: actionable first, meta last
   var moreLinks = [
-    { href: '/brief', label: '🧠 AI Brief', gold: true },
-    { href: '/odds', label: '🎲 Odds' },
-    { href: '/high-prob', label: '🎯 99% Bets', gold: true },
     { href: '/rewards', label: '💰 Rewards', gold: true },
+    { href: '/brief', label: '🧠 AI Brief', gold: true },
+    { href: '/high-prob', label: '🎯 99% Bets', gold: true },
+    { href: '/odds', label: '🎲 Odds' },
     { sep: true },
+    { href: '/data', label: '📈 Data' },
     { href: '/ecosystem', label: '🌐 Ecosystem' },
     { href: '/features', label: '✨ Features' },
-    { href: '/data', label: '📈 Data' },
     { href: '/api-docs', label: '⚙️ API' },
     { sep: true },
     { href: '/nominate', label: '➕ Nominate a Creator', gold: true }
@@ -138,13 +138,14 @@
   nav.innerHTML =
     '<a href="/explore" class="topbar-logo">HYPER<span>FLEX</span></a>' +
     '<div class="nav-links">' +
+      // Dashboard first (logged-in only) — trader's home base
+      '<a id="navDashLink" href="/creator/dashboard" class="nav-link" style="' + (isLoggedIn ? '' : 'display:none;') + 'color:#00e68a;font-weight:700">🛠 Dashboard</a>' +
       primaryLinks.map(function(l) {
         var isActive = path === l.href;
         var cls = 'nav-link' + (isActive ? ' active' : '');
         var style = l.gold && !isActive ? ' style="color:#00e68a"' : '';
         return '<a href="' + l.href + '" class="' + cls + '"' + style + '>' + l.label + '</a>';
       }).join('') +
-      '<a id="navDashLink" href="/creator/dashboard" class="nav-link" style="' + (isLoggedIn ? '' : 'display:none;') + 'color:#00e68a;font-weight:600">Dashboard</a>' +
       '<div class="nav-more-wrap">' +
         '<button class="nav-more-btn' + (moreActive ? ' active' : '') + '" id="navMoreBtn" title="More">' +
           '<svg viewBox="0 0 24 24" style="width:18px;height:18px"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>' +
@@ -184,8 +185,24 @@
   // Dashboard link visibility already handled by isLoggedIn above
 
   // ── Mobile hamburger menu ──
+  // Order matches the priority tiers: Your Stuff → Find Alpha → Discover → Research → Meta
   (function() {
-    var allLinks = primaryLinks.concat([{sep:true}]).concat(moreLinks);
+    var allLinks = [];
+    // Tier 1 — Your Stuff (logged-in only)
+    if (isLoggedIn) {
+      allLinks.push({ href: '/creator/dashboard', label: '🛠 Dashboard', gold: true });
+      allLinks.push({ href: '/rewards', label: '💰 Rewards', gold: true });
+      allLinks.push({ sep: true });
+    }
+    // Tier 2 — Find Alpha (the primary alpha sources)
+    allLinks = allLinks.concat(primaryLinks);
+    allLinks.push({ sep: true });
+    // Tier 3+ — More dropdown items, but skip Rewards if already shown in Tier 1
+    var dropdownLinks = isLoggedIn
+      ? moreLinks.filter(function(l) { return l.href !== '/rewards'; })
+      : moreLinks;
+    allLinks = allLinks.concat(dropdownLinks);
+
     var mobileMenu = document.createElement('div');
     mobileMenu.className = 'nav-mobile-menu';
     mobileMenu.id = 'navMobileMenu';
@@ -195,9 +212,6 @@
       var cls = 'nav-mobile-link' + (isActive ? ' active' : '') + (l.gold && !isActive ? ' gold' : '');
       return '<a href="' + l.href + '" class="' + cls + '">' + l.label + '</a>';
     }).join('');
-    if (isLoggedIn) {
-      mLinksHtml += '<div class="nav-mobile-sep"></div><a href="/creator/dashboard" class="nav-mobile-link gold">🛠 Dashboard</a>';
-    }
     mobileMenu.innerHTML =
       '<div class="nav-mobile-header">' +
         '<a href="/explore" class="topbar-logo" style="font-family:Inter,-apple-system,sans-serif;font-weight:800;font-size:18px;letter-spacing:-0.5px;color:#f0f0f5;text-decoration:none">HYPER<span style="background:linear-gradient(135deg,#00e68a,#4d9fff,#a855f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">FLEX</span></a>' +
