@@ -14061,7 +14061,7 @@ async function loadPolymarketPositions(forceRefresh) {
         question: p.title||p.question||'Unknown market', side: p.outcome||'YES',
         shares: parseFloat(p.size)||0, current_price: parseFloat(p.curPrice)||0,
         cash_value: parseFloat(p.currentValue)||0, cost_basis: parseFloat(p.initialValue)||0,
-        pnl: parseFloat(p.cashPnl)||0, pnl_pct: parseFloat(p.percentPnl)||0,
+        pnl: parseFloat(p.cashPnl)||0, pnl_pct: (parseFloat(p.percentPnl)||0) * 100,
         market_url: (typeof polyRef==='function'?polyRef:function(u){return u})(buildMarketUrl({ slug: p.eventSlug||p.slug, question: p.title||p.question })),
         slug: p.eventSlug||p.slug||null,
         icon: p.icon||null, end_date: p.endDateIso||p.endDate||null, platform: 'polymarket',
@@ -17913,17 +17913,63 @@ async function confirmTrade() {
       orderType: 'FOK'
     });
 
-    // Always route through server proxy — server computes HMAC + attaches builder attribution headers
-    const res = await fetch('/api/polymarket/clob-order', {
+    // Route through Cloudflare Worker edge proxy to avoid geo-blocking.
+    // Client-side HMAC signing — same approach as market.html.
+    const ts = Math.floor(Date.now() / 1000).toString();
+    const hmacMessage = ts + 'POST' + '/order' + requestBody;
+    const enc = new TextEncoder();
+
+    // Decode API secret (base64url → raw bytes)
+    let b64std = apiSecret.replace(/-/g, '+').replace(/_/g, '/');
+    while (b64std.length % 4) b64std += '=';
+    let secretBytes;
+    try {
+      secretBytes = Uint8Array.from(atob(b64std), c => c.charCodeAt(0));
+    } catch (b64err) {
+      secretBytes = enc.encode(apiSecret);
+    }
+
+    const cryptoKey = await crypto.subtle.importKey('raw', secretBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    const sigBuf = await crypto.subtle.sign('HMAC', cryptoKey, enc.encode(hmacMessage));
+    const hmacSig = btoa(String.fromCharCode.apply(null, new Uint8Array(sigBuf)))
+      .replace(/\+/g, '-').replace(/\//g, '_');
+
+    // Get builder attribution headers from server (for fee revenue)
+    let builderHeaders = {};
+    try {
+      const hfToken = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+      const bsHeaders = { 'Content-Type': 'application/json' };
+      if (hfToken) bsHeaders['Authorization'] = 'Bearer ' + hfToken;
+      const bsRes = await fetch('/api/polymarket/builder-sign', {
+        method: 'POST',
+        headers: bsHeaders,
+        body: JSON.stringify({ method: 'POST', path: '/order', body: requestBody })
+      });
+      if (bsRes.ok) builderHeaders = await bsRes.json();
+    } catch (bsErr) {
+      console.warn('[qt-trade] builder-sign error:', bsErr.message);
+    }
+
+    // Submit via Cloudflare Worker edge proxy (300+ edge locations, never geo-blocked)
+    const CF_PROXY = 'https://hyperflex-trade-proxy.hyperflex.workers.dev/order';
+    const proxyHeaders = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'POLY_ADDRESS': eoaAddress,
+      'POLY_API_KEY': apiKey,
+      'POLY_PASSPHRASE': apiPassphrase,
+      'POLY_TIMESTAMP': ts,
+      'POLY_SIGNATURE': hmacSig
+    };
+    for (const bk in builderHeaders) {
+      if (builderHeaders.hasOwnProperty(bk)) proxyHeaders[bk] = builderHeaders[bk];
+    }
+
+    console.log('[qt-trade] Submitting via CF edge proxy:', CF_PROXY);
+    const res = await fetch(CF_PROXY, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        signed_body: requestBody,
-        api_key: apiKey,
-        api_secret: apiSecret,
-        api_passphrase: apiPassphrase,
-        eoa_address: eoaAddress
-      })
+      headers: proxyHeaders,
+      body: requestBody
     });
 
     const data = await res.json().catch(() => ({}));
