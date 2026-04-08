@@ -235,6 +235,23 @@ POLY_BUILDER_API_KEY, POLY_BUILDER_PASSPHRASE, POLY_BUILDER_TIMESTAMP, POLY_BUIL
 - `CLOUDFLARE_API_TOKEN` — "Edit Cloudflare Workers" template
 - `CLOUDFLARE_ACCOUNT_ID`
 
+### ⚠️ KNOWN duplication — DO NOT auto-consolidate
+
+`getPolymarketProxy()` and `POLYGON_RPCS` are **deliberately duplicated** between `market.html` and `creator-dashboard.html`:
+
+| Symbol | Location | Notes |
+|---|---|---|
+| `getPolymarketProxy(eoa)` | `market.html:1734`, `creator-dashboard.html:12803` | Same name, may have subtle behavioral differences |
+| `POLYGON_RPCS` | `market.html:1717`, `creator-dashboard.html:12789`, `:17175`, `:18072` | 4 copies; market.html has 3 RPCs, creator-dashboard has 2 |
+
+This is **NOT** part of the `HFXWallet` shared module (`public/wallet.js`) intentionally. Reasons:
+1. The two files load **different ethers minor versions** (`6.13.2` vs `6.9.0`). The signer-cache extraction worked because the `BrowserProvider`/`getSigner` API is identical between minor versions, but `Contract` ABI encoding and RPC error formats can differ subtly.
+2. Proxy discovery uses a **public RPC** (not `window.ethereum`), so it does NOT have the EIP-1193 `-32002` race that `HFXWallet` exists to solve. The signer extraction was a bug fix; proxy extraction would be pure refactoring.
+3. The 11 callsites across both files have per-callsite error/fallback wrappers that aren't trivially equivalent.
+4. Per CLAUDE.md rule: **proxy wallet discovery "finally works" after burning 2 days of debug**. Working code in this area is precious.
+
+**If you find yourself wanting to consolidate**: don't, unless you're also fixing an active bug there. Update both files in lockstep instead. If you must consolidate, diff the two `getPolymarketProxy` implementations line-by-line first and verify behavioral equivalence under both ethers versions.
+
 ---
 
 ## This session (March 16, session 6) — committed `a6a2b7d`, needs push + new commits
