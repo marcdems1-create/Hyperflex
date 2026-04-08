@@ -1945,6 +1945,38 @@ async function checkTradingSetup() {
   }
 }
 
+// Cached ethers v6 signer. BrowserProvider fires `eth_requestAccounts` once
+// per instance via internal _start(); on mobile MetaMask, overlapping calls
+// return EIP-1193 -32002 "request already pending". We cache the first signer
+// from enableTrading/runFullSetup and reuse it on every subsequent trade so
+// the trade flow never re-triggers the account request.
+var _cachedSigner = null;
+var _cachedSignerAddress = null;
+
+async function getTradingSigner() {
+  if (_cachedSigner && _cachedSignerAddress) {
+    return { provider: _cachedSigner.provider, signer: _cachedSigner, address: _cachedSignerAddress };
+  }
+  if (!window.ethereum) throw new Error('MetaMask required');
+  var provider = new ethers.BrowserProvider(window.ethereum);
+  var signer = await provider.getSigner();
+  var address = await signer.getAddress();
+  _cachedSigner = signer;
+  _cachedSignerAddress = address;
+  return { provider: provider, signer: signer, address: address };
+}
+
+// EIP-1193 -32002 "Request already pending" — ethers v6 wraps raw errors
+// inconsistently via `info.error` / `error`, so check every level.
+function is32002Error(err) {
+  if (!err) return false;
+  if (err.code === -32002) return true;
+  if (err.error && err.error.code === -32002) return true;
+  if (err.info && err.info.error && err.info.error.code === -32002) return true;
+  if (err.message && String(err.message).indexOf('-32002') !== -1) return true;
+  return false;
+}
+
 // ── Connect Wallet (derive CLOB API keys via MetaMask EIP-712) ───────────────
 async function enableTrading() {
   if (!window.ethereum) {
@@ -1976,6 +2008,8 @@ async function enableTrading() {
     var provider = new ethers.BrowserProvider(window.ethereum);
     var signer = await provider.getSigner();
     var address = await signer.getAddress();
+    _cachedSigner = signer;
+    _cachedSignerAddress = address;
 
     // Clear cached credentials if wallet changed
     var cachedEoaAddress = localStorage.getItem('poly_eoa_address');
@@ -2255,6 +2289,8 @@ async function runFullSetup() {
     var provider = new ethers.BrowserProvider(window.ethereum);
     var signer = await provider.getSigner();
     var eoaAddress = await signer.getAddress();
+    _cachedSigner = signer;
+    _cachedSignerAddress = eoaAddress;
     localStorage.setItem('poly_eoa_address', eoaAddress);
   } catch (e) {
     if (e.code === 'ACTION_REJECTED' || e.code === 4001) {
@@ -2542,9 +2578,10 @@ async function executeTrade() {
     var shares = amount / clobPrice;
 
     showTradeStatus('Connecting to MetaMask...', 'info');
-    var provider = new ethers.BrowserProvider(window.ethereum);
-    var signer = await provider.getSigner();
-    var signerAddress = await signer.getAddress();
+    var walletCtx = await getTradingSigner();
+    var provider = walletCtx.provider;
+    var signer = walletCtx.signer;
+    var signerAddress = walletCtx.address;
 
     if (eoaAddress && signerAddress.toLowerCase() !== eoaAddress.toLowerCase()) {
       // Wallet changed (common on mobile MetaMask) — clear stale keys and adopt new wallet
@@ -2949,6 +2986,11 @@ async function executeTrade() {
   } catch (err) {
     if (err.code === 'ACTION_REJECTED' || err.code === 4001) {
       showTradeStatus('Order signing rejected', 'error');
+    } else if (is32002Error(err)) {
+      _cachedSigner = null;
+      _cachedSignerAddress = null;
+      showTradeStatus('A wallet request is already pending. Open your MetaMask app, approve or dismiss the previous request, then tap Buy again.', 'error');
+      console.warn('[trade] -32002 detected, signer cache cleared');
     } else {
       showTradeStatus('Trade error: ' + err.message, 'error');
       console.error('[trade] Error:', err);
@@ -3333,6 +3375,8 @@ setTimeout(function() { checkTradingSetup(); }, 500);
       var cachedEoa = (localStorage.getItem('poly_eoa_address') || '').toLowerCase();
       if (cachedEoa && cachedEoa !== currentEoa) {
         console.warn('[wallet] MetaMask account changed: cached=' + cachedEoa.slice(0,10) + ' current=' + currentEoa.slice(0,10));
+        _cachedSigner = null;
+        _cachedSignerAddress = null;
         // Clear stale data — both key naming conventions
         localStorage.removeItem('poly_eoa_address');
         localStorage.removeItem('hf_poly_wallet');
