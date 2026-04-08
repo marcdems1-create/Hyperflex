@@ -910,16 +910,30 @@ async function loadMarketIntel() {
     var activeConditionId = (activeMkt.conditionId || activeMkt.condition_id || '').toLowerCase();
     var activeQuestion = activeMkt.question || activeMkt.groupItemTitle || '';
 
+    // Pull the local YES price from the active outcome — always available,
+    // doesn't depend on the screener. The screener is only consulted for the
+    // model probability and whale stats, which may not be present for low-
+    // volume outcomes (anything outside the screener's top 200 by volume).
+    var localYes = null;
+    try {
+      var prices = activeMkt.outcomePrices || activeMkt.outcome_prices;
+      if (typeof prices === 'string') prices = JSON.parse(prices);
+      if (Array.isArray(prices) && prices[0] != null) localYes = parseFloat(prices[0]);
+      if (localYes == null && activeMkt.yes_price != null) localYes = parseFloat(activeMkt.yes_price);
+    } catch (e) { /* fall through */ }
+
     // Fetch + cache screener data (90s TTL — matches server-side cache)
     if (!_intelScreenerCache || (Date.now() - _intelScreenerCacheTs > 90 * 1000)) {
       var r = await fetch('/api/screener?limit=200');
-      if (!r.ok) return;
-      var data = await r.json();
-      if (!Array.isArray(data)) return;
-      _intelScreenerCache = data;
-      _intelScreenerCacheTs = Date.now();
+      if (r.ok) {
+        var data = await r.json();
+        if (Array.isArray(data)) {
+          _intelScreenerCache = data;
+          _intelScreenerCacheTs = Date.now();
+        }
+      }
     }
-    var markets = _intelScreenerCache;
+    var markets = _intelScreenerCache || [];
 
     // Match by conditionId first (unique per outcome). Fall back to question text.
     var match = null;
@@ -948,25 +962,28 @@ async function loadMarketIntel() {
       outcomeLabel.style.display = 'none';
     }
 
-    if (!match || match.model_probability == null || match.yes_price == null) {
-      // Show the panel with a "no signal" state instead of leaving stale numbers
-      section.style.display = '';
-      document.getElementById('intelMktPrice').textContent = '—';
+    section.style.display = '';
+
+    // Always show the YES market price from the local outcome data
+    var mktPct = localYes != null ? Math.round(localYes * 100) : null;
+    document.getElementById('intelMktPrice').textContent = mktPct != null ? mktPct + '%' : '—';
+
+    // Model + edge come from the screener — only show them if we have a match
+    if (!match || match.model_probability == null) {
       document.getElementById('intelModelPrice').textContent = '—';
       var edgeEl0 = document.getElementById('intelAlphaEdge');
       edgeEl0.textContent = '—';
       edgeEl0.style.color = 'var(--soft)';
-      document.getElementById('intelExplain').textContent = 'Insufficient signal data for this outcome';
+      document.getElementById('intelExplain').textContent = mktPct != null
+        ? 'Model signal not available for this outcome (low volume) · current YES is ' + mktPct + '%'
+        : 'Insufficient signal data for this outcome';
       return;
     }
 
-    section.style.display = '';
-
-    var mktPct = Math.round(match.yes_price * 100);
     var modelPct = Math.round(match.model_probability * 100);
-    var edge = match.alpha_edge != null ? match.alpha_edge : (modelPct - mktPct);
+    // Edge = model - actual local price (use local price, not the screener's possibly-stale yes_price)
+    var edge = mktPct != null ? (modelPct - mktPct) : (match.alpha_edge != null ? match.alpha_edge : 0);
 
-    document.getElementById('intelMktPrice').textContent = mktPct + '%';
     document.getElementById('intelModelPrice').textContent = modelPct + '%';
 
     var edgeEl = document.getElementById('intelAlphaEdge');
@@ -1025,9 +1042,45 @@ async function loadWhaleFlow(marketSlug) {
       // Show which outcome the whale is positioned on
       var outcomeLabel = '';
       if (f.outcome && _eventMarkets && _eventMarkets.length > 1) {
-        // Multi-outcome event: extract short outcome from title
-        var shortOutcome = f.outcome;
-        if (shortOutcome.length > 20) shortOutcome = shortOutcome.substring(0, 18) + '..';
+        // Multi-outcome event: prefer the canonical groupItemTitle from
+        // the loaded event markets (e.g. "April 15"). f.outcome is the
+        // full question ("Iran x Israel/US conflict ends by April 15?")
+        // — naively truncating it gives "Iran x Israel/US c.." which is
+        // useless. Match the whale's question against our loaded outcomes
+        // and use that outcome's groupItemTitle.
+        var shortOutcome = '';
+        var fLower = (f.outcome || '').toLowerCase();
+        for (var emi = 0; emi < _eventMarkets.length; emi++) {
+          var emQ = (_eventMarkets[emi].question || '').toLowerCase();
+          if (emQ && (emQ === fLower || fLower.indexOf(emQ) !== -1 || emQ.indexOf(fLower) !== -1)) {
+            shortOutcome = _eventMarkets[emi].groupItemTitle || '';
+            break;
+          }
+        }
+        // Fallback: strip the common prefix shared by all loaded outcomes
+        if (!shortOutcome) {
+          var commonPrefix = '';
+          if (_eventMarkets[0] && _eventMarkets[0].question) {
+            commonPrefix = _eventMarkets[0].question;
+            for (var emj = 1; emj < _eventMarkets.length; emj++) {
+              var qj = _eventMarkets[emj].question || '';
+              var maxLen = Math.min(commonPrefix.length, qj.length);
+              var matchedLen = 0;
+              for (var ci = 0; ci < maxLen; ci++) {
+                if (commonPrefix[ci] === qj[ci]) matchedLen++;
+                else break;
+              }
+              commonPrefix = commonPrefix.substring(0, matchedLen);
+            }
+          }
+          if (commonPrefix && commonPrefix.length > 5 && f.outcome.indexOf(commonPrefix) === 0) {
+            shortOutcome = f.outcome.substring(commonPrefix.length).replace(/^[\s?,.]+/, '').trim();
+          }
+        }
+        // Last resort: truncate (better than nothing)
+        if (!shortOutcome) {
+          shortOutcome = f.outcome.length > 20 ? f.outcome.substring(0, 18) + '..' : f.outcome;
+        }
         outcomeLabel = '<span style="font-family:var(--body);font-size:11px;color:var(--soft);background:rgba(201,146,13,0.08);padding:1px 5px;border-radius:3px">' + escH(shortOutcome) + '</span>';
       } else if (_market) {
         // Binary market with custom outcome names: YES→outcome[0], NO→outcome[1]
@@ -3600,6 +3653,11 @@ async function loadMarketComments(slug) {
   } catch (e) { /* silent */ }
 }
 
+// Pending comment that survives the auth modal flow — set when an anonymous
+// user tries to post and we open the signup/login modal instead.
+var _pendingCommentBody = null;
+var _commentAuthMode = 'signup'; // 'signup' | 'login'
+
 async function postMarketComment() {
   var input = document.getElementById('commentInput');
   var body = (input.value || '').trim();
@@ -3608,10 +3666,16 @@ async function postMarketComment() {
 
   var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token') || localStorage.getItem('hf_member_token');
   if (!token) {
-    alert('Sign in to comment');
+    // Stash the body and prompt for account creation instead of an alert
+    _pendingCommentBody = body;
+    openCommentAuthModal();
     return;
   }
 
+  await sendComment(body, token, input);
+}
+
+async function sendComment(body, token, input) {
   var slug = window.location.pathname.split('/market/')[1];
   if (!slug) return;
 
@@ -3625,13 +3689,142 @@ async function postMarketComment() {
       var newComment = await r.json();
       _marketComments.unshift(newComment);
       renderComments();
-      input.value = '';
+      if (input) input.value = '';
     } else {
       var err = await r.json().catch(function() { return {}; });
       alert(err.error || 'Could not post comment');
     }
   } catch (e) {
     alert('Error posting comment');
+  }
+}
+
+function openCommentAuthModal() {
+  _commentAuthMode = 'signup';
+  applyCommentAuthMode();
+  var modal = document.getElementById('commentAuthModal');
+  if (modal) {
+    modal.style.display = 'flex';
+    var emailInput = document.getElementById('commentAuthEmail');
+    if (emailInput) setTimeout(function() { emailInput.focus(); }, 50);
+  }
+}
+
+function closeCommentAuthModal() {
+  var modal = document.getElementById('commentAuthModal');
+  if (modal) modal.style.display = 'none';
+  // Clear sensitive fields
+  var pw = document.getElementById('commentAuthPassword');
+  if (pw) pw.value = '';
+  var err = document.getElementById('commentAuthError');
+  if (err) { err.style.display = 'none'; err.textContent = ''; }
+}
+
+function toggleCommentAuthMode() {
+  _commentAuthMode = (_commentAuthMode === 'signup') ? 'login' : 'signup';
+  applyCommentAuthMode();
+}
+
+function applyCommentAuthMode() {
+  var title = document.getElementById('commentAuthTitle');
+  var sub = document.getElementById('commentAuthSub');
+  var submit = document.getElementById('commentAuthSubmit');
+  var toggleText = document.getElementById('commentAuthToggleText');
+  var toggleLink = document.getElementById('commentAuthToggleLink');
+  if (_commentAuthMode === 'signup') {
+    if (title) title.textContent = '💬 Create account to comment';
+    if (sub) sub.textContent = 'Free, 30 seconds. Then your comment posts.';
+    if (submit) submit.textContent = 'Create account & post comment';
+    if (toggleText) toggleText.textContent = 'Already have an account?';
+    if (toggleLink) toggleLink.textContent = 'Sign in →';
+  } else {
+    if (title) title.textContent = '🔑 Sign in to comment';
+    if (sub) sub.textContent = 'Welcome back. Then your comment posts.';
+    if (submit) submit.textContent = 'Sign in & post comment';
+    if (toggleText) toggleText.textContent = 'New here?';
+    if (toggleLink) toggleLink.textContent = 'Create account →';
+  }
+}
+
+async function submitCommentAuth() {
+  var emailEl = document.getElementById('commentAuthEmail');
+  var pwEl = document.getElementById('commentAuthPassword');
+  var errEl = document.getElementById('commentAuthError');
+  var submitBtn = document.getElementById('commentAuthSubmit');
+  var email = (emailEl.value || '').trim().toLowerCase();
+  var password = pwEl.value || '';
+  errEl.style.display = 'none';
+  errEl.textContent = '';
+
+  if (!email || email.indexOf('@') === -1) {
+    errEl.textContent = 'Enter a valid email';
+    errEl.style.display = '';
+    return;
+  }
+  if (password.length < 6) {
+    errEl.textContent = 'Password must be at least 6 characters';
+    errEl.style.display = '';
+    return;
+  }
+
+  var origText = submitBtn.textContent;
+  submitBtn.disabled = true;
+  submitBtn.textContent = _commentAuthMode === 'signup' ? 'Creating account...' : 'Signing in...';
+
+  try {
+    if (_commentAuthMode === 'signup') {
+      // Create the account
+      var rReg = await fetch('/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email, password: password, display_name: email.split('@')[0] })
+      });
+      if (!rReg.ok) {
+        var regErr = await rReg.json().catch(function() { return {}; });
+        // If the email is already taken, suggest sign-in instead
+        var msg = regErr.error || 'Could not create account';
+        if (/exists|duplicate|already/i.test(msg)) {
+          errEl.textContent = 'That email already exists — try signing in instead';
+        } else {
+          errEl.textContent = msg;
+        }
+        errEl.style.display = '';
+        return;
+      }
+    }
+    // Both signup and login flows now log in to get a token
+    var rLogin = await fetch('/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email, password: password })
+    });
+    if (!rLogin.ok) {
+      var loginErr = await rLogin.json().catch(function() { return {}; });
+      errEl.textContent = loginErr.error || 'Sign-in failed';
+      errEl.style.display = '';
+      return;
+    }
+    var loginData = await rLogin.json();
+    if (!loginData.token) {
+      errEl.textContent = 'No token returned';
+      errEl.style.display = '';
+      return;
+    }
+    localStorage.setItem('hf_token', loginData.token);
+
+    // Account created/signed in — close the modal and post the pending comment
+    closeCommentAuthModal();
+    if (_pendingCommentBody) {
+      var input = document.getElementById('commentInput');
+      await sendComment(_pendingCommentBody, loginData.token, input);
+      _pendingCommentBody = null;
+    }
+  } catch (e) {
+    errEl.textContent = e.message || 'Network error';
+    errEl.style.display = '';
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = origText;
   }
 }
 
@@ -3644,6 +3837,27 @@ loadMarket = async function() {
   return result;
 };
 </script>
+
+<!-- Comment Signup / Login Modal -->
+<div id="commentAuthModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.6);align-items:center;justify-content:center;padding:16px">
+  <div style="width:100%;max-width:380px;background:#0c0c0b;border:1px solid #1a1917;border-radius:16px;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,0.5)">
+    <div style="padding:20px 20px 0;display:flex;align-items:center;justify-content:space-between">
+      <div style="font-family:var(--sans);font-size:16px;font-weight:700;color:var(--text)" id="commentAuthTitle">💬 Create account to comment</div>
+      <button onclick="closeCommentAuthModal()" style="background:none;border:none;color:var(--soft);font-size:20px;cursor:pointer;padding:4px">✕</button>
+    </div>
+    <div style="padding:8px 20px 0;font-family:var(--sans);font-size:12px;color:var(--soft);line-height:1.4" id="commentAuthSub">Free, 30 seconds. Then your comment posts.</div>
+    <div style="padding:16px 20px 20px">
+      <input id="commentAuthEmail" type="email" placeholder="Email" autocomplete="email" style="width:100%;padding:11px 12px;border-radius:8px;border:1px solid #1a1917;background:#0a0a09;color:var(--text);font-family:var(--sans);font-size:14px;margin-bottom:10px;outline:none"/>
+      <input id="commentAuthPassword" type="password" placeholder="Password (min 6 chars)" autocomplete="new-password" style="width:100%;padding:11px 12px;border-radius:8px;border:1px solid #1a1917;background:#0a0a09;color:var(--text);font-family:var(--sans);font-size:14px;margin-bottom:14px;outline:none"/>
+      <div id="commentAuthError" style="display:none;font-family:var(--sans);font-size:12px;color:#ff6b6b;margin-bottom:10px"></div>
+      <button id="commentAuthSubmit" onclick="submitCommentAuth()" style="width:100%;padding:12px;border-radius:8px;border:none;background:var(--gold);color:#000;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;min-height:44px">Create account &amp; post comment</button>
+      <div style="text-align:center;margin-top:12px;font-family:var(--sans);font-size:12px;color:var(--soft)">
+        <span id="commentAuthToggleText">Already have an account?</span>
+        <a href="#" onclick="event.preventDefault();toggleCommentAuthMode()" id="commentAuthToggleLink" style="color:var(--gold);text-decoration:none;margin-left:4px">Sign in &rarr;</a>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- Price Alert Modal -->
 <div id="alertModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.6);align-items:center;justify-content:center;padding:16px">
