@@ -182,10 +182,6 @@ canvas{display:block;width:100%!important}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 
 /* Technical Analysis Controls */
-.ta-controls{background:rgba(255,255,255,.02);border-top:1px solid var(--border);border-radius:0}
-.ta-btn{padding:5px 12px;font-family:var(--body);font-size:11px;font-weight:600;color:var(--soft);background:transparent;border:1px solid var(--border);border-radius:7px;cursor:pointer;transition:all .15s cubic-bezier(.4,0,.2,1);text-transform:uppercase;letter-spacing:.04em}
-.ta-btn.active{background:var(--gold);color:#141412;border-color:var(--gold)}
-.ta-btn:hover:not(.active){color:var(--text);border-color:var(--soft)}
 
 /* Mobile */
 @media(max-width:900px){
@@ -255,18 +251,7 @@ canvas{display:block;width:100%!important}
             <button class="mkt-chart-tab active" data-interval="all">ALL</button>
           </div>
         </div>
-        <!-- Technical Analysis Indicator Toggles -->
-        <div class="ta-controls" style="display:flex;gap:6px;padding:4px 12px;flex-wrap:wrap">
-          <button class="ta-btn active" data-ta="none" onclick="toggleTA(this)">Price</button>
-          <button class="ta-btn" data-ta="sma" onclick="toggleTA(this)">SMA</button>
-          <button class="ta-btn" data-ta="ema" onclick="toggleTA(this)">EMA</button>
-          <button class="ta-btn" data-ta="bb" onclick="toggleTA(this)">Bollinger</button>
-          <button class="ta-btn" data-ta="rsi" onclick="toggleTA(this)">RSI</button>
-          <button class="ta-btn" data-ta="vwap" onclick="toggleTA(this)">VWAP</button>
-          <button class="ta-btn" data-ta="sr" onclick="toggleTA(this)">S/R</button>
-        </div>
         <div id="priceChart" style="height:260px;width:100%"></div>
-        <div id="rsiChart" style="height:0;overflow:hidden;transition:height .3s"></div>
       </div>
 
       <!-- Description -->
@@ -659,25 +644,37 @@ function renderMarket() {
   renderOutcomes(m);
   // Replace YES/NO labels with outcome names AFTER renderOutcomes sets _sortedEventMarkets
   updateOutcomeLabels();
-  // For multi-outcome events, show the selected outcome's chart (default: top outcome)
-  // Single clean chart is more actionable than 9 overlaid colored lines
+  // Multi-outcome chart: fetch history for top outcomes and draw colored lines (like Polymarket)
   if (_eventMarkets && _eventMarkets.length > 1) {
-    var defaultEm = _sortedEventMarkets ? _sortedEventMarkets[_activeOutcomeIndex] : _eventMarkets[0];
-    var emLabel = defaultEm.groupItemTitle || defaultEm.question || 'Outcome';
-    document.getElementById('chartOutcome').textContent = emLabel.length > 40 ? emLabel.substring(0, 38) + '...' : emLabel;
-    var emTids = defaultEm.clobTokenIds || '[]';
-    if (typeof emTids === 'string') { try { emTids = JSON.parse(emTids); } catch(e) { emTids = []; } }
-    var tid = emTids[0];
-    if (tid) {
-      fetch('https://clob.polymarket.com/prices-history?market=' + tid + '&interval=' + _chartInterval + '&fidelity=60')
-        .then(function(r) { return r.json(); })
-        .then(function(d) { _priceHistory = (d.history || []); drawChart(_priceHistory); setTimeout(applyTA, 150); })
-        .catch(function() {});
+    document.getElementById('chartOutcome').textContent = 'All Outcomes';
+    var sorted = _eventMarkets.slice().map(function(em, i) {
+      var ep = em.outcomePrices || '[]';
+      if (typeof ep === 'string') { try { ep = JSON.parse(ep); } catch(e) { ep = []; } }
+      var yp = ep[0] ? parseFloat(ep[0]) : 0;
+      var label = em.groupItemTitle || em.question || '';
+      var rm = label.match(/(?:at |between |close (?:at )?)(\$[\d,.]+\s*[-–]\s*\$[\d,.]+|\<\s*\$[\d,.]+|\>\s*\$[\d,.]+)/i);
+      if (rm) label = rm[1];
+      else { var tm = label.match(/Will (?:the )?(.+?) win/i); if (tm) label = tm[1]; }
+      if (label.length > 25) label = label.substring(0, 22) + '...';
+      return { em: em, yp: yp, label: label, tokenId: em.clobTokenIds ? JSON.parse(em.clobTokenIds)[0] : null };
+    }).filter(function(x) { return x.tokenId && x.yp > 0.01; });
+    sorted.sort(function(a, b) { return b.yp - a.yp; });
+    var top = sorted.slice(0, 6);
+    if (top.length > 1) {
+      Promise.all(top.map(function(x) {
+        return fetch('https://clob.polymarket.com/prices-history?market=' + x.tokenId + '&interval=' + _chartInterval + '&fidelity=60')
+          .then(function(r) { return r.json(); })
+          .then(function(d) { return { label: x.label, history: d.history || [] }; })
+          .catch(function() { return { label: x.label, history: [] }; });
+      })).then(function(multiData) {
+        // Only draw multi-chart if user hasn't already switched to a specific outcome
+        if (_activeOutcomeIndex === 0) drawChart(null, multiData);
+      });
     } else {
-      drawChart(_priceHistory); setTimeout(applyTA, 150);
+      drawChart(_priceHistory);
     }
   } else {
-    drawChart(_priceHistory); setTimeout(applyTA, 150);
+    drawChart(_priceHistory);
   }
   renderOrderbook();
   setTimeout(updateAlertBell, 300);
@@ -847,7 +844,7 @@ function switchOutcome(index) {
     if (tokenId) {
       fetch('https://clob.polymarket.com/prices-history?market=' + tokenId + '&interval=' + _chartInterval + '&fidelity=60')
         .then(function(r) { return r.json(); })
-        .then(function(d) { _priceHistory = (d.history || []); drawChart(_priceHistory); setTimeout(applyTA, 150); })
+        .then(function(d) { _priceHistory = (d.history || []); drawChart(_priceHistory); })
         .catch(function() {});
     }
     updateSidebarPosition();
@@ -881,7 +878,7 @@ function switchOutcome(index) {
   if (tokenId) {
     fetch('https://clob.polymarket.com/prices-history?market=' + tokenId + '&interval=' + _chartInterval + '&fidelity=60')
       .then(function(r) { return r.json(); })
-      .then(function(d) { _priceHistory = (d.history || []); drawChart(_priceHistory); setTimeout(applyTA, 150); })
+      .then(function(d) { _priceHistory = (d.history || []); drawChart(_priceHistory); })
       .catch(function() {});
   }
 
@@ -1059,13 +1056,53 @@ var _lwSeries = null;
 var _chartColors = ['#f59e0b','#3b82f6','#22c55e','#ef4444','#a855f7','#ec4899','#06b6d4','#84cc16','#f97316','#6366f1'];
 var _multiSeries = [];
 
-function drawChart(history) {
+function drawChart(history, multiData) {
   var container = document.getElementById('priceChart');
   var legendEl = document.getElementById('chartLegend');
 
   // Destroy previous chart instance
   if (_lwChart) { _lwChart.remove(); _lwChart = null; _lwSeries = null; _multiSeries = []; }
 
+  // Multi-outcome mode — colored lines for each outcome (like Polymarket)
+  if (multiData && multiData.length > 0) {
+    var hasAny = multiData.some(function(d) { return d.history && d.history.length >= 2; });
+    if (!hasAny) {
+      container.innerHTML = '<div style="height:260px;display:flex;align-items:center;justify-content:center;font-family:var(--body);font-size:12px;color:var(--soft)">Not enough price data yet</div>';
+      return;
+    }
+    container.innerHTML = '';
+    legendEl.style.display = 'flex';
+    legendEl.innerHTML = multiData.map(function(d, i) {
+      var c = _chartColors[i % _chartColors.length];
+      var pct = d.history && d.history.length > 0 ? Math.round(d.history[d.history.length - 1].p * 100) + '%' : '';
+      return '<span style="color:' + c + '">● ' + escH(d.label) + ' <span style="opacity:.7">' + pct + '</span></span>';
+    }).join('');
+
+    requestAnimationFrame(function() {
+      var _w = container.offsetWidth || container.parentElement.offsetWidth || 760;
+      _lwChart = LightweightCharts.createChart(container, _chartOpts(_w));
+
+      multiData.forEach(function(d, i) {
+        if (!d.history || d.history.length < 2) return;
+        var c = _chartColors[i % _chartColors.length];
+        var s = _lwChart.addLineSeries({
+          color: c, lineWidth: 2,
+          priceFormat: { type: 'custom', formatter: function(p) { return Math.round(p * 100) + '%'; }, minMove: 0.001 },
+          lastValueVisible: true, priceLineVisible: false,
+        });
+        var seen = {}, sd = [];
+        d.history.forEach(function(h) { var t = Math.floor(h.t); if (!seen[t]) { seen[t] = true; sd.push({ time: t, value: h.p }); } });
+        sd.sort(function(a, b) { return a.time - b.time; });
+        s.setData(sd);
+        _multiSeries.push(s);
+      });
+      _lwChart.timeScale().fitContent();
+      window.addEventListener('resize', function() { if (_lwChart) _lwChart.applyOptions({ width: container.offsetWidth }); });
+    });
+    return;
+  }
+
+  // Single-line mode (binary or single selected outcome)
   legendEl.style.display = 'none';
   legendEl.innerHTML = '';
 
@@ -1126,262 +1163,6 @@ function _chartOpts(w) {
   };
 }
 
-// ── Technical Analysis Engine ─────────────────────────────────────────────────
-var _activeTA = new Set();       // active indicator names
-var _taSeries = [];              // extra lightweight-charts series for indicators
-var _rsiChart = null;            // separate chart for RSI
-var _rsiSeries = null;
-
-function toggleTA(btn) {
-  var ta = btn.getAttribute('data-ta');
-  if (ta === 'none') {
-    // Clear all indicators
-    _activeTA.clear();
-    document.querySelectorAll('.ta-btn').forEach(function(b) { b.classList.remove('active'); });
-    btn.classList.add('active');
-  } else {
-    // Remove 'Price' active state
-    document.querySelector('.ta-btn[data-ta="none"]').classList.remove('active');
-    if (_activeTA.has(ta)) { _activeTA.delete(ta); btn.classList.remove('active'); }
-    else { _activeTA.add(ta); btn.classList.add('active'); }
-    // If nothing active, re-activate Price
-    if (_activeTA.size === 0) document.querySelector('.ta-btn[data-ta="none"]').classList.add('active');
-  }
-  applyTA();
-}
-
-function applyTA() {
-  // Remove old indicator series
-  _taSeries.forEach(function(s) { try { _lwChart.removeSeries(s); } catch(e){} });
-  _taSeries = [];
-  // Remove RSI sub-chart
-  var rsiContainer = document.getElementById('rsiChart');
-  if (_rsiChart) { _rsiChart.remove(); _rsiChart = null; _rsiSeries = null; }
-  rsiContainer.style.height = '0';
-
-  if (!_lwChart || !_priceHistory || _priceHistory.length < 5) return;
-
-  // Build sorted deduped data
-  var seen = {};
-  var data = [];
-  _priceHistory.forEach(function(h) {
-    var t = Math.floor(h.t);
-    if (!seen[t]) { seen[t] = true; data.push({ time: t, value: h.p }); }
-  });
-  data.sort(function(a, b) { return a.time - b.time; });
-  var values = data.map(function(d) { return d.value; });
-
-  // SMA (7, 20, 50)
-  if (_activeTA.has('sma')) {
-    [{ n: 7, color: '#f59e0b' }, { n: 20, color: '#3b82f6' }, { n: 50, color: '#a855f7' }].forEach(function(cfg) {
-      var sma = computeSMA(values, cfg.n);
-      var sd = [];
-      for (var i = cfg.n - 1; i < data.length; i++) {
-        if (sma[i] != null) sd.push({ time: data[i].time, value: sma[i] });
-      }
-      if (sd.length < 2) return;
-      var s = _lwChart.addLineSeries({ color: cfg.color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false,
-        priceFormat: { type: 'custom', formatter: function(p) { return Math.round(p*100)+'¢'; }, minMove: 0.001 } });
-      s.setData(sd);
-      _taSeries.push(s);
-    });
-  }
-
-  // EMA (9, 21)
-  if (_activeTA.has('ema')) {
-    [{ n: 9, color: '#06b6d4' }, { n: 21, color: '#ec4899' }].forEach(function(cfg) {
-      var ema = computeEMA(values, cfg.n);
-      var sd = [];
-      for (var i = 0; i < data.length; i++) {
-        if (ema[i] != null) sd.push({ time: data[i].time, value: ema[i] });
-      }
-      if (sd.length < 2) return;
-      var s = _lwChart.addLineSeries({ color: cfg.color, lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false,
-        priceFormat: { type: 'custom', formatter: function(p) { return Math.round(p*100)+'¢'; }, minMove: 0.001 } });
-      s.setData(sd);
-      _taSeries.push(s);
-    });
-  }
-
-  // Bollinger Bands (20, 2σ)
-  if (_activeTA.has('bb')) {
-    var bb = computeBollinger(values, 20, 2);
-    var upper = [], lower = [], mid = [];
-    for (var i = 0; i < data.length; i++) {
-      if (bb.upper[i] != null) {
-        upper.push({ time: data[i].time, value: bb.upper[i] });
-        lower.push({ time: data[i].time, value: bb.lower[i] });
-        mid.push({ time: data[i].time, value: bb.mid[i] });
-      }
-    }
-    if (upper.length > 2) {
-      var sU = _lwChart.addLineSeries({ color: 'rgba(168,85,247,.5)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false,
-        priceFormat: { type: 'custom', formatter: function(p) { return Math.round(p*100)+'¢'; }, minMove: 0.001 } });
-      sU.setData(upper); _taSeries.push(sU);
-      var sL = _lwChart.addLineSeries({ color: 'rgba(168,85,247,.5)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false,
-        priceFormat: { type: 'custom', formatter: function(p) { return Math.round(p*100)+'¢'; }, minMove: 0.001 } });
-      sL.setData(lower); _taSeries.push(sL);
-      var sM = _lwChart.addLineSeries({ color: 'rgba(168,85,247,.3)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false,
-        priceFormat: { type: 'custom', formatter: function(p) { return Math.round(p*100)+'¢'; }, minMove: 0.001 } });
-      sM.setData(mid); _taSeries.push(sM);
-    }
-  }
-
-  // VWAP (volume-weighted average price — approximated since we only have price, uses equal weight)
-  if (_activeTA.has('vwap')) {
-    var vwap = computeVWAP(values);
-    var sd = [];
-    for (var i = 0; i < data.length; i++) {
-      if (vwap[i] != null) sd.push({ time: data[i].time, value: vwap[i] });
-    }
-    if (sd.length > 2) {
-      var s = _lwChart.addLineSeries({ color: '#84cc16', lineWidth: 2, lineStyle: 0, priceLineVisible: false, lastValueVisible: false,
-        priceFormat: { type: 'custom', formatter: function(p) { return Math.round(p*100)+'¢'; }, minMove: 0.001 } });
-      s.setData(sd); _taSeries.push(s);
-    }
-  }
-
-  // Support / Resistance levels
-  if (_activeTA.has('sr')) {
-    var levels = computeSR(values);
-    levels.forEach(function(lv) {
-      var s = _lwChart.addLineSeries({ color: lv.type === 'support' ? 'rgba(34,197,94,.4)' : 'rgba(239,68,68,.4)', lineWidth: 1, lineStyle: 1, priceLineVisible: false, lastValueVisible: true,
-        priceFormat: { type: 'custom', formatter: function(p) { return Math.round(p*100)+'¢'; }, minMove: 0.001 } });
-      s.setData([{ time: data[0].time, value: lv.price }, { time: data[data.length-1].time, value: lv.price }]);
-      _taSeries.push(s);
-    });
-  }
-
-  // RSI (14-period) — drawn in separate sub-chart
-  if (_activeTA.has('rsi')) {
-    rsiContainer.style.height = '100px';
-    var rsiVals = computeRSI(values, 14);
-    var rsiData = [];
-    for (var i = 0; i < data.length; i++) {
-      if (rsiVals[i] != null) rsiData.push({ time: data[i].time, value: rsiVals[i] });
-    }
-    if (rsiData.length > 2) {
-      requestAnimationFrame(function() {
-        var _w = rsiContainer.parentElement.offsetWidth - 40 || 700;
-        _rsiChart = LightweightCharts.createChart(rsiContainer, {
-          width: _w, height: 100,
-          layout: { background: { color: '#131311' }, textColor: '#8a8780', fontFamily: "'Space Mono', monospace", fontSize: 10 },
-          grid: { vertLines: { color: 'rgba(255,255,255,.02)' }, horzLines: { color: 'rgba(255,255,255,.04)' } },
-          rightPriceScale: { borderColor: '#222220', scaleMargins: { top: 0.05, bottom: 0.05 } },
-          timeScale: { visible: false }, handleScroll: true, handleScale: true, crosshair: { mode: LightweightCharts.CrosshairMode.Normal }
-        });
-        _rsiSeries = _rsiChart.addLineSeries({ color: '#f59e0b', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true,
-          priceFormat: { type: 'price', precision: 0, minMove: 1 } });
-        _rsiSeries.setData(rsiData);
-        // Overbought/oversold lines
-        var ob70 = _rsiChart.addLineSeries({ color: 'rgba(239,68,68,.3)', lineWidth: 1, lineStyle: 1, priceLineVisible: false, lastValueVisible: false });
-        ob70.setData([{ time: rsiData[0].time, value: 70 }, { time: rsiData[rsiData.length-1].time, value: 70 }]);
-        var os30 = _rsiChart.addLineSeries({ color: 'rgba(34,197,94,.3)', lineWidth: 1, lineStyle: 1, priceLineVisible: false, lastValueVisible: false });
-        os30.setData([{ time: rsiData[0].time, value: 30 }, { time: rsiData[rsiData.length-1].time, value: 30 }]);
-        _rsiChart.timeScale().fitContent();
-        window.addEventListener('resize', function() { if (_rsiChart) _rsiChart.applyOptions({ width: rsiContainer.parentElement.offsetWidth - 40 }); });
-      });
-    }
-  }
-}
-
-// ── TA Computation Functions ─────────────────────────────────────────────────
-function computeSMA(arr, n) {
-  var result = new Array(arr.length).fill(null);
-  for (var i = n - 1; i < arr.length; i++) {
-    var sum = 0;
-    for (var j = i - n + 1; j <= i; j++) sum += arr[j];
-    result[i] = sum / n;
-  }
-  return result;
-}
-
-function computeEMA(arr, n) {
-  var result = new Array(arr.length).fill(null);
-  var k = 2 / (n + 1);
-  // Seed with SMA
-  var sum = 0;
-  for (var i = 0; i < n && i < arr.length; i++) sum += arr[i];
-  if (arr.length < n) return result;
-  result[n - 1] = sum / n;
-  for (var i = n; i < arr.length; i++) {
-    result[i] = arr[i] * k + result[i - 1] * (1 - k);
-  }
-  return result;
-}
-
-function computeBollinger(arr, n, mult) {
-  var sma = computeSMA(arr, n);
-  var upper = new Array(arr.length).fill(null);
-  var lower = new Array(arr.length).fill(null);
-  for (var i = n - 1; i < arr.length; i++) {
-    if (sma[i] == null) continue;
-    var sumSq = 0;
-    for (var j = i - n + 1; j <= i; j++) sumSq += Math.pow(arr[j] - sma[i], 2);
-    var std = Math.sqrt(sumSq / n);
-    upper[i] = sma[i] + mult * std;
-    lower[i] = sma[i] - mult * std;
-  }
-  return { upper: upper, lower: lower, mid: sma };
-}
-
-function computeRSI(arr, n) {
-  var result = new Array(arr.length).fill(null);
-  if (arr.length < n + 1) return result;
-  var gains = 0, losses = 0;
-  for (var i = 1; i <= n; i++) {
-    var d = arr[i] - arr[i - 1];
-    if (d > 0) gains += d; else losses -= d;
-  }
-  var avgGain = gains / n;
-  var avgLoss = losses / n;
-  result[n] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
-  for (var i = n + 1; i < arr.length; i++) {
-    var d = arr[i] - arr[i - 1];
-    avgGain = (avgGain * (n - 1) + (d > 0 ? d : 0)) / n;
-    avgLoss = (avgLoss * (n - 1) + (d < 0 ? -d : 0)) / n;
-    result[i] = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
-  }
-  return result;
-}
-
-function computeVWAP(arr) {
-  // Cumulative average (true VWAP needs volume per candle — approximate with equal weight)
-  var result = new Array(arr.length).fill(null);
-  var cumSum = 0;
-  for (var i = 0; i < arr.length; i++) {
-    cumSum += arr[i];
-    result[i] = cumSum / (i + 1);
-  }
-  return result;
-}
-
-function computeSR(arr) {
-  // Find local min/max as support/resistance
-  var levels = [];
-  if (arr.length < 10) return levels;
-  var window = Math.max(5, Math.floor(arr.length / 20));
-  var candidates = [];
-  for (var i = window; i < arr.length - window; i++) {
-    var isMax = true, isMin = true;
-    for (var j = i - window; j <= i + window; j++) {
-      if (j === i) continue;
-      if (arr[j] >= arr[i]) isMax = false;
-      if (arr[j] <= arr[i]) isMin = false;
-    }
-    if (isMax) candidates.push({ price: arr[i], type: 'resistance' });
-    if (isMin) candidates.push({ price: arr[i], type: 'support' });
-  }
-  // Cluster nearby levels (within 2%)
-  candidates.sort(function(a, b) { return a.price - b.price; });
-  for (var i = 0; i < candidates.length; i++) {
-    if (levels.length > 0 && Math.abs(candidates[i].price - levels[levels.length - 1].price) / candidates[i].price < 0.02) continue;
-    levels.push(candidates[i]);
-    if (levels.length >= 6) break;
-  }
-  return levels;
-}
-
 // Chart tab switching
 document.querySelectorAll('.mkt-chart-tab').forEach(function(tab) {
   tab.addEventListener('click', function() {
@@ -1394,7 +1175,7 @@ document.querySelectorAll('.mkt-chart-tab').forEach(function(tab) {
     if (tokenId) {
       fetch('https://clob.polymarket.com/prices-history?market=' + tokenId + '&interval=' + _chartInterval + '&fidelity=60')
         .then(function(r) { return r.json(); })
-        .then(function(d) { _priceHistory = (d.history || []); drawChart(_priceHistory); setTimeout(applyTA, 100); })
+        .then(function(d) { _priceHistory = (d.history || []); drawChart(_priceHistory); })
         .catch(function() {});
     }
   });

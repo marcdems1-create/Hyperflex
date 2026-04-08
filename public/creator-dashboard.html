@@ -2922,9 +2922,18 @@ body.nav-open .sidebar-backdrop {
   transition: border-color .15s, color .15s;
 }
 .social-unfollow-btn:hover { border-color: var(--red); color: var(--red); }
+
+/* TA tab styles */
+.ta-interval-btn { padding:6px 12px; font-family:var(--body); font-size:11px; font-weight:600; color:var(--dim); background:transparent; border:1px solid var(--border); border-radius:7px; cursor:pointer; transition:all .15s; }
+.ta-interval-btn.active { background:var(--accent); color:#000; border-color:var(--accent); }
+.ta-interval-btn:hover:not(.active) { color:var(--ink); border-color:var(--dim); }
+.ta-ind-btn { padding:5px 12px; font-family:var(--body); font-size:11px; font-weight:600; color:var(--dim); background:transparent; border:1px solid var(--border); border-radius:7px; cursor:pointer; transition:all .15s; text-transform:uppercase; letter-spacing:.04em; }
+.ta-ind-btn.active { background:var(--accent); color:#000; border-color:var(--accent); }
+.ta-ind-btn:hover:not(.active) { color:var(--ink); border-color:var(--dim); }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.9.0/dist/ethers.umd.min.js"></script>
+<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body class="plan-premium">
 <div class="layout">
@@ -2993,6 +3002,9 @@ body.nav-open .sidebar-backdrop {
       </a>
       <a class="nav-item" data-nav-section="trading" onclick="showTab('pythedge')">
         <span class="nav-icon">⚡</span><span class="nav-label">Pyth Edge</span>
+      </a>
+      <a class="nav-item" data-nav-section="trading" onclick="showTab('ta')">
+        <span class="nav-icon">📈</span><span class="nav-label">Technical Analysis</span>
       </a>
       <div class="nav-section-label" id="navSectionCommunity" data-nav-section="community">Community</div>
       <a class="nav-item" data-nav-section="community" onclick="showTab('overview')">
@@ -5716,6 +5728,52 @@ body.nav-open .sidebar-backdrop {
         </div>
       </div><!-- /tab-pythedge -->
 
+      <!-- TECHNICAL ANALYSIS TAB -->
+      <div id="tab-ta" style="display:none">
+        <div class="section">
+          <div style="padding:20px">
+            <h2 style="font-size:18px;font-weight:800;margin-bottom:4px">Technical Analysis</h2>
+            <p style="font-size:13px;color:var(--dim);margin-bottom:20px">Select a position to view its price chart with technical indicators.</p>
+
+            <!-- Position selector -->
+            <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+              <select id="taPositionSelect" style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--ink);font-family:var(--body);font-size:13px;min-width:300px;outline:none" onchange="loadTAChart()">
+                <option value="">Select a position...</option>
+              </select>
+              <div style="display:flex;gap:4px">
+                <button class="ta-interval-btn active" data-tai="all" onclick="setTAInterval(this)">ALL</button>
+                <button class="ta-interval-btn" data-tai="1m" onclick="setTAInterval(this)">1M</button>
+                <button class="ta-interval-btn" data-tai="1w" onclick="setTAInterval(this)">1W</button>
+                <button class="ta-interval-btn" data-tai="1d" onclick="setTAInterval(this)">1D</button>
+                <button class="ta-interval-btn" data-tai="6h" onclick="setTAInterval(this)">6H</button>
+              </div>
+            </div>
+
+            <!-- Indicator toggles -->
+            <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+              <button class="ta-ind-btn active" data-ind="price" onclick="toggleTAIndicator(this)">Price</button>
+              <button class="ta-ind-btn" data-ind="sma" onclick="toggleTAIndicator(this)">SMA</button>
+              <button class="ta-ind-btn" data-ind="ema" onclick="toggleTAIndicator(this)">EMA</button>
+              <button class="ta-ind-btn" data-ind="bb" onclick="toggleTAIndicator(this)">Bollinger</button>
+              <button class="ta-ind-btn" data-ind="rsi" onclick="toggleTAIndicator(this)">RSI</button>
+              <button class="ta-ind-btn" data-ind="vwap" onclick="toggleTAIndicator(this)">VWAP</button>
+              <button class="ta-ind-btn" data-ind="sr" onclick="toggleTAIndicator(this)">S/R</button>
+            </div>
+
+            <!-- Chart containers -->
+            <div id="taChartContainer" style="height:340px;width:100%;background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:13px">
+              Select a position to view the chart
+            </div>
+            <div id="taRsiContainer" style="height:0;overflow:hidden;transition:height .3s;width:100%;background:var(--card);border:1px solid var(--border);border-top:none;border-radius:0 0 12px 12px"></div>
+
+            <!-- Position summary card -->
+            <div id="taPosInfo" style="display:none;margin-top:16px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;display:none">
+              <div style="display:flex;gap:24px;flex-wrap:wrap" id="taPosInfoInner"></div>
+            </div>
+          </div>
+        </div>
+      </div><!-- /tab-ta -->
+
       <!-- ACCOUNT TAB -->
       <div id="tab-account" style="display:none">
         <div class="section">
@@ -7538,7 +7596,7 @@ function ensureMoreExpanded(tab) {
 // Tab switching
 function showTab(tab) {
   ensureMoreExpanded(tab);
-  ['overview','markets','resolve','members','leaderboard','share','rewards','seasons','settings','analytics','economy','branding','flexbot','ideas','portfolio','account','performance','breaking','quicktrade','findmarkets','arbitrage','calendar','watchlist','briefing','pythedge','alpha','aiportfolio','flexpoints'].forEach(t => {
+  ['overview','markets','resolve','members','leaderboard','share','rewards','seasons','settings','analytics','economy','branding','flexbot','ideas','portfolio','account','performance','breaking','quicktrade','findmarkets','arbitrage','calendar','watchlist','briefing','pythedge','alpha','aiportfolio','flexpoints','ta'].forEach(t => {
     const el = document.getElementById('tab-' + t);
     if (el) el.style.display = t === tab ? 'block' : 'none';
   });
@@ -7546,7 +7604,7 @@ function showTab(tab) {
   document.querySelectorAll('.nav-item').forEach(n => {
     if (n.getAttribute('onclick') && n.getAttribute('onclick').includes(`'${tab}'`)) n.classList.add('active');
   });
-  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Social', portfolio:'My Positions', account:'My Account', performance:'Performance', breaking:'Breaking', quicktrade:'Quick Trade', findmarkets:'Find Markets', arbitrage:'Arbitrage Scanner', calendar:'Catalyst Calendar', watchlist:'Watchlist', briefing:'Daily Brief', pythedge:'Pyth Edge', alpha:'Alpha Feed', aiportfolio:'AI Portfolio', flexpoints:'FLEX Points' };
+  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Social', portfolio:'My Positions', account:'My Account', performance:'Performance', breaking:'Breaking', quicktrade:'Quick Trade', findmarkets:'Find Markets', arbitrage:'Arbitrage Scanner', calendar:'Catalyst Calendar', watchlist:'Watchlist', briefing:'Daily Brief', pythedge:'Pyth Edge', alpha:'Alpha Feed', aiportfolio:'AI Portfolio', flexpoints:'FLEX Points', ta:'Technical Analysis' };
   document.getElementById('topbarTitle').textContent = titles[tab] || tab;
   if (tab === 'analytics' && !analyticsLoaded) loadAnalytics();
   if (tab === 'members') { loadSocialTab(); loadMembers(); }
@@ -7598,6 +7656,7 @@ function showTab(tab) {
   if (tab === 'watchlist') { loadWatchlistTab(); }
   if (tab === 'briefing') { loadBriefingTab(); }
   if (tab === 'pythedge') { loadPythEdgeTab(); }
+  if (tab === 'ta') { loadTATab(); }
   if (tab === 'findmarkets') { loadTrendingMarkets(); }
   if (tab === 'account') populateAccountTab();
   if (tab === 'seasons' && !seasonsLoaded) loadSeasons();
@@ -18117,6 +18176,210 @@ async function redeemAllPositions() {
   }
   if (success > 0) showToast('Redeemed ' + success + '/' + redeemable.length + ' positions' + (failed > 0 ? ' (' + failed + ' failed)' : ''), 'success');
 }
+
+// ── Technical Analysis Tab ──────────────────────────────────────────────────
+let _taChart = null, _taSeries = null, _taIndicatorSeries = [], _taRsiChart = null;
+let _taInterval = 'all', _taActiveIndicators = new Set(), _taPriceHistory = [];
+let _taLoaded = false;
+
+function loadTATab() {
+  if (_taLoaded) return;
+  _taLoaded = true;
+  // Populate position selector from Polymarket positions
+  const sel = document.getElementById('taPositionSelect');
+  if (!sel) return;
+  const positions = window._polyPositionsData || [];
+  const active = positions.filter(p => !p._isResolved && parseFloat(p.size || 0) > 0);
+  sel.innerHTML = '<option value="">Select a position...</option>';
+  active.forEach((p, i) => {
+    const label = (p.title || p.question || 'Position').substring(0, 60);
+    const side = (p.outcome || p.side || 'YES').toUpperCase();
+    const size = parseFloat(p.size || 0).toFixed(1);
+    const tokenId = p.asset || '';
+    sel.innerHTML += `<option value="${tokenId}" data-idx="${i}">${side} ${size} — ${label}</option>`;
+  });
+  // If positions not loaded yet, retry after delay
+  if (!active.length) {
+    setTimeout(() => { _taLoaded = false; loadTATab(); }, 2000);
+  }
+}
+
+function setTAInterval(btn) {
+  document.querySelectorAll('.ta-interval-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  _taInterval = btn.getAttribute('data-tai');
+  loadTAChart();
+}
+
+function toggleTAIndicator(btn) {
+  const ind = btn.getAttribute('data-ind');
+  if (ind === 'price') {
+    _taActiveIndicators.clear();
+    document.querySelectorAll('.ta-ind-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  } else {
+    document.querySelector('.ta-ind-btn[data-ind="price"]').classList.remove('active');
+    if (_taActiveIndicators.has(ind)) { _taActiveIndicators.delete(ind); btn.classList.remove('active'); }
+    else { _taActiveIndicators.add(ind); btn.classList.add('active'); }
+    if (_taActiveIndicators.size === 0) document.querySelector('.ta-ind-btn[data-ind="price"]').classList.add('active');
+  }
+  applyTAIndicators();
+}
+
+async function loadTAChart() {
+  const sel = document.getElementById('taPositionSelect');
+  const tokenId = sel ? sel.value : '';
+  const container = document.getElementById('taChartContainer');
+  if (!tokenId) { container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--dim);font-size:13px">Select a position to view the chart</div>'; return; }
+
+  container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--dim);font-size:13px">Loading chart...</div>';
+
+  try {
+    const r = await fetch(`https://clob.polymarket.com/prices-history?market=${encodeURIComponent(tokenId)}&interval=${_taInterval}&fidelity=60`);
+    const d = await r.json();
+    _taPriceHistory = d.history || [];
+    if (_taPriceHistory.length < 2) { container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--dim);font-size:13px">Not enough price data</div>'; return; }
+    drawTAChart();
+    applyTAIndicators();
+    // Show position info
+    showTAPosInfo(sel.selectedIndex - 1);
+  } catch (e) {
+    container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--dim);font-size:13px">Error loading chart</div>';
+  }
+}
+
+function drawTAChart() {
+  const container = document.getElementById('taChartContainer');
+  if (_taChart) { _taChart.remove(); _taChart = null; _taSeries = null; _taIndicatorSeries = []; }
+  container.innerHTML = '';
+
+  const w = container.offsetWidth || 760;
+  _taChart = LightweightCharts.createChart(container, {
+    width: w, height: 340,
+    layout: { background: { color: '#12121e' }, textColor: '#6b6b80', fontFamily: "'Inter', sans-serif", fontSize: 11 },
+    grid: { vertLines: { color: 'rgba(255,255,255,0.03)' }, horzLines: { color: 'rgba(255,255,255,0.03)' } },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    rightPriceScale: { borderColor: '#1e1e2a', scaleMargins: { top: 0.1, bottom: 0.1 } },
+    timeScale: { borderColor: '#1e1e2a', timeVisible: true, secondsVisible: false },
+    handleScroll: true, handleScale: true
+  });
+
+  const history = _taPriceHistory;
+  const isUp = history[history.length - 1].p >= history[0].p;
+  _taSeries = _taChart.addAreaSeries({
+    lineColor: isUp ? '#00e68a' : '#ff4d6a',
+    topColor: isUp ? 'rgba(0,230,138,0.15)' : 'rgba(255,77,106,0.15)',
+    bottomColor: isUp ? 'rgba(0,230,138,0.0)' : 'rgba(255,77,106,0.0)',
+    lineWidth: 2,
+    priceFormat: { type: 'custom', formatter: p => Math.round(p * 100) + '¢', minMove: 0.001 },
+  });
+
+  const seen = {};
+  const sd = [];
+  history.forEach(h => { const t = Math.floor(h.t); if (!seen[t]) { seen[t] = true; sd.push({ time: t, value: h.p }); } });
+  sd.sort((a, b) => a.time - b.time);
+  _taSeries.setData(sd);
+  _taChart.timeScale().fitContent();
+  window.addEventListener('resize', () => { if (_taChart) _taChart.applyOptions({ width: container.offsetWidth }); });
+}
+
+function applyTAIndicators() {
+  if (!_taChart || !_taPriceHistory || _taPriceHistory.length < 5) return;
+  // Remove old indicators
+  _taIndicatorSeries.forEach(s => { try { _taChart.removeSeries(s); } catch(e){} });
+  _taIndicatorSeries = [];
+  // RSI sub-chart
+  const rsiC = document.getElementById('taRsiContainer');
+  if (_taRsiChart) { _taRsiChart.remove(); _taRsiChart = null; }
+  rsiC.style.height = '0';
+
+  const seen = {}; const data = [];
+  _taPriceHistory.forEach(h => { const t = Math.floor(h.t); if (!seen[t]) { seen[t] = true; data.push({ time: t, value: h.p }); } });
+  data.sort((a, b) => a.time - b.time);
+  const values = data.map(d => d.value);
+  const fmt = { type: 'custom', formatter: p => Math.round(p*100)+'¢', minMove: 0.001 };
+
+  // SMA
+  if (_taActiveIndicators.has('sma')) {
+    [{n:7,color:'#f59e0b'},{n:20,color:'#4d9fff'},{n:50,color:'#a855f7'}].forEach(cfg => {
+      const sma = _taSMA(values, cfg.n);
+      const sd = []; for (let i=cfg.n-1;i<data.length;i++) if(sma[i]!=null) sd.push({time:data[i].time,value:sma[i]});
+      if (sd.length<2) return;
+      const s = _taChart.addLineSeries({color:cfg.color,lineWidth:1,priceLineVisible:false,lastValueVisible:false,priceFormat:fmt});
+      s.setData(sd); _taIndicatorSeries.push(s);
+    });
+  }
+  // EMA
+  if (_taActiveIndicators.has('ema')) {
+    [{n:9,color:'#06b6d4'},{n:21,color:'#ec4899'}].forEach(cfg => {
+      const ema = _taEMA(values, cfg.n);
+      const sd = []; for(let i=0;i<data.length;i++) if(ema[i]!=null) sd.push({time:data[i].time,value:ema[i]});
+      if(sd.length<2) return;
+      const s = _taChart.addLineSeries({color:cfg.color,lineWidth:1,lineStyle:2,priceLineVisible:false,lastValueVisible:false,priceFormat:fmt});
+      s.setData(sd); _taIndicatorSeries.push(s);
+    });
+  }
+  // Bollinger Bands
+  if (_taActiveIndicators.has('bb')) {
+    const sma = _taSMA(values,20);
+    const upper=[],lower=[],mid=[];
+    for(let i=19;i<data.length;i++){if(sma[i]==null)continue;let sq=0;for(let j=i-19;j<=i;j++)sq+=Math.pow(values[j]-sma[i],2);const std=Math.sqrt(sq/20);upper.push({time:data[i].time,value:sma[i]+2*std});lower.push({time:data[i].time,value:sma[i]-2*std});mid.push({time:data[i].time,value:sma[i]});}
+    if(upper.length>2){const sU=_taChart.addLineSeries({color:'rgba(168,85,247,.5)',lineWidth:1,lineStyle:2,priceLineVisible:false,lastValueVisible:false,priceFormat:fmt});sU.setData(upper);_taIndicatorSeries.push(sU);const sL=_taChart.addLineSeries({color:'rgba(168,85,247,.5)',lineWidth:1,lineStyle:2,priceLineVisible:false,lastValueVisible:false,priceFormat:fmt});sL.setData(lower);_taIndicatorSeries.push(sL);const sM=_taChart.addLineSeries({color:'rgba(168,85,247,.3)',lineWidth:1,priceLineVisible:false,lastValueVisible:false,priceFormat:fmt});sM.setData(mid);_taIndicatorSeries.push(sM);}
+  }
+  // VWAP
+  if (_taActiveIndicators.has('vwap')) {
+    let cumSum=0;const sd=[];for(let i=0;i<data.length;i++){cumSum+=values[i];sd.push({time:data[i].time,value:cumSum/(i+1)});}
+    if(sd.length>2){const s=_taChart.addLineSeries({color:'#84cc16',lineWidth:2,priceLineVisible:false,lastValueVisible:false,priceFormat:fmt});s.setData(sd);_taIndicatorSeries.push(s);}
+  }
+  // S/R
+  if (_taActiveIndicators.has('sr')) {
+    const win=Math.max(5,Math.floor(values.length/20));const cands=[];
+    for(let i=win;i<values.length-win;i++){let isMax=true,isMin=true;for(let j=i-win;j<=i+win;j++){if(j===i)continue;if(values[j]>=values[i])isMax=false;if(values[j]<=values[i])isMin=false;}if(isMax)cands.push({price:values[i],type:'resistance'});if(isMin)cands.push({price:values[i],type:'support'});}
+    cands.sort((a,b)=>a.price-b.price);const levels=[];for(let i=0;i<cands.length;i++){if(levels.length>0&&Math.abs(cands[i].price-levels[levels.length-1].price)/cands[i].price<0.02)continue;levels.push(cands[i]);if(levels.length>=6)break;}
+    levels.forEach(lv=>{const s=_taChart.addLineSeries({color:lv.type==='support'?'rgba(0,230,138,.4)':'rgba(255,77,106,.4)',lineWidth:1,lineStyle:1,priceLineVisible:false,lastValueVisible:true,priceFormat:fmt});s.setData([{time:data[0].time,value:lv.price},{time:data[data.length-1].time,value:lv.price}]);_taIndicatorSeries.push(s);});
+  }
+  // RSI
+  if (_taActiveIndicators.has('rsi')) {
+    rsiC.style.height = '100px';
+    const rsi = _taRSI(values, 14);
+    const rd = []; for(let i=0;i<data.length;i++) if(rsi[i]!=null) rd.push({time:data[i].time,value:rsi[i]});
+    if(rd.length>2){
+      _taRsiChart = LightweightCharts.createChart(rsiC,{width:rsiC.parentElement.offsetWidth||700,height:100,layout:{background:{color:'#12121e'},textColor:'#6b6b80',fontFamily:"'Inter',sans-serif",fontSize:10},grid:{vertLines:{color:'rgba(255,255,255,.02)'},horzLines:{color:'rgba(255,255,255,.04)'}},rightPriceScale:{borderColor:'#1e1e2a',scaleMargins:{top:.05,bottom:.05}},timeScale:{visible:false},handleScroll:true,handleScale:true,crosshair:{mode:LightweightCharts.CrosshairMode.Normal}});
+      const rs=_taRsiChart.addLineSeries({color:'#f59e0b',lineWidth:1.5,priceLineVisible:false,lastValueVisible:true,priceFormat:{type:'price',precision:0,minMove:1}});rs.setData(rd);
+      const ob=_taRsiChart.addLineSeries({color:'rgba(255,77,106,.3)',lineWidth:1,lineStyle:1,priceLineVisible:false,lastValueVisible:false});ob.setData([{time:rd[0].time,value:70},{time:rd[rd.length-1].time,value:70}]);
+      const os=_taRsiChart.addLineSeries({color:'rgba(0,230,138,.3)',lineWidth:1,lineStyle:1,priceLineVisible:false,lastValueVisible:false});os.setData([{time:rd[0].time,value:30},{time:rd[rd.length-1].time,value:30}]);
+      _taRsiChart.timeScale().fitContent();
+    }
+  }
+}
+
+function showTAPosInfo(idx) {
+  const positions = window._polyPositionsData || [];
+  const active = positions.filter(p => !p._isResolved && parseFloat(p.size || 0) > 0);
+  const pos = active[idx];
+  const el = document.getElementById('taPosInfo');
+  const inner = document.getElementById('taPosInfoInner');
+  if (!pos || !el || !inner) { if(el) el.style.display='none'; return; }
+  const side = (pos.outcome || 'YES').toUpperCase();
+  const size = parseFloat(pos.size || 0).toFixed(1);
+  const avg = (parseFloat(pos.avgPrice || pos.avg_price || 0) * 100).toFixed(1);
+  const cur = (parseFloat(pos.curPrice || pos.cur_price || 0) * 100).toFixed(1);
+  const pnl = parseFloat(pos.cashPnl || pos.cash_pnl || 0).toFixed(2);
+  const pnlColor = pnl >= 0 ? '#00e68a' : '#ff4d6a';
+  inner.innerHTML = `
+    <div><div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Side</div><div style="font-weight:700;color:${side==='NO'?'#ff4d6a':'#00e68a'}">${side}</div></div>
+    <div><div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Shares</div><div style="font-weight:700">${size}</div></div>
+    <div><div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Avg Price</div><div style="font-weight:700">${avg}¢</div></div>
+    <div><div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Current</div><div style="font-weight:700">${cur}¢</div></div>
+    <div><div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">P&L</div><div style="font-weight:700;color:${pnlColor}">${pnl>=0?'+':''}$${pnl}</div></div>`;
+  el.style.display = 'block';
+}
+
+// TA computation helpers
+function _taSMA(arr,n){const r=new Array(arr.length).fill(null);for(let i=n-1;i<arr.length;i++){let s=0;for(let j=i-n+1;j<=i;j++)s+=arr[j];r[i]=s/n;}return r;}
+function _taEMA(arr,n){const r=new Array(arr.length).fill(null);const k=2/(n+1);let s=0;for(let i=0;i<n&&i<arr.length;i++)s+=arr[i];if(arr.length<n)return r;r[n-1]=s/n;for(let i=n;i<arr.length;i++)r[i]=arr[i]*k+r[i-1]*(1-k);return r;}
+function _taRSI(arr,n){const r=new Array(arr.length).fill(null);if(arr.length<n+1)return r;let g=0,l=0;for(let i=1;i<=n;i++){const d=arr[i]-arr[i-1];if(d>0)g+=d;else l-=d;}let ag=g/n,al=l/n;r[n]=al===0?100:100-100/(1+ag/al);for(let i=n+1;i<arr.length;i++){const d=arr[i]-arr[i-1];ag=(ag*(n-1)+(d>0?d:0))/n;al=(al*(n-1)+(d<0?-d:0))/n;r[i]=al===0?100:100-100/(1+ag/al);}return r;}
+
 </script>
 
 <!-- Trade Modal -->
