@@ -482,8 +482,8 @@ body::before {
 
   <!-- CTAs -->
   <div class="cta-row">
-    <a id="ctaPoly" href="https://polymarket.com" target="_blank" rel="noopener" class="cta-primary">
-      Trade on Polymarket &rarr;
+    <a id="ctaPoly" href="#" class="cta-primary">
+      Trade now &rarr;
     </a>
     <a href="/odds" class="cta-secondary">
       Compare odds on HYPERFLEX &rarr;
@@ -532,7 +532,7 @@ body::before {
           <div class="compare-badge poly">POLYMARKET</div>
           <div class="compare-price" id="polyYes">--</div>
           <div class="compare-label">YES</div>
-          <a id="polyLink" href="#" target="_blank" rel="noopener" class="compare-cta">Trade &rarr;</a>
+          <a id="polyLink" href="#" class="compare-cta">Trade &rarr;</a>
         </div>
         <div class="compare-col" id="kalshiCol" style="display:none">
           <div class="compare-badge kalshi">KALSHI</div>
@@ -645,12 +645,14 @@ function renderMarket(d) {
   document.getElementById('roiPay').textContent = '$' + cost;
   document.getElementById('roiPct').textContent = 'ROI: ' + roi + '%';
 
-  // CTAs
-  document.getElementById('ctaPoly').href = polyRef(d.polymarket_url || ('https://polymarket.com/event/' + encodeURIComponent(SLUG)));
+  // CTAs — route through our internal trade widget so the order earns
+  // builder fees. polyRef(polymarket.com) only captures referral attribution;
+  // /market/:slug captures the full builder fee on every CLOB order.
+  document.getElementById('ctaPoly').href = '/market/' + encodeURIComponent(SLUG);
 
-  // Compare section
+  // Compare section — Polymarket column also routes through our widget
   document.getElementById('polyYes').textContent = yesP + '%';
-  document.getElementById('polyLink').href = polyRef(d.polymarket_url || '#');
+  document.getElementById('polyLink').href = '/market/' + encodeURIComponent(SLUG);
 
   // Try Kalshi match
   searchKalshi(d.title);
