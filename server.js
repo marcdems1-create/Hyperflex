@@ -23296,6 +23296,125 @@ app.get('/api/whale-alerts', requireAuth, async (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════
+// SMART PRICE ALERTS
+// ═══════════════════════════════════════
+
+// Create a price alert
+app.post('/api/price-alerts', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { condition_id, slug, question, direction, threshold, side } = req.body;
+    if (!condition_id || !direction || threshold == null) {
+      return res.status(400).json({ error: 'condition_id, direction, threshold required' });
+    }
+    if (!['above', 'below'].includes(direction)) {
+      return res.status(400).json({ error: 'direction must be above or below' });
+    }
+    const safeSide = side === 'no' ? 'no' : 'yes';
+    const t = parseFloat(threshold);
+    if (isNaN(t) || t < 0 || t > 1) {
+      return res.status(400).json({ error: 'threshold must be 0-1' });
+    }
+
+    // Limit 20 active alerts per user
+    let count = 0;
+    if (pool) {
+      const rows = await dbQuery('SELECT COUNT(*)::int as c FROM price_alerts WHERE user_id = $1 AND triggered = false', [userId]);
+      count = rows[0]?.c || 0;
+    } else {
+      const { data } = await supabase.from('price_alerts').select('id', { count: 'exact' }).eq('user_id', userId).eq('triggered', false);
+      count = data?.length || 0;
+    }
+    if (count >= 20) return res.status(400).json({ error: 'Max 20 active alerts' });
+
+    if (pool) {
+      const rows = await dbQuery(
+        `INSERT INTO price_alerts (user_id, condition_id, slug, question, direction, threshold, side)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (user_id, condition_id, direction, threshold, side) DO NOTHING
+         RETURNING *`,
+        [userId, condition_id, slug || null, question || null, direction, t, safeSide]
+      );
+      if (!rows.length) return res.status(409).json({ error: 'Alert already exists' });
+      return res.json({ alert: rows[0] });
+    } else {
+      const { data, error } = await supabase.from('price_alerts').insert({
+        user_id: userId, condition_id, slug: slug || null, question: question || null,
+        direction, threshold: t, side: safeSide
+      }).select().single();
+      if (error) {
+        if (error.code === '23505') return res.status(409).json({ error: 'Alert already exists' });
+        throw error;
+      }
+      return res.json({ alert: data });
+    }
+  } catch (err) {
+    console.error('[price-alerts] Create error:', err.message);
+    res.status(500).json({ error: 'Failed to create alert' });
+  }
+});
+
+// List user's price alerts
+app.get('/api/price-alerts', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    let rows;
+    if (pool) {
+      rows = await dbQuery(
+        'SELECT * FROM price_alerts WHERE user_id = $1 ORDER BY triggered ASC, created_at DESC',
+        [userId]
+      );
+    } else {
+      const { data } = await supabase.from('price_alerts').select('*')
+        .eq('user_id', userId).order('triggered').order('created_at', { ascending: false });
+      rows = data || [];
+    }
+    res.json({ alerts: rows });
+  } catch (err) {
+    console.error('[price-alerts] List error:', err.message);
+    res.status(500).json({ error: 'Failed to list alerts' });
+  }
+});
+
+// Delete a price alert
+app.delete('/api/price-alerts/:id', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    if (pool) {
+      await dbQuery('DELETE FROM price_alerts WHERE id = $1 AND user_id = $2', [req.params.id, userId]);
+    } else {
+      await supabase.from('price_alerts').delete().eq('id', req.params.id).eq('user_id', userId);
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[price-alerts] Delete error:', err.message);
+    res.status(500).json({ error: 'Failed to delete alert' });
+  }
+});
+
+// Get alerts for a specific market (for the bell icon state)
+app.get('/api/price-alerts/market/:conditionId', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    let rows;
+    if (pool) {
+      rows = await dbQuery(
+        'SELECT * FROM price_alerts WHERE user_id = $1 AND condition_id = $2 ORDER BY created_at DESC',
+        [userId, req.params.conditionId]
+      );
+    } else {
+      const { data } = await supabase.from('price_alerts').select('*')
+        .eq('user_id', userId).eq('condition_id', req.params.conditionId)
+        .order('created_at', { ascending: false });
+      rows = data || [];
+    }
+    res.json({ alerts: rows });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed' });
+  }
+});
+
 // ── AI MARKET ANALYSIS ────────────────────────────────────────────────────
 const _aiAnalysisRateLimit = new Map(); // ip -> { count, resetAt }
 
@@ -29704,6 +29823,131 @@ async function gradeExpiredPredictions() {
 }
 
 cron.schedule('*/30 * * * *', () => { console.log('[accuracy/grade] Cron triggered'); gradeExpiredPredictions().catch(err => console.error('[accuracy/grade] Cron error:', err.message)); });
+
+// ── Price Alert Checker (every 2 min) ──
+cron.schedule('*/2 * * * *', safeCron('checkPriceAlerts', async () => {
+  // Get current market prices from screener cache
+  let markets;
+  try {
+    markets = await buildAlphaList();
+  } catch (e) {
+    return;
+  }
+  if (!markets || !markets.length) return;
+
+  // Build price lookup by conditionId
+  const priceMap = {};
+  markets.forEach(m => {
+    if (m.conditionId || m.market_id) {
+      const cid = m.conditionId || m.market_id;
+      priceMap[cid] = {
+        yes: parseFloat(m.yes_price) || 0,
+        no: 1 - (parseFloat(m.yes_price) || 0),
+        question: m.question,
+        slug: m.slug
+      };
+    }
+  });
+
+  // Fetch active (untriggered) alerts
+  let alerts;
+  if (pool) {
+    alerts = await dbQuery(
+      `SELECT * FROM price_alerts
+       WHERE triggered = false
+       AND (snoozed_until IS NULL OR snoozed_until < NOW())`
+    );
+  } else {
+    const { data } = await supabase.from('price_alerts').select('*')
+      .eq('triggered', false).or('snoozed_until.is.null,snoozed_until.lt.' + new Date().toISOString());
+    alerts = data || [];
+  }
+
+  if (!alerts.length) return;
+
+  let triggered = 0;
+  for (const alert of alerts) {
+    const priceData = priceMap[alert.condition_id];
+    if (!priceData) continue;
+
+    const currentPrice = alert.side === 'no' ? priceData.no : priceData.yes;
+    const threshold = parseFloat(alert.threshold);
+
+    let shouldFire = false;
+    if (alert.direction === 'above' && currentPrice >= threshold) shouldFire = true;
+    if (alert.direction === 'below' && currentPrice <= threshold) shouldFire = true;
+
+    if (!shouldFire) continue;
+
+    // Mark as triggered
+    if (pool) {
+      await dbQuery(
+        'UPDATE price_alerts SET triggered = true, triggered_at = NOW(), triggered_price = $1 WHERE id = $2',
+        [currentPrice, alert.id]
+      );
+    } else {
+      await supabase.from('price_alerts').update({
+        triggered: true, triggered_at: new Date().toISOString(), triggered_price: currentPrice
+      }).eq('id', alert.id);
+    }
+
+    // Format price as cents
+    const priceCents = Math.round(currentPrice * 100);
+    const threshCents = Math.round(threshold * 100);
+    const dir = alert.direction === 'above' ? '📈' : '📉';
+    const sideLabel = alert.side === 'no' ? 'NO' : 'YES';
+    const q = alert.question || priceData.question || 'Market';
+    const shortQ = q.length > 60 ? q.substring(0, 57) + '...' : q;
+
+    // In-app notification
+    pushNotification(
+      alert.user_id,
+      'price_alert',
+      `${dir} ${sideLabel} hit ${priceCents}¢`,
+      shortQ,
+      alert.condition_id,
+      null
+    );
+
+    // Web push notification
+    if (webpush) {
+      try {
+        let subs;
+        if (pool) {
+          subs = await dbQuery('SELECT * FROM push_subscriptions WHERE user_id = $1', [alert.user_id]);
+        } else {
+          const { data } = await supabase.from('push_subscriptions').select('*').eq('user_id', alert.user_id);
+          subs = data || [];
+        }
+        const slug = alert.slug || priceData.slug;
+        const payload = JSON.stringify({
+          title: `${dir} Price Alert: ${sideLabel} ${priceCents}¢`,
+          body: shortQ,
+          icon: '/icon-192.png',
+          badge: '/icon-192.png',
+          data: { url: slug ? '/market/' + slug : '/' }
+        });
+        for (const sub of subs) {
+          webpush.sendNotification(
+            { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+            payload
+          ).catch(err => {
+            if (err.statusCode === 410 || err.statusCode === 404) {
+              if (pool) dbQuery('DELETE FROM push_subscriptions WHERE endpoint = $1', [sub.endpoint]).catch(() => {});
+              else supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint).then(() => {});
+            }
+          });
+        }
+      } catch (pushErr) {
+        console.error('[price-alerts] Push error:', pushErr.message);
+      }
+    }
+
+    triggered++;
+  }
+
+  if (triggered > 0) console.log(`[price-alerts] Triggered ${triggered} alerts`);
+}));
 
 // GET /accuracy — Accuracy tracking page
 app.get('/accuracy', (req, res) => res.sendFile(path.join(__dirname, 'public', 'accuracy.html')));

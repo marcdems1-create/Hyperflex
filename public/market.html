@@ -214,6 +214,13 @@ canvas{display:block;width:100%!important}
       <div class="mkt-back" onclick="history.back()">← Back</div>
       <h1 class="mkt-title" id="mktTitle">Loading...</h1>
 
+      <div id="marketActions" style="display:flex;align-items:center;gap:8px;margin:8px 0 12px;flex-wrap:wrap">
+        <button id="alertBellBtn" onclick="openAlertModal()" style="display:none;align-items:center;gap:6px;padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:rgba(255,255,255,0.03);color:var(--text);cursor:pointer;font-family:var(--sans);font-size:12px;font-weight:600;transition:all .15s;min-height:40px" onmouseover="this.style.borderColor='#f59e0b';this.style.background='rgba(245,158,11,0.08)'" onmouseout="this.style.borderColor='var(--border)';this.style.background='rgba(255,255,255,0.03)'">
+          🔔 <span id="alertBellLabel">Set Alert</span>
+        </button>
+        <div id="activeAlertsBadge" style="display:none;font-family:var(--sans);font-size:11px;color:#f59e0b;padding:4px 10px;border-radius:6px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.2)"></div>
+      </div>
+
       <!-- Stats -->
       <div class="mkt-stats">
         <div class="mkt-stat">
@@ -664,6 +671,7 @@ function renderMarket() {
     drawChart(_priceHistory); setTimeout(applyTA, 150);
   }
   renderOrderbook();
+  setTimeout(updateAlertBell, 300);
 }
 
 // ── Outcomes Table ────────────────────────────────────────────────────────────
@@ -3613,6 +3621,305 @@ loadMarket = async function() {
   if (slug) loadMarketComments(slug);
   return result;
 };
+</script>
+
+<!-- Price Alert Modal -->
+<div id="alertModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.6);align-items:center;justify-content:center;padding:16px">
+  <div style="width:100%;max-width:400px;background:#0c0c0b;border:1px solid #1a1917;border-radius:16px;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,0.5)">
+    <div style="padding:20px 20px 0;display:flex;align-items:center;justify-content:space-between">
+      <div style="font-family:var(--sans);font-size:16px;font-weight:700;color:var(--text)">🔔 Set Price Alert</div>
+      <button onclick="closeAlertModal()" style="background:none;border:none;color:var(--soft);font-size:20px;cursor:pointer;padding:4px">✕</button>
+    </div>
+    <div id="alertModalQuestion" style="padding:8px 20px 0;font-family:var(--sans);font-size:12px;color:var(--soft);line-height:1.4;max-height:40px;overflow:hidden;text-overflow:ellipsis"></div>
+    <div style="padding:16px 20px 20px">
+      <!-- Side toggle -->
+      <div style="margin-bottom:14px">
+        <div style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--soft);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">Side</div>
+        <div style="display:flex;gap:8px">
+          <button id="alertSideYes" onclick="setAlertSide('yes')" style="flex:1;padding:10px;border-radius:8px;border:2px solid #00e68a;background:rgba(0,230,138,0.1);color:#00e68a;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;min-height:44px">YES</button>
+          <button id="alertSideNo" onclick="setAlertSide('no')" style="flex:1;padding:10px;border-radius:8px;border:2px solid #1a1917;background:transparent;color:var(--soft);font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;min-height:44px">NO</button>
+        </div>
+      </div>
+      <!-- Direction -->
+      <div style="margin-bottom:14px">
+        <div style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--soft);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">Alert when price goes</div>
+        <div style="display:flex;gap:8px">
+          <button id="alertDirBelow" onclick="setAlertDir('below')" style="flex:1;padding:10px;border-radius:8px;border:2px solid #f59e0b;background:rgba(245,158,11,0.1);color:#f59e0b;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;min-height:44px">📉 Below</button>
+          <button id="alertDirAbove" onclick="setAlertDir('above')" style="flex:1;padding:10px;border-radius:8px;border:2px solid #1a1917;background:transparent;color:var(--soft);font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;min-height:44px">📈 Above</button>
+        </div>
+      </div>
+      <!-- Threshold -->
+      <div style="margin-bottom:16px">
+        <div style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--soft);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">Price threshold</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <input id="alertThreshold" type="range" min="1" max="99" value="50" oninput="updateAlertPreview()" style="flex:1;accent-color:#f59e0b;height:6px">
+          <div id="alertThresholdDisplay" style="font-family:var(--sans);font-size:20px;font-weight:800;color:var(--text);min-width:50px;text-align:right">50¢</div>
+        </div>
+        <div id="alertCurrentPrice" style="font-family:var(--sans);font-size:11px;color:var(--soft);margin-top:4px"></div>
+      </div>
+      <!-- Preview -->
+      <div id="alertPreview" style="padding:12px;border-radius:8px;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.15);margin-bottom:16px;font-family:var(--sans);font-size:12px;color:#f59e0b;line-height:1.5;text-align:center"></div>
+      <!-- Submit -->
+      <button id="alertSubmitBtn" onclick="submitAlert()" style="width:100%;padding:14px;border:none;border-radius:10px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#0c0c0b;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;min-height:48px;transition:all .15s" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter='brightness(1)'">
+        🔔 Create Alert
+      </button>
+      <!-- Existing alerts for this market -->
+      <div id="alertExistingList" style="margin-top:16px"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Price Alerts ──
+var _alertSide = 'yes';
+var _alertDir = 'below';
+
+function openAlertModal() {
+  var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+  if (!token) {
+    alert('Sign in to set price alerts');
+    return;
+  }
+  var modal = document.getElementById('alertModal');
+  modal.style.display = 'flex';
+  document.getElementById('alertModalQuestion').textContent = _market ? (_market._displayTitle || _market.question || '') : '';
+
+  // Set current price display
+  var prices = _market && _market.outcomePrices ? JSON.parse(_market.outcomePrices) : [0.5, 0.5];
+  var cp = Math.round(parseFloat(prices[0]) * 100);
+  document.getElementById('alertCurrentPrice').textContent = 'Current YES price: ' + cp + '\u00a2';
+
+  // Default threshold: 5 below current for 'below', 5 above for 'above'
+  var defaultVal = _alertDir === 'below' ? Math.max(1, cp - 5) : Math.min(99, cp + 5);
+  document.getElementById('alertThreshold').value = defaultVal;
+
+  setAlertSide('yes');
+  setAlertDir('below');
+  updateAlertPreview();
+  loadMarketAlerts();
+}
+
+function closeAlertModal() {
+  document.getElementById('alertModal').style.display = 'none';
+}
+
+// Close on backdrop click
+document.getElementById('alertModal').addEventListener('click', function(e) {
+  if (e.target === this) closeAlertModal();
+});
+
+function setAlertSide(side) {
+  _alertSide = side;
+  var yesBtn = document.getElementById('alertSideYes');
+  var noBtn = document.getElementById('alertSideNo');
+  if (side === 'yes') {
+    yesBtn.style.border = '2px solid #00e68a';
+    yesBtn.style.background = 'rgba(0,230,138,0.1)';
+    yesBtn.style.color = '#00e68a';
+    noBtn.style.border = '2px solid #1a1917';
+    noBtn.style.background = 'transparent';
+    noBtn.style.color = 'var(--soft)';
+  } else {
+    noBtn.style.border = '2px solid #ff6b6b';
+    noBtn.style.background = 'rgba(255,107,107,0.1)';
+    noBtn.style.color = '#ff6b6b';
+    yesBtn.style.border = '2px solid #1a1917';
+    yesBtn.style.background = 'transparent';
+    yesBtn.style.color = 'var(--soft)';
+  }
+  updateAlertPreview();
+}
+
+function setAlertDir(dir) {
+  _alertDir = dir;
+  var belowBtn = document.getElementById('alertDirBelow');
+  var aboveBtn = document.getElementById('alertDirAbove');
+  if (dir === 'below') {
+    belowBtn.style.border = '2px solid #f59e0b';
+    belowBtn.style.background = 'rgba(245,158,11,0.1)';
+    belowBtn.style.color = '#f59e0b';
+    aboveBtn.style.border = '2px solid #1a1917';
+    aboveBtn.style.background = 'transparent';
+    aboveBtn.style.color = 'var(--soft)';
+  } else {
+    aboveBtn.style.border = '2px solid #f59e0b';
+    aboveBtn.style.background = 'rgba(245,158,11,0.1)';
+    aboveBtn.style.color = '#f59e0b';
+    belowBtn.style.border = '2px solid #1a1917';
+    belowBtn.style.background = 'transparent';
+    belowBtn.style.color = 'var(--soft)';
+  }
+  // Adjust default threshold based on direction
+  var prices = _market && _market.outcomePrices ? JSON.parse(_market.outcomePrices) : [0.5, 0.5];
+  var cp = _alertSide === 'no' ? Math.round((1 - parseFloat(prices[0])) * 100) : Math.round(parseFloat(prices[0]) * 100);
+  var slider = document.getElementById('alertThreshold');
+  if (dir === 'below') {
+    slider.value = Math.max(1, cp - 5);
+  } else {
+    slider.value = Math.min(99, cp + 5);
+  }
+  updateAlertPreview();
+}
+
+function updateAlertPreview() {
+  var val = document.getElementById('alertThreshold').value;
+  document.getElementById('alertThresholdDisplay').textContent = val + '\u00a2';
+  var sideLabel = _alertSide.toUpperCase();
+  var dirLabel = _alertDir === 'below' ? 'drops to or below' : 'rises to or above';
+  var emoji = _alertDir === 'below' ? '📉' : '📈';
+  document.getElementById('alertPreview').innerHTML = emoji + ' Alert when <b>' + sideLabel + '</b> ' + dirLabel + ' <b>' + val + '\u00a2</b>';
+
+  // Update current price for selected side
+  var prices = _market && _market.outcomePrices ? JSON.parse(_market.outcomePrices) : [0.5, 0.5];
+  var cp = _alertSide === 'no' ? Math.round((1 - parseFloat(prices[0])) * 100) : Math.round(parseFloat(prices[0]) * 100);
+  document.getElementById('alertCurrentPrice').textContent = 'Current ' + sideLabel + ' price: ' + cp + '\u00a2';
+}
+
+function submitAlert() {
+  var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+  if (!token) return;
+  var threshold = parseInt(document.getElementById('alertThreshold').value) / 100;
+  var conditionId = _market.conditionId || _market.market_id || '';
+  var slug = '';
+  try { slug = window.location.pathname.split('/market/')[1] || ''; } catch(e) {}
+
+  var btn = document.getElementById('alertSubmitBtn');
+  btn.textContent = 'Creating...';
+  btn.disabled = true;
+
+  fetch('/api/price-alerts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+    body: JSON.stringify({
+      condition_id: conditionId,
+      slug: slug,
+      question: _market._displayTitle || _market.question || '',
+      direction: _alertDir,
+      threshold: threshold,
+      side: _alertSide
+    })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    btn.textContent = '🔔 Create Alert';
+    btn.disabled = false;
+    if (data.error) {
+      alert(data.error);
+      return;
+    }
+    // Show success
+    btn.textContent = '✓ Alert Created!';
+    btn.style.background = 'linear-gradient(135deg,#00e68a,#00b36b)';
+    setTimeout(function() {
+      btn.textContent = '🔔 Create Alert';
+      btn.style.background = 'linear-gradient(135deg,#f59e0b,#d97706)';
+    }, 2000);
+    loadMarketAlerts();
+    updateAlertBell();
+  })
+  .catch(function() {
+    btn.textContent = '🔔 Create Alert';
+    btn.disabled = false;
+  });
+}
+
+function loadMarketAlerts() {
+  var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+  if (!token || !_market) return;
+  var conditionId = _market.conditionId || _market.market_id || '';
+  fetch('/api/price-alerts/market/' + encodeURIComponent(conditionId), {
+    headers: { 'Authorization': 'Bearer ' + token }
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    var list = document.getElementById('alertExistingList');
+    if (!data.alerts || !data.alerts.length) {
+      list.innerHTML = '';
+      return;
+    }
+    var activeAlerts = data.alerts.filter(function(a) { return !a.triggered; });
+    var triggeredAlerts = data.alerts.filter(function(a) { return a.triggered; });
+
+    var html = '';
+    if (activeAlerts.length) {
+      html += '<div style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--soft);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">Active Alerts</div>';
+      activeAlerts.forEach(function(a) {
+        var emoji = a.direction === 'below' ? '📉' : '📈';
+        var priceCents = Math.round(parseFloat(a.threshold) * 100);
+        html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:rgba(245,158,11,0.05);border:1px solid rgba(245,158,11,0.12);border-radius:6px;margin-bottom:6px">' +
+          '<span style="font-family:var(--sans);font-size:12px;color:var(--text)">' + emoji + ' ' + a.side.toUpperCase() + ' ' + a.direction + ' ' + priceCents + '\u00a2</span>' +
+          '<button onclick="deleteAlert(\'' + a.id + '\')" style="background:none;border:none;color:#ff6b6b;cursor:pointer;font-size:14px;padding:4px 8px" title="Delete">\u2715</button>' +
+        '</div>';
+      });
+    }
+    if (triggeredAlerts.length) {
+      html += '<div style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--soft);margin-top:10px;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">Triggered</div>';
+      triggeredAlerts.slice(0, 3).forEach(function(a) {
+        var emoji = a.direction === 'below' ? '📉' : '📈';
+        var priceCents = Math.round(parseFloat(a.threshold) * 100);
+        var triggeredCents = a.triggered_price ? Math.round(parseFloat(a.triggered_price) * 100) + '\u00a2' : '';
+        html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:rgba(255,255,255,0.02);border:1px solid #1a1917;border-radius:6px;margin-bottom:6px;opacity:0.6">' +
+          '<span style="font-family:var(--sans);font-size:12px;color:var(--soft)">' + emoji + ' ' + a.side.toUpperCase() + ' ' + a.direction + ' ' + priceCents + '\u00a2' + (triggeredCents ? ' \u2192 hit ' + triggeredCents : '') + '</span>' +
+          '<button onclick="deleteAlert(\'' + a.id + '\')" style="background:none;border:none;color:var(--soft);cursor:pointer;font-size:12px;padding:4px 8px" title="Remove">\u2715</button>' +
+        '</div>';
+      });
+    }
+    list.innerHTML = html;
+  })
+  .catch(function() {});
+}
+
+function deleteAlert(id) {
+  var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+  if (!token) return;
+  fetch('/api/price-alerts/' + id, {
+    method: 'DELETE',
+    headers: { 'Authorization': 'Bearer ' + token }
+  })
+  .then(function() {
+    loadMarketAlerts();
+    updateAlertBell();
+  })
+  .catch(function() {});
+}
+
+function updateAlertBell() {
+  var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+  var bellBtn = document.getElementById('alertBellBtn');
+  var badge = document.getElementById('activeAlertsBadge');
+  if (!token || !_market) {
+    if (bellBtn) bellBtn.style.display = 'none';
+    return;
+  }
+  if (bellBtn) bellBtn.style.display = 'inline-flex';
+
+  var conditionId = _market.conditionId || _market.market_id || '';
+  fetch('/api/price-alerts/market/' + encodeURIComponent(conditionId), {
+    headers: { 'Authorization': 'Bearer ' + token }
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    var active = (data.alerts || []).filter(function(a) { return !a.triggered; });
+    if (active.length) {
+      document.getElementById('alertBellLabel').textContent = active.length + ' Alert' + (active.length > 1 ? 's' : '');
+      bellBtn.style.borderColor = '#f59e0b';
+      bellBtn.style.background = 'rgba(245,158,11,0.08)';
+      badge.style.display = 'inline-block';
+      // Show summary
+      var summaries = active.map(function(a) {
+        var emoji = a.direction === 'below' ? '📉' : '📈';
+        return emoji + ' ' + a.side.toUpperCase() + ' ' + a.direction + ' ' + Math.round(parseFloat(a.threshold) * 100) + '\u00a2';
+      });
+      badge.textContent = summaries.join(' \u00b7 ');
+    } else {
+      document.getElementById('alertBellLabel').textContent = 'Set Alert';
+      bellBtn.style.borderColor = 'var(--border)';
+      bellBtn.style.background = 'rgba(255,255,255,0.03)';
+      badge.style.display = 'none';
+    }
+  })
+  .catch(function() {});
+}
 </script>
 </body>
 </html>
