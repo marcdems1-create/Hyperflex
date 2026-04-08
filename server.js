@@ -19926,6 +19926,49 @@ async function _buildAlphaListInner(opts = {}) {
       }
     }
 
+    // ── WHALE VELOCITY — whales who JUST opened/increased positions ──
+    // The single biggest 5-minute alpha signal. A whale who bought 8 minutes ago
+    // is a completely different signal from one who's been holding 3 weeks.
+    // Reads Marc's _whaleTradeStream (newest-first, capped at 100), filters to
+    // 'opened' / 'increased' events in the last 60 minutes, and builds a map
+    // keyed by lowercased question text (stream events don't carry conditionId
+    // but the question is consistent with gamma market titles).
+    const velocityByMarket = new Map(); // lowercase question -> { count, totalCapital, topPnl, mostRecentMs, side, traderName }
+    try {
+      const nowMsForVel = Date.now();
+      const sixtyMinAgo = nowMsForVel - 60 * 60 * 1000;
+      for (const evt of (_whaleTradeStream || [])) {
+        if (evt.action !== 'opened' && evt.action !== 'increased') continue;
+        const evtMs = new Date(evt.ts || 0).getTime();
+        if (!evtMs || evtMs < sixtyMinAgo) continue;
+        const key = (evt.question || '').toLowerCase().trim();
+        if (!key) continue;
+        const size = parseFloat(evt.size) || 0;
+        if (size < 1000) continue; // ignore micro-moves
+        const pnl = parseFloat(evt.trader_pnl) || 0;
+        const existing = velocityByMarket.get(key);
+        if (existing) {
+          existing.count++;
+          existing.totalCapital += size;
+          if (pnl > existing.topPnl) existing.topPnl = pnl;
+          if (evtMs > existing.mostRecentMs) {
+            existing.mostRecentMs = evtMs;
+            existing.side = evt.side || existing.side;
+            existing.traderName = evt.trader_name || existing.traderName;
+          }
+        } else {
+          velocityByMarket.set(key, {
+            count: 1,
+            totalCapital: size,
+            topPnl: pnl,
+            mostRecentMs: evtMs,
+            side: evt.side || 'YES',
+            traderName: evt.trader_name || 'whale'
+          });
+        }
+      }
+    } catch (e) { /* silent — velocity is additive, never breaks the pipeline */ }
+
     // Build enriched market list (filter expired markets)
     const now = new Date();
     const markets = [];
@@ -20029,6 +20072,22 @@ async function _buildAlphaListInner(opts = {}) {
         if (newsInfo.sentiment && newsInfo.sentiment !== 'neutral') edgeNews += 3;
         edgeNews = Math.min(15, edgeNews);
       }
+      // Whale velocity: whales who JUST opened / increased positions in the
+      // last 60 min. This is the hottest 5-minute signal — smart money moving
+      // RIGHT NOW, before the price catches up. Base +6 for any recent event,
+      // +4 for multiple whales, +3 if within last 10 min, +3 for high-PnL
+      // trader ($5M+), +2 for $50k+ total recent capital. Capped at 16.
+      let edgeWhaleVelocity = 0;
+      const velocityInfo = velocityByMarket.size > 0 ? velocityByMarket.get(qLower) : null;
+      if (velocityInfo) {
+        edgeWhaleVelocity = 6;
+        if (velocityInfo.count >= 2) edgeWhaleVelocity += 4;
+        const minutesAgo = Math.round((Date.now() - velocityInfo.mostRecentMs) / 60000);
+        if (minutesAgo <= 10) edgeWhaleVelocity += 3;
+        if (velocityInfo.topPnl >= 5000000) edgeWhaleVelocity += 3;
+        if (velocityInfo.totalCapital >= 50000) edgeWhaleVelocity += 2;
+        edgeWhaleVelocity = Math.min(16, edgeWhaleVelocity);
+      }
       // Momentum + expiry only fire on liquid markets (>$50k vol). Otherwise it's just noise.
       const liquid = volume >= 50000;
       const edgeMomentum = liquid ? Math.min(15, Math.abs(pChange || 0) * 1.5) : 0;
@@ -20049,7 +20108,7 @@ async function _buildAlphaListInner(opts = {}) {
           else edgeDecay = 4;
         }
       }
-      const edgeScore = Math.min(99, Math.round(edgeWhale + edgeCapital + edgeMomentum + edgeVolume + edgeMega + edgeExpiry + edgeDivergence + edgeDecay + edgeNews));
+      const edgeScore = Math.min(99, Math.round(edgeWhale + edgeCapital + edgeMomentum + edgeVolume + edgeMega + edgeExpiry + edgeDivergence + edgeDecay + edgeNews + edgeWhaleVelocity));
 
       // ── Trade ROI ──
       let trade = null;
@@ -20151,6 +20210,7 @@ async function _buildAlphaListInner(opts = {}) {
       // this as bullets / badges / urgency dot without parsing the free-text hook.
       const _components = {
         whale: edgeWhale,
+        whale_velocity: edgeWhaleVelocity,
         depth: 0, // populated post-CLOB depth fetch — placeholder here
         decay: edgeDecay,
         mega: edgeMega,
@@ -20184,13 +20244,27 @@ async function _buildAlphaListInner(opts = {}) {
       if (_smartDir === 'neutral' && newsInfo && newsInfo.sentiment !== 'neutral') {
         _smartDir = newsInfo.sentiment === 'positive' ? 'bullish' : 'bearish';
       }
-      // Urgency: news-driven > decay > imminent expiry > medium score > low.
-      // News is the loudest 5-minute signal — a breaking headline closes the
-      // edge window fast as the market reprices.
+      // Fall back to whale velocity side if still neutral (most recent event side)
+      if (_smartDir === 'neutral' && velocityInfo && velocityInfo.side) {
+        const vSide = velocityInfo.side.toUpperCase();
+        if (vSide === 'YES' || vSide === 'UP') _smartDir = 'bullish';
+        else if (vSide === 'NO' || vSide === 'DOWN') _smartDir = 'bearish';
+      }
+      // Urgency tiering by signal freshness:
+      // whale_velocity (just moved) > news (breaking) > decay > imminent expiry > medium.
+      // Whale velocity is the single strongest 5-minute signal — smart money is
+      // repositioning RIGHT NOW, window closes as the price catches up.
       let _urgency = 'low';
       let _urgencyReason = null;
       let _expiresIn = null;
-      if (edgeNews >= 12 && newsInfo) {
+      if (edgeWhaleVelocity >= 10 && velocityInfo) {
+        _urgency = 'high';
+        const minsAgo = Math.max(1, Math.round((Date.now() - velocityInfo.mostRecentMs) / 60000));
+        const capDisplay = velocityInfo.totalCapital >= 1000000
+          ? '$' + (velocityInfo.totalCapital / 1000000).toFixed(1) + 'M'
+          : '$' + Math.round(velocityInfo.totalCapital / 1000) + 'k';
+        _urgencyReason = 'Whale just bought ' + capDisplay + ' · ' + minsAgo + 'm ago';
+      } else if (edgeNews >= 12 && newsInfo) {
         _urgency = 'high';
         const headline = (newsInfo.headline || '').slice(0, 70);
         _urgencyReason = headline ? 'News-driven · "' + headline + '"' : 'News-driven · breaking headline';
@@ -20200,6 +20274,9 @@ async function _buildAlphaListInner(opts = {}) {
       } else if (daysUntilExpiry != null && daysUntilExpiry <= 1 && volume >= 50000) {
         _urgency = 'high';
         _urgencyReason = 'Expires in ' + (daysUntilExpiry === 0 ? '<24h' : '1d');
+      } else if (edgeWhaleVelocity > 0 && velocityInfo) {
+        _urgency = 'medium';
+        _urgencyReason = 'Whale activity · ' + velocityInfo.count + ' recent move' + (velocityInfo.count > 1 ? 's' : '');
       } else if (edgeNews > 0 && newsInfo) {
         _urgency = 'medium';
         _urgencyReason = 'Matched news · "' + (newsInfo.headline || '').slice(0, 60) + '"';
@@ -20245,6 +20322,7 @@ async function _buildAlphaListInner(opts = {}) {
         edge_score: edgeScore,
         edge_components: {
           whale: Math.round(edgeWhale),
+          whale_velocity: Math.round(edgeWhaleVelocity),
           capital: Math.round(edgeCapital),
           momentum: Math.round(edgeMomentum),
           volume: Math.round(edgeVolume),
@@ -20258,6 +20336,14 @@ async function _buildAlphaListInner(opts = {}) {
         news_headline: newsInfo ? newsInfo.headline : null,
         news_source: newsInfo ? newsInfo.source : null,
         news_sentiment: newsInfo ? newsInfo.sentiment : null,
+        whale_velocity_event: velocityInfo ? {
+          count: velocityInfo.count,
+          total_capital: Math.round(velocityInfo.totalCapital),
+          top_pnl: Math.round(velocityInfo.topPnl),
+          minutes_ago: Math.max(1, Math.round((Date.now() - velocityInfo.mostRecentMs) / 60000)),
+          side: velocityInfo.side,
+          trader_name: velocityInfo.traderName
+        } : null,
         alpha_score: 0, // populated after whale index is ready
         model_probability: modelProb != null ? parseFloat(modelProb.toFixed(3)) : null,
         alpha_edge: alphaEdge,
