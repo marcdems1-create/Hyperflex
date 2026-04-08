@@ -2091,45 +2091,36 @@ async function checkTradingSetup() {
   }
 }
 
-// Cached ethers v6 provider/signer.
-// ethers.BrowserProvider fires `eth_requestAccounts` once per instance via its
-// internal _start() the first time send()/getSigner() is called. On mobile
-// MetaMask, firing a second eth_requestAccounts while the first is still
-// settling returns EIP-1193 code -32002 ("request already pending").
-// We cache the first provider+signer from enableTrading/runFullSetup and
-// reuse them on every subsequent trade so the trade flow never re-triggers
-// the account request.
-var _cachedBrowserProvider = null;
+// Cached ethers v6 signer. BrowserProvider fires `eth_requestAccounts` once
+// per instance via internal _start(); on mobile MetaMask, overlapping calls
+// return EIP-1193 -32002 "request already pending". We cache the first signer
+// from enableTrading/runFullSetup and reuse it on every subsequent trade so
+// the trade flow never re-triggers the account request.
 var _cachedSigner = null;
+var _cachedSignerAddress = null;
 
-// Get a live signer without re-firing eth_requestAccounts when already
-// connected. Returns { provider, signer, address }. Used by the trade flow.
 async function getTradingSigner() {
-  if (_cachedBrowserProvider && _cachedSigner) {
-    try {
-      var cachedAddr = await _cachedSigner.getAddress();
-      if (cachedAddr) return { provider: _cachedBrowserProvider, signer: _cachedSigner, address: cachedAddr };
-    } catch (e) { /* cache stale, fall through */ }
+  if (_cachedSigner && _cachedSignerAddress) {
+    return { provider: _cachedSigner.provider, signer: _cachedSigner, address: _cachedSignerAddress };
   }
   if (!window.ethereum) throw new Error('MetaMask required');
-
-  // Silent account check — does NOT prompt the wallet
-  var accounts = [];
-  try {
-    accounts = await window.ethereum.request({ method: 'eth_accounts' }) || [];
-  } catch (e) { /* some wallets reject silently; fall through */ }
-
-  if (!accounts.length) {
-    // No prior permission — have to prompt
-    accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-  }
-  if (!accounts || !accounts.length) throw new Error('No wallet accounts available');
-
   var provider = new ethers.BrowserProvider(window.ethereum);
   var signer = await provider.getSigner();
-  _cachedBrowserProvider = provider;
+  var address = await signer.getAddress();
   _cachedSigner = signer;
-  return { provider: provider, signer: signer, address: accounts[0] };
+  _cachedSignerAddress = address;
+  return { provider: provider, signer: signer, address: address };
+}
+
+// EIP-1193 -32002 "Request already pending" — ethers v6 wraps raw errors
+// inconsistently via `info.error` / `error`, so check every level.
+function is32002Error(err) {
+  if (!err) return false;
+  if (err.code === -32002) return true;
+  if (err.error && err.error.code === -32002) return true;
+  if (err.info && err.info.error && err.info.error.code === -32002) return true;
+  if (err.message && String(err.message).indexOf('-32002') !== -1) return true;
+  return false;
 }
 
 // ── Connect Wallet (derive CLOB API keys via MetaMask EIP-712) ───────────────
@@ -2163,10 +2154,8 @@ async function enableTrading() {
     var provider = new ethers.BrowserProvider(window.ethereum);
     var signer = await provider.getSigner();
     var address = await signer.getAddress();
-    // Populate trade-signer cache so performTrade reuses this instance
-    // and does not fire a second eth_requestAccounts on mobile.
-    _cachedBrowserProvider = provider;
     _cachedSigner = signer;
+    _cachedSignerAddress = address;
 
     // Clear cached credentials if wallet changed
     var cachedEoaAddress = localStorage.getItem('poly_eoa_address');
@@ -2446,9 +2435,8 @@ async function runFullSetup() {
     var provider = new ethers.BrowserProvider(window.ethereum);
     var signer = await provider.getSigner();
     var eoaAddress = await signer.getAddress();
-    // Cache so the subsequent trade reuses this provider instance
-    _cachedBrowserProvider = provider;
     _cachedSigner = signer;
+    _cachedSignerAddress = eoaAddress;
     localStorage.setItem('poly_eoa_address', eoaAddress);
   } catch (e) {
     if (e.code === 'ACTION_REJECTED' || e.code === 4001) {
@@ -2736,14 +2724,10 @@ async function executeTrade() {
     var shares = amount / clobPrice;
 
     showTradeStatus('Connecting to MetaMask...', 'info');
-    // Reuse the cached provider/signer from enableTrading/runFullSetup.
-    // A fresh BrowserProvider here would re-fire eth_requestAccounts and
-    // trigger EIP-1193 -32002 on mobile if the previous request is still
-    // settling (common on MetaMask Mobile / WalletConnect deeplinks).
-    var _ts = await getTradingSigner();
-    var provider = _ts.provider;
-    var signer = _ts.signer;
-    var signerAddress = _ts.address;
+    var walletCtx = await getTradingSigner();
+    var provider = walletCtx.provider;
+    var signer = walletCtx.signer;
+    var signerAddress = walletCtx.address;
 
     if (eoaAddress && signerAddress.toLowerCase() !== eoaAddress.toLowerCase()) {
       // Wallet changed (common on mobile MetaMask) — clear stale keys and adopt new wallet
@@ -3040,22 +3024,13 @@ async function executeTrade() {
     setTimeout(fetchTradeBalance, 2000);
     setTimeout(fetchUserPositions, 3000);
   } catch (err) {
-    // Detect EIP-1193 -32002 "Request already pending" from any nesting level
-    // (ethers v6 wraps the raw error several deep via `info.error` / `error`)
-    var rawMsg = (err && err.message) ? String(err.message) : '';
-    var is32002 = (err && err.code === -32002)
-      || (err && err.error && err.error.code === -32002)
-      || (err && err.info && err.info.error && err.info.error.code === -32002)
-      || rawMsg.indexOf('-32002') !== -1
-      || rawMsg.indexOf('already pending') !== -1;
     if (err.code === 'ACTION_REJECTED' || err.code === 4001) {
       showTradeStatus('Order signing rejected', 'error');
-    } else if (is32002) {
-      // Invalidate stale cache — next tap rebuilds a clean provider
-      _cachedBrowserProvider = null;
+    } else if (is32002Error(err)) {
       _cachedSigner = null;
+      _cachedSignerAddress = null;
       showTradeStatus('A wallet request is already pending. Open your MetaMask app, approve or dismiss the previous request, then tap Buy again.', 'error');
-      console.warn('[trade] -32002 detected, provider cache cleared');
+      console.warn('[trade] -32002 detected, signer cache cleared');
     } else {
       showTradeStatus('Trade error: ' + err.message, 'error');
       console.error('[trade] Error:', err);
@@ -3437,9 +3412,8 @@ setTimeout(function() { checkTradingSetup(); }, 500);
       var cachedEoa = (localStorage.getItem('poly_eoa_address') || '').toLowerCase();
       if (cachedEoa && cachedEoa !== currentEoa) {
         console.warn('[wallet] MetaMask account changed: cached=' + cachedEoa.slice(0,10) + ' current=' + currentEoa.slice(0,10));
-        // Invalidate trade-signer cache — stale signer would sign for wrong EOA
-        _cachedBrowserProvider = null;
         _cachedSigner = null;
+        _cachedSignerAddress = null;
         // Clear stale data — both key naming conventions
         localStorage.removeItem('poly_eoa_address');
         localStorage.removeItem('hf_poly_wallet');
