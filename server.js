@@ -20088,6 +20088,22 @@ async function _buildAlphaListInner(opts = {}) {
         if (velocityInfo.totalCapital >= 50000) edgeWhaleVelocity += 2;
         edgeWhaleVelocity = Math.min(16, edgeWhaleVelocity);
       }
+      // Volume spike: current 24h volume vs 7-day baseline. A market doing
+      // 10× its normal volume = something breaking right now. Only fires when
+      // baseline is meaningful (>$10k) so we don't flag micro-markets.
+      let edgeVolumeSpike = 0;
+      let volumeSpikeRatio = null;
+      if (_volumeBaselineCache && _volumeBaselineCache.data && marketId) {
+        const baseline = _volumeBaselineCache.data[marketId];
+        if (baseline && baseline >= 10000 && volume > 0) {
+          const ratio = volume / baseline;
+          volumeSpikeRatio = parseFloat(ratio.toFixed(2));
+          if (ratio >= 10) edgeVolumeSpike = 12;
+          else if (ratio >= 5) edgeVolumeSpike = 8;
+          else if (ratio >= 3) edgeVolumeSpike = 5;
+          else if (ratio >= 2) edgeVolumeSpike = 3;
+        }
+      }
       // Momentum + expiry only fire on liquid markets (>$50k vol). Otherwise it's just noise.
       const liquid = volume >= 50000;
       const edgeMomentum = liquid ? Math.min(15, Math.abs(pChange || 0) * 1.5) : 0;
@@ -20108,7 +20124,7 @@ async function _buildAlphaListInner(opts = {}) {
           else edgeDecay = 4;
         }
       }
-      const edgeScore = Math.min(99, Math.round(edgeWhale + edgeCapital + edgeMomentum + edgeVolume + edgeMega + edgeExpiry + edgeDivergence + edgeDecay + edgeNews + edgeWhaleVelocity));
+      const edgeScore = Math.min(99, Math.round(edgeWhale + edgeCapital + edgeMomentum + edgeVolume + edgeMega + edgeExpiry + edgeDivergence + edgeDecay + edgeNews + edgeWhaleVelocity + edgeVolumeSpike));
 
       // ── Trade ROI ──
       let trade = null;
@@ -20211,6 +20227,7 @@ async function _buildAlphaListInner(opts = {}) {
       const _components = {
         whale: edgeWhale,
         whale_velocity: edgeWhaleVelocity,
+        volume_spike: edgeVolumeSpike,
         depth: 0, // populated post-CLOB depth fetch — placeholder here
         decay: edgeDecay,
         mega: edgeMega,
@@ -20264,6 +20281,9 @@ async function _buildAlphaListInner(opts = {}) {
           ? '$' + (velocityInfo.totalCapital / 1000000).toFixed(1) + 'M'
           : '$' + Math.round(velocityInfo.totalCapital / 1000) + 'k';
         _urgencyReason = 'Whale just bought ' + capDisplay + ' · ' + minsAgo + 'm ago';
+      } else if (edgeVolumeSpike >= 8 && volumeSpikeRatio) {
+        _urgency = 'high';
+        _urgencyReason = 'Volume spike · ' + volumeSpikeRatio.toFixed(1) + 'x normal · something broke';
       } else if (edgeNews >= 12 && newsInfo) {
         _urgency = 'high';
         const headline = (newsInfo.headline || '').slice(0, 70);
@@ -20277,6 +20297,9 @@ async function _buildAlphaListInner(opts = {}) {
       } else if (edgeWhaleVelocity > 0 && velocityInfo) {
         _urgency = 'medium';
         _urgencyReason = 'Whale activity · ' + velocityInfo.count + ' recent move' + (velocityInfo.count > 1 ? 's' : '');
+      } else if (edgeVolumeSpike > 0 && volumeSpikeRatio) {
+        _urgency = 'medium';
+        _urgencyReason = 'Volume ' + volumeSpikeRatio.toFixed(1) + 'x vs 7d baseline';
       } else if (edgeNews > 0 && newsInfo) {
         _urgency = 'medium';
         _urgencyReason = 'Matched news · "' + (newsInfo.headline || '').slice(0, 60) + '"';
@@ -20323,6 +20346,7 @@ async function _buildAlphaListInner(opts = {}) {
         edge_components: {
           whale: Math.round(edgeWhale),
           whale_velocity: Math.round(edgeWhaleVelocity),
+          volume_spike: Math.round(edgeVolumeSpike),
           capital: Math.round(edgeCapital),
           momentum: Math.round(edgeMomentum),
           volume: Math.round(edgeVolume),
@@ -20333,6 +20357,7 @@ async function _buildAlphaListInner(opts = {}) {
           decay: Math.round(edgeDecay),
           arb: 0 // populated by post-loop arb pass if applicable
         },
+        volume_spike_ratio: volumeSpikeRatio, // current 24h / 7-day average, or null
         news_headline: newsInfo ? newsInfo.headline : null,
         news_source: newsInfo ? newsInfo.source : null,
         news_sentiment: newsInfo ? newsInfo.sentiment : null,
