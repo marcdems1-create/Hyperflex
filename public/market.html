@@ -3128,9 +3128,17 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
     var directErrMsg = directData.error || directData.message || JSON.stringify(directData);
     tradeDebug('direct order failed', directRes.status + ': ' + directErrMsg);
 
+    // Clean up geo-restriction errors
+    var cleanMsg = directErrMsg;
+    if (/restricted|geo|region|not available/i.test(directErrMsg)) {
+      cleanMsg = 'Trading unavailable from your current IP. Try connecting via VPN.';
+    } else if (cleanMsg.length > 120) {
+      cleanMsg = cleanMsg.substring(0, 120) + '…';
+    }
+
     // If browser-direct failed for non-auth reasons, DON'T fall through to server proxy
     // (server proxy will also get geo-blocked from Railway's IP)
-    return { _error: true, _errorMsg: 'CLOB ' + directRes.status + ': ' + directErrMsg };
+    return { _error: true, _errorMsg: cleanMsg };
 
   } catch (directErr) {
     // CORS or network error on browser-direct — fall back to server proxy as last resort
@@ -3176,7 +3184,11 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
       return { _expired: true, _errorMsg: 'CLOB 401: ' + (clobDetail || proxyErrMsg) };
     }
 
-    return { _error: true, _errorMsg: 'CLOB ' + proxyRes.status + ': ' + proxyErrMsg + (clobDetail ? ' | ' + clobDetail : '') };
+    var fullProxyMsg = proxyErrMsg + (clobDetail ? ' ' + clobDetail : '');
+    if (/restricted|geo|region|not available/i.test(fullProxyMsg)) {
+      return { _error: true, _errorMsg: 'Trading unavailable from your current IP. Try connecting via VPN.' };
+    }
+    return { _error: true, _errorMsg: fullProxyMsg.length > 120 ? fullProxyMsg.substring(0, 120) + '…' : fullProxyMsg };
   } catch (proxyErr) {
     tradeDebug('proxy THREW', proxyErr.message);
     return { _error: true, _errorMsg: 'Network error: ' + proxyErr.message };
