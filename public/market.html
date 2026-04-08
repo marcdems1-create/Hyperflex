@@ -2644,19 +2644,30 @@ async function executeTrade() {
       return result;
     }
 
-    // SDK's getOrderRawAmounts() — exact replica
+    // SDK's getOrderRawAmounts() — exact replica for LIMIT orders.
+    // Market (FOK) orders have different CLOB constraints — see the isMarketOrder branch.
+    var isMarketOrder = document.getElementById('tradeOrderType').value === 'market';
     var rawPrice = roundNormal(clobPrice, roundConfig.price);
     var rawMakerAmt, rawTakerAmt, sideInt;
 
     if (clobSide === 'BUY') {
       sideInt = 0;
-      // BUY: taker = shares (rounded down), maker = taker × price
-      rawTakerAmt = roundDown(shares, roundConfig.size);
-      rawMakerAmt = rawTakerAmt * rawPrice;
-      if (decimalPlaces(rawMakerAmt) > roundConfig.amount) {
-        rawMakerAmt = roundUp(rawMakerAmt, roundConfig.amount + 4);
+      if (isMarketOrder) {
+        // Market BUY (FOK): CLOB requires makerAmount (USDC) ≤ 2 decimals,
+        // takerAmount (shares) ≤ 4 decimals — different from limit-order tick config.
+        // Using user-entered USDC directly avoids the shares→maker float drift
+        // (e.g. 65.22 × 0.23 = 15.0006, rejected as 4-decimal maker).
+        rawMakerAmt = roundDown(amount, 2);
+        rawTakerAmt = roundDown(amount / rawPrice, 4);
+      } else {
+        // Limit BUY: taker = shares (rounded down), maker = taker × price
+        rawTakerAmt = roundDown(shares, roundConfig.size);
+        rawMakerAmt = rawTakerAmt * rawPrice;
         if (decimalPlaces(rawMakerAmt) > roundConfig.amount) {
-          rawMakerAmt = roundDown(rawMakerAmt, roundConfig.amount);
+          rawMakerAmt = roundUp(rawMakerAmt, roundConfig.amount + 4);
+          if (decimalPlaces(rawMakerAmt) > roundConfig.amount) {
+            rawMakerAmt = roundDown(rawMakerAmt, roundConfig.amount);
+          }
         }
       }
     } else {

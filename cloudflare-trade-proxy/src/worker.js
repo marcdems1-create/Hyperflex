@@ -20,11 +20,14 @@ const POLY_HEADERS = [
   'POLY_SIGNATURE',
 ];
 
-// Builder attribution headers
+// Builder attribution headers — must match what /api/polymarket/builder-sign
+// returns and what market.html sends. Mismatched names cause CORS preflight
+// to reject the POST (browser throws "Failed to fetch") before it ever leaves.
 const BUILDER_HEADERS = [
-  'POLY_BUILDER_ADDRESS',
+  'POLY_BUILDER_API_KEY',
+  'POLY_BUILDER_PASSPHRASE',
+  'POLY_BUILDER_TIMESTAMP',
   'POLY_BUILDER_SIGNATURE',
-  'POLY_BUILDER_NONCE',
 ];
 
 function corsHeaders(origin) {
