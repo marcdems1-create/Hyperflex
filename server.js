@@ -30768,8 +30768,31 @@ if (pool) {
       await dbQuery(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_polymarket_address_lower ON users (LOWER(polymarket_address)) WHERE polymarket_address IS NOT NULL AND polymarket_address != ''`).catch(() => {});
 
       await dbQuery(`ALTER TABLE cached_positions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`).catch(() => {});
+      await dbQuery(`ALTER TABLE cached_positions ADD COLUMN IF NOT EXISTS shares NUMERIC`).catch(() => {});
       await dbQuery(`ALTER TABLE market_snapshots ADD COLUMN IF NOT EXISTS volume NUMERIC`).catch(() => {});
       await dbQuery(`ALTER TABLE markets ADD COLUMN IF NOT EXISTS resolution_sources JSONB`).catch(() => {});
+
+      // FLEX Points — platform-wide points earned on every trade (Marc's 2832ca7).
+      // The migration file uses auth.users UUID FK + RLS which doesn't fit the
+      // TEXT user_id pattern here, so we create the minimal schema inline.
+      await dbQuery(`CREATE TABLE IF NOT EXISTS flex_points (
+        user_id TEXT PRIMARY KEY,
+        total_points INTEGER NOT NULL DEFAULT 0,
+        trade_count INTEGER NOT NULL DEFAULT 0,
+        last_earned_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+      await dbQuery(`CREATE TABLE IF NOT EXISTS flex_points_log (
+        id BIGSERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        points INTEGER NOT NULL,
+        source TEXT NOT NULL DEFAULT 'polymarket_trade',
+        trade_amount_usd NUMERIC,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_flex_points_log_user ON flex_points_log(user_id)`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_flex_points_log_created ON flex_points_log(created_at)`).catch(() => {});
+      await dbQuery(`CREATE INDEX IF NOT EXISTS idx_flex_points_total ON flex_points(total_points DESC)`).catch(() => {});
 
       // Alpha freshness — persists edge stamp timestamps across deploys so
       // traders see stable "first seen Xm ago" times instead of resets.
