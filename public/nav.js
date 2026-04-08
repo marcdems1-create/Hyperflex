@@ -15,10 +15,9 @@
       '.nav-link.active{color:#f0f0f5;background:rgba(255,255,255,0.08);font-weight:600}' +
       /* Hamburger More menu */
       '.nav-more-wrap{position:relative;flex-shrink:0}' +
-      '.nav-more-btn{display:flex;align-items:center;gap:5px;padding:6px 10px;border-radius:8px;cursor:pointer;font-family:"Inter",-apple-system,sans-serif;font-size:12px;font-weight:500;color:#8888a0;background:none;border:none;transition:all .15s}' +
+      '.nav-more-btn{display:flex;align-items:center;justify-content:center;padding:6px 8px;border-radius:8px;cursor:pointer;color:#8888a0;background:none;border:none;transition:all .15s}' +
       '.nav-more-btn:hover,.nav-more-btn.open{color:#f0f0f5;background:rgba(255,255,255,0.05)}' +
-      '.nav-more-btn svg{width:16px;height:16px;stroke:currentColor;stroke-width:2;fill:none;transition:transform .2s}' +
-      '.nav-more-btn.open svg{transform:rotate(180deg)}' +
+      '.nav-more-btn svg{stroke:currentColor;stroke-width:2;fill:none}' +
       '.nav-more-dd{display:none;position:absolute;top:calc(100% + 8px);right:0;min-width:220px;background:rgba(18,18,24,0.95);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.08);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,0.5);padding:6px;z-index:200}' +
       '.nav-more-dd.open{display:block}' +
       '.nav-more-dd a{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;font-family:"Inter",-apple-system,sans-serif;font-size:13px;font-weight:500;color:#8888a0;text-decoration:none;transition:all .12s}' +
@@ -147,8 +146,8 @@
       }).join('') +
       '<a id="navDashLink" href="/creator/dashboard" class="nav-link" style="' + (isLoggedIn ? '' : 'display:none;') + 'color:#00e68a;font-weight:600">Dashboard</a>' +
       '<div class="nav-more-wrap">' +
-        '<button class="nav-more-btn' + (moreActive ? ' active' : '') + '" id="navMoreBtn">' +
-          'More <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>' +
+        '<button class="nav-more-btn' + (moreActive ? ' active' : '') + '" id="navMoreBtn" title="More">' +
+          '<svg viewBox="0 0 24 24" style="width:18px;height:18px"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>' +
         '</button>' +
         '<div class="nav-more-dd" id="navMoreDd">' +
           moreLinks.map(function(l) {
