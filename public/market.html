@@ -659,35 +659,20 @@ function renderMarket() {
   renderOutcomes(m);
   // Replace YES/NO labels with outcome names AFTER renderOutcomes sets _sortedEventMarkets
   updateOutcomeLabels();
-  // Multi-outcome chart: fetch history for top outcomes and draw colored lines
+  // For multi-outcome events, show the selected outcome's chart (default: top outcome)
+  // Single clean chart is more actionable than 9 overlaid colored lines
   if (_eventMarkets && _eventMarkets.length > 1) {
-    document.getElementById('chartOutcome').textContent = 'All Outcomes';
-    var tids = m.clobTokenIds || '[]';
-    if (typeof tids === 'string') { try { tids = JSON.parse(tids); } catch(e) { tids = []; } }
-    // Sort event markets by YES price descending, take top 6 for chart
-    var sorted = _eventMarkets.slice().map(function(em, i) {
-      var ep = em.outcomePrices || '[]';
-      if (typeof ep === 'string') { try { ep = JSON.parse(ep); } catch(e) { ep = []; } }
-      var yp = ep[0] ? parseFloat(ep[0]) : 0;
-      var label = em.groupItemTitle || em.question || '';
-      // Extract short label like "$580-$590"
-      var rm = label.match(/(?:at |between |close (?:at )?)(\$[\d,.]+\s*[-–]\s*\$[\d,.]+|\<\s*\$[\d,.]+|\>\s*\$[\d,.]+)/i);
-      if (rm) label = rm[1];
-      else { var tm = label.match(/Will (?:the )?(.+?) win/i); if (tm) label = tm[1]; }
-      if (label.length > 25) label = label.substring(0, 22) + '...';
-      return { em: em, yp: yp, label: label, tokenId: em.clobTokenIds ? JSON.parse(em.clobTokenIds)[0] : null };
-    }).filter(function(x) { return x.tokenId && x.yp > 0.01; });
-    sorted.sort(function(a, b) { return b.yp - a.yp; });
-    var top = sorted.slice(0, 6);
-    if (top.length > 1) {
-      Promise.all(top.map(function(x) {
-        return fetch('https://clob.polymarket.com/prices-history?market=' + x.tokenId + '&interval=' + _chartInterval + '&fidelity=60')
-          .then(function(r) { return r.json(); })
-          .then(function(d) { return { label: x.label, history: d.history || [] }; })
-          .catch(function() { return { label: x.label, history: [] }; });
-      })).then(function(multiData) {
-        drawChart(null, multiData);
-      });
+    var defaultEm = _sortedEventMarkets ? _sortedEventMarkets[_activeOutcomeIndex] : _eventMarkets[0];
+    var emLabel = defaultEm.groupItemTitle || defaultEm.question || 'Outcome';
+    document.getElementById('chartOutcome').textContent = emLabel.length > 40 ? emLabel.substring(0, 38) + '...' : emLabel;
+    var emTids = defaultEm.clobTokenIds || '[]';
+    if (typeof emTids === 'string') { try { emTids = JSON.parse(emTids); } catch(e) { emTids = []; } }
+    var tid = emTids[0];
+    if (tid) {
+      fetch('https://clob.polymarket.com/prices-history?market=' + tid + '&interval=' + _chartInterval + '&fidelity=60')
+        .then(function(r) { return r.json(); })
+        .then(function(d) { _priceHistory = (d.history || []); drawChart(_priceHistory); setTimeout(applyTA, 150); })
+        .catch(function() {});
     } else {
       drawChart(_priceHistory); setTimeout(applyTA, 150);
     }
@@ -1074,53 +1059,13 @@ var _lwSeries = null;
 var _chartColors = ['#f59e0b','#3b82f6','#22c55e','#ef4444','#a855f7','#ec4899','#06b6d4','#84cc16','#f97316','#6366f1'];
 var _multiSeries = [];
 
-function drawChart(history, multiData) {
+function drawChart(history) {
   var container = document.getElementById('priceChart');
   var legendEl = document.getElementById('chartLegend');
 
   // Destroy previous chart instance
   if (_lwChart) { _lwChart.remove(); _lwChart = null; _lwSeries = null; _multiSeries = []; }
 
-  // Multi-outcome mode
-  if (multiData && multiData.length > 0) {
-    var hasAny = multiData.some(function(d) { return d.history && d.history.length >= 2; });
-    if (!hasAny) {
-      container.innerHTML = '<div style="height:260px;display:flex;align-items:center;justify-content:center;font-family:var(--body);font-size:12px;color:var(--soft)">Not enough price data yet</div>';
-      return;
-    }
-    container.innerHTML = '';
-    legendEl.style.display = 'flex';
-    legendEl.innerHTML = multiData.map(function(d, i) {
-      var c = _chartColors[i % _chartColors.length];
-      var pct = d.history && d.history.length > 0 ? Math.round(d.history[d.history.length - 1].p * 100) + '%' : '';
-      return '<span style="color:' + c + '">● ' + escH(d.label) + ' <span style="opacity:.7">' + pct + '</span></span>';
-    }).join('');
-
-    requestAnimationFrame(function() {
-      var _w = container.offsetWidth || container.parentElement.offsetWidth || 760;
-      _lwChart = LightweightCharts.createChart(container, _chartOpts(_w));
-
-      multiData.forEach(function(d, i) {
-        if (!d.history || d.history.length < 2) return;
-        var c = _chartColors[i % _chartColors.length];
-        var s = _lwChart.addLineSeries({
-          color: c, lineWidth: 2,
-          priceFormat: { type: 'custom', formatter: function(p) { return Math.round(p * 100) + '%'; }, minMove: 0.001 },
-          lastValueVisible: true, priceLineVisible: false,
-        });
-        var seen = {}, sd = [];
-        d.history.forEach(function(h) { var t = Math.floor(h.t); if (!seen[t]) { seen[t] = true; sd.push({ time: t, value: h.p }); } });
-        sd.sort(function(a, b) { return a.time - b.time; });
-        s.setData(sd);
-        _multiSeries.push(s);
-      });
-      _lwChart.timeScale().fitContent();
-      window.addEventListener('resize', function() { if (_lwChart) _lwChart.applyOptions({ width: container.offsetWidth }); });
-    });
-    return;
-  }
-
-  // Single-line mode (binary or single selected outcome)
   legendEl.style.display = 'none';
   legendEl.innerHTML = '';
 
@@ -1136,9 +1081,9 @@ function drawChart(history, multiData) {
   _lwChart = LightweightCharts.createChart(container, _chartOpts(_w));
 
   var isUp = history[history.length - 1].p >= history[0].p;
-  var lineColor = isUp ? '#22c55e' : '#ef4444';
-  var areaTop   = isUp ? 'rgba(34,197,94,0.2)'  : 'rgba(239,68,68,0.2)';
-  var areaBot   = isUp ? 'rgba(34,197,94,0.0)'  : 'rgba(239,68,68,0.0)';
+  var lineColor = isUp ? '#00e68a' : '#ff4d6a';
+  var areaTop   = isUp ? 'rgba(0,230,138,0.2)'  : 'rgba(255,77,106,0.2)';
+  var areaBot   = isUp ? 'rgba(0,230,138,0.0)'  : 'rgba(255,77,106,0.0)';
 
   _lwSeries = _lwChart.addAreaSeries({
     lineColor: lineColor,
