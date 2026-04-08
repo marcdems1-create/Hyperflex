@@ -16960,6 +16960,12 @@ async function connectBrowserWallet() {
 
         showToast('Wallet connected! Loading Polymarket positions...', 'success');
 
+        // ── RE-FETCH BALANCE NOW THAT PROXY IS KNOWN ──
+        // The earlier fetchWalletBalance() call fired before proxy discovery,
+        // so USDC was skipped. Now proxy is set — fetch the real balance.
+        console.log('[wallet] Proxy discovered — re-fetching balance from', _polyWalletAddress.slice(0,10));
+        fetchWalletBalance(provider, address);
+
         // Force reload performance tab too
         _portfolioLoaded = false;
         loadPortfolio();
@@ -17058,14 +17064,12 @@ function disconnectBrowserWallet() {
 
 async function fetchWalletBalance(provider, address) {
   if (!address) return;
-  // CRITICAL: Read balance from the PROXY address (where Polymarket funds live),
-  // not the EOA (MetaMask address). The EOA usually has $0 USDC.
+  // ALWAYS read USDC from the PROXY address. Never the EOA.
+  // If proxy isn't known yet, skip USDC — it'll be fetched later when proxy is resolved.
   const proxyAddr = _polyWalletAddress || localStorage.getItem('hf_poly_wallet') || '';
-  const balanceAddr = (proxyAddr && proxyAddr.startsWith('0x') && proxyAddr.toLowerCase() !== address.toLowerCase())
-    ? proxyAddr : address;
-  console.log('[wallet balance] Reading from:', balanceAddr.slice(0,10), '(proxy:', proxyAddr.slice(0,10), ', EOA:', address.slice(0,10), ')');
+  const hasProxy = proxyAddr && proxyAddr.startsWith('0x') && proxyAddr.length >= 40;
+  console.log('[wallet balance] EOA:', address.slice(0,10), '| proxy:', hasProxy ? proxyAddr.slice(0,10) : 'NOT SET');
 
-  // Use public RPC for read-only balance calls — no MetaMask popup, no 401
   const POLYGON_RPCS = ['https://polygon-bor-rpc.publicnode.com', 'https://1rpc.io/matic'];
   let pubProvider = null;
   for (const rpc of POLYGON_RPCS) {
@@ -17078,19 +17082,23 @@ async function fetchWalletBalance(provider, address) {
   }
   if (!pubProvider) { console.warn('[wallet balance] All public RPCs failed'); return; }
   try {
-    // MATIC/POL native balance (from EOA — gas fees come from here)
+    // MATIC/POL native balance from EOA (gas fees)
     const maticBal = await pubProvider.getBalance(address);
     window._walletBalanceMATIC = parseFloat(ethers.formatEther(maticBal));
 
-    // USDC balance from PROXY address (where Polymarket deposits live)
-    const USDC_E_ADDRESS = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
-    const USDC_NATIVE_ADDRESS = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
-    const USDC_ABI = ['function balanceOf(address) view returns (uint256)'];
-    const usdcE = new ethers.Contract(USDC_E_ADDRESS, USDC_ABI, pubProvider);
-    const usdcN = new ethers.Contract(USDC_NATIVE_ADDRESS, USDC_ABI, pubProvider);
-    const [usdcEBal, usdcNBal] = await Promise.all([usdcE.balanceOf(balanceAddr), usdcN.balanceOf(balanceAddr)]);
-    window._walletBalanceUSDC = parseFloat(ethers.formatUnits(usdcEBal, 6)) + parseFloat(ethers.formatUnits(usdcNBal, 6));
-    console.log('[wallet balance] USDC:', window._walletBalanceUSDC.toFixed(2), 'from', balanceAddr.slice(0,10));
+    // USDC balance — ONLY from proxy address, NEVER from EOA
+    if (hasProxy) {
+      const USDC_E_ADDRESS = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
+      const USDC_NATIVE_ADDRESS = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
+      const USDC_ABI = ['function balanceOf(address) view returns (uint256)'];
+      const usdcE = new ethers.Contract(USDC_E_ADDRESS, USDC_ABI, pubProvider);
+      const usdcN = new ethers.Contract(USDC_NATIVE_ADDRESS, USDC_ABI, pubProvider);
+      const [usdcEBal, usdcNBal] = await Promise.all([usdcE.balanceOf(proxyAddr), usdcN.balanceOf(proxyAddr)]);
+      window._walletBalanceUSDC = parseFloat(ethers.formatUnits(usdcEBal, 6)) + parseFloat(ethers.formatUnits(usdcNBal, 6));
+      console.log('[wallet balance] USDC:', window._walletBalanceUSDC.toFixed(2), 'from PROXY', proxyAddr.slice(0,10));
+    } else {
+      console.log('[wallet balance] Proxy not set yet — skipping USDC read, will retry after proxy discovery');
+    }
 
     updateWalletUI();
   } catch (e) {
