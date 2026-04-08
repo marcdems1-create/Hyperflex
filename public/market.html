@@ -3139,7 +3139,7 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
   }
 
   // FALLBACK: Cloudflare Worker edge proxy (runs near user, not geo-blocked)
-  var CF_PROXY = 'https://hyperflex-trade-proxy.marcdems1.workers.dev/order';
+  var CF_PROXY = 'https://hyperflex-trade-proxy.hyperflex.workers.dev/order';
   try {
     var cfHeaders = {
       'Content-Type': 'application/json',
