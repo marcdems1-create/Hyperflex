@@ -5191,7 +5191,7 @@ body.nav-open .sidebar-backdrop {
                     <span id="openPositionsChevron" style="color:#8888a0;font-size:12px;transition:transform .2s">▼</span>
                   </div>
                   <!-- Table header -->
-                  <div id="posTableHeader" style="display:grid;grid-template-columns:minmax(180px,2fr) 100px 80px 90px 90px 80px;gap:0;padding:8px 16px;background:#0a0908;border:1px solid #2a2825;border-top:none;font-family:var(--mono);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#8888a0">
+                  <div id="posTableHeader" style="display:grid;grid-template-columns:minmax(180px,2fr) 100px 80px 90px 120px 115px;gap:0;padding:8px 16px;background:#0a0908;border:1px solid #2a2825;border-top:none;font-family:var(--mono);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#8888a0">
                     <div>Market</div>
                     <div style="text-align:center">Avg → Now</div>
                     <div style="text-align:right">Bet</div>
@@ -16563,7 +16563,7 @@ function renderPositionRow({question,side,posData,url}) {
   const mktUrl = url && url !== '#' ? url : (posData?.slug ? '/market/' + posData.slug : '#');
 
   return `<div class="pos-table-row" data-question="${escHtmlDash(question)}" data-value="${cashValue}" data-pnl="${pnl}" data-pnlpct="${pnlPct}" data-expiry="${endDate||''}" data-price="${curPrice||0}"
-    style="display:grid;grid-template-columns:minmax(180px,2fr) 100px 80px 90px 90px 80px;gap:0;align-items:center;padding:10px 16px;border-bottom:1px solid rgba(255,255,255,0.04);transition:background .1s;cursor:pointer"
+    style="display:grid;grid-template-columns:minmax(180px,2fr) 100px 80px 90px 120px 115px;gap:0;align-items:center;padding:10px 16px;border-bottom:1px solid rgba(255,255,255,0.04);transition:background .1s;cursor:pointer"
     onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background=''"
     onclick="if(!event.target.closest('button'))window.location='${mktUrl}'">
     <!-- MARKET -->
@@ -16589,9 +16589,9 @@ function renderPositionRow({question,side,posData,url}) {
     <!-- TO WIN -->
     <div style="text-align:right;font-family:var(--mono);font-size:12px;font-weight:600;color:var(--text)">${toWin > 0 ? fmtV(toWin) : '—'}</div>
     <!-- VALUE + P&L -->
-    <div style="text-align:right">
-      <div style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text)">${fmtV(cashValue)}</div>
-      <div style="font-family:var(--mono);font-size:11px;color:${pnlColor};font-weight:600">${pnlSign}${fmtV(Math.abs(pnl))} (${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%)</div>
+    <div style="text-align:right;min-width:0;overflow:hidden">
+      <div style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${fmtV(cashValue)}</div>
+      <div style="font-family:var(--mono);font-size:11px;color:${pnlColor};font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${pnlSign}${fmtV(Math.abs(pnl))} (${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%)</div>
     </div>
     <!-- SELL / CLAIM -->
     <div style="text-align:right">
