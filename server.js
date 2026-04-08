@@ -17180,7 +17180,10 @@ app.get('/api/polymarket/positions/:address', async (req, res) => {
       cash_value: parseFloat(p.currentValue) || 0,
       cost_basis: parseFloat(p.initialValue) || 0,
       pnl: parseFloat(p.cashPnl) || 0,
-      pnl_pct: (parseFloat(p.percentPnl) || 0) * 100,
+      // Compute pnl_pct from cashPnl / initialValue. Polymarket's percentPnl
+      // field has had inconsistent format (decimal vs already-%), computing
+      // from raw values is stable.
+      pnl_pct: (parseFloat(p.initialValue) || 0) > 0 ? ((parseFloat(p.cashPnl) || 0) / parseFloat(p.initialValue)) * 100 : 0,
       market_url: p.slug ? `https://polymarket.com/event/${p.eventSlug || p.slug}` : `https://polymarket.com`,
       icon: p.icon || null,
       end_date: p.endDateIso || p.endDate || null,

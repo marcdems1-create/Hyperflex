@@ -14090,7 +14090,11 @@ async function loadPolymarketPositions(forceRefresh) {
         question: p.title||p.question||'Unknown market', side: p.outcome||'YES',
         shares: parseFloat(p.size)||0, current_price: parseFloat(p.curPrice)||0,
         cash_value: parseFloat(p.currentValue)||0, cost_basis: parseFloat(p.initialValue)||0,
-        pnl: parseFloat(p.cashPnl)||0, pnl_pct: (parseFloat(p.percentPnl)||0) * 100,
+        // Compute pnl_pct ourselves from cashPnl / initialValue. Polymarket's
+        // percentPnl field has had inconsistent format (decimal vs already-%),
+        // computing from raw values is the only stable approach.
+        pnl: parseFloat(p.cashPnl)||0,
+        pnl_pct: (parseFloat(p.initialValue)||0) > 0 ? ((parseFloat(p.cashPnl)||0) / parseFloat(p.initialValue)) * 100 : 0,
         market_url: (typeof polyRef==='function'?polyRef:function(u){return u})(buildMarketUrl({ slug: p.eventSlug||p.slug, question: p.title||p.question })),
         slug: p.eventSlug||p.slug||null,
         icon: p.icon||null, end_date: p.endDateIso||p.endDate||null, platform: 'polymarket',
