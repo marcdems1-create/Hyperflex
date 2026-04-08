@@ -1546,14 +1546,14 @@ function setTradeMode(mode) {
   var input = document.getElementById('tradeAmount');
 
   if (mode === 'sell') {
-    if (label) label.textContent = 'Shares';
+    if (label) label.textContent = 'Amount (USD)';
     if (maxBtn) maxBtn.style.display = 'inline';
     if (quickBtns) quickBtns.innerHTML =
-      '<button class="trade-quick-btn" onclick="adjustSharesBy(-100)">-100</button>' +
-      '<button class="trade-quick-btn" onclick="adjustSharesBy(-10)">-10</button>' +
-      '<button class="trade-quick-btn" onclick="adjustSharesBy(10)">+10</button>' +
-      '<button class="trade-quick-btn" onclick="adjustSharesBy(100)">+100</button>';
-    if (input) { input.value = '0'; input.step = '0.1'; }
+      '<button class="trade-quick-btn" onclick="setAmount(10)">+$10</button>' +
+      '<button class="trade-quick-btn" onclick="setAmount(50)">+$50</button>' +
+      '<button class="trade-quick-btn" onclick="setAmount(100)">+$100</button>' +
+      '<button class="trade-quick-btn" onclick="setAmount(250)">+$250</button>';
+    if (input) { input.value = '0'; input.step = '1'; }
   } else {
     if (label) label.textContent = 'Amount (USD)';
     if (maxBtn) maxBtn.style.display = 'none';
@@ -1610,7 +1610,7 @@ function adjustSharesBy(delta) {
 }
 
 function setMaxShares() {
-  // Find user's shares for current side from _userPositions (keyed by tokenId)
+  // Find user's shares for current side, convert to USD at current limit price
   var input = document.getElementById('tradeAmount');
   if (!input || !_market) return;
   var maxShares = 0;
@@ -1629,7 +1629,11 @@ function setMaxShares() {
       }
     }
   }
-  input.value = maxShares > 0 ? maxShares.toFixed(1) : '0';
+  // Convert shares to USD value at current limit price
+  var price = parseFloat(document.getElementById('tradePrice').value) || 50;
+  var priceFrac = price / 100;
+  var maxUsd = maxShares * priceFrac;
+  input.value = maxUsd > 0 ? Math.floor(maxUsd) : '0';
   updateTradeCalc();
 }
 
@@ -1637,24 +1641,17 @@ function updateTradeCalc() {
   var price = parseFloat(document.getElementById('tradePrice').value) || 50;
   var amount = parseFloat(document.getElementById('tradeAmount').value) || 0;
   var priceFrac = price / 100;
+  var shares = priceFrac > 0 ? amount / priceFrac : 0;
+
+  document.getElementById('summaryPrice').textContent = price.toFixed(2) + '¢';
+  document.getElementById('summaryShares').textContent = shares.toFixed(2);
 
   if (_tradeMode === 'sell') {
-    // In sell mode, input is shares — calc USD total
-    var shares = amount;
-    var total = shares * priceFrac;
-    var toWin = total; // proceeds from selling shares at limit price
-    document.getElementById('summaryPrice').textContent = price.toFixed(2) + '¢';
-    document.getElementById('summaryShares').textContent = shares.toFixed(2);
-    document.getElementById('summaryPayout').textContent = '$' + total.toFixed(2);
-    var totalEl = document.getElementById('summaryTotal');
-    if (totalEl) totalEl.textContent = '$' + total.toFixed(2);
+    // Sell: you get USD = shares × price
+    document.getElementById('summaryPayout').textContent = '$' + amount.toFixed(2);
   } else {
-    // In buy mode, input is USD — calc shares
-    var shares = priceFrac > 0 ? amount / priceFrac : 0;
-    var payout = shares; // Each share pays $1 if it wins
-    document.getElementById('summaryPrice').textContent = price.toFixed(2) + '¢';
-    document.getElementById('summaryShares').textContent = shares.toFixed(2);
-    document.getElementById('summaryPayout').textContent = '$' + payout.toFixed(2);
+    // Buy: potential payout = shares (each pays $1 if wins)
+    document.getElementById('summaryPayout').textContent = '$' + shares.toFixed(2);
   }
 }
 
@@ -2703,16 +2700,9 @@ async function executeTrade() {
     showTradeStatus('Price must be 1\u201399\u00a2', 'error');
     return;
   }
-  if (_tradeMode === 'sell') {
-    if (!amount || amount <= 0) {
-      showTradeStatus('Enter shares to sell', 'error');
-      return;
-    }
-  } else {
-    if (!amount || amount < 1) {
-      showTradeStatus('Minimum amount is $1', 'error');
-      return;
-    }
+  if (!amount || amount < 1) {
+    showTradeStatus('Minimum amount is $1', 'error');
+    return;
   }
 
   var clobSide = _tradeMode === 'buy' ? 'BUY' : 'SELL';
@@ -2790,7 +2780,7 @@ async function executeTrade() {
       cta.disabled = false; updateCtaButton();
       return;
     }
-    var shares = _tradeMode === 'sell' ? amount : amount / clobPrice;
+    var shares = amount / clobPrice;
 
     showTradeStatus('Connecting to MetaMask...', 'info');
     var provider = new ethers.BrowserProvider(window.ethereum);
