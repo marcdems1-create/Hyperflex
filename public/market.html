@@ -593,9 +593,18 @@ function renderMarket() {
   document.getElementById('mkt24hVol').textContent = fmtCap(m.volume24hr || 0);
   document.getElementById('mktLiquidity').textContent = fmtCap(m.liquidityNum || m.liquidity || 0);
 
-  // Expiry
+  // Expiry — check closed/resolved FIRST, then fall back to end date countdown
+  // Also detect resolved by terminal price (YES at 100¢ or 0¢ = market settled)
+  var priceAtTerminal = (yesPrice >= 0.97 || yesPrice <= 0.03);
+  var isClosed = m.closed === true || m.active === false || m.resolved === true || priceAtTerminal;
   var endDate = m.endDate || m.end_date_iso;
-  if (endDate) {
+  if (isClosed) {
+    document.getElementById('mktExpiry').textContent = 'Resolved';
+    document.getElementById('mktExpiry').style.color = '#a78bfa';
+    // Hide trade widget for resolved markets
+    var tradeWidget = document.querySelector('.trade-widget');
+    if (tradeWidget) tradeWidget.style.display = 'none';
+  } else if (endDate) {
     var diff = new Date(endDate) - new Date();
     if (diff > 0) {
       var days = Math.floor(diff / 86400000);
