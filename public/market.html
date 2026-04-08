@@ -2647,6 +2647,69 @@ async function executeTrade() {
     // SDK's getOrderRawAmounts() — exact replica for LIMIT orders.
     // Market (FOK) orders have different CLOB constraints — see the isMarketOrder branch.
     var isMarketOrder = document.getElementById('tradeOrderType').value === 'market';
+
+    // For MARKET orders: walk the live orderbook to find the actual fill price.
+    // The user-entered limit (or "Mkt" preset) is just current mid — it doesn't
+    // reflect orderbook depth. FOK requires the FULL size to fill at ≤ limit, so
+    // a thin top-of-book causes "order couldn't be fully filled" rejections. The
+    // SDK's calculateMarketPrice walks the book and returns the worst price the
+    // order would touch to fully fill. We use that as the limit so FOK succeeds.
+    if (isMarketOrder) {
+      try {
+        showTradeStatus('Checking orderbook depth...', 'info');
+        var bookRes = await fetch('https://clob.polymarket.com/book?token_id=' + encodeURIComponent(tokenId));
+        if (bookRes.ok) {
+          var bookData = await bookRes.json();
+          var levels;
+          if (clobSide === 'BUY') {
+            levels = (bookData.asks || []).slice().sort(function(a, b) { return parseFloat(a.price) - parseFloat(b.price); });
+          } else {
+            levels = (bookData.bids || []).slice().sort(function(a, b) { return parseFloat(b.price) - parseFloat(a.price); });
+          }
+          var fillPrice = null;
+          if (clobSide === 'BUY') {
+            // Walk asks: spend `amount` USDC, find worst price touched
+            var spent = 0;
+            for (var li = 0; li < levels.length; li++) {
+              var lvlPrice = parseFloat(levels[li].price);
+              var lvlSize = parseFloat(levels[li].size);
+              var costAtLevel = lvlPrice * lvlSize;
+              if (spent + costAtLevel >= amount) { fillPrice = lvlPrice; break; }
+              spent += costAtLevel;
+            }
+          } else {
+            // Walk bids: sell `shares`, find worst price touched
+            var sharesRemaining = shares;
+            for (var lj = 0; lj < levels.length; lj++) {
+              var bidPrice = parseFloat(levels[lj].price);
+              var bidSize = parseFloat(levels[lj].size);
+              if (sharesRemaining <= bidSize) { fillPrice = bidPrice; break; }
+              sharesRemaining -= bidSize;
+            }
+          }
+          if (fillPrice == null) {
+            showTradeStatus('Not enough orderbook depth to fully fill this size — try a smaller amount or use a Limit order', 'error');
+            cta.disabled = false; updateCtaButton();
+            return;
+          }
+          // Round UP to tick — paying slightly more than the walk price ensures FOK fills
+          var bumped = Math.ceil(fillPrice / tickSize - 1e-9) * tickSize;
+          if (bumped <= 0) bumped = tickSize;
+          if (bumped >= 1) bumped = 1 - tickSize;
+          var newClobPrice = parseFloat(bumped.toFixed(roundConfig.price));
+          if (newClobPrice !== clobPrice) {
+            console.log('[trade] Market price walk: user entered ' + (clobPrice * 100).toFixed(1) + '¢, book needs ' + (newClobPrice * 100).toFixed(1) + '¢ for full fill');
+            clobPrice = newClobPrice;
+            shares = amount / clobPrice;
+          }
+        } else {
+          console.warn('[trade] /book fetch returned ' + bookRes.status + ', falling back to user-entered limit price');
+        }
+      } catch (bookErr) {
+        console.warn('[trade] /book walk failed:', bookErr.message, '— falling back to user-entered limit price');
+      }
+    }
+
     var rawPrice = roundNormal(clobPrice, roundConfig.price);
     var rawMakerAmt, rawTakerAmt, sideInt;
 
