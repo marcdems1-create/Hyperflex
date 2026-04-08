@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
 <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
+<script src="/wallet.js?v=1"></script>
 <style>
 :root{--bg:#0a0a09;--card:#131311;--border:#222220;--text:#e8e4d9;--soft:#b0ab9f;--dim:#5a5752;--muted:#7b8070;--gold:#c9920d;--green:#22c55e;--red:#ef4444;--sans:'Syne',sans-serif;--body:'Inter',sans-serif;--mono:'Space Mono',monospace}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -1945,37 +1946,8 @@ async function checkTradingSetup() {
   }
 }
 
-// Cached ethers v6 signer. BrowserProvider fires `eth_requestAccounts` once
-// per instance via internal _start(); on mobile MetaMask, overlapping calls
-// return EIP-1193 -32002 "request already pending". We cache the first signer
-// from enableTrading/runFullSetup and reuse it on every subsequent trade so
-// the trade flow never re-triggers the account request.
-var _cachedSigner = null;
-var _cachedSignerAddress = null;
-
-async function getTradingSigner() {
-  if (_cachedSigner && _cachedSignerAddress) {
-    return { provider: _cachedSigner.provider, signer: _cachedSigner, address: _cachedSignerAddress };
-  }
-  if (!window.ethereum) throw new Error('MetaMask required');
-  var provider = new ethers.BrowserProvider(window.ethereum);
-  var signer = await provider.getSigner();
-  var address = await signer.getAddress();
-  _cachedSigner = signer;
-  _cachedSignerAddress = address;
-  return { provider: provider, signer: signer, address: address };
-}
-
-// EIP-1193 -32002 "Request already pending" — ethers v6 wraps raw errors
-// inconsistently via `info.error` / `error`, so check every level.
-function is32002Error(err) {
-  if (!err) return false;
-  if (err.code === -32002) return true;
-  if (err.error && err.error.code === -32002) return true;
-  if (err.info && err.info.error && err.info.error.code === -32002) return true;
-  if (err.message && String(err.message).indexOf('-32002') !== -1) return true;
-  return false;
-}
+// Wallet caching + EIP-1193 -32002 detection live in /wallet.js (HFXWallet)
+// so market.html and creator-dashboard.html share a single signer instance.
 
 // ── Connect Wallet (derive CLOB API keys via MetaMask EIP-712) ───────────────
 async function enableTrading() {
@@ -2008,8 +1980,7 @@ async function enableTrading() {
     var provider = new ethers.BrowserProvider(window.ethereum);
     var signer = await provider.getSigner();
     var address = await signer.getAddress();
-    _cachedSigner = signer;
-    _cachedSignerAddress = address;
+    HFXWallet.adoptSigner(provider, signer, address);
 
     // Clear cached credentials if wallet changed
     var cachedEoaAddress = localStorage.getItem('poly_eoa_address');
@@ -2289,8 +2260,7 @@ async function runFullSetup() {
     var provider = new ethers.BrowserProvider(window.ethereum);
     var signer = await provider.getSigner();
     var eoaAddress = await signer.getAddress();
-    _cachedSigner = signer;
-    _cachedSignerAddress = eoaAddress;
+    HFXWallet.adoptSigner(provider, signer, eoaAddress);
     localStorage.setItem('poly_eoa_address', eoaAddress);
   } catch (e) {
     if (e.code === 'ACTION_REJECTED' || e.code === 4001) {
@@ -2578,7 +2548,7 @@ async function executeTrade() {
     var shares = amount / clobPrice;
 
     showTradeStatus('Connecting to MetaMask...', 'info');
-    var walletCtx = await getTradingSigner();
+    var walletCtx = await HFXWallet.getSigner();
     var provider = walletCtx.provider;
     var signer = walletCtx.signer;
     var signerAddress = walletCtx.address;
@@ -2986,9 +2956,8 @@ async function executeTrade() {
   } catch (err) {
     if (err.code === 'ACTION_REJECTED' || err.code === 4001) {
       showTradeStatus('Order signing rejected', 'error');
-    } else if (is32002Error(err)) {
-      _cachedSigner = null;
-      _cachedSignerAddress = null;
+    } else if (HFXWallet.is32002Error(err)) {
+      HFXWallet.invalidate();
       showTradeStatus('A wallet request is already pending. Open your MetaMask app, approve or dismiss the previous request, then tap Buy again.', 'error');
       console.warn('[trade] -32002 detected, signer cache cleared');
     } else {
@@ -3375,8 +3344,7 @@ setTimeout(function() { checkTradingSetup(); }, 500);
       var cachedEoa = (localStorage.getItem('poly_eoa_address') || '').toLowerCase();
       if (cachedEoa && cachedEoa !== currentEoa) {
         console.warn('[wallet] MetaMask account changed: cached=' + cachedEoa.slice(0,10) + ' current=' + currentEoa.slice(0,10));
-        _cachedSigner = null;
-        _cachedSignerAddress = null;
+        HFXWallet.invalidate();
         // Clear stale data — both key naming conventions
         localStorage.removeItem('poly_eoa_address');
         localStorage.removeItem('hf_poly_wallet');
