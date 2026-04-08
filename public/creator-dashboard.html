@@ -17952,9 +17952,38 @@ async function redeemPosition(posDataJson) {
   const payout = won ? (pos.shares || 0) : 0;
   const label = pos.question ? pos.question.substring(0, 50) : 'position';
 
+  // Check POL balance first — need gas for on-chain redemption
+  const POLYGON_RPCS = ['https://polygon-bor-rpc.publicnode.com', 'https://1rpc.io/matic'];
+  let pubProvider = null;
+  for (const rpc of POLYGON_RPCS) {
+    try { const p = new ethers.JsonRpcProvider(rpc); await p.getBlockNumber(); pubProvider = p; break; }
+    catch (e) { /* try next */ }
+  }
+
+  let hasPol = false;
+  if (pubProvider) {
+    try {
+      const polBal = await pubProvider.getBalance(window._connectedWallet);
+      hasPol = parseFloat(ethers.formatEther(polBal)) >= 0.005;
+    } catch (e) { /* assume no POL */ }
+  }
+
+  if (!hasPol) {
+    // No POL — redirect to Polymarket where they pay gas for you
+    const polyUrl = typeof polyRef === 'function' ? polyRef('https://polymarket.com/portfolio') : 'https://polymarket.com/portfolio';
+    if (confirm(won
+      ? 'Claim $' + payout.toFixed(2) + ' USDC from "' + label + '"?\n\nYou need POL for gas to claim from here. Click OK to claim on Polymarket instead (free, they pay gas).'
+      : 'Clear "' + label + '"?\n\nYou need POL for gas. Click OK to go to Polymarket to claim (free).'
+    )) {
+      window.open(polyUrl, '_blank');
+    }
+    return;
+  }
+
+  // Has POL — do direct on-chain redemption
   if (!confirm(won
-    ? 'Claim $' + payout.toFixed(2) + ' USDC from "' + label + '"?\n\nThis burns your winning tokens and sends USDC to your wallet. Gasless — no POL needed.'
-    : 'Clear resolved position "' + label + '"?\n\nThis removes worthless tokens from your wallet. Gasless — no POL needed.'
+    ? 'Claim $' + payout.toFixed(2) + ' USDC from "' + label + '"?\n\nThis burns your winning tokens and sends USDC to your wallet.\nGas cost: ~0.01 POL (fraction of a cent).'
+    : 'Clear resolved position "' + label + '"?\n\nGas cost: ~0.01 POL.'
   )) return;
 
   showToast('Preparing redemption...', 'info');
@@ -17989,18 +18018,10 @@ async function redeemPosition(posDataJson) {
     }
 
     // ── STEP 1: Get Safe nonce (read-only, no gas) ──
-    const POLYGON_RPCS = ['https://polygon-bor-rpc.publicnode.com', 'https://1rpc.io/matic'];
-    let pubProvider = null;
-    for (const rpc of POLYGON_RPCS) {
-      try { const p = new ethers.JsonRpcProvider(rpc); await p.getBlockNumber(); pubProvider = p; break; }
-      catch (e) { console.warn('[redeem] RPC failed:', rpc); }
-    }
-    if (!pubProvider) { showToast('All RPCs failed — try again later', 'error'); return; }
-
     const safeReadAbi = ['function nonce() view returns (uint256)'];
     const safeRead = new ethers.Contract(proxyAddr, safeReadAbi, pubProvider);
     const nonce = await safeRead.nonce();
-    console.log('[redeem] Safe nonce:', nonce.toString());
+    console.log('[redeem] Safe nonce:', nonce.toString(), '| target:', isNegRisk ? 'NegRisk' : 'CTF', '| condition:', conditionId.slice(0,10));
 
     // ── STEP 2: Build EIP-712 typed data for Safe transaction ──
     const safeTxData = {
@@ -18032,96 +18053,47 @@ async function redeemPosition(posDataJson) {
       ]
     };
 
-    // ── STEP 3: Sign with MetaMask (EIP-712, triggers popup) ──
-    showToast('Sign the redemption in MetaMask...', 'info');
+    // ── STEP 3: Sign Safe transaction in MetaMask (EIP-712) ──
+    showToast('Sign the Safe transaction in MetaMask...', 'info');
     const signature = await window._walletSigner.signTypedData(domain, types, safeTxData);
-    console.log('[redeem] Signed, signature length:', signature.length);
+    console.log('[redeem] EIP-712 signature obtained, length:', signature.length);
 
-    // ── STEP 4: Try Polymarket relayer (gasless) ──
-    let txHash = null;
-    try {
-      showToast('Submitting via Polymarket relayer (gasless)...', 'info');
-      const relayerRes = await fetch('https://relayer-v2.polymarket.com/relay', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chain_id: 137,
-          to: proxyAddr,
-          data: {
-            to: safeTxData.to,
-            value: safeTxData.value.toString(),
-            data: safeTxData.data,
-            operation: safeTxData.operation,
-            safeTxGas: safeTxData.safeTxGas.toString(),
-            baseGas: safeTxData.baseGas.toString(),
-            gasPrice: safeTxData.gasPrice.toString(),
-            gasToken: safeTxData.gasToken,
-            refundReceiver: safeTxData.refundReceiver,
-            nonce: safeTxData.nonce.toString()
-          },
-          signatures: signature,
-          sender: window._connectedWallet
-        })
-      });
-      if (relayerRes.ok) {
-        const relayerData = await relayerRes.json();
-        txHash = relayerData.txHash || relayerData.hash || relayerData.transactionHash || null;
-        console.log('[redeem] Relayer response:', relayerData);
-      } else {
-        const errText = await relayerRes.text();
-        console.warn('[redeem] Relayer returned', relayerRes.status, errText);
-      }
-    } catch (relayerErr) {
-      console.warn('[redeem] Relayer failed:', relayerErr.message);
-    }
+    // ── STEP 4: Execute on-chain via Safe's execTransaction ──
+    showToast('Confirm gas payment in MetaMask...', 'info');
+    const safeExecAbi = [
+      'function execTransaction(address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, bytes signatures) returns (bool success)'
+    ];
+    const safeExec = new ethers.Contract(proxyAddr, safeExecAbi, window._walletSigner);
 
-    // ── STEP 5: Fallback — direct on-chain (needs POL for gas) ──
-    if (!txHash) {
-      console.log('[redeem] Relayer unavailable, trying direct on-chain...');
-      // Check POL balance first
-      const polBal = await pubProvider.getBalance(window._connectedWallet);
-      const polAmount = parseFloat(ethers.formatEther(polBal));
-      if (polAmount < 0.005) {
-        showToast('Need POL for gas. Send ~0.1 POL to ' + window._connectedWallet.slice(0, 8) + '... on Polygon', 'error');
-        return;
-      }
-
-      showToast('Submitting on-chain (gas: ~0.02 POL)...', 'info');
-      const safeExecAbi = [
-        'function execTransaction(address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, bytes signatures) returns (bool success)'
-      ];
-      const safeExec = new ethers.Contract(proxyAddr, safeExecAbi, window._walletSigner);
-      const tx = await safeExec.execTransaction(
-        safeTxData.to, safeTxData.value, safeTxData.data, safeTxData.operation,
-        safeTxData.safeTxGas, safeTxData.baseGas, safeTxData.gasPrice,
-        safeTxData.gasToken, safeTxData.refundReceiver, signature
-      );
-
-      showToast('Waiting for confirmation...', 'info');
-      const receipt = await tx.wait();
-      txHash = receipt.hash;
-      if (receipt.status !== 1) {
-        showToast('Transaction reverted — check PolygonScan', 'error');
-        return;
-      }
-    }
-
-    // ── STEP 6: Success ──
-    showToast(won
-      ? '✓ Claimed $' + payout.toFixed(2) + ' USDC!' + (txHash ? ' TX: ' + txHash.slice(0, 10) + '...' : '')
-      : '✓ Position cleared!' + (txHash ? ' TX: ' + txHash.slice(0, 10) + '...' : ''),
-      'success'
+    console.log('[redeem] Calling execTransaction on Safe:', proxyAddr.slice(0,10));
+    const tx = await safeExec.execTransaction(
+      safeTxData.to, safeTxData.value, safeTxData.data, safeTxData.operation,
+      safeTxData.safeTxGas, safeTxData.baseGas, safeTxData.gasPrice,
+      safeTxData.gasToken, safeTxData.refundReceiver, signature
     );
-    setTimeout(() => {
-      fetchWalletBalance(window._walletProvider, window._connectedWallet);
-      loadPolymarketPositions(true);
-    }, 4000);
 
+    showToast('Transaction submitted — waiting for confirmation...', 'info');
+    console.log('[redeem] TX hash:', tx.hash);
+    const receipt = await tx.wait();
+
+    if (receipt.status === 1) {
+      showToast(won
+        ? '✓ Claimed $' + payout.toFixed(2) + ' USDC! TX: ' + tx.hash.slice(0, 10) + '...'
+        : '✓ Position cleared! TX: ' + tx.hash.slice(0, 10) + '...',
+        'success'
+      );
+      setTimeout(() => {
+        fetchWalletBalance(window._walletProvider, window._connectedWallet);
+        loadPolymarketPositions(true);
+      }, 4000);
+    } else {
+      showToast('Transaction reverted — check PolygonScan: ' + tx.hash.slice(0, 14), 'error');
+    }
   } catch (e) {
     if (e.code === 'ACTION_REJECTED' || e.code === 4001) {
       showToast('Redemption cancelled', 'info');
     } else {
-      console.error('[redeem]', e);
+      console.error('[redeem] Error:', e);
       showToast('Redeem failed: ' + (e.shortMessage || e.reason || e.message || 'Unknown error'), 'error');
     }
   }
@@ -18138,7 +18110,7 @@ async function redeemAllPositions() {
     return sum + (p.current_price >= 0.99 ? parseFloat(p.shares) : 0);
   }, 0);
 
-  if (!confirm('Claim ' + redeemable.length + ' resolved position' + (redeemable.length > 1 ? 's' : '') + '?\nEstimated payout: $' + totalPayout.toFixed(2) + ' USDC\nGasless — no POL needed.')) return;
+  if (!confirm('Claim ' + redeemable.length + ' resolved position' + (redeemable.length > 1 ? 's' : '') + '?\nEstimated payout: $' + totalPayout.toFixed(2) + ' USDC\nGas cost: ~0.01 POL per position.')) return;
 
   let success = 0, failed = 0;
   for (const pos of redeemable) {
