@@ -1,0 +1,118 @@
+/**
+ * HYPERFLEX Trade Proxy — Cloudflare Worker
+ *
+ * Proxies signed Polymarket CLOB orders from the user's browser.
+ * Runs at the edge (300+ cities) so the request originates from a
+ * non-geo-restricted IP near the user. The order is already signed
+ * client-side — this worker just forwards it.
+ *
+ * Deploy: cd cloudflare-trade-proxy && npx wrangler deploy
+ */
+
+const CLOB_BASE = 'https://clob.polymarket.com';
+
+// Headers we forward from the client to Polymarket CLOB
+const POLY_HEADERS = [
+  'POLY_ADDRESS',
+  'POLY_API_KEY',
+  'POLY_PASSPHRASE',
+  'POLY_TIMESTAMP',
+  'POLY_SIGNATURE',
+];
+
+// Builder attribution headers
+const BUILDER_HEADERS = [
+  'POLY_BUILDER_ADDRESS',
+  'POLY_BUILDER_SIGNATURE',
+  'POLY_BUILDER_NONCE',
+];
+
+function corsHeaders(origin) {
+  return {
+    'Access-Control-Allow-Origin': origin || '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': [
+      'Content-Type',
+      ...POLY_HEADERS,
+      ...BUILDER_HEADERS,
+    ].join(', '),
+    'Access-Control-Max-Age': '86400',
+  };
+}
+
+export default {
+  async fetch(request, env) {
+    const origin = request.headers.get('Origin') || '';
+    const allowed = env.ALLOWED_ORIGIN || 'https://hyperflex.network';
+
+    // Allow localhost for dev + production domain
+    const isAllowed = origin === allowed
+      || origin.startsWith('http://localhost')
+      || origin.startsWith('http://127.0.0.1');
+
+    // Preflight
+    if (request.method === 'OPTIONS') {
+      return new Response(null, {
+        status: 204,
+        headers: corsHeaders(isAllowed ? origin : allowed),
+      });
+    }
+
+    // Only POST /order
+    if (request.method !== 'POST') {
+      return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+        status: 405,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders(isAllowed ? origin : allowed) },
+      });
+    }
+
+    // Origin check
+    if (!isAllowed) {
+      return new Response(JSON.stringify({ error: 'Origin not allowed' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders(allowed) },
+      });
+    }
+
+    // Build headers for Polymarket CLOB
+    const clobHeaders = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    };
+
+    for (const h of POLY_HEADERS) {
+      const val = request.headers.get(h);
+      if (val) clobHeaders[h] = val;
+    }
+    for (const h of BUILDER_HEADERS) {
+      const val = request.headers.get(h);
+      if (val) clobHeaders[h] = val;
+    }
+
+    // Forward the signed order body to CLOB
+    const body = await request.text();
+
+    try {
+      const clobRes = await fetch(`${CLOB_BASE}/order`, {
+        method: 'POST',
+        headers: clobHeaders,
+        body: body,
+      });
+
+      const clobText = await clobRes.text();
+
+      return new Response(clobText, {
+        status: clobRes.status,
+        headers: {
+          'Content-Type': 'application/json',
+          ...corsHeaders(origin),
+        },
+      });
+    } catch (err) {
+      return new Response(JSON.stringify({ error: 'Proxy error: ' + err.message }), {
+        status: 502,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+      });
+    }
+  },
+};

@@ -1,0 +1,9 @@
+name = "hyperflex-trade-proxy"
+main = "src/worker.js"
+compatibility_date = "2024-01-01"
+
+[vars]
+ALLOWED_ORIGIN = "https://hyperflex.network"
+
+# Custom domain (set up in Cloudflare dashboard after first deploy):
+# routes = [{ pattern = "trade-proxy.hyperflex.network/*", zone_name = "hyperflex.network" }]
