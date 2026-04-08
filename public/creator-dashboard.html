@@ -15610,7 +15610,13 @@ async function fetchRealizedPnL(address) {
 // Fetch USDC balance from Polygon RPC (no MetaMask needed)
 // Checks both USDC.e (bridged) and native USDC — Polymarket may use either
 async function fetchUSDCBalance(address) {
-  if (!address || window._walletBalanceUSDC != null) return; // already have it
+  if (!address) return;
+  // Use proxy address if available (where Polymarket funds live)
+  const proxyAddr = _polyWalletAddress || localStorage.getItem('hf_poly_wallet') || '';
+  if (proxyAddr && proxyAddr.startsWith('0x') && proxyAddr.toLowerCase() !== address.toLowerCase()) {
+    address = proxyAddr;
+  }
+  if (window._walletBalanceUSDC != null && window._walletBalanceUSDC > 0) return; // already have a valid balance
   try {
     const usdceContract = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174'; // USDC.e (bridged, 6 decimals)
     const usdcNative    = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359'; // USDC (native, 6 decimals)
@@ -17052,6 +17058,13 @@ function disconnectBrowserWallet() {
 
 async function fetchWalletBalance(provider, address) {
   if (!address) return;
+  // CRITICAL: Read balance from the PROXY address (where Polymarket funds live),
+  // not the EOA (MetaMask address). The EOA usually has $0 USDC.
+  const proxyAddr = _polyWalletAddress || localStorage.getItem('hf_poly_wallet') || '';
+  const balanceAddr = (proxyAddr && proxyAddr.startsWith('0x') && proxyAddr.toLowerCase() !== address.toLowerCase())
+    ? proxyAddr : address;
+  console.log('[wallet balance] Reading from:', balanceAddr.slice(0,10), '(proxy:', proxyAddr.slice(0,10), ', EOA:', address.slice(0,10), ')');
+
   // Use public RPC for read-only balance calls — no MetaMask popup, no 401
   const POLYGON_RPCS = ['https://polygon-bor-rpc.publicnode.com', 'https://1rpc.io/matic'];
   let pubProvider = null;
@@ -17065,20 +17078,19 @@ async function fetchWalletBalance(provider, address) {
   }
   if (!pubProvider) { console.warn('[wallet balance] All public RPCs failed'); return; }
   try {
-    // MATIC/POL native balance
+    // MATIC/POL native balance (from EOA — gas fees come from here)
     const maticBal = await pubProvider.getBalance(address);
     window._walletBalanceMATIC = parseFloat(ethers.formatEther(maticBal));
 
-    // USDC.e balance (Polymarket uses USDC.e bridged: 0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174)
+    // USDC balance from PROXY address (where Polymarket deposits live)
     const USDC_E_ADDRESS = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
-    // Also check native USDC (0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359)
     const USDC_NATIVE_ADDRESS = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
     const USDC_ABI = ['function balanceOf(address) view returns (uint256)'];
     const usdcE = new ethers.Contract(USDC_E_ADDRESS, USDC_ABI, pubProvider);
     const usdcN = new ethers.Contract(USDC_NATIVE_ADDRESS, USDC_ABI, pubProvider);
-    const [usdcEBal, usdcNBal] = await Promise.all([usdcE.balanceOf(address), usdcN.balanceOf(address)]);
-    // Show combined USDC balance (both bridged + native)
+    const [usdcEBal, usdcNBal] = await Promise.all([usdcE.balanceOf(balanceAddr), usdcN.balanceOf(balanceAddr)]);
     window._walletBalanceUSDC = parseFloat(ethers.formatUnits(usdcEBal, 6)) + parseFloat(ethers.formatUnits(usdcNBal, 6));
+    console.log('[wallet balance] USDC:', window._walletBalanceUSDC.toFixed(2), 'from', balanceAddr.slice(0,10));
 
     updateWalletUI();
   } catch (e) {
