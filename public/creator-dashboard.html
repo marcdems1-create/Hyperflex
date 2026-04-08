@@ -2822,12 +2822,39 @@ body.nav-open .sidebar-backdrop {
 }
 @media (max-width: 699px) {
   .pos-table-row {
-    grid-template-columns: 1fr auto !important;
-    gap: 4px !important;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) minmax(0, max-content) !important;
+    grid-template-areas:
+      "market value"
+      "sell sell" !important;
+    column-gap: 10px !important;
+    row-gap: 6px !important;
+    align-items: center !important;
+  }
+  .pos-table-row > div:nth-child(1) {
+    grid-area: market;
+    min-width: 0 !important;
+    overflow: hidden !important;
   }
   .pos-table-row > div:nth-child(2),
   .pos-table-row > div:nth-child(3),
   .pos-table-row > div:nth-child(4) { display: none !important; }
+  .pos-table-row > div:nth-child(5) {
+    grid-area: value;
+    text-align: right !important;
+    min-width: 0 !important;
+    max-width: 140px !important;
+    overflow: hidden !important;
+  }
+  .pos-table-row > div:nth-child(5) > div {
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+  .pos-table-row > div:nth-child(6) {
+    grid-area: sell;
+    text-align: right !important;
+  }
 }
 
 /* ══ Social Tab ══ */
