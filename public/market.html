@@ -3128,70 +3128,16 @@ async function submitClobOrder(requestBody, apiKey, apiSecret, apiPassphrase, eo
     var directErrMsg = directData.error || directData.message || JSON.stringify(directData);
     tradeDebug('direct order failed', directRes.status + ': ' + directErrMsg);
 
-    // Clean up geo-restriction errors
-    var cleanMsg = directErrMsg;
-    if (/restricted|geo|region|not available/i.test(directErrMsg)) {
-      cleanMsg = 'Trading unavailable from your current IP. Try connecting via VPN.';
-    } else if (cleanMsg.length > 120) {
-      cleanMsg = cleanMsg.substring(0, 120) + '…';
-    }
-
     // If browser-direct failed for non-auth reasons, DON'T fall through to server proxy
     // (server proxy will also get geo-blocked from Railway's IP)
-    return { _error: true, _errorMsg: cleanMsg };
+    return { _error: true, _errorMsg: 'CLOB ' + directRes.status + ': ' + directErrMsg };
 
   } catch (directErr) {
-    // CORS or network error on browser-direct — fall back to server proxy as last resort
-    tradeDebug('direct THREW (CORS?)', directErr.message + ' — falling back to server proxy');
-  }
-
-  // FALLBACK: Server proxy (only if browser-direct threw — e.g. CORS blocked)
-  try {
-    tradeDebug('submitting via server proxy', '/api/polymarket/clob-order');
-    var token2 = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
-    var proxyHeaders = { 'Content-Type': 'application/json' };
-    if (token2) proxyHeaders['Authorization'] = 'Bearer ' + token2;
-
-    var proxyRes = await fetch('/api/polymarket/clob-order', {
-      method: 'POST',
-      headers: proxyHeaders,
-      body: JSON.stringify({
-        signed_body: requestBody,
-        api_key: apiKey,
-        api_secret: apiSecret,
-        api_passphrase: apiPassphrase,
-        eoa_address: eoaAddress
-      })
-    });
-
-    var proxyData = await proxyRes.json().catch(function() { return {}; });
-    tradeDebug('proxy ' + proxyRes.status, JSON.stringify(proxyData).substring(0, 300));
-
-    if (proxyRes.ok) return proxyData;
-
-    var proxyErrMsg = proxyData.error || proxyData.message || JSON.stringify(proxyData);
-    var clobDetail = proxyData.detail ? JSON.stringify(proxyData.detail).substring(0, 200) : '';
-
-    if (proxyRes.status === 401 || (proxyRes.status === 502 && clobDetail.includes('401'))) {
-      localStorage.removeItem('poly_api_key');
-      localStorage.removeItem('poly_api_secret');
-      localStorage.removeItem('poly_api_passphrase');
-      localStorage.removeItem('hf_clob_api_key');
-      localStorage.removeItem('hf_clob_api_secret');
-      localStorage.removeItem('hf_clob_api_passphrase');
-      localStorage.removeItem('poly_eoa_address');
-      updateTradingUI();
-      return { _expired: true, _errorMsg: 'CLOB 401: ' + (clobDetail || proxyErrMsg) };
-    }
-
-    var fullProxyMsg = proxyErrMsg + (clobDetail ? ' ' + clobDetail : '');
-    if (/restricted|geo|region|not available/i.test(fullProxyMsg)) {
-      return { _error: true, _errorMsg: 'Trading unavailable from your current IP. Try connecting via VPN.' };
-    }
-    return { _error: true, _errorMsg: fullProxyMsg.length > 120 ? fullProxyMsg.substring(0, 120) + '…' : fullProxyMsg };
-  } catch (proxyErr) {
-    tradeDebug('proxy THREW', proxyErr.message);
-    return { _error: true, _errorMsg: 'Network error: ' + proxyErr.message };
+    // CORS or network error on browser-direct — do NOT fall back to server proxy
+    // Railway's IP is geo-restricted by Polymarket, so proxy always fails with
+    // "Trading restricted in your region" even when the user's own IP is fine.
+    tradeDebug('direct THREW (CORS?)', directErr.message);
+    return { _error: true, _errorMsg: 'Could not reach Polymarket — please try again' };
   }
 }
 
