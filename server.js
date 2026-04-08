@@ -26503,6 +26503,50 @@ app.post('/api/polymarket/clob-order', optionalAuth, async (req, res) => {
   }
 });
 
+// ── Builder-sign failure monitoring ──────────────────────────────────────────
+// Every trade client calls /api/polymarket/builder-sign before POSTing the
+// order. A failure here means the trade still submits, but WITHOUT the
+// POLY_BUILDER_* headers — so we silently lose the builder fee on that order.
+// Client-side catch blocks in market.html + creator-dashboard.html degrade
+// gracefully (submit the trade anyway), so a broken builder-sign endpoint
+// would leak revenue with zero visible symptom. This counter fixes that.
+const _builderSignStats = {
+  total: 0,
+  success: 0,
+  failures: 0,
+  failures_503: 0, // credentials missing
+  failures_400: 0, // bad request from client
+  failures_500: 0, // hmac / unexpected error
+  last_failures: [], // last 50 failures: { ts, status, error, ip }
+  last_success_at: null,
+  last_failure_at: null,
+  first_tracked_at: new Date().toISOString()
+};
+
+function _trackBuilderSign(status, err, req) {
+  _builderSignStats.total++;
+  if (status >= 200 && status < 300) {
+    _builderSignStats.success++;
+    _builderSignStats.last_success_at = new Date().toISOString();
+    return;
+  }
+  _builderSignStats.failures++;
+  _builderSignStats.last_failure_at = new Date().toISOString();
+  if (status === 503) _builderSignStats.failures_503++;
+  else if (status === 400) _builderSignStats.failures_400++;
+  else if (status === 500) _builderSignStats.failures_500++;
+  _builderSignStats.last_failures.push({
+    ts: new Date().toISOString(),
+    status,
+    error: (err || '').toString().slice(0, 200),
+    ip: (req && (req.ip || req.headers['x-forwarded-for'] || '')).toString().slice(0, 40)
+  });
+  if (_builderSignStats.last_failures.length > 50) {
+    _builderSignStats.last_failures = _builderSignStats.last_failures.slice(-50);
+  }
+  console.warn('[builder-sign] FAIL', status, (err || '').toString().slice(0, 200));
+}
+
 // POST /api/polymarket/builder-sign — remote signing endpoint
 // Client sends { method, path, body } → server returns builder HMAC headers
 app.post('/api/polymarket/builder-sign', optionalAuth, async (req, res) => {
@@ -26510,10 +26554,12 @@ app.post('/api/polymarket/builder-sign', optionalAuth, async (req, res) => {
   const builderSecret = process.env.POLY_BUILDER_SECRET;
   const builderPassphrase = process.env.POLY_BUILDER_PASSPHRASE;
   if (!builderKey || !builderSecret || !builderPassphrase) {
+    _trackBuilderSign(503, 'Builder credentials not configured', req);
     return res.status(503).json({ error: 'Builder credentials not configured' });
   }
   const { method, path, body } = req.body;
   if (!method || !path) {
+    _trackBuilderSign(400, 'method and path required', req);
     return res.status(400).json({ error: 'method and path required' });
   }
   try {
@@ -26522,6 +26568,7 @@ app.post('/api/polymarket/builder-sign', optionalAuth, async (req, res) => {
     const secretBuf = Buffer.from(builderSecret, 'base64');
     const signature = crypto.createHmac('sha256', secretBuf).update(message).digest('base64')
       .replace(/\+/g, '-').replace(/\//g, '_');
+    _trackBuilderSign(200, null, req);
     res.json({
       POLY_BUILDER_API_KEY: builderKey,
       POLY_BUILDER_TIMESTAMP: ts,
@@ -26530,8 +26577,22 @@ app.post('/api/polymarket/builder-sign', optionalAuth, async (req, res) => {
     });
   } catch (err) {
     console.error('[builder-sign]', err.message);
+    _trackBuilderSign(500, err.message, req);
     res.status(500).json({ error: 'Failed to generate builder signature' });
   }
+});
+
+// GET /api/admin/builder-sign-stats — read the builder-sign counter. If this
+// endpoint returns a non-zero failure count you're silently losing builder
+// fees on every failing request.
+app.get('/api/admin/builder-sign-stats', requireAdmin, (req, res) => {
+  const total = _builderSignStats.total;
+  const failureRate = total > 0 ? (_builderSignStats.failures / total) : 0;
+  res.json({
+    ...(_builderSignStats),
+    failure_rate_pct: Math.round(failureRate * 10000) / 100,
+    tracked_since: _builderSignStats.first_tracked_at
+  });
 });
 
 // ════════════════════════════════════════════════════════════
