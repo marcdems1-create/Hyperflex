@@ -17599,10 +17599,11 @@ function _updateLimitFromOrderbook() {
 function adjustPrice(delta) {
   if (!_tradeModalData) return;
   const tick = _tradeModalData._tickSize || 0.01;
-  const step = delta > 0 ? tick : -tick;
+  // Use 1¢ steps (0.01) as minimum — tick size 0.1 makes 10¢ jumps which is too coarse
+  const step = delta > 0 ? Math.min(tick, 0.01) : -Math.min(tick, 0.01);
   const current = _tradeModalData._limitPrice || 0;
-  const newPrice = Math.round((current + step) / tick) * tick;
-  _tradeModalData._limitPrice = Math.max(tick, Math.min(1 - tick, newPrice));
+  const newPrice = Math.round((current + step) * 10000) / 10000;
+  _tradeModalData._limitPrice = Math.max(0.01, Math.min(0.99, newPrice));
   const el = document.getElementById('tradeLimitPrice');
   if (el) el.textContent = (_tradeModalData._limitPrice * 100).toFixed(1) + '¢';
   updateTradeEstimate();
@@ -17626,8 +17627,8 @@ function setMaxShares() {
   if (mode === 'sell') {
     // Max sell = position value in USD (shares × price)
     const shares = _tradeModalData.shares || _tradeModalData.size || 0;
-    const maxUsd = Math.floor(shares * price);
-    input.value = maxUsd;
+    const maxUsd = Math.round(shares * price * 100) / 100;
+    input.value = maxUsd > 0 ? maxUsd : (shares * price).toFixed(2);
   } else {
     // Max buy = wallet balance
     const balance = window._walletBalanceUSDC || 0;
@@ -18513,7 +18514,7 @@ function _taRSI(arr,n){const r=new Array(arr.length).fill(null);if(arr.length<n+
         <button id="tradeBuyBtn" onclick="setTradeMode('buy')" style="flex:1;background:none;border:none;padding:10px;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;color:#fff;border-bottom:2px solid #fff;margin-bottom:-2px">Buy</button>
         <button id="tradeSellBtn" onclick="setTradeMode('sell')" style="flex:1;background:none;border:none;padding:10px;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;color:#666;border-bottom:2px solid transparent;margin-bottom:-2px">Sell</button>
         <div style="flex:1;display:flex;align-items:center;justify-content:flex-end;padding-right:4px">
-          <span style="font-family:var(--mono);font-size:11px;color:#888">Limit ▾</span>
+          <span style="font-family:var(--mono);font-size:11px;color:#888">Market (FOK)</span>
         </div>
       </div>
 
