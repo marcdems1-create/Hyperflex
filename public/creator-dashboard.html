@@ -15456,22 +15456,22 @@ function classifyPosition(p) {
   const price = p.current_price || p.curPrice || p.probability || 0;
   const endDate = p.end_date ? new Date(p.end_date) : null;
   const isExpired = endDate && endDate < new Date();
-  const priceNearTerminal = price <= 0.03 || price >= 0.97;
+  // Only treat as terminal at exactly 0¢ or 100¢ (not 97¢ — that's still tradeable)
+  const priceAtTerminal = price <= 0.01 || price >= 0.99;
   const cashValue = parseFloat(p.cash_value) || parseFloat(p.currentValue) || 0;
   const shares = parseFloat(p.shares) || parseFloat(p.size) || 0;
   // A position is resolved if:
-  // - explicitly marked resolved/settled
-  // - expired AND price near 0 or 1
+  // - explicitly marked resolved/settled/closed by the API
+  // - expired AND price at terminal (0¢ or 100¢)
   // - has shares but currentValue is 0 (total loss — resolved at 0)
-  // - cashPnl exists AND currentValue is 0 (closed position)
   const zeroedOut = shares > 0 && cashValue === 0;
-  const isResolved = p.resolved || p.settled || (isExpired && priceNearTerminal) || zeroedOut;
+  const isResolved = p.resolved || p.settled || p.closed || (isExpired && priceAtTerminal) || zeroedOut;
   let won = false;
   if (isResolved) {
     if (p.won != null) won = p.won;
     else if (p.pnl != null) won = parseFloat(p.pnl) > 0;
-    else if (priceNearTerminal) {
-      won = (p.side === 'YES' && price >= 0.97) || (p.side === 'NO' && price <= 0.03);
+    else if (priceAtTerminal) {
+      won = (p.side === 'YES' && price >= 0.99) || (p.side === 'NO' && price <= 0.01);
     }
   }
   return { isResolved, won };
@@ -17349,7 +17349,8 @@ function openTradeModal(posDataJson, mode) {
   const pos = typeof posDataJson === 'string' ? JSON.parse(posDataJson) : posDataJson;
 
   // Resolved markets can't be traded on CLOB — redirect to Polymarket to claim
-  if (pos._isResolved || (pos.current_price != null && pos.current_price >= 0.97)) {
+  // Only block if explicitly resolved (classifyPosition), NOT just high price
+  if (pos._isResolved) {
     showToast('This market has resolved. Claim your winnings on Polymarket.', 'info');
     const claimUrl = typeof polyRef === 'function' ? polyRef('https://polymarket.com/portfolio') : 'https://polymarket.com/portfolio';
     window.open(claimUrl, '_blank');

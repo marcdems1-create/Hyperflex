@@ -594,8 +594,8 @@ function renderMarket() {
   document.getElementById('mktLiquidity').textContent = fmtCap(m.liquidityNum || m.liquidity || 0);
 
   // Expiry — check closed/resolved FIRST, then fall back to end date countdown
-  // Also detect resolved by terminal price (YES at 100¢ or 0¢ = market settled)
-  var priceAtTerminal = (yesPrice >= 0.97 || yesPrice <= 0.03);
+  // Also detect resolved by exact terminal price (100¢ or 0¢ = market settled)
+  var priceAtTerminal = (yesPrice >= 0.99 || yesPrice <= 0.01);
   var isClosed = m.closed === true || m.active === false || m.resolved === true || priceAtTerminal;
   var endDate = m.endDate || m.end_date_iso;
   if (isClosed) {
