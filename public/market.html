@@ -392,8 +392,8 @@ canvas{display:block;width:100%!important}
           <button class="trade-tab" onclick="setTradeMode('sell')">Sell</button>
           <div style="margin-left:auto;display:flex;align-items:center">
             <select id="tradeOrderType" style="background:transparent;border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-family:var(--body);font-size:11px;color:var(--soft)">
+              <option value="market" selected>Market</option>
               <option value="limit">Limit</option>
-              <option value="market">Market</option>
             </select>
           </div>
         </div>
@@ -528,14 +528,29 @@ async function loadMarket() {
 
     renderMarket();
 
-    // Auto-select outcome from ?outcome= param (conditionId or index)
+    // Auto-select outcome from ?outcome= param (conditionId, slug, tokenId, or index)
     var outcomeParam = new URLSearchParams(window.location.search).get('outcome');
     if (outcomeParam && _sortedEventMarkets && _sortedEventMarkets.length > 1) {
       var foundIdx = -1;
-      // Try matching by conditionId first
+      // Try matching by conditionId or slug first
       for (var oi = 0; oi < _sortedEventMarkets.length; oi++) {
         if (_sortedEventMarkets[oi].conditionId === outcomeParam || _sortedEventMarkets[oi].slug === outcomeParam) {
           foundIdx = oi; break;
+        }
+      }
+      // Try matching by token ID (clobTokenIds)
+      if (foundIdx < 0) {
+        for (var oi = 0; oi < _sortedEventMarkets.length; oi++) {
+          var emTids = _sortedEventMarkets[oi].clobTokenIds;
+          if (typeof emTids === 'string') { try { emTids = JSON.parse(emTids); } catch(e) { emTids = []; } }
+          if (emTids && emTids.length) {
+            for (var ti = 0; ti < emTids.length; ti++) {
+              if (emTids[ti] === outcomeParam || (emTids[ti] && emTids[ti].toLowerCase() === outcomeParam.toLowerCase())) {
+                foundIdx = oi; break;
+              }
+            }
+            if (foundIdx >= 0) break;
+          }
         }
       }
       // Fall back to numeric index
@@ -1868,8 +1883,8 @@ function updateSidebarPosition() {
     '</div>';
 
   posEl.style.display = 'block';
-  posEl.style.borderColor = 'rgba(34,197,94,0.25)';
-  posEl.style.background = 'rgba(34,197,94,0.06)';
+  posEl.style.borderColor = 'rgba(0,230,138,0.25)';
+  posEl.style.background = 'rgba(0,230,138,0.06)';
 }
 
 // Helper: find a user position matching a specific outcome row
@@ -3025,7 +3040,7 @@ async function executeTrade() {
         signature: orderSignature
       },
       owner: apiKey,
-      orderType: 'GTC',
+      orderType: (document.getElementById('tradeOrderType').value === 'market') ? 'FOK' : 'GTC',
       deferExec: false
     });
     tradeDebug('requestBody', { side: clobSide, sigType: sigType, maker: makerAddr.slice(0,10), owner: apiKey.slice(0,10), bodyLen: requestBody.length });
@@ -3047,7 +3062,7 @@ async function executeTrade() {
           var retryBody = JSON.stringify({
             order: JSON.parse(requestBody).order,
             owner: apiKey,
-            orderType: 'GTC'
+            orderType: (document.getElementById('tradeOrderType').value === 'market') ? 'FOK' : 'GTC'
           });
           data = await submitClobOrder(retryBody, apiKey, apiSecret, apiPassphrase, eoaAddress);
           if (data._expired || data._error) {
@@ -3078,6 +3093,38 @@ async function executeTrade() {
     // Show position in trade panel
     showTradePosition(sideLabel, shares, price, amount, payout);
 
+    // Immediately inject local position so sidebar shows it without waiting for Polymarket API
+    try {
+      var localTokenId = tokenId.toLowerCase();
+      var localOutcomeMarket = (_sortedEventMarkets && _sortedEventMarkets[_activeOutcomeIndex]) ? _sortedEventMarkets[_activeOutcomeIndex] : _market;
+      var existingPos = _userPositions[localTokenId];
+      if (existingPos) {
+        // Add to existing position
+        var oldSize = existingPos.size;
+        var oldAvg = existingPos.avgPrice;
+        existingPos.size = oldSize + shares;
+        existingPos.avgPrice = ((oldAvg * oldSize) + (price / 100 * shares)) / (oldSize + shares);
+        existingPos.currentPrice = price / 100;
+      } else {
+        _userPositions[localTokenId] = {
+          size: shares,
+          avgPrice: price / 100,
+          side: sideLabel,
+          currentPrice: price / 100,
+          cashPnl: 0,
+          percentPnl: 0,
+          conditionId: (localOutcomeMarket.conditionId || '').toLowerCase(),
+          title: localOutcomeMarket.groupItemTitle || localOutcomeMarket.question || ''
+        };
+      }
+      // Re-render outcome badges + sidebar position immediately
+      if (_market) renderOutcomes(_market);
+      updateSidebarPosition();
+      console.log('[trade] Local position injected for', sideLabel, shares.toFixed(1), 'shares @', price + '¢');
+    } catch (posErr) {
+      console.log('[trade] Could not inject local position:', posErr.message);
+    }
+
     // Award FLEX points — 1 per $1 traded
     try {
       var hfToken = localStorage.getItem('hf_token');
@@ -3096,9 +3143,9 @@ async function executeTrade() {
       }
     } catch (e) { /* silent */ }
 
-    // Refresh balance + positions after trade
+    // Refresh balance + positions after trade (will update with real data from Polymarket API)
     setTimeout(fetchTradeBalance, 2000);
-    setTimeout(fetchUserPositions, 3000);
+    setTimeout(fetchUserPositions, 5000);
   } catch (err) {
     if (err.code === 'ACTION_REJECTED' || err.code === 4001) {
       showTradeStatus('Order signing rejected', 'error');
