@@ -30,9 +30,8 @@
       '.nav-signin:hover{color:#f0f0f5;border-color:rgba(255,255,255,0.2);background:rgba(255,255,255,0.04)}' +
       '.nav-cta{font-family:"Inter",-apple-system,sans-serif;font-size:11px;font-weight:700;color:#0a0a0f;background:linear-gradient(135deg,#00e68a,#4d9fff);text-decoration:none;padding:6px 14px;border-radius:8px;transition:all .15s;white-space:nowrap}' +
       '.nav-cta:hover{filter:brightness(1.1);transform:translateY(-1px)}' +
-      '@media(max-width:768px){.topbar{padding:12px 16px}.nav-links{display:none}.nav-auth{display:none}' +
-      '.nav-hamburger{display:flex;align-items:center;justify-content:center;width:44px;height:44px;border:none;background:none;cursor:pointer;padding:0;margin-left:auto;flex-shrink:0}' +
-      '.nav-hamburger svg{width:24px;height:24px;stroke:#f0f0f5;stroke-width:2;fill:none}' +
+      /* Mobile menu base styles (hidden on all screens by default) */
+      '.nav-hamburger{display:none}' +
       '.nav-mobile-menu{display:none;position:fixed;inset:0;z-index:9998;background:rgba(10,10,15,0.98);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);flex-direction:column;overflow-y:auto;padding:0}' +
       '.nav-mobile-menu.open{display:flex}' +
       '.nav-mobile-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.06)}' +
@@ -48,8 +47,11 @@
       '.nav-mobile-auth a{display:block;text-align:center;padding:12px;border-radius:10px;font-family:"Inter",-apple-system,sans-serif;font-size:14px;font-weight:600;text-decoration:none;min-height:48px;line-height:24px}' +
       '.nav-mobile-auth .mob-signin{color:#f0f0f5;border:1px solid rgba(255,255,255,0.12);margin-bottom:10px}' +
       '.nav-mobile-auth .mob-dash{color:#0a0a0f;background:linear-gradient(135deg,#00e68a,#4d9fff)}' +
+      /* Mobile breakpoint — show hamburger, hide desktop nav */
+      '@media(max-width:768px){.topbar{padding:12px 16px}.nav-links{display:none}.nav-auth{display:none}' +
+      '.nav-hamburger{display:flex;align-items:center;justify-content:center;width:44px;height:44px;border:none;background:none;cursor:pointer;padding:0;margin-left:auto;flex-shrink:0}' +
+      '.nav-hamburger svg{width:24px;height:24px;stroke:#f0f0f5;stroke-width:2;fill:none}' +
       '}' +
-      '@media(min-width:769px){.nav-hamburger{display:none}}' +
       /* ── Global Search (Cmd+K) styles ── */
       '.nav-search-btn{display:flex;align-items:center;gap:6px;padding:5px 12px;border:1px solid rgba(255,255,255,0.08);border-radius:8px;background:rgba(255,255,255,0.03);cursor:pointer;margin-left:8px;transition:all .15s;flex-shrink:0}' +
       '.nav-search-btn:hover{border-color:rgba(255,255,255,0.16);background:rgba(255,255,255,0.06)}' +
