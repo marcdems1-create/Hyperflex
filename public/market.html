@@ -1609,26 +1609,35 @@ function adjustSharesBy(delta) {
   updateTradeCalc();
 }
 
-function setMaxShares() {
-  // Find user's shares for current side, convert to USD at current limit price
+async function setMaxShares() {
   var input = document.getElementById('tradeAmount');
   if (!input || !_market) return;
-  var maxShares = 0;
 
+  // If positions haven't loaded yet, try fetching them now
+  if (!_userPositions || !Object.keys(_userPositions).length) {
+    console.log('[max] No positions cached, fetching...');
+    await fetchUserPositions();
+  }
+
+  var maxShares = 0;
   // _userPositions is { tokenId: { size, avgPrice, side, conditionId } }
   if (_userPositions && typeof _userPositions === 'object') {
     var keys = Object.keys(_userPositions);
+    console.log('[max] Checking', keys.length, 'positions for side', _tradeSide);
     for (var i = 0; i < keys.length; i++) {
       var pos = _userPositions[keys[i]];
       if (pos && pos.size > 0) {
         var posSide = (pos.side || pos.outcome || '').toUpperCase();
+        console.log('[max] Position:', posSide, 'size:', pos.size);
         if (posSide === _tradeSide.toUpperCase()) {
-          maxShares = pos.size;
-          break;
+          maxShares += pos.size; // sum all positions on this side
         }
       }
     }
   }
+
+  console.log('[max] Total shares for', _tradeSide, ':', maxShares);
+
   // Convert shares to USD value at current limit price
   var price = parseFloat(document.getElementById('tradePrice').value) || 50;
   var priceFrac = price / 100;
