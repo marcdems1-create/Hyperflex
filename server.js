@@ -32486,67 +32486,283 @@ app.get('/api/admin/rewards/pool', requireAdmin, async (req, res) => {
 });
 
 // POST /api/admin/rewards/distribute — Calculate and distribute shares
+//
+// FLYWHEEL MODEL (v2):
+// 1. Compute actual builder-fee revenue for the week from the flex_points
+//    _log trade volume × 0.003 (Polymarket pays ~30% of ~1% trading fee
+//    to builders, = 0.3% of routed volume).
+// 2. 50% of that revenue is distributed to traders; 50% stays with
+//    HYPERFLEX as profit.
+// 3. The trader share splits into:
+//      - BASE POOL (80%, = 40% of revenue) — pro-rata by trading VOLUME
+//        so every user who traded this week gets paid in proportion.
+//      - FLEX POT (20%, = 10% of revenue) — goes to the TOP 20% of users
+//        by a blended engagement score:
+//          volume 50% + clicks 20% + trade_count 20% + streak 10%
+//        The top-engaged users double-dip: they get their base share
+//        AND a flex bonus. Most engaged → biggest payout.
+//
+// Admin can override the auto-computed pool by passing `override_pool_usd`
+// in the request body (for edge cases where we want to seed a bigger
+// incentive or backfill from an off-chain source).
 app.post('/api/admin/rewards/distribute', requireAdmin, async (req, res) => {
   try {
     const week = rewardsWeekStart(req.body.week_start);
-    // Get pool record
-    let poolRec;
+    // dry_run = true runs the entire distribution calculation but DOESN'T
+    // write to rewards_pool or user_rewards. Admin can preview the split
+    // (base pool $, flex pot $, per-user breakdown) before committing.
+    const dryRun = req.body.dry_run === true;
+    const weekStart = new Date(week);
+    const weekEnd = new Date(weekStart.getTime() + 7 * 86400000);
+    const weekStartISO = weekStart.toISOString();
+    const weekEndISO = weekEnd.toISOString();
+
+    // ── Step 1: compute weekly builder-fee revenue from trade volume ──
+    // Matches the platform-stats formula at server.js:13881
+    //   est_revenue = volume × 0.003  (0.3% of routed volume)
+    let totalVolume = 0;
     if (pool) {
-      const rows = await dbQuery('SELECT * FROM rewards_pool WHERE week_start = $1', [week]);
-      poolRec = rows[0];
-    } else {
-      const { data } = await supabase.from('rewards_pool').select('*').eq('week_start', week).single();
-      poolRec = data;
+      const rows = await dbQuery(
+        `SELECT COALESCE(SUM(trade_amount_usd), 0) as vol
+         FROM flex_points_log
+         WHERE created_at >= $1 AND created_at < $2
+           AND source IN ('polymarket_trade','kalshi_trade')`,
+        [weekStartISO, weekEndISO]);
+      totalVolume = parseFloat(rows[0]?.vol || 0);
+    } else if (supabase) {
+      const { data } = await supabase.from('flex_points_log')
+        .select('trade_amount_usd')
+        .gte('created_at', weekStartISO).lt('created_at', weekEndISO)
+        .in('source', ['polymarket_trade','kalshi_trade']);
+      totalVolume = (data || []).reduce((s, r) => s + (parseFloat(r.trade_amount_usd) || 0), 0);
     }
-    if (!poolRec) return res.status(400).json({ error: 'No pool set for this week. Set a pool amount first.' });
-    if (poolRec.distributed) return res.status(400).json({ error: 'Already distributed for this week.' });
-    const poolAmount = parseFloat(poolRec.pool_amount) || 0;
-    if (poolAmount <= 0) return res.status(400).json({ error: 'Pool amount must be > 0' });
 
-    // Query click counts grouped by user_id for this week
-    let clickRows;
-    if (pool) {
-      clickRows = await dbQuery(
-        `SELECT user_id, COUNT(*) as clicks FROM rewards_click_tracking
-         WHERE user_id IS NOT NULL AND created_at >= $1::date AND created_at < ($1::date + interval '7 days')
-         GROUP BY user_id ORDER BY clicks DESC`, [week]);
-    } else {
-      const { data } = await supabase.rpc('rewards_click_summary', { week_param: week });
-      clickRows = data || [];
+    // Polymarket builder rebate ≈ 30% of their 1% trade fee = 0.3% of volume.
+    // If this ever changes, update the constant in ONE place (here + the
+    // matching line in /api/admin/platform-stats).
+    const BUILDER_FEE_RATE = 0.003;
+    const autoBuilderFees = totalVolume * BUILDER_FEE_RATE;
+
+    // Admin override (optional) for edge cases or manual revenue reconciliation
+    const overridePool = parseFloat(req.body.override_pool_usd);
+    const builderFees = (overridePool && overridePool > 0) ? (overridePool / 0.5) : autoBuilderFees;
+
+    // ── Step 2: compute the 50/40/10 split ──
+    const rewardsBudget = builderFees * 0.5;  // 50% to traders
+    const basePool      = rewardsBudget * 0.8; // 40% of revenue
+    const flexPot       = rewardsBudget * 0.2; // 10% of revenue
+
+    if (rewardsBudget <= 0.01) {
+      return res.status(400).json({
+        error: 'No trading volume this week — nothing to distribute.',
+        total_volume: totalVolume,
+        builder_fees: builderFees
+      });
     }
-    if (!clickRows.length) return res.status(400).json({ error: 'No clicks tracked this week. Nothing to distribute.' });
 
-    const totalClicks = clickRows.reduce((sum, r) => sum + parseInt(r.clicks), 0);
-    const distribution = clickRows.map(r => {
-      const clicks = parseInt(r.clicks);
-      const sharePct = parseFloat(((clicks / totalClicks) * 100).toFixed(4));
-      const usdcEarned = parseFloat(((clicks / totalClicks) * poolAmount).toFixed(6));
-      return { user_id: r.user_id, click_count: clicks, share_pct: sharePct, usdc_earned: usdcEarned };
-    });
-
-    // Upsert user_rewards for each user
-    for (const d of distribution) {
+    // ── Step 3: upsert the pool record with the breakdown ──
+    // Skipped in dry_run mode so admin can preview without committing.
+    if (!dryRun) {
       if (pool) {
         await dbQuery(
-          `INSERT INTO user_rewards (user_id, week_start, click_count, share_pct, usdc_earned)
-           VALUES ($1, $2, $3, $4, $5)
-           ON CONFLICT (user_id, week_start) DO UPDATE SET click_count = $3, share_pct = $4, usdc_earned = $5`,
-          [d.user_id, week, d.click_count, d.share_pct, d.usdc_earned]);
-      } else {
-        await supabase.from('user_rewards').upsert({
-          user_id: d.user_id, week_start: week, click_count: d.click_count, share_pct: d.share_pct, usdc_earned: d.usdc_earned
-        }, { onConflict: 'user_id,week_start' });
+          `INSERT INTO rewards_pool (week_start, pool_amount, builder_fees_total, base_pool_amount, flex_pot_amount, total_volume)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           ON CONFLICT (week_start) DO UPDATE SET
+             pool_amount = $2, builder_fees_total = $3, base_pool_amount = $4,
+             flex_pot_amount = $5, total_volume = $6`,
+          [week, rewardsBudget, builderFees, basePool, flexPot, totalVolume]);
+        // Refuse to re-distribute if already marked
+        const poolCheck = await dbQuery('SELECT distributed FROM rewards_pool WHERE week_start = $1', [week]);
+        if (poolCheck[0]?.distributed) return res.status(400).json({ error: 'Already distributed for this week.' });
+      } else if (supabase) {
+        const { data: ex } = await supabase.from('rewards_pool').select('distributed').eq('week_start', week).single();
+        if (ex?.distributed) return res.status(400).json({ error: 'Already distributed for this week.' });
+        await supabase.from('rewards_pool').upsert({
+          week_start: week, pool_amount: rewardsBudget, builder_fees_total: builderFees,
+          base_pool_amount: basePool, flex_pot_amount: flexPot, total_volume: totalVolume
+        }, { onConflict: 'week_start' });
       }
     }
 
-    // Mark pool as distributed
+    // ── Step 4: aggregate per-user stats for the week ──
+    // Volume + trade count come from flex_points_log; clicks come from
+    // rewards_click_tracking. Outer-join in app code because not every
+    // trader clicked and not every clicker traded — flex pot needs both.
+    let traderRows = [];
+    let clickRows = [];
     if (pool) {
-      await dbQuery('UPDATE rewards_pool SET distributed = true, distributed_at = NOW() WHERE week_start = $1', [week]);
-    } else {
-      await supabase.from('rewards_pool').update({ distributed: true, distributed_at: new Date().toISOString() }).eq('week_start', week);
+      traderRows = await dbQuery(
+        `SELECT user_id,
+                COALESCE(SUM(trade_amount_usd), 0) as volume,
+                COUNT(*) as trade_count
+         FROM flex_points_log
+         WHERE user_id IS NOT NULL
+           AND created_at >= $1 AND created_at < $2
+           AND source IN ('polymarket_trade','kalshi_trade')
+         GROUP BY user_id`,
+        [weekStartISO, weekEndISO]);
+      clickRows = await dbQuery(
+        `SELECT user_id, COUNT(*) as clicks
+         FROM rewards_click_tracking
+         WHERE user_id IS NOT NULL AND created_at >= $1 AND created_at < $2
+         GROUP BY user_id`,
+        [weekStartISO, weekEndISO]);
+    } else if (supabase) {
+      const { data: td } = await supabase.from('flex_points_log')
+        .select('user_id, trade_amount_usd')
+        .gte('created_at', weekStartISO).lt('created_at', weekEndISO)
+        .in('source', ['polymarket_trade','kalshi_trade'])
+        .not('user_id', 'is', null);
+      const tMap = {};
+      (td || []).forEach(r => {
+        if (!tMap[r.user_id]) tMap[r.user_id] = { user_id: r.user_id, volume: 0, trade_count: 0 };
+        tMap[r.user_id].volume += parseFloat(r.trade_amount_usd) || 0;
+        tMap[r.user_id].trade_count++;
+      });
+      traderRows = Object.values(tMap);
+      const { data: cd } = await supabase.from('rewards_click_tracking')
+        .select('user_id')
+        .gte('created_at', weekStartISO).lt('created_at', weekEndISO)
+        .not('user_id', 'is', null);
+      const cMap = {};
+      (cd || []).forEach(r => { cMap[r.user_id] = (cMap[r.user_id] || 0) + 1; });
+      clickRows = Object.keys(cMap).map(user_id => ({ user_id, clicks: cMap[user_id] }));
     }
 
-    res.json({ week_start: week, pool_amount: poolAmount, total_clicks: totalClicks, users: distribution.length, distribution });
+    if (!traderRows.length) {
+      return res.status(400).json({
+        error: 'No traders this week — cannot distribute.',
+        total_volume: totalVolume,
+        builder_fees: builderFees
+      });
+    }
+
+    // Build per-user stats map
+    const userStats = {};
+    for (const t of traderRows) {
+      userStats[t.user_id] = {
+        user_id: t.user_id,
+        volume: parseFloat(t.volume) || 0,
+        trade_count: parseInt(t.trade_count) || 0,
+        clicks: 0,
+      };
+    }
+    for (const c of clickRows) {
+      if (!userStats[c.user_id]) {
+        // Click-only users (never traded this week) don't qualify for base
+        // pool, but DO count toward flex pot engagement if they also have
+        // ever-traded history. For now: require a trade this week to earn
+        // anything. Click-only users get nothing — they can trade to earn.
+        continue;
+      }
+      userStats[c.user_id].clicks = parseInt(c.clicks) || 0;
+    }
+    const users = Object.values(userStats);
+
+    // ── Step 5: compute base pool shares (pro-rata by volume) ──
+    const totalVol = users.reduce((s, u) => s + u.volume, 0) || 1;
+    const totalClicks = users.reduce((s, u) => s + u.clicks, 0) || 1;
+    const totalTrades = users.reduce((s, u) => s + u.trade_count, 0) || 1;
+
+    for (const u of users) {
+      u.volume_share = u.volume / totalVol;
+      u.click_share = totalClicks > 0 ? u.clicks / totalClicks : 0;
+      u.trade_share = totalTrades > 0 ? u.trade_count / totalTrades : 0;
+      // Streak bonus: 1.0 if ≥10 trades this week, 0.5 if ≥5, 0 otherwise
+      const streakFactor = u.trade_count >= 10 ? 1.0 : u.trade_count >= 5 ? 0.5 : 0;
+      u.streak_share = streakFactor / users.length;
+      // Blended engagement score — weights can be tuned
+      u.engagement_score = (u.volume_share * 0.50)
+                         + (u.click_share  * 0.20)
+                         + (u.trade_share  * 0.20)
+                         + (u.streak_share * 0.10);
+      u.base_usdc = u.volume_share * basePool;
+    }
+
+    // ── Step 6: flex pot → top 20% of users by engagement_score ──
+    const sortedByEngagement = [...users].sort((a, b) => b.engagement_score - a.engagement_score);
+    const flexTierCount = Math.max(1, Math.ceil(users.length * 0.20));
+    const flexTier = sortedByEngagement.slice(0, flexTierCount);
+    const flexTierIds = new Set(flexTier.map(u => u.user_id));
+    const flexTotalScore = flexTier.reduce((s, u) => s + u.engagement_score, 0) || 1;
+    for (const u of flexTier) {
+      u.flex_bonus_usdc = (u.engagement_score / flexTotalScore) * flexPot;
+    }
+    for (const u of users) {
+      if (!u.flex_bonus_usdc) u.flex_bonus_usdc = 0;
+      u.is_flex_tier = flexTierIds.has(u.user_id);
+      u.total_usdc = u.base_usdc + u.flex_bonus_usdc;
+    }
+
+    // ── Step 7: write per-user rewards (skipped in dry_run) ──
+    if (!dryRun) {
+      for (const u of users) {
+        if (pool) {
+          await dbQuery(
+            `INSERT INTO user_rewards (user_id, week_start, click_count, share_pct, usdc_earned,
+                                       base_usdc, flex_bonus_usdc, volume_usd, trade_count,
+                                       engagement_score, is_flex_tier)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+             ON CONFLICT (user_id, week_start) DO UPDATE SET
+               click_count = $3, share_pct = $4, usdc_earned = $5,
+               base_usdc = $6, flex_bonus_usdc = $7, volume_usd = $8,
+               trade_count = $9, engagement_score = $10, is_flex_tier = $11`,
+            [u.user_id, week, u.clicks,
+             parseFloat((u.volume_share * 100).toFixed(4)),
+             parseFloat(u.total_usdc.toFixed(6)),
+             parseFloat(u.base_usdc.toFixed(6)),
+             parseFloat(u.flex_bonus_usdc.toFixed(6)),
+             parseFloat(u.volume.toFixed(2)),
+             u.trade_count,
+             parseFloat(u.engagement_score.toFixed(6)),
+             u.is_flex_tier]);
+        } else if (supabase) {
+          await supabase.from('user_rewards').upsert({
+            user_id: u.user_id, week_start: week,
+            click_count: u.clicks,
+            share_pct: parseFloat((u.volume_share * 100).toFixed(4)),
+            usdc_earned: parseFloat(u.total_usdc.toFixed(6)),
+            base_usdc: parseFloat(u.base_usdc.toFixed(6)),
+            flex_bonus_usdc: parseFloat(u.flex_bonus_usdc.toFixed(6)),
+            volume_usd: parseFloat(u.volume.toFixed(2)),
+            trade_count: u.trade_count,
+            engagement_score: parseFloat(u.engagement_score.toFixed(6)),
+            is_flex_tier: u.is_flex_tier
+          }, { onConflict: 'user_id,week_start' });
+        }
+      }
+
+      // ── Step 8: mark pool distributed ──
+      if (pool) {
+        await dbQuery('UPDATE rewards_pool SET distributed = true, distributed_at = NOW() WHERE week_start = $1', [week]);
+      } else if (supabase) {
+        await supabase.from('rewards_pool').update({
+          distributed: true, distributed_at: new Date().toISOString()
+        }).eq('week_start', week);
+      }
+    }
+
+    res.json({
+      week_start: week,
+      dry_run: dryRun,
+      total_volume: totalVolume,
+      builder_fees: builderFees,
+      rewards_budget: rewardsBudget,
+      base_pool: basePool,
+      flex_pot: flexPot,
+      users: users.length,
+      flex_tier_count: flexTierCount,
+      distribution: users.sort((a, b) => b.total_usdc - a.total_usdc).map(u => ({
+        user_id: u.user_id,
+        volume_usd: parseFloat(u.volume.toFixed(2)),
+        trade_count: u.trade_count,
+        clicks: u.clicks,
+        base_usdc: parseFloat(u.base_usdc.toFixed(4)),
+        flex_bonus_usdc: parseFloat(u.flex_bonus_usdc.toFixed(4)),
+        total_usdc: parseFloat(u.total_usdc.toFixed(4)),
+        is_flex_tier: u.is_flex_tier
+      }))
+    });
   } catch (e) {
     _logError('admin-rewards-distribute', e);
     res.status(500).json({ error: 'Failed to distribute: ' + e.message });
