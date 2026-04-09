@@ -16264,7 +16264,7 @@ function renderResolvedCard(p) {
   const question = p.question || p.market_title || 'Unknown market';
   const pnl = p.pnl || 0;
   const pnlColor = pnl >= 0 ? '#00e68a' : '#ff6b6b';
-  const pnlStr = (pnl >= 0 ? '+' : '') + '$' + Math.abs(pnl).toFixed(2);
+  const pnlStr = (pnl >= 0 ? '+' : '-') + '$' + Math.abs(pnl).toFixed(2);
   const badge = p._won
     ? '<span style="font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 10px;border-radius:6px;background:rgba(0,230,138,0.12);color:#00e68a;border:1px solid rgba(0,230,138,0.3)">WON</span>'
     : '<span style="font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 10px;border-radius:6px;background:rgba(255,107,107,0.12);color:#ff6b6b;border:1px solid rgba(255,107,107,0.3)">LOST</span>';
@@ -16374,11 +16374,12 @@ function updateAllPositionsTab() {
       if (countEl) countEl.textContent = resolved.length + ' resolved';
       const contentEl = document.getElementById('closedPositionsContent');
       // Check for claimable positions
-      const claimable = resolved.filter(p => p.redeemable && parseFloat(p.shares) > 0);
-      const claimTotal = claimable.reduce((sum, p) => {
-        const won = (p._won) || (p.current_price >= 0.99 && p.side === 'YES') || (p.current_price <= 0.01 && p.side === 'NO');
-        return sum + (won ? parseFloat(p.shares) : 0);
-      }, 0);
+      const claimable = resolved.filter(p => {
+        if (!p.redeemable || parseFloat(p.shares) <= 0) return false;
+        // Only count WON positions — LOST positions have nothing to claim
+        return p._won || p.current_price >= 0.99 || (p.side === 'NO' && p.current_price <= 0.01);
+      });
+      const claimTotal = claimable.reduce((sum, p) => sum + parseFloat(p.shares), 0);
       let claimBanner = '';
       if (claimable.length > 0 && window._connectedWallet) {
         claimBanner = '<div style="padding:14px 16px;background:rgba(0,230,138,0.06);border:1px solid rgba(0,230,138,0.20);border-radius:10px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">' +
