@@ -2989,14 +2989,30 @@ body.nav-open .sidebar-backdrop {
     </a>
 
     <div class="sidebar-community">
-      <div class="creator-avatar" id="sidebarAvatar">HF</div>
-      <div class="community-label">Your community</div>
-      <div class="community-name" id="sidebarCommunityName">Loading...</div>
-      <div class="community-url-row">
-        <div class="community-url" id="sidebarCommunityUrl"></div>
-        <button class="sidebar-copy-btn" onclick="copyLink()" title="Copy link">📋</button>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <div class="creator-avatar" id="sidebarAvatar" style="margin-bottom:0">HF</div>
+        <div style="min-width:0;flex:1">
+          <div class="community-name" id="sidebarCommunityName" style="margin-bottom:2px">Loading...</div>
+          <div class="community-url-row" style="margin-bottom:0">
+            <div class="community-url" id="sidebarCommunityUrl"></div>
+            <button class="sidebar-copy-btn" onclick="copyLink()" title="Copy link">📋</button>
+          </div>
+        </div>
       </div>
-      <!-- Plan pills removed — platform is free for everyone -->
+      <div id="sidebarStats" style="display:flex;gap:6px;flex-wrap:wrap">
+        <div style="flex:1;min-width:60px;background:rgba(0,230,138,0.06);border:1px solid rgba(0,230,138,0.12);border-radius:6px;padding:6px 8px;text-align:center">
+          <div style="font-family:var(--mono);font-size:12px;font-weight:800;color:#00e68a" id="sidebarPnl">—</div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--dim);letter-spacing:.05em">P&L</div>
+        </div>
+        <div style="flex:1;min-width:60px;background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.12);border-radius:6px;padding:6px 8px;text-align:center">
+          <div style="font-family:var(--mono);font-size:12px;font-weight:800;color:#a855f7" id="sidebarFP">0</div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--dim);letter-spacing:.05em">FP</div>
+        </div>
+        <div style="flex:1;min-width:60px;background:rgba(201,146,13,0.06);border:1px solid rgba(201,146,13,0.12);border-radius:6px;padding:6px 8px;text-align:center">
+          <div style="font-family:var(--mono);font-size:12px;font-weight:800;color:var(--gold)" id="sidebarPositions">0</div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--dim);letter-spacing:.05em">OPEN</div>
+        </div>
+      </div>
     </div>
 
     <nav class="sidebar-nav">
@@ -7924,6 +7940,8 @@ function loadFlexPointsTopbar() {
       if (badge) badge.textContent = fp.total_points.toLocaleString() + ' FP';
       if (tier) tier.textContent = fp.tier.toUpperCase();
       if (navBadge) navBadge.textContent = fp.total_points.toLocaleString();
+      var sbFP = document.getElementById('sidebarFP');
+      if (sbFP) sbFP.textContent = fp.total_points.toLocaleString();
     }).catch(function() {});
 }
 
@@ -15807,6 +15825,18 @@ function updatePortfolioSummary() {
 
   const stats = computePortfolioStats(positions);
   window._portfolioStats = stats; // for share button
+
+  // Update sidebar stats
+  const sbPnl = document.getElementById('sidebarPnl');
+  const sbPos = document.getElementById('sidebarPositions');
+  if (sbPnl) {
+    const pnl = stats.totalPnl || 0;
+    sbPnl.textContent = (pnl >= 0 ? '+' : '-') + '$' + Math.abs(pnl).toFixed(2);
+    sbPnl.style.color = pnl >= 0 ? '#00e68a' : '#ff6b6b';
+    sbPnl.parentElement.style.background = pnl >= 0 ? 'rgba(0,230,138,0.06)' : 'rgba(255,107,107,0.06)';
+    sbPnl.parentElement.style.borderColor = pnl >= 0 ? 'rgba(0,230,138,0.12)' : 'rgba(255,107,107,0.12)';
+  }
+  if (sbPos) sbPos.textContent = stats.openCount || 0;
 
   bar.style.display = 'block';
   // Only show share button when there's something worth sharing
