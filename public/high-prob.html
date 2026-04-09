@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
-<script src="/nav.js?v=9" defer></script>
+<script src="/nav.js?v=10" defer></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -290,7 +290,13 @@ function render() {
     const apyClass = m.apy >= 1000 ? 'apy-value high' : 'apy-value';
     const fillClass = m.side === 'NO' ? 'prob-fill no' : 'prob-fill';
 
-    html += `<tr onclick="window.open('${m.market_url}','_blank')">
+    // Route to internal /market/:slug (earns builder fees) — fallback to
+    // referral-wrapped polymarket.com only when we have no slug. Never
+    // raw window.open, which bypasses the global click interceptor.
+    const internalHref = m.slug
+      ? '/market/' + encodeURIComponent(m.slug)
+      : (typeof hfxMarketUrl === 'function' ? hfxMarketUrl(m.market_url || '') : (m.market_url || '#'));
+    html += `<tr onclick="window.location.href='${internalHref}'">
       <td>
         <div class="market-name">${m.question}</div>
         <div class="market-meta"><span class="cat-badge cat-${m.category}">${m.category}</span></div>

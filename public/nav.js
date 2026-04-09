@@ -400,7 +400,23 @@
         ? '<span class="hfx-search-badge kalshi">Kalshi</span>'
         : isSportsbook ? '<span class="hfx-search-badge kalshi">Sportsbook</span>'
         : '<span class="hfx-search-badge poly">Polymarket</span>';
-      var href = isKalshi ? (m.url || '#') : (window.hfxMarketUrl ? window.hfxMarketUrl(m.url || '') : (m.slug ? '/market/' + m.slug : (m.url || '#')));
+      // Route in order of revenue preference:
+      //   1. Kalshi/Sportsbook → external (no ref program, same-tab nav avoided)
+      //   2. Polymarket with slug → internal /market/:slug (earns builder fees)
+      //   3. Polymarket without slug → polyRef-wrapped external (earns referral)
+      //   4. Raw URL fallback — caught by global click interceptor anyway
+      var href;
+      if (isKalshi || isSportsbook) {
+        href = m.url || '#';
+      } else if (m.slug) {
+        href = '/market/' + m.slug;
+      } else if (m.url && typeof window.hfxMarketUrl === 'function') {
+        href = window.hfxMarketUrl(m.url);
+      } else if (m.url && typeof window.polyRef === 'function') {
+        href = window.polyRef(m.url);
+      } else {
+        href = m.url || '#';
+      }
       return '<a href="' + escHtml(href) + '" class="hfx-search-item" data-idx="' + idx + '"' + (isKalshi || isSportsbook ? ' target="_blank" rel="noopener"' : '') + '>' +
         '<div class="hfx-search-item-icon market">📈</div>' +
         '<div class="hfx-search-item-body">' +
@@ -645,18 +661,26 @@
   }, true);
 })();
 
-// Global helper: convert Polymarket URL to our market page URL
+// Global helper: convert Polymarket URL to our market page URL.
+// Routing order of preference (most → least valuable revenue):
+//   1. Internal /market/:slug — earns BUILDER FEES on every order
+//   2. polymarket.com + ?r=REF — earns REFERRAL fees via click interceptor
+//   3. Raw polymarket.com — last resort
 // Usage: hfxMarketUrl('https://polymarket.com/event/us-x-iran-ceasefire-by-march-31')
 // Returns: '/market/us-x-iran-ceasefire-by-march-31'
 window.hfxMarketUrl = function(polyUrl) {
-  if (!polyUrl || typeof polyUrl !== 'string') return '/creator/dashboard#find-markets';
+  if (!polyUrl || typeof polyUrl !== 'string') return '/screener';
   // Already our URL
   if (polyUrl.startsWith('/market/')) return polyUrl;
-  // Extract slug from polymarket.com/event/SLUG or polymarket.com/event/SLUG/SUBMARKET
+  // Extract slug from polymarket.com/event/SLUG — preferred (builder fees)
   var match = polyUrl.match(/polymarket\.com\/event\/([a-z0-9\-]+)/i);
   if (match) return '/market/' + match[1].toLowerCase();
   // Try extracting from any URL-like slug
   var parts = polyUrl.split('/').filter(function(p) { return p && p !== 'https:' && p !== 'http:' && !p.includes('.'); });
   if (parts.length) return '/market/' + parts[parts.length - 1].toLowerCase();
-  return '/creator/dashboard#find-markets';
+  // Last resort: external polymarket.com with our referral code
+  if (polyUrl.indexOf('polymarket.com') !== -1 && typeof window.polyRef === 'function') {
+    return window.polyRef(polyUrl);
+  }
+  return polyUrl;
 };
