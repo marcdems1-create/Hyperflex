@@ -17539,9 +17539,15 @@ function openTradeModal(posDataJson, mode, options) {
     return;
   }
 
-  _tradeModalData = { ...pos, mode: mode || 'buy', _fillMax: !!opts.fillMax };
+  _tradeModalData = { ...pos, mode: mode || 'buy', _fillMax: !!opts.fillMax, _orderType: 'FOK' };
   const modal = document.getElementById('tradeModal');
   if (!modal) return;
+
+  // Reset order type toggle
+  const otBtn = document.getElementById('tradeOrderTypeBtn');
+  if (otBtn) otBtn.textContent = 'Market ▾';
+  const plbl = document.getElementById('tradePriceLabel');
+  if (plbl) plbl.textContent = 'Market Price';
 
   document.getElementById('tradeModalQuestion').textContent = pos.question || 'Unknown market';
 
@@ -17621,14 +17627,29 @@ function _updateLimitFromOrderbook() {
   if (!_tradeModalData || !_tradeModalData._orderbook) return;
   const ob = _tradeModalData._orderbook;
   const mode = _tradeModalData.mode || 'buy';
+  const orderType = _tradeModalData._orderType || 'FOK';
   let livePrice = null;
-  if (mode === 'buy' && ob.best_ask != null) {
-    livePrice = ob.best_ask;
-  } else if (mode === 'sell' && ob.best_bid != null) {
-    livePrice = ob.best_bid;
-  } else if (ob.mid_price != null) {
-    livePrice = ob.mid_price;
+
+  if (orderType === 'GTC') {
+    // Limit orders: default to mid price (user adjusts from there)
+    if (ob.mid_price != null) {
+      livePrice = ob.mid_price;
+    } else if (mode === 'buy' && ob.best_ask != null) {
+      livePrice = ob.best_ask;
+    } else if (mode === 'sell' && ob.best_bid != null) {
+      livePrice = ob.best_bid;
+    }
+  } else {
+    // Market (FOK): best ask for buys, best bid for sells
+    if (mode === 'buy' && ob.best_ask != null) {
+      livePrice = ob.best_ask;
+    } else if (mode === 'sell' && ob.best_bid != null) {
+      livePrice = ob.best_bid;
+    } else if (ob.mid_price != null) {
+      livePrice = ob.mid_price;
+    }
   }
+
   if (livePrice != null && livePrice > 0 && livePrice < 1) {
     const tick = _tradeModalData._tickSize || 0.01;
     livePrice = Math.round(livePrice / tick) * tick;
@@ -17636,6 +17657,21 @@ function _updateLimitFromOrderbook() {
     const limitEl = document.getElementById('tradeLimitPrice');
     if (limitEl) limitEl.textContent = (livePrice * 100).toFixed(1) + '\u00A2';
   }
+}
+
+function toggleOrderType() {
+  if (!_tradeModalData) return;
+  const current = _tradeModalData._orderType || 'FOK';
+  const next = current === 'FOK' ? 'GTC' : 'FOK';
+  _tradeModalData._orderType = next;
+  const btn = document.getElementById('tradeOrderTypeBtn');
+  if (btn) btn.textContent = next === 'FOK' ? 'Market ▾' : 'Limit ▾';
+  // Update price label
+  const priceLabel = document.getElementById('tradePriceLabel');
+  if (priceLabel) priceLabel.textContent = next === 'FOK' ? 'Market Price' : 'Limit Price';
+  // Market orders: snap to best bid/ask; Limit orders: use mid for better default
+  _updateLimitFromOrderbook();
+  updateTradeEstimate();
 }
 
 function adjustPrice(direction) {
@@ -17778,25 +17814,11 @@ async function loadOrderbook(pos) {
     _tradeModalData._tickSize = tsData.minimum_tick_size || 0.01;
     _tradeModalData._feeRateBps = (feeRes && feeRes.base_fee !== undefined) ? String(feeRes.base_fee) : '0';
 
-    // Update limit price to live CLOB price (best ask for BUY, best bid for SELL)
-    const mode = _tradeModalData.mode || 'buy';
-    let livePrice = null;
-    if (mode === 'buy' && data.best_ask != null) {
-      livePrice = data.best_ask;
-    } else if (mode === 'sell' && data.best_bid != null) {
-      livePrice = data.best_bid;
-    } else if (data.mid_price != null) {
-      livePrice = data.mid_price;
-    }
-    if (livePrice != null && livePrice > 0 && livePrice < 1) {
-      // Round to tick size
-      const tick = _tradeModalData._tickSize;
-      livePrice = Math.round(livePrice / tick) * tick;
-      _tradeModalData._limitPrice = livePrice;
-      const limitEl = document.getElementById('tradeLimitPrice');
-      if (limitEl) limitEl.textContent = (livePrice * 100).toFixed(1) + '\u00A2';
+    // Update limit price from CLOB data (respects Market vs Limit order type)
+    _updateLimitFromOrderbook();
 
-      // Also update YES/NO price displays with CLOB data
+    // Also update YES/NO price displays with CLOB data
+    if (data.best_ask != null || data.mid_price != null) {
       const yesPrice = data.best_ask != null ? data.best_ask : (data.mid_price || 0.5);
       const noPrice = 1 - yesPrice;
       document.getElementById('tradeYesPrice').textContent = (yesPrice * 100).toFixed(1) + '\u00A2';
@@ -18048,7 +18070,7 @@ async function confirmTrade() {
         signature: orderSignature
       },
       owner: apiKey,
-      orderType: 'FOK'
+      orderType: (_tradeModalData._orderType || 'FOK') === 'GTC' ? 'GTC' : 'FOK'
     });
 
     // Route through Cloudflare Worker edge proxy to avoid geo-blocking.
@@ -18591,7 +18613,7 @@ function _taRSI(arr,n){const r=new Array(arr.length).fill(null);if(arr.length<n+
         <button id="tradeBuyBtn" onclick="setTradeMode('buy')" style="flex:1;background:none;border:none;padding:10px;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;color:#fff;border-bottom:2px solid #fff;margin-bottom:-2px">Buy</button>
         <button id="tradeSellBtn" onclick="setTradeMode('sell')" style="flex:1;background:none;border:none;padding:10px;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;color:#666;border-bottom:2px solid transparent;margin-bottom:-2px">Sell</button>
         <div style="flex:1;display:flex;align-items:center;justify-content:flex-end;padding-right:4px">
-          <span style="font-family:var(--mono);font-size:11px;color:#888">Market (FOK)</span>
+          <button id="tradeOrderTypeBtn" onclick="toggleOrderType()" style="background:#2d2d44;border:1px solid #3d3d54;border-radius:6px;padding:5px 10px;font-family:var(--mono);font-size:11px;color:#ccc;cursor:pointer;transition:background .15s" onmouseover="this.style.background='#3d3d54'" onmouseout="this.style.background='#2d2d44'">Market ▾</button>
         </div>
       </div>
 
@@ -18608,7 +18630,7 @@ function _taRSI(arr,n){const r=new Array(arr.length).fill(null);if(arr.length<n+
       <!-- Limit Price with stepper -->
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
         <div>
-          <div style="font-size:14px;font-weight:600;color:#fff">Limit Price</div>
+          <div id="tradePriceLabel" style="font-size:14px;font-weight:600;color:#fff">Market Price</div>
           <div id="tradeBalance" style="font-family:var(--mono);font-size:11px;color:#888">Balance $0.00</div>
         </div>
         <div style="display:flex;align-items:center;gap:0;background:#2d2d44;border-radius:8px;overflow:hidden;user-select:none">
