@@ -18166,6 +18166,9 @@ async function confirmTrade() {
         errEl.textContent = 'Insufficient USDC balance on Polymarket. Deposit funds first.';
       } else if (res.status === 400 && errStr.includes('tick size')) {
         errEl.textContent = 'Price precision error — try adjusting the price.';
+      } else if (errStr.includes('fully filled') || errStr.includes('fill or kill') || errStr.includes('fok')) {
+        // FOK failed due to insufficient liquidity — suggest switching to Limit
+        errEl.innerHTML = 'order couldn\'t be fully filled. FOK orders are fully filled or killed.<br><button onclick="toggleOrderType();this.parentElement.style.display=\'none\'" style="margin-top:8px;padding:8px 16px;background:var(--gold);color:#000;border:none;border-radius:8px;font-family:var(--mono);font-size:12px;font-weight:700;cursor:pointer">Switch to Limit order →</button>';
       } else {
         const msg = data.error || data.message || (typeof data === 'string' ? data : '');
         errEl.textContent = msg || ('Order rejected by CLOB (' + res.status + ')');
