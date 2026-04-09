@@ -13276,9 +13276,11 @@ function renderBestWorstCalls() {
   if (!container || !bestList || !worstList) return;
 
   const positions = getAllPositionsFlat();
-  const resolved = positions.filter(p => p._isResolved);
+  // Merge in closed trade details from activity (sold/redeemed positions no longer in API)
+  const closedTrades = window._closedTradeDetails || [];
+  const allResolved = positions.filter(p => p._isResolved).concat(closedTrades);
 
-  if (resolved.length === 0) {
+  if (allResolved.length === 0) {
     const openPositions = positions.filter(p => !p._isResolved);
     if (openPositions.length > 0) {
       // === "Positions to Watch" mode ===
@@ -13361,7 +13363,7 @@ function renderBestWorstCalls() {
     return;
   }
 
-  const withPnl = resolved.filter(p => p.pnl != null);
+  const withPnl = allResolved.filter(p => p.pnl != null);
   const best = [...withPnl].sort((a, b) => (b.pnl || 0) - (a.pnl || 0)).slice(0, 3);
   const worst = [...withPnl].sort((a, b) => (a.pnl || 0) - (b.pnl || 0)).slice(0, 3);
 
@@ -15712,12 +15714,14 @@ async function fetchRealizedPnL(address) {
     for (const i of allItems) {
       if (i.type !== 'TRADE' && i.type !== 'REDEEM') continue;
       const cid = i.conditionId || i.assetId || 'unknown';
-      if (!byMarket[cid]) byMarket[cid] = { buys: 0, sells: 0, redeems: 0, buyTokens: 0, sellTokens: 0 };
+      if (!byMarket[cid]) byMarket[cid] = { buys: 0, sells: 0, redeems: 0, buyTokens: 0, sellTokens: 0, title: '', outcome: '' };
       const amt = parseFloat(i.usdcSize || 0);
       const tokens = parseFloat(i.size || 0);
       if (i.type === 'TRADE' && i.side === 'BUY') { byMarket[cid].buys += amt; byMarket[cid].buyTokens += tokens; }
       if (i.type === 'TRADE' && i.side === 'SELL') { byMarket[cid].sells += amt; byMarket[cid].sellTokens += tokens; }
       if (i.type === 'REDEEM') byMarket[cid].redeems += amt;
+      if (!byMarket[cid].title && (i.title || i.question || i.market)) byMarket[cid].title = i.title || i.question || i.market;
+      if (!byMarket[cid].outcome && i.outcome) byMarket[cid].outcome = i.outcome;
     }
     // Calculate extra realized P&L not captured by positions API cashPnl
     // The positions API cashPnl only covers tokens you STILL HOLD
@@ -15759,6 +15763,22 @@ async function fetchRealizedPnL(address) {
     }
     window._closedTradeWins = closedWins;
     window._closedTradeLosses = closedLosses;
+    // Store per-trade details for Best/Worst Calls on Performance tab
+    var closedTradeDetails = [];
+    for (const [cid, m] of Object.entries(byMarket)) {
+      if (m.sells <= 0 && m.redeems <= 0) continue;
+      const inApi = currentById[cid];
+      if (!inApi) {
+        const net = (m.sells + m.redeems) - m.buys;
+        closedTradeDetails.push({
+          question: m.title || 'Unknown market', side: m.outcome || 'YES',
+          pnl: net, cost_basis: m.buys, cash_value: m.sells + m.redeems,
+          _platform: 'polymarket', _isResolved: true, _won: net > 0,
+          condition_id: cid
+        });
+      }
+    }
+    window._closedTradeDetails = closedTradeDetails;
     window._netDeposited = null; // flag that we've run
     console.log('[realized-pnl] Extra P&L:', extraRealizedPnl.toFixed(2), '| Closed wins:', closedWins, '| Closed losses:', closedLosses);
   } catch (e) { console.warn('[realized-pnl]', e.message); }
