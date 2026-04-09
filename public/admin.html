@@ -1952,10 +1952,31 @@ async function setRewardsPool() {
 }
 
 async function distributeRewards() {
-  if (!confirm('Distribute the pool to all users based on their clicks this week?')) return;
   const weekVal = document.getElementById('rewardsWeekSelect').value || undefined;
-  document.getElementById('distributeStatus').textContent = 'Distributing...';
+  // First: dry-run to show admin the breakdown, then confirm
+  document.getElementById('distributeStatus').textContent = 'Computing preview...';
   try {
+    const preview = await fetch(API + '/api/admin/rewards/distribute', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + adminSecret },
+      body: JSON.stringify({ week_start: weekVal, dry_run: true, secret: adminSecret })
+    });
+    const previewData = await preview.json();
+    if (!preview.ok) throw new Error(previewData.error || 'Preview failed');
+    const msg = 'FLYWHEEL DISTRIBUTION PREVIEW\n\n'
+      + 'Week: ' + previewData.week_start + '\n'
+      + 'Total volume: $' + (previewData.total_volume || 0).toLocaleString() + '\n'
+      + 'Builder fees earned: $' + (previewData.builder_fees || 0).toFixed(2) + '\n\n'
+      + '→ Rewards budget (50%): $' + (previewData.rewards_budget || 0).toFixed(2) + '\n'
+      + '   • Base pool (80%): $' + (previewData.base_pool || 0).toFixed(2) + ' — by volume\n'
+      + '   • Flex pot (20%):  $' + (previewData.flex_pot || 0).toFixed(2) + ' — top ' + (previewData.flex_tier_count || 0) + ' engaged\n\n'
+      + 'Eligible users: ' + (previewData.users || 0) + '\n\n'
+      + 'Commit this distribution?';
+    if (!confirm(msg)) {
+      document.getElementById('distributeStatus').textContent = 'Cancelled. No changes made.';
+      return;
+    }
+    document.getElementById('distributeStatus').textContent = 'Distributing...';
     const r = await fetch(API + '/api/admin/rewards/distribute', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + adminSecret },
@@ -1963,7 +1984,9 @@ async function distributeRewards() {
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || 'Failed');
-    document.getElementById('distributeStatus').textContent = 'Distributed $' + (data.pool_amount || 0).toFixed(2) + ' to ' + (data.users || 0) + ' users.';
+    document.getElementById('distributeStatus').textContent =
+      'Distributed $' + (data.rewards_budget || 0).toFixed(2) + ' to ' + (data.users || 0) + ' users '
+      + '(base $' + (data.base_pool || 0).toFixed(2) + ' + flex $' + (data.flex_pot || 0).toFixed(2) + ')';
     loadRewardsSummary();
   } catch (e) {
     document.getElementById('distributeStatus').textContent = 'Error: ' + e.message;

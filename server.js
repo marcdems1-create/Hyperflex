@@ -3242,6 +3242,51 @@ cron.schedule('0 0 * * 1', () => {
   processWeeklyRefills().catch(err => console.error('[refill] Cron error:', err.message));
 });
 
+// ── Flywheel rewards: weekly auto-distribute ────────────────────────
+// Every Sunday at 00:05 UTC, compute + distribute the previous week's
+// reward pool from builder-fee revenue. Runs for the week that JUST
+// ended (prior Sunday → Saturday). Idempotent via distributed flag —
+// calling twice on the same week returns "Already distributed".
+//
+// Graceful no-op if ADMIN_SECRET is unset (dev envs).
+cron.schedule('5 0 * * 0', async () => {
+  console.log('[rewards-cron] Weekly flywheel distribution triggered');
+  try {
+    const adminSecret = process.env.ADMIN_SECRET;
+    if (!adminSecret) {
+      console.warn('[rewards-cron] ADMIN_SECRET not set — skipping auto-distribute');
+      return;
+    }
+    // Compute the week_start for the PREVIOUS week (the one that just ended)
+    const now = new Date();
+    const prevSunday = new Date(now.getTime() - 7 * 86400000);
+    prevSunday.setUTCHours(0, 0, 0, 0);
+    // Align to Sunday — getUTCDay() returns 0 for Sunday
+    const daysSinceSunday = prevSunday.getUTCDay();
+    prevSunday.setUTCDate(prevSunday.getUTCDate() - daysSinceSunday);
+    const weekStart = prevSunday.toISOString().split('T')[0];
+
+    const port = process.env.PORT || 3000;
+    const res = await _nodeFetch(
+      `http://localhost:${port}/api/admin/rewards/distribute?secret=${encodeURIComponent(adminSecret)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ week_start: weekStart })
+      }
+    );
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      console.log(`[rewards-cron] ✓ week ${weekStart}: distributed $${(data.rewards_budget || 0).toFixed(2)} to ${data.users || 0} users (base $${(data.base_pool || 0).toFixed(2)} + flex $${(data.flex_pot || 0).toFixed(2)})`);
+    } else if (data.error && /already distributed/i.test(data.error)) {
+      console.log('[rewards-cron] week', weekStart, 'already distributed — no-op');
+    } else {
+      console.warn('[rewards-cron] ✗ distribute failed:', data.error || res.status);
+    }
+  } catch (e) {
+    console.error('[rewards-cron] error:', e.message);
+  }
+});
 // POST /api/creator/trigger-refill — manually trigger a refill run for the creator's community
 // Useful for testing; safe to call multiple times (idempotent per week)
 app.post('/api/creator/trigger-refill', requireCreator, async (req, res) => {
@@ -32888,16 +32933,29 @@ app.get('/api/rewards/my-stats', requireAuth, async (req, res) => {
   try {
     const userId = req.user.id;
     const weekStart = getWeekStart();
-    let clicksThisWeek = 0, pendingUsdc = 0, lifetimeEarned = 0, currentWeekEstimate = 0, payoutWallet = null, history = [];
+    let clicksThisWeek = 0, pendingUsdc = 0, lifetimeEarned = 0,
+        currentWeekEstimate = 0, payoutWallet = null, history = [],
+        volumeThisWeek = 0, tradesThisWeek = 0, totalVolumeThisWeek = 0,
+        basePoolProjected = 0, flexPotProjected = 0,
+        isFlexTierProjection = false;
     if (pool) {
-      // Clicks this week
+      // ── Live week stats for this user ──
       const cRows = await dbQuery(
         `SELECT COUNT(*) as cnt FROM rewards_click_tracking
          WHERE user_id = $1 AND created_at >= $2::date AND created_at < ($2::date + interval '7 days')`,
         [userId, weekStart]);
       clicksThisWeek = parseInt(cRows[0]?.cnt) || 0;
 
-      // Pending USDC (unpaid)
+      const vRows = await dbQuery(
+        `SELECT COALESCE(SUM(trade_amount_usd), 0) as vol, COUNT(*) as trades
+         FROM flex_points_log
+         WHERE user_id = $1 AND created_at >= $2::date AND created_at < ($2::date + interval '7 days')
+           AND source IN ('polymarket_trade','kalshi_trade')`,
+        [userId, weekStart]);
+      volumeThisWeek = parseFloat(vRows[0]?.vol) || 0;
+      tradesThisWeek = parseInt(vRows[0]?.trades) || 0;
+
+      // Pending USDC (unpaid past weeks)
       const pRows = await dbQuery(
         'SELECT COALESCE(SUM(usdc_earned), 0) as pending FROM user_rewards WHERE user_id = $1 AND paid = false', [userId]);
       pendingUsdc = parseFloat(pRows[0]?.pending) || 0;
@@ -32907,34 +32965,114 @@ app.get('/api/rewards/my-stats', requireAuth, async (req, res) => {
         'SELECT COALESCE(SUM(usdc_earned), 0) as lifetime FROM user_rewards WHERE user_id = $1 AND paid = true', [userId]);
       lifetimeEarned = parseFloat(lRows[0]?.lifetime) || 0;
 
-      // Current week estimate: my clicks / total clicks * pool amount
-      const totalRows = await dbQuery(
-        `SELECT COUNT(*) as total FROM rewards_click_tracking
-         WHERE user_id IS NOT NULL AND created_at >= $1::date AND created_at < ($1::date + interval '7 days')`, [weekStart]);
-      const totalClicks = parseInt(totalRows[0]?.total) || 0;
-      const poolRows = await dbQuery('SELECT pool_amount FROM rewards_pool WHERE week_start = $1', [weekStart]);
-      const poolAmount = parseFloat(poolRows[0]?.pool_amount) || 0;
-      if (totalClicks > 0 && poolAmount > 0) {
-        currentWeekEstimate = parseFloat(((clicksThisWeek / totalClicks) * poolAmount).toFixed(6));
+      // ── Flywheel projection for the CURRENT (in-progress) week ──
+      // Mirrors the distribute endpoint's math: builder_fees = total_vol ×
+      // 0.003, rewards_budget = 50% of that, base = 40%, flex = 10%.
+      // Projects the user's share IF the week ended right now.
+      const tvRows = await dbQuery(
+        `SELECT COALESCE(SUM(trade_amount_usd), 0) as vol
+         FROM flex_points_log
+         WHERE created_at >= $1::date AND created_at < ($1::date + interval '7 days')
+           AND source IN ('polymarket_trade','kalshi_trade')`,
+        [weekStart]);
+      totalVolumeThisWeek = parseFloat(tvRows[0]?.vol) || 0;
+
+      const BUILDER_FEE_RATE = 0.003;
+      const weekBuilderFees = totalVolumeThisWeek * BUILDER_FEE_RATE;
+      const weekRewardsBudget = weekBuilderFees * 0.5;
+      basePoolProjected = weekRewardsBudget * 0.8;
+      flexPotProjected  = weekRewardsBudget * 0.2;
+
+      if (totalVolumeThisWeek > 0 && volumeThisWeek > 0) {
+        const volShare = volumeThisWeek / totalVolumeThisWeek;
+        const baseShare = volShare * basePoolProjected;
+        currentWeekEstimate = parseFloat(baseShare.toFixed(6));
+
+        // Cheap engagement-score estimate: is this user likely in the top 20%
+        // by volume alone? Full engagement score requires aggregating clicks
+        // and trade_count across ALL users for the week, which is heavy for a
+        // user-facing endpoint. Use volume share as a proxy — not perfect but
+        // reflects the strongest weight (50%) in the real score.
+        const volRankRows = await dbQuery(
+          `SELECT COUNT(DISTINCT user_id) as above
+           FROM flex_points_log
+           WHERE created_at >= $1::date AND created_at < ($1::date + interval '7 days')
+             AND source IN ('polymarket_trade','kalshi_trade')
+           GROUP BY user_id
+           HAVING SUM(trade_amount_usd) > $2`,
+          [weekStart, volumeThisWeek]).catch(() => []);
+        const usersAbove = (volRankRows || []).length;
+        const totalActiveRows = await dbQuery(
+          `SELECT COUNT(DISTINCT user_id) as cnt
+           FROM flex_points_log
+           WHERE created_at >= $1::date AND created_at < ($1::date + interval '7 days')
+             AND source IN ('polymarket_trade','kalshi_trade')`,
+          [weekStart]);
+        const totalActive = parseInt(totalActiveRows[0]?.cnt) || 1;
+        const userRankPct = usersAbove / totalActive;
+        isFlexTierProjection = userRankPct <= 0.20; // top 20%
+        if (isFlexTierProjection && flexPotProjected > 0) {
+          // Rough projected flex share — assumes even distribution in top 20%
+          // for the projection (real distribution is engagement-weighted)
+          const flexTierSize = Math.max(1, Math.ceil(totalActive * 0.20));
+          currentWeekEstimate += parseFloat((flexPotProjected / flexTierSize).toFixed(6));
+        }
       }
 
       // Payout wallet
       const wRows = await dbQuery('SELECT payout_wallet FROM creator_settings WHERE creator_id = $1', [userId]);
       payoutWallet = wRows[0]?.payout_wallet || null;
 
-      // History (last 12 weeks)
+      // History (last 12 weeks) — include the new base/flex split columns
       const hRows = await dbQuery(
-        'SELECT week_start, click_count, share_pct, usdc_earned, paid, paid_at, tx_hash FROM user_rewards WHERE user_id = $1 ORDER BY week_start DESC LIMIT 12', [userId]);
+        `SELECT week_start, click_count, share_pct, usdc_earned, base_usdc,
+                flex_bonus_usdc, volume_usd, trade_count, engagement_score,
+                is_flex_tier, paid, paid_at, tx_hash
+         FROM user_rewards
+         WHERE user_id = $1 ORDER BY week_start DESC LIMIT 12`, [userId]);
       history = hRows;
     }
+
+    // Tier info (Scout → Legend) from 30d volume — used by the rewards UI
+    // for the "Your tier" badge. getUserTier() already wraps this.
+    let tierInfo = null;
+    try { tierInfo = await getUserTier(userId); } catch {}
+
+    // Legacy payout_history shape kept for the existing rewards.html UI —
+    // maps the new history rows into { date, amount, tx_hash } format the
+    // old UI expects. When rewards.html is refreshed to show the base/flex
+    // breakdown, it can switch to the richer `history` field.
+    const legacyPayoutHistory = (history || [])
+      .filter(h => h.paid)
+      .map(h => ({
+        date: h.paid_at || h.week_start,
+        amount: parseFloat(h.usdc_earned) || 0,
+        tx_hash: h.tx_hash || null
+      }));
+
     res.json({
+      week_start: weekStart,
+      // ── New flywheel fields ──
+      volume_this_week: volumeThisWeek,
+      trades_this_week: tradesThisWeek,
       clicks_this_week: clicksThisWeek,
+      total_volume_this_week: totalVolumeThisWeek,
+      base_pool_projected: parseFloat(basePoolProjected.toFixed(4)),
+      flex_pot_projected: parseFloat(flexPotProjected.toFixed(4)),
+      current_week_estimate: currentWeekEstimate,
+      is_flex_tier_projection: isFlexTierProjection,
+      // ── Past / paid ──
       pending_usdc: pendingUsdc,
       lifetime_earned: lifetimeEarned,
-      current_week_estimate: currentWeekEstimate,
       payout_wallet: payoutWallet,
       history,
-      week_start: weekStart
+      // ── Backward-compat for existing rewards.html ──
+      estimated_payout: currentWeekEstimate,
+      payout_history: legacyPayoutHistory,
+      tier: tierInfo ? tierInfo.name : null,
+      tier_icon: tierInfo ? tierInfo.icon : null,
+      tier_fp_multiplier: tierInfo ? tierInfo.fp_multiplier : 1,
+      volume_30d: tierInfo ? tierInfo.volume_30d : 0
     });
   } catch (e) {
     _logError('rewards-my-stats', e);
