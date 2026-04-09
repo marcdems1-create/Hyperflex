@@ -547,85 +547,36 @@
   </header>
 
   <main>
-    <!-- Platform stats: Row 1 -->
-    <div class="stats-row" id="statsRow1">
-      <div class="stat-card">
-        <div class="stat-label">Total Users</div>
-        <div class="stat-value" id="statTotalUsers">&mdash;</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">New (7d)</div>
-        <div class="stat-value gold" id="statNewUsers">&mdash;</div>
-      </div>
+    <!-- Platform stats -->
+    <div class="stats-row" id="statsRow1" style="margin-bottom:20px">
       <div class="stat-card">
         <div class="stat-label">Creators</div>
         <div class="stat-value" id="statTotal">&mdash;</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Connected Wallets</div>
+        <div class="stat-value" id="statPolyWallets">&mdash;</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">Markets</div>
         <div class="stat-value" id="statTotalMarkets">&mdash;</div>
       </div>
       <div class="stat-card">
+        <div class="stat-label">Active Traders (7d)</div>
+        <div class="stat-value blue" id="statActiveTraders">&mdash;</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">New Users (7d)</div>
+        <div class="stat-value gold" id="statNewUsers">&mdash;</div>
+      </div>
+      <div class="stat-card">
         <div class="stat-label">Trades (7d)</div>
         <div class="stat-value gold" id="statNewTrades">&mdash;</div>
-      </div>
-    </div>
-
-    <!-- Platform stats: Row 2 -->
-    <div class="stats-row" id="statsRow2" style="margin-bottom:28px">
-      <div class="stat-card">
-        <div class="stat-label">Poly Wallets</div>
-        <div class="stat-value" id="statPolyWallets">&mdash;</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Total Poly P&amp;L</div>
-        <div class="stat-value green" id="statPolyPnl">&mdash;</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Builder Fee Revenue</div>
-        <div class="stat-value amber" id="statBuilderFee">&mdash;</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">FLEX Points Issued</div>
         <div class="stat-value purple" id="statFlexPoints">&mdash;</div>
       </div>
-      <div class="stat-card">
-        <div class="stat-label">Active Traders (7d)</div>
-        <div class="stat-value blue" id="statActiveTraders">&mdash;</div>
-      </div>
-    </div>
-
-    <!-- Builder Sign Health — every failure = silently lost builder fees -->
-    <div id="builderSignHealth" style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px 20px;margin-bottom:20px">
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
-        <div style="font-family:var(--sans);font-size:13px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:0.05em">🔐 Builder Sign Health</div>
-        <div id="bsHealthBadge" style="font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 10px;border-radius:12px;background:rgba(148,163,184,0.15);color:#94a3b8">—</div>
-        <div id="bsHealthRefresh" style="margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--muted);cursor:pointer" onclick="loadBuilderSignStats()">↻ refresh</div>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:12px" id="bsStatsGrid">
-        <div class="stat-card" style="padding:12px 14px">
-          <div class="stat-label">Total requests</div>
-          <div class="stat-value" style="font-size:20px" id="bsTotalReq">—</div>
-        </div>
-        <div class="stat-card" style="padding:12px 14px">
-          <div class="stat-label">Success</div>
-          <div class="stat-value green" style="font-size:20px" id="bsSuccessReq">—</div>
-        </div>
-        <div class="stat-card" style="padding:12px 14px">
-          <div class="stat-label">Failures</div>
-          <div class="stat-value" style="font-size:20px;color:#ff6b6b" id="bsFailReq">—</div>
-        </div>
-        <div class="stat-card" style="padding:12px 14px">
-          <div class="stat-label">Failure rate</div>
-          <div class="stat-value" style="font-size:20px" id="bsFailRate">—</div>
-        </div>
-        <div class="stat-card" style="padding:12px 14px">
-          <div class="stat-label">Last failure</div>
-          <div class="stat-value" style="font-size:13px" id="bsLastFail">—</div>
-        </div>
-      </div>
-      <div id="bsFailureList" style="display:none;max-height:180px;overflow-y:auto;border-top:1px solid var(--border);padding-top:10px"></div>
-      <div id="bsFailureToggle" style="display:none;font-family:var(--mono);font-size:10px;color:var(--muted);cursor:pointer;margin-top:6px;text-align:center" onclick="toggleBsFailureList()">Show recent failures ▼</div>
     </div>
 
     <!-- Tab nav -->
@@ -1191,98 +1142,13 @@ async function loadPlatformStats() {
     const r = await fetch(API + '/api/admin/platform-stats?secret=' + encodeURIComponent(adminSecret));
     if (!r.ok) return;
     const d = await r.json();
-    document.getElementById('statTotalUsers').textContent  = (d.total_users   || 0).toLocaleString();
     document.getElementById('statNewUsers').textContent    = '+' + (d.new_users_7d  || 0);
     document.getElementById('statTotalMarkets').textContent = (d.total_markets || 0).toLocaleString();
     document.getElementById('statNewTrades').textContent    = '+' + (d.new_trades_7d || 0);
-    // Active traders
     if (d.active_traders_7d !== undefined) {
       document.getElementById('statActiveTraders').textContent = (d.active_traders_7d || 0).toLocaleString();
     }
   } catch {}
-  loadBuilderSignStats();
-}
-
-// Builder Sign Health — every failure is a silently-lost builder fee.
-// Fetched alongside platform stats, and refreshable from the panel.
-let _bsFailuresVisible = false;
-async function loadBuilderSignStats() {
-  try {
-    const r = await fetch(API + '/api/admin/builder-sign-stats?secret=' + encodeURIComponent(adminSecret));
-    if (!r.ok) return;
-    const d = await r.json();
-    const total = d.total || 0;
-    const success = d.success || 0;
-    const failures = d.failures || 0;
-    const failRate = d.failure_rate_pct || 0;
-    document.getElementById('bsTotalReq').textContent = total.toLocaleString();
-    document.getElementById('bsSuccessReq').textContent = success.toLocaleString();
-    document.getElementById('bsFailReq').textContent = failures.toLocaleString();
-    document.getElementById('bsFailRate').textContent = failRate.toFixed(2) + '%';
-    const rateEl = document.getElementById('bsFailRate');
-    if (failRate >= 5) rateEl.style.color = '#ff6b6b';
-    else if (failRate >= 1) rateEl.style.color = '#f59e0b';
-    else rateEl.style.color = failRate > 0 ? '#00e68a' : 'var(--text)';
-
-    // Last failure summary
-    const lastFailEl = document.getElementById('bsLastFail');
-    if (d.last_failure_at) {
-      const minsAgo = Math.round((Date.now() - new Date(d.last_failure_at).getTime()) / 60000);
-      const timeStr = minsAgo < 1 ? 'just now' : minsAgo < 60 ? minsAgo + 'm ago' : Math.round(minsAgo/60) + 'h ago';
-      lastFailEl.textContent = timeStr;
-      lastFailEl.style.color = minsAgo < 60 ? '#ff6b6b' : 'var(--text-soft)';
-    } else {
-      lastFailEl.textContent = 'never';
-      lastFailEl.style.color = '#00e68a';
-    }
-
-    // Health badge
-    const badge = document.getElementById('bsHealthBadge');
-    if (failures === 0) {
-      badge.textContent = 'HEALTHY';
-      badge.style.background = 'rgba(0,230,138,0.15)';
-      badge.style.color = '#00e68a';
-    } else if (failRate < 1) {
-      badge.textContent = 'OK · ' + failures + ' failures';
-      badge.style.background = 'rgba(0,230,138,0.10)';
-      badge.style.color = '#00e68a';
-    } else if (failRate < 5) {
-      badge.textContent = 'DEGRADED · ' + failRate.toFixed(1) + '% failing';
-      badge.style.background = 'rgba(245,158,11,0.15)';
-      badge.style.color = '#f59e0b';
-    } else {
-      badge.textContent = '⚠️ LOSING FEES · ' + failRate.toFixed(1) + '% failing';
-      badge.style.background = 'rgba(255,107,107,0.15)';
-      badge.style.color = '#ff6b6b';
-    }
-
-    // Failure list
-    const list = d.last_failures || [];
-    const listEl = document.getElementById('bsFailureList');
-    const toggleEl = document.getElementById('bsFailureToggle');
-    if (list.length > 0) {
-      toggleEl.style.display = 'block';
-      listEl.innerHTML = list.slice().reverse().map(function(f) {
-        const t = new Date(f.ts).toLocaleString();
-        return '<div style="display:flex;gap:10px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-family:var(--mono);font-size:10px">'
-          + '<span style="color:var(--muted);min-width:130px">' + t + '</span>'
-          + '<span style="color:#ff6b6b;font-weight:700;min-width:40px">' + f.status + '</span>'
-          + '<span style="color:var(--text-soft);flex:1">' + (f.error || '').replace(/</g,'&lt;').slice(0, 120) + '</span>'
-          + '</div>';
-      }).join('');
-    } else {
-      toggleEl.style.display = 'none';
-      listEl.innerHTML = '';
-    }
-  } catch (e) { /* silent */ }
-}
-
-function toggleBsFailureList() {
-  _bsFailuresVisible = !_bsFailuresVisible;
-  const list = document.getElementById('bsFailureList');
-  const toggle = document.getElementById('bsFailureToggle');
-  list.style.display = _bsFailuresVisible ? 'block' : 'none';
-  toggle.textContent = _bsFailuresVisible ? 'Hide recent failures ▲' : 'Show recent failures ▼';
 }
 
 function renderCreators(data) {
@@ -1299,14 +1165,7 @@ function updateStats(data) {
 // Polymarket stats -- computed from user data
 function updatePolyStats(users) {
   const withWallet = users.filter(u => u.polymarket_address);
-  const totalPnl = users.reduce((sum, u) => sum + (u.poly_pnl || 0), 0);
   document.getElementById('statPolyWallets').textContent = withWallet.length;
-  document.getElementById('statPolyPnl').textContent = (totalPnl >= 0 ? '+' : '-') + '$' + Math.abs(totalPnl).toFixed(2);
-  document.getElementById('statPolyPnl').style.color = totalPnl >= 0 ? 'var(--green)' : 'var(--red)';
-  // Builder fee revenue -- placeholder until tracked server-side
-  document.getElementById('statBuilderFee').textContent = '\u2014';
-  // FLEX Points -- placeholder
-  document.getElementById('statFlexPoints').textContent = '\u2014';
 }
 
 // -- Users table --
