@@ -20,133 +20,148 @@
 <link rel="icon" href="/hyperflex-logo.png"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
 <style>
-:root{--bg:#141412;--card-bg:rgba(255,255,255,0.03);--card-border:rgba(255,255,255,0.06);--gold:#c9920d;--gold-dim:rgba(201,146,13,0.15);--gold-glow:rgba(201,146,13,0.25);--paper:#e8e4d9;--dim:#7a7870;--muted:#4a4744;--green:#22c55e;--green-dim:rgba(34,197,94,0.1);--red:#ef4444;--blue:#60a5fa;--surface:#1a1a17;--border:#2a2a25;--sans:'Syne',sans-serif;--mono:'Space Mono',monospace}
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap');
+:root{
+  --bg:#0a0a0f;--card:#111118;--card2:#16161f;--card-glass:rgba(22,22,31,0.8);
+  --border:#1e1e2a;--border2:#2a2a38;
+  --text:#e8e6f0;--soft:#a0a0b4;--dim:#6b6880;--muted:#4a4760;
+  --gold:#c9920d;--gold-dim:rgba(201,146,13,0.12);--gold-glow:rgba(201,146,13,0.25);
+  --green:#00e68a;--green-dim:rgba(0,230,138,0.12);
+  --red:#ff4d6a;--red-dim:rgba(255,77,106,0.12);
+  --blue:#4d9fff;--blue-dim:rgba(77,159,255,0.12);
+  --purple:#a855f7;--amber:#f59e0b;
+  --sans:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+  --mono:'JetBrains Mono',monospace
+}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{font-family:var(--sans);background:var(--bg);color:var(--paper);min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased;background-image:radial-gradient(ellipse 80% 50% at 50% 0%,rgba(201,146,13,0.03),transparent)}
 a{color:var(--gold);text-decoration:none}a:hover{text-decoration:underline}
 
-/* HERO */
-.rw-hero{position:relative;padding:80px 40px 60px;text-align:center;overflow:hidden}
-.rw-hero::before{content:'';position:absolute;top:-50%;left:50%;transform:translateX(-50%);width:800px;height:800px;background:radial-gradient(circle,var(--gold-glow) 0%,transparent 70%);pointer-events:none;opacity:0.3}
-.rw-hero-badge{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gold);background:var(--gold-dim);padding:6px 14px;border-radius:20px;margin-bottom:24px;letter-spacing:0.5px}
-.rw-hero-badge .dot{width:6px;height:6px;border-radius:50%;background:var(--gold);animation:pulse-dot 2s ease-in-out infinite}
 @keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:0.3}}
-.rw-hero h1{font-family:var(--sans);font-size:clamp(36px,5vw,56px);font-weight:800;line-height:1.1;margin-bottom:16px;letter-spacing:-1px}
+
+/* HERO */
+.rw-hero{position:relative;max-width:1200px;margin:0 auto;padding:80px 40px 48px;text-align:center}
+.rw-hero-badge{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gold);background:var(--gold-dim);padding:8px 16px;border-radius:20px;margin-bottom:28px;letter-spacing:0.5px;border:1px solid rgba(201,146,13,0.2)}
+.rw-hero-badge .dot{width:6px;height:6px;border-radius:50%;background:var(--gold);animation:pulse-dot 2s ease-in-out infinite}
+.rw-hero h1{font-family:var(--sans);font-size:clamp(36px,5vw,52px);font-weight:900;line-height:1.1;margin-bottom:16px;letter-spacing:-1.5px;color:#fff}
 .rw-hero h1 span{color:var(--gold)}
-.rw-hero-sub{font-family:var(--mono);font-size:14px;color:var(--dim);max-width:600px;margin:0 auto 32px;line-height:1.7}
-.rw-cta{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:14px;font-weight:700;color:var(--bg);background:var(--gold);padding:14px 32px;border-radius:10px;text-decoration:none;transition:all 0.2s;border:none;cursor:pointer}
+.rw-hero-sub{font-family:var(--sans);font-size:15px;font-weight:400;color:var(--dim);max-width:560px;margin:0 auto 36px;line-height:1.7}
+.rw-cta{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:13px;font-weight:700;color:#000;background:var(--gold);padding:14px 32px;border-radius:12px;text-decoration:none;transition:all 0.2s;border:none;cursor:pointer;min-height:48px}
 .rw-cta:hover{background:#e0b340;text-decoration:none;transform:translateY(-1px);box-shadow:0 8px 24px rgba(201,146,13,0.3)}
-.rw-cta-secondary{background:transparent;color:var(--paper);border:1px solid var(--border);margin-left:12px}
-.rw-cta-secondary:hover{border-color:var(--gold);color:var(--gold);background:transparent}
+.rw-cta-secondary{background:transparent;color:var(--text);border:1px solid var(--border);margin-left:12px}
+.rw-cta-secondary:hover{border-color:var(--gold);color:var(--gold);background:transparent;transform:translateY(-1px)}
 
-/* SECTION */
-.rw-section{max-width:1100px;margin:0 auto;padding:0 40px 60px}
-.rw-section-title{font-family:var(--sans);font-size:28px;font-weight:800;margin-bottom:8px;letter-spacing:-0.5px}
-.rw-section-sub{font-family:var(--mono);font-size:12px;color:var(--dim);margin-bottom:32px}
+/* SECTIONS */
+.rw-section{max-width:1100px;margin:0 auto;padding:0 40px 48px}
+.rw-section-title{font-family:var(--sans);font-size:22px;font-weight:800;margin-bottom:6px;letter-spacing:-0.5px;color:#fff}
+.rw-section-sub{font-family:var(--sans);font-size:13px;color:var(--dim);margin-bottom:28px;line-height:1.5}
 
-/* HOW IT WORKS */
-.rw-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-bottom:20px}
-.rw-step{background:var(--card-bg);border:1px solid var(--card-border);border-radius:16px;padding:32px 24px;text-align:center;transition:border-color 0.2s}
-.rw-step:hover{border-color:var(--gold-dim)}
-.rw-step-num{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gold);background:var(--gold-dim);width:32px;height:32px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;margin-bottom:16px}
-.rw-step-icon{font-size:32px;margin-bottom:12px}
-.rw-step h3{font-family:var(--sans);font-size:18px;font-weight:700;margin-bottom:8px}
-.rw-step p{font-family:var(--mono);font-size:12px;color:var(--dim);line-height:1.6}
+/* POOL BANNER */
+.rw-pool{background:linear-gradient(135deg,#111118,rgba(201,146,13,0.06));border:1px solid var(--border);border-radius:16px;padding:36px;text-align:center;margin-bottom:48px;position:relative;overflow:hidden}
+.rw-pool::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(201,146,13,0.2),transparent)}
+.rw-pool-label{font-family:var(--mono);font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px;font-weight:600}
+.rw-pool-amount{font-family:var(--mono);font-size:48px;font-weight:900;color:var(--gold);letter-spacing:-2px}
+.rw-pool-sub{font-family:var(--sans);font-size:12px;color:var(--dim);margin-top:8px}
+
+/* HOW IT WORKS — 3-col strip */
+.rw-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:24px}
+.rw-step{background:var(--card);padding:28px 24px;text-align:center;transition:background .2s}
+.rw-step:hover{background:var(--card2)}
+.rw-step-num{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gold);background:var(--gold-dim);width:32px;height:32px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;margin-bottom:14px;border:1px solid rgba(201,146,13,0.2)}
+.rw-step-icon{font-size:28px;margin-bottom:10px}
+.rw-step h3{font-family:var(--sans);font-size:16px;font-weight:800;margin-bottom:8px;color:#fff}
+.rw-step p{font-family:var(--sans);font-size:12px;color:var(--dim);line-height:1.6}
 
 /* CONNECTOR */
-.rw-connector{display:flex;align-items:center;justify-content:center;gap:12px;padding:16px 0;margin-bottom:20px}
-.rw-connector-line{width:80px;height:1px;background:linear-gradient(90deg,transparent,var(--gold),transparent)}
-.rw-connector-icon{font-family:var(--mono);font-size:11px;color:var(--gold);background:var(--gold-dim);padding:4px 12px;border-radius:12px}
+.rw-connector{display:flex;align-items:center;justify-content:center;gap:12px;padding:8px 0;margin-bottom:24px}
+.rw-connector-line{width:80px;height:1px;background:linear-gradient(90deg,transparent,rgba(201,146,13,0.3),transparent)}
+.rw-connector-icon{font-family:var(--mono);font-size:11px;color:var(--gold);background:var(--gold-dim);padding:6px 16px;border-radius:20px;border:1px solid rgba(201,146,13,0.15)}
 
 /* TIERS TABLE */
-.rw-tiers{width:100%;border-collapse:separate;border-spacing:0;background:var(--card-bg);border:1px solid var(--card-border);border-radius:16px;overflow:hidden}
-.rw-tiers th{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:0.5px;padding:14px 20px;text-align:left;background:rgba(255,255,255,0.02);border-bottom:1px solid var(--card-border)}
-.rw-tiers td{font-family:var(--mono);font-size:13px;padding:16px 20px;border-bottom:1px solid var(--card-border);vertical-align:middle}
+.rw-tiers{width:100%;border-collapse:separate;border-spacing:0;border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.rw-tiers th{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:0.5px;padding:14px 20px;text-align:left;background:var(--card);border-bottom:1px solid var(--border)}
+.rw-tiers td{font-family:var(--mono);font-size:13px;padding:16px 20px;border-bottom:1px solid var(--border);vertical-align:middle;background:var(--card);transition:background .15s}
 .rw-tiers tr:last-child td{border-bottom:none}
-.rw-tiers tr:hover td{background:rgba(201,146,13,0.03)}
-.rw-tier-name{font-weight:700;display:flex;align-items:center;gap:8px}
-.rw-tier-rate{color:var(--gold);font-weight:700;font-size:15px}
+.rw-tiers tr:hover td{background:var(--card2)}
+.rw-tier-name{font-weight:700;display:flex;align-items:center;gap:8px;color:#fff}
+.rw-tier-rate{color:var(--gold);font-weight:800;font-size:16px}
 .rw-tier-example{color:var(--dim);font-size:11px}
-.rw-tier-active{background:var(--gold-dim) !important}
-.rw-tier-active td{color:var(--paper)}
-
-/* LEADERBOARD */
-.rw-lb{background:var(--card-bg);border:1px solid var(--card-border);border-radius:16px;overflow:hidden}
-.rw-lb-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--card-border)}
-.rw-lb-title{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:0.5px}
-.rw-lb-badge{font-family:var(--mono);font-size:9px;font-weight:700;color:var(--green);background:var(--green-dim);padding:3px 8px;border-radius:4px}
-.rw-lb-row{display:grid;grid-template-columns:40px 1fr 120px 100px 120px;align-items:center;padding:12px 20px;border-bottom:1px solid var(--card-border);font-family:var(--mono);font-size:12px;transition:background 0.15s}
-.rw-lb-row:hover{background:rgba(255,255,255,0.02)}
-.rw-lb-row:last-child{border-bottom:none}
-.rw-lb-rank{font-weight:700;color:var(--gold)}
-.rw-lb-wallet{color:var(--paper);font-weight:700}
-.rw-lb-vol{color:var(--dim);text-align:right}
-.rw-lb-tier{text-align:center}
-.rw-lb-reward{color:var(--green);font-weight:700;text-align:right}
-.rw-lb-empty{padding:40px 20px;text-align:center;font-family:var(--mono);font-size:12px;color:var(--dim)}
 
 /* YOUR STATS CARD */
-.rw-stats-card{background:linear-gradient(135deg,rgba(201,146,13,0.08),rgba(201,146,13,0.02));border:1px solid var(--gold-dim);border-radius:16px;padding:24px;margin-bottom:32px}
-.rw-stats-card-title{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:16px}
+.rw-stats-card{background:linear-gradient(135deg,rgba(201,146,13,0.06),rgba(201,146,13,0.02));border:1px solid rgba(201,146,13,0.15);border-radius:14px;padding:24px;margin-bottom:28px;position:relative;overflow:hidden}
+.rw-stats-card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(201,146,13,0.2),transparent)}
+.rw-stats-card-title{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:1px;margin-bottom:16px}
 .rw-stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
 .rw-stat{text-align:center}
-.rw-stat-val{font-family:var(--sans);font-size:24px;font-weight:800;margin-bottom:4px}
-.rw-stat-label{font-family:var(--mono);font-size:10px;color:var(--dim)}
+.rw-stat-val{font-family:var(--mono);font-size:24px;font-weight:900;margin-bottom:4px;letter-spacing:-0.5px}
+.rw-stat-label{font-family:var(--sans);font-size:11px;color:var(--dim)}
 .rw-stat-val.gold{color:var(--gold)}
 .rw-stat-val.green{color:var(--green)}
 
+/* LEADERBOARD */
+.rw-lb{border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.rw-lb-header{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);background:var(--card)}
+.rw-lb-title{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:0.8px}
+.rw-lb-badge{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--green);background:var(--green-dim);padding:4px 10px;border-radius:6px;border:1px solid rgba(0,230,138,0.2)}
+.rw-lb-row{display:grid;grid-template-columns:40px 1fr 120px 100px 120px;align-items:center;padding:14px 20px;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:12px;transition:background 0.15s;background:var(--card)}
+.rw-lb-row:hover{background:var(--card2)}
+.rw-lb-row:last-child{border-bottom:none}
+.rw-lb-rank{font-weight:800;color:var(--gold)}
+.rw-lb-wallet{font-weight:700;color:#fff}
+.rw-lb-vol{color:var(--dim);text-align:right}
+.rw-lb-tier{text-align:center;color:var(--soft)}
+.rw-lb-reward{color:var(--green);font-weight:700;text-align:right}
+.rw-lb-empty{padding:48px 20px;text-align:center;font-family:var(--sans);font-size:13px;color:var(--dim);background:var(--card)}
+
 /* PAYOUTS */
-.rw-payouts{background:var(--card-bg);border:1px solid var(--card-border);border-radius:16px;overflow:hidden}
-.rw-payouts-header{padding:16px 20px;border-bottom:1px solid var(--card-border);display:flex;align-items:center;justify-content:space-between}
-.rw-payouts-title{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:0.5px}
-.rw-payouts-row{display:grid;grid-template-columns:1fr 120px 1fr;align-items:center;padding:12px 20px;border-bottom:1px solid var(--card-border);font-family:var(--mono);font-size:12px}
+.rw-payouts{border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.rw-payouts-header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--card)}
+.rw-payouts-title{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:0.8px}
+.rw-payouts-row{display:grid;grid-template-columns:1fr 120px 1fr;align-items:center;padding:14px 20px;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:12px;background:var(--card);transition:background .15s}
+.rw-payouts-row:hover{background:var(--card2)}
 .rw-payouts-row:last-child{border-bottom:none}
-.rw-payouts-empty{padding:40px 20px;text-align:center;font-family:var(--mono);font-size:12px;color:var(--dim)}
+.rw-payouts-empty{padding:48px 20px;text-align:center;font-family:var(--sans);font-size:13px;color:var(--dim);background:var(--card)}
 
 /* FAQ */
-.rw-faq{display:flex;flex-direction:column;gap:12px}
-.rw-faq-item{background:var(--card-bg);border:1px solid var(--card-border);border-radius:12px;padding:20px 24px;cursor:pointer;transition:border-color 0.2s}
-.rw-faq-item:hover{border-color:var(--gold-dim)}
-.rw-faq-q{font-family:var(--sans);font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:space-between}
+.rw-faq{display:flex;flex-direction:column;gap:8px}
+.rw-faq-item{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 22px;cursor:pointer;transition:all 0.2s}
+.rw-faq-item:hover{border-color:rgba(201,146,13,0.2);background:var(--card2)}
+.rw-faq-q{font-family:var(--sans);font-size:14px;font-weight:700;color:#fff;display:flex;align-items:center;justify-content:space-between}
 .rw-faq-q::after{content:'+';font-family:var(--mono);font-size:18px;color:var(--dim);transition:transform 0.2s}
 .rw-faq-item.open .rw-faq-q::after{transform:rotate(45deg);color:var(--gold)}
-.rw-faq-a{font-family:var(--mono);font-size:12px;color:var(--dim);line-height:1.7;max-height:0;overflow:hidden;transition:max-height 0.3s ease,margin 0.3s ease}
+.rw-faq-a{font-family:var(--sans);font-size:13px;color:var(--dim);line-height:1.7;max-height:0;overflow:hidden;transition:max-height 0.3s ease,margin 0.3s ease}
 .rw-faq-item.open .rw-faq-a{max-height:200px;margin-top:12px}
-
-/* POOL BANNER */
-.rw-pool{background:linear-gradient(135deg,var(--surface),rgba(201,146,13,0.05));border:1px solid var(--card-border);border-radius:16px;padding:32px;text-align:center;margin-bottom:40px}
-.rw-pool-label{font-family:var(--mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
-.rw-pool-amount{font-family:var(--sans);font-size:42px;font-weight:800;color:var(--gold);letter-spacing:-1px}
-.rw-pool-sub{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:4px}
-
-/* FOOTER CTA */
-.rw-footer-cta{text-align:center;padding:60px 40px;background:linear-gradient(180deg,transparent,rgba(201,146,13,0.04))}
-.rw-footer-cta h2{font-family:var(--sans);font-size:32px;font-weight:800;margin-bottom:12px}
-.rw-footer-cta p{font-family:var(--mono);font-size:13px;color:var(--dim);margin-bottom:24px}
 
 /* TWO COLS */
 .rw-two-col{display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:start}
 
+/* FOOTER CTA */
+.rw-footer-cta{text-align:center;padding:64px 40px;position:relative}
+.rw-footer-cta::before{content:'';position:absolute;inset:0;background:linear-gradient(180deg,transparent,rgba(201,146,13,0.03));pointer-events:none}
+.rw-footer-cta h2{font-family:var(--sans);font-size:28px;font-weight:900;margin-bottom:12px;color:#fff;letter-spacing:-0.5px;position:relative}
+.rw-footer-cta p{font-family:var(--sans);font-size:14px;color:var(--dim);margin-bottom:28px;position:relative}
+
 /* RESPONSIVE */
 @media(max-width:768px){
-  .rw-hero{padding:48px 20px 40px}
-  .rw-section{padding:0 20px 40px}
+  .rw-hero{padding:48px 20px 36px}
+  .rw-section{padding:0 20px 36px}
   .rw-steps{grid-template-columns:1fr}
   .rw-tiers th,.rw-tiers td{padding:10px 12px;font-size:11px}
   .rw-lb-row{grid-template-columns:32px 1fr 80px;gap:4px}
   .rw-lb-row .rw-lb-tier,.rw-lb-row .rw-lb-reward{display:none}
   .rw-stats-grid{grid-template-columns:repeat(2,1fr)}
   .rw-two-col{grid-template-columns:1fr}
-  .rw-pool-amount{font-size:32px}
+  .rw-pool-amount{font-size:36px}
   .rw-cta-secondary{margin-left:0;margin-top:8px}
   .rw-hero .rw-cta-row{flex-direction:column;gap:8px}
   .rw-payouts-row{grid-template-columns:1fr 80px 1fr;font-size:11px}
+  .rw-footer-cta{padding:48px 20px}
 }
 @media(max-width:480px){
   .rw-tiers{font-size:10px}
   .rw-tiers .rw-tier-example{display:none}
+  .rw-hero h1{font-size:32px}
 }
 </style>
 </head>
@@ -160,7 +175,7 @@ a{color:var(--gold);text-decoration:none}a:hover{text-decoration:underline}
   <h1>Trade & Earn <span>USDC</span></h1>
   <p class="rw-hero-sub">Every trade you make through HYPERFLEX earns you real USDC rewards. We share our Polymarket referral revenue directly with you — the more you trade, the more you earn.</p>
   <div class="rw-cta-row" style="display:inline-flex;gap:12px;flex-wrap:wrap;justify-content:center">
-    <a href="/explore" class="rw-cta">Start Earning <span style="font-size:16px">&rarr;</span></a>
+    <a href="/explore" class="rw-cta">Start Earning &rarr;</a>
     <a href="#how-it-works" class="rw-cta rw-cta-secondary">How It Works</a>
   </div>
 </div>
@@ -200,7 +215,7 @@ a{color:var(--gold);text-decoration:none}a:hover{text-decoration:underline}
   </div>
   <div class="rw-connector">
     <div class="rw-connector-line"></div>
-    <div class="rw-connector-icon">Flywheel: more users &rarr; more revenue &rarr; bigger rewards</div>
+    <div class="rw-connector-icon">More users &rarr; more revenue &rarr; bigger rewards</div>
     <div class="rw-connector-line"></div>
   </div>
 </div>
@@ -223,7 +238,7 @@ a{color:var(--gold);text-decoration:none}a:hover{text-decoration:underline}
   </table>
 </div>
 
-<!-- YOUR STATS + LEADERBOARD — TWO COL -->
+<!-- YOUR STATS + LEADERBOARD -->
 <div class="rw-section">
   <div class="rw-section-title">Leaderboard & Your Stats</div>
   <div class="rw-section-sub">Top traders this week &mdash; updated in real time</div>
@@ -270,7 +285,7 @@ a{color:var(--gold);text-decoration:none}a:hover{text-decoration:underline}
   </div>
 </div>
 
-<!-- PAYOUTS -->
+<!-- PAYOUTS + FAQ -->
 <div class="rw-section">
   <div class="rw-two-col">
     <div>
@@ -320,7 +335,7 @@ a{color:var(--gold);text-decoration:none}a:hover{text-decoration:underline}
 <div class="rw-footer-cta">
   <h2>Start earning on every trade</h2>
   <p>Join the HYPERFLEX rewards program and turn your trading edge into USDC cashback.</p>
-  <a href="/explore" class="rw-cta">Explore Markets <span style="font-size:16px">&rarr;</span></a>
+  <a href="/explore" class="rw-cta">Explore Markets &rarr;</a>
 </div>
 
 <script>
