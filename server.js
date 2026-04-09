@@ -13823,22 +13823,76 @@ app.post('/api/admin/gift-user-trial', requireAdmin, async (req, res) => {
 // GET /api/admin/platform-stats — platform-wide metrics
 app.get('/api/admin/platform-stats', requireAdmin, async (req, res) => {
   try {
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    const [r1, r2, r3, r4, r5, r6] = await Promise.all([
+    const now = Date.now();
+    const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const fourteenDaysAgo = new Date(now - 14 * 24 * 60 * 60 * 1000).toISOString();
+
+    const [r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13] = await Promise.all([
       dbQuery('SELECT count(*) as count FROM users'),
       dbQuery('SELECT count(*) as count FROM creator_settings'),
       dbQuery('SELECT count(*) as count FROM markets'),
       dbQuery('SELECT count(*) as count FROM positions'),
       dbQuery('SELECT count(*) as count FROM users WHERE created_at >= $1', [sevenDaysAgo]),
       dbQuery('SELECT count(*) as count FROM positions WHERE created_at >= $1', [sevenDaysAgo]),
+      // Revenue: trade volume from flex_points_log (this week + last week for trend)
+      dbQuery('SELECT coalesce(sum(trade_amount_usd),0) as vol, count(*) as trades FROM flex_points_log WHERE created_at >= $1', [sevenDaysAgo]),
+      dbQuery('SELECT coalesce(sum(trade_amount_usd),0) as vol, count(*) as trades FROM flex_points_log WHERE created_at >= $1 AND created_at < $2', [fourteenDaysAgo, sevenDaysAgo]),
+      // Funnel: wallets connected, users who traded at least once
+      dbQuery("SELECT count(*) as count FROM users WHERE polymarket_address IS NOT NULL AND polymarket_address != ''"),
+      dbQuery('SELECT count(DISTINCT user_id) as count FROM flex_points_log'),
+      // Active traders 7d
+      dbQuery('SELECT count(DISTINCT user_id) as count FROM flex_points_log WHERE created_at >= $1', [sevenDaysAgo]),
+      // Top traders by volume (last 30d)
+      dbQuery("SELECT u.id, u.display_name, u.email, u.polymarket_address, coalesce(sum(f.trade_amount_usd),0) as volume, count(*) as trade_count, max(f.created_at) as last_trade FROM flex_points_log f JOIN users u ON u.id = f.user_id WHERE f.created_at >= $1 GROUP BY u.id, u.display_name, u.email, u.polymarket_address ORDER BY volume DESC LIMIT 10", [new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString()]),
+      // Recent activity: last 20 events from flex_points_log
+      dbQuery("SELECT f.user_id, u.display_name, u.email, f.trade_amount_usd, f.points, f.source, f.created_at FROM flex_points_log f LEFT JOIN users u ON u.id = f.user_id ORDER BY f.created_at DESC LIMIT 20"),
     ]);
+
+    const volThisWeek = parseFloat(r7[0]?.vol || 0);
+    const volLastWeek = parseFloat(r8[0]?.vol || 0);
+    const tradesThisWeek = parseInt(r7[0]?.trades || 0);
+    const tradesLastWeek = parseInt(r8[0]?.trades || 0);
+    // Builder fee estimate: Polymarket pays ~1% fee, builder gets 30% of that = 0.3% of volume
+    const estRevenueThisWeek = volThisWeek * 0.003;
+    const estRevenueLastWeek = volLastWeek * 0.003;
+
     res.json({
-      total_users:    parseInt(r1[0]?.count || 0),
-      total_creators: parseInt(r2[0]?.count || 0),
-      total_markets:  parseInt(r3[0]?.count || 0),
-      total_trades:   parseInt(r4[0]?.count || 0),
-      new_users_7d:   parseInt(r5[0]?.count || 0),
-      new_trades_7d:  parseInt(r6[0]?.count || 0)
+      total_users:      parseInt(r1[0]?.count || 0),
+      total_creators:   parseInt(r2[0]?.count || 0),
+      total_markets:    parseInt(r3[0]?.count || 0),
+      total_trades:     parseInt(r4[0]?.count || 0),
+      new_users_7d:     parseInt(r5[0]?.count || 0),
+      new_trades_7d:    parseInt(r6[0]?.count || 0),
+      // Revenue
+      volume_7d:        volThisWeek,
+      volume_prev_7d:   volLastWeek,
+      volume_trend:     volLastWeek > 0 ? ((volThisWeek - volLastWeek) / volLastWeek * 100) : (volThisWeek > 0 ? 100 : 0),
+      est_revenue_7d:   estRevenueThisWeek,
+      est_revenue_prev: estRevenueLastWeek,
+      trades_7d:        tradesThisWeek,
+      trades_prev_7d:   tradesLastWeek,
+      trades_trend:     tradesLastWeek > 0 ? ((tradesThisWeek - tradesLastWeek) / tradesLastWeek * 100) : (tradesThisWeek > 0 ? 100 : 0),
+      // Funnel
+      wallets_connected:  parseInt(r9[0]?.count || 0),
+      users_ever_traded:  parseInt(r10[0]?.count || 0),
+      active_traders_7d:  parseInt(r11[0]?.count || 0),
+      // Top traders
+      top_traders: (r12 || []).map(t => ({
+        id: t.id,
+        name: t.display_name || t.email || 'Anonymous',
+        wallet: t.polymarket_address ? (t.polymarket_address.slice(0,6) + '...' + t.polymarket_address.slice(-4)) : null,
+        volume: parseFloat(t.volume || 0),
+        trade_count: parseInt(t.trade_count || 0),
+        last_trade: t.last_trade
+      })),
+      // Recent activity
+      recent_activity: (r13 || []).map(a => ({
+        user: a.display_name || a.email || 'Anonymous',
+        amount_usd: parseFloat(a.trade_amount_usd || 0),
+        points: parseInt(a.points || 0),
+        source: a.source || 'trade',
+        ts: a.created_at
+      }))
     });
   } catch (err) {
     console.error('[admin] platform-stats error:', err.message);
