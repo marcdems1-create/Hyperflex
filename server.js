@@ -18913,6 +18913,7 @@ app.get('/screener', (req, res) => res.sendFile(path.join(__dirname, 'public', '
 app.get('/ecosystem', (req, res) => res.sendFile(path.join(__dirname, 'public', 'ecosystem.html')));
 app.get('/features', (req, res) => res.sendFile(path.join(__dirname, 'public', 'features.html')));
 app.get('/alpha', (req, res) => res.sendFile(path.join(__dirname, 'public', 'alpha-live.html')));
+app.get('/terminal', (req, res) => res.sendFile(path.join(__dirname, 'public', 'terminal.html')));
 app.get('/spread-scanner', (req, res) => res.redirect(301, '/odds'));
 app.get('/high-prob', (req, res) => res.sendFile(path.join(__dirname, 'public', 'high-prob.html')));
 
@@ -20647,6 +20648,126 @@ app.get('/api/alpha/top', async (req, res) => {
       return res.json({ markets: top, count: top.length, updated_at: new Date(_screenerCache.ts).toISOString(), stale: true });
     }
     res.status(502).json({ error: 'Failed to build alpha list', detail: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TERMINAL — unified 6-panel data endpoint for /terminal Bloomberg-style view
+// ═══════════════════════════════════════════════════════════════════════════
+// Returns all 6 terminal panels in one payload. Client polls this one endpoint
+// at 30s intervals. Every panel is a filtered/sorted slice of data we already
+// have in _screenerCache / _whaleWatchCache / _narrativeCache — no new data
+// collection, no new crons, no new tables.
+app.get('/api/terminal/data', async (req, res) => {
+  try {
+    // buildAlphaList coalesces concurrent calls and respects the 90s TTL so
+    // calling it here is cheap — usually a cache hit.
+    const markets = await buildAlphaList();
+    if (!Array.isArray(markets)) return res.status(502).json({ error: 'No market data' });
+
+    // Slim each market to just the fields the terminal cards render. Reduces
+    // payload from ~300KB to ~40KB per poll.
+    function slim(m) {
+      return {
+        market_id: m.market_id,
+        slug: m.slug,
+        question: m.question,
+        category: m.category,
+        yes_price: m.yes_price,
+        volume: m.volume,
+        whale_count: m.whale_count,
+        total_whale_capital: m.total_whale_capital,
+        price_change_24h: m.price_change_24h,
+        days_until_expiry: m.days_until_expiry,
+        edge_score: m.edge_score,
+        edge_components: m.edge_components,
+        model_probability: m.model_probability,
+        alpha_edge: m.alpha_edge,
+        trade: m.trade,
+        ai_hook: m.ai_hook,
+        edge_age_minutes: m.edge_age_minutes,
+        is_new: m.is_new,
+        trade_thesis: m.trade_thesis ? {
+          urgency: m.trade_thesis.urgency,
+          urgency_reason: m.trade_thesis.urgency_reason
+        } : null
+      };
+    }
+
+    // PANEL 1: TOP EDGES — highest composite edge score
+    const topEdges = [...markets]
+      .filter(m => (m.edge_score || 0) >= 50)
+      .sort((a, b) => (b.edge_score || 0) - (a.edge_score || 0))
+      .slice(0, 6)
+      .map(slim);
+
+    // PANEL 2: WHALE FLOW — flatten _whaleWatchCache positions, sorted by size
+    let whaleFlow = [];
+    if (_whaleWatchCache && _whaleWatchCache.data && Array.isArray(_whaleWatchCache.data.whales)) {
+      whaleFlow = _whaleWatchCache.data.whales
+        .map(w => ({
+          wallet: ((w.proxyWallet || w.trader || '').toString()).slice(0, 10),
+          side: (w.side || 'YES').toUpperCase(),
+          size: parseFloat(w.size || 0),
+          market: w.market || w.question || '',
+          slug: w.slug || w.eventSlug || null,
+          entry_price: w.avgPrice ? parseFloat(w.avgPrice) : null,
+          pnl: w.pnl != null ? parseFloat(w.pnl) : null
+        }))
+        .filter(w => w.size >= 1000)
+        .sort((a, b) => b.size - a.size)
+        .slice(0, 10);
+    }
+
+    // PANEL 3: FRESH EDGES — edge_age_minutes <= 30, sorted newest first
+    const freshEdges = [...markets]
+      .filter(m => m.is_new === true && (m.edge_age_minutes != null && m.edge_age_minutes <= 30) && (m.edge_score || 0) >= 50)
+      .sort((a, b) => (a.edge_age_minutes || 999) - (b.edge_age_minutes || 999))
+      .slice(0, 6)
+      .map(slim);
+
+    // PANEL 4: NARRATIVE PULSE — reuse _narrativeCache when fresh, otherwise
+    // skip (the terminal will poll narratives less aggressively anyway since
+    // they're 15-min cached server-side)
+    let narrativePulse = [];
+    if (_narrativeCache && _narrativeCache.data && Array.isArray(_narrativeCache.data)) {
+      narrativePulse = _narrativeCache.data.slice(0, 8).map(n => ({
+        narrative: n.narrative,
+        dominance_pct: n.dominance_pct,
+        weekly_change: n.weekly_change,
+        market_count: n.market_count,
+        top_market: n.top_market
+      }));
+    }
+
+    // PANEL 5: VOLUME SPIKE — edge_components.volume_spike > 0, sorted desc
+    const volumeSpike = [...markets]
+      .filter(m => m.edge_components && (m.edge_components.volume_spike || 0) >= 3)
+      .sort((a, b) => (b.edge_components.volume_spike || 0) - (a.edge_components.volume_spike || 0))
+      .slice(0, 6)
+      .map(slim);
+
+    // PANEL 6: TIME DECAY — binary markets expiring soon (≤3d) in discount
+    // zones (15-40¢ or 60-85¢), sorted by decay component. The decay component
+    // already filters for this geometry inside buildAlphaList.
+    const timeDecay = [...markets]
+      .filter(m => m.edge_components && (m.edge_components.decay || 0) > 0 && m.days_until_expiry != null && m.days_until_expiry <= 3)
+      .sort((a, b) => (b.edge_components.decay || 0) - (a.edge_components.decay || 0))
+      .slice(0, 6)
+      .map(slim);
+
+    res.json({
+      top_edges: topEdges,
+      whale_flow: whaleFlow,
+      fresh_edges: freshEdges,
+      narrative_pulse: narrativePulse,
+      volume_spike: volumeSpike,
+      time_decay: timeDecay,
+      updated_at: new Date(_screenerCache ? _screenerCache.ts : Date.now()).toISOString()
+    });
+  } catch (err) {
+    console.error('[terminal/data]', err.message);
+    res.status(502).json({ error: 'Failed to build terminal data', detail: err.message });
   }
 });
 
