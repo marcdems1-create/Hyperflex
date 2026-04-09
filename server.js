@@ -4459,6 +4459,7 @@ app.post('/api/creator/signup', async (req, res) => {
       community_description = '',
       selected_markets = [],
       referred_by = null,   // creator slug of referrer (from ?ref= param)
+      ref_code = null,      // platform referral code (from ?ref_code= param)
     } = req.body;
 
     // Validate required fields
@@ -4701,6 +4702,29 @@ app.post('/api/creator/signup', async (req, res) => {
           .then(() => {})
           .catch(() => {});
       }
+    }
+
+    // Claim platform referral code if provided
+    if (ref_code) {
+      (async () => {
+        try {
+          let referrerId = null;
+          if (pool) {
+            const rows = await dbQuery('SELECT id FROM users WHERE referral_code = $1', [ref_code.toUpperCase()]);
+            referrerId = rows[0]?.id;
+          } else if (supabase) {
+            const { data } = await supabase.from('users').select('id').eq('referral_code', ref_code.toUpperCase()).single();
+            referrerId = data?.id;
+          }
+          if (referrerId && referrerId !== newUser.id) {
+            if (pool) {
+              await dbQuery('UPDATE users SET referred_by = $1 WHERE id = $2', [referrerId, newUser.id]);
+            } else if (supabase) {
+              await supabase.from('users').update({ referred_by: referrerId }).eq('id', newUser.id);
+            }
+          }
+        } catch (e) { console.warn('[signup-ref-code]', e.message); }
+      })();
     }
 
     // Schedule a drop-off nudge: if creator has no public markets 2h after signup, send them an email
@@ -22039,13 +22063,21 @@ app.get('/api/mispricings', async (req, res) => {
 const _flexPointsCache = {}; // userId → { points, updated }
 const FLEX_PTS_CACHE_TTL = 5 * 60 * 1000;
 
-// Earn FLEX points — 1 point per $1 traded (min 1 per trade), bonus for streaks
+// Earn FLEX points — 1 point per $1 traded (min 1 per trade), bonus for streaks + tier multiplier
 async function awardFlexPoints(userId, tradeAmountUsd, source = 'polymarket_trade') {
   if (!userId) return 0;
   // Only real-money trades earn FLEX points
   const VALID_SOURCES = ['polymarket_trade', 'kalshi_trade'];
   if (!VALID_SOURCES.includes(source)) return 0;
   const basePoints = Math.max(1, Math.round(tradeAmountUsd));
+
+  // Tier multiplier from 30d volume
+  let tierMultiplier = 1;
+  try {
+    const userTier = await getUserTier(userId);
+    tierMultiplier = userTier.fp_multiplier || 1;
+  } catch (e) { /* silent */ }
+
   // Streak bonus: check recent trades in last 7 days
   let streakBonus = 0;
   try {
@@ -22062,7 +22094,8 @@ async function awardFlexPoints(userId, tradeAmountUsd, source = 'polymarket_trad
     streakBonus = Math.round(basePoints * (multiplier - 1));
   } catch (e) { /* silent — don't block trade on points failure */ }
 
-  const totalPoints = basePoints + streakBonus;
+  // Apply tier multiplier to total (base + streak)
+  const totalPoints = Math.round((basePoints + streakBonus) * tierMultiplier);
 
   // Log the earn event
   try {
@@ -22084,6 +22117,9 @@ async function awardFlexPoints(userId, tradeAmountUsd, source = 'polymarket_trad
   } catch (e) {
     console.warn('[flex-points] Failed to award:', e.message);
   }
+
+  // Fire-and-forget: award referral FP to referrer chain
+  awardReferralFP(userId, totalPoints, tradeAmountUsd).catch(() => {});
 
   return totalPoints;
 }
@@ -22117,12 +22153,13 @@ app.get('/api/flex-points', requireAuth, async (req, res) => {
       }
     } catch (e) { /* silent */ }
 
-    // Compute tier
+    // Compute volume-based tier
     const totalPts = row ? row.total_points : 0;
-    const tier = totalPts >= 10000 ? 'diamond' : totalPts >= 5000 ? 'platinum' : totalPts >= 1000 ? 'gold' : totalPts >= 250 ? 'silver' : 'bronze';
-    const tierThresholds = { bronze: 0, silver: 250, gold: 1000, platinum: 5000, diamond: 10000 };
-    const nextTier = tier === 'diamond' ? null : Object.keys(tierThresholds).find(t => tierThresholds[t] > totalPts);
-    const nextThreshold = nextTier ? tierThresholds[nextTier] : null;
+    const userTier = await getUserTier(userId);
+    const tierName = userTier.name.toLowerCase();
+    const nextTierObj = REWARD_TIERS.find(t => t.min_volume > userTier.volume_30d) || null;
+    const nextTier = nextTierObj ? nextTierObj.name.toLowerCase() : null;
+    const nextThreshold = nextTierObj ? nextTierObj.min_volume : null;
 
     // Weekly streak
     let weeklyTrades = 0;
@@ -22138,16 +22175,39 @@ app.get('/api/flex-points', requireAuth, async (req, res) => {
 
     const streakMultiplier = weeklyTrades >= 20 ? '2.5x' : weeklyTrades >= 10 ? '2x' : weeklyTrades >= 5 ? '1.5x' : '1x';
 
+    // Referral stats
+    let referralCount = 0, referralCode = null;
+    try {
+      if (pool) {
+        const rows = await dbQuery('SELECT referral_code FROM users WHERE id = $1', [userId]);
+        referralCode = rows[0]?.referral_code || null;
+        const rc = await dbQuery('SELECT COUNT(*) as cnt FROM users WHERE referred_by = $1', [userId]);
+        referralCount = parseInt(rc[0]?.cnt || 0);
+      } else if (supabase) {
+        const { data: u } = await supabase.from('users').select('referral_code').eq('id', userId).single();
+        referralCode = u?.referral_code || null;
+        const { count } = await supabase.from('users').select('id', { count: 'exact', head: true }).eq('referred_by', userId);
+        referralCount = count || 0;
+      }
+    } catch (e) { /* silent */ }
+
     const result = {
       total_points: totalPts,
       trade_count: row ? row.trade_count : 0,
       last_earned_at: row ? row.last_earned_at : null,
-      tier,
+      tier: tierName,
+      tier_name: userTier.name,
+      tier_icon: userTier.icon,
+      tier_reward_pct: userTier.reward_pct,
+      tier_fp_multiplier: userTier.fp_multiplier,
+      volume_30d: userTier.volume_30d,
       next_tier: nextTier,
       next_threshold: nextThreshold,
-      points_to_next: nextThreshold ? nextThreshold - totalPts : 0,
+      volume_to_next: nextThreshold ? Math.max(0, nextThreshold - userTier.volume_30d) : 0,
       weekly_trades: weeklyTrades,
       streak_multiplier: streakMultiplier,
+      referral_code: referralCode,
+      referral_count: referralCount,
       recent_log: recentLog
     };
 
@@ -22155,7 +22215,7 @@ app.get('/api/flex-points', requireAuth, async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error('[flex-points]', err.message);
-    res.json({ total_points: 0, trade_count: 0, tier: 'bronze', weekly_trades: 0, streak_multiplier: '1x', recent_log: [] });
+    res.json({ total_points: 0, trade_count: 0, tier: 'scout', tier_name: 'Scout', tier_icon: '🔭', tier_fp_multiplier: 1, volume_30d: 0, weekly_trades: 0, streak_multiplier: '1x', recent_log: [] });
   }
 });
 
@@ -22183,8 +22243,8 @@ app.post('/api/flex-points/earn', optionalAuth, async (req, res) => {
       }
     } catch (e) { /* silent */ }
 
-    const tier = total >= 10000 ? 'diamond' : total >= 5000 ? 'platinum' : total >= 1000 ? 'gold' : total >= 250 ? 'silver' : 'bronze';
-    res.json({ points_earned: earned, total_points: total, tier });
+    const earnTier = await getUserTier(userId);
+    res.json({ points_earned: earned, total_points: total, tier: earnTier.name.toLowerCase(), tier_name: earnTier.name, fp_multiplier: earnTier.fp_multiplier });
   } catch (err) {
     console.error('[flex-points/earn]', err.message);
     res.json({ points_earned: 0 });
@@ -22207,12 +22267,137 @@ app.get('/api/flex-points/leaderboard', async (req, res) => {
       display_name: l.display_name || null,
       total_points: l.total_points,
       trade_count: l.trade_count,
-      tier: l.total_points >= 10000 ? 'diamond' : l.total_points >= 5000 ? 'platinum' : l.total_points >= 1000 ? 'gold' : l.total_points >= 250 ? 'silver' : 'bronze'
+      tier: getRewardTier(l.total_points).name.toLowerCase()
     })) });
   } catch (err) {
     console.error('[flex-leaderboard]', err.message);
     res.json({ leaderboard: [] });
   }
+});
+
+// ── Platform Referral Endpoints ──────────────────────────────────────────
+
+// GET /api/referral/code — get or generate user's referral code
+app.get('/api/referral/code', requireAuth, async (req, res) => {
+  try {
+    const userId = req.userId;
+    let code = null;
+    if (pool) {
+      const rows = await dbQuery('SELECT referral_code FROM users WHERE id = $1', [userId]);
+      code = rows[0]?.referral_code;
+    } else if (supabase) {
+      const { data } = await supabase.from('users').select('referral_code').eq('id', userId).single();
+      code = data?.referral_code;
+    }
+    if (!code) {
+      code = generateReferralCode();
+      if (pool) {
+        await dbQuery('UPDATE users SET referral_code = $1 WHERE id = $2', [code, userId]);
+      } else if (supabase) {
+        await supabase.from('users').update({ referral_code: code }).eq('id', userId);
+      }
+    }
+    // Get referral stats
+    let referrals = [], totalFP = 0;
+    if (pool) {
+      referrals = await dbQuery(`SELECT u.id, u.display_name, u.created_at as joined_at, COALESCE(SUM(pr.fp_earned), 0) as fp_from FROM users u LEFT JOIN platform_referrals pr ON pr.referee_id = u.id AND pr.referrer_id = $1 WHERE u.referred_by = $1 GROUP BY u.id, u.display_name, u.created_at ORDER BY u.created_at DESC`, [userId]);
+      const fpRow = await dbQuery(`SELECT COALESCE(SUM(fp_earned), 0) as total FROM platform_referrals WHERE referrer_id = $1`, [userId]);
+      totalFP = parseFloat(fpRow[0]?.total || 0);
+    } else if (supabase) {
+      const { data: refs } = await supabase.from('users').select('id, display_name, created_at').eq('referred_by', userId).order('created_at', { ascending: false });
+      referrals = refs || [];
+      const { data: fpData } = await supabase.from('platform_referrals').select('fp_earned').eq('referrer_id', userId);
+      totalFP = (fpData || []).reduce((s, r) => s + (parseFloat(r.fp_earned) || 0), 0);
+    }
+    const activeCount = referrals.length;
+    // Check milestones
+    let milestoneBonus = null;
+    if (activeCount >= 5 && activeCount < 20) milestoneBonus = { type: 'fp_bonus', value: REFERRAL_CONFIG.milestone_5, label: '5 referrals = 1,000 FP bonus' };
+    if (activeCount >= 20) milestoneBonus = { type: 'tier_boost', label: '20 referrals = permanent tier boost' };
+    res.json({
+      referral_code: code,
+      referral_link: `https://hyperflex.network/ref/${code}`,
+      referral_count: activeCount,
+      total_fp_earned: totalFP,
+      referrals: referrals.map(r => ({ display_name: r.display_name || 'Trader', joined_at: r.joined_at || r.created_at, fp_from: parseFloat(r.fp_from) || 0 })),
+      milestone: milestoneBonus,
+      config: REFERRAL_CONFIG
+    });
+  } catch (err) {
+    console.error('[referral/code]', err.message);
+    res.status(500).json({ error: 'Failed to get referral code' });
+  }
+});
+
+// POST /api/referral/claim — claim a referral code (called during onboarding)
+app.post('/api/referral/claim', requireAuth, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { code } = req.body;
+    if (!code) return res.status(400).json({ error: 'Missing referral code' });
+
+    // Check if user already has a referrer
+    let existing = null;
+    if (pool) {
+      const rows = await dbQuery('SELECT referred_by FROM users WHERE id = $1', [userId]);
+      existing = rows[0]?.referred_by;
+    } else if (supabase) {
+      const { data } = await supabase.from('users').select('referred_by').eq('id', userId).single();
+      existing = data?.referred_by;
+    }
+    if (existing) return res.status(400).json({ error: 'Already have a referrer' });
+
+    // Find referrer by code
+    let referrerId = null;
+    if (pool) {
+      const rows = await dbQuery('SELECT id FROM users WHERE referral_code = $1', [code.toUpperCase()]);
+      referrerId = rows[0]?.id;
+    } else if (supabase) {
+      const { data } = await supabase.from('users').select('id').eq('referral_code', code.toUpperCase()).single();
+      referrerId = data?.id;
+    }
+    if (!referrerId) return res.status(404).json({ error: 'Invalid referral code' });
+    if (referrerId === userId) return res.status(400).json({ error: 'Cannot refer yourself' });
+
+    // Set referred_by
+    if (pool) {
+      await dbQuery('UPDATE users SET referred_by = $1 WHERE id = $2', [referrerId, userId]);
+    } else if (supabase) {
+      await supabase.from('users').update({ referred_by: referrerId }).eq('id', userId);
+    }
+
+    res.json({ success: true, referrer_id: referrerId });
+  } catch (err) {
+    console.error('[referral/claim]', err.message);
+    res.status(500).json({ error: 'Failed to claim referral' });
+  }
+});
+
+// GET /api/referral/stats — admin view of referral chain stats
+app.get('/api/referral/stats', requireAdmin, async (req, res) => {
+  try {
+    let totalReferrals = 0, totalFPAwarded = 0, topReferrers = [];
+    if (pool) {
+      const rc = await dbQuery('SELECT COUNT(*) as cnt FROM users WHERE referred_by IS NOT NULL');
+      totalReferrals = parseInt(rc[0]?.cnt || 0);
+      const fp = await dbQuery('SELECT COALESCE(SUM(fp_earned), 0) as total FROM platform_referrals');
+      totalFPAwarded = parseFloat(fp[0]?.total || 0);
+      topReferrers = await dbQuery(`SELECT u.id, u.display_name, COUNT(r.id) as ref_count, COALESCE(SUM(pr.fp_earned), 0) as fp_earned FROM users u JOIN users r ON r.referred_by = u.id LEFT JOIN platform_referrals pr ON pr.referrer_id = u.id GROUP BY u.id, u.display_name ORDER BY ref_count DESC LIMIT 10`);
+    } else if (supabase) {
+      const { count } = await supabase.from('users').select('id', { count: 'exact', head: true }).not('referred_by', 'is', null);
+      totalReferrals = count || 0;
+    }
+    res.json({ total_referrals: totalReferrals, total_fp_awarded: totalFPAwarded, top_referrers: topReferrers });
+  } catch (err) {
+    console.error('[referral/stats]', err.message);
+    res.json({ total_referrals: 0, total_fp_awarded: 0, top_referrers: [] });
+  }
+});
+
+// GET /ref/:code — referral landing redirect
+app.get('/ref/:code', (req, res) => {
+  const code = (req.params.code || '').toUpperCase();
+  res.redirect(`/creator/signup?ref_code=${encodeURIComponent(code)}`);
 });
 
 // ── AI EDGE DETECTOR — Claude estimates true probability vs market price ──
@@ -31828,11 +32013,11 @@ setInterval(async () => {
 // ══════════════════════════════════════════════════════════════════════
 
 const REWARD_TIERS = [
-  { name: 'Bronze',  icon: '\uD83E\uDD49', min_volume: 100,    reward_pct: 5,  min_volume_label: '$100+',    example: 'Trade $1K \u2192 earn ~$1.50' },
-  { name: 'Silver',  icon: '\uD83E\uDD48', min_volume: 1000,   reward_pct: 10, min_volume_label: '$1,000+',  example: 'Trade $5K \u2192 earn ~$15' },
-  { name: 'Gold',    icon: '\uD83E\uDD47', min_volume: 10000,  reward_pct: 15, min_volume_label: '$10,000+', example: 'Trade $25K \u2192 earn ~$112.50' },
-  { name: 'Diamond', icon: '\uD83D\uDC8E', min_volume: 50000,  reward_pct: 20, min_volume_label: '$50,000+', example: 'Trade $100K \u2192 earn ~$600' },
-  { name: 'Whale',   icon: '\uD83D\uDC51', min_volume: 250000, reward_pct: 25, min_volume_label: '$250,000+',example: 'Trade $500K \u2192 earn ~$3,750' },
+  { name: 'Scout',   icon: '\uD83D\uDD2D', min_volume: 0,      reward_pct: 5,  fp_multiplier: 1,   min_volume_label: '$0',       example: 'Trade $500 → earn ~$0.75' },
+  { name: 'Trader',  icon: '\uD83D\uDCC8', min_volume: 500,     reward_pct: 8,  fp_multiplier: 1.5, min_volume_label: '$500+',    example: 'Trade $2K → earn ~$4.80' },
+  { name: 'Shark',   icon: '\uD83E\uDD88', min_volume: 5000,    reward_pct: 12, fp_multiplier: 2,   min_volume_label: '$5,000+',  example: 'Trade $10K → earn ~$36' },
+  { name: 'Apex',    icon: '\u26A1',       min_volume: 25000,   reward_pct: 18, fp_multiplier: 3,   min_volume_label: '$25,000+', example: 'Trade $50K → earn ~$270' },
+  { name: 'Legend',  icon: '\uD83D\uDC51', min_volume: 100000,  reward_pct: 25, fp_multiplier: 5,   min_volume_label: '$100,000+',example: 'Trade $200K → earn ~$1,500' },
 ];
 
 function getRewardTier(monthlyVolume) {
@@ -31841,6 +32026,108 @@ function getRewardTier(monthlyVolume) {
     if (monthlyVolume >= t.min_volume) tier = t;
   }
   return tier;
+}
+
+// ── Platform Tier System — volume-based tiers with FP multipliers + USDC cashback ──
+async function getUserTier(userId) {
+  try {
+    let volume30d = 0;
+    if (pool) {
+      const rows = await dbQuery(`SELECT COALESCE(SUM(trade_amount_usd), 0) as vol FROM flex_points_log WHERE user_id = $1 AND created_at > NOW() - INTERVAL '30 days'`, [userId]);
+      volume30d = parseFloat(rows[0]?.vol || 0);
+    } else if (supabase) {
+      const { data } = await supabase.from('flex_points_log').select('trade_amount_usd').eq('user_id', userId).gte('created_at', new Date(Date.now() - 30 * 86400000).toISOString());
+      volume30d = (data || []).reduce((s, r) => s + (parseFloat(r.trade_amount_usd) || 0), 0);
+    }
+    const tier = getRewardTier(volume30d);
+    return { ...tier, volume_30d: volume30d };
+  } catch (e) {
+    console.warn('[getUserTier]', e.message);
+    return { ...REWARD_TIERS[0], volume_30d: 0 };
+  }
+}
+
+// ── Platform Referral Chain — 2-level referral with FP + USDC sharing ──
+const REFERRAL_CONFIG = {
+  l1_fp_pct: 10,    // L1 referrer gets 10% of referee's FP
+  l1_usdc_pct: 2,   // L1 referrer gets 2% of referee's USDC cashback
+  l2_fp_pct: 3,     // L2 referrer gets 3% of L2 referee's FP
+  milestone_5: 1000, // 5 active referrals = 1000 FP bonus
+  milestone_20_tier_boost: true, // 20 referrals = permanent tier boost
+};
+
+function generateReferralCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = 'HFX-';
+  for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
+
+// Award referral FP when a referred user earns points
+async function awardReferralFP(userId, fpEarned, tradeAmountUsd) {
+  try {
+    // Find L1 referrer
+    let referrer = null;
+    if (pool) {
+      const rows = await dbQuery('SELECT referred_by FROM users WHERE id = $1', [userId]);
+      referrer = rows[0]?.referred_by || null;
+    } else if (supabase) {
+      const { data } = await supabase.from('users').select('referred_by').eq('id', userId).single();
+      referrer = data?.referred_by || null;
+    }
+    if (!referrer) return;
+
+    // L1 referrer gets 10% of referee's FP
+    const l1FP = Math.max(1, Math.round(fpEarned * REFERRAL_CONFIG.l1_fp_pct / 100));
+    if (pool) {
+      await dbQuery(`INSERT INTO flex_points_log (user_id, points, source, trade_amount_usd) VALUES ($1, $2, 'referral_l1', 0)`, [referrer, l1FP]);
+      await dbQuery(`INSERT INTO flex_points (user_id, total_points, trade_count, last_earned_at) VALUES ($1, $2, 0, NOW()) ON CONFLICT (user_id) DO UPDATE SET total_points = flex_points.total_points + $2, last_earned_at = NOW()`, [referrer, l1FP]);
+    } else if (supabase) {
+      await supabase.from('flex_points_log').insert({ user_id: referrer, points: l1FP, source: 'referral_l1', trade_amount_usd: 0 });
+      const { data: ex } = await supabase.from('flex_points').select('total_points').eq('user_id', referrer).single();
+      if (ex) {
+        await supabase.from('flex_points').update({ total_points: ex.total_points + l1FP, last_earned_at: new Date().toISOString() }).eq('user_id', referrer);
+      } else {
+        await supabase.from('flex_points').insert({ user_id: referrer, total_points: l1FP, trade_count: 0, last_earned_at: new Date().toISOString() });
+      }
+    }
+    // Log to platform_referrals
+    if (pool) {
+      await dbQuery(`INSERT INTO platform_referrals (referrer_id, referee_id, level, fp_earned, usdc_earned) VALUES ($1, $2, 1, $3, 0) ON CONFLICT DO NOTHING`, [referrer, userId, l1FP]);
+    } else if (supabase) {
+      await supabase.from('platform_referrals').insert({ referrer_id: referrer, referee_id: userId, level: 1, fp_earned: l1FP, usdc_earned: 0 }).then(() => {});
+    }
+    delete _flexPointsCache[referrer];
+
+    // Find L2 referrer (referrer's referrer)
+    let l2Referrer = null;
+    if (pool) {
+      const rows = await dbQuery('SELECT referred_by FROM users WHERE id = $1', [referrer]);
+      l2Referrer = rows[0]?.referred_by || null;
+    } else if (supabase) {
+      const { data } = await supabase.from('users').select('referred_by').eq('id', referrer).single();
+      l2Referrer = data?.referred_by || null;
+    }
+    if (!l2Referrer) return;
+
+    // L2 referrer gets 3% of FP
+    const l2FP = Math.max(1, Math.round(fpEarned * REFERRAL_CONFIG.l2_fp_pct / 100));
+    if (pool) {
+      await dbQuery(`INSERT INTO flex_points_log (user_id, points, source, trade_amount_usd) VALUES ($1, $2, 'referral_l2', 0)`, [l2Referrer, l2FP]);
+      await dbQuery(`INSERT INTO flex_points (user_id, total_points, trade_count, last_earned_at) VALUES ($1, $2, 0, NOW()) ON CONFLICT (user_id) DO UPDATE SET total_points = flex_points.total_points + $2, last_earned_at = NOW()`, [l2Referrer, l2FP]);
+    } else if (supabase) {
+      await supabase.from('flex_points_log').insert({ user_id: l2Referrer, points: l2FP, source: 'referral_l2', trade_amount_usd: 0 });
+      const { data: ex2 } = await supabase.from('flex_points').select('total_points').eq('user_id', l2Referrer).single();
+      if (ex2) {
+        await supabase.from('flex_points').update({ total_points: ex2.total_points + l2FP, last_earned_at: new Date().toISOString() }).eq('user_id', l2Referrer);
+      } else {
+        await supabase.from('flex_points').insert({ user_id: l2Referrer, total_points: l2FP, trade_count: 0, last_earned_at: new Date().toISOString() });
+      }
+    }
+    delete _flexPointsCache[l2Referrer];
+  } catch (e) {
+    console.warn('[referral-fp]', e.message);
+  }
 }
 
 function getWeekStart() {

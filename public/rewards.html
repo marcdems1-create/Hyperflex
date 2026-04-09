@@ -222,20 +222,52 @@ a{color:var(--gold);text-decoration:none}a:hover{text-decoration:underline}
 
 <!-- REWARD TIERS -->
 <div class="rw-section">
-  <div class="rw-section-title">Reward Tiers</div>
-  <div class="rw-section-sub">Higher volume = higher reward rate. Polymarket pays us 30% of the ~1% trading fee. We share 5-25% of that with you.</div>
+  <div class="rw-section-title">Volume Tiers</div>
+  <div class="rw-section-sub">Trade more → earn more. Your tier is computed from 30-day rolling trade volume. Higher tiers unlock bigger USDC cashback rates and FLEX Point multipliers.</div>
   <table class="rw-tiers" id="tiersTable">
     <thead>
       <tr>
         <th>Tier</th>
-        <th>Monthly Volume</th>
-        <th>Reward Rate</th>
-        <th>Example Payout</th>
+        <th>30d Volume</th>
+        <th>Cashback</th>
+        <th>FP Multiplier</th>
+        <th>Example</th>
       </tr>
     </thead>
     <tbody id="tiersBody">
     </tbody>
   </table>
+</div>
+
+<!-- REFERRAL CHAIN -->
+<div class="rw-section">
+  <div class="rw-section-title">Referral Chain</div>
+  <div class="rw-section-sub">Invite traders and earn from their activity — 2 levels deep.</div>
+  <div class="rw-steps" style="grid-template-columns:repeat(2,1fr);margin-bottom:0">
+    <div class="rw-step">
+      <div class="rw-step-icon">🔗</div>
+      <h3>Level 1 — Direct</h3>
+      <p>Earn <strong style="color:var(--gold)">10% of their FLEX Points</strong> + <strong style="color:var(--green)">2% of their USDC cashback</strong> on every trade they make.</p>
+    </div>
+    <div class="rw-step">
+      <div class="rw-step-icon">🌐</div>
+      <h3>Level 2 — Extended</h3>
+      <p>When your referrals refer others, you earn <strong style="color:var(--gold)">3% of L2's FLEX Points</strong>. Passive income from your network.</p>
+    </div>
+  </div>
+  <div id="refWrap" style="display:none;margin-top:20px">
+    <div class="rw-stats-card" style="margin-bottom:0">
+      <div class="rw-stats-card-title">Your Referral Link</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+        <input id="refLinkInput" readonly style="flex:1;background:var(--card2);border:1px solid var(--border);color:var(--gold);font-family:var(--mono);font-size:12px;padding:12px 14px;border-radius:8px;outline:none" value=""/>
+        <button onclick="navigator.clipboard.writeText(document.getElementById('refLinkInput').value);this.textContent='Copied!';setTimeout(function(){document.querySelector('#refWrap button').textContent='Copy'},1500)" style="background:var(--gold);color:#000;border:none;font-family:var(--mono);font-size:12px;font-weight:700;padding:12px 20px;border-radius:8px;cursor:pointer;white-space:nowrap">Copy</button>
+      </div>
+      <div class="rw-stats-grid">
+        <div class="rw-stat"><div class="rw-stat-val gold" id="refCount">0</div><div class="rw-stat-label">Referrals</div></div>
+        <div class="rw-stat"><div class="rw-stat-val" id="refFP">0</div><div class="rw-stat-label">FP Earned</div></div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- YOUR STATS + LEADERBOARD -->
@@ -353,11 +385,26 @@ a{color:var(--gold);text-decoration:none}a:hover{text-decoration:underline}
           '<td><div class="rw-tier-name">' + t.icon + ' ' + t.name + '</div></td>' +
           '<td>' + t.min_volume_label + '</td>' +
           '<td><span class="rw-tier-rate">' + t.reward_pct + '%</span></td>' +
+          '<td><span style="color:var(--gold);font-weight:700">' + t.fp_multiplier + 'x</span></td>' +
           '<td class="rw-tier-example">' + t.example + '</td>' +
           '</tr>';
       });
       document.getElementById('tiersBody').innerHTML = html;
     }).catch(function() {});
+  }
+
+  // ── REFERRAL ──
+  function loadReferral() {
+    if (!isLoggedIn || !token) return;
+    fetch('/api/referral/code', { headers: { 'Authorization': 'Bearer ' + token } })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (!d || d.error) return;
+        document.getElementById('refWrap').style.display = 'block';
+        document.getElementById('refLinkInput').value = d.referral_link || '';
+        document.getElementById('refCount').textContent = d.referral_count || 0;
+        document.getElementById('refFP').textContent = Math.round(d.total_fp_earned || 0).toLocaleString();
+      }).catch(function() {});
   }
 
   // ── LEADERBOARD ──
@@ -420,6 +467,7 @@ a{color:var(--gold);text-decoration:none}a:hover{text-decoration:underline}
   loadTiers();
   loadLeaderboard();
   loadMyStats();
+  loadReferral();
 
   // Track clicks to Polymarket from this page
   document.addEventListener('click', function(e) {

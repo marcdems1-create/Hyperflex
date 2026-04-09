@@ -7931,10 +7931,12 @@ function loadFlexPointsTopbar() {
     }).catch(function() {});
 }
 
-var _tierColors = { bronze:'#cd7f32', silver:'#c0c0c0', gold:'#ffd700', platinum:'#e5e4e2', diamond:'#b9f2ff' };
-var _tierBgs = { bronze:'rgba(205,127,50,0.1)', silver:'rgba(192,192,192,0.1)', gold:'rgba(255,215,0,0.1)', platinum:'rgba(229,228,226,0.1)', diamond:'rgba(185,242,255,0.1)' };
-var _tierOrder = ['bronze','silver','gold','platinum','diamond'];
-var _tierThresholds = { bronze:0, silver:250, gold:1000, platinum:5000, diamond:10000 };
+var _tierColors = { scout:'#a0a0b4', trader:'#4d9fff', shark:'#a855f7', apex:'#f59e0b', legend:'#c9920d' };
+var _tierBgs = { scout:'rgba(160,160,180,0.1)', trader:'rgba(77,159,255,0.1)', shark:'rgba(168,85,247,0.1)', apex:'rgba(245,158,11,0.1)', legend:'rgba(201,146,13,0.15)' };
+var _tierOrder = ['scout','trader','shark','apex','legend'];
+var _tierThresholds = { scout:0, trader:500, shark:5000, apex:25000, legend:100000 };
+var _tierIcons = { scout:'🔭', trader:'📈', shark:'🦈', apex:'⚡', legend:'👑' };
+var _tierFPMultipliers = { scout:1, trader:1.5, shark:2, apex:3, legend:5 };
 
 function renderFlexPointsData(fp) {
   // Hero
@@ -7948,50 +7950,52 @@ function renderFlexPointsData(fp) {
   }
 
   // Stats
+  var vol30d = fp.volume_30d || 0;
+  var fpMult = fp.tier_fp_multiplier || _tierFPMultipliers[fp.tier] || 1;
   var statsEl = document.getElementById('fpStats');
   statsEl.innerHTML =
     '<div style="padding:14px;background:#0c0c0b;border:1px solid #1a1917;border-radius:10px;text-align:center">' +
       '<div style="font-family:var(--sans);font-size:24px;font-weight:900;color:#a855f7">' + fp.total_points.toLocaleString() + '</div>' +
-      '<div style="font-family:var(--sans);font-size:11px;color:var(--muted);margin-top:4px">Total Points</div>' +
+      '<div style="font-family:var(--sans);font-size:11px;color:var(--muted);margin-top:4px">Total FLEX Points</div>' +
     '</div>' +
     '<div style="padding:14px;background:#0c0c0b;border:1px solid #1a1917;border-radius:10px;text-align:center">' +
-      '<div style="font-family:var(--sans);font-size:24px;font-weight:900;color:var(--text)">' + fp.trade_count + '</div>' +
-      '<div style="font-family:var(--sans);font-size:11px;color:var(--muted);margin-top:4px">Total Trades</div>' +
+      '<div style="font-family:var(--sans);font-size:24px;font-weight:900;color:var(--text)">$' + Math.round(vol30d).toLocaleString() + '</div>' +
+      '<div style="font-family:var(--sans);font-size:11px;color:var(--muted);margin-top:4px">30d Volume</div>' +
     '</div>' +
     '<div style="padding:14px;background:#0c0c0b;border:1px solid #1a1917;border-radius:10px;text-align:center">' +
-      '<div style="font-family:var(--sans);font-size:24px;font-weight:900;color:#00e68a">' + fp.streak_multiplier + '</div>' +
-      '<div style="font-family:var(--sans);font-size:11px;color:var(--muted);margin-top:4px">Streak Bonus · ' + fp.weekly_trades + ' this week</div>' +
+      '<div style="font-family:var(--sans);font-size:24px;font-weight:900;color:#00e68a">' + fpMult + 'x</div>' +
+      '<div style="font-family:var(--sans);font-size:11px;color:var(--muted);margin-top:4px">Tier Multiplier · ' + fp.streak_multiplier + ' streak</div>' +
     '</div>' +
     '<div style="padding:14px;background:#0c0c0b;border:1px solid #1a1917;border-radius:10px;text-align:center">' +
-      '<div style="font-family:var(--sans);font-size:24px;font-weight:900;color:' + (_tierColors[fp.tier] || '#a855f7') + '">' + fp.tier.toUpperCase() + '</div>' +
+      '<div style="font-family:var(--sans);font-size:24px;font-weight:900;color:' + (_tierColors[fp.tier] || '#a855f7') + '">' + (_tierIcons[fp.tier] || '') + ' ' + (fp.tier_name || fp.tier).toUpperCase() + '</div>' +
       '<div style="font-family:var(--sans);font-size:11px;color:var(--muted);margin-top:4px">Current Tier</div>' +
     '</div>';
 
-  // Tier progress
+  // Tier progress (volume-based)
   var tierEl = document.getElementById('fpTierProgress');
-  var currentIdx = _tierOrder.indexOf(fp.tier);
-  var progressHtml = '<div style="font-family:var(--sans);font-size:12px;font-weight:700;color:var(--text);margin-bottom:14px;text-transform:uppercase;letter-spacing:.06em">Tier Progress</div>';
+  var progressHtml = '<div style="font-family:var(--sans);font-size:12px;font-weight:700;color:var(--text);margin-bottom:14px;text-transform:uppercase;letter-spacing:.06em">Volume Tier Progress</div>';
   progressHtml += '<div style="display:flex;align-items:center;gap:4px;margin-bottom:12px;height:6px;border-radius:3px;overflow:hidden;background:#1a1917">';
-  var totalMax = 10000;
-  var pctFilled = Math.min(100, (fp.total_points / totalMax) * 100);
-  progressHtml += '<div style="width:' + pctFilled + '%;height:100%;background:linear-gradient(90deg,#a855f7,#00e68a);border-radius:3px;transition:width .5s"></div>';
+  var totalMax = 100000;
+  var pctFilled = Math.min(100, (vol30d / totalMax) * 100);
+  progressHtml += '<div style="width:' + pctFilled + '%;height:100%;background:linear-gradient(90deg,#4d9fff,#c9920d);border-radius:3px;transition:width .5s"></div>';
   progressHtml += '</div>';
   progressHtml += '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px">';
   _tierOrder.forEach(function(t) {
     var threshold = _tierThresholds[t];
-    var reached = fp.total_points >= threshold;
+    var reached = vol30d >= threshold;
     var isCurrent = t === fp.tier;
     progressHtml += '<div style="text-align:center;min-width:60px;padding:8px 12px;border-radius:6px;border:1px solid ' + (isCurrent ? _tierColors[t] + '55' : '#1a1917') + ';background:' + (reached ? _tierBgs[t] : 'transparent') + '">' +
+      '<div style="font-size:14px;margin-bottom:2px">' + (_tierIcons[t] || '') + '</div>' +
       '<div style="font-family:var(--sans);font-size:12px;font-weight:800;color:' + (reached ? _tierColors[t] : 'var(--muted)') + '">' + t.toUpperCase() + '</div>' +
-      '<div style="font-family:var(--sans);font-size:11px;color:var(--muted);margin-top:2px">' + threshold.toLocaleString() + ' FP</div>' +
+      '<div style="font-family:var(--sans);font-size:11px;color:var(--muted);margin-top:2px">$' + threshold.toLocaleString() + '</div>' +
+      '<div style="font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:2px">' + _tierFPMultipliers[t] + 'x FP</div>' +
       (reached ? '<div style="font-size:11px;margin-top:2px">✓</div>' : '') +
     '</div>';
   });
   progressHtml += '</div>';
   if (fp.next_tier) {
-    progressHtml += '<div style="margin-top:12px;font-family:var(--sans);font-size:12px;color:var(--muted)">' + fp.points_to_next.toLocaleString() + ' points to <span style="color:' + (_tierColors[fp.next_tier] || '#a855f7') + ';font-weight:700">' + fp.next_tier.toUpperCase() + '</span></div>';
-  } else {
-    progressHtml += '';
+    var volToNext = fp.volume_to_next || 0;
+    progressHtml += '<div style="margin-top:12px;font-family:var(--sans);font-size:12px;color:var(--muted)">$' + Math.round(volToNext).toLocaleString() + ' more volume to <span style="color:' + (_tierColors[fp.next_tier] || '#c9920d') + ';font-weight:700">' + fp.next_tier.toUpperCase() + '</span></div>';
   }
   tierEl.innerHTML = progressHtml;
 
@@ -7999,7 +8003,7 @@ function renderFlexPointsData(fp) {
   var logEl = document.getElementById('fpRecentLog');
   if (fp.recent_log && fp.recent_log.length) {
     logEl.innerHTML = fp.recent_log.map(function(entry) {
-      var sourceLabel = entry.source === 'polymarket_trade' ? '📈 Polymarket Trade' : entry.source === 'community_trade' ? '🎯 Community Trade' : '⚡ ' + entry.source;
+      var sourceLabel = entry.source === 'polymarket_trade' ? '📈 Polymarket Trade' : entry.source === 'kalshi_trade' ? '📊 Kalshi Trade' : entry.source === 'referral_l1' ? '🔗 Referral (L1)' : entry.source === 'referral_l2' ? '🌐 Referral (L2)' : entry.source === 'community_trade' ? '🎯 Community Trade' : '⚡ ' + entry.source;
       var ago = '';
       if (entry.created_at) {
         var ms = Date.now() - new Date(entry.created_at).getTime();
