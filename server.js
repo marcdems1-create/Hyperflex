@@ -136,6 +136,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { createClient } = require('@supabase/supabase-js');
 const Anthropic = require('@anthropic-ai/sdk');
+const liveStream = require('./lib/live-stream');
 const cron = require('node-cron');
 const path = require('path');
 const fs = require('fs');
@@ -20758,12 +20759,25 @@ app.get('/api/terminal/data', async (req, res) => {
     // Slim each market to just the fields the terminal cards render. Reduces
     // payload from ~300KB to ~40KB per poll.
     function slim(m) {
+      // Parse clobTokenIds once — needed so the SSE tick client can match
+      // incoming Polymarket trade events to the exact outcome card.
+      let yesAsset = null, noAsset = null;
+      try {
+        let tids = m.clobTokenIds;
+        if (typeof tids === 'string') tids = JSON.parse(tids);
+        if (Array.isArray(tids)) {
+          yesAsset = tids[0] || null;
+          noAsset = tids[1] || null;
+        }
+      } catch {}
       return {
         market_id: m.market_id,
         slug: m.slug,
         question: m.question,
         category: m.category,
         yes_price: m.yes_price,
+        yes_asset: yesAsset,
+        no_asset: noAsset,
         volume: m.volume,
         whale_count: m.whale_count,
         total_whale_capital: m.total_whale_capital,
@@ -20871,6 +20885,75 @@ app.get('/api/terminal/data', async (req, res) => {
     console.error('[terminal/data]', err.message);
     res.status(502).json({ error: 'Failed to build terminal data', detail: err.message });
   }
+});
+
+// GET /api/terminal/stream — Server-Sent Events live price ticks
+//
+// Subscribes to the Polymarket real-time trade stream server-side and pushes
+// each trade event down to connected browser clients. Connecting to this
+// endpoint upgrades the terminal from 30s polling to live price updates (sub-
+// second after trade execution on Polymarket).
+//
+// Message format (text/event-stream):
+//   event: tick        — new trade tick
+//   data: {"asset":"...","slug":"...","price":0.52,"side":"BUY","size":150,"ts":...}
+//
+//   event: snapshot    — initial state (all tracked prices)
+//   data: {"prices":{...},"stats":{...}}
+//
+//   event: heartbeat   — every 15s to keep proxies from closing the conn
+//   data: {"ts":...}
+//
+// Clients that drop the connection are cleaned up via the `close` event.
+// Listener count is reflected in liveStream.getStats().listeners.
+app.get('/api/terminal/stream', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no'); // disable nginx/cf buffering
+  res.flushHeaders && res.flushHeaders();
+
+  function send(event, data) {
+    try {
+      res.write('event: ' + event + '\n');
+      res.write('data: ' + JSON.stringify(data) + '\n\n');
+    } catch (e) { /* client gone, close will fire */ }
+  }
+
+  // Initial snapshot so the client doesn't have to wait for the next tick
+  // to render something. Sends all tokens we've seen a trade on so far.
+  try {
+    send('snapshot', {
+      prices: liveStream.getAllPrices(),
+      stats: liveStream.getStats(),
+      updated_at: new Date().toISOString()
+    });
+  } catch (e) { /* silent */ }
+
+  // Register a per-client tick listener that forwards every Polymarket trade
+  // event to this browser. The client filters its own rendered tokens.
+  const onTick = (tick) => send('tick', tick);
+  liveStream.onTrade(onTick);
+
+  // Heartbeat every 15s — some proxies (Cloudflare, nginx) drop idle
+  // connections after ~30s of silence. A minimal data payload keeps the
+  // pipe open even when there's no market activity.
+  const heartbeat = setInterval(() => {
+    send('heartbeat', { ts: Date.now() });
+  }, 15000);
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    liveStream.offTrade(onTick);
+    try { res.end(); } catch {}
+  });
+});
+
+// GET /api/terminal/stream-stats — lightweight debug/monitoring endpoint.
+// Returns connection state + counters for the upstream WS client. Admin-only
+// so we don't leak internal infra details to the public.
+app.get('/api/terminal/stream-stats', requireAdmin, (req, res) => {
+  res.json(liveStream.getStats());
 });
 
 function filterScreenerResults(markets, query) {
@@ -33101,6 +33184,16 @@ app.listen(PORT, () => {
       try { await fn(); console.log(`[boot] ✓ ${name}`); } catch (e) { console.warn(`[boot] ✗ ${name}: ${e.message}`); }
     }
     console.log('[boot] Cache pre-warm complete');
+
+    // Start the Polymarket real-time trade stream for /terminal live ticks.
+    // Non-blocking — if the ws module or the upstream is unavailable, the
+    // terminal falls back to 30s polling automatically on the client side.
+    try {
+      liveStream.start();
+      console.log('[boot] ✓ live-stream connecting to Polymarket WS');
+    } catch (e) {
+      console.warn('[boot] ✗ live-stream start failed:', e.message);
+    }
   }, 5000); // Wait 5s for DB connections to establish
 });
 
