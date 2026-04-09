@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HYPERFLEX Terminal — 6-panel live alpha for Polymarket</title>
+<meta name="description" content="Multi-panel Bloomberg-style alpha terminal for Polymarket. Top edges, whale flow, fresh signals, narrative pulse, volume spikes, time decay — all live, all tradeable.">
+<meta property="og:title" content="HYPERFLEX Terminal">
+<meta property="og:description" content="Live 6-panel alpha terminal for Polymarket traders.">
+<meta property="og:url" content="https://hyperflex.network/terminal">
+<meta property="og:image" content="https://hyperflex.network/og-default.png">
+<link rel="canonical" href="https://hyperflex.network/terminal">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#0e0e15;
+    --paper-2:#16161f;
+    --paper-3:#1e1e2a;
+    --ink:#f0f0f5;
+    --dim:#8888a0;
+    --soft:#aaaabe;
+    --border:#1e1e2a;
+    --gold:#c9920d;
+    --green:#00e68a;
+    --red:#ff4d6a;
+    --blue:#4d9fff;
+    --purple:#a855f7;
+    --amber:#f59e0b;
+    --sans:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+    --mono:'JetBrains Mono',monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{overflow-x:hidden}
+  body{
+    background:var(--paper);color:var(--ink);
+    font-family:var(--sans);font-size:14px;line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+  }
+  a{color:inherit;text-decoration:none}
+
+  /* ── Top strip ── */
+  .term-strip{
+    display:flex;align-items:center;gap:16px;
+    padding:18px 24px;border-bottom:1px solid var(--border);
+    background:rgba(14,14,21,0.9);backdrop-filter:blur(10px);
+    position:sticky;top:64px;z-index:10;
+  }
+  .term-title{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:0.12em;color:var(--gold);text-transform:uppercase}
+  .term-title::before{content:'⬤ ';color:var(--green);animation:pulse 2s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.35}}
+  .term-status{font-family:var(--mono);font-size:10px;color:var(--dim)}
+  .term-status .val{color:var(--soft)}
+  .term-refresh{
+    margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--dim);
+    cursor:pointer;padding:6px 12px;border:1px solid var(--border);border-radius:6px;
+    background:transparent;transition:all .15s;
+  }
+  .term-refresh:hover{border-color:var(--gold);color:var(--gold)}
+
+  /* ── 6-panel grid ── */
+  .term-grid{
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:14px;
+    padding:14px 24px 48px;
+    max-width:1600px;margin:0 auto;
+  }
+  @media (max-width: 1200px){
+    .term-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  }
+  @media (max-width: 760px){
+    .term-grid{grid-template-columns:1fr;gap:10px;padding:10px 12px 48px}
+    .term-strip{padding:14px 12px;flex-wrap:wrap;gap:8px}
+  }
+
+  /* ── Panel shell ── */
+  .panel{
+    background:var(--paper-2);
+    border:1px solid var(--border);
+    border-radius:12px;
+    display:flex;flex-direction:column;
+    min-height:380px;
+    overflow:hidden;
+    transition:border-color .2s;
+  }
+  .panel:hover{border-color:rgba(201,146,13,0.25)}
+  .panel-header{
+    display:flex;align-items:center;gap:10px;
+    padding:14px 16px 10px;
+    border-bottom:1px solid var(--border);
+  }
+  .panel-icon{font-size:16px;line-height:1}
+  .panel-title{
+    font-family:var(--mono);font-size:11px;font-weight:700;
+    text-transform:uppercase;letter-spacing:0.08em;color:var(--ink);
+  }
+  .panel-sub{font-family:var(--mono);font-size:10px;color:var(--dim);margin-left:auto}
+  .panel-body{flex:1;overflow-y:auto;padding:8px 0}
+  .panel-body::-webkit-scrollbar{width:4px}
+  .panel-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+
+  /* ── Card rows inside panels ── */
+  .card-row{
+    display:block;
+    padding:10px 16px;
+    border-bottom:1px solid rgba(30,30,42,0.6);
+    text-decoration:none;
+    color:inherit;
+    transition:background .12s;
+    cursor:pointer;
+  }
+  .card-row:last-child{border-bottom:none}
+  .card-row:hover{background:rgba(201,146,13,0.04)}
+  .card-row-top{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+  .edge-badge{
+    font-family:var(--mono);font-size:10px;font-weight:800;
+    padding:2px 7px;border-radius:4px;
+    background:rgba(201,146,13,0.14);color:var(--gold);
+    border:1px solid rgba(201,146,13,0.3);
+    flex-shrink:0;
+  }
+  .edge-badge.high{background:rgba(0,230,138,0.14);color:var(--green);border-color:rgba(0,230,138,0.3)}
+  .fresh-badge{
+    font-family:var(--mono);font-size:9px;font-weight:800;
+    padding:2px 6px;border-radius:4px;
+    background:rgba(77,159,255,0.14);color:var(--blue);
+    border:1px solid rgba(77,159,255,0.3);
+    text-transform:uppercase;
+    flex-shrink:0;
+  }
+  .cat-pill{
+    font-family:var(--mono);font-size:9px;font-weight:700;
+    padding:2px 6px;border-radius:4px;text-transform:uppercase;
+    background:rgba(136,136,160,0.12);color:var(--dim);
+    flex-shrink:0;
+  }
+  .card-q{
+    font-family:var(--sans);font-size:13px;font-weight:600;color:var(--ink);
+    line-height:1.35;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+    overflow:hidden;
+    margin-bottom:6px;
+  }
+  .card-bottom{
+    display:flex;align-items:center;gap:10px;
+    font-family:var(--mono);font-size:10px;color:var(--dim);
+    flex-wrap:wrap;
+  }
+  .card-bottom .price{color:var(--gold);font-weight:700}
+  .card-bottom .roi{color:var(--green);font-weight:700}
+  .card-bottom .roi.neg{color:var(--red)}
+  .trade-cta{
+    display:inline-block;
+    font-family:var(--mono);font-size:10px;font-weight:800;
+    padding:4px 10px;border-radius:5px;
+    background:var(--gold);color:#000;
+    text-decoration:none;
+    margin-left:auto;
+    transition:all .15s;
+  }
+  .trade-cta:hover{background:#e0a820;transform:translateX(2px)}
+
+  /* ── Whale flow row ── */
+  .whale-row{
+    display:flex;align-items:center;gap:10px;
+    padding:8px 16px;
+    border-bottom:1px solid rgba(30,30,42,0.5);
+    font-family:var(--mono);font-size:11px;
+    cursor:pointer;transition:background .12s;
+  }
+  .whale-row:hover{background:rgba(77,159,255,0.04)}
+  .whale-row:last-child{border-bottom:none}
+  .whale-wallet{color:var(--dim);min-width:72px}
+  .whale-side{font-weight:800;min-width:28px}
+  .whale-side.yes{color:var(--green)}
+  .whale-side.no{color:var(--red)}
+  .whale-size{color:var(--ink);font-weight:700}
+  .whale-mkt{color:var(--soft);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  /* ── Narrative row ── */
+  .nar-row{
+    display:flex;align-items:center;gap:10px;
+    padding:10px 16px;
+    border-bottom:1px solid rgba(30,30,42,0.5);
+  }
+  .nar-row:last-child{border-bottom:none}
+  .nar-name{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--ink);min-width:90px;text-transform:uppercase;letter-spacing:0.04em}
+  .nar-bar{
+    flex:1;height:6px;background:rgba(30,30,42,0.6);border-radius:3px;overflow:hidden;
+  }
+  .nar-bar-fill{height:100%;background:linear-gradient(90deg,var(--gold),#e0a820);border-radius:3px}
+  .nar-pct{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--gold);min-width:44px;text-align:right}
+  .nar-delta{font-family:var(--mono);font-size:10px;font-weight:700;min-width:36px;text-align:right}
+  .nar-delta.up{color:var(--green)}
+  .nar-delta.down{color:var(--red)}
+  .nar-flame{font-size:11px}
+
+  /* ── Empty + loading states ── */
+  .empty,.loading{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:40px 20px;text-align:center;gap:8px;flex:1;
+    font-family:var(--mono);font-size:11px;color:var(--dim);
+  }
+  .empty .big{font-size:28px;opacity:0.4}
+  .loading .big{font-size:20px;animation:spin 1.2s linear infinite;display:inline-block;opacity:0.6}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .refresh-flash{animation:flashBorder 0.8s ease-out}
+  @keyframes flashBorder{0%{border-color:var(--gold)}100%{border-color:var(--border)}}
+</style>
+</head>
+<body>
+
+<div id="nav-root"></div>
+<script>if(typeof polyRef==="undefined")window.polyRef=function(u){return u};</script>
+<script src="/nav.js?v=9"></script>
+
+<!-- Top strip: live indicator + status + refresh -->
+<div class="term-strip">
+  <span class="term-title">HYPERFLEX TERMINAL</span>
+  <span class="term-status">Last update <span class="val" id="termLastUpdate">—</span></span>
+  <span class="term-status">Next refresh <span class="val" id="termNextRefresh">—</span></span>
+  <button class="term-refresh" onclick="termFetch(true)">↻ refresh</button>
+</div>
+
+<!-- 6-panel grid -->
+<div class="term-grid">
+
+  <!-- PANEL 1: TOP EDGES -->
+  <div class="panel" id="panel-top">
+    <div class="panel-header">
+      <span class="panel-icon">⚡</span>
+      <span class="panel-title">Top Edges</span>
+      <span class="panel-sub" id="panel-top-sub">live</span>
+    </div>
+    <div class="panel-body" id="panel-top-body">
+      <div class="loading"><span class="big">◐</span> Loading alpha…</div>
+    </div>
+  </div>
+
+  <!-- PANEL 2: WHALE FLOW -->
+  <div class="panel" id="panel-whale">
+    <div class="panel-header">
+      <span class="panel-icon">🐋</span>
+      <span class="panel-title">Whale Flow</span>
+      <span class="panel-sub" id="panel-whale-sub">smart money</span>
+    </div>
+    <div class="panel-body" id="panel-whale-body">
+      <div class="loading"><span class="big">◐</span> Loading whales…</div>
+    </div>
+  </div>
+
+  <!-- PANEL 3: FRESH EDGES -->
+  <div class="panel" id="panel-fresh">
+    <div class="panel-header">
+      <span class="panel-icon">🆕</span>
+      <span class="panel-title">Fresh Edges</span>
+      <span class="panel-sub">last 30 min</span>
+    </div>
+    <div class="panel-body" id="panel-fresh-body">
+      <div class="loading"><span class="big">◐</span> Scanning for fresh signals…</div>
+    </div>
+  </div>
+
+  <!-- PANEL 4: NARRATIVE PULSE -->
+  <div class="panel" id="panel-narrative">
+    <div class="panel-header">
+      <span class="panel-icon">📊</span>
+      <span class="panel-title">Narrative Pulse</span>
+      <span class="panel-sub">weekly delta</span>
+    </div>
+    <div class="panel-body" id="panel-narrative-body">
+      <div class="loading"><span class="big">◐</span> Loading narratives…</div>
+    </div>
+  </div>
+
+  <!-- PANEL 5: VOLUME SPIKE -->
+  <div class="panel" id="panel-vol">
+    <div class="panel-header">
+      <span class="panel-icon">📈</span>
+      <span class="panel-title">Volume Spike</span>
+      <span class="panel-sub">3x+ baseline</span>
+    </div>
+    <div class="panel-body" id="panel-vol-body">
+      <div class="loading"><span class="big">◐</span> Scanning volume…</div>
+    </div>
+  </div>
+
+  <!-- PANEL 6: TIME DECAY -->
+  <div class="panel" id="panel-decay">
+    <div class="panel-header">
+      <span class="panel-icon">⏳</span>
+      <span class="panel-title">Time Decay</span>
+      <span class="panel-sub">expiring ≤3d</span>
+    </div>
+    <div class="panel-body" id="panel-decay-body">
+      <div class="loading"><span class="big">◐</span> Loading decay plays…</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+'use strict';
+
+var TERM_POLL_MS = 30000; // 30s
+var _termTimer = null;
+var _termNextTick = 0;
+var _termCountdownTimer = null;
+
+function escH(s) {
+  var d = document.createElement('div');
+  d.textContent = (s == null ? '' : String(s));
+  return d.innerHTML;
+}
+function fmtMoney(n) {
+  n = Math.abs(Number(n) || 0);
+  if (n >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return '$' + Math.round(n/1e3) + 'K';
+  return '$' + Math.round(n);
+}
+function fmtVol(n) { return fmtMoney(n); }
+
+function marketUrl(m) {
+  // ?from=terminal so the trade widget banner reads "Prefilled from Terminal"
+  if (!m || !m.slug) return '/screener';
+  var params = '?from=terminal';
+  if (m.trade && m.trade.side) params += '&side=' + m.trade.side;
+  if (m.trade && m.trade.entry_cost) {
+    // Use a sensible default size for the prefill — Kelly if present, else 25
+    var size = (m.trade && m.trade.recommended_size_usd) || 25;
+    params += '&size=' + Math.round(size);
+  }
+  return '/market/' + encodeURIComponent(m.slug) + params;
+}
+
+function cardRow(m) {
+  if (!m) return '';
+  var edge = m.edge_score || 0;
+  var edgeClass = edge >= 70 ? 'high' : '';
+  var freshBadge = m.is_new ? '<span class="fresh-badge">NEW ' + (m.edge_age_minutes || 0) + 'M</span>' : '';
+  var catPill = m.category ? '<span class="cat-pill">' + escH(m.category) + '</span>' : '';
+  var yesPct = m.yes_price != null ? Math.round(m.yes_price * 100) + '¢' : '—';
+  var trade = m.trade || {};
+  var side = trade.side || (m.yes_price && m.yes_price < 0.5 ? 'YES' : 'NO');
+  var roi = trade.roi_pct != null ? (trade.roi_pct >= 0 ? '+' : '') + trade.roi_pct + '%' : '';
+  var roiClass = trade.roi_pct < 0 ? 'neg' : '';
+  var q = m.question || '';
+  var urgencyReason = (m.trade_thesis && m.trade_thesis.urgency_reason) || m.ai_hook || '';
+
+  return '<a class="card-row" href="' + marketUrl(m) + '">' +
+    '<div class="card-row-top">' +
+      '<span class="edge-badge ' + edgeClass + '">' + edge + '</span>' +
+      freshBadge +
+      catPill +
+    '</div>' +
+    '<div class="card-q">' + escH(q) + '</div>' +
+    '<div class="card-bottom">' +
+      '<span>Mkt <span class="price">' + yesPct + '</span></span>' +
+      (trade.side ? '<span>Bet ' + trade.side + ' @ ' + trade.entry_cost + '¢</span>' : '') +
+      (roi ? '<span class="roi ' + roiClass + '">' + roi + '</span>' : '') +
+      '<span class="trade-cta">Trade →</span>' +
+    '</div>' +
+    (urgencyReason ? '<div style="font-family:var(--mono);font-size:10px;color:var(--amber);margin-top:4px">' + escH(urgencyReason) + '</div>' : '') +
+  '</a>';
+}
+
+function renderTopEdges(markets) {
+  var body = document.getElementById('panel-top-body');
+  if (!markets || !markets.length) { body.innerHTML = '<div class="empty"><div class="big">📭</div>No edges ≥50 right now</div>'; return; }
+  body.innerHTML = markets.map(cardRow).join('');
+  document.getElementById('panel-top-sub').textContent = markets.length + ' live';
+}
+
+function renderFreshEdges(markets) {
+  var body = document.getElementById('panel-fresh-body');
+  if (!markets || !markets.length) { body.innerHTML = '<div class="empty"><div class="big">⏲</div>No fresh edges in the last 30 min.<br>Check back soon.</div>'; return; }
+  body.innerHTML = markets.map(cardRow).join('');
+}
+
+function renderVolumeSpike(markets) {
+  var body = document.getElementById('panel-vol-body');
+  if (!markets || !markets.length) { body.innerHTML = '<div class="empty"><div class="big">📊</div>No 3x+ volume spikes right now</div>'; return; }
+  body.innerHTML = markets.map(cardRow).join('');
+}
+
+function renderTimeDecay(markets) {
+  var body = document.getElementById('panel-decay-body');
+  if (!markets || !markets.length) { body.innerHTML = '<div class="empty"><div class="big">⏳</div>No discount-zone markets<br>expiring in the next 3 days</div>'; return; }
+  body.innerHTML = markets.map(cardRow).join('');
+}
+
+function renderWhaleFlow(flows) {
+  var body = document.getElementById('panel-whale-body');
+  if (!flows || !flows.length) { body.innerHTML = '<div class="empty"><div class="big">🐋</div>No whale positions cached</div>'; return; }
+  body.innerHTML = flows.map(function(f) {
+    var href = f.slug ? '/market/' + encodeURIComponent(f.slug) + '?from=terminal' : '/whales';
+    var sideClass = f.side === 'YES' ? 'yes' : 'no';
+    return '<a class="whale-row" href="' + href + '">' +
+      '<span class="whale-wallet">' + escH(f.wallet || '') + '…</span>' +
+      '<span class="whale-side ' + sideClass + '">' + f.side + '</span>' +
+      '<span class="whale-size">' + fmtMoney(f.size) + '</span>' +
+      '<span class="whale-mkt">' + escH(f.market || '') + '</span>' +
+    '</a>';
+  }).join('');
+  document.getElementById('panel-whale-sub').textContent = flows.length + ' active';
+}
+
+function renderNarratives(narratives) {
+  var body = document.getElementById('panel-narrative-body');
+  if (!narratives || !narratives.length) { body.innerHTML = '<div class="empty"><div class="big">📊</div>Loading narrative pulse…</div>'; return; }
+  // Max dominance for bar scaling
+  var maxDom = Math.max.apply(null, narratives.map(function(n) { return n.dominance_pct || 0; }));
+  body.innerHTML = narratives.map(function(n) {
+    var dom = n.dominance_pct || 0;
+    var widthPct = maxDom > 0 ? (dom / maxDom * 100) : 0;
+    var delta = n.weekly_change;
+    var deltaStr = '';
+    if (delta != null) {
+      deltaStr = (delta >= 0 ? '+' : '') + delta.toFixed(1);
+    }
+    var deltaClass = delta > 0 ? 'up' : delta < 0 ? 'down' : '';
+    var flame = delta != null && Math.abs(delta) >= 5 ? '<span class="nar-flame">🔥</span>' : '';
+    return '<div class="nar-row">' +
+      '<span class="nar-name">' + escH(n.narrative) + '</span>' +
+      '<div class="nar-bar"><div class="nar-bar-fill" style="width:' + widthPct + '%"></div></div>' +
+      '<span class="nar-pct">' + dom.toFixed(1) + '%</span>' +
+      (deltaStr ? '<span class="nar-delta ' + deltaClass + '">' + deltaStr + '</span>' : '<span class="nar-delta"></span>') +
+      flame +
+    '</div>';
+  }).join('');
+}
+
+function flashPanel(id) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.classList.remove('refresh-flash');
+  // Force reflow to restart the animation
+  void el.offsetWidth;
+  el.classList.add('refresh-flash');
+}
+
+async function termFetch(manual) {
+  try {
+    var r = await fetch('/api/terminal/data', { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    var data = await r.json();
+    renderTopEdges(data.top_edges || []);
+    renderWhaleFlow(data.whale_flow || []);
+    renderFreshEdges(data.fresh_edges || []);
+    renderNarratives(data.narrative_pulse || []);
+    renderVolumeSpike(data.volume_spike || []);
+    renderTimeDecay(data.time_decay || []);
+
+    var updated = data.updated_at ? new Date(data.updated_at) : new Date();
+    var diffSec = Math.round((Date.now() - updated.getTime()) / 1000);
+    var ago = diffSec < 60 ? diffSec + 's ago' : Math.round(diffSec / 60) + 'm ago';
+    document.getElementById('termLastUpdate').textContent = ago;
+
+    if (manual) {
+      // Visual flash — show something happened
+      ['panel-top','panel-whale','panel-fresh','panel-narrative','panel-vol','panel-decay'].forEach(flashPanel);
+    }
+  } catch (e) {
+    console.warn('[terminal]', e.message);
+    document.getElementById('termLastUpdate').textContent = 'error';
+  } finally {
+    _termNextTick = Date.now() + TERM_POLL_MS;
+  }
+}
+
+function updateCountdown() {
+  if (_termNextTick <= 0) { document.getElementById('termNextRefresh').textContent = '—'; return; }
+  var remain = Math.max(0, Math.round((_termNextTick - Date.now()) / 1000));
+  document.getElementById('termNextRefresh').textContent = remain + 's';
+}
+
+function termStart() {
+  termFetch(false);
+  _termTimer = setInterval(function() { termFetch(false); }, TERM_POLL_MS);
+  _termCountdownTimer = setInterval(updateCountdown, 1000);
+}
+
+// Pause polling when tab is hidden — saves bandwidth, restart on return
+document.addEventListener('visibilitychange', function() {
+  if (document.hidden) {
+    if (_termTimer) { clearInterval(_termTimer); _termTimer = null; }
+  } else if (!_termTimer) {
+    termStart();
+  }
+});
+
+termStart();
+</script>
+</body>
+</html>

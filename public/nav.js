@@ -101,6 +101,7 @@
 
   // Primary links shown in desktop nav bar — alpha-source order
   var primaryLinks = [
+    { href: '/terminal', label: '🖥 Terminal', gold: true },
     { href: '/alpha', label: '⚡ Alpha', gold: true },
     { href: '/signals', label: 'Signals' },
     { href: '/screener', label: 'Screener' },
