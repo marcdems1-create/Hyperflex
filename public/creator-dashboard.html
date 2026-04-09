@@ -2869,6 +2869,27 @@ body.nav-open .sidebar-backdrop {
   }
 }
 
+/* ══ Position Groups ══ */
+.pos-group { border-bottom: 1px solid rgba(201,146,13,0.08); }
+.pos-group-header {
+  display: grid;
+  grid-template-columns: minmax(180px, 2fr) 1fr minmax(120px, max-content) 40px;
+  align-items: center;
+  padding: 10px 16px;
+  background: rgba(201,146,13,0.03);
+  cursor: pointer;
+  transition: background 0.15s;
+  user-select: none;
+}
+.pos-group-header:hover { background: rgba(201,146,13,0.07); }
+.pos-group-body { }
+.pos-group-body .pos-table-row { padding-left: 32px !important; }
+@media (max-width: 699px) {
+  .pos-group-header { grid-template-columns: 1fr max-content 40px !important; }
+  .pos-group-header > div:nth-child(2) { display: none; }
+  .pos-group-body .pos-table-row { padding-left: 16px !important; }
+}
+
 /* ══ Social Tab ══ */
 .social-accounts-grid {
   display: grid;
@@ -14136,6 +14157,7 @@ async function loadPolymarketPositions(forceRefresh) {
         pnl_pct: (parseFloat(p.initialValue)||0) > 0 ? ((parseFloat(p.cashPnl)||0) / parseFloat(p.initialValue)) * 100 : 0,
         market_url: (typeof polyRef==='function'?polyRef:function(u){return u})(buildMarketUrl({ slug: p.eventSlug||p.slug, question: p.title||p.question })),
         slug: p.eventSlug||p.slug||null,
+        _eventSlug: p.eventSlug||null,
         icon: p.icon||null, end_date: p.endDateIso||p.endDate||null, platform: 'polymarket',
         avg_cost: parseFloat(p.size)>0 ? Math.round(parseFloat(p.initialValue)/parseFloat(p.size)*100)/100 : null,
         // Redemption fields from Polymarket data API
@@ -16344,6 +16366,106 @@ function shareRecordOnX() {
   window.open(`https://twitter.com/intent/tweet?text=${text}`, '_blank');
 }
 
+// ── POSITION GROUPING ────────────────────────────────────────────────────
+var _posGroupCollapsed = new Set(); // persists across re-renders
+
+function getPositionGroupKey(p) {
+  // Primary: Polymarket eventSlug (guaranteed same-event grouping)
+  if (p._eventSlug) return 'slug:' + p._eventSlug;
+  // Fallback for non-Polymarket: regex extraction from question text
+  return extractGroupKey(p.question) ? 'q:' + extractGroupKey(p.question) : null;
+}
+
+function extractGroupKey(question) {
+  if (!question) return null;
+  var q = question.replace(/^Will\s+/i, '').trim();
+  var m = q.match(/^(.+?)\s+(?:hit|dip|reach|settle|close|break|cross|drop|fall|rise|surge|crash|touch)\s/i);
+  if (m && m[1].length >= 3 && m[1].length <= 80) return m[1].trim();
+  return null;
+}
+
+function getGroupDisplayName(members) {
+  // Use the common prefix of all questions, or the first question truncated
+  if (!members || !members.length) return 'Group';
+  if (members.length === 1) return members[0].question || 'Unknown';
+  // Find common prefix
+  var questions = members.map(function(p) { return p.question || ''; });
+  var prefix = questions[0];
+  for (var i = 1; i < questions.length; i++) {
+    while (questions[i].indexOf(prefix) !== 0 && prefix.length > 0) {
+      prefix = prefix.substring(0, prefix.length - 1);
+    }
+  }
+  // Clean up: remove trailing spaces, punctuation, partial words
+  prefix = prefix.replace(/[\s,.\-–—:;(]+$/, '').trim();
+  if (prefix.length >= 8) return prefix + '…';
+  // Fallback: extract subject via regex from first question
+  var key = extractGroupKey(questions[0]);
+  return key || questions[0].substring(0, 40) + '…';
+}
+
+function renderPositionGroup(opts) {
+  var gk = opts.groupKey, name = opts.groupName, icon = opts.icon || '';
+  var count = opts.count, aggValue = opts.aggValue, aggPnl = opts.aggPnl;
+  var aggPnlPct = opts.aggPnlPct, aggCost = opts.aggCost, members = opts.members;
+  var pnlColor = aggPnl >= 0 ? '#00e68a' : '#ff6b6b';
+  var pnlStr = (aggPnl >= 0 ? '+' : '-') + '$' + Math.abs(aggPnl).toFixed(2);
+  var pnlPctStr = aggCost > 0 ? ('(' + (aggPnlPct >= 0 ? '+' : '') + aggPnlPct.toFixed(1) + '%)') : '';
+  var isCollapsed = _posGroupCollapsed.has(gk);
+  // Nearest expiry for sorting
+  var nearestExpiry = '';
+  members.forEach(function(p) { if (p.end_date && (!nearestExpiry || p.end_date < nearestExpiry)) nearestExpiry = p.end_date; });
+
+  var iconHtml = icon ? '<img src="' + icon + '" style="width:24px;height:24px;border-radius:6px;object-fit:cover" onerror="this.style.display=\'none\'">' : '';
+
+  var rowsHtml = members.map(function(p) {
+    return renderPositionRow({
+      question: p.question || p.market_title || 'Unknown market',
+      side: p.side,
+      url: buildMarketUrl({ url: p.market_url, slug: p.slug || p.eventSlug, question: p.question || p.market_title }),
+      posData: { ...p, platform: p._platform, _groupKey: gk }
+    });
+  }).join('');
+
+  return '<div class="pos-group" data-group-key="' + escHtmlDash(gk) + '" data-group-value="' + aggValue.toFixed(2) + '" data-group-pnl="' + aggPnl.toFixed(2) + '" data-group-pnlpct="' + aggPnlPct.toFixed(1) + '" data-group-name="' + escHtmlDash(name) + '" data-group-expiry="' + nearestExpiry + '">' +
+    '<div class="pos-group-header" onclick="togglePosGroup(this)">' +
+      '<div style="display:flex;align-items:center;gap:10px;min-width:0">' +
+        iconHtml +
+        '<div style="min-width:0">' +
+          '<div style="font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtmlDash(name) + '</div>' +
+          '<div style="font-family:var(--mono);font-size:11px;color:var(--dim)">' + count + ' positions</div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--dim)">$' + aggCost.toFixed(2) + ' invested</div>' +
+      '<div style="text-align:right">' +
+        '<div style="font-family:var(--mono);font-size:13px;font-weight:800;color:var(--text)">$' + aggValue.toFixed(2) + '</div>' +
+        '<div style="font-family:var(--mono);font-size:11px;font-weight:700;color:' + pnlColor + '">' + pnlStr + ' ' + pnlPctStr + '</div>' +
+      '</div>' +
+      '<div style="text-align:center"><span class="pos-group-chevron" style="display:inline-block;transition:transform .2s;transform:rotate(' + (isCollapsed ? '-90deg' : '0deg') + ');font-size:12px;color:var(--dim)">▼</span></div>' +
+    '</div>' +
+    '<div class="pos-group-body" style="' + (isCollapsed ? 'display:none' : '') + '">' + rowsHtml + '</div>' +
+  '</div>';
+}
+
+function togglePosGroup(headerEl) {
+  var group = headerEl.closest('.pos-group');
+  if (!group) return;
+  var key = group.dataset.groupKey;
+  var body = group.querySelector('.pos-group-body');
+  var chevron = headerEl.querySelector('.pos-group-chevron');
+  if (!body) return;
+  var isCollapsed = _posGroupCollapsed.has(key);
+  if (isCollapsed) {
+    _posGroupCollapsed.delete(key);
+    body.style.display = '';
+    if (chevron) chevron.style.transform = 'rotate(0deg)';
+  } else {
+    _posGroupCollapsed.add(key);
+    body.style.display = 'none';
+    if (chevron) chevron.style.transform = 'rotate(-90deg)';
+  }
+}
+
 function updateAllPositionsTab() {
   const positions = getAllPositionsFlat();
   const hasAnyPlatform = _polyWalletAddress || _kalshiConnected || _manifoldUsername;
@@ -16386,14 +16508,59 @@ function updateAllPositionsTab() {
       if (countEl) countEl.textContent = open.length + ' active';
       const contentEl = document.getElementById('openPositionsContent');
       if (contentEl) {
-        contentEl.innerHTML = open.map(p => {
-          return renderPositionRow({
+        // Group positions by event/subject
+        var groupMap = new Map();
+        var ungrouped = [];
+        open.forEach(function(p) {
+          var key = getPositionGroupKey(p);
+          if (key) {
+            if (!groupMap.has(key)) groupMap.set(key, []);
+            groupMap.get(key).push(p);
+          } else {
+            ungrouped.push(p);
+          }
+        });
+        // Dissolve single-member groups
+        for (var [gk, gMembers] of groupMap) {
+          if (gMembers.length < 2) {
+            ungrouped.push(gMembers[0]);
+            groupMap.delete(gk);
+          }
+        }
+        // Build HTML: groups first (sorted by aggregate value desc), then ungrouped
+        var groupArr = Array.from(groupMap.entries()).map(function([key, members]) {
+          var aggValue = members.reduce(function(s, p) { return s + (parseFloat(p.cash_value) || 0); }, 0);
+          var aggPnl = members.reduce(function(s, p) { return s + (parseFloat(p.pnl) || 0); }, 0);
+          var aggCost = members.reduce(function(s, p) { return s + (parseFloat(p.cost_basis) || 0); }, 0);
+          var aggPnlPct = aggCost > 0 ? (aggPnl / aggCost * 100) : 0;
+          return { key: key, members: members, aggValue: aggValue, aggPnl: aggPnl, aggCost: aggCost, aggPnlPct: aggPnlPct };
+        });
+        groupArr.sort(function(a, b) { return b.aggValue - a.aggValue; });
+        // Sort ungrouped by value desc
+        ungrouped.sort(function(a, b) { return (parseFloat(b.cash_value) || 0) - (parseFloat(a.cash_value) || 0); });
+
+        var html = '';
+        groupArr.forEach(function(g) {
+          // Sort members within group by value desc
+          g.members.sort(function(a, b) { return (parseFloat(b.cash_value) || 0) - (parseFloat(a.cash_value) || 0); });
+          html += renderPositionGroup({
+            groupKey: g.key,
+            groupName: getGroupDisplayName(g.members),
+            icon: g.members[0].icon || '',
+            count: g.members.length,
+            aggValue: g.aggValue, aggPnl: g.aggPnl, aggPnlPct: g.aggPnlPct, aggCost: g.aggCost,
+            members: g.members
+          });
+        });
+        ungrouped.forEach(function(p) {
+          html += renderPositionRow({
             question: p.question || p.market_title || 'Unknown market',
             side: p.side,
             url: buildMarketUrl({ url: p.market_url, slug: p.slug || p.eventSlug, question: p.question || p.market_title }),
             posData: { ...p, platform: p._platform }
           });
-        }).join('');
+        });
+        contentEl.innerHTML = html;
         // Apply current sort
         var sortVal = document.getElementById('posSortSelect')?.value;
         if (sortVal) sortPositionRows(sortVal);
@@ -16653,7 +16820,8 @@ function renderPositionRow({question,side,posData,url}) {
   // Build internal market URL
   const mktUrl = url && url !== '#' ? url : (posData?.slug ? '/market/' + posData.slug : '#');
 
-  return `<div class="pos-table-row" data-question="${escHtmlDash(question)}" data-value="${cashValue}" data-pnl="${pnl}" data-pnlpct="${pnlPct}" data-expiry="${endDate||''}" data-price="${curPrice||0}"
+  const _gk = posData?._groupKey || '';
+  return `<div class="pos-table-row" data-question="${escHtmlDash(question)}" data-value="${cashValue}" data-pnl="${pnl}" data-pnlpct="${pnlPct}" data-expiry="${endDate||''}" data-price="${curPrice||0}" data-group-key="${escHtmlDash(_gk)}"
     style="display:grid;grid-template-columns:var(--pos-table-grid);gap:0;align-items:center;padding:10px 16px;border-bottom:1px solid rgba(255,255,255,0.04);transition:background .1s;cursor:pointer"
     onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background=''"
     onclick="if(!event.target.closest('button'))window.location='${mktUrl}'">
@@ -16716,6 +16884,7 @@ function toggleHideDust() {
 
 function filterPositionRows() {
   var query = (document.getElementById('posSearchInput')?.value || '').toLowerCase().trim();
+  // Filter individual rows
   var rows = document.querySelectorAll('.pos-table-row');
   rows.forEach(function(row) {
     var q = (row.dataset.question || '').toLowerCase();
@@ -16724,26 +16893,72 @@ function filterPositionRows() {
     var matchDust = !_hideDust || price >= 0.10;
     row.style.display = (matchSearch && matchDust) ? '' : 'none';
   });
+  // Hide/show groups based on visible rows; group name also matches search
+  var groups = document.querySelectorAll('.pos-group');
+  groups.forEach(function(group) {
+    var groupName = (group.dataset.groupName || '').toLowerCase();
+    var groupMatchesSearch = query && groupName.includes(query);
+    var body = group.querySelector('.pos-group-body');
+    if (!body) return;
+    var groupRows = Array.from(body.querySelectorAll('.pos-table-row'));
+    if (groupMatchesSearch) {
+      // Group name matches — show all rows in group (override individual hide for search, still respect dust)
+      groupRows.forEach(function(r) {
+        var price = parseFloat(r.dataset.price) || 0;
+        var matchDust = !_hideDust || price >= 0.10;
+        r.style.display = matchDust ? '' : 'none';
+      });
+    }
+    var anyVisible = groupRows.some(function(r) { return r.style.display !== 'none'; });
+    group.style.display = anyVisible ? '' : 'none';
+  });
+}
+
+function _posSortCompare(sortBy) {
+  return function(a, b) {
+    switch(sortBy) {
+      case 'value': return (parseFloat(b.dataset.value || b.dataset.groupValue) || 0) - (parseFloat(a.dataset.value || a.dataset.groupValue) || 0);
+      case 'pnl': return (parseFloat(b.dataset.pnl || b.dataset.groupPnl) || 0) - (parseFloat(a.dataset.pnl || a.dataset.groupPnl) || 0);
+      case 'pnl_pct': return (parseFloat(b.dataset.pnlpct || b.dataset.groupPnlpct) || 0) - (parseFloat(a.dataset.pnlpct || a.dataset.groupPnlpct) || 0);
+      case 'expiry':
+        var da = (a.dataset.expiry || a.dataset.groupExpiry) ? new Date(a.dataset.expiry || a.dataset.groupExpiry).getTime() : Infinity;
+        var db = (b.dataset.expiry || b.dataset.groupExpiry) ? new Date(b.dataset.expiry || b.dataset.groupExpiry).getTime() : Infinity;
+        return da - db;
+      case 'name': return (a.dataset.question || a.dataset.groupName || '').localeCompare(b.dataset.question || b.dataset.groupName || '');
+      default: return 0;
+    }
+  };
 }
 
 function sortPositionRows(sortBy) {
   var container = document.getElementById('openPositionsContent');
   if (!container) return;
-  var rows = Array.from(container.querySelectorAll('.pos-table-row'));
-  rows.sort(function(a, b) {
-    switch(sortBy) {
-      case 'value': return (parseFloat(b.dataset.value) || 0) - (parseFloat(a.dataset.value) || 0);
-      case 'pnl': return (parseFloat(b.dataset.pnl) || 0) - (parseFloat(a.dataset.pnl) || 0);
-      case 'pnl_pct': return (parseFloat(b.dataset.pnlpct) || 0) - (parseFloat(a.dataset.pnlpct) || 0);
-      case 'expiry':
-        var da = a.dataset.expiry ? new Date(a.dataset.expiry).getTime() : Infinity;
-        var db = b.dataset.expiry ? new Date(b.dataset.expiry).getTime() : Infinity;
-        return da - db;
-      case 'name': return (a.dataset.question || '').localeCompare(b.dataset.question || '');
-      default: return 0;
-    }
+  var cmp = _posSortCompare(sortBy);
+  // Sort rows within each group body
+  var groups = container.querySelectorAll('.pos-group');
+  groups.forEach(function(group) {
+    var body = group.querySelector('.pos-group-body');
+    if (!body) return;
+    var rows = Array.from(body.querySelectorAll('.pos-table-row'));
+    rows.sort(function(a, b) {
+      switch(sortBy) {
+        case 'value': return (parseFloat(b.dataset.value) || 0) - (parseFloat(a.dataset.value) || 0);
+        case 'pnl': return (parseFloat(b.dataset.pnl) || 0) - (parseFloat(a.dataset.pnl) || 0);
+        case 'pnl_pct': return (parseFloat(b.dataset.pnlpct) || 0) - (parseFloat(a.dataset.pnlpct) || 0);
+        case 'expiry':
+          var da = a.dataset.expiry ? new Date(a.dataset.expiry).getTime() : Infinity;
+          var db = b.dataset.expiry ? new Date(b.dataset.expiry).getTime() : Infinity;
+          return da - db;
+        case 'name': return (a.dataset.question || '').localeCompare(b.dataset.question || '');
+        default: return 0;
+      }
+    });
+    rows.forEach(function(r) { body.appendChild(r); });
   });
-  rows.forEach(function(r) { container.appendChild(r); });
+  // Sort top-level children (groups + ungrouped rows)
+  var topLevel = Array.from(container.children);
+  topLevel.sort(cmp);
+  topLevel.forEach(function(el) { container.appendChild(el); });
 }
 
 let _hfxPositionsLoaded = false;
