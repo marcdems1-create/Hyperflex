@@ -277,6 +277,19 @@ a{color:var(--gold);text-decoration:none}a:hover{text-decoration:underline}
 
   <!-- YOUR STATS (hidden if not logged in) -->
   <div id="myStatsWrap" style="display:none">
+
+    <!-- HOW THE FLYWHEEL WORKS — brief explainer above the user's stats -->
+    <div class="rw-stats-card" style="margin-bottom:16px;background:linear-gradient(135deg,rgba(77,159,255,0.05),rgba(77,159,255,0.01));border-color:rgba(77,159,255,0.15)">
+      <div class="rw-stats-card-title" style="color:#4d9fff">🔄 How the rewards flywheel works</div>
+      <div style="font-family:var(--sans);font-size:13px;color:var(--soft);line-height:1.65">
+        <strong style="color:#fff">50% of HYPERFLEX's Polymarket builder fees go back to traders weekly.</strong>
+        The <span style="color:#4d9fff;font-weight:700">Base Pool</span> (40% of revenue) pays everyone who traded,
+        pro-rata by volume. The <span style="color:var(--gold);font-weight:700">Flex Pot</span> (10% of revenue)
+        is a bonus layer split between the top 20% most-engaged users — volume, clicks, trade count and streaks
+        all count toward your engagement score. More activity = more reward.
+      </div>
+    </div>
+
     <div class="rw-stats-card">
       <div class="rw-stats-card-title">Your Stats</div>
       <div class="rw-stats-grid">
@@ -285,17 +298,43 @@ a{color:var(--gold);text-decoration:none}a:hover{text-decoration:underline}
           <div class="rw-stat-label">Volume This Week</div>
         </div>
         <div class="rw-stat">
-          <div class="rw-stat-val gold" id="myTier">--</div>
-          <div class="rw-stat-label">Current Tier</div>
+          <div class="rw-stat-val" id="myTradesWeek">0</div>
+          <div class="rw-stat-label">Trades This Week</div>
         </div>
         <div class="rw-stat">
-          <div class="rw-stat-val green" id="myPayout">$0.00</div>
-          <div class="rw-stat-label">Est. Payout</div>
+          <div class="rw-stat-val gold" id="myTier">--</div>
+          <div class="rw-stat-label">Current Tier</div>
         </div>
         <div class="rw-stat">
           <div class="rw-stat-val" id="myLifetime">$0.00</div>
           <div class="rw-stat-label">Lifetime Earned</div>
         </div>
+      </div>
+
+      <!-- FLYWHEEL BREAKDOWN — base + flex + projected total for this week -->
+      <div style="margin-top:20px;padding-top:20px;border-top:1px solid rgba(201,146,13,0.15)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+          <div style="font-family:var(--mono);font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:1px">This Week's Projected Payout</div>
+          <div id="myFlexBadge" style="display:none;font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:12px;background:rgba(201,146,13,0.14);color:var(--gold);border:1px solid rgba(201,146,13,0.3);text-transform:uppercase;letter-spacing:0.5px">🔥 Flex Tier · Top 20%</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">
+          <div style="background:rgba(77,159,255,0.06);border:1px solid rgba(77,159,255,0.15);border-radius:10px;padding:14px">
+            <div style="font-family:var(--mono);font-size:10px;color:#4d9fff;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Base Share</div>
+            <div style="font-family:var(--mono);font-size:20px;font-weight:900;color:#4d9fff;letter-spacing:-0.5px" id="myBaseShare">$0.00</div>
+            <div style="font-family:var(--sans);font-size:11px;color:var(--dim);margin-top:2px">from your volume</div>
+          </div>
+          <div style="background:rgba(201,146,13,0.06);border:1px solid rgba(201,146,13,0.15);border-radius:10px;padding:14px">
+            <div style="font-family:var(--mono);font-size:10px;color:var(--gold);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Flex Bonus</div>
+            <div style="font-family:var(--mono);font-size:20px;font-weight:900;color:var(--gold);letter-spacing:-0.5px" id="myFlexBonus">$0.00</div>
+            <div style="font-family:var(--sans);font-size:11px;color:var(--dim);margin-top:2px" id="myFlexHint">top 20% only</div>
+          </div>
+          <div style="background:rgba(0,230,138,0.06);border:1px solid rgba(0,230,138,0.15);border-radius:10px;padding:14px">
+            <div style="font-family:var(--mono);font-size:10px;color:var(--green);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Projected Total</div>
+            <div style="font-family:var(--mono);font-size:20px;font-weight:900;color:var(--green);letter-spacing:-0.5px" id="myProjectedTotal">$0.00</div>
+            <div style="font-family:var(--sans);font-size:11px;color:var(--dim);margin-top:2px">if week ends now</div>
+          </div>
+        </div>
+        <div style="font-family:var(--sans);font-size:11px;color:var(--dim);text-align:center" id="myPoolContext">Loading this week's pool...</div>
       </div>
     </div>
   </div>
@@ -339,24 +378,32 @@ a{color:var(--gold);text-decoration:none}a:hover{text-decoration:underline}
       <div class="rw-section-sub" style="margin-bottom:16px">Common questions about the rewards program</div>
       <div class="rw-faq">
         <div class="rw-faq-item" onclick="this.classList.toggle('open')">
-          <div class="rw-faq-q">How does HYPERFLEX earn referral revenue?</div>
-          <div class="rw-faq-a">When you click any Polymarket link on HYPERFLEX, our referral tag is automatically applied. Polymarket pays us 30% of the trading fee (~1% of volume) from referred users. We share a portion of this revenue back with you as USDC rewards.</div>
+          <div class="rw-faq-q">Where does the reward money come from?</div>
+          <div class="rw-faq-a">Every trade you place through HYPERFLEX routes through our Polymarket builder program. Polymarket pays us ~30% of the ~1% trading fee on every order — that's ~0.3% of your routed volume. We split that 50/50: half stays with HYPERFLEX, half goes back to you and the other traders. No funny money, no marketing budget — pure revenue share from real trading.</div>
+        </div>
+        <div class="rw-faq-item" onclick="this.classList.toggle('open')">
+          <div class="rw-faq-q">How is my share calculated?</div>
+          <div class="rw-faq-a">The 50% that goes back to traders is split into two pools: an 80% <strong>Base Pool</strong> (40% of total revenue) distributed pro-rata by your trading volume, and a 20% <strong>Flex Pot</strong> (10% of revenue) reserved for the top 20% most-engaged users. Your engagement score blends volume (50%), clicks on alpha cards (20%), trade count (20%), and weekly streak (10%). Top engaged users double-dip — they earn their base share AND a flex bonus.</div>
+        </div>
+        <div class="rw-faq-item" onclick="this.classList.toggle('open')">
+          <div class="rw-faq-q">How do I get into the Flex Tier?</div>
+          <div class="rw-faq-a">The Flex Tier is automatic — the top 20% of traders each week by engagement score qualify. To climb: trade more volume, trade more often (5+ trades/week hits the streak threshold), and click through to the /market/:slug pages from the Alpha Terminal. Watching the ticker without trading earns nothing — only clicks from active traders count. The Flex Bonus is where the real extra upside is.</div>
         </div>
         <div class="rw-faq-item" onclick="this.classList.toggle('open')">
           <div class="rw-faq-q">When do I get paid?</div>
-          <div class="rw-faq-a">Rewards are calculated weekly (Monday to Sunday) and distributed every Monday. USDC is sent directly to the Polymarket wallet address you've connected to your HYPERFLEX account.</div>
+          <div class="rw-faq-a">Rewards are calculated every Sunday at 00:05 UTC by an automated cron job that computes the week's builder fees and distributes the pool. USDC is sent directly to your connected Polymarket proxy wallet. Your projected earnings update live throughout the week on this page.</div>
         </div>
         <div class="rw-faq-item" onclick="this.classList.toggle('open')">
           <div class="rw-faq-q">Do I need a HYPERFLEX account?</div>
-          <div class="rw-faq-a">Yes, you need to create a free HYPERFLEX account and connect your Polymarket wallet address so we can track your referral volume and send your USDC rewards.</div>
+          <div class="rw-faq-a">Yes, you need a free HYPERFLEX account with your Polymarket wallet connected so we can attribute trades to you and send your USDC share. No KYC, no credit card — just an email + your Polymarket address.</div>
         </div>
         <div class="rw-faq-item" onclick="this.classList.toggle('open')">
           <div class="rw-faq-q">How is my tier calculated?</div>
-          <div class="rw-faq-a">Your tier is based on your total trading volume through HYPERFLEX referral links over the last 30 days. Tiers are recalculated daily. Trade more to unlock higher reward rates.</div>
+          <div class="rw-faq-a">Your Scout → Trader → Shark → Apex → Legend tier is based on your trading volume over the last 30 days. Higher tiers multiply your FLEX Points earnings (1× → 5×) and unlock higher reward percentages. Tiers recalculate automatically every time you trade.</div>
         </div>
         <div class="rw-faq-item" onclick="this.classList.toggle('open')">
           <div class="rw-faq-q">Is there a minimum payout?</div>
-          <div class="rw-faq-a">The minimum payout is $1 USDC. If your weekly earnings are below $1, they roll over to the next week until the threshold is met.</div>
+          <div class="rw-faq-a">The minimum payout is $1 USDC. If your weekly earnings are below $1, they roll over to the next week until the threshold is met. Tiny earnings don't disappear — they accumulate.</div>
         </div>
       </div>
     </div>
@@ -441,12 +488,58 @@ a{color:var(--gold);text-decoration:none}a:hover{text-decoration:underline}
       .then(function(r) { return r.json(); })
       .then(function(d) {
         if (!d || d.error) return;
+
+        // Top row — live week activity
         document.getElementById('myVolWeek').textContent = '$' + Number(d.volume_this_week || 0).toLocaleString();
-        document.getElementById('myTier').textContent = d.tier || '--';
-        document.getElementById('myPayout').textContent = '$' + Number(d.estimated_payout || 0).toFixed(2);
+        document.getElementById('myTradesWeek').textContent = Number(d.trades_this_week || 0).toLocaleString();
+        document.getElementById('myTier').textContent = (d.tier_icon ? d.tier_icon + ' ' : '') + (d.tier || '--');
         document.getElementById('myLifetime').textContent = '$' + Number(d.lifetime_earned || 0).toFixed(2);
 
-        // Payout history
+        // Flywheel breakdown — base + flex + projected total
+        var baseShare = 0;
+        var flexBonus = 0;
+        var totalVol = Number(d.total_volume_this_week || 0);
+        var myVol = Number(d.volume_this_week || 0);
+        var basePool = Number(d.base_pool_projected || 0);
+        var flexPot = Number(d.flex_pot_projected || 0);
+        if (totalVol > 0 && myVol > 0) {
+          baseShare = (myVol / totalVol) * basePool;
+        }
+        // current_week_estimate already sums base + flex from the server,
+        // so flex bonus = total - base
+        var projectedTotal = Number(d.current_week_estimate || 0);
+        flexBonus = Math.max(0, projectedTotal - baseShare);
+
+        document.getElementById('myBaseShare').textContent = '$' + baseShare.toFixed(2);
+        document.getElementById('myFlexBonus').textContent = '$' + flexBonus.toFixed(2);
+        document.getElementById('myProjectedTotal').textContent = '$' + projectedTotal.toFixed(2);
+
+        // Flex tier badge — shown if user is currently in top 20%
+        var flexBadge = document.getElementById('myFlexBadge');
+        var flexHint = document.getElementById('myFlexHint');
+        if (d.is_flex_tier_projection) {
+          flexBadge.style.display = '';
+          flexHint.textContent = 'you\'re in the top 20%';
+          flexHint.style.color = 'var(--gold)';
+        } else {
+          flexBadge.style.display = 'none';
+          flexHint.textContent = 'trade more to qualify';
+          flexHint.style.color = 'var(--dim)';
+        }
+
+        // Pool context line — shows the total pool breakdown for this week
+        var poolCtx = document.getElementById('myPoolContext');
+        if (basePool > 0 || flexPot > 0) {
+          poolCtx.innerHTML = 'This week\'s pool so far: <strong style="color:var(--text)">$'
+            + (basePool + flexPot).toFixed(2) + '</strong> '
+            + '<span style="color:var(--muted)">('
+            + 'base $' + basePool.toFixed(2) + ' · flex $' + flexPot.toFixed(2)
+            + ' · from $' + totalVol.toLocaleString() + ' platform volume)</span>';
+        } else {
+          poolCtx.textContent = 'No trading volume routed through HYPERFLEX this week yet. Be the first!';
+        }
+
+        // Payout history (legacy format from API's payout_history alias)
         if (d.payout_history && d.payout_history.length) {
           var ph = '';
           d.payout_history.forEach(function(p) {
