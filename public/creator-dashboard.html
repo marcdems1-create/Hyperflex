@@ -17582,6 +17582,7 @@ function openTradeModal(posDataJson, mode, options) {
   document.getElementById('tradeAmount').value = '0';
   document.getElementById('tradeModalError').style.display = 'none';
   document.getElementById('tradeConfirmBtn').disabled = false;
+  _updateQuickBtnLabels();
   updateTradeConfirmBtn();
 
   // Update totals
@@ -17637,13 +17638,12 @@ function _updateLimitFromOrderbook() {
   }
 }
 
-function adjustPrice(delta) {
+function adjustPrice(direction) {
   if (!_tradeModalData) return;
-  const tick = _tradeModalData._tickSize || 0.01;
-  // Use 1¢ steps (0.01) as minimum — tick size 0.1 makes 10¢ jumps which is too coarse
-  const step = delta > 0 ? Math.min(tick, 0.01) : -Math.min(tick, 0.01);
+  // Always step by 1¢ (0.01) for fine control
+  const step = direction > 0 ? 0.01 : -0.01;
   const current = _tradeModalData._limitPrice || 0;
-  const newPrice = Math.round((current + step) * 10000) / 10000;
+  const newPrice = Math.round((current + step) * 100) / 100;
   _tradeModalData._limitPrice = Math.max(0.01, Math.min(0.99, newPrice));
   const el = document.getElementById('tradeLimitPrice');
   if (el) el.textContent = (_tradeModalData._limitPrice * 100).toFixed(1) + '¢';
@@ -17653,9 +17653,44 @@ function adjustPrice(delta) {
 function adjustShares(delta) {
   const input = document.getElementById('tradeAmount');
   if (!input) return;
-  const current = parseInt(input.value) || 0;
-  input.value = Math.max(0, current + delta);
+  const current = parseFloat(input.value) || 0;
+  input.value = Math.max(0, Math.round((current + delta) * 100) / 100);
   updateTradeEstimate();
+}
+
+function quickAmount(tier) {
+  if (!_tradeModalData) return;
+  const mode = _tradeModalData.mode || 'buy';
+  const input = document.getElementById('tradeAmount');
+  if (!input) return;
+
+  if (mode === 'sell') {
+    // Sell mode: % of position value
+    const shares = _tradeModalData.shares || _tradeModalData.size || 0;
+    const price = _tradeModalData._limitPrice || (_tradeModalData.current_price || 0.5);
+    const posValue = shares * price;
+    const pcts = { 1: 0.10, 2: 0.25, 3: 0.50, 4: 1.0 };
+    const pct = pcts[tier] || 0.25;
+    const amt = Math.round(posValue * pct * 100) / 100;
+    input.value = amt > 0 ? amt : posValue.toFixed(2);
+  } else {
+    // Buy mode: fixed USD amounts
+    const amounts = { 1: 10, 2: 50, 3: 100, 4: 250 };
+    const current = parseFloat(input.value) || 0;
+    input.value = Math.max(0, current + (amounts[tier] || 10));
+  }
+  updateTradeEstimate();
+}
+
+function _updateQuickBtnLabels() {
+  const mode = _tradeModalData?.mode || 'buy';
+  const labels = mode === 'sell'
+    ? { qb1: '10%', qb2: '25%', qb3: '50%', qb4: '100%' }
+    : { qb1: '+$10', qb2: '+$50', qb3: '+$100', qb4: '+$250' };
+  for (const [id, text] of Object.entries(labels)) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  }
 }
 
 function setMaxShares() {
@@ -17713,6 +17748,7 @@ function setTradeMode(mode) {
   // Reset input
   document.getElementById('tradeAmount').value = '0';
   _updateLimitFromOrderbook();
+  _updateQuickBtnLabels();
   updateTradeEstimate();
   updateTradeConfirmBtn();
 }
@@ -18575,10 +18611,10 @@ function _taRSI(arr,n){const r=new Array(arr.length).fill(null);if(arr.length<n+
           <div style="font-size:14px;font-weight:600;color:#fff">Limit Price</div>
           <div id="tradeBalance" style="font-family:var(--mono);font-size:11px;color:#888">Balance $0.00</div>
         </div>
-        <div style="display:flex;align-items:center;gap:0;background:#2d2d44;border-radius:8px;overflow:hidden">
-          <button onclick="adjustPrice(-0.01)" style="background:none;border:none;color:#fff;font-size:16px;padding:8px 12px;cursor:pointer;font-weight:700">−</button>
-          <span id="tradeLimitPrice" style="font-family:var(--mono);font-size:15px;font-weight:700;color:#fff;min-width:60px;text-align:center">0.0¢</span>
-          <button onclick="adjustPrice(0.01)" style="background:none;border:none;color:#fff;font-size:16px;padding:8px 12px;cursor:pointer;font-weight:700">+</button>
+        <div style="display:flex;align-items:center;gap:0;background:#2d2d44;border-radius:8px;overflow:hidden;user-select:none">
+          <button onclick="adjustPrice(-1)" style="background:none;border:none;color:#fff;font-size:20px;padding:10px 16px;cursor:pointer;font-weight:700;min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center" onmousedown="this.style.background='#3d3d54'" onmouseup="this.style.background='none'">−</button>
+          <span id="tradeLimitPrice" style="font-family:var(--mono);font-size:15px;font-weight:700;color:#fff;min-width:65px;text-align:center">0.0¢</span>
+          <button onclick="adjustPrice(1)" style="background:none;border:none;color:#fff;font-size:20px;padding:10px 16px;cursor:pointer;font-weight:700;min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center" onmousedown="this.style.background='#3d3d54'" onmouseup="this.style.background='none'">+</button>
         </div>
       </div>
 
@@ -18592,12 +18628,12 @@ function _taRSI(arr,n){const r=new Array(arr.length).fill(null);if(arr.length<n+
         </div>
         <input id="tradeAmount" type="number" step="1" min="0" value="0" oninput="updateTradeEstimate()" style="width:100px;background:#2d2d44;border:1px solid #3d3d54;border-radius:8px;padding:10px 14px;font-family:var(--mono);font-size:16px;font-weight:700;color:#fff;outline:none;text-align:right;box-sizing:border-box" onfocus="this.style.borderColor='#00e68a'" onblur="this.style.borderColor='#3d3d54'"/>
       </div>
-      <!-- Quick amount buttons -->
+      <!-- Quick amount buttons — switch between USD (buy) and % (sell) -->
       <div id="tradeQuickBtns" style="display:flex;gap:6px;margin:10px 0 16px;justify-content:flex-end">
-        <button onclick="adjustShares(10)" style="background:#2d2d44;border:1px solid #3d3d54;border-radius:6px;padding:5px 10px;font-family:var(--mono);font-size:11px;color:#ccc;cursor:pointer">+$10</button>
-        <button onclick="adjustShares(50)" style="background:#2d2d44;border:1px solid #3d3d54;border-radius:6px;padding:5px 10px;font-family:var(--mono);font-size:11px;color:#ccc;cursor:pointer">+$50</button>
-        <button onclick="adjustShares(100)" style="background:#2d2d44;border:1px solid #3d3d54;border-radius:6px;padding:5px 10px;font-family:var(--mono);font-size:11px;color:#ccc;cursor:pointer">+$100</button>
-        <button onclick="adjustShares(250)" style="background:#2d2d44;border:1px solid #3d3d54;border-radius:6px;padding:5px 10px;font-family:var(--mono);font-size:11px;color:#ccc;cursor:pointer">+$250</button>
+        <button id="qb1" onclick="quickAmount(1)" style="background:#2d2d44;border:1px solid #3d3d54;border-radius:6px;padding:5px 10px;font-family:var(--mono);font-size:11px;color:#ccc;cursor:pointer">+$10</button>
+        <button id="qb2" onclick="quickAmount(2)" style="background:#2d2d44;border:1px solid #3d3d54;border-radius:6px;padding:5px 10px;font-family:var(--mono);font-size:11px;color:#ccc;cursor:pointer">+$50</button>
+        <button id="qb3" onclick="quickAmount(3)" style="background:#2d2d44;border:1px solid #3d3d54;border-radius:6px;padding:5px 10px;font-family:var(--mono);font-size:11px;color:#ccc;cursor:pointer">+$100</button>
+        <button id="qb4" onclick="quickAmount(4)" style="background:#2d2d44;border:1px solid #3d3d54;border-radius:6px;padding:5px 10px;font-family:var(--mono);font-size:11px;color:#ccc;cursor:pointer">+$250</button>
       </div>
 
       <div style="height:1px;background:#2d2d44;margin:0 0 16px"></div>
