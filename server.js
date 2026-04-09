@@ -19940,11 +19940,23 @@ async function _buildAlphaListInner(opts = {}) {
     // Auto-detect category
     function detectCategory(q) {
       const t = (q || '').toLowerCase();
-      if (/bitcoin|btc|eth|crypto|solana|sol |xrp|dogecoin|doge|token|defi|nft/i.test(t)) return 'crypto';
-      if (/nba|nfl|mlb|nhl|soccer|football|basketball|baseball|ufc|boxing|sport|game |match|playoff|super bowl|world cup|championship|league|team|player|coach|season|finals|series|mvp|draft|trade |free agent/i.test(t)) return 'sports';
-      if (/trump|biden|president|congress|senate|election|democrat|republican|politic|governor|vote |primary|gop|dnc|rnc|impeach|cabinet|supreme court/i.test(t)) return 'politics';
-      if (/movie|oscar|grammy|emmy|album|netflix|spotify|tiktok|youtube|celebrity|award|film|tv |show|music|concert|tour|streaming|actor|singer|rapper/i.test(t)) return 'entertainment';
-      if (/ai |openai|chatgpt|apple|google|microsoft|meta |tesla|nvidia|amazon|startup|tech|iphone|android/i.test(t)) return 'tech';
+      // Crypto
+      if (/\b(bitcoin|btc|eth|ethereum|crypto|solana|xrp|dogecoin|doge|token|defi|nft|stablecoin|blockchain)\b/i.test(t)) return 'crypto';
+      // Politics — domestic US (check first so Trump/election always wins)
+      if (/\b(trump|biden|harris|obama|kamala|president|prime minister|parliament|parliamentary|congress|senate|elections?|democrat|republican|politic|politics|governor|primary|gop|dnc|rnc|impeach|cabinet|supreme court|tariff|treaty|sanction|regime|coup|invasion|invade|ceasefire|nato|united nations|geopolitic)\b/i.test(t)) return 'politics';
+      // Sports — check BEFORE international politics so "France win World Cup"
+      // doesn't fall through to geopolitical (`france` keyword). Includes
+      // golf / tennis / olympics / tournaments so Masters, PGA, Wimbledon,
+      // World Cup, F1, etc. classify correctly.
+      if (/\b(nba|nfl|mlb|nhl|soccer|football|basketball|baseball|ufc|boxing|mma|sport|sports|game|match|playoff|super bowl|world cup|championship|tournament|league|team|player|coach|season|finals|mvp|golf|tennis|pga|lpga|masters|olympic|olympics|wimbledon|formula 1|f1|nascar)\b/i.test(t)) return 'sports';
+      // Politics — international / geopolitical (after sports so FIFA/Olympics
+      // questions involving country names don't mislabel). "Iran x Israel
+      // conflict" → matches here because nothing in the sports regex fires.
+      if (/\b(iran|iranian|israel|israeli|russia|russian|ukraine|china|chinese|korea|korean|syria|yemen|afghanistan|palestine|palestinian|gaza|lebanon|taiwan|hungary|hungarian|germany|german|france|french|italy|italian|spain|spanish|uk|britain|british|canada|canadian|brazil|brazilian|mexico|mexican|argentina|turkey|turkish|india|indian|pakistan|venezuela|venezuelan|putin|netanyahu|khamenei|orban|orbán|macron|merkel|scholz|sunak|starmer|trudeau|hamas|hezbollah|taliban|war|conflict|middle east)\b/i.test(t)) return 'politics';
+      // Entertainment — \btour\b so "tournament" doesn't match as substring
+      if (/\b(movie|film|oscar|grammy|emmy|album|netflix|spotify|tiktok|youtube|celebrity|award|tv show|concert|tour|streaming|actor|singer|rapper|kardashian|taylor swift)\b/i.test(t)) return 'entertainment';
+      // Tech
+      if (/\b(ai|openai|chatgpt|apple|google|microsoft|meta|tesla|nvidia|amazon|startup|tech|iphone|android|spacex|bezos|musk|zuckerberg)\b/i.test(t)) return 'tech';
       return 'other';
     }
 
