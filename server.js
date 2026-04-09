@@ -20805,8 +20805,20 @@ app.get('/api/terminal/data', async (req, res) => {
       .map(slim);
 
     // PANEL 4: NARRATIVE PULSE — reuse _narrativeCache when fresh, otherwise
-    // skip (the terminal will poll narratives less aggressively anyway since
-    // they're 15-min cached server-side)
+    // If _narrativeCache is cold (happens immediately after boot, before the
+    // pre-warm cron hits it), fire a non-blocking warm so subsequent polls
+    // land with data. We deliberately don't await it — the terminal caller
+    // gets an empty array on the first poll, then populated data on the next.
+    if (!_narrativeCache || !_narrativeCache.data || !Array.isArray(_narrativeCache.data) || _narrativeCache.data.length === 0) {
+      try {
+        // Fire and forget — fetch internally so the existing narratives
+        // endpoint computes + caches for the next request
+        const port = process.env.PORT || 3000;
+        _nodeFetch('http://localhost:' + port + '/api/screener/narratives')
+          .then(() => { /* cache populated */ })
+          .catch(() => { /* silent — terminal still works without this panel */ });
+      } catch { /* silent */ }
+    }
     let narrativePulse = [];
     if (_narrativeCache && _narrativeCache.data && Array.isArray(_narrativeCache.data)) {
       narrativePulse = _narrativeCache.data.slice(0, 8).map(n => ({
@@ -33070,6 +33082,7 @@ app.listen(PORT, () => {
       ['market-movers', async () => { const r = await fetch(`http://localhost:${PORT}/api/market-movers`); if (!r.ok) throw new Error(r.status); }],
       ['whale-flow', async () => { const r = await fetch(`http://localhost:${PORT}/api/whale-flow`); if (!r.ok) throw new Error(r.status); }],
       ['screener', async () => { const r = await fetch(`http://localhost:${PORT}/api/screener`); if (!r.ok) throw new Error(r.status); }],
+      ['narratives', async () => { const r = await fetch(`http://localhost:${PORT}/api/screener/narratives`); if (!r.ok) throw new Error(r.status); }],
       ['fear-greed', async () => { const r = await fetch(`http://localhost:${PORT}/api/fear-greed`); if (!r.ok) throw new Error(r.status); }],
     ];
     for (const [name, fn] of warmups) {

@@ -408,7 +408,12 @@ function renderWhaleFlow(flows) {
 
 function renderNarratives(narratives) {
   var body = document.getElementById('panel-narrative-body');
-  if (!narratives || !narratives.length) { body.innerHTML = '<div class="empty"><div class="big">📊</div>Loading narrative pulse…</div>'; return; }
+  if (!narratives || !narratives.length) {
+    // Don't clobber populated data on empty polls (server warm may still be pending)
+    if (body.querySelector('.nar-row')) return;
+    body.innerHTML = '<div class="empty"><div class="big">📊</div>Warming narrative cache…<br>Refresh in a few seconds.</div>';
+    return;
+  }
   // Max dominance for bar scaling
   var maxDom = Math.max.apply(null, narratives.map(function(n) { return n.dominance_pct || 0; }));
   body.innerHTML = narratives.map(function(n) {
