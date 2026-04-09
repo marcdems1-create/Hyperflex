@@ -207,6 +207,12 @@
   @keyframes spin{to{transform:rotate(360deg)}}
   .refresh-flash{animation:flashBorder 0.8s ease-out}
   @keyframes flashBorder{0%{border-color:var(--gold)}100%{border-color:var(--border)}}
+  /* Price tick flash — applied to .price/.whale-size when SSE ticks land */
+  .tick-up{animation:tickUp 0.9s ease-out}
+  .tick-down{animation:tickDown 0.9s ease-out}
+  @keyframes tickUp{0%{background:rgba(0,230,138,0.35);color:var(--green)}100%{background:transparent}}
+  @keyframes tickDown{0%{background:rgba(255,77,106,0.35);color:var(--red)}100%{background:transparent}}
+  .price{padding:0 2px;border-radius:3px;transition:background .2s}
 </style>
 </head>
 <body>
@@ -218,6 +224,10 @@
 <!-- Top strip: live indicator + status + refresh -->
 <div class="term-strip">
   <span class="term-title">HYPERFLEX TERMINAL</span>
+  <span class="term-status" id="termLiveIndicator" style="display:none">
+    <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);animation:pulse 1.8s ease-in-out infinite;vertical-align:middle;margin-right:4px"></span>
+    <span class="val" style="color:var(--green)">LIVE</span> <span class="val" id="termTickCount">0</span> ticks
+  </span>
   <span class="term-status">Last update <span class="val" id="termLastUpdate">—</span></span>
   <span class="term-status">Next refresh <span class="val" id="termNextRefresh">—</span></span>
   <button class="term-refresh" onclick="termFetch(true)">↻ refresh</button>
@@ -348,7 +358,14 @@ function cardRow(m) {
   var q = m.question || '';
   var urgencyReason = (m.trade_thesis && m.trade_thesis.urgency_reason) || m.ai_hook || '';
 
-  return '<a class="card-row" href="' + marketUrl(m) + '">' +
+  // data-slug + data-yes-asset + data-no-asset let the SSE tick handler find
+  // this card by either the slug or the tokenId and update its price text live
+  var dataAttrs = '';
+  if (m.slug)      dataAttrs += ' data-slug="' + escH(m.slug) + '"';
+  if (m.yes_asset) dataAttrs += ' data-yes-asset="' + escH(m.yes_asset) + '"';
+  if (m.no_asset)  dataAttrs += ' data-no-asset="' + escH(m.no_asset) + '"';
+
+  return '<a class="card-row"' + dataAttrs + ' href="' + marketUrl(m) + '">' +
     '<div class="card-row-top">' +
       '<span class="edge-badge ' + edgeClass + '">' + edge + '</span>' +
       freshBadge +
@@ -486,16 +503,144 @@ function termStart() {
   _termCountdownTimer = setInterval(updateCountdown, 1000);
 }
 
-// Pause polling when tab is hidden — saves bandwidth, restart on return
+// ── SSE live-tick client ─────────────────────────────────────────────────
+// Connects to /api/terminal/stream which forwards Polymarket trade events.
+// Every tick carries {asset, slug, price, side, size, ts}. We find matching
+// cards by [data-yes-asset], [data-no-asset], or [data-slug] and update the
+// price text with a green/red flash animation.
+//
+// On connection failure, EventSource auto-reconnects. If the stream is
+// unreachable entirely, the terminal still gets 30s polling updates from
+// termStart() — graceful degradation, no user-visible break.
+
+var _termSSE = null;
+var _termTickCount = 0;
+// Track the last price we saw per asset so we can compare directions
+var _termLastPriceByAsset = Object.create(null);
+// Throttle updates per asset — Polymarket can fire multiple trades per second
+// on hot markets; one animation per 400ms is plenty
+var _termLastFlashByAsset = Object.create(null);
+
+function applyTickToCards(tick) {
+  if (!tick || tick.price == null) return;
+  var cents = Math.round(tick.price * 100);
+
+  // Find every card that references this asset (or slug as fallback)
+  var selector = [];
+  if (tick.asset) {
+    selector.push('[data-yes-asset="' + cssEscape(tick.asset) + '"]');
+    selector.push('[data-no-asset="' + cssEscape(tick.asset) + '"]');
+  }
+  if (tick.slug && selector.length === 0) {
+    selector.push('[data-slug="' + cssEscape(tick.slug) + '"]');
+  }
+  if (!selector.length) return;
+
+  var nodes = document.querySelectorAll(selector.join(','));
+  if (!nodes.length) return;
+
+  // Throttle animation (but always update the text)
+  var now = Date.now();
+  var shouldFlash = !_termLastFlashByAsset[tick.asset] || (now - _termLastFlashByAsset[tick.asset]) > 400;
+
+  nodes.forEach(function(card) {
+    var priceEl = card.querySelector('.price');
+    if (!priceEl) return;
+
+    // For NO asset, show 1-price so the card still reflects the YES market
+    // price as the user understands it (.price text is always the YES view)
+    var showCents = cents;
+    if (card.getAttribute('data-no-asset') === tick.asset) {
+      showCents = 100 - cents;
+    }
+
+    var prev = _termLastPriceByAsset[tick.asset];
+    priceEl.textContent = showCents + '¢';
+
+    if (shouldFlash && prev != null) {
+      var cls = cents > prev ? 'tick-up' : (cents < prev ? 'tick-down' : null);
+      if (cls) {
+        priceEl.classList.remove('tick-up', 'tick-down');
+        void priceEl.offsetWidth; // restart animation
+        priceEl.classList.add(cls);
+      }
+    }
+  });
+
+  _termLastPriceByAsset[tick.asset] = cents;
+  if (shouldFlash) _termLastFlashByAsset[tick.asset] = now;
+}
+
+// CSS.escape polyfill (Safari < 10)
+function cssEscape(s) {
+  if (window.CSS && CSS.escape) return CSS.escape(String(s));
+  return String(s).replace(/[^a-zA-Z0-9_-]/g, '\\$&');
+}
+
+function startLiveStream() {
+  if (typeof EventSource === 'undefined') return; // ancient browser fallback
+  try {
+    _termSSE = new EventSource('/api/terminal/stream');
+  } catch (e) { return; }
+
+  _termSSE.addEventListener('snapshot', function(e) {
+    try {
+      var d = JSON.parse(e.data || '{}');
+      if (d && d.prices) {
+        // Warm the last-price map with the server's current view
+        Object.keys(d.prices).forEach(function(asset) {
+          var p = d.prices[asset];
+          if (p && p.price != null) {
+            _termLastPriceByAsset[asset] = Math.round(p.price * 100);
+          }
+        });
+      }
+      document.getElementById('termLiveIndicator').style.display = '';
+    } catch {}
+  });
+
+  _termSSE.addEventListener('tick', function(e) {
+    try {
+      var tick = JSON.parse(e.data || '{}');
+      applyTickToCards(tick);
+      _termTickCount++;
+      var el = document.getElementById('termTickCount');
+      if (el) el.textContent = _termTickCount;
+    } catch {}
+  });
+
+  _termSSE.addEventListener('heartbeat', function() { /* just keep-alive */ });
+
+  _termSSE.addEventListener('error', function() {
+    // EventSource auto-reconnects on error. Hide the LIVE indicator until
+    // the next open event arrives (which re-triggers the snapshot handler).
+    var live = document.getElementById('termLiveIndicator');
+    if (live) live.style.display = 'none';
+  });
+}
+
+function stopLiveStream() {
+  if (_termSSE) {
+    try { _termSSE.close(); } catch {}
+    _termSSE = null;
+  }
+  var live = document.getElementById('termLiveIndicator');
+  if (live) live.style.display = 'none';
+}
+
+// Pause polling + streaming when tab is hidden — saves bandwidth, restart on return
 document.addEventListener('visibilitychange', function() {
   if (document.hidden) {
     if (_termTimer) { clearInterval(_termTimer); _termTimer = null; }
-  } else if (!_termTimer) {
-    termStart();
+    stopLiveStream();
+  } else {
+    if (!_termTimer) termStart();
+    if (!_termSSE) startLiveStream();
   }
 });
 
 termStart();
+startLiveStream();
 </script>
 </body>
 </html>
