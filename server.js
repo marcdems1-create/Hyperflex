@@ -20809,12 +20809,32 @@ app.get('/api/terminal/data', async (req, res) => {
         .slice(0, 10);
     }
 
-    // PANEL 3: FRESH EDGES — edge_age_minutes <= 30, sorted newest first
-    const freshEdges = [...markets]
+    // PANEL 3: FRESH EDGES — tries tightest-first, falls back to looser
+    // criteria so the panel is never empty on a quiet day. Trader always
+    // sees the freshest signal available, even if it's older than the
+    // ideal 30-min window.
+    //   Tier 1: is_new=true AND age ≤ 30m AND score ≥ 50
+    //   Tier 2: is_new=true AND age ≤ 60m AND score ≥ 40
+    //   Tier 3: age ≤ 120m AND score ≥ 40 (ignore is_new flag, catch stamps
+    //           that dropped just out of the freshness window)
+    //   Tier 4: top 6 markets by score ≥ 40 (last resort — "nearly fresh")
+    let freshEdges = [...markets]
       .filter(m => m.is_new === true && (m.edge_age_minutes != null && m.edge_age_minutes <= 30) && (m.edge_score || 0) >= 50)
       .sort((a, b) => (a.edge_age_minutes || 999) - (b.edge_age_minutes || 999))
-      .slice(0, 6)
-      .map(slim);
+      .slice(0, 6);
+    if (freshEdges.length < 3) {
+      freshEdges = [...markets]
+        .filter(m => m.is_new === true && (m.edge_age_minutes != null && m.edge_age_minutes <= 60) && (m.edge_score || 0) >= 40)
+        .sort((a, b) => (a.edge_age_minutes || 999) - (b.edge_age_minutes || 999))
+        .slice(0, 6);
+    }
+    if (freshEdges.length < 3) {
+      freshEdges = [...markets]
+        .filter(m => m.edge_age_minutes != null && m.edge_age_minutes <= 120 && (m.edge_score || 0) >= 40)
+        .sort((a, b) => (a.edge_age_minutes || 999) - (b.edge_age_minutes || 999))
+        .slice(0, 6);
+    }
+    freshEdges = freshEdges.map(slim);
 
     // PANEL 4: NARRATIVE PULSE — reuse _narrativeCache when fresh, otherwise
     // If _narrativeCache is cold (happens immediately after boot, before the
@@ -20842,21 +20862,55 @@ app.get('/api/terminal/data', async (req, res) => {
       }));
     }
 
-    // PANEL 5: VOLUME SPIKE — edge_components.volume_spike > 0, sorted desc
-    const volumeSpike = [...markets]
-      .filter(m => m.edge_components && (m.edge_components.volume_spike || 0) >= 3)
+    // PANEL 5: VOLUME SPIKE — tiered fallback so panel is never empty.
+    //   Tier 1: markets with edge_components.volume_spike > 0 (requires the
+    //           7-day baseline cache to be warm and at least 2x ratio)
+    //   Tier 2: top 6 markets by price_change_24h magnitude (momentum proxy
+    //           — captures "something moved" even without a baseline)
+    //   Tier 3: top 6 markets by raw 24h volume (last resort — "where
+    //           the money is right now")
+    let volumeSpike = [...markets]
+      .filter(m => m.edge_components && (m.edge_components.volume_spike || 0) > 0)
       .sort((a, b) => (b.edge_components.volume_spike || 0) - (a.edge_components.volume_spike || 0))
-      .slice(0, 6)
-      .map(slim);
+      .slice(0, 6);
+    if (volumeSpike.length < 3) {
+      volumeSpike = [...markets]
+        .filter(m => m.price_change_24h != null && Math.abs(m.price_change_24h) >= 5)
+        .sort((a, b) => Math.abs(b.price_change_24h || 0) - Math.abs(a.price_change_24h || 0))
+        .slice(0, 6);
+    }
+    if (volumeSpike.length < 3) {
+      volumeSpike = [...markets]
+        .filter(m => (m.volume || 0) >= 100000)
+        .sort((a, b) => (b.volume || 0) - (a.volume || 0))
+        .slice(0, 6);
+    }
+    volumeSpike = volumeSpike.map(slim);
 
-    // PANEL 6: TIME DECAY — binary markets expiring soon (≤3d) in discount
-    // zones (15-40¢ or 60-85¢), sorted by decay component. The decay component
-    // already filters for this geometry inside buildAlphaList.
-    const timeDecay = [...markets]
+    // PANEL 6: TIME DECAY — tiered fallback.
+    //   Tier 1: discount-zone markets (15-40¢ or 60-85¢) with decay score > 0
+    //           and ≤3d to expiry (the canonical mispricing play)
+    //   Tier 2: markets ≤7d to expiry in the 15-40¢ or 60-85¢ discount bands
+    //           (widens the expiry window when tier 1 is empty)
+    //   Tier 3: top 6 closest expiring markets regardless of price zone
+    //           (last resort — "what's expiring soon")
+    let timeDecay = [...markets]
       .filter(m => m.edge_components && (m.edge_components.decay || 0) > 0 && m.days_until_expiry != null && m.days_until_expiry <= 3)
       .sort((a, b) => (b.edge_components.decay || 0) - (a.edge_components.decay || 0))
-      .slice(0, 6)
-      .map(slim);
+      .slice(0, 6);
+    if (timeDecay.length < 3) {
+      timeDecay = [...markets]
+        .filter(m => m.days_until_expiry != null && m.days_until_expiry >= 0 && m.days_until_expiry <= 7 && m.yes_price != null && ((m.yes_price >= 0.15 && m.yes_price <= 0.40) || (m.yes_price >= 0.60 && m.yes_price <= 0.85)))
+        .sort((a, b) => (a.days_until_expiry || 99) - (b.days_until_expiry || 99))
+        .slice(0, 6);
+    }
+    if (timeDecay.length < 3) {
+      timeDecay = [...markets]
+        .filter(m => m.days_until_expiry != null && m.days_until_expiry >= 0 && m.days_until_expiry <= 14 && (m.volume || 0) >= 50000)
+        .sort((a, b) => (a.days_until_expiry || 99) - (b.days_until_expiry || 99))
+        .slice(0, 6);
+    }
+    timeDecay = timeDecay.map(slim);
 
     res.json({
       top_edges: topEdges,
@@ -21681,17 +21735,18 @@ app.get('/api/catalysts', async (req, res) => {
 const NARRATIVE_KEYWORDS = {
   'Trump & US Politics':   ['trump','president','democrat','republican','congress','senate','maga','white house','tariff','executive order','vance','gop','biden','kamala','rnc','dnc','impeach','scotus','supreme court'],
   'Crypto & DeFi':         ['bitcoin','btc','ethereum','eth','crypto','solana','sol','defi','nft','coinbase','stablecoin','altcoin','xrp','dogecoin','doge','memecoin','binance','token','blockchain','web3','polygon','avalanche','cardano','chainlink','uniswap','aave','backpack'],
-  'Middle East & War':     ['israel','iran','gaza','hamas','hezbollah','ceasefire','hormuz','middle east','lebanon','netanyahu','strike','invasion','military','pentagon','troops','bomb','missile','airstrike','war ','warfare','conflict','idf','tehran','syria','yemen','houthi'],
-  'AI & Big Tech':         ['ai ','openai','gpt','artificial intelligence','nvidia','apple','microsoft','google','meta ','anthropic','chatgpt','claude','gemini','llm','machine learning','deepseek','tesla','spacex','elon musk','robot','autonomous'],
-  'Macro & Economy':       ['fed ','federal reserve','interest rate','inflation','recession','gdp','cpi','unemployment','rate cut','yield','crude oil','gold price','tariff','s&p','nasdaq','dow','stock market','treasury','bond','commodity','forex','oil price','copper','silver'],
-  'Ukraine & Russia':      ['ukraine','russia','zelensky','putin','nato','kyiv','donbas','crimea','moscow','sanctions'],
+  'Middle East & War':     ['israel','iran','iranian','gaza','hamas','hezbollah','ceasefire','hormuz','middle east','lebanon','netanyahu','khamenei','strike','invasion','military','pentagon','troops','bomb','missile','airstrike','war ','warfare','conflict','idf','tehran','syria','yemen','houthi','regime'],
+  'AI & Big Tech':         ['ai ','openai','gpt','artificial intelligence','nvidia','apple','microsoft','google','meta ','anthropic','chatgpt','claude','gemini','llm','machine learning','deepseek','tesla','spacex','elon musk','robot','autonomous','nasa','amazon','zuckerberg','bezos','altman'],
+  'Macro & Economy':       ['fed ','federal reserve','interest rate','inflation','recession','gdp','cpi','unemployment','rate cut','yield','crude oil','gold price','tariff','s&p','nasdaq','dow','stock market','treasury','bond','commodity','forex','oil price','copper','silver','jobs report'],
+  'Ukraine & Russia':      ['ukraine','russia','russian','zelensky','putin','nato','kyiv','donbas','crimea','moscow','sanctions'],
   'NBA & Basketball':      ['nba','basketball','finals','playoff','lakers','celtics','warriors','nuggets','cavaliers','thunder','knicks','bucks','76ers','rockets','heat','suns','nets','kings','clippers','bulls','pacers','timberwolves','grizzlies','hawks','pistons','hornets','magic','wizards','pelicans','raptors','jazz','mavericks','spurs','blazers'],
   'NFL & American Sports': ['nfl','super bowl','mlb','world series','nhl','stanley cup','ncaa','march madness','yankees','dodgers','mets','cubs','red sox','chiefs','eagles','cowboys','49ers','ravens','bills','bengals','dolphins','lions','steelers','packers','bears','rams','seahawks','saints','ufc','boxing','fight night'],
   'Soccer & Football':     ['premier league','champions league','la liga','serie a','bundesliga','ligue 1','uefa','fifa','world cup','epl','manchester','liverpool','arsenal','chelsea','barcelona','real madrid','psg','bayern','juventus','napoli','inter milan','tottenham','man city','man united','mls','soccer'],
+  'Golf & Tennis':         ['masters tournament','masters','pga','lpga','wimbledon','grand slam','us open','french open','australian open','tennis','golf','augusta','scheffler','schauffele','rory mcilroy','mcilroy','djokovic','alcaraz','nadal','rafael nadal','tiger woods','rahm','koepka','djokovic','sinner','fritz'],
   'Health & Science':      ['measles','vaccine','fda','covid','pandemic','virus','disease','outbreak','drug','pharma','clinical trial','cdc','who ','health','cancer','obesity','bird flu','monkeypox','treatment','epidemic'],
-  'Pop Culture':           ['oscar','grammy','emmy','movie','film','album','celebrity','kardashian','taylor swift','drake','beyonce','kanye','netflix','disney','tiktok','youtube','spotify','concert','box office','award','super bowl halftime'],
+  'Pop Culture':           ['oscar','grammy','emmy','movie','film','album','celebrity','kardashian','taylor swift','drake','beyonce','kanye','netflix','disney','tiktok','youtube','spotify','concert','box office','award','super bowl halftime','streaming'],
   'Weather & Climate':     ['temperature','hurricane','wildfire','flood','earthquake','tornado','climate','weather','heat wave','cold snap','storm','drought','el nino','la nina','celsius','fahrenheit'],
-  'Global Elections':      ['election','vote','ballot','candidate','prime minister','chancellor','parliament','referendum','runoff','polling','constituency'],
+  'Global Elections':      ['election','vote','ballot','candidate','prime minister','chancellor','parliament','parliamentary','referendum','runoff','polling','constituency','hungary','hungarian','orban','orbán','fidesz','tisza','magyar','viktor','germany','german','france','french','macron','merkel','scholz','italy','italian','spain','spanish','uk ','britain','british','tories','labour','sunak','starmer','canada','canadian','trudeau','brazil','brazilian','lula','mexico','mexican','india','indian','modi','argentina','milei','turkey','turkish','erdogan','venezuela','maduro','netanyahu','bibi','south korea','japan','japanese','taiwan','philippines'],
   'Other':                 []
 };
 function classifyNarrative(question) {
