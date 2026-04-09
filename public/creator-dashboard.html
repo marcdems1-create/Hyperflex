@@ -3077,9 +3077,6 @@ body.nav-open .sidebar-backdrop {
       <a class="nav-item" data-nav-section="trading" onclick="showTab('briefing')">
         <span class="nav-icon">📋</span><span class="nav-label">Daily Brief</span>
       </a>
-      <a class="nav-item" data-nav-section="trading" onclick="showTab('pythedge')">
-        <span class="nav-icon">⚡</span><span class="nav-label">Pyth Edge</span>
-      </a>
       <a class="nav-item" data-nav-section="trading" onclick="showTab('ta')">
         <span class="nav-icon">📈</span><span class="nav-label">Technical Analysis</span>
       </a>
@@ -5766,53 +5763,6 @@ body.nav-open .sidebar-backdrop {
         </div>
       </div><!-- /tab-briefing -->
 
-      <!-- PYTH EDGE TAB -->
-      <div id="tab-pythedge" style="display:none">
-        <div class="section">
-          <div style="max-width:1060px">
-            <div style="margin-bottom:24px">
-              <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
-                <div style="font-family:var(--sans);font-size:18px;font-weight:800;color:var(--text)">⚡ Pyth Edge</div>
-                <span style="font-family:var(--mono);font-size:11px;padding:3px 10px;border-radius:8px;background:rgba(0,230,138,0.10);color:#00e68a;border:1px solid rgba(0,230,138,0.25);font-weight:700">LIVE 400ms</span>
-              </div>
-              <div style="font-family:var(--sans);font-size:13px;color:var(--dim);line-height:1.5">Real-time Pyth oracle prices vs Polymarket odds. When Pyth moves before the market adjusts, you have edge.</div>
-            </div>
-
-            <!-- Live price ticker -->
-            <div id="pythPriceTicker" style="display:flex;gap:10px;overflow-x:auto;padding-bottom:8px;margin-bottom:20px">
-              <div style="text-align:center;padding:20px;font-family:var(--mono);font-size:12px;color:var(--dim)">Loading Pyth prices...</div>
-            </div>
-
-            <!-- Selected feed chart -->
-            <div id="pythChartSection" style="background:var(--cream);border:1px solid var(--border);border-radius:14px;padding:24px;margin-bottom:24px;display:none">
-              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-                <div>
-                  <span id="pythChartLabel" style="font-family:var(--sans);font-size:16px;font-weight:800;color:var(--text)"></span>
-                  <span id="pythChartPrice" style="font-family:var(--mono);font-size:24px;font-weight:900;color:var(--text);margin-left:12px"></span>
-                  <span id="pythChartConf" style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-left:8px"></span>
-                </div>
-                <div id="pythChartDelta" style="font-family:var(--mono);font-size:14px;font-weight:700"></div>
-              </div>
-              <div style="height:160px;position:relative">
-                <svg id="pythChartSvg" width="100%" height="100%" preserveAspectRatio="none" style="overflow:visible"></svg>
-              </div>
-              <div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:6px">
-                <span id="pythChartTimeStart"></span>
-                <span id="pythChartTimeEnd"></span>
-              </div>
-            </div>
-
-            <!-- Edge signals -->
-            <div style="margin-bottom:12px;display:flex;align-items:center;justify-content:space-between">
-              <div style="font-family:var(--sans);font-size:14px;font-weight:700;color:var(--text)">Divergence Signals</div>
-              <button onclick="loadPythEdgeTab()" style="background:none;border:1px solid var(--border);border-radius:6px;padding:6px 14px;font-family:var(--mono);font-size:11px;color:var(--dim);cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='var(--gold)';this.style.color='var(--gold)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">↻ Refresh</button>
-            </div>
-            <div id="pythEdgeList" style="display:flex;flex-direction:column;gap:10px">
-              <div style="text-align:center;padding:40px 0;font-family:var(--mono);font-size:12px;color:var(--dim)">Scanning for edge...</div>
-            </div>
-          </div>
-        </div>
-      </div><!-- /tab-pythedge -->
 
       <!-- TECHNICAL ANALYSIS TAB -->
       <div id="tab-ta" style="display:none">
@@ -7690,7 +7640,7 @@ function showTab(tab) {
   document.querySelectorAll('.nav-item').forEach(n => {
     if (n.getAttribute('onclick') && n.getAttribute('onclick').includes(`'${tab}'`)) n.classList.add('active');
   });
-  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Social', portfolio:'My Positions', account:'My Account', performance:'Performance', breaking:'Breaking', quicktrade:'Quick Trade', findmarkets:'Find Markets', arbitrage:'Arbitrage Scanner', calendar:'Catalyst Calendar', watchlist:'Watchlist', briefing:'Daily Brief', pythedge:'Pyth Edge', alpha:'Alpha Feed', aiportfolio:'AI Portfolio', flexpoints:'FLEX Points', ta:'Technical Analysis' };
+  const titles = { overview:'Overview', markets:'Markets', resolve:'Resolution Queue', leaderboard:'Leaderboard', share:'Share & Grow', rewards:'Rewards', seasons:'Seasons', settings:'Settings', analytics:'Analytics', economy:'Economy', branding:'Branding', flexbot:'FLEX BOT', ideas:'Market Ideas', members:'Social', portfolio:'My Positions', account:'My Account', performance:'Performance', breaking:'Breaking', quicktrade:'Quick Trade', findmarkets:'Find Markets', arbitrage:'Arbitrage Scanner', calendar:'Catalyst Calendar', watchlist:'Watchlist', briefing:'Daily Brief', alpha:'Alpha Feed', aiportfolio:'AI Portfolio', flexpoints:'FLEX Points', ta:'Technical Analysis' };
   document.getElementById('topbarTitle').textContent = titles[tab] || tab;
   if (tab === 'analytics' && !analyticsLoaded) loadAnalytics();
   if (tab === 'members') { loadSocialTab(); loadMembers(); }
@@ -7741,7 +7691,6 @@ function showTab(tab) {
   if (tab === 'calendar') { loadCalendarTab(); }
   if (tab === 'watchlist') { loadWatchlistTab(); }
   if (tab === 'briefing') { loadBriefingTab(); }
-  if (tab === 'pythedge') { loadPythEdgeTab(); }
   if (tab === 'ta') { loadTATab(); }
   if (tab === 'findmarkets') { loadTrendingMarkets(); }
   if (tab === 'account') populateAccountTab();
@@ -14777,214 +14726,7 @@ function openAddWatchlist() {
 }
 
 // ── DAILY BRIEFING TAB ──────────────────────────────────────────────────────
-// ── PYTH EDGE TAB ──────────────────────────────────────────────────
-let _pythEdgeInterval = null;
-let _pythSelectedFeed = 'XAU/USD';
 
-async function loadPythEdgeTab() {
-  // Clear any existing polling
-  if (_pythEdgeInterval) clearInterval(_pythEdgeInterval);
-
-  const tickerEl = document.getElementById('pythPriceTicker');
-  const listEl = document.getElementById('pythEdgeList');
-  if (!tickerEl || !listEl) return;
-
-  // Fetch edge data (prices + markets)
-  try {
-    const token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
-    const [priceRes, edgeRes] = await Promise.all([
-      fetch('/api/pyth/prices'),
-      fetch('/api/pyth/edge', { headers: { Authorization: 'Bearer ' + token } }),
-    ]);
-    const priceData = await priceRes.json();
-    const edgeData = await edgeRes.json();
-
-    renderPythTicker(priceData.prices, priceData.history);
-    renderPythEdgeList(edgeData.markets, edgeData.prices);
-
-    // Show chart for selected feed
-    if (priceData.history && priceData.history[_pythSelectedFeed]) {
-      renderPythChart(_pythSelectedFeed, priceData.prices[_pythSelectedFeed], priceData.history[_pythSelectedFeed]);
-    }
-  } catch (e) {
-    console.error('[pythEdge]', e);
-    listEl.innerHTML = '<div style="text-align:center;padding:40px;font-family:var(--mono);font-size:12px;color:#ff6b6b">Failed to load Pyth data</div>';
-  }
-
-  // Poll every 5 seconds for live updates
-  _pythEdgeInterval = setInterval(async () => {
-    try {
-      const r = await fetch('/api/pyth/prices');
-      const data = await r.json();
-      renderPythTicker(data.prices, data.history);
-      if (data.history && data.history[_pythSelectedFeed]) {
-        renderPythChart(_pythSelectedFeed, data.prices[_pythSelectedFeed], data.history[_pythSelectedFeed]);
-      }
-    } catch (e) { /* silent */ }
-  }, 5000);
-}
-
-function renderPythTicker(prices, history) {
-  const el = document.getElementById('pythPriceTicker');
-  if (!el || !prices) return;
-  const feeds = Object.keys(prices);
-  if (!feeds.length) { el.innerHTML = '<div style="padding:16px;font-family:var(--mono);font-size:12px;color:var(--dim)">No price data yet</div>'; return; }
-
-  el.innerHTML = feeds.map(key => {
-    const p = prices[key];
-    const hist = (history && history[key]) || [];
-    const prevPrice = hist.length >= 2 ? hist[hist.length - 2].price : p.emaPrice;
-    const delta = p.price - prevPrice;
-    const deltaPct = prevPrice ? ((delta / prevPrice) * 100) : 0;
-    const isUp = delta >= 0;
-    const color = isUp ? '#00e68a' : '#ff6b6b';
-    const arrow = isUp ? '▲' : '▼';
-    const isSelected = key === _pythSelectedFeed;
-    const decimals = p.price > 100 ? 2 : p.price > 1 ? 4 : 6;
-
-    return `<div onclick="_pythSelectedFeed='${key}';loadPythEdgeTab()" style="flex-shrink:0;background:${isSelected ? 'rgba(201,146,13,0.08)' : 'var(--cream)'};border:1px solid ${isSelected ? 'var(--gold)' : 'var(--border)'};border-radius:10px;padding:12px 16px;min-width:140px;cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='${isSelected ? 'var(--gold)' : 'var(--border)'}'" >
-      <div style="font-family:var(--sans);font-size:11px;font-weight:700;color:var(--dim);margin-bottom:4px">${p.label}</div>
-      <div style="font-family:var(--mono);font-size:18px;font-weight:900;color:var(--text);letter-spacing:-0.02em">$${p.price.toLocaleString(undefined, {minimumFractionDigits: decimals, maximumFractionDigits: decimals})}</div>
-      <div style="font-family:var(--mono);font-size:11px;font-weight:700;color:${color};margin-top:2px">${arrow} ${deltaPct >= 0 ? '+' : ''}${deltaPct.toFixed(3)}%</div>
-    </div>`;
-  }).join('');
-}
-
-function renderPythChart(feedKey, current, history) {
-  const section = document.getElementById('pythChartSection');
-  const svg = document.getElementById('pythChartSvg');
-  if (!section || !svg || !history || history.length < 2) { if (section) section.style.display = 'none'; return; }
-  section.style.display = 'block';
-
-  // Labels
-  document.getElementById('pythChartLabel').textContent = current.label;
-  const decimals = current.price > 100 ? 2 : current.price > 1 ? 4 : 6;
-  document.getElementById('pythChartPrice').textContent = '$' + current.price.toLocaleString(undefined, {minimumFractionDigits: decimals, maximumFractionDigits: decimals});
-  document.getElementById('pythChartConf').textContent = '±$' + current.conf.toFixed(decimals);
-
-  // Delta from first to last
-  const first = history[0].price;
-  const last = history[history.length - 1].price;
-  const delta = last - first;
-  const deltaPct = (delta / first * 100);
-  const deltaEl = document.getElementById('pythChartDelta');
-  deltaEl.textContent = (delta >= 0 ? '+' : '') + '$' + Math.abs(delta).toFixed(decimals) + ' (' + (deltaPct >= 0 ? '+' : '') + deltaPct.toFixed(3) + '%)';
-  deltaEl.style.color = delta >= 0 ? '#00e68a' : '#ff6b6b';
-
-  // Time labels
-  document.getElementById('pythChartTimeStart').textContent = new Date(history[0].ts).toLocaleTimeString();
-  document.getElementById('pythChartTimeEnd').textContent = new Date(history[history.length - 1].ts).toLocaleTimeString();
-
-  // Draw SVG line chart
-  const W = svg.clientWidth || 800;
-  const H = 160;
-  const prices = history.map(h => h.price);
-  const min = Math.min(...prices);
-  const max = Math.max(...prices);
-  const range = max - min || 1;
-  const pad = 8;
-
-  const points = history.map((h, i) => {
-    const x = (i / (history.length - 1)) * W;
-    const y = pad + (1 - (h.price - min) / range) * (H - pad * 2);
-    return `${x},${y}`;
-  });
-
-  const lineColor = delta >= 0 ? '#00e68a' : '#ff6b6b';
-  const fillColor = delta >= 0 ? 'rgba(0,230,138,0.08)' : 'rgba(255,107,107,0.08)';
-
-  svg.innerHTML = `
-    <defs><linearGradient id="pythGrad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="${lineColor}" stop-opacity="0.15"/>
-      <stop offset="100%" stop-color="${lineColor}" stop-opacity="0"/>
-    </linearGradient></defs>
-    <polygon points="${points.join(' ')} ${W},${H} 0,${H}" fill="url(#pythGrad)"/>
-    <polyline points="${points.join(' ')}" fill="none" stroke="${lineColor}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-    <circle cx="${points[points.length-1].split(',')[0]}" cy="${points[points.length-1].split(',')[1]}" r="4" fill="${lineColor}"/>
-  `;
-}
-
-function renderPythEdgeList(markets, prices) {
-  const el = document.getElementById('pythEdgeList');
-  if (!el) return;
-
-  if (!markets || !markets.length) {
-    el.innerHTML = '<div style="text-align:center;padding:48px 20px"><div style="font-size:28px;margin-bottom:12px;opacity:0.4">⚡</div><div style="font-family:var(--sans);font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">No active Pyth markets found</div><div style="font-family:var(--sans);font-size:13px;color:var(--dim)">Daily Gold, Silver, and ETF markets will appear here when active on Polymarket.</div></div>';
-    return;
-  }
-
-  el.innerHTML = markets.map(m => {
-    const e = m.edge;
-    if (!e) return '';
-    const absEdge = Math.abs(e.edge);
-    const isSignal = absEdge >= 0.05;
-    const signalColor = e.signal === 'BUY_YES' ? '#00e68a' : e.signal === 'BUY_NO' ? '#ff6b6b' : 'var(--dim)';
-    const signalBg = e.signal === 'BUY_YES' ? 'rgba(0,230,138,0.08)' : e.signal === 'BUY_NO' ? 'rgba(255,107,107,0.08)' : 'transparent';
-    const signalBorder = e.signal === 'BUY_YES' ? 'rgba(0,230,138,0.25)' : e.signal === 'BUY_NO' ? 'rgba(255,107,107,0.25)' : 'var(--border)';
-    const edgePct = (absEdge * 100).toFixed(1);
-    const impliedPct = (e.impliedYes * 100).toFixed(0);
-    const marketPct = (e.marketYes * 100).toFixed(0);
-    const decimals = e.pythPrice > 100 ? 2 : 4;
-    const pythFeedLabel = m.pythFeed ? (prices[m.pythFeed]?.label || m.pythFeed) : '';
-
-    const yesPrice = m.yes_price != null ? m.yes_price.toFixed(2) : null;
-    const roi = yesPrice && yesPrice > 0 && yesPrice < 1 ? Math.round(((1 - yesPrice) / yesPrice) * 100) : null;
-
-    // Trade context
-    const tradeAction = e.signal === 'BUY_YES' ? 'YES' : e.signal === 'BUY_NO' ? 'NO' : null;
-    const tradePrice = tradeAction === 'YES' ? m.yes_price : tradeAction === 'NO' ? m.no_price : null;
-    const tradeRoi = tradePrice && tradePrice > 0 && tradePrice < 1 ? Math.round(((1 - tradePrice) / tradePrice) * 100) : null;
-
-    return `<div style="background:var(--cream);border:1px solid ${isSignal ? signalBorder : 'var(--border)'};border-radius:12px;padding:16px 18px;transition:all .18s" onmouseover="this.style.borderColor='${signalColor}';this.style.boxShadow='0 4px 16px rgba(0,0,0,0.2)'" onmouseout="this.style.borderColor='${isSignal ? signalBorder : 'var(--border)'}';this.style.boxShadow='none'">
-      <div style="display:flex;align-items:flex-start;gap:14px">
-        <div style="flex:1;min-width:0">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-            ${isSignal ? `<span style="font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 10px;border-radius:6px;background:${signalBg};color:${signalColor};border:1px solid ${signalBorder}">${e.signal === 'BUY_YES' ? '⚡ BUY YES' : '⚡ BUY NO'}</span>` : `<span style="font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 10px;border-radius:6px;background:rgba(255,255,255,0.03);color:var(--dim);border:1px solid var(--border)">NEUTRAL</span>`}
-            <span style="font-family:var(--mono);font-size:11px;color:var(--dim)">${pythFeedLabel}</span>
-            ${m.marketType !== 'direction' && m.threshold ? `<span style="font-family:var(--mono);font-size:11px;color:var(--dim)">Target: $${m.threshold.toLocaleString()}</span>` : ''}
-          </div>
-          <a href="${m.url}" target="_blank" rel="noopener" style="font-family:var(--sans);font-size:14px;font-weight:700;color:var(--text);text-decoration:none;line-height:1.4;display:block;margin-bottom:10px" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='var(--text)'">${escHtmlDash(m.question)}</a>
-
-          <!-- Edge metrics -->
-          <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px">
-            <div>
-              <div style="font-family:var(--sans);font-size:11px;color:var(--dim);margin-bottom:2px">Pyth Price</div>
-              <div style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--text)">$${e.pythPrice.toLocaleString(undefined, {minimumFractionDigits: decimals, maximumFractionDigits: decimals})}</div>
-            </div>
-            <div>
-              <div style="font-family:var(--sans);font-size:11px;color:var(--dim);margin-bottom:2px">Pyth Implied</div>
-              <div style="font-family:var(--mono);font-size:14px;font-weight:700;color:${signalColor}">${impliedPct}% YES</div>
-            </div>
-            <div>
-              <div style="font-family:var(--sans);font-size:11px;color:var(--dim);margin-bottom:2px">Market Price</div>
-              <div style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--text)">${marketPct}% YES</div>
-            </div>
-            <div>
-              <div style="font-family:var(--sans);font-size:11px;color:var(--dim);margin-bottom:2px">Edge</div>
-              <div style="font-family:var(--mono);font-size:14px;font-weight:900;color:${isSignal ? signalColor : 'var(--dim)'}">${edgePct}%</div>
-            </div>
-            ${e.direction ? `<div>
-              <div style="font-family:var(--sans);font-size:11px;color:var(--dim);margin-bottom:2px">Momentum</div>
-              <div style="font-family:var(--mono);font-size:14px;font-weight:700;color:${e.direction === 'UP' ? '#00e68a' : '#ff6b6b'}">${e.direction} ${e.deltaPct >= 0 ? '+' : ''}${e.deltaPct}%</div>
-            </div>` : ''}
-          </div>
-
-          ${tradeAction && tradePrice ? `<div style="font-family:var(--mono);font-size:11px;color:var(--dim)">Buy ${tradeAction} @ <span style="color:var(--text);font-weight:700">${(tradePrice * 100).toFixed(0)}¢</span> → Win <span style="color:#00e68a;font-weight:700">${((1 - tradePrice) * 100).toFixed(0)}¢</span>${tradeRoi ? ` → <span style="color:var(--gold);font-weight:700">${tradeRoi}% ROI</span>` : ''}</div>` : ''}
-        </div>
-
-        <!-- Trade button -->
-        <div style="flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:6px">
-          <a href="${m.url}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;padding:8px 18px;border-radius:8px;font-family:var(--mono);font-size:12px;font-weight:700;text-decoration:none;min-height:40px;transition:all .15s;${isSignal ? `background:${signalBg};color:${signalColor};border:1px solid ${signalBorder}` : `background:rgba(201,146,13,0.06);color:var(--gold);border:1px solid rgba(201,146,13,0.2)`}" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">${isSignal ? 'Trade ↗' : 'View ↗'}</a>
-          ${m.volume24h ? `<div style="font-family:var(--mono);font-size:11px;color:var(--dim)">Vol: $${m.volume24h >= 1000 ? (m.volume24h / 1000).toFixed(1) + 'K' : m.volume24h.toFixed(0)}</div>` : ''}
-        </div>
-      </div>
-    </div>`;
-  }).filter(Boolean).join('');
-
-  if (!el.innerHTML.trim()) {
-    el.innerHTML = '<div style="text-align:center;padding:48px 20px"><div style="font-size:28px;margin-bottom:12px;opacity:0.4">⚡</div><div style="font-family:var(--sans);font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">No active Pyth markets found</div><div style="font-family:var(--sans);font-size:13px;color:var(--dim)">Daily Gold, Silver, and ETF markets will appear here when active on Polymarket.</div></div>';
-  }
-}
 
 async function loadBriefingTab() {
   try {

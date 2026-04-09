@@ -129,6 +129,18 @@ a.s-row-link-wrap:last-child .s-row{border-bottom:none}
 .s-fg-fill{position:absolute;top:0;left:0;height:100%;background:linear-gradient(90deg,var(--accent-red),var(--accent-amber),var(--accent-green));border-radius:2px}
 .s-fg-dot{position:absolute;top:-4px;width:12px;height:12px;border-radius:50%;border:2px solid var(--card)}
 
+/* PYTH ORACLE DIVERGENCE */
+.s-pyth-card{padding:12px 14px;border-bottom:1px solid var(--border);transition:all .2s;display:block;text-decoration:none;color:inherit}
+.s-pyth-card:hover{background:rgba(245,158,11,0.03);text-decoration:none}
+.s-pyth-card:last-child{border-bottom:none}
+.s-pyth-signal{font-family:var(--mono);font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;display:inline-block;margin-bottom:6px}
+.s-pyth-q{font-family:var(--sans);font-size:12px;font-weight:600;color:var(--text);line-height:1.35;margin-bottom:6px;letter-spacing:-0.2px}
+.s-pyth-card:hover .s-pyth-q{color:var(--gold)}
+.s-pyth-metrics{display:flex;gap:10px;flex-wrap:wrap;font-family:var(--mono);font-size:11px;color:#9a9590}
+.s-pyth-metrics .val{font-weight:700;color:var(--text)}
+.s-pyth-edge{font-family:var(--mono);font-size:18px;font-weight:800;line-height:1}
+.s-pyth-trade{font-family:var(--mono);font-size:11px;color:#9a9590;margin-top:6px;padding:6px 10px;border-radius:6px}
+
 /* WINNER PICKS */
 .s-winner{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);transition:all .2s}
 .s-winner:hover{background:rgba(0,230,138,0.03)}
@@ -239,6 +251,14 @@ a.s-row-link-wrap:last-child .s-row{border-bottom:none}
         <span class="s-panel-badge" style="background:var(--accent-green-dim);color:var(--accent-green)">CONSISTENT</span>
       </div>
       <div id="winnerPicks"><div class="s-loading">Loading...</div></div>
+    </div>
+    <!-- Oracle Divergence -->
+    <div class="s-widget">
+      <div class="s-widget-head">
+        <div class="s-widget-title">Oracle Divergence</div>
+        <span class="s-panel-badge" style="background:var(--accent-amber-dim);color:var(--accent-amber)">PYTH</span>
+      </div>
+      <div id="pythDivergence"><div class="s-loading">Scanning...</div></div>
     </div>
   </div>
 
@@ -577,12 +597,80 @@ async function runAI() {
   btn.disabled = false; btn.textContent = 'Analyze';
 }
 
+// ── PYTH ORACLE DIVERGENCE ──
+async function loadPythDivergence() {
+  var el = document.getElementById('pythDivergence');
+  if (!el) return;
+  try {
+    var token = localStorage.getItem('hf_token') || localStorage.getItem('hf_creator_token');
+    var [priceRes, edgeRes] = await Promise.all([
+      fetch('/api/pyth/prices'),
+      fetch('/api/pyth/edge', { headers: { Authorization: 'Bearer ' + (token || '') } })
+    ]);
+    if (!edgeRes.ok) { el.innerHTML = '<div class="s-empty">Oracle signals unavailable.</div>'; return; }
+    var priceData = await priceRes.json();
+    var edgeData = await edgeRes.json();
+    var markets = edgeData.markets || [];
+    var prices = edgeData.prices || (priceData && priceData.prices) || {};
+    if (!markets.length) { el.innerHTML = '<div class="s-empty">No divergence signals right now.</div>'; return; }
+
+    // Sort by edge magnitude descending
+    markets.sort(function(a, b) { return Math.abs((b.edge||{}).edge||0) - Math.abs((a.edge||{}).edge||0); });
+
+    el.innerHTML = markets.map(function(m) {
+      var e = m.edge;
+      if (!e) return '';
+      var absEdge = Math.abs(e.edge);
+      var isSignal = absEdge >= 0.05;
+      var signalColor = e.signal === 'BUY_YES' ? 'var(--accent-green)' : e.signal === 'BUY_NO' ? 'var(--accent-red)' : 'var(--dim)';
+      var signalBg = e.signal === 'BUY_YES' ? 'var(--accent-green-dim)' : e.signal === 'BUY_NO' ? 'var(--accent-red-dim)' : 'rgba(255,255,255,0.03)';
+      var edgePct = (absEdge * 100).toFixed(1);
+      var impliedPct = (e.impliedYes * 100).toFixed(0);
+      var marketPct = (e.marketYes * 100).toFixed(0);
+      var decimals = e.pythPrice > 100 ? 2 : 4;
+      var feedLabel = m.pythFeed ? ((prices[m.pythFeed] && prices[m.pythFeed].label) || m.pythFeed) : '';
+      var url = m.url || '#';
+      var signalLabel = e.signal === 'BUY_YES' ? 'BUY YES' : e.signal === 'BUY_NO' ? 'BUY NO' : 'NEUTRAL';
+
+      var tradeAction = e.signal === 'BUY_YES' ? 'YES' : e.signal === 'BUY_NO' ? 'NO' : null;
+      var tradePrice = tradeAction === 'YES' ? m.yes_price : tradeAction === 'NO' ? m.no_price : null;
+      var tradeRoi = tradePrice && tradePrice > 0 && tradePrice < 1 ? Math.round(((1 - tradePrice) / tradePrice) * 100) : null;
+
+      return '<a href="' + escH(url) + '" target="_blank" rel="noopener" class="s-pyth-card">' +
+        '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">' +
+          '<div style="flex:1;min-width:0">' +
+            '<span class="s-pyth-signal" style="background:' + signalBg + ';color:' + signalColor + '">' + signalLabel + '</span>' +
+            (feedLabel ? ' <span style="font-family:var(--mono);font-size:11px;color:var(--dim)">' + escH(feedLabel) + '</span>' : '') +
+            '<div class="s-pyth-q">' + escH(m.question || '') + '</div>' +
+            '<div class="s-pyth-metrics">' +
+              '<span>Oracle <span class="val">$' + e.pythPrice.toLocaleString(undefined, {minimumFractionDigits: decimals, maximumFractionDigits: decimals}) + '</span></span>' +
+              '<span>Implied <span class="val" style="color:' + signalColor + '">' + impliedPct + '%</span></span>' +
+              '<span>Mkt <span class="val">' + marketPct + '%</span></span>' +
+            '</div>' +
+            (tradeAction && tradePrice ? '<div class="s-pyth-trade" style="background:' + signalBg + '">Buy ' + tradeAction + ' @ ' + (tradePrice * 100).toFixed(0) + '\u00A2 \u2192 Win ' + ((1 - tradePrice) * 100).toFixed(0) + '\u00A2' + (tradeRoi ? ' \u2192 ' + tradeRoi + '% ROI' : '') + '</div>' : '') +
+          '</div>' +
+          '<div class="s-pyth-edge" style="color:' + (isSignal ? signalColor : 'var(--dim)') + '">' + edgePct + '%</div>' +
+        '</div>' +
+      '</a>';
+    }).filter(Boolean).join('');
+
+    if (!el.innerHTML.trim()) {
+      el.innerHTML = '<div class="s-empty">No divergence signals right now.</div>';
+    }
+  } catch(err) {
+    console.warn('[pyth-divergence]', err);
+    el.innerHTML = '<div class="s-empty">Oracle signals unavailable.</div>';
+  }
+}
+
 // ── INIT ──
 loadSignals();
 loadWhaleConsensus();
 loadFG();
 loadWinners();
+loadPythDivergence();
 setInterval(loadSignals, 2 * 60 * 1000);
+setInterval(loadPythDivergence, 30000);
 </script>
 </body>
 </html>
