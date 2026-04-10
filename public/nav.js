@@ -148,8 +148,6 @@
   nav.innerHTML =
     '<a href="/explore" class="topbar-logo">HYPER<span>FLEX</span></a>' +
     '<div class="nav-links">' +
-      // Dashboard first (logged-in only) — trader's home base
-      '<a id="navDashLink" href="/creator/dashboard" class="nav-link" style="' + (isLoggedIn ? '' : 'display:none;') + 'color:#00e68a;font-weight:700">🛠 Dashboard</a>' +
       primaryLinks.map(function(l) {
         var isActive = path === l.href;
         var cls = 'nav-link' + (isActive ? ' active' : '');
@@ -196,18 +194,16 @@
     document.body.insertBefore(nav, document.body.firstChild);
   }
 
-  // Dashboard link visibility already handled by isLoggedIn above
-
   // ── Mobile hamburger menu ──
   // Order matches the priority tiers: Your Stuff → Find Alpha → Discover → Research → Meta
   (function() {
     var allLinks = [];
     // Tier 1 — Your Stuff (logged-in only)
+    allLinks.push({ href: '#', label: '🔗 Connect Wallet', id: 'navMobileWalletLink', gold: true });
     if (isLoggedIn) {
-      allLinks.push({ href: '/creator/dashboard', label: '🛠 Dashboard', gold: true });
       allLinks.push({ href: '/rewards', label: '💰 Rewards', gold: true });
-      allLinks.push({ sep: true });
     }
+    allLinks.push({ sep: true });
     // Tier 2 — Find Alpha (the primary alpha sources)
     allLinks = allLinks.concat(primaryLinks);
     allLinks.push({ sep: true });
@@ -224,7 +220,8 @@
       if (l.sep) return '<div class="nav-mobile-sep"></div>';
       var isActive = path === l.href;
       var cls = 'nav-mobile-link' + (isActive ? ' active' : '') + (l.gold && !isActive ? ' gold' : '');
-      return '<a href="' + l.href + '" class="' + cls + '">' + l.label + '</a>';
+      var idAttr = l.id ? ' id="' + l.id + '"' : '';
+      return '<a href="' + l.href + '" class="' + cls + '"' + idAttr + '>' + l.label + '</a>';
     }).join('');
     mobileMenu.innerHTML =
       '<div class="nav-mobile-header">' +
@@ -235,10 +232,6 @@
       '</div>' +
       '<div class="nav-mobile-links">' + mLinksHtml + '</div>' +
       '<div class="nav-mobile-auth">' +
-        '<a href="#" class="mob-signin" id="navMobileWallet" style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:10px;border-color:rgba(168,85,247,0.3);color:#a855f7">' +
-          '<svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:currentColor;stroke-width:2;fill:none;flex-shrink:0"><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M16 14a2 2 0 100-4 2 2 0 000 4z"/><path d="M2 10h20"/></svg>' +
-          '<span id="navMobileWalletLabel">Connect Wallet</span>' +
-        '</a>' +
         (isLoggedIn
           ? ''
           : '<a href="/creator/login" class="mob-signin">Sign in</a>') +
@@ -297,8 +290,7 @@
   (function() {
     var walletBtn = document.getElementById('navWalletBtn');
     var walletLabel = document.getElementById('navWalletLabel');
-    var mobileWallet = document.getElementById('navMobileWallet');
-    var mobileWalletLabel = document.getElementById('navMobileWalletLabel');
+    var mobileWalletLink = document.getElementById('navMobileWalletLink');
     var STORAGE_KEY = 'hfx_wallet_address';
 
     function shortAddr(a) { return a ? a.slice(0, 6) + '…' + a.slice(-4) : ''; }
@@ -309,10 +301,9 @@
         walletBtn.title = addr;
         walletLabel.textContent = shortAddr(addr);
       }
-      if (mobileWalletLabel) {
-        mobileWalletLabel.textContent = shortAddr(addr);
-        if (mobileWallet) mobileWallet.style.color = '#00e68a';
-        if (mobileWallet) mobileWallet.style.borderColor = 'rgba(0,230,138,0.3)';
+      if (mobileWalletLink) {
+        mobileWalletLink.innerHTML = '🔗 ' + shortAddr(addr);
+        mobileWalletLink.href = '/creator/dashboard';
       }
     }
 
@@ -322,10 +313,9 @@
         walletBtn.title = 'Connect Wallet';
         walletLabel.textContent = 'Connect';
       }
-      if (mobileWalletLabel) {
-        mobileWalletLabel.textContent = 'Connect Wallet';
-        if (mobileWallet) mobileWallet.style.color = '#a855f7';
-        if (mobileWallet) mobileWallet.style.borderColor = 'rgba(168,85,247,0.3)';
+      if (mobileWalletLink) {
+        mobileWalletLink.innerHTML = '🔗 Connect Wallet';
+        mobileWalletLink.href = '#';
       }
     }
 
@@ -336,7 +326,7 @@
     // Hide wallet button if no ethereum provider
     if (!window.ethereum) {
       if (walletBtn) walletBtn.style.display = 'none';
-      if (mobileWallet) mobileWallet.style.display = 'none';
+      if (mobileWalletLink) mobileWalletLink.style.display = 'none';
       return;
     }
 
@@ -374,15 +364,15 @@
         }
       });
     }
-    if (mobileWallet) {
-      mobileWallet.addEventListener('click', function(e) {
-        e.preventDefault();
+    if (mobileWalletLink) {
+      mobileWalletLink.addEventListener('click', function(e) {
         var current = localStorage.getItem(STORAGE_KEY);
         if (current) {
-          window.location.href = '/creator/dashboard#portfolio';
+          // Already connected — let the href navigate to dashboard
           var mm = document.getElementById('navMobileMenu');
           if (mm) { mm.classList.remove('open'); document.body.style.overflow = ''; }
         } else {
+          e.preventDefault();
           connectWallet();
         }
       });
