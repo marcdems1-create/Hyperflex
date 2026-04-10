@@ -171,7 +171,7 @@
   <div class="container">
     <div class="hero-eyebrow">⚡ Alpha Terminal</div>
     <h1>Alpha you can trade in the <em>next 5 minutes.</em></h1>
-    <p class="hero-sub">Live edges from the unified alpha engine — whale clusters, momentum, book depth, expiry decay — ranked by Edge Score and enriched with Alpha Score.</p>
+    <p class="hero-sub">Live edges scored from whale clusters, momentum, book depth, and expiry decay. Not financial advice — all markets can resolve to zero.</p>
     <div class="hero-stats">
       <div class="hero-stat"><div class="n" id="s-count">—</div><div class="l">Live Edges</div></div>
       <div class="hero-stat"><div class="n" id="s-top">—</div><div class="l">Top Score</div></div>
@@ -200,7 +200,7 @@
   </div>
 
   <div class="footnote">
-    Powered by <em>buildAlphaList()</em> — whale positions, CLOB depth, momentum, expiry decay. Auto-refresh 90s.
+    Scored from whale positions, CLOB depth, momentum, and expiry decay. Auto-refresh 90s. Not financial advice.
   </div>
 </div>
 
@@ -328,7 +328,7 @@ function render(data){
       '<span class="arrow">→</span>'+
       '<span class="win">Win '+win+'¢</span>'+
       '<span class="arrow">→</span>'+
-      '<span class="roi">'+roi+'% ROI</span>'+
+      '<span class="roi">'+roi+'% max ROI</span>'+
     '</div>';
 
     // Build link with alpha-prefill params so market.html opens the trade widget
@@ -371,7 +371,7 @@ function render(data){
         (ec.binance_divergence?bdRow('Binance',ec.binance_divergence,15,'momentum'):'')+
       '</div>'+
       '<div class="trade-cta '+(t.side==='YES'?'yes':'no')+'">'+
-        '<span class="roi-hero">+'+roi+'% ROI</span>'+
+        '<span class="roi-hero">+'+roi+'% max ROI</span>'+
         '<span class="side-tag">'+t.side+'</span>'+
         '<span class="entry-detail">'+entry+'¢ → '+win+'¢</span>'+
       '</div>'+

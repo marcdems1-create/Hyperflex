@@ -1006,7 +1006,7 @@ nav {
 <div class="hero">
   <div class="live-badge">Live Intelligence Feed</div>
   <h1>Where smart money<br><span>is moving right now</span></h1>
-  <p>AI-powered edge detection across Polymarket, Kalshi, and sportsbooks.</p>
+  <p>Signal-based edge detection across Polymarket, Kalshi, and sportsbooks.</p>
   <div class="stats-ticker" id="statsTicker">
     <div class="stat-pill">
       <div class="stat-pill-value" id="statTotalTrades">—</div>
@@ -1030,12 +1030,12 @@ nav {
     <div class="stat-divider"></div>
     <div class="stat-pill">
       <div class="stat-pill-value" id="statTopROI">—</div>
-      <div class="stat-pill-label">Top Signal ROI</div>
+      <div class="stat-pill-label">Top Max ROI</div>
     </div>
     <div class="stat-divider"></div>
     <div class="stat-pill">
       <div class="stat-pill-value" id="statCommunities">—</div>
-      <div class="stat-pill-label">AI Edge Signals</div>
+      <div class="stat-pill-label">Live Signals</div>
     </div>
   </div>
 </div>
@@ -1060,7 +1060,7 @@ nav {
     <a href="/crystal-ball" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--accent-blue);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s;display:block" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(77,159,255,0.1)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
       <div style="font-size:22px;margin-bottom:8px">🔮</div>
       <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;letter-spacing:-0.3px">Crystal Ball</div>
-      <div style="font-size:11px;color:var(--muted);line-height:1.5">AI predictions with trade context and ROI</div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.5">Market analysis with trade context and potential ROI</div>
     </a>
   </div>
   <div class="intel-grid-bottom" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
@@ -1206,19 +1206,19 @@ nav {
         <a href="/crystal-ball" style="font-family:var(--mono);font-size:11px;color:var(--gold);text-decoration:none">All →</a>
       </div>
       <div id="hubCrystalCards" style="display:flex;flex-direction:column;gap:10px">
-        <div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Loading predictions...</div>
+        <div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Loading analysis...</div>
       </div>
     </div>
     <div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
         <div style="display:flex;align-items:center;gap:8px">
           <span style="font-size:15px">🧠</span>
-          <span style="font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">AI Edge Detector</span>
+          <span style="font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">Edge Scanner</span>
         </div>
         <a href="/screener" style="font-family:var(--mono);font-size:11px;color:var(--gold);text-decoration:none">All →</a>
       </div>
       <div id="aiEdgeCards" style="display:flex;flex-direction:column;gap:10px">
-        <div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Loading AI edge...</div>
+        <div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Loading edges...</div>
       </div>
     </div>
   </div>
@@ -3153,7 +3153,7 @@ async function handleExploreCopyCta() {
         + '<span>' + price + '\u00A2</span>'
         + (wh ? '<span>' + wh + ' whale' + (wh > 1 ? 's' : '') + '</span>' : '')
         + '<span style="color:' + chgColor + '">' + chgStr + '</span>'
-        + (roi ? '<span style="color:var(--accent-green);font-weight:700">' + roi + '% ROI</span>' : '')
+        + (roi ? '<span style="color:var(--accent-green);font-weight:700">' + roi + '% max ROI</span>' : '')
         + '</div></div>'
         + '<div style="text-align:right;flex-shrink:0">'
         + (side ? '<div style="font-family:var(--mono);font-size:9px;font-weight:700;color:' + (side === 'YES' ? 'var(--accent-green)' : 'var(--accent-red)') + ';margin-bottom:2px">' + side + '</div>' : '')
