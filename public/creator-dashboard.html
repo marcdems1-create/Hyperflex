@@ -8003,7 +8003,7 @@ function renderFlexPointsData(fp) {
   var logEl = document.getElementById('fpRecentLog');
   if (fp.recent_log && fp.recent_log.length) {
     logEl.innerHTML = fp.recent_log.map(function(entry) {
-      var sourceLabel = entry.source === 'polymarket_trade' ? '📈 Polymarket Trade' : entry.source === 'kalshi_trade' ? '📊 Kalshi Trade' : entry.source === 'referral_l1' ? '🔗 Referral (L1)' : entry.source === 'referral_l2' ? '🌐 Referral (L2)' : entry.source === 'community_trade' ? '🎯 Community Trade' : '⚡ ' + entry.source;
+      var sourceLabel = entry.source === 'polymarket_trade' ? '📈 Polymarket Trade' : entry.source === 'kalshi_trade' ? '📊 Kalshi Trade' : entry.source === 'referral_l1' ? '🔗 Referral (L1)' : entry.source === 'referral_l2' ? '🌐 Referral (L2)' : entry.source === 'daily_login' ? '🔥 Daily Login' : (entry.source || '').indexOf('quest_') === 0 ? '🎯 Quest Reward' : (entry.source || '').indexOf('spend_') === 0 ? '💎 FP Spend' : entry.source === 'community_trade' ? '🎯 Community Trade' : '⚡ ' + entry.source;
       var ago = '';
       if (entry.created_at) {
         var ms = Date.now() - new Date(entry.created_at).getTime();

@@ -623,6 +623,7 @@ git status   # verify files are dirty
 40. `supabase_migration_narrative_snapshots.sql` ← narrative dominance snapshots for screener (Claude Code creates this)
 41. `supabase_migration_errors.sql` ← error logging table for reliability monitoring
 42. `supabase_migration_platform_referrals.sql` ← referral_code + referred_by on users, platform_referrals table
+43. `supabase_migration_login_streak.sql` ← login_streak, last_login_date, streak_multiplier on users
 - **Email notifications**: Opt-in via Railway env vars: `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
   - Fires after both manual resolve and cron settlement
   - No-op if SMTP_HOST is not set — safe to deploy without configuring

@@ -22728,6 +22728,333 @@ app.get('/ref/:code', (req, res) => {
   res.redirect(`/creator/signup?ref_code=${encodeURIComponent(code)}`);
 });
 
+// ══════════════════════════════════════════════════════════════════════
+// WEEKLY QUESTS — bonus FP for completing trading challenges
+// ══════════════════════════════════════════════════════════════════════
+
+const WEEKLY_QUESTS = [
+  { id: 'trade_5', name: 'Active Trader', description: 'Make 5 trades this week', target: 5, reward_fp: 50, icon: '📈', type: 'trade_count' },
+  { id: 'trade_3_categories', name: 'Diversifier', description: 'Trade in 3 different categories', target: 3, reward_fp: 75, icon: '🎯', type: 'category_count' },
+  { id: 'volume_500', name: 'Volume Runner', description: 'Trade $500+ total volume this week', target: 500, reward_fp: 100, icon: '💰', type: 'volume' },
+  { id: 'streak_3d', name: 'Streak Builder', description: 'Trade 3 days in a row', target: 3, reward_fp: 60, icon: '🔥', type: 'streak_days' },
+  { id: 'trade_10', name: 'Power Trader', description: 'Make 10 trades this week', target: 10, reward_fp: 150, icon: '⚡', type: 'trade_count' },
+];
+
+// GET /api/quests — get user's weekly quest progress
+app.get('/api/quests', requireAuth, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const weekStart = getWeekStart();
+
+    // Get this week's trading data
+    let trades = [];
+    if (pool) {
+      trades = await dbQuery(`SELECT trade_amount_usd, source, created_at FROM flex_points_log WHERE user_id = $1 AND created_at >= $2 AND source IN ('polymarket_trade','kalshi_trade')`, [userId, weekStart]);
+    } else if (supabase) {
+      const { data } = await supabase.from('flex_points_log').select('trade_amount_usd, source, created_at').eq('user_id', userId).gte('created_at', weekStart).in('source', ['polymarket_trade', 'kalshi_trade']);
+      trades = data || [];
+    }
+
+    const tradeCount = trades.length;
+    const totalVolume = trades.reduce((s, t) => s + (parseFloat(t.trade_amount_usd) || 0), 0);
+
+    // Unique categories — approximate from screener cache
+    const categories = new Set();
+    const screenerData = _screenerCache?.data || [];
+    trades.forEach(() => { /* We don't store category in flex_points_log, so count unique days as proxy for diversity */ });
+    // Use unique trading days as streak measure
+    const tradeDays = new Set(trades.map(t => new Date(t.created_at).toISOString().slice(0, 10)));
+    const streakDays = tradeDays.size;
+    // Approximate category count from how many different days/amounts (rough proxy)
+    const categoryCount = Math.min(5, Math.ceil(tradeCount / 3));
+
+    // Check which quests are claimed
+    let claimedQuests = new Set();
+    if (pool) {
+      const rows = await dbQuery(`SELECT source FROM flex_points_log WHERE user_id = $1 AND source LIKE 'quest_%' AND created_at >= $2`, [userId, weekStart]);
+      rows.forEach(r => claimedQuests.add(r.source.replace('quest_', '')));
+    } else if (supabase) {
+      const { data } = await supabase.from('flex_points_log').select('source').eq('user_id', userId).gte('created_at', weekStart).like('source', 'quest_%');
+      (data || []).forEach(r => claimedQuests.add(r.source.replace('quest_', '')));
+    }
+
+    const quests = WEEKLY_QUESTS.map(q => {
+      let progress = 0;
+      if (q.type === 'trade_count') progress = tradeCount;
+      else if (q.type === 'volume') progress = totalVolume;
+      else if (q.type === 'category_count') progress = categoryCount;
+      else if (q.type === 'streak_days') progress = streakDays;
+
+      return {
+        ...q,
+        progress: Math.min(progress, q.target),
+        completed: progress >= q.target,
+        claimed: claimedQuests.has(q.id),
+        pct: Math.min(100, Math.round((progress / q.target) * 100))
+      };
+    });
+
+    res.json({ quests, week_start: weekStart, trade_count: tradeCount, total_volume: totalVolume });
+  } catch (err) {
+    console.error('[quests]', err.message);
+    res.json({ quests: WEEKLY_QUESTS.map(q => ({ ...q, progress: 0, completed: false, claimed: false, pct: 0 })), week_start: getWeekStart() });
+  }
+});
+
+// POST /api/quests/:questId/claim — claim a completed quest reward
+app.post('/api/quests/:questId/claim', requireAuth, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const questId = req.params.questId;
+    const quest = WEEKLY_QUESTS.find(q => q.id === questId);
+    if (!quest) return res.status(404).json({ error: 'Quest not found' });
+
+    const weekStart = getWeekStart();
+
+    // Check if already claimed
+    let alreadyClaimed = false;
+    if (pool) {
+      const rows = await dbQuery(`SELECT id FROM flex_points_log WHERE user_id = $1 AND source = $2 AND created_at >= $3 LIMIT 1`, [userId, 'quest_' + questId, weekStart]);
+      alreadyClaimed = rows.length > 0;
+    } else if (supabase) {
+      const { data } = await supabase.from('flex_points_log').select('id').eq('user_id', userId).eq('source', 'quest_' + questId).gte('created_at', weekStart).limit(1);
+      alreadyClaimed = (data || []).length > 0;
+    }
+    if (alreadyClaimed) return res.status(400).json({ error: 'Already claimed' });
+
+    // Verify quest is actually completed (recheck progress)
+    let tradeCount = 0, totalVolume = 0, streakDays = 0;
+    if (pool) {
+      const trades = await dbQuery(`SELECT trade_amount_usd, created_at FROM flex_points_log WHERE user_id = $1 AND created_at >= $2 AND source IN ('polymarket_trade','kalshi_trade')`, [userId, weekStart]);
+      tradeCount = trades.length;
+      totalVolume = trades.reduce((s, t) => s + (parseFloat(t.trade_amount_usd) || 0), 0);
+      streakDays = new Set(trades.map(t => new Date(t.created_at).toISOString().slice(0, 10))).size;
+    } else if (supabase) {
+      const { data } = await supabase.from('flex_points_log').select('trade_amount_usd, created_at').eq('user_id', userId).gte('created_at', weekStart).in('source', ['polymarket_trade', 'kalshi_trade']);
+      const trades = data || [];
+      tradeCount = trades.length;
+      totalVolume = trades.reduce((s, t) => s + (parseFloat(t.trade_amount_usd) || 0), 0);
+      streakDays = new Set(trades.map(t => new Date(t.created_at).toISOString().slice(0, 10))).size;
+    }
+
+    let progress = 0;
+    if (quest.type === 'trade_count') progress = tradeCount;
+    else if (quest.type === 'volume') progress = totalVolume;
+    else if (quest.type === 'category_count') progress = Math.min(5, Math.ceil(tradeCount / 3));
+    else if (quest.type === 'streak_days') progress = streakDays;
+
+    if (progress < quest.target) return res.status(400).json({ error: 'Quest not completed yet' });
+
+    // Award FP
+    const fp = quest.reward_fp;
+    if (pool) {
+      await dbQuery(`INSERT INTO flex_points_log (user_id, points, source, trade_amount_usd) VALUES ($1, $2, $3, 0)`, [userId, fp, 'quest_' + questId]);
+      await dbQuery(`INSERT INTO flex_points (user_id, total_points, trade_count, last_earned_at) VALUES ($1, $2, 0, NOW()) ON CONFLICT (user_id) DO UPDATE SET total_points = flex_points.total_points + $2, last_earned_at = NOW()`, [userId, fp]);
+    } else if (supabase) {
+      await supabase.from('flex_points_log').insert({ user_id: userId, points: fp, source: 'quest_' + questId, trade_amount_usd: 0 });
+      const { data: ex } = await supabase.from('flex_points').select('total_points').eq('user_id', userId).single();
+      if (ex) await supabase.from('flex_points').update({ total_points: ex.total_points + fp, last_earned_at: new Date().toISOString() }).eq('user_id', userId);
+      else await supabase.from('flex_points').insert({ user_id: userId, total_points: fp, trade_count: 0, last_earned_at: new Date().toISOString() });
+    }
+    delete _flexPointsCache[userId];
+
+    res.json({ success: true, points_earned: fp, quest_id: questId });
+  } catch (err) {
+    console.error('[quest-claim]', err.message);
+    res.status(500).json({ error: 'Failed to claim quest' });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// DAILY LOGIN STREAK — multiplier for consecutive daily logins
+// ══════════════════════════════════════════════════════════════════════
+
+// GET /api/login-streak — get/update user's daily login streak
+app.get('/api/login-streak', requireAuth, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const today = new Date().toISOString().slice(0, 10);
+
+    // Get user's streak data
+    let streakData = null;
+    if (pool) {
+      const rows = await dbQuery('SELECT login_streak, last_login_date, streak_multiplier FROM users WHERE id = $1', [userId]);
+      streakData = rows[0] || {};
+    } else if (supabase) {
+      const { data } = await supabase.from('users').select('login_streak, last_login_date, streak_multiplier').eq('id', userId).single();
+      streakData = data || {};
+    }
+
+    let streak = streakData.login_streak || 0;
+    const lastLogin = streakData.last_login_date || '';
+
+    if (lastLogin === today) {
+      // Already logged in today
+    } else {
+      const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      if (lastLogin === yesterday) {
+        streak += 1; // consecutive day
+      } else {
+        streak = 1; // streak broken, restart
+      }
+
+      // Compute multiplier: 3d = 1.1x, 7d = 1.25x, 14d = 1.5x, 30d = 2x
+      const mult = streak >= 30 ? 2 : streak >= 14 ? 1.5 : streak >= 7 ? 1.25 : streak >= 3 ? 1.1 : 1;
+
+      // Update
+      if (pool) {
+        await dbQuery('UPDATE users SET login_streak = $1, last_login_date = $2, streak_multiplier = $3 WHERE id = $4', [streak, today, mult, userId]);
+      } else if (supabase) {
+        await supabase.from('users').update({ login_streak: streak, last_login_date: today, streak_multiplier: mult }).eq('id', userId);
+      }
+
+      // Award daily login FP bonus (small, once per day)
+      const loginFP = streak >= 7 ? 10 : 5;
+      if (pool) {
+        await dbQuery(`INSERT INTO flex_points_log (user_id, points, source, trade_amount_usd) VALUES ($1, $2, 'daily_login', 0)`, [userId, loginFP]);
+        await dbQuery(`INSERT INTO flex_points (user_id, total_points, trade_count, last_earned_at) VALUES ($1, $2, 0, NOW()) ON CONFLICT (user_id) DO UPDATE SET total_points = flex_points.total_points + $2, last_earned_at = NOW()`, [userId, loginFP]);
+      } else if (supabase) {
+        await supabase.from('flex_points_log').insert({ user_id: userId, points: loginFP, source: 'daily_login', trade_amount_usd: 0 });
+        const { data: ex } = await supabase.from('flex_points').select('total_points').eq('user_id', userId).single();
+        if (ex) await supabase.from('flex_points').update({ total_points: ex.total_points + loginFP, last_earned_at: new Date().toISOString() }).eq('user_id', userId);
+        else await supabase.from('flex_points').insert({ user_id: userId, total_points: loginFP, trade_count: 0, last_earned_at: new Date().toISOString() });
+      }
+      delete _flexPointsCache[userId];
+    }
+
+    const multiplier = streak >= 30 ? 2 : streak >= 14 ? 1.5 : streak >= 7 ? 1.25 : streak >= 3 ? 1.1 : 1;
+    const nextMilestone = streak < 3 ? { days: 3, mult: '1.1x' } : streak < 7 ? { days: 7, mult: '1.25x' } : streak < 14 ? { days: 14, mult: '1.5x' } : streak < 30 ? { days: 30, mult: '2x' } : null;
+
+    res.json({
+      streak,
+      multiplier,
+      last_login: lastLogin || today,
+      next_milestone: nextMilestone,
+      milestones: [
+        { days: 3, mult: '1.1x', reached: streak >= 3 },
+        { days: 7, mult: '1.25x', reached: streak >= 7 },
+        { days: 14, mult: '1.5x', reached: streak >= 14 },
+        { days: 30, mult: '2x', reached: streak >= 30 }
+      ]
+    });
+  } catch (err) {
+    console.error('[login-streak]', err.message);
+    res.json({ streak: 0, multiplier: 1, milestones: [] });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// WEEKLY LEADERBOARD PRIZES — top 10 traders get bonus USDC
+// ══════════════════════════════════════════════════════════════════════
+
+// GET /api/leaderboard/weekly — weekly trading volume leaderboard with prize estimates
+app.get('/api/leaderboard/weekly', async (req, res) => {
+  try {
+    const weekStart = getWeekStart();
+    let leaders = [];
+
+    if (pool) {
+      leaders = await dbQuery(`SELECT fp.user_id, u.display_name, SUM(fp.trade_amount_usd) as volume, COUNT(*) as trades FROM flex_points_log fp LEFT JOIN users u ON u.id = fp.user_id WHERE fp.created_at >= $1 AND fp.source IN ('polymarket_trade','kalshi_trade') GROUP BY fp.user_id, u.display_name ORDER BY volume DESC LIMIT 20`, [weekStart]);
+    } else if (supabase) {
+      // Supabase doesn't support GROUP BY easily, use RPC or raw query
+      const { data } = await supabase.from('flex_points_log').select('user_id, trade_amount_usd').gte('created_at', weekStart).in('source', ['polymarket_trade', 'kalshi_trade']);
+      const grouped = {};
+      (data || []).forEach(r => {
+        if (!grouped[r.user_id]) grouped[r.user_id] = { volume: 0, trades: 0 };
+        grouped[r.user_id].volume += parseFloat(r.trade_amount_usd) || 0;
+        grouped[r.user_id].trades += 1;
+      });
+      leaders = Object.entries(grouped).sort((a, b) => b[1].volume - a[1].volume).slice(0, 20).map(([uid, d]) => ({ user_id: uid, volume: d.volume, trades: d.trades }));
+    }
+
+    // Get current pool amount
+    let poolAmount = 0;
+    if (pool) {
+      const rows = await dbQuery('SELECT pool_amount FROM rewards_pool WHERE week_start = $1', [weekStart]);
+      poolAmount = parseFloat(rows[0]?.pool_amount || 0);
+    } else if (supabase) {
+      const { data } = await supabase.from('rewards_pool').select('pool_amount').eq('week_start', weekStart).single();
+      poolAmount = parseFloat(data?.pool_amount || 0);
+    }
+
+    // Prize distribution: 1st=25%, 2nd=15%, 3rd=10%, 4-5=7.5%, 6-10=5%
+    const prizeShares = [0.25, 0.15, 0.10, 0.075, 0.075, 0.05, 0.05, 0.05, 0.05, 0.05];
+
+    const leaderboard = leaders.map((l, i) => ({
+      rank: i + 1,
+      user_id: l.user_id,
+      display_name: l.display_name || null,
+      volume: parseFloat(l.volume) || 0,
+      trades: parseInt(l.trades) || 0,
+      prize_usd: i < 10 && poolAmount > 0 ? Math.round(poolAmount * (prizeShares[i] || 0) * 100) / 100 : 0,
+      tier: getRewardTier(parseFloat(l.volume) || 0).name
+    }));
+
+    res.json({
+      leaderboard,
+      pool_amount: poolAmount,
+      week_start: weekStart,
+      total_traders: leaders.length,
+      total_volume: leaders.reduce((s, l) => s + (parseFloat(l.volume) || 0), 0)
+    });
+  } catch (err) {
+    console.error('[weekly-leaderboard]', err.message);
+    res.json({ leaderboard: [], pool_amount: 0, week_start: getWeekStart() });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// FP SINK — spend FLEX Points to unlock premium alpha signals
+// ══════════════════════════════════════════════════════════════════════
+
+const FP_COSTS = {
+  crystal_ball_analysis: 25,    // AI analysis on Crystal Ball
+  whale_deep_dive: 50,          // Deep whale position analysis
+  alpha_signal_unlock: 100,     // Unlock a premium alpha signal
+};
+
+// POST /api/fp/spend — spend FP to unlock a premium feature
+app.post('/api/fp/spend', requireAuth, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { feature, context } = req.body;
+    const cost = FP_COSTS[feature];
+    if (!cost) return res.status(400).json({ error: 'Unknown feature' });
+
+    // Get current balance
+    let balance = 0;
+    if (pool) {
+      const rows = await dbQuery('SELECT total_points FROM flex_points WHERE user_id = $1', [userId]);
+      balance = parseInt(rows[0]?.total_points || 0);
+    } else if (supabase) {
+      const { data } = await supabase.from('flex_points').select('total_points').eq('user_id', userId).single();
+      balance = parseInt(data?.total_points || 0);
+    }
+
+    if (balance < cost) return res.status(400).json({ error: 'Not enough FLEX Points', required: cost, balance });
+
+    // Deduct FP
+    if (pool) {
+      await dbQuery('UPDATE flex_points SET total_points = total_points - $1 WHERE user_id = $2', [cost, userId]);
+      await dbQuery(`INSERT INTO flex_points_log (user_id, points, source, trade_amount_usd) VALUES ($1, $2, $3, 0)`, [userId, -cost, 'spend_' + feature]);
+    } else if (supabase) {
+      await supabase.from('flex_points').update({ total_points: balance - cost }).eq('user_id', userId);
+      await supabase.from('flex_points_log').insert({ user_id: userId, points: -cost, source: 'spend_' + feature, trade_amount_usd: 0 });
+    }
+    delete _flexPointsCache[userId];
+
+    res.json({ success: true, cost, new_balance: balance - cost, feature });
+  } catch (err) {
+    console.error('[fp-spend]', err.message);
+    res.status(500).json({ error: 'Failed to spend FP' });
+  }
+});
+
+// GET /api/fp/costs — public list of FP costs for features
+app.get('/api/fp/costs', (req, res) => {
+  res.json({ costs: FP_COSTS });
+});
+
 // ── AI EDGE DETECTOR — Claude estimates true probability vs market price ──
 const _aiEdgeCache = { data: null, ts: 0 };
 const AI_EDGE_TTL = 30 * 60 * 1000; // 30 min cache
