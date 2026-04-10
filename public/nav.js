@@ -29,6 +29,15 @@
       '.nav-signin:hover{color:#f0f0f5;border-color:rgba(255,255,255,0.2);background:rgba(255,255,255,0.04)}' +
       '.nav-cta{font-family:"Inter",-apple-system,sans-serif;font-size:11px;font-weight:700;color:#0a0a0f;background:linear-gradient(135deg,#00e68a,#4d9fff);text-decoration:none;padding:6px 14px;border-radius:8px;transition:all .15s;white-space:nowrap}' +
       '.nav-cta:hover{filter:brightness(1.1);transform:translateY(-1px)}' +
+      /* Connect Wallet button */
+      '.nav-wallet-btn{display:flex;align-items:center;gap:6px;padding:5px 12px;border:1px solid rgba(168,85,247,0.3);border-radius:8px;background:rgba(168,85,247,0.08);cursor:pointer;transition:all .15s;white-space:nowrap}' +
+      '.nav-wallet-btn:hover{border-color:rgba(168,85,247,0.5);background:rgba(168,85,247,0.14)}' +
+      '.nav-wallet-btn svg{width:14px;height:14px;stroke:#a855f7;stroke-width:2;fill:none;flex-shrink:0}' +
+      '.nav-wallet-btn span{font-family:"Inter",-apple-system,sans-serif;font-size:11px;font-weight:600;color:#a855f7}' +
+      '.nav-wallet-btn.connected{border-color:rgba(0,230,138,0.3);background:rgba(0,230,138,0.08)}' +
+      '.nav-wallet-btn.connected:hover{border-color:rgba(0,230,138,0.5);background:rgba(0,230,138,0.14)}' +
+      '.nav-wallet-btn.connected svg{stroke:#00e68a}' +
+      '.nav-wallet-btn.connected span{color:#00e68a}' +
       /* Mobile menu base styles (hidden on all screens by default) */
       '.nav-hamburger{display:none}' +
       '.nav-mobile-menu{display:none;position:fixed;inset:0;z-index:9998;background:rgba(10,10,15,0.98);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);flex-direction:column;overflow-y:auto;padding:0}' +
@@ -168,6 +177,10 @@
       '<kbd>' + (navigator.platform.indexOf('Mac') > -1 ? '⌘' : 'Ctrl') + 'K</kbd>' +
     '</div>' +
     '<div class="nav-auth">' +
+      '<button class="nav-wallet-btn" id="navWalletBtn" title="Connect Wallet">' +
+        '<svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M16 14a2 2 0 100-4 2 2 0 000 4z"/><path d="M2 10h20"/></svg>' +
+        '<span id="navWalletLabel">Connect</span>' +
+      '</button>' +
       (isLoggedIn
         ? ''
         : '<a href="/creator/login" class="nav-signin">Sign in</a>') +
@@ -222,6 +235,10 @@
       '</div>' +
       '<div class="nav-mobile-links">' + mLinksHtml + '</div>' +
       '<div class="nav-mobile-auth">' +
+        '<a href="#" class="mob-signin" id="navMobileWallet" style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:10px;border-color:rgba(168,85,247,0.3);color:#a855f7">' +
+          '<svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:currentColor;stroke-width:2;fill:none;flex-shrink:0"><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M16 14a2 2 0 100-4 2 2 0 000 4z"/><path d="M2 10h20"/></svg>' +
+          '<span id="navMobileWalletLabel">Connect Wallet</span>' +
+        '</a>' +
         (isLoggedIn
           ? ''
           : '<a href="/creator/login" class="mob-signin">Sign in</a>') +
@@ -274,6 +291,115 @@
         btn.classList.remove('open');
       }
     });
+  })();
+
+  // ── Connect Wallet ──
+  (function() {
+    var walletBtn = document.getElementById('navWalletBtn');
+    var walletLabel = document.getElementById('navWalletLabel');
+    var mobileWallet = document.getElementById('navMobileWallet');
+    var mobileWalletLabel = document.getElementById('navMobileWalletLabel');
+    var STORAGE_KEY = 'hfx_wallet_address';
+
+    function shortAddr(a) { return a ? a.slice(0, 6) + '…' + a.slice(-4) : ''; }
+
+    function setConnected(addr) {
+      if (walletBtn && walletLabel) {
+        walletBtn.classList.add('connected');
+        walletBtn.title = addr;
+        walletLabel.textContent = shortAddr(addr);
+      }
+      if (mobileWalletLabel) {
+        mobileWalletLabel.textContent = shortAddr(addr);
+        if (mobileWallet) mobileWallet.style.color = '#00e68a';
+        if (mobileWallet) mobileWallet.style.borderColor = 'rgba(0,230,138,0.3)';
+      }
+    }
+
+    function setDisconnected() {
+      if (walletBtn && walletLabel) {
+        walletBtn.classList.remove('connected');
+        walletBtn.title = 'Connect Wallet';
+        walletLabel.textContent = 'Connect';
+      }
+      if (mobileWalletLabel) {
+        mobileWalletLabel.textContent = 'Connect Wallet';
+        if (mobileWallet) mobileWallet.style.color = '#a855f7';
+        if (mobileWallet) mobileWallet.style.borderColor = 'rgba(168,85,247,0.3)';
+      }
+    }
+
+    // Restore from localStorage on load
+    var saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) setConnected(saved);
+
+    // Hide wallet button if no ethereum provider
+    if (!window.ethereum) {
+      if (walletBtn) walletBtn.style.display = 'none';
+      if (mobileWallet) mobileWallet.style.display = 'none';
+      return;
+    }
+
+    // Check if already connected (without prompting)
+    if (!saved) {
+      window.ethereum.request({ method: 'eth_accounts' }).then(function(accounts) {
+        if (accounts && accounts.length > 0) {
+          localStorage.setItem(STORAGE_KEY, accounts[0]);
+          setConnected(accounts[0]);
+        }
+      }).catch(function() {});
+    }
+
+    async function connectWallet() {
+      try {
+        var accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+        if (accounts && accounts.length > 0) {
+          localStorage.setItem(STORAGE_KEY, accounts[0]);
+          setConnected(accounts[0]);
+        }
+      } catch (e) {
+        // User rejected or error — ignore
+        console.warn('Wallet connect failed:', e.message || e);
+      }
+    }
+
+    if (walletBtn) {
+      walletBtn.addEventListener('click', function() {
+        var current = localStorage.getItem(STORAGE_KEY);
+        if (current) {
+          // Already connected — go to dashboard portfolio
+          window.location.href = '/creator/dashboard#portfolio';
+        } else {
+          connectWallet();
+        }
+      });
+    }
+    if (mobileWallet) {
+      mobileWallet.addEventListener('click', function(e) {
+        e.preventDefault();
+        var current = localStorage.getItem(STORAGE_KEY);
+        if (current) {
+          window.location.href = '/creator/dashboard#portfolio';
+          var mm = document.getElementById('navMobileMenu');
+          if (mm) { mm.classList.remove('open'); document.body.style.overflow = ''; }
+        } else {
+          connectWallet();
+        }
+      });
+    }
+
+    // Listen for account changes
+    if (window.ethereum.on) {
+      window.ethereum.on('accountsChanged', function(accounts) {
+        if (accounts && accounts.length > 0) {
+          localStorage.setItem(STORAGE_KEY, accounts[0]);
+          setConnected(accounts[0]);
+        } else {
+          localStorage.removeItem(STORAGE_KEY);
+          setDisconnected();
+        }
+      });
+    }
   })();
 
   // ── Global Search Modal (Cmd+K / Ctrl+K) ──
