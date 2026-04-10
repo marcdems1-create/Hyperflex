@@ -1163,84 +1163,18 @@ nav {
 })();
 </script>
 
-<!-- ═══ INTELLIGENCE HUB — FULL WIDTH ═══ -->
-<div style="max-width:1200px;margin:0 auto;padding:0 40px 24px">
-
-  <!-- TOP SIGNALS -->
-  <div style="margin-bottom:28px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-      <div style="display:flex;align-items:center;gap:8px">
-        <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse-dot 2s infinite"></span>
-        <span style="font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">Top Signals</span>
-        <span style="font-family:var(--sans);font-size:11px;color:var(--muted)">Live</span>
-      </div>
-      <a href="/signals" style="font-family:var(--mono);font-size:11px;color:var(--gold);text-decoration:none">View all →</a>
-    </div>
-    <div id="hubSignalCards" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
-      <div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--muted);font-size:12px">Loading signals...</div>
-    </div>
-  </div>
-
-  <!-- SCREENER PICKS -->
-  <div style="margin-bottom:28px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-      <div style="display:flex;align-items:center;gap:8px">
-        <span style="font-size:15px">📊</span>
-        <span style="font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">Screener Picks</span>
-      </div>
-      <a href="/screener" style="font-family:var(--mono);font-size:11px;color:var(--gold);text-decoration:none">Full screener →</a>
-    </div>
-    <div id="hubScreenerCards" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
-      <div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--muted);font-size:12px">Loading screener...</div>
-    </div>
-  </div>
-
-  <!-- CRYSTAL BALL + AI EDGE — 2 col -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:28px">
-    <div>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:15px">🔮</span>
-          <span style="font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">Crystal Ball</span>
-        </div>
-        <a href="/crystal-ball" style="font-family:var(--mono);font-size:11px;color:var(--gold);text-decoration:none">All →</a>
-      </div>
-      <div id="hubCrystalCards" style="display:flex;flex-direction:column;gap:10px">
-        <div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Loading analysis...</div>
-      </div>
-    </div>
-    <div>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:15px">🧠</span>
-          <span style="font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)">Edge Scanner</span>
-        </div>
-        <a href="/screener" style="font-family:var(--mono);font-size:11px;color:var(--gold);text-decoration:none">All →</a>
-      </div>
-      <div id="aiEdgeCards" style="display:flex;flex-direction:column;gap:10px">
-        <div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">Loading edges...</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- CTA -->
-  <div class="creator-cta-strip" id="creatorCta" style="margin-bottom:28px">
-    <div class="cta-text">
-      <strong>Trade directly from Hyperflex</strong> — Connect your wallet and execute trades without leaving the site.
-    </div>
-    <a href="/creator/signup" class="cta-btn">Get started free →</a>
-  </div>
-</div>
-
 <!-- REWARDS CTA BANNER -->
 <div style="max-width:1200px;margin:0 auto;padding:0 40px">
-  <a href="/rewards" style="display:flex;align-items:center;gap:10px;padding:10px 16px;margin-bottom:12px;background:linear-gradient(90deg,rgba(0,230,138,0.06),rgba(77,159,255,0.04));border:1px solid rgba(0,230,138,0.15);border-radius:10px;text-decoration:none;transition:all 0.2s;backdrop-filter:blur(8px)" onmouseover="this.style.borderColor='rgba(0,230,138,0.4)';this.style.transform='translateY(-1px)'" onmouseout="this.style.borderColor='rgba(0,230,138,0.15)';this.style.transform='none'">
+  <a href="/rewards" style="display:flex;align-items:center;gap:10px;padding:10px 16px;margin-bottom:16px;background:linear-gradient(90deg,rgba(0,230,138,0.06),rgba(77,159,255,0.04));border:1px solid rgba(0,230,138,0.15);border-radius:10px;text-decoration:none;transition:all 0.2s;backdrop-filter:blur(8px)" onmouseover="this.style.borderColor='rgba(0,230,138,0.4)';this.style.transform='translateY(-1px)'" onmouseout="this.style.borderColor='rgba(0,230,138,0.15)';this.style.transform='none'">
     <span style="font-size:18px">&#x1F4B0;</span>
     <span style="font-family:var(--sans);font-size:12px;font-weight:700;color:#00e68a;letter-spacing:-0.2px">Earn USDC on every trade</span>
     <span style="font-family:var(--sans);font-size:11px;color:var(--muted)">Trade through HYPERFLEX and get rewarded weekly</span>
     <span style="margin-left:auto;font-family:var(--sans);font-size:11px;font-weight:600;color:#4d9fff;white-space:nowrap">Learn more &rarr;</span>
   </a>
 </div>
+
+<!-- Hidden containers for JS compatibility -->
+<div style="display:none"><div id="hubSignalCards"></div><div id="hubScreenerCards"></div><div id="hubCrystalCards"></div><div id="aiEdgeCards"></div></div>
 
 <!-- ═══ COMMUNITY ACTIVITY — 2-COL LAYOUT ═══ -->
 <!-- Search hidden until community features re-enabled -->
@@ -1270,7 +1204,7 @@ nav {
     <!-- Quick nav links -->
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
       <a href="/alpha" style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--gold);padding:7px 14px;border:1px solid rgba(201,146,13,0.3);border-radius:8px;text-decoration:none;transition:all .15s;background:rgba(201,146,13,0.06)" onmouseover="this.style.borderColor='var(--gold)';this.style.background='rgba(201,146,13,0.12)'" onmouseout="this.style.borderColor='rgba(201,146,13,0.3)';this.style.background='rgba(201,146,13,0.06)'">Alpha Terminal</a>
-      <a href="/data" style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--accent-purple);padding:7px 14px;border:1px solid rgba(168,85,247,0.3);border-radius:8px;text-decoration:none;transition:all .15s;background:rgba(168,85,247,0.06)" onmouseover="this.style.borderColor='var(--accent-purple)';this.style.background='rgba(168,85,247,0.12)'" onmouseout="this.style.borderColor='rgba(168,85,247,0.3)';this.style.background='rgba(168,85,247,0.06)'">Data Terminal</a>
+      <a href="/terminal" style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--accent-purple);padding:7px 14px;border:1px solid rgba(168,85,247,0.3);border-radius:8px;text-decoration:none;transition:all .15s;background:rgba(168,85,247,0.06)" onmouseover="this.style.borderColor='var(--accent-purple)';this.style.background='rgba(168,85,247,0.12)'" onmouseout="this.style.borderColor='rgba(168,85,247,0.3)';this.style.background='rgba(168,85,247,0.06)'">Data Terminal</a>
       <a href="/crystal-ball" style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--dim);padding:7px 14px;border:1px solid var(--border);border-radius:8px;text-decoration:none;transition:all .15s" onmouseover="this.style.borderColor='rgba(77,159,255,0.4)';this.style.color='#4d9fff'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">Crystal Ball</a>
       <a href="/whales" style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--dim);padding:7px 14px;border:1px solid var(--border);border-radius:8px;text-decoration:none;transition:all .15s" onmouseover="this.style.borderColor='rgba(168,85,247,0.4)';this.style.color='#a855f7'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">Whales</a>
       <a href="/signals" style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--dim);padding:7px 14px;border:1px solid var(--border);border-radius:8px;text-decoration:none;transition:all .15s" onmouseover="this.style.borderColor='rgba(0,230,138,0.4)';this.style.color='#00e68a'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">Signals</a>
@@ -1315,6 +1249,44 @@ nav {
   </div>
 
   <div class="sidebar">
+    <!-- FEAR & GREED GAUGE -->
+    <div class="sidebar-card" id="fgGaugeCard" style="border-top:2px solid var(--accent-amber)">
+      <div class="sidebar-title">FEAR &amp; GREED INDEX</div>
+      <div style="text-align:center;padding:12px 0">
+        <div id="fgScore" style="font-family:var(--mono);font-size:48px;font-weight:900;color:var(--accent-amber);line-height:1">--</div>
+        <div id="fgLabel" style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--muted);margin-top:4px;text-transform:uppercase;letter-spacing:1px">Loading...</div>
+        <div style="margin:12px auto 0;width:100%;height:6px;background:var(--border);border-radius:3px;overflow:hidden;position:relative">
+          <div id="fgBar" style="height:100%;width:50%;border-radius:3px;background:linear-gradient(90deg,#ef4444,#f59e0b,#22c55e);transition:width .6s"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:4px;font-family:var(--mono);font-size:9px;color:var(--muted)">
+          <span>Extreme Fear</span><span>Extreme Greed</span>
+        </div>
+      </div>
+      <div id="fgComponents" style="margin-top:8px;font-size:11px;color:var(--muted)"></div>
+      <a href="/terminal" class="sidebar-footer-link">Full terminal &#8594;</a>
+    </div>
+
+    <!-- HOW EDGE SCORES WORK -->
+    <div class="sidebar-card" style="border-top:2px solid var(--border)">
+      <div class="sidebar-title">HOW EDGE SCORES WORK</div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:10px">
+        Edge Score is a <strong style="color:var(--text)">weighted formula</strong>, not AI. It combines 8 on-chain and orderbook signals:
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;font-family:var(--mono);font-size:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center"><span style="color:var(--text)">Whale Positions</span><span style="color:var(--accent-purple)">35 pts max</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center"><span style="color:var(--text)">Volume</span><span style="color:var(--accent-blue)">30 pts max</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center"><span style="color:var(--text)">CLOB Depth</span><span style="color:var(--accent-green)">20 pts max</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center"><span style="color:var(--text)">Whale Capital</span><span style="color:var(--accent-purple)">15 pts max</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center"><span style="color:var(--text)">Momentum</span><span style="color:var(--accent-amber)">15 pts max</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center"><span style="color:var(--text)">Expiry Decay</span><span style="color:var(--muted)">12 pts max</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center"><span style="color:var(--text)">Divergence</span><span style="color:var(--muted)">10 pts max</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center"><span style="color:var(--text)">Expiry</span><span style="color:var(--muted)">8 pts max</span></div>
+      </div>
+      <div style="margin-top:10px;font-size:10px;color:var(--muted);line-height:1.5;border-top:1px solid var(--border);padding-top:8px">
+        High scores mean multiple signals align. This is <strong style="color:var(--text)">not financial advice</strong> — all markets can resolve to zero. Max ROI assumes full resolution at $1.
+      </div>
+    </div>
+
     <!-- HOT STREAKS -->
     <div class="sidebar-card" id="hotStreaksCard">
       <div class="sidebar-title">&#x1F525; HOT STREAKS</div>
@@ -3122,10 +3094,41 @@ async function handleExploreCopyCta() {
   </div>
 </div>
 <script>
+// Fear & Greed gauge
+(async function(){
+  try {
+    var r = await fetch('/api/market-intelligence');
+    if (!r.ok) return;
+    var d = await r.json();
+    if (d && d.fear_greed) {
+      var fg = d.fear_greed;
+      var score = fg.score || 50;
+      var label = fg.label || 'Neutral';
+      var color = score >= 70 ? 'var(--accent-green)' : score >= 55 ? 'var(--accent-amber)' : score <= 30 ? 'var(--accent-red)' : 'var(--accent-amber)';
+      var el = document.getElementById('fgScore');
+      if (el) { el.textContent = score; el.style.color = color; }
+      var lbl = document.getElementById('fgLabel');
+      if (lbl) { lbl.textContent = label; lbl.style.color = color; }
+      var bar = document.getElementById('fgBar');
+      if (bar) bar.style.width = score + '%';
+      // Components
+      var comp = document.getElementById('fgComponents');
+      if (comp && fg.components) {
+        var c = fg.components;
+        var items = [];
+        if (c.whale_sentiment != null) items.push('<span>Whale Sentiment: <strong style="color:var(--text)">' + c.whale_sentiment + '</strong></span>');
+        if (c.momentum != null) items.push('<span>Momentum: <strong style="color:var(--text)">' + c.momentum + '</strong></span>');
+        if (c.volume != null) items.push('<span>Volume: <strong style="color:var(--text)">' + c.volume + '</strong></span>');
+        if (items.length) comp.innerHTML = items.join('<span style="color:var(--border)"> · </span>');
+      }
+    }
+  } catch(e) {}
+})();
+
 // Top Edges live feed
 (async function(){
   try {
-    var r = await fetch('/api/alpha/top?n=5');
+    var r = await fetch('/api/alpha/top?n=10');
     if (!r.ok) return;
     var d = await r.json();
     var mkts = d.markets || [];
