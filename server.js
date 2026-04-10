@@ -16418,6 +16418,175 @@ cron.schedule('*/30 * * * *', () => {
 // Auto-sync platform positions — every hour — wrapped to prevent unhandled rejections
 cron.schedule('0 * * * *', () => { syncAllUserPositions().catch(err => console.error('[auto-sync] Cron error:', err.message)); });
 
+// ════════════════════════════════════════════════════════════
+// HEDGE ALERTS — scans user positions for profitable hedge opportunities
+// Runs every 30 min. Two alert types:
+//   1) Price-shift: a correlated market's price dropped, making it a cheap hedge
+//   2) New-market: a new market appeared that correlates with an open position
+// ════════════════════════════════════════════════════════════
+
+// In-memory dedup: user_id:market_a:market_b → timestamp (don't re-alert same pair within 24h)
+const _hedgeAlertSent = new Map();
+const HEDGE_ALERT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+
+// Track screener market_ids seen in previous scan — new ones trigger "new market" alerts
+let _previousScreenerIds = new Set();
+
+async function scanHedgeAlerts() {
+  console.log('[hedge-alerts] Starting scan');
+  try {
+    const screenerMarkets = (_screenerCache && _screenerCache.data) || [];
+    if (screenerMarkets.length < 10) { console.log('[hedge-alerts] Screener too thin, skipping'); return; }
+
+    // Build keyword index for screener markets (same logic as /api/hedge-pairs)
+    const screenerByKw = {}; // keyword -> [screener market objects]
+    for (const m of screenerMarkets) {
+      if (!m.yes_price || m.yes_price <= 0.05 || m.yes_price >= 0.95) continue;
+      if (!m.slug) continue;
+      const kws = _extractHedgeKeywords(m.question);
+      for (const kw of kws) {
+        if (!screenerByKw[kw]) screenerByKw[kw] = [];
+        screenerByKw[kw].push(m);
+      }
+    }
+
+    // Detect new markets since last scan
+    const currentIds = new Set(screenerMarkets.map(m => m.market_id).filter(Boolean));
+    const newMarketIds = new Set();
+    if (_previousScreenerIds.size > 0) {
+      for (const id of currentIds) {
+        if (!_previousScreenerIds.has(id)) newMarketIds.add(id);
+      }
+    }
+    _previousScreenerIds = currentIds;
+    const newMarkets = screenerMarkets.filter(m => newMarketIds.has(m.market_id));
+    if (newMarkets.length > 0) console.log(`[hedge-alerts] ${newMarkets.length} new markets detected`);
+
+    // Fetch all users with cached positions
+    let users;
+    if (pool) {
+      users = await dbQuery(`
+        SELECT DISTINCT cp.user_id, cp.market_title, cp.side, cp.probability, cp.external_id, cp.platform
+        FROM cached_positions cp
+        WHERE cp.probability > 0.05 AND cp.probability < 0.95
+        ORDER BY cp.user_id
+      `, []);
+    } else {
+      const { data } = await supabase.from('cached_positions')
+        .select('user_id, market_title, side, probability, external_id, platform')
+        .gt('probability', 0.05).lt('probability', 0.95);
+      users = data || [];
+    }
+
+    if (!users.length) { console.log('[hedge-alerts] No open positions to scan'); return; }
+
+    // Group positions by user
+    const userPositions = {};
+    for (const row of users) {
+      if (!userPositions[row.user_id]) userPositions[row.user_id] = [];
+      userPositions[row.user_id].push(row);
+    }
+
+    let alertsSent = 0;
+
+    for (const [userId, positions] of Object.entries(userPositions)) {
+      let userAlerts = 0;
+      for (const pos of positions) {
+        if (userAlerts >= 3) break; // max 3 alerts per user per scan
+        const posKws = _extractHedgeKeywords(pos.market_title);
+        if (posKws.length < 2) continue;
+
+        // Entry cost for the user's current position
+        const posPrice = parseFloat(pos.probability) || 0.5;
+        const posSide = (pos.side || 'YES').toUpperCase();
+        const posEntry = posSide === 'YES' ? Math.round(posPrice * 100) : Math.round((1 - posPrice) * 100);
+
+        // Find correlated screener markets by keyword overlap
+        const candidateScores = {};
+        for (const kw of posKws) {
+          const matches = screenerByKw[kw] || [];
+          for (const m of matches) {
+            // Skip same market
+            if (m.market_id === pos.external_id) continue;
+            if ((m.question || '').toLowerCase() === (pos.market_title || '').toLowerCase()) continue;
+            if (!candidateScores[m.market_id]) candidateScores[m.market_id] = { market: m, overlap: 0 };
+            candidateScores[m.market_id].overlap++;
+          }
+        }
+
+        // Need at least 2 keyword overlap to be considered correlated
+        const correlated = Object.values(candidateScores)
+          .filter(c => c.overlap >= 2)
+          .sort((a, b) => b.overlap - a.overlap)
+          .slice(0, 3); // max 3 hedge candidates per position
+
+        for (const { market: hedgeMkt } of correlated) {
+          // Compute cheapest hedge side
+          const hYesCost = Math.round(hedgeMkt.yes_price * 100);
+          const hNoCost = 100 - hYesCost;
+          const hSide = hYesCost <= hNoCost ? 'YES' : 'NO';
+          const hEntry = Math.min(hYesCost, hNoCost);
+          const totalCost = posEntry + hEntry;
+
+          // PROFITABILITY GATE: must be < 100¢ with >= 10¢ margin
+          if (totalCost >= 100) continue;
+          const profit = 100 - totalCost;
+          if (profit < 10) continue;
+
+          // Dedup: don't re-alert same user + same pair within 24h
+          const dedupKey = `${userId}:${pos.external_id}:${hedgeMkt.market_id}`;
+          const lastSent = _hedgeAlertSent.get(dedupKey) || 0;
+          if (Date.now() - lastSent < HEDGE_ALERT_COOLDOWN_MS) continue;
+
+          // Determine alert type
+          const isNewMarket = newMarketIds.has(hedgeMkt.market_id);
+          const alertType = isNewMarket ? 'hedge_new_market' : 'hedge_opportunity';
+
+          const roi = Math.round((profit / totalCost) * 100);
+          const profitBoth = 200 - totalCost;
+          const posQ = (pos.market_title || '').substring(0, 55);
+          const hedgeQ = (hedgeMkt.question || '').substring(0, 55);
+
+          // Clear, human-readable copy that walks the user through the trade:
+          // 1. What you hold  2. What to buy  3. Combined cost  4. Profit scenarios
+          const title = isNewMarket
+            ? `🆕 New hedge found: +${profit}¢ guaranteed profit`
+            : `🔗 Hedge alert: +${profit}¢ profit (${roi}% ROI)`;
+
+          const body = `You hold ${posSide} on "${posQ}" at ${posEntry}¢. ` +
+            (isNewMarket ? `A new market just listed: ` : '') +
+            `"${hedgeQ}" is at ${hSide} ${hEntry}¢. ` +
+            `Buy both → total cost ${totalCost}¢. ` +
+            `If either wins → you get $1 back → +${profit}¢ profit. ` +
+            `If both win → +${profitBoth}¢. ` +
+            `Guaranteed net-positive if at least one leg hits.`;
+
+          // Store hedge market slug so notification links to /market/:slug
+          await pushNotification(userId, alertType, title, body, null, 'market:' + (hedgeMkt.slug || ''));
+          _hedgeAlertSent.set(dedupKey, Date.now());
+          alertsSent++;
+          userAlerts++;
+
+          if (userAlerts >= 3) break; // per-user cap
+        }
+      }
+    }
+
+    // Cleanup old dedup entries (> 48h)
+    const cutoff = Date.now() - 2 * HEDGE_ALERT_COOLDOWN_MS;
+    for (const [key, ts] of _hedgeAlertSent) {
+      if (ts < cutoff) _hedgeAlertSent.delete(key);
+    }
+
+    console.log(`[hedge-alerts] Done — ${alertsSent} alerts sent for ${Object.keys(userPositions).length} users`);
+  } catch (err) {
+    console.error('[hedge-alerts] Error:', err.message);
+  }
+}
+
+// Run every 30 min (offset by 15 min from auto-sync so positions are fresh)
+cron.schedule('15,45 * * * *', safeCron('scanHedgeAlerts', scanHedgeAlerts));
+
 // ── PROFILE PAGE: WALL + AGGREGATED COMMENTS ─────────────────────────────────
 
 // GET /api/profile/:slug/wall — public, returns last 40 wall posts
@@ -19481,17 +19650,28 @@ app.get('/api/whale-index', async (req, res) => {
       const consensusCapital = Math.round(maxCap);
       const oppositionCapital = Math.round(totalCapital - maxCap);
 
-      // Enrich with slug from screener cache for proper market links
+      // Enrich with slug + LIVE market price from screener cache
+      // (whale-derived avgPrice is stale; screener cache is 90s TTL CLOB midpoint)
       let pickSlug = '';
       let pickUrl = data.url;
+      let livePrice = null;
       if (_screenerCache && _screenerCache.data) {
         const mktLower = market.toLowerCase().trim();
         const scMatch = _screenerCache.data.find(s => (s.question || '').toLowerCase().trim() === mktLower);
         if (scMatch) {
           if (scMatch.slug) pickSlug = scMatch.slug;
           if (scMatch.url && scMatch.url !== 'https://polymarket.com') pickUrl = scMatch.url;
+          if (scMatch.yes_price != null && scMatch.yes_price > 0 && scMatch.yes_price < 1) {
+            livePrice = scMatch.yes_price;
+          }
         }
       }
+      // Prefer live screener price; fall back to whale-derived avg
+      const finalPrice = livePrice != null ? livePrice : avgPrice;
+      // Entry price for the consensus side (what you'd pay to take that side)
+      const sideEntry = consensusSide === 'YES'
+        ? finalPrice
+        : parseFloat((1 - finalPrice).toFixed(4));
 
       picks.push({
         market,
@@ -19499,8 +19679,9 @@ app.get('/api/whale-index', async (req, res) => {
         total_capital: Math.round(totalCapital),
         consensus_side: consensusSide,
         consensus_pct: consensusPct,
-        current_price: avgPrice,
-        yes_price: avgPrice,
+        current_price: finalPrice,
+        yes_price: finalPrice, // live YES price, not whale-derived
+        side_entry: sideEntry, // what you'd pay for the consensus side
         url: pickUrl,
         slug: pickSlug,
         strength,
@@ -19549,6 +19730,176 @@ app.get('/api/whale-index', async (req, res) => {
     console.error('[whale-index]', err.message);
     if (_whaleIndexCache) return res.json(_whaleIndexCache.data);
     res.status(502).json({ error: 'Failed to build whale index', detail: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+// HEDGE PAIRS — algorithmically-detected correlated market pairs
+// Public endpoint, no auth. 10-min cache.
+// ════════════════════════════════════════════════════════════
+let _hedgePairCache = null;
+
+// Extract significant keywords from a question (skip stopwords)
+const _hedgeStopWords = new Set(['will','the','a','an','in','on','at','to','of','by','for','is','be','or','and','with','from','this','that','it','not','do','does','if','has','have','was','are','were','been','did','can','could','would','should','its','his','her','he','she','they','their','them','than','more','before','after','over','under','any','all','into','about','which','what','who','when','where','how','between','each','other','some','no','yes','up','down','out','most','through','during','win','winning','next']);
+
+function _extractHedgeKeywords(question) {
+  return (question || '').toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(w => w.length >= 3 && !_hedgeStopWords.has(w));
+}
+
+app.get('/api/hedge-pairs', (req, res) => {
+  try {
+    // Check cache (10 min TTL)
+    if (_hedgePairCache && (Date.now() - _hedgePairCache.ts < 10 * 60 * 1000)) {
+      return res.json(_hedgePairCache.data);
+    }
+
+    const markets = (_screenerCache && _screenerCache.data) || [];
+    if (markets.length < 10) {
+      return res.json({ pairs: [], updated_at: new Date().toISOString() });
+    }
+
+    // Only consider markets with real prices, decent volume, and not near resolution
+    const candidates = markets.filter(m =>
+      m.yes_price != null && m.yes_price > 0.05 && m.yes_price < 0.95 &&
+      m.volume >= 5000 &&
+      m.slug &&
+      (m.days_until_expiry == null || m.days_until_expiry > 1)
+    );
+
+    // Build keyword index: keyword -> [market indices]
+    const kwIndex = {};
+    const kwSets = [];
+    for (let i = 0; i < candidates.length; i++) {
+      const kws = _extractHedgeKeywords(candidates[i].question);
+      kwSets.push(new Set(kws));
+      for (const kw of kws) {
+        if (!kwIndex[kw]) kwIndex[kw] = [];
+        kwIndex[kw].push(i);
+      }
+    }
+
+    // ── Find profitable hedge pairs ──
+    // A hedge is net-profitable when: totalCost < 100¢
+    // Because prediction markets pay $1 on win, if at least one leg hits
+    // you make (100 - totalCost)¢ profit. Both legs hitting = even more.
+    //
+    // Strategy: for each market, compute the cheapest side (YES or NO).
+    // Then find correlated pairs where cheapA + cheapB < 100¢.
+    // Sort by profit margin (lower total cost = higher margin).
+    const seenMarkets = new Set();
+    const rawPairs = [];
+
+    for (let i = 0; i < candidates.length; i++) {
+      const kwsA = kwSets[i];
+      if (kwsA.size < 2) continue;
+
+      // Find candidates with shared keywords
+      const neighborScores = {};
+      for (const kw of kwsA) {
+        const lst = kwIndex[kw] || [];
+        for (const j of lst) {
+          if (j <= i) continue;
+          neighborScores[j] = (neighborScores[j] || 0) + 1;
+        }
+      }
+
+      const ranked = Object.entries(neighborScores)
+        .filter(([, count]) => count >= 2)
+        .sort((a, b) => b[1] - a[1]);
+
+      for (const [jStr] of ranked) {
+        const j = parseInt(jStr);
+        const mA = candidates[i];
+        const mB = candidates[j];
+
+        if (mA.market_id === mB.market_id) continue;
+        const kwsB = kwSets[j];
+        const union = new Set([...kwsA, ...kwsB]);
+        const intersection = [...kwsA].filter(k => kwsB.has(k));
+        const similarity = intersection.length / union.size;
+        if (similarity > 0.8) continue;
+
+        // For each market, pick the cheapest side — that maximises profit margin
+        const yesCostA = Math.round(mA.yes_price * 100);
+        const noCostA = 100 - yesCostA;
+        const sideA = yesCostA <= noCostA ? 'YES' : 'NO';
+        const entryA = Math.min(yesCostA, noCostA);
+
+        const yesCostB = Math.round(mB.yes_price * 100);
+        const noCostB = 100 - yesCostB;
+        const sideB = yesCostB <= noCostB ? 'YES' : 'NO';
+        const entryB = Math.min(yesCostB, noCostB);
+
+        const totalCost = entryA + entryB;
+
+        // ── PROFITABILITY GATE: total cost must be under 100¢ ──
+        // If at least one leg wins, payout = $1 = 100¢, profit = 100 - totalCost
+        if (totalCost >= 100) continue;
+
+        // Also skip tiny margins (<5¢ profit) — not worth the execution cost
+        const profitIfOneWins = 100 - totalCost;
+        if (profitIfOneWins < 5) continue;
+
+        const sharedTopics = intersection.slice(0, 4).join(', ');
+
+        rawPairs.push({
+          market_a: {
+            question: mA.question,
+            slug: mA.slug,
+            side: sideA,
+            entry_cost: entryA,
+            yes_price: mA.yes_price,
+            whale_count: mA.whale_count || 0,
+            volume: mA.volume || 0
+          },
+          market_b: {
+            question: mB.question,
+            slug: mB.slug,
+            side: sideB,
+            entry_cost: entryB,
+            yes_price: mB.yes_price,
+            whale_count: mB.whale_count || 0,
+            volume: mB.volume || 0
+          },
+          correlation_reason: `Both assess ${sharedTopics} outcomes`,
+          total_cost: totalCost,
+          profit_if_one_wins: profitIfOneWins,
+          profit_if_both_win: 200 - totalCost,
+          roi_pct: Math.round((profitIfOneWins / totalCost) * 100),
+          shared_keywords: intersection.length,
+          combined_volume: (mA.volume || 0) + (mB.volume || 0),
+          _idxA: i,
+          _idxB: j
+        });
+      }
+    }
+
+    // Sort by best profit margin (highest ROI first), then volume for liquidity
+    rawPairs.sort((a, b) => b.roi_pct - a.roi_pct || b.combined_volume - a.combined_volume);
+
+    // Deduplicate: each market appears in at most one pair
+    const pairs = [];
+    for (const p of rawPairs) {
+      if (pairs.length >= 6) break;
+      if (seenMarkets.has(p._idxA) || seenMarkets.has(p._idxB)) continue;
+      seenMarkets.add(p._idxA);
+      seenMarkets.add(p._idxB);
+      // Clean internal fields
+      delete p._idxA;
+      delete p._idxB;
+      pairs.push(p);
+    }
+
+    const result = { pairs: pairs.slice(0, 6), updated_at: new Date().toISOString() };
+    _hedgePairCache = { ts: Date.now(), data: result };
+    res.json(result);
+  } catch (err) {
+    console.error('[hedge-pairs]', err.message);
+    if (_hedgePairCache) return res.json(_hedgePairCache.data);
+    res.json({ pairs: [], updated_at: new Date().toISOString() });
   }
 });
 
@@ -27287,39 +27638,44 @@ app.get('/api/signals', async (req, res) => {
           if (whaleCount >= 3) {
             const consensus = m.consensus_pct || m.consensus || 0;
             const consensusSide = m.consensus_side || (consensus > 50 ? 'YES' : 'NO');
-            // Cross-reference screener cache for end_date and yes_pct
+            // Cross-reference screener cache for end_date, live yes_price, and slug
             let endDate = null;
-            let yesPct = consensus;
+            let livePrice = null; // real market YES price (0-1), from screener cache
+            let pickSlug = null;
             if (_screenerCache && _screenerCache.data) {
-              const mktQ = (m.market || m.question || '').toLowerCase();
-              const match = _screenerCache.data.find(sm => (sm.question || '').toLowerCase() === mktQ);
+              const mktQ = (m.market || m.question || '').toLowerCase().trim();
+              const match = _screenerCache.data.find(sm => (sm.question || '').toLowerCase().trim() === mktQ);
               if (match) {
                 endDate = match.end_date || null;
-                if (match.yes_price != null) yesPct = Math.round(match.yes_price * 100);
+                if (match.yes_price != null && match.yes_price > 0 && match.yes_price < 1) {
+                  livePrice = match.yes_price;
+                }
+                if (match.slug) pickSlug = match.slug;
               }
             }
+            // Skip if we can't find a live market price — the signal is stale/closed
+            if (livePrice == null) continue;
+            const yesPct = Math.round(livePrice * 100);
             // Skip resolved markets (price at 0% or 100%)
             if (yesPct >= 99 || yesPct <= 1) continue;
             // Skip expired/closed markets
             if (endDate && new Date(endDate) < new Date()) continue;
-            // Skip markets not found in screener (likely closed/delisted)
-            if (_screenerCache && _screenerCache.data && _screenerCache.data.length > 10) {
-              const mktQ2 = (m.market || m.question || '').toLowerCase();
-              const inScreener = _screenerCache.data.some(sm => (sm.question || '').toLowerCase() === mktQ2);
-              if (!inScreener) continue; // not in active markets = closed
-            }
+            // Entry price for the consensus side: YES price if YES, (1 - YES) if NO
+            const sidePrice = consensusSide === 'YES' ? livePrice : parseFloat((1 - livePrice).toFixed(4));
             signals.push({
               type: 'whale_cluster',
               badge: 'Whale Cluster',
               market: m.market || m.question || 'Unknown',
-              action: `BUY ${consensusSide} at ${consensus}%`,
+              action: `BUY ${consensusSide} at ${Math.round(sidePrice * 100)}\u00A2`,
               side: consensusSide,
-              price: consensus / 100,
+              price: sidePrice, // <-- actual market price for the consensus side, not whale consensus %
               confidence: whaleCount >= 10 ? 'HIGH' : whaleCount >= 7 ? 'MEDIUM' : 'LOW',
               whale_count: whaleCount,
               capital: m.total_capital || m.capital || 0,
               yes_pct: yesPct,
+              consensus_pct: consensus, // keep whale consensus separately for display
               end_date: endDate,
+              slug: pickSlug,
               detected_at: now,
               url: m.url || 'https://polymarket.com'
             });

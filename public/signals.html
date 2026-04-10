@@ -461,13 +461,19 @@ async function loadWhaleConsensus() {
       // Time ago
       var updatedAgo = m.detected_at || m.updated_at || m.last_trade_at || '';
       var agoStr = updatedAgo ? timeAgo(updatedAgo) : '';
-      // ROI calc: entry = market price for consensus side, win = 1 - entry
-      var mktPrice = m.yes_price || m.price || 0;
-      var entry = side === 'YES' ? mktPrice : (1 - mktPrice);
-      if (entry <= 0 || entry >= 1) entry = 0.5;
-      var entryCents = Math.round(entry * 100);
-      var winCents = 100 - entryCents;
-      var roi = entryCents > 0 ? Math.round(winCents / entryCents * 100) : 0;
+      // ROI calc: entry = what you pay for the consensus side
+      // Server now provides `side_entry` directly (already accounts for YES/NO flip
+      // and uses the live screener-cache price, not a stale whale-derived avg).
+      var entry = m.side_entry;
+      if (entry == null || entry <= 0 || entry >= 1) {
+        var mktPrice = m.yes_price || m.price || 0;
+        entry = side === 'YES' ? mktPrice : (1 - mktPrice);
+      }
+      // If we still don't have a real price, skip the ROI display instead of faking 50¢
+      var hasPrice = entry > 0.01 && entry < 0.99;
+      var entryCents = hasPrice ? Math.round(entry * 100) : 0;
+      var winCents = hasPrice ? 100 - entryCents : 0;
+      var roi = hasPrice && entryCents > 0 ? Math.round(winCents / entryCents * 100) : 0;
       var sideColor = side === 'YES' ? 'var(--accent-green)' : 'var(--accent-red)';
       return '<a href="' + hfxLink + '" class="s-whale-row" style="text-decoration:none;color:inherit;display:flex">' +
         '<div class="s-whale-rank' + rankClass + '">' + (i+1) + '</div>' +

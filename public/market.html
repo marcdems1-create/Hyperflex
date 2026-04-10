@@ -3053,6 +3053,22 @@ async function executeTrade() {
       }
     } catch (e) { /* silent */ }
 
+    // Hedge chain: if this was leg 1 of a hedge pair, navigate to leg 2
+    try {
+      var hp = new URLSearchParams(window.location.search);
+      var hedgeSlug = hp.get('hedge');
+      var hedgeSide = hp.get('hedgeSide') || 'YES';
+      if (hedgeSlug) {
+        var hedgeBanner = document.createElement('div');
+        hedgeBanner.style.cssText = 'position:fixed;top:74px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#a855f7,#7c3aed);color:#fff;padding:12px 24px;border-radius:10px;font-family:Inter,sans-serif;font-weight:700;font-size:13px;z-index:1001;box-shadow:0 4px 20px rgba(168,85,247,0.4);display:flex;align-items:center;gap:10px;cursor:pointer';
+        hedgeBanner.innerHTML = '✅ Leg 1 complete — <span style="text-decoration:underline">Opening Leg 2 →</span>';
+        document.body.appendChild(hedgeBanner);
+        var leg2Url = '/market/' + hedgeSlug + '?side=' + hedgeSide + '&from=hedge';
+        hedgeBanner.onclick = function() { window.location.href = leg2Url; };
+        setTimeout(function() { window.location.href = leg2Url; }, 2500);
+      }
+    } catch (hedgeErr) { /* silent */ }
+
     // Refresh balance + positions after trade (will update with real data from Polymarket API)
     setTimeout(fetchTradeBalance, 2000);
     setTimeout(fetchUserPositions, 5000);
@@ -3397,7 +3413,7 @@ function applyAlphaPrefill() {
   try {
     var p = new URLSearchParams(window.location.search);
     var from = p.get('from');
-    if (from !== 'alpha' && from !== 'trader' && from !== 'terminal') return;
+    if (from !== 'alpha' && from !== 'trader' && from !== 'terminal' && from !== 'hedge') return;
     var side = (p.get('side') || '').toLowerCase();
     var size = parseFloat(p.get('size') || '');
     if (side === 'yes' || side === 'no') {
@@ -3417,6 +3433,9 @@ function applyAlphaPrefill() {
     var banner = '⚡ Prefilled from Alpha Terminal — review and sign';
     if (from === 'trader')   banner = '🎯 Copying trade — review and sign';
     if (from === 'terminal') banner = '🖥 Prefilled from Terminal — review and sign';
+    var hedgeSlug = p.get('hedge');
+    if (from === 'hedge' && hedgeSlug) banner = '🔗 Hedge Leg 1 of 2 — buy this side, then we\'ll open leg 2';
+    if (from === 'hedge' && !hedgeSlug) banner = '🔗 Hedge Leg 2 of 2 — complete your hedge';
     hint.textContent = banner;
     hint.style.cssText = 'position:fixed;top:74px;left:50%;transform:translateX(-50%);background:#00e68a;color:#0a0a0f;padding:8px 16px;border-radius:8px;font-family:Inter,sans-serif;font-weight:700;font-size:12px;z-index:1000;box-shadow:0 4px 16px rgba(0,230,138,0.3);animation:fadeOut 4s forwards';
     var style = document.createElement('style');
