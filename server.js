@@ -19904,6 +19904,10 @@ async function _buildAlphaListInner(opts = {}) {
 
   const fetch = _nodeFetch;
 
+    // Pre-fetch Binance spot prices for crypto divergence signal (non-blocking)
+    let binancePrices = {};
+    try { binancePrices = await fetchBinancePrices(); } catch {}
+
     // Fetch a wider window from Gamma API — gamma's order=volume sort is unreliable
     // (returns markets with $99 lifetime volume first), so we fetch 500 and sort client-side
     // by 24h volume desc to get the actually-hot markets in our processing window.
@@ -20279,7 +20283,39 @@ async function _buildAlphaListInner(opts = {}) {
           else edgeDecay = 4;
         }
       }
-      const edgeScore = Math.min(99, Math.round(edgeWhale + edgeCapital + edgeMomentum + edgeVolume + edgeMega + edgeExpiry + edgeDivergence + edgeDecay + edgeNews + edgeWhaleVelocity + edgeVolumeSpike));
+      // Binance divergence: crypto prediction market price hasn't caught up with
+      // a sudden Binance spot move. E.g. BTC dumps 2% in 5min but "BTC above $80K"
+      // is still priced at 70% — that's a tradeable lag. Max 15.
+      let edgeBinanceDivergence = 0;
+      let binanceDivergenceData = null;
+      if (liquid && category === 'crypto' && Object.keys(binancePrices).length > 0) {
+        // Detect which coin this market references
+        const coinMatch = qLow.match(/\b(bitcoin|btc)\b/) ? 'btc'
+          : qLow.match(/\b(ethereum|eth)\b/) ? 'eth'
+          : qLow.match(/\b(solana|sol)\b/) ? 'sol' : null;
+        if (coinMatch && binancePrices[coinMatch] && binancePrices[coinMatch].change5m != null) {
+          const spotChange = Math.abs(binancePrices[coinMatch].change5m);
+          const mktChange = Math.abs(pChange || 0);
+          // Divergence = spot moved significantly but prediction market barely moved
+          // Spot needs to have moved at least 0.5% in 5min (meaningful move)
+          if (spotChange >= 0.5 && mktChange < spotChange * 0.3) {
+            // Strong divergence — spot moved but market is lagging
+            if (spotChange >= 2.0) edgeBinanceDivergence = 15;
+            else if (spotChange >= 1.5) edgeBinanceDivergence = 12;
+            else if (spotChange >= 1.0) edgeBinanceDivergence = 8;
+            else edgeBinanceDivergence = 5;
+            binanceDivergenceData = {
+              coin: coinMatch.toUpperCase(),
+              spot_change_5m: binancePrices[coinMatch].change5m,
+              spot_price: binancePrices[coinMatch].price,
+              market_change: pChange || 0,
+              divergence_pct: parseFloat((spotChange - mktChange).toFixed(2))
+            };
+          }
+        }
+      }
+
+      const edgeScore = Math.min(99, Math.round(edgeWhale + edgeCapital + edgeMomentum + edgeVolume + edgeMega + edgeExpiry + edgeDivergence + edgeDecay + edgeNews + edgeWhaleVelocity + edgeVolumeSpike + edgeBinanceDivergence));
 
       // ── Trade ROI ──
       let trade = null;
@@ -20314,6 +20350,9 @@ async function _buildAlphaListInner(opts = {}) {
         aiHook = `Resolves in ${daysUntilExpiry === 0 ? 'hours' : daysUntilExpiry + 'd'} and still at ${Math.round(yesPrice*100)}% — outcome uncertain`;
       } else if (volume >= 1000000) {
         aiHook = `$${(volume/1000000).toFixed(1)}M volume — one of the most-traded markets right now`;
+      } else if (binanceDivergenceData) {
+        const dir = binanceDivergenceData.spot_change_5m > 0 ? 'up' : 'down';
+        aiHook = `${binanceDivergenceData.coin} spot moved ${Math.abs(binanceDivergenceData.spot_change_5m).toFixed(1)}% ${dir} in 5min but this market hasn't repriced — divergence play`;
       } else if (wCount >= 3) {
         aiHook = `${wCount} whale wallets positioned — watching for consensus`;
       }
@@ -20391,7 +20430,8 @@ async function _buildAlphaListInner(opts = {}) {
         volume: edgeVolume,
         divergence: edgeDivergence,
         capital: edgeCapital,
-        expiry: edgeExpiry
+        expiry: edgeExpiry,
+        binance_divergence: edgeBinanceDivergence
       };
       // Find the largest contributing component
       let _primary = 'volume';
@@ -20510,7 +20550,8 @@ async function _buildAlphaListInner(opts = {}) {
           expiry: Math.round(edgeExpiry),
           divergence: Math.round(edgeDivergence),
           decay: Math.round(edgeDecay),
-          arb: 0 // populated by post-loop arb pass if applicable
+          arb: 0, // populated by post-loop arb pass if applicable
+          binance_divergence: Math.round(edgeBinanceDivergence)
         },
         volume_spike_ratio: volumeSpikeRatio, // current 24h / 7-day average, or null
         news_headline: newsInfo ? newsInfo.headline : null,
@@ -20524,6 +20565,7 @@ async function _buildAlphaListInner(opts = {}) {
           side: velocityInfo.side,
           trader_name: velocityInfo.traderName
         } : null,
+        binance_divergence: binanceDivergenceData,
         alpha_score: 0, // populated after whale index is ready
         model_probability: modelProb != null ? parseFloat(modelProb.toFixed(3)) : null,
         alpha_edge: alphaEdge,
@@ -25481,6 +25523,54 @@ app.get('/api/hyperliquid/whale-positions', async (req, res) => {
 // ════════════════════════════════════════════════════════════
 let _fearGreedCache = null;
 
+// ── Binance spot price cache — used for crypto divergence signal in edge scoring ──
+let _binancePriceCache = null; // { ts, data: { btc: { price, change5m, change1h }, eth: {...}, sol: {...} } }
+
+async function fetchBinancePrices() {
+  // Return cached if fresh (30s TTL)
+  if (_binancePriceCache && Date.now() - _binancePriceCache.ts < 30000) return _binancePriceCache.data;
+  try {
+    const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'];
+    const url = `https://api.binance.com/api/v3/ticker/24hr?symbols=${JSON.stringify(symbols)}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) throw new Error(`Binance ${res.status}`);
+    const tickers = await res.json();
+    const result = {};
+    for (const t of tickers) {
+      const coin = t.symbol.replace('USDT', '').toLowerCase();
+      result[coin] = {
+        price: parseFloat(t.lastPrice) || 0,
+        change24h: parseFloat(t.priceChangePercent) || 0,
+        high24h: parseFloat(t.highPrice) || 0,
+        low24h: parseFloat(t.lowPrice) || 0,
+        volume24h: parseFloat(t.quoteVolume) || 0,
+      };
+    }
+    // Also fetch 5m klines for short-term momentum
+    for (const sym of symbols) {
+      try {
+        const kRes = await fetch(`https://api.binance.com/api/v3/klines?symbol=${sym}&interval=5m&limit=2`, { signal: AbortSignal.timeout(5000) });
+        if (kRes.ok) {
+          const klines = await kRes.json();
+          if (klines.length >= 2) {
+            const coin = sym.replace('USDT', '').toLowerCase();
+            const prevClose = parseFloat(klines[0][4]);
+            const currentClose = parseFloat(klines[1][4]);
+            if (prevClose > 0) {
+              result[coin].change5m = parseFloat(((currentClose - prevClose) / prevClose * 100).toFixed(3));
+            }
+          }
+        }
+      } catch {} // non-critical
+    }
+    _binancePriceCache = { ts: Date.now(), data: result };
+    return result;
+  } catch (e) {
+    console.warn('[binance] price fetch failed:', e.message);
+    return _binancePriceCache ? _binancePriceCache.data : {};
+  }
+}
+
 function computeFearGreed() {
   const factors = {};
 
@@ -25566,6 +25656,16 @@ function computeFearGreed() {
 
   return { score, label, color, factors, updated_at: new Date().toISOString() };
 }
+
+// Binance spot prices — BTC/ETH/SOL with 5m change for divergence signals
+app.get('/api/binance-prices', async (req, res) => {
+  try {
+    const data = await fetchBinancePrices();
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 app.get('/api/fear-greed', (req, res) => {
   try {
