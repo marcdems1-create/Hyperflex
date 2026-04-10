@@ -366,13 +366,15 @@ async function loadTerminal(){
   if(moversList.length>0){
     var html2='';
     moversList.slice(0,8).forEach(function(m){
-      var chg=m.change_pct||0;
-      var chgColor=chg>=0?'var(--green)':'var(--red)';
-      var price=Math.round((m.current_price||0)*100);
+      var pts=m.odds_change_pts||0;
+      var chgColor=pts>=0?'var(--green)':'var(--red)';
+      var arrow=pts>=0?'&#9650;':'&#9660;';
+      var price=m.current_price||0;
+      var startPrice=m.start_price||0;
       var link=m.url&&m.url!=='https://polymarket.com'?(typeof hfxMarketUrl==='function'?hfxMarketUrl(m.url):m.url):'';
       var qHtml=link?'<a href="'+link+'" style="color:var(--text);text-decoration:none">'+E((m.question||'').substring(0,45))+'</a>':E((m.question||'').substring(0,45));
       var tradeBtn2=link?'<a href="'+link+'" style="font-family:var(--mono);font-size:9px;color:var(--gold);text-decoration:none;white-space:nowrap">Trade &rarr;</a>':'';
-      html2+='<div class="t-row"><div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px">'+qHtml+'</div><div style="min-width:45px;text-align:right;color:var(--soft)">'+price+'&cent;</div><div style="min-width:65px;text-align:right;font-weight:700;color:'+chgColor+'">'+(chg>=0?'+':'')+chg.toFixed(1)+'%</div><div style="min-width:45px;text-align:right">'+tradeBtn2+'</div></div>';
+      html2+='<div class="t-row"><div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px">'+qHtml+'</div><div style="min-width:65px;text-align:right;color:var(--dim);font-size:10px">'+startPrice+'&cent;&rarr;'+price+'&cent;</div><div style="min-width:60px;text-align:right;font-weight:700;color:'+chgColor+'"><span style="font-size:8px">'+arrow+'</span> '+(pts>=0?'+':'')+pts+'pts</div><div style="min-width:45px;text-align:right">'+tradeBtn2+'</div></div>';
     });
     document.getElementById('moversTable').innerHTML=html2;
   } else {
