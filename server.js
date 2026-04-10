@@ -24549,6 +24549,33 @@ app.post('/api/ai/market-analysis', async (req, res) => {
       primaryMarket = relatedMarkets[0] || null;
     } catch (e) { /* silent */ }
 
+    // 1a-bis. Disambiguation — if query is short and matches many diverse markets, offer refinement
+    let disambiguation = null;
+    if (relatedMarkets.length >= 3 && queryWords.length <= 4) {
+      // Check if the markets span genuinely different sub-topics (not all the same question)
+      const uniqueQuestions = relatedMarkets.map(m => (m.question || '').toLowerCase().replace(/[^a-z0-9 ]/g, '').trim());
+      // Dedupe by first 40 chars to group near-identical
+      const seen = new Set();
+      const diverse = [];
+      for (const m of relatedMarkets) {
+        const key = (m.question || '').toLowerCase().substring(0, 40);
+        if (!seen.has(key)) {
+          seen.add(key);
+          diverse.push(m);
+        }
+      }
+      if (diverse.length >= 3) {
+        disambiguation = diverse.slice(0, 6).map(m => ({
+          question: m.question,
+          slug: m.slug,
+          yes_price: m.yes_price,
+          edge_score: m.edge_score,
+          volume: m.volume,
+          end_date: m.end_date
+        }));
+      }
+    }
+
     // 1b. Whale data — find whale positions on related markets
     let whalePositions = [];
     let whaleCapital = 0;
@@ -24694,6 +24721,7 @@ IMPORTANT: Use REAL numbers from the data. If no data was found, say so honestly
     // ── Step 4: Attach raw data for frontend rendering ────────────────
     res.json({
       analysis: structured,
+      disambiguation: disambiguation,
       data: {
         primary_market: primaryMarket ? {
           question: primaryMarket.question,

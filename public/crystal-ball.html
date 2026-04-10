@@ -112,6 +112,17 @@ a{color:var(--gold);text-decoration:none} a:hover{text-decoration:underline}
 .ai-chip{font-family:var(--sans);font-size:11px;font-weight:600;padding:8px 14px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--soft);cursor:pointer;transition:all .2s}
 .ai-chip:hover{border-color:var(--accent-blue);color:var(--accent-blue);background:var(--accent-blue-dim)}
 
+/* DISAMBIGUATION */
+.ai-disambig{background:var(--card);border:1px solid rgba(168,85,247,0.2);border-radius:12px;padding:16px 20px;margin-bottom:16px}
+.ai-disambig-title{font-family:var(--sans);font-size:13px;font-weight:700;color:var(--accent-purple);margin-bottom:4px;display:flex;align-items:center;gap:6px}
+.ai-disambig-sub{font-family:var(--sans);font-size:11px;color:var(--soft);margin-bottom:12px}
+.ai-disambig-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px}
+.ai-disambig-opt{display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px solid var(--border);border-radius:10px;cursor:pointer;transition:all .15s;background:transparent}
+.ai-disambig-opt:hover{border-color:var(--accent-purple);background:rgba(168,85,247,0.06)}
+.ai-disambig-opt-q{flex:1;font-family:var(--sans);font-size:12px;color:var(--ink);font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ai-disambig-opt-odds{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--accent-green);flex-shrink:0}
+.ai-disambig-opt-edge{font-family:var(--mono);font-size:10px;font-weight:600;color:var(--accent-gold);background:rgba(201,146,13,0.1);padding:2px 6px;border-radius:4px;flex-shrink:0}
+
 /* AI LOADING */
 .ai-loading{padding:40px;text-align:center;background:var(--card);border:1px solid var(--border);border-radius:12px}
 .ai-loading-text{font-family:var(--sans);font-size:13px;color:var(--soft);margin-top:12px}
@@ -442,6 +453,10 @@ async function runAI(query) {
 
     renderAIResult(d, q);
     renderSidebar(d);
+    // Show disambiguation above result if present
+    if (d.disambiguation && d.disambiguation.length >= 3) {
+      renderDisambiguation(d.disambiguation, q);
+    }
   } catch(e) {
     console.error('[ai-analysis]', e);
     res.innerHTML = '<div style="padding:24px;text-align:center;background:var(--card);border:1px solid var(--border);border-radius:12px;font-family:var(--sans);font-size:13px;color:var(--soft)">AI analysis temporarily unavailable. Try again shortly.</div>';
@@ -525,6 +540,27 @@ function renderAIResult(d, query) {
 
   html += '</div></div>'; // close body + result
   el.innerHTML = html;
+}
+
+function renderDisambiguation(options, originalQuery) {
+  var el = document.getElementById('aiResult');
+  var html = '<div class="ai-disambig">';
+  html += '<div class="ai-disambig-title">&#x1F50D; Multiple markets match &ldquo;' + escHtml(originalQuery) + '&rdquo;</div>';
+  html += '<div class="ai-disambig-sub">Flex Bot analyzed the top match below. Pick a specific market for a deeper dive:</div>';
+  html += '<div class="ai-disambig-grid">';
+  options.forEach(function(m) {
+    var yesStr = m.yes_price ? Math.round(m.yes_price * 100) + '% YES' : '';
+    var edgeStr = m.edge_score ? m.edge_score : '';
+    var q = (m.question || '').substring(0, 65);
+    html += '<div class="ai-disambig-opt" onclick="runAI(\'' + escAttr(m.question || '') + '\')">';
+    html += '<div class="ai-disambig-opt-q">' + escHtml(q) + '</div>';
+    if (yesStr) html += '<div class="ai-disambig-opt-odds">' + yesStr + '</div>';
+    if (edgeStr) html += '<div class="ai-disambig-opt-edge">Edge ' + edgeStr + '</div>';
+    html += '</div>';
+  });
+  html += '</div></div>';
+  // Prepend above the existing result
+  el.innerHTML = html + el.innerHTML;
 }
 
 function renderSidebar(d) {
