@@ -16416,15 +16416,23 @@ async function scanHedgeAlerts() {
           const alertType = isNewMarket ? 'hedge_new_market' : 'hedge_opportunity';
 
           const roi = Math.round((profit / totalCost) * 100);
-          const posLabel = `${posSide} "${(pos.market_title || '').substring(0, 40)}"`;
-          const hedgeLabel = `${hSide} "${(hedgeMkt.question || '').substring(0, 40)}" at ${hEntry}¢`;
+          const profitBoth = 200 - totalCost;
+          const posQ = (pos.market_title || '').substring(0, 55);
+          const hedgeQ = (hedgeMkt.question || '').substring(0, 55);
 
+          // Clear, human-readable copy that walks the user through the trade:
+          // 1. What you hold  2. What to buy  3. Combined cost  4. Profit scenarios
           const title = isNewMarket
-            ? `🆕 New hedge: +${profit}¢ profit opportunity`
+            ? `🆕 New hedge found: +${profit}¢ guaranteed profit`
             : `🔗 Hedge alert: +${profit}¢ profit (${roi}% ROI)`;
-          const body = isNewMarket
-            ? `New market "${(hedgeMkt.question || '').substring(0, 50)}" hedges your ${posLabel}. Buy ${hedgeLabel} — total cost ${totalCost}¢, guaranteed +${profit}¢ if either wins.`
-            : `${hedgeLabel} hedges your ${posLabel}. Total cost ${totalCost}¢ → +${profit}¢ profit if either leg wins.`;
+
+          const body = `You hold ${posSide} on "${posQ}" at ${posEntry}¢. ` +
+            (isNewMarket ? `A new market just listed: ` : '') +
+            `"${hedgeQ}" is at ${hSide} ${hEntry}¢. ` +
+            `Buy both → total cost ${totalCost}¢. ` +
+            `If either wins → you get $1 back → +${profit}¢ profit. ` +
+            `If both win → +${profitBoth}¢. ` +
+            `Guaranteed net-positive if at least one leg hits.`;
 
           // Store hedge market slug so notification links to /market/:slug
           await pushNotification(userId, alertType, title, body, null, 'market:' + (hedgeMkt.slug || ''));

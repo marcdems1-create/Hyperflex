@@ -1456,7 +1456,11 @@ function escH(s) { const d = document.createElement('div'); d.textContent = s; r
             '<div style="font-weight:700;color:#00e68a">+' + profitBoth + '\u00A2</div>' +
           '</div>' +
         '</div>' +
-        '<div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #1a1917;padding-top:10px">' +
+        // Plain-English explanation
+        '<div style="font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.5;margin-bottom:8px">' +
+          'Buy both for ' + totalCost + '\u00A2. If either wins \u2192 you get $1 back \u2192 <span style="color:#00e68a;font-weight:700">+' + profit + '\u00A2 profit</span>. If both win \u2192 <span style="color:#00e68a;font-weight:700">+' + profitBoth + '\u00A2</span>.' +
+        '</div>' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #1a1917;padding-top:8px">' +
           '<span style="font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.4">' + escH(h.correlation_reason) + '</span>' +
           '<span style="font-family:var(--mono);font-size:12px;font-weight:800;color:#00e68a;white-space:nowrap;margin-left:8px">+' + roi + '% ROI</span>' +
         '</div>' +

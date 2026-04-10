@@ -8147,6 +8147,10 @@ function renderAIPortfolioHedges(pairs) {
           '<div style="flex:1;padding:5px 8px;background:rgba(0,230,138,0.06);text-align:center;border-left:1px solid #1a1917;border-right:1px solid #1a1917"><div style="color:var(--muted);font-size:9px;margin-bottom:1px">1 WINS</div><div style="font-weight:700;color:' + profitColor + '">' + (profit1 > 0 ? '+' : '') + profit1 + '¢</div></div>' +
           '<div style="flex:1;padding:5px 8px;background:rgba(0,230,138,0.08);text-align:center"><div style="color:var(--muted);font-size:9px;margin-bottom:1px">BOTH WIN</div><div style="font-weight:700;color:#00e68a">+' + profit2 + '¢</div></div>' +
         '</div>' +
+        // Plain-English explanation
+        '<div style="font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.5;margin-bottom:6px">' +
+          'Buy both for ' + totalCost + '¢. If either wins → $1 back → <span style="color:#00e68a;font-weight:700">+' + profit1 + '¢ profit</span>. Both win → <span style="color:#00e68a;font-weight:700">+' + profit2 + '¢</span>.' +
+        '</div>' +
         '<div style="font-family:var(--sans);font-size:11px;color:var(--muted);line-height:1.4;border-top:1px solid #1a1917;padding-top:8px;display:flex;justify-content:space-between;align-items:center">' +
           '<span>' + esc(h.correlation_reason || '') + '</span>' +
           '<span style="font-family:var(--mono);font-size:12px;font-weight:800;color:' + profitColor + ';white-space:nowrap;margin-left:8px">' + (roi > 0 ? '+' : '') + roi + '% ROI</span>' +
