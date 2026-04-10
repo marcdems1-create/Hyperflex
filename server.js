@@ -19522,11 +19522,18 @@ app.get('/api/hedge-pairs', (req, res) => {
       }
     }
 
-    // Find pairs with high keyword overlap but different predicted outcomes
-    const seenPairs = new Set();
-    const pairs = [];
+    // ── Find profitable hedge pairs ──
+    // A hedge is net-profitable when: totalCost < 100¢
+    // Because prediction markets pay $1 on win, if at least one leg hits
+    // you make (100 - totalCost)¢ profit. Both legs hitting = even more.
+    //
+    // Strategy: for each market, compute the cheapest side (YES or NO).
+    // Then find correlated pairs where cheapA + cheapB < 100¢.
+    // Sort by profit margin (lower total cost = higher margin).
+    const seenMarkets = new Set();
+    const rawPairs = [];
 
-    for (let i = 0; i < candidates.length && pairs.length < 10; i++) {
+    for (let i = 0; i < candidates.length; i++) {
       const kwsA = kwSets[i];
       if (kwsA.size < 2) continue;
 
@@ -19535,46 +19542,51 @@ app.get('/api/hedge-pairs', (req, res) => {
       for (const kw of kwsA) {
         const lst = kwIndex[kw] || [];
         for (const j of lst) {
-          if (j <= i) continue; // avoid duplicates
+          if (j <= i) continue;
           neighborScores[j] = (neighborScores[j] || 0) + 1;
         }
       }
 
-      // Sort by overlap count, take best match
       const ranked = Object.entries(neighborScores)
-        .filter(([, count]) => count >= 2) // at least 2 shared keywords
+        .filter(([, count]) => count >= 2)
         .sort((a, b) => b[1] - a[1]);
 
-      for (const [jStr, overlap] of ranked) {
-        if (pairs.length >= 6) break;
+      for (const [jStr] of ranked) {
         const j = parseInt(jStr);
-        const pairKey = i + ':' + j;
-        if (seenPairs.has(pairKey)) continue;
-        seenPairs.add(pairKey);
-
         const mA = candidates[i];
         const mB = candidates[j];
 
-        // Skip if same market
         if (mA.market_id === mB.market_id) continue;
-        // Skip if questions are too similar (likely same event with different wording)
         const kwsB = kwSets[j];
         const union = new Set([...kwsA, ...kwsB]);
         const intersection = [...kwsA].filter(k => kwsB.has(k));
         const similarity = intersection.length / union.size;
-        if (similarity > 0.8) continue; // too similar, not a real hedge
+        if (similarity > 0.8) continue;
 
-        // Determine sides — prefer opposing sides for a true hedge
-        const sideA = mA.trade ? mA.trade.side : (mA.yes_price <= 0.5 ? 'YES' : 'NO');
-        const sideB = mB.trade ? mB.trade.side : (mB.yes_price <= 0.5 ? 'YES' : 'NO');
-        const entryA = sideA === 'YES' ? Math.round(mA.yes_price * 100) : Math.round((1 - mA.yes_price) * 100);
-        const entryB = sideB === 'YES' ? Math.round(mB.yes_price * 100) : Math.round((1 - mB.yes_price) * 100);
+        // For each market, pick the cheapest side — that maximises profit margin
+        const yesCostA = Math.round(mA.yes_price * 100);
+        const noCostA = 100 - yesCostA;
+        const sideA = yesCostA <= noCostA ? 'YES' : 'NO';
+        const entryA = Math.min(yesCostA, noCostA);
 
-        // Build correlation reason from shared keywords
+        const yesCostB = Math.round(mB.yes_price * 100);
+        const noCostB = 100 - yesCostB;
+        const sideB = yesCostB <= noCostB ? 'YES' : 'NO';
+        const entryB = Math.min(yesCostB, noCostB);
+
+        const totalCost = entryA + entryB;
+
+        // ── PROFITABILITY GATE: total cost must be under 100¢ ──
+        // If at least one leg wins, payout = $1 = 100¢, profit = 100 - totalCost
+        if (totalCost >= 100) continue;
+
+        // Also skip tiny margins (<5¢ profit) — not worth the execution cost
+        const profitIfOneWins = 100 - totalCost;
+        if (profitIfOneWins < 5) continue;
+
         const sharedTopics = intersection.slice(0, 4).join(', ');
-        const reason = `Both assess ${sharedTopics} outcomes`;
 
-        pairs.push({
+        rawPairs.push({
           market_a: {
             question: mA.question,
             slug: mA.slug,
@@ -19593,17 +19605,34 @@ app.get('/api/hedge-pairs', (req, res) => {
             whale_count: mB.whale_count || 0,
             volume: mB.volume || 0
           },
-          correlation_reason: reason,
-          total_cost: entryA + entryB,
+          correlation_reason: `Both assess ${sharedTopics} outcomes`,
+          total_cost: totalCost,
+          profit_if_one_wins: profitIfOneWins,
+          profit_if_both_win: 200 - totalCost,
+          roi_pct: Math.round((profitIfOneWins / totalCost) * 100),
           shared_keywords: intersection.length,
-          combined_volume: (mA.volume || 0) + (mB.volume || 0)
+          combined_volume: (mA.volume || 0) + (mB.volume || 0),
+          _idxA: i,
+          _idxB: j
         });
-        break; // only one pair per market A
       }
     }
 
-    // Sort by combined volume (most liquid pairs first)
-    pairs.sort((a, b) => b.combined_volume - a.combined_volume);
+    // Sort by best profit margin (highest ROI first), then volume for liquidity
+    rawPairs.sort((a, b) => b.roi_pct - a.roi_pct || b.combined_volume - a.combined_volume);
+
+    // Deduplicate: each market appears in at most one pair
+    const pairs = [];
+    for (const p of rawPairs) {
+      if (pairs.length >= 6) break;
+      if (seenMarkets.has(p._idxA) || seenMarkets.has(p._idxB)) continue;
+      seenMarkets.add(p._idxA);
+      seenMarkets.add(p._idxB);
+      // Clean internal fields
+      delete p._idxA;
+      delete p._idxB;
+      pairs.push(p);
+    }
 
     const result = { pairs: pairs.slice(0, 6), updated_at: new Date().toISOString() };
     _hedgePairCache = { ts: Date.now(), data: result };

@@ -1094,8 +1094,8 @@ function logTradeIntent() {
 <section style="padding:60px 40px 40px;max-width:1100px;margin:0 auto" id="hedge-section">
   <div style="text-align:center;margin-bottom:32px">
     <div style="font-family:var(--mono);font-size:11px;font-weight:700;color:#a855f7;letter-spacing:3px;text-transform:uppercase;margin-bottom:12px">Live hedge opportunities</div>
-    <h2 style="font-family:var(--sans);font-size:clamp(22px,3vw,32px);font-weight:800;color:var(--text);margin:0 0 8px">Correlated markets. One-click hedge.</h2>
-    <p style="font-family:var(--mono);font-size:12px;color:var(--dim);max-width:500px;margin:0 auto;line-height:1.7">Markets that move together — buy both sides to hedge your exposure or double down on a thesis. Updated every 10 minutes from live CLOB data.</p>
+    <h2 style="font-family:var(--sans);font-size:clamp(22px,3vw,32px);font-weight:800;color:var(--text);margin:0 0 8px">Net-profitable hedges. One click.</h2>
+    <p style="font-family:var(--mono);font-size:12px;color:var(--dim);max-width:540px;margin:0 auto;line-height:1.7">Correlated markets where total cost &lt; $1. If either leg wins, you profit. If both win, you profit more. Only showing pairs with guaranteed positive math.</p>
   </div>
   <div id="hedgePairsGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px">
     <div style="grid-column:1/-1;text-align:center;padding:40px 20px;color:var(--dim);font-family:var(--mono);font-size:12px">Loading hedge pairs...</div>
@@ -1418,7 +1418,10 @@ function escH(s) { const d = document.createElement('div'); d.textContent = s; r
       const hedgeUrl = slugA && slugB
         ? '/market/' + slugA + '?side=' + sA + '&hedge=' + encodeURIComponent(slugB) + '&hedgeSide=' + sB + '&from=hedge'
         : '/signals';
-      const totalCost = (h.market_a.entry_cost || 0) + (h.market_b.entry_cost || 0);
+      const totalCost = h.total_cost || ((h.market_a.entry_cost || 0) + (h.market_b.entry_cost || 0));
+      const profit = h.profit_if_one_wins || (100 - totalCost);
+      const roi = h.roi_pct || (totalCost > 0 ? Math.round((profit / totalCost) * 100) : 0);
+      const profitBoth = h.profit_if_both_win || (200 - totalCost);
       const wA = h.market_a.whale_count || 0;
       const wB = h.market_b.whale_count || 0;
       return '<div style="background:#0c0c0b;border:1px solid rgba(168,85,247,0.2);border-radius:12px;padding:18px;position:relative;transition:border-color .15s" onmouseenter="this.style.borderColor=\'rgba(168,85,247,0.5)\'" onmouseleave="this.style.borderColor=\'rgba(168,85,247,0.2)\'">' +
@@ -1438,9 +1441,24 @@ function escH(s) { const d = document.createElement('div'); d.textContent = s; r
           '<span style="font-family:var(--mono);font-size:12px;font-weight:700;color:' + colB + '">' + sB + ' ' + h.market_b.entry_cost + '\u00A2</span>' +
           (wB >= 3 ? '<span style="font-family:var(--mono);font-size:11px;color:#a855f7">\uD83D\uDC33 ' + wB + '</span>' : '') +
         '</div>' +
+        // Profit math strip
+        '<div style="display:flex;gap:0;border-radius:6px;overflow:hidden;border:1px solid #1a1917;margin-bottom:10px;font-family:var(--mono);font-size:11px">' +
+          '<div style="flex:1;padding:6px 10px;background:rgba(0,230,138,0.04);text-align:center">' +
+            '<div style="color:var(--dim);font-size:10px;margin-bottom:2px">COST</div>' +
+            '<div style="font-weight:700;color:var(--text)">' + totalCost + '\u00A2</div>' +
+          '</div>' +
+          '<div style="flex:1;padding:6px 10px;background:rgba(0,230,138,0.06);text-align:center;border-left:1px solid #1a1917;border-right:1px solid #1a1917">' +
+            '<div style="color:var(--dim);font-size:10px;margin-bottom:2px">IF 1 WINS</div>' +
+            '<div style="font-weight:700;color:#00e68a">+' + profit + '\u00A2</div>' +
+          '</div>' +
+          '<div style="flex:1;padding:6px 10px;background:rgba(0,230,138,0.08);text-align:center">' +
+            '<div style="color:var(--dim);font-size:10px;margin-bottom:2px">IF BOTH WIN</div>' +
+            '<div style="font-weight:700;color:#00e68a">+' + profitBoth + '\u00A2</div>' +
+          '</div>' +
+        '</div>' +
         '<div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #1a1917;padding-top:10px">' +
           '<span style="font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.4">' + escH(h.correlation_reason) + '</span>' +
-          '<span style="font-family:var(--mono);font-size:11px;font-weight:700;color:#a855f7;white-space:nowrap;margin-left:8px">' + totalCost + '\u00A2 total</span>' +
+          '<span style="font-family:var(--mono);font-size:12px;font-weight:800;color:#00e68a;white-space:nowrap;margin-left:8px">+' + roi + '% ROI</span>' +
         '</div>' +
       '</div>';
     }).join('');
