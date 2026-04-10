@@ -89,18 +89,22 @@
       /* Result items */
       '.hfx-search-item{display:flex;align-items:center;gap:10px;padding:8px 18px;cursor:pointer;transition:background .1s;text-decoration:none}' +
       '.hfx-search-item:hover,.hfx-search-item.active{background:rgba(77,159,255,0.08)}' +
-      '.hfx-search-item-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}' +
-      '.hfx-search-item-icon.page{background:rgba(77,159,255,0.12)}' +
-      '.hfx-search-item-icon.market{background:rgba(0,230,138,0.12)}' +
+      '.hfx-search-item-icon{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08)}' +
+      '.hfx-search-item-icon.page{background:rgba(77,159,255,0.12);border-color:rgba(77,159,255,0.2)}' +
+      '.hfx-search-item-icon.market{background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.1)}' +
       '.hfx-search-item-body{flex:1;min-width:0}' +
-      '.hfx-search-item-title{font-family:"Inter",-apple-system,sans-serif;font-size:13px;color:#f0f0f5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
+      '.hfx-search-item-title{font-family:"Inter",-apple-system,sans-serif;font-size:13px;color:#f0f0f5;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}' +
       '.hfx-search-item-meta{font-family:"Inter",-apple-system,sans-serif;font-size:11px;color:#8888a0;margin-top:1px}' +
-      '.hfx-search-item-odds{display:flex;gap:6px;flex-shrink:0;align-items:center}' +
-      '.hfx-search-item-odds .yes{font-family:"JetBrains Mono",monospace;font-size:12px;font-weight:600;color:#00e68a}' +
-      '.hfx-search-item-odds .no{font-family:"JetBrains Mono",monospace;font-size:12px;font-weight:600;color:#ff6b6b}' +
-      '.hfx-search-badge{font-family:"Inter",-apple-system,sans-serif;font-size:9px;font-weight:600;padding:2px 6px;border-radius:4px;text-transform:uppercase;flex-shrink:0}' +
-      '.hfx-search-badge.poly{background:rgba(102,51,204,0.2);color:#a78bfa}' +
-      '.hfx-search-badge.kalshi{background:rgba(255,165,0,0.15);color:#ffa500}' +
+      '.hfx-search-item-odds{display:flex;flex-direction:column;align-items:flex-end;flex-shrink:0;gap:1px}' +
+      '.hfx-search-item-odds .pct{font-family:"JetBrains Mono",monospace;font-size:14px;font-weight:700;color:#f0f0f5}' +
+      '.hfx-search-item-odds .vol{font-family:"Inter",-apple-system,sans-serif;font-size:10px;color:#8888a0}' +
+      /* Browse pills */
+      '.hfx-search-browse{padding:12px 18px 8px}' +
+      '.hfx-search-browse-label{font-family:"Inter",-apple-system,sans-serif;font-size:10px;font-weight:600;color:#55556a;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:10px}' +
+      '.hfx-search-browse-pills{display:flex;flex-wrap:wrap;gap:6px}' +
+      '.hfx-search-pill{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:20px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);cursor:pointer;transition:all .15s;text-decoration:none;font-family:"Inter",-apple-system,sans-serif;font-size:12px;color:#c0c0d0;font-weight:500}' +
+      '.hfx-search-pill:hover{background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.15);color:#f0f0f5}' +
+      '.hfx-search-pill svg{width:14px;height:14px;flex-shrink:0}' +
       /* Footer */
       '.hfx-search-footer{display:flex;align-items:center;gap:12px;padding:8px 18px;border-top:1px solid rgba(255,255,255,0.06);font-family:"Inter",-apple-system,sans-serif;font-size:10px;color:#55556a}' +
       '.hfx-search-footer kbd{font-size:10px;color:#666680;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);border-radius:3px;padding:1px 4px}' +
@@ -396,8 +400,8 @@
   (function() {
     // Page definitions for static search
     var pages = [
-      { name: 'Signals', desc: 'AI-powered trading signals', href: '/signals', icon: '📡' },
-      { name: 'Crystal Ball', desc: 'AI market predictions', href: '/crystal-ball', icon: '🔮' },
+      { name: 'Signals', desc: 'Live trading signals', href: '/signals', icon: '📡' },
+      { name: 'Crystal Ball', desc: 'Market analysis & scoring', href: '/crystal-ball', icon: '🔮' },
       { name: 'Screener', desc: 'Market screener & filters', href: '/screener', icon: '📊' },
       { name: 'Whale Intel', desc: 'Whale activity tracker', href: '/whales', icon: '🐋' },
       { name: 'Market Intel', desc: 'Whale activity tracker', href: '/whales', icon: '🐋' },
@@ -429,7 +433,7 @@
           '<span class="hfx-search-esc" id="hfxSearchEscBtn">ESC</span>' +
         '</div>' +
         '<div class="hfx-search-results" id="hfxSearchResults">' +
-          '<div class="hfx-search-hint">Type to search pages and prediction markets<br>across Polymarket and Kalshi</div>' +
+          '<div class="hfx-search-hint" id="hfxSearchHint"></div>' +
         '</div>' +
         '<div class="hfx-search-footer">' +
           '<span><kbd>↑</kbd> <kbd>↓</kbd> navigate</span>' +
@@ -447,13 +451,24 @@
     var abortCtrl = null;
     var lastQuery = '';
 
+    var browseHtml =
+      '<div class="hfx-search-browse">' +
+        '<div class="hfx-search-browse-label">Browse</div>' +
+        '<div class="hfx-search-browse-pills">' +
+          '<a class="hfx-search-pill" href="/alpha"><svg viewBox="0 0 24 24" fill="none" stroke="#00e68a" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke-linejoin="round" stroke-linecap="round"/></svg> Top Edges</a>' +
+          '<a class="hfx-search-pill" href="/signals"><svg viewBox="0 0 24 24" fill="none" stroke="#4d9fff" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2" stroke-linejoin="round" stroke-linecap="round"/></svg> Signals</a>' +
+          '<a class="hfx-search-pill" href="/whales"><svg viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12a4 4 0 008 0" stroke-linecap="round"/></svg> Whale Intel</a>' +
+          '<a class="hfx-search-pill" href="/screener"><svg viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg> Screener</a>' +
+          '<a class="hfx-search-pill" href="/predictors"><svg viewBox="0 0 24 24" fill="none" stroke="#c9920d" stroke-width="2"><path d="M12 2L15 8.5 22 9.5 17 14.5 18 21.5 12 18 6 21.5 7 14.5 2 9.5 9 8.5z" stroke-linejoin="round"/></svg> Predictors</a>' +
+        '</div>' +
+      '</div>';
+
     function openSearch() {
       overlay.classList.add('active');
       input.value = '';
       activeIndex = -1;
       lastQuery = '';
-      results.innerHTML = '<div class="hfx-search-hint">Type to search pages and prediction markets<br>across Polymarket and Kalshi</div>';
-      // Focus after a tick for animation
+      results.innerHTML = browseHtml;
       setTimeout(function() { input.focus(); }, 50);
     }
 
@@ -509,18 +524,8 @@
 
     function renderMarketItem(m, idx) {
       var yesStr = m.yes_pct != null ? m.yes_pct + '%' : '--';
-      var noStr = m.no_pct != null ? (100 - m.yes_pct) + '%' : '--';
       var isKalshi = m.platform === 'kalshi' || (m.url && m.url.indexOf('kalshi.com') !== -1);
       var isSportsbook = m.platform === 'sportsbook' || (m.url && m.url.indexOf('odds-api') !== -1);
-      var badge = isKalshi
-        ? '<span class="hfx-search-badge kalshi">Kalshi</span>'
-        : isSportsbook ? '<span class="hfx-search-badge kalshi">Sportsbook</span>'
-        : '<span class="hfx-search-badge poly">Polymarket</span>';
-      // Route in order of revenue preference:
-      //   1. Kalshi/Sportsbook → external (no ref program, same-tab nav avoided)
-      //   2. Polymarket with slug → internal /market/:slug (earns builder fees)
-      //   3. Polymarket without slug → polyRef-wrapped external (earns referral)
-      //   4. Raw URL fallback — caught by global click interceptor anyway
       var href;
       if (isKalshi || isSportsbook) {
         href = m.url || '#';
@@ -533,16 +538,22 @@
       } else {
         href = m.url || '#';
       }
+      // Volume formatting
+      var volStr = '';
+      if (m.volume_24h || m.volume) {
+        var v = m.volume_24h || m.volume || 0;
+        volStr = v >= 1e6 ? '$' + (v/1e6).toFixed(0) + 'M' : v >= 1e3 ? '$' + (v/1e3).toFixed(0) + 'K' : '$' + v;
+      }
+      // Icon — simple SVG chart for markets
+      var iconSvg = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 12L6 7L9 9.5L14 4" stroke="#8888a0" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
       return '<a href="' + escHtml(href) + '" class="hfx-search-item" data-idx="' + idx + '"' + (isKalshi || isSportsbook ? ' target="_blank" rel="noopener"' : '') + '>' +
-        '<div class="hfx-search-item-icon market">📈</div>' +
+        '<div class="hfx-search-item-icon market">' + iconSvg + '</div>' +
         '<div class="hfx-search-item-body">' +
           '<div class="hfx-search-item-title">' + escHtml(m.question) + '</div>' +
         '</div>' +
         '<div class="hfx-search-item-odds">' +
-          '<span class="yes">Y ' + yesStr + '</span>' +
-          '<span class="no">N ' + noStr + '</span>' +
-          (m.yes_pct != null && m.yes_pct > 0 && m.yes_pct < 100 ? '<span style="font-family:var(--mono,monospace);font-size:10px;color:#f59e0b;font-weight:600">+' + Math.round((100 - m.yes_pct) / m.yes_pct * 100) + '%</span>' : '') +
-          badge +
+          '<span class="pct">' + yesStr + '</span>' +
+          (volStr ? '<span class="vol">' + volStr + '</span>' : '') +
         '</div>' +
       '</a>';
     }
@@ -595,7 +606,7 @@
     function doSearch(q) {
       q = (q || '').trim();
       if (!q) {
-        results.innerHTML = '<div class="hfx-search-hint">Type to search pages and prediction markets<br>across Polymarket and Kalshi</div>';
+        results.innerHTML = browseHtml;
         activeIndex = -1;
         return;
       }
