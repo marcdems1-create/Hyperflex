@@ -16291,6 +16291,167 @@ cron.schedule('*/30 * * * *', () => {
 // Auto-sync platform positions — every hour — wrapped to prevent unhandled rejections
 cron.schedule('0 * * * *', () => { syncAllUserPositions().catch(err => console.error('[auto-sync] Cron error:', err.message)); });
 
+// ════════════════════════════════════════════════════════════
+// HEDGE ALERTS — scans user positions for profitable hedge opportunities
+// Runs every 30 min. Two alert types:
+//   1) Price-shift: a correlated market's price dropped, making it a cheap hedge
+//   2) New-market: a new market appeared that correlates with an open position
+// ════════════════════════════════════════════════════════════
+
+// In-memory dedup: user_id:market_a:market_b → timestamp (don't re-alert same pair within 24h)
+const _hedgeAlertSent = new Map();
+const HEDGE_ALERT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+
+// Track screener market_ids seen in previous scan — new ones trigger "new market" alerts
+let _previousScreenerIds = new Set();
+
+async function scanHedgeAlerts() {
+  console.log('[hedge-alerts] Starting scan');
+  try {
+    const screenerMarkets = (_screenerCache && _screenerCache.data) || [];
+    if (screenerMarkets.length < 10) { console.log('[hedge-alerts] Screener too thin, skipping'); return; }
+
+    // Build keyword index for screener markets (same logic as /api/hedge-pairs)
+    const screenerByKw = {}; // keyword -> [screener market objects]
+    for (const m of screenerMarkets) {
+      if (!m.yes_price || m.yes_price <= 0.05 || m.yes_price >= 0.95) continue;
+      if (!m.slug) continue;
+      const kws = _extractHedgeKeywords(m.question);
+      for (const kw of kws) {
+        if (!screenerByKw[kw]) screenerByKw[kw] = [];
+        screenerByKw[kw].push(m);
+      }
+    }
+
+    // Detect new markets since last scan
+    const currentIds = new Set(screenerMarkets.map(m => m.market_id).filter(Boolean));
+    const newMarketIds = new Set();
+    if (_previousScreenerIds.size > 0) {
+      for (const id of currentIds) {
+        if (!_previousScreenerIds.has(id)) newMarketIds.add(id);
+      }
+    }
+    _previousScreenerIds = currentIds;
+    const newMarkets = screenerMarkets.filter(m => newMarketIds.has(m.market_id));
+    if (newMarkets.length > 0) console.log(`[hedge-alerts] ${newMarkets.length} new markets detected`);
+
+    // Fetch all users with cached positions
+    let users;
+    if (pool) {
+      users = await dbQuery(`
+        SELECT DISTINCT cp.user_id, cp.market_title, cp.side, cp.probability, cp.external_id, cp.platform
+        FROM cached_positions cp
+        WHERE cp.probability > 0.05 AND cp.probability < 0.95
+        ORDER BY cp.user_id
+      `, []);
+    } else {
+      const { data } = await supabase.from('cached_positions')
+        .select('user_id, market_title, side, probability, external_id, platform')
+        .gt('probability', 0.05).lt('probability', 0.95);
+      users = data || [];
+    }
+
+    if (!users.length) { console.log('[hedge-alerts] No open positions to scan'); return; }
+
+    // Group positions by user
+    const userPositions = {};
+    for (const row of users) {
+      if (!userPositions[row.user_id]) userPositions[row.user_id] = [];
+      userPositions[row.user_id].push(row);
+    }
+
+    let alertsSent = 0;
+
+    for (const [userId, positions] of Object.entries(userPositions)) {
+      let userAlerts = 0;
+      for (const pos of positions) {
+        if (userAlerts >= 3) break; // max 3 alerts per user per scan
+        const posKws = _extractHedgeKeywords(pos.market_title);
+        if (posKws.length < 2) continue;
+
+        // Entry cost for the user's current position
+        const posPrice = parseFloat(pos.probability) || 0.5;
+        const posSide = (pos.side || 'YES').toUpperCase();
+        const posEntry = posSide === 'YES' ? Math.round(posPrice * 100) : Math.round((1 - posPrice) * 100);
+
+        // Find correlated screener markets by keyword overlap
+        const candidateScores = {};
+        for (const kw of posKws) {
+          const matches = screenerByKw[kw] || [];
+          for (const m of matches) {
+            // Skip same market
+            if (m.market_id === pos.external_id) continue;
+            if ((m.question || '').toLowerCase() === (pos.market_title || '').toLowerCase()) continue;
+            if (!candidateScores[m.market_id]) candidateScores[m.market_id] = { market: m, overlap: 0 };
+            candidateScores[m.market_id].overlap++;
+          }
+        }
+
+        // Need at least 2 keyword overlap to be considered correlated
+        const correlated = Object.values(candidateScores)
+          .filter(c => c.overlap >= 2)
+          .sort((a, b) => b.overlap - a.overlap)
+          .slice(0, 3); // max 3 hedge candidates per position
+
+        for (const { market: hedgeMkt } of correlated) {
+          // Compute cheapest hedge side
+          const hYesCost = Math.round(hedgeMkt.yes_price * 100);
+          const hNoCost = 100 - hYesCost;
+          const hSide = hYesCost <= hNoCost ? 'YES' : 'NO';
+          const hEntry = Math.min(hYesCost, hNoCost);
+          const totalCost = posEntry + hEntry;
+
+          // PROFITABILITY GATE: must be < 100¢ with >= 10¢ margin
+          if (totalCost >= 100) continue;
+          const profit = 100 - totalCost;
+          if (profit < 10) continue;
+
+          // Dedup: don't re-alert same user + same pair within 24h
+          const dedupKey = `${userId}:${pos.external_id}:${hedgeMkt.market_id}`;
+          const lastSent = _hedgeAlertSent.get(dedupKey) || 0;
+          if (Date.now() - lastSent < HEDGE_ALERT_COOLDOWN_MS) continue;
+
+          // Determine alert type
+          const isNewMarket = newMarketIds.has(hedgeMkt.market_id);
+          const alertType = isNewMarket ? 'hedge_new_market' : 'hedge_opportunity';
+
+          const roi = Math.round((profit / totalCost) * 100);
+          const posLabel = `${posSide} "${(pos.market_title || '').substring(0, 40)}"`;
+          const hedgeLabel = `${hSide} "${(hedgeMkt.question || '').substring(0, 40)}" at ${hEntry}¢`;
+
+          const title = isNewMarket
+            ? `🆕 New hedge: +${profit}¢ profit opportunity`
+            : `🔗 Hedge alert: +${profit}¢ profit (${roi}% ROI)`;
+          const body = isNewMarket
+            ? `New market "${(hedgeMkt.question || '').substring(0, 50)}" hedges your ${posLabel}. Buy ${hedgeLabel} — total cost ${totalCost}¢, guaranteed +${profit}¢ if either wins.`
+            : `${hedgeLabel} hedges your ${posLabel}. Total cost ${totalCost}¢ → +${profit}¢ profit if either leg wins.`;
+
+          // Store hedge market slug so notification links to /market/:slug
+          await pushNotification(userId, alertType, title, body, null, 'market:' + (hedgeMkt.slug || ''));
+          _hedgeAlertSent.set(dedupKey, Date.now());
+          alertsSent++;
+          userAlerts++;
+
+          if (userAlerts >= 3) break; // per-user cap
+        }
+      }
+    }
+
+    // Cleanup old dedup entries (> 48h)
+    const cutoff = Date.now() - 2 * HEDGE_ALERT_COOLDOWN_MS;
+    for (const [key, ts] of _hedgeAlertSent) {
+      if (ts < cutoff) _hedgeAlertSent.delete(key);
+    }
+
+    console.log(`[hedge-alerts] Done — ${alertsSent} alerts sent for ${Object.keys(userPositions).length} users`);
+  } catch (err) {
+    console.error('[hedge-alerts] Error:', err.message);
+  }
+}
+
+// Run every 30 min (offset by 15 min from auto-sync so positions are fresh)
+cron.schedule('15,45 * * * *', safeCron('scanHedgeAlerts', scanHedgeAlerts));
+
 // ── PROFILE PAGE: WALL + AGGREGATED COMMENTS ─────────────────────────────────
 
 // GET /api/profile/:slug/wall — public, returns last 40 wall posts

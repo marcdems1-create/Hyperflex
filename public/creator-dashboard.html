@@ -10923,7 +10923,7 @@ function renderNotifBell() {
   list.innerHTML = _notifs.map(n => {
     const ago = timeAgo(n.created_at);
     const cls = n.read ? 'notif-item' : 'notif-item unread';
-    const dest = n.market_id ? '#' : n.community_slug ? '/' + n.community_slug : '#';
+    const dest = n.community_slug && n.community_slug.startsWith('market:') ? '/market/' + n.community_slug.slice(7) : n.market_id ? '#' : n.community_slug ? '/' + n.community_slug : '#';
     return `<div class="${cls}" onclick="notifClick(${JSON.stringify(n.id)},${JSON.stringify(dest)})">
       <div class="notif-item-title">${escHtml(n.title)}</div>
       ${n.body ? `<div class="notif-item-body">${escHtml(n.body)}</div>` : ''}
