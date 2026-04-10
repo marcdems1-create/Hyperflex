@@ -24648,6 +24648,42 @@ app.post('/api/ai/market-analysis', async (req, res) => {
       primaryMarket = relatedMarkets[0] || null;
     } catch (e) { /* silent */ }
 
+    // 1a-fallback. If screener cache had no matches, search Polymarket directly
+    if (relatedMarkets.length === 0 && question.length >= 3) {
+      try {
+        const searchRes = await fetch(`https://gamma-api.polymarket.com/public-search?q=${encodeURIComponent(question)}&limit_per_type=10`, {
+          headers: { Accept: 'application/json', 'User-Agent': 'Hyperflex/1.0' },
+          signal: AbortSignal.timeout(5000)
+        });
+        if (searchRes.ok) {
+          const searchData = await searchRes.json();
+          const events = searchData.events || searchData || [];
+          const liveMarkets = [];
+          (Array.isArray(events) ? events : []).forEach(ev => {
+            const mkts = ev.markets || [ev];
+            mkts.forEach(m => {
+              if (m.closed || m.resolved) return;
+              const yesPrice = parseFloat(m.outcomePrices ? JSON.parse(m.outcomePrices)[0] : m.lastTradePrice) || 0;
+              liveMarkets.push({
+                question: m.question || ev.title || '',
+                slug: m.conditionId || m.slug || '',
+                yes_price: yesPrice,
+                volume: parseFloat(m.volume24hr || m.volume || 0),
+                end_date: m.endDate || ev.endDate || null,
+                edge_score: 0,
+                price_change_24h: 0,
+                _fromSearch: true
+              });
+            });
+          });
+          if (liveMarkets.length > 0) {
+            relatedMarkets = liveMarkets.sort((a, b) => (b.volume || 0) - (a.volume || 0)).slice(0, 8);
+            primaryMarket = relatedMarkets[0];
+          }
+        }
+      } catch (e) { console.warn('[ai-analysis] search fallback failed:', e.message); }
+    }
+
     // 1a-bis. Disambiguation — if query is short and matches many diverse markets, offer refinement
     let disambiguation = null;
     if (relatedMarkets.length >= 3 && queryWords.length <= 4) {
@@ -24709,6 +24745,22 @@ app.post('/api/ai/market-analysis', async (req, res) => {
       if (primaryMarket.end_date) {
         hoursToExpiry = Math.max(0, (new Date(primaryMarket.end_date).getTime() - Date.now()) / 3600000);
       }
+      // If primary market came from search fallback, try to get CLOB price
+      if (primaryMarket._fromSearch && primaryMarket.slug && !currentPrice) {
+        try {
+          const clobRes = await fetch(`https://clob.polymarket.com/midpoint?token_id=${primaryMarket.slug}`, {
+            signal: AbortSignal.timeout(3000)
+          });
+          if (clobRes.ok) {
+            const clobData = await clobRes.json();
+            const mid = parseFloat(clobData.mid || clobData.price || 0);
+            if (mid > 0) {
+              currentPrice = mid;
+              primaryMarket.yes_price = mid;
+            }
+          }
+        } catch (e) { /* silent */ }
+      }
     }
 
     // 1e. Signal types active on this market
@@ -24761,10 +24813,16 @@ app.post('/api/ai/market-analysis', async (req, res) => {
       dataContext += `\nActive signal types: ${[...new Set(activeSignals)].join(', ')}\n`;
     }
 
+    // Add market count context for richer analysis
+    const screenerTotal = _screenerCache?.data?.length || 0;
+    if (screenerTotal > 0) {
+      dataContext += `\nMarket Universe: ${screenerTotal} active markets tracked across Polymarket\n`;
+    }
+
     // ── Step 3: Call Claude with full data context ─────────────────────
     const resp = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 800,
+      max_tokens: 1200,
       messages: [{
         role: 'user',
         content: `You are Crystal Ball AI, the prediction market analyst for HYPERFLEX. You have access to live whale tracking, edge scoring, and cross-platform odds data.
@@ -24775,8 +24833,8 @@ ${dataContext}
 
 Respond with a JSON object (no markdown fences, just raw JSON) with this exact structure:
 {
-  "headline": "One bold sentence summarizing the key finding, e.g. 'Whales are positioning for a hot CPI print'",
-  "key_finding": "2-3 sentences with SPECIFIC numbers from the data above. Reference whale capital amounts, consensus percentages, odds shifts, edge scores. Be precise.",
+  "headline": "One bold, punchy sentence summarizing the key finding — use trader language, e.g. 'Whales are positioning for a hot CPI print' or 'Smart money piling into YES on rate cuts'. Make it sound like a Bloomberg terminal alert.",
+  "key_finding": "3-4 sentences with SPECIFIC numbers from the data above. Reference whale capital amounts ($X.XM), consensus percentages (X% YES), odds shifts (+X.X%), edge scores, volume, and time to resolution. Cross-reference multiple data points — e.g. 'Consensus expects X but whale wallets are leaning Y — $Z in capital is positioned across N markets with M% betting YES. Odds have shifted +X% toward YES in the last 24 hours.' Be precise, data-dense, and analytical.",
   "factors": {
     "whale_capital": "$X.XM or $XXK — total whale capital on related markets",
     "odds_shift_24h": "+X.X% or -X.X% — 24h movement",
@@ -24785,12 +24843,19 @@ Respond with a JSON object (no markdown fences, just raw JSON) with this exact s
   },
   "trade_suggestion": {
     "side": "YES or NO",
-    "reasoning": "One sentence why"
+    "reasoning": "One sentence with conviction — reference the data that supports this side"
   },
   "follow_up_questions": ["question 1?", "question 2?", "question 3?"]
 }
 
-IMPORTANT: Use REAL numbers from the data. If no data was found, say so honestly but still give your best analytical take based on market knowledge. Always be specific and actionable.`
+RULES:
+1. Use REAL numbers from the data — never fabricate whale positions or edge scores.
+2. If whale data exists, lead with it — whale positioning is the most valuable signal for traders.
+3. If limited data, still give a thorough analytical take with whatever is available. Mention Fear & Greed, general market sentiment, related market context.
+4. The headline must be bold and specific — never generic like "Market Analysis" or "Here's what we found".
+5. Key finding must be 3+ sentences, data-dense, and cross-reference multiple signals.
+6. Always fill ALL factor fields — use the data provided, or "N/A" as last resort.
+7. Follow-up questions should be specific and actionable, not generic.`
       }]
     });
 
