@@ -19907,9 +19907,10 @@ async function _buildAlphaListInner(opts = {}) {
 
   const fetch = _nodeFetch;
 
-    // Pre-fetch Binance spot prices for crypto divergence signal (non-blocking)
+    // Pre-fetch Binance spot prices + volume surge for crypto signals (non-blocking)
     let binancePrices = {};
-    try { binancePrices = await fetchBinancePrices(); } catch {}
+    let binanceVolSurge = {};
+    try { [binancePrices, binanceVolSurge] = await Promise.all([fetchBinancePrices(), fetchBinanceVolumeSurge()]); } catch {}
 
     // Fetch a wider window from Gamma API — gamma's order=volume sort is unreliable
     // (returns markets with $99 lifetime volume first), so we fetch 500 and sort client-side
@@ -20318,7 +20319,24 @@ async function _buildAlphaListInner(opts = {}) {
         }
       }
 
-      const edgeScore = Math.min(99, Math.round(edgeWhale + edgeCapital + edgeMomentum + edgeVolume + edgeMega + edgeExpiry + edgeDivergence + edgeDecay + edgeNews + edgeWhaleVelocity + edgeVolumeSpike + edgeBinanceDivergence));
+      // Binance volume surge: crypto market gets a boost when Binance spot volume
+      // spikes 3x+ in the last minute — something is breaking, market may not have repriced.
+      let edgeBinanceVolSurge = 0;
+      let binanceVolSurgeData = null;
+      if (liquid && category === 'crypto' && Object.keys(binanceVolSurge).length > 0) {
+        const coinMatch2 = qLow.match(/\b(bitcoin|btc)\b/) ? 'btc'
+          : qLow.match(/\b(ethereum|eth)\b/) ? 'eth'
+          : qLow.match(/\b(solana|sol)\b/) ? 'sol' : null;
+        if (coinMatch2 && binanceVolSurge[coinMatch2] && binanceVolSurge[coinMatch2].surge) {
+          const vs = binanceVolSurge[coinMatch2];
+          if (vs.ratio >= 10) edgeBinanceVolSurge = 10;
+          else if (vs.ratio >= 5) edgeBinanceVolSurge = 7;
+          else edgeBinanceVolSurge = 4;
+          binanceVolSurgeData = vs;
+        }
+      }
+
+      const edgeScore = Math.min(99, Math.round(edgeWhale + edgeCapital + edgeMomentum + edgeVolume + edgeMega + edgeExpiry + edgeDivergence + edgeDecay + edgeNews + edgeWhaleVelocity + edgeVolumeSpike + edgeBinanceDivergence + edgeBinanceVolSurge));
 
       // ── Trade ROI ──
       let trade = null;
@@ -20434,7 +20452,8 @@ async function _buildAlphaListInner(opts = {}) {
         divergence: edgeDivergence,
         capital: edgeCapital,
         expiry: edgeExpiry,
-        binance_divergence: edgeBinanceDivergence
+        binance_divergence: edgeBinanceDivergence,
+        binance_vol_surge: edgeBinanceVolSurge
       };
       // Find the largest contributing component
       let _primary = 'volume';
@@ -20554,7 +20573,8 @@ async function _buildAlphaListInner(opts = {}) {
           divergence: Math.round(edgeDivergence),
           decay: Math.round(edgeDecay),
           arb: 0, // populated by post-loop arb pass if applicable
-          binance_divergence: Math.round(edgeBinanceDivergence)
+          binance_divergence: Math.round(edgeBinanceDivergence),
+          binance_vol_surge: Math.round(edgeBinanceVolSurge)
         },
         volume_spike_ratio: volumeSpikeRatio, // current 24h / 7-day average, or null
         news_headline: newsInfo ? newsInfo.headline : null,
@@ -20569,6 +20589,7 @@ async function _buildAlphaListInner(opts = {}) {
           trader_name: velocityInfo.traderName
         } : null,
         binance_divergence: binanceDivergenceData,
+        binance_vol_surge: binanceVolSurgeData,
         alpha_score: 0, // populated after whale index is ready
         model_probability: modelProb != null ? parseFloat(modelProb.toFixed(3)) : null,
         alpha_edge: alphaEdge,
@@ -25606,6 +25627,53 @@ async function fetchBinancePrices() {
   }
 }
 
+// ── Binance volume surge detection — tracks 1min candle volume vs rolling baseline ──
+let _binanceVolSurgeCache = null; // { ts, data: { btc: { surge, ratio, vol1m, avgVol }, ... } }
+const _binanceVolHistory = { btc: [], eth: [], sol: [] }; // rolling 30 entries of 1min volumes
+
+async function fetchBinanceVolumeSurge() {
+  if (_binanceVolSurgeCache && Date.now() - _binanceVolSurgeCache.ts < 60000) return _binanceVolSurgeCache.data;
+  try {
+    const result = {};
+    for (const [sym, coin] of [['BTCUSDT','btc'],['ETHUSDT','eth'],['SOLUSDT','sol']]) {
+      try {
+        const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${sym}&interval=1m&limit=2`, { signal: AbortSignal.timeout(5000) });
+        if (!res.ok) continue;
+        const klines = await res.json();
+        if (klines.length < 2) continue;
+        // Use the completed candle (index 0), current candle (index 1) is partial
+        const vol1m = parseFloat(klines[0][7]) || 0; // quote volume in USDT
+        const buyVol = parseFloat(klines[0][10]) || 0; // taker buy quote volume
+        const sellVol = vol1m - buyVol;
+
+        // Push to history and compute baseline
+        _binanceVolHistory[coin].push(vol1m);
+        if (_binanceVolHistory[coin].length > 30) _binanceVolHistory[coin].shift();
+
+        const hist = _binanceVolHistory[coin];
+        const avgVol = hist.length >= 5 ? hist.reduce((s, v) => s + v, 0) / hist.length : vol1m;
+        const ratio = avgVol > 0 ? parseFloat((vol1m / avgVol).toFixed(2)) : 1;
+        const surge = ratio >= 3; // 3x normal = surge
+
+        result[coin] = {
+          surge,
+          ratio,
+          vol_1m_usd: Math.round(vol1m),
+          avg_vol_usd: Math.round(avgVol),
+          buy_pct: vol1m > 0 ? Math.round(buyVol / vol1m * 100) : 50,
+          sell_pct: vol1m > 0 ? Math.round(sellVol / vol1m * 100) : 50,
+          bias: buyVol > sellVol ? 'BUY' : 'SELL'
+        };
+      } catch {}
+    }
+    _binanceVolSurgeCache = { ts: Date.now(), data: result };
+    return result;
+  } catch (e) {
+    console.warn('[binance-vol] surge fetch failed:', e.message);
+    return _binanceVolSurgeCache ? _binanceVolSurgeCache.data : {};
+  }
+}
+
 function computeFearGreed() {
   const factors = {};
 
@@ -25692,11 +25760,11 @@ function computeFearGreed() {
   return { score, label, color, factors, updated_at: new Date().toISOString() };
 }
 
-// Binance spot prices — BTC/ETH/SOL with 5m change for divergence signals
+// Binance spot prices + volume surge — BTC/ETH/SOL
 app.get('/api/binance-prices', async (req, res) => {
   try {
-    const data = await fetchBinancePrices();
-    res.json(data);
+    const [prices, volSurge] = await Promise.all([fetchBinancePrices(), fetchBinanceVolumeSurge()]);
+    res.json({ prices, volume_surge: volSurge });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
