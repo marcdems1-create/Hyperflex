@@ -9853,7 +9853,7 @@ const RESERVED_SLUGS = new Set([
   'creator', 'api', 'auth', 'markets', 'positions', 'leaderboard',
   'trade', 'register', 'login', 'favicon.ico', 'robots.txt', 'admin',
   'explore', 'signup', 'pricing', 'about', 'terms', 'privacy', 'discover', 'u', 'win',
-  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed', 'market-intel', 'spread-scanner', 'high-prob', 'rewards', 'ecosystem', 'features', 'alpha', 'terminal'
+  'm', 'nominate', 'my', 'embed', 'ref', 'templates', 'widget', 'share', 'predictors', 'odds', 'p', 'whales', 'api-docs', 'data', 'whale-index', 'screener', 'signals', 'crystal-ball', 'accuracy', 'events', 'agent', 'brief', 'trader', 'health', 'fear-greed', 'market-intel', 'spread-scanner', 'high-prob', 'rewards', 'ecosystem', 'features', 'alpha', 'alpha-live', 'terminal'
 ]);
 
 // GET /my — private member dashboard
@@ -19037,6 +19037,7 @@ app.get('/screener', (req, res) => res.sendFile(path.join(__dirname, 'public', '
 app.get('/ecosystem', (req, res) => res.sendFile(path.join(__dirname, 'public', 'ecosystem.html')));
 app.get('/features', (req, res) => res.sendFile(path.join(__dirname, 'public', 'features.html')));
 app.get('/alpha', (req, res) => res.sendFile(path.join(__dirname, 'public', 'alpha-live.html')));
+app.get('/alpha-live', (req, res) => res.sendFile(path.join(__dirname, 'public', 'alpha-live.html')));
 app.get('/terminal', (req, res) => res.sendFile(path.join(__dirname, 'public', 'terminal.html')));
 app.get('/spread-scanner', (req, res) => res.redirect(301, '/odds'));
 app.get('/high-prob', (req, res) => res.sendFile(path.join(__dirname, 'public', 'high-prob.html')));

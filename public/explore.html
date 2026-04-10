@@ -1028,7 +1028,7 @@ nav {
 <!-- INTELLIGENCE CARDS -->
 <div style="max-width:1200px;margin:0 auto 24px;padding:0 40px">
   <div class="intel-grid-top" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px">
-    <a href="/alpha-live" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--gold);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s;display:block;position:relative" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(201,146,13,0.15)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
+    <a href="/alpha" style="text-decoration:none;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--gold);border-radius:12px;padding:20px;transition:transform .2s,box-shadow .2s;display:block;position:relative" onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 24px rgba(201,146,13,0.15)'" onmouseleave="this.style.transform='';this.style.boxShadow=''">
       <div style="position:absolute;top:12px;right:12px;font-family:var(--mono);font-size:8px;font-weight:700;color:var(--accent-green);background:var(--accent-green-dim);padding:2px 6px;border-radius:4px;letter-spacing:0.5px">LIVE</div>
       <div style="font-size:22px;margin-bottom:8px">🎯</div>
       <div style="font-size:14px;font-weight:700;color:var(--gold);margin-bottom:4px;letter-spacing:-0.3px">Alpha Terminal</div>
@@ -1245,7 +1245,7 @@ nav {
           <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--gold);letter-spacing:1px;text-transform:uppercase">Top Edges Right Now</span>
           <span style="font-family:var(--mono);font-size:8px;font-weight:700;color:var(--accent-green);background:var(--accent-green-dim);padding:2px 6px;border-radius:4px">LIVE</span>
         </div>
-        <a href="/alpha-live" style="font-family:var(--mono);font-size:10px;color:var(--gold);text-decoration:none">Open Terminal &rarr;</a>
+        <a href="/alpha" style="font-family:var(--mono);font-size:10px;color:var(--gold);text-decoration:none">Open Terminal &rarr;</a>
       </div>
       <div id="exploreEdgeList" style="display:flex;flex-direction:column;gap:6px">
         <div style="font-size:12px;color:var(--muted);padding:8px 0">Loading edges...</div>
@@ -1254,7 +1254,7 @@ nav {
 
     <!-- Quick nav links -->
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
-      <a href="/alpha-live" style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--gold);padding:7px 14px;border:1px solid rgba(201,146,13,0.3);border-radius:8px;text-decoration:none;transition:all .15s;background:rgba(201,146,13,0.06)" onmouseover="this.style.borderColor='var(--gold)';this.style.background='rgba(201,146,13,0.12)'" onmouseout="this.style.borderColor='rgba(201,146,13,0.3)';this.style.background='rgba(201,146,13,0.06)'">Alpha Terminal</a>
+      <a href="/alpha" style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--gold);padding:7px 14px;border:1px solid rgba(201,146,13,0.3);border-radius:8px;text-decoration:none;transition:all .15s;background:rgba(201,146,13,0.06)" onmouseover="this.style.borderColor='var(--gold)';this.style.background='rgba(201,146,13,0.12)'" onmouseout="this.style.borderColor='rgba(201,146,13,0.3)';this.style.background='rgba(201,146,13,0.06)'">Alpha Terminal</a>
       <a href="/data" style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--accent-purple);padding:7px 14px;border:1px solid rgba(168,85,247,0.3);border-radius:8px;text-decoration:none;transition:all .15s;background:rgba(168,85,247,0.06)" onmouseover="this.style.borderColor='var(--accent-purple)';this.style.background='rgba(168,85,247,0.12)'" onmouseout="this.style.borderColor='rgba(168,85,247,0.3)';this.style.background='rgba(168,85,247,0.06)'">Data Terminal</a>
       <a href="/crystal-ball" style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--dim);padding:7px 14px;border:1px solid var(--border);border-radius:8px;text-decoration:none;transition:all .15s" onmouseover="this.style.borderColor='rgba(77,159,255,0.4)';this.style.color='#4d9fff'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">Crystal Ball</a>
       <a href="/whales" style="font-family:var(--sans);font-size:11px;font-weight:600;color:var(--dim);padding:7px 14px;border:1px solid var(--border);border-radius:8px;text-decoration:none;transition:all .15s" onmouseover="this.style.borderColor='rgba(168,85,247,0.4)';this.style.color='#a855f7'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--dim)'">Whales</a>
@@ -3105,6 +3105,8 @@ async function handleExploreCopyCta() {
       var chg = m.price_change_24h || 0;
       var chgColor = chg >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
       var chgStr = (chg >= 0 ? '+' : '') + chg.toFixed(1) + '%';
+      var roi = m.trade && m.trade.roi_pct ? m.trade.roi_pct : 0;
+      var side = m.trade && m.trade.side ? m.trade.side : '';
       var slug = m.slug || '';
       var link = slug ? '/market/' + slug : '#';
       return '<a href="' + link + '" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:8px;text-decoration:none;color:inherit;transition:border-color .15s" onmouseover="this.style.borderColor=\'var(--gold)\'" onmouseout="this.style.borderColor=\'var(--border)\'">'
@@ -3115,9 +3117,12 @@ async function handleExploreCopyCta() {
         + '<span>' + price + '\u00A2</span>'
         + (wh ? '<span>' + wh + ' whale' + (wh > 1 ? 's' : '') + '</span>' : '')
         + '<span style="color:' + chgColor + '">' + chgStr + '</span>'
+        + (roi ? '<span style="color:var(--accent-green);font-weight:700">' + roi + '% ROI</span>' : '')
         + '</div></div>'
-        + '<div style="font-family:var(--mono);font-size:9px;color:var(--gold);flex-shrink:0">Trade \u2192</div>'
-        + '</a>';
+        + '<div style="text-align:right;flex-shrink:0">'
+        + (side ? '<div style="font-family:var(--mono);font-size:9px;font-weight:700;color:' + (side === 'YES' ? 'var(--accent-green)' : 'var(--accent-red)') + ';margin-bottom:2px">' + side + '</div>' : '')
+        + '<div style="font-family:var(--mono);font-size:9px;color:var(--gold)">Trade \u2192</div>'
+        + '</div></a>';
     }).join('');
   } catch(e) { console.warn('Top edges error:', e); }
 })();
