@@ -31114,7 +31114,11 @@ Good examples:
       if (_replyLog.length > 200) _replyLog.splice(0, 100);
     } catch (postErr) {
       console.warn(`[reply-bot] Reply failed: ${postErr.message}`);
-      _logError('reply-bot/post', postErr);
+      // X 403 "not mentioned/engaged" = conversation-level restriction not detectable from reply_settings
+      // These are expected; don't pollute health endpoint's recent_errors
+      if (!postErr.message.includes('not been mentioned or otherwise engaged')) {
+        _logError('reply-bot/post', postErr);
+      }
     }
 
     _replyDraftQueue.push({
